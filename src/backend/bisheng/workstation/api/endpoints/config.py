@@ -20,10 +20,10 @@ router = APIRouter()
 @router.get("/config", summary="Get workbench configuration", response_model=UnifiedResponseModel)
 async def get_config(request: Request, login_user=LoginUserDep):
     ret = await WorkStationService.get_daily_chat_config(for_picker=True)
-    if bisheng_settings.dsh.enabled:
-        from bisheng.dsh.domain.services.model_catalog import authorized_workbench_models
+    from bisheng.dsh.domain.services.model_catalog import user_workbench_models
 
-        ret.models = await authorized_workbench_models(login_user.user_id)
+    # Every online chat model the user may see; the stored list only adds labels.
+    ret.models = await user_workbench_models(login_user.user_id)
     linsight_config = await WorkStationService.get_linsight_config()
     # `enable_etl4lm` historically gated the frontend on `etl4lm.url` alone, but the
     # parse pipeline now supports mineru / paddle_ocr as alternative providers that

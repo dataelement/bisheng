@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import resp_200
@@ -25,11 +25,41 @@ router = APIRouter(prefix="/dsh")
 admin_user = UserPayload.get_tenant_admin_user
 
 
+class _PlatformPolicyAdmin:
+    """Model visibility administration when DSH is not deployed.
+
+    Visibility belongs to the platform (who may pick a model in the workbench);
+    only credits need DSH. Authorization is the same tenant-admin check DSH uses.
+    """
+
+    @staticmethod
+    async def authorize(actor_id: int, tenant_id: int | None):
+        from bisheng.dsh.admin_runtime import authorize_admin
+
+        return await authorize_admin(actor_id, tenant_id)
+
+
+async def get_policy_admin(request: Request):
+    """DSH management when deployed; otherwise platform tenant-admin authorization."""
+    from bisheng.common.services.config_service import settings
+
+    if not settings.dsh.enabled:
+        return _PlatformPolicyAdmin()
+    return await get_management(await get_runtime(request, settings.dsh))
+
+
+def _missing_row_visible_to_everyone() -> bool:
+    """Without DSH every online model is offered until an administrator narrows it."""
+    from bisheng.common.services.config_service import settings
+
+    return not settings.dsh.enabled
+
+
 @router.get("/admin/models/{model_id}/visibility")
 async def visibility(
     model_id: UserId,
     user=Depends(admin_user),
-    service=Depends(get_management),
+    service=Depends(get_policy_admin),
     tenant_id: TenantId = None,
 ):
     _, tenant = await service.authorize(user.user_id, tenant_id or get_current_tenant_id())
@@ -37,7 +67,10 @@ async def visibility(
         from bisheng.llm.domain.services.llm import LLMService
 
         await LLMService.get_dsh_model_metadata_snapshot(model_id)
-        return resp_200(data=await policy_transaction(lambda repo: repo.visibility(model_id)))
+        default_everyone = _missing_row_visible_to_everyone()
+        return resp_200(
+            data=await policy_transaction(lambda repo: repo.visibility(model_id, default_everyone=default_everyone))
+        )
 
 
 @router.put("/admin/models/{model_id}/visibility")
@@ -45,7 +78,7 @@ async def save_visibility(
     model_id: UserId,
     body: ModelVisibilityInput,
     user=Depends(admin_user),
-    service=Depends(get_management),
+    service=Depends(get_policy_admin),
     tenant_id: TenantId = None,
 ):
     _, tenant = await service.authorize(user.user_id, tenant_id or get_current_tenant_id())
@@ -70,7 +103,7 @@ async def credit_rules(
 @router.get("/admin/policy-subjects")
 async def policy_subjects(
     user=Depends(admin_user),
-    service=Depends(get_management),
+    service=Depends(get_policy_admin),
     tenant_id: TenantId = None,
 ):
     _, tenant = await service.authorize(user.user_id, tenant_id or get_current_tenant_id())

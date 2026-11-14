@@ -26,6 +26,8 @@ export function ModelAccessDialog({ model, onClose }: ModelAccessDialogProps) {
     const [error, setError] = useState<string | null>(null)
     const [revision, setRevision] = useState(0)
     const modelId = model?.id
+    // Limiting a model to nobody would hide it from every user, administrators included.
+    const emptyGrant = !!value && !value.everyone && value.subjects.length === 0
 
     useEffect(() => {
         setValue(null)
@@ -52,7 +54,7 @@ export function ModelAccessDialog({ model, onClose }: ModelAccessDialogProps) {
         })
     }
     const save = async () => {
-        if (!modelId || !value || saving) return
+        if (!modelId || !value || saving || emptyGrant) return
         setSaving(true)
         setError(null)
         try {
@@ -88,9 +90,10 @@ export function ModelAccessDialog({ model, onClose }: ModelAccessDialogProps) {
                         options={options} disabled={saving}
                         onChange={next => { setValue(next); setDirty(true) }} />
                 </section>}
+                {emptyGrant && <p role="note" className="mt-3 text-xs text-danger">{t('dsh.unified.selectedVisibleEmpty')}</p>}
                 <div className="mt-4 flex shrink-0 justify-end gap-2">
                     <Button variant="outlined" onClick={close} disabled={saving}>{t('dsh.unified.cancel')}</Button>
-                    <Button onClick={save} disabled={saving || !dirty}>
+                    <Button onClick={save} disabled={saving || !dirty || emptyGrant}>
                         {t(saving ? 'dsh.unified.saving' : 'dsh.unified.save')}
                     </Button>
                 </div>

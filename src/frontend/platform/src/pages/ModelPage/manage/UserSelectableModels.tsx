@@ -35,7 +35,8 @@ export function UserSelectableModels({ data, configuredModels, enterpriseEnabled
     return <section className="space-y-4">
         <div>
             <h3 className="text-sm font-medium">{t('model.userSelectableModels')}</h3>
-            <p className="mt-1 text-xs text-muted-foreground">{t('model.userSelectableModelsHelp')}</p>
+            {/* Visibility is a platform setting; only credits need the desktop module. */}
+            <p className="mt-1 text-xs text-muted-foreground">{t(enterpriseEnabled ? 'model.userSelectableModelsHelp' : 'model.userSelectableModelsHelpBasic')}</p>
         </div>
         <div className="overflow-x-auto rounded-lg border bg-background">
             <Table className="min-w-[1100px] table-fixed">
@@ -45,7 +46,7 @@ export function UserSelectableModels({ data, configuredModels, enterpriseEnabled
                     <TableHead>{t('model.displayName')}</TableHead>
                     <TableHead className="w-32">{t('model.supportsImages')}</TableHead>
                     {enterpriseEnabled && <TableHead className="w-44">{t('dsh.unified.multiplier', { ns: 'bs' })}</TableHead>}
-                    {enterpriseEnabled && <TableHead className="w-32 text-left">{t('model.visibilityScope')}</TableHead>}
+                    <TableHead className="w-32 text-left">{t('model.visibilityScope')}</TableHead>
                 </TableRow></TableHeader>
                 <TableBody>{models.map(model => {
                     const config = configuredModels.find(row => String(row.id) === String(model.id))
@@ -61,12 +62,12 @@ export function UserSelectableModels({ data, configuredModels, enterpriseEnabled
                             <Switch aria-label={`${t('model.supportsImages')} · ${model.model_name}`} checked={!!config?.visual}
                                 disabled={disabled} onCheckedChange={visual => onMetadataChange(model, { visual })} />}</TableCell>
                         {enterpriseEnabled && <TableCell><ModelMultiplierInput modelId={model.id} modelName={model.model_name} onSavingChange={handleRateSaving} /></TableCell>}
-                        {enterpriseEnabled && <TableCell className="text-left">
+                        <TableCell className="text-left">
                             <Button variant="link" className="whitespace-nowrap px-0" disabled={savingRates.has(model.id)}
                                 onClick={() => setSelected({ id: model.id, name: config?.displayName?.trim() || model.model_name })}>
                                 {t('model.configureVisibility')}
                             </Button>
-                        </TableCell>}
+                        </TableCell>
                     </TableRow>
                 })}</TableBody>
             </Table>
