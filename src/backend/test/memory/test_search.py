@@ -8,7 +8,7 @@ from bisheng.memory.domain.models.memory_item import MemoryItem
 from bisheng.memory.domain.ports import IndexHit, build_scope_filter
 from bisheng.memory.domain.repositories import _db
 from bisheng.memory.domain.services import metrics as m
-from bisheng.memory.domain.services.search import SearchService, rrf_fuse
+from bisheng.memory.domain.services.search import SearchService, render_hits, rrf_fuse
 from test.memory.conftest import TENANT_B, USER_2, counter
 
 
@@ -45,8 +45,12 @@ async def test_ac59_fields_and_detail_on_request(service, search, make_ctx):
         "2026-12-01",
     )
     assert hit.recorded_at and hit.detail is None and hit.has_detail
+    # The model is told which item has a detail and how to fetch it.
+    assert f"id={res.item_id}" in render_hits([hit]) and "有详情" in render_hits([hit])
     hit = (await search.search(ctx, "季度复盘", detail_ids=[res.item_id]))[0]
     assert hit.detail == "复盘全文"
+    rendered = render_hits([hit])
+    assert "复盘全文" in rendered and "以上为详情全文" in rendered and "有详情，" not in rendered
 
 
 async def test_pending_items_appended(service, search, make_ctx, index):

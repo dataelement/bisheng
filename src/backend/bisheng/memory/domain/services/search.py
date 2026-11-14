@@ -91,6 +91,11 @@ def render_hits(hits: list[SearchHit]) -> str:
         extra = f"记录于 {h.recorded_at:%Y-%m-%d}"
         if h.event_time:
             extra += f"；事件时间 {h.event_time:%Y-%m-%d}"
+        # Say which items have a detail body, or the model has no way to know detail_ids is worth using.
+        if h.detail:
+            extra += "；以上为详情全文"
+        elif h.has_detail:
+            extra += "；有详情，需要全文时用同一 query 再检索并把此 id 放进 detail_ids"
         body = h.detail or h.content
         lines.append(f"- id={h.item_id} [{TYPE_LABEL.get(h.type, h.type)}] {body}（{extra}）")
     return "\n".join(lines)
