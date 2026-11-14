@@ -120,8 +120,10 @@ def map_candidates(data: dict, existing_ids: set[str]) -> list[dict]:
             continue
         if cand.get("duplicate_of") in existing_ids:
             continue
+        detail = cand.get("detail")
         op = {
             "content": content,
+            "detail": detail.strip() if isinstance(detail, str) else "",
             "type": item_type if item_type in ITEM_TYPES else "fact",
             "event_time": cand.get("event_time"),
             "pinned": bool(cand.get("pinned")),
@@ -155,12 +157,15 @@ class ConsolidationContent:
         async with _db.async_session() as s:
             existing = await ItemRepository.list_active(s, ctx)
         # Bound the prompt: resident items first, then the most recent ones.
+        pinned_count = sum(1 for i in existing if i.pinned)
         existing = sorted(existing, key=lambda i: (not i.pinned, -(i.recorded_at.timestamp() if i.recorded_at else 0)))
         existing = existing[:MAX_EXISTING_IN_PROMPT]
         existing_view = [{"id": i.id, "type": i.type, "content": i.content, "pinned": i.pinned} for i in existing]
         today = local_today(ctx.timezone, config.default_timezone).strftime("%Y-%m-%d")
         mode = "linsight" if ctx.scene == SCENE_LINSIGHT else "chat"
-        prompt = build_prompt(today, messages, existing_view, config.resident_max_items, mode=mode)
+        prompt = build_prompt(
+            today, messages, existing_view, config.resident_max_items, mode=mode, pinned_count=pinned_count
+        )
         answer = await self.llm.consolidate(ctx, prompt)
         return map_candidates(parse_candidates(answer), {i["id"] for i in existing_view})
 
@@ -219,9 +224,7 @@ class ExpiredEventRewrite:
         if not items:
             return
         listing = "\n".join(f"- id={i.id} 事件日期 {i.event_time:%Y-%m-%d}：{i.content}" for i in items)
-        answer = await self.llm.consolidate(
-            ctx, REWRITE_PROMPT.format(today=today.strftime("%Y-%m-%d"), items=listing)
-        )
+        answer = await self.llm.consolidate(ctx, REWRITE_PROMPT.format(today=today.strftime("%Y-%m-%d"), items=listing))
         by_id = {i.id: i for i in items}
         ops = []
         for rw in parse_candidates(answer).get("rewrites") or []:
