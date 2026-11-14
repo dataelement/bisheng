@@ -1,9 +1,21 @@
 apiVersion: v2
 name: bisheng
-description: BiSheng platform — frontend, API, and Celery worker.
+description: BiSheng standard platform, optional infrastructure, Vibe runtime and
+  code sandbox
 type: application
-version: 0.1.0
-appVersion: v3.0.0
+version: 0.2.0
+appVersion: 3.1.0-beta1
 keywords:
-  - bisheng
-  - llm
+- bisheng
+- llm
+dependencies:
+- name: bisheng-app-runtime
+  alias: runtime
+  version: 0.2.0
+  repository: file://../../../deploy/kubernetes/app-runtime
+  condition: runtime.enabled
+- name: bisheng-sandbox
+  alias: sandbox
+  version: 0.2.0
+  repository: file://../bisheng-sandbox
+  condition: sandbox.enabled

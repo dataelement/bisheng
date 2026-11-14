@@ -1,0 +1,855 @@
+"""Reference-index SQL operations participating in the caller's transaction."""
+
+from __future__ import annotations
+
+from collections.abc import AsyncIterator
+from dataclasses import dataclass, field
+from heapq import heappop, heappush
+from weakref import ReferenceType, WeakKeyDictionary, ref
+
+from sqlalchemy import and_, false, or_, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
+
+from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
+from bisheng.core.context.tenant import bypass_tenant_filter, is_tenant_filter_bypassed, strict_tenant_filter
+from bisheng.core.database.tenant_filter import _resolve_tenant_id
+from bisheng.resource_reference.application.contracts import (
+    ROOT_GUARD_VERSION,
+    ReferenceSpec,
+    ReferenceState,
+    SourceKey,
+    SourceRootKey,
+    SourceType,
+    TargetKey,
+    TargetLockReceipt,
+    TargetType,
+    TransactionIdentity,
+    reference_set_digest,
+)
+from bisheng.resource_reference.application.target_verification import ReferenceTargetVerifier
+from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
+from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
+
+
+@dataclass(frozen=True, slots=True, eq=False, weakref_slot=True)
+class OwnerTargetScope:
+    transaction: TransactionIdentity
+    owner_tenant_id: int
+    targets: tuple[TargetKey, ...]
+    _receipts: tuple[TargetLockReceipt, ...] = field(repr=False)
+    _authority: object = field(repr=False)
+
+
+def _invalid(reason: str) -> ResourceReferenceInvalidError:
+    return ResourceReferenceInvalidError(reason=reason)
+
+
+class ReferenceRepository:
+    def __init__(self, *, verifier: ReferenceTargetVerifier | None = None):
+        if verifier is not None and not isinstance(verifier, ReferenceTargetVerifier):
+            raise TypeError("target query authority requires a ReferenceTargetVerifier")
+        self.verifier = verifier
+        self._scope_authority = object()
+        self._issued_scopes: WeakKeyDictionary[OwnerTargetScope, ReferenceType] = WeakKeyDictionary()
+
+    @staticmethod
+    def current_tenant_id() -> int:
+        if is_tenant_filter_bypassed():
+            raise _invalid("source_tenant_filter_bypassed")
+        tenant_id = _resolve_tenant_id()
+        if isinstance(tenant_id, bool) or not isinstance(tenant_id, int) or tenant_id <= 0:
+            raise _invalid("source_tenant_context_missing")
+        return tenant_id
+
+    @classmethod
+    def assert_source_tenant(cls, key: SourceKey | SourceRootKey) -> None:
+        if cls.current_tenant_id() != key.tenant_id:
+            raise _invalid("source_tenant_mismatch")
+
+    @staticmethod
+    def _source_query(model, key: SourceKey, *, root: bool = False, for_update: bool = False):
+        statement = select(model).where(
+            model.source_type == key.source_type.value,
+            model.source_id == key.source_id,
+            model.source_version == (ROOT_GUARD_VERSION if root else key.source_version),
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        return statement.execution_options(populate_existing=True)
+
+    def get_source_set(self, session: Session, key: SourceKey, *, for_update: bool = False):
+        self.assert_source_tenant(key)
+        with strict_tenant_filter():
+            return session.execute(
+                self._source_query(BusinessReferenceSet, key, for_update=for_update)
+            ).scalar_one_or_none()
+
+    async def aget_source_set(self, session: AsyncSession, key: SourceKey, *, for_update: bool = False):
+        self.assert_source_tenant(key)
+        with strict_tenant_filter():
+            result = await session.execute(self._source_query(BusinessReferenceSet, key, for_update=for_update))
+            return result.scalar_one_or_none()
+
+    def get_root_guard(self, session: Session, key: SourceKey, *, for_update: bool = False):
+        self.assert_source_tenant(key)
+        with strict_tenant_filter():
+            return session.execute(
+                self._source_query(BusinessReferenceSet, key, root=True, for_update=for_update)
+            ).scalar_one_or_none()
+
+    async def aget_root_guard(self, session: AsyncSession, key: SourceKey, *, for_update: bool = False):
+        self.assert_source_tenant(key)
+        with strict_tenant_filter():
+            result = await session.execute(
+                self._source_query(BusinessReferenceSet, key, root=True, for_update=for_update)
+            )
+            return result.scalar_one_or_none()
+
+    @staticmethod
+    def _root_source_exists_query(key: SourceKey | SourceRootKey, *, for_update: bool):
+        statement = (
+            select(BusinessReferenceSet.id)
+            .where(
+                BusinessReferenceSet.source_type == key.source_type.value,
+                BusinessReferenceSet.source_id == key.source_id,
+                BusinessReferenceSet.record_kind == "source",
+            )
+            .limit(1)
+        )
+        return statement.with_for_update() if for_update else statement
+
+    def has_source_sets_for_root(
+        self, session: Session, key: SourceKey | SourceRootKey, *, for_update: bool = False
+    ) -> bool:
+        """Bounded existence check for this exact tenant/type/business root."""
+        self.assert_source_tenant(key)
+        with strict_tenant_filter():
+            return session.execute(self._root_source_exists_query(key, for_update=for_update)).first() is not None
+
+    async def ahas_source_sets_for_root(
+        self, session: AsyncSession, key: SourceKey | SourceRootKey, *, for_update: bool = False
+    ) -> bool:
+        self.assert_source_tenant(key)
+        with strict_tenant_filter():
+            result = await session.execute(self._root_source_exists_query(key, for_update=for_update))
+            return result.first() is not None
+
+    def list_source_references(
+        self, session: Session, key: SourceKey, *, for_update: bool = False
+    ) -> tuple[BusinessResourceReference, ...]:
+        self.assert_source_tenant(key)
+        with strict_tenant_filter():
+            return tuple(
+                session.execute(self._source_query(BusinessResourceReference, key, for_update=for_update))
+                .scalars()
+                .all()
+            )
+
+    async def alist_source_references(
+        self, session: AsyncSession, key: SourceKey, *, for_update: bool = False
+    ) -> tuple[BusinessResourceReference, ...]:
+        self.assert_source_tenant(key)
+        with strict_tenant_filter():
+            result = await session.execute(self._source_query(BusinessResourceReference, key, for_update=for_update))
+            return tuple(result.scalars().all())
+
+    def list_source_sets(self, session: Session, *, source_type: str) -> tuple[BusinessReferenceSet, ...]:
+        self.current_tenant_id()
+        with strict_tenant_filter():
+            return tuple(session.execute(self._sets_query(source_type)).scalars().all())
+
+    async def alist_source_sets(self, session: AsyncSession, *, source_type: str) -> tuple[BusinessReferenceSet, ...]:
+        self.current_tenant_id()
+        with strict_tenant_filter():
+            return tuple((await session.execute(self._sets_query(source_type))).scalars().all())
+
+    @staticmethod
+    def _root_source_sets_query(key: SourceKey | SourceRootKey, *, for_update: bool):
+        statement = (
+            select(BusinessReferenceSet)
+            .where(
+                BusinessReferenceSet.source_type == key.source_type.value,
+                BusinessReferenceSet.source_id == key.source_id,
+                BusinessReferenceSet.record_kind == "source",
+            )
+            .order_by(BusinessReferenceSet.source_version)
+            .execution_options(populate_existing=True)
+        )
+        return statement.with_for_update() if for_update else statement
+
+    def list_source_sets_for_root(
+        self, session: Session, key: SourceKey | SourceRootKey, *, for_update: bool = False
+    ) -> tuple[BusinessReferenceSet, ...]:
+        """All indexed versions, including inactive ones, of one trusted root."""
+        self.assert_source_tenant(key)
+        with strict_tenant_filter():
+            return tuple(session.execute(self._root_source_sets_query(key, for_update=for_update)).scalars())
+
+    async def alist_source_sets_for_root(
+        self, session: AsyncSession, key: SourceKey | SourceRootKey, *, for_update: bool = False
+    ) -> tuple[BusinessReferenceSet, ...]:
+        self.assert_source_tenant(key)
+        with strict_tenant_filter():
+            return tuple((await session.execute(self._root_source_sets_query(key, for_update=for_update))).scalars())
+
+    @staticmethod
+    def _root_source_references_query(key: SourceKey | SourceRootKey, *, for_update: bool):
+        statement = (
+            select(BusinessResourceReference)
+            .where(
+                BusinessResourceReference.source_type == key.source_type.value,
+                BusinessResourceReference.source_id == key.source_id,
+            )
+            .order_by(
+                BusinessResourceReference.source_version,
+                BusinessResourceReference.slot_key,
+                BusinessResourceReference.target_type,
+                BusinessResourceReference.target_id,
+            )
+            .execution_options(populate_existing=True)
+        )
+        return statement.with_for_update() if for_update else statement
+
+    def list_source_references_for_root(
+        self, session: Session, key: SourceKey | SourceRootKey, *, for_update: bool = False
+    ) -> tuple[BusinessResourceReference, ...]:
+        """Raw root details, including rows whose source set is missing."""
+        self.assert_source_tenant(key)
+        with strict_tenant_filter():
+            return tuple(session.execute(self._root_source_references_query(key, for_update=for_update)).scalars())
+
+    async def alist_source_references_for_root(
+        self, session: AsyncSession, key: SourceKey | SourceRootKey, *, for_update: bool = False
+    ) -> tuple[BusinessResourceReference, ...]:
+        self.assert_source_tenant(key)
+        with strict_tenant_filter():
+            return tuple(
+                (await session.execute(self._root_source_references_query(key, for_update=for_update))).scalars()
+            )
+
+    @staticmethod
+    def _sets_query(source_type):
+        return select(BusinessReferenceSet).where(
+            BusinessReferenceSet.source_type == SourceType(source_type).value,
+            BusinessReferenceSet.record_kind == "source",
+        )
+
+    @staticmethod
+    def _check_revision(current, expected_revision: int | None, new_revision: int, *, root: bool = False):
+        if isinstance(new_revision, bool) or not isinstance(new_revision, int) or new_revision < 0:
+            raise _invalid("source_revision_conflict")
+        if current is None:
+            if expected_revision != (0 if root else None):
+                raise _invalid("root_revision_conflict" if root else "source_revision_conflict")
+            if root and new_revision <= 0:
+                raise _invalid("root_revision_conflict")
+        elif (
+            isinstance(expected_revision, bool)
+            or not isinstance(expected_revision, int)
+            or current.source_revision != expected_revision
+            or new_revision <= expected_revision
+        ):
+            raise _invalid("root_revision_conflict" if root else "source_revision_conflict")
+
+    @staticmethod
+    def _revision_update(current, key, expected_revision, **values):
+        # Tenant events do not intercept bulk UPDATE. All identity predicates
+        # are required even when the caller already holds the business root.
+        return (
+            update(BusinessReferenceSet)
+            .where(
+                BusinessReferenceSet.id == current.id,
+                BusinessReferenceSet.tenant_id == key.tenant_id,
+                BusinessReferenceSet.source_type == key.source_type.value,
+                BusinessReferenceSet.source_id == key.source_id,
+                BusinessReferenceSet.source_version == current.source_version,
+                BusinessReferenceSet.source_revision == expected_revision,
+            )
+            .values(**values)
+            .execution_options(synchronize_session=False)
+        )
+
+    @staticmethod
+    def _new_guard(key, revision):
+        return BusinessReferenceSet(
+            tenant_id=key.tenant_id,
+            source_type=key.source_type.value,
+            source_id=key.source_id,
+            source_version=ROOT_GUARD_VERSION,
+            record_kind="root_guard",
+            source_revision=revision,
+            extractor_version="root-guard-v1",
+            digest=reference_set_digest(()),
+            effective=False,
+            ready=False,
+        )
+
+    def advance_root_guard(self, session: Session, key: SourceKey, *, expected_revision: int, new_revision: int) -> int:
+        current = self.get_root_guard(session, key, for_update=True)
+        if current is None and self.has_source_sets_for_root(session, key, for_update=True):
+            raise ReferenceCoverageNotReadyError(reason="source_root_guard_missing")
+        self._check_revision(current, expected_revision, new_revision, root=True)
+        if current is None:
+            session.add(self._new_guard(key, new_revision))
+        else:
+            result = session.execute(
+                self._revision_update(current, key, expected_revision, source_revision=new_revision)
+            )
+            if result.rowcount != 1:
+                raise _invalid("root_revision_conflict")
+            session.expire(current)
+        session.flush()
+        return new_revision
+
+    async def aadvance_root_guard(
+        self, session: AsyncSession, key: SourceKey, *, expected_revision: int, new_revision: int
+    ) -> int:
+        current = await self.aget_root_guard(session, key, for_update=True)
+        if current is None and await self.ahas_source_sets_for_root(session, key, for_update=True):
+            raise ReferenceCoverageNotReadyError(reason="source_root_guard_missing")
+        self._check_revision(current, expected_revision, new_revision, root=True)
+        if current is None:
+            session.add(self._new_guard(key, new_revision))
+        else:
+            result = await session.execute(
+                self._revision_update(current, key, expected_revision, source_revision=new_revision)
+            )
+            if result.rowcount != 1:
+                raise _invalid("root_revision_conflict")
+            session.expire(current)
+        await session.flush()
+        return new_revision
+
+    def _prepare_set(self, key, references, new_revision, extractor_version, digest, effective):
+        self.assert_source_tenant(key)
+        if not extractor_version or len(extractor_version) > 64:
+            raise _invalid("extractor_version_invalid")
+        if not isinstance(effective, bool) or (not effective and references):
+            raise _invalid("ineffective_source_has_references")
+        indexed = {}
+        for row in references:
+            if (row.tenant_id, row.source_type, row.source_id, row.source_version, row.source_revision) != (
+                key.tenant_id,
+                key.source_type.value,
+                key.source_id,
+                key.source_version,
+                new_revision,
+            ):
+                raise _invalid("reference_row_source_mismatch")
+            identity = (row.slot_key, row.target_type, row.target_id)
+            if identity in indexed:
+                raise _invalid("duplicate_reference_identity")
+            indexed[identity] = row
+        specs = tuple(ReferenceSpec(row.slot_key, TargetKey(row.target_type, row.target_id)) for row in references)
+        if digest != reference_set_digest(specs):
+            raise _invalid("source_digest_mismatch")
+        return indexed, {
+            "source_revision": new_revision,
+            "extractor_version": extractor_version,
+            "digest": digest,
+            "effective": effective,
+            "ready": True,
+        }
+
+    @staticmethod
+    def _change_rows(old, new):
+        previous = {(row.slot_key, row.target_type, row.target_id): row for row in old}
+        removed = tuple(row for identity, row in previous.items() if identity not in new)
+        added = tuple(row for identity, row in new.items() if identity not in previous)
+        for identity in previous.keys() & new.keys():
+            existing, incoming = previous[identity], new[identity]
+            for name in (
+                "source_revision",
+                "target_tenant_id",
+                "target_space_id",
+                "legacy_invalid_reason",
+                "legacy_run_id",
+                "legacy_evidence_key",
+            ):
+                setattr(existing, name, getattr(incoming, name))
+        return removed, added
+
+    def replace_source_set(
+        self,
+        session: Session,
+        key: SourceKey,
+        *,
+        expected_revision: int | None,
+        new_revision: int,
+        references: tuple[BusinessResourceReference, ...],
+        extractor_version: str,
+        digest: str,
+        effective: bool,
+    ) -> None:
+        indexed, values = self._prepare_set(key, references, new_revision, extractor_version, digest, effective)
+        current = self.get_source_set(session, key, for_update=True)
+        self._check_revision(current, expected_revision, new_revision)
+        old = self.list_source_references(session, key)
+        if current is None:
+            session.add(
+                BusinessReferenceSet(
+                    tenant_id=key.tenant_id,
+                    source_type=key.source_type.value,
+                    source_id=key.source_id,
+                    source_version=key.source_version,
+                    **values,
+                )
+            )
+        else:
+            result = session.execute(self._revision_update(current, key, expected_revision, **values))
+            if result.rowcount != 1:
+                raise _invalid("source_revision_conflict")
+            session.expire(current)
+        removed, added = self._change_rows(old, indexed)
+        for row in removed:
+            session.delete(row)
+        session.add_all(added)
+        session.flush()
+
+    async def areplace_source_set(
+        self,
+        session: AsyncSession,
+        key: SourceKey,
+        *,
+        expected_revision: int | None,
+        new_revision: int,
+        references: tuple[BusinessResourceReference, ...],
+        extractor_version: str,
+        digest: str,
+        effective: bool,
+    ) -> None:
+        indexed, values = self._prepare_set(key, references, new_revision, extractor_version, digest, effective)
+        current = await self.aget_source_set(session, key, for_update=True)
+        self._check_revision(current, expected_revision, new_revision)
+        old = await self.alist_source_references(session, key)
+        if current is None:
+            session.add(
+                BusinessReferenceSet(
+                    tenant_id=key.tenant_id,
+                    source_type=key.source_type.value,
+                    source_id=key.source_id,
+                    source_version=key.source_version,
+                    **values,
+                )
+            )
+        else:
+            result = await session.execute(self._revision_update(current, key, expected_revision, **values))
+            if result.rowcount != 1:
+                raise _invalid("source_revision_conflict")
+            session.expire(current)
+        removed, added = self._change_rows(old, indexed)
+        for row in removed:
+            await session.delete(row)
+        session.add_all(added)
+        await session.flush()
+
+    @staticmethod
+    def _target_query(targets: tuple[TargetKey, ...], *, include_space_contents: bool = False):
+        groups = {}
+        for target in targets:
+            groups.setdefault(target.target_type.value, set()).add(target.target_id)
+
+        def ids(column, values):
+            ordered = sorted(values)
+            return or_(*(column.in_(ordered[start : start + 200]) for start in range(0, len(ordered), 200)))
+
+        # One global id-ordered query, not a rescan per target group/page.
+        conditions = [
+            and_(BusinessResourceReference.target_type == kind, ids(BusinessResourceReference.target_id, values))
+            for kind, values in groups.items()
+        ]
+        if include_space_contents:
+            spaces = [target.target_id for target in targets if target.target_type == TargetType.KNOWLEDGE_SPACE]
+            if spaces:
+                conditions.append(ids(BusinessResourceReference.target_space_id, spaces))
+        return (
+            select(BusinessResourceReference)
+            .where(or_(*conditions) if conditions else false())
+            .order_by(BusinessResourceReference.id)
+            .execution_options(populate_existing=True)
+        )
+
+    def list_inbound_targets(
+        self, session: Session, targets: tuple[TargetKey, ...]
+    ) -> tuple[BusinessResourceReference, ...]:
+        self.current_tenant_id()
+        if not targets:
+            return ()
+        with strict_tenant_filter():
+            return tuple(session.execute(self._target_query(targets)).scalars().all())
+
+    async def alist_inbound_targets(
+        self, session: AsyncSession, targets: tuple[TargetKey, ...]
+    ) -> tuple[BusinessResourceReference, ...]:
+        self.current_tenant_id()
+        if not targets:
+            return ()
+        with strict_tenant_filter():
+            return tuple((await session.execute(self._target_query(targets))).scalars().all())
+
+    def list_inbound_space(self, session: Session, space_id: str) -> tuple[BusinessResourceReference, ...]:
+        self.current_tenant_id()
+        with strict_tenant_filter():
+            return tuple(
+                session.execute(
+                    self._target_query((TargetKey(TargetType.KNOWLEDGE_SPACE, space_id),), include_space_contents=True)
+                )
+                .scalars()
+                .all()
+            )
+
+    async def alist_inbound_space(self, session: AsyncSession, space_id: str) -> tuple[BusinessResourceReference, ...]:
+        self.current_tenant_id()
+        with strict_tenant_filter():
+            return tuple(
+                (
+                    await session.execute(
+                        self._target_query(
+                            (TargetKey(TargetType.KNOWLEDGE_SPACE, space_id),), include_space_contents=True
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+
+    def list_inbound_exact_files(self, session: Session, file_ids: tuple[str, ...]):
+        return self.list_inbound_targets(session, tuple(TargetKey(TargetType.KNOWLEDGE_FILE, key) for key in file_ids))
+
+    async def alist_inbound_exact_files(self, session: AsyncSession, file_ids: tuple[str, ...]):
+        return await self.alist_inbound_targets(
+            session, tuple(TargetKey(TargetType.KNOWLEDGE_FILE, key) for key in file_ids)
+        )
+
+    def target_owner_scope(
+        self, session: Session | AsyncSession, receipts: tuple[TargetLockReceipt, ...]
+    ) -> OwnerTargetScope:
+        tenant_id = self.current_tenant_id()
+        if self.verifier is None:
+            raise _invalid("reference_target_verifier_missing")
+        targets = self.verifier.validate_owner_receipts(session, receipts)
+        if any(target.target_tenant_id != tenant_id for target in targets):
+            raise _invalid("target_owner_scope_invalid")
+        keys = tuple(sorted({target.key for target in targets}, key=lambda key: key.lock_order_key))
+        scope = OwnerTargetScope(TransactionIdentity.capture(session), tenant_id, keys, receipts, self._scope_authority)
+        self._issued_scopes[scope] = ref(scope)
+        return scope
+
+    def _check_scope(self, session, scope):
+        issued = self._issued_scopes.get(scope) if isinstance(scope, OwnerTargetScope) else None
+        if (
+            not isinstance(scope, OwnerTargetScope)
+            or issued is None
+            or issued() is not scope
+            or not scope.targets
+            or scope._authority is not self._scope_authority
+            or scope.owner_tenant_id != self.current_tenant_id()
+        ):
+            raise _invalid("target_owner_scope_invalid")
+        try:
+            scope.transaction.assert_current(session)
+        except (TypeError, ValueError) as exc:
+            raise _invalid("target_owner_scope_expired") from exc
+        if self.verifier is None:
+            raise _invalid("reference_target_verifier_missing")
+        verified = self.verifier.validate_owner_receipts(session, scope._receipts)
+        if {target.key for target in verified} != set(scope.targets):
+            raise _invalid("target_owner_scope_invalid")
+
+    async def aupdate_file_target_ownership(self, session, *, scope, expected_space_id):
+        """Validate the complete locked inbound set before bounded derived writes.
+
+        The business Owner already holds Root/File locks and owns the SAVEPOINT.
+        Reuse the exact-target stream; do not introduce a reverse SourceRoot lock.
+        """
+        self._check_scope(session, scope)
+        if not isinstance(session, AsyncSession):
+            raise TypeError("file ownership requires a native AsyncSession")
+        native = session.sync_session
+        if native.new or native.dirty or native.deleted:
+            raise _invalid("reference_file_owner_pending_changes")
+        transaction, tenant = TransactionIdentity.capture(session), self.current_tenant_id()
+        targets = self.verifier.validate_owner_receipts(session, scope._receipts)
+        if (
+            type(expected_space_id) is not int
+            or expected_space_id <= 0
+            or any(
+                target.key.target_type != TargetType.KNOWLEDGE_FILE
+                or target.state != ReferenceState.VALID
+                or target.target_tenant_id != tenant
+                or target.target_space_id is None
+                for target in targets
+            )
+            or len({target.target_space_id for target in targets}) != 1
+            or targets[0].target_space_id == str(expected_space_id)
+        ):
+            raise _invalid("reference_file_owner_invalid")
+        spaces = {target.key.target_id: target.target_space_id for target in targets}
+        before, after = str(expected_space_id), targets[0].target_space_id
+
+        def current():
+            transaction.assert_current(session)
+            if self.current_tenant_id() != tenant or self.verifier is None:
+                raise _invalid("reference_file_owner_context_changed")
+
+        def valid(row):
+            if (
+                row.tenant_id != tenant
+                or row.target_tenant_id != tenant
+                or row.target_type != TargetType.KNOWLEDGE_FILE.value
+                or row.target_id not in spaces
+                or row.target_space_id not in (before, spaces[row.target_id])
+                or any(
+                    getattr(row, key) is not None
+                    for key in ("legacy_invalid_reason", "legacy_run_id", "legacy_evidence_key")
+                )
+            ):
+                raise _invalid("reference_file_owner_inbound_invalid")
+
+        # Exhaustion performs the original stream's complete scope validation.
+        async for page in self.aiter_inbound_for_owner_pages(session, scope):
+            current()
+            for row in page:
+                valid(row)
+        changed = 0
+        table = BusinessResourceReference.__table__
+        async for page in self.aiter_inbound_for_owner_pages(session, scope):
+            current()
+            for row in page:
+                valid(row)
+            ids = tuple(row.id for row in page if row.target_space_id == before)
+            if not ids:
+                continue
+            file_ids = tuple(sorted({row.target_id for row in page if row.target_space_id == before}))
+            result = await session.execute(
+                update(table)
+                .where(
+                    table.c.id.in_(ids),
+                    table.c.tenant_id == tenant,
+                    table.c.target_tenant_id == tenant,
+                    table.c.target_type == TargetType.KNOWLEDGE_FILE.value,
+                    table.c.target_id.in_(file_ids),
+                    table.c.target_space_id == before,
+                )
+                .values(target_space_id=after)
+            )
+            current()
+            if result.rowcount != len(ids):
+                raise _invalid("reference_file_owner_write_conflict")
+            changed += result.rowcount
+        current()
+        self._check_scope(session, scope)
+        return changed
+
+    def list_inbound_for_owner(
+        self, session: Session, scope: OwnerTargetScope, *, include_space_contents: bool = False
+    ) -> tuple[BusinessResourceReference, ...]:
+        self._check_scope(session, scope)
+        with bypass_tenant_filter():
+            return tuple(
+                session.execute(
+                    self._target_query(scope.targets, include_space_contents=include_space_contents).with_for_update()
+                )
+                .scalars()
+                .all()
+            )
+
+    async def alist_inbound_for_owner(
+        self, session: AsyncSession, scope: OwnerTargetScope, *, include_space_contents: bool = False
+    ) -> tuple[BusinessResourceReference, ...]:
+        self._check_scope(session, scope)
+        with bypass_tenant_filter():
+            return tuple(
+                (
+                    await session.execute(
+                        self._target_query(
+                            scope.targets, include_space_contents=include_space_contents
+                        ).with_for_update()
+                    )
+                )
+                .scalars()
+                .all()
+            )
+
+    async def alist_inbound_for_owner_page(
+        self, session: AsyncSession, scope: OwnerTargetScope, *, after_id: int | None = None, limit: int = 200
+    ) -> tuple[BusinessResourceReference, ...]:
+        """Seek one exact Owner's targets, preserving incomplete-source failures.
+
+        The source join includes the entire identity. An OUTER JOIN makes an
+        orphaned or unready set an explicit coverage error instead of erasing
+        its blocking binding. Paused business configurations remain effective.
+        """
+        self._check_scope(session, scope)
+        if type(limit) is not int or not 1 <= limit <= 200:
+            raise ValueError("inbound page limit must be 1..200")
+        if after_id is not None and (type(after_id) is not int or after_id < 0):
+            raise ValueError("inbound cursor must be a non-negative reference ID")
+        with bypass_tenant_filter():
+            rows = (await session.execute(self._inbound_owner_statement(scope.targets, after_id, limit))).all()
+        result = self._inbound_owner_rows(rows)
+        self._check_scope(session, scope)
+        return result
+
+    @classmethod
+    def _inbound_owner_statement(cls, targets, after_id, limit, *, include_space_contents=False):
+        source, binding = BusinessReferenceSet, BusinessResourceReference
+        query = (
+            cls._target_query(targets, include_space_contents=include_space_contents)
+            .add_columns(source)
+            .outerjoin(
+                source,
+                and_(
+                    source.tenant_id == binding.tenant_id,
+                    source.source_type == binding.source_type,
+                    source.source_id == binding.source_id,
+                    source.source_version == binding.source_version,
+                ),
+            )
+            .limit(limit)
+            .with_for_update()
+        )
+        if after_id is not None:
+            query = query.where(binding.id > after_id)
+        return query
+
+    @staticmethod
+    def _inbound_owner_rows(rows):
+        result = []
+        for reference, indexed in rows:
+            if (
+                indexed is None
+                or indexed.record_kind != "source"
+                or not indexed.ready
+                or not indexed.effective
+                or indexed.source_revision != reference.source_revision
+            ):
+                raise ReferenceCoverageNotReadyError(reason="reference_inbound_source_incomplete")
+            result.append(reference)
+        return tuple(result)
+
+    async def aiter_inbound_for_owner_pages(
+        self,
+        session: AsyncSession,
+        scope: OwnerTargetScope,
+        *,
+        limit: int = 200,
+        global_id_order: bool = False,
+        include_space_contents: bool = False,
+    ) -> AsyncIterator[tuple[BusinessResourceReference, ...]]:
+        """Stream exact target groups, optionally merging their BRR IDs.
+
+        Global output order is not physical lock order: each SQL query still
+        locks one exact group. Only exhaustion runs final scope validation;
+        partial pages grant no authorization. The merge holds one bounded
+        page and one heap candidate per group, never all inbound rows.
+        """
+        self._check_scope(session, scope)
+        if type(limit) is not int or not 1 <= limit <= 200:
+            raise ValueError("inbound page limit must be 1..200")
+        if type(global_id_order) is not bool:
+            raise ValueError("inbound global ID order must be a bool")
+        if type(include_space_contents) is not bool or (
+            include_space_contents
+            and (len(scope.targets) != 1 or scope.targets[0].target_type != TargetType.KNOWLEDGE_SPACE)
+        ):
+            raise ValueError("space contents require one verified space Owner scope")
+        # Copy primitive values before awaiting: neither a changed scope nor a
+        # changed original TargetKey may redirect a later target group's SQL.
+        raw_targets = tuple((key.target_type.value, key.target_id) for key in scope.targets)
+        transaction = TransactionIdentity.capture(session)
+        owner = self.current_tenant_id()
+        registration = self._issued_scopes.get(scope)
+        authority = self._scope_authority
+
+        def current():
+            try:
+                transaction.assert_current(session)
+            except (TypeError, ValueError) as error:
+                raise _invalid("target_owner_scope_expired") from error
+            if (
+                self.current_tenant_id() != owner
+                or self._issued_scopes.get(scope) is not registration
+                or registration() is not scope
+                or scope._authority is not authority
+                or scope.owner_tenant_id != owner
+            ):
+                raise _invalid("target_owner_scope_invalid")
+
+        if global_id_order:
+            groups = tuple(
+                tuple(TargetKey(kind, ident) for kind, ident in raw_targets[start : start + 200])
+                for start in range(0, len(raw_targets), 200)
+            )
+
+            async def load(index, after):
+                current()
+                with session.no_autoflush, bypass_tenant_filter():
+                    rows = (
+                        await session.execute(
+                            self._inbound_owner_statement(
+                                groups[index], after, limit, include_space_contents=include_space_contents
+                            )
+                        )
+                    ).all()
+                current()
+                page = self._inbound_owner_rows(rows)
+                # Buffered ORM rows are also mutable after yielding another
+                # group's page. Capture every merge key and seek cursor now.
+                return page, tuple(row.id for row in page)
+
+            pages, heap, output = [], [], []
+            for index in range(len(groups)):
+                page, ids = await load(index, None)
+                pages.append((page, ids))
+                if page:
+                    heappush(heap, (ids[0], index, 0))
+            while heap:
+                current()
+                _, index, offset = heappop(heap)
+                page, ids = pages[index]
+                output.append(page[offset])
+                if offset + 1 < len(page):
+                    heappush(heap, (ids[offset + 1], index, offset + 1))
+                else:
+                    if len(page) == limit:
+                        page, ids = await load(index, ids[-1])
+                    else:
+                        page, ids = (), ()
+                    pages[index] = (page, ids)
+                    if page:
+                        heappush(heap, (ids[0], index, 0))
+                if len(output) == limit:
+                    yield tuple(output)
+                    output.clear()
+            if output:
+                yield tuple(output)
+        else:
+            for start in range(0, len(raw_targets), 200):
+                targets = tuple(TargetKey(kind, ident) for kind, ident in raw_targets[start : start + 200])
+                after = None
+                while True:
+                    current()
+                    with session.no_autoflush, bypass_tenant_filter():
+                        rows = (
+                            await session.execute(
+                                self._inbound_owner_statement(
+                                    targets, after, limit, include_space_contents=include_space_contents
+                                )
+                            )
+                        ).all()
+                    current()
+                    page = self._inbound_owner_rows(rows)
+                    if not page:
+                        break
+                    # The ORM rows are public and mutable after yielding. Capture
+                    # the SQL cursor first so their mutation cannot skip later rows.
+                    after = page[-1].id
+                    yield page
+                    if len(page) < limit:
+                        break
+        current()
+        self._check_scope(session, scope)
+        if tuple((key.target_type.value, key.target_id) for key in scope.targets) != raw_targets:
+            raise _invalid("target_owner_scope_invalid")

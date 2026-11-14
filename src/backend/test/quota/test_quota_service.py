@@ -4,6 +4,7 @@ Covers AC-15~AC-23: effective quota calculation, multi-role max,
 tenant hard limit, admin unlimited, quota check enforcement.
 """
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -43,6 +44,8 @@ def _make_user_role(role_id):
 def _make_tenant(tenant_id=1, quota_config=None):
     t = MagicMock()
     t.id = tenant_id
+    t.status = "active"
+    t.parent_tenant_id = None
     t.quota_config = quota_config
     return t
 
@@ -68,7 +71,6 @@ class TestGetEffectiveQuota:
         """AC-17: Multi-role quota takes the maximum value (5, 10 → 10)."""
         from bisheng.role.domain.services.quota_service import QuotaService
 
-        user_roles = [_make_user_role(3), _make_user_role(4)]
         roles = [
             _make_role(3, {"channel": 5}),
             _make_role(4, {"channel": 10}),
@@ -76,12 +78,12 @@ class TestGetEffectiveQuota:
         tenant = _make_tenant(quota_config=None)  # tenant unlimited
 
         with (
-            patch("bisheng.role.domain.services.quota_service.UserRoleDao") as mock_ur_dao,
-            patch("bisheng.role.domain.services.quota_service.RoleDao") as mock_role_dao,
+            patch(
+                "bisheng.role.domain.services.quota_service.load_effective_roles", new_callable=AsyncMock
+            ) as mock_policy,
             patch("bisheng.role.domain.services.quota_service.TenantDao") as mock_tenant_dao,
         ):
-            mock_ur_dao.aget_user_roles = AsyncMock(return_value=user_roles)
-            mock_role_dao.aget_role_by_ids = AsyncMock(return_value=roles)
+            mock_policy.return_value = SimpleNamespace(home_tenant_id=1, roles=roles)
             mock_tenant_dao.aget_by_id = AsyncMock(return_value=tenant)
 
             result = await QuotaService.get_effective_quota(
@@ -97,19 +99,18 @@ class TestGetEffectiveQuota:
         """AC-16: If any role has -1 for a resource type, return -1."""
         from bisheng.role.domain.services.quota_service import QuotaService
 
-        user_roles = [_make_user_role(3), _make_user_role(4)]
         roles = [
             _make_role(3, {"workflow": 10}),
             _make_role(4, {"workflow": -1}),
         ]
 
         with (
-            patch("bisheng.role.domain.services.quota_service.UserRoleDao") as mock_ur_dao,
-            patch("bisheng.role.domain.services.quota_service.RoleDao") as mock_role_dao,
+            patch(
+                "bisheng.role.domain.services.quota_service.load_effective_roles", new_callable=AsyncMock
+            ) as mock_policy,
             patch("bisheng.role.domain.services.quota_service.TenantDao") as mock_tenant_dao,
         ):
-            mock_ur_dao.aget_user_roles = AsyncMock(return_value=user_roles)
-            mock_role_dao.aget_role_by_ids = AsyncMock(return_value=roles)
+            mock_policy.return_value = SimpleNamespace(home_tenant_id=1, roles=roles)
             mock_tenant_dao.aget_by_id = AsyncMock(return_value=_make_tenant())
 
             result = await QuotaService.get_effective_quota(
@@ -125,17 +126,16 @@ class TestGetEffectiveQuota:
         """AC-18: Missing quota_config key uses DEFAULT_ROLE_QUOTA."""
         from bisheng.role.domain.services.quota_service import DEFAULT_ROLE_QUOTA, QuotaService
 
-        user_roles = [_make_user_role(3)]
         roles = [_make_role(3, {"channel": 5})]  # no 'knowledge_space' key
         tenant = _make_tenant(quota_config=None)
 
         with (
-            patch("bisheng.role.domain.services.quota_service.UserRoleDao") as mock_ur_dao,
-            patch("bisheng.role.domain.services.quota_service.RoleDao") as mock_role_dao,
+            patch(
+                "bisheng.role.domain.services.quota_service.load_effective_roles", new_callable=AsyncMock
+            ) as mock_policy,
             patch("bisheng.role.domain.services.quota_service.TenantDao") as mock_tenant_dao,
         ):
-            mock_ur_dao.aget_user_roles = AsyncMock(return_value=user_roles)
-            mock_role_dao.aget_role_by_ids = AsyncMock(return_value=roles)
+            mock_policy.return_value = SimpleNamespace(home_tenant_id=1, roles=roles)
             mock_tenant_dao.aget_by_id = AsyncMock(return_value=tenant)
 
             result = await QuotaService.get_effective_quota(
@@ -151,17 +151,16 @@ class TestGetEffectiveQuota:
         """Role with quota_config=None uses all defaults."""
         from bisheng.role.domain.services.quota_service import DEFAULT_ROLE_QUOTA, QuotaService
 
-        user_roles = [_make_user_role(3)]
         roles = [_make_role(3, None)]  # quota_config is None
         tenant = _make_tenant(quota_config=None)
 
         with (
-            patch("bisheng.role.domain.services.quota_service.UserRoleDao") as mock_ur_dao,
-            patch("bisheng.role.domain.services.quota_service.RoleDao") as mock_role_dao,
+            patch(
+                "bisheng.role.domain.services.quota_service.load_effective_roles", new_callable=AsyncMock
+            ) as mock_policy,
             patch("bisheng.role.domain.services.quota_service.TenantDao") as mock_tenant_dao,
         ):
-            mock_ur_dao.aget_user_roles = AsyncMock(return_value=user_roles)
-            mock_role_dao.aget_role_by_ids = AsyncMock(return_value=roles)
+            mock_policy.return_value = SimpleNamespace(home_tenant_id=1, roles=roles)
             mock_tenant_dao.aget_by_id = AsyncMock(return_value=tenant)
 
             result = await QuotaService.get_effective_quota(
@@ -180,10 +179,12 @@ class TestGetEffectiveQuota:
         tenant = _make_tenant(quota_config=None)
 
         with (
-            patch("bisheng.role.domain.services.quota_service.UserRoleDao") as mock_ur_dao,
+            patch(
+                "bisheng.role.domain.services.quota_service.load_effective_roles", new_callable=AsyncMock
+            ) as mock_policy,
             patch("bisheng.role.domain.services.quota_service.TenantDao") as mock_tenant_dao,
         ):
-            mock_ur_dao.aget_user_roles = AsyncMock(return_value=[])
+            mock_policy.return_value = SimpleNamespace(home_tenant_id=1, roles=[])
             mock_tenant_dao.aget_by_id = AsyncMock(return_value=tenant)
 
             result = await QuotaService.get_effective_quota(
@@ -199,17 +200,16 @@ class TestGetEffectiveQuota:
         """AC-22: Tenant hard limit caps effective quota via min(remaining, role)."""
         from bisheng.role.domain.services.quota_service import QuotaService
 
-        user_roles = [_make_user_role(3)]
         roles = [_make_role(3, {"knowledge_space": 30})]
         tenant = _make_tenant(quota_config={"knowledge_space": 50})  # tenant limit 50
 
         with (
-            patch("bisheng.role.domain.services.quota_service.UserRoleDao") as mock_ur_dao,
-            patch("bisheng.role.domain.services.quota_service.RoleDao") as mock_role_dao,
+            patch(
+                "bisheng.role.domain.services.quota_service.load_effective_roles", new_callable=AsyncMock
+            ) as mock_policy,
             patch("bisheng.role.domain.services.quota_service.TenantDao") as mock_tenant_dao,
         ):
-            mock_ur_dao.aget_user_roles = AsyncMock(return_value=user_roles)
-            mock_role_dao.aget_role_by_ids = AsyncMock(return_value=roles)
+            mock_policy.return_value = SimpleNamespace(home_tenant_id=1, roles=roles)
             mock_tenant_dao.aget_by_id = AsyncMock(return_value=tenant)
 
             with patch.object(QuotaService, "get_tenant_resource_count", new_callable=AsyncMock, return_value=42):
@@ -228,17 +228,16 @@ class TestGetEffectiveQuota:
         """Tenant with null quota_config means unlimited — only role_quota matters."""
         from bisheng.role.domain.services.quota_service import QuotaService
 
-        user_roles = [_make_user_role(3)]
         roles = [_make_role(3, {"channel": 15})]
         tenant = _make_tenant(quota_config=None)
 
         with (
-            patch("bisheng.role.domain.services.quota_service.UserRoleDao") as mock_ur_dao,
-            patch("bisheng.role.domain.services.quota_service.RoleDao") as mock_role_dao,
+            patch(
+                "bisheng.role.domain.services.quota_service.load_effective_roles", new_callable=AsyncMock
+            ) as mock_policy,
             patch("bisheng.role.domain.services.quota_service.TenantDao") as mock_tenant_dao,
         ):
-            mock_ur_dao.aget_user_roles = AsyncMock(return_value=user_roles)
-            mock_role_dao.aget_role_by_ids = AsyncMock(return_value=roles)
+            mock_policy.return_value = SimpleNamespace(home_tenant_id=1, roles=roles)
             mock_tenant_dao.aget_by_id = AsyncMock(return_value=tenant)
 
             result = await QuotaService.get_effective_quota(
@@ -267,7 +266,10 @@ class TestCheckQuota:
 
         with (
             patch(
-                "bisheng.role.domain.services.quota_service.UserRoleDao.aget_user_roles", new=AsyncMock(return_value=[])
+                "bisheng.role.domain.services.quota_service.load_effective_roles",
+                new=AsyncMock(
+                    return_value=SimpleNamespace(home_tenant_id=1, roles=[_make_role(3, {"knowledge_space": 10})])
+                ),
             ),
             patch.object(QuotaService, "_apply_tenant_chain_cap", new=AsyncMock(return_value=(10, None))),
             patch.object(QuotaService, "get_user_resource_count", new=AsyncMock(return_value=10)),
@@ -287,7 +289,10 @@ class TestCheckQuota:
 
         with (
             patch(
-                "bisheng.role.domain.services.quota_service.UserRoleDao.aget_user_roles", new=AsyncMock(return_value=[])
+                "bisheng.role.domain.services.quota_service.load_effective_roles",
+                new=AsyncMock(
+                    return_value=SimpleNamespace(home_tenant_id=1, roles=[_make_role(3, {"knowledge_space": 10})])
+                ),
             ),
             patch.object(QuotaService, "_apply_tenant_chain_cap", new=AsyncMock(return_value=(10, None))),
             patch.object(QuotaService, "get_user_resource_count", new=AsyncMock(return_value=5)),
@@ -302,135 +307,68 @@ class TestCheckQuota:
 
 
 class TestCheckInfoSourceSubscribeLimit:
-    """info_source_subscribe enforcement: deduped usage + quota-owner admin exemption.
-
-    The quota owner is the channel creator, not necessarily the operator —
-    update_channel lets managers/editors add sources to someone else's channel.
-    """
-
-    @pytest.mark.asyncio
-    async def test_admin_operator_passes(self, mock_admin_user):
-        """Admin operator short-circuits before any owner/usage lookup."""
+    @pytest.mark.parametrize("owner_admin, editor_admin", [(True, False), (False, True)])
+    async def test_valid_owner_or_editor_admin_exemption(self, owner_admin, editor_admin):
         from bisheng.role.domain.services.quota_service import QuotaService
 
-        with patch(
-            "bisheng.role.domain.services.quota_service.UserRoleDao.aget_user_roles",
-            new=AsyncMock(side_effect=AssertionError("owner roles must not be queried")),
-        ):
-            await QuotaService.check_info_source_subscribe_limit(10, 1, ["s1"], login_user=mock_admin_user)
-
-    @pytest.mark.asyncio
-    async def test_admin_owner_exempt_for_non_admin_operator(self, mock_normal_user):
-        """Creator holding AdminRole stays exempt when a plain manager edits the channel."""
-        from bisheng.database.constants import AdminRole
-        from bisheng.role.domain.services.quota_service import QuotaService
-
+        policy = SimpleNamespace(home_tenant_id=1, roles=[], is_identity_admin=owner_admin)
         with (
-            patch(
-                "bisheng.role.domain.services.quota_service.UserRoleDao.aget_user_roles",
-                new=AsyncMock(return_value=[_make_user_role(AdminRole)]),
-            ),
-            patch.object(
-                QuotaService,
-                "get_effective_quota",
-                new=AsyncMock(side_effect=AssertionError("admin owner must be exempt")),
-            ),
+            patch("bisheng.role.domain.services.quota_service.load_effective_roles", AsyncMock(return_value=policy)),
+            patch.object(QuotaService, "_distinct_info_source_ids", AsyncMock(return_value=set())),
         ):
-            await QuotaService.check_info_source_subscribe_limit(1, 1, ["s1"], login_user=mock_normal_user)
+            await QuotaService.check_info_source_subscribe_limit(
+                10, 1, ["s1"], login_user=SimpleNamespace(is_admin=lambda: editor_admin)
+            )
 
-    @pytest.mark.asyncio
     async def test_deduped_union_is_compared_to_limit(self, mock_normal_user):
-        """Re-using an already-counted source never consumes a slot; only the
-        deduped post-save total is compared against the effective limit."""
         from bisheng.common.errcode.tenant_quota import TenantRoleQuotaExceededError
         from bisheng.role.domain.services.quota_service import QuotaService
 
+        policy = SimpleNamespace(
+            home_tenant_id=1, roles=[_make_role(3, {"info_source_subscribe": 3})], is_identity_admin=False
+        )
         with (
-            patch(
-                "bisheng.role.domain.services.quota_service.UserRoleDao.aget_user_roles",
-                new=AsyncMock(return_value=[_make_user_role(3)]),
-            ),
-            patch.object(QuotaService, "get_effective_quota", new=AsyncMock(return_value=3)),
-            patch.object(QuotaService, "_distinct_info_source_ids", new=AsyncMock(return_value={"a", "b", "x"})),
+            patch("bisheng.role.domain.services.quota_service.load_effective_roles", AsyncMock(return_value=policy)),
+            patch.object(QuotaService, "_distinct_info_source_ids", AsyncMock(return_value={"a", "b", "x"})),
         ):
-            # Both already counted → total stays 3 == limit → allowed.
             await QuotaService.check_info_source_subscribe_limit(10, 1, ["a", "x"], login_user=mock_normal_user)
-            # "y" is new → deduped total 4 > 3 → blocked.
             with pytest.raises(TenantRoleQuotaExceededError):
                 await QuotaService.check_info_source_subscribe_limit(10, 1, ["a", "y"], login_user=mock_normal_user)
 
 
-class TestKI01SqlTemplateSchema:
-    """Regression for v2.5.0/F005 KI-01 (2026-04-19 fixed).
+class TestKI01OrmSchema:
+    """Typed metrics retain real schema filters and fractional GB."""
 
-    Four SQL templates in ``_RESOURCE_COUNT_TEMPLATES`` referenced columns
-    or tables that do not exist on any deployment; ``_count_resource``
-    caught the MySQL error and returned 0, making quota counts silently
-    wrong. Guard against re-introduction with static assertions — cheap
-    and DB-free (full integration verified via 114 ``/quota/tree`` probe,
-    see F016 ac-verification.md).
-    """
+    @pytest.mark.parametrize(
+        "metric, required",
+        [
+            ("channel", "channel.tenant_id"),
+            ("channel_subscribe", "space_channel_member"),
+            ("tool", "t_gpts_tools"),
+            ("knowledge_space", "knowledge.type"),
+        ],
+    )
+    def test_metric_uses_real_schema(self, metric, required):
+        from bisheng.role.domain.repositories.quota_repository import usage_statement
 
-    def test_knowledge_space_is_not_a_raw_template(self):
-        """knowledge_space must stay off the raw-SQL path.
+        sql = str(usage_statement(metric, 2, user_id=10)).lower()
+        assert required in sql and "status = 'active'" not in sql
 
-        It needs ``type = 3`` (the old template counted document/QA knowledge
-        bases as spaces) plus a department-space exclusion, and ``type`` is a
-        reserved word DM8 cannot quote inside ``text()``. Counting moved to
-        ``_count_knowledge_space``; see test_knowledge_space_count_scope.py.
-        """
-        from bisheng.role.domain.services.quota_service import _RESOURCE_COUNT_TEMPLATES
-
-        assert "knowledge_space" not in _RESOURCE_COUNT_TEMPLATES
-
-    def test_channel_no_phantom_status_filter(self):
-        from bisheng.role.domain.services.quota_service import _RESOURCE_COUNT_TEMPLATES
-
-        for key in ("channel", "channel_subscribe"):
-            tmpl = _RESOURCE_COUNT_TEMPLATES[key]
-            assert "status='active'" not in tmpl, (
-                f"channel table has no status column; {key} template must not filter by it: {tmpl!r}"
-            )
-
-    def test_channel_subscribe_counts_memberships(self):
-        from bisheng.role.domain.services.quota_service import _RESOURCE_COUNT_TEMPLATES
-
-        tmpl = _RESOURCE_COUNT_TEMPLATES["channel_subscribe"]
-        assert "FROM space_channel_member" in tmpl
-        assert "INNER JOIN channel" in tmpl
-        assert "scm.status IN ('ACTIVE','PENDING')" in tmpl
-        assert "{qualified_col}" in tmpl
-
-    def test_tool_uses_t_prefix_table_name(self):
-        from bisheng.role.domain.services.quota_service import _RESOURCE_COUNT_TEMPLATES
-
-        tmpl = _RESOURCE_COUNT_TEMPLATES["tool"]
-        assert "FROM t_gpts_tools" in tmpl, (
-            f"actual table is t_gpts_tools (t_ prefix); template must use that: {tmpl!r}"
-        )
-
-    @pytest.mark.asyncio
     async def test_storage_count_preserves_fractional_gb(self):
-        from bisheng.role.domain.services.quota_service import QuotaService
+        from contextlib import asynccontextmanager
 
-        class _Result:
-            def scalar(self):
-                return int(1.5 * 1024 * 1024 * 1024)
+        from bisheng.role.domain.repositories.quota_repository import QuotaRepository
 
-        class _Session:
-            async def __aenter__(self):
-                return self
+        @asynccontextmanager
+        async def sessions():
+            session = MagicMock()
+            result = MagicMock()
+            result.one.return_value = int(1.5 * 1024**3)
+            session.exec = AsyncMock(return_value=result)
+            yield session
 
-            async def __aexit__(self, exc_type, exc, tb):
-                return False
-
-            async def execute(self, *args, **kwargs):
-                return _Result()
-
-        with patch("bisheng.core.database.get_async_db_session", return_value=_Session()):
-            result = await QuotaService._count_resource("tenant_id", 1, "storage_gb")
-
-        assert result == 1.5
+        with patch("bisheng.role.domain.repositories.quota_repository.get_async_db_session", sessions):
+            assert await QuotaRepository.count(1, "storage_gb") == 1.5
 
 
 class TestValidateQuotaConfig:
@@ -703,15 +641,17 @@ class TestTenantStorageBytesHelpers:
         assert used == round(0.5 * (1024**3))
 
     @pytest.mark.asyncio
-    async def test_used_bytes_unknown_tenant_returns_zero(self):
+    async def test_used_bytes_unknown_tenant_is_unavailable(self):
         from bisheng.role.domain.services.quota_service import QuotaService
 
         with patch(
             "bisheng.database.models.tenant.TenantDao.aget_by_id",
             new=AsyncMock(return_value=None),
         ):
-            used = await QuotaService.get_tenant_storage_used_bytes(999)
-        assert used == 0
+            from bisheng.common.errcode.tenant_quota import QuotaUsageUnavailableError
+
+            with pytest.raises(QuotaUsageUnavailableError):
+                await QuotaService.get_tenant_storage_used_bytes(999)
 
     @pytest.mark.asyncio
     async def test_remaining_bytes_unlimited_returns_none(self):

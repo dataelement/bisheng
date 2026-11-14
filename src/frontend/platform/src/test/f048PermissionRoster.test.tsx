@@ -2,9 +2,12 @@ import {
   getGrantablePermissionModelsApi,
   getMyResourcePermissionsApi,
   getResourcePermissionGrantsApi,
+  mutateResourceGrantsApi,
+  type PermissionGrantAssignee,
   type ResourcePermissionContext,
 } from "@/controllers/API/permission"
 import { PermissionListTab } from "@/components/bs-comp/permission/PermissionListTab"
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 import { fireEvent, render, screen, waitFor } from "@/test/test-utils"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -14,6 +17,8 @@ vi.mock("@/controllers/API/permission", () => ({
   getResourcePermissionGrantsApi: vi.fn(),
   mutateResourceGrantsApi: vi.fn(),
 }))
+
+vi.mock("@/components/bs-ui/alertDialog/useConfirm", () => ({ bsConfirm: vi.fn() }))
 
 const customContext: ResourcePermissionContext = {
   mode: "CUSTOM",
@@ -58,6 +63,95 @@ const departmentAssignee = {
   protected: false,
   editable: true,
 }
+
+describe("F118 pure visibility source roster", () => {
+  const pureModel = {
+    key: "pure-original",
+    name: "Original visible model",
+    level: 3 as const,
+    active: true,
+    visibility_only: true,
+  };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getGrantablePermissionModelsApi).mockResolvedValue([pureModel]);
+  });
+
+  it("keeps both sources visible and removes only the confirmed inactive source identity", async () => {
+    const retired: PermissionGrantAssignee = {
+      ...departmentAssignee,
+      assignee_id: "201",
+      assignee_version: 6,
+      model: { ...pureModel, key: "old-pure", active: false },
+      source: { type: "DIRECT", include_children: false },
+    };
+    const retained: PermissionGrantAssignee = {
+      ...departmentAssignee,
+      assignee_id: "202",
+      model: pureModel,
+    };
+    vi.mocked(getResourcePermissionGrantsApi).mockResolvedValue({
+      data: [retired, retained],
+      page_size: 50,
+      has_more: false,
+      next_cursor: null,
+    });
+    const response = { resource_version: 8, items: [retained] };
+    vi.mocked(mutateResourceGrantsApi).mockResolvedValue(response);
+    const changed = vi.fn();
+    render(
+      <PermissionListTab
+        resourceType="tool"
+        resourceId="tool-1"
+        context={customContext}
+        onMutationSuccess={changed}
+      />,
+    );
+    const remove = await screen.findByRole("button", {
+      name: "grant.remove.201",
+    });
+    expect(screen.getByTestId("permission-assignee-202")).toBeInTheDocument();
+    fireEvent.click(remove);
+    expect(mutateResourceGrantsApi).not.toHaveBeenCalled();
+    expect(bsConfirm).toHaveBeenCalledOnce();
+    vi.mocked(bsConfirm).mock.calls[0][0].onOk?.(vi.fn());
+    await waitFor(() => expect(changed).toHaveBeenCalledWith(response));
+    expect(vi.mocked(mutateResourceGrantsApi).mock.calls[0][2]).toMatchObject({
+      expected_resource_version: 7,
+      expected_catalog_release_id: 12,
+      changes: [
+        { op: "REMOVE", assignee_id: "201", expected_assignee_version: 6 },
+      ],
+    });
+    expect(screen.queryByTestId("permission-assignee-201")).toBeNull();
+    expect(screen.getByTestId("permission-assignee-202")).toHaveTextContent(
+      "source.department",
+    );
+    expect(retained.model.level).toBe(3);
+  });
+
+  it("displays only the server self summary when pure visibility has no management right", async () => {
+    vi.mocked(getMyResourcePermissionsApi).mockResolvedValue({
+      mode: "CUSTOM",
+      actions: ["visible", "rename"],
+      sources: [{ type: "DIRECT", include_children: false }],
+      roster_complete: false,
+    });
+    render(
+      <PermissionListTab
+        resourceType="knowledge_file"
+        resourceId="file-1"
+        context={{ ...customContext, can_manage_permission: false }}
+      />,
+    );
+    expect(await screen.findByText("visible")).toBeInTheDocument();
+    expect(screen.getByText("rename")).toBeInTheDocument();
+    expect(screen.queryByText("edit")).toBeNull();
+    expect(screen.queryByText("use")).toBeNull();
+    expect(getResourcePermissionGrantsApi).not.toHaveBeenCalled();
+    expect(mutateResourceGrantsApi).not.toHaveBeenCalled();
+  });
+});
 
 describe("F048 PermissionListTab", () => {
   it("searches the server roster beyond the currently loaded page", async () => {

@@ -34,7 +34,7 @@ class CapabilityCatalogService:
     async def list(self):
         from bisheng.tool.domain.services.tool import ToolServices
 
-        groups = await ToolServices(login_user=self.user).get_tool_list(action="use")
+        groups = await ToolServices(login_user=self.user).get_tool_list(action="visible")
         disabled = await UserToolAvailabilityService(self.user.user_id).disabled_ids(
             [tool for group in groups for tool in group.children or []]
         )
@@ -127,7 +127,7 @@ class CapabilityCatalogService:
             ]
         from bisheng.tool.domain.services.tool import ToolServices
 
-        groups = await ToolServices(login_user=self.user).get_tool_list(action="use")
+        groups = await ToolServices(login_user=self.user).get_tool_list(action="visible")
         disabled = await UserToolAvailabilityService(self.user.user_id).disabled_ids(
             [tool for group in groups for tool in group.children or []]
         )
@@ -157,7 +157,7 @@ class CapabilityCatalogService:
     async def set_availability(self, tool_id: int, enabled: bool):
         from bisheng.tool.domain.services.tool import ToolServices
 
-        groups = await ToolServices(login_user=self.user).get_tool_list(action="use")
+        groups = await ToolServices(login_user=self.user).get_tool_list(action="visible")
         tool = next(
             (tool for group in groups for tool in group.children or [] if tool.id == tool_id and not tool.is_delete),
             None,
@@ -176,7 +176,7 @@ class CapabilityCatalogService:
             raise HTTPException(404, "This capability has no read-only demonstration")
         started = monotonic()
         try:
-            # The ordinary Work path rechecks tenant, use permission, schema and audit.
+            # The ordinary Work path rechecks tenant, visibility, schema and audit.
             result = await self.work.call_tool(f"bisheng_tool_{tool_id}", arguments)
         except jsonschema.ValidationError:
             raise HTTPException(422, "Demo arguments do not match the tool schema") from None

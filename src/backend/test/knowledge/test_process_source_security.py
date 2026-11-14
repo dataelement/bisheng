@@ -1,11 +1,12 @@
 """Security contract for web knowledge ingestion sources."""
 
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import httpx
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.knowledge.api.endpoints import knowledge as endpoint
@@ -21,7 +22,9 @@ async def test_process_rejects_unissued_paths_before_any_download(path, monkeypa
     download = Mock(side_effect=AssertionError("untrusted source downloaded"))
     monkeypatch.setattr(service, "file_download", download)
     monkeypatch.setattr(
-        service.KnowledgeDao, "aquery_by_id", AsyncMock(return_value=SimpleNamespace(id=3, user_id=7, tenant_id=2))
+        service.KnowledgeDao,
+        "aquery_by_id",
+        AsyncMock(return_value=SimpleNamespace(id=3, user_id=7, tenant_id=2, type=0)),
     )
     monkeypatch.setattr(service.KnowledgeService.permission_service, "ensure_knowledge_write_async", AsyncMock())
     monkeypatch.setattr(service.KnowledgeService, "ensure_knowledge_upload_tenant_consistency", Mock())
@@ -40,7 +43,9 @@ async def test_batch_rejects_invalid_ref_before_processing_valid_ref(monkeypatch
     app.dependency_overrides[UserPayload.get_login_user] = lambda: SimpleNamespace(user_id=7, tenant_id=2)
     monkeypatch.setattr(endpoint.QuotaService, "get_knowledge_space_upload_limit_bytes", AsyncMock(return_value=None))
     monkeypatch.setattr(
-        service.KnowledgeDao, "aquery_by_id", AsyncMock(return_value=SimpleNamespace(id=3, user_id=7, tenant_id=2))
+        service.KnowledgeDao,
+        "aquery_by_id",
+        AsyncMock(return_value=SimpleNamespace(id=3, user_id=7, tenant_id=2, type=0)),
     )
     monkeypatch.setattr(service.KnowledgeService.permission_service, "ensure_knowledge_write_async", AsyncMock())
     monkeypatch.setattr(service.KnowledgeService, "ensure_knowledge_upload_tenant_consistency", Mock())
@@ -117,7 +122,7 @@ async def test_process_preserves_issued_url_as_preview_cache_key(monkeypatch):
     from bisheng.knowledge.domain.services import preview_source_service as sources
 
     user = SimpleNamespace(user_id=7, tenant_id=2)
-    knowledge = SimpleNamespace(id=3, user_id=7, tenant_id=2)
+    knowledge = SimpleNamespace(id=3, user_id=7, tenant_id=2, type=0)
     req = KnowledgeFileProcess(knowledge_id=3, file_list=[{"file_path": "issued-url", "preview_upload_ref": "ref"}])
     monkeypatch.setattr(service.KnowledgeDao, "aquery_by_id", AsyncMock(return_value=knowledge))
     monkeypatch.setattr(service.KnowledgeService.permission_service, "ensure_knowledge_write_async", AsyncMock())
@@ -126,7 +131,15 @@ async def test_process_preserves_issued_url_as_preview_cache_key(monkeypatch):
     source = sources.PreviewSource("temporary", "server.txt", "a.txt", "issued-url", "issued-url")
     monkeypatch.setattr(sources.PreviewSourceService, "resolve", AsyncMock(return_value=source))
     db_file = SimpleNamespace(id=5, status=2, file_size=1)
-    process = Mock(return_value=db_file)
+
+    def process_one_file(_user, _knowledge, one, split_rule, **_kwargs):
+        # Mirror prepare_one_file: the saved rule always carries a concrete ExcelRule.
+        db_file.split_rule = json.dumps(
+            {**split_rule, "excel_rule": (one.excel_rule or service.ExcelRule()).model_dump()}
+        )
+        return db_file
+
+    process = Mock(side_effect=process_one_file)
     monkeypatch.setattr(service.KnowledgeService, "process_one_file", process)
     cache = Mock(return_value="cache-key")
     monkeypatch.setattr(service.KnowledgeService, "preview_cache_key_for_split_rule", cache)
@@ -173,3 +186,33 @@ def test_trusted_new_file_uses_server_object(monkeypatch, tmp_path):
     assert result.id == 12
     minio.download_object_sync.assert_called_once_with("temporary", "server.txt")
     assert minio.put_object_sync.call_args.kwargs["file"] == str(path)
+
+
+@pytest.mark.parametrize("with_ref", [False, True])
+async def test_space_process_resolves_uploads_before_native_registration(with_ref, monkeypatch):
+    """SPACE rows go through the native owner; /process must still require issued refs."""
+    from bisheng.api.v1.schemas import KnowledgeFileProcess
+    from bisheng.knowledge.application import legacy_files
+    from bisheng.knowledge.domain.services import preview_source_service as sources
+
+    user = SimpleNamespace(user_id=7, tenant_id=2)
+    space = SimpleNamespace(id=3, user_id=7, tenant_id=2, type=service.KnowledgeTypeEnum.SPACE.value)
+    monkeypatch.setattr(service.KnowledgeDao, "aquery_by_id", AsyncMock(return_value=space))
+    source = sources.PreviewSource("temporary", "server.txt", "a.txt", "issued", "issued")
+    resolve = AsyncMock(return_value=source)
+    monkeypatch.setattr(sources.PreviewSourceService, "resolve", resolve)
+    aprocess = AsyncMock(return_value=[])
+    monkeypatch.setattr(legacy_files, "make_legacy_space_service", Mock(return_value=SimpleNamespace()))
+    monkeypatch.setattr(legacy_files.LegacyFilesApplication, "aprocess", aprocess)
+    item = {"file_path": "issued", **({"preview_upload_ref": "ref"} if with_ref else {})}
+    req = KnowledgeFileProcess(knowledge_id=3, file_list=[item])
+
+    call = service.KnowledgeService.aprocess_knowledge_file(None, user, None, req, trusted_uploads_only=True)
+    if not with_ref:
+        with pytest.raises(HTTPException) as exc:
+            await call
+        assert exc.value.status_code == 404
+        aprocess.assert_not_awaited()
+        return
+    await call
+    assert aprocess.await_args.kwargs["trusted_sources"] == [source]

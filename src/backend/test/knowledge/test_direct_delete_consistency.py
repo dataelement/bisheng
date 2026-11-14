@@ -346,7 +346,7 @@ async def test_empty_folder_cleanup_uses_snapshot_without_storage_or_embedding(d
             AsyncMock(side_effect=AssertionError("storage not needed")),
         ),
         patch(
-            "bisheng.knowledge.domain.knowledge_rag.KnowledgeRag.init_knowledge_milvus_vectorstore_sync",
+            "bisheng.knowledge.domain.knowledge_rag.KnowledgeRag.init_knowledge_milvus_cleanup_sync",
             side_effect=AssertionError("embedding not needed"),
         ),
     ):
@@ -373,11 +373,9 @@ async def test_external_step_cannot_complete_with_residue(db, step):
     )
     with (
         patch("bisheng.core.storage.minio.minio_manager.get_minio_storage", AsyncMock(return_value=minio)),
+        patch("bisheng.knowledge.domain.knowledge_rag.KnowledgeRag.init_knowledge_es_cleanup_sync", return_value=es),
         patch(
-            "bisheng.knowledge.domain.knowledge_rag.KnowledgeRag.init_knowledge_es_vectorstore_sync", return_value=es
-        ),
-        patch(
-            "bisheng.knowledge.domain.knowledge_rag.KnowledgeRag.init_knowledge_milvus_vectorstore_sync",
+            "bisheng.knowledge.domain.knowledge_rag.KnowledgeRag.init_knowledge_milvus_cleanup_sync",
             return_value=milvus,
         ),
     ):

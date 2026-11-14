@@ -7,6 +7,7 @@ isolated substitutes; no application settings or production storage is loaded.
 import json
 import socket
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import httpx
 import uvicorn
@@ -104,7 +105,9 @@ async def authenticate(_header):
     return principal()
 
 
-runtime = SimpleNamespace(access=SimpleNamespace(authenticate=authenticate))
+runtime = SimpleNamespace(
+    sessions=SimpleNamespace(record_activity=AsyncMock()), access=SimpleNamespace(authenticate=authenticate)
+)
 model_runtime = SimpleNamespace(model=service, complete=service.complete)
 
 

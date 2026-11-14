@@ -1,8 +1,9 @@
 // @ts-strict-ignore
-import { Pagination, Button, Select, toast } from '@bisheng/ui';
+import { Pagination, Button, DatePicker, Select, toast } from '@bisheng/ui';
+import type { DatePickerError, DatePickerOpenRange } from '@bisheng/ui';
+import { addDays, differenceInCalendarDays, parseISO } from 'date-fns';
 
 import FilterByApp from "@/components/bs-comp/filterTableDataComponent/FilterByApp";
-import FilterByDate from "@/components/bs-comp/filterTableDataComponent/FilterByDate";
 import FilterByUsergroup from "@/components/bs-comp/filterTableDataComponent/FilterByUsergroup";
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { LoadingIcon } from "@/components/bs-icons/loading";
@@ -10,6 +11,7 @@ import { Tag } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 
 import { usePaginationLocale } from "@/hooks/usePaginationLocale";
+import { useDatePickerLocale } from "@/hooks/useDatePickerLocale";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 
 import { locationContext } from "@/contexts/locationContext";
@@ -19,23 +21,24 @@ import type { OrgSelection } from "@/types/api/audit";
 import { AuditEmptyState } from "../components/AuditEmptyState";
 import { OrgFilter } from "../components/OrgFilter";
 import { orgLabel } from "../components/OrgFilter/orgLabel";
+import { OrgPathText } from "../components/OrgPathText";
 import { useTable } from "@/util/hook";
 import { exportCsv, formatDate } from "@/util/utils";
 import { useContext, useEffect, useMemo, useReducer, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import styles from "../AuditFilters.module.css";
 
-const getStrTime = (date) => {
-    const start_date = date[0] && (formatDate(date[0], 'yyyy-MM-dd') + ' 00:00:00')
-    const end_date = date[1] && (formatDate(date[1], 'yyyy-MM-dd') + ' 23:59:59')
-    return [start_date, end_date]
-}
+const getDateBounds = (range?: DatePickerOpenRange | null) => ({
+    start_date: range?.[0] ? `${range[0]} 00:00:00` : undefined,
+    end_date: range?.[1] ? `${range[1]} 23:59:59` : undefined,
+});
 
 type FilterState = {
     appName: any[];
     userId: number | null;
     userGroup: string;
-    dateRange: any[];
+    dateRange: DatePickerOpenRange | null;
     feedback: string;
     sensitive_status: string;
     org: OrgSelection;
@@ -46,11 +49,11 @@ const INITIAL_FILTERS: FilterState = {
     appName: [],
     userId: null,
     userGroup: '',
-    dateRange: [],
+    dateRange: null,
     feedback: '',
     sensitive_status: '',
     org: EMPTY_ORG_SELECTION,
-    usageType: '',
+    usageType: 'all',
 };
 
 // Daily chat, knowledge-space QA and channel-article QA all open the daily
@@ -58,6 +61,7 @@ const INITIAL_FILTERS: FilterState = {
 const DAILY_FLOW_TYPES = [15, 20, 25, 30];
 const USAGE_TYPES: AuditUsageType[] = ['daily', 'assistant', 'workflow', 'task'];
 const usageTypeParam = (value?: string) => (value && value !== 'all' ? value as AuditUsageType : undefined);
+const supportsAppFilter = (usageType: FilterState['usageType']) => usageType !== 'daily' && usageType !== 'task';
 
 const appNameOf = (row, t) => (row.flow_type === 15 ? t('log.workbench_daily') : row.flow_name);
 const usageTypeOf = (row, t) => (row.usage_type ? t(`log.usageType.${row.usage_type}`) : '');
@@ -79,8 +83,10 @@ type Action =
 
 const filterReducer = (state: FilterState, action: Action): FilterState => {
     switch (action.type) {
-        case 'SET_FILTER':
-            return { ...state, ...action.payload };
+        case 'SET_FILTER': {
+            const next = { ...state, ...action.payload };
+            return supportsAppFilter(next.usageType) ? next : { ...next, appName: [] };
+        }
         case 'RESET':
             return { ...INITIAL_FILTERS };
         default:
@@ -90,21 +96,21 @@ const filterReducer = (state: FilterState, action: Action): FilterState => {
 
 export default function AppUseLog() {
     const { t } = useTranslation()
+    const navigate = useNavigate()
     const paginationLocale = usePaginationLocale();
+    const datePickerLocale = useDatePickerLocale();
     const selectLabels = useSelectLabels()
     const { appConfig } = useContext(locationContext)
 
     // 20 items per page
     const { page, pageSize, data: datalist, total, loading, loaded, setPage, filterData } = useTable({}, (param) => {
-        const [start_date, end_date] = getStrTime(param.dateRange || [])
         return getAuditAppListApi({
             page: page,
             page_size: param.pageSize,
             flow_ids: param.appName?.length ? param.appName : undefined,
             user_ids: param.userId || undefined,
             group_ids: param.userGroup || undefined,
-            start_date,
-            end_date,
+            ...getDateBounds(param.dateRange),
             feedback: param.feedback || undefined,
             sensitive_status: param.sensitive_status || undefined,
             org: param.org,
@@ -121,9 +127,13 @@ export default function AppUseLog() {
     );
 
     const [filters, dispatch] = useReducer(filterReducer, { ...INITIAL_FILTERS });
+    const [dateError, setDateError] = useState<DatePickerError | null>(null);
+    const [datePickerVersion, setDatePickerVersion] = useState(0);
 
     const resetClick = () => {
         dispatch({ type: 'RESET' });
+        setDateError(null);
+        setDatePickerVersion(version => version + 1);
         filterData({ ...INITIAL_FILTERS })
     }
     // Cache page before entering detail page, temporary solution
@@ -153,57 +163,27 @@ export default function AppUseLog() {
             return `Export_${str}${userName}_${formatDate(new Date(), 'yyyy-MM-dd_HH-mm-ss')}.csv`;
         };
 
+        const [startDay, endDay] = filters.dateRange ?? [null, null];
+        const selectedStart = startDay ? parseISO(startDay) : null;
+        const selectedEnd = endDay ? parseISO(endDay) : null;
+        if (selectedStart && selectedEnd && differenceInCalendarDays(selectedEnd, selectedStart) >= 60) {
+            toast.show({ type: 'error', message: t('log.exportDateRangeExceed') });
+            return;
+        }
+
+        const exportEnd = selectedEnd ?? (selectedStart ? addDays(selectedStart, 59) : new Date());
+        const exportStart = selectedStart ?? addDays(exportEnd, -59);
+        const formattedStart = formatDate(exportStart, 'yyyy-MM-dd');
+        const formattedEnd = formatDate(exportEnd, 'yyyy-MM-dd');
+        if (!selectedStart || !selectedEnd) {
+            const message = selectedStart || selectedEnd
+                ? t('log.exportCustomDateRange', { start: formattedStart, end: formattedEnd })
+                : t('log.exportNoDateRange');
+            toast.show({ type: 'warning', message });
+        }
+
+        const { start_date, end_date } = getDateBounds([formattedStart, formattedEnd]);
         setAuditing(true);
-
-        // Handle time range logic
-        const dateRange = filters.dateRange || [];
-        const originalStart = dateRange[0];
-        const originalEnd = dateRange[1];
-
-        let adjustedStart = originalStart;
-        let adjustedEnd = originalEnd;
-        let showToast = false;
-        let toastMessage = '';
-
-        // No time range selected
-        if (!originalStart && !originalEnd) {
-            adjustedEnd = new Date();
-            adjustedStart = new Date(adjustedEnd.getTime() - 59 * 24 * 60 * 60 * 1000); // Last 60 days
-            showToast = true;
-            toastMessage = t('log.exportNoDateRange');
-        }
-        // Partial time selection (only start or end selected)
-        else if (!originalStart || !originalEnd) {
-            if (originalStart) {
-                adjustedEnd = new Date(originalStart);
-                adjustedEnd.setDate(adjustedEnd.getDate() + 59);
-            } else {
-                adjustedStart = new Date(originalEnd);
-                adjustedStart.setDate(adjustedStart.getDate() - 59);
-            }
-            showToast = true;
-            const formattedStart = formatDate(adjustedStart, 'yyyy-MM-dd');
-            const formattedEnd = formatDate(adjustedEnd, 'yyyy-MM-dd');
-            toastMessage = t('log.exportCustomDateRange', { start: formattedStart, end: formattedEnd });
-        }
-        // Time range selected, check span
-        else {
-            const diffTime = adjustedEnd.getTime() - adjustedStart.getTime();
-            const diffDays = Math.floor(diffTime / (24 * 60 * 60 * 1000)) + 1; // Total days including start and end dates
-            if (diffDays > 60) {
-                toast.show({ type: 'error', message: String(t('log.exportDateRangeExceed') ?? '') })
-                setAuditing(false);
-                return;
-            }
-        }
-
-        // Display toast message
-        if (showToast) {
-            toast.show({ type: 'warning', message: String(toastMessage ?? '') })
-        }
-
-        // Generate request parameters
-        const [start_date, end_date] = getStrTime([adjustedStart, adjustedEnd])
 
         exportCsvDataApi({
             flow_ids: filters.appName?.length ? filters.appName : undefined,
@@ -285,17 +265,16 @@ export default function AppUseLog() {
     };
 
 
-    return <div className="relative">
+    return <div className="relative flex min-h-0 flex-1 flex-col">
         {loading && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
             <LoadingIcon />
         </div>}
-        <div className="flex h-[calc(100vh-128px-var(--license-banner-h,0px))] flex-col overflow-y-auto px-2 py-4 pb-20">
-            <div className="flex shrink-0 flex-wrap gap-4">
+        <div className={`${styles.filterContainer} flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pt-2 pb-20`}>
+            <div className={`${styles.filterGrid} shrink-0`}>
                 <OrgFilter value={filters.org} onChange={(org) => dispatch({ type: 'SET_FILTER', payload: { org } })} />
                 <Select
                     {...selectLabels}
                     allowClear
-                    className="w-[160px]"
                     aria-label={t('log.usageType.label')}
                     placeholder={t('log.usageType.label')}
                     value={filters.usageType || null}
@@ -305,12 +284,13 @@ export default function AppUseLog() {
                         ...USAGE_TYPES.map(value => ({ value, label: t(`log.usageType.${value}`) })),
                     ]}
                 />
-                <FilterByApp value={filters.appName} placeholder={t('log.appName')} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['appName']: value } })} />
+                {supportsAppFilter(filters.usageType) && (
+                    <FilterByApp value={filters.appName} placeholder={t('log.appName')} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { appName: value } })} />
+                )}
                 <Select
                     {...selectLabels}
                     allowClear
                     showSearch
-                    className="w-[200px]"
                     aria-label={t('log.userName')}
                     placeholder={t('log.userName')}
                     options={sessionUsers.options}
@@ -320,11 +300,21 @@ export default function AppUseLog() {
                     onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { userId: value == null ? null : Number(value) } })}
                 />
                 <FilterByUsergroup value={filters.userGroup} placeholder={t('log.userGroup')} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['userGroup']: value } })} />
-                <FilterByDate value={filters.dateRange} placeholders={[`${t('log.startDate')}`, `${t('log.endDate')}`]} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['dateRange']: value } })} />
+                <DatePicker
+                    key={datePickerVersion}
+                    aria-label={t('datePicker.dateRange')}
+                    className={styles.dateRange}
+                    mode="range"
+                    allowOpenRange
+                    allowClear
+                    value={filters.dateRange}
+                    onChange={(dateRange: DatePickerOpenRange | null) => dispatch({ type: 'SET_FILTER', payload: { dateRange } })}
+                    onValidationChange={setDateError}
+                    locale={datePickerLocale}
+                />
                 <Select
                     {...selectLabels}
                     allowClear
-                    className="w-[200px]"
                     aria-label={t('log.userFeedbackPlaceholder')}
                     placeholder={t('log.userFeedbackPlaceholder')}
                     value={filters.feedback || null}
@@ -338,7 +328,6 @@ export default function AppUseLog() {
                 {appConfig.isPro && <Select
                     {...selectLabels}
                     allowClear
-                    className="w-[200px]"
                     aria-label={t('log.sensitiveReviewResult')}
                     placeholder={t('log.sensitiveReviewResult')}
                     value={filters.sensitive_status || null}
@@ -348,25 +337,12 @@ export default function AppUseLog() {
                         { value: '1', label: t('log.sensitivePass') },
                     ]}
                 />}
-                <Button onClick={() => {
-                    const dateRange = filters.dateRange || [];
-                    const originalStart = dateRange[0];
-                    const originalEnd = dateRange[1];
-                    let adjustedStart = originalStart;
-                    let adjustedEnd = originalEnd;
-                    if (originalStart && !originalEnd) {
-                        adjustedEnd = undefined;
-                    } else if (!originalStart && originalEnd) {
-                        adjustedStart = undefined;
-                    }
-
-                    filterData({ ...filters, dateRange: [adjustedStart, adjustedEnd] })
-                }}>{t('log.searchButton')}</Button>
-                <Button onClick={resetClick} variant="outlined" color="default">{t('log.resetButton')}</Button>
-                <Button onClick={handleExport} loading={auditing} disabled={Boolean(auditing)}>
-                    {t('log.exportButton')}</Button>
+                <div className={styles.filterActions}>
+                    <Button onClick={resetClick} variant="outlined" color="default">{t('log.resetButton')}</Button>
+                    <Button onClick={() => filterData(filters)} disabled={Boolean(dateError)}>{t('log.searchButton')}</Button>
+                </div>
             </div>
-            <Table>
+            <Table containerClassName="shrink-0">
                 <TableHeader>
                     <TableRow>
                         <TableHead className="w-[200px]">{t('log.appName')}</TableHead>
@@ -377,47 +353,66 @@ export default function AppUseLog() {
                         <TableHead>{t('createTime')}</TableHead>
                         <TableHead>{t('log.userFeedback')}</TableHead>
                         {appConfig.isPro && <TableHead>{t('log.sensitiveReviewResult')}</TableHead>}
-                        <TableHead className="text-right">{t('operations')}</TableHead>
                     </TableRow>
                 </TableHeader>
 
                 <TableBody>
-                    {processedData.map((el: any) => (
-                        <TableRow key={el.id}>
+                    {processedData.map((el: any) => {
+                        const appName = supportsAppFilter(el.usage_type) ? appNameOf(el, t) : '--'
+                        const usageType = usageTypeOf(el, t)
+                        const createdAt = el.create_time.replace('T', ' ')
+                        const detailPath = el.chat_id && (DAILY_FLOW_TYPES.includes(el.flow_type)
+                            ? `/log/chatlog/${el.chat_id}`
+                            : `/log/chatlog/${el.flow_id}/${el.chat_id}/${el.flow_type}`)
+
+                        return <TableRow
+                            key={el.id}
+                            hoverable={Boolean(detailPath)}
+                            className={detailPath ? 'cursor-pointer [&_.cursor-default]:cursor-pointer' : undefined}
+                            onClick={detailPath ? (event) => {
+                                if (event.defaultPrevented || (event.target as Element).closest('a')) return
+                                handleCachePage()
+                                navigate(detailPath)
+                            } : undefined}
+                        >
                             <TableCell className="font-medium max-w-[200px]">
-                                {/* <div className=" truncate-multiline"></div> */}
-                                <div className="truncate-multiline">
-                                    {appNameOf(el, t)}
-                                </div>
+                                {detailPath ? <Link
+                                    to={detailPath}
+                                    onClick={handleCachePage}
+                                    aria-label={`${t('lib.details')} · ${appName && appName !== '--' ? appName : usageType} · ${createdAt}`}
+                                    className="truncate-multiline rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500"
+                                >{appName}</Link> : <div className="truncate-multiline">{appName}</div>}
                             </TableCell>
-                            <TableCell>{usageTypeOf(el, t)}</TableCell>
+                            <TableCell>{usageType}</TableCell>
                             <TableCell>{el.user_name}</TableCell>
                             <TableCell className="max-w-[200px]">
-                                <div className="truncate-multiline break-all">{orgLabel(el.operator_dept_id, el.operator_dept_path, t)}</div>
+                                <OrgPathText text={orgLabel(el.operator_dept_id, el.operator_dept_path, t)} />
                             </TableCell>
                             <TableCell>{el.userGroupsString}</TableCell>
-                            <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
-                            <TableCell className="break-all flex gap-2">
-                                <div className="text-center text-xs relative">
-                                    <Outlined.ThumbsUp
-                                        size={16} aria-hidden
-                                        className={el.like_count ? 'text-primary' : 'text-gray-400'}
-                                    />
-                                    <span className="left-4 top-[-4px] break-keep">{el.like_count}</span>
-                                </div>
-                                <div className="text-center text-xs relative">
-                                    <Outlined.ThumbsDown
-                                        size={16} aria-hidden
-                                        className={el.dislike_count ? 'text-primary' : 'text-gray-400'}
-                                    />
-                                    <span className="left-4 top-[-4px] break-keep">{el.dislike_count}</span>
-                                </div>
-                                <div className="text-center text-xs relative">
-                                    <Outlined.Copy
-                                        size={16} aria-hidden
-                                        className={el.copied_count ? 'text-primary' : 'text-gray-400'}
-                                    />
-                                    <span className="left-4 top-[-4px] break-keep">{el.copied_count}</span>
+                            <TableCell>{createdAt}</TableCell>
+                            <TableCell>
+                                <div className="flex items-center gap-2 text-xs">
+                                    <div className="flex flex-col items-center">
+                                        <Outlined.ThumbsUp
+                                            size={16} aria-hidden
+                                            className={el.like_count ? 'text-primary' : 'text-gray-400'}
+                                        />
+                                        <span>{el.like_count}</span>
+                                    </div>
+                                    <div className="flex flex-col items-center">
+                                        <Outlined.ThumbsDown
+                                            size={16} aria-hidden
+                                            className={el.dislike_count ? 'text-primary' : 'text-gray-400'}
+                                        />
+                                        <span>{el.dislike_count}</span>
+                                    </div>
+                                    <div className="flex flex-col items-center">
+                                        <Outlined.Copy
+                                            size={16} aria-hidden
+                                            className={el.copied_count ? 'text-primary' : 'text-gray-400'}
+                                        />
+                                        <span>{el.copied_count}</span>
+                                    </div>
                                 </div>
                             </TableCell>
                             {appConfig.isPro && <TableCell>
@@ -425,36 +420,24 @@ export default function AppUseLog() {
                                     : <Tag size="small" dot color="danger" className="whitespace-nowrap shrink-0">{t('log.sensitiveViolation')}</Tag>
                                 }
                             </TableCell>}
-                            <TableCell className="text-right" onClick={() => {
-                                // @ts-ignore
-                                // window.libname = el.name;
-                            }}>
-                                {/* <Button variant="link" className="" onClick={() => setOpenData(true)}>Add to dataset</Button> */}
-                                {
-                                    el.chat_id && <Button asChild size="small" variant="link"><Link
-                                        to={DAILY_FLOW_TYPES.includes(el.flow_type) ? `/log/chatlog/${el.chat_id}` : `/log/chatlog/${el.flow_id}/${el.chat_id}/${el.flow_type}`}
-                                        onClick={handleCachePage}
-                                    >{t('lib.details')}</Link></Button>
-                                }
-                            </TableCell>
                         </TableRow>
-                    )
-                    )}
+                    })}
                 </TableBody>
             </Table>
             {loaded && !loading && processedData.length === 0 && <AuditEmptyState />}
         </div>
-        <div className="bisheng-table-footer px-6 bg-background-login">
-            <p className="desc"></p>
-            <div>
-                <Pagination locale={paginationLocale}
-                    current={page}
-                    pageSize={pageSize}
-                    total={total}
-                    showTotal={true}
-                    onChange={(newPage) => setPage(newPage)}
-                />
-            </div>
+        <div className="bisheng-table-footer gap-4 pl-2 pr-6 bg-background-login">
+            <Button className="shrink-0" onClick={handleExport} loading={auditing} disabled={auditing || Boolean(dateError)}>
+                {t('log.exportButton')}
+            </Button>
+            <Pagination locale={paginationLocale}
+                className="ml-auto min-w-0"
+                current={page}
+                pageSize={pageSize}
+                total={total}
+                showTotal={true}
+                onChange={(newPage) => setPage(newPage)}
+            />
         </div>
     </div>
 };

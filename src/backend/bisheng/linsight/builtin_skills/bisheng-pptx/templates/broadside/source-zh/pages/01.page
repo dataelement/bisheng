@@ -1,0 +1,72 @@
+pageType: cover
+background:
+  type: solid
+  color: '#E85D26'
+notes: Native PPTD adaptation of Zara Zhang / Broadside. MIT. Example figures are illustrative.
+elements:
+  - elementId: t1
+    elementType: text
+    bounds:
+      - 48
+      - 34
+      - 800
+      - 24
+    content:
+      text: 橙黑宣言 / 01
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 12
+      color: '#111111'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t2
+    elementType: text
+    bounds:
+      - 48
+      - 209
+      - 864
+      - 224
+    content:
+      text: |-
+        下一步，
+        动起来
+      fontFamily:
+        latin: Arial Black
+        ea: Noto Serif CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 78
+      color: '#111111'
+      lineHeight: 1.12
+      bold: true
+  - elementId: t3
+    elementType: text
+    bounds:
+      - 48
+      - 506
+      - 760
+      - 16
+    content:
+      text: 自编示例
+      fontFamily: *ref_0
+      fontSize: 9
+      color: '#F0ECE5'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t4
+    elementType: text
+    bounds:
+      - 870
+      - 503
+      - 40
+      - 20
+    content:
+      text: '01'
+      fontFamily: *ref_0
+      fontSize: 11
+      color: '#F0ECE5'
+      lineHeight: 1.12
+      bold: false

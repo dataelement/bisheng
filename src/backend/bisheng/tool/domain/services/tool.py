@@ -90,7 +90,7 @@ class ToolServices(BaseModel):
     async def get_tool_list(
         self,
         is_preset: int | None = None,
-        action: str = "use",
+        action: str = "visible",
     ) -> list[GptsToolsTypeRead]:
         """Get a list of tools visible to users"""
         total_start = perf_counter()
@@ -260,10 +260,15 @@ class ToolServices(BaseModel):
         if tool_type:
             raise ToolTypeRepeatError()
         req.user_id = self.login_user.user_id
-        req.tenant_id = self.login_user.tenant_id
+        from bisheng.core.context.tenant import get_current_tenant_id
+
+        req.tenant_id = get_current_tenant_id()
+        if not req.tenant_id:
+            raise UnAuthorizedError()
 
         for one in req.children:
             one.id = None
+            one.tenant_id = req.tenant_id
             one.user_id = self.login_user.user_id
             one.is_delete = 0
             one.is_preset = req.is_preset
@@ -273,7 +278,18 @@ class ToolServices(BaseModel):
         # Add Tool Category and Corresponding Tools List
         res = await GptsToolsDao.insert_tool_type(req)
 
-        await self.add_gpts_tools_hook(self.request, self.login_user, res)
+        from bisheng.common.errcode.tool import ToolCreationPendingError
+        from bisheng.tool.domain.repositories.creation_repository import CreationRepository
+
+        try:
+            await self.add_gpts_tools_hook(self.request, self.login_user, res)
+        except Exception as exc:
+            current = await CreationRepository.load(req.tenant_id, res.id)
+            if current is not None and current.creation_state == "READY":
+                raise
+            logger.exception("Tool creation pending: tenant={} id={}", req.tenant_id, res.id)
+            raise ToolCreationPendingError(resource_id=res.id) from exc
+        await CreationRepository.ready(req.tenant_id, res.id)
 
         return res
 
@@ -286,6 +302,9 @@ class ToolServices(BaseModel):
             actor=await resolve_permission_actor(user),
         )
 
+        from bisheng.tool.domain.repositories.creation_repository import CreationRepository
+
+        await CreationRepository.ready(gpts_tool_type.tenant_id, gpts_tool_type.id)
         from bisheng.api.services.audit_log import AuditLogService
 
         await asyncio.to_thread(AuditLogService.create_tool, user, get_request_ip(request), [], gpts_tool_type)
@@ -442,7 +461,9 @@ class ToolServices(BaseModel):
         return tool_type
 
     @classmethod
-    async def _update_gpts_tools(cls, exist_tool_type: GptsToolsType, req: GptsToolsTypeRead) -> GptsToolsTypeRead:
+    async def _update_gpts_tools(
+        cls, exist_tool_type: GptsToolsType, req: GptsToolsTypeRead, login_user=None
+    ) -> GptsToolsTypeRead:
         exist_tool_type.name = req.name
         exist_tool_type.logo = req.logo
         exist_tool_type.description = req.description
@@ -459,7 +480,10 @@ class ToolServices(BaseModel):
             children_map[one.name] = one
 
         # Get old under this categoryAPIVertical
-        old_tool_list = await GptsToolsDao.aget_list_by_type([exist_tool_type.id])
+        from bisheng.core.context.tenant import strict_tenant_filter, tenant_execution_scope
+
+        with tenant_execution_scope(int(exist_tool_type.tenant_id)), strict_tenant_filter():
+            old_tool_list = await GptsToolsDao.aget_list_by_type([exist_tool_type.id])
         # List of tools that need to be removed
         delete_tool_id_list = []
         # List of tools that need to be updated
@@ -481,14 +505,39 @@ class ToolServices(BaseModel):
         for one in children_map.values():
             one.id = None
             one.user_id = exist_tool_type.user_id
+            one.tenant_id = exist_tool_type.tenant_id
             one.is_preset = exist_tool_type.is_preset
             one.is_delete = 0
             add_children.append(one)
 
+        deleted = [row for row in old_tool_list if row.id in delete_tool_id_list]
+        owner_delta = len(add_children) - sum(row.user_id == exist_tool_type.user_id for row in deleted)
+        tenant_delta = len(add_children) - len(deleted)
+        await cls._assert_tool_delta_quota(exist_tool_type, max(owner_delta, 0), max(tenant_delta, 0), login_user)
         await GptsToolsDao.update_tool_type(exist_tool_type, delete_tool_id_list, add_children, update_tool_list)
 
-        children = await GptsToolsDao.aget_list_by_type([exist_tool_type.id])
+        with tenant_execution_scope(int(exist_tool_type.tenant_id)), strict_tenant_filter():
+            children = await GptsToolsDao.aget_list_by_type([exist_tool_type.id])
         return GptsToolsTypeRead(**exist_tool_type.model_dump(), children=children)
+
+    @staticmethod
+    async def _assert_tool_delta_quota(parent, owner_delta, tenant_delta, login_user=None):
+        if owner_delta == 0 or parent.is_preset == ToolPresetType.PRESET.value:
+            return
+        from bisheng.common.errcode.tenant_quota import QuotaResponsibilityChangedError, QuotaUsageUnavailableError
+        from bisheng.role.application.effective_roles import load_effective_roles
+        from bisheng.role.domain.services.quota_service import QuotaService
+
+        if not parent.user_id or not parent.tenant_id:
+            raise QuotaUsageUnavailableError()
+        policy = await load_effective_roles(parent.user_id)
+        if policy.is_identity_admin:
+            return
+        if policy.home_tenant_id != parent.tenant_id:
+            raise QuotaResponsibilityChangedError()
+        await QuotaService.check_quota(
+            parent.user_id, "tool", parent.tenant_id, login_user, delta=owner_delta, tenant_delta=tenant_delta
+        )
 
     async def update_tools(self, req: GptsToolsTypeRead) -> GptsToolsTypeRead:
         """
@@ -517,7 +566,7 @@ class ToolServices(BaseModel):
             action="edit",
         )
 
-        res = await self._update_gpts_tools(exist_tool_type, req)
+        res = await self._update_gpts_tools(exist_tool_type, req, self.login_user)
         await self.update_tool_hook(self.request, self.login_user, exist_tool_type)
         return res
 
@@ -551,6 +600,7 @@ class ToolServices(BaseModel):
         )
 
         await GptsToolsDao.delete_tool_type(tool_type_id)
+        await adapter.cleanup_deleted(record=record, actor=await resolve_permission_actor(self.login_user))
         await self.delete_tool_hook(self.request, self.login_user, exist_tool_type)
         return True
 
@@ -563,6 +613,45 @@ class ToolServices(BaseModel):
 
         await asyncio.to_thread(AuditLogService.delete_tool, user, get_request_ip(request), [], gpts_tool_type)
         return True
+
+    @classmethod
+    async def resume_creation(cls, resource_id, login_user):
+        from bisheng.common.errcode.permission import PermissionInvalidResourceError
+        from bisheng.core.context.tenant import get_current_tenant_id
+        from bisheng.permission.application.creation_recovery import resume_created_permission
+        from bisheng.permission.domain.schemas import VerifiedPermissionTarget
+        from bisheng.role.application.effective_roles import load_effective_roles
+        from bisheng.tool.domain.repositories.creation_repository import CreationRepository
+        from bisheng.user.domain.services.auth import LoginUser
+
+        tenant_id = get_current_tenant_id()
+        row = await CreationRepository.load(tenant_id, resource_id)
+        policy = await load_effective_roles(login_user.user_id)
+        if (
+            row is None
+            or row.user_id != login_user.user_id
+            or (policy.home_tenant_id != tenant_id and not policy.is_identity_admin)
+        ):
+            raise PermissionInvalidResourceError()
+        if row.creation_state == "READY":
+            return row
+        if not policy.is_identity_admin:
+            await LoginUser.assert_effective_web_menu_contains(login_user.user_id, "tool")
+        fresh_user = await LoginUser.init_login_user(login_user.user_id, login_user.user_name)
+        actor = await resolve_permission_actor(fresh_user)
+        await resume_created_permission(
+            actor=actor,
+            target=VerifiedPermissionTarget(
+                tenant_id=tenant_id,
+                resource_type="tool",
+                resource_id=str(row.id),
+                resource_version=0,
+                context_version=cls._new_permission_record(row).context_version,
+            ),
+            owner_user_id=row.user_id,
+        )
+        await CreationRepository.ready(tenant_id, row.id)
+        return await CreationRepository.load(tenant_id, row.id)
 
     @staticmethod
     def _new_permission_record(

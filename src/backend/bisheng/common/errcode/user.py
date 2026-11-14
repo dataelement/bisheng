@@ -4,22 +4,22 @@ from .base import BaseErrorCode
 # Return error code related to user module, function module code:106
 class UserValidateError(BaseErrorCode):
     Code: int = 10600
-    Msg: str = 'Account or password error'
+    Msg: str = "Account or password error"
 
 
 class UserPasswordExpireError(BaseErrorCode):
     Code: int = 10601
-    Msg: str = 'Your password has expired, please change it in time'
+    Msg: str = "Your password has expired, please change it in time"
 
 
 class UserNotPasswordError(BaseErrorCode):
     Code: int = 10602
-    Msg: str = 'The user has not set a password, please contact the administrator to reset the password first'
+    Msg: str = "The user has not set a password, please contact the administrator to reset the password first"
 
 
 class UserPasswordError(BaseErrorCode):
     Code: int = 10603
-    Msg: str = 'wrong current password'
+    Msg: str = "wrong current password"
 
 
 class UserLoginOfflineError(BaseErrorCode):
@@ -29,59 +29,80 @@ class UserLoginOfflineError(BaseErrorCode):
 
 class UserNameAlreadyExistError(BaseErrorCode):
     Code: int = 10605
-    Msg: str = 'User Name already exist'
+    Msg: str = "User Name already exist"
 
 
 class UserNeedGroupAndRoleError(BaseErrorCode):
     Code: int = 10606
-    Msg: str = 'User group and role cannot be empty'
+    Msg: str = "User group and role cannot be empty"
 
 
 class CaptchaError(BaseErrorCode):
     Code: int = 10607
-    Msg: str = 'Kode verifikasi salah'
+    Msg: str = "Kode verifikasi salah"
 
 
 class UserNameTooLongError(BaseErrorCode):
     Code: int = 10608
-    Msg: str = 'Username length cannot exceed30characters'
+    # Retained for older callers; new identity writes use 10614.
+    Msg: str = "Nickname length cannot exceed 32 characters"
 
 
 class UserNoRoleForLoginError(BaseErrorCode):
     Code: int = 10609
-    Msg: str = 'No assignable role; please contact your administrator'
+    Msg: str = "No assignable role; please contact your administrator"
 
 
 class UserNoWebMenuForLoginError(BaseErrorCode):
     Code: int = 10611
-    Msg: str = '当前无页面权限，请联系管理员。'
+    Msg: str = "当前无页面权限，请联系管理员。"
+
+
+class AccountFormatError(BaseErrorCode):
+    Code: int = 10612
+    Msg: str = "Account must be 1-64 characters, start with a letter or number, and use only letters, numbers, . _ - @"
+
+
+class AccountAlreadyExistsError(BaseErrorCode):
+    Code: int = 10613
+    Msg: str = "Account already exists"
+
+
+class NicknameValidationError(BaseErrorCode):
+    Code: int = 10614
+    Msg: str = "Nickname must be 1-32 visible characters without spaces or whitespace"
+
+
+class AmbiguousAccountError(BaseErrorCode):
+    Code: int = 10615
+    Msg: str = "Multiple users match this historical account. Contact an administrator"
 
 
 class UserGroupNotDeleteError(BaseErrorCode):
     Code: int = 10610
-    Msg: str = 'There are still users in the user group and cannot be deleted'
+    Msg: str = "There are still users in the user group and cannot be deleted"
 
 
 class UserForbiddenError(BaseErrorCode):
     Code: int = 10620
-    Msg: str = 'Account cannot be used, please contact the administrator'
+    Msg: str = "Account cannot be used, please contact the administrator"
 
 
 class UserPasswordMaxTryError(BaseErrorCode):
     Code: int = 10621
-    Msg: str = 'The account has been automatically disabled due to too many failed login attempts, please contact your administrator'
+    Msg: str = "The account has been automatically disabled due to too many failed login attempts, please contact your administrator"
 
 
 class UserPasswordStrengthError(BaseErrorCode):
     Code: int = 10622
-    Msg: str = 'Password must be at least 8 characters and include uppercase, lowercase, number, and symbol'
+    Msg: str = "Password must be at least 8 characters and include uppercase, lowercase, number, and symbol"
 
 
 class UserGroupEmptyError(BaseErrorCode):
     Code: int = 10630
-    Msg: str = 'User group cannot be empty'
+    Msg: str = "User group cannot be empty"
 
 
 class AdminUserUpdateForbiddenError(BaseErrorCode):
     Code: int = 10640
-    Msg: str = 'Administrator user information cannot be modified'
+    Msg: str = "Administrator user information cannot be modified"

@@ -1,0 +1,398 @@
+pageType: evidence
+background:
+  type: solid
+  color: $paper
+elements:
+  - elementId: export-index-field
+    elementType: shape
+    bounds:
+      - 0
+      - 0
+      - 52
+      - 540
+    shapeName: rect
+    fill:
+      type: solid
+      color: $black
+    border:
+      color: $black
+      width: 0
+  - elementId: export-red-tab
+    elementType: shape
+    bounds:
+      - 52
+      - 212
+      - 10
+      - 116
+    shapeName: rect
+    fill:
+      type: solid
+      color: $red
+    border:
+      color: $red
+      width: 0
+  - elementId: export-rule-top
+    elementType: line
+    bounds:
+      - 80
+      - 42
+      - 808
+      - 1
+    viewBox:
+      - 808
+      - 1
+    points: 0,0 808,0
+    border:
+      color: $black
+      width: 1.2
+  - elementId: export-bar-frame
+    elementType: shape
+    bounds:
+      - 80
+      - 202
+      - 656
+      - 100
+    shapeName: rect
+    fill:
+      type: solid
+      color: $wash
+    border:
+      color: $black
+      width: 0.8
+  - elementId: export-bar-export
+    elementType: shape
+    bounds:
+      - 80
+      - 202
+      - 520
+      - 100
+    shapeName: rect
+    fill:
+      type: solid
+      color: $red
+    border:
+      color: $red
+      width: 0
+  - elementId: export-bar-import
+    elementType: shape
+    bounds:
+      - 602
+      - 202
+      - 134
+      - 100
+    shapeName: rect
+    fill:
+      type: solid
+      color: $black
+    border:
+      color: $black
+      width: 0
+  - elementId: export-kpi-rule-1
+    elementType: line
+    bounds:
+      - 80
+      - 374
+      - 232
+      - 1
+    viewBox:
+      - 232
+      - 1
+    points: 0,0 232,0
+    border:
+      color: $grid
+      width: 0.8
+  - elementId: export-kpi-rule-2
+    elementType: line
+    bounds:
+      - 356
+      - 374
+      - 232
+      - 1
+    viewBox:
+      - 232
+      - 1
+    points: 0,0 232,0
+    border:
+      color: $grid
+      width: 0.8
+  - elementId: export-kpi-rule-3
+    elementType: line
+    bounds:
+      - 632
+      - 374
+      - 232
+      - 1
+    viewBox:
+      - 232
+      - 1
+    points: 0,0 232,0
+    border:
+      color: $grid
+      width: 0.8
+  - elementId: export-index
+    elementType: text
+    bounds:
+      - 10
+      - 430
+      - 32
+      - 80
+    rotation: 270
+    content:
+      text: 04 / EXPORT
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 9
+      bold: true
+      letterSpacing: 1.2
+      color: $white
+      align:
+        - center
+        - middle
+  - elementId: export-kicker
+    elementType: text
+    bounds:
+      - 80
+      - 54
+      - 500
+      - 18
+    content:
+      text: STRUCTURE / EXPORT-LED GROWTH
+      fontFamily: *ref_0
+      fontSize: 9
+      bold: true
+      letterSpacing: 1.2
+      color: $red
+  - elementId: export-title
+    elementType: text
+    bounds:
+      - 80
+      - 78
+      - 808
+      - 42
+    content:
+      style: $title
+      text: 2024 年增长主要由出口驱动，出口占比达 79.3%
+  - elementId: export-lead
+    elementType: text
+    bounds:
+      - 80
+      - 126
+      - 808
+      - 24
+    content:
+      style: $lead
+      text: 出口 2.15 万亿元，约为进口规模的 3.9 倍
+  - elementId: export-total-label
+    elementType: text
+    bounds:
+      - 80
+      - 166
+      - 330
+      - 20
+    content:
+      text: 2024 跨境电商进出口总额  2.71 万亿元
+      fontFamily: *ref_0
+      fontSize: 12
+      bold: true
+      color: $black
+  - elementId: export-share-export
+    elementType: text
+    bounds:
+      - 100
+      - 218
+      - 220
+      - 52
+    content:
+      text: 79.3%
+      fontFamily: &ref_1
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 42
+      bold: true
+      color: $white
+  - elementId: export-label-export
+    elementType: text
+    bounds:
+      - 102
+      - 270
+      - 284
+      - 18
+    content:
+      text: 出口 2.15 万亿元 / 同比 +16.9%
+      fontFamily: *ref_0
+      fontSize: 10.5
+      bold: true
+      color: $white
+  - elementId: export-share-import
+    elementType: text
+    bounds:
+      - 614
+      - 224
+      - 108
+      - 36
+    content:
+      text: 20.5%
+      fontFamily: *ref_0
+      fontSize: 25
+      bold: true
+      color: $white
+      align:
+        - center
+        - middle
+  - elementId: export-label-import
+    elementType: text
+    bounds:
+      - 610
+      - 270
+      - 116
+      - 18
+    content:
+      text: 进口 5552.5 亿元
+      fontFamily: *ref_0
+      fontSize: 8.5
+      bold: true
+      color: $white
+      align:
+        - center
+        - middle
+  - elementId: export-multiple
+    elementType: text
+    bounds:
+      - 748
+      - 198
+      - 120
+      - 62
+    content:
+      text: 3.9×
+      fontFamily: *ref_1
+      fontSize: 46
+      bold: true
+      letterSpacing: -1.2
+      color: $red
+      align:
+        - right
+        - top
+  - elementId: export-multiple-note
+    elementType: text
+    bounds:
+      - 748
+      - 264
+      - 120
+      - 34
+    content:
+      text: 出口 / 进口<br>根据披露数据计算
+      fontFamily: *ref_0
+      fontSize: 9.5
+      lineHeight: 1.2
+      color: $gray
+      align:
+        - right
+        - top
+  - elementId: export-kpi-1
+    elementType: text
+    bounds:
+      - 80
+      - 390
+      - 232
+      - 40
+    content:
+      text: 6.2%
+      fontFamily: *ref_1
+      fontSize: 34
+      bold: true
+      color: $black
+  - elementId: export-kpi-1-note
+    elementType: text
+    bounds:
+      - 80
+      - 434
+      - 232
+      - 30
+    content:
+      text: 总额占货物贸易
+      fontFamily: *ref_0
+      fontSize: 11
+      color: $gray
+  - elementId: export-kpi-2
+    elementType: text
+    bounds:
+      - 356
+      - 390
+      - 232
+      - 40
+    content:
+      text: 8.5%
+      fontFamily: *ref_1
+      fontSize: 34
+      bold: true
+      color: $red
+  - elementId: export-kpi-2-note
+    elementType: text
+    bounds:
+      - 356
+      - 434
+      - 232
+      - 30
+    content:
+      text: 出口占货物出口
+      fontFamily: *ref_0
+      fontSize: 11
+      color: $gray
+  - elementId: export-kpi-3
+    elementType: text
+    bounds:
+      - 632
+      - 390
+      - 232
+      - 40
+    content:
+      text: 3.0%
+      fontFamily: *ref_1
+      fontSize: 34
+      bold: true
+      color: $black
+  - elementId: export-kpi-3-note
+    elementType: text
+    bounds:
+      - 632
+      - 434
+      - 232
+      - 30
+    content:
+      text: 进口占货物进口
+      fontFamily: *ref_0
+      fontSize: 11
+      color: $gray
+  - elementId: export-source
+    elementType: text
+    bounds:
+      - 80
+      - 512
+      - 720
+      - 12
+    content:
+      text: 来源：海关总署公开数据（商务部电子商务公共服务网转载）；79.3%、20.5% 与 3.9 倍根据海关披露数据计算。
+      fontFamily: *ref_0
+      fontSize: 8.2
+      color: $gray
+  - elementId: export-page
+    elementType: text
+    bounds:
+      - 856
+      - 510
+      - 32
+      - 12
+    content:
+      text: '04'
+      fontFamily: *ref_0
+      fontSize: 9
+      bold: true
+      color: $black
+      align:
+        - right
+        - bottom

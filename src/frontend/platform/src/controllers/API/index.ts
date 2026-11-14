@@ -530,9 +530,10 @@ export async function subUploadLibFile(data: UploadFileFc | DefaultUploadFileFc)
 
 export async function importKnowledgeWebLinkApi(
   knowledgeId: string | number,
-  data: { url: string; title?: string; overwrite?: boolean },
+  data: { url: string; title?: string; overwrite?: boolean; parent_id?: number | null },
+  signal?: AbortSignal,
 ) {
-  return await axios.post(`/api/v1/knowledge/space/${knowledgeId}/web-links`, data, { silent: true });
+  return await axios.post(`/api/v1/knowledge/space/${knowledgeId}/web-links`, data, { silent: true, ...(signal ? { signal } : {}) });
 }
 
 //调整分段策略

@@ -72,3 +72,5 @@
 | F006 | 27.8 / 25.4 | 6.1 万 / 5.3 万 | 59 / 55 |
 
 均值：基线 34.9 分钟、7.45 万 token；F006 26.6 分钟、5.7 万 token（各约 −24%），两次结果也最接近。样本小，只能说明量级。逐页看图发现最高柱的数值标签被截，已修（图表顶部留白）。
+
+> **2026-11-11 注（F014）**：「PPT 制作」技能（`bisheng-pptx`）改用 PPTD 引擎，原 `templates/catalog.json` 与五套 .pptx 模板已删除。AC-06 的配色一致性改为只校验 gov-red（对照 `bisheng-pptx/templates/gov-red/source-zh/deck.pptd`），AC-07 的 14 个版式改为 html-report 自身的固定清单。见 [F014 design](../014-pptx-pptd-engine/design.md) 决策 7。

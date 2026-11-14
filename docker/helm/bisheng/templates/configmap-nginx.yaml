@@ -1,126 +1,57 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "bisheng.fullname" . }}-nginx
-  labels:
-    {{- include "bisheng.labels" . | nindent 4 }}
+  name: {{ include "bisheng.component" (list . "nginx") }}
 data:
   default.conf: |
-    map $http_upgrade $connection_upgrade {
-      default upgrade;
-      '' close;
-    }
-    map $http_x_forwarded_proto $bs_forwarded_proto {
-      default $http_x_forwarded_proto;
-      "" $scheme;
-    }
-    map $http_x_forwarded_host $bs_forwarded_host {
-      default $http_x_forwarded_host;
-      "" $http_host;
-    }
+    map $http_upgrade $connection_upgrade { default upgrade; '' close; }
+    map $http_x_forwarded_proto $bs_forwarded_proto { default $http_x_forwarded_proto; "" $scheme; }
+    map $http_x_forwarded_host $bs_forwarded_host { default $http_x_forwarded_host; "" $http_host; }
     server {
-      gzip on;
-      gzip_comp_level 2;
-      gzip_min_length 1000;
-      gzip_types text/xml text/css;
-      gzip_http_version 1.1;
-      gzip_vary on;
       listen {{ .Values.frontend.service.port }};
-
-      location / {
-        root /usr/share/nginx/html/platform;
-        index index.html index.htm;
-        try_files $uri $uri/ /index.html =404;
-        add_header X-Frame-Options SAMEORIGIN;
-      }
-
-      location /workspace/ {
-        alias /usr/share/nginx/html/client/;
-        index index.html index.htm;
-        try_files $uri $uri/ /workspace/index.html;
-      }
-
-      location ~ ^(/workspace)?/api(/|$) {
-        rewrite ^/workspace(/.*)$ $1 break;
-        proxy_pass http://{{ include "bisheng.backendService" . }}:{{ .Values.backend.service.port }};
-        proxy_read_timeout 300s;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $bs_forwarded_proto;
-        proxy_set_header X-Forwarded-Host $bs_forwarded_host;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection $connection_upgrade;
-        client_max_body_size 1024m;
-        add_header X-Frame-Options SAMEORIGIN;
-      }
-
-      location ~ ^/(workspace/)?object/([^/]+)/ {
-        set $bs_object_bucket $2;
-        auth_request /_object_bucket_ok/$bs_object_bucket;
-        rewrite ^/(?:workspace/)?object/(.*)$ /$1 break;
-        # SigV4 signs Host; must match object_storage.minio.sharepoint.
-        proxy_set_header Host {{ .Values.frontend.objectStorageSharepoint }};
-        proxy_pass http://{{ .Values.frontend.objectStorageEndpoint }};
-      }
-
-      location /_object_bucket_ok/ {
-        internal;
-        rewrite ^ /api/v1/storage/browser-bucket break;
-        proxy_pass http://{{ include "bisheng.backendService" . }}:{{ .Values.backend.service.port }};
-        proxy_pass_request_body off;
-        proxy_set_header Content-Length "";
-        proxy_set_header X-Object-Bucket $bs_object_bucket;
-        proxy_set_header Authorization "";
-        proxy_set_header Cookie "";
-      }
-    }
-    {{- if .Values.frontend.service.clientPort }}
-    server {
-      gzip on;
-      gzip_comp_level 2;
-      gzip_min_length 1000;
-      gzip_types text/xml text/css;
-      gzip_http_version 1.1;
-      gzip_vary on;
+{{- if .Values.frontend.service.clientPort }}
       listen {{ .Values.frontend.service.clientPort }};
-
-      location = / {
-        return 302 /workspace/;
-      }
-
-      location /workspace/ {
-        alias /usr/share/nginx/html/client/;
-        index index.html index.htm;
-        try_files $uri $uri/ /workspace/index.html;
-      }
-
+{{- end }}
+      client_max_body_size {{ .Values.frontend.proxy.maxBodySize }};
+      proxy_read_timeout {{ .Values.frontend.proxy.readTimeoutSeconds }}s;
+      proxy_http_version 1.1;
+      proxy_set_header Host $http_host;
+      proxy_set_header X-Forwarded-Host $bs_forwarded_host;
+      proxy_set_header X-Forwarded-Proto $bs_forwarded_proto;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection $connection_upgrade;
+      location / { root /usr/share/nginx/html/platform; try_files $uri $uri/ /index.html; }
+      location /workspace/ { alias /usr/share/nginx/html/client/; try_files $uri $uri/ /workspace/index.html; }
+      location ^~ /workspace/api/v1/internal/ { return 404; }
+      location ^~ /api/v1/internal/app-runtime/ { return 404; }
+      location ^~ /api/v1/internal/app-proxy/ { return 404; }
+      location ^~ /internal/ { return 404; }
+{{- if .Values.runtime.enabled }}
+      location = /apps { proxy_pass http://{{ include "runtime.name" (list . "app-proxy") }}:8080; }
+      location /apps/ { proxy_pass http://{{ include "runtime.name" (list . "app-proxy") }}:8080; proxy_buffering off; }
+{{- else }}
+      location /apps/ { proxy_pass http://{{ include "bisheng.backendService" . }}:{{ .Values.backend.service.port }}; }
+{{- end }}
       location ~ ^(/workspace)?/api(/|$) {
         rewrite ^/workspace(/.*)$ $1 break;
+{{- if .Values.gateway.enabled }}
+        proxy_pass http://{{ include "bisheng.component" (list . "gateway") }}:{{ .Values.gateway.service.port }};
+{{- else }}
         proxy_pass http://{{ include "bisheng.backendService" . }}:{{ .Values.backend.service.port }};
-        proxy_read_timeout 300s;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $bs_forwarded_proto;
-        proxy_set_header X-Forwarded-Host $bs_forwarded_host;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection $connection_upgrade;
-        client_max_body_size 1024m;
-        add_header X-Frame-Options SAMEORIGIN;
+{{- end }}
+        proxy_buffering off;
       }
-
+      # F009: browser object paths are /object/{bucket}/{key}; the backend
+      # decides (auth_request) whether {bucket} is the current public/temp bucket.
       location ~ ^/(workspace/)?object/([^/]+)/ {
         set $bs_object_bucket $2;
         auth_request /_object_bucket_ok/$bs_object_bucket;
         rewrite ^/(?:workspace/)?object/(.*)$ /$1 break;
         # SigV4 signs Host; must match object_storage.minio.sharepoint.
-        proxy_set_header Host {{ .Values.frontend.objectStorageSharepoint }};
-        proxy_pass http://{{ .Values.frontend.objectStorageEndpoint }};
+        proxy_set_header Host {{ if .Values.minio.external.sharepoint }}{{ .Values.minio.external.sharepoint }}{{ else }}{{ get (urlParse .Values.publicUrl) "host" }}{{ end }};
+        proxy_pass {{ if .Values.minio.external.secure }}https{{ else }}http{{ end }}://{{ include "bisheng.host" (list . "minio") }}:{{ .Values.minio.external.port }};
       }
-
       location /_object_bucket_ok/ {
         internal;
         rewrite ^ /api/v1/storage/browser-bucket break;
@@ -132,4 +63,38 @@ data:
         proxy_set_header Cookie "";
       }
     }
-    {{- end }}
+{{- if .Values.runtime.enabled }}
+    server {
+      listen {{ .Values.global.internalPlatformPort }} ssl;
+      ssl_certificate /run/internal-tls/tls.crt;
+      ssl_certificate_key /run/internal-tls/tls.key;
+      client_max_body_size {{ .Values.frontend.proxy.maxBodySize }};
+      proxy_read_timeout {{ .Values.frontend.proxy.readTimeoutSeconds }}s;
+      proxy_http_version 1.1;
+      proxy_set_header Host $http_host;
+      proxy_set_header X-Forwarded-Proto https;
+      proxy_set_header X-Forwarded-Host $http_host;
+      proxy_request_buffering off;
+      proxy_buffering off;
+      location / { return 404; }
+      location ^~ /api/v1/internal/app-runtime/v2/ {
+        proxy_pass http://{{ include "bisheng.backendService" . }}:{{ .Values.backend.service.port }};
+      }
+      location ^~ /api/v1/internal/app-proxy/ {
+        proxy_pass http://{{ include "bisheng.backendService" . }}:{{ .Values.backend.service.port }};
+      }
+      location ^~ /api/v2/ {
+{{- if .Values.gateway.enabled }}
+        proxy_pass http://{{ include "bisheng.component" (list . "gateway") }}:{{ .Values.gateway.service.port }};
+{{- else }}
+        proxy_pass http://{{ include "bisheng.backendService" . }}:{{ .Values.backend.service.port }};
+{{- end }}
+      }
+      location ^~ /api/v1/apps/ {
+        proxy_pass http://{{ include "bisheng.backendService" . }}:{{ .Values.backend.service.port }};
+      }
+      location ^~ /internal/app-runtime/v2/material-access/ {
+        proxy_pass http://{{ include "bisheng.backendService" . }}:{{ .Values.backend.service.port }};
+      }
+    }
+{{- end }}

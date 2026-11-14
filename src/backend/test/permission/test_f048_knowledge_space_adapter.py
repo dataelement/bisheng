@@ -188,7 +188,7 @@ async def test_container_service_verifies_business_facts_before_action() -> None
     (
         (None, "knowledge_library"),
         (_record(tenant_id=6), "knowledge_library"),
-        (_record(status="COPYING"), "knowledge_library"),
+        (_record(status="DELETED"), "knowledge_library"),
         (_record(kind="SPACE"), "knowledge_library"),
         (
             _record(

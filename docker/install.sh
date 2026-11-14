@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copy the template, optionally configure Gateway, then let Compose deploy.
+# Copy the template, configure optional services, then let Compose deploy.
 set +x
 set -euo pipefail
 umask 077
@@ -11,7 +11,7 @@ source "${SCRIPT_DIR}/lib/credential-migrate.sh"
 die() { printf '部署停止：%s\n' "$*" >&2; exit 1; }
 
 BUNDLE=""; KEY_FILE=""; REVISION=""
-GATEWAY_CHOICE=""; LICENSE_FILE=""; PUBLIC_URL=""; PREPARE_ONLY=false
+GATEWAY_CHOICE=""; FT_CHOICE=""; LICENSE_FILE=""; PUBLIC_URL=""; PREPARE_ONLY=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --bundle|--key-file|--revision)
@@ -20,14 +20,17 @@ while [[ $# -gt 0 ]]; do
       shift 2 ;;
     --gateway) GATEWAY_CHOICE=true; shift ;;
     --no-gateway) GATEWAY_CHOICE=false; shift ;;
+    --ft) FT_CHOICE=true; shift ;;
+    --no-ft) FT_CHOICE=false; shift ;;
     --prepare-only) PREPARE_ONLY=true; shift ;;
     --license-file|--public-url)
       [[ $# -ge 2 && -n "$2" ]] || die "$1 需要参数"
       if [[ "$1" = --license-file ]]; then LICENSE_FILE="$2"; else PUBLIC_URL="$2"; fi
       shift 2 ;;
     -h|--help)
-      printf '%s\n' '用法：bash docker/install.sh [--gateway | --no-gateway] [--prepare-only]' \
-        '首次运行会引导填写密码；后续自动复用现有配置、密码及密钥。' \
+      printf '%s\n' '用法：bash docker/install.sh [--gateway | --no-gateway] [--ft | --no-ft] [--prepare-only]' \
+        '首次运行会引导填写密码；后续自动复用现有配置、密码及密钥。首次无参数部署不启用 Gateway 和 FT。' \
+        'FT 需要 NVIDIA GPU 和 NVIDIA Container Toolkit；--no-ft 不停止已运行容器。' \
         'Gateway 必须提供 license 文件路径：--license-file <文件> --public-url <平台地址>'
       exit 0 ;;
     *) die "未知参数：$1" ;;
@@ -99,6 +102,10 @@ if [[ -n "$GATEWAY_CHOICE" ]]; then
     volume="$(env_get "$ENV_FILE" DOCKER_VOLUME_DIRECTORY)"; volume="${volume:-.}"
     env_set "$ENV_FILE" BISHENG_NGINX_CONF_DIR "${volume%/}/nginx/conf.d"
   fi
+fi
+if [[ -n "$FT_CHOICE" ]]; then
+  profiles="$(env_get "$ENV_FILE" COMPOSE_PROFILES)"
+  env_set "$ENV_FILE" COMPOSE_PROFILES "$(set_optional_profile "$profiles" "$FT_CHOICE" ft)"
 fi
 # Existing advanced path options stay compatible; normal deployment needs none.
 BUNDLE=${BUNDLE:-$(env_get "$ENV_FILE" BISHENG_CREDENTIALS_DIR)}

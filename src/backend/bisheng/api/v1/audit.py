@@ -106,6 +106,12 @@ async def export_audit_logs(
     return resp_200(data={"data": rows, "total": total})
 
 
+@router.get("/scope")
+async def get_audit_scope(*, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    """Tenant and departments the caller is allowed to read on the audit page."""
+    return resp_200(data=await AuditLogService.get_audit_scope(login_user))
+
+
 @router.get("/departments")
 async def get_audit_departments(
     *,

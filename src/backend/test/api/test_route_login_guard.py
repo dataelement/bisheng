@@ -51,6 +51,7 @@ LEGACY_ROUTES_WITHOUT_LOGIN_DEPENDENCY = frozenset(
     """
 DELETE /api/v1/apps/{app_id}/storage/objects/{key:path}
 DELETE /api/v1/dsh/market/admin/plugins/{plugin_id}
+DELETE /api/v1/dsh/mobile/session
 DELETE /api/v1/service-accounts/{service_account_id}
 DELETE /api/v1/tenants/{tenant_id}/users/{user_id}
 GET /api/v1/all
@@ -115,6 +116,7 @@ GET /api/v1/service-accounts/{service_account_id}/keys
 GET /api/v1/service-accounts/{service_account_id}/keys/page
 GET /api/v1/service-accounts/{service_account_id}/resource-grants
 GET /api/v1/share-link/{share_token}
+GET /api/v1/storage/browser-bucket
 GET /api/v1/telemetry/dashboard/dataset/field/enums
 GET /api/v1/telemetry/dashboard/dataset/list
 GET /api/v1/tool/linsight/preset
@@ -144,6 +146,9 @@ POST /api/v1/dsh/market/admin/workbenches/imports
 POST /api/v1/dsh/market/admin/workbenches/imports/preview
 POST /api/v1/dsh/market/admin/workbenches/imports/{task_id}/resume
 POST /api/v1/dsh/market/sync
+POST /api/v1/dsh/mobile/bind
+POST /api/v1/dsh/mobile/session/refresh
+POST /api/v1/dsh/mobile/unbind
 POST /api/v1/dsh/responses
 POST /api/v1/dsh/token
 POST /api/v1/dsh/tools/{toolCode}/invoke

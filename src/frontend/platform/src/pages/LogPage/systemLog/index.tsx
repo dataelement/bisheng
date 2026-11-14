@@ -1,8 +1,9 @@
 // @ts-strict-ignore
-import { Pagination, Button, Input, Select } from '@bisheng/ui';
+import { Pagination, Button, DatePicker, Input, Select } from '@bisheng/ui';
+import type { DatePickerError, DatePickerOpenRange } from '@bisheng/ui';
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 
-import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
+import { useDatePickerLocale } from "@/hooks/useDatePickerLocale";
 import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import { notification } from "@bisheng/ui";
@@ -40,8 +41,10 @@ import {
     toAppOptions,
 } from "./auditRow";
 import { AuditEmptyState } from "../components/AuditEmptyState";
+import { OrgPathText } from "../components/OrgPathText";
 import { OrgFilter } from "../components/OrgFilter";
 import type { OrgSelection } from "@/types/api/audit";
+import styles from "../AuditFilters.module.css";
 
 const useGroups = () => {
     const [groups, setGroups] = useState([])
@@ -98,8 +101,7 @@ export { actionToI18nKey }
 type FilterKeys = {
     userIds: number[]
     groupId: string
-    start?: Date
-    end?: Date
+    dateRange: DatePickerOpenRange | null
     moduleId: string
     action: string
     targetAppId: string
@@ -111,8 +113,7 @@ type FilterKeys = {
 const init: FilterKeys = {
     userIds: [],
     groupId: '',
-    start: undefined,
-    end: undefined,
+    dateRange: null,
     moduleId: '',
     action: '',
     targetAppId: '',
@@ -126,8 +127,8 @@ const init: FilterKeys = {
 const toFilters = (keys: FilterKeys): AuditLogFilters => ({
     userIds: keys.userIds,
     groupId: keys.groupId,
-    start: keys.start && formatDate(keys.start, 'yyyy-MM-dd HH:mm:ss'),
-    end: keys.end && formatDate(keys.end, 'yyyy-MM-dd HH:mm:ss').replace('00:00:00', '23:59:59'),
+    start: keys.dateRange?.[0] ? `${keys.dateRange[0]} 00:00:00` : undefined,
+    end: keys.dateRange?.[1] ? `${keys.dateRange[1]} 23:59:59` : undefined,
     moduleId: keys.moduleId,
     action: keys.action,
     targetAppId: keys.targetAppId,
@@ -139,6 +140,7 @@ const toFilters = (keys: FilterKeys): AuditLogFilters => ({
 export default function SystemLog() {
     const { t } = useTranslation()
     const paginationLocale = usePaginationLocale();
+    const datePickerLocale = useDatePickerLocale();
     const { appConfig } = useContext(locationContext)
     const { user } = useContext(userContext)
     const multiTenantEnabled = !!appConfig.multiTenantEnabled
@@ -154,6 +156,8 @@ export default function SystemLog() {
 
     const [actions, setActions] = useState<any[]>([])
     const [keys, setKeys] = useState<FilterKeys>({ ...init })
+    const [dateError, setDateError] = useState<DatePickerError | null>(null)
+    const [datePickerVersion, setDatePickerVersion] = useState(0)
     // The filters the table currently shows — the export follows these, not
     // the controls, so a half-edited form cannot export something the user
     // has not looked at.
@@ -170,6 +174,8 @@ export default function SystemLog() {
     }
     const handleReset = () => {
         setKeys({ ...init })
+        setDateError(null)
+        setDatePickerVersion(version => version + 1)
         appliedRef.current = toFilters(init)
         filterData(toFilters(init))
     }
@@ -193,14 +199,14 @@ export default function SystemLog() {
         loadUsers()
     }, [])
 
-    return <div className="relative">
+    return <div className="relative flex min-h-0 flex-1 flex-col">
         {loading && (
             <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                 <LoadingIcon />
             </div>
         )}
-        <div className="flex h-[calc(100vh-128px-var(--license-banner-h,0px))] flex-col overflow-y-auto px-2 py-4 pb-10">
-            <div className="flex shrink-0 flex-wrap gap-4">
+        <div className={`${styles.filterContainer} flex min-h-0 flex-1 flex-col overflow-y-auto px-2 pt-2 pb-20`}>
+            <div className={`${styles.filterGrid} shrink-0`}>
                 <OrgFilter value={keys.org} tenantId={keys.tenantId ? Number(keys.tenantId) : null}
                     onChange={org => setKeys({ ...keys, org })} />
                 <Select
@@ -208,7 +214,6 @@ export default function SystemLog() {
                     multiple
                     showSearch
                     allowClear
-                    className="w-[200px]"
                     aria-label={t('log.selectUser')}
                     placeholder={t('log.selectUser')}
                     options={users.filter(u => u.value != null && u.value !== '')}
@@ -218,7 +223,6 @@ export default function SystemLog() {
                 <Select
                     {...selectLabels}
                     allowClear
-                    className="w-[200px]"
                     aria-label={t('log.selectUserGroup')}
                     placeholder={t('log.selectUserGroup')}
                     onOpenChange={(open) => { if (open) loadData() }}
@@ -226,16 +230,21 @@ export default function SystemLog() {
                     onChange={(value) => setKeys({ ...keys, groupId: value == null ? '' : value })}
                     options={groups.filter(g => g.id != null && g.id !== '').map(g => ({ value: g.id, label: g.group_name }))}
                 />
-                <div className="w-[180px] relative">
-                    <DatePicker value={keys.start} placeholder={t('log.startDate')} onChange={(t) => setKeys({ ...keys, start: t })} />
-                </div>
-                <div className="w-[180px] relative">
-                    <DatePicker value={keys.end} placeholder={t('log.endDate')} onChange={(t) => setKeys({ ...keys, end: t })} />
-                </div>
+                <DatePicker
+                    key={datePickerVersion}
+                    aria-label={t('datePicker.dateRange')}
+                    className={styles.dateRange}
+                    mode="range"
+                    allowOpenRange
+                    allowClear
+                    value={keys.dateRange}
+                    onChange={(dateRange: DatePickerOpenRange | null) => setKeys(current => ({ ...current, dateRange }))}
+                    onValidationChange={setDateError}
+                    locale={datePickerLocale}
+                />
                 <Select
                     {...selectLabels}
                     allowClear
-                    className="w-[180px]"
                     aria-label={t('log.systemModule')}
                     placeholder={t('log.systemModule')}
                     onOpenChange={(open) => { if (open) loadModules() }}
@@ -246,7 +255,6 @@ export default function SystemLog() {
                 <Select
                     {...selectLabels}
                     allowClear
-                    className="w-[180px]"
                     aria-label={t('log.actionBehavior')}
                     placeholder={t('log.actionBehavior')}
                     onOpenChange={(open) => { if (open) handleActionOpen() }}
@@ -254,36 +262,32 @@ export default function SystemLog() {
                     onChange={(value) => setKeys({ ...keys, action: value == null ? '' : value })}
                     options={actions.filter(a => a.value != null && a.value !== '').map(a => ({ value: a.value, label: t(a.name) }))}
                 />
-                <Select {...selectLabels} allowClear showSearch className="w-[220px]"
+                <Select {...selectLabels} allowClear showSearch
                     aria-label={t('log.selectApp')} placeholder={t('log.selectApp')}
                     options={apps} value={keys.targetAppId || null}
                     onOpenChange={open => { if (open) loadApps() }} onSearch={searchApps}
                     onChange={value => setKeys({ ...keys, targetAppId: value == null ? '' : String(value) })} />
-                {showTenant && <Select {...selectLabels} allowClear className="w-[180px]"
+                {showTenant && <Select {...selectLabels} allowClear
                     aria-label={t('log.selectTenant')} placeholder={t('log.selectTenant')}
                     options={tenants.filter(tenant => tenant.id != null).map(tenant => ({ value: String(tenant.id), label: tenant.tenant_name }))}
                     value={keys.tenantId || null} onOpenChange={open => { if (open) loadTenants() }}
                     onChange={value => setKeys({ ...keys, tenantId: value == null ? '' : String(value) })} />}
                 <Input
-                    className="w-[200px]"
                     aria-label={t('log.remark')}
                     placeholder={t('log.remark')}
                     value={keys.note}
                     onChange={(event) => setKeys({ ...keys, note: event.target.value.slice(0, 200) })}
                 />
-                <div className="flex items-center gap-2">
-                    <Button size="medium" onClick={handleSearch}>
-                        {t('log.searchButton')}
-                    </Button>
+                <div className={styles.filterActions}>
                     <Button size="medium" variant="outlined" onClick={handleReset} color="default">
                         {t('log.resetButton')}
                     </Button>
-                    <Button size="medium" variant="outlined" color="default" loading={exporting} disabled={exporting} onClick={handleExport}>
-                        {t('log.exportButton')}
+                    <Button size="medium" onClick={handleSearch} disabled={Boolean(dateError)}>
+                        {t('log.searchButton')}
                     </Button>
                 </div>
             </div>
-            <Table className="mb-[50px]">
+            <Table className="mb-[50px]" containerClassName="shrink-0">
                 <TableHeader>
                     <TableRow>
                         <TableHead className="w-[200px]">{t('log.auditId')}</TableHead>
@@ -304,13 +308,13 @@ export default function SystemLog() {
                     {logs.map((log: any) => {
                         const operator = renderOperator(log, t)
                         return (
-                            <TableRow key={log.id}>
+                            <TableRow key={log.id} hoverable={false}>
                                 <TableCell>{log.id}</TableCell>
                                 <TableCell>
                                     <div className="max-w-[200px] break-all truncate-multiline">{operator.primary}</div>
                                     {operator.secondary && <div className="max-w-[200px] break-all text-xs text-muted-foreground">{operator.secondary}</div>}
                                 </TableCell>
-                                <TableCell><div className="max-w-[200px] break-all truncate-multiline">{renderOrg(log, t)}</div></TableCell>
+                                <TableCell className="max-w-[200px]"><OrgPathText text={renderOrg(log, t)} /></TableCell>
                                 <TableCell>{log.create_time.replace('T', ' ')}</TableCell>
                                 <TableCell>{renderSystemId(log, t)}</TableCell>
                                 <TableCell>{renderEventType(log, t, actionToI18nKey)}</TableCell>
@@ -331,11 +335,12 @@ export default function SystemLog() {
             </Table>
             {loaded && !loading && logs.length === 0 && <AuditEmptyState />}
         </div>
-        {/* Pagination */}
-
-        <div className="bisheng-table-footer px-6 bg-background-login">
+        <div className="bisheng-table-footer gap-4 pl-2 pr-6 bg-background-login">
+            <Button className="shrink-0" size="medium" variant="outlined" color="default" loading={exporting} disabled={exporting} onClick={handleExport}>
+                {t('log.exportButton')}
+            </Button>
             <Pagination locale={paginationLocale}
-                className="float-right justify-end w-full mr-6"
+                className="ml-auto min-w-0"
                 current={page}
                 pageSize={pageSize}
                 total={total}

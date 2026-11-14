@@ -42,11 +42,11 @@ async def test_runtime_classification_uses_type_and_keeps_action_guards(monkeypa
     assert record.owner_user_id == owner_user_id
     if tool_kind != ToolPresetType.PRESET and owner_user_id is None:
         with pytest.raises(PermissionInvalidResourceError):
-            await adapter.check_action(resource_id="902", actor=actor, action="use")
+            await adapter.check_action(resource_id="902", actor=actor, action="visible")
         permission.check_action.assert_not_awaited()
         return
 
-    assert await adapter.check_action(resource_id="902", actor=actor, action="use")
+    assert await adapter.check_action(resource_id="902", actor=actor, action="visible")
     if tool_kind == ToolPresetType.PRESET:
         with pytest.raises(InvalidCatalogActionError):
             await adapter.resolve_permission_target(resource_id="902", actor=actor, action="edit")
@@ -66,7 +66,7 @@ def test_new_permission_record_uses_type_independently_of_creator(owner_user_id,
 
 
 @pytest.mark.parametrize("allowed", [True, False])
-async def test_workstation_presets_with_creator_still_require_use_permission(monkeypatch, allowed):
+async def test_workstation_presets_with_creator_still_require_visibility(monkeypatch, allowed):
     from bisheng.permission.application import business_authorization
 
     row = GptsToolsType(id=902, tenant_id=5, user_id=1, name="Web search", is_preset=1)
@@ -94,7 +94,7 @@ async def test_workstation_presets_with_creator_still_require_use_permission(mon
     runtime.batch_check_actions.assert_awaited_once()
     assert runtime.batch_check_actions.await_args.args[0] == actor
     assert runtime.batch_check_actions.await_args.args[1][0].resource_id == "902"
-    assert runtime.batch_check_actions.await_args.args[2] == "use"
+    assert runtime.batch_check_actions.await_args.args[2] == "visible"
 
 
 @pytest.fixture
@@ -178,4 +178,4 @@ async def test_tenant_copy_projects_presets_with_historical_creator(monkeypatch,
     assert len(specs) == 1
     assert specs[0].tenant_id == 3
     assert specs[0].resource_id == str(copied_type.id)
-    assert specs[0].action_codes == ("use", "visible")
+    assert specs[0].action_codes == ("visible",)

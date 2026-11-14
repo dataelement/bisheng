@@ -13,6 +13,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.core.cache.redis_manager import get_redis_client
+from bisheng.core.session_activity import business_activity
 from bisheng.database.models.assistant import Assistant
 from bisheng.permission.application.business_authorization import (
     require_business_action,
@@ -34,9 +35,9 @@ async def get_assistant(
     page_size: int | None = Query(default=10, gt=0, description="Items per page"),
     status: int | None = Query(default=None, description="Is online status"),
     action: str = Query(
-        default="use",
+        default="visible",
         pattern="^(visible|use)$",
-        description="Concrete action required for each assistant",
+        description="Visibility required for each assistant; legacy use is interpreted as visible",
     ),
     cursor: str | None = Query(
         default=None,
@@ -58,7 +59,7 @@ async def get_assistant(
         tag_id=tag_id,
         cursor=cursor,
         page_size=page_size,
-        action=action,
+        action="visible" if action == "use" else action,
     )
     return resp_200(data=result)
 
@@ -242,6 +243,7 @@ async def update_tool_list(
 
 # Assistant Dialogue'swebsocketCONNECT
 @router.websocket("/chat/{assistant_id}")
+@business_activity(http=False, websocket_actions=("input",))
 async def chat(
     *,
     assistant_id: str,
@@ -255,7 +257,7 @@ async def chat(
             login_user,
             resource_type="assistant",
             resource_id=assistant_id,
-            action="use",
+            action="visible",
         )
         # ``flow_lease_id`` is the page lease opened by the session page; without
         # it the connection takes its own execution lease.

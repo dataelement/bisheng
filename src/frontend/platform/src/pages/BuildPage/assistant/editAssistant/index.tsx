@@ -33,6 +33,9 @@ function EditAssistantContent() {
     const { assistantState, changed, setAssistantDetail, changeStatus, saveAfter, destroy } = useAssistantStore()
     const { startNewRound, insetSystemMsg, insetBsMsg, destory, setShowGuideQuestion } = useMessageStore()
     const [checking, setChecking] = useState(true)
+    const [loadedAssistantId, setLoadedAssistantId] = useState('')
+    const activeAssistant = useRef(assisId);
+    activeAssistant.current = assisId;
     const assistantId = assisId ? String(assisId) : ''
     const { actions } = useResourceActions('assistant', assistantId ? [assistantId] : [], ['edit'])
     const canEdit = assistantId ? hasResourceAction(actions, assistantId, 'edit') : false
@@ -44,7 +47,9 @@ function EditAssistantContent() {
         await checkAppEditPermission(assisId, 5)
 
         await getAssistantDetailApi(assisId, 'v1').then((res) => {
+            if (activeAssistant.current !== assisId) return
             setAssistantDetail(res)
+            setLoadedAssistantId(String(assisId))
             setChecking(false)
             setShowGuideQuestion(true)
             setGuideQuestion(res.guide_question?.filter((item) => item) || [])
@@ -53,8 +58,9 @@ function EditAssistantContent() {
     }
 
     useEffect(() => {
-        void flowInit().catch(showApiError).finally(() => setChecking(false))
-    }, [])
+        setChecking(true)
+        void flowInit().catch(showApiError).finally(() => { if (activeAssistant.current === assisId) setChecking(false) })
+    }, [assisId])
 
     // Store displayed guide words independently
     const [guideQuestion, setGuideQuestion] = useState([])
@@ -65,7 +71,7 @@ function EditAssistantContent() {
         destory()
         setOpenChat(false)
         try {
-        save ? await handleSave(true) : await new Promise((resolve) => setTimeout(resolve, 0))
+        if (save && !await handleSave(true)) return
         saveAfter()
         startNewRound(t('build.configurationUpdated'))
         setGuideQuestion(assistantState.guide_question.filter((item) => item))
@@ -78,27 +84,33 @@ function EditAssistantContent() {
 
     // Save assistant details
     const handleSave = async (showMessage = false) => {
-        if (!canEdit) return
-        if (!handleCheck()) return
-        await saveAssistanttApi({
+        if (!canEdit) return false
+        if (!handleCheck()) return false
+        const payload = {
             ...assistantState,
             flow_list: assistantState.flow_list.map(item => item.id),
             tool_list: assistantState.tool_list.map(item => item.id),
             knowledge_list: assistantState.knowledge_list.map(item => item.id),
             guide_question: assistantState.guide_question.filter((item) => item),
             logo: assistantState.viewLogo ? assistantState.logo : '',
-        }).then(res => {
-            if (!res) return
-            showMessage && toast.show({ type: 'success', message: [String(t('prompt') ?? ''), String(t('skills.saveSuccessful') ?? '')].filter(Boolean).join('\n') })
-        })
+        }
+        delete payload.knowledge_ids
+        delete payload.reference_states
+        const result = await saveAssistanttApi(payload)
+        if (!result) return false
+        const refreshed = await getAssistantDetailApi(assistantState.id, 'v1')
+        if (activeAssistant.current !== assisId || useAssistantStore.getState().assistantState !== assistantState) return false
+        setAssistantDetail(refreshed)
+        showMessage && toast.show({ type: 'success', message: [String(t('prompt') ?? ''), String(t('skills.saveSuccessful') ?? '')].filter(Boolean).join('\n') })
         saveAfter()
+        return true
     }
 
     // Publish assistant online
     const handleOnline = async (online) => {
         if (!handleCheck()) return
         if (online) {
-            await handleSave()
+            if (!await handleSave()) return
             await changeAssistantStatusApi(assistantState.id, 2).then(() => {
                 toast.show({ type: 'success', message: [String(t('prompt') ?? ''), String(t('skills.onlineSuccessful') ?? '')].filter(Boolean).join('\n') })
             })
@@ -142,7 +154,7 @@ function EditAssistantContent() {
 
     // Cleanup
     useEffect(() => {
-        return destroy
+        return () => { activeAssistant.current = undefined; destroy(); }
     }, [])
 
     const [showApiPage, setShowApiPage] = useState(false)
@@ -150,11 +162,10 @@ function EditAssistantContent() {
     const blocker = useBeforeUnload(changed, checking)
     const handleSaveAndClose = async () => {
         if (!canEdit) return blocker.reset?.()
-        await handleSave(true)
-        blocker.proceed?.()
+        if (await handleSave(true)) blocker.proceed?.()
     }
 
-    if (checking) return null
+    if (checking || loadedAssistantId !== assistantId) return null
 
     return <div className="bg-background-main">
         <Header loca={loca} canEdit={canEdit} onSave={handleUiRequest(() => handleSave(true))} onLine={handleUiRequest(handleOnline)} onTabChange={(t) => setShowApiPage(t === 'api')}></Header>

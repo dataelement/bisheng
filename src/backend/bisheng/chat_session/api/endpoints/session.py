@@ -57,6 +57,19 @@ async def get_chat_messages_by_conversation_id(
     return resp_200([await WorkstationMessage.from_chat_message(message) for message in messages])
 
 
+@router.get("/chat/{chat_id}/files/{file_id}/url")
+async def get_chat_generated_file_url(
+    *, chat_id: str, file_id: str, login_user: UserPayload = Depends(UserPayload.get_login_user)
+):
+    """Fresh link to a code-interpreter file of a conversation (audit detail; F016)."""
+    try:
+        await AuditLogService.assert_session_in_audit_scope(login_user, chat_id)
+    except UnAuthorizedError:
+        raise UnAuthorizedError.http_exception()
+    url = await ChatSessionService.resolve_audit_attachment_url(chat_id, file_id)
+    return resp_200(data={"url": url})
+
+
 @router.post("/chat/message/telemetry")
 async def post_chat_message_telemetry(
     *,

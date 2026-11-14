@@ -811,7 +811,9 @@ export default function useAiChat(
                         prev.map((m) =>
                             m.messageId === userMessageId
                                 ? { ...m, ...mergedUser, messageId: serverMessageId }
-                                : m
+                                : m.parentMessageId === userMessageId
+                                    ? { ...m, parentMessageId: serverMessageId }
+                                    : m
                         )
                     );
                 },
@@ -1086,6 +1088,7 @@ export default function useAiChat(
                             ...(patch.messageId ? { messageId: patch.messageId } : {}),
                             ...(patch.text != null ? { text: patch.text } : {}),
                             ...(patch.events ? { events: patch.events } : {}),
+                            ...(patch.files ? { files: patch.files } : {}),
                             ...(patch.finalised ? { unfinished: false } : {}),
                         };
                         return msgs;
@@ -1186,6 +1189,7 @@ export default function useAiChat(
                                 errorCode,
                                 errorType: meta?.errorType,
                                 errorDetail: meta?.errorDetail,
+                                referenceId: meta?.referenceId,
                                 failureInfo: meta?.failureInfo,
                             };
                         }
@@ -1257,7 +1261,7 @@ export default function useAiChat(
 
             // Find the parent (user) message
             const parentMsg = turnMessages.find(
-                (m) => m.messageId === parentMessageId
+                (m) => m.isCreatedByUser && m.messageId === parentMessageId
             );
             if (!parentMsg) return;
             const vision = bsConfig?.models?.some(model => String(model.id) === String(chatModel.id) && model.visual) ?? false;
@@ -1282,6 +1286,17 @@ export default function useAiChat(
 
             // Add the new response to messages (as a sibling of existing responses)
             setMessages((prev) => [...prev, newResponse]);
+
+            // Each server event can replace the temporary answer ID. Capture
+            // the preceding ID so batched updates keep targeting the same row.
+            let responseMessageId = newResponseId;
+            const updateResponse = (patch: Partial<ChatMessage>) => {
+                const previousId = responseMessageId;
+                responseMessageId = patch.messageId || responseMessageId;
+                setMessages((prev) => prev.map((message) =>
+                    message.messageId === previousId ? { ...message, ...patch } : message,
+                ));
+            };
 
             // Build SSE payload
             const payload = {
@@ -1331,58 +1346,38 @@ export default function useAiChat(
                     console.log("[AiChat] Regenerate SSE started");
                     setIsStreaming(true);
                 },
-                onCreated: (newConvoId) => {
+                onCreated: (newConvoId, mergedUser) => {
                     if (newConvoId && newConvoId !== "") {
                         adoptConversationId(turn, newConvoId);
                     }
+                    const questionId = String(mergedUser.messageId || parentMsg.messageId);
+                    setMessages((prev) => prev.map((message) =>
+                        message.messageId === parentMsg.messageId
+                            ? { ...message, ...mergedUser, messageId: questionId }
+                            : message.parentMessageId === parentMsg.messageId
+                                ? { ...message, parentMessageId: questionId }
+                                : message,
+                    ));
                 },
                 onMessage: (text, messageId) => {
-                    setMessages((prev) => {
-                        const msgs = [...prev];
-                        const idx = msgs.findIndex(
-                            (m) => m.messageId === newResponseId
-                        );
-                        if (idx >= 0) {
-                            msgs[idx] = {
-                                ...msgs[idx],
-                                text,
-                                messageId: messageId || msgs[idx].messageId,
-                            };
-                        }
-                        return msgs;
+                    updateResponse({
+                        text,
+                        ...(messageId ? { messageId } : {}),
                     });
                 },
                 onAgentUpdate: (patch) => {
-                    setMessages((prev) => {
-                        const msgs = [...prev];
-                        const idx = msgs.findIndex(
-                            (m) => m.messageId === newResponseId,
-                        );
-                        if (idx < 0) return prev;
-                        msgs[idx] = {
-                            ...msgs[idx],
-                            category:
-                                patch.category ?? msgs[idx].category ?? "agent_answer",
-                            ...(patch.messageId ? { messageId: patch.messageId } : {}),
-                            ...(patch.text != null ? { text: patch.text } : {}),
-                            ...(patch.events ? { events: patch.events } : {}),
-                            ...(patch.finalised ? { unfinished: false } : {}),
-                        };
-                        return msgs;
+                    updateResponse({
+                        category: patch.category ?? "agent_answer",
+                        ...(patch.messageId ? { messageId: patch.messageId } : {}),
+                        ...(patch.text != null ? { text: patch.text } : {}),
+                        ...(patch.events ? { events: patch.events } : {}),
+                        ...(patch.files ? { files: patch.files } : {}),
+                        ...(patch.finalised ? { unfinished: false } : {}),
                     });
                 },
 
                 onFinal: (data) => {
-                    setMessages((prev) => {
-                        const msgs = [...prev];
-                        const idx = msgs.findIndex(
-                            (m) => m.messageId === newResponseId
-                        );
-                        if (idx >= 0 && data.responseMessage) {
-                            msgs[idx] = { ...msgs[idx], ...data.responseMessage };
-                        }
-                        return msgs;
-                    });
+                    if (data.responseMessage) updateResponse(data.responseMessage);
                     if (data.conversation?.conversationId) {
                         adoptConversationId(turn, data.conversation.conversationId);
                     }
@@ -1390,23 +1385,14 @@ export default function useAiChat(
                 // Same as the send path: failure copy goes to `errorText` so a
                 // partially-streamed answer survives the error.
                 onError: (error, errorCode, meta) => {
-                    setMessages((prev) => {
-                        const msgs = [...prev];
-                        const idx = msgs.findIndex(
-                            (m) => m.messageId === newResponseId
-                        );
-                        if (idx >= 0) {
-                            msgs[idx] = {
-                                ...msgs[idx],
-                                errorText: error || localize("workstation.chat.answer_failed"),
-                                error: true,
-                                errorCode,
-                                errorType: meta?.errorType,
-                                errorDetail: meta?.errorDetail,
-                                failureInfo: meta?.failureInfo,
-                            };
-                        }
-                        return msgs;
+                    updateResponse({
+                        errorText: error || localize("workstation.chat.answer_failed"),
+                        error: true,
+                        errorCode,
+                        errorType: meta?.errorType,
+                        errorDetail: meta?.errorDetail,
+                        referenceId: meta?.referenceId,
+                        failureInfo: meta?.failureInfo,
                     });
                 },
                 onEnd: () => {

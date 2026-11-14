@@ -109,6 +109,7 @@ export interface KnowledgeSpace {
     memberCount: number;          // mapped from member_count
     fileCount: number;            // success-indexed file count
     totalFileCount: number;
+    state?: number | null;
     role: SpaceRole;
     isPinned: boolean;
     createdAt: string;            // mapped from create_time
@@ -223,7 +224,7 @@ export interface KnowledgeFile {
 // Backend raw types (snake_case from API responses)
 // ─────────────────────────────────────────────
 
-interface RawKnowledgeSpace {
+export interface RawKnowledgeSpace {
     id: number;
     name: string;
     description?: string;
@@ -234,6 +235,7 @@ interface RawKnowledgeSpace {
     member_count?: number;
     file_count?: number;
     total_file_count?: number;
+    state?: number | null;
     follower_num?: number;
     file_num?: number;
     role?: string;
@@ -343,7 +345,7 @@ export interface UploadFileResponse {
 // ─────────────────────────────────────────────
 
 /** Map a raw backend space to the frontend KnowledgeSpace model */
-function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
+export function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
     return {
         id: String(raw.id),
         name: raw.name,
@@ -356,6 +358,7 @@ function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
         memberCount: raw.member_count ?? raw.follower_num ?? 0,
         fileCount: raw.file_count ?? raw.file_num ?? 0,
         totalFileCount: raw.total_file_count ?? raw.file_num ?? raw.file_count ?? 0,
+        state: raw.state,
         role: (raw.user_role as SpaceRole) || (raw.role as SpaceRole) || SpaceRole.MEMBER,
         isPinned: raw.is_pinned ?? false,
         createdAt: raw.create_time || "",
@@ -1591,7 +1594,8 @@ export type MoveInvalidReason =
     | "into_subtree"
     | "into_current_parent"
     | "depth_exceeded"
-    | "name_conflict";
+    | "name_conflict"
+    | "not_found" | "unsupported" | "processing" | "related_invalid";
 
 export interface InvalidEntry {
     id: number;
@@ -2011,4 +2015,50 @@ export async function dismissSimilarApi(file_id: number): Promise<void> {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         { skip403Redirect: true } as any,
     );
+}
+
+export async function getMoveManagementTenant(spaceId: string): Promise<string> {
+  const response = await request.getResponse<{ headers: Record<string, unknown> }>(`/api/v1/knowledge/space/${spaceId}/info`);
+  const tenant = response.headers["x-management-tenant"];
+  if (tenant == null) throw new Error("Move management scope is unavailable");
+  return String(tenant);
+}
+
+/** A move review is pinned to the actual management tenant that issued it. */
+export interface MoveConfirmation {
+  precheck: Pick<import("./knowledgeProcessing").OperationPrecheck, "confirmation_id" | "plan_digest">;
+  managementTenant: string;
+}
+
+export interface MoveReview extends MoveConfirmation {
+  precheck: import("./knowledgeProcessing").OperationPrecheck;
+}
+
+export async function precheckMoveFilesApi(
+  spaceId: string,
+  params: Parameters<typeof moveFilesApi>[1],
+): Promise<MoveReview> {
+  const tenant = await getMoveManagementTenant(spaceId);
+  const result = await request.post(`/api/v1/knowledge/space/${spaceId}/files/move/precheck`, {
+    items: params.items.map((item) => ({ id: Number(item.id), type: item.type })),
+    target_space_id: Number(params.target_space_id),
+    target_folder_id: params.target_folder_id == null ? null : Number(params.target_folder_id),
+    skip_invalid: false,
+  }, { headers: { "X-Management-Tenant": String(tenant) } }) as ApiResponse<MoveReview["precheck"]>;
+  if (result.status_code !== 200 || !result.data) throw Object.assign(new Error(result.status_message || "Move precheck failed"), result);
+  return { precheck: result.data, managementTenant: String(tenant) };
+}
+
+export async function confirmMoveFilesApi(
+  spaceId: string,
+  review: MoveConfirmation,
+  idempotencyKey: string,
+): Promise<MoveResult | import("./knowledgeProcessing").JobAccepted> {
+  const result = await request.post(`/api/v1/knowledge/space/${spaceId}/files/move/confirm`, {
+    confirmation_id: review.precheck.confirmation_id,
+    plan_digest: review.precheck.plan_digest,
+    idempotency_key: idempotencyKey,
+  }, { headers: { "X-Management-Tenant": review.managementTenant } }) as ApiResponse<MoveResult | import("./knowledgeProcessing").JobAccepted>;
+  if (result.status_code !== 200 || !result.data) throw Object.assign(new Error(result.status_message || "Move confirmation failed"), result);
+  return result.data;
 }

@@ -1,0 +1,229 @@
+---
+status: done
+component: DatePicker
+---
+
+# 日期选择器 DatePicker
+
+点击输入框即可打开日历。桌面可直接打字，触屏可在日历里点「输入日期」。查看[日期选择器规范](/组件-DatePicker日期选择器)。
+
+## 单日
+
+点一个日期即完成选择。也可以输入日期，按 Enter 或离开字段后校验。
+
+```tsx
+import React from 'react';
+import { DatePicker, type DatePickerLocale } from '@bisheng/ui';
+import { zhCN } from 'date-fns/locale';
+
+const locale: DatePickerLocale = {
+  calendar: zhCN,
+  openCalendar: '打开日历', enterDate: '输入日期', clear: '清除日期',
+  startDate: '开始日期', endDate: '结束日期', selectOtherDate: '选择另一个日期',
+  cancel: '取消', confirm: '确定', hour: '时', minute: '分', second: '秒',
+  calendarLabels: {
+    labelNav: () => '日历导航',
+    labelPrevious: () => '上个月', labelNext: () => '下个月',
+    labelMonthDropdown: () => '选择月份', labelYearDropdown: () => '选择年份',
+    labelDayButton: (date, modifiers) => [
+      date.toLocaleDateString('zh-CN', { dateStyle: 'full', timeZone: 'UTC' }),
+      modifiers.today && '今天', modifiers.selected && '已选',
+    ].filter(Boolean).join('，'),
+  },
+  errors: {
+    invalidDate: '请输入有效日期，例如 2026-11-10',
+    invalidTime: '请输入有效时间',
+    incompleteRange: '请输入开始日期和结束日期',
+    reversedRange: '结束日期不能早于开始日期',
+    unavailable: '所选日期或时间不在可选范围内',
+  },
+};
+
+export default function Example() {
+  const [value, setValue] = React.useState<string | null>('2026-11-10');
+  return (
+    <div style={{ width: 260, maxWidth: '100%' }}>
+      <label htmlFor="demo-effective-date" style={{ display: 'block', marginBottom: 6 }}>生效日期</label>
+      <DatePicker
+        id="demo-effective-date"
+        allowClear
+        value={value}
+        onChange={setValue}
+        locale={locale}
+      />
+    </div>
+  );
+}
+```
+
+## 日期范围
+
+点完两个日期后按先后顺序回显。桌面并排显示两个月，手机使用单月翻页。此例预选 11 月 30 日至 12 月 2 日，并提供一个业务快捷区间。
+
+```tsx
+import React from 'react';
+import { DatePicker, type DatePickerLocale, type DatePickerRange } from '@bisheng/ui';
+import { zhCN } from 'date-fns/locale';
+
+const locale: DatePickerLocale = {
+  calendar: zhCN,
+  openCalendar: '打开日历', enterDate: '输入日期', clear: '清除日期',
+  startDate: '开始日期', endDate: '结束日期', selectOtherDate: '选择另一个日期',
+  cancel: '取消', confirm: '确定', hour: '时', minute: '分', second: '秒',
+  calendarLabels: {
+    labelNav: () => '日历导航',
+    labelPrevious: () => '上个月', labelNext: () => '下个月',
+    labelMonthDropdown: () => '选择月份', labelYearDropdown: () => '选择年份',
+    labelDayButton: (date, modifiers) => [
+      date.toLocaleDateString('zh-CN', { dateStyle: 'full', timeZone: 'UTC' }),
+      modifiers.today && '今天', modifiers.selected && '已选',
+    ].filter(Boolean).join('，'),
+  },
+  errors: {
+    invalidDate: '请输入有效日期，例如 2026-11-10',
+    invalidTime: '请输入有效时间',
+    incompleteRange: '请输入开始日期和结束日期',
+    reversedRange: '结束日期不能早于开始日期',
+    unavailable: '所选日期或时间不在可选范围内',
+  },
+};
+
+export default function Example() {
+  const [value, setValue] = React.useState<DatePickerRange | null>(['2026-11-30', '2026-12-02']);
+  return (
+    <div style={{ width: 336, maxWidth: '100%' }}>
+      <label htmlFor="demo-query-range" style={{ display: 'block', marginBottom: 6 }}>查询日期范围</label>
+      <DatePicker
+        id="demo-query-range"
+        aria-label="查询日期范围"
+        mode="range"
+        allowClear
+        presets={[{ label: '11 月 1 日至 7 日', value: ['2026-11-01', '2026-11-07'] }]}
+        value={value}
+        onChange={setValue}
+        locale={locale}
+      />
+    </div>
+  );
+}
+```
+
+## 单边日期范围
+
+点击开始日期或结束日期输入框，选择这一端的日期。只选一端时，另一端显示「不限」。点击「不限」可补选日期。下面两个示例均包含选中的当天。
+
+```tsx
+import React from 'react';
+import { DatePicker, type DatePickerOpenRange, type DatePickerOpenRangeLocale } from '@bisheng/ui';
+import { zhCN } from 'date-fns/locale';
+
+const locale: DatePickerOpenRangeLocale = {
+  calendar: zhCN,
+  unlimited: '不限',
+  openCalendar: '打开日历', enterDate: '输入日期', clear: '清除日期',
+  startDate: '开始日期', endDate: '结束日期', selectOtherDate: '选择另一个日期',
+  cancel: '取消', confirm: '确定', hour: '时', minute: '分', second: '秒',
+  calendarLabels: {
+    labelNav: () => '日历导航',
+    labelPrevious: () => '上个月', labelNext: () => '下个月',
+    labelMonthDropdown: () => '选择月份', labelYearDropdown: () => '选择年份',
+    labelDayButton: (date, modifiers) => [
+      date.toLocaleDateString('zh-CN', { dateStyle: 'full', timeZone: 'UTC' }),
+      modifiers.today && '今天', modifiers.selected && '已选',
+    ].filter(Boolean).join('，'),
+  },
+  errors: {
+    invalidDate: '请输入有效日期，例如 2026-11-10',
+    invalidTime: '请输入有效时间',
+    incompleteRange: '请输入开始日期和结束日期',
+    reversedRange: '结束日期不能早于开始日期',
+    unavailable: '所选日期或时间不在可选范围内',
+  },
+};
+
+export default function Example() {
+  const [from, setFrom] = React.useState<DatePickerOpenRange | null>(['2026-11-11', null]);
+  const [until, setUntil] = React.useState<DatePickerOpenRange | null>([null, '2026-11-11']);
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24 }}>
+      <div style={{ width: 336, maxWidth: '100%' }}>
+        <label htmlFor="demo-date-from" style={{ display: 'block', marginBottom: 6 }}>从某天起</label>
+        <DatePicker
+          id="demo-date-from"
+          aria-label="从某天起的日期范围"
+          mode="range"
+          allowOpenRange
+          allowClear
+          value={from}
+          onChange={setFrom}
+          locale={locale}
+        />
+      </div>
+      <div style={{ width: 336, maxWidth: '100%' }}>
+        <label htmlFor="demo-date-until" style={{ display: 'block', marginBottom: 6 }}>截至某天</label>
+        <DatePicker
+          id="demo-date-until"
+          aria-label="截至某天的日期范围"
+          mode="range"
+          allowOpenRange
+          allowClear
+          value={until}
+          onChange={setUntil}
+          locale={locale}
+        />
+      </div>
+    </div>
+  );
+}
+```
+
+## 日期时间
+
+在日历里选好日期和时间，再点「确定」。此例显示秒，并注明使用的时区。
+
+```tsx
+import React from 'react';
+import { DatePicker, type DatePickerLocale } from '@bisheng/ui';
+import { zhCN } from 'date-fns/locale';
+
+const locale: DatePickerLocale = {
+  calendar: zhCN,
+  openCalendar: '打开日历', enterDate: '输入日期时间', clear: '清除日期',
+  startDate: '开始日期', endDate: '结束日期', selectOtherDate: '选择另一个日期',
+  cancel: '取消', confirm: '确定', hour: '时', minute: '分', second: '秒',
+  calendarLabels: {
+    labelNav: () => '日历导航',
+    labelPrevious: () => '上个月', labelNext: () => '下个月',
+    labelMonthDropdown: () => '选择月份', labelYearDropdown: () => '选择年份',
+    labelDayButton: (date, modifiers) => [
+      date.toLocaleDateString('zh-CN', { dateStyle: 'full', timeZone: 'UTC' }),
+      modifiers.today && '今天', modifiers.selected && '已选',
+    ].filter(Boolean).join('，'),
+  },
+  errors: {
+    invalidDate: '请输入有效日期，例如 2026-11-10',
+    invalidTime: '请输入有效时间',
+    incompleteRange: '请输入开始日期和结束日期',
+    reversedRange: '结束日期不能早于开始日期',
+    unavailable: '所选日期或时间不在可选范围内',
+  },
+};
+
+export default function Example() {
+  const [value, setValue] = React.useState<string | null>('2026-11-10 14:30:05');
+  return (
+    <div style={{ width: 260, maxWidth: '100%' }}>
+      <label htmlFor="demo-expiration" style={{ display: 'block', marginBottom: 6 }}>密钥到期时间</label>
+      <DatePicker
+        id="demo-expiration"
+        mode="datetime"
+        showSeconds
+        timeZone="Asia/Shanghai"
+        value={value}
+        onChange={setValue}
+        locale={locale}
+      />
+    </div>
+  );
+}
+```

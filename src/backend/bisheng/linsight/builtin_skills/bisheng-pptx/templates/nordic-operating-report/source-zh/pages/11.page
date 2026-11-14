@@ -1,0 +1,589 @@
+pageType: content
+background:
+  type: solid
+  color: '#F3F0EA'
+notes: Authored roadmap composition. All new example statements and figures are illustrative, not reported facts. Replace them with user evidence. Four timed workstreams and a decision gate
+elements:
+  - elementId: s1
+    elementType: shape
+    bounds:
+      - 0
+      - 0
+      - 8
+      - 540
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#42C7E7'
+    border:
+      width: 0
+      color: '#42C7E7'
+  - elementId: t2
+    elementType: text
+    bounds:
+      - 48
+      - 27
+      - 665
+      - 20
+    content:
+      text: NORDIC OPERATING REPORT
+      fontFamily: &ref_0
+        latin: Arial
+        mac: PingFang SC
+        win: Microsoft YaHei
+        ea: Noto Sans CJK SC
+      fontSize: 10
+      lineHeight: 1.1
+      color: '#0B2A3A'
+      bold: false
+  - elementId: l3
+    elementType: line
+    bounds:
+      - 48
+      - 59
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.6
+      color: '#adb5b5'
+  - elementId: t4
+    elementType: text
+    bounds:
+      - 48
+      - 76
+      - 864
+      - 64
+    content:
+      text: 围绕决策门槛安排执行顺序
+      fontFamily: &ref_1
+        latin: Arial
+        mac: PingFang SC
+        win: Microsoft YaHei
+        ea: Noto Sans CJK SC
+      fontSize: 32
+      lineHeight: 1.1
+      color: '#0B2A3A'
+      bold: true
+  - elementId: t5
+    elementType: text
+    bounds:
+      - 754
+      - 46
+      - 158
+      - 13
+    content:
+      text: 图示 02
+      fontFamily: *ref_0
+      fontSize: 9
+      lineHeight: 1.1
+      color: '#51656f'
+      bold: false
+      align: right
+  - elementId: t6
+    elementType: text
+    bounds:
+      - 48
+      - 167
+      - 243
+      - 23
+    content:
+      text: 工作流 / 负责人
+      fontFamily: *ref_0
+      fontSize: 11
+      lineHeight: 1.1
+      color: '#0B2A3A'
+      bold: false
+  - elementId: t7
+    elementType: text
+    bounds:
+      - 316
+      - 166
+      - 132
+      - 25
+    content:
+      text: W1–2
+      fontFamily: *ref_0
+      fontSize: 12
+      lineHeight: 1.1
+      color: '#0B2A3A'
+      bold: false
+  - elementId: t8
+    elementType: text
+    bounds:
+      - 463
+      - 166
+      - 132
+      - 25
+    content:
+      text: W3–4
+      fontFamily: *ref_0
+      fontSize: 12
+      lineHeight: 1.1
+      color: '#0B2A3A'
+      bold: false
+  - elementId: t9
+    elementType: text
+    bounds:
+      - 610
+      - 166
+      - 132
+      - 25
+    content:
+      text: W5–6
+      fontFamily: *ref_0
+      fontSize: 12
+      lineHeight: 1.1
+      color: '#0B2A3A'
+      bold: false
+  - elementId: t10
+    elementType: text
+    bounds:
+      - 757
+      - 166
+      - 132
+      - 25
+    content:
+      text: W7–8
+      fontFamily: *ref_0
+      fontSize: 12
+      lineHeight: 1.1
+      color: '#0B2A3A'
+      bold: false
+  - elementId: l11
+    elementType: line
+    bounds:
+      - 304
+      - 198
+      - 1
+      - 242
+    viewBox:
+      - 1
+      - 242
+    points: 0,0 0,242
+    border:
+      width: 0.5
+      color: '#ced0ce'
+  - elementId: l12
+    elementType: line
+    bounds:
+      - 451
+      - 198
+      - 1
+      - 242
+    viewBox:
+      - 1
+      - 242
+    points: 0,0 0,242
+    border:
+      width: 0.5
+      color: '#ced0ce'
+  - elementId: l13
+    elementType: line
+    bounds:
+      - 598
+      - 198
+      - 1
+      - 242
+    viewBox:
+      - 1
+      - 242
+    points: 0,0 0,242
+    border:
+      width: 0.5
+      color: '#ced0ce'
+  - elementId: l14
+    elementType: line
+    bounds:
+      - 745
+      - 198
+      - 1
+      - 242
+    viewBox:
+      - 1
+      - 242
+    points: 0,0 0,242
+    border:
+      width: 0.5
+      color: '#ced0ce'
+  - elementId: l15
+    elementType: line
+    bounds:
+      - 892
+      - 198
+      - 1
+      - 242
+    viewBox:
+      - 1
+      - 242
+    points: 0,0 0,242
+    border:
+      width: 0.5
+      color: '#ced0ce'
+  - elementId: l16
+    elementType: line
+    bounds:
+      - 48
+      - 197
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.6
+      color: '#d7d8d5'
+  - elementId: t17
+    elementType: text
+    bounds:
+      - 48
+      - 205
+      - 239
+      - 30
+    content:
+      text: 基线与范围
+      fontFamily: *ref_1
+      fontSize: 18
+      lineHeight: 1.1
+      color: '#0B2A3A'
+      bold: true
+  - elementId: t18
+    elementType: text
+    bounds:
+      - 48
+      - 235
+      - 239
+      - 24
+    content:
+      text: 研究团队
+      fontFamily: *ref_0
+      fontSize: 11
+      lineHeight: 1.1
+      color: '#556972'
+      bold: false
+  - elementId: s19
+    elementType: shape
+    bounds:
+      - 305
+      - 217
+      - 132.3
+      - 22
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#b4bbba'
+    border:
+      width: 0
+      color: '#b4bbba'
+  - elementId: s20
+    elementType: shape
+    bounds:
+      - 434.3
+      - 225
+      - 6
+      - 6
+    shapeName: ellipse
+    fill:
+      type: solid
+      color: '#738389'
+    border:
+      width: 0
+      color: '#738389'
+  - elementId: l21
+    elementType: line
+    bounds:
+      - 48
+      - 258
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.6
+      color: '#d7d8d5'
+  - elementId: t22
+    elementType: text
+    bounds:
+      - 48
+      - 266
+      - 239
+      - 30
+    content:
+      text: 小规模试点
+      fontFamily: *ref_1
+      fontSize: 18
+      lineHeight: 1.1
+      color: '#0B2A3A'
+      bold: true
+  - elementId: t23
+    elementType: text
+    bounds:
+      - 48
+      - 296
+      - 239
+      - 24
+    content:
+      text: 交付团队
+      fontFamily: *ref_0
+      fontSize: 11
+      lineHeight: 1.1
+      color: '#556972'
+      bold: false
+  - elementId: s24
+    elementType: shape
+    bounds:
+      - 407.9
+      - 278
+      - 191.1
+      - 22
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#b4bbba'
+    border:
+      width: 0
+      color: '#b4bbba'
+  - elementId: s25
+    elementType: shape
+    bounds:
+      - 596
+      - 286
+      - 6
+      - 6
+    shapeName: ellipse
+    fill:
+      type: solid
+      color: '#738389'
+    border:
+      width: 0
+      color: '#738389'
+  - elementId: l26
+    elementType: line
+    bounds:
+      - 48
+      - 319
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.6
+      color: '#d7d8d5'
+  - elementId: t27
+    elementType: text
+    bounds:
+      - 48
+      - 327
+      - 239
+      - 30
+    content:
+      text: 评估证据
+      fontFamily: *ref_1
+      fontSize: 18
+      lineHeight: 1.1
+      color: '#0B2A3A'
+      bold: true
+  - elementId: t28
+    elementType: text
+    bounds:
+      - 48
+      - 357
+      - 239
+      - 24
+    content:
+      text: 分析团队
+      fontFamily: *ref_0
+      fontSize: 11
+      lineHeight: 1.1
+      color: '#556972'
+      bold: false
+  - elementId: s29
+    elementType: shape
+    bounds:
+      - 569.6
+      - 339
+      - 161.70000000000002
+      - 22
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#0B2A3A'
+    border:
+      width: 0
+      color: '#0B2A3A'
+  - elementId: s30
+    elementType: shape
+    bounds:
+      - 728.3000000000001
+      - 347
+      - 6
+      - 6
+    shapeName: ellipse
+    fill:
+      type: solid
+      color: '#0B2A3A'
+    border:
+      width: 0
+      color: '#0B2A3A'
+  - elementId: l31
+    elementType: line
+    bounds:
+      - 48
+      - 380
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.6
+      color: '#d7d8d5'
+  - elementId: t32
+    elementType: text
+    bounds:
+      - 48
+      - 388
+      - 239
+      - 30
+    content:
+      text: 确定下一步
+      fontFamily: *ref_1
+      fontSize: 18
+      lineHeight: 1.1
+      color: '#0B2A3A'
+      bold: true
+  - elementId: t33
+    elementType: text
+    bounds:
+      - 48
+      - 418
+      - 239
+      - 24
+    content:
+      text: 项目负责人
+      fontFamily: *ref_0
+      fontSize: 11
+      lineHeight: 1.1
+      color: '#556972'
+      bold: false
+  - elementId: s34
+    elementType: shape
+    bounds:
+      - 716.5999999999999
+      - 400
+      - 176.4
+      - 22
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#b4bbba'
+    border:
+      width: 0
+      color: '#b4bbba'
+  - elementId: s35
+    elementType: shape
+    bounds:
+      - 889.9999999999999
+      - 408
+      - 6
+      - 6
+    shapeName: ellipse
+    fill:
+      type: solid
+      color: '#738389'
+    border:
+      width: 0
+      color: '#738389'
+  - elementId: l36
+    elementType: line
+    bounds:
+      - 716
+      - 198
+      - 1
+      - 250
+    viewBox:
+      - 1
+      - 250
+    points: 0,0 0,250
+    border:
+      width: 1.2
+      color: '#21697f'
+  - elementId: s37
+    elementType: shape
+    bounds:
+      - 712
+      - 444
+      - 8
+      - 8
+    shapeName: ellipse
+    fill:
+      type: solid
+      color: '#42C7E7'
+    border:
+      width: 0
+      color: '#42C7E7'
+  - elementId: l38
+    elementType: line
+    bounds:
+      - 48
+      - 465
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.6
+      color: '#c0c4c3'
+  - elementId: t39
+    elementType: text
+    bounds:
+      - 48
+      - 475
+      - 864
+      - 25
+    content:
+      text: W6 决策门槛：扩大投入前，确认验证结果、负责人和回退条件。
+      fontFamily: *ref_0
+      fontSize: 13
+      lineHeight: 1.1
+      color: '#0B2A3A'
+      bold: false
+  - elementId: t40
+    elementType: text
+    bounds:
+      - 48
+      - 507
+      - 783
+      - 16
+    content:
+      text: 版式示例 / 数据为模拟值
+      fontFamily: *ref_0
+      fontSize: 9
+      lineHeight: 1.1
+      color: '#0B2A3A'
+      bold: false
+  - elementId: t41
+    elementType: text
+    bounds:
+      - 871
+      - 504
+      - 41
+      - 22
+    content:
+      text: '11'
+      fontFamily: *ref_0
+      fontSize: 11
+      lineHeight: 1.1
+      color: '#0B2A3A'
+      bold: false

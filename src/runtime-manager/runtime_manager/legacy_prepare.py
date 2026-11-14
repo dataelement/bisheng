@@ -73,16 +73,12 @@ def prepare_image(config, platform, docker, operation, *, checkpoint, report):
     tag = f"{config.image_prefix}:operation-{operation['operation_id']}"
     args = build_args_for(config, runtime)
     if not body.get("offline") and config.egress_enabled:
-        from runtime_manager.egress import egress_env
+        from runtime_manager.egress import build_package_sources, egress_env
 
         credentials = platform.egress(
             operation["operation_id"],
             "build",
-            package_sources=[
-                config.build_index_url,
-                config.build_extra_index_url,
-                config.build_npm_registry,
-            ],
+            package_sources=build_package_sources(config),
         )
         proxy = egress_env(config, **credentials)
         args.update({key: value for key, value in proxy.items() if key in {"HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY"}})

@@ -1,8 +1,17 @@
 """set_primary: promote a non-primary version back to primary."""
+
+from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 from fastapi import HTTPException
-from unittest.mock import MagicMock, AsyncMock
+from sqlmodel.ext.asyncio.session import AsyncSession
 
+from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.knowledge_space import (
+    VersionManagementDisabledError,
+)
+from bisheng.knowledge.application.knowledge_version_mutation import KnowledgeVersionMutationApplication
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
@@ -19,9 +28,15 @@ from bisheng.knowledge.domain.repositories.implementations.knowledge_file_reposi
 from bisheng.knowledge.domain.services.knowledge_version_service import KnowledgeVersionService
 
 
+@pytest.fixture(autouse=True)
+def concrete_tenant(tenant_context):
+    tenant_context(1)
+
+
 @pytest.fixture
 def enable_switch(monkeypatch):
     from bisheng.knowledge.domain.services import knowledge_version_service as kvs_mod
+
     mock_settings = MagicMock()
     conf = MagicMock()
     conf.version_management.enabled = True
@@ -51,17 +66,36 @@ async def _seed_two_version_doc(session):
 
 
 def _build_svc(session):
-    return KnowledgeVersionService(
-        request=MagicMock(), login_user=MagicMock(),
+    service = KnowledgeVersionService(
+        request=MagicMock(),
+        login_user=UserPayload(user_id=1, tenant_id=1, user_role=[]),
         doc_repo=KnowledgeDocumentRepositoryImpl(session),
         version_repo=KnowledgeDocumentVersionRepositoryImpl(session),
         knowledge_file_repo=KnowledgeFileRepositoryImpl(session),
     )
 
+    @asynccontextmanager
+    async def fresh():
+        assert not session.new and not session.dirty and not session.deleted
+        async with AsyncSession(bind=session.bind, expire_on_commit=False) as owned:
+            try:
+                yield owned
+            finally:
+                # These older tests keep the seed Session for read assertions.
+                # Real requests read afresh after the independent mutation TX.
+                # Detach, without expiring or dropping any pending caller work.
+                session.expunge_all()
+
+    service.version_mutation_application = KnowledgeVersionMutationApplication(
+        session_factory=fresh,
+        require_version_management_enabled=service._require_version_management_enabled,
+    )
+    return service
+
 
 @pytest.mark.asyncio
 async def test_set_primary_demotes_old_and_points_doc(enable_switch, async_db_session, monkeypatch):
-    doc, v1, v2 = await _seed_two_version_doc(async_db_session)
+    doc, v1, _v2 = await _seed_two_version_doc(async_db_session)
     monkeypatch.setattr(
         "bisheng.knowledge.domain.services.knowledge_audit_telemetry_service."
         "KnowledgeAuditTelemetryService.audit_set_primary_version",
@@ -82,7 +116,7 @@ async def test_set_primary_demotes_old_and_points_doc(enable_switch, async_db_se
 
 @pytest.mark.asyncio
 async def test_set_primary_rejects_failed_parse_target(enable_switch, async_db_session, monkeypatch):
-    doc, v1, v2 = await _seed_two_version_doc(async_db_session)
+    _doc, v1, _v2 = await _seed_two_version_doc(async_db_session)
     # Mark v1's underlying file as failed (status=3)
     file_repo = KnowledgeFileRepositoryImpl(async_db_session)
     kf = await file_repo.find_by_id(100)
@@ -101,7 +135,7 @@ async def test_set_primary_rejects_failed_parse_target(enable_switch, async_db_s
 
 @pytest.mark.asyncio
 async def test_set_primary_no_op_when_already_primary(enable_switch, async_db_session, monkeypatch):
-    doc, v1, v2 = await _seed_two_version_doc(async_db_session)
+    doc, _v1, v2 = await _seed_two_version_doc(async_db_session)
     monkeypatch.setattr(
         "bisheng.knowledge.domain.services.knowledge_audit_telemetry_service."
         "KnowledgeAuditTelemetryService.audit_set_primary_version",
@@ -119,15 +153,15 @@ async def test_set_primary_no_op_when_already_primary(enable_switch, async_db_se
 @pytest.mark.asyncio
 async def test_set_primary_rejected_when_switch_off(async_db_session, monkeypatch):
     from bisheng.knowledge.domain.services import knowledge_version_service as kvs_mod
+
     mock_settings = MagicMock()
     conf = MagicMock()
     conf.version_management.enabled = False
     mock_settings.async_get_knowledge = AsyncMock(return_value=conf)
     monkeypatch.setattr(kvs_mod, "bisheng_settings", mock_settings)
     svc = _build_svc(async_db_session)
-    with pytest.raises(HTTPException) as ctx:
+    with pytest.raises(VersionManagementDisabledError):
         await svc.set_primary_version(version_id=1)
-    assert ctx.value.status_code == 403
 
 
 @pytest.mark.asyncio

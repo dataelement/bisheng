@@ -160,6 +160,76 @@ beforeEach(() => {
   mockSelectedSkills = [];
   mockGetAgentMessages.mockImplementation((cid: string) => Promise.resolve(historyOf(cid)));
   mockGetSessionName.mockResolvedValue("");
+  (store.chatModel as unknown as { __testValue: { id: number; name: string } }).__testValue = { id: 1, name: 'test-model' };
+});
+
+describe('daily answer retry identity', () => {
+  it('retries the persisted original question with its files and selected model', async () => {
+    const { result, rerender } = renderChat('c1');
+    await waitFor(() => expect(result.current.messages).toHaveLength(1));
+    const files = [{ name: 'notes.txt', filepath: 'notes.txt' }];
+    await act(async () => { await result.current.sendMessage('Original question', files); });
+    const initial = latestStream().submission;
+    act(() => {
+      initial.onCreated('c1', { ...initial.userMessage, messageId: '101' });
+      initial.onError('Model unavailable');
+      initial.onEnd();
+    });
+    (store.chatModel as unknown as { __testValue: { id: number; name: string } }).__testValue = { id: 9, name: 'working-model' };
+    rerender({ cid: 'c1' });
+    await act(async () => { await result.current.regenerate(result.current.messages.at(-1)!.parentMessageId); });
+    expect(mockOpenedStreams).toHaveLength(2);
+    expect(latestStream().submission.payload).toMatchObject({ text: 'Original question', messageId: '101', model: '9', files });
+  });
+
+  it('keeps updating a retry after server ID replacement and retains safety metadata', async () => {
+    const { result } = renderChat('c1');
+    await waitFor(() => expect(result.current.messages).toHaveLength(1));
+    await act(async () => { await result.current.regenerate('c1-q'); });
+    const retry = latestStream().submission;
+    act(() => {
+      retry.onCreated('c1', { ...retry.userMessage, messageId: '102' });
+      retry.onAgentUpdate?.({ messageId: '202', text: 'Partial answer' });
+      retry.onAgentUpdate?.({ messageId: '202', text: 'Complete answer' });
+      retry.onError('Connection lost', 500, { referenceId: 'support-one', errorType: 'network' });
+      retry.onEnd();
+    });
+    expect(result.current.messages.at(-1)).toMatchObject({ messageId: '202', parentMessageId: '102', text: 'Complete answer', error: true, referenceId: 'support-one' });
+    await act(async () => { await result.current.regenerate('102'); });
+    expect(mockOpenedStreams).toHaveLength(2);
+    expect(latestStream().submission.payload).toMatchObject({ messageId: '102', text: 'c1 history' });
+  });
+
+  it('keeps legacy deltas and final metadata on the same persisted retry answer', async () => {
+    const { result } = renderChat('c1');
+    await waitFor(() => expect(result.current.messages).toHaveLength(1));
+    await act(async () => { await result.current.regenerate('c1-q'); });
+    const retry = latestStream().submission;
+    act(() => {
+      retry.onMessage('Partial', '202');
+      retry.onMessage('Complete', '202');
+      retry.onFinal({ responseMessage: { messageId: '202', sender: 'persisted-model' } });
+      retry.onEnd();
+    });
+    expect(result.current.messages.at(-1)).toMatchObject({ messageId: '202', text: 'Complete', sender: 'persisted-model' });
+  });
+
+  it('captures retry project intent before awaiting its department lease', async () => {
+    const firstProject = '11111111-1111-4111-8111-111111111111';
+    window.history.replaceState({}, '', `/workspace/c/new?projectId=${firstProject}`);
+    let grant: (value: { leaseId: string; blocked: boolean }) => void = () => {};
+    const pending = new Promise<{ leaseId: string; blocked: boolean }>(resolve => { grant = resolve; });
+    const lease = jest.fn().mockResolvedValueOnce({ leaseId: 'initial-lease', blocked: false }).mockReturnValueOnce(pending);
+    const { result } = renderHook(() => useAiChat('new', false, '', 'chat', lease));
+    await act(async () => { await result.current.sendMessage('Project question'); });
+    act(() => { latestStream().submission.onError('Failed'); latestStream().submission.onEnd(); });
+    let retry: Promise<void> | undefined;
+    act(() => { retry = result.current.regenerate(result.current.messages[0].messageId); });
+    window.history.replaceState({}, '', '/workspace/c/new?projectId=22222222-2222-4222-8222-222222222222');
+    await act(async () => { grant({ leaseId: 'retry-lease', blocked: false }); await retry; });
+    expect(latestStream().submission.projectDraft).toEqual({ projectId: firstProject });
+    expect(latestStream().submission.flowLeaseId).toBe('retry-lease');
+  });
 });
 
 describe('project draft through the real SSE serializer', () => {
@@ -175,7 +245,7 @@ describe('project draft through the real SSE serializer', () => {
     act(() => { sending = result.current.sendMessage('From the first project', undefined, { taskMode }); });
     window.history.replaceState({ key: 'another-project' }, '', `/workspace/c/new?projectId=${otherProject}`);
     await act(async () => { grant({ leaseId: 'lease-one', blocked: false }); await sending; });
-    expect(mockTransportPayloads[0]).toMatchObject({ project_id: firstProject, project_request_id: expect.any(String), task_mode: taskMode });
+    expect(mockTransportPayloads[0]).toMatchObject({ project_id: firstProject, task_mode: taskMode });
   });
 
   it('does not adopt a later project when an ordinary draft waits for its lease', async () => {
@@ -189,10 +259,9 @@ describe('project draft through the real SSE serializer', () => {
     window.history.replaceState({ key: 'later-project' }, '', `/workspace/c/new?projectId=${otherProject}`);
     await act(async () => { grant({ leaseId: 'lease-two', blocked: false }); await sending; });
     expect(mockTransportPayloads[0].project_id).toBeUndefined();
-    expect(mockTransportPayloads[0].project_request_id).toBeUndefined();
   });
 
-  it.each([false, true])('reuses the first-message request id on a same-draft retry despite new UI message IDs, task mode=%s', async taskMode => {
+  it.each([false, true])('keeps the project on a same-draft retry, task mode=%s', async taskMode => {
     mockUseRealProjectTransport = true;
     window.history.replaceState({ key: 'draft-retry', usr: { newChatKey: 'same-intent' } }, '', `/workspace/c/new?projectId=${firstProject}`);
     const { result } = renderHook(() => useAiChat('new'));
@@ -200,7 +269,7 @@ describe('project draft through the real SSE serializer', () => {
     act(() => { latestStream().submission.onError('response lost'); latestStream().submission.onEnd(); });
     await act(async () => { await result.current.sendMessage('Retry this question', undefined, { taskMode }); });
     expect(mockTransportPayloads[0].messageId).not.toBe(mockTransportPayloads[1].messageId);
-    expect(mockTransportPayloads[0].project_request_id).toBe(mockTransportPayloads[1].project_request_id);
+    expect(mockTransportPayloads[1].project_id).toBe(firstProject);
   });
 });
 

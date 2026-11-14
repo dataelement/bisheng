@@ -69,6 +69,14 @@ class LinsightBishengLLMError(BaseErrorCode):
     Msg: str = "InspirationBisheng LLMRelated Errors"
 
 
+# A task failed on an exception that does not come from the model service
+# (platform code, storage, tooling). ``classify_for_event`` writes it instead of
+# 11090 so a platform defect is not reported as a model error.
+class LinsightTaskExecutionError(BaseErrorCode):
+    Code: int = 11091
+    Msg: str = "The task failed with an internal error"
+
+
 # F087: the task's context still exceeded the model's context window after the
 # framework compressed history and retried. Written as ``error_code`` by
 # ``classify_for_event`` for the ``context_overflow`` error type.

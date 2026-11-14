@@ -31,3 +31,7 @@
 | [`observability/`](observability/) | BS_METRIC 指标日志契约(监控团队解析依据) |
 | [`私有化部署/`](私有化部署/) | 部署文档 |
 | [`blog/`](blog/) | 设计科普(如"企业权限体系的前世今生") |
+
+## 独立待办
+
+- [分享链接签发授权加固](backlog/share-link-issuance-authorization.md)：从 F118 移出，单独设计和排期，未实施。

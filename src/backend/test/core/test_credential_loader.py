@@ -93,6 +93,25 @@ def test_runtime_preflight_requires_key_and_database(tmp_path, monkeypatch):
         get_keyring.cache_clear()
 
 
+def test_runtime_preflight_ignores_unknown_top_level_keys_but_keeps_credential_checks(monkeypatch):
+    warnings = []
+    monkeypatch.setattr(loader.logger, "warning", lambda message, *args: warnings.append(message.format(*args)))
+    settings = loader.validate_runtime(
+        {"database_url": "sqlite://", "retired_section": {"token": "secret-value"}, "admin": {"password": "x"}}
+    )
+    assert settings.database_url == "sqlite://"
+    assert len(warnings) == 1 and "retired_section" in warnings[0] and "secret-value" not in warnings[0]
+    with pytest.raises(CredentialConfigurationError, match="secret_key") as error:
+        loader.validate_runtime(
+            {
+                "database_url": "sqlite://",
+                "unknown": 1,
+                "object_storage": {"type": "minio", "minio": {"access_key": "u", "secret_key": "plain-secret"}},
+            }
+        )
+    assert "plain-secret" not in str(error.value)
+
+
 def test_legacy_database_file_source_is_materialized_when_yaml_omits_it(tmp_path):
     config = tmp_path / "source.yaml"
     config.write_text("redis_url: redis://redis/1\n")

@@ -1,3 +1,4 @@
+import json
 from collections.abc import Sequence
 
 from langchain_core.embeddings import Embeddings
@@ -6,14 +7,27 @@ from langchain_elasticsearch import AsyncElasticsearchStore, ElasticsearchStore
 from langchain_milvus import Milvus
 
 from bisheng.common.errcode.http_error import NotFoundError
-from bisheng.common.errcode.knowledge import KnowledgeEmbeddingUnavailableError
+from bisheng.common.errcode.knowledge import (
+    KnowledgeEmbeddingUnavailableError,
+    KnowledgeUnificationError,
+    ResourceReferenceInvalidError,
+)
+from bisheng.common.errcode.tenant import NoTenantContextError
+from bisheng.core.ai import FakeEmbeddings
+from bisheng.core.database import get_sync_db_session
+from bisheng.knowledge.application.model_reference_read import (
+    get_knowledge_model_read_runtime,
+    get_knowledge_model_read_runtime_sync,
+)
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao
+from bisheng.knowledge.domain.repositories.model_reference_repository import KnowledgeModelReferenceRepository
 from bisheng.knowledge.domain.services.knowledge_permission_service import (
     KnowledgePermissionService,
 )
 from bisheng.knowledge.rag.elasticsearch_factory import ElasticsearchFactory
 from bisheng.knowledge.rag.milvus_factory import MilvusFactory
 from bisheng.llm.domain import LLMService
+from bisheng.resource_reference.application.contracts import canonical_target_id
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils.async_utils import run_async_safe
 
@@ -67,9 +81,9 @@ class KnowledgeRag:
         action_map = await KnowledgePermissionService.get_knowledge_action_map_async(
             login_user,
             normalized,
-            ["use"],
+            ["visible"],
         )
-        return {knowledge_id for knowledge_id in normalized if "use" in action_map.get(knowledge_id, set())}
+        return {knowledge_id for knowledge_id in normalized if "visible" in action_map.get(knowledge_id, set())}
 
     @classmethod
     def _get_usable_knowledge(
@@ -181,6 +195,98 @@ class KnowledgeRag:
                 raise NotFoundError.http_exception()
         return knowledge
 
+    @staticmethod
+    def _resource_id(knowledge, knowledge_id):
+        try:
+            actual = canonical_target_id(knowledge.id if knowledge is not None else knowledge_id)
+            if knowledge_id is not None and actual != canonical_target_id(knowledge_id):
+                raise ValueError("conflicting Knowledge identities")
+            return int(actual)
+        except (AttributeError, TypeError, ValueError) as error:
+            raise ResourceReferenceInvalidError(reason="knowledge_rag_resource_identity") from error
+
+    @staticmethod
+    def _current_knowledge(result, candidate):
+        current = json.loads(result.read.snapshot.payload_json)["knowledge"]
+        original = candidate.model_dump() if isinstance(candidate, Knowledge) else {}
+        return Knowledge(**{**original, **current})
+
+    @classmethod
+    def _model_source_sync(cls, knowledge, knowledge_id=None, **scope):
+        result = get_knowledge_model_read_runtime_sync().require(cls._resource_id(knowledge, knowledge_id), **scope)
+        return cls._current_knowledge(result, knowledge), result.model_id
+
+    @classmethod
+    async def _model_source(cls, knowledge, knowledge_id=None, **scope):
+        runtime = await get_knowledge_model_read_runtime()
+        result = await runtime.arequire(cls._resource_id(knowledge, knowledge_id), **scope)
+        return cls._current_knowledge(result, knowledge), result.model_id
+
+    @staticmethod
+    def _scope(
+        login_user,
+        reference_session,
+        model_slot,
+        expected_operation_id,
+        expected_model_config_revision,
+        expected_index_generation,
+    ):
+        return {
+            "login_user": login_user,
+            "session": reference_session,
+            "slot_key": model_slot,
+            "expected_operation_id": expected_operation_id,
+            "expected_model_config_revision": expected_model_config_revision,
+            "expected_index_generation": expected_index_generation,
+        }
+
+    @staticmethod
+    async def _embedding(knowledge, model_id, invoke_user_id):
+        try:
+            return await LLMService.get_bisheng_knowledge_embedding(model_id=model_id, invoke_user_id=invoke_user_id)
+        except KnowledgeUnificationError:
+            raise
+        except Exception as error:
+            raise KnowledgeEmbeddingUnavailableError(
+                knowledge_name=knowledge.name, knowledge_id=knowledge.id
+            ) from error
+
+    @staticmethod
+    def _cleanup_knowledge(knowledge, deletion_job):
+        if not isinstance(knowledge, Knowledge):
+            raise ResourceReferenceInvalidError(reason="knowledge_cleanup_resource_required")
+        try:
+            KnowledgeModelReferenceRepository._tenant_id()
+        except NoTenantContextError as error:
+            raise ResourceReferenceInvalidError(reason="knowledge_cleanup_resource_required") from error
+        knowledge_id = KnowledgeRag._resource_id(knowledge, None)
+        with get_sync_db_session() as session:
+            actual = KnowledgeModelReferenceRepository().load_cleanup_identity(
+                session, knowledge_id, deletion_job=deletion_job
+            )
+        if any(
+            getattr(knowledge, key) != actual.get(key)
+            for key in ("id", "tenant_id", "type", "index_name", "collection_name")
+        ):
+            raise ResourceReferenceInvalidError(reason="knowledge_cleanup_index_changed")
+        if not isinstance(actual.get("collection_name"), str) or not actual["collection_name"]:
+            raise ResourceReferenceInvalidError(reason="knowledge_cleanup_index_required")
+        # Cleanup consumes only the verified existing index identity; unrelated
+        # processing/model JSON must not become a management deletion gate.
+        return Knowledge(
+            **{key: actual.get(key) for key in ("id", "tenant_id", "type", "name", "index_name", "collection_name")}
+        )
+
+    @classmethod
+    def init_knowledge_milvus_cleanup_sync(cls, knowledge, *, deletion_job=None):
+        actual = cls._cleanup_knowledge(knowledge, deletion_job)
+        return cls.init_milvus_vectorstore(actual.collection_name, FakeEmbeddings())
+
+    @classmethod
+    def init_knowledge_es_cleanup_sync(cls, knowledge, *, deletion_job=None):
+        actual = cls._cleanup_knowledge(knowledge, deletion_job)
+        return cls.init_es_vectorstore_sync(actual.index_name or actual.collection_name)
+
     @classmethod
     async def init_knowledge_milvus_vectorstore(
         cls,
@@ -188,18 +294,29 @@ class KnowledgeRag:
         knowledge: Knowledge | None = None,
         knowledge_id: int | None = None,
         embeddings=None,
+        *,
+        login_user=None,
+        reference_session=None,
+        model_slot="model",
+        expected_operation_id=None,
+        expected_model_config_revision=None,
+        expected_index_generation=None,
         **kwargs,
     ) -> Milvus:
-        knowledge = await cls._get_knowledge(knowledge, knowledge_id)
+        knowledge, model_id = await cls._model_source(
+            knowledge,
+            knowledge_id,
+            **cls._scope(
+                login_user,
+                reference_session,
+                model_slot,
+                expected_operation_id,
+                expected_model_config_revision,
+                expected_index_generation,
+            ),
+        )
         if embeddings is None:
-            try:
-                embeddings = await LLMService.get_bisheng_knowledge_embedding(
-                    model_id=int(knowledge.model), invoke_user_id=invoke_user_id
-                )
-            except Exception as exc:
-                raise KnowledgeEmbeddingUnavailableError(
-                    knowledge_name=knowledge.name, knowledge_id=knowledge.id
-                ) from exc
+            embeddings = await cls._embedding(knowledge, model_id, invoke_user_id)
         return cls.init_milvus_vectorstore(knowledge.collection_name, embeddings, **kwargs)
 
     @classmethod
@@ -209,12 +326,30 @@ class KnowledgeRag:
         knowledge: Knowledge | None = None,
         knowledge_id: int | None = None,
         embeddings=None,
+        *,
+        login_user=None,
+        reference_session=None,
+        model_slot="model",
+        expected_operation_id=None,
+        expected_model_config_revision=None,
+        expected_index_generation=None,
         **kwargs,
     ) -> Milvus:
-        knowledge = cls._get_knowledge_sync(knowledge, knowledge_id)
+        knowledge, model_id = cls._model_source_sync(
+            knowledge,
+            knowledge_id,
+            **cls._scope(
+                login_user,
+                reference_session,
+                model_slot,
+                expected_operation_id,
+                expected_model_config_revision,
+                expected_index_generation,
+            ),
+        )
         if embeddings is None:
             embeddings = LLMService.get_bisheng_knowledge_embedding_sync(
-                model_id=int(knowledge.model), invoke_user_id=invoke_user_id
+                model_id=model_id, invoke_user_id=invoke_user_id
             )
         return cls.init_milvus_vectorstore(knowledge.collection_name, embeddings, **kwargs)
 
@@ -223,9 +358,27 @@ class KnowledgeRag:
         cls,
         knowledge: Knowledge | None = None,
         knowledge_id: int | None = None,
+        *,
+        login_user=None,
+        reference_session=None,
+        model_slot="model",
+        expected_operation_id=None,
+        expected_model_config_revision=None,
+        expected_index_generation=None,
         **kwargs,
     ) -> AsyncElasticsearchStore:
-        knowledge = await cls._get_knowledge(knowledge, knowledge_id)
+        knowledge, _ = await cls._model_source(
+            knowledge,
+            knowledge_id,
+            **cls._scope(
+                login_user,
+                reference_session,
+                model_slot,
+                expected_operation_id,
+                expected_model_config_revision,
+                expected_index_generation,
+            ),
+        )
         return cls.init_es_vectorstore(knowledge.index_name, **kwargs)
 
     @classmethod
@@ -233,9 +386,27 @@ class KnowledgeRag:
         cls,
         knowledge: Knowledge | None = None,
         knowledge_id: int | None = None,
+        *,
+        login_user=None,
+        reference_session=None,
+        model_slot="model",
+        expected_operation_id=None,
+        expected_model_config_revision=None,
+        expected_index_generation=None,
         **kwargs,
     ) -> ElasticsearchStore:
-        knowledge = cls._get_knowledge_sync(knowledge, knowledge_id)
+        knowledge, _ = cls._model_source_sync(
+            knowledge,
+            knowledge_id,
+            **cls._scope(
+                login_user,
+                reference_session,
+                model_slot,
+                expected_operation_id,
+                expected_model_config_revision,
+                expected_index_generation,
+            ),
+        )
         return cls.init_es_vectorstore_sync(knowledge.index_name, **kwargs)
 
     @classmethod
@@ -247,6 +418,8 @@ class KnowledgeRag:
         check_auth: bool = True,
         include_es: bool = True,
         include_milvus: bool = True,
+        *,
+        login_user=None,
     ) -> dict[int, dict[str, VectorStore | Knowledge]]:
         """get multiple knowledge vectorstore, including milvus and es
         return: {
@@ -271,16 +444,20 @@ class KnowledgeRag:
             knowledge_list = KnowledgeDao.get_list_by_ids(knowledge_ids)
         ret = {}
         for knowledge in knowledge_list:
+            knowledge, model_id = cls._model_source_sync(knowledge, login_user=login_user)
             ret[knowledge.id] = {
                 "knowledge": knowledge,
                 "milvus": None,
                 "es": None,
             }
             if include_milvus:
-                vectorstore = cls.init_knowledge_milvus_vectorstore_sync(invoke_user_id, knowledge)
+                embedding = LLMService.get_bisheng_knowledge_embedding_sync(
+                    model_id=model_id, invoke_user_id=invoke_user_id
+                )
+                vectorstore = cls.init_milvus_vectorstore(knowledge.collection_name, embedding)
                 ret[knowledge.id]["milvus"] = vectorstore
             if include_es:
-                es_vectorstore = cls.init_knowledge_es_vectorstore_sync(knowledge)
+                es_vectorstore = cls.init_es_vectorstore_sync(knowledge.index_name)
                 ret[knowledge.id]["es"] = es_vectorstore
         return ret
 
@@ -293,6 +470,8 @@ class KnowledgeRag:
         check_auth: bool = True,
         include_es: bool = True,
         include_milvus: bool = True,
+        *,
+        login_user=None,
     ) -> dict[int, dict[str, VectorStore | Knowledge]]:
         """get multiple knowledge vectorstore, including milvus and es
         return: {
@@ -320,16 +499,18 @@ class KnowledgeRag:
             knowledge_list = await KnowledgeDao.aget_list_by_ids(knowledge_ids)
         ret = {}
         for knowledge in knowledge_list:
+            knowledge, model_id = await cls._model_source(knowledge, login_user=login_user)
             ret[knowledge.id] = {
                 "knowledge": knowledge,
                 "milvus": None,
                 "es": None,
             }
             if include_milvus:
-                vectorstore = await cls.init_knowledge_milvus_vectorstore(invoke_user_id, knowledge)
+                embedding = await cls._embedding(knowledge, model_id, invoke_user_id)
+                vectorstore = cls.init_milvus_vectorstore(knowledge.collection_name, embedding)
                 ret[knowledge.id]["milvus"] = vectorstore
             if include_es:
-                es_vectorstore = await cls.init_knowledge_es_vectorstore(knowledge)
+                es_vectorstore = cls.init_es_vectorstore(knowledge.index_name)
                 ret[knowledge.id]["es"] = es_vectorstore
         return ret
 

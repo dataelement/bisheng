@@ -1,7 +1,9 @@
-// @ts-strict-ignore
 import { departmentDisplayName } from "@/components/bs-comp/department/departmentDisplayName";
 import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import { Button, Input, Select, notification } from '@bisheng/ui';
+import { characterCount, validateNicknameChange } from '@bisheng/identity';
+import { isApiError } from '@bisheng/api-client';
+import { updateIdentityInput } from '@/components/bs-comp/identity/identityInput';
 import { TreeDepartmentSelect } from "@/components/bs-comp/department/TreeDepartmentSelect"
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels"
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
@@ -28,10 +30,10 @@ import {
 } from "@/controllers/API/department"
 import { handleUiRequest, showApiError } from "@/controllers/request"
 import type { DepartmentMember, DepartmentTreeNode } from "@/types/api/department"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-type Props = {
+interface OrganizationMemberEditDialogProps {
   open: boolean
   deptId: string
   member: DepartmentMember | null
@@ -45,13 +47,18 @@ export function OrganizationMemberEditDialog({
   member,
   onClose,
   onSaved,
-}: Props) {
+}: OrganizationMemberEditDialogProps) {
   const { t } = useTranslation()
   const selectLabels = useSelectLabels()
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState<DepartmentMemberEditForm | null>(null)
   const [userName, setUserName] = useState("")
+  const [serverNicknameError, setServerNicknameError] = useState<string>()
+  const savingRef = useRef(false)
+  const loadRequestRef = useRef(0)
+  const nicknameError = form?.edit_mode === 'local_primary' ? validateNicknameChange(userName, form.user.user_name) : undefined
+  const handleNicknameValue = (value: string) => { setUserName(value); setServerNicknameError(undefined) }
   const [groupSel, setGroupSel] = useState<Set<number>>(new Set())
   const [primaryRoles, setPrimaryRoles] = useState<Set<number>>(new Set())
   const [affRoleByDept, setAffRoleByDept] = useState<Record<string, Set<number>>>({})
@@ -64,6 +71,7 @@ export function OrganizationMemberEditDialog({
   const resetLocal = useCallback(() => {
     setForm(null)
     setUserName("")
+    setServerNicknameError(undefined)
     setGroupSel(new Set())
     setPrimaryRoles(new Set())
     setAffRoleByDept({})
@@ -74,15 +82,18 @@ export function OrganizationMemberEditDialog({
 
   const load = useCallback(async () => {
     if (!member) return
+    const requestId = ++loadRequestRef.current
     setLoading(true)
     try {
       const data = await getDepartmentMemberEditFormApi(deptId, member.user_id)
+      if (requestId !== loadRequestRef.current) return
       if (!data) {
         notification.open({ type: "warning", title: String(t("prompt") ?? ''), description: String(t("bs:department.memberEditLoadFailed") ?? '') })
         return
       }
       setForm(data)
       setUserName(data.user.user_name)
+      setServerNicknameError(undefined)
       setGroupSel(new Set(data.current_group_ids))
       if (data.edit_mode === "affiliate") {
         setCtxRoles(new Set(data.context_role_ids))
@@ -114,13 +125,14 @@ export function OrganizationMemberEditDialog({
         }
       }
     } finally {
-      setLoading(false)
+      if (requestId === loadRequestRef.current) setLoading(false)
     }
   }, [deptId, member, t])
 
   useEffect(() => {
     if (open && member) void load().catch(showApiError)
     if (!open) resetLocal()
+    return () => { loadRequestRef.current += 1 }
   }, [open, member, load, resetLocal])
 
   const handlePrimaryDeptChange = useCallback(
@@ -233,24 +245,22 @@ export function OrganizationMemberEditDialog({
   }, [form, t])
 
   const handleSave = async () => {
-    if (!member || !form) return
-    if (form.edit_mode === "local_primary" && !userName.trim()) {
-      notification.open({ type: "warning", title: String(t("prompt") ?? ''), description: String(t("bs:department.localUserNameRequired") ?? '') })
-      return
-    }
+    if (!member || !form || form.user.user_id !== member.user_id || savingRef.current) return
+    if (nicknameError) return
+    savingRef.current = true
     setSaving(true)
     try {
       if (form.edit_mode === "affiliate") {
         await applyDepartmentMemberEditApi(deptId, member.user_id, {
-            context_role_ids: Array.from(ctxRoles),
+            ...(form.policy_editable !== false ? { context_role_ids: Array.from(ctxRoles) } : {}),
           })
       } else {
-        const affiliate_roles = (form.affiliate_rows ?? []).map((row) => ({
+        const affiliate_roles = (form.affiliate_rows ?? []).filter((row) => row.policy_editable !== false).map((row) => ({
           dept_id: row.dept_id,
-          role_ids: Array.from(affRoleByDept[row.dept_id] ?? new Set()),
+          role_ids: Array.from(affRoleByDept[row.dept_id] ?? new Set<number>()),
         }))
         const body: Parameters<typeof applyDepartmentMemberEditApi>[2] = {
-          user_name: form.edit_mode === "local_primary" ? userName.trim() : undefined,
+          user_name: form.edit_mode === "local_primary" && userName !== form.user.user_name ? userName : undefined,
           primary_department_id:
             form.edit_mode === "local_primary" &&
             form.can_change_primary &&
@@ -269,8 +279,10 @@ export function OrganizationMemberEditDialog({
       onSaved()
       onClose()
     } catch (error) {
+      if (isApiError(error) && [10608, 10614].includes(error.status_code ?? 0)) setServerNicknameError(error.message)
       showApiError(error)
     } finally {
+      savingRef.current = false
       setSaving(false)
     }
   }
@@ -289,6 +301,7 @@ export function OrganizationMemberEditDialog({
     return (
       <Select
         {...selectLabels}
+        disabled={saving}
         multiple
         showSearch
         className="mt-1 min-w-0 max-w-full"
@@ -312,7 +325,7 @@ export function OrganizationMemberEditDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+    <Dialog open={open} onOpenChange={(v) => { if (!v && !savingRef.current) onClose() }}>
       <DialogContent
         className="max-h-[90vh] min-w-0 overflow-y-auto sm:max-w-lg [&>div]:min-w-0"
         aria-describedby={undefined}
@@ -327,14 +340,26 @@ export function OrganizationMemberEditDialog({
         ) : (
           <div className="min-w-0 space-y-4 py-1">
             <div>
-              <Label>{t("system.username")}</Label>
-              <Input value={userName} disabled={
+              <Label htmlFor="member-nickname">{t("accountIdentity.nickname")}</Label>
+              <Input id="member-nickname" size="medium" value={userName} title={userName} disabled={saving ||
                   form.edit_mode === "affiliate" || form.edit_mode === "synced_primary"
-                } onChange={(e) => setUserName(e.target.value)} className={"mt-1"} />
+                }
+                onChange={event => updateIdentityInput(event.currentTarget, handleNicknameValue, (event.nativeEvent as InputEvent).isComposing)}
+                onCompositionEnd={event => updateIdentityInput(event.currentTarget, handleNicknameValue)}
+                status={nicknameError || serverNicknameError ? 'error' : 'default'} aria-invalid={Boolean(nicknameError || serverNicknameError)}
+                aria-describedby="member-nickname-rule member-nickname-effect"
+                suffix={<span className="text-caption text-text-3">{characterCount(userName)}/32</span>}
+                className="mt-1" />
+              <p id="member-nickname-rule" className={`mt-1 text-caption ${nicknameError || serverNicknameError ? 'text-danger' : 'text-text-3'}`} aria-live="polite">
+                {serverNicknameError || t(nicknameError ? `accountIdentity.errors.${nicknameError}` : 'accountIdentity.nicknameRules')}
+              </p>
+              <p id="member-nickname-effect" className="mt-1 text-caption text-text-3">{t('accountIdentity.nicknameEffectAdmin')}</p>
             </div>
             <div>
-              <Label>{t("bs:department.personId")}</Label>
-              <Input readOnly value={form.user.person_id || "-"} className={"mt-1 bg-muted"} />
+              <Label htmlFor="member-account">{t("accountIdentity.account")}</Label>
+              <Input id="member-account" size="medium" readOnly value={form.user.person_id || ''}
+                title={form.user.person_id || ''} placeholder={t('accountIdentity.noAccount')} className="mt-1 bg-muted" />
+              <p className="mt-1 text-caption text-text-3">{t('accountIdentity.accountPurpose')}</p>
             </div>
 
             {form.edit_mode !== "affiliate" && (
@@ -348,6 +373,7 @@ export function OrganizationMemberEditDialog({
                   ) : (
                     <Select
                       {...selectLabels}
+                      disabled={saving}
                       multiple
                       showSearch
                       className="mt-1 min-w-0 max-w-full"
@@ -379,6 +405,7 @@ export function OrganizationMemberEditDialog({
                     {form.can_change_primary && primaryDeptInternalId != null ? (
                       <TreeDepartmentSelect
                         className="mt-1 min-w-0 max-w-full"
+                        disabled={saving}
                         modal={false}
                         value={primaryDeptInternalId}
                         onChange={handleUiRequest(handlePrimaryDeptChange)}
@@ -397,9 +424,9 @@ export function OrganizationMemberEditDialog({
                                   {departmentDisplayName(form.primary_department, t("bs:department.defaultOrganization"))}
                                 </span>
                               </div></SharedTooltip></SharedTooltipProvider>
-                        <p className="mt-1 text-xs text-muted-foreground">
+                        {form.edit_mode === 'synced_primary' && <p className="mt-1 text-xs text-muted-foreground">
                           {t("bs:department.memberEditPrimaryReadonly")}
-                        </p>
+                        </p>}
                       </>
                     )}
                   </div>
@@ -421,7 +448,9 @@ export function OrganizationMemberEditDialog({
                     {form.affiliate_rows.map((row) => (
                       <div key={row.dept_id} className="rounded border p-3">
                         <div className="mb-2 text-sm font-medium">{row.name}</div>
-                        {renderRoleMultiSelect(
+                        {row.policy_editable === false ? (
+                          <p className="text-sm text-muted-foreground">{t("bs:department.foreignMembershipPolicyHint")}</p>
+                        ) : renderRoleMultiSelect(
                           form.assignable_roles_catalog[row.dept_id] ?? [],
                           affRoleByDept[row.dept_id] ?? new Set(),
                           (next) =>
@@ -435,7 +464,11 @@ export function OrganizationMemberEditDialog({
               </>
             )}
 
-            {form.edit_mode === "affiliate" && (
+            <p className="text-sm text-muted-foreground">{t("bs:department.personRoleBindingHint")}</p>
+            {form.edit_mode === "affiliate" && form.policy_editable === false && (
+              <p className="text-sm text-muted-foreground">{t("bs:department.foreignMembershipPolicyHint")}</p>
+            )}
+            {form.edit_mode === "affiliate" && form.policy_editable !== false && (
               <div>
                 <Label>{t("bs:department.roles")}</Label>
                 {renderRoleMultiSelect(
@@ -460,7 +493,7 @@ export function OrganizationMemberEditDialog({
             <Button variant="outlined" onClick={onClose} disabled={saving} color="default">
               {t("cancel")}
             </Button>
-            <Button onClick={() => void handleSave()} disabled={saving || loading || !form}>
+            <Button onClick={() => void handleSave()} loading={saving} disabled={saving || loading || !form || form.user.user_id !== member?.user_id || (form.edit_mode === "affiliate" && form.policy_editable === false)}>
               {t("save")}
             </Button>
           </div>

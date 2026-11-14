@@ -200,6 +200,43 @@ absent "${CASE_ROOT}/calls" $'down\t'
 pass 'Disabling Gateway restores direct routing without deleting data or other profiles'
 
 new_case
+run_install --ft --prepare-only
+ok
+[[ "$(env_get "${CASE_DIR}/.env" COMPOSE_PROFILES)" = ft ]] || fail 'FT profile missing'
+absent "${CASE_ROOT}/calls" $'pull\t'
+absent "${CASE_ROOT}/calls" $'up\t'
+env_set "${CASE_DIR}/.env" BISHENG_FT_IMAGE custom.example/ft:custom
+cp "${CASE_DIR}/.env" "${CASE_ROOT}/before"
+run_install --prepare-only
+ok
+cmp "${CASE_DIR}/.env" "${CASE_ROOT}/before" || fail 'FT settings changed on rerun'
+pass 'FT opt-in persists without deploying in prepare-only or replacing custom images'
+
+env_set "${CASE_DIR}/.env" COMPOSE_PROFILES app-runtime,ft,ft
+gateway --ft --prepare-only
+ok
+[[ "$(env_get "${CASE_DIR}/.env" COMPOSE_PROFILES)" = app-runtime,gateway,ft ]] || fail 'Combined profiles lost or duplicated'
+run_install --no-gateway --prepare-only
+ok
+[[ "$(env_get "${CASE_DIR}/.env" COMPOSE_PROFILES)" = app-runtime,ft ]] || fail 'Disabling Gateway lost FT'
+gateway --no-ft --prepare-only
+ok
+[[ "$(env_get "${CASE_DIR}/.env" COMPOSE_PROFILES)" = app-runtime,gateway ]] || fail 'Disabling FT lost other profiles'
+absent "${CASE_ROOT}/calls" $'stop\t'
+absent "${CASE_ROOT}/calls" $'down\t'
+pass 'Gateway and FT switches preserve each other and app-runtime without stopping services'
+
+new_case
+printf 'COMPOSE_PROFILES=\nCUSTOM_SETTING=preserved\n' > "${CASE_DIR}/.env"
+run_install --ft
+ok
+[[ "$(env_get "${CASE_DIR}/.env" COMPOSE_PROFILES)" = ft ]] || fail 'Legacy env cannot opt in'
+contains "${CASE_DIR}/.env" 'CUSTOM_SETTING=preserved'
+contains "${CASE_ROOT}/calls" $'pull\t'
+contains "${CASE_ROOT}/calls" $'up\t-d\t'
+pass 'Existing env files can enable FT without replacing configuration'
+
+new_case
 TEST_LEGACY=yes run_install --prepare-only
 ok
 contains "${CASE_ROOT}/calls" $'config\t--quiet\t'

@@ -1,6 +1,11 @@
 from .base import BaseErrorCode
 
 
+class WorkflowCreationPendingError(BaseErrorCode):
+    Code: int = 10590
+    Msg: str = "Workflow creation has not finished. The workflow cannot be used yet."
+
+
 # Skill service related return error code, function module code:105
 class NotFoundVersionError(BaseErrorCode):
     Code: int = 10500

@@ -171,9 +171,19 @@ class ConfigService(Settings):
             settings_dict.pop("admin")
             logger.warning("Ignoring retired admin bootstrap setting; the first registered user becomes administrator")
 
+        known_settings = {}
+        for key, value in settings_dict.items():
+            if key not in Settings.model_fields:
+                logger.warning(
+                    "Ignoring unknown top-level config key {!r} in {}; this setting has no effect", key, file_path
+                )
+                continue
+            known_settings[key] = value
+            logger.debug(f"Loading {key} from {file_path}")
+
         # Validate in this exact model instance, not via model_dump/reparse:
         # the latter would feed already-decrypted credentials to validators.
-        return validate_runtime(settings_dict, model_type=cls)
+        return validate_runtime(known_settings, model_type=cls)
 
     async def init_config(self):
         # Inisialisasiconfig

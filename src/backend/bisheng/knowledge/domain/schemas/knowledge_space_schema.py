@@ -2,11 +2,13 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from bisheng.common.models.space_channel_member import UserRoleEnum
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeBase
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileRead
+from bisheng.knowledge.domain.schemas.processing_settings import ProcessingDefaults, ProcessingOverrides
+from bisheng.knowledge.domain.schemas.upload_preview import UploadContext
 from bisheng.permission.domain.schemas import GrantSubjectInput
 
 
@@ -40,6 +42,7 @@ class KnowledgeSpaceListItemResp(KnowledgeBase):
 
     id: int = Field(..., description="Knowledge Space ID")
     user_name: str = Field(default="", description="Knowledge Space creator name")
+    has_abnormal_files: bool = Field(default=False, description="Whether this space contains abnormal FILE rows")
     actions: list[str] | None = Field(
         default=None,
         description="Effective F048 actions the current identity holds on this space",
@@ -51,6 +54,10 @@ class KnowledgeSpaceListItemResp(KnowledgeBase):
         description="Current user subscription status",
     )
     user_role: UserRoleEnum | None = Field(default=None, description="Knowledge Space user role")
+
+
+class KnowledgeSpaceAdminListItemResp(KnowledgeSpaceListItemResp):
+    space_kind: Literal["normal", "department"] = Field(default="normal", description="Knowledge space kind")
 
 
 class KnowledgeSpaceCreateReq(BaseModel):
@@ -71,6 +78,8 @@ class KnowledgeSpaceCreateReq(BaseModel):
     )
     creation_request_id: str | None = Field(default=None, min_length=1, max_length=64)
     initial_permissions: InitialPermissionsRequest | None = None
+    embedding_model_id: int | None = Field(default=None, gt=0, strict=True)
+    processing_defaults: ProcessingDefaults | None = None
 
     @model_validator(mode="after")
     def require_request_id_for_initial_permissions(self):
@@ -185,9 +194,29 @@ class FolderRenameReq(BaseModel):
 
 
 class FileCreateReq(BaseModel):
+    upload_context: UploadContext | None = None
     file_path: list[str] = Field(..., description="File Path")
     preview_upload_refs: list[str] = Field(default_factory=list, description="References returned by upload")
     parent_id: int | None = Field(None, description="Parent Folder ID")
+    overrides: ProcessingOverrides | None = None
+
+    @field_validator("overrides", mode="before")
+    @classmethod
+    def require_integer_override_flags(cls, value):
+        # Literal[0, 1] also accepts Python booleans/floats by equality.
+        # This new public wire accepts integer flags, as the rule UI emits.
+        if isinstance(value, dict):
+            for group, names in (
+                ("document", ("retain_images", "force_ocr", "enable_formula", "filter_page_header_footer")),
+                ("table", ("append_header",)),
+            ):
+                rules = value.get(group)
+                if isinstance(rules, dict):
+                    for name in names:
+                        flag = rules.get(name)
+                        if flag is not None and type(flag) is not int:
+                            raise ValueError("processing override flags must be integer 0 or 1")
+        return value
 
 
 class WebLinkCreateReq(BaseModel):
@@ -214,6 +243,8 @@ class FolderUploadItem(BaseModel):
 
 
 class FolderUploadReq(BaseModel):
+    upload_context: UploadContext | None = None
+    overrides: ProcessingOverrides | None = None
     parent_id: int | None = Field(None, description="Target folder id; None = space root")
     items: list[FolderUploadItem] = Field(..., min_length=1, description="Files with relative paths")
 

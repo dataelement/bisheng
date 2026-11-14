@@ -1,0 +1,359 @@
+pageType: evidence
+background:
+  type: solid
+  color: $navy
+notes: |
+  2024 年跨境电商出口 2.15 万亿元，同比增长 16.9%，占对应货物贸易出口 8.5%；进口 5552.5 亿元，同比增长 4.1%，占对应货物贸易进口 3.0%。
+  按披露规模计算，出口约占 79.3%，进口约占 20.5%，出口额约为进口额的 3.9 倍。
+elements:
+  - elementId: export-cyan-rail
+    elementType: shape
+    bounds:
+      - 0
+      - 0
+      - 14
+      - 540
+    shapeName: rect
+    fill:
+      type: solid
+      color: $cyan
+    border:
+      color: $cyan
+      width: 0
+  - elementId: export-top-rule
+    elementType: line
+    bounds:
+      - 52
+      - 46
+      - 856
+      - 1
+    viewBox:
+      - 856
+      - 1
+    points: 0,0 856,0
+    border:
+      color: $mist
+      width: 0.8
+  - elementId: export-bar-export
+    elementType: shape
+    bounds:
+      - 52
+      - 246
+      - 679
+      - 74
+    shapeName: rect
+    fill:
+      type: solid
+      color: $cyan
+    border:
+      color: $cyan
+      width: 0
+  - elementId: export-bar-import
+    elementType: shape
+    bounds:
+      - 731
+      - 246
+      - 177
+      - 74
+    shapeName: rect
+    fill:
+      type: solid
+      color: $paper
+    border:
+      color: $paper
+      width: 0
+  - elementId: export-bottom-rule
+    elementType: line
+    bounds:
+      - 52
+      - 396
+      - 856
+      - 1
+    viewBox:
+      - 856
+      - 1
+    points: 0,0 856,0
+    border:
+      color: $mist
+      width: 0.8
+  - elementId: export-v1
+    elementType: line
+    bounds:
+      - 338
+      - 412
+      - 1
+      - 62
+    viewBox:
+      - 1
+      - 62
+    points: 0,0 0,62
+    border:
+      color: $mist
+      width: 0.6
+  - elementId: export-v2
+    elementType: line
+    bounds:
+      - 624
+      - 412
+      - 1
+      - 62
+    viewBox:
+      - 1
+      - 62
+    points: 0,0 0,62
+    border:
+      color: $mist
+      width: 0.6
+  - elementId: export-kicker
+    elementType: text
+    bounds:
+      - 52
+      - 20
+      - 520
+      - 18
+    content:
+      text: TRADE STRUCTURE / EXPORT-LED
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 8.5
+      bold: true
+      letterSpacing: 1.15
+      color: $mist
+  - elementId: export-title
+    elementType: text
+    bounds:
+      - 52
+      - 76
+      - 610
+      - 46
+    content:
+      text: 出口占近八成，增长与经营风险同步外移
+      fontFamily: &ref_1
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 30
+      bold: true
+      color: $white
+  - elementId: export-thesis
+    elementType: text
+    bounds:
+      - 680
+      - 78
+      - 228
+      - 44
+    content:
+      text: 出口增速 +16.9%<br>进口增速 +4.1%
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      lineHeight: 1.45
+      color: $cyan
+      align:
+        - right
+        - top
+  - elementId: export-share
+    elementType: text
+    bounds:
+      - 52
+      - 150
+      - 280
+      - 68
+    content:
+      text: 79.3%
+      fontFamily: *ref_1
+      fontSize: 58
+      bold: true
+      letterSpacing: -1.7
+      color: $cyan
+  - elementId: export-share-label
+    elementType: text
+    bounds:
+      - 330
+      - 160
+      - 276
+      - 44
+    content:
+      text: 出口占跨境电商进出口<br>根据海关披露数据计算
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      lineHeight: 1.4
+      color: $mist
+  - elementId: export-ratio
+    elementType: text
+    bounds:
+      - 674
+      - 156
+      - 234
+      - 50
+    content:
+      text: 3.9×
+      fontFamily: *ref_1
+      fontSize: 40
+      bold: true
+      color: $white
+      align:
+        - right
+        - top
+  - elementId: export-ratio-label
+    elementType: text
+    bounds:
+      - 706
+      - 204
+      - 202
+      - 18
+    content:
+      text: 出口额 / 进口额
+      fontFamily: *ref_0
+      fontSize: 9
+      color: $mist
+      align:
+        - right
+        - top
+  - elementId: export-bar-label-a
+    elementType: text
+    bounds:
+      - 72
+      - 260
+      - 620
+      - 42
+    content:
+      text: 出口 79.3%　｜　2.15 万亿元　｜　同比 +16.9%
+      fontFamily: *ref_0
+      fontSize: 15
+      bold: true
+      color: $ink
+  - elementId: export-bar-label-b
+    elementType: text
+    bounds:
+      - 744
+      - 260
+      - 148
+      - 44
+    content:
+      text: 进口 20.5%<br>5552.5 亿元
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      lineHeight: 1.3
+      color: $ink
+  - elementId: export-bar-note
+    elementType: text
+    bounds:
+      - 52
+      - 336
+      - 856
+      - 36
+    content:
+      text: 消费品占比：出口 97.5%　｜　进口 97.8%　　出口主导意味着平台政策、海外需求与本地履约变化会更快传导到企业利润。
+      fontFamily: *ref_0
+      fontSize: 10.5
+      color: $mist
+  - elementId: export-m1
+    elementType: text
+    bounds:
+      - 52
+      - 414
+      - 250
+      - 28
+    content:
+      text: 8.5%
+      fontFamily: *ref_0
+      fontSize: 22
+      bold: true
+      color: $cyan
+  - elementId: export-m1-l
+    elementType: text
+    bounds:
+      - 52
+      - 448
+      - 250
+      - 24
+    content:
+      text: 跨境电商出口占货物贸易出口
+      fontFamily: *ref_0
+      fontSize: 8.5
+      color: $mist
+  - elementId: export-m2
+    elementType: text
+    bounds:
+      - 366
+      - 414
+      - 220
+      - 28
+    content:
+      text: 3.0%
+      fontFamily: *ref_0
+      fontSize: 22
+      bold: true
+      color: $white
+  - elementId: export-m2-l
+    elementType: text
+    bounds:
+      - 366
+      - 448
+      - 220
+      - 24
+    content:
+      text: 跨境电商进口占货物贸易进口
+      fontFamily: *ref_0
+      fontSize: 8.5
+      color: $mist
+  - elementId: export-m3
+    elementType: text
+    bounds:
+      - 652
+      - 414
+      - 256
+      - 28
+    content:
+      text: 97%+
+      fontFamily: *ref_0
+      fontSize: 22
+      bold: true
+      color: $clay
+  - elementId: export-m3-l
+    elementType: text
+    bounds:
+      - 652
+      - 448
+      - 256
+      - 24
+    content:
+      text: 进出口均以消费品为绝对主体
+      fontFamily: *ref_0
+      fontSize: 8.5
+      color: $mist
+  - elementId: export-source
+    elementType: text
+    bounds:
+      - 52
+      - 510
+      - 720
+      - 14
+    content:
+      text: 来源：海关总署 2024 更新统计｜占比与倍数根据海关披露数据计算。
+      fontFamily: *ref_0
+      fontSize: 7.5
+      color: $mist
+  - elementId: export-page
+    elementType: text
+    bounds:
+      - 862
+      - 510
+      - 46
+      - 14
+    content:
+      text: 16—04
+      fontFamily: *ref_0
+      fontSize: 8
+      bold: true
+      color: $mist
+      align:
+        - right
+        - bottom

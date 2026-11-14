@@ -62,7 +62,7 @@ async def test_rbac_super_tenant_admin_stays_on_the_department_tree(identity, mo
 
     monkeypatch.setattr(module.AuditDeptRepository, "root_paths", _roots)
     user = _user(admin=True, global_super=True)
-    assert await AuditDeptScopeService.resolve(user, 1) == AuditDeptScope.restricted(admin_paths=["/1/"])
+    assert await AuditDeptScopeService.resolve(user, 1) == AuditDeptScope.restricted(admin_paths=["/1/"], unattributed=True)
 
 
 async def test_tenant_admin_is_limited_to_the_tenant_department_tree(identity, monkeypatch):
@@ -74,7 +74,7 @@ async def test_tenant_admin_is_limited_to_the_tenant_department_tree(identity, m
         return ["/1/"]
 
     monkeypatch.setattr(module.AuditDeptRepository, "root_paths", _roots)
-    assert await AuditDeptScopeService.resolve(_user(), 1) == AuditDeptScope.restricted(admin_paths=["/1/"])
+    assert await AuditDeptScopeService.resolve(_user(), 1) == AuditDeptScope.restricted(admin_paths=["/1/"], unattributed=True)
 
 
 async def test_department_admin_gets_union_of_paths_in_audit_tenant(identity):
@@ -120,3 +120,36 @@ async def test_group_admin_without_menu_is_rejected(identity, monkeypatch):
     )
     with pytest.raises(UnAuthorizedError):
         await AuditDeptScopeService.resolve(_user(), 1)
+
+
+async def test_describe_names_each_kind_of_department(monkeypatch):
+    async def _names(dept_ids):
+        assert sorted(dept_ids) == [2, 3, 9]
+        return {2: "研发部", 9: "测试部", 3: "财务部"}
+
+    monkeypatch.setattr(module.AuditDeptRepository, "names_by_id", _names)
+    described = await AuditDeptScopeService.describe(
+        AuditDeptScope.restricted(admin_paths=["/1/2/", "/1/9/"], exact_ids=[3])
+    )
+    assert described == {
+        "unrestricted_organization": False,
+        "organizations": [
+            {"name": "研发部", "includes_descendants": True},
+            {"name": "测试部", "includes_descendants": True},
+            {"name": "财务部", "includes_descendants": False},
+        ],
+    }
+
+
+async def test_describe_unrestricted_scope_has_no_department_list():
+    described = await AuditDeptScopeService.describe(AuditDeptScope.unlimited())
+    assert described == {"organizations": [], "unrestricted_organization": True}
+
+
+async def test_describe_keeps_an_id_when_the_department_name_is_gone(monkeypatch):
+    async def _names(_dept_ids):
+        return {}
+
+    monkeypatch.setattr(module.AuditDeptRepository, "names_by_id", _names)
+    described = await AuditDeptScopeService.describe(AuditDeptScope.restricted(exact_ids=[3]))
+    assert described["organizations"] == [{"name": "3", "includes_descendants": False}]

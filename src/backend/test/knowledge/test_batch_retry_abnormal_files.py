@@ -1,48 +1,50 @@
-"""Batch retry accepts every status classified as abnormal."""
+"""The original raw retry response still accepts TIMEOUT through the native Plan."""
 
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
+
+from sqlalchemy import insert, select
 
 from bisheng import worker as worker_module
-from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile, KnowledgeFileStatus
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileStatus
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+from test.knowledge_unification import test_kn_batch as native
 
-_SERVICE = "bisheng.knowledge.domain.services.knowledge_space_service"
+deletion_tenant, db, batch = native.deletion_tenant, native.db, native.batch
 
 
-async def test_batch_retry_accepts_timeout_file():
-    user = SimpleNamespace(user_id=41, tenant_id=7)
-    service = KnowledgeSpaceService(request=None, login_user=user)
-    space = SimpleNamespace(id=9, tenant_id=7)
-    timeout_file = KnowledgeFile(
-        id=17,
-        user_id=41,
-        tenant_id=7,
-        knowledge_id=9,
-        file_name="timeout.pdf",
-        file_type=FileType.FILE.value,
-        file_level_path="",
-        status=KnowledgeFileStatus.TIMEOUT.value,
+async def test_batch_retry_accepts_timeout_file(batch, monkeypatch):
+    async with batch.db.sessions() as session, session.begin():
+        await session.execute(
+            insert(KnowledgeFile).values(
+                id=17,
+                tenant_id=101,
+                knowledge_id=1,
+                user_id=7,
+                file_name="timeout.pdf",
+                file_type=1,
+                file_level_path="",
+                status=6,
+                object_name="obj/17",
+            )
+        )
+    app = batch.application()
+    app.dispatcher = None
+    service = KnowledgeSpaceService(request=None, login_user=batch.user)
+    service.batch_application_factory = lambda: app
+
+    async def records(ids):
+        async with batch.db.sessions() as session:
+            return (await session.execute(select(KnowledgeFile).where(KnowledgeFile.id.in_(ids)))).scalars().all()
+
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_ids", records
     )
-    retry_task = SimpleNamespace(delay=MagicMock())
-
-    with (
-        patch.object(worker_module, "retry_knowledge_file_celery", retry_task),
-        patch(f"{_SERVICE}.KnowledgeDao.aquery_by_id", new=AsyncMock(return_value=space)),
-        patch(f"{_SERVICE}.KnowledgeFileDao.aget_file_by_ids", new=AsyncMock(return_value=[timeout_file])),
-        patch(f"{_SERVICE}.KnowledgeFileDao.aupdate_file_status", new=AsyncMock()) as update_status,
-        patch(f"{_SERVICE}.KnowledgeDao.async_update_knowledge_update_time_by_id", new=AsyncMock()),
-        patch.object(service, "_require_read_permission", new=AsyncMock()),
-        patch.object(service, "_require_resource_action", new=AsyncMock()) as require_action,
-        patch.object(service, "_ensure_space_async_task_tenant_consistency", new=MagicMock()),
-    ):
-        result = await service.batch_retry_failed_files(9, [17])
-
-    assert result is True
-    retry_task.delay.assert_called_once_with(17)
-    require_action.assert_awaited_once_with("rename", "knowledge_file", 17)
-    update_status.assert_awaited_once_with(
-        [17],
-        KnowledgeFileStatus.WAITING,
-        "batch_retry_failed_files",
-    )
+    task = MagicMock()
+    monkeypatch.setattr(worker_module, "retry_knowledge_file_celery", task)
+    assert await service.batch_retry_failed_files(1, [17]) is True
+    task.delay.assert_called_once_with(17)
+    assert any(call[0] == "knowledge_file" and 17 in call[1] and call[2] == ("rename",) for call in batch.calls)
+    assert not any("visible" in call[2] or "edit" in call[2] for call in batch.calls)
+    async with batch.db.sessions() as session:
+        file = await session.get(KnowledgeFile, 17)
+        assert file.status == KnowledgeFileStatus.WAITING and file.remark == "batch_retry_failed_files"

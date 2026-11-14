@@ -1,0 +1,343 @@
+pageType: closing
+background:
+  type: solid
+  color: $black
+elements:
+  - elementId: next-red-field
+    elementType: shape
+    bounds:
+      - 0
+      - 0
+      - 72
+      - 540
+    shapeName: rect
+    fill:
+      type: solid
+      color: $red
+    border:
+      color: $red
+      width: 0
+  - elementId: next-platform-rule
+    elementType: line
+    bounds:
+      - 108
+      - 212
+      - 332
+      - 1
+    viewBox:
+      - 332
+      - 1
+    points: 0,0 332,0
+    border:
+      color: $red
+      width: 2
+  - elementId: next-brand-rule
+    elementType: line
+    bounds:
+      - 520
+      - 212
+      - 332
+      - 1
+    viewBox:
+      - 332
+      - 1
+    points: 0,0 332,0
+    border:
+      color: $paper
+      width: 2
+  - elementId: next-mid-divider
+    elementType: line
+    bounds:
+      - 480
+      - 196
+      - 1
+      - 236
+    viewBox:
+      - 1
+      - 236
+    points: 0,0 0,236
+    border:
+      color: '#FFFFFF33'
+      width: 0.8
+  - elementId: next-bottom-band
+    elementType: shape
+    bounds:
+      - 108
+      - 458
+      - 744
+      - 50
+    shapeName: rect
+    fill:
+      type: solid
+      color: $paper
+    border:
+      color: $paper
+      width: 0
+  - elementId: next-index
+    elementType: text
+    bounds:
+      - 20
+      - 430
+      - 32
+      - 82
+    rotation: 270
+    content:
+      text: 10 / DECIDE
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 9
+      bold: true
+      letterSpacing: 1.2
+      color: $white
+      align:
+        - center
+        - middle
+  - elementId: next-kicker
+    elementType: text
+    bounds:
+      - 108
+      - 52
+      - 500
+      - 18
+    content:
+      text: NEXT 90 DAYS / TWO OPERATING PATHS
+      fontFamily: *ref_0
+      fontSize: 9
+      bold: true
+      letterSpacing: 1.3
+      color: $red
+  - elementId: next-title
+    elementType: text
+    bounds:
+      - 108
+      - 82
+      - 744
+      - 84
+    content:
+      text: 平台型先提周转<br>品牌型先建本地资产
+      fontFamily:
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 36
+      bold: true
+      lineHeight: 1.04
+      color: $white
+  - elementId: next-platform-title
+    elementType: text
+    bounds:
+      - 108
+      - 174
+      - 250
+      - 28
+    content:
+      text: 平台型卖家
+      fontFamily: *ref_0
+      fontSize: 20
+      bold: true
+      color: $red
+  - elementId: next-platform-01-num
+    elementType: text
+    bounds:
+      - 108
+      - 232
+      - 52
+      - 30
+    content:
+      text: '01'
+      fontFamily: *ref_0
+      fontSize: 25
+      bold: true
+      color: $red
+  - elementId: next-platform-01
+    elementType: text
+    bounds:
+      - 168
+      - 232
+      - 270
+      - 34
+    content:
+      text: SKU 分级：砍掉低周转尾部
+      fontFamily: *ref_0
+      fontSize: 15
+      bold: true
+      color: $white
+  - elementId: next-platform-02-num
+    elementType: text
+    bounds:
+      - 108
+      - 294
+      - 52
+      - 30
+    content:
+      text: '02'
+      fontFamily: *ref_0
+      fontSize: 25
+      bold: true
+      color: $red
+  - elementId: next-platform-02
+    elementType: text
+    bounds:
+      - 168
+      - 294
+      - 270
+      - 34
+    content:
+      text: 仓网联动：把时效变成转化
+      fontFamily: *ref_0
+      fontSize: 15
+      bold: true
+      color: $white
+  - elementId: next-platform-03-num
+    elementType: text
+    bounds:
+      - 108
+      - 356
+      - 52
+      - 30
+    content:
+      text: '03'
+      fontFamily: *ref_0
+      fontSize: 25
+      bold: true
+      color: $red
+  - elementId: next-platform-03
+    elementType: text
+    bounds:
+      - 168
+      - 356
+      - 270
+      - 34
+    content:
+      text: 市场分散：降低单一平台波动
+      fontFamily: *ref_0
+      fontSize: 15
+      bold: true
+      color: $white
+  - elementId: next-brand-title
+    elementType: text
+    bounds:
+      - 520
+      - 174
+      - 250
+      - 28
+    content:
+      text: 品牌型企业
+      fontFamily: *ref_0
+      fontSize: 20
+      bold: true
+      color: $white
+  - elementId: next-brand-01-num
+    elementType: text
+    bounds:
+      - 520
+      - 232
+      - 52
+      - 30
+    content:
+      text: '01'
+      fontFamily: *ref_0
+      fontSize: 25
+      bold: true
+      color: $paper
+  - elementId: next-brand-01
+    elementType: text
+    bounds:
+      - 580
+      - 232
+      - 270
+      - 34
+    content:
+      text: 用户资产：统一站内外数据
+      fontFamily: *ref_0
+      fontSize: 15
+      bold: true
+      color: $white
+  - elementId: next-brand-02-num
+    elementType: text
+    bounds:
+      - 520
+      - 294
+      - 52
+      - 30
+    content:
+      text: '02'
+      fontFamily: *ref_0
+      fontSize: 25
+      bold: true
+      color: $paper
+  - elementId: next-brand-02
+    elementType: text
+    bounds:
+      - 580
+      - 294
+      - 270
+      - 34
+    content:
+      text: 本地内容：建立品牌信任
+      fontFamily: *ref_0
+      fontSize: 15
+      bold: true
+      color: $white
+  - elementId: next-brand-03-num
+    elementType: text
+    bounds:
+      - 520
+      - 356
+      - 52
+      - 30
+    content:
+      text: '03'
+      fontFamily: *ref_0
+      fontSize: 25
+      bold: true
+      color: $paper
+  - elementId: next-brand-03
+    elementType: text
+    bounds:
+      - 580
+      - 356
+      - 270
+      - 34
+    content:
+      text: 组织前置：本地团队拥有 P&L
+      fontFamily: *ref_0
+      fontSize: 15
+      bold: true
+      color: $white
+  - elementId: next-common
+    elementType: text
+    bounds:
+      - 124
+      - 469
+      - 714
+      - 28
+    content:
+      text: 共同门槛｜合规先行 · 库存可视 · 退换货闭环
+      fontFamily: *ref_0
+      fontSize: 16
+      bold: true
+      color: $black
+      align:
+        - left
+        - middle
+  - elementId: next-page
+    elementType: text
+    bounds:
+      - 862
+      - 510
+      - 28
+      - 12
+    content:
+      text: '12'
+      fontFamily: *ref_0
+      fontSize: 9
+      bold: true
+      color: $paper
+      align:
+        - right
+        - bottom

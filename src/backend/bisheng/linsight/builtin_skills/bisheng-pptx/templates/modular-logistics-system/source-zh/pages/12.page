@@ -1,0 +1,895 @@
+pageType: closing
+background:
+  type: solid
+  color: $paper
+notes: |
+  两类企业的起点不同：平台型卖家先补客户资产和履约能力，品牌型企业先建立本地损益、合规和组织闭环。终点一致，都是把本地经营能力沉淀为可以跨市场复制的系统。
+elements:
+  - elementId: p10-top-rule
+    elementType: shape
+    bounds:
+      - 0
+      - 0
+      - 960
+      - 12
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $yellow
+      width: 0
+  - elementId: p10-kicker
+    elementType: text
+    bounds:
+      - 54
+      - 32
+      - 420
+      - 18
+    content:
+      style: $section
+      text: 08 / NEXT MOVES
+  - elementId: p10-title
+    elementType: text
+    bounds:
+      - 52
+      - 58
+      - 850
+      - 42
+    content:
+      style: $pageTitle
+      text: 起点不同，终点相同：把本地经营做成可复用系统
+  - elementId: p10-left-head
+    elementType: shape
+    bounds:
+      - 54
+      - 126
+      - 408
+      - 38
+    shapeName: rect
+    fill:
+      type: solid
+      color: $graphite
+    border:
+      color: $graphite
+      width: 0
+  - elementId: p10-left-head-text
+    elementType: text
+    bounds:
+      - 70
+      - 135
+      - 376
+      - 20
+    content:
+      text: PLATFORM SELLER / 平台型卖家
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 12
+      color: $white
+      bold: true
+      align:
+        - left
+        - middle
+  - elementId: p10-left-01
+    elementType: shape
+    bounds:
+      - 54
+      - 178
+      - 122
+      - 136
+    shapeName: rect
+    fill:
+      type: solid
+      color: $surface
+    border:
+      color: $graphite
+      width: 1
+  - elementId: p10-left-01-tag
+    elementType: shape
+    bounds:
+      - 54
+      - 178
+      - 122
+      - 24
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $yellow
+      width: 0
+  - elementId: p10-left-01-no
+    elementType: text
+    bounds:
+      - 64
+      - 183
+      - 102
+      - 14
+    content:
+      text: GATE 01 / 0–90D
+      fontFamily: *ref_0
+      fontSize: 8
+      color: $graphite
+      bold: true
+  - elementId: p10-left-01-title
+    elementType: text
+    bounds:
+      - 66
+      - 216
+      - 98
+      - 44
+    content:
+      text: |-
+        验证高复购
+        品类与国家
+      fontFamily: *ref_0
+      fontSize: 13
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p10-left-01-body
+    elementType: text
+    bounds:
+      - 66
+      - 270
+      - 98
+      - 30
+    content:
+      text: |-
+        看毛利、退货率
+        与交付承诺
+      fontFamily: *ref_0
+      fontSize: 9
+      color: $slate
+      align:
+        - center
+        - middle
+  - elementId: p10-left-arrow-01
+    elementType: line
+    bounds:
+      - 176
+      - 238
+      - 20
+      - 2
+    viewBox:
+      - 20
+      - 2
+    points: 0,1 20,1
+    border:
+      width: 2
+      color: $graphite
+    arrow:
+      - null
+      - triangle
+  - elementId: p10-left-02
+    elementType: shape
+    bounds:
+      - 196
+      - 178
+      - 122
+      - 136
+    shapeName: rect
+    fill:
+      type: solid
+      color: $surface
+    border:
+      color: $graphite
+      width: 1
+  - elementId: p10-left-02-tag
+    elementType: shape
+    bounds:
+      - 196
+      - 178
+      - 122
+      - 24
+    shapeName: rect
+    fill:
+      type: solid
+      color: $steel
+    border:
+      color: $steel
+      width: 0
+  - elementId: p10-left-02-no
+    elementType: text
+    bounds:
+      - 206
+      - 183
+      - 102
+      - 14
+    content:
+      text: GATE 02 / 3–6M
+      fontFamily: *ref_0
+      fontSize: 8
+      color: $graphite
+      bold: true
+  - elementId: p10-left-02-title
+    elementType: text
+    bounds:
+      - 208
+      - 216
+      - 98
+      - 44
+    content:
+      text: |-
+        沉淀会员
+        内容与复购
+      fontFamily: *ref_0
+      fontSize: 13
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p10-left-02-body
+    elementType: text
+    bounds:
+      - 208
+      - 270
+      - 98
+      - 30
+    content:
+      text: |-
+        平台成交
+        独立站沉淀
+      fontFamily: *ref_0
+      fontSize: 9
+      color: $slate
+      align:
+        - center
+        - middle
+  - elementId: p10-left-arrow-02
+    elementType: line
+    bounds:
+      - 318
+      - 238
+      - 20
+      - 2
+    viewBox:
+      - 20
+      - 2
+    points: 0,1 20,1
+    border:
+      width: 2
+      color: $graphite
+    arrow:
+      - null
+      - triangle
+  - elementId: p10-left-03
+    elementType: shape
+    bounds:
+      - 338
+      - 178
+      - 124
+      - 136
+    shapeName: rect
+    fill:
+      type: solid
+      color: $graphite
+    border:
+      color: $graphite
+      width: 1
+  - elementId: p10-left-03-tag
+    elementType: shape
+    bounds:
+      - 338
+      - 178
+      - 124
+      - 24
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $yellow
+      width: 0
+  - elementId: p10-left-03-no
+    elementType: text
+    bounds:
+      - 348
+      - 183
+      - 104
+      - 14
+    content:
+      text: GATE 03 / 6–12M
+      fontFamily: *ref_0
+      fontSize: 8
+      color: $graphite
+      bold: true
+  - elementId: p10-left-03-title
+    elementType: text
+    bounds:
+      - 350
+      - 216
+      - 100
+      - 44
+    content:
+      text: |-
+        在确定性市场
+        部署本地履约
+      fontFamily: *ref_0
+      fontSize: 13
+      color: $white
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p10-left-03-body
+    elementType: text
+    bounds:
+      - 350
+      - 270
+      - 100
+      - 30
+    content:
+      text: |-
+        阶段门控制
+        库存与现金
+      fontFamily: *ref_0
+      fontSize: 9
+      color: $yellow
+      align:
+        - center
+        - middle
+  - elementId: p10-right-head
+    elementType: shape
+    bounds:
+      - 494
+      - 126
+      - 412
+      - 38
+    shapeName: rect
+    fill:
+      type: solid
+      color: $graphite
+    border:
+      color: $graphite
+      width: 0
+  - elementId: p10-right-head-text
+    elementType: text
+    bounds:
+      - 510
+      - 135
+      - 380
+      - 20
+    content:
+      text: BRAND ENTERPRISE / 品牌型企业
+      fontFamily: *ref_0
+      fontSize: 12
+      color: $white
+      bold: true
+      align:
+        - left
+        - middle
+  - elementId: p10-right-01
+    elementType: shape
+    bounds:
+      - 494
+      - 178
+      - 124
+      - 136
+    shapeName: rect
+    fill:
+      type: solid
+      color: $surface
+    border:
+      color: $graphite
+      width: 1
+  - elementId: p10-right-01-tag
+    elementType: shape
+    bounds:
+      - 494
+      - 178
+      - 124
+      - 24
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $yellow
+      width: 0
+  - elementId: p10-right-01-no
+    elementType: text
+    bounds:
+      - 504
+      - 183
+      - 104
+      - 14
+    content:
+      text: MODULE 01 / P&L
+      fontFamily: *ref_0
+      fontSize: 8
+      color: $graphite
+      bold: true
+  - elementId: p10-right-01-title
+    elementType: text
+    bounds:
+      - 506
+      - 216
+      - 100
+      - 44
+    content:
+      text: |-
+        建立本地损益
+        与合规责任人
+      fontFamily: *ref_0
+      fontSize: 13
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p10-right-01-body
+    elementType: text
+    bounds:
+      - 506
+      - 270
+      - 100
+      - 30
+    content:
+      text: |-
+        税务、认证
+        隐私与用工
+      fontFamily: *ref_0
+      fontSize: 9
+      color: $slate
+      align:
+        - center
+        - middle
+  - elementId: p10-right-arrow-01
+    elementType: line
+    bounds:
+      - 618
+      - 238
+      - 20
+      - 2
+    viewBox:
+      - 20
+      - 2
+    points: 0,1 20,1
+    border:
+      width: 2
+      color: $graphite
+    arrow:
+      - null
+      - triangle
+  - elementId: p10-right-02
+    elementType: shape
+    bounds:
+      - 638
+      - 178
+      - 124
+      - 136
+    shapeName: rect
+    fill:
+      type: solid
+      color: $surface
+    border:
+      color: $graphite
+      width: 1
+  - elementId: p10-right-02-tag
+    elementType: shape
+    bounds:
+      - 638
+      - 178
+      - 124
+      - 24
+    shapeName: rect
+    fill:
+      type: solid
+      color: $steel
+    border:
+      color: $steel
+      width: 0
+  - elementId: p10-right-02-no
+    elementType: text
+    bounds:
+      - 648
+      - 183
+      - 104
+      - 14
+    content:
+      text: MODULE 02 / CX
+      fontFamily: *ref_0
+      fontSize: 8
+      color: $graphite
+      bold: true
+  - elementId: p10-right-02-title
+    elementType: text
+    bounds:
+      - 650
+      - 216
+      - 100
+      - 44
+    content:
+      text: |-
+        本地内容、客服
+        售后形成闭环
+      fontFamily: *ref_0
+      fontSize: 13
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p10-right-02-body
+    elementType: text
+    bounds:
+      - 650
+      - 270
+      - 100
+      - 30
+    content:
+      text: |-
+        提升转化
+        留存与口碑
+      fontFamily: *ref_0
+      fontSize: 9
+      color: $slate
+      align:
+        - center
+        - middle
+  - elementId: p10-right-arrow-02
+    elementType: line
+    bounds:
+      - 762
+      - 238
+      - 20
+      - 2
+    viewBox:
+      - 20
+      - 2
+    points: 0,1 20,1
+    border:
+      width: 2
+      color: $graphite
+    arrow:
+      - null
+      - triangle
+  - elementId: p10-right-03
+    elementType: shape
+    bounds:
+      - 782
+      - 178
+      - 124
+      - 136
+    shapeName: rect
+    fill:
+      type: solid
+      color: $graphite
+    border:
+      color: $graphite
+      width: 1
+  - elementId: p10-right-03-tag
+    elementType: shape
+    bounds:
+      - 782
+      - 178
+      - 124
+      - 24
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $yellow
+      width: 0
+  - elementId: p10-right-03-no
+    elementType: text
+    bounds:
+      - 792
+      - 183
+      - 104
+      - 14
+    content:
+      text: MODULE 03 / SCALE
+      fontFamily: *ref_0
+      fontSize: 8
+      color: $graphite
+      bold: true
+  - elementId: p10-right-03-title
+    elementType: text
+    bounds:
+      - 794
+      - 216
+      - 100
+      - 44
+    content:
+      text: |-
+        优化仓网
+        组织与资金
+      fontFamily: *ref_0
+      fontSize: 13
+      color: $white
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p10-right-03-body
+    elementType: text
+    bounds:
+      - 794
+      - 270
+      - 100
+      - 30
+    content:
+      text: |-
+        形成跨市场
+        复制能力
+      fontFamily: *ref_0
+      fontSize: 9
+      color: $yellow
+      align:
+        - center
+        - middle
+  - elementId: p10-shared-line-left
+    elementType: line
+    bounds:
+      - 258
+      - 314
+      - 1
+      - 52
+    viewBox:
+      - 1
+      - 52
+    points: 0,0 0,52
+    border:
+      width: 2
+      color: $graphite
+    arrow:
+      - null
+      - triangle
+  - elementId: p10-shared-line-right
+    elementType: line
+    bounds:
+      - 700
+      - 314
+      - 1
+      - 52
+    viewBox:
+      - 1
+      - 52
+    points: 0,0 0,52
+    border:
+      width: 2
+      color: $graphite
+    arrow:
+      - null
+      - triangle
+  - elementId: p10-shared-platform
+    elementType: shape
+    bounds:
+      - 54
+      - 376
+      - 852
+      - 104
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $graphite
+      width: 2
+  - elementId: p10-shared-title
+    elementType: text
+    bounds:
+      - 76
+      - 388
+      - 250
+      - 26
+    content:
+      text: SHARED DESTINATION
+      fontFamily: *ref_0
+      fontSize: 11
+      color: $graphite
+      bold: true
+      letterSpacing: 1.1
+  - elementId: p10-shared-claim
+    elementType: text
+    bounds:
+      - 74
+      - 418
+      - 320
+      - 42
+    content:
+      text: 共同终点｜可复制的本地经营系统
+      fontFamily: *ref_0
+      fontSize: 19
+      color: $graphite
+      bold: true
+      align:
+        - left
+        - middle
+  - elementId: p10-shared-mod-1
+    elementType: shape
+    bounds:
+      - 426
+      - 398
+      - 82
+      - 48
+    shapeName: rect
+    fill:
+      type: solid
+      color: $surface
+    border:
+      color: $graphite
+      width: 1
+  - elementId: p10-shared-mod-1t
+    elementType: text
+    bounds:
+      - 436
+      - 408
+      - 62
+      - 28
+    content:
+      text: |-
+        需求
+        验证
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p10-shared-mod-2
+    elementType: shape
+    bounds:
+      - 520
+      - 398
+      - 82
+      - 48
+    shapeName: rect
+    fill:
+      type: solid
+      color: $surface
+    border:
+      color: $graphite
+      width: 1
+  - elementId: p10-shared-mod-2t
+    elementType: text
+    bounds:
+      - 530
+      - 408
+      - 62
+      - 28
+    content:
+      text: |-
+        客户
+        资产
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p10-shared-mod-3
+    elementType: shape
+    bounds:
+      - 614
+      - 398
+      - 82
+      - 48
+    shapeName: rect
+    fill:
+      type: solid
+      color: $surface
+    border:
+      color: $graphite
+      width: 1
+  - elementId: p10-shared-mod-3t
+    elementType: text
+    bounds:
+      - 624
+      - 408
+      - 62
+      - 28
+    content:
+      text: |-
+        仓配
+        售后
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p10-shared-mod-4
+    elementType: shape
+    bounds:
+      - 708
+      - 398
+      - 82
+      - 48
+    shapeName: rect
+    fill:
+      type: solid
+      color: $surface
+    border:
+      color: $graphite
+      width: 1
+  - elementId: p10-shared-mod-4t
+    elementType: text
+    bounds:
+      - 718
+      - 408
+      - 62
+      - 28
+    content:
+      text: |-
+        合规
+        现金
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p10-shared-mod-5
+    elementType: shape
+    bounds:
+      - 802
+      - 398
+      - 82
+      - 48
+    shapeName: rect
+    fill:
+      type: solid
+      color: $graphite
+    border:
+      color: $graphite
+      width: 1
+  - elementId: p10-shared-mod-5t
+    elementType: text
+    bounds:
+      - 812
+      - 408
+      - 62
+      - 28
+    content:
+      text: |-
+        组织
+        复制
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $yellow
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p10-footer
+    elementType: text
+    bounds:
+      - 54
+      - 506
+      - 704
+      - 14
+    content:
+      text: 建议：按阶段门配置资本，按本地体验评价投入。
+      fontFamily: *ref_0
+      fontSize: 9
+      color: $slate
+  - elementId: p10-page
+    elementType: text
+    bounds:
+      - 882
+      - 504
+      - 28
+      - 16
+    content:
+      text: '12'
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      align:
+        - right
+        - top

@@ -69,7 +69,12 @@ def check_document(operation, capabilities, platform):
         ]
         for key, values in options.items()
     }
-    return {"platform": platform, "targets": targets, **options}
+    result = {"platform": platform, "targets": targets, **options}
+    if operation.get("payload", {}).get("execution_policy_json"):
+        result["timeout_seconds"] = (
+            json.loads(operation["payload"]["execution_policy_json"]).get("timeouts", {}).get("image_check", 120)
+        )
+    return result
 
 
 def registry_sources(targets, *, endpoints=(), insecure_registries=()):
@@ -100,7 +105,8 @@ def _run(args, *, timeout):
 
 def check_images(document, *, run=_run, clock=time.monotonic):
     if not isinstance(document, dict) or (
-        set(document) - {"platform", "targets", "insecure_registries"} or not {"platform", "targets"} <= document.keys()
+        set(document) - {"platform", "targets", "insecure_registries", "timeout_seconds"}
+        or not {"platform", "targets"} <= document.keys()
     ):
         raise ExecutorError("image_check_document_invalid")
     platform, targets = document["platform"], document["targets"]
@@ -131,7 +137,10 @@ def check_images(document, *, run=_run, clock=time.monotonic):
         not isinstance(value, str) or value not in authorities for value in insecure
     ):
         raise ExecutorError("image_check_document_invalid")
-    deadline = clock() + 60
+    timeout = document.get("timeout_seconds", 60)
+    if type(timeout) is not int or not 1 <= timeout <= 1800:
+        raise ExecutorError("image_check_document_invalid")
+    deadline = clock() + timeout
     checked = []
     for target in targets:
 

@@ -97,7 +97,7 @@ function RosterRow({
     >
       <PermissionSubjectIdentity type={assignee.subject.type} name={displayName} metadata={<>
         <SourceBadge source={assignee.source} />
-        <PermissionModelStatus active={assignee.model.active} />
+        <PermissionModelStatus active={assignee.model.active} visibilityOnly={assignee.model.visibility_only} />
         <span>{t(`scope.${assignee.scope.toLowerCase()}`)}</span>
         {assignee.inherited_from && <span className="truncate">· {t("roster.inheritedFrom")}: {getInheritedSourceLabel(assignee, t)}</span>}
       </>} />

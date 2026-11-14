@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
+from loguru import logger
 
 from bisheng.core.config.secret_crypto import CredentialConfigurationError, get_keyring
 
@@ -163,11 +164,17 @@ def validate_runtime(data: dict, model_type=None):
     get_keyring()
     if not data.get("database_url") and not os.getenv("bisheng_DATABASE_URL"):
         raise CredentialConfigurationError("database_url: explicit connection required")
-    unknown = set(data) - Settings.model_fields.keys() - {"admin"}
-    if unknown:
-        raise CredentialConfigurationError("config: unsupported top-level fields")
-    cleaned = dict(data)
-    cleaned.pop("admin", None)
+    # Same rule as ConfigService.load_settings_from_yaml: an unknown top-level
+    # key only warns (by name, never its value) and has no effect. Known fields,
+    # including credentials, keep their strict validation below.
+    cleaned = {}
+    for key, value in data.items():
+        if key == "admin":
+            continue
+        if key not in Settings.model_fields:
+            logger.warning("Ignoring unknown top-level config key {!r}; this setting has no effect", key)
+            continue
+        cleaned[key] = value
     try:
         settings = (model_type or Settings)(**cleaned)
     except ValidationError as error:

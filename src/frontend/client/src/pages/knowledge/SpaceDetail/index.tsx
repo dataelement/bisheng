@@ -16,11 +16,7 @@ import {
 } from "../knowledgeUtils";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
 import { LoadMore } from "./LoadMore";
-import {
-  useLocalize,
-  usePrefersMobileLayout,
-  useScrollRevealRef,
-} from "~/hooks";
+import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
 import { useRefreshEffectiveQuota } from "~/hooks/useEffectiveQuota";
 import { useStorageQuotaGuard } from "~/hooks/usePersonalStorageQuota";
 import { useKnowledgeFilePermissions } from "./useKnowledgeFilePermissions";
@@ -114,9 +110,7 @@ function useKnowledgeSpaceDetail(
   const [searchTagIds, setSearchTagIds] = useState<number[]>([]);
   const [viewMode, setViewModeState] = useState<"card" | "list">(() => {
     if (typeof window === "undefined") return "list";
-    return localStorage.getItem("knowledge-view-mode") === "card"
-      ? "card"
-      : "list";
+    return localStorage.getItem("knowledge-view-mode") === "card" ? "card" : "list";
   });
   const setViewMode = (mode: "card" | "list") => {
     setViewModeState(mode);
@@ -125,17 +119,11 @@ function useKnowledgeSpaceDetail(
 
   // Shared atom (not local state) so the bottom AI dock can clear the selection
   // on focus/send without prop drilling. See selectionStore.ts.
-  const [selectedFiles, setSelectedFiles] = useRecoilState(
-    knowledgeSelectedFilesState,
-  );
+  const [selectedFiles, setSelectedFiles] = useRecoilState(knowledgeSelectedFilesState);
   const [statusFilter, setStatusFilter] = useState<FileStatus[]>([]);
   const [sortBy, setSortBy] = useState<SortType | undefined>(undefined);
-  const [sortDirection, setSortDirection] = useState<SortDirection | undefined>(
-    undefined,
-  );
-  const [editingTagsFileId, setEditingTagsFileId] = useState<string | null>(
-    null,
-  );
+  const [sortDirection, setSortDirection] = useState<SortDirection | undefined>(undefined);
+  const [editingTagsFileId, setEditingTagsFileId] = useState<string | null>(null);
   const [isBatchTagging, setIsBatchTagging] = useState(false);
   const [contextMenuOpen, setContextMenuOpen] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState({
@@ -204,9 +192,7 @@ function useKnowledgeSpaceDetail(
         ) : null}
         {!hasMore ? (
           <div className="col-span-full flex h-10 w-full items-center justify-center text-xs text-text-4">
-            {loadMoreError
-              ? localize("com_list_load_failed")
-              : localize("com_list_all_loaded")}
+            {loadMoreError ? localize("com_list_load_failed") : localize("com_list_all_loaded")}
           </div>
         ) : null}
       </>
@@ -224,15 +210,14 @@ function useKnowledgeSpaceDetail(
     canCreateFolder,
     canUploadFile,
     canMoveFile,
-    canMoveFolder,
     permissionEntryIds,
     deleteEntryIds,
+    renameEntryIds,
     downloadEntryIds,
   } = filePermissions;
 
   // Blank-area right-click menu opens when the user can upload a file OR create a folder.
-  const canUseContextMenuActions =
-    (canUploadFile || canCreateFolder) && !isSearching;
+  const canUseContextMenuActions = (canUploadFile || canCreateFolder) && !isSearching;
   // Read max file size from env config (MB), fallback to default 200MB
   const bishengConfig = useRecoilValue(bishengConfState);
   const uploadSizeLimits = resolveUploadSizeLimits(bishengConfig);
@@ -291,15 +276,11 @@ function useKnowledgeSpaceDetail(
     onSort,
   });
 
-  const selectableFiles = displayFiles.filter(
-    (f) => !isFolderUploadPlaceholder(f),
-  );
+  const selectableFiles = displayFiles.filter((f) => !isFolderUploadPlaceholder(f));
   const isAllSelectedOnPage =
-    selectableFiles.length > 0 &&
-    selectableFiles.every((f) => selectedFiles.has(f.id));
+    selectableFiles.length > 0 && selectableFiles.every((f) => selectedFiles.has(f.id));
   const isSelectionIndeterminate =
-    !isAllSelectedOnPage &&
-    selectableFiles.some((f) => selectedFiles.has(f.id));
+    !isAllSelectedOnPage && selectableFiles.some((f) => selectedFiles.has(f.id));
   const hasFailedFiles = displayFiles.some(
     (f) => selectedFiles.has(f.id) && isKnowledgeItemRetryable(f),
   );
@@ -307,20 +288,12 @@ function useKnowledgeSpaceDetail(
     (f) => selectedFiles.has(f.id) && f.type === FileType.FOLDER,
   );
   const selectedList = displayFiles.filter((f) => selectedFiles.has(f.id));
-  const selectionHasFile = selectedList.some((f) => f.type !== FileType.FOLDER);
-  // Batch move requires the target to accept both selected resource kinds.
+  // The actual server review classifies each selected source and the target.
   // Uploading placeholders no longer block the entry — the
   // move flow warns about them and lets the user move the rest (handleBatchMove).
-  const canBatchMove =
-    selectedList.length > 0 &&
-    (!hasFoldersSelected || canMoveFolder) &&
-    (!selectionHasFile || canMoveFile);
-  const canBatchDelete =
-    selectedList.length > 0 &&
-    selectedList.every((file) => deleteEntryIds.has(file.id));
-  const canBatchDownload =
-    selectedList.length > 0 &&
-    selectedList.every((file) => downloadEntryIds.has(file.id));
+  const canBatchMove = selectedList.length > 0;
+  const canBatchDelete = selectedList.length > 0;
+  const canBatchDownload = selectedList.length > 0;
 
   const fileActions = useKnowledgeFileActions({
     localize,
@@ -338,6 +311,12 @@ function useKnowledgeSpaceDetail(
     confirm,
     selectedList,
     canBatchDelete,
+    deletionScopeKey: JSON.stringify([
+      currentFolderId,
+      Array.from(selectedFiles).sort(),
+      Array.from(deleteEntryIds).sort(),
+      Array.from(renameEntryIds).sort(),
+    ]),
     space,
     onDeleteFile,
     onBatchDeleteFiles,
@@ -359,8 +338,7 @@ function useKnowledgeSpaceDetail(
   // appears whenever ANY selected file is a pending similar document. The dialog is then
   // scoped to exactly the selected files (see handleProcessSimilar).
   const hasSimilarSelected = selectedList.some(
-    (f) =>
-      f.has_similar && !f.is_multi_version && f.status === FileStatus.SUCCESS,
+    (f) => f.has_similar && !f.is_multi_version && f.status === FileStatus.SUCCESS,
   );
 
   // Mobile only ever shows the list form — never the multi-column card grid.
@@ -379,44 +357,38 @@ function useKnowledgeSpaceDetail(
   // Permission management is a single-target action: only with exactly one selected item,
   // and only when the user is allowed to manage its permission (permissionEntryIds is the
   // permission-probed set, so this respects the user's permission).
-  const singleSelectedId =
-    selectedFiles.size === 1 ? Array.from(selectedFiles)[0] : undefined;
-  const canManageSinglePermission =
-    !!singleSelectedId && permissionEntryIds.has(singleSelectedId);
+  const singleSelectedId = selectedFiles.size === 1 ? Array.from(selectedFiles)[0] : undefined;
+  const canManageSinglePermission = !!singleSelectedId && permissionEntryIds.has(singleSelectedId);
 
-  const { batchActions, inlineActions, overflowActions } =
-    getKnowledgeBatchActions({
-      selectedFiles,
-      isAdmin,
-      canManageMembers,
-      versionManagementEnabled,
-      handleProcessSimilar,
-      handleManagePermission,
-      hasFailedFiles,
-      hasFoldersSelected,
-      canBatchMove,
-      canBatchDelete,
-      canBatchDownload,
-      handleBatchDownload,
-      handleBatchTag,
-      handleBatchMove,
-      handleSingleDownload,
-      handleBatchDelete,
-      handleBatchRetry,
-      hasSimilarSelected,
-      singleSelectedId,
-      canManageSinglePermission,
-      localize,
-    });
+  const { batchActions, inlineActions, overflowActions } = getKnowledgeBatchActions({
+    selectedFiles,
+    isAdmin,
+    canManageMembers,
+    versionManagementEnabled,
+    handleProcessSimilar,
+    handleManagePermission,
+    hasFailedFiles,
+    hasFoldersSelected,
+    canBatchMove,
+    canBatchDelete,
+    canBatchDownload,
+    handleBatchDownload,
+    handleBatchTag,
+    handleBatchMove,
+    handleSingleDownload,
+    handleBatchDelete,
+    handleBatchRetry,
+    hasSimilarSelected,
+    singleSelectedId,
+    canManageSinglePermission,
+    localize,
+  });
 
   // F034: drag-move wiring for the card grid (table view wires its own internally).
   const cardDrag = useKnowledgeMoveDrag({
     files: displayFiles,
     selectedFiles,
-    onMoveToFolder: canUploadFile
-      ? (folderId, items, folderName) =>
-          dropMoveToFolder(items, folderId, folderName)
-      : undefined,
+    onMoveToFolder: (folderId, items, folderName) => dropMoveToFolder(items, folderId, folderName),
   });
 
   return {

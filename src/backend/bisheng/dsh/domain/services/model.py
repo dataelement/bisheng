@@ -27,7 +27,7 @@ from bisheng.dsh.domain.schemas.usage import UsageEvent
 from bisheng.dsh.domain.services.access import DshPrincipal, principal_scope
 from bisheng.dsh.domain.services.model_display import model_display_name
 from bisheng.dsh.infrastructure.chat_adapter import DshChatAdapter
-from bisheng.dsh.infrastructure.model_errors import model_failure_code
+from bisheng.dsh.infrastructure.model_errors import is_context_length_error, model_failure_code
 from bisheng.dsh.infrastructure.quota_redis import QuotaRejected
 from bisheng.dsh.infrastructure.responses_adapter import DshResponsesAdapter
 from bisheng.dsh.infrastructure.telemetry import record_settlement, request_trace
@@ -69,7 +69,6 @@ class DshModelService:
         billing_timezone: str = "Asia/Shanghai",
         audit_factory=None,
         display_names_reader=None,
-        activity_recorder=None,
     ):
         self.policy_reader, self.model_loader, self.llm_builder = policy_reader, model_loader, llm_builder
         self.capabilities_for, self.usage, self.now = capabilities_for, usage, now
@@ -79,7 +78,6 @@ class DshModelService:
         self.responses_adapter = DshResponsesAdapter()
         self.audit_factory = audit_factory
         self.display_names_reader = display_names_reader
-        self.activity_recorder = activity_recorder
 
     async def list_models(self, principal: DshPrincipal) -> dict:
         with principal_scope(principal):
@@ -189,21 +187,6 @@ class DshModelService:
                 if error.reason == "model_not_allowed":
                     raise DshModelNotAllowedError() from error
                 raise DshQuotaUnavailableError() from error
-            if self.activity_recorder is not None:
-                try:
-                    await self.activity_recorder(principal)
-                except (Exception, asyncio.CancelledError):
-                    # No upstream call has started. Release quota admission with
-                    # known zero usage rather than leaving a running/unknown call.
-                    await asyncio.shield(
-                        self.settle_usage(
-                            event,
-                            DshTokenUsage(input_tokens=0, output_tokens=0, total_tokens=0),
-                            "FAILED",
-                            "session_activity_failed",
-                        )
-                    )
-                    raise
             if self.audit_factory is not None:
                 try:
                     execution.capture = await self.audit_factory(
@@ -251,7 +234,7 @@ class DshModelService:
             return error
         if isinstance(error, TimeoutError):
             return DshUpstreamTimeoutError()
-        if getattr(error, "code", None) == "context_length_exceeded":
+        if is_context_length_error(error):
             return DshContextLengthExceededError()
         return DshUpstreamErrorError()
 

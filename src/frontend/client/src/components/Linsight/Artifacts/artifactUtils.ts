@@ -14,12 +14,18 @@ import {
     stripCitationMarkers,
     transformPrivateCitations,
 } from '~/components/Chat/Messages/Content/citationUtils';
+import { reissueAttachmentUrl } from '~/components/Chat/attachments/chatAttachmentUtils';
 import { getShareTokenFromPath } from '~/utils/shareToken';
 
 /** Output file shape of `output_result.final_files` (= store `file_list`). */
 export interface ArtifactFile {
     /** Original uploaded attachment URL, already authorized by the conversation. */
     directUrl?: string;
+    /**
+     * A conversation attachment kept permanently: open it through a freshly
+     * issued link, since `directUrl` is the upload-time link and expires.
+     */
+    attachment?: { conversationId: string; fileId: string };
     file_id: string;
     file_name: string;
     file_url: string;
@@ -245,6 +251,14 @@ export async function resolveArtifactUrl(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- backend returns {data:{file_path}}, not typed
     const res: any = await getLinsightFileDownloadApi(fileUrl, versionId, shareToken);
     return `${__APP_ENV__.BASE_URL}${res.data.file_path}`;
+}
+
+/** The link to fetch `file` from: a re-issued attachment link, its direct link, or a workspace resolve. */
+export async function resolveArtifactFileUrl(file: ArtifactFile, versionId: string): Promise<string> {
+    if (file.directUrl) {
+        return (await reissueAttachmentUrl(file.attachment, file.directUrl)) ?? file.directUrl;
+    }
+    return resolveArtifactUrl(file.file_url, artifactVersionId(file, versionId));
 }
 
 function decodeSafe(s: string): string {
@@ -532,7 +546,7 @@ export async function fetchArtifactBlob(
   versionId: string,
   options?: ArtifactBlobOptions,
 ): Promise<{ blob: Blob; fileName: string }> {
-  const url = file.directUrl || await resolveArtifactUrl(file.file_url, artifactVersionId(file, versionId));
+  const url = await resolveArtifactFileUrl(file, versionId);
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Failed to download file: ${response.status}`);

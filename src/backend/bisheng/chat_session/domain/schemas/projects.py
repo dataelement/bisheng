@@ -23,11 +23,13 @@ class ProjectActor:
 
 class ActionBase(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    request_id: UUID
 
 
 class CreateProject(ActionBase):
+    """The client generates project_id, so retrying the same create is idempotent."""
+
     operation: Literal["create"]
+    project_id: UUID
     name: ProjectName
     chat_id: ChatId | None = None
 
@@ -63,10 +65,11 @@ class LegacyMembership(BaseModel):
 
 
 class ImportProjects(ActionBase):
+    """The whole legacy browser record in one request, processed in one transaction."""
+
     operation: Literal["import"]
-    source_client_id: UUID
     projects: list[LegacyProject] = Field(max_length=100)
-    memberships: list[LegacyMembership] = Field(max_length=500)
+    memberships: list[LegacyMembership] = Field(max_length=2000)
 
 
 ProjectAction = Annotated[

@@ -1,0 +1,117 @@
+pageType: cover
+background:
+  type: solid
+  color: '#F2EEDF'
+notes: Native PPTD adaptation of Zara Zhang / Soft Editorial. MIT. Example figures are illustrative.
+elements:
+  - elementId: t1
+    elementType: text
+    bounds:
+      - 48
+      - 34
+      - 800
+      - 24
+    content:
+      text: 观察手记 / 第一期
+      fontFamily: &ref_1
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 12
+      color: '#2A241B'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t2
+    elementType: text
+    bounds:
+      - 48
+      - 148
+      - 480
+      - 210
+    content:
+      text: |-
+        值得细看的
+        几个想法
+      fontFamily: &ref_0
+        latin: Georgia
+        ea: Noto Serif CJK SC
+        mac: Songti SC
+        win: SimSun
+      fontSize: 64
+      color: '#2A241B'
+      lineHeight: 1.12
+      bold: false
+  - elementId: s3
+    elementType: shape
+    bounds:
+      - 589
+      - 124
+      - 323
+      - 330
+    shapeName: roundRect
+    fill:
+      type: solid
+      color: '#E1A4C2'
+    border:
+      width: 0
+      color: '#2A241B'
+  - elementId: t4
+    elementType: text
+    bounds:
+      - 620
+      - 177
+      - 265
+      - 200
+    content:
+      text: |-
+        观察。
+        提问。
+        理解。
+      fontFamily: *ref_0
+      fontSize: 38
+      color: '#2A241B'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t5
+    elementType: text
+    bounds:
+      - 50
+      - 415
+      - 490
+      - 50
+    content:
+      text: 研究、观点与下一项决策
+      fontFamily: *ref_1
+      fontSize: 18
+      color: '#2A241B'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t6
+    elementType: text
+    bounds:
+      - 48
+      - 506
+      - 760
+      - 16
+    content:
+      text: 自编示例
+      fontFamily: *ref_1
+      fontSize: 9
+      color: '#2A241B'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t7
+    elementType: text
+    bounds:
+      - 870
+      - 503
+      - 40
+      - 20
+    content:
+      text: '01'
+      fontFamily: *ref_1
+      fontSize: 11
+      color: '#2A241B'
+      lineHeight: 1.12
+      bold: false

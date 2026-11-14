@@ -39,16 +39,9 @@ class DshSubjectPolicyRepository:
         self.include_retired_roles = include_retired_roles
 
     def _departments(self) -> list[Department]:
-        tenant = require_tenant()
-        with strict_tenant_filter():
-            rows = list(
-                self.session.exec(
-                    select(Department)
-                    .where(Department.tenant_id == tenant, Department.status == "active")
-                    .order_by(Department.sort_order, Department.id)
-                ).all()
-            )
-        return rows
+        from bisheng.department.application.business_scope import business_departments_sync
+
+        return business_departments_sync(require_tenant(), session=self.session)
 
     def _roles(self) -> list[Role]:
         tenant = require_tenant()
@@ -152,14 +145,7 @@ class DshSubjectPolicyRepository:
     def _validate_subject(self, subject_type: str, subject_id: int):
         tenant = require_tenant()
         if subject_type == "DEPARTMENT":
-            with strict_tenant_filter():
-                row = self.session.exec(
-                    select(Department).where(
-                        Department.id == subject_id,
-                        Department.tenant_id == tenant,
-                        Department.status == "active",
-                    )
-                ).one_or_none()
+            row = next((dept for dept in self._departments() if dept.id == subject_id), None)
         elif subject_type == "ROLE":
             with bypass_tenant_filter():
                 row = self.session.exec(
@@ -264,21 +250,9 @@ class DshSubjectPolicyRepository:
         }
 
     def _department_ancestor_ids(self, user_id: int, departments: list[Department]) -> set[int]:
-        with strict_tenant_filter():
-            memberships = list(
-                self.session.exec(
-                    select(UserDepartment)
-                    .join(Department, Department.id == UserDepartment.department_id)
-                    .where(
-                        UserDepartment.user_id == user_id,
-                        Department.status == "active",
-                        Department.tenant_id == require_tenant(),
-                    )
-                ).all()
-            )
-        return self._department_ancestor_ids_for(
-            {int(membership.department_id) for membership in memberships}, departments
-        )
+        from bisheng.user.application.policy_bindings import policy_department_ids_sync
+
+        return policy_department_ids_sync(user_id, require_tenant(), session=self.session)
 
     @staticmethod
     def _department_ancestor_ids_for(direct_ids: set[int], departments: list[Department]) -> set[int]:
@@ -338,17 +312,15 @@ class DshSubjectPolicyRepository:
                 UserRole.tenant_id == require_tenant(), UserRole.role_id == subject_id
             )
         with strict_tenant_filter():
-            return sorted({int(value) for value in self.session.exec(query).all()})
+            candidates = sorted({int(value) for value in self.session.exec(query).all()})
+        if subject_type == "ROLE":
+            return [uid for uid in candidates if subject_id in self._role_ids(uid)]
+        return candidates
 
     def _role_ids(self, user_id: int) -> set[int]:
-        tenant = require_tenant()
-        with strict_tenant_filter():
-            return {
-                int(value)
-                for value in self.session.exec(
-                    select(UserRole.role_id).where(UserRole.tenant_id == tenant, UserRole.user_id == user_id)
-                ).all()
-            }
+        from bisheng.role.application.effective_roles import load_effective_roles_sync
+
+        return set(load_effective_roles_sync(user_id, expected_home_tenant_id=require_tenant(), session=self.session).role_ids)
 
     def _matching_grants(
         self, grants: list[DshSubjectPolicy], department_ids: set[int], role_ids: set[int]
@@ -384,22 +356,25 @@ class DshSubjectPolicyRepository:
         grants: list[DshSubjectPolicy] = []
         if user_ids:
             with strict_tenant_filter():
-                membership_rows = list(
-                    self.session.exec(
-                        select(
-                            UserDepartment.user_id,
-                            UserDepartment.department_id,
-                            UserDepartment.is_primary,
-                        )
-                        .join(Department, Department.id == UserDepartment.department_id)
-                        .where(
-                            UserDepartment.user_id.in_(user_ids),
-                            Department.tenant_id == tenant,
-                            Department.status == "active",
-                        )
-                        .order_by(UserDepartment.user_id, UserDepartment.id)
-                    ).all()
-                )
+                with bypass_tenant_filter():
+                    membership_rows = list(
+                        self.session.exec(
+                            select(
+                                UserDepartment.user_id,
+                                UserDepartment.department_id,
+                                UserDepartment.is_primary,
+                            )
+                            .join(Department, Department.id == UserDepartment.department_id)
+                            .join(UserTenant, UserTenant.user_id == UserDepartment.user_id)
+                            .where(
+                                UserDepartment.user_id.in_(user_ids),
+                                Department.id.in_([row.id for row in departments]),
+                                UserTenant.tenant_id == tenant, UserTenant.is_active == 1, UserTenant.status == "active",
+                                Department.status == "active",
+                            )
+                            .order_by(UserDepartment.user_id, UserDepartment.id)
+                        ).all()
+                    )
                 direct_rows = list(
                     self.session.exec(
                         select(DshUserPolicy).where(
@@ -436,8 +411,10 @@ class DshSubjectPolicyRepository:
                 )
             for user_id, department_id, is_primary in membership_rows:
                 memberships_by_user[int(user_id)].append((int(department_id), bool(is_primary)))
+            effective_ids = {uid: self._role_ids(uid) for uid in user_ids}
             for user_id, role_id, role_name in role_rows:
-                roles_by_user[int(user_id)].append((int(role_id), role_name))
+                if int(role_id) in effective_ids[int(user_id)]:
+                    roles_by_user[int(user_id)].append((int(role_id), role_name))
             for row in direct_rows:
                 direct_by_user[int(row.user_id)].append(row)
 
@@ -558,8 +535,7 @@ class DshSubjectPolicyRepository:
             tenant_grants = list(self.session.exec(grant_statement).all())
         grants: list[DshSubjectPolicy] = []
         if tenant_grants:
-            departments = self._departments()
-            department_ids = self._department_ancestor_ids(user_id, departments)
+            department_ids = self._department_ancestor_ids(user_id, [])
             role_ids = self._role_ids(user_id)
             grants = self._matching_grants(tenant_grants, department_ids, role_ids)
         sources_by_model: dict[int, list[tuple[str, int, int, int, str, int, bool]]] = {}

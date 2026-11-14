@@ -1,6 +1,7 @@
 """Preview edits must be consumed by the worker after trusted upload."""
 
 import importlib.util
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -68,7 +69,7 @@ async def test_preview_edit_survives_trusted_upload_for_worker(monkeypatch, tmp_
     monkeypatch.setattr(utils, "get_redis_client_sync", lambda: redis)
     monkeypatch.setattr(service, "get_redis_client", AsyncMock(return_value=redis))
     user = SimpleNamespace(user_id=7, tenant_id=2)
-    knowledge = SimpleNamespace(id=3, user_id=7, tenant_id=2)
+    knowledge = SimpleNamespace(id=3, user_id=7, tenant_id=2, type=0)
     monkeypatch.setattr(service.KnowledgeDao, "aquery_by_id", AsyncMock(return_value=knowledge))
     monkeypatch.setattr(service.KnowledgeService.permission_service, "ensure_knowledge_write_async", AsyncMock())
     monkeypatch.setattr(service.KnowledgeService, "ensure_knowledge_upload_tenant_consistency", Mock())
@@ -94,7 +95,15 @@ async def test_preview_edit_survives_trusted_upload_for_worker(monkeypatch, tmp_
 
     monkeypatch.setattr(preview_file_pipeline, "PreviewFilePipeline", FakePipeline)
     db_file = SimpleNamespace(id=5, status=2, file_size=1)
-    process = Mock(return_value=db_file)
+
+    def process_one_file(_user, _knowledge, one, split_rule, **_kwargs):
+        # Mirror prepare_one_file: the saved rule always carries a concrete ExcelRule.
+        db_file.split_rule = json.dumps(
+            {**split_rule, "excel_rule": (one.excel_rule or service.ExcelRule()).model_dump()}
+        )
+        return db_file
+
+    process = Mock(side_effect=process_one_file)
     monkeypatch.setattr(service.KnowledgeService, "process_one_file", process)
     req = KnowledgeFileProcess(
         knowledge_id=3, file_list=[{"file_path": "issued-url", "preview_upload_ref": "ref", "excel_rule": excel_rule}]

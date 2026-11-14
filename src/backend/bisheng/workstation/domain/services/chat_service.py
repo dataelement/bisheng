@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import mimetypes
 import threading
 import time
 from datetime import datetime
@@ -46,7 +47,7 @@ from bisheng.citation.domain.services.daily_citation_handles import (
 )
 from bisheng.citation.domain.services.daily_citation_scope import DailyCitationScope
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
-from bisheng.common.dependencies.user_deps import UserPayload, record_business_activity
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.errcode.knowledge import (
@@ -80,7 +81,7 @@ from bisheng.common.utils.message_content import extract_message_reasoning, extr
 from bisheng.common.utils.think_tags import ThinkBlockStreamFilter
 from bisheng.core.cache.utils import async_file_download
 from bisheng.core.logger import trace_id_var
-from bisheng.core.storage.chat_attachment import promote_chat_attachments
+from bisheng.core.storage.chat_attachment import promote_chat_attachments, promote_chat_attachments_sync
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao, SensitiveStatus
@@ -196,9 +197,7 @@ async def initialize_chat(data: APIChatCompletion, login_user: UserPayload):
             user_id=login_user.user_id,
         )
         if data.project_id is not None:
-            await ChatSessionService.create_owned_project_session(
-                new_session, login_user, data.project_id, data.project_request_id, data.project_creation_payload()
-            )
+            await ChatSessionService.create_owned_project_session(new_session, login_user, data.project_id)
         else:
             await MessageSessionDao.async_insert_one(new_session)
         await telemetry_service.log_event(
@@ -466,6 +465,14 @@ def _stop_code_executors(tools: list[BaseTool]) -> None:
             threading.Thread(target=_close_quietly, args=(executor,), name="code-executor-stop", daemon=True).start()
 
 
+def _release_code_sandboxes(tools: list[BaseTool]) -> None:
+    """Close the sandboxes a turn kept alive (E2B ``keep_sandbox``) without blocking the loop."""
+    for tool in tools:
+        executor = _code_executor_of(tool)
+        if getattr(executor, "keep_sandbox", False) and getattr(executor, "sandbox", None) is not None:
+            threading.Thread(target=_close_quietly, args=(executor,), name="code-sandbox-release", daemon=True).start()
+
+
 def _attach_kb_image_stage(tool: BaseTool, stage: KbImageStage) -> None:
     """Give a code-interpreter tool access to this request's retrieved knowledge images."""
     inner = getattr(tool, "tool_instance", tool)
@@ -481,6 +488,92 @@ def _attach_kb_image_stage(tool: BaseTool, stage: KbImageStage) -> None:
     inner.description = description
     if inner is not tool:
         tool.description = description
+
+
+GENERATED_FILES_LIMIT = 50
+GENERATED_FILE_SOURCE = "code_interpreter"
+_DELIVERABLE_HINT = (
+    "Files you save under output/ are attached to your reply automatically and shown to the user as "
+    "download cards. Do not write download links, URLs or output/ paths in your reply; mention a file "
+    "by its file name only."
+)
+
+
+def _code_executor_of(tool: BaseTool):
+    return getattr(getattr(tool, "tool_instance", tool), "executor", None)
+
+
+def _enable_deliverable_collection(tool: BaseTool) -> None:
+    """Have a code-interpreter tool record its output/ files so the answer can carry them."""
+    inner = getattr(tool, "tool_instance", tool)
+    executor = getattr(inner, "executor", None)
+    if executor is None or not hasattr(executor, "collect_deliverables"):
+        return
+    executor.collect_deliverables = True
+    if hasattr(executor, "keep_sandbox"):
+        # One E2B sandbox per turn, so a later call can read what an earlier one wrote;
+        # _release_code_sandboxes closes it when the turn ends.
+        executor.keep_sandbox = True
+    description = f"{inner.description}\n\n{_DELIVERABLE_HINT}"
+    inner.description = description
+    if inner is not tool:
+        tool.description = description
+
+
+def _collect_generated_files(tools: list[BaseTool]) -> list[dict]:
+    """Attachment items for the files this turn's code runs left under output/.
+
+    A path written twice keeps its last version; only the last
+    GENERATED_FILES_LIMIT files are kept.
+    """
+    latest: dict[str, dict] = {}
+    for tool in tools or []:
+        entries = getattr(_code_executor_of(tool), "published_deliverables", None)
+        if not isinstance(entries, list):
+            continue
+        for entry in list(entries):
+            latest.pop(entry["path"], None)
+            latest[entry["path"]] = entry
+    return [
+        {
+            "file_id": uuid4().hex,
+            "file_name": entry["name"],
+            "path": entry["path"],
+            "type": mimetypes.guess_type(entry["name"])[0] or "",
+            "size": entry["size"],
+            "source": GENERATED_FILE_SOURCE,
+            "filepath": entry["url"],
+        }
+        for entry in list(latest.values())[-GENERATED_FILES_LIMIT:]
+    ]
+
+
+async def _promote_generated_files(
+    tools: list[BaseTool], chat_id: str, user_id: int, storage_partition: str | None
+) -> list[dict]:
+    files = _collect_generated_files(tools)
+    if files:
+        await promote_chat_attachments(files, user_id, storage_partition=storage_partition)
+        _log_generated_files(chat_id, files)
+    return files
+
+
+def _promote_generated_files_sync(tools: list[BaseTool], chat_id: str, storage_partition: str) -> list[dict]:
+    """Twin for the stream teardown path, where an await would be cancelled."""
+    files = _collect_generated_files(tools)
+    if files:
+        promote_chat_attachments_sync(files, storage_partition)
+        _log_generated_files(chat_id, files)
+    return files
+
+
+def _log_generated_files(chat_id: str, files: list[dict]) -> None:
+    logger.info(
+        "daily chat generated files chat_id={} count={} promoted={}",
+        chat_id,
+        len(files),
+        sum(1 for f in files if f.get("object_name")),
+    )
 
 
 def _wrap_daily_chat_citation_tool(
@@ -1344,6 +1437,8 @@ async def _prepare_tools(
         if t is not None:
             if kb_image_stage is not None:
                 _attach_kb_image_stage(t, kb_image_stage)
+            if tool_key == CODE_INTERPRETER_TOOL_KEY:
+                _enable_deliverable_collection(t)
             tools.append(
                 _wrap_daily_chat_citation_tool(
                     t,
@@ -1458,9 +1553,7 @@ async def _agent_initialize_chat(
                 from bisheng.common.errcode.chat import ProjectInputError
 
                 raise ProjectInputError()
-            await ChatSessionService.create_owned_project_session(
-                new_session, login_user, data.project_id, data.project_request_id, data.project_creation_payload()
-            )
+            await ChatSessionService.create_owned_project_session(new_session, login_user, data.project_id)
         else:
             await MessageSessionDao.async_insert_one(new_session)
         await telemetry_service.log_event(
@@ -1801,7 +1894,8 @@ async def _agent_stream_chat_completion(
         )
         return _respond_blocked_workbench(conversation, message, model_info, data, blocked.auto_reply or "")
 
-    await record_business_activity(login_user)
+    # The tools of this turn, for event_stream's teardown to release their sandboxes.
+    turn_tools: list[BaseTool] = []
 
     async def _agent_event_stream_impl():
         # Single ordered event log — one entry per thinking segment or tool
@@ -1827,6 +1921,7 @@ async def _agent_stream_chat_completion(
         error_flag = False
         error_msg = ""
         error_metadata = {}
+        pending_error_sse = None
         citation_collector = CitationRegistryCollector()
         # F075: the model cites with [Sn] handles from the session table shared
         # with the task mode; answer text is converted before it is stored or sent.
@@ -1884,6 +1979,11 @@ async def _agent_stream_chat_completion(
         # True once the answer row has been written, so the interrupt path can't
         # double-insert a turn the normal path already saved.
         persisted = False
+        # Read by the teardown path too, which can run before the tools are built.
+        langchain_tools: list[BaseTool] = []
+        storage_partition = (
+            session_subject.storage_partition if session_subject is not None else str(login_user.user_id)
+        )
         scanner = None
         if SensitiveWordPolicyService.is_workbench_content_safety_active(tenant_id):
             from bisheng.sensitive_word.domain.services.stream_scanner import StreamContentSafetyScanner
@@ -1930,8 +2030,9 @@ async def _agent_stream_chat_completion(
                 events.append({"type": "text", "content": text})
             return _sse_resp("agent_answer", "stream", {"msg": text}, conversation_id)
 
-        def build_answer_row(db_content: dict) -> ChatMessage:
+        def build_answer_row(db_content: dict, files: list[dict] | None = None) -> ChatMessage:
             return ChatMessage(
+                files=json.dumps(files, ensure_ascii=False) if files else None,
                 user_id=conversation.user_id,
                 chat_id=conversation_id,
                 flow_id="",
@@ -2011,7 +2112,8 @@ async def _agent_stream_chat_completion(
                     stats=stream_converter.stats,
                     cited=citation_items,
                 )
-                resp = ChatMessageDao.insert_one(build_answer_row({"msg": final_msg, "events": events}))
+                files = _promote_generated_files_sync(langchain_tools, conversation_id, storage_partition)
+                resp = ChatMessageDao.insert_one(build_answer_row({"msg": final_msg, "events": events}, files))
                 save_message_citations_sync(
                     message_id=resp.id,
                     items=citation_items,
@@ -2037,7 +2139,6 @@ async def _agent_stream_chat_completion(
             is_bot=False,
         )
 
-        langchain_tools: list[BaseTool] = []
         try:
             # ---- Step 1: resolve user-selected KBs ----
             knowledge_bases_info = await _resolve_user_kb_selection(data)
@@ -2063,6 +2164,7 @@ async def _agent_stream_chat_completion(
                 citation_scope=citation_scope,
                 kb_image_stage=kb_image_stage,
             )
+            turn_tools[:] = langchain_tools
 
             # Surface init failures as synthetic tool_call events so the user
             # sees *something* (e.g. "联网搜索 失败: 未配置服务商") rather than
@@ -2531,7 +2633,9 @@ async def _agent_stream_chat_completion(
             error_metadata = FailureContextAdapter.public_payload({**exc.kwargs, "error_code": exc.code}, exc=exc)
             if label_error(exc) == ErrorType.CREDIT_EXHAUSTED:
                 error_metadata["error_type"] = ErrorType.CREDIT_EXHAUSTED.value
-            yield FailureContextAdapter.public_sse_text(exc, data=error_metadata)
+            if exc.code == LLMRateLimitError.Code:
+                error_metadata["error_type"] = ErrorType.RATE_LIMIT.value
+            pending_error_sse = FailureContextAdapter.public_sse_text(exc, data=error_metadata)
         except Exception as exc:
             error_flag = True
             error_msg = FailureContextAdapter.safe_detail(exc)
@@ -2544,9 +2648,12 @@ async def _agent_stream_chat_completion(
                 exc=exc,
             )
             if error_type == ErrorType.RATE_LIMIT:
-                yield FailureContextAdapter.public_sse_text(LLMRateLimitError(), data=error_metadata, cause=exc)
+                error_metadata["error_code"] = LLMRateLimitError.Code
+                pending_error_sse = FailureContextAdapter.public_sse_text(
+                    LLMRateLimitError(), data=error_metadata, cause=exc
+                )
             else:
-                yield FailureContextAdapter.public_sse_text(ServerError(), data=error_metadata, cause=exc)
+                pending_error_sse = FailureContextAdapter.public_sse_text(ServerError(), data=error_metadata, cause=exc)
         except (asyncio.CancelledError, GeneratorExit):
             # The stream was torn down mid-flight — client navigated away, gateway
             # read timeout, worker restart. Neither is an `Exception`, so without
@@ -2600,9 +2707,16 @@ async def _agent_stream_chat_completion(
         )
         db_content: dict = {"msg": final_msg, "events": events}
 
+        # Before `persisted`: a stop during the copy must still leave the teardown path to save the turn.
+        generated_files = await _promote_generated_files(
+            langchain_tools,
+            conversation_id,
+            login_user.user_id,
+            session_subject.storage_partition if session_subject is not None else None,
+        )
         persisted = True
         try:
-            resp_msg = await ChatMessageDao.ainsert_one(build_answer_row(db_content))
+            resp_msg = await ChatMessageDao.ainsert_one(build_answer_row(db_content, generated_files))
             await save_message_citations(
                 message_id=resp_msg.id,
                 items=citation_items,
@@ -2617,10 +2731,15 @@ async def _agent_stream_chat_completion(
             yield f"data: {json.dumps({'final': True, 'conversation': {'conversationId': conversation_id}})}\n\n"
             return
 
+        # The frontend can close immediately on error. Commit the answer and
+        # its safe recovery metadata before exposing that terminal event.
+        if pending_error_sse is not None:
+            yield pending_error_sse
+
         yield _sse_resp(
             "agent_answer",
             "end",
-            db_content,
+            {**db_content, "files": generated_files},
             conversation_id,
             message_id=resp_msg.id,
             citations=citation_items,
@@ -2629,7 +2748,7 @@ async def _agent_stream_chat_completion(
 
         # Schedule BEFORE final: the client closes the stream on that event.
         # Retain the task so disconnecting cannot cancel conversation naming.
-        if is_new_conv or (conversation.name in (None, "", "New Chat")):
+        if not error_flag and (is_new_conv or conversation.name in (None, "", "New Chat")):
             title_task = asyncio.create_task(
                 gen_title(data.text or "", bisheng_llm, conversation_id, login_user, request)
             )
@@ -2681,6 +2800,7 @@ async def _agent_stream_chat_completion(
                 yield chunk
         finally:
             await impl.aclose()
+            _release_code_sandboxes(turn_tools)
             if execution_task is not None or execution_lease is not None:
                 await DepartmentFlowService.stop_renewal(execution_task, execution_lease)
 

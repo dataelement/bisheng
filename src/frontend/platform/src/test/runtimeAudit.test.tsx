@@ -12,10 +12,6 @@ vi.mock('@/controllers/API/runtimeAudit', async (importOriginal) => ({ ...(await
 vi.mock('@/hooks/useAdminScope', () => ({ useAdminScope: () => ({ scope: { scope_tenant_id: null }, loading: false }) }))
 vi.mock('@/controllers/API/tenant', () => ({ getTenantsApi: vi.fn().mockResolvedValue({ data: [] }) }))
 vi.mock('@/controllers/request', () => ({ showApiError: vi.fn() }))
-vi.mock('@/components/bs-ui/calendar/datePicker', () => ({
-  DatePicker: ({ placeholder, onChange }: { placeholder: string; onChange: (date: Date) => void }) =>
-    <button onClick={() => onChange(new Date(placeholder.endsWith('start') ? '2026-10-20T09:15:30' : '2026-10-21T18:45:00'))}>{placeholder}</button>,
-}))
 const wrapper = ({ children }: PropsWithChildren) => <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, cacheTime: 0 } } })}>{children}</QueryClientProvider>
 afterEach(cleanup)
 beforeEach(() => {
@@ -40,18 +36,61 @@ it('changes tenant and kind without reusing prior cursor or showing old rows', a
 
 it('renders real source rows and distinguishes failed loading from empty records', async () => {
   mock.records.mockRejectedValueOnce(new Error('unavailable'))
-  render(<RuntimeAuditPanel />, { wrapper })
+  const { rerender } = render(<RuntimeAuditPanel kind="model" />, { wrapper })
   expect(await screen.findByRole('alert')).toHaveTextContent('log.runtime.loadFailed')
-  fireEvent.click(screen.getAllByRole('button', { name: 'log.runtime.refresh' })[0])
+  fireEvent.click(screen.getByRole('button', { name: 'log.runtime.refresh' }))
   await waitFor(() => expect(screen.getByText('log.emptyTitle')).toBeVisible())
-  fireEvent.click(screen.getByRole('radio', { name: 'log.runtime.accessTab' }))
-  expect(await screen.findByText('log.runtime.accessHint')).toBeVisible()
+  rerender(<RuntimeAuditPanel kind="access" />)
+  expect(await screen.findByRole('columnheader', { name: 'log.runtime.fields.entry_time' })).toBeVisible()
+})
+
+it('reloads the first page on every search without clearing an unchanged visitor filter', async () => {
+  const user = userEvent.setup()
+  mock.candidates.mockResolvedValue({ items: [{ id: '7', label: 'Audit visitor' }] })
+  mock.records.mockImplementation(async (_kind, _filters, cursor?: string) => ({
+    items: [], next_cursor: cursor ? null : 'page-two', snapshot_id: 'initial', matched_count: null,
+  }))
+  render(<RuntimeAuditPanel kind="model" />, { wrapper })
+  await user.click(screen.getByRole('combobox', { name: 'log.runtime.visitor' }))
+  await user.click(await screen.findByRole('option', { name: 'Audit visitor' }))
+  const expectedFilters = expect.objectContaining({ time_range: 'recent7d', visitor_id: 7 })
+  await waitFor(() => expect(mock.records).toHaveBeenLastCalledWith('model', expectedFilters, undefined))
+
+  const pager = screen.getByRole('navigation', { name: 'pagination.nav' })
+  const next = within(pager).getByRole('button', { name: 'pagination.next' })
+  const previous = within(pager).getByRole('button', { name: 'pagination.prev' })
+  await waitFor(() => expect(next).toBeEnabled())
+  expect(previous).toBeDisabled()
+  expect(pager).toHaveTextContent(/^1$/)
+  await user.click(next)
+  await waitFor(() => expect(previous).toBeEnabled())
+  expect(mock.records).toHaveBeenLastCalledWith('model', expectedFilters, 'page-two')
+  expect(pager).toHaveTextContent(/^2$/)
+  expect(next).toBeDisabled()
+  await user.click(previous)
+  await waitFor(() => expect(next).toBeEnabled())
+  expect(pager).toHaveTextContent(/^1$/)
+  await user.click(next)
+  await waitFor(() => expect(mock.records).toHaveBeenLastCalledWith('model', expectedFilters, 'page-two'))
+
+  const search = screen.getByRole('button', { name: 'log.runtime.apply' })
+  mock.records.mockResolvedValueOnce({ items: [{ id: 1, model_name: 'Fresh record' }], next_cursor: null, snapshot_id: 'fresh' })
+  await user.click(search)
+  expect(await screen.findByText('Fresh record')).toBeVisible()
+  expect(mock.records).toHaveBeenLastCalledWith('model', expectedFilters, undefined)
+  expect(previous).toBeDisabled()
+  expect(screen.queryByRole('button', { name: 'log.runtime.refresh' })).not.toBeInTheDocument()
+
+  mock.records.mockResolvedValueOnce({ items: [{ id: 2, model_name: 'Newer record' }], next_cursor: null, snapshot_id: 'newer' })
+  await user.click(search)
+  expect(await screen.findByText('Newer record')).toBeVisible()
+  expect(mock.records).toHaveBeenLastCalledWith('model', expectedFilters, undefined)
 })
 
 it('submits full export using the current frozen selection rather than current page rows', async () => {
   mock.createExport.mockResolvedValue({ export_id: 'job', status: 'pending' })
   mock.exportJob.mockResolvedValue({ export_id: 'job', status: 'ready', final_count: 300 })
-  render(<RuntimeAuditPanel />, { wrapper })
+  render(<RuntimeAuditPanel kind="model" />, { wrapper })
   await waitFor(() => expect(screen.getByRole('button', { name: 'log.runtime.export' })).toBeEnabled())
   fireEvent.click(screen.getByRole('button', { name: 'log.runtime.export' }))
   await waitFor(() => expect(mock.createExport).toHaveBeenCalledWith('selection', undefined))
@@ -67,7 +106,7 @@ it('submits full export using the current frozen selection rather than current p
 
 it('renders caller and model metadata while leaving missing tokens unknown and excluding bodies', async () => {
   mock.records.mockResolvedValue({ items: [{ id: 1, actor_kind: 'service_account', actor_name: 'SDK account', model_name: 'Example model', total_tokens: null, prompt: 'PRIVATE_BODY', result: 'success' }], next_cursor: null, snapshot_id: 'selection' })
-  render(<RuntimeAuditPanel />, { wrapper })
+  render(<RuntimeAuditPanel kind="model" />, { wrapper })
   expect(await screen.findByText('Example model')).toBeVisible()
   expect(screen.getByText('log.runtime.values.service_account')).toBeVisible()
   expect(screen.getAllByText('log.runtime.notRecorded').length).toBeGreaterThan(0)
@@ -79,7 +118,7 @@ it('uses readable identities instead of separate surrogate-ID columns', async ()
     actor_name: 'Recorded application', subject_kind: 'app_self', subject_id: null,
     credential_id: 143, credential_mask: 'bs-app-********ABCD', result: 'upstream_failed' }],
     next_cursor: null, snapshot_id: 'selection' })
-  render(<RuntimeAuditPanel />, { wrapper })
+  render(<RuntimeAuditPanel kind="model" />, { wrapper })
   expect(await screen.findByText('Recorded application')).toBeVisible()
   expect(screen.getByText('bs-app-********ABCD')).toBeVisible()
   expect(screen.getAllByText('log.runtime.values.app_self').length).toBeGreaterThan(0)
@@ -91,8 +130,7 @@ it('uses readable identities instead of separate surrogate-ID columns', async ()
 it('shows the recorded visitor name without a redundant numeric user column', async () => {
   mock.records.mockResolvedValue({ items: [{ id: 58, user_id: 3, user_name: 'Recorded visitor' }],
     next_cursor: null, snapshot_id: 'selection' })
-  render(<RuntimeAuditPanel />, { wrapper })
-  fireEvent.click(screen.getByRole('radio', { name: 'log.runtime.accessTab' }))
+  render(<RuntimeAuditPanel kind="access" />, { wrapper })
   expect(await screen.findByText('Recorded visitor')).toBeVisible()
   expect(screen.queryByRole('columnheader', { name: 'log.runtime.fields.user_id' })).not.toBeInTheDocument()
   expect(screen.getByRole('columnheader', { name: 'log.runtime.fields.operator_dept_path' })).toBeVisible()
@@ -106,7 +144,7 @@ it('sends the organisation as a comma string only after apply', async () => {
     ],
     archived: [], show_none: true, show_unrecorded: false,
   })
-  render(<RuntimeAuditPanel />, { wrapper })
+  render(<RuntimeAuditPanel kind="model" />, { wrapper })
   await waitFor(() => expect(mock.records).toHaveBeenCalled())
   expect(screen.getAllByRole('button')[0]).toHaveAccessibleName('log.org.placeholder')
   fireEvent.click(screen.getByRole('button', { name: 'log.org.placeholder' }))
@@ -121,12 +159,32 @@ it('sends the organisation as a comma string only after apply', async () => {
   }), undefined))
 })
 
+it('keeps the chosen visitor when only the organisation is applied', async () => {
+  const user = userEvent.setup()
+  mock.departments.mockResolvedValue({
+    active: [{ id: 2, dept_id: 'BS@2', external_id: null, name: 'Sales', path_name: 'Root/Sales', parent_id: 1, tenant_id: 1, has_children: false }],
+    archived: [], show_none: false, show_unrecorded: false,
+  })
+  mock.candidates.mockResolvedValue({ items: [{ id: '7', label: 'Audit visitor' }] })
+  render(<RuntimeAuditPanel kind="model" />, { wrapper })
+  await user.click(screen.getByRole('combobox', { name: 'log.runtime.visitor' }))
+  await user.click(await screen.findByRole('option', { name: 'Audit visitor' }))
+  await waitFor(() => expect(mock.records).toHaveBeenLastCalledWith('model', expect.objectContaining({ visitor_id: 7 }), undefined))
+  fireEvent.click(screen.getByRole('button', { name: 'log.org.placeholder' }))
+  fireEvent.click(await screen.findByRole('checkbox', { name: /Sales/ }))
+  fireEvent.click(screen.getByRole('button', { name: 'log.org.confirm' }))
+  fireEvent.click(screen.getByRole('button', { name: 'log.runtime.apply' }))
+  await waitFor(() => expect(mock.records).toHaveBeenLastCalledWith('model', expect.objectContaining({
+    dept_ids: '2', visitor_id: 7,
+  }), undefined))
+})
+
 it('keeps a pending export on close and cancels only through the explicit cancel action', async () => {
   const user = userEvent.setup()
   mock.createExport.mockResolvedValue({ export_id: 'pending-job', status: 'pending' })
   mock.exportJob.mockResolvedValue({ export_id: 'pending-job', status: 'running' })
   mock.cancelExport.mockResolvedValue({ export_id: 'pending-job', status: 'expired' })
-  render(<RuntimeAuditPanel />, { wrapper })
+  render(<RuntimeAuditPanel kind="model" />, { wrapper })
   await waitFor(() => expect(screen.getByRole('button', { name: 'log.runtime.export' })).toBeEnabled())
   await user.click(screen.getByRole('button', { name: 'log.runtime.export' }))
   await screen.findByRole('button', { name: 'log.runtime.cancel' })
@@ -145,7 +203,7 @@ it('shows creation failures inside the dialog and can retry the export', async (
   const user = userEvent.setup()
   mock.createExport.mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ export_id: 'retry-job', status: 'pending' })
   mock.exportJob.mockResolvedValue({ export_id: 'retry-job', status: 'ready', final_count: 2 })
-  render(<RuntimeAuditPanel />, { wrapper })
+  render(<RuntimeAuditPanel kind="model" />, { wrapper })
   await waitFor(() => expect(screen.getByRole('button', { name: 'log.runtime.export' })).toBeEnabled())
   await user.click(screen.getByRole('button', { name: 'log.runtime.export' }))
   expect(await screen.findByRole('alert')).toHaveTextContent('log.runtime.exportCreateFailed')
@@ -160,23 +218,46 @@ it('renders zoned runtime timestamps in the viewers local time instead of raw UT
   const pad = (n: number) => String(n).padStart(2, '0')
   const expected = `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
   mock.records.mockResolvedValue({ items: [{ id: 1, create_time: value }], next_cursor: null, snapshot_id: 'selection' })
-  render(<RuntimeAuditPanel />, { wrapper })
+  render(<RuntimeAuditPanel kind="model" />, { wrapper })
   expect(await screen.findByText(expected)).toBeVisible()
   expect(screen.queryByText(value)).toBeNull()
 })
 
-it('applies custom dates selected through the platform picker and rejects incomplete ranges', async () => {
+it('accepts either date boundary and resets to the first page of the default time range', async () => {
   const user = userEvent.setup()
-  render(<RuntimeAuditPanel />, { wrapper })
-  await waitFor(() => expect(mock.records).toHaveBeenCalled())
+  mock.records.mockResolvedValueOnce({ items: [], next_cursor: 'recent-next', snapshot_id: 'recent', matched_count: null })
+  render(<RuntimeAuditPanel kind="model" />, { wrapper })
+  const next = screen.getByRole('button', { name: 'pagination.next' })
+  await waitFor(() => expect(next).toBeEnabled())
+  await user.click(next)
+  await waitFor(() => expect(mock.records).toHaveBeenLastCalledWith('model', { time_range: 'recent7d', tenant_id: undefined }, 'recent-next'))
   await user.click(screen.getByRole('combobox', { name: 'log.runtime.timeRange' }))
   await user.click(screen.getByRole('option', { name: 'log.runtime.custom' }))
-  await user.click(screen.getByRole('button', { name: 'log.runtime.apply' }))
+  const start = screen.getByRole('combobox', { name: 'datePicker.startDate' })
+  const end = screen.getByRole('combobox', { name: 'datePicker.endDate' })
+  const search = screen.getByRole('button', { name: 'log.runtime.apply' })
+  await user.click(search)
   expect(screen.getByRole('alert')).toHaveTextContent('log.runtime.invalidRange')
-  await user.click(screen.getByRole('button', { name: 'log.runtime.start' }))
-  await user.click(screen.getByRole('button', { name: 'log.runtime.end' }))
-  await user.click(screen.getByRole('button', { name: 'log.runtime.apply' }))
+  fireEvent.change(start, { target: { value: '2026-10-20' } })
+  fireEvent.keyDown(start, { key: 'Enter' })
+  expect(end).toHaveAttribute('placeholder', 'datePicker.unlimited')
+  await user.click(search)
   await waitFor(() => expect(mock.records).toHaveBeenLastCalledWith('model', expect.objectContaining({
-    time_range: 'custom', start_time: new Date('2026-10-20T09:15:30').toISOString(), end_time: new Date('2026-10-21T18:45:00').toISOString(),
+    time_range: 'custom', start_time: new Date(2026, 9, 20).toISOString(), end_time: undefined,
   }), undefined))
+  fireEvent.change(end, { target: { value: '2026-10-21' } })
+  fireEvent.keyDown(end, { key: 'Enter' })
+  fireEvent.change(start, { target: { value: '' } })
+  fireEvent.keyDown(start, { key: 'Enter' })
+  expect(start).toHaveAttribute('placeholder', 'datePicker.unlimited')
+  await user.click(search)
+  await waitFor(() => expect(mock.records).toHaveBeenLastCalledWith('model', expect.objectContaining({
+    time_range: 'custom', start_time: undefined,
+    end_time: new Date(2026, 9, 21, 23, 59, 59).toISOString().replace('.000Z', '.999999Z'),
+  }), undefined))
+  await user.click(screen.getByRole('button', { name: 'log.resetButton' }))
+  expect(screen.getByRole('combobox', { name: 'log.runtime.timeRange' })).toHaveTextContent('log.runtime.recent7d')
+  expect(screen.queryByRole('combobox', { name: 'datePicker.startDate' })).not.toBeInTheDocument()
+  await waitFor(() => expect(mock.records).toHaveBeenLastCalledWith('model', { time_range: 'recent7d', tenant_id: undefined }, undefined))
+  expect(screen.getByRole('button', { name: 'pagination.prev' })).toBeDisabled()
 })

@@ -13,6 +13,7 @@ from bisheng.linsight.domain.services.state_message_manager import (
     MessageData,
     MessageEventType,
 )
+from bisheng.linsight.domain.services.task_failure_payload import task_failure_payload
 
 
 class MessageStreamHandle:
@@ -52,14 +53,9 @@ class MessageStreamHandle:
         if info.status == SessionVersionStatusEnum.TERMINATED:
             return MessageData(event_type=MessageEventType.TASK_TERMINATED, data={})
         if info.status in {SessionVersionStatusEnum.FAILED, SessionVersionStatusEnum.SOP_GENERATION_FAILED}:
-            result = info.output_result or {}
             return MessageData(
                 event_type=MessageEventType.ERROR_MESSAGE,
-                data={
-                    "error": result.get("error_message", "Task failed"),
-                    "error_code": result.get("error_code"),
-                    "error_type": result.get("error_type"),
-                },
+                data=task_failure_payload(info.output_result),
             )
         return None
 

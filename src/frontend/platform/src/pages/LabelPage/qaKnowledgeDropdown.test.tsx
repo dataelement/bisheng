@@ -12,6 +12,11 @@ vi.mock('@/controllers/API', () => ({
     readFileLibDatabase: api.read, updateQa: api.update, getQaList: api.list,
     addSimilarQa: vi.fn(), generateSimilarQa: vi.fn(),
 }));
+vi.mock('@/contexts/userContext', async () => ({
+    userContext: (await import('react')).createContext({
+        user: { user_id: 7, leaf_tenant_id: 101 },
+    }),
+}));
 const longName = 'Long QA name '.repeat(60).trim();
 beforeEach(() => {
     vi.clearAllMocks();
@@ -33,6 +38,7 @@ it.each([['new QA', SaveQaLibForm], ['similar questions', AddSimilarQuestions]] 
         mount(Component);
         fireEvent.click(screen.getByRole('combobox', { name: 'log.qaKnowledgeLib' }));
         const option = await screen.findByRole('option', { name: longName });
+        expect(api.read).toHaveBeenCalledWith(expect.objectContaining({ type: 1, action: 'visible' }));
         expect(option.closest('[data-side]')).toHaveClass('w-[var(--radix-popover-trigger-width)]');
         expect(screen.getByText(longName)).toHaveClass('truncate');
     },

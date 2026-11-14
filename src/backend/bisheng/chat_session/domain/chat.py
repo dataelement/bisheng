@@ -118,71 +118,27 @@ class ChatSessionService:
     async def rename_session(conversation_id: str, name: str, login_user: UserPayload) -> None:
         """Rename a chat session."""
         await ChatSessionService._own_conversation_or_raise(conversation_id, login_user)
-        await ChatSessionService.update_generated_session_name(conversation_id, name)
+        await MessageSessionDao.update_session_name(conversation_id, name)
 
     @staticmethod
-    async def create_owned_project_session(session, login_user, project_id, request_id, request_payload):
+    async def create_owned_project_session(session, login_user, project_id):
+        """Insert a new natural-person session and its project membership atomically."""
         from bisheng.chat_session.domain.repositories.project_session_repository import ProjectSessionRepository
         from bisheng.chat_session.domain.schemas.projects import ProjectActor
-        from bisheng.chat_session.domain.services.project_events import publish_project_change
-        from bisheng.common.errcode.chat import ProjectInputError, ProjectSessionExistsError
+        from bisheng.common.errcode.chat import ProjectInputError
         from bisheng.database.models.org_snapshot import astamp_session
 
         actor = ProjectActor(tenant_id=login_user.tenant_id, user_id=login_user.user_id)
         if session.api_subject_type is not None:
             raise ProjectInputError()
         session = SessionSubject.natural_person(tenant_id=actor.tenant_id, user_id=actor.user_id).stamp(session)
-        # Preserve the preparation previously done by async_insert_one, before
+        # Preserve the preparation otherwise done by async_insert_one before
         # entering the atomic project/session transaction.
         if not session.group_ids:
             session.group_ids = [group.group_id for group in await UserGroupDao.aget_user_group(actor.user_id)]
         await astamp_session(session)
-        result = await asyncio.to_thread(
-            ProjectSessionRepository.create, actor, session, str(project_id), str(request_id), request_payload
-        )
-        if result["replayed"]:
-            raise ProjectSessionExistsError(chat_id=result["chat_id"])
-        await publish_project_change(actor, result["revision"], "conversation")
+        await asyncio.to_thread(ProjectSessionRepository.create, actor, session, str(project_id))
         return session
-
-    @staticmethod
-    async def update_generated_session_name(chat_id, name, *, only_if_default=False):
-        from bisheng.chat_session.domain.repositories.project_session_repository import ProjectSessionRepository
-        from bisheng.chat_session.domain.schemas.projects import ProjectActor
-        from bisheng.chat_session.domain.services.project_events import publish_project_change
-
-        session = await MessageSessionDao.async_get_one(chat_id)
-        if session is None or session.is_delete:
-            return False
-        if session.api_subject_type is not None:
-            await MessageSessionDao.update_session_name(chat_id, name)
-            return True
-        actor = ProjectActor(tenant_id=session.tenant_id, user_id=session.user_id)
-        result = await asyncio.to_thread(
-            ProjectSessionRepository.rename, actor, chat_id, name, only_if_default=only_if_default
-        )
-        if result["revision"]:
-            await publish_project_change(actor, result["revision"], "conversation")
-        return result["changed"]
-
-    @staticmethod
-    def update_generated_session_name_sync(chat_id, name, *, only_if_default=False, tenant_id=None):
-        from bisheng.chat_session.domain.repositories.project_session_repository import ProjectSessionRepository
-        from bisheng.chat_session.domain.schemas.projects import ProjectActor
-        from bisheng.chat_session.domain.services.project_events import publish_project_change_sync
-
-        session = MessageSessionDao.get_one(chat_id)
-        if session is None or session.is_delete or (tenant_id is not None and session.tenant_id != tenant_id):
-            return False
-        if session.api_subject_type is not None:
-            return MessageSessionDao.update_session_name_sync(
-                chat_id, name, only_if_default=only_if_default, tenant_id=tenant_id
-            )
-        actor = ProjectActor(tenant_id=session.tenant_id, user_id=session.user_id)
-        result = ProjectSessionRepository.rename(actor, chat_id, name, only_if_default=only_if_default)
-        if result["revision"]:
-            publish_project_change_sync(actor, result["revision"], "conversation")
-        return result["changed"]
 
     @staticmethod
     async def _own_conversation_or_raise(chat_id: str, login_user: UserPayload) -> MessageSession:
@@ -261,10 +217,27 @@ class ChatSessionService:
         account.
         """
         owner = await ChatSessionService._own_conversation_or_raise(chat_id, login_user)
+        return await ChatSessionService._sign_attachment(chat_id, file_id, owner)
 
+    @staticmethod
+    async def resolve_audit_attachment_url(chat_id: str, file_id: str) -> str:
+        """Sign a code-interpreter file of a conversation for an auditor.
+
+        The caller has already checked the audit scope. User uploads are not
+        part of what an auditor may download, so only generated files are found.
+        """
+        owner = await MessageSessionDao.async_get_one(chat_id)
+        if owner is None:
+            raise NotFoundError.http_exception()
+        return await ChatSessionService._sign_attachment(chat_id, file_id, owner, only_source="code_interpreter")
+
+    @staticmethod
+    async def _sign_attachment(chat_id: str, file_id: str, owner, *, only_source: str | None = None) -> str:
         messages = await WorkflowFileRepository.attachment_messages(chat_id)
         for attachment in ChatSessionService._attachment_objects(messages, owner):
             if str(attachment.get("file_id")) != str(file_id):
+                continue
+            if only_source is not None and attachment.get("source") != only_source:
                 continue
             object_name = attachment.get("object_name")
             if attachment.get("_workflow_image") and attachment.get("state") != "ready":
@@ -307,16 +280,9 @@ class ChatSessionService:
             if flow_info and flow_info.flow_type == FlowType.WORKFLOW.value:
                 await AuditLogService.delete_chat_workflow(login_user, request_ip, flow_info)
 
-        revision = await WorkflowFileRepository.soft_delete_owned_session(
+        await WorkflowFileRepository.soft_delete_owned_session(
             chat_id, user_id=login_user.user_id, tenant_id=session_chat.tenant_id
         )
-        if revision is not None:
-            from bisheng.chat_session.domain.schemas.projects import ProjectActor
-            from bisheng.chat_session.domain.services.project_events import publish_project_change
-
-            await publish_project_change(
-                ProjectActor(session_chat.tenant_id, login_user.user_id), revision, "conversation"
-            )
         await ChatSessionService._remove_attachments(chat_id)
 
         await telemetry_service.log_event(

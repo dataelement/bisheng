@@ -20,14 +20,18 @@ env_set() {
 }
 
 set_gateway_profile() {
-  local profiles="$1" enabled="$2"
-  awk -v profiles="$profiles" -v enabled="$enabled" 'BEGIN {
+  set_optional_profile "$1" "$2" gateway
+}
+
+set_optional_profile() {
+  local profiles="$1" enabled="$2" profile="$3"
+  awk -v profiles="$profiles" -v enabled="$enabled" -v profile="$profile" 'BEGIN {
     count = split(profiles, items, /[[:space:],]+/)
     for (i = 1; i <= count; i++) {
       item = items[i]
-      if (item != "" && item != "gateway" && !seen[item]++) result = result (result ? "," : "") item
+      if (item != "" && item != profile && !seen[item]++) result = result (result ? "," : "") item
     }
-    if (enabled == "true") result = result (result ? "," : "") "gateway"
+    if (enabled == "true") result = result (result ? "," : "") profile
     printf "%s", result
   }'
 }

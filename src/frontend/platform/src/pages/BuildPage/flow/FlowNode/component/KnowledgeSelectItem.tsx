@@ -1,86 +1,33 @@
 // @ts-strict-ignore
 import { Label } from "@/components/bs-ui/label";
 import MultiSelect from "@/components/bs-ui/select/multi";
-import { getKnowledgeDetailApi,readFileLibDatabase } from "@/controllers/API";
-import { getSelectableKnowledgeSpacesApi } from "@/controllers/API/knowledgeSpace";
-import { showApiError } from "@/controllers/request";
+import { useKnowledgeCandidates } from "@/components/bs-comp/selectComponent/useKnowledgeCandidates";
 import { isVarInFlow } from "@/util/flowUtils";
-import { Tabs,Tooltip } from "@bisheng/ui";
+import { Tabs, Tooltip } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
-import { memo,useEffect,useRef,useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import useFlowStore from "../../flowStore";
 
-
-const TabsHead = memo(({ tab, onChange }) => {
-    const { t } = useTranslation('flow');
-
-    return (
-        <Tabs defaultActiveKey={tab} className="mb-2" onChange={onChange} items={[
-            { key: 'knowledge', label: t('documentKnowledgeBase') },
-            { key: 'space', label: t('knowledgeSpace') },
-            { key: 'tmp', label: <Tooltip content={t('storeFilesSentInCurrentSession')}>
-                <span className="inline-flex items-center gap-1">{t('temporarySessionFiles')}<Outlined.Question size={14} className="text-text-3" /></span>
-            </Tooltip> },
-        ]} />
-    );
-});
-
-
-const enum KnowledgeType {
-    Knowledge = 'knowledge',
-    Space = 'space',
-    Temp = 'tmp'
-}
-type KnowledgeTypeValues = `${KnowledgeType}`;
-const pageSize = 60
-
-const mergeOptionsByValue = (currentOptions, nextOptions) => {
-    const existingValues = new Set(currentOptions.map(option => option.value))
-    return [
-        ...currentOptions,
-        ...nextOptions.filter(option => !existingValues.has(option.value))
-    ]
-}
-
 export function hasTempKnowledgeMode(fileParseMode: unknown): boolean {
-    if (Array.isArray(fileParseMode)) {
-        return fileParseMode.includes('ingest_to_temp_kb')
-    }
-    return fileParseMode === 'ingest_to_temp_kb'
+    return Array.isArray(fileParseMode) ? fileParseMode.includes('ingest_to_temp_kb') : fileParseMode === 'ingest_to_temp_kb';
 }
 
 export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent, onValidate, i18nPrefix }) {
-    const { flow } = useFlowStore()
-    const { t } = useTranslation('flow')
-
-    const currentTabRef = useRef(data.value.type)
-    const [tabType, setTabType] = useState<KnowledgeTypeValues>(data.value.type)
-    const [value, setValue] = useState<any>(() => data.value.value.map(el => {
-        return { label: el.label, value: el.key }
-    }))
-
-    const [options, setOptions] = useState<any>([]);
-    const [fileOptions, setFileOptions] = useState<any>([])
-    // F041: knowledge spaces are loaded once (INV-6 exception, full-return) and
-    // filtered client-side, matching the client daily-mode selector.
-    const [spaceOptions, setSpaceOptions] = useState<any>([])
-    const allSpacesRef = useRef<any[]>([])
-    const originOptionsRef = useRef([])
-
-    const cursorRef = useRef<string | null>(null)
-    const requestSeqRef = useRef(0)
-    const reload = (cursor: string | null, name: string) => {
-        const requestSeq = ++requestSeqRef.current
-        readFileLibDatabase({ cursor, pageSize, name, type: 0, action: 'use' }).then(res => {
-            if (requestSeq !== requestSeqRef.current) return
-            cursorRef.current = res.next_cursor
-            originOptionsRef.current = res.data
-            const opts = res.data.map(el => ({ label: el.name, value: el.id }))
-            setOptions(_ops => cursor ? mergeOptionsByValue(_ops, opts) : opts)
-        }).catch(showApiError)
-    }
-    // input文件变量s
+    const { flow } = useFlowStore();
+    const { t } = useTranslation('flow');
+    const [tabType, setTabType] = useState(data.value.type === 'tmp' ? 'tmp' : 'space');
+    const [value, setValue] = useState(() => data.value.value.map(el => ({ label: el.label, value: el.key })));
+    const currentMode = useRef(data.value.type);
+    const candidates = useKnowledgeCandidates('space', tabType !== 'tmp');
+    const saved = new Map(value.map(item => [String(item.value), item]));
+    const options = candidates.options.map(item => ({ ...item, value: saved.get(String(item.value))?.value ?? item.value }));
+    const [fileOptions, setFileOptions] = useState([]);
+    useEffect(() => {
+        currentMode.current = data.value.type;
+        setValue(data.value.value.map(el => ({ label: el.label, value: el.key })));
+    }, [data.value]);
+    // Temporary input variables keep their existing mode.
     const loadFiles = () => {
         const files = []
         flow.nodes.forEach(node => {
@@ -104,159 +51,64 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
         setFileOptions(files)
     }
 
-    // F041: load selectable knowledge spaces (mine + joined + department union).
-    const loadSpaces = () => {
-        getSelectableKnowledgeSpacesApi().then(spaces => {
-            allSpacesRef.current = spaces.map(s => ({ label: s.name, value: s.id }))
-            setSpaceOptions(allSpacesRef.current)
-        }).catch(showApiError)
-    }
-    const filterSpaces = (name: string) => {
-        const kw = (name || '').toLowerCase()
-        setSpaceOptions(allSpacesRef.current.filter(o => o.label.toLowerCase().includes(kw)))
-    }
 
-    useEffect(() => {
-        reload(null, '')
-        loadFiles()
-        loadSpaces()
-    }, [])
-
-    // const handleChange = (res) => {
-    //     // id => obj
-    //     onChange(res.map(el => originOptionsRef.current.find(el2 => el2.id === el)))
-    // }
-
-    // 加载更多
-    const loadMore = (name) => {
-        if (cursorRef.current) reload(cursorRef.current, name)
-    }
-
-    const handleTabChange = (val) => {
-        if (val === KnowledgeType.Knowledge) reload(null, '')
-        else if (val === KnowledgeType.Space) loadSpaces()
-        else loadFiles()
-
-        setTabType(val)
-        const inputDom = document.getElementById('knowledge-select-item')
-        if (inputDom) {
-            inputDom.value = ''
-        }
-    }
-
+    useEffect(() => { loadFiles(); }, [flow.nodes]);
     const handleSelect = (vals) => {
-        const resVals = currentTabRef.current === tabType ? vals : [vals[vals.length - 1]]
-        setValue(resVals)
-        onChange({
-            type: tabType,
-            value: resVals.map(el => ({ // 夸类型先清空value
-                key: el.value,
-                label: el.label
-            }))
-        })
-
-        currentTabRef.current = tabType
-    }
-
-    const [error, setError] = useState(false)
+        const added = vals.filter(item => !saved.has(String(item.value)));
+        const switchedTemp = (currentMode.current === 'tmp') !== (tabType === 'tmp');
+        const next = added.length && switchedTemp ? added : vals;
+        const mode = added.length ? tabType : currentMode.current;
+        setValue(next);
+        onChange({ ...data.value, type: mode, value: next.map(item => ({ key: item.value, label: item.label })) });
+        currentMode.current = mode;
+    };
+    const [error, setError] = useState(false);
     useEffect(() => {
-        // data.required && onValidate(() => {
-        onValidate((config) => {
+        onValidate(() => {
             if (data.required && !data.value.value.length) {
-                setError(true)
+                setError(true);
                 return `${t(`${i18nPrefix}label`)} ${t('required')}`;
             }
-            if (data.value.value.some(item => /input_[a-zA-Z0-9]+\.file/.test(item.key))) {
-                return 'input_file'
-            }
-            setError(false)
-            return false
-        })
-
-        return () => onValidate(() => { })
-    }, [data.value])
-
-    // 校验变量是否可用
-    const [errorKeys, setErrorKeys] = useState<string[]>([])
-    const validateVarAvailable = async (config) => {
-        if (!value.length) return ''
-        let error = '';
-        // 单节点运行校验临时文件
-        if (config?.tmp && data.value.value.length && data.value.type === 'tmp') {
-            setError(true)
-            return t('tmpKnowledgeBaseNotSupportSingleNodeDebug')
-        }
-        const _errorKeys = [];
-        if (typeof value[0].value === 'number' && data.value.type === KnowledgeType.Space) {
-            // F041: validate spaces against the loaded selectable-space list
-            // (getKnowledgeDetailApi is KB-only and would flag every space as missing).
-            const knownIds = new Set(allSpacesRef.current.map(o => o.value));
-            for (const el of value) {
-                if (!knownIds.has(el.value)) {
-                    error = `${flow.nodes.find(node => node.id === nodeId).data.name}${t('nodeError')}: ${el.label} ${t('doesNotExist')}.`
-                    _errorKeys.push(el.value);
-                }
-            }
-            setErrorKeys(_errorKeys);
-            return error;
-        }
-        if (typeof value[0].value === 'number') {
-            const effectiveKnowledges = await getKnowledgeDetailApi(value.map(el => el.value));
-            for (const el of value) {
-                // If not found, check against effectiveKnowledges
-                if (!effectiveKnowledges.some(base => base.id === el.value)) {
-                    // error = t('nodeErrorMessage', {
-                    //     ns: 'flow',
-                    //     nodeName: flow.nodes.find(node => node.id === nodeId).data.name,
-                    //     varNameCn: ''
-                    // });
-                    error = `${flow.nodes.find(node => node.id === nodeId).data.name}${t('nodeError')}: ${el.label} ${t('doesNotExist')}.`
-                    error && _errorKeys.push(el.value);
-                }
-                setErrorKeys(_errorKeys);
-            }
-            return error;
-        }
-        for (const el of value) {
-            // Check if variable exists in flow
-            const _error = isVarInFlow(nodeId, flow.nodes, el.value, '');
-            if (_error) {
-                _errorKeys.push(el.value);
-                error = _error;
-            }
-        }
-        setErrorKeys(_errorKeys);
-        return error;
-    };
-
+            if (data.value.value.some(item => /input_[a-zA-Z0-9]+\.file/.test(item.key))) return 'input_file';
+            setError(false);
+            return false;
+        });
+        return () => onValidate(() => {});
+    }, [data.value]);
+    const [errorKeys, setErrorKeys] = useState([]);
     useEffect(() => {
-        onVarEvent && onVarEvent(validateVarAvailable);
-        return () => onVarEvent && onVarEvent(() => { });
-    }, [data, value]);
-
-    return <div className='node-item mb-4'>
+        onVarEvent?.((config) => {
+            // Saved numeric references are checked by the authoritative execution path.
+            // A partial visible candidate page cannot establish that an old target was deleted.
+            if (data.value.type !== 'tmp') return '';
+            if (config?.tmp && value.length) {
+                setError(true);
+                return t('tmpKnowledgeBaseNotSupportSingleNodeDebug');
+            }
+            const invalid = value.filter(item => isVarInFlow(nodeId, flow.nodes, item.value, ''));
+            setErrorKeys(invalid.map(item => item.value));
+            return invalid.length ? isVarInFlow(nodeId, flow.nodes, invalid[0].value, '') : '';
+        });
+        return () => onVarEvent?.(() => {});
+    }, [data, value, flow.nodes]);
+    return <div className="node-item mb-4">
         <Label className="flex items-center bisheng-label mb-2">
-            {data.required && <span className="text-red-500">*</span>}
-            {t(`${i18nPrefix}label`)}
+            {data.required && <span className="text-red-500">*</span>}{t(`${i18nPrefix}label`)}
         </Label>
-        <MultiSelect
-            id="knowledge-select-item"
-            error={error}
-            errorKeys={errorKeys}
-            tabs={<TabsHead tab={tabType} onChange={handleTabChange} />}
-            multiple
-            className={''}
-            hideSearch={tabType === KnowledgeType.Temp}
-            value={value}
-            options={tabType === KnowledgeType.Knowledge ? options : tabType === KnowledgeType.Space ? spaceOptions : fileOptions}
-            placeholder={data.placeholder && t(`${i18nPrefix}placeholder`) || ''}
+        <MultiSelect id="knowledge-select-item" error={error} errorKeys={errorKeys} multiple
+            value={value} options={tabType === 'tmp' ? fileOptions : options}
+            hideSearch={tabType === 'tmp'}
+            tabs={<Tabs activeKey={tabType} onChange={setTabType} className="mb-2" items={[
+                { key: 'space', label: t('knowledgeSpace') },
+                { key: 'tmp', label: <Tooltip content={t('storeFilesSentInCurrentSession')}>
+                    <span className="inline-flex items-center gap-1">{t('temporarySessionFiles')}<Outlined.Question size={14} className="text-text-3" /></span>
+                </Tooltip> },
+            ]} />}
+            placeholder={data.placeholder ? t(`${i18nPrefix}placeholder`) : ''}
             searchPlaceholder={t('build.searchBaseName', { ns: 'bs' })}
-            onChange={handleSelect}
-            onLoad={() => { reload(null, ''); loadFiles(); loadSpaces() }}
-            onSearch={(val) => tabType === KnowledgeType.Space ? filterSpaces(val) : reload(null, val)}
-            onScrollLoad={(val) => { if (tabType === KnowledgeType.Knowledge) loadMore(val) }}
-        >
-            {/* {children?.(reload)} */}
-        </MultiSelect>
-    </div>
-};
+            onChange={handleSelect} onLoad={() => { candidates.refresh(); loadFiles(); }}
+            onSearch={candidates.search} onScrollLoad={candidates.loadMore} />
+        {data.value.type !== 'tmp' && value.some(item => !options.some(option => String(option.value) === String(item.value))) &&
+            <p className="text-xs text-text-3">{t('references.unconfirmed', { ns: 'bs' })}</p>}
+    </div>;
+}

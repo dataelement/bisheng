@@ -13,7 +13,7 @@
  * move and is kept — renaming ~20 keys across three locales would change nothing
  * a user sees.
  */
-import { FailureInfoDetails } from '~/components/FailureInfoDetails';
+import { ErrorDetailDisclosure, FailureInfoDetails } from '~/components/FailureInfoDetails';
 import { parseFailureInfo, localizedBusinessFailure } from '~/utils/failureInfo';
 import { Outlined } from 'bisheng-icons';
 import { useLocalize } from '~/hooks';
@@ -24,8 +24,10 @@ interface ChatErrorCardProps {
     errorCode?: number;
     /** stable classification from the backend (error_message event / SSE error `data.error_type`) */
     errorType?: string;
-    /** raw provider text for the "view details" disclosure */
+    /** redacted exception text for the "view details" disclosure */
     detail?: string;
+    /** support reference when the failure has no dependency failure_id */
+    referenceId?: string;
     /** legacy/raw error string — fallback when `detail` is absent */
     fallbackMessage?: string;
     /** transient (retryable) errors only: re-run the turn. Wired on the /linsight
@@ -97,6 +99,9 @@ export function ChatErrorCard({
     errorType,
     failureInfo,
     errorCode,
+    detail,
+    fallbackMessage,
+    referenceId,
     onRetry,
     retrying,
     description,
@@ -112,6 +117,7 @@ export function ChatErrorCard({
     const title = serviceFailure ? localize(`api_errors.failure_${serviceFailure.category}`) : localize(`com_linsight_error_title_${key}`);
     const desc = serviceFailure ? undefined : localizedBusinessFailure(errorCode, localize) ?? description ?? localize(`com_linsight_error_desc_${key}`);
     const hint = serviceFailure || hideHint ? '' : localize(`com_linsight_error_hint_${key}`);
+    const rawDetail = detail || fallbackMessage || '';
 
     // Transient → calm neutral notice (with retry where the surface wires it).
     if (TRANSIENT_TYPES.has(key)) {
@@ -125,6 +131,8 @@ export function ChatErrorCard({
                 // the static gray attention mark.
                 icon={isRateLimit ? 'gauge' : 'attention'}
                 failureInfo={failure}
+                referenceId={referenceId}
+                detail={isRateLimit ? undefined : rawDetail}
                 onRetry={onRetry}
                 retrying={retrying}
             />
@@ -143,8 +151,8 @@ export function ChatErrorCard({
                     <p className="mt-1 whitespace-pre-wrap break-words leading-relaxed text-text-3">{desc}</p>
                     {hint && <p className="mt-1.5 leading-relaxed text-text-3">{hint}</p>}
 
-                    <FailureInfoDetails failureInfo={failure} />
-
+                    <FailureInfoDetails failureInfo={failure} referenceId={referenceId} detail={rawDetail} />
+                    {!failure && <ErrorDetailDisclosure detail={rawDetail} />}
                 </div>
             </div>
         </div>

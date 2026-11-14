@@ -57,6 +57,7 @@ jest.mock('../../hooks/useKnowledgeSpacePermissions', () => ({ useKnowledgeSpace
 }) }));
 jest.mock('../../hooks/useSpaceActions', () => ({ useSpaceActions: () => ({
   handleUpdateSpace: mockUpdate, handlePinSpace: mockPin, handleDeleteSpace: mockDelete, handleLeaveSpace: mockLeave,
+  deletion: { view: null },
 }) }));
 
 function row(id: string, name: string, date = '2026-01-01'): KnowledgeSpace {
@@ -208,6 +209,28 @@ it('supports arrow-key category selection and preserves focus', async () => {
   });
 });
 
+it('keeps full category counts and exposes later cards when tabbing through a large list', () => {
+  mockData = {
+    mine: Array.from({ length: 100 }, (_, index) => row(String(index + 1), `Space ${index + 1}`)),
+    joined: [],
+    department: [row('101', 'Department')],
+  };
+  mount();
+  expect(screen.getByRole('tab', { name: 'com_knowledge.home_next.all 101', selected: true })).toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Space 49' })).not.toBeInTheDocument();
+
+  const lastLink = screen.getByRole('link', { name: 'Space 48' });
+  act(() => lastLink.focus());
+  expect(lastLink).toHaveFocus();
+  expect(screen.getByRole('link', { name: 'Space 49' })).toBeInTheDocument();
+
+  fireEvent.mouseDown(screen.getByRole('tab', { name: 'com_knowledge.home_next.department 1' }));
+  expect(screen.getAllByRole('article')).toHaveLength(1);
+  fireEvent.mouseDown(screen.getByRole('tab', { name: 'com_knowledge.home_next.all 101' }));
+  expect(screen.getByRole('link', { name: 'Space 48' })).toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Space 49' })).not.toBeInTheDocument();
+});
+
 it('keeps latest pin first through sort changes, unpin and re-pin', async () => {
   mockPin.mockImplementation(async (id: string, isPinned: boolean) => {
     const update = (list: KnowledgeSpace[]) => list.map((space) => space.id === id ? { ...space, isPinned } : space);
@@ -295,7 +318,7 @@ it('resolves permissions when opening the portaled menu and hides unauthorized e
   expect(screen.queryByRole('menuitem', { name: 'com_knowledge.delete_space' })).not.toBeInTheDocument();
 });
 
-it('confirms destructive operations and dispatches deletion only with the permission', async () => {
+it('hands destructive deletion to the confirmation owner only with the permission', async () => {
   mockPermissions = { '1': ['delete', 'edit'] };
   mount();
   const card = screen.getAllByRole('article').find((node) => within(node).queryByRole('link', { name: 'Alpha' }))!;
@@ -303,9 +326,11 @@ it('confirms destructive operations and dispatches deletion only with the permis
   const menu = await screen.findByRole('menu');
   expect(within(menu).getAllByRole('menuitem')).toHaveLength(2);
   expect(within(menu).queryByRole('menuitem', { name: 'com_knowledge.pin_space' })).not.toBeInTheDocument();
-  fireEvent.click(within(menu).getByRole('menuitem', { name: 'com_knowledge.delete_space' }));
+  const deleteAction = within(menu).getByRole('menuitem', { name: 'com_knowledge.delete_space' });
+  expect(deleteAction).toHaveClass('text-danger');
+  fireEvent.click(deleteAction);
   await waitFor(() => expect(mockDelete).toHaveBeenCalledWith('1'));
-  expect(mockConfirm).toHaveBeenCalledWith(expect.objectContaining({ variant: 'destructive' }));
+  expect(mockConfirm).not.toHaveBeenCalled();
 });
 
 it('keeps creation and discovery disabled until the plugin gate resolves', () => {

@@ -1,12 +1,12 @@
 // @ts-strict-ignore
-import { Button, Input, toast, notification } from '@bisheng/ui';
+import { Button, Input, Tooltip, toast, notification } from '@bisheng/ui';
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { Checkbox } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 
 import { GithubIcon } from "@/components/bs-icons/github";
 
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import json from "../../../package.json";
 
@@ -19,15 +19,36 @@ import { getBrandAssetUrl } from "@/utils/brand";
 import { consumeLoginReturnTo } from "@/utils/loginReturnTo";
 import { getWorkspaceClientUrl } from "@/utils/workspaceUrl";
 import { useLocation, useNavigate } from "react-router-dom";
-import { getCaptchaApi, loginApi, registerApi } from "../../controllers/API/user";
+import { getCaptchaApi, loginApi } from "../../controllers/API/user";
 import { showApiError } from "../../controllers/request";
 import LoginBridge from "./loginBridge";
-import { PWD_RULE, handleEncrypt, handleLdapEncrypt } from "./utils";
+import { handleEncrypt, handleLdapEncrypt } from "./utils";
+import { RegistrationForm } from './RegistrationForm';
 
 interface LoginPageProps {
     // Backdoor entry: skip SSO auto-redirect and clear any stored third-party
     // redirect URLs so 401/logout flows do not bounce admins back to the IdP.
     forceLocal?: boolean;
+}
+
+type RegistrationLayout = {
+    formTop: number;
+    loginHeight: number;
+    accountHeight: number;
+};
+
+const formTransition = { duration: 240, easing: "cubic-bezier(0.2, 0, 0, 1)" };
+
+function formClip(height: number, visibleHeight = height) {
+    return `inset(-4px -4px ${height - visibleHeight}px)`;
+}
+
+function animateFormHeight(fields: HTMLElement, from: number, to: number, fill?: FillMode) {
+    return fields.animate([{ height: `${from}px` }, { height: `${to}px` }], { ...formTransition, fill });
+}
+
+function canAnimateForm(fields: HTMLElement) {
+    return typeof fields.animate === "function" && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
 export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
@@ -39,12 +60,94 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
     const isLoading = false;
 
     const personIdRef = useRef(null);
-    const userNameRef = useRef(null);
     const pwdRef = useRef(null);
-    const agenPwdRef = useRef(null);
 
-    // login or register
-    const [showLogin, setShowLogin] = useState(true);
+    const layoutRef = useRef<HTMLDivElement>(null);
+    const scrollAreaRef = useRef<HTMLDivElement>(null);
+    const formRef = useRef<HTMLDivElement>(null);
+    const fieldsRef = useRef<HTMLDivElement>(null);
+    const loginFieldsRef = useRef<HTMLDivElement>(null);
+    const registrationFieldsRef = useRef<HTMLDivElement>(null);
+    const [registrationLayout, setRegistrationLayout] = useState<RegistrationLayout | null>(null);
+    const [returningToLogin, setReturningToLogin] = useState(false);
+    const showLogin = registrationLayout === null;
+
+    useLayoutEffect(() => {
+        if (showLogin && scrollAreaRef.current) scrollAreaRef.current.scrollTop = 0;
+    }, [showLogin]);
+
+    const handleShowRegistration = (event: MouseEvent<HTMLAnchorElement>) => {
+        event.preventDefault();
+        const layout = layoutRef.current;
+        const form = formRef.current;
+        const fields = fieldsRef.current;
+        const account = loginFieldsRef.current?.firstElementChild;
+        if (!layout || !form || !fields || !account) return;
+
+        // Keep the login title at the same height when the registration fields fit.
+        setRegistrationLayout({
+            formTop: form.getBoundingClientRect().top - layout.getBoundingClientRect().top,
+            loginHeight: fields.getBoundingClientRect().height,
+            accountHeight: account.getBoundingClientRect().height,
+        });
+    };
+
+    useLayoutEffect(() => {
+        const fields = fieldsRef.current;
+        const registration = registrationFieldsRef.current;
+        if (!registrationLayout || !fields || !registration || !canAnimateForm(fields)) return;
+
+        const height = registration.getBoundingClientRect().height;
+        const resize = animateFormHeight(fields, registrationLayout.loginHeight, height);
+        const reveal = registration.animate([
+            { clipPath: formClip(height, registrationLayout.accountHeight) },
+            { clipPath: formClip(height) },
+        ], formTransition);
+        return () => {
+            resize.cancel();
+            reveal.cancel();
+        };
+    }, [registrationLayout]);
+
+    useLayoutEffect(() => {
+        const fields = fieldsRef.current;
+        const login = loginFieldsRef.current;
+        const registration = registrationFieldsRef.current;
+        if (!returningToLogin || !registrationLayout || !fields || !login || !registration) return;
+
+        // Fade the login layer over the folding form so the account row never goes blank.
+        const resize = animateFormHeight(fields, fields.getBoundingClientRect().height, login.getBoundingClientRect().height, "forwards");
+        const height = registration.getBoundingClientRect().height;
+        const currentClip = window.getComputedStyle(registration).clipPath;
+        const fold = registration.animate([
+            { clipPath: currentClip === "none" ? formClip(height) : currentClip },
+            { clipPath: formClip(height, registrationLayout.accountHeight) },
+        ], { ...formTransition, fill: "forwards" });
+        const reveal = login.animate([{ opacity: 0 }, { opacity: 1 }], { ...formTransition, fill: "forwards" });
+        registration.inert = true;
+        login.inert = true;
+        resize.onfinish = () => {
+            setRegistrationLayout(null);
+            setReturningToLogin(false);
+        };
+
+        return () => {
+            resize.cancel();
+            fold.cancel();
+            reveal.cancel();
+            login.inert = false;
+        };
+    }, [registrationLayout, returningToLogin]);
+
+    const handleShowLogin = () => {
+        if (!registrationLayout || returningToLogin) return;
+        const fields = fieldsRef.current;
+        if (fields && canAnimateForm(fields)) {
+            setReturningToLogin(true);
+        } else {
+            setRegistrationLayout(null);
+        }
+    };
 
     // Check third-party redirect login before rendering the login form
     const [oauthLoading, setOauthLoading] = useState(true);
@@ -133,7 +236,7 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
     const enableDualLogin = hasLdap && !!ldapCheckboxLabel;
 
     const shouldUseLdap = hasLdap && !!ldapCheckboxLabel && isLdapLogin;
-    const showCaptcha = captchaData.user_capthca && (!showLogin || !shouldUseLdap);
+    const showCaptcha = captchaData.user_capthca && !shouldUseLdap;
 
     const handleLogin = async () => {
         const error = [];
@@ -181,58 +284,13 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
                 }
             }).catch((error) => {
                 if ((error?.status_code ?? error?.code) === 10601) {
-                    // 密码过期
+                    // Password expired.
                     localStorage.setItem("account", personId);
                     navigate("/reset", { state: { noback: true } });
                     return;
                 }
                 showApiError(error);
             });
-
-        fetchCaptchaData();
-    };
-
-    const handleRegister = async () => {
-        const error = [];
-        const [personId, userName, pwd, apwd] = [
-            personIdRef.current.value,
-            userNameRef.current?.value,
-            pwdRef.current.value,
-            agenPwdRef.current.value,
-        ];
-        if (!personId) {
-            error.push(t("login.pleaseEnterPersonId"));
-        }
-        if (!userName) {
-            error.push(t("login.pleaseEnterUserName"));
-        }
-        if (personId.length < 2) {
-            error.push(t("login.personIdTooShort"));
-        }
-        if (!/.{8,}/.test(pwd)) {
-            error.push(t("login.passwordTooShort"));
-        }
-        if (!PWD_RULE.test(pwd)) {
-            error.push(t("login.passwordError"));
-        }
-        if (pwd !== apwd) {
-            error.push(t("login.passwordMismatch"));
-        }
-        if (captchaData.user_capthca && !captchaRef.current.value) {
-            error.push(t("login.pleaseEnterCaptcha"));
-        }
-        if (error.length) {
-            return toast.show({ type: "warning", message: [String(`${t("prompt")}`), error.filter(Boolean).join('\n')].filter(Boolean).join('\n') });
-        }
-        const encryptPwd = await handleEncrypt(pwd);
-        registerApi(userName, personId, encryptPwd, captchaData.captcha_key, captchaRef.current?.value).then(
-                (res) => {
-                    // setSuccessData({ title: t('login.registrationSuccess') })
-                    toast.show({ type: "success", message: [String(`${t("prompt")}`), ([t("login.registrationSuccess")]).filter(Boolean).join('\n')].filter(Boolean).join('\n') });
-                    pwdRef.current.value = "";
-                    setShowLogin(true);
-                },
-            ).catch(showApiError);
 
         fetchCaptchaData();
     };
@@ -247,127 +305,126 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
     }
 
     return (
-        <div className="w-full min-h-screen bg-background-dark flex items-center justify-center sm:py-4 overflow-y-auto">
-            <div className="relative z-10 sm:w-[1280px] w-full sm:h-[720px] h-full sm:shrink-0 border rounded-lg shadow-xl overflow-hidden bg-background-login">
-                <div className="w-[420px] h-[704px] m-[8px] hidden sm:block relative z-20">
+        <div className="flex h-dvh w-full flex-col items-center overflow-hidden bg-background-dark md:px-4">
+            <div
+                ref={layoutRef}
+                className="my-auto grid h-dvh w-full max-w-[1280px] shrink-0 grid-cols-1 grid-rows-[minmax(0,1fr)] bg-background-login md:h-[min(720px,100dvh)] md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] md:rounded-lg"
+            >
+                <div className="relative my-2 ml-2 hidden overflow-hidden rounded-lg md:block">
                     <img
                         src={getBrandAssetUrl("loginHeroLight", "/assets/bisheng/login-logo-big.png")}
-                        alt="logo_picture"
-                        className="w-full h-full dark:hidden"
+                        alt=""
+                        className="absolute inset-0 h-full w-full object-cover dark:hidden"
                     />
                     <img
                         src={getBrandAssetUrl("loginHeroDark", "/assets/bisheng/login-logo-dark.png")}
-                        alt="logo_picture"
-                        className="w-full h-full hidden dark:block"
+                        alt=""
+                        className="absolute inset-0 hidden h-full w-full object-cover dark:block"
                     />
-                    {/* <iframe src={__APP_ENV__.BASE_URL + '/face.html'} className='w-full h-full'></iframe> */}
                 </div>
-                <div className="absolute w-full h-full z-10 flex justify-end top-0">
-                    <div className="w-[852px] sm:px-[266px] px-[20px] pyx-[200px] bg-background-login relative">
-                        <div>
+                <div
+                    className={`grid min-h-0 min-w-0 ${registrationLayout
+                        ? "grid-rows-[0px_minmax(0,1fr)_auto]"
+                        : "grid-rows-[minmax(1rem,1fr)_minmax(0,max-content)_minmax(min-content,1fr)]"}`}
+                >
+                    <div ref={scrollAreaRef} className="row-start-2 flex min-h-0 flex-col overflow-y-auto overscroll-contain pb-1">
+                        {/* Shrink the empty space before scrolling the form. */}
+                        {registrationLayout && <div aria-hidden className="min-h-4" style={{ flexBasis: registrationLayout.formTop }} />}
+                        <div ref={formRef} className="mx-auto w-full max-w-[360px] shrink-0 px-5">
                             <img
                                 src={getBrandAssetUrl("headerLogoLight", "/assets/bisheng/login-logo-small.png")}
-                                className="block w-[114px] h-[36px] m-auto mt-[96px] dark:w-[124px] dark:pr-[10px] dark:hidden"
+                                className="m-auto block h-[36px] w-[114px] dark:hidden"
                                 alt=""
                             />
                             <img
                                 src={getBrandAssetUrl("headerLogoDark", "/assets/bisheng/logo-small-dark.png")}
-                                className="w-[114px] h-[36px] m-auto mt-[96px] dark:w-[124px] dark:pr-[10px] dark:block hidden"
+                                className="m-auto hidden h-[36px] w-[124px] pr-[10px] dark:block"
                                 alt=""
                             />
-                            <span className="block w-fit m-auto font-normal text-[14px] text-tx-color mt-[24px]">
+                            <span className="mt-6 block break-words text-center text-body text-tx-color">
                                 {t("login.slogen")}
                             </span>
                         </div>
-                        <div className="grid gap-[12px] mt-[68px]">
-                            <div className="grid">
-                                <Input size="large" id="email" ref={personIdRef} placeholder={t("login.account")} type="text" autoCapitalize="none" autoComplete="username" autoCorrect="off" />
-                            </div>
-                            {!showLogin && (
-                                <div className="grid">
-                                    <Input size="large" id="userName" ref={userNameRef} placeholder={t("login.userName")} />
-                                </div>
-                            )}
-                            <div className="grid">
-                                <Input size="large" id="pwd" ref={pwdRef} placeholder={t("login.password")} type="password" onKeyDown={(e) => e.key === "Enter" && showLogin && handleLogin()} />
-                            </div>
-                            {!showLogin && (
-                                <div className="grid">
-                                    <Input size="large" id="pwd" ref={agenPwdRef} placeholder={t("login.confirmPassword")} type="password" />
-                                </div>
-                            )}
-                            {showCaptcha && (
-                                <div className="flex items-center gap-4">
-                                    <Input size="large" type="text" ref={captchaRef} placeholder={t("login.pleaseEnterCaptcha")} />
-                                    <img
-                                        src={"data:image/jpg;base64," + captchaData.captcha} // 这里应该是你的验证码图片的URL
-                                        alt="captcha"
-                                        onClick={fetchCaptchaData} // 这里应该是你的刷新验证码函数
-                                        className="cursor-pointer h-10 bg-gray-100 border border-gray-300"
-                                        style={{ width: "120px" }} // 根据需要调整宽度
-                                    />
-                                </div>
-                            )}
-                            {showLogin ? (
-                                <>
+                        <div aria-hidden className={`basis-8 md:[@media(min-height:752px)]:basis-[68px] ${registrationLayout ? "min-h-4" : "shrink-0"}`} />
+                        <div ref={fieldsRef} className="relative mx-auto grid w-full max-w-[360px] shrink-0 grid-cols-1 content-start px-5">
+                            {(showLogin || returningToLogin) && (
+                                <div ref={loginFieldsRef} className={`grid content-start gap-3 ${returningToLogin ? "absolute inset-x-5 top-0 z-10 bg-background-login" : ""}`}>
+                                    <div className="grid">
+                                        <Input size="large" id="email" ref={personIdRef} placeholder={t("login.account")} type="text" autoCapitalize="none" autoComplete="username" autoCorrect="off" />
+                                    </div>
+                                    <div className="grid">
+                                        <Input size="large" id="pwd" ref={pwdRef} placeholder={t("login.password")} type="password" onKeyDown={(e) => e.key === "Enter" && showLogin && handleLogin()} />
+                                    </div>
+                                    {showCaptcha && (
+                                        <div className="flex items-center gap-4">
+                                            <Input size="large" type="text" ref={captchaRef} className="min-w-0 flex-1" placeholder={t("login.pleaseEnterCaptcha")} />
+                                            <img
+                                                src={"data:image/jpg;base64," + captchaData.captcha}
+                                                alt="captcha"
+                                                onClick={fetchCaptchaData}
+                                                className="h-10 w-[120px] shrink-0 cursor-pointer border border-gray-300 bg-gray-100"
+                                            />
+                                        </div>
+                                    )}
                                     {enableDualLogin && (
                                         <label className="flex items-center gap-2 text-sm text-tx-color">
                                             <Checkbox
                                                 checked={isLdapLogin}
                                                 onCheckedChange={(checked) => setIsLdapLogin(checked === true)}
                                             />
-                                            <span>{ldapCheckboxLabel}</span>
+                                            <span className="min-w-0 break-words">{ldapCheckboxLabel}</span>
                                         </label>
                                     )}
                                     <div className="text-center">
                                         {!shouldUseLdap && appConfig.register && (
                                             <a
-                                                href="javascript:;"
+                                                href="/login"
                                                 className=" text-blue-500 text-sm hover:underline"
-                                                onClick={() => setShowLogin(false)}
+                                                onClick={handleShowRegistration}
                                             >
                                                 {t("login.noAccountRegister")}
                                             </a>
                                         )}
                                     </div>
-                                    <Button size="large" className="mt-[32px]" disabled={isLoading} onClick={handleLogin}>
+                                    <Button size="large" className="mt-4 md:[@media(min-height:752px)]:mt-8" disabled={isLoading} onClick={handleLogin}>
                                         {t("login.loginButton")}
                                     </Button>
-                                </>
-                            ) : (
-                                <>
-                                    <div className="text-center">
-                                        <a
-                                            href="javascript:;"
-                                            className=" text-blue-500 text-sm hover:underline"
-                                            onClick={() => setShowLogin(true)}
-                                        >
-                                            {t("login.haveAccountLogin")}
-                                        </a>
-                                    </div>
-                                    <Button size="large" className="mt-[32px]" disabled={isLoading} onClick={handleRegister}>
-                                        {t("login.registerButton")}
-                                    </Button>
-                                </>
+                                    {appConfig.isPro && <LoginBridge oauthData={oauthData} onHasLdap={setHasLdap} />}
+                                </div>
                             )}
-                            {appConfig.isPro && <LoginBridge oauthData={oauthData} onHasLdap={setHasLdap} />}
-                        </div>
-                        <div className=" absolute right-[16px] bottom-[16px] flex">
-                            <span className="mr-4 text-sm text-gray-400 relative top-2">v{json.version}</span>
-                            {!appConfig.noFace && (
-                                <div className="help flex">
-                                    <a href={"https://github.com/dataelement/bisheng"} target="_blank">
-                                        <GithubIcon className="block h-[40px] w-[40px] gap-1 border p-[10px] rounded-[8px] mx-[8px] hover:bg-[#1b1f23] hover:text-[white] hover:cursor-pointer" />
-                                    </a>
-                                    <a
-                                        href={"https://m7a7tqsztt.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde"}
-                                        target="_blank"
-                                    >
-                                        <Outlined.BookOpenText className="block h-[40px] w-[40px] gap-1 border p-[10px] rounded-[8px]  hover:bg-[#0055e3] hover:text-[white] hover:cursor-pointer" />
-                                    </a>
+                            {!showLogin && (
+                                <div ref={registrationFieldsRef}>
+                                    <RegistrationForm captcha={captchaData} onRefreshCaptcha={fetchCaptchaData}
+                                        onLogin={handleShowLogin} onSuccess={handleShowLogin} />
                                 </div>
                             )}
                         </div>
+                    </div>
+                    <div className="row-start-3 flex flex-wrap items-center justify-end gap-x-6 gap-y-2 self-end px-4 pb-4 pt-2 md:pt-4">
+                            <span className="text-sm text-gray-400">v{json.version}</span>
+                            {!appConfig.noFace && (
+                                <div className="flex gap-2">
+                                    <Tooltip content={t("menu.github")}>
+                                        <Button asChild size="medium" color="default" variant="outlined" iconOnly>
+                                            <a href="https://github.com/dataelement/bisheng" target="_blank" rel="noopener noreferrer" aria-label={t("menu.github")}>
+                                                <GithubIcon aria-hidden="true" />
+                                            </a>
+                                        </Button>
+                                    </Tooltip>
+                                    <Tooltip content={t("menu.bookopen")}>
+                                        <Button asChild size="medium" color="default" variant="outlined" iconOnly>
+                                            <a
+                                                href="https://m7a7tqsztt.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                aria-label={t("menu.bookopen")}
+                                            >
+                                                <Outlined.BookOpenText aria-hidden="true" />
+                                            </a>
+                                        </Button>
+                                    </Tooltip>
+                                </div>
+                            )}
                     </div>
                 </div>
             </div>

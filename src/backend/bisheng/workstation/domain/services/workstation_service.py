@@ -8,8 +8,6 @@ from loguru import logger
 from sqlmodel import col, select
 
 from bisheng.api.v1.schemas import (
-    KnowledgeFileOne,
-    KnowledgeFileProcess,
     KnowledgeSpaceConfig,
     LinsightConfig,
     SubscriptionConfig,
@@ -18,7 +16,7 @@ from bisheng.api.v1.schemas import (
     WSPrompt,
 )
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.server import EmbeddingModelStatusError
+from bisheng.common.errcode.knowledge import KnowledgeTypeNotSupportedError
 from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
 from bisheng.common.services.base import BaseService
 from bisheng.common.services.config_service import settings
@@ -35,9 +33,8 @@ from bisheng.database.constants import MessageCategory
 from bisheng.database.models.flow import Flow
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
-from bisheng.knowledge.domain.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.knowledge.domain.services.knowledge_permission_service import KnowledgePermissionService
-from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.llm.domain.schemas import WorkbenchModelConfig
 from bisheng.llm.domain.services import LLMService
 from bisheng.permission.application.access import get_f048_runtime
@@ -1103,37 +1100,8 @@ class WorkStationService(BaseService):
         *,
         upload_limit_bytes: int | None = None,
     ):
-        knowledge = await KnowledgeDao.aget_user_knowledge(
-            login_user.user_id,
-            None,
-            KnowledgeTypeEnum.PRIVATE,
-        )
-        if not knowledge:
-            model = await LLMService.aget_knowledge_llm()
-            knowledge_create = KnowledgeCreate(
-                name="Personal Knowledge Base",
-                type=KnowledgeTypeEnum.PRIVATE.value,
-                user_id=login_user.user_id,
-                model=model.embedding_model_id,
-            )
-            knowledge = await KnowledgeService.acreate_knowledge(request, login_user, knowledge_create)
-        else:
-            knowledge = knowledge[0]
-        req_data = KnowledgeFileProcess(
-            knowledge_id=knowledge.id,
-            file_list=[KnowledgeFileOne(file_path=file_path)],
-        )
-        try:
-            _ = await LLMService.get_bisheng_knowledge_embedding(login_user.user_id, int(knowledge.model))
-        except Exception as exc:
-            raise EmbeddingModelStatusError(exception=exc)
-        return await KnowledgeService.aprocess_knowledge_file(
-            request,
-            login_user,
-            background_tasks,
-            req_data,
-            upload_limit_bytes=upload_limit_bytes,
-        )
+        """Do not recreate retired type=2 through a legacy service caller."""
+        raise KnowledgeTypeNotSupportedError()
 
     @classmethod
     async def queryKnowledgeList(
@@ -1143,21 +1111,8 @@ class WorkStationService(BaseService):
         page: int,
         size: int,
     ):
-        knowledge = KnowledgeDao.get_user_knowledge(
-            login_user.user_id,
-            None,
-            KnowledgeTypeEnum.PRIVATE,
-        )
-        if not knowledge:
-            return [], 0
-        res, total, _ = await KnowledgeService.aget_knowledge_files(
-            request,
-            login_user,
-            knowledge[0].id,
-            page=page,
-            page_size=size,
-        )
-        return res, total
+        """Preserve the old list envelope without exposing retired resources."""
+        return [], 0
 
     # ------------------------------------------------------------------
     # F029 helpers — view_file filter for the workstation chat retrieval.
@@ -1284,11 +1239,28 @@ class WorkStationService(BaseService):
         """
         failures: list[dict] = []
         try:
+            from bisheng.knowledge.domain.repositories.retrieval_file_repository import KnowledgeRetrievalFileRepository
+
+            selected_ids = list(
+                dict.fromkeys(
+                    [
+                        *(use_knowledge_param.organization_knowledge_ids or []),
+                        *(use_knowledge_param.knowledge_space_ids or []),
+                    ]
+                )
+            )
+            async with get_async_db_session() as session:
+                actual_types = await KnowledgeRetrievalFileRepository().aload_actual_types(
+                    session, knowledge_ids=selected_ids
+                )
+            for ident in selected_ids:
+                if actual_types.get(ident) not in {0, 1, 3}:
+                    failures.append({"id": ident, "name": "", "error": "Knowledge base is unavailable"})
             # F029 Stage 1: drop space-bucket kb_ids the user lacks view_space on.
             visibility_filter = await cls._filter_visible_space_kb_ids(
                 login_user=login_user,
-                space_bucket=use_knowledge_param.knowledge_space_ids,
-                org_bucket=use_knowledge_param.organization_knowledge_ids,
+                space_bucket=[ident for ident in selected_ids if actual_types.get(ident) == 3],
+                org_bucket=[ident for ident in selected_ids if actual_types.get(ident) in {0, 1}],
             )
             space_kb_id_set = {int(x) for x in visibility_filter["space_kb_ids"]}
 
@@ -1310,12 +1282,16 @@ class WorkStationService(BaseService):
                     )
                 org_kb_ids = permitted_org_ids
 
-            vectorstore_targets = [(kb_id, False) for kb_id in org_kb_ids] + [
-                (int(kb_id), True) for kb_id in visibility_filter["space_kb_ids"]
-            ]
+            admitted = set(org_kb_ids) | space_kb_id_set
+            vectorstore_targets = [(ident, ident in space_kb_id_set) for ident in selected_ids if ident in admitted]
 
             knowledge_vector_list = {}
             for kb_id, is_space_bucket in vectorstore_targets:
+                if is_space_bucket:
+                    # Actual SPACE rows use the existing F029 retrieval path;
+                    # the legacy selector JSON never determines its permission path.
+                    knowledge_vector_list[kb_id] = {}
+                    continue
                 try:
                     vectorstore_info = await KnowledgeRag.get_multi_knowledge_vectorstore(
                         invoke_user_id=login_user.user_id,
@@ -1363,6 +1339,44 @@ class WorkStationService(BaseService):
             for kb_id, vectorstore_info in knowledge_vector_list.items():
                 if len(finally_docs) >= max_total_docs:
                     break
+                if kb_id in space_kb_id_set:
+                    try:
+                        from bisheng.knowledge.domain.services.space_flow_retrieval import aretrieve_space_documents
+
+                        selected_tag_id = use_knowledge_param.knowledge_space_tag_filters.get(int(kb_id))
+                        metadata_filter = None
+                        if selected_tag_id is not None:
+                            from bisheng.knowledge.domain.services.knowledge_space_tag_filter_service import (
+                                KnowledgeSpaceTagFilterService,
+                            )
+
+                            tag_scope = await KnowledgeSpaceTagFilterService().build_index_prefilter(
+                                int(kb_id), selected_tag_id, login_user
+                            )
+                            if tag_scope.is_empty:
+                                continue
+
+                            def metadata_filter(_space, scope=tag_scope):
+                                return scope.milvus_expr, scope.es_filter
+
+                        kb_docs = await aretrieve_space_documents(
+                            space_ids=[int(kb_id)],
+                            query=question,
+                            identity_user=login_user,
+                            max_content=max_token,
+                            metadata_filter_fn=metadata_filter,
+                            sort_by_source_and_index=True,
+                            access_scope="per_user",
+                            retrieval_multipliers=(1,),
+                        )
+                        finally_docs.extend(kb_docs)
+                        if kb_docs:
+                            kb_succeed.append(kb_id)
+                    except Exception as exc:
+                        err_msg = str(exc) or exc.__class__.__name__
+                        failures.append({"id": int(kb_id), "name": "", "error": err_msg})
+                        logger.warning("[queryChunksFromDB] kb={} failed: {}", kb_id, err_msg)
+                    continue
                 milvus_vectorstore = vectorstore_info.get("milvus")
                 es_vectorstore = vectorstore_info.get("es")
                 kb_row = vectorstore_info.get("knowledge")
@@ -1520,8 +1534,8 @@ class WorkStationService(BaseService):
         legacy plain-text messages and v2.5 JSON-formatted messages.
 
         Two-stage trimming:
-          1. DB returns the MOST RECENT ``size`` rows in chronological order
-             (see aget_messages_by_chat_id — fixed to DESC LIMIT + reverse).
+          1. Read bounded DB pages until the MOST RECENT ``size`` usable rows
+             are collected, skipping rate-limit display cards.
           2. If the combined token count exceeds ``max_tokens``, drop oldest
              entries one at a time until the remainder fits. Token counting
              uses tiktoken (cl100k_base) with a char-based fallback — see
@@ -1556,7 +1570,28 @@ class WorkStationService(BaseService):
             # so the daily chain must see them too (D2 — both directions feed model).
             MessageCategory.TASK.value,
         ]
-        messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id, categories, size)
+        messages = []
+        offset = 0
+        while len(messages) < size:
+            page_options = {"offset": offset} if offset else {}
+            page = await ChatMessageDao.aget_messages_by_chat_id(chat_id, categories, size, **page_options)
+            usable = []
+            for one in page:
+                if one.category == MessageCategory.AGENT_ANSWER.value:
+                    try:
+                        extra = json.loads(one.extra) if one.extra else {}
+                    except (json.JSONDecodeError, TypeError):
+                        extra = {}
+                    # Keep UI failure cards without changing the model's context
+                    # or making a recovery request repeat the pending question.
+                    if isinstance(extra, dict) and extra.get("error_type") == "rate_limit":
+                        continue
+                usable.append(one)
+            messages = usable + messages
+            if len(page) < size:
+                break
+            offset += len(page)
+        messages = messages[-size:] if size > 0 else []
 
         for one in messages:
             raw = one.message or ""
