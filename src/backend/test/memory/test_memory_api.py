@@ -8,6 +8,7 @@ import pytest
 from bisheng.common.errcode.memory import (
     MemoryContentSensitiveError,
     MemoryContentTooLongError,
+    MemoryDetailUnavailableError,
     MemoryItemNotFoundError,
 )
 from bisheng.memory.api.endpoints import memory as api
@@ -178,3 +179,39 @@ async def test_flags_by_chat(service, make_ctx, tenant_a):
     flags = _data(await api.get_flags(chat_id="c-flags", login_user=_user()))
     assert flags == {"5": {"turn_id": "t1", "has_write": True, "has_attribution": False}}
     assert _data(await api.get_flags(chat_id="c-flags", login_user=_user(USER_2))) == {}
+
+
+async def test_ac88_full_text_readable_and_kept_through_an_edit(service, make_ctx, details, tenant_a):
+    res = await service.write(
+        make_ctx(), "remember", content="用户的周报格式", type="experience", detail="周报全文：先结论后过程"
+    )
+    plain = await service.write(make_ctx(), "remember", content="用户喜欢冰美式", type="preference")
+    get = lambda item_id, user=None: api.get_item_detail(item_id, login_user=user or _user(), service=service)  # noqa: E731
+    assert _data(await get(res.item_id)) == {"detail": "周报全文：先结论后过程"}
+    assert _data(await get(plain.item_id)) == {"detail": None}
+    with pytest.raises(MemoryItemNotFoundError):
+        await get(res.item_id, _user(USER_2))
+
+    # A hand edit changes the one-line content; the full text moves to the new item.
+    edited = _data(
+        await api.edit_item(
+            res.item_id,
+            api.ItemIn(content="用户的周报格式是先结论", type="experience"),
+            login_user=_user(),
+            service=service,
+        )
+    )
+    assert _data(await get(edited["item_id"])) == {"detail": "周报全文：先结论后过程"}
+    with pytest.raises(MemoryItemNotFoundError):
+        await get(res.item_id)  # the edited-away item is no longer active
+
+    # Unreadable full text: the read says so, and an edit saves nothing rather than drop it.
+    details.read_fail = True
+    with pytest.raises(MemoryDetailUnavailableError):
+        await get(edited["item_id"])
+    with pytest.raises(MemoryDetailUnavailableError):
+        await api.edit_item(
+            edited["item_id"], api.ItemIn(content="改不成", type="experience"), login_user=_user(), service=service
+        )
+    contents = {i["content"] for i in _data(await api.list_items(login_user=_user(), service=service))}
+    assert contents == {"用户的周报格式是先结论", "用户喜欢冰美式"}

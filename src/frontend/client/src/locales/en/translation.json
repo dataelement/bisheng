@@ -2937,6 +2937,10 @@
       "experience": "Experience"
     },
     "recorded_at_value": "Saved {{time}}",
+    "full_text_show": "Show full text",
+    "full_text_hide": "Hide",
+    "full_text_failed": "Couldn't load the full text",
+    "edit_keeps_full_text": "This changes the one-line summary only; the memory keeps its full text.",
     "source": {
       "manual": "Added manually",
       "daily": "Daily chat",

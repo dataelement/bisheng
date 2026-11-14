@@ -715,5 +715,6 @@
   "12109": "The workflow has a memory retrieval node but memory is off in the start node",
   "12110": "Memory type must be fact, preference or experience",
   "12111": "Memory content cannot be empty",
-  "12112": "No model is available for memory consolidation"
+  "12112": "No model is available for memory consolidation",
+  "12113": "The full text of this memory cannot be read right now"
 }

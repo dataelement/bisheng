@@ -83,6 +83,7 @@ export function MemoryItemEditor({ open, item, onOpenChange, onSubmit }: MemoryI
             placeholder={localize("memory.content_placeholder")}
             className="min-h-[96px]"
           />
+          {item?.has_detail && <span className="text-caption text-text-3">{localize("memory.edit_keeps_full_text")}</span>}
         </div>
         <div className="flex flex-col gap-1.5">
           <span className="text-body-sm text-text-2">{localize("memory.field.type")}</span>

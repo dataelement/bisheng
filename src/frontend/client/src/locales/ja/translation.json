@@ -2860,6 +2860,10 @@
       "experience": "経験"
     },
     "recorded_at_value": "記録 {{time}}",
+    "full_text_show": "全文を表示",
+    "full_text_hide": "閉じる",
+    "full_text_failed": "全文を読み込めませんでした",
+    "edit_keeps_full_text": "ここで変更するのは一文だけです。この記憶の全文はそのまま残ります。",
     "source": {
       "manual": "手動で追加",
       "daily": "日常チャット",

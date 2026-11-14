@@ -11,6 +11,7 @@ const mockApi = {
   editMemoryItemApi: jest.fn(),
   deleteMemoryItemApi: jest.fn(),
   clearMemoryItemsApi: jest.fn(),
+  getMemoryItemDetailApi: jest.fn(),
 };
 
 jest.mock("~/api/memory", () => ({
@@ -22,6 +23,7 @@ jest.mock("~/api/memory", () => ({
   editMemoryItemApi: (...args: unknown[]) => mockApi.editMemoryItemApi(...args),
   deleteMemoryItemApi: (...args: unknown[]) => mockApi.deleteMemoryItemApi(...args),
   clearMemoryItemsApi: (...args: unknown[]) => mockApi.clearMemoryItemsApi(...args),
+  getMemoryItemDetailApi: (...args: unknown[]) => mockApi.getMemoryItemDetailApi(...args),
 }));
 
 jest.mock("~/hooks", () => ({
@@ -99,6 +101,26 @@ it("lists content, type, recorded time, event time and source, with no pinned/re
   // The event date is already in the content, so the meta line leaves it out.
   expect(within(second).queryByText(/2026-12-05/)).toBeNull();
   expect(within(second).getByText(/Travel helper/)).toBeInTheDocument();
+});
+
+it("folds a long memory's full text under its line and reads it only when opened (AC-88)", async () => {
+  mockApi.listMemoryItemsApi.mockResolvedValue([
+    item({ id: "d1", content: "Weekly report format", has_detail: true }),
+    item({ id: "d2", content: "Likes iced coffee", has_detail: false }),
+  ]);
+  mockApi.getMemoryItemDetailApi.mockResolvedValue("Conclusion first, then the process.");
+  renderPane();
+  await screen.findByText("Weekly report format");
+  expect(within(rowOf("Likes iced coffee")).queryByRole("button", { name: "memory.full_text_show" })).toBeNull();
+  // No "detail" wording anywhere: it is just more of the same memory.
+  expect(screen.queryByText(/detail/i)).toBeNull();
+  expect(mockApi.getMemoryItemDetailApi).not.toHaveBeenCalled();
+
+  fireEvent.click(within(rowOf("Weekly report format")).getByRole("button", { name: "memory.full_text_show" }));
+  expect(await screen.findByText("Conclusion first, then the process.")).toBeInTheDocument();
+  expect(mockApi.getMemoryItemDetailApi).toHaveBeenCalledWith("d1");
+  fireEvent.click(within(rowOf("Weekly report format")).getByRole("button", { name: "memory.full_text_hide" }));
+  expect(screen.queryByText("Conclusion first, then the process.")).toBeNull();
 });
 
 it("shows a manually added item as added by hand (AC-88)", async () => {
