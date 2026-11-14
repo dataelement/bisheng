@@ -1,4 +1,5 @@
 import copy
+import os
 import time
 
 import yaml
@@ -17,6 +18,8 @@ from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
 from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.cache.utils import save_uploaded_file, upload_file_to_minio
+from bisheng.knowledge.domain.schemas.document_parse_schema import DocumentParseConfig
+from bisheng.knowledge.domain.services.document_parse_settings import DocumentParseSettingsService
 from bisheng.utils import generate_uuid, get_request_ip
 
 # build router
@@ -139,6 +142,29 @@ def get_all_langchain_types_legacy():
     若画布/组件列表异常，请使用与当前后端版本一致的前端构建，或在此补全数据。
     """
     return resp_200({})
+
+
+@router.get("/settings/document-parse")
+def get_document_parse_config(admin_user: UserPayload = Depends(UserPayload.get_admin_user)):
+    """Structured document-parse settings for the admin form (tokens: presence only)."""
+    return resp_200(DocumentParseSettingsService.read())
+
+
+@router.post("/settings/document-parse")
+def save_document_parse_config(
+    data: DocumentParseConfig, admin_user: UserPayload = Depends(UserPayload.get_admin_user)
+):
+    """Persist document-parse settings without rewriting the whole config."""
+    DocumentParseSettingsService.save(data, user_name=admin_user.user_name)
+    return resp_200()
+
+
+@router.post("/settings/document-parse/test")
+def test_document_parse_config(
+    data: DocumentParseConfig, admin_user: UserPayload = Depends(UserPayload.get_admin_user)
+):
+    """Probe the selected provider without saving anything."""
+    return resp_200(DocumentParseSettingsService.test(data))
 
 
 @router.get("/settings")
