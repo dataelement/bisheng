@@ -19,9 +19,13 @@ async def _items():
 async def test_ac95_past_event_superseded_by_past_tense_with_date(service, llm, make_ctx):
     past = (datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d")
     future = (datetime.now() + timedelta(days=3)).strftime("%Y-%m-%d")
-    old = await service.write(make_ctx(), "remember", content=f"用户 {past} 要参加信创评审", type="fact", event_time=past)
+    old = await service.write(
+        make_ctx(), "remember", content=f"用户 {past} 要参加信创评审", type="fact", event_time=past
+    )
     keep = await service.write(make_ctx(), "remember", content=f"用户 {future} 要出差", type="fact", event_time=future)
-    llm.answers = [json.dumps({"rewrites": [{"id": old.item_id, "content": f"用户在 {past} 参加了信创评审"}]}, ensure_ascii=False)]
+    llm.answers = [
+        json.dumps({"rewrites": [{"id": old.item_id, "content": f"用户在 {past} 参加了信创评审"}]}, ensure_ascii=False)
+    ]
     await ExpiredEventRewrite(service=service, llm=llm)(TENANT_A, USER_1)
     items = await _items()
     assert items[old.item_id].status == STATUS_SUPERSEDED
@@ -35,7 +39,9 @@ async def test_ac95_past_event_superseded_by_past_tense_with_date(service, llm, 
 async def test_same_item_not_rewritten_twice(service, llm, make_ctx):
     past = (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d")
     old = await service.write(make_ctx(), "remember", content=f"用户 {past} 有述职", type="fact", event_time=past)
-    llm.answers = [json.dumps({"rewrites": [{"id": old.item_id, "content": f"用户在 {past} 做过述职"}]}, ensure_ascii=False)]
+    llm.answers = [
+        json.dumps({"rewrites": [{"id": old.item_id, "content": f"用户在 {past} 做过述职"}]}, ensure_ascii=False)
+    ]
     step = ExpiredEventRewrite(service=service, llm=llm)
     await step(TENANT_A, USER_1)
     await step(TENANT_A, USER_1)
@@ -81,3 +87,17 @@ async def test_rewrite_keeps_source_mark_and_rejected_rewrite_is_not_retried(ser
     assert items[bad.item_id].status == STATUS_ACTIVE
     await step(TENANT_A, USER_1)
     assert len(llm.prompts) == 1
+
+
+async def test_rewrite_carries_the_detail_over(service, llm, make_ctx):
+    """A tense rewrite is the same memory: its detail moves to the rewritten item."""
+    past = (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d")
+    old = await service.write(
+        make_ctx(), "remember", content=f"用户 {past} 去杭州出差", type="fact", event_time=past, detail="- 拜访客户 A"
+    )
+    llm.answers = [
+        json.dumps({"rewrites": [{"id": old.item_id, "content": f"用户在 {past} 去过杭州出差"}]}, ensure_ascii=False)
+    ]
+    await ExpiredEventRewrite(service=service, llm=llm)(TENANT_A, USER_1)
+    new_id = (await _items())[old.item_id].superseded_by
+    assert await service.get_detail(make_ctx(), new_id) == "- 拜访客户 A"

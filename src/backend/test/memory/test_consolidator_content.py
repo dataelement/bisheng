@@ -216,3 +216,42 @@ async def test_ac39_long_backlog_is_cut_and_reported(memory_db):
     finally:
         cc.MAX_TOTAL_CHARS = original
     assert len(messages) == 1 and consumed == ids[0]
+
+
+async def test_consolidated_item_keeps_its_detail(memory_db, run, llm, service, make_ctx):
+    """Research §7 #7: the line states the conclusion, the detail holds the specifics."""
+    _seed(memory_db, "c1", messages=[("question", "我写周报的规矩：先结论，再数据，最后风险", False)])
+    llm.answers = [
+        _answer(
+            {
+                "content": "用户写周报按固定结构：结论、数据、风险",
+                "detail": "- 第一部分：结论\n- 第二部分：数据\n- 第三部分：风险",
+                "type": "preference",
+            },
+            # A detail that fails validation is dropped on its own; the line is kept.
+            {"content": "用户每周五交周报", "detail": "下周开始执行", "type": "fact"},
+        )
+    ]
+    await run()
+    items = {i.content: i for i in await _items()}
+    ctx = make_ctx()
+    assert await service.get_detail(ctx, items["用户写周报按固定结构：结论、数据、风险"].id) == (
+        "- 第一部分：结论\n- 第二部分：数据\n- 第三部分：风险"
+    )
+    assert await service.get_detail(ctx, items["用户每周五交周报"].id) is None
+    prompt = llm.prompts[0]
+    assert '"detail"' in prompt and "写进 detail" in prompt
+
+
+async def test_prompt_asks_for_conservative_merges_and_shows_resident_room(
+    memory_db, run, llm, service, make_ctx, monkeypatch
+):
+    """Research §7 #18 (merge only when sure) and #12 (tell the model the room left)."""
+    await service.write(make_ctx(), "remember", content="用户喜欢喝绿茶", type="preference")
+    await service.write(make_ctx(), "remember", content="用户常住北京", type="fact")
+    _seed(memory_db, "c1", messages=[("question", "随便聊聊", False)])
+    llm.answers = [_answer()]
+    await run()
+    prompt = llm.prompts[0]
+    assert "拿不准" in prompt and "不要合并或取代" in prompt
+    assert "目前已有 2 条，还能新增" in prompt

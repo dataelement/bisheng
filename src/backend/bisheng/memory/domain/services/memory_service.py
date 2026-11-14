@@ -437,6 +437,7 @@ class MemoryService:
                         pinned_now += 0 if keeps_slot else 1
                     elif keeps_slot:
                         pinned_now -= 1
+                    await self._attach_auto_detail(ctx, item, op, old if kind == "rewrite" else None)
                     if old is not None:
                         changed = await ItemRepository.update_status(
                             session, ctx, old.id, STATUS_ACTIVE, STATUS_SUPERSEDED, superseded_by=item.id
@@ -465,6 +466,26 @@ class MemoryService:
                 logger.info("memory consolidation dropped a candidate: {}", exc)
         ctx.extra["superseded_ids"] = superseded
         return new_items
+
+    async def _attach_auto_detail(self, ctx: MemoryContext, item: MemoryItem, op: dict, rewritten_from) -> None:
+        """Detail of a consolidated item: the candidate's own, or for a tense rewrite the old one.
+
+        A detail that fails validation (or cannot be copied) is dropped on its own; the
+        one-line item is still worth keeping.
+        """
+        detail = op.get("detail") or ""
+        if not detail and rewritten_from is not None and rewritten_from.detail_object_key:
+            try:
+                detail = await self.details.get(rewritten_from.detail_object_key)
+            except Exception:  # noqa: BLE001 - the rewritten line is kept without its detail
+                logger.exception("memory rewrite: copying detail failed item={}", rewritten_from.id)
+                return
+        if not detail:
+            return
+        try:
+            await self._attach_detail(ctx, item, detail)
+        except BaseErrorCode as exc:
+            logger.info("memory consolidation dropped a detail: {}", exc.message)
 
     async def after_auto_commit(self, ctx: MemoryContext, new_items: list[MemoryItem]) -> None:
         superseded = ctx.extra.pop("superseded_ids", [])
