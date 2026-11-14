@@ -21,6 +21,7 @@ from loguru import logger
 
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.memory import (
+    MemoryDetailUnavailableError,
     MemoryItemNotFoundError,
     MemoryUndoAlreadyDoneError,
     MemoryUndoChangedError,
@@ -95,6 +96,23 @@ class MemoryService:
     async def list(self, ctx: MemoryContext) -> list[MemoryItem]:
         async with _db.async_session() as s:
             return await ItemRepository.list_active(s, ctx)
+
+    async def get_detail(self, ctx: MemoryContext, item_id: str) -> str | None:
+        """Full text of one of the caller's active items; None when it has none.
+
+        For the owner's management page: it does not count as a model read.
+        """
+        async with _db.async_session() as s:
+            item = await ItemRepository.get_active(s, ctx, item_id)
+        if item is None:
+            raise MemoryItemNotFoundError()
+        if not item.detail_object_key:
+            return None
+        try:
+            return await self.details.get(item.detail_object_key)
+        except Exception as exc:
+            logger.exception("memory detail read failed item={}", item_id)
+            raise MemoryDetailUnavailableError() from exc
 
     async def get_items(self, ctx: MemoryContext, item_ids: list[str], active_only: bool = True) -> list[MemoryItem]:
         async with _db.async_session() as s:
@@ -200,6 +218,14 @@ class MemoryService:
             raise MemoryItemNotFoundError()
         new_type = item_type or old.type
         text = validate_item(content, new_type)
+        if origin == ORIGIN_MANUAL and detail is None and old.detail_object_key:
+            # A hand edit changes the one-line content only; the full text carries over
+            # (objects are immutable and keyed by item id, so it is copied to the new item).
+            try:
+                detail = await self.details.get(old.detail_object_key)
+            except Exception as exc:
+                logger.exception("memory detail read failed during edit item={}", target_id)
+                raise MemoryDetailUnavailableError() from exc
         item = self._new_item(ctx, text, new_type, origin, event_time, pinned=new_type in RESIDENT_TYPES)
         if origin == ORIGIN_MANUAL:
             # An edit keeps the original source mark; only the write mode becomes manual.
@@ -384,7 +410,9 @@ class MemoryService:
                         item.source_app_name, item.source_chat_id = old.source_app_name, old.source_chat_id
                         item.origin = old.origin
                     if want_pin:
-                        item.pin_order = old.pin_order if keeps_slot else await ItemRepository.max_pin_order(session, ctx) + 1
+                        item.pin_order = (
+                            old.pin_order if keeps_slot else await ItemRepository.max_pin_order(session, ctx) + 1
+                        )
                         pinned_now += 0 if keeps_slot else 1
                     elif keeps_slot:
                         pinned_now -= 1

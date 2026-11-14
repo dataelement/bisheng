@@ -66,3 +66,8 @@ class MemoryContentEmptyError(BaseErrorCode):
 class MemoryNoModelError(BaseErrorCode):
     Code: int = 12112
     Msg: str = "No model is available for memory consolidation"
+
+
+class MemoryDetailUnavailableError(BaseErrorCode):
+    Code: int = 12113
+    Msg: str = "The full text of this memory cannot be read right now"

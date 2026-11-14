@@ -2900,6 +2900,10 @@
       "experience": "经验"
     },
     "recorded_at_value": "记录于 {{time}}",
+    "full_text_show": "展开全文",
+    "full_text_hide": "收起",
+    "full_text_failed": "全文加载失败",
+    "edit_keeps_full_text": "这里只修改这一句话，这条记忆的全文会保留。",
     "source": {
       "manual": "手动添加",
       "daily": "日常对话",

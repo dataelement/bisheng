@@ -56,6 +56,15 @@ async def list_items(login_user=Depends(UserPayload.get_login_user), service=Dep
     return resp_200([item_view(i) for i in await service.list(ctx)])
 
 
+@router.get("/items/{item_id}/detail")
+async def get_item_detail(
+    item_id: str, login_user=Depends(UserPayload.get_login_user), service=Depends(get_memory_service)
+):
+    """Full text of one of the caller's items (``detail`` is null when it has none)."""
+    ctx = build_user_context(login_user)
+    return resp_200({"detail": await service.get_detail(ctx, item_id)})
+
+
 @router.post("/items")
 async def add_item(data: ItemIn, login_user=Depends(UserPayload.get_login_user), service=Depends(get_memory_service)):
     ctx = build_user_context(login_user)
@@ -73,7 +82,9 @@ async def edit_item(
 
 
 @router.delete("/items/{item_id}")
-async def delete_item(item_id: str, login_user=Depends(UserPayload.get_login_user), service=Depends(get_memory_service)):
+async def delete_item(
+    item_id: str, login_user=Depends(UserPayload.get_login_user), service=Depends(get_memory_service)
+):
     ctx = build_user_context(login_user)
     await service.delete(ctx, item_id)
     return resp_200(None)

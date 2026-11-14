@@ -114,6 +114,17 @@ export async function editMemoryItemApi(
   );
 }
 
+/** Full text of one of the caller's items; null when the item has none. */
+export async function getMemoryItemDetailApi(itemId: string): Promise<string | null> {
+  const data = dataOf(
+    await request.get<ApiEnvelope<{ detail: string | null }>>(
+      `${BASE}/items/${encodeURIComponent(itemId)}/detail`,
+      QUIET,
+    ),
+  );
+  return data?.detail ?? null;
+}
+
 export async function deleteMemoryItemApi(itemId: string): Promise<void> {
   await request.delete(`${BASE}/items/${encodeURIComponent(itemId)}`, QUIET);
 }

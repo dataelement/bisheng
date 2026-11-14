@@ -24,6 +24,7 @@ import {
 } from "~/api/memory";
 import { memoryMetaParts, memoryTypeLabel } from "~/components/Memory/memoryLabels";
 import { useLocalize } from "~/hooks";
+import { MemoryFullText } from "./MemoryFullText";
 import { MemoryItemEditor } from "./MemoryItemEditor";
 
 export const MEMORY_ITEMS_QUERY_KEY = ["memory", "items"] as const;
@@ -149,6 +150,8 @@ export function MemoryPane() {
                     {memoryMetaParts(item, localize).map((part) => (
                       <span key={part}>{part}</span>
                     ))}
+                    {/* A long memory folds its full text here; opening it takes the next line. */}
+                    {item.has_detail && <MemoryFullText itemId={item.id} />}
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
