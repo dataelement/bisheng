@@ -16,6 +16,7 @@ from datetime import datetime
 from loguru import logger
 
 from bisheng.common.errcode.memory import MemorySearchUnavailableError
+from bisheng.memory.domain.models.memory_item import MemoryItem
 from bisheng.memory.domain.ports import (
     DetailStore,
     IndexHit,
@@ -95,7 +96,7 @@ def render_hits(hits: list[SearchHit]) -> str:
         if h.detail:
             extra += "；以上为详情全文"
         elif h.has_detail:
-            extra += "；有详情，需要全文时用同一 query 再检索并把此 id 放进 detail_ids"
+            extra += "；有详情，需要全文时把此 id 放进 detail_ids 再调用（不用传 query）"
         body = h.detail or h.content
         lines.append(f"- id={h.item_id} [{TYPE_LABEL.get(h.type, h.type)}] {body}（{extra}）")
     return "\n".join(lines)
@@ -113,9 +114,47 @@ class SearchService:
     async def _vector(self, ctx, scope, query, limit):
         return await self.index.vector_search(ctx, scope, query, limit)
 
-    async def search(
-        self, ctx: MemoryContext, query: str, limit: int = 20, detail_ids: list[str] | None = None
-    ) -> list[SearchHit]:
+    @staticmethod
+    def _hit(item: MemoryItem) -> SearchHit:
+        return SearchHit(
+            item_id=item.id,
+            content=item.content,
+            type=item.type,
+            recorded_at=item.recorded_at,
+            event_time=item.event_time,
+            source=source_of(item),
+            has_detail=bool(item.detail_object_key),
+        )
+
+    async def get_details(self, ctx: MemoryContext, item_ids: list[str]) -> list[SearchHit]:
+        """The named items with their detail text, read by id (no query).
+
+        Only the caller's own active items are returned (same table check as
+        search); unknown, deleted or foreign ids are skipped. An item without a
+        detail comes back with its content only. A failed detail read keeps the
+        content and is counted, like a search.
+        """
+        wanted = list(dict.fromkeys(i for i in item_ids if i))
+        async with _db.async_session() as s:
+            rows = {i.id: i for i in await ItemRepository.list_by_ids(s, ctx, wanted)}
+        hits, detail_read = [], []
+        for item_id in wanted:
+            item = rows.get(item_id)
+            if item is None:
+                continue
+            hit = self._hit(item)
+            if item.detail_object_key:
+                try:
+                    hit.detail = await self.details.get(item.detail_object_key)
+                    detail_read.append(item.id)
+                except Exception as exc:
+                    logger.warning("memory detail read failed item={} err={!r}", item.id, exc)
+                    await self.metrics.incr(ctx, m.DETAIL_READ_FAILED)
+            hits.append(hit)
+        await self.metrics.mark_detail_read(ctx, detail_read)
+        return hits
+
+    async def search(self, ctx: MemoryContext, query: str, limit: int = 20) -> list[SearchHit]:
         scope = build_scope_filter(ctx)
         fetch = max(limit * 2, limit)
         results = await asyncio.gather(
@@ -152,27 +191,7 @@ class SearchService:
         ordered += [p for p in pending if p.id not in seen]
         ordered = ordered[:limit]
 
-        wanted = set(detail_ids or [])
-        hits, detail_read = [], []
-        for item in ordered:
-            hit = SearchHit(
-                item_id=item.id,
-                content=item.content,
-                type=item.type,
-                recorded_at=item.recorded_at,
-                event_time=item.event_time,
-                source=source_of(item),
-                has_detail=bool(item.detail_object_key),
-            )
-            if item.detail_object_key and item.id in wanted:
-                try:
-                    hit.detail = await self.details.get(item.detail_object_key)
-                    detail_read.append(item.id)
-                except Exception as exc:
-                    logger.warning("memory detail read failed item={} err={!r}", item.id, exc)
-                    await self.metrics.incr(ctx, m.DETAIL_READ_FAILED)
-            hits.append(hit)
+        hits = [self._hit(item) for item in ordered]
         await self.metrics.incr(ctx, m.RETRIEVED, len(hits))
         await self.metrics.mark_read(ctx, [h.item_id for h in hits])
-        await self.metrics.mark_detail_read(ctx, detail_read)
         return hits

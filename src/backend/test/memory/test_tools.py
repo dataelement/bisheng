@@ -97,6 +97,19 @@ async def test_ac57_search_records_and_prefixes(tools_for, make_ctx, service):
     assert ctx.extra.get("memory_retrieved") is True
 
 
+async def test_detail_ids_read_full_text_without_a_query(tools_for, make_ctx, service):
+    ctx = make_ctx(turn_id="t-d")
+    res = await service.write(
+        make_ctx(turn_id="t0"), "remember", content="季度复盘结论", type="experience", detail="复盘全文"
+    )
+    tool = tools_for(ctx)["memory_search"]
+    listed = await tool.ainvoke({"query": "季度复盘"})
+    assert "有详情" in listed and "detail_ids" in listed
+    out = await tool.ainvoke({"detail_ids": [res.item_id]})
+    assert out.startswith(SEARCH_HEADER) and "复盘全文" in out and "以上为详情全文" in out
+    assert "请传 query" in await tool.ainvoke({})
+
+
 async def test_ac61_search_unavailable_returns_message_not_raise(tools_for, make_ctx, index, kv):
     ctx = make_ctx()
     index.keyword_down = index.vector_down = True
