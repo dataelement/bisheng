@@ -118,7 +118,7 @@ async function openMemory(content: string) {
   return screen.findByRole("textbox", { name: "memory.revise_label" });
 }
 
-it("opens a memory as a note: its line as the heading, its details as the body, and goes back (AC-88)", async () => {
+it("opens a memory with last updated, summary and details, and goes back (AC-88)", async () => {
   mockApi.listMemoryItemsApi.mockResolvedValue([LONG, PLAIN]);
   mockApi.getMemoryItemDetailApi.mockResolvedValue("- Conclusion first\n- Then the process");
   renderPane();
@@ -128,9 +128,12 @@ it("opens a memory as a note: its line as the heading, its details as the body, 
   expect(screen.queryByText(/full_text/)).toBeNull();
 
   await openMemory("Weekly report format");
-  expect(screen.getByRole("heading", { name: "Weekly report format" })).toBeInTheDocument();
-  // No labels to learn, and no hand editing: only delete and the AI box.
-  expect(screen.queryByText(/memory\.field\./)).toBeNull();
+  expect(screen.getAllByRole("heading").map((h) => h.textContent)).toEqual([
+    "memory.updated_at",
+    "memory.summary_label",
+    "memory.detail_label",
+  ]);
+  // No hand editing: only delete and the AI box.
   expect(screen.queryByRole("button", { name: "memory.edit" })).toBeNull();
   expect(screen.getByRole("button", { name: "memory.delete" })).toBeInTheDocument();
   expect(await screen.findByTestId("markdown")).toHaveTextContent("- Conclusion first - Then the process");
@@ -142,6 +145,7 @@ it("opens a memory as a note: its line as the heading, its details as the body, 
 
   await openMemory("Likes iced coffee");
   expect(screen.queryByTestId("markdown")).toBeNull();
+  expect(screen.getByText("memory.no_detail")).toBeInTheDocument();
 });
 
 it("lets the AI change a memory, follows the new version, and undoes it (AC-107)", async () => {
