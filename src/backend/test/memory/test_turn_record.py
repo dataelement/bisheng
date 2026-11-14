@@ -103,3 +103,19 @@ async def test_cleanup_orphan_records_older_than_a_day(memory_db, make_ctx):
     async with _db.async_session() as s:
         left = sorted(r.turn_id for r in (await s.exec(select(MemoryTurnRecord))).all())
     assert left == ["t-bound", "t-fresh"]
+
+
+async def test_ac87_history_flags_attribute_retrieval_only(memory_db, make_ctx):
+    """AC-87: resident memory rides along every turn, so a turn that only injected it is not
+    attributed in history flags; a turn that retrieved items is."""
+    resident_only = make_ctx(turn_id="t-r")
+    await TurnRecordService.add_summary(resident_only, resident_rev=3, resident_day="2026-11-13", scene_class="chat")
+    await TurnRecordService.bind_turn(resident_only, 21)
+    searched = make_ctx(turn_id="t-s")
+    await TurnRecordService.add_summary(searched, resident_rev=3, resident_day="2026-11-13", scene_class="chat")
+    await TurnRecordService.add_retrieved(searched, ["i9"])
+    await TurnRecordService.bind_turn(searched, 22)
+    assert await TurnRecordService.flags_for_chat(searched, "chat-1") == {
+        21: {"turn_id": "t-r", "has_write": False, "has_attribution": False},
+        22: {"turn_id": "t-s", "has_write": False, "has_attribution": True},
+    }

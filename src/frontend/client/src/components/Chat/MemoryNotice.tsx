@@ -3,9 +3,9 @@
  *
  * - Operation notice: what this turn remembered, corrected or forgot, with the
  *   item text on expand and an undo per write.
- * - Attribution: one plain list of the memory this turn drew on — the
- *   retrieved items first, then the pinned (resident) items not already
- *   listed. Every item can be deleted in place.
+ * - Attribution: the items this turn's memory search returned. Memory that is
+ *   carried into every turn is not listed — it would show up under every
+ *   answer whether or not it was relevant. Every item can be deleted in place.
  *
  * Everything comes from GET /api/v1/memory/turn, which answers the owner only.
  * The component renders nothing unless the answer's flags (or, in `probe`
@@ -90,7 +90,6 @@ export function MemoryNotice({ flags, turnId, messageId, probe = false, classNam
       updateTurn((turn) => ({
         ...turn,
         retrieved: turn.retrieved.filter((i) => i.id !== itemId),
-        resident: turn.resident.filter((i) => i.id !== itemId),
       }));
       void queryClient.invalidateQueries({ queryKey: MEMORY_ITEMS_KEY });
     },
@@ -99,12 +98,8 @@ export function MemoryNotice({ flags, turnId, messageId, probe = false, classNam
 
   const writes = data?.writes ?? [];
   const retrieved = data?.retrieved ?? [];
-  const resident = data?.resident ?? [];
-  // One list for the user: retrieved first, then pinned items not already listed.
-  const retrievedIds = new Set(retrieved.map((i) => i.id));
-  const referenced = [...retrieved, ...resident.filter((i) => !retrievedIds.has(i.id))];
   const showWrites = probe ? writes.length > 0 : flagged && flags.has_write;
-  const showAttribution = probe ? referenced.length > 0 : flagged && flags.has_attribution;
+  const showAttribution = probe ? retrieved.length > 0 : flagged && flags.has_attribution;
   if (!hasKey || (!probe && !flagged) || (!showWrites && !showAttribution)) return null;
 
   const toggle = (next: Exclude<Panel, null>) => setPanel((cur) => (cur === next ? null : next));
@@ -203,10 +198,10 @@ export function MemoryNotice({ flags, turnId, messageId, probe = false, classNam
     }
     if (!data) return <p className="text-caption text-text-3">{localize("memory.loading")}</p>;
     if (panel === "writes") return <ul className="flex flex-col gap-1">{writes.map(writeRow)}</ul>;
-    if (referenced.length === 0) {
+    if (retrieved.length === 0) {
       return <p className="text-caption text-text-3">{localize("memory.attribution.empty")}</p>;
     }
-    return <ul className="flex flex-col gap-1">{referenced.map(itemRow)}</ul>;
+    return <ul className="flex flex-col gap-1">{retrieved.map(itemRow)}</ul>;
   };
 
   return (

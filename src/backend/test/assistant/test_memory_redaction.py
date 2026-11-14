@@ -230,19 +230,18 @@ async def test_ac21_write_sends_memory_signal_without_text(executor, enabled_cha
 
 
 @pytest.mark.parametrize("executor", EXECUTORS)
-async def test_ac87_resident_only_turn_signals_attribution_and_writes_summary(
+async def test_ac87_resident_only_turn_has_no_attribution_but_writes_summary(
     executor, enabled_chat, rows, make_ctx, service
 ):
-    """AC-87: a turn that only injected resident memory still signals attribution and has a
-    summary row (with resident rev and day)."""
+    """AC-87: resident memory rides along every turn, so a turn that only injected it sends no
+    signal; it still has a summary row (with resident rev and day)."""
     await service.write(make_ctx(), "remember", content="用户常驻上海", type="fact")
     ws = FakeWebSocket()
     agent, _ = await build_agent(executor, [final_reply(executor)])
 
     await agent.run("你好", [], [_handler(ws)])
 
-    (signal,) = _memory_frames(ws)
-    assert signal["message"]["has_attribution"] is True and signal["message"]["has_write"] is False
+    assert _memory_frames(ws) == []
     ctx = agent.memory_turn.ctx
     record = await TurnRecordService.get_for_owner(ctx, turn_id=ctx.turn_id)
     assert record["summary"]["resident_rev"] is not None and record["summary"]["resident_day"]
