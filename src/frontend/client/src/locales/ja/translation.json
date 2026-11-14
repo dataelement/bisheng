@@ -2848,7 +2848,8 @@
     "close": "閉じる",
     "save": "保存",
     "field": {
-      "content": "内容",
+      "summary": "概要",
+      "detail": "詳細",
       "type": "種類",
       "event_time": "イベント日付"
     },
@@ -2860,10 +2861,18 @@
       "experience": "経験"
     },
     "recorded_at_value": "記録 {{time}}",
-    "full_text_show": "全文を表示",
-    "full_text_hide": "閉じる",
-    "full_text_failed": "全文を読み込めませんでした",
-    "edit_keeps_full_text": "ここで変更するのは一文だけです。この記憶の全文はそのまま残ります。",
+    "detail_placeholder": "細かい内容を残したいときはここに書きます。Markdown に対応しています。",
+    "updated_at": "最終更新",
+    "no_detail": "詳細はありません",
+    "back": "戻る",
+    "revise_label": "AI にこの記憶を修正してもらう",
+    "revise_placeholder": "この記憶をどう直すか AI に伝えてください（例：旅行は 1 月に変更）",
+    "revise_send": "送信",
+    "revised": "修正しました",
+    "undo": "元に戻す",
+    "revise_unchanged": "この記憶に修正が必要な箇所はありませんでした",
+    "revise_failed": "修正できませんでした。もう一度お試しください",
+    "detail_load_failed": "詳細を読み込めませんでした",
     "source": {
       "manual": "手動で追加",
       "daily": "日常チャット",

@@ -12,6 +12,7 @@ const mockApi = {
   deleteMemoryItemApi: jest.fn(),
   clearMemoryItemsApi: jest.fn(),
   getMemoryItemDetailApi: jest.fn(),
+  reviseMemoryItemApi: jest.fn(),
 };
 
 jest.mock("~/api/memory", () => ({
@@ -24,6 +25,12 @@ jest.mock("~/api/memory", () => ({
   deleteMemoryItemApi: (...args: unknown[]) => mockApi.deleteMemoryItemApi(...args),
   clearMemoryItemsApi: (...args: unknown[]) => mockApi.clearMemoryItemsApi(...args),
   getMemoryItemDetailApi: (...args: unknown[]) => mockApi.getMemoryItemDetailApi(...args),
+  reviseMemoryItemApi: (...args: unknown[]) => mockApi.reviseMemoryItemApi(...args),
+}));
+// The markdown renderer pulls ESM-only plugins; the detail text itself is what is under test.
+jest.mock("~/components/Chat/Messages/Content/MarkdownLite", () => ({
+  __esModule: true,
+  default: ({ content }: { content: string }) => <div data-testid="markdown">{content}</div>,
 }));
 
 jest.mock("~/hooks", () => ({
@@ -103,24 +110,134 @@ it("lists content, type, recorded time, event time and source, with no pinned/re
   expect(within(second).getByText(/Travel helper/)).toBeInTheDocument();
 });
 
-it("folds a long memory's full text under its line and reads it only when opened (AC-88)", async () => {
-  mockApi.listMemoryItemsApi.mockResolvedValue([
-    item({ id: "d1", content: "Weekly report format", has_detail: true }),
-    item({ id: "d2", content: "Likes iced coffee", has_detail: false }),
-  ]);
-  mockApi.getMemoryItemDetailApi.mockResolvedValue("Conclusion first, then the process.");
+const LONG = item({ id: "d1", content: "Weekly report format", type: "experience", has_detail: true });
+const PLAIN = item({ id: "d2", content: "Likes iced coffee", has_detail: false });
+
+async function openMemory(content: string) {
+  fireEvent.click(await screen.findByRole("button", { name: new RegExp(content) }));
+  return screen.findByText("memory.field.summary");
+}
+
+it("opens a memory in its own view with its summary and details, and goes back (AC-88)", async () => {
+  mockApi.listMemoryItemsApi.mockResolvedValue([LONG, PLAIN]);
+  mockApi.getMemoryItemDetailApi.mockResolvedValue("- Conclusion first\n- Then the process");
   renderPane();
   await screen.findByText("Weekly report format");
-  expect(within(rowOf("Likes iced coffee")).queryByRole("button", { name: "memory.full_text_show" })).toBeNull();
-  // No "detail" wording anywhere: it is just more of the same memory.
-  expect(screen.queryByText(/detail/i)).toBeNull();
+  // The list shows summaries only; nothing is read until a memory is opened.
   expect(mockApi.getMemoryItemDetailApi).not.toHaveBeenCalled();
+  expect(screen.queryByText(/full_text/)).toBeNull();
 
-  fireEvent.click(within(rowOf("Weekly report format")).getByRole("button", { name: "memory.full_text_show" }));
-  expect(await screen.findByText("Conclusion first, then the process.")).toBeInTheDocument();
+  await openMemory("Weekly report format");
+  expect(screen.getByText("memory.updated_at")).toBeInTheDocument();
+  expect(await screen.findByTestId("markdown")).toHaveTextContent("- Conclusion first - Then the process");
   expect(mockApi.getMemoryItemDetailApi).toHaveBeenCalledWith("d1");
-  fireEvent.click(within(rowOf("Weekly report format")).getByRole("button", { name: "memory.full_text_hide" }));
-  expect(screen.queryByText("Conclusion first, then the process.")).toBeNull();
+  expect(screen.queryByText("memory.list_title")).toBeNull();
+
+  fireEvent.click(screen.getByRole("button", { name: "memory.back" }));
+  expect(await screen.findByText("Likes iced coffee")).toBeInTheDocument();
+
+  await openMemory("Likes iced coffee");
+  expect(screen.getByText("memory.no_detail")).toBeInTheDocument();
+});
+
+it("lets the AI change a memory, follows the new version, and undoes it (AC-107)", async () => {
+  const revised = item({ id: "d9", content: "Weekly report: conclusion only", type: "experience", has_detail: true });
+  mockApi.listMemoryItemsApi.mockResolvedValue([LONG]);
+  mockApi.getMemoryItemDetailApi.mockImplementation(async (id: string) => (id === "d9" ? "Conclusion only" : "Old detail"));
+  mockApi.reviseMemoryItemApi.mockResolvedValue({
+    item_id: "d9",
+    changed: true,
+    previous: { summary: "Weekly report format", detail: "Old detail", type: "experience", event_time: null },
+  });
+  mockApi.editMemoryItemApi.mockResolvedValue({ item_id: "d10", replaced_item_id: "d9" });
+  renderPane();
+  await openMemory("Weekly report format");
+
+  const box = screen.getByRole("textbox", { name: "memory.revise_label" });
+  fireEvent.change(box, { target: { value: "Keep only the conclusion" } });
+  mockApi.listMemoryItemsApi.mockResolvedValue([revised]);
+  fireEvent.keyDown(box, { key: "Enter" });
+  await waitFor(() => expect(mockApi.reviseMemoryItemApi).toHaveBeenCalledWith("d1", "Keep only the conclusion"));
+  expect(await screen.findByText("Weekly report: conclusion only")).toBeInTheDocument();
+  expect(await screen.findByText("Conclusion only")).toBeInTheDocument();
+  expect(screen.getByText("memory.revised")).toBeInTheDocument();
+  expect(box).toHaveValue("");
+
+  // Undo edits the new version back to the previous one, details included.
+  mockApi.listMemoryItemsApi.mockResolvedValue([{ ...LONG, id: "d10" }]);
+  fireEvent.click(screen.getByRole("button", { name: "memory.undo" }));
+  await waitFor(() =>
+    expect(mockApi.editMemoryItemApi).toHaveBeenCalledWith("d9", {
+      content: "Weekly report format",
+      type: "experience",
+      event_time: null,
+      detail: "Old detail",
+    }),
+  );
+  expect(await screen.findByText("Weekly report format")).toBeInTheDocument();
+  expect(screen.queryByText("memory.revised")).toBeNull();
+});
+
+it("keeps the request and shows why when the AI could not change it (AC-107)", async () => {
+  mockApi.listMemoryItemsApi.mockResolvedValue([LONG]);
+  mockApi.getMemoryItemDetailApi.mockResolvedValue("Old detail");
+  mockApi.reviseMemoryItemApi.mockRejectedValueOnce(new Error("The AI could not revise this memory"));
+  renderPane();
+  await openMemory("Weekly report format");
+  const box = screen.getByRole("textbox", { name: "memory.revise_label" });
+  fireEvent.change(box, { target: { value: "Make it nicer" } });
+  fireEvent.click(screen.getByRole("button", { name: "memory.revise_send" }));
+  expect(await screen.findByText("The AI could not revise this memory")).toBeInTheDocument();
+  expect(box).toHaveValue("Make it nicer");
+
+  mockApi.reviseMemoryItemApi.mockResolvedValueOnce({
+    item_id: "d1",
+    changed: false,
+    previous: { summary: "Weekly report format", detail: "Old detail", type: "experience", event_time: null },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "memory.revise_send" }));
+  expect(await screen.findByText("memory.revise_unchanged")).toBeInTheDocument();
+});
+
+it("loads and edits the details in the dialog (AC-89)", async () => {
+  mockApi.listMemoryItemsApi.mockResolvedValue([LONG]);
+  mockApi.getMemoryItemDetailApi.mockResolvedValueOnce("Old detail");
+  mockApi.editMemoryItemApi.mockResolvedValue({ item_id: "d1", replaced_item_id: null });
+  renderPane();
+  await screen.findByText("Weekly report format");
+
+  fireEvent.click(within(rowOf("Weekly report format")).getByRole("button", { name: "memory.edit" }));
+  const detail = await screen.findByLabelText("memory.field.detail");
+  await waitFor(() => expect(detail).toHaveValue("Old detail"));
+  fireEvent.change(detail, { target: { value: "New detail" } });
+  fireEvent.click(screen.getByRole("button", { name: "memory.save" }));
+  await waitFor(() =>
+    expect(mockApi.editMemoryItemApi).toHaveBeenCalledWith("d1", {
+      content: "Weekly report format",
+      type: "experience",
+      event_time: null,
+      detail: "New detail",
+    }),
+  );
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+});
+
+it("does not clear details it could not read when saving an edit (AC-89)", async () => {
+  mockApi.listMemoryItemsApi.mockResolvedValue([{ ...LONG, id: "d5" }]);
+  mockApi.getMemoryItemDetailApi.mockRejectedValue(new Error("detail unavailable"));
+  mockApi.editMemoryItemApi.mockResolvedValue({ item_id: "d6", replaced_item_id: "d5" });
+  renderPane();
+  await screen.findByText("Weekly report format");
+  fireEvent.click(within(rowOf("Weekly report format")).getByRole("button", { name: "memory.edit" }));
+  expect(await screen.findByText("detail unavailable")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "memory.save" }));
+  await waitFor(() =>
+    expect(mockApi.editMemoryItemApi).toHaveBeenCalledWith("d5", {
+      content: "Weekly report format",
+      type: "experience",
+      event_time: null,
+    }),
+  );
 });
 
 it("shows a manually added item as added by hand (AC-88)", async () => {
@@ -157,15 +274,15 @@ it("adds, edits and deletes an item (AC-89)", async () => {
   await screen.findByText("Prefers short answers");
 
   fireEvent.click(screen.getByRole("button", { name: "memory.add" }));
-  fireEvent.change(await screen.findByLabelText("memory.field.content"), { target: { value: "Likes green tea" } });
+  fireEvent.change(await screen.findByLabelText("memory.field.summary"), { target: { value: "Likes green tea" } });
   fireEvent.click(screen.getByRole("button", { name: "memory.save" }));
   await waitFor(() =>
-    expect(mockApi.addMemoryItemApi).toHaveBeenCalledWith({ content: "Likes green tea", type: "fact", event_time: null }),
+    expect(mockApi.addMemoryItemApi).toHaveBeenCalledWith({ content: "Likes green tea", type: "fact", event_time: null, detail: "" }),
   );
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 
   fireEvent.click(within(rowOf("Prefers short answers")).getByRole("button", { name: "memory.edit" }));
-  const box = await screen.findByLabelText("memory.field.content");
+  const box = await screen.findByLabelText("memory.field.summary");
   expect(box).toHaveValue("Prefers short answers");
   fireEvent.change(box, { target: { value: "Prefers very short answers" } });
   fireEvent.click(screen.getByRole("button", { name: "memory.save" }));
@@ -174,6 +291,7 @@ it("adds, edits and deletes an item (AC-89)", async () => {
       content: "Prefers very short answers",
       type: "preference",
       event_time: null,
+      detail: "",
     }),
   );
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
@@ -188,10 +306,10 @@ it("shows the backend reason when an add or edit is rejected, and keeps the dial
   await screen.findByText("Prefers short answers");
 
   fireEvent.click(screen.getByRole("button", { name: "memory.add" }));
-  fireEvent.change(await screen.findByLabelText("memory.field.content"), { target: { value: "password: hunter2" } });
+  fireEvent.change(await screen.findByLabelText("memory.field.summary"), { target: { value: "password: hunter2" } });
   fireEvent.click(screen.getByRole("button", { name: "memory.save" }));
   expect(await screen.findByText("Looks like a password; not saved")).toBeInTheDocument();
-  expect(screen.getByLabelText("memory.field.content")).toHaveValue("password: hunter2");
+  expect(screen.getByLabelText("memory.field.summary")).toHaveValue("password: hunter2");
 
   mockApi.editMemoryItemApi.mockRejectedValueOnce(new Error("Exceeds 200 characters"));
   fireEvent.click(screen.getByRole("button", { name: "memory.cancel" }));

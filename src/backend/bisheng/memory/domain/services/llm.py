@@ -17,7 +17,6 @@ from bisheng.memory.domain.ports import MemoryContext
 from bisheng.memory.domain.services.consolidation_model import resolve_memory_model_id
 from bisheng.memory.domain.services.index import default_embedding_loader
 
-
 CONSOLIDATE_TIMEOUT_SECONDS = 300
 
 
@@ -26,7 +25,7 @@ class MemoryLLMCallError(Exception):
 
 
 class PlatformMemoryLLM:
-    async def consolidate(self, ctx: MemoryContext, prompt: str) -> str:
+    async def consolidate(self, ctx: MemoryContext, prompt: str, timeout: float = CONSOLIDATE_TIMEOUT_SECONDS) -> str:
         model_id = await resolve_memory_model_id()
         llm = await LLMService.get_bisheng_llm(
             model_id=model_id,
@@ -37,7 +36,7 @@ class PlatformMemoryLLM:
         )
         try:
             # Bounded below the consolidation lock TTL so a hung call cannot outlive the lock.
-            response = await asyncio.wait_for(llm.ainvoke(prompt), timeout=CONSOLIDATE_TIMEOUT_SECONDS)
+            response = await asyncio.wait_for(llm.ainvoke(prompt), timeout=timeout)
         except Exception as exc:
             raise MemoryLLMCallError(str(exc)) from exc
         content = getattr(response, "content", response)

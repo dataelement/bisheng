@@ -77,6 +77,10 @@ def parse_event_time(value) -> datetime | None:
     return parsed.replace(tzinfo=None)
 
 
+# ``edit(detail=KEEP)``: leave the item's full text as it is.
+KEEP = object()
+
+
 class MemoryService:
     def __init__(
         self,
@@ -218,14 +222,16 @@ class MemoryService:
             raise MemoryItemNotFoundError()
         new_type = item_type or old.type
         text = validate_item(content, new_type)
-        if origin == ORIGIN_MANUAL and detail is None and old.detail_object_key:
-            # A hand edit changes the one-line content only; the full text carries over
-            # (objects are immutable and keyed by item id, so it is copied to the new item).
-            try:
-                detail = await self.details.get(old.detail_object_key)
-            except Exception as exc:
-                logger.exception("memory detail read failed during edit item={}", target_id)
-                raise MemoryDetailUnavailableError() from exc
+        if detail is KEEP:
+            # The caller did not touch the detail: it carries over (objects are immutable and
+            # keyed by item id, so it is copied to the new item). An empty string drops it.
+            detail = None
+            if old.detail_object_key:
+                try:
+                    detail = await self.details.get(old.detail_object_key)
+                except Exception as exc:
+                    logger.exception("memory detail read failed during edit item={}", target_id)
+                    raise MemoryDetailUnavailableError() from exc
         item = self._new_item(ctx, text, new_type, origin, event_time, pinned=new_type in RESIDENT_TYPES)
         if origin == ORIGIN_MANUAL:
             # An edit keeps the original source mark; only the write mode becomes manual.
@@ -273,11 +279,26 @@ class MemoryService:
         return WriteResult(ok=True, op=verb, related_item_id=target_id, record_id=record_id)
 
     # ------------------------------------------------------------------ management (AC-88, AC-89)
-    async def add_manual(self, ctx: MemoryContext, content: str, item_type: str = "fact", event_time=None):
-        return await self._create(ctx, content, item_type, event_time, None, ORIGIN_MANUAL, "add")
+    async def add_manual(
+        self, ctx: MemoryContext, content: str, item_type: str = "fact", event_time=None, detail: str | None = None
+    ):
+        return await self._create(ctx, content, item_type, event_time, detail or None, ORIGIN_MANUAL, "add")
 
-    async def edit(self, ctx: MemoryContext, item_id: str, content: str, item_type: str | None = None, event_time=None):
-        return await self._replace(ctx, item_id, content, item_type, event_time, None, ORIGIN_MANUAL, "edit")
+    async def edit(
+        self,
+        ctx: MemoryContext,
+        item_id: str,
+        content: str,
+        item_type: str | None = None,
+        event_time=None,
+        detail=KEEP,
+        verb: str = "edit",
+    ):
+        """Hand edit (or an AI revision the user asked for, ``verb="revise"``).
+
+        ``detail``: ``KEEP`` copies the current full text, ``""`` drops it, text replaces it.
+        """
+        return await self._replace(ctx, item_id, content, item_type, event_time, detail, ORIGIN_MANUAL, verb)
 
     async def delete(self, ctx: MemoryContext, item_id: str) -> WriteResult:
         return await self._forget(ctx, item_id, "delete")

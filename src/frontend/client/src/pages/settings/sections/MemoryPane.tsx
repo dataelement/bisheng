@@ -1,5 +1,5 @@
 /**
- * Settings → Memory (F132, AC-68 / AC-88–90).
+ * Settings → Memory (F132, AC-68 / AC-88–90, AC-107).
  *
  * The "my memory" switch only decides whether chats read and write memory; the
  * list below and every action on it stay available while it is off (AC-90).
@@ -24,7 +24,7 @@ import {
 } from "~/api/memory";
 import { memoryMetaParts, memoryTypeLabel } from "~/components/Memory/memoryLabels";
 import { useLocalize } from "~/hooks";
-import { MemoryFullText } from "./MemoryFullText";
+import { MemoryDetailView } from "./MemoryDetailView";
 import { MemoryItemEditor } from "./MemoryItemEditor";
 
 export const MEMORY_ITEMS_QUERY_KEY = ["memory", "items"] as const;
@@ -37,6 +37,8 @@ export function MemoryPane() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const [actionError, setActionError] = useState("");
+  /** The memory opened in its own view; null shows the list. */
+  const [openedId, setOpenedId] = useState<string | null>(null);
 
   const itemsQuery = useQuery({ queryKey: MEMORY_ITEMS_QUERY_KEY, queryFn: listMemoryItemsApi });
   const settingQuery = useQuery({ queryKey: SETTING_QUERY_KEY, queryFn: getMemorySettingApi });
@@ -54,7 +56,10 @@ export function MemoryPane() {
 
   const deleteMutation = useMutation({
     mutationFn: deleteMemoryItemApi,
-    onSuccess: refreshItems,
+    onSuccess: (_result, itemId) => {
+      setOpenedId((current) => (current === itemId ? null : current));
+      return refreshItems();
+    },
     onError: (err) => setActionError(memoryErrorMessage(err, localize("memory.delete_failed"))),
   });
 
@@ -77,10 +82,47 @@ export function MemoryPane() {
   };
 
   const handleSubmit = async (input: MemoryItemInput) => {
-    if (editing) await editMemoryItemApi(editing.id, input);
-    else await addMemoryItemApi(input);
-    await refreshItems();
+    if (editing) {
+      // An edit replaces the item with a new one: an open view follows it.
+      const result = await editMemoryItemApi(editing.id, input);
+      await refreshItems();
+      setOpenedId((current) => (current === editing.id ? result.item_id : current));
+    } else {
+      await addMemoryItemApi(input);
+      await refreshItems();
+    }
   };
+
+  const opened = openedId ? items.find((item) => item.id === openedId) : undefined;
+  const dialogs = (
+    <MemoryItemEditor open={editorOpen} item={editing} onOpenChange={setEditorOpen} onSubmit={handleSubmit} />
+  );
+
+  if (opened) {
+    return (
+      <>
+        {actionError && (
+          <p role="alert" className="mb-3 text-body-sm text-danger">
+            {actionError}
+          </p>
+        )}
+        <MemoryDetailView
+          item={opened}
+          onBack={() => setOpenedId(null)}
+          onEdit={openEditor}
+          onDelete={(item) => {
+            setActionError("");
+            deleteMutation.mutate(item.id);
+          }}
+          onReplaced={async (newItemId) => {
+            await refreshItems();
+            setOpenedId(newItemId);
+          }}
+        />
+        {dialogs}
+      </>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-5">
@@ -142,18 +184,29 @@ export function MemoryPane() {
         ) : (
           <ul className="flex flex-col divide-y divide-border-base rounded-xl border border-border-base">
             {items.map((item) => (
-              <li key={item.id} data-memory-item className="group flex items-start gap-3 px-4 py-3">
-                <div className="min-w-0 flex-1">
-                  <p className="whitespace-pre-wrap break-words text-body text-text-1">{item.content}</p>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-text-3">
+              <li
+                key={item.id}
+                data-memory-item
+                className="group flex items-start gap-3 px-4 py-3 transition-colors hover:bg-fill-1"
+              >
+                {/* The whole text block opens the memory; the icons on the right stay shortcuts. */}
+                <button
+                  type="button"
+                  className="min-w-0 flex-1 cursor-pointer text-left"
+                  onClick={() => {
+                    setActionError("");
+                    setOpenedId(item.id);
+                  }}
+                >
+                  {/* Spans only: a button holds phrasing content. */}
+                  <span className="block whitespace-pre-wrap break-words text-body text-text-1">{item.content}</span>
+                  <span className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-text-3">
                     <Tag size="small">{memoryTypeLabel(item.type, localize)}</Tag>
                     {memoryMetaParts(item, localize).map((part) => (
                       <span key={part}>{part}</span>
                     ))}
-                    {/* A long memory folds its full text here; opening it takes the next line. */}
-                    {item.has_detail && <MemoryFullText itemId={item.id} />}
-                  </div>
-                </div>
+                  </span>
+                </button>
                 <div className="flex shrink-0 items-center gap-1">
                   <Button
                     size="small"
@@ -187,7 +240,7 @@ export function MemoryPane() {
         )}
       </section>
 
-      <MemoryItemEditor open={editorOpen} item={editing} onOpenChange={setEditorOpen} onSubmit={handleSubmit} />
+      {dialogs}
 
       <Modal
         open={confirmClear}

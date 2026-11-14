@@ -239,6 +239,7 @@
   "12111": "Memory content cannot be empty",
   "12112": "No model is available for memory consolidation",
   "12113": "The full text of this memory cannot be read right now",
+  "12114": "The AI could not revise this memory. Try rewording your request.",
   "13001": "Skill deleted",
   "13002": "Skill offline. Cannot chat",
   "13003": "Skill compile failed. Cannot chat",
