@@ -46,7 +46,24 @@ export interface MemoryItemInput {
   content: string;
   type?: MemoryItemType | string;
   event_time?: string | null;
+  /** Full text. Left undefined on an edit: kept as it is; "" removes it. */
+  detail?: string;
 }
+
+/** An item's editable fields, as the revise endpoint returns its previous version. */
+export interface MemoryItemVersion {
+  summary: string;
+  detail: string;
+  type: string;
+  event_time: string | null;
+}
+
+const itemBody = (input: MemoryItemInput) => ({
+  content: input.content,
+  type: input.type ?? "fact",
+  event_time: input.event_time ?? null,
+  ...(input.detail !== undefined ? { detail: input.detail } : {}),
+});
 
 export interface MemoryTurnWrite {
   record_id: number;
@@ -93,11 +110,7 @@ export async function listMemoryItemsApi(): Promise<MemoryItem[]> {
 
 export async function addMemoryItemApi(input: MemoryItemInput): Promise<{ item_id: string }> {
   return dataOf(
-    await request.post(
-      `${BASE}/items`,
-      { content: input.content, type: input.type ?? "fact", event_time: input.event_time ?? null },
-      QUIET,
-    ),
+    await request.post(`${BASE}/items`, itemBody(input), QUIET),
   );
 }
 
@@ -106,11 +119,17 @@ export async function editMemoryItemApi(
   input: MemoryItemInput,
 ): Promise<{ item_id: string; replaced_item_id: string | null }> {
   return dataOf(
-    await request.put(
-      `${BASE}/items/${encodeURIComponent(itemId)}`,
-      { content: input.content, type: input.type ?? "fact", event_time: input.event_time ?? null },
-      QUIET,
-    ),
+    await request.put(`${BASE}/items/${encodeURIComponent(itemId)}`, itemBody(input), QUIET),
+  );
+}
+
+/** Let the AI rewrite one item from a plain instruction; `previous` is the version before (for undo). */
+export async function reviseMemoryItemApi(
+  itemId: string,
+  instruction: string,
+): Promise<{ item_id: string; changed: boolean; previous: MemoryItemVersion }> {
+  return dataOf(
+    await request.post(`${BASE}/items/${encodeURIComponent(itemId)}/revise`, { instruction }, QUIET),
   );
 }
 

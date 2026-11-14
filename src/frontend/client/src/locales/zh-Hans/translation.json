@@ -2888,7 +2888,8 @@
     "close": "关闭",
     "save": "保存",
     "field": {
-      "content": "内容",
+      "summary": "概要",
+      "detail": "详情",
       "type": "类型",
       "event_time": "事件时间"
     },
@@ -2900,10 +2901,18 @@
       "experience": "经验"
     },
     "recorded_at_value": "记录于 {{time}}",
-    "full_text_show": "展开全文",
-    "full_text_hide": "收起",
-    "full_text_failed": "全文加载失败",
-    "edit_keeps_full_text": "这里只修改这一句话，这条记忆的全文会保留。",
+    "detail_placeholder": "需要记住更多细节时写在这里，支持 Markdown",
+    "updated_at": "最近更新",
+    "no_detail": "没有详情",
+    "back": "返回",
+    "revise_label": "让 AI 修改这条记忆",
+    "revise_placeholder": "告诉 AI 怎么改这条记忆，例如：出行改到 1 月了",
+    "revise_send": "发送",
+    "revised": "已修改",
+    "undo": "撤销",
+    "revise_unchanged": "这条记忆没有需要修改的地方",
+    "revise_failed": "修改失败，请重试",
+    "detail_load_failed": "详情加载失败",
     "source": {
       "manual": "手动添加",
       "daily": "日常对话",

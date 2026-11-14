@@ -17,6 +17,7 @@ ACTIONS = {
     "forget": "memory.item.forget",
     "add": "memory.item.add",
     "edit": "memory.item.edit",
+    "revise": "memory.item.revise",
     "delete": "memory.item.delete",
     "clear": "memory.item.clear",
     "undo": "memory.item.undo",

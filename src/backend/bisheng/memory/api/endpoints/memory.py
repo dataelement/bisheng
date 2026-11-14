@@ -16,7 +16,9 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import resp_200
 from bisheng.memory.domain.repositories.setting_repository import SettingRepository
 from bisheng.memory.domain.services.context import build_user_context
-from bisheng.memory.domain.services.factory import get_memory_service, get_resident_service
+from bisheng.memory.domain.services.factory import get_memory_llm, get_memory_service, get_resident_service
+from bisheng.memory.domain.services.memory_service import KEEP
+from bisheng.memory.domain.services.revise import revise_item
 from bisheng.memory.domain.services.turn_record import TurnRecordService
 from bisheng.memory.domain.services.views import item_view, turn_view
 
@@ -27,6 +29,12 @@ class ItemIn(BaseModel):
     content: str
     type: str = "fact"
     event_time: str | None = None
+    # Full text. Left out of an edit: kept as it is; "" or null: removed.
+    detail: str | None = None
+
+
+class ReviseIn(BaseModel):
+    instruction: str = Field(min_length=1, max_length=2000)
 
 
 class SettingIn(BaseModel):
@@ -68,7 +76,7 @@ async def get_item_detail(
 @router.post("/items")
 async def add_item(data: ItemIn, login_user=Depends(UserPayload.get_login_user), service=Depends(get_memory_service)):
     ctx = build_user_context(login_user)
-    res = await service.add_manual(ctx, data.content, data.type, data.event_time)
+    res = await service.add_manual(ctx, data.content, data.type, data.event_time, detail=data.detail)
     return resp_200({"item_id": res.item_id})
 
 
@@ -77,8 +85,23 @@ async def edit_item(
     item_id: str, data: ItemIn, login_user=Depends(UserPayload.get_login_user), service=Depends(get_memory_service)
 ):
     ctx = build_user_context(login_user)
-    res = await service.edit(ctx, item_id, data.content, data.type, data.event_time)
+    detail = (data.detail or "") if "detail" in data.model_fields_set else KEEP
+    res = await service.edit(ctx, item_id, data.content, data.type, data.event_time, detail=detail)
     return resp_200({"item_id": res.item_id, "replaced_item_id": res.related_item_id})
+
+
+@router.post("/items/{item_id}/revise")
+async def revise_memory_item(
+    item_id: str,
+    data: ReviseIn,
+    login_user=Depends(UserPayload.get_login_user),
+    service=Depends(get_memory_service),
+    llm=Depends(get_memory_llm),
+):
+    """Let the memory model rewrite one of the caller's items from a plain instruction (AC-107)."""
+    ctx = build_user_context(login_user)
+    rev = await revise_item(ctx, item_id, data.instruction, service, llm)
+    return resp_200({"item_id": rev.item_id, "changed": rev.changed, "previous": rev.previous})
 
 
 @router.delete("/items/{item_id}")

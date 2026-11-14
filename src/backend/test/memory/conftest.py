@@ -260,7 +260,7 @@ class StubLLM:
         self.prompts: list[str] = []
         self.calls: list[MemoryContext] = []
 
-    async def consolidate(self, ctx, prompt):
+    async def consolidate(self, ctx, prompt, timeout=None):
         self.calls.append(ctx)
         self.prompts.append(prompt)
         if not self.answers:

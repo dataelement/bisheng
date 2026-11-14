@@ -215,3 +215,27 @@ async def test_ac88_full_text_readable_and_kept_through_an_edit(service, make_ct
         )
     contents = {i["content"] for i in _data(await api.list_items(login_user=_user(), service=service))}
     assert contents == {"用户的周报格式是先结论", "用户喜欢冰美式"}
+
+
+async def test_ac89_add_and_edit_carry_a_detail(service, tenant_a):
+    user = _user()
+    added = _data(
+        await api.add_item(
+            api.ItemIn(content="用户的周报格式", type="experience", detail="先结论，后过程"),
+            login_user=user,
+            service=service,
+        )
+    )
+    detail = lambda item_id: api.get_item_detail(item_id, login_user=user, service=service)  # noqa: E731
+    assert _data(await detail(added["item_id"])) == {"detail": "先结论，后过程"}
+
+    def edit(item_id, **fields):
+        return api.edit_item(item_id, api.ItemIn(type="experience", **fields), login_user=user, service=service)
+
+    # Detail left out: kept. Detail sent: replaced. Detail emptied: removed.
+    kept = _data(await edit(added["item_id"], content="用户的周报格式（新）"))
+    assert _data(await detail(kept["item_id"])) == {"detail": "先结论，后过程"}
+    changed = _data(await edit(kept["item_id"], content="用户的周报格式（新）", detail="只写结论"))
+    assert _data(await detail(changed["item_id"])) == {"detail": "只写结论"}
+    removed = _data(await edit(changed["item_id"], content="用户的周报格式（新）", detail=""))
+    assert _data(await detail(removed["item_id"])) == {"detail": None}

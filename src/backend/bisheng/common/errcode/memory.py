@@ -71,3 +71,8 @@ class MemoryNoModelError(BaseErrorCode):
 class MemoryDetailUnavailableError(BaseErrorCode):
     Code: int = 12113
     Msg: str = "The full text of this memory cannot be read right now"
+
+
+class MemoryReviseFailedError(BaseErrorCode):
+    Code: int = 12114
+    Msg: str = "The AI could not revise this memory; try rewording the request"

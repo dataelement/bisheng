@@ -2960,7 +2960,8 @@
     "close": "Close",
     "save": "Save",
     "field": {
-      "content": "Content",
+      "summary": "Summary",
+      "detail": "Details",
       "type": "Type",
       "event_time": "Event date"
     },
@@ -2972,10 +2973,18 @@
       "experience": "Experience"
     },
     "recorded_at_value": "Saved {{time}}",
-    "full_text_show": "Show full text",
-    "full_text_hide": "Hide",
-    "full_text_failed": "Couldn't load the full text",
-    "edit_keeps_full_text": "This changes the one-line summary only; the memory keeps its full text.",
+    "detail_placeholder": "Add more detail here if needed. Markdown is supported.",
+    "updated_at": "Last updated",
+    "no_detail": "No details",
+    "back": "Back",
+    "revise_label": "Ask the AI to change this memory",
+    "revise_placeholder": "Tell the AI how to change this memory, e.g. the trip moved to January",
+    "revise_send": "Send",
+    "revised": "Updated",
+    "undo": "Undo",
+    "revise_unchanged": "Nothing in this memory needed changing",
+    "revise_failed": "Couldn't update it. Try again.",
+    "detail_load_failed": "Couldn't load the details",
     "source": {
       "manual": "Added manually",
       "daily": "Daily chat",
