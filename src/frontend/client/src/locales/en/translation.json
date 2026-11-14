@@ -2972,7 +2972,6 @@
       "experience": "Experience"
     },
     "recorded_at_value": "Saved {{time}}",
-    "event_time_value": "Event date {{time}}",
     "source": {
       "manual": "Added manually",
       "daily": "Daily chat",

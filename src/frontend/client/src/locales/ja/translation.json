@@ -2895,7 +2895,6 @@
       "experience": "経験"
     },
     "recorded_at_value": "記録 {{time}}",
-    "event_time_value": "イベント日付 {{time}}",
     "source": {
       "manual": "手動で追加",
       "daily": "日常チャット",
