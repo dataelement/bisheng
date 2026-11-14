@@ -179,7 +179,8 @@ export function MemoryNotice({
   const entry = (
     <button
       type="button"
-      className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-caption text-text-3 transition-colors hover:bg-fill-2 hover:text-text-1"
+      // Never shrinks: in a flex row, Chinese text could otherwise squeeze to one character per line.
+      className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-1.5 py-0.5 text-caption text-text-3 transition-colors hover:bg-fill-2 hover:text-text-1"
       aria-expanded={open}
       onClick={() => setOpen((v) => !v)}
     >
