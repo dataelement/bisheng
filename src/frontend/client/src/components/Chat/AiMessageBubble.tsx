@@ -776,7 +776,7 @@ function AssistantBubble({
                                         />
                                     )}
                                     <TextToSpeechButton
-                                        className="flex size-6 items-center justify-center rounded-md transition-colors hover:bg-[#F7F7F7]"
+                                        className="dsh-message-action"
                                         messageId={message.messageId || ""}
                                         text={regularContent}
                                     />
