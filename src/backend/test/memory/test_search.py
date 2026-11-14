@@ -47,7 +47,8 @@ async def test_ac59_fields_and_detail_on_request(service, search, make_ctx):
     assert hit.recorded_at and hit.detail is None and hit.has_detail
     # The model is told which item has a detail and how to fetch it.
     assert f"id={res.item_id}" in render_hits([hit]) and "有详情" in render_hits([hit])
-    hit = (await search.search(ctx, "季度复盘", detail_ids=[res.item_id]))[0]
+    # The detail is read by id; no query is needed.
+    hit = (await search.get_details(ctx, [res.item_id]))[0]
     assert hit.detail == "复盘全文"
     rendered = render_hits([hit])
     assert "复盘全文" in rendered and "以上为详情全文" in rendered and "有详情，" not in rendered
@@ -105,9 +106,24 @@ async def test_ac62_detail_read_failure_falls_back(service, search, make_ctx, de
     ctx = make_ctx()
     res = await service.write(ctx, "remember", content="迁移方案要点", type="experience", detail="迁移方案全文")
     details.read_fail = True
-    hit = (await search.search(ctx, "迁移方案", detail_ids=[res.item_id]))[0]
+    hit = (await search.get_details(ctx, [res.item_id]))[0]
     assert hit.detail is None and hit.content == "迁移方案要点"
     assert await counter(kv, ctx.tenant_id, m.DETAIL_READ_FAILED) == 1
+
+
+async def test_details_by_id_only_for_own_active_items(service, search, make_ctx):
+    me = make_ctx()
+    mine = await service.write(me, "remember", content="周报格式", type="experience", detail="周报全文")
+    plain = await service.write(me, "remember", content="用户喜欢冰美式", type="preference")
+    gone = await service.write(me, "remember", content="旧习惯", type="experience", detail="旧习惯全文")
+    await service.write(me, "forget", target_id=gone.item_id)
+    other = await service.write(
+        make_ctx(user_id=USER_2), "remember", content="乙的周报", type="experience", detail="乙全文"
+    )
+    hits = await search.get_details(
+        me, [plain.item_id, mine.item_id, gone.item_id, other.item_id, "nope", mine.item_id]
+    )
+    assert [(h.item_id, h.detail) for h in hits] == [(plain.item_id, None), (mine.item_id, "周报全文")]
 
 
 async def test_scope_filter_used_by_both_paths(service, search, make_ctx, index):

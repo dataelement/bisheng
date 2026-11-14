@@ -189,7 +189,7 @@
 
 - **选定**：`memory/domain/services/tools.py` 的 `build_memory_tools(ctx) -> list[BaseTool]` 返回两个 `StructuredTool`：
   - `memory_write(action, content, target_id?, type?, event_time?)`，`action ∈ {remember, correct, forget}`
-  - `memory_search(query, limit?, detail_ids?)`
+  - `memory_search(query?, limit?, detail_ids?)`：传 `query` 是检索；传 `detail_ids` 是按 id 直接取这些条目的详情全文（`SearchService.get_details`，只取本人有效条目），不需要 query。检索结果给有详情的条目标「有详情」并说明用法，否则模型不知道哪条值得取（2026-11-14）。
 - **被否方案**：做成平台"工具"由作者勾选。否决原因是 AC-77 要求助手记忆开启后无须另配，并且它会把记忆带进 `ToolExecutor` 的权限与配置体系。
 - **脱敏（K7）**：凡是把工具调用落库或下发给前端的地方，对名称以 `memory_` 开头的工具做统一处理：入参与返回替换为 `{"redacted": true, "item_ids": [...], "op": ...}`。本人需要看原文时，前端拿 `item_ids` 向记忆接口取。这样任何原样返回消息的接口里都没有记忆原文（AC-09）。
   - **落点清单**（每一处都要调同一个脱敏函数）：
@@ -714,6 +714,7 @@ spec 中标〔测〕的验收标准，每一条都要有至少一个标注其编
 
 | 日期 | 改动 | 触发原因 |
 |---|---|---|
+| 2026-11-14 | 详情改为按 id 直接取（`memory_search` 只传 `detail_ids`，不再要求同一 query 命中）；检索结果标出「有详情」 | 用户裁定 |
 | 2026-11-14 | 归因移入思考过程的检索步骤（可展开、可删除），连续检索合并为一步；写入回执与点赞点踩同一行；记忆工具说明与检索结果写明记忆不是可标编号的资料来源（修 `[S1]` 被当正文显示）；修订 AC-87、决策 16 | 用户裁定 |
 | 2026-11-14 | 记忆管理页列表行不再显示事件时间（内容已写明日期；编辑条目时仍可查看和修改），修订 AC-88 | 用户裁定 |
 | 2026-11-14 | 归因只列检索取回的条目，常驻记忆不列入；`has_attribution` 只看本轮检索；修订 AC-87、决策 16 | 用户裁定（问排序算法时归因里出现无关的常驻条目） |
