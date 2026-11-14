@@ -2887,7 +2887,10 @@
       "experience": "経験"
     },
     "recorded_at_value": "記録 {{time}}",
-    "updated_at_value": "更新日時 {{time}}",
+    "updated_at": "最終更新",
+    "summary_label": "概要",
+    "detail_label": "詳細",
+    "no_detail": "詳細はまだありません。AI に追加してもらえます。",
     "event_time_value": "イベント日付 {{time}}",
     "back": "戻る",
     "revise_label": "AI にこの記憶を修正してもらう",

@@ -2964,7 +2964,10 @@
       "experience": "Experience"
     },
     "recorded_at_value": "Saved {{time}}",
-    "updated_at_value": "Updated {{time}}",
+    "updated_at": "Last updated",
+    "summary_label": "Summary",
+    "detail_label": "Details",
+    "no_detail": "No details yet. You can ask the AI to add some.",
     "event_time_value": "Event date {{time}}",
     "back": "Back",
     "revise_label": "Ask the AI to change this memory",

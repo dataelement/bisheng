@@ -2892,7 +2892,10 @@
       "experience": "经验"
     },
     "recorded_at_value": "记录于 {{time}}",
-    "updated_at_value": "更新于 {{time}}",
+    "updated_at": "最近更新",
+    "summary_label": "概要",
+    "detail_label": "详情",
+    "no_detail": "暂无详情，可以让 AI 补充",
     "event_time_value": "事件时间 {{time}}",
     "back": "返回",
     "revise_label": "让 AI 修改这条记忆",
