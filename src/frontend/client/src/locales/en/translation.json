@@ -2938,6 +2938,7 @@
       "experience": "Experience"
     },
     "recorded_at_value": "Saved {{time}}",
+    "event_time_value": "Event date {{time}}",
     "detail_placeholder": "Add more detail here if needed. Markdown is supported.",
     "updated_at": "Last updated",
     "no_detail": "No details",

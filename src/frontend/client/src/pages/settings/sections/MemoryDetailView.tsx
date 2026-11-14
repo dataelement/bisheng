@@ -113,7 +113,8 @@ export function MemoryDetailView({ item, onBack, onEdit, onDelete, onReplaced }:
     }
     if (detailQuery.isLoading) return <p className="text-body-sm text-text-3">{localize("memory.loading")}</p>;
     return (
-      <div className="prose prose-sm max-w-none break-words text-text-1">
+      // Same size as the summary; markdown lists and paragraphs keep their structure.
+      <div className="break-words text-body text-text-1 [&_li]:my-0.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-5">
         <Suspense fallback={<p className="whitespace-pre-wrap">{detailQuery.data ?? ""}</p>}>
           <MarkdownLite content={detailQuery.data ?? ""} codeExecution={false} />
         </Suspense>

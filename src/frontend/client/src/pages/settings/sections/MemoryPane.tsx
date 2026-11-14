@@ -8,7 +8,7 @@
 import { Button, Modal, Switch, Tag } from "@bisheng/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Outlined } from "bisheng-icons";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   addMemoryItemApi,
   clearMemoryItemsApi,
@@ -39,6 +39,9 @@ export function MemoryPane() {
   const [actionError, setActionError] = useState("");
   /** The memory opened in its own view; null shows the list. */
   const [openedId, setOpenedId] = useState<string | null>(null);
+  /** While an opened memory is being replaced by its new version, keep showing the old one. */
+  const [replacing, setReplacing] = useState(false);
+  const lastOpened = useRef<MemoryItem | null>(null);
 
   const itemsQuery = useQuery({ queryKey: MEMORY_ITEMS_QUERY_KEY, queryFn: listMemoryItemsApi });
   const settingQuery = useQuery({ queryKey: SETTING_QUERY_KEY, queryFn: getMemorySettingApi });
@@ -85,15 +88,24 @@ export function MemoryPane() {
     if (editing) {
       // An edit replaces the item with a new one: an open view follows it.
       const result = await editMemoryItemApi(editing.id, input);
-      await refreshItems();
+      setReplacing(true);
       setOpenedId((current) => (current === editing.id ? result.item_id : current));
+      try {
+        await refreshItems();
+      } finally {
+        setReplacing(false);
+      }
     } else {
       await addMemoryItemApi(input);
       await refreshItems();
     }
   };
 
-  const opened = openedId ? items.find((item) => item.id === openedId) : undefined;
+  const found = openedId ? items.find((item) => item.id === openedId) : undefined;
+  if (found) lastOpened.current = found;
+  // The new version only appears once the list reloads; until then the view stays mounted
+  // on the old one, so its state (the "changed · undo" note) survives the switch.
+  const opened = found ?? (openedId && replacing ? (lastOpened.current ?? undefined) : undefined);
   const dialogs = (
     <MemoryItemEditor open={editorOpen} item={editing} onOpenChange={setEditorOpen} onSubmit={handleSubmit} />
   );
@@ -115,8 +127,13 @@ export function MemoryPane() {
             deleteMutation.mutate(item.id);
           }}
           onReplaced={async (newItemId) => {
-            await refreshItems();
+            setReplacing(true);
             setOpenedId(newItemId);
+            try {
+              await refreshItems();
+            } finally {
+              setReplacing(false);
+            }
           }}
         />
         {dialogs}

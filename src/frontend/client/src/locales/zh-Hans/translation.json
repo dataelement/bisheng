@@ -2866,6 +2866,7 @@
       "experience": "经验"
     },
     "recorded_at_value": "记录于 {{time}}",
+    "event_time_value": "事件时间 {{time}}",
     "detail_placeholder": "需要记住更多细节时写在这里，支持 Markdown",
     "updated_at": "最近更新",
     "no_detail": "没有详情",
