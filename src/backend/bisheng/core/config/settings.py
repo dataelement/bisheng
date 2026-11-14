@@ -3,7 +3,7 @@ import json
 import os
 import re
 import ssl
-from typing import Union
+from typing import Literal, Union
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from celery.schedules import crontab
@@ -613,17 +613,34 @@ class Etl4lmConf(BaseModel):
     request_kwargs: dict = Field(default_factory=dict, description="etl4lmService Request Arguments")
 
 
-class MineruConf(BaseModel):
+class EncryptedKeyConf(BaseModel):
+    """A provider credential stored Fernet-encrypted, set from the admin form.
+
+    Encryption is obfuscation, not secrecy: the Fernet key ships in this file.
+    """
+
+    api_key_enc: str = Field(
+        default="",
+        description="Fernet-encrypted API key; takes precedence over the environment variable",
+    )
+
+
+class MineruConf(EncryptedKeyConf):
     url: str = Field(default="", description="MineruService Address")
     timeout: int = Field(default=60, description="MineruService Request Timeout (sec)")
     headers: dict = Field(default_factory=dict, description="MineruService Request Headers")
     request_kwargs: dict = Field(default_factory=dict, description="MineruService Request Arguments")
+    api_key_header: str = Field(default="x-api-key", description="Header name carrying the API key")
 
 
-class MineruV4Conf(BaseModel):
+class MineruV4Conf(EncryptedKeyConf):
     api_url: str = Field(default="", description="MinerU V4 API root URL")
     api_key_env: str = Field(default="", description="Environment variable containing the API key")
     tier: str = Field(default="standard", min_length=1, description="Requested parse tier")
+    cloud_model_version: str = Field(
+        default="pipeline",
+        description="model_version sent to the hosted mineru.net API (pipeline or vlm)",
+    )
     ocr_mode: str = Field(default="auto", description="auto, txt, or ocr")
     request_kwargs: dict = Field(default_factory=dict, description="Extra parse-job JSON fields")
     connect_timeout_seconds: float = Field(default=10, gt=0)
@@ -656,15 +673,69 @@ class MineruV4Conf(BaseModel):
 
 
 class PaddleOcrConf(BaseModel):
-    """PaddleOcr Configure"""
+    """PaddleOcr Configure
+
+    Two serving styles exist and are not interchangeable:
+
+    - ``sync`` — self-hosted PP-StructureV3 ``/layout-parsing``. One POST with a
+      JSON body, results come back inline. Authenticates with ``auth_token``.
+    - ``jobs`` — the hosted ``/api/v2/ocr/jobs`` API. Multipart submit, poll the
+      jobId, then fetch a presigned result URL. Needs ``model`` and reads its
+      token from the environment (``api_key_env``), so the credential never
+      enters the config file, a database dump, or the admin YAML payload.
+
+    ``auto`` picks ``jobs`` when the URL ends in ``/jobs`` and ``sync`` otherwise,
+    so an existing ``/layout-parsing`` deployment keeps working untouched.
+    """
 
     url: str = Field(default="", description="PaddleOcrService Address")
     timeout: int = Field(default=60, description="PaddleOcrService Request Timeout (sec)")
     max_retries: int = Field(default=3, ge=0, description="Retries for transient PaddleOcrService errors")
     retry_backoff: float = Field(default=1.0, ge=0, description="Initial PaddleOcrService retry delay (sec)")
-    auth_token: str = Field(default="", description="PaddleOcrService Authentication Token")
+    auth_token: str = Field(default="", description="PaddleOcrService Authentication Token (sync mode)")
+    auth_token_enc: str = Field(
+        default="",
+        description=(
+            "Fernet-encrypted jobs-API token, set from the admin form. Preferred over "
+            "api_key_env when both exist. Obfuscation, not secrecy: the Fernet key ships in git."
+        ),
+    )
     headers: dict = Field(default_factory=dict, description="PaddleOcrService Headers")
-    request_kwargs: dict = Field(default_factory=dict, description="PaddleOcrService Request Arguments")
+    request_kwargs: dict = Field(
+        default_factory=dict,
+        description="Extra request fields: JSON keys in sync mode, form fields in jobs mode",
+    )
+    service_mode: Literal["auto", "jobs", "sync"] = Field(
+        default="auto", description="PaddleOCR serving style; auto detects from the URL"
+    )
+    model: str = Field(default="", description="PaddleOCR model name for the jobs API, e.g. PaddleOCR-VL-1.6")
+    api_key_env: str = Field(default="", description="Environment variable naming the jobs API token")
+    poll_interval_seconds: float = Field(default=3, gt=0, description="Jobs API poll interval (sec)")
+    job_timeout_seconds: float = Field(default=1800, gt=0, description="Overall jobs API deadline (sec)")
+
+    @field_validator("request_kwargs")
+    @classmethod
+    def validate_request_kwargs(cls, value: dict) -> dict:
+        if not all(isinstance(key, str) for key in value):
+            raise ValueError("PaddleOCR request_kwargs keys must be strings")
+        try:
+            json.dumps(value, allow_nan=False)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("PaddleOCR request_kwargs must be JSON serializable") from exc
+        return value
+
+    # No cross-field validation here on purpose: this class is rebuilt on EVERY
+    # config read (KnowledgeConf -> ConfigService.get_knowledge, ~12 call sites
+    # including the app-bootstrap endpoints), so raising would turn one wrong OCR
+    # line into platform-wide 500s, and warning would spam a line per read.
+    # A misconfigured jobs deployment fails instead at parse time, where
+    # PaddleOcrJobsClient.__init__ states exactly which field is missing.
+    @property
+    def resolved_service_mode(self) -> str:
+        """Concrete serving style for this configuration."""
+        if self.service_mode != "auto":
+            return self.service_mode
+        return "jobs" if self.url.rstrip("/").endswith("/jobs") else "sync"
 
 
 class VersionManagementConf(BaseModel):
