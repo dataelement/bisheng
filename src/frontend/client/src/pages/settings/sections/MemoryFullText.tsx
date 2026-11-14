@@ -6,9 +6,11 @@
  */
 import { Button } from "@bisheng/ui";
 import { useQuery } from "@tanstack/react-query";
+import { Outlined } from "bisheng-icons";
 import { useState } from "react";
 import { getMemoryItemDetailApi, memoryErrorMessage } from "~/api/memory";
 import { useLocalize } from "~/hooks";
+import { cn } from "~/utils";
 
 export interface MemoryFullTextProps {
   itemId: string;
@@ -41,16 +43,17 @@ export function MemoryFullText({ itemId }: MemoryFullTextProps) {
 
   return (
     <>
-      <Button
-        size="small"
-        variant="text"
-        color="default"
-        className="shrink-0"
+      {/* Same size and grey as the meta line it sits in (like the memory receipt entry),
+          so it reads as part of the line rather than a separate button. */}
+      <button
+        type="button"
+        className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded text-caption text-text-3 transition-colors hover:text-text-1"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
         {localize(open ? "memory.full_text_hide" : "memory.full_text_show")}
-      </Button>
+        <Outlined.Down size={12} className={cn("shrink-0 transition-transform", !open && "-rotate-90")} />
+      </button>
       {open && <div className="order-last mt-1 basis-full border-l-2 border-border-base pl-3">{body()}</div>}
     </>
   );
