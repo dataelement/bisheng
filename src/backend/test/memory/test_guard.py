@@ -115,6 +115,9 @@ def test_ac16_guard_runs_inside_validate_item():
         "Meeting with the CFO tomorrow",
         "Release planned for next week",
         "三天后出差",
+        "用户本周在北京出差",
+        "下周三之前交周报",
+        "这个月要完成评审",
     ],
 )
 def test_ac14_relative_time_rejected(text):
@@ -132,6 +135,10 @@ def test_ac14_relative_time_rejected(text):
         "用户每周二例会",
         "用户偏好在周报里列出下一步计划",
         "The weekly report is due on 2026-11-20",
+        # Period words naming a report section are labels, not dates.
+        "用户偏好周报采用本周结论、关键数据、风险与支持三段式结构",
+        "用户写月报时先写本月总结，再写下月计划",
+        "用户的周报里有上周回顾和下周重点",
     ],
 )
 def test_ac14_absolute_dates_accepted(text):

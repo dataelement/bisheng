@@ -109,10 +109,13 @@ class SensitiveContentGuard:
             raise MemoryContentSensitiveError()
 
 
+# "本周/下周/上个月…" right before one of these words names a section of a report or a
+# plan ("本周结论、下周计划"), not a point in time; such labels are not rejected.
+_PERIOD_LABEL_NOUNS = "结论|总结|小结|数据|工作|重点|计划|进展|报告|复盘|回顾|要点|目标|安排|待办|风险"
 _RELATIVE_TIME = re.compile(
     r"(今天|今日|今晚|今早|明天|明日|明早|明晚|后天|大后天|昨天|昨日|前天|"
-    r"(?:下|上|这|本)(?:个)?(?:周|星期|礼拜)[一二三四五六日天末]?|"
-    r"(?:下|上|这|本)(?:个)?月|月底前?|今年|明年|去年|"
+    rf"(?:下|上|这|本)(?:个)?(?:周|星期|礼拜)[一二三四五六日天末]?(?!{_PERIOD_LABEL_NOUNS})|"
+    rf"(?:下|上|这|本)(?:个)?月(?!{_PERIOD_LABEL_NOUNS})|月底前?|今年|明年|去年|"
     r"[一二三四五六七八九十两\d]+\s*(?:天|周|个月|星期)(?:后|以后|之后|前|以前)|"
     r"\btoday\b|\btonight\b|\btomorrow\b|\byesterday\b|"
     r"\b(?:next|last|this)\s+(?:week|month|year|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b|"
