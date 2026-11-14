@@ -58,6 +58,23 @@ export function ensureMemoryStartGroup(node: MemoryNodeData) {
     node.group_params.push(createMemoryStartGroup(false));
 }
 
+/**
+ * A workflow created from a template starts with the same switch as a blank workflow.
+ * Templates saved before the switch existed have no switch at all, and the editor's
+ * legacy-flow upgrade would otherwise add it switched off. A template that already
+ * turns memory on keeps it on (its retriever nodes need it).
+ */
+export function applyNewWorkflowMemorySwitch(nodes: Array<{ data?: MemoryNodeData }>) {
+    const start = nodes.find(node => node.data?.type === 'start')?.data;
+    if (!start || !Array.isArray(start.group_params)) return;
+    const param = findNodeParam(start, MEMORY_SWITCH_KEY);
+    if (param) {
+        param.value = param.value === true || MEMORY_SWITCH_DEFAULT;
+    } else {
+        start.group_params.push(createMemoryStartGroup());
+    }
+}
+
 /** A limit is valid only as an integer from 1 to 100 (AC-80); numeric strings count. */
 export function isValidMemoryLimit(value: unknown): boolean {
     if (typeof value === 'string' && !/^\d+$/.test(value.trim())) return false;
