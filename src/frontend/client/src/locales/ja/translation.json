@@ -2896,6 +2896,7 @@
       "experience": "経験"
     },
     "recorded_at_value": "記録 {{time}}",
+    "event_time_value": "イベント日付 {{time}}",
     "detail_placeholder": "細かい内容を残したいときはここに書きます。Markdown に対応しています。",
     "updated_at": "最終更新",
     "no_detail": "詳細はありません",
