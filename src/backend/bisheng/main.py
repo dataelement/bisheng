@@ -159,6 +159,14 @@ async def lifespan(app: FastAPI):
                 await backfill_chat_default_model()
             except Exception:
                 logger.exception("chat default-model backfill failed; continuing startup")
+            # Fill system-model settings that are still empty (incl. settings added
+            # after the first model was configured) from each tenant's own models.
+            try:
+                from bisheng.llm.domain.services.system_model_autofill import autofill_all_tenants
+
+                await autofill_all_tenants()
+            except Exception:
+                logger.exception("system-model autofill failed; continuing startup")
             try:
                 from bisheng.dsh.domain.services.workbench_visibility_backfill import (
                     backfill_workbench_model_visibility,

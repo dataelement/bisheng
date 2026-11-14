@@ -25,6 +25,8 @@ class ConfigKeyEnum(Enum):
     LINSIGHT_LLM = "linsight_llm"  # workstation Default Model Configuration
     JWT_SECRET = "jwt_secret"  # Generated JWT signing secret (F072); only used when config.yaml leaves it unset
     SANDBOX_ENDPOINT = "sandbox_endpoint"  # Page-configured sandbox addresses and token ciphertext
+    # System-model slots already auto-filled per tenant (tenant_system_model_config row)
+    SYSTEM_MODEL_AUTOFILL = "system_model_autofill"
 
 
 class ConfigBase(SQLModelSerializable):

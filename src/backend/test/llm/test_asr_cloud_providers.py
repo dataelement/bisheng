@@ -500,22 +500,11 @@ async def test_probe_invokes_realtime_asr(monkeypatch):
     fake.ainvoke.assert_awaited()
 
 
-async def test_empty_workbench_slot_accepts_realtime_asr(monkeypatch):
-    from bisheng.llm.domain.schemas import WorkbenchModelConfig
-    from bisheng.llm.domain.services.llm import LLMService
+def test_realtime_asr_fills_asr_slots():
+    from bisheng.llm.domain.services.system_model_autofill import KIND_ASR, _kind_of
 
-    saved = {}
-
-    async def get_workbench():
-        return WorkbenchModelConfig()
-
-    async def update(_user, workbench, _tasks):
-        saved["id"] = workbench.asr_model.id
-
-    monkeypatch.setattr(LLMService, "get_workbench_llm", get_workbench)
-    monkeypatch.setattr(LLMService, "update_workbench_llm", update)
-    await LLMService.set_default_model(SimpleNamespace(id=9, model_type="asr_rt", model_name="16k_zh"))
-    assert saved["id"] == "9"
+    assert _kind_of("asr_rt") == KIND_ASR
+    assert _kind_of("asr") == KIND_ASR
 
 
 async def test_file_typed_tencent_model_is_not_kept(monkeypatch):
