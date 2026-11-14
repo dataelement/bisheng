@@ -1445,6 +1445,15 @@ check. Only missing digests are filled; original names and bodies remain unchang
 Historical exact-name lookup is incomplete until this operation finishes. No fuzzy
 query fallback or automatic startup backfill is performed.
 
+## 启用 DSH 前补齐模型可见范围
+
+不部署 DSH 时，没有可见范围记录的对话模型默认全员可见；启用 DSH 后，没有记录的模型对所有人不可见。启用 DSH 之前，对每个租户运行一次，为缺少记录的对话模型（本租户及 Root 共享、含已下线）补一条「全员可见」记录；只新增，不改已有记录。
+
+```bash
+python scripts/backfill_model_visibility_everyone.py --tenant-id 1                              # 预览
+python scripts/backfill_model_visibility_everyone.py --tenant-id 1 --apply --actor-user-id 1    # 写入
+```
+
 ## DSH audit presentation preparation
 
 Run from `src/backend/` using the live service config. `python scripts/backfill_dsh_audit_presentation.py --tenant-id 1` previews one bounded batch; add `--apply --max-batches 20` to prepare historical presentation statuses and mark conversation projection. Resume with the reported `--after-request-id`, then rerun from the start to catch late rows. The independent audit inspection task projects groups; no model bodies, policy or keys are changed.

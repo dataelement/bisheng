@@ -137,6 +137,9 @@ async def management(store, governed, monkeypatch):
     app.include_router(api.router, prefix="/api/v1")
     app.dependency_overrides[api.admin_user] = lambda: SimpleNamespace(user_id=20)
     app.dependency_overrides[api.get_management] = lambda: SimpleNamespace(authorize=authorize)
+    # Visibility routes resolve their administrator through get_policy_admin
+    # (DSH management when deployed, platform tenant admin otherwise).
+    app.dependency_overrides[api.get_policy_admin] = lambda: SimpleNamespace(authorize=authorize)
 
     @app.exception_handler(BaseErrorCode)
     async def domain_failure(request, error):
