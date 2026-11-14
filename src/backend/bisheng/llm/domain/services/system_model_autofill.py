@@ -38,7 +38,7 @@ from sqlmodel import col, select
 
 from bisheng.api.v1.schemas import WSModel
 from bisheng.common.models.config import ConfigKeyEnum
-from bisheng.core.context.tenant import bypass_tenant_filter
+from bisheng.core.context.tenant import bypass_tenant_filter, tenant_execution_scope
 from bisheng.core.database import get_async_db_session
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.llm.domain.models import LLMModel
@@ -233,7 +233,16 @@ async def _read_own_config(tenant_id: int, key: ConfigKeyEnum) -> BaseModel | No
 
 
 async def autofill_system_models(tenant_id: int, slots: tuple[ModelSlot, ...] = SLOTS) -> list[str]:
-    """Fill the tenant's empty, not-yet-handled settings. Returns the filled slot ids."""
+    """Fill the tenant's empty, not-yet-handled settings. Returns the filled slot ids.
+
+    Runs inside the tenant's own scope: startup has no tenant context, and the
+    tenant filter rejects unscoped reads of tenant tables.
+    """
+    with tenant_execution_scope(tenant_id):
+        return await _autofill_in_scope(tenant_id, slots)
+
+
+async def _autofill_in_scope(tenant_id: int, slots: tuple[ModelSlot, ...]) -> list[str]:
     ledger = await _read_ledger(tenant_id)
     pending = [slot for slot in slots if slot.id not in ledger]
     if not pending:
