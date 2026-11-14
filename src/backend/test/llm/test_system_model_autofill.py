@@ -74,6 +74,7 @@ async def test_fresh_tenant_gets_every_slot_filled(store):
     assert workbench["embedding_model"]["id"] == "2"
     assert workbench["asr_model"]["id"] == "3"
     assert workbench["tts_model"]["id"] == "4"
+    assert workbench["memory_llm"]["id"] == "1"
     assert fake.cfg(ConfigKeyEnum.WORKFLOW_LLM)["model_id"] == 1
     assert fake.cfg(ConfigKeyEnum.KNOWLEDGE_LLM)["asr_model_id"] == 3
     assert fake.ledger() == {slot.id for slot in SLOTS}
@@ -98,6 +99,7 @@ async def test_upgrade_fills_only_the_empty_slot_and_keeps_admin_choices(store):
     assert saved["chat_default_model_id"] == "7"
     assert [m["id"] for m in saved["models"]] == ["7"]
     assert saved["chat_title_llm"]["id"] == "7"
+    assert saved["memory_llm"]["id"] == "7"
 
 
 async def test_slot_in_ledger_is_not_refilled_after_admin_clears_it(store):

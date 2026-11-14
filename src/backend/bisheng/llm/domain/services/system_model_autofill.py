@@ -131,6 +131,24 @@ def _workbench_default_slot(field: str) -> ModelSlot:
     )
 
 
+def _workbench_listed_ws_slot(field: str) -> ModelSlot:
+    """A workbench ``WSModel`` setting that defaults to the first selectable model."""
+
+    def fill(cfg: WorkbenchModelConfig, model: LLMModel) -> None:
+        if not cfg.models:
+            cfg.models = [_ws_option(model)]
+        first = cfg.models[0]
+        setattr(cfg, field, WSModel(id=str(first.id), name=first.name))
+
+    return ModelSlot(
+        id=f"{ConfigKeyEnum.LINSIGHT_LLM.value}.{field}",
+        config_key=ConfigKeyEnum.LINSIGHT_LLM,
+        kind=KIND_LLM,
+        is_set=lambda cfg: bool(getattr(cfg, field) and getattr(cfg, field).id),
+        fill=fill,
+    )
+
+
 def _fill_assistant_auto(cfg: AssistantLLMConfig, model: LLMModel) -> None:
     cfg.auto_llm = AssistantLLMItem(model_id=model.id)
 
@@ -177,6 +195,8 @@ SLOTS: tuple[ModelSlot, ...] = (
     _ws_slot("asr_model", KIND_ASR),
     _ws_slot("tts_model", KIND_TTS),
     _ws_slot("chat_title_llm", KIND_LLM),
+    # F132: the same model the consolidation falls back to when this is empty.
+    _workbench_listed_ws_slot("memory_llm"),
 )
 
 
