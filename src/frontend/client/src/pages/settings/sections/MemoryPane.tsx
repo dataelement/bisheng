@@ -13,7 +13,6 @@ import {
   addMemoryItemApi,
   clearMemoryItemsApi,
   deleteMemoryItemApi,
-  editMemoryItemApi,
   getMemorySettingApi,
   listMemoryItemsApi,
   memoryErrorMessage,
@@ -33,7 +32,6 @@ const SETTING_QUERY_KEY = ["memory", "setting"] as const;
 export function MemoryPane() {
   const localize = useLocalize();
   const queryClient = useQueryClient();
-  const [editing, setEditing] = useState<MemoryItem | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const [actionError, setActionError] = useState("");
@@ -78,27 +76,15 @@ export function MemoryPane() {
     },
   });
 
-  const openEditor = (item: MemoryItem | null) => {
+  const openEditor = () => {
     setActionError("");
-    setEditing(item);
     setEditorOpen(true);
   };
 
+  // Only adding is by hand; an existing memory is changed by asking the AI on its own view.
   const handleSubmit = async (input: MemoryItemInput) => {
-    if (editing) {
-      // An edit replaces the item with a new one: an open view follows it.
-      const result = await editMemoryItemApi(editing.id, input);
-      setReplacing(true);
-      setOpenedId((current) => (current === editing.id ? result.item_id : current));
-      try {
-        await refreshItems();
-      } finally {
-        setReplacing(false);
-      }
-    } else {
-      await addMemoryItemApi(input);
-      await refreshItems();
-    }
+    await addMemoryItemApi(input);
+    await refreshItems();
   };
 
   const found = openedId ? items.find((item) => item.id === openedId) : undefined;
@@ -107,7 +93,7 @@ export function MemoryPane() {
   // on the old one, so its state (the "changed · undo" note) survives the switch.
   const opened = found ?? (openedId && replacing ? (lastOpened.current ?? undefined) : undefined);
   const dialogs = (
-    <MemoryItemEditor open={editorOpen} item={editing} onOpenChange={setEditorOpen} onSubmit={handleSubmit} />
+    <MemoryItemEditor open={editorOpen} onOpenChange={setEditorOpen} onSubmit={handleSubmit} />
   );
 
   if (opened) {
@@ -121,7 +107,6 @@ export function MemoryPane() {
         <MemoryDetailView
           item={opened}
           onBack={() => setOpenedId(null)}
-          onEdit={openEditor}
           onDelete={(item) => {
             setActionError("");
             deleteMutation.mutate(item.id);
@@ -177,7 +162,7 @@ export function MemoryPane() {
             >
               {localize("memory.clear")}
             </Button>
-            <Button size="small" variant="outlined" onClick={() => openEditor(null)}>
+            <Button size="small" variant="outlined" onClick={openEditor}>
               {localize("memory.add")}
             </Button>
           </div>
@@ -225,17 +210,6 @@ export function MemoryPane() {
                   </span>
                 </button>
                 <div className="flex shrink-0 items-center gap-1">
-                  <Button
-                    size="small"
-                    variant="text"
-                    color="default"
-                    iconOnly
-                    aria-label={localize("memory.edit")}
-                    title={localize("memory.edit")}
-                    onClick={() => openEditor(item)}
-                  >
-                    <Outlined.Edit />
-                  </Button>
                   <Button
                     size="small"
                     variant="text"

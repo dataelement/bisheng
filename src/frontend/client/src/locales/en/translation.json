@@ -2949,8 +2949,6 @@
     "empty": "No saved memories yet",
     "add": "Add",
     "add_title": "Add memory",
-    "edit": "Edit",
-    "edit_title": "Edit memory",
     "delete": "Delete",
     "clear": "Clear all",
     "clear_confirm_title": "Clear all memories?",
@@ -2959,13 +2957,6 @@
     "cancel": "Cancel",
     "close": "Close",
     "save": "Save",
-    "field": {
-      "summary": "Summary",
-      "detail": "Details",
-      "type": "Type",
-      "event_time": "Event date"
-    },
-    "event_time_hint": "Optional. Add a date for things tied to a day, such as a trip or a deadline.",
     "content_placeholder": "What should be remembered (up to 200 characters)",
     "type": {
       "fact": "Fact",
@@ -2973,10 +2964,8 @@
       "experience": "Experience"
     },
     "recorded_at_value": "Saved {{time}}",
+    "updated_at_value": "Updated {{time}}",
     "event_time_value": "Event date {{time}}",
-    "detail_placeholder": "Add more detail here if needed. Markdown is supported.",
-    "updated_at": "Last updated",
-    "no_detail": "No details",
     "back": "Back",
     "revise_label": "Ask the AI to change this memory",
     "revise_placeholder": "Tell the AI how to change this memory, e.g. the trip moved to January",

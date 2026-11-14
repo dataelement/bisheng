@@ -115,10 +115,10 @@ const PLAIN = item({ id: "d2", content: "Likes iced coffee", has_detail: false }
 
 async function openMemory(content: string) {
   fireEvent.click(await screen.findByRole("button", { name: new RegExp(content) }));
-  return screen.findByText("memory.field.summary");
+  return screen.findByRole("textbox", { name: "memory.revise_label" });
 }
 
-it("opens a memory in its own view with its summary and details, and goes back (AC-88)", async () => {
+it("opens a memory as a note: its line as the heading, its details as the body, and goes back (AC-88)", async () => {
   mockApi.listMemoryItemsApi.mockResolvedValue([LONG, PLAIN]);
   mockApi.getMemoryItemDetailApi.mockResolvedValue("- Conclusion first\n- Then the process");
   renderPane();
@@ -128,7 +128,11 @@ it("opens a memory in its own view with its summary and details, and goes back (
   expect(screen.queryByText(/full_text/)).toBeNull();
 
   await openMemory("Weekly report format");
-  expect(screen.getByText("memory.updated_at")).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Weekly report format" })).toBeInTheDocument();
+  // No labels to learn, and no hand editing: only delete and the AI box.
+  expect(screen.queryByText(/memory\.field\./)).toBeNull();
+  expect(screen.queryByRole("button", { name: "memory.edit" })).toBeNull();
+  expect(screen.getByRole("button", { name: "memory.delete" })).toBeInTheDocument();
   expect(await screen.findByTestId("markdown")).toHaveTextContent("- Conclusion first - Then the process");
   expect(mockApi.getMemoryItemDetailApi).toHaveBeenCalledWith("d1");
   expect(screen.queryByText("memory.list_title")).toBeNull();
@@ -137,7 +141,7 @@ it("opens a memory in its own view with its summary and details, and goes back (
   expect(await screen.findByText("Likes iced coffee")).toBeInTheDocument();
 
   await openMemory("Likes iced coffee");
-  expect(screen.getByText("memory.no_detail")).toBeInTheDocument();
+  expect(screen.queryByTestId("markdown")).toBeNull();
 });
 
 it("lets the AI change a memory, follows the new version, and undoes it (AC-107)", async () => {
@@ -199,47 +203,6 @@ it("keeps the request and shows why when the AI could not change it (AC-107)", a
   expect(await screen.findByText("memory.revise_unchanged")).toBeInTheDocument();
 });
 
-it("loads and edits the details in the dialog (AC-89)", async () => {
-  mockApi.listMemoryItemsApi.mockResolvedValue([LONG]);
-  mockApi.getMemoryItemDetailApi.mockResolvedValueOnce("Old detail");
-  mockApi.editMemoryItemApi.mockResolvedValue({ item_id: "d1", replaced_item_id: null });
-  renderPane();
-  await screen.findByText("Weekly report format");
-
-  fireEvent.click(within(rowOf("Weekly report format")).getByRole("button", { name: "memory.edit" }));
-  const detail = await screen.findByLabelText("memory.field.detail");
-  await waitFor(() => expect(detail).toHaveValue("Old detail"));
-  fireEvent.change(detail, { target: { value: "New detail" } });
-  fireEvent.click(screen.getByRole("button", { name: "memory.save" }));
-  await waitFor(() =>
-    expect(mockApi.editMemoryItemApi).toHaveBeenCalledWith("d1", {
-      content: "Weekly report format",
-      type: "experience",
-      event_time: null,
-      detail: "New detail",
-    }),
-  );
-  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-});
-
-it("does not clear details it could not read when saving an edit (AC-89)", async () => {
-  mockApi.listMemoryItemsApi.mockResolvedValue([{ ...LONG, id: "d5" }]);
-  mockApi.getMemoryItemDetailApi.mockRejectedValue(new Error("detail unavailable"));
-  mockApi.editMemoryItemApi.mockResolvedValue({ item_id: "d6", replaced_item_id: "d5" });
-  renderPane();
-  await screen.findByText("Weekly report format");
-  fireEvent.click(within(rowOf("Weekly report format")).getByRole("button", { name: "memory.edit" }));
-  expect(await screen.findByText("detail unavailable")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "memory.save" }));
-  await waitFor(() =>
-    expect(mockApi.editMemoryItemApi).toHaveBeenCalledWith("d5", {
-      content: "Weekly report format",
-      type: "experience",
-      event_time: null,
-    }),
-  );
-});
-
 it("shows a manually added item as added by hand (AC-88)", async () => {
   renderPane();
   await screen.findByText("Uses metric units");
@@ -269,30 +232,16 @@ it("cancelling the confirmation keeps every item (AC-89)", async () => {
   expect(screen.getByText("Prefers short answers")).toBeInTheDocument();
 });
 
-it("adds, edits and deletes an item (AC-89)", async () => {
+it("adds an item with one box and deletes one; there is no hand editing (AC-89)", async () => {
   renderPane();
   await screen.findByText("Prefers short answers");
+  expect(within(rowOf("Prefers short answers")).queryByRole("button", { name: "memory.edit" })).toBeNull();
 
   fireEvent.click(screen.getByRole("button", { name: "memory.add" }));
-  fireEvent.change(await screen.findByLabelText("memory.field.summary"), { target: { value: "Likes green tea" } });
+  fireEvent.change(await screen.findByRole("textbox", { name: "memory.add_title" }), { target: { value: "Likes green tea" } });
   fireEvent.click(screen.getByRole("button", { name: "memory.save" }));
   await waitFor(() =>
-    expect(mockApi.addMemoryItemApi).toHaveBeenCalledWith({ content: "Likes green tea", type: "fact", event_time: null, detail: "" }),
-  );
-  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-
-  fireEvent.click(within(rowOf("Prefers short answers")).getByRole("button", { name: "memory.edit" }));
-  const box = await screen.findByLabelText("memory.field.summary");
-  expect(box).toHaveValue("Prefers short answers");
-  fireEvent.change(box, { target: { value: "Prefers very short answers" } });
-  fireEvent.click(screen.getByRole("button", { name: "memory.save" }));
-  await waitFor(() =>
-    expect(mockApi.editMemoryItemApi).toHaveBeenCalledWith("m1", {
-      content: "Prefers very short answers",
-      type: "preference",
-      event_time: null,
-      detail: "",
-    }),
+    expect(mockApi.addMemoryItemApi).toHaveBeenCalledWith({ content: "Likes green tea", type: "fact", event_time: null }),
   );
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 
@@ -300,22 +249,16 @@ it("adds, edits and deletes an item (AC-89)", async () => {
   await waitFor(() => expect(mockApi.deleteMemoryItemApi).toHaveBeenCalledWith("m2"));
 });
 
-it("shows the backend reason when an add or edit is rejected, and keeps the dialog open (AC-89)", async () => {
+it("shows the backend reason when an add is rejected, and keeps the dialog open (AC-89)", async () => {
   mockApi.addMemoryItemApi.mockRejectedValueOnce(new Error("Looks like a password; not saved"));
   renderPane();
   await screen.findByText("Prefers short answers");
 
   fireEvent.click(screen.getByRole("button", { name: "memory.add" }));
-  fireEvent.change(await screen.findByLabelText("memory.field.summary"), { target: { value: "password: hunter2" } });
+  fireEvent.change(await screen.findByRole("textbox", { name: "memory.add_title" }), { target: { value: "password: hunter2" } });
   fireEvent.click(screen.getByRole("button", { name: "memory.save" }));
   expect(await screen.findByText("Looks like a password; not saved")).toBeInTheDocument();
-  expect(screen.getByLabelText("memory.field.summary")).toHaveValue("password: hunter2");
-
-  mockApi.editMemoryItemApi.mockRejectedValueOnce(new Error("Exceeds 200 characters"));
-  fireEvent.click(screen.getByRole("button", { name: "memory.cancel" }));
-  fireEvent.click(within(rowOf("Prefers short answers")).getByRole("button", { name: "memory.edit" }));
-  fireEvent.click(await screen.findByRole("button", { name: "memory.save" }));
-  expect(await screen.findByText("Exceeds 200 characters")).toBeInTheDocument();
+  expect(screen.getByRole("textbox", { name: "memory.add_title" })).toHaveValue("password: hunter2");
 });
 
 it("shows the switch on by default and saves a change (AC-68)", async () => {
@@ -337,7 +280,6 @@ it("keeps the list and every action available with my memory off (AC-90)", async
   expect(screen.getByRole("button", { name: "memory.add" })).toBeEnabled();
   expect(screen.getByRole("button", { name: "memory.clear" })).toBeEnabled();
   const row = rowOf("Prefers short answers");
-  expect(within(row).getByRole("button", { name: "memory.edit" })).toBeEnabled();
   fireEvent.click(within(row).getByRole("button", { name: "memory.delete" }));
   await waitFor(() => expect(mockApi.deleteMemoryItemApi).toHaveBeenCalledWith("m1"));
 });
