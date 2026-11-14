@@ -2865,7 +2865,6 @@
       "experience": "经验"
     },
     "recorded_at_value": "记录于 {{time}}",
-    "event_time_value": "事件时间 {{time}}",
     "source": {
       "manual": "手动添加",
       "daily": "日常对话",

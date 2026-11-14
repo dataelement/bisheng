@@ -19,11 +19,11 @@ export function memorySourceLabel(source: MemorySource | null | undefined, local
   return source.origin === "auto" ? localize("memory.source.auto", { source: where }) : where;
 }
 
-/** One-line meta of an item: type is shown separately as a tag. */
+/** One-line meta of an item: type is shown separately as a tag. The event date is
+ *  left out: the content already states it, and it stays editable in the item editor. */
 export function memoryMetaParts(item: MemoryItem, localize: Localize): string[] {
   const parts: string[] = [];
   if (item.recorded_at) parts.push(localize("memory.recorded_at_value", { time: item.recorded_at }));
-  if (item.event_time) parts.push(localize("memory.event_time_value", { time: item.event_time }));
   parts.push(memorySourceLabel(item.source, localize));
   return parts;
 }

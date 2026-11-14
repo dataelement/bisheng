@@ -96,7 +96,8 @@ it("lists content, type, recorded time, event time and source, with no pinned/re
 
   const second = rowOf("Team offsite in Hangzhou");
   expect(within(second).getByText("memory.type.fact")).toBeInTheDocument();
-  expect(within(second).getByText(/2026-12-05/)).toBeInTheDocument();
+  // The event date is already in the content, so the meta line leaves it out.
+  expect(within(second).queryByText(/2026-12-05/)).toBeNull();
   expect(within(second).getByText(/Travel helper/)).toBeInTheDocument();
 });
 
