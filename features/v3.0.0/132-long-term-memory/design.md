@@ -285,7 +285,8 @@
 - **选定**：B（用户已于 2026-11-13 确认，spec AC-87 已按此改写）
 - **原因**：A 要在三套互不通用的引用机制上各做一遍句柄转换，并且标注是否准确无法保证。B 完全由系统确定，可自动化测试。
 - **2026-11-14 修订（用户裁定）**：常驻记忆不再出现在归因里。常驻记忆每轮都带入，列进归因会让与问题无关的条目出现在每个回答下面（例：问排序算法，归因里出现「要去上海开会」），用户会误以为回答用了它。现在只有本轮调用了记忆检索并取回条目时，`has_attribution` 才为真（日常模式、助手、深度研究的流式信号和按会话取的历史标志四处一致），归因列表只列 `retrieved`。`GET /memory/turn` 仍返回 `resident` 字段与常驻快照，前端不再使用。
-- **何时该重新考虑**：用户反馈"回答用了常驻记忆却看不到依据"成为主要问题时。
+- **2026-11-14 再修订（用户裁定）**：归因从回答下方移进思考过程。它说明回答依据了什么，和「查找记忆，找到 N 条」是同一件事，分两处显示反而要用户对号；回答下方只留会改变用户数据、可撤销的写入回执，并且回执与点赞点踩同一行。检索步骤的事件本来就带取回条目的 id（脱敏只去原文），前端用本人的条目列表（`GET /memory/items`）按 id 取原文，所以后端不改；非本人或条目已删时按 id 找不到，显示「相关记忆已被删除」，不会泄露他人记忆。连续发起的多次检索（模型常并发调用）合并成一个步骤，条目去重计数。`has_attribution` 标志与 `GET /memory/turn` 的 `retrieved` 字段仍在，前端不再使用。
+- **何时该重新考虑**：用户反馈"回答用了常驻记忆却看不到依据"成为主要问题时；或用户反馈思考过程折叠后找不到依据时。
 
 ### 决策 17：三处开关存储在各自对象的现有配置里，没有租户级开关
 
@@ -487,7 +488,7 @@ HTTP 接口，前缀 `/api/v1/memory`，全部只作用于调用者本人，没�
 | 前端：工作流节点 | `platform/src/controllers/API/workflow.ts:185`、`pages/BuildPage/flow/FlowNode/Parameter.tsx`、`FlowNode/NodeLogo.tsx`、`public/locales/*/flow.json` | 新增节点四处都要改 |
 | 前端：助手设置 | `platform/src/pages/BuildPage/assistant/editAssistant/Setting.tsx`（`knowledge_auth` 开关是样板） | 新增开关与说明 |
 | 前端：工作台配置 | `platform/src/pages/BuildPage/bench/index.tsx`、`DailyChatConfig.tsx` | 新增一项"记忆整理使用的模型"下拉，没有开关 |
-| 前端：日常模式气泡 | `client/src/components/Chat/AiMessageBubble.tsx`；SSE 解析 `client/src/hooks/useAiChatSSE.ts`；工具卡片 `Messages/ToolCallDisplay.tsx` | 操作提示与归因入口；记忆工具的卡片按脱敏后的格式渲染 |
+| 前端：日常模式气泡 | `client/src/components/Chat/AiMessageBubble.tsx`；SSE 解析 `client/src/hooks/useAiChatSSE.ts`；工具卡片 `Messages/ToolCallDisplay.tsx` | 操作提示（在回答操作栏内）；记忆工具的步骤按脱敏后的格式渲染，检索步骤可展开列出取回的条目（`components/Memory/MemorySearchHits.tsx`，三处共用） |
 | 前端：应用聊天 | `client/src/pages/appChat/ChatMessages.tsx`、`components/ClientMessageFooter.tsx` | 同上，第二套 |
 | 前端：深度研究结果 | `client/src/components/Linsight/Execution/ResultPanel.tsx`、`TaskTurnPanel.tsx` | 操作提示（含撤销）与归因入口，按该轮的 `turn_id` 取数。这是第三处接入 |
 | 前端：个人设置 | `client/src/pages/settings/settingsSections.ts`、`SettingsPage.tsx`；样板 `sections/AiAccessPane.tsx` | 新增"记忆" section |
@@ -601,7 +602,7 @@ HTTP 接口，前缀 `/api/v1/memory`，全部只作用于调用者本人，没�
 | 单元 | guard 规则、时间换算、常驻截取与缓存键、启用判定的全部组合、条目状态机（含三种撤销及其边界）、倒数排名融合、工具事件脱敏 | `src/backend/test/memory/` |
 | 服务级（需数据库） | 隔离（两用户、两租户、可见多租户、全局超管）、并发写入不丢、整理的水位与幂等与崩溃恢复、开关关闭期间的消息不被整理、生命周期各事件、审计 | 同上 |
 | 接入点 | 四个场景各一组：启用时有带入和工具，未启用或无登记时都没有；落库后的消息里没有记忆原文；工作流节点的参数校验、输出、空结果、故障、上线校验 | 各模块现有测试目录 |
-| 前端 | 节点参数面板、助手与工作台开关、个人设置记忆页、两套气泡的提示与归因入口、管理端页面不请求记忆接口 | platform 用 Vitest，client 用 Jest |
+| 前端 | 节点参数面板、助手与工作台开关、个人设置记忆页、两套气泡的操作提示与检索步骤的条目列表、管理端页面不请求记忆接口 | platform 用 Vitest，client 用 Jest |
 | 评测集 | 全部〔评〕条目，以及"带记忆/不带记忆"对比 | `tools/memory_eval/`，做法沿用 `tools/taskmode_eval/` |
 
 spec 中标〔测〕的验收标准，每一条都要有至少一个标注其编号的测试，供 tasks.md 追溯。〔测〕类测试里模型一律用桩。
@@ -713,6 +714,7 @@ spec 中标〔测〕的验收标准，每一条都要有至少一个标注其编
 
 | 日期 | 改动 | 触发原因 |
 |---|---|---|
+| 2026-11-14 | 归因移入思考过程的检索步骤（可展开、可删除），连续检索合并为一步；写入回执与点赞点踩同一行；记忆工具说明与检索结果写明记忆不是可标编号的资料来源（修 `[S1]` 被当正文显示）；修订 AC-87、决策 16 | 用户裁定 |
 | 2026-11-14 | 记忆管理页列表行不再显示事件时间（内容已写明日期；编辑条目时仍可查看和修改），修订 AC-88 | 用户裁定 |
 | 2026-11-14 | 归因只列检索取回的条目，常驻记忆不列入；`has_attribution` 只看本轮检索；修订 AC-87、决策 16 | 用户裁定（问排序算法时归因里出现无关的常驻条目） |
 | 2026-11-14 | 整理模型从工作台配置挪到系统模型配置的工作台页，字段改为 `WorkbenchModelConfig.memory_llm`，界面名称改为"记忆整理模型"；修订 AC-106 | 用户裁定 |

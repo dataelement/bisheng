@@ -2895,10 +2895,6 @@
       "undone": "已撤销",
       "undo_failed": "撤销失败，请重试"
     },
-    "attribution": {
-      "entry": "参考了记忆",
-      "empty": "相关记忆已被删除"
-    },
     "tool_operation": "记忆操作",
     "step": {
       "running_remember": "正在记下记忆",
@@ -2912,6 +2908,7 @@
       "done_write": "记忆已更新",
       "done_search": "查找记忆，找到 {{count}} 条",
       "done_search_empty": "查找记忆，没有相关内容",
+      "hits_gone": "相关记忆已被删除",
       "failed_remember": "记忆写入被拒绝：{{reason}}",
       "failed_correct": "记忆更正被拒绝：{{reason}}",
       "failed_forget": "记忆删除被拒绝：{{reason}}",

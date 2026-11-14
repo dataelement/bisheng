@@ -16,8 +16,8 @@ from bisheng.memory.domain.services.redaction import (
     replay_placeholder,
     split_reserved_tools,
 )
-from bisheng.memory.domain.services.search import SEARCH_HEADER, SearchService
-from bisheng.memory.domain.services.tools import build_memory_tools
+from bisheng.memory.domain.services.search import NOT_A_SOURCE_LINE, SEARCH_HEADER, SearchService
+from bisheng.memory.domain.services.tools import NOT_A_SOURCE, build_memory_tools
 from bisheng.memory.domain.services.turn_record import TurnRecordService
 from test.memory.conftest import counter
 
@@ -38,6 +38,13 @@ def test_two_tools_with_today_in_user_timezone(tools_for, make_ctx):
     today = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
     desc = tools["memory_write"].description
     assert today in desc and "明确要求" in desc
+
+
+def test_memory_is_not_a_numbered_source(tools_for, make_ctx):
+    """The daily citation rules number sources [Sn]; memory must not be one (a model cited a write as [S1])."""
+    tools = tools_for(make_ctx())
+    assert NOT_A_SOURCE in tools["memory_write"].description
+    assert NOT_A_SOURCE in tools["memory_search"].description
 
 
 def test_bad_timezone_falls_back_to_default(tools_for, make_ctx):
@@ -83,6 +90,7 @@ async def test_ac57_search_records_and_prefixes(tools_for, make_ctx, service):
     res = await service.write(make_ctx(turn_id="t0"), "remember", content="用户的项目叫北极星", type="fact")
     out = await tools_for(ctx)["memory_search"].ainvoke({"query": "北极星项目"})
     assert out.startswith(SEARCH_HEADER)
+    assert out.splitlines()[1] == NOT_A_SOURCE_LINE
     assert datetime.now().strftime("%Y-%m-%d") in out and res.item_id in out
     view = await TurnRecordService.get_for_owner(ctx, turn_id="t-s")
     assert view["retrieved_item_ids"] == [res.item_id]
@@ -102,7 +110,11 @@ def test_ac09_redaction_of_memory_tools_only():
     result = json.dumps({"ok": True, "op": "remember", "item_id": "i-1"})
     assert redact_tool_event("memory_write", args) == {"redacted": True, "op": "remember", "item_ids": []}
     assert redact_tool_event("memory_write", result) == {
-        "redacted": True, "op": "remember", "item_ids": ["i-1"], "ok": True, "reason_code": None
+        "redacted": True,
+        "op": "remember",
+        "item_ids": ["i-1"],
+        "ok": True,
+        "reason_code": None,
     }
     search_out = SEARCH_HEADER + "\n- id=i-2 [事实] 用户的秘密（记录于 2026-11-13）"
     red = redact_tool_event("memory_search", search_out)

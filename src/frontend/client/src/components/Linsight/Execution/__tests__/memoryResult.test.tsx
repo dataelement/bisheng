@@ -67,29 +67,24 @@ beforeEach(() => {
   mockGetTurn.mockImplementation(async ({ messageId }: { messageId: string }) => TURNS[messageId]);
 });
 
-it("shows each round's own notice and attribution by its task message id (AC-21, AC-87)", async () => {
+it("shows each round's own notice, in the round's feedback row, by its task message id (AC-21)", async () => {
   renderRounds();
   const first = screen.getByTestId("round-1");
   const second = screen.getByTestId("round-2");
 
   const notice = await within(first).findByRole("button", { name: /memory\.notice\.remember\|1/ });
-  expect(within(first).queryByRole("button", { name: /memory\.attribution\.entry/ })).toBeNull();
-  const attribution = await within(second).findByRole("button", { name: /memory\.attribution\.entry/ });
-  expect(within(second).queryByRole("button", { name: /memory\.notice/ })).toBeNull();
-
   expect(mockGetTurn).toHaveBeenCalledWith({ turnId: undefined, messageId: "201" });
   expect(mockGetTurn).toHaveBeenCalledWith({ turnId: undefined, messageId: "202" });
 
+  // Round two only looked memory up: its items are listed on the search step, not here.
+  await waitFor(() => expect(mockGetTurn).toHaveBeenCalledTimes(2));
+  expect(within(second).queryByRole("button", { name: /memory\./ })).toBeNull();
+  expect(within(second).queryByText("Round two lookup")).toBeNull();
+
   fireEvent.click(notice);
   expect(await within(first).findByText("Round one fact")).toBeInTheDocument();
-  expect(within(second).queryByText("Round one fact")).toBeNull();
-
-  fireEvent.click(attribution);
-  expect(await within(second).findByText("Round two lookup")).toBeInTheDocument();
-  expect(within(first).queryByText("Round two lookup")).toBeNull();
-
-  // The notice sits with the feedback buttons of the same round.
-  expect(within(first).getByTestId("feedback")).toBeInTheDocument();
+  // The notice shares the row with the same round's feedback buttons.
+  expect(notice.closest(".flex-wrap")?.contains(within(first).getByTestId("feedback"))).toBe(true);
 });
 
 it("asks nothing on a read-only or shared result (AC-87)", async () => {

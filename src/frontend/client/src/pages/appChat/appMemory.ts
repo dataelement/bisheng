@@ -7,7 +7,7 @@
  * attribution (spec: a workflow's final output is not attributed).
  */
 import { MEMORY_TOOL_NAMES, parseMemorySignal, type MemoryFlags } from "~/api/memory";
-import { describeMemoryStep, type MemoryStep } from "~/components/Memory/memoryStep";
+import { describeMemoryStep, mergeMemorySearchSteps, type MemoryStep } from "~/components/Memory/memoryStep";
 
 const ASSISTANT_FLOW_TYPE = 5;
 const ANSWER_CATEGORIES = new Set(["stream_msg", "answer", "output_msg", "agent_answer"]);
@@ -153,18 +153,57 @@ export function memoryRunStep(message: RunLike & { status?: unknown }): MemorySt
   });
 }
 
-/** Replace every field a run card could display with a content-free label for that run. */
-export function maskMemoryRuns<T extends RunLike>(messages: T[], labelFor: (message: T) => string): T[] {
-  return messages.map((message) => {
-    if (!isMemoryRun(message)) return message;
-    const label = labelFor(message);
+/** Item ids a masked memory search run returned (ids only), for the run's detail list. */
+export function memoryRunItemIds(message: { raw?: Row }): string[] {
+  const ids = message.raw?.memory_item_ids;
+  return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : [];
+}
+
+/**
+ * Replace every field a run card could display with a content-free label for that run.
+ * Memory searches fired back to back (often in parallel) become one run: the first
+ * keeps the merged label and item ids, the rest are dropped, so "found N" does not repeat.
+ */
+export function maskMemoryRuns<T extends RunLike>(messages: T[], labelFor: (step: MemoryStep) => string): T[] {
+  const out: T[] = [];
+  let searchRun: { index: number; steps: MemoryStep[] } | null = null;
+  const mask = (message: T, step: MemoryStep): T => {
+    const label = labelFor(step);
     const toolKey = asObject(message.payload).tool_key;
     return {
       ...message,
       text: label,
       reasoning: "",
       payload: typeof toolKey === "string" ? { tool_key: toolKey, redacted: true } : { redacted: true },
-      raw: { ...(message.raw ?? {}), message: label, thought: label, intermediate_steps: label },
+      raw: {
+        ...(message.raw ?? {}),
+        message: label,
+        thought: label,
+        intermediate_steps: label,
+        // Ids only (never text), and only where a search has items to list.
+        ...(step.op === "search" && step.state === "done" && step.itemIds.length ? { memory_item_ids: step.itemIds } : {}),
+      },
     };
-  });
+  };
+  for (const message of messages) {
+    if (!isMemoryRun(message)) {
+      searchRun = null;
+      out.push(message);
+      continue;
+    }
+    const step = memoryRunStep(message);
+    if (step.op !== "search") {
+      searchRun = null;
+      out.push(mask(message, step));
+      continue;
+    }
+    if (searchRun) {
+      searchRun.steps.push(step);
+      out[searchRun.index] = mask(out[searchRun.index], mergeMemorySearchSteps(searchRun.steps));
+      continue;
+    }
+    searchRun = { index: out.length, steps: [step] };
+    out.push(mask(message, step));
+  }
+  return out;
 }

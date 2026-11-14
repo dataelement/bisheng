@@ -91,19 +91,22 @@ it("reads a memory WebSocket message and pins it on the round's answer (AC-21)",
   expect(takeQueuedMemoryFlags("c1")).toBeUndefined();
 });
 
-it("shows the notice and the attribution entry under an assistant answer (AC-21, AC-87)", async () => {
+it("shows the notice in the answer's action row, with no attribution entry (AC-21, AC-87)", async () => {
   const { rows } = attachMemoryFlags([QUESTION, ANSWER], readMemoryFrame(MEMORY_FRAME)!.flags);
   renderFooter(rows, "assistant", appMemoryEnabled(5, false, false));
   expect(await screen.findByRole("button", { name: /memory\.notice/ })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: /memory\.attribution\.entry/ })).toBeInTheDocument();
+  // Retrieved items are listed on the search step, not under the answer.
+  expect(screen.queryByRole("button", { name: /memory\.attribution\.entry/ })).toBeNull();
   await waitFor(() => expect(mockApi.getMemoryTurnApi).toHaveBeenCalledWith({ turnId: "turn-1", messageId: "11" }));
-  expect(screen.getByTestId("message-buttons")).toBeInTheDocument();
+  // Same row as the like/dislike buttons.
+  const notice = screen.getByRole("button", { name: /memory\.notice/ });
+  expect(notice.closest(".flex-wrap")?.contains(screen.getByTestId("message-buttons"))).toBe(true);
 });
 
-it("shows history flags fetched by chat id after a reload (AC-21, AC-87)", async () => {
-  mockApi.getMemoryFlagsApi.mockResolvedValue({ "11": { turn_id: "turn-0", has_write: false, has_attribution: true } });
+it("shows history flags fetched by chat id after a reload (AC-21)", async () => {
+  mockApi.getMemoryFlagsApi.mockResolvedValue({ "11": { turn_id: "turn-0", has_write: true, has_attribution: true } });
   renderFooter([QUESTION, ANSWER], "assistant", true);
-  expect(await screen.findByRole("button", { name: /memory\.attribution\.entry/ })).toBeInTheDocument();
+  expect(await screen.findByRole("button", { name: /memory\.notice/ })).toBeInTheDocument();
   expect(mockApi.getMemoryFlagsApi).toHaveBeenCalledWith("c1");
 });
 

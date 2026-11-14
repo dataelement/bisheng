@@ -2967,10 +2967,6 @@
       "undone": "Undone",
       "undo_failed": "Could not undo. Please try again."
     },
-    "attribution": {
-      "entry": "Used memory",
-      "empty": "The related memories have been deleted"
-    },
     "tool_operation": "Memory operation",
     "step": {
       "running_remember": "Remembering",
@@ -2984,6 +2980,7 @@
       "done_write": "Memory updated",
       "done_search": "Searched memory, found {{count}}",
       "done_search_empty": "Searched memory, nothing relevant",
+      "hits_gone": "The related memories have been deleted",
       "failed_remember": "Memory write rejected: {{reason}}",
       "failed_correct": "Memory correction rejected: {{reason}}",
       "failed_forget": "Memory deletion rejected: {{reason}}",

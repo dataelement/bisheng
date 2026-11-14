@@ -26,7 +26,8 @@ import InputForm from "./components/InputForm";
 import InputFormSkill from "./components/InputFormSkill";
 import { bishengConfState, currentChatState, currentRunningState } from "./store/atoms";
 import { memoryStepLabel } from "~/components/Memory/memoryStep";
-import { appMemoryEnabled, isMemoryRun, maskMemoryRuns, memoryRunStep } from "./appMemory";
+import { MemorySearchHits } from "~/components/Memory/MemorySearchHits";
+import { appMemoryEnabled, isMemoryRun, maskMemoryRuns, memoryRunItemIds } from "./appMemory";
 import { useMessage } from "./useMessages";
 
 // F028: only question + answer category rows are selectable. Intermediate
@@ -101,7 +102,7 @@ export default function ChatMessages({
                 : messages,
               { mode: chatState?.flow.flow_type === 10 ? "workflow" : "assistant", sessionKey: chatId ?? "" },
             ),
-            (run) => memoryStepLabel(memoryRunStep(run), localize),
+            (step) => memoryStepLabel(step, localize),
           )}
           canExecute={!readOnly}
           labels={{
@@ -128,6 +129,12 @@ export default function ChatMessages({
               isMemoryRun(message)
                 ? { title: message.text || localize("memory.tool_operation"), unavailable: false }
                 : describeRun(message, chatState?.flow, createRunLabels(localize)),
+            // F132: a memory search run opens to the items it returned (owner's own list).
+            runDetail: (message) => {
+              if (!isMemoryRun(message)) return undefined;
+              const ids = memoryRunItemIds(message);
+              return ids.length ? <MemorySearchHits itemIds={ids} /> : undefined;
+            },
             title: (message) =>
               message.kind === "user" ? displayText(message.raw.user_name) || useName || "" : title,
             avatar: (message) =>
