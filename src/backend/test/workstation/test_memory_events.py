@@ -59,18 +59,15 @@ async def test_ac21_write_emits_memory_signal_without_item_text(memory, stream_e
     assert order.index("memory/" + signals[-1]["type"]) < order.index("agent_answer/end")
 
 
-async def test_ac87_resident_only_turn_signals_attribution_and_writes_summary(memory, stream_env):
-    """AC-87: a turn that only injected resident memory still signals has_attribution and has its summary row."""
+async def test_ac87_resident_only_turn_has_no_attribution_but_writes_summary(memory, stream_env):
+    """AC-87: resident memory rides along every turn, so a turn that only injected it is not
+    attributed (no signal); its summary row is still written."""
     await memory.service.write(make_ctx(), "remember", content="用户偏好简短回答", type="preference")
     chunks = await run_turn(stream_env)
-    signals = sse_events(chunks, "memory")
-    assert len(signals) == 1
-    flags = _flags(signals[0])
-    assert flags["has_attribution"] is True and flags["has_write"] is False
+    assert sse_events(chunks, "memory") == []
     summaries = [r for r in turn_rows(memory.db) if r.kind == KIND_SUMMARY]
     assert len(summaries) == 1
     row = summaries[0]
-    assert row.turn_id == flags["turn_id"]
     assert row.resident_rev is not None and row.resident_day
     assert row.scene_class == "chat"
     assert row.message_id == answer_rows(stream_env.inserted)[0].id

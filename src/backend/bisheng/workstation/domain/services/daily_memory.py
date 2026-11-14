@@ -145,10 +145,11 @@ class DailyMemoryTurn:
 
     @property
     def has_attribution(self) -> bool:
-        """This turn injected a non-empty resident block or retrieved items."""
+        """This turn retrieved items. The resident block rides along every turn, so it is
+        not listed as something the answer drew on."""
         if not self.ctx:
             return False
-        return bool(self.block and self.block.text) or bool(self.ctx.extra.get("memory_retrieved"))
+        return bool(self.ctx.extra.get("memory_retrieved"))
 
     def _flags(self) -> dict:
         return {"turn_id": self.ctx.turn_id, "has_write": self.has_write, "has_attribution": self.has_attribution}

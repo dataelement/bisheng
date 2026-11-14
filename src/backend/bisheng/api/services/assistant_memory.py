@@ -57,7 +57,7 @@ class AssistantMemoryTurn:
         return {
             "turn_id": ctx.turn_id if ctx else None,
             "has_write": bool(ctx and ctx.extra.get("memory_written")),
-            "has_attribution": bool(ctx and (self.resident_text or ctx.extra.get("memory_retrieved"))),
+            "has_attribution": bool(ctx and ctx.extra.get("memory_retrieved")),
         }
 
 

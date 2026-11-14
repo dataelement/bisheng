@@ -141,8 +141,8 @@ async def test_ac51_text_fetched_once_at_round_start(memory_services, memory_db,
     assert before == after and "用户在台北工作" in after and "东京" not in after
 
 
-async def test_ac87_resident_round_signals_attribution_at_end(memory_services, memory_db, task_message):
-    """AC-87: a round that only injected resident memory streams has_attribution at its end."""
+async def test_ac87_resident_only_round_has_no_attribution(memory_services, memory_db, task_message):
+    """AC-87: a round that only injected resident memory is not attributed, so nothing is streamed."""
     seed_session(memory_db)
     task_message()
     await _remember(memory_services, "用户偏好简体中文")
@@ -155,7 +155,7 @@ async def test_ac87_resident_round_signals_attribution_at_end(memory_services, m
     await round_.begin(_version(), push=_push)
     await round_.end(False)
 
-    assert pushed == [{"turn_id": round_.ctx.turn_id, "has_write": False, "has_attribution": True}]
+    assert pushed == []
     summary = turn_rows(memory_db, KIND_SUMMARY)[0]
     assert summary.resident_rev is not None and summary.scene_class == "linsight"
 

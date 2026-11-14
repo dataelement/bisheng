@@ -176,7 +176,7 @@ class LinsightMemoryRound:
         return {
             "turn_id": self.ctx.turn_id,
             "has_write": bool(self.ctx.extra.get("memory_written")),
-            "has_attribution": bool(self.resident_text) or bool(self.ctx.extra.get("memory_retrieved")),
+            "has_attribution": bool(self.ctx.extra.get("memory_retrieved")),
         }
 
     async def push_signal(self) -> None:

@@ -148,7 +148,7 @@ class TurnRecordService:
             f = flags.setdefault(r.message_id, {"turn_id": r.turn_id, "has_write": False, "has_attribution": False})
             if r.kind == KIND_WRITE:
                 f["has_write"] = True
-            elif r.kind == KIND_RETRIEVED or (r.kind == KIND_SUMMARY and r.resident_rev is not None):
+            elif r.kind == KIND_RETRIEVED:
                 f["has_attribution"] = True
         return flags
 
