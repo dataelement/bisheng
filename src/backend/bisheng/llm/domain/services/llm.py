@@ -53,7 +53,6 @@ from bisheng.llm.domain.models import LLMDao, LLMModel, LLMServer
 from bisheng.llm.domain.repositories.model_default_repository import ModelDefaultRepository
 from bisheng.llm.domain.schemas import (
     AssistantLLMConfig,
-    AssistantLLMItem,
     EvaluationLLMConfig,
     KnowledgeLLMConfig,
     LLMModelCreateReq,
@@ -61,7 +60,6 @@ from bisheng.llm.domain.schemas import (
     LLMServerCreateReq,
     LLMServerInfo,
     WorkbenchModelConfig,
-    WSModel,
 )
 from bisheng.llm.domain.services.context_window import ContextWindowService
 from bisheng.llm.domain.utils import invalidate_llm_info_cache, to_llm_invoke_error, usable_proxy_url
@@ -262,6 +260,28 @@ class LLMService:
             key.value, login_user=login_user, session=session
         )
         return model_cls.model_validate_json(admitted.payload_json)
+
+    @classmethod
+    async def aget_online_chat_models(cls) -> list[tuple[LLMModel, LLMServer]]:
+        """Online chat (``llm``) models this tenant can see, with their providers.
+
+        Uses the same server set as the management list (own + Root-shared), so
+        the workbench offers exactly the rows an administrator sees there.
+        """
+        leaf_id = get_current_tenant_id() or ROOT_TENANT_ID
+        servers = await cls.acollect_visible_servers(leaf_id)
+        server_by_id = {server.id: server for server in servers}
+        if not server_by_id:
+            return []
+        # Root-shared servers live outside the caller tenant; the server set above
+        # has already been authorized, so only their models are read here.
+        with bypass_tenant_filter():
+            models = await LLMDao.aget_model_by_server_ids(list(server_by_id))
+        return [
+            (model, server_by_id[model.server_id])
+            for model in sorted(models, key=lambda row: row.id)
+            if model.online and (model.model_type or "").strip() == LLMModelType.LLM.value
+        ]
 
     @classmethod
     async def acollect_visible_servers(cls, leaf_id: int, *, strict: bool = False) -> list[LLMServer]:
@@ -872,46 +892,26 @@ class LLMService:
                 return None
             return schema.model_validate_json(resolved.own.payload_json) if resolved.own is not None else schema()
 
-        if model.model_type == LLMModelType.LLM.value:
-            knowledge = await original(ConfigKeyEnum.KNOWLEDGE_LLM, KnowledgeLLMConfig)
-            if knowledge is not None:
-                changed = False
-                for field in ("extract_title_model_id", "source_model_id", "qa_similar_model_id"):
-                    if getattr(knowledge, field) is None:
-                        setattr(knowledge, field, model.id)
-                        changed = True
-                if changed:
-                    await cls.update_knowledge_llm(knowledge, login_user=login_user)
-            evaluation = await original(ConfigKeyEnum.EVALUATION_LLM, EvaluationLLMConfig)
-            if evaluation is not None and evaluation.model_id is None:
-                evaluation.model_id = model.id
-                await cls.update_evaluation_llm(evaluation, login_user=login_user)
-            assistant = await original(ConfigKeyEnum.ASSISTANT_LLM, AssistantLLMConfig)
-            if assistant is not None:
-                changed = False
-                if assistant.auto_llm is None:
-                    assistant.auto_llm = AssistantLLMItem(model_id=model.id)
-                    changed = True
-                if not assistant.llm_list:
-                    assistant.llm_list = [AssistantLLMItem(model_id=model.id, default=True)]
-                    changed = True
-                if changed:
-                    await cls.update_assistant_llm(assistant, login_user=login_user)
-            workbench = await original(ConfigKeyEnum.LINSIGHT_LLM, WorkbenchModelConfig)
-            if workbench is not None and (workbench.chat_title_llm is None or not workbench.chat_title_llm.id):
-                workbench.chat_title_llm = WSModel(id=str(model.id), name=model.model_name)
-                await cls.update_workbench_llm(login_user.user_id, workbench, BackgroundTasks(), login_user=login_user)
-        elif model.model_type == LLMModelType.EMBEDDING.value:
-            knowledge = await original(ConfigKeyEnum.KNOWLEDGE_LLM, KnowledgeLLMConfig)
-            if knowledge is not None and knowledge.embedding_model_id is None:
-                knowledge.embedding_model_id = model.id
-                await cls.update_knowledge_llm(knowledge, login_user=login_user)
-        elif model.model_type == LLMModelType.TTS.value or LLMModelType.is_speech(model.model_type):
-            workbench = await original(ConfigKeyEnum.LINSIGHT_LLM, WorkbenchModelConfig)
-            field = "tts_model" if model.model_type == LLMModelType.TTS.value else "asr_model"
-            if workbench is not None and getattr(workbench, field) is None:
-                setattr(workbench, field, WSModel(id=str(model.id), name=model.model_name))
-                await cls.update_workbench_llm(login_user.user_id, workbench, BackgroundTasks(), login_user=login_user)
+        # Every setting that takes a model is registered in system_model_autofill.SLOTS;
+        # a newly added model fills the empty ones of its kind.
+        from bisheng.llm.domain.services.system_model_autofill import CONFIG_TYPES, fill_empty_slots, kind_of
+
+        if kind_of(model.model_type) is None:
+            return
+        savers = {
+            ConfigKeyEnum.KNOWLEDGE_LLM: cls.update_knowledge_llm,
+            ConfigKeyEnum.ASSISTANT_LLM: cls.update_assistant_llm,
+            ConfigKeyEnum.EVALUATION_LLM: cls.update_evaluation_llm,
+            ConfigKeyEnum.WORKFLOW_LLM: cls.update_workflow_llm,
+        }
+        for key, schema in CONFIG_TYPES.items():
+            config = await original(key, schema)
+            if config is None or not fill_empty_slots(key, config, model):
+                continue
+            if key == ConfigKeyEnum.LINSIGHT_LLM:
+                await cls.update_workbench_llm(login_user.user_id, config, BackgroundTasks(), login_user=login_user)
+            else:
+                await savers[key](config, login_user=login_user)
 
     @classmethod
     async def update_llm_server(

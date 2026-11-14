@@ -53,6 +53,11 @@ async def test_public_config_keeps_only_visible_org_kbs(monkeypatch):
         "get_subscription_config",
         AsyncMock(return_value=None),
     )
+    # The model picker list is out of scope here (org knowledge-base visibility only).
+    monkeypatch.setattr(
+        "bisheng.dsh.domain.services.model_catalog.user_workbench_models",
+        AsyncMock(return_value=[]),
+    )
     monkeypatch.setattr(
         config_endpoint,
         "bisheng_settings",

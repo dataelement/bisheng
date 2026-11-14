@@ -16,6 +16,15 @@
     width: calc(15px + var(--dsh-content-font-delta, 0px));
     height: calc(15px + var(--dsh-content-font-delta, 0px));
 }
+/* Export and read-aloud draw bisheng-icons (24-unit grid, stroke 2, color pinned by
+   text-text-3). In this row they follow the DSH artwork instead: the button's color
+   token, and stroke 1.5 on the 24 grid, which at 15px equals the DSH icons' 1 on 16. */
+.dsh-message-action > svg.text-text-3 {
+    color: inherit;
+}
+.dsh-message-action > svg[viewBox="0 0 24 24"] {
+    stroke-width: 1.5;
+}
 .dsh-message-action:hover {
     background: var(--dsw-alias-interactive-bg-hover, rgb(var(--fill-1)));
     color: var(--dsw-alias-label-secondary, rgb(var(--text-2)));
