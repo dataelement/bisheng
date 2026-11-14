@@ -2842,8 +2842,6 @@
     "empty": "还没有保存的记忆",
     "add": "新增",
     "add_title": "新增记忆",
-    "edit": "编辑",
-    "edit_title": "编辑记忆",
     "delete": "删除",
     "clear": "清空全部",
     "clear_confirm_title": "清空全部记忆？",
@@ -2852,13 +2850,6 @@
     "cancel": "取消",
     "close": "关闭",
     "save": "保存",
-    "field": {
-      "summary": "概要",
-      "detail": "详情",
-      "type": "类型",
-      "event_time": "事件时间"
-    },
-    "event_time_hint": "选填。和某个日期有关的事情（如出差、截止日）可以填上日期。",
     "content_placeholder": "写下要记住的内容，200 字以内",
     "type": {
       "fact": "事实",
@@ -2866,10 +2857,8 @@
       "experience": "经验"
     },
     "recorded_at_value": "记录于 {{time}}",
+    "updated_at_value": "更新于 {{time}}",
     "event_time_value": "事件时间 {{time}}",
-    "detail_placeholder": "需要记住更多细节时写在这里，支持 Markdown",
-    "updated_at": "最近更新",
-    "no_detail": "没有详情",
     "back": "返回",
     "revise_label": "让 AI 修改这条记忆",
     "revise_placeholder": "告诉 AI 怎么改这条记忆，例如：出行改到 1 月了",

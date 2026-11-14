@@ -2837,8 +2837,6 @@
     "empty": "保存済みのメモリーはまだありません",
     "add": "追加",
     "add_title": "メモリーを追加",
-    "edit": "編集",
-    "edit_title": "メモリーを編集",
     "delete": "削除",
     "clear": "すべてクリア",
     "clear_confirm_title": "すべてのメモリーをクリアしますか？",
@@ -2847,13 +2845,6 @@
     "cancel": "キャンセル",
     "close": "閉じる",
     "save": "保存",
-    "field": {
-      "summary": "概要",
-      "detail": "詳細",
-      "type": "種類",
-      "event_time": "イベント日付"
-    },
-    "event_time_hint": "任意。出張や締め切りなど、日付に関わる内容は日付を入力できます。",
     "content_placeholder": "覚えておく内容（200 文字以内）",
     "type": {
       "fact": "事実",
@@ -2861,10 +2852,8 @@
       "experience": "経験"
     },
     "recorded_at_value": "記録 {{time}}",
+    "updated_at_value": "更新日時 {{time}}",
     "event_time_value": "イベント日付 {{time}}",
-    "detail_placeholder": "細かい内容を残したいときはここに書きます。Markdown に対応しています。",
-    "updated_at": "最終更新",
-    "no_detail": "詳細はありません",
     "back": "戻る",
     "revise_label": "AI にこの記憶を修正してもらう",
     "revise_placeholder": "この記憶をどう直すか AI に伝えてください（例：旅行は 1 月に変更）",

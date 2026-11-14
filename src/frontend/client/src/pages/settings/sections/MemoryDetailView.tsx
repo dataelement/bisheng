@@ -1,9 +1,9 @@
 /**
  * One memory, opened from the memory list (F132, AC-88 / AC-107).
  *
- * Shows when it was last updated, its summary and its detail (markdown), with
- * edit and delete at the top and a box at the bottom to tell the AI how to change
- * it. An AI change applies at once and can be undone, which edits the item back
+ * Reads like a note: the memory's one line is the heading, its full text (markdown)
+ * the body. It is changed only by telling the AI how (the box pinned at the bottom),
+ * or deleted. An AI change applies at once and can be undone, which edits the item back
  * to the version before.
  */
 import { Button, Tag } from "@bisheng/ui";
@@ -27,7 +27,6 @@ const MarkdownLite = lazy(() => import("~/components/Chat/Messages/Content/Markd
 export interface MemoryDetailViewProps {
   item: MemoryItem;
   onBack: () => void;
-  onEdit: (item: MemoryItem) => void;
   onDelete: (item: MemoryItem) => void;
   /** The item was replaced by a new version (AI change or its undo): follow the new id. */
   onReplaced: (newItemId: string) => Promise<void>;
@@ -35,7 +34,7 @@ export interface MemoryDetailViewProps {
 
 type Notice = { kind: "revised"; previous: MemoryItemVersion } | { kind: "unchanged" } | null;
 
-export function MemoryDetailView({ item, onBack, onEdit, onDelete, onReplaced }: MemoryDetailViewProps) {
+export function MemoryDetailView({ item, onBack, onDelete, onReplaced }: MemoryDetailViewProps) {
   const localize = useLocalize();
   const [instruction, setInstruction] = useState("");
   const [notice, setNotice] = useState<Notice>(null);
@@ -92,15 +91,8 @@ export function MemoryDetailView({ item, onBack, onEdit, onDelete, onReplaced }:
     }
   };
 
-  const section = (label: string, body: React.ReactNode) => (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-caption text-text-3">{label}</span>
-      {body}
-    </div>
-  );
-
   const detailBody = () => {
-    if (!item.has_detail) return <p className="text-body-sm text-text-3">{localize("memory.no_detail")}</p>;
+    if (!item.has_detail) return null;
     if (detailQuery.isError) {
       return (
         <div className="flex items-center gap-2 text-body-sm text-text-3">
@@ -113,8 +105,8 @@ export function MemoryDetailView({ item, onBack, onEdit, onDelete, onReplaced }:
     }
     if (detailQuery.isLoading) return <p className="text-body-sm text-text-3">{localize("memory.loading")}</p>;
     return (
-      // Same size as the summary; markdown lists and paragraphs keep their structure.
-      <div className="break-words text-body text-text-1 [&_li]:my-0.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-5">
+      // Body text under the heading; markdown lists and paragraphs keep their structure.
+      <div className="break-words text-body leading-7 text-text-2 [&_li]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_p:last-child]:mb-0 [&_ul]:list-disc [&_ul]:pl-5">
         <Suspense fallback={<p className="whitespace-pre-wrap">{detailQuery.data ?? ""}</p>}>
           <MarkdownLite content={detailQuery.data ?? ""} codeExecution={false} />
         </Suspense>
@@ -123,75 +115,69 @@ export function MemoryDetailView({ item, onBack, onEdit, onDelete, onReplaced }:
   };
 
   return (
-    <div className="flex min-h-full flex-col" data-memory-detail={item.id}>
+    // Tall enough that the AI box sits at the bottom of the window, like a chat composer.
+    <div className="flex min-h-[calc(100dvh-148px)] flex-col" data-memory-detail={item.id}>
       <div className="flex items-center justify-between gap-2">
         <Button size="small" variant="text" color="default" onClick={onBack}>
           <Outlined.ArrowLeft />
           {localize("memory.back")}
         </Button>
-        <div className="flex items-center gap-2">
-          <Button size="small" variant="outlined" onClick={() => onEdit(item)}>
-            {localize("memory.edit")}
-          </Button>
-          <Button size="small" variant="outlined" color="danger" onClick={() => onDelete(item)}>
-            {localize("memory.delete")}
-          </Button>
-        </div>
+        <Button size="small" variant="outlined" color="danger" onClick={() => onDelete(item)}>
+          {localize("memory.delete")}
+        </Button>
       </div>
 
-      {notice && (
-        <div className="mt-3 flex items-center gap-2 text-body-sm text-text-2" role="status">
-          {notice.kind === "revised" ? (
-            <>
-              <span>{localize("memory.revised")}</span>
-              <Button
-                size="small"
-                variant="text"
-                color="default"
-                loading={undo.isLoading}
-                onClick={() => undo.mutate(notice.previous)}
-              >
-                {localize("memory.undo")}
-              </Button>
-            </>
-          ) : (
-            <span>{localize("memory.revise_unchanged")}</span>
-          )}
-        </div>
-      )}
-
-      <div className="mt-4 flex flex-1 flex-col gap-5">
+      {/* A memory reads like a note: its one line is the heading, the rest is the body.
+          No "summary"/"details" labels to learn. */}
+      <article className="mt-5 flex flex-col gap-4">
+        <h3 className="whitespace-pre-wrap break-words text-h4 font-medium text-text-1">{item.content}</h3>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-text-3">
           <Tag size="small">{memoryTypeLabel(item.type, localize)}</Tag>
           <span>{memorySourceLabel(item.source, localize)}</span>
           {item.event_time && <span>{localize("memory.event_time_value", { time: item.event_time })}</span>}
+          {item.recorded_at && <span>{localize("memory.updated_at_value", { time: item.recorded_at })}</span>}
         </div>
-        {section(localize("memory.updated_at"), <p className="text-body text-text-1">{item.recorded_at ?? ""}</p>)}
-        {section(
-          localize("memory.field.summary"),
-          <p className="whitespace-pre-wrap break-words text-body text-text-1">{item.content}</p>,
-        )}
-        {section(localize("memory.field.detail"), detailBody())}
-      </div>
+        {detailBody()}
+      </article>
 
-      {/* Tell the AI how to change this memory; it stays at the bottom of the pane while scrolling. */}
-      <div className="sticky bottom-0 mt-6 bg-white pb-1 pt-2">
+      {/* Tell the AI how to change this memory: pinned to the bottom of the pane. */}
+      <div className="sticky bottom-0 mt-auto bg-white pb-2 pt-6">
+        {notice && (
+          <div className="mb-2 flex items-center gap-2 text-body-sm text-text-2" role="status">
+            {notice.kind === "revised" ? (
+              <>
+                <span>{localize("memory.revised")}</span>
+                <Button
+                  size="small"
+                  variant="text"
+                  color="default"
+                  loading={undo.isLoading}
+                  onClick={() => undo.mutate(notice.previous)}
+                >
+                  {localize("memory.undo")}
+                </Button>
+              </>
+            ) : (
+              <span>{localize("memory.revise_unchanged")}</span>
+            )}
+          </div>
+        )}
         {error && (
           <p role="alert" className="mb-2 text-body-sm text-danger">
             {error}
           </p>
         )}
-        <div className="flex items-end gap-2 rounded-2xl border border-border-base px-4 py-2.5 focus-within:border-border-deep">
+        <div className="flex items-end gap-2 rounded-2xl border border-border-base bg-white px-4 py-3 shadow-sm focus-within:border-border-deep">
           <textarea
             aria-label={localize("memory.revise_label")}
             value={instruction}
             onChange={(e) => setInstruction(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={revise.isLoading}
-            rows={1}
+            rows={2}
             maxLength={2000}
             placeholder={localize("memory.revise_placeholder")}
-            className="max-h-32 min-h-[24px] flex-1 resize-none bg-transparent text-body text-text-1 outline-none placeholder:text-text-4"
+            className="max-h-40 min-h-[48px] flex-1 resize-none bg-transparent text-body text-text-1 outline-none placeholder:text-text-3"
           />
           <Button
             size="small"
