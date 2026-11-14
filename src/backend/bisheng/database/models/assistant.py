@@ -12,6 +12,9 @@ from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.utils import generate_uuid
 
 
+# F132: memory switch of newly created assistants. Rows that predate the column stay off (server_default).
+ASSISTANT_MEMORY_DEFAULT = False
+
 class AssistantStatus(Enum):
     OFFLINE = 1
     ONLINE = 2
@@ -57,6 +60,15 @@ class AssistantBase(SQLModelSerializable):
             server_default=text("0"),
             comment="F041: 用户知识库权限校验 — ON filters knowledge-space retrieval by the runtime "
             "user's view_file, OFF by the config author's (default OFF preserves current behavior)",
+        ),
+    )
+    memory_enabled: bool = Field(
+        default=ASSISTANT_MEMORY_DEFAULT,
+        sa_column=Column(
+            Boolean,
+            nullable=False,
+            server_default=text("0"),
+            comment="F132: long-term memory switch of this assistant (default OFF)",
         ),
     )
     create_time: datetime | None = Field(

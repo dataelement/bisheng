@@ -122,7 +122,7 @@ grep -rhoE "Code(:\s*int)?\s*=\s*[0-9]{5}" src/backend/bisheng/common/errcode/*.
 |---|---|
 | 10x | 100 server · 101 finetune · 102 model_deploy · 103 component · 104 assistant · 105 flow · 106 user · 107 tag · 108 llm · 109 knowledge |
 | 11x | 110 linsight · 111 linsight (second block) |
-| 12x–18x | 120 workstation · 130 chat · 140 message · 150 tool · 160 dataset · **161 app_factory (F054) · 162 app_factory (F055)** · 170 telemetry · 180 knowledge_space · 181 approval |
+| 12x–18x | 120 workstation · **121 memory (F132)** · 130 chat · 140 message · 150 tool · 160 dataset · **161 app_factory (F054) · 162 app_factory (F055)** · 170 telemetry · 180 knowledge_space · 181 approval |
 | 19x (tenant / permission) | 190 channel + permission denied (19000) · 191 tenant_resolver · 192 tenant_fga · 193 sso_sync · 194 tenant_quota · 195 tenant_sharing · 196 resource_owner_transfer · 197 admin_scope · 198 llm_tenant |
 | 20x–25x (org) | 200 tenant · 210 department · 220 org_sync **and** tenant_tree ⚠️ · 230 user_group · 240 role · 250 permission |
 | 26x–27x (open / public API · license) | 260 open_api · 261 dsh · 262 dsh_market · **263 mcp_face (F052)** · 264 public_endpoints · **265 model_face (F051)** · 270 commercial_license |

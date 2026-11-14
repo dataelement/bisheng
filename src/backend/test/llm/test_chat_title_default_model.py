@@ -63,6 +63,8 @@ async def test_first_llm_fills_an_empty_title_slot(config_store, empty_slot):
 
 async def test_a_chosen_title_model_is_kept(config_store):
     config_store["workbench"].chat_title_llm = WSModel(id="7")
+    # memory_llm is another empty LLM slot; set it so only the title slot is under test.
+    config_store["workbench"].memory_llm = WSModel(id="7")
 
     await LLMService.set_default_model(
         SimpleNamespace(id=30, model_type="llm", model_name="dsv4"), login_user=config_store["actor"]

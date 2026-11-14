@@ -1,0 +1,25 @@
+{
+  "id": "no-fabrication",
+  "acs": [
+    "AC-64"
+  ],
+  "turns": [],
+  "question": {
+    "user": "我上次让你记的生日是哪天？",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "must_not_contain": [
+      "月",
+      "日"
+    ],
+    "must_contain_any": [
+      "没有",
+      "不知道",
+      "未"
+    ]
+  },
+  "notes": "空记忆",
+  "requires_consolidation": false
+}

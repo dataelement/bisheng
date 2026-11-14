@@ -72,6 +72,12 @@ _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.org_sync.domain.models.org_sync",
     "bisheng.approval.domain.models.approval_request",
     "bisheng.citation.domain.models.message_citation",
+    "bisheng.memory.domain.models.memory_item",
+    "bisheng.memory.domain.models.memory_session_cursor",
+    "bisheng.memory.domain.models.memory_user_setting",
+    "bisheng.memory.domain.models.memory_turn_record",
+    "bisheng.memory.domain.models.memory_resident_snapshot",
+    "bisheng.memory.domain.models.memory_metric_daily",
     # Previously *not* on any auto-imported chain — silent tenant-id leaks.
     "bisheng.database.models.failed_tuple",
     "bisheng.database.models.flow_version",

@@ -17,6 +17,8 @@
     "workbenchVoiceModel": "Workbench Voice Model",
     "sessionTitleGenerationModel": "Conversation Title Model",
     "sessionTitleGenerationModelTooltip": "Names new conversations in the workbench, knowledge spaces and apps; pick a fast model. Thinking is turned off for titles. If unset, the workbench names conversations with the chat model in use, and knowledge spaces and apps leave them unnamed.",
+    "memoryLlm": "Memory Organization Model",
+    "memoryLlmTooltip": "This model organizes each user's long-term memory in the background. If none is selected, the first model in the daily chat model list is used.",
     "imageReadModel": "Image Reading Model",
     "imageReadModelTooltip": "Reads pictures in documents and decides which ones match the question. Knowledge Q&A, channel Q&A, and daily chat all use the model set here.",
     "asrModel": "Speech-to-Text (ASR) Model",

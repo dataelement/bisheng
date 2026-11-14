@@ -1,0 +1,26 @@
+{
+  "id": "no-request-no-write-chat",
+  "acs": [
+    "AC-30"
+  ],
+  "turns": [
+    {
+      "user": "帮我把这段话润色一下：我们的平台支持多租户隔离。",
+      "new_session": false,
+      "expect_write": false
+    }
+  ],
+  "question": {
+    "user": "你刚才帮我记住了什么吗？",
+    "new_session": false,
+    "expect_write": false
+  },
+  "rules": {
+    "must_not_contain": [
+      "已记下",
+      "记住了"
+    ]
+  },
+  "notes": "",
+  "requires_consolidation": false
+}

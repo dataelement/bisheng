@@ -416,6 +416,18 @@ class CeleryConf(BaseModel):
                 "schedule": crontab.from_string("10 4 * * *"),
             }
 
+        # F132 long-term memory. Tasks are referenced by name only; this module
+        # must not import bisheng.memory (layering check). The scan runs every
+        # minute and itself honours the configured scan interval.
+        for key, task, schedule in (
+            ("memory_scan_sessions", "bisheng.worker.memory.tasks.scan_memory_sessions", 60.0),
+            ("memory_reconcile", "bisheng.worker.memory.tasks.reconcile_memory", 3600.0),
+            ("memory_flush_metrics", "bisheng.worker.memory.tasks.flush_memory_metrics", 600.0),
+            ("memory_cleanup_turns", "bisheng.worker.memory.tasks.cleanup_memory_turns", crontab.from_string("40 4 * * *")),
+        ):
+            if key not in self.beat_schedule:
+                self.beat_schedule[key] = {"task": task, "schedule": schedule}
+
         # convert str to crontab
         for key, task_info in self.beat_schedule.items():
             if isinstance(task_info["schedule"], str):

@@ -15,6 +15,8 @@
     "workbenchVoiceModel": "工作台及知识空间语音模型",
     "sessionTitleGenerationModel": "会话标题生成模型",
     "sessionTitleGenerationModelTooltip": "为工作台、知识空间和应用的新会话起标题，建议选响应快的模型。起标题时会关闭模型的思考。未设置时，工作台用当前对话的模型起标题，知识空间和应用不起标题。",
+    "memoryLlm": "记忆整理模型",
+    "memoryLlmTooltip": "后台整理每个用户的长期记忆时调用这个模型。未选择时使用日常对话模型列表中的第一个模型。",
     "imageReadModel": "图片读取模型",
     "imageReadModelTooltip": "用于查看文档中的图片，并判断哪些图片与问题有关。知识库问答、频道问答和日常对话都使用这里配置的模型。",
     "asrModel": "语音转文字（ASR）模型",

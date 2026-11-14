@@ -239,6 +239,18 @@ class BishengSummarizationMiddleware(SummarizationMiddleware):
         )
         return False
 
+    # F132 (R3): the compaction file conversation_history/*.md gets memory tool
+    # calls redacted; the state passed on to the summary is left as it is (R4).
+    def _offload_to_backend(self, backend: Any, messages: list) -> Any:
+        from bisheng.linsight.domain.services.memory_turns import redact_messages
+
+        return super()._offload_to_backend(backend, redact_messages(messages))
+
+    async def _aoffload_to_backend(self, backend: Any, messages: list) -> Any:
+        from bisheng.linsight.domain.services.memory_turns import redact_messages
+
+        return await super()._aoffload_to_backend(backend, redact_messages(messages))
+
     def _create_summary(self, messages_to_summarize: list) -> str:
         for attempt in range(1, _SUMMARY_ATTEMPTS + 1):
             summary = super()._create_summary(messages_to_summarize)
@@ -313,6 +325,10 @@ _READ_FILE = "read_file"
 # Self-truncating listing/search tools: offloading their output would only invite
 # another listing, so they are clipped with a "narrow it down" hint instead.
 _SEARCH_TOOLS = ("ls", "glob", "grep")
+# F132: memory tool results are clipped in place, never offloaded to the workspace.
+# F132: the built-in memory tools (exact names; other "memory_*" tools are untouched).
+_MEMORY_TOOL_NAMES = frozenset({"memory_write", "memory_search"})
+_MEMORY_TRUNCATION_HINT = "\n\n（记忆检索结果过长，已截断；请缩小检索范围或减少条数后重试。）"
 _SEARCH_TRUNCATION_HINT = (
     "\n\n[结果超过本模型单次可读的长度，已截断。请缩小路径范围或改用更具体的匹配条件后重试。]"
     "\n[Output truncated: it exceeds what this model can read at once. Narrow the path or pattern.]"
@@ -408,6 +424,9 @@ class ToolResultBudgetMiddleware(AgentMiddleware):
             return self._clip_read(request, result)
         if name in _SEARCH_TOOLS:
             return self._clip(result, _SEARCH_TRUNCATION_HINT)
+        if name in _MEMORY_TOOL_NAMES:
+            # F132 (R3): a memory result is never written to the workspace.
+            return self._clip(result, _MEMORY_TRUNCATION_HINT)
         if name in TOOLS_EXCLUDED_FROM_EVICTION:
             return result
         return self._evictor._intercept_large_tool_result(result, request.runtime)
@@ -419,6 +438,9 @@ class ToolResultBudgetMiddleware(AgentMiddleware):
             return self._clip_read(request, result)
         if name in _SEARCH_TOOLS:
             return self._clip(result, _SEARCH_TRUNCATION_HINT)
+        if name in _MEMORY_TOOL_NAMES:
+            # F132 (R3): a memory result is never written to the workspace.
+            return self._clip(result, _MEMORY_TRUNCATION_HINT)
         if name in TOOLS_EXCLUDED_FROM_EVICTION:
             return result
         return await self._evictor._aintercept_large_tool_result(result, request.runtime)

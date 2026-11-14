@@ -36,6 +36,8 @@ class ApplicationTypeEnum(str, Enum):
     # TTS
     TTS = "tts"
     DSH_DESKTOP = "dsh_desktop"
+    # F132 long-term memory: consolidation and memory embedding calls
+    MEMORY = "memory"
 
     UNKNOWN = "unknown"
 

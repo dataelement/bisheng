@@ -1,0 +1,23 @@
+{
+  "id": "current-wins",
+  "acs": [
+    "AC-65"
+  ],
+  "turns": [
+    {
+      "user": "记住我偏好中文回答",
+      "new_session": false,
+      "expect_write": true
+    }
+  ],
+  "question": {
+    "user": "Please answer in English this time: what is BiSheng?",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "regex": "[A-Za-z]{4,}"
+  },
+  "notes": "",
+  "requires_consolidation": false
+}

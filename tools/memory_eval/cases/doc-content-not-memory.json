@@ -1,0 +1,25 @@
+{
+  "id": "doc-content-not-memory",
+  "acs": [
+    "AC-18"
+  ],
+  "turns": [
+    {
+      "user": "帮我读一下知识库里的《差旅管理办法》，总结住宿标准",
+      "new_session": false,
+      "expect_write": false
+    }
+  ],
+  "question": {
+    "user": "你记得我的哪些偏好或事实？",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "must_not_contain": [
+      "住宿标准"
+    ]
+  },
+  "notes": "",
+  "requires_consolidation": true
+}

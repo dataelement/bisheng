@@ -21,6 +21,7 @@ import { dailyFailureMetadata, createBrowserNetworkFailure, parseFailureInfo, ty
 import { SSE } from "sse.js";
 import type { AgentEvent, ChatMessage, ContentPart } from "~/api/chatApi";
 import { getSSEUrl } from "~/api/chatApi";
+import { parseMemorySignal, type MemoryFlags } from "~/api/memory";
 import { translateApiErrorMessage } from "~/api/request";
 import { bindProjectChatCreation, captureProjectChatDraft, type ProjectChatDraft } from "~/layouts/WorkbenchSidebar/projectChatCreation";
 
@@ -40,6 +41,8 @@ export interface AgentPatch {
     finalised?: boolean;
     /** Files the code interpreter produced this turn, sent on `agent_answer.end`. */
     files?: ChatMessage["files"];
+    /** F132: memory flags of this answer (from the `memory` SSE category). */
+    memory?: MemoryFlags;
 }
 
 export interface SSESubmission {
@@ -382,6 +385,14 @@ export function openChatStream(
 
                 if (category === "processing") {
                     if (type === "close") expectedClose = true;
+                    return;
+                }
+
+                // F132: memory signal — turn id + notice/attribution flags, never item text.
+                if (category === "memory") {
+                    const flags = parseMemorySignal(data);
+                    if (!flags) return;
+                    emitAgent({ memory: flags });
                     return;
                 }
 

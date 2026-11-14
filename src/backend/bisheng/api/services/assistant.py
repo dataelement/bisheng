@@ -766,6 +766,9 @@ class AssistantService(BaseService, AssistantUtils):
         # F041: persist the 用户知识库权限校验 toggle (None = untouched, keep current value)
         if req.knowledge_auth is not None:
             changes["knowledge_auth"] = req.knowledge_auth
+        # F132: the memory switch takes effect on the next turn (None = untouched)
+        if req.memory_enabled is not None:
+            changes["memory_enabled"] = req.memory_enabled
         assistant = await cls._persist_assistant_changes(
             req.id,
             login_user,

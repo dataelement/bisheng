@@ -223,6 +223,7 @@ class LLMService:
                     getattr(workbench_cfg.asr_model, "id", None),
                     getattr(workbench_cfg.tts_model, "id", None),
                     getattr(workbench_cfg.chat_title_llm, "id", None),
+                    getattr(workbench_cfg.memory_llm, "id", None),
                 ],
             )
 

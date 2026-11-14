@@ -9,6 +9,7 @@ from bisheng.core.context.tenant import bypass_tenant_filter_if
 from bisheng.core.session_activity import business_activity
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSessionDao
+from bisheng.memory.domain.services.gate import MemoryGate
 from bisheng.workstation.domain.schemas import WorkstationMessage
 from bisheng.workstation.domain.schemas.chat import APIChatCompletion
 from bisheng.workstation.domain.services.chat_helpers import (
@@ -102,4 +103,10 @@ async def chat_completions(
     data: APIChatCompletion,
     login_user=LoginUserDep,
 ):
-    return await stream_chat_completion(request, data, login_user)
+    async def memory_register(chat_id: str) -> None:
+        # F132 decision 6: only this login-state endpoint registers a conversation
+        # for long-term memory; the open-API entry shares the service function
+        # but passes no register callable (AC-10).
+        await MemoryGate.open(chat_id, login_user)
+
+    return await stream_chat_completion(request, data, login_user, memory_register=memory_register)

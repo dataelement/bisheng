@@ -1,0 +1,26 @@
+{
+  "id": "long-conclusion-detail",
+  "acs": [
+    "AC-20"
+  ],
+  "turns": [
+    {
+      "user": "把我们刚讨论的知识库迁移方案记下来：先冻结写入，再全量导出向量，按租户分批导入新集群，最后切换读流量并保留旧集群一周用于回滚",
+      "new_session": false,
+      "expect_write": true
+    }
+  ],
+  "question": {
+    "user": "我们定的知识库迁移方案是什么？",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "must_contain_all": [
+      "冻结",
+      "回滚"
+    ]
+  },
+  "notes": "",
+  "requires_consolidation": false
+}

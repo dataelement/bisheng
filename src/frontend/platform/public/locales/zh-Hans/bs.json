@@ -1229,6 +1229,9 @@
     "knowledgeSpace": "知识空间",
     "userAuthVerification": "用户知识库权限校验",
     "userAuthVerificationTips": "开启后，检索结果按当前使用者本人的知识空间文件查看权限过滤，每人只能检索到自己有权查看的文件；关闭时，按配置者的可见范围检索，所有使用者共享配置者能看到的文件（配置者无权查看的文件同样不会被检索）。文档知识库不受细粒度文件权限影响。",
+    "memory": "记忆",
+    "assistantMemory": "助手记忆",
+    "assistantMemoryDesc": "开启后，用户在这个助手里的对话要点会整理进自己的记忆；助手回答时会参考当前用户的记忆，记忆内容可能出现在回答里。每个用户的记忆只属于自己，其他用户看不到。",
     "searchBaseName": "搜索知识库名称",
     "debugPreview": "调试预览",
     "addTool": "添加工具",
@@ -4574,5 +4577,8 @@
   "organization.trafficLoadFailed": "流量控制加载失败，请重试。",
   "organization.partialSave": "基本设置已保存，流量控制尚未保存，请重试。",
   "organization.clearSearch": "清空搜索",
-  "organization.noResults": "暂无结果"
+  "organization.noResults": "暂无结果",
+  "memory": {
+    "operation": "记忆操作"
+  }
 }

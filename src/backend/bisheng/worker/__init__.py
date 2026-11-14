@@ -36,6 +36,13 @@ from bisheng.worker.knowledge.space_delete import dispatch_pending_deletes, purg
 from bisheng.worker.knowledge.stale_projection_reconciler import (
     reconcile_stale_parent_projections as reconcile_stale_parent_projections,
 )
+from bisheng.worker.memory.tasks import (
+    cleanup_memory_turns,
+    consolidate_memory_user,
+    flush_memory_metrics,
+    reconcile_memory,
+    scan_memory_sessions,
+)
 from bisheng.worker.linsight.personal_skill_sweep import (
     dispatch_personal_skill_orphan_sweep,
     sweep_personal_skill_orphans,

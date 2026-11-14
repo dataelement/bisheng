@@ -20,9 +20,14 @@ import CollapsibleTimelineItem from './CollapsibleTimelineItem';
 import { ACCENT, BODY, MUTED } from './execTokens';
 import { detailTextCls, formatStepParams, stepTypeIcon } from './StepRow';
 import { mergedStepRenderEqual, type MergedStep } from './stepUtils';
+import { isMemoryToolEvent } from '~/api/memory';
+import { MemorySearchHits } from '~/components/Memory/MemorySearchHits';
+import { describeMemoryStep, memoryStepLabel, mergeMemorySearchSteps } from '~/components/Memory/memoryStep';
 
 export interface ToolRowLiteProps {
     step: MergedStep;
+    /** F132: further memory searches fired right after `step`, shown as this one row. */
+    memorySearches?: MergedStep[];
 }
 
 /**
@@ -65,7 +70,7 @@ function resolveTitle(step: MergedStep, localize: ReturnType<typeof useLocalize>
     return localize('com_tools_state_tool_done', { name: step.name || localize('com_tools_generic_fallback') });
 }
 
-const ToolRowLiteBase: FC<ToolRowLiteProps> = ({ step }) => {
+const ToolRowLiteBase: FC<ToolRowLiteProps> = ({ step, memorySearches }) => {
     const localize = useLocalize();
     // Default COLLAPSED to a single verb-phrase line (入参/结果 on demand). The
     // parent group already stays expanded while it's the active episode; keeping
@@ -75,10 +80,23 @@ const ToolRowLiteBase: FC<ToolRowLiteProps> = ({ step }) => {
     // local; the parent DeepStepGroup owns the group-level fold.
     const [open, setOpen] = useState<boolean>(false);
 
-    const paramsText = formatStepParams(step.params);
-    const hasDetails = !!(parseFailureInfo(step.extraInfo?.failure_info) || step.callReason || paramsText || step.output);
+    // F132: a memory tool step (already redacted server-side) says what it did and
+    // never shows its input/output; a finished search with hits opens to list them.
+    const isMemoryStep = isMemoryToolEvent({ tool_name: step.name, args: step.params, results: step.output });
+    const memoryStep = isMemoryStep
+        ? mergeMemorySearchSteps(
+              [step, ...(memorySearches ?? [])].map((s) =>
+                  describeMemoryStep({ tool_name: s.name, args: s.params, results: s.output, inflight: s.running }),
+              ),
+          )
+        : null;
+    const memoryHits = memoryStep?.op === 'search' && memoryStep.state === 'done' ? memoryStep.itemIds : [];
+    const paramsText = isMemoryStep ? '' : formatStepParams(step.params);
+    const hasDetails = isMemoryStep
+        ? memoryHits.length > 0
+        : !!(parseFailureInfo(step.extraInfo?.failure_info) || step.callReason || paramsText || step.output);
 
-    const title = resolveTitle(step, localize);
+    const title = memoryStep ? memoryStepLabel(memoryStep, localize) : resolveTitle(step, localize);
     // Unified icon system (§1.3): running → Accent Loading spinner; done →
     // stepTypeIcon recolored to Ink via the descendant selector. Open-aware:
     // the spinner shows only while COLLAPSED + running; once expanded the node
@@ -97,15 +115,20 @@ const ToolRowLiteBase: FC<ToolRowLiteProps> = ({ step }) => {
             open={hasDetails && open}
             onToggle={(next) => hasDetails && setOpen(next)}
         >
-            {parseFailureInfo(step.extraInfo?.failure_info) && <ChatErrorCard failureInfo={step.extraInfo?.failure_info} />}
-            {step.callReason && <p className={DETAIL_TEXT} style={{ color: BODY }}>{step.callReason}</p>}
+            {!isMemoryStep && parseFailureInfo(step.extraInfo?.failure_info) && <ChatErrorCard failureInfo={step.extraInfo?.failure_info} />}
+            {memoryHits.length > 0 && (
+                <div className="mt-1 w-fit max-w-[560px] border-l-2 border-border-base py-0.5 pl-3">
+                    <MemorySearchHits itemIds={memoryHits} />
+                </div>
+            )}
+            {!isMemoryStep && step.callReason && <p className={DETAIL_TEXT} style={{ color: BODY }}>{step.callReason}</p>}
             {paramsText && (
                 <div className="mt-1">
                     <p className="text-xs font-medium" style={{ color: MUTED }}>{localize('com_linsight_step_input')}</p>
                     <p className={cn(detailTextCls, 'max-h-40 overflow-y-auto')} style={{ color: BODY }}>{paramsText}</p>
                 </div>
             )}
-            {step.output && (
+            {!isMemoryStep && step.output && (
                 <div className="mt-1">
                     <p className="text-xs font-medium" style={{ color: MUTED }}>{localize('com_linsight_step_output')}</p>
                     <p className={cn(DETAIL_TEXT, 'max-h-40 overflow-y-auto')} style={{ color: BODY }}>{step.output}</p>
@@ -125,7 +148,13 @@ ToolRowLiteBase.displayName = 'ToolRowLite';
  * (also used by DeepStepGroup's gate) so the two memo comparators can't drift.
  */
 export function toolRowLitePropsEqual(prev: ToolRowLiteProps, next: ToolRowLiteProps): boolean {
-    return mergedStepRenderEqual(prev.step, next.step);
+    const a = prev.memorySearches ?? [];
+    const b = next.memorySearches ?? [];
+    return (
+        mergedStepRenderEqual(prev.step, next.step) &&
+        a.length === b.length &&
+        a.every((s, i) => mergedStepRenderEqual(s, b[i]))
+    );
 }
 
 const ToolRowLite = memo(ToolRowLiteBase, toolRowLitePropsEqual);

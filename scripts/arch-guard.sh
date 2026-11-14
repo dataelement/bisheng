@@ -20,7 +20,7 @@ FILE="$1"
 [ ! -f "$FILE" ] && exit 0
 
 # 领域模块列表（用于 RULE-1 检查）
-DOMAIN_MODULES="knowledge|workflow|permission|linsight|llm|chat_session|tool|channel|message|user|finetune|share_link|telemetry_search|workstation|open_endpoints|mcp_manage"
+DOMAIN_MODULES="knowledge|workflow|permission|linsight|llm|chat_session|tool|channel|message|user|finetune|share_link|telemetry_search|workstation|open_endpoints|mcp_manage|memory"
 
 # ── RULE-1：common/core 不导入 domain/api ──────────────────────────
 # 基础设施层不应反向依赖领域层或 API 层

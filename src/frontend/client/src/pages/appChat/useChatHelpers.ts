@@ -8,6 +8,8 @@ import { useMemo } from "react"
 import { useRecoilState, useRecoilValue } from "recoil"
 import { Chat } from "~/@types/chat"
 import { baseMsgItem } from "~/api/apps"
+import type { MemoryFlags } from "~/api/memory"
+import { attachMemoryFlags, queueMemoryFlags } from "./appMemory"
 import { formatDate, generateUUID } from "~/utils"
 import { FLOW_TYPES } from "."
 import { runLogsTypes, SkillMethod } from "./appUtils/skillMethod"
@@ -382,6 +384,16 @@ export default function useChatHelpers(flowLeaseId?: string | null) {
                     setChats((prev) => updateChatMessages(prev, chatId, (messages) => messages.filter((msg) => msg.end)))
                 }, 0)
             }
+        },
+        // F132: pin a memory signal onto its answer; queue it when the answer row is not there yet.
+        attachMemory: (chatid: string, flags: MemoryFlags, messageId?: string) => {
+            setChats((prev) =>
+                updateChatMessages(prev, chatid, (messages) => {
+                    const result = attachMemoryFlags(messages, flags, messageId)
+                    if (!result.attached) queueMemoryFlags(chatid, flags)
+                    return result.rows
+                }),
+            )
         },
         insetSeparator: (chatid: string, msg: string) => {
             setChats((prev) =>

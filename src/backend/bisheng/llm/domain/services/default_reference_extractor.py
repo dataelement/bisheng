@@ -29,7 +29,7 @@ KNOWLEDGE_MODEL_SLOTS = (
     "qa_similar_model_id",
     "asr_model_id",
 )
-WORKBENCH_MODEL_OBJECTS = ("embedding_model", "asr_model", "tts_model", "chat_title_llm", "image_read_model")
+WORKBENCH_MODEL_OBJECTS = ("embedding_model", "asr_model", "tts_model", "chat_title_llm", "memory_llm", "image_read_model")
 
 
 def extract_model_default_references(key: str, payload: dict | BaseModel) -> tuple[ReferenceSpec, ...]:

@@ -55,6 +55,8 @@ class MessageEventType(StrEnum):
     FINAL_RESULT = "final_result"
     # Mission terminated
     TASK_TERMINATED = "task_terminated"
+    # F132 long-term memory signal: {turn_id, has_write, has_attribution}, never item text
+    MEMORY = "memory"
 
 
 class MessageData(BaseModel):

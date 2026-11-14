@@ -12,6 +12,7 @@ import { Outlined } from 'bisheng-icons';
 import type { ReactNode } from 'react';
 import { useLocalize } from '~/hooks';
 import { MessageFeedbackButtons } from '~/components/Chat/MessageFeedbackButtons';
+import { MemoryNotice } from '~/components/Chat/MemoryNotice';
 import { likeChatApi, disLikeCommentApi } from '~/api/apps';
 import { INK } from './execTokens';
 
@@ -24,7 +25,7 @@ interface ResultPanelProps {
     messageId?: string;
     /** persisted like/dislike verdict: 0 none / 1 up / 2 down */
     liked?: number;
-    /** show like/dislike (off for read-only / share view) */
+    /** show like/dislike and the F132 memory notice (off for read-only / share view) */
     allowFeedback?: boolean;
     /** Sync the new verdict back to the linsight store so the highlight survives a
         switch-away/switch-back: the panel reads `liked` from the store, which is
@@ -55,17 +56,25 @@ export function ResultPanel({ children, messageId, liked, allowFeedback, onLiked
             {/* like/dislike — the task result is a category="task" ChatMessage, so
                 rate it through the shared chatmessage feedback endpoints keyed by
                 message id (rollup to message_session is maintained backend-side). */}
+            {/* F132: one round = one task message row (design R8), so the round's
+                memory notice is read by that row's id. Shares the
+                feedback row's owner-only visibility. */}
             {allowFeedback && messageId && (
                 <div className="mt-3">
-                    <MessageFeedbackButtons
-                        liked={liked}
-                        onLike={(l) => {
-                            onLikedChange?.(l);
-                            // returned so the confirmation toast waits for the request
-                            return likeChatApi(messageId, l);
-                        }}
-                        onDislikeComment={(c) => disLikeCommentApi(messageId, c)}
-                    />
+                    {/* MessageFeedbackButtons renders `display: contents`; the row lays its
+                        buttons out, and the memory notice joins the same row. */}
+                    <div className="flex flex-wrap items-center">
+                        <MessageFeedbackButtons
+                            liked={liked}
+                            onLike={(l) => {
+                                onLikedChange?.(l);
+                                // returned so the confirmation toast waits for the request
+                                return likeChatApi(messageId, l);
+                            }}
+                            onDislikeComment={(c) => disLikeCommentApi(messageId, c)}
+                        />
+                        <MemoryNotice inline probe messageId={messageId} />
+                    </div>
                 </div>
             )}
         </div>

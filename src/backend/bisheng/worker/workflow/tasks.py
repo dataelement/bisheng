@@ -10,6 +10,10 @@ from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import FlowDao
+from bisheng.memory.domain.ports import SCENE_WORKFLOW
+from bisheng.memory.domain.services.activity import MemoryActivity
+from bisheng.memory.domain.services.app_switch import workflow_memory_enabled_sync
+from bisheng.memory.domain.services.gate import MemoryGate
 from bisheng.open_api.domain.services.execution_context import restore_execution_context
 from bisheng.permission.application.business_authorization import require_business_action
 from bisheng.permission.application.identity import get_current_permission_actor
@@ -55,6 +59,45 @@ def _judge_workflow_status(redis_callback: RedisCallback, workflow: Workflow):
     _clear_workflow_obj(redis_callback.unique_id)
 
 
+def _memory_chat_id(chat_id: str, source: str) -> str:
+    """F132 AC-10: only platform (logged-in) runs may use memory; open-API runs never do,
+    even when they reuse a chat_id that a logged-in connection registered."""
+    return chat_id if source == "platform" else ""
+
+
+def _online_memory_switch(workflow_id: str, chat_id: str) -> bool:
+    """F132 R5: the workflow memory switch of the ONLINE version in the database.
+
+    Read once per run at execution start, never from the graph the client sent.
+    Runs without a session (evaluation, canvas debug, open API) skip the lookup.
+    A lookup failure counts as off and never fails the run.
+    """
+    if not chat_id:
+        return False
+    try:
+        return workflow_memory_enabled_sync(workflow_id)
+    except Exception:
+        logger.exception("memory switch lookup failed workflow_id={}", workflow_id)
+        return False
+
+
+def _end_memory_turn(chat_id: str, memory_enabled: bool | None, user_id: int | None = None) -> None:
+    """F132: the task yields (waiting for input, success, failure, error) -> one turn ends.
+
+    Enabled turns mark the session for consolidation; turns with memory off move
+    the watermark past them. Unregistered sessions are a no-op. Best effort.
+    """
+    if not chat_id or memory_enabled is None:
+        # memory_enabled None: the run object was lost, the switch is unknown; leave
+        # the session as it is so earlier enabled turns are still consolidated.
+        return
+    try:
+        ctx = MemoryGate.resolve_sync(chat_id, SCENE_WORKFLOW, app_enabled=memory_enabled, actor_user_id=user_id)
+        MemoryActivity.end_turn_sync(chat_id, None, ctx is not None)
+    except Exception:
+        logger.exception("memory end_turn failed chat_id={}", chat_id)
+
+
 def _execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: int, source: str = "platform"):
     # F022 INV-T18: resolve Flow.tenant_id once; reuse for both Workflow
     # node tenant threading and RedisCallback's sync workbench reads.
@@ -65,6 +108,8 @@ def _execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: i
     # the runtime user who triggered the run).
     flow_user_id = getattr(workflow_info, "user_id", None)
     redis_callback = RedisCallback(unique_id, workflow_id, chat_id, user_id, source=source, tenant_id=flow_tenant_id)
+    memory_chat_id = _memory_chat_id(chat_id, source)
+    memory_enabled = _online_memory_switch(workflow_id, memory_chat_id)
     try:
         # update workflow status
         redis_callback.set_workflow_status(WorkflowStatus.RUNNING.value)
@@ -87,6 +132,8 @@ def _execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: i
             redis_callback,
             tenant_id=flow_tenant_id,
             flow_user_id=flow_user_id,
+            chat_id=chat_id or "",
+            memory_enabled=memory_enabled,
         )
         redis_callback.workflow = workflow
         status, reason = workflow.run()
@@ -99,6 +146,8 @@ def _execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: i
         logger.exception("execute_workflow error")
         redis_callback.set_workflow_status(WorkflowStatus.FAILED.value, str(e)[:100])
         _clear_workflow_obj(redis_callback.unique_id)
+    finally:
+        _end_memory_turn(memory_chat_id, memory_enabled, user_id)
 
 
 def _authorize_workflow_use(snapshot, user_id: int, workflow_id: str, chat_id: str) -> None:
@@ -169,10 +218,14 @@ def execute_workflow(
 def _continue_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: int, source: str = "platform"):
     """Resumeworkflow"""
     redis_callback = RedisCallback(unique_id, workflow_id, chat_id, user_id, source=source)
+    memory_chat_id = _memory_chat_id(chat_id, source)
+    memory_enabled = None
     try:
         workflow = _global_workflow.get(redis_callback.unique_id, None)
         if not workflow:
             raise Exception("workflow object not found maybe data is expired")
+        # a resumed run keeps the switch read at its start (R5)
+        memory_enabled = bool(getattr(workflow.graph_engine.graph_state, "memory_enabled", False))
         if workflow.status() not in [WorkflowStatus.INPUT.value, WorkflowStatus.INPUT_OVER.value]:
             raise Exception(f"workflow status is {workflow.status()} not INPUT")
         user_input = redis_callback.get_user_input()
@@ -189,6 +242,8 @@ def _continue_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: 
         logger.exception("continue_workflow error")
         redis_callback.set_workflow_status(WorkflowStatus.FAILED.value, str(e)[:100])
         _clear_workflow_obj(redis_callback.unique_id)
+    finally:
+        _end_memory_turn(memory_chat_id, memory_enabled, user_id)
 
 
 @bisheng_celery.task

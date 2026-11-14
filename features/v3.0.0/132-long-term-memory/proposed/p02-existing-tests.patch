@@ -1,0 +1,24 @@
+diff --git a/src/backend/test/dsh/test_telemetry.py b/src/backend/test/dsh/test_telemetry.py
+index 38443b9be0..e0c8930422 100644
+--- a/src/backend/test/dsh/test_telemetry.py
++++ b/src/backend/test/dsh/test_telemetry.py
+@@ -22,6 +22,7 @@ def test_application_enum_preserves_existing_values():
+         "ASR": "asr",
+         "TTS": "tts",
+         "MODEL_GATEWAY": "model_gateway",
++        "MEMORY": "memory",
+         "UNKNOWN": "unknown",
+     }
+     assert {item.name: item.value for item in ApplicationTypeEnum if item.name != "DSH_DESKTOP"} == expected
+diff --git a/src/backend/test/fixtures/table_definitions.py b/src/backend/test/fixtures/table_definitions.py
+index c7d503ea1f..0810362de5 100644
+--- a/src/backend/test/fixtures/table_definitions.py
++++ b/src/backend/test/fixtures/table_definitions.py
+@@ -400,6 +400,7 @@ CREATE TABLE IF NOT EXISTS assistant (
+     model_name VARCHAR(255),
+     status INTEGER DEFAULT 1,
+     is_delete INTEGER DEFAULT 0,
++    memory_enabled BOOLEAN NOT NULL DEFAULT 0,
+     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+     update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
+ )"""

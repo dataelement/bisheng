@@ -1,0 +1,25 @@
+{
+  "id": "transient-state-not-remembered",
+  "acs": [
+    "AC-17"
+  ],
+  "turns": [
+    {
+      "user": "我现在正在等编译完成，大概还要五分钟",
+      "new_session": false,
+      "expect_write": false
+    }
+  ],
+  "question": {
+    "user": "关于我你记得什么？",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "must_not_contain": [
+      "编译"
+    ]
+  },
+  "notes": "",
+  "requires_consolidation": true
+}

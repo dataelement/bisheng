@@ -1240,6 +1240,9 @@
     "knowledgeSpace": "Knowledge Space",
     "userAuthVerification": "User knowledge permission check",
     "userAuthVerificationTips": "When enabled, results are filtered by the current user's own view permission on knowledge-space files (each user only retrieves files they may view); when disabled, retrieval uses the config author's visible range, shared by all users (files the author cannot view are never retrieved). Document knowledge bases are unaffected by fine-grained file permissions.",
+    "memory": "Memory",
+    "assistantMemory": "Assistant Memory",
+    "assistantMemoryDesc": "When on, key points from a user's conversations with this assistant are saved to that user's own memory, and the assistant uses the current user's memory when answering, so it may appear in answers. Each user's memory is their own; other users cannot see it.",
     "searchBaseName": "Search for knowledge base name",
     "debugPreview": "Debug Preview",
     "addTool": "Add Tool",
@@ -4629,5 +4632,8 @@
   "organization.trafficLoadFailed": "Unable to load traffic control. Try again.",
   "organization.partialSave": "Basic settings were saved. Traffic control was not saved. Try again.",
   "organization.clearSearch": "Clear search",
-  "organization.noResults": "No results"
+  "organization.noResults": "No results",
+  "memory": {
+    "operation": "Memory operation"
+  }
 }

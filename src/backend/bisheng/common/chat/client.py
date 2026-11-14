@@ -54,6 +54,9 @@ class ChatMessageExecution:
 
 
 class ChatClient:
+    # F132: set by ChatManager.dispatch_client for logged-in connections only.
+    memory_register = None
+
     def __init__(
         self,
         request: Request,
@@ -234,6 +237,13 @@ class ChatClient:
         )
 
     async def init_gpts_agent(self):
+        if self.chat_id and self.memory_register is not None:
+            # F132: logged-in connections register the session whenever the chat id is
+            # set or switched; the callable comes from the endpoint, never from here.
+            try:
+                await self.memory_register(self.chat_id)
+            except Exception:
+                logger.exception("memory session registration failed")
         await self.init_chat_history()
         await self.init_gpts_callback()
         try:
@@ -260,6 +270,8 @@ class ChatClient:
                 candidate_agent = AssistantAgent(
                     assistant, self.chat_id, invoke_user_id=self.user_id, login_user=self.login_user
                 )
+                # F132: only connections whose endpoint injected memory_register are logged in.
+                candidate_agent.memory_allowed = self.memory_register is not None
                 await candidate_agent.init_assistant(self.gpts_async_callback)
                 self.gpts_agent = candidate_agent
                 self.db_assistant = assistant
@@ -361,7 +373,18 @@ class ChatClient:
             await self.send_response("reasoning_answer", "end", "", message_id=res.id if res else None)
         # An empty answer carries the terminal marker when stopped before the first token.
         res = await self.add_message("bot", answer, "answer", "break_answer")
+        await self.notify_answer_persisted(res.id if res else None, interrupted=True)
         await self.send_response("answer", "end", "", message_id=res.id if res else None)
+
+    async def notify_answer_persisted(self, message_id, interrupted: bool) -> None:
+        """Tell the agent the turn's answer row exists (or that the turn ended without one)."""
+        hook = getattr(self.gpts_agent, "after_answer_persisted", None) if self.gpts_agent else None
+        if hook is None:
+            return
+        try:
+            await hook(message_id, interrupted)
+        except Exception:
+            logger.exception("after_answer_persisted failed")
 
     async def clear_stream_queue(self):
         while not self.stream_queue.empty():
@@ -469,6 +492,7 @@ class ChatClient:
                     chat_id=self.chat_id,
                     flow_id=self.client_id,
                 )
+            await self.notify_answer_persisted(res.id if res else None, interrupted=False)
             await self.send_response("answer", "start", "")
             await self.send_response(
                 "answer",
@@ -502,11 +526,15 @@ class ChatClient:
                 self.gpts_agent = None
                 self.db_assistant = None
                 self.gpts_async_callback = None
+            if question_saved:
+                await self.notify_answer_persisted(None, interrupted=False)
             await self.send_response("system", "start", "")
             await e.websocket_close_message(websocket=self.websocket, close_ws=False)
         except Exception as e:
             e = AssistantOtherError(exception=e)
             logger.exception("handle gpts message error: ")
+            if question_saved:
+                await self.notify_answer_persisted(None, interrupted=False)
             await self.send_response("system", "start", "")
             await e.websocket_close_message(websocket=self.websocket, close_ws=False)
         finally:
