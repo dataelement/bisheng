@@ -54,14 +54,12 @@ from bisheng.llm.domain.models import LLMDao, LLMModel, LLMServer
 from bisheng.llm.domain.models.tenant_system_model_config import TenantSystemModelConfigDao
 from bisheng.llm.domain.schemas import (
     AssistantLLMConfig,
-    AssistantLLMItem,
     EvaluationLLMConfig,
     KnowledgeLLMConfig,
     LLMModelInfo,
     LLMServerCreateReq,
     LLMServerInfo,
     WorkbenchModelConfig,
-    WSModel,
 )
 from bisheng.llm.domain.services.context_window import ContextWindowService
 from bisheng.llm.domain.share_fallback import avalidate_system_model_refs
@@ -875,16 +873,8 @@ class LLMService:
     @classmethod
     async def add_llm_server_hook(cls, request: Request, login_user: UserPayload, server: LLMServerInfo) -> bool:
         """Add a service provider Next Actions"""
-
-        handle_types = []
-        for one in server.models:
-            if one.model_type in handle_types:
-                continue
-            handle_types.append(one.model_type)
-            model_info = await LLMDao.aget_model_by_type(LLMModelType(one.model_type))
-            # Determine if this is the firstllmorembeddingModels
-            if model_info.id == one.id:
-                await cls.set_default_model(model_info)
+        if server.models:
+            await cls.autofill_default_models()
         await cls.probe_models_in_background(server.models, login_user)
         return True
 
@@ -974,67 +964,20 @@ class LLMService:
             await bisheng_rerank.acompress_documents(documents=[Document(page_content="hello world")], query="hello")
 
     @classmethod
-    async def set_default_model(cls, model: LLMModel | LLMModelInfo):
-        """Set default model configuration"""
-        # Set defaultllmmodel config
-        if model.model_type == LLMModelType.LLM.value:
-            # Set default model configuration for knowledge base
-            knowledge_llm = await cls.aget_knowledge_llm()
-            knowledge_change = False
-            if not knowledge_llm.extract_title_model_id:
-                knowledge_llm.extract_title_model_id = model.id
-                knowledge_change = True
-            if not knowledge_llm.source_model_id:
-                knowledge_llm.source_model_id = model.id
-                knowledge_change = True
-            if not knowledge_llm.qa_similar_model_id:
-                knowledge_llm.qa_similar_model_id = model.id
-                knowledge_change = True
-            if knowledge_change:
-                await cls.update_knowledge_llm(knowledge_llm)
+    async def autofill_default_models(cls, tenant_id: int | None = None) -> list[str]:
+        """Fill every empty system-model setting the tenant has a model for.
 
-            # Set default model configuration for reviews
-            evaluation_llm = await cls.get_evaluation_llm()
-            if not evaluation_llm.model_id:
-                evaluation_llm.model_id = model.id
-                await cls.update_evaluation_llm(evaluation_llm)
+        The settings and their rules live in ``system_model_autofill.SLOTS``. A
+        failure here must not fail the provider save that triggered it.
+        """
+        from bisheng.llm.domain.services.system_model_autofill import autofill_system_models
 
-            # Setting the default model configuration for the assistant
-            assistant_llm = await cls.get_assistant_llm()
-            assistant_change = False
-            if not assistant_llm.auto_llm:
-                assistant_llm.auto_llm = AssistantLLMItem(model_id=model.id)
-                assistant_change = True
-            if not assistant_llm.llm_list:
-                assistant_change = True
-                assistant_llm.llm_list = [AssistantLLMItem(model_id=model.id, default=True)]
-            if assistant_change:
-                await cls.update_assistant_llm(assistant_llm)
-
-            workbench_llm = await cls.get_workbench_llm()
-            workbench_change = False
-            if not workbench_llm.chat_title_llm:
-                workbench_llm.chat_title_llm = WSModel(id=str(model.id), name=model.model_name)
-                workbench_change = True
-            if workbench_change:
-                await cls.update_workbench_llm(0, workbench_llm, BackgroundTasks())
-
-        elif model.model_type == LLMModelType.EMBEDDING.value:
-            knowledge_llm = cls.get_knowledge_llm()
-            if not knowledge_llm.embedding_model_id:
-                knowledge_llm.embedding_model_id = model.id
-                await cls.update_knowledge_llm(knowledge_llm)
-
-        elif model.model_type == LLMModelType.TTS.value:
-            workbench_llm = await cls.get_workbench_llm()
-            if not workbench_llm.tts_model or not workbench_llm.tts_model.id:
-                workbench_llm.tts_model = WSModel(id=str(model.id), name=model.model_name)
-                await cls.update_workbench_llm(0, workbench_llm, BackgroundTasks())
-        elif LLMModelType.is_speech(model.model_type):
-            workbench_llm = await cls.get_workbench_llm()
-            if not workbench_llm.asr_model or not workbench_llm.asr_model.id:
-                workbench_llm.asr_model = WSModel(id=str(model.id), name=model.model_name)
-                await cls.update_workbench_llm(0, workbench_llm, BackgroundTasks())
+        target = _resolve_tenant_id(tenant_id)
+        try:
+            return await autofill_system_models(target)
+        except Exception:
+            logger.exception("system-model autofill failed for tenant {}", target)
+            return []
 
     @classmethod
     async def update_llm_server(
@@ -1129,10 +1072,10 @@ class LLMService:
         await ContextWindowService.invalidate([one.id for one in new_server_info.models])
 
         # Determine if the model status needs to be re-determined
+        if any(one.id not in old_model_dict for one in new_server_info.models):
+            await cls.autofill_default_models()
         to_probe = []
         for one in new_server_info.models:
-            if one.id not in old_model_dict:
-                await cls.set_default_model(one)
             # The new model, or the model name or type has changed
             if (
                 one.id not in old_model_dict
