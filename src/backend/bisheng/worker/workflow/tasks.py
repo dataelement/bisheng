@@ -71,7 +71,7 @@ def _execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: i
         # get workflow data
         workflow_data = redis_callback.get_workflow_data()
         if not workflow_data:
-            raise Exception("workflow data not found maybe data is expired")
+            raise FileNotFoundError("workflow data not found maybe data is expired")
 
         # init workflow
         workflow_conf = settings.get_workflow_conf()
@@ -172,9 +172,9 @@ def _continue_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: 
     try:
         workflow = _global_workflow.get(redis_callback.unique_id, None)
         if not workflow:
-            raise Exception("workflow object not found maybe data is expired")
+            raise FileNotFoundError("workflow object not found maybe data is expired")
         if workflow.status() not in [WorkflowStatus.INPUT.value, WorkflowStatus.INPUT_OVER.value]:
-            raise Exception(f"workflow status is {workflow.status()} not INPUT")
+            raise ValueError(f"workflow status is {workflow.status()} not INPUT")
         user_input = redis_callback.get_user_input()
         if not user_input:
             raise IgnoreException("workflow continue not found user input")
