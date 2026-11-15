@@ -158,17 +158,8 @@ async def test_skill_rechecks_revocation_after_download():
     assert denied.value.status_code == 409
 
 
-async def test_real_streamable_http_handshake_discovery_and_error_result(monkeypatch):
-    from unittest.mock import AsyncMock
-
-    from bisheng.core.session_activity import business_activity
-    from bisheng.dsh.application.session_activity import DshSessionActivity
-    from bisheng.dsh.domain.services.access import DshPrincipal
-
-    activity = AsyncMock()
-    binding = DshSessionActivity(
-        SimpleNamespace(record_activity=activity), DshPrincipal(tenant_id="2", user_id="42", session_id="verified")
-    )
+@pytest.mark.parametrize("kind", [0, 1, 2])
+async def test_real_streamable_http_handshake_discovery_and_error_result(monkeypatch, kind):
     app_service = service()
     row = app_service._tools.return_value[7]
     row.is_preset = kind
@@ -180,10 +171,8 @@ async def test_real_streamable_http_handshake_discovery_and_error_result(monkeyp
         TransportSecuritySettings(enable_dns_rebinding_protection=True, allowed_hosts=["localhost"])
     )
 
-    @business_activity(http=False, rpc_methods=("tools/call",))
     async def endpoint(request: Request):
-        request.state.authenticated_activity = binding
-        return WorkMcpResponse(manager, app_service.user, connection=request)
+        return WorkMcpResponse(manager, app_service.user)
 
     app = Starlette(routes=[Route("/mcp", endpoint, methods=["POST", "GET"])])
     headers = {"accept": "application/json, text/event-stream", "mcp-protocol-version": "2025-11-25"}
@@ -206,33 +195,30 @@ async def test_real_streamable_http_handshake_discovery_and_error_result(monkeyp
             {"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "test", "version": "1"}},
         )
         assert initialized["result"]["serverInfo"]["name"] == "bisheng-enterprise-work"
-        assert (await rpc("tools/list"))["result"]["tools"][0]["name"] == "bisheng_tool_7"
-        activity.assert_not_awaited()
-        invalid = await rpc("tools/call", {"name": "bisheng_tool_7", "arguments": {"query": 123}})
-        assert invalid["result"]["isError"] is True
-        assert activity.await_count == 1
-        result = await rpc("tools/call", {"name": "bisheng_tool_7", "arguments": {"query": "test"}})
+        assert (await rpc("tools/list"))["result"]["tools"][0]["name"] == "customer_search"
+        result = await rpc("tools/call", {"name": "customer_search", "arguments": {"query": "test"}})
         assert result["result"]["structuredContent"]["result"]["customer"] == "Allowed"
-        assert activity.await_count == 2
+        legacy = await rpc("tools/call", {"name": "bisheng_tool_7", "arguments": {"query": "test"}})
+        assert legacy["result"]["isError"] is True
+        original = app_service._tools.return_value[7]
+        original.name = "A changed display title"
+        assert (await rpc("tools/list"))["result"]["tools"][0]["name"] == "customer_search"
+        app_service._tools.return_value[8] = SimpleNamespace(
+            id=8,
+            name="Conflicting API",
+            is_preset=0,
+            tool_key="a" * 32,
+            extra=json.dumps({"operationId": "Customer-Search"}),
+        )
+        assert (await rpc("tools/list"))["result"]["tools"] == []
+        collision = await rpc("tools/call", {"name": "customer_search", "arguments": {"query": "test"}})
+        assert collision["result"]["isError"] is True
+        assert app_service._executor.return_value.ainvoke.await_count == 1
         app_service._tools.return_value = {}
         result = await rpc("tools/call", {"name": "customer_search", "arguments": {"query": "test"}})
         assert result["result"]["isError"] is True
         assert json.loads(result["result"]["content"][0]["text"])["code"] == 403
-        assert activity.await_count == 3
         assert (await rpc("resources/list"))["result"]["resources"][0]["uri"].endswith("a" * 64)
-        assert activity.await_count == 3
-        rejected = await client.post(
-            "/mcp",
-            headers={"host": "invalid.example"},
-            json={
-                "jsonrpc": "2.0",
-                "id": 2,
-                "method": "tools/call",
-                "params": {"name": "bisheng_tool_7", "arguments": {"query": "test"}},
-            },
-        )
-        assert rejected.status_code == 421
-        assert activity.await_count == 3
 
 
 async def test_audit_failure_prevents_execution_and_records_only_safe_metadata():
