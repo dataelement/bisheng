@@ -68,7 +68,7 @@ class BishengRerank(BishengBase, BaseDocumentCompressor):
         super().__init__(**kwargs)
         self.model_id = kwargs.get('model_id')
         if not self.model_id:
-            raise Exception('No bulkpost found in Trashrerankmodel config')
+            raise ValueError('No bulkpost found in Trashrerankmodel config')
         if "model_info" in kwargs and "server_info" in kwargs:
             self._init_client(model_info=kwargs.pop('model_info'), server_info=kwargs.pop('server_info'), **kwargs)
         else:
@@ -78,18 +78,18 @@ class BishengRerank(BishengBase, BaseDocumentCompressor):
     def _init_client(self, model_info, server_info, **kwargs):
         ignore_online = kwargs.get('ignore_online', False)
         if not model_info:
-            raise Exception('rerankModel configuration has been deleted, please reconfigure the model')
+            raise ValueError('rerankModel configuration has been deleted, please reconfigure the model')
         if not server_info:
-            raise Exception('Service provider configuration has been deleted, please reconfigurererankModels')
+            raise ValueError('Service provider configuration has been deleted, please reconfigurererankModels')
         if model_info.model_type != LLMModelType.RERANK.value:
-            raise Exception(f'Support onlyRerankModel of type, not supported{model_info.model_type}Type of model')
+            raise ValueError(f'Support onlyRerankModel of type, not supported{model_info.model_type}Type of model')
         if not ignore_online and not model_info.online:
-            raise Exception(f'{server_info.name}under{model_info.model_name}The model is offline, please contact the administrator to launch the corresponding model')
+            raise ValueError(f'{server_info.name}under{model_info.model_name}The model is offline, please contact the administrator to launch the corresponding model')
         logger.debug(f'init_bisheng_rerank: server_id: {server_info.id}, model_id: {model_info.id}')
 
         node_conf = _node_type.get(server_info.type)
         if not node_conf:
-            raise Exception(f'Not supportedrerankService Provider:{server_info.type}')
+            raise ValueError(f'Not supportedrerankService Provider:{server_info.type}')
         self.model_info = model_info
         self.model_name = model_info.model_name
         self.server_info = server_info
@@ -104,7 +104,7 @@ class BishengRerank(BishengBase, BaseDocumentCompressor):
             self.rerank = client_class(**params)
         except Exception as e:
             logger.exception('init_bisheng_rerank error')
-            raise Exception(f'init bisheng rerank error，error msg：{e}')
+            raise ValueError(f'init bisheng rerank error，error msg：{e}')
 
     @wrapper_bisheng_model_limit_check
     def compress_documents(
