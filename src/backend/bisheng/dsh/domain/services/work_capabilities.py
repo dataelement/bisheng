@@ -29,7 +29,10 @@ class WorkCapabilitiesService:
     async def _tools(self):
         from bisheng.tool.domain.services.tool import ToolServices
 
-        groups = await ToolServices(login_user=self.user).get_tool_list(action="visible")
+        # Execution must use the same resource boundary as the Desktop catalog.
+        # A visible-only lookup would keep revoked ``use`` tools callable by a
+        # stale client that already knows the stable invocation name.
+        groups = await ToolServices(login_user=self.user).get_tool_list(action="use")
         from bisheng.tool.domain.services.user_availability import UserToolAvailabilityService
 
         tools = [tool for group in groups for tool in group.children if not tool.is_delete]

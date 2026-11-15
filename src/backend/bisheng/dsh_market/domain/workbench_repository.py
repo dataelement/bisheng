@@ -139,31 +139,33 @@ class WorkbenchRepository:
 
     def create_import(self, tenant, actor, digest, display_name):
         with self.sessions() as db:
+            def reset_existing(row):
+                if row.status in {"failed", "completed"}:
+                    row.status, row.error, row.error_code = "validating", "", ""
+                    row.actor_id, row.display_name, row.created_at = actor, display_name, now()
+                    db.add(row)
+                    db.commit()
+                    db.refresh(row)
+                return row.model_dump()
+
             query = select(MarketWorkbenchImport).where(
                 MarketWorkbenchImport.tenant_id == tenant, MarketWorkbenchImport.digest == digest
             )
             existing = db.exec(query.with_for_update()).first()
             if existing:
-                # Active reimports must reapply bytes after an overwrite or deletion.
-                # Resuming an existing completed task keeps its separate no-op behavior.
-                if existing.status in {"failed", "completed"}:
-                    existing.status, existing.error, existing.error_code = "validating", "", ""
-                    existing.actor_id, existing.display_name, existing.created_at = actor, display_name, now()
-                    db.add(existing)
-                    db.commit()
-                    db.refresh(existing)
-                return existing.model_dump()
+                return reset_existing(existing)
             task = MarketWorkbenchImport(tenant_id=tenant, actor_id=actor, digest=digest, display_name=display_name)
             db.add(task)
             try:
                 db.commit()
             except IntegrityError:
                 db.rollback()
-                # The winning task may already be completed and overwritten or deleted.
-                # Re-enter the active-import reset path rather than returning stale success.
-                db.exec(query.with_for_update()).one()
-                db.rollback()
-                return self.create_import(tenant, actor, digest, display_name)
+                # Only retry the expected concurrent digest insert. Other
+                # integrity failures must surface instead of recursing forever.
+                winner = db.exec(query.with_for_update()).first()
+                if winner is None:
+                    raise
+                return reset_existing(winner)
             db.refresh(task)
             return task.model_dump()
 

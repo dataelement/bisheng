@@ -269,9 +269,21 @@ def execute_request(request, *, schema=False):
                 or parsed.port == 0
             ):
                 raise CustomSearchError("Invalid schema URL")
+        parsed = urlsplit(request["url"])
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            raise CustomSearchError("Invalid search URL")
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        authority = f"[{parsed.hostname}]" if ":" in parsed.hostname else parsed.hostname
+        request_origin = f"{parsed.scheme}://{authority}:{port}"
         origin_key = "BS_CUSTOM_SCHEMA_ORIGINS" if schema else "BS_CUSTOM_SEARCH_ORIGINS"
-        origins = list(filter(None, os.environ.get(origin_key, "").split(",")))
-        ports = [int(value) for value in os.environ.get("BS_CUSTOM_SEARCH_PORTS", "").split(",") if value]
+        configured_origins = list(filter(None, os.environ.get(origin_key, "").split(",")))
+        configured_ports = [int(value) for value in os.environ.get("BS_CUSTOM_SEARCH_PORTS", "").split(",") if value]
+        # The operation/server is persisted through the UI and is the primary
+        # allowlist. Environment variables remain an optional tighter policy
+        # for deployments that need one, so Compose does not need new search
+        # variables just to make UI-configured providers usable.
+        origins = configured_origins or [request_origin]
+        ports = configured_ports or [port]
         networks = list(filter(None, os.environ.get("BS_CUSTOM_SEARCH_PRIVATE_CIDRS", "").split(",")))
         if not origins or not ports:
             raise CustomSearchError("Search network policy is not configured")
