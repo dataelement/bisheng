@@ -383,7 +383,7 @@ class InputNode(BaseNode):
         if self._vector_client is None:
             embedding = LLMService.get_knowledge_default_embedding(self.user_id, tenant_id=self.tenant_id)
             if not embedding:
-                raise Exception("No default configured embedding Models")
+                raise ValueError("No default configured embedding Models")
             milvus_collection_name = self.get_milvus_collection_name(embedding.model_id)
             self._vector_client = KnowledgeRag.init_milvus_vectorstore(
                 milvus_collection_name, embedding, metadata_schemas=InputFileMetadata
