@@ -192,6 +192,8 @@ async def test_catalog_and_admin_share_provider_model_name_and_route_id(
                 "owned_by": "bisheng",
                 "display_name": expected,
                 "capabilities": service.capabilities_for(model, server).client_fields(),
+                "input_modalities": ["text"],
+                **({"slug": model_name.strip()} if model_name.strip() else {}),
             }
         ],
     }

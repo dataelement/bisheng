@@ -62,9 +62,62 @@ class WorkCapabilitiesService:
             app_type=ApplicationTypeEnum.DSH_DESKTOP,
         )
 
+    @staticmethod
+    def _tool_name(tool) -> str | None:
+        """Use persisted machine identities, never editable titles or database IDs.
+
+        API/MCP tool_key is an MD5 executor key. Their original operationId/name
+        is retained in extra by ToolServices.parse_openapi_schema/parse_mcp_schema.
+        Normalize only this persisted identity; the directory detects all aliases.
+        Reserve 14 characters for the Desktop mcp__bisheng__ namespace.
+        """
+        kind = getattr(tool, "is_preset", None)
+        if kind == 1:
+            name = getattr(tool, "tool_key", None)
+        elif kind in (0, 2):
+            extra = getattr(tool, "extra", None)
+            try:
+                extra = json.loads(extra) if isinstance(extra, str) else extra
+            except (ValueError, TypeError):
+                return None
+            name = extra.get("operationId" if kind == 0 else "name") if isinstance(extra, dict) else None
+        else:
+            return None
+        if not isinstance(name, str) or re.fullmatch(r"[a-fA-F0-9]{32}", name):
+            return None
+        # Avoid partial transliteration of non-ASCII identities. Operators must
+        # configure an explicit machine identity rather than a display-name slug.
+        if not name.isascii():
+            return None
+        name = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+        if (
+            len(name) > 50
+            or not re.fullmatch(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)*", name)
+            or name.startswith("bisheng_tool_")
+        ):
+            return None
+        return name
+
+    @staticmethod
+    def _named_tools(tools):
+        names = {}
+        for tool_id, tool in tools.items():
+            name = WorkCapabilitiesService._tool_name(tool)
+            if name is None:
+                logger.warning("Work tool has no safe stable name id={}", tool_id)
+                continue
+            names.setdefault(name, []).append(tool_id)
+        return names
+
     async def list_tools(self):
         result = []
-        for tool_id, tool in (await self._tools()).items():
+        tools = await self._tools()
+        for name, ids in self._named_tools(tools).items():
+            if len(ids) != 1:
+                logger.warning("Ambiguous Work tool name={} ids={}", name, ids)
+                continue
+            tool_id = ids[0]
+            tool = tools[tool_id]
             try:
                 executor = await self._executor(tool_id)
                 schema = self._schema(executor)
@@ -75,7 +128,7 @@ class WorkCapabilitiesService:
             version = hashlib.sha256(json.dumps(schema, sort_keys=True).encode()).hexdigest()
             result.append(
                 {
-                    "name": f"bisheng_tool_{tool_id}",
+                    "name": name,
                     "title": tool.name,
                     "description": tool.desc or tool.name,
                     "inputSchema": schema,
@@ -92,13 +145,19 @@ class WorkCapabilitiesService:
         return executor.get_input_schema().model_json_schema()
 
     async def call_tool(self, name: str, arguments: dict[str, Any]):
-        match = re.fullmatch(r"bisheng_tool_([1-9][0-9]*)", name)
-        if not match:
+        if (
+            len(name) > 50
+            or not re.fullmatch(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)*", name)
+            or name.startswith("bisheng_tool_")
+        ):
             raise HTTPException(404, "Tool is unavailable")
-        tool_id = int(match[1])
         allowed_tools = await self._tools()
-        if tool_id not in allowed_tools:
+        ids = self._named_tools(allowed_tools).get(name, [])
+        if not ids:
             raise HTTPException(403, "Tool is unavailable for this user")
+        if len(ids) != 1:
+            raise HTTPException(409, "Tool name is ambiguous; resolve duplicate capability names")
+        tool_id = ids[0]
         executor = await self._executor(tool_id)
         # Validate against the current executable schema; the model controls only arguments.
         import jsonschema

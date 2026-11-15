@@ -16,7 +16,15 @@ def account_availability(monkeypatch):
 
 
 def tool(id=1, kind=1, name="Current time", key="get_current_time"):
-    return SimpleNamespace(id=id, is_preset=kind, name=name, tool_key=key, desc="Description", is_delete=0)
+    return SimpleNamespace(
+        id=id,
+        is_preset=kind,
+        name=name,
+        tool_key=key,
+        desc="Description",
+        is_delete=0,
+        extra=json.dumps({"operationId" if kind == 0 else "name": name}),
+    )
 
 
 def make_service(monkeypatch, rows):
@@ -61,7 +69,7 @@ async def test_catalog_uses_resource_permissions_without_publication(monkeypatch
 async def test_readonly_demo_still_calls_the_normal_authorized_work_path(monkeypatch):
     app, work = make_service(monkeypatch, [tool(1, 2, "demo_check_inventory", "hash")])
     result = await app.trial(1, {"product_code": "MAT-001"})
-    work.call_tool.assert_awaited_once_with("bisheng_tool_1", {"product_code": "MAT-001"})
+    work.call_tool.assert_awaited_once_with("demo_check_inventory", {"product_code": "MAT-001"})
     assert result["result"]["available"] == 85
     assert result["demo_data"] is True
 
@@ -102,7 +110,7 @@ async def test_mcp_error_payload_is_audited_as_incomplete(monkeypatch):
     service._executor = AsyncMock(return_value=executor)
     work.publications.audit = AsyncMock()
     with pytest.raises(HTTPException) as error:
-        await service.call_tool("bisheng_tool_1", {})
+        await service.call_tool("demo_check_inventory", {})
     assert error.value.status_code == 502
     assert [call.args[-1]["status"] for call in work.publications.audit.await_args_list] == ["STARTED", "INCOMPLETE"]
 
@@ -142,11 +150,11 @@ async def test_work_call_accepts_resource_permission_without_publication(monkeyp
     service._tools = work._tools
     executor = SimpleNamespace(args_schema={"type": "object"}, ainvoke=AsyncMock(return_value="time"))
     service._executor = AsyncMock(return_value=executor)
-    assert await service.call_tool("bisheng_tool_1", {}) == "time"
+    assert await service.call_tool("get_current_time", {}) == "time"
     work.publications.list_enabled.assert_not_awaited()
     work._tools.return_value = {}
     with pytest.raises(HTTPException) as error:
-        await service.call_tool("bisheng_tool_1", {})
+        await service.call_tool("get_current_time", {})
     assert error.value.status_code == 403
     assert executor.ainvoke.await_count == 1
 
@@ -227,7 +235,7 @@ async def test_each_tool_kind_can_be_disabled_and_removed_from_work(monkeypatch,
     assert await work._tools() == {}
     work._executor = AsyncMock()
     with pytest.raises(HTTPException) as failure:
-        await work.call_tool("bisheng_tool_7", {})
+        await work.call_tool("get_current_time", {})
     assert failure.value.status_code == 403
     work._executor.assert_not_awaited()
 
@@ -254,14 +262,16 @@ async def test_catalog_exposes_stable_translation_identity_for_builtins(monkeypa
     assert row["description"] == "Description"
     assert row["provider"] == "Enterprise tools"
     assert row["resource_id"] == 9
-    assert row["invocation_name"] == "mcp__bisheng__bisheng_tool_9"
+    assert row["invocation_name"] == (
+        "mcp__bisheng__tianyancha_get_company_baseinfo" if kind == 1 else "mcp__bisheng__configured_name"
+    )
 
 
 @pytest.mark.parametrize("target_id", [1, 2, 3])
 async def test_tool_order_stays_stable_across_availability_changes_and_reload(monkeypatch, target_id):
     from bisheng.tool.domain.services.user_availability import UserToolAvailabilityService
 
-    tools = [tool(3, 2), tool(4, 1), tool(2, 1), tool(1, 0)]
+    tools = [tool(3, 2, "mcp_time"), tool(4, 1, key="disabled_time"), tool(2, 1), tool(1, 0, "api_time")]
     disabled = AsyncMock(return_value={4})
     monkeypatch.setattr(UserToolAvailabilityService, "disabled_ids", disabled)
     app, _ = make_service(monkeypatch, tools)
