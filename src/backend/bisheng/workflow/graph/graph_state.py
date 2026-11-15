@@ -71,12 +71,12 @@ class GraphState(BaseModel):
             if isinstance(variable_val, list):
                 variable_val_index = int(variable_val_index)
                 if len(variable_val) <= variable_val_index:
-                    raise Exception(f'variable {contact_key} index out of range')
+                    raise KeyError(f'variable {contact_key} index out of range')
                 return variable_val[variable_val_index]
             elif isinstance(variable_val, dict):
                 return variable_val.get(variable_val_index)
             else:
-                raise Exception(f'variable {contact_key} is not a list or dict, not support #index')
+                raise KeyError(f'variable {contact_key} is not a list or dict, not support #index')
 
         return variable_val
 
