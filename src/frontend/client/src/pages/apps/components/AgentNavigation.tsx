@@ -1,22 +1,21 @@
-// @ts-strict-ignore
 "use client"
 
+import { Tabs } from "@bisheng/ui"
 import { BoltIcon } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useAuthContext, useLocalize } from "~/hooks"
 import MarkLabel from "./MarkLabel"
 import { getHomeLabelApi } from "~/api/apps"
-import { cn } from "~/utils"
 
 interface Category {
-    value: string
-    label: string,
-    selected: boolean
+    value: number
+    label: string
 }
 
+export type AppCategoryId = number | 'all' | 'uncategorized'
+
 interface AgentNavigationProps {
-    onCategoryChange: (categoryId: number | string) => void
-    onCategoryLoadError?: () => void
+    onCategoryChange: (categoryId: AppCategoryId) => void
     onRefresh: () => void
     /**
      * A keyword search is running. Search results span every category, so no
@@ -26,23 +25,17 @@ interface AgentNavigationProps {
     searchActive?: boolean
 }
 
-const UNCATEGORIZED = 'uncategorized'
-
-export function AgentNavigation({ onCategoryChange, onCategoryLoadError, onRefresh, searchActive = false }: AgentNavigationProps) {
+export function AgentNavigation({ onCategoryChange, onRefresh, searchActive = false }: AgentNavigationProps) {
     const { user } = useAuthContext();
     const localize = useLocalize();
 
     const [isLabelModalOpen, setIsLabelModalOpen] = useState(false)
-    // Nothing is selected until the tags come back — the first one is the
-    // default, and which one that is isn't known before then.
-    const [activeCategory, setActiveCategory] = useState<number | string | null>(null)
-    const [showRightShadow, setShowRightShadow] = useState(false)
+    const [activeCategory, setActiveCategory] = useState<AppCategoryId>('all')
 
     const [categories, setCategories] = useState<Category[]>([])
-    const tabsScrollRef = useRef<HTMLDivElement>(null)
-    const activeCategoryRef = useRef<number | string | null>(null)
+    const activeCategoryRef = useRef<AppCategoryId>('all')
 
-    const selectCategory = useCallback((id: number | string) => {
+    const selectCategory = useCallback((id: AppCategoryId) => {
         activeCategoryRef.current = id
         setActiveCategory(id)
         onCategoryChange(id)
@@ -50,50 +43,27 @@ export function AgentNavigation({ onCategoryChange, onCategoryLoadError, onRefre
 
     const fetchCategoryTags = useCallback(async () => {
         try {
-            const tags = await getHomeLabelApi()
-            const next: Category[] = tags.data.map(tag => ({
+            const { data } = await getHomeLabelApi() as { data: { id: number; name: string }[] }
+            const next = data.map(tag => ({
                 label: tag.name,
                 value: tag.id,
-                selected: true
             }))
             setCategories(next)
 
-            // Keep the current tab if it survived (the tag list is editable from
-            // here), otherwise fall back to the first tag — or to Uncategorized,
-            // which is the only tab left when no tags are configured at all.
+            // The tag editor can remove the selected category.
             const current = activeCategoryRef.current
-            const stillListed = current === UNCATEGORIZED || next.some((category) => category.value === current)
-            if (current === null || !stillListed) {
-                selectCategory(next[0]?.value ?? UNCATEGORIZED)
+            if (typeof current === 'number' && !next.some((category) => category.value === current)) {
+                selectCategory('all')
             }
         } catch (error) {
             console.error("Failed to load app categories:", error)
-            setCategories([])
-            if (activeCategoryRef.current === null) onCategoryLoadError?.()
         }
-    }, [onCategoryLoadError, selectCategory])
+    }, [selectCategory])
 
-    // Initial data load
     useEffect(() => {
+        selectCategory('all')
         fetchCategoryTags()
-    }, [fetchCategoryTags])
-
-    const updateShadow = useCallback(() => {
-        const el = tabsScrollRef.current
-        if (!el) return
-        const hasOverflow = el.scrollWidth > el.clientWidth + 1
-        const atRightEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 1
-        setShowRightShadow(hasOverflow && !atRightEnd)
-    }, [])
-
-    useEffect(() => {
-        updateShadow()
-    }, [categories, user?.role, updateShadow])
-
-    useEffect(() => {
-        window.addEventListener('resize', updateShadow)
-        return () => window.removeEventListener('resize', updateShadow)
-    }, [updateShadow])
+    }, [fetchCategoryTags, selectCategory])
 
     const handleCloseLabelModal = async (shouldClose: boolean) => {
         if (shouldClose) {
@@ -105,57 +75,37 @@ export function AgentNavigation({ onCategoryChange, onCategoryLoadError, onRefre
         onRefresh();
     }
 
-    const renderTab = (id: number | string, label: string) => {
-        const isActive = !searchActive && activeCategory === id;
-        return (
-            <button
-                key={id}
-                type="button"
-                onClick={() => selectCategory(id)}
-                className={cn(
-                    "flex shrink-0 items-center whitespace-nowrap border-b-2 px-2 py-[5px] font-['PingFang_SC'] text-[14px] leading-[22px] transition-colors",
-                    isActive
-                        ? "border-blue-500 text-blue-500"
-                        : "border-transparent text-text-1 fine-pointer:hover:text-blue-500",
-                )}
-            >
-                {label}
-            </button>
-        )
-    };
+    const handleTabChange = (key: string) => {
+        selectCategory(key === 'all' || key === 'uncategorized' ? key : Number(key))
+    }
 
     return (
-        <nav className="flex w-full min-w-0 items-center gap-2">
-            <div className="relative min-w-0 flex-1">
-                <div
-                    ref={tabsScrollRef}
-                    onScroll={updateShadow}
-                    className="flex w-full min-w-0 items-center gap-[8px] overflow-x-auto whitespace-nowrap scrollbar-hide"
-                >
-                    {categories.map((category) => renderTab(category.value, category.label))}
-                    {renderTab(UNCATEGORIZED, localize('com_app_uncategorized'))}
-                </div>
-
-                {showRightShadow && (
-                    <div className="pointer-events-none absolute right-0 top-0 h-full w-8 bg-gradient-to-l from-white to-transparent" />
-                )}
-            </div>
-
-            {/* edit label  */}
-            {user?.role === 'admin' && (
-                <button
-                    onClick={() => setIsLabelModalOpen(true)}
-                    className="flex items-center justify-cente mr-2 p-[6px] relative rounded-md shrink-0 hover:bg-gray-100 transition-colors"
-                >
-                    <BoltIcon size={16} className="text-[#666]" />
-                </button>
-            )}
-
+        <>
+            <Tabs
+                aria-label={localize('com_nav_app_center')}
+                activeKey={searchActive ? '' : String(activeCategory)}
+                onChange={handleTabChange}
+                items={[
+                    { key: 'all', label: localize('com_app.all') },
+                    ...categories.map(({ value, label }) => ({ key: String(value), label })),
+                    { key: 'uncategorized', label: localize('com_app_uncategorized') },
+                ]}
+                extra={user?.role === 'admin' ? (
+                    <button
+                        type="button"
+                        aria-label={localize('com_label_settings_title')}
+                        onClick={() => setIsLabelModalOpen(true)}
+                        className="mr-2 flex shrink-0 items-center justify-center rounded-md p-1.5 hover:bg-gray-100 transition-colors"
+                    >
+                        <BoltIcon size={16} className="text-[#666]" />
+                    </button>
+                ) : undefined}
+            />
             <MarkLabel
                 open={isLabelModalOpen}
                 home={categories}
                 onClose={handleCloseLabelModal}
             />
-        </nav>
+        </>
     )
 }

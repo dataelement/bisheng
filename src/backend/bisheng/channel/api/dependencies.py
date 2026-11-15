@@ -63,6 +63,7 @@ async def get_channel_service(
     article_es_service = get_article_es_service()
     article_read_repository = await get_article_read_repository(session)
     message_service = await _get_message_service(session)
+    from bisheng.knowledge.application.space_upload import make_space_upload_application
     from bisheng.permission.application.access import get_f048_runtime
     from bisheng.permission.application.initial_grant import InitialGrantApplication
     from bisheng.permission.application.prospective_grant import ProspectiveGrantApplication
@@ -78,6 +79,7 @@ async def get_channel_service(
         article_es_service=article_es_service,
         article_read_repository=article_read_repository,
         message_service=message_service,
+        space_upload_factory=make_space_upload_application,
         initial_grant_application=InitialGrantApplication(
             runtime=runtime,
             subjects=subject_directory,

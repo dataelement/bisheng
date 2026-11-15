@@ -38,6 +38,7 @@ from bisheng.app_publish.domain.models.capability_call_record import (
     AppCapabilityCallRecordDao,
 )
 from bisheng.core.database import get_async_db_session
+from bisheng.database.models.org_snapshot import astamp
 
 #: ``model_call_record.subject_kind`` values, mirrored from F051 so this
 #: module's assertion does not depend on importing the face.
@@ -91,6 +92,7 @@ async def record_retrieval(
         version_id=version_id,
     )
     try:
+        await astamp([row], lambda one: one.subject_user_id)
         async with get_async_db_session() as session:
             await AppCapabilityCallRecordDao.ainsert(session, row)
             await session.commit()

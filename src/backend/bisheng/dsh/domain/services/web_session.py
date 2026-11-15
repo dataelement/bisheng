@@ -61,3 +61,10 @@ async def validate_web_session(connection, subject: dict) -> None:
     principal = await runtime.access.authenticate(authorization)
     if (int(principal.user_id), int(principal.tenant_id)) != (subject["user_id"], subject["tenant_id"]):
         raise DshInvalidAccessTokenError()
+    # Authentication only binds the exact device. The shared entrance hook
+    # records explicitly marked business requests after identity validation.
+    state = getattr(connection, "state", None)
+    if state is not None:
+        from bisheng.dsh.application.session_activity import DshSessionActivity
+
+        state.authenticated_activity = DshSessionActivity(runtime.sessions, principal)

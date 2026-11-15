@@ -1,26 +1,15 @@
 apiVersion: v1
 kind: Service
-metadata:
-  name: {{ include "bisheng.backendService" . }}
-  labels:
-    {{- include "bisheng.labels" . | nindent 4 }}
-    app.kubernetes.io/component: backend
+metadata: {name: {{ include "bisheng.backendService" . }}}
 spec:
   selector:
     {{- include "bisheng.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: backend
-  ports:
-    - name: http
-      port: {{ .Values.backend.service.port }}
-      targetPort: http
+  ports: [{name: http, port: {{ .Values.backend.service.port }}, targetPort: http}]
 ---
 apiVersion: v1
 kind: Service
-metadata:
-  name: {{ include "bisheng.frontendService" . }}
-  labels:
-    {{- include "bisheng.labels" . | nindent 4 }}
-    app.kubernetes.io/component: frontend
+metadata: {name: {{ include "bisheng.frontendService" . }}}
 spec:
   type: {{ .Values.frontend.service.type }}
   selector:
@@ -30,14 +19,45 @@ spec:
     - name: http
       port: {{ .Values.frontend.service.port }}
       targetPort: http
-      {{- if and (eq .Values.frontend.service.type "NodePort") .Values.frontend.service.nodePort }}
+{{- if and (eq .Values.frontend.service.type "NodePort") .Values.frontend.service.nodePort }}
       nodePort: {{ .Values.frontend.service.nodePort }}
-      {{- end }}
-    {{- if .Values.frontend.service.clientPort }}
+{{- end }}
+{{- if .Values.frontend.service.clientPort }}
     - name: client
       port: {{ .Values.frontend.service.clientPort }}
       targetPort: client
-      {{- if and (eq .Values.frontend.service.type "NodePort") .Values.frontend.service.clientNodePort }}
+{{- if and (eq .Values.frontend.service.type "NodePort") .Values.frontend.service.clientNodePort }}
       nodePort: {{ .Values.frontend.service.clientNodePort }}
-      {{- end }}
-    {{- end }}
+{{- end }}
+{{- end }}
+{{- if .Values.runtime.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: {{ include "bisheng.component" (list . "internal") }}}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "bisheng.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+  ports: [{name: https, port: 443, targetPort: internal-tls}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: {{ include "bisheng.component" (list . "frontend-ingress") }}}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "bisheng.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: frontend
+  policyTypes: [Ingress]
+  ingress:
+    - ports: [{protocol: TCP, port: {{ .Values.frontend.service.port }} }{{ if .Values.frontend.service.clientPort }}, {protocol: TCP, port: {{ .Values.frontend.service.clientPort }}}{{ end }}]
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values: [{{ include "runtime.name" (list . "runtime-manager") }}, {{ include "runtime.name" (list . "app-proxy") }}, {{ include "runtime.name" (list . "egress-proxy") }}, {{ include "runtime.name" (list . "runtime-admission") }}]
+      ports: [{protocol: TCP, port: {{ .Values.global.internalPlatformPort }}}]
+{{- end }}

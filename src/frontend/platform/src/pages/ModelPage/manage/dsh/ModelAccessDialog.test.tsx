@@ -93,3 +93,13 @@ it('preserves the selected-member draft when the all-members switch collapses an
     expect(screen.getByText('Ada')).toBeVisible()
     expect(saveModelVisibility).not.toHaveBeenCalled()
 })
+
+it('refuses to limit a model to nobody', async () => {
+    vi.mocked(getModelVisibility).mockResolvedValue({ version: 1, everyone: true, subjects: [] })
+    const user = userEvent.setup()
+    render(<ModelAccessDialog model={{ id: 7, name: 'Model' }} onClose={vi.fn()} />)
+    await user.click(await screen.findByRole('switch', { name: 'dsh.unified.everyoneVisible' }))
+    expect(screen.getByRole('note')).toHaveTextContent('dsh.unified.selectedVisibleEmpty')
+    expect(screen.getByRole('button', { name: 'dsh.unified.save' })).toBeDisabled()
+    expect(saveModelVisibility).not.toHaveBeenCalled()
+})

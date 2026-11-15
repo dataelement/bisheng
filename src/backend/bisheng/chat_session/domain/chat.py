@@ -1,3 +1,4 @@
+import asyncio
 import json
 from typing import TYPE_CHECKING
 
@@ -32,6 +33,7 @@ from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao, SensitiveStatus
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.user.domain.models.user import UserDao
+from bisheng.workflow.domain.repositories.history_repository import WorkflowHistoryRepository
 
 if TYPE_CHECKING:
     from bisheng.api.v1.schema.chat_schema import ChatMessageHistoryResponse
@@ -113,9 +115,30 @@ class ChatSessionService:
         return await MessageSessionDao.async_insert_one(subject.stamp(session))
 
     @staticmethod
-    async def rename_session(conversation_id: str, name: str) -> None:
+    async def rename_session(conversation_id: str, name: str, login_user: UserPayload) -> None:
         """Rename a chat session."""
+        await ChatSessionService._own_conversation_or_raise(conversation_id, login_user)
         await MessageSessionDao.update_session_name(conversation_id, name)
+
+    @staticmethod
+    async def create_owned_project_session(session, login_user, project_id):
+        """Insert a new natural-person session and its project membership atomically."""
+        from bisheng.chat_session.domain.repositories.project_session_repository import ProjectSessionRepository
+        from bisheng.chat_session.domain.schemas.projects import ProjectActor
+        from bisheng.common.errcode.chat import ProjectInputError
+        from bisheng.database.models.org_snapshot import astamp_session
+
+        actor = ProjectActor(tenant_id=login_user.tenant_id, user_id=login_user.user_id)
+        if session.api_subject_type is not None:
+            raise ProjectInputError()
+        session = SessionSubject.natural_person(tenant_id=actor.tenant_id, user_id=actor.user_id).stamp(session)
+        # Preserve the preparation otherwise done by async_insert_one before
+        # entering the atomic project/session transaction.
+        if not session.group_ids:
+            session.group_ids = [group.group_id for group in await UserGroupDao.aget_user_group(actor.user_id)]
+        await astamp_session(session)
+        await asyncio.to_thread(ProjectSessionRepository.create, actor, session, str(project_id))
+        return session
 
     @staticmethod
     async def _own_conversation_or_raise(chat_id: str, login_user: UserPayload) -> MessageSession:
@@ -194,10 +217,27 @@ class ChatSessionService:
         account.
         """
         owner = await ChatSessionService._own_conversation_or_raise(chat_id, login_user)
+        return await ChatSessionService._sign_attachment(chat_id, file_id, owner)
 
+    @staticmethod
+    async def resolve_audit_attachment_url(chat_id: str, file_id: str) -> str:
+        """Sign a code-interpreter file of a conversation for an auditor.
+
+        The caller has already checked the audit scope. User uploads are not
+        part of what an auditor may download, so only generated files are found.
+        """
+        owner = await MessageSessionDao.async_get_one(chat_id)
+        if owner is None:
+            raise NotFoundError.http_exception()
+        return await ChatSessionService._sign_attachment(chat_id, file_id, owner, only_source="code_interpreter")
+
+    @staticmethod
+    async def _sign_attachment(chat_id: str, file_id: str, owner, *, only_source: str | None = None) -> str:
         messages = await WorkflowFileRepository.attachment_messages(chat_id)
         for attachment in ChatSessionService._attachment_objects(messages, owner):
             if str(attachment.get("file_id")) != str(file_id):
+                continue
+            if only_source is not None and attachment.get("source") != only_source:
                 continue
             object_name = attachment.get("object_name")
             if attachment.get("_workflow_image") and attachment.get("state") != "ready":
@@ -236,7 +276,7 @@ class ChatSessionService:
         elif session_chat.flow_type == FlowType.WORKSTATION.value:
             await AuditLogService.delete_chat_message(login_user, request_ip, session_chat)
         else:
-            flow_info = await FlowDao.aget_flow_by_id(session_chat.flow_id)
+            flow_info = next(iter(await WorkflowHistoryRepository.aget_by_ids([session_chat.flow_id])), None)
             if flow_info and flow_info.flow_type == FlowType.WORKFLOW.value:
                 await AuditLogService.delete_chat_workflow(login_user, request_ip, flow_info)
 
@@ -290,7 +330,7 @@ class ChatSessionService:
                 group_flow_ids = MarkTaskDao.get_task_byid(task_id).app_id.split(",")
 
         if keyword:
-            flows = FlowDao.get_flow_list_by_name(name=keyword)
+            flows = WorkflowHistoryRepository.search_by_name(keyword)
             assistants, _ = AssistantDao.get_all_assistants(name=keyword, page=0, limit=0)
             users = UserDao.search_user_by_name(user_name=keyword)
             if flows:

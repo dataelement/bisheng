@@ -14,6 +14,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.telemetry.event_data_schema import ToolInvocationEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
+from bisheng.common.services.failure_context import FailureContextAdapter
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.logger import trace_id_var
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
@@ -118,8 +119,11 @@ class ToolExecutor(BaseTool):
 
     @classmethod
     async def _ensure_use_permission_async(cls, tool_type: GptsToolsType, user_id: int) -> None:
+        from bisheng.tool.domain.models.gpts_tools import assert_tool_ready
+
+        assert_tool_ready(tool_type)
         if not tool_type.id or not tool_type.tenant_id:
-            raise PermissionError("Permission denied: use")
+            raise PermissionError("Permission denied: visible")
         login_user = await cls._build_permission_user(
             user_id,
             int(tool_type.tenant_id),
@@ -128,10 +132,10 @@ class ToolExecutor(BaseTool):
             login_user,
             resource_type="tool",
             resource_id=tool_type.id,
-            action="use",
+            action="visible",
         )
         if not allowed:
-            raise PermissionError("Permission denied: use")
+            raise PermissionError("Permission denied: visible")
 
     @classmethod
     def _ensure_use_permission_sync(cls, tool_type: GptsToolsType, user_id: int) -> None:
@@ -414,6 +418,9 @@ class ToolExecutor(BaseTool):
             tool_type = tool_types_map.get(tool.type)
             if not tool_type:
                 raise ValueError(f"Tool type with id {tool.type} not found.")
+            from bisheng.tool.domain.models.gpts_tools import assert_tool_ready
+
+            assert_tool_ready(tool_type)
             if enforce_permission:
                 cls._ensure_use_permission_sync(tool_type, user_id)
             result.append(
@@ -511,12 +518,24 @@ class ToolExecutor(BaseTool):
         )
 
     @classmethod
-    async def init_knowledge_tool(cls, invoke_user_id: int, knowledge_id: int, **kwargs) -> BaseTool:
+    async def init_knowledge_tool(
+        cls,
+        invoke_user_id: int,
+        knowledge_id: int,
+        *,
+        login_user: UserPayload | None = None,
+        reference_session=None,
+        **kwargs,
+    ) -> BaseTool:
         knowledge = await KnowledgeDao.aquery_by_id(knowledge_id=knowledge_id)
         if not knowledge:
             raise ValueError(f"Knowledge with id {knowledge_id} not found.")
-        vector_client = await KnowledgeRag.init_knowledge_milvus_vectorstore(invoke_user_id, knowledge)
-        es_client = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge)
+        vector_client = await KnowledgeRag.init_knowledge_milvus_vectorstore(
+            invoke_user_id, knowledge, login_user=login_user, reference_session=reference_session
+        )
+        es_client = await KnowledgeRag.init_knowledge_es_vectorstore(
+            knowledge, login_user=login_user, reference_session=reference_session
+        )
         return cls._init_knowledge_rag_tool(
             knowledge=knowledge,
             vector_retriever=vector_client.as_retriever(),
@@ -641,7 +660,11 @@ class ToolExecutor(BaseTool):
 
                 _logger.warning(f"linsight tool '{self.tool_name}' failed: {e}")
                 return json.dumps(
-                    {"状态": "失败", "错误信息": f"工具 {self.tool_name} 调用失败: {e}"},
+                    {
+                        "状态": "失败",
+                        "错误信息": FailureContextAdapter.safe_detail(e),
+                        **({"failure_info": info} if (info := FailureContextAdapter.from_error(e)) else {}),
+                    },
                     ensure_ascii=False,
                 )
         return await instance._arun(*args, **kwargs)

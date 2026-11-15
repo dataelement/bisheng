@@ -54,6 +54,7 @@ import asyncio
 import base64
 import hashlib
 import html
+import json
 import os
 import re
 import time
@@ -62,6 +63,8 @@ from pathlib import Path
 
 from loguru import logger
 from minio.error import S3Error
+
+from bisheng.common.services.failure_context import FailureContextAdapter
 
 
 def _is_missing_key(exc: S3Error) -> bool:
@@ -127,6 +130,14 @@ SKILLS_DIR = "skills"
 # Exported so tests (and any future tool-layer guard) can assert on the refusal
 # without pinning the whole sentence.
 SKILLS_READONLY_ERROR_PREFIX = "[read-only]"
+
+# F013: a skill keeps credentials (e.g. a business-database password) under
+# ``skills/<name>/secrets/``. The workspace file tools never return that content:
+# whatever read_file / grep return is stored as step output, which the UI and share
+# links render. Code in bisheng_code_interpreter still reads it from the local disk
+# (the executor never goes through this backend).
+SKILL_SECRETS_DIR = "secrets"
+SKILL_SECRET_ERROR_PREFIX = "[secret]"
 
 # Extensions deepagents' ``_EXTENSION_TO_FILE_TYPE`` classifies as ``image`` — the
 # ONE multimodal shape mainstream OpenAI-compatible endpoints accept. Reading one
@@ -195,6 +206,26 @@ def _is_skills_path(rel_path: str) -> bool:
     silently refuse it.
     """
     return rel_path == SKILLS_DIR or rel_path.startswith(SKILLS_DIR + "/")
+
+
+def _is_skill_secret_path(rel_path: str) -> bool:
+    """True for ``skills/<name>/secrets/...`` (credentials only code may read)."""
+    parts = rel_path.split("/")
+    return len(parts) >= 4 and parts[0] == SKILLS_DIR and parts[2] == SKILL_SECRETS_DIR
+
+
+def _skill_secret_error(file_path: str) -> str:
+    """Refusal for a file-tool read of a skill's secrets/ file, routed to the executor."""
+    parts = file_path.strip("/").split("/")
+    code_path = "/".join(parts[parts.index(SKILLS_DIR) :]) if SKILLS_DIR in parts else file_path.lstrip("/")
+    return (
+        f"{SKILL_SECRET_ERROR_PREFIX} `{file_path}` 是技能的凭据文件，文件工具不能读取。"
+        f'请在 bisheng_code_interpreter 的代码里用 open("{code_path}") 读取并直接用于建立连接，'
+        f"不要 print、记录或写出其中的内容。\n"
+        f"{SKILL_SECRET_ERROR_PREFIX} `{file_path}` holds skill credentials and cannot be read with file "
+        f'tools. Read it inside bisheng_code_interpreter code with open("{code_path}") and use it to connect; '
+        f"never print or write out its content."
+    )
 
 
 def _skills_readonly_error(file_path: str) -> str:
@@ -907,6 +938,8 @@ class WorkspaceBackend(FilesystemBackend):
 
     def read(self, file_path: str, offset: int = 0, limit: int = 2000) -> ReadResult:
         rel = self._ws_rel(file_path)
+        if _is_skill_secret_path(rel):
+            return ReadResult(error=_skill_secret_error(file_path))
         from bisheng.linsight.domain.services.skill_runtime_guard import refuse_workspace_read
 
         refusal = refuse_workspace_read(rel, self.skill_snapshot, self._skill_enabled_sync)
@@ -953,7 +986,12 @@ class WorkspaceBackend(FilesystemBackend):
                 )
         except Exception as e:
             logger.exception("workspace ls failed for svid=%s prefix=%s", self.svid, path)
-            return LsResult(error=f"Error listing '{path}': {e}")
+            if type(e).__module__.startswith(("urllib3", "aiohttp", "httpx", "requests")):
+                FailureContextAdapter.capture(e, category="object_storage", service="minio", operation="read_file")
+            payload = {"error": "Workspace listing failed."}
+            if info := FailureContextAdapter.from_error(e):
+                payload["failure_info"] = info
+            return LsResult(error=json.dumps(payload))
         return LsResult(entries=entries)
 
     # -- edit (cache mutation + write-through) ------------------------------
@@ -1081,6 +1119,9 @@ class WorkspaceBackend(FilesystemBackend):
             # silently narrow the scan to nothing.
             if glob and not self._glob_matches(rel_in_ws, glob):
                 continue
+            # Matched lines are returned verbatim, so a secrets/ file is never scanned.
+            if _is_skill_secret_path(rel_in_ws):
+                continue
             # ``ls`` already reports the object size; use it to avoid downloading a
             # multi-MB original (uploads/ carries them since the dual-track write)
             # only to discover it holds no matchable text.
@@ -1156,6 +1197,8 @@ class WorkspaceBackend(FilesystemBackend):
 
     async def aread(self, file_path: str, offset: int = 0, limit: int = 2000) -> ReadResult:
         rel = self._ws_rel(file_path)
+        if _is_skill_secret_path(rel):
+            return ReadResult(error=_skill_secret_error(file_path))
         from bisheng.linsight.domain.services.skill_runtime_guard import arefuse_workspace_read
 
         refusal = await arefuse_workspace_read(rel, self.skill_snapshot, self._skill_enabled)

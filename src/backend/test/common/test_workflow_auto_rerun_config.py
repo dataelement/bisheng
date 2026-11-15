@@ -6,6 +6,7 @@ import yaml
 
 from bisheng.api.v1 import endpoints
 from bisheng.common.services.config_service import ConfigService
+from bisheng.core.config.open_platform import OpenApiConf
 from bisheng.core.config.settings import WorkflowConf
 
 
@@ -59,6 +60,7 @@ def test_env_exposes_only_normalized_workflow_auto_rerun_switch(monkeypatch):
         # F049 / F054 switches ``get_env`` reads on this branch; the fake settings
         # object has to carry them or the endpoint raises before reaching workflow.
         open_platform=SimpleNamespace(enabled=False),
+        open_api=OpenApiConf(),
         app_runtime=SimpleNamespace(enabled=False),
         get_workflow_conf=lambda: WorkflowConf(auto_rerun_on_open=True),
     )
@@ -66,7 +68,7 @@ def test_env_exposes_only_normalized_workflow_auto_rerun_switch(monkeypatch):
 
     response = endpoints.get_env()
 
-    assert response.data["workflow"] == {"auto_rerun_on_open": True}
+    assert response.data["workflow"] == {"auto_rerun_on_open": True, "code_node_enabled": False}
 
 
 def test_env_fails_closed_when_workflow_config_cannot_be_loaded(monkeypatch):
@@ -82,6 +84,7 @@ def test_env_fails_closed_when_workflow_config_cannot_be_loaded(monkeypatch):
         # F049 / F054 switches ``get_env`` reads on this branch; the fake settings
         # object has to carry them or the endpoint raises before reaching workflow.
         open_platform=SimpleNamespace(enabled=False),
+        open_api=OpenApiConf(),
         app_runtime=SimpleNamespace(enabled=False),
         get_workflow_conf=raise_invalid_config,
     )
@@ -89,4 +92,4 @@ def test_env_fails_closed_when_workflow_config_cannot_be_loaded(monkeypatch):
 
     response = endpoints.get_env()
 
-    assert response.data["workflow"] == {"auto_rerun_on_open": False}
+    assert response.data["workflow"] == {"auto_rerun_on_open": False, "code_node_enabled": False}

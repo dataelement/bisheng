@@ -383,7 +383,6 @@ export function FileCard({
   // never sprouts a second floating control over its thumbnail.
   const hasReviewedMenuItems =
     showMenuDownloadItem ||
-    isAdmin ||
     canRename ||
     canDelete ||
     Boolean(onManagePermission) ||
@@ -404,7 +403,6 @@ export function FileCard({
     showMenuDownloadItem ||
     Boolean(onManagePermission) ||
     canRename ||
-    (isAdmin && (!isFolder || hasRetryOption)) ||
     showMoveItem ||
     showVersionManagement ||
     showVersionHistory;
@@ -427,7 +425,7 @@ export function FileCard({
           {localize("com_permission.manage_permission")}
         </DropdownItem>
       )}
-      {isAdmin && !isFolder && (
+      {canRename && !isFolder && (
         <DropdownItem onSelect={() => onEditTags()} icon={<Outlined.Tag />}>
           {localize("com_knowledge.edit_tags")}
         </DropdownItem>
@@ -446,7 +444,7 @@ export function FileCard({
           {localize("com_knowledge.move")}
         </DropdownItem>
       )}
-      {isAdmin && hasRetryOption && (
+      {canRename && hasRetryOption && (
         <DropdownItem onSelect={() => onRetry?.()} icon={<Outlined.Refresh />}>
           {localize("com_knowledge.retry")}
         </DropdownItem>

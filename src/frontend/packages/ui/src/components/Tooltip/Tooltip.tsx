@@ -1,6 +1,7 @@
 import * as React from 'react';
 import * as TooltipPrimitive from '@radix-ui/react-tooltip';
 import cn from '../../utils/cn';
+import { useTooltipFocusIntent } from './focusIntent';
 
 /**
  * Tooltip — one line of plain text explaining a control (组件-Tooltip文字提示.md v1).
@@ -149,6 +150,12 @@ function useTriggerElement(children: React.ReactElement): React.ReactElement {
   );
 }
 
+const OPEN_POPUP = '[aria-haspopup][aria-expanded="true"], [data-menu-open]';
+
+function hasOpenPopup(trigger: HTMLElement | null) {
+  return !!trigger && (trigger.matches(OPEN_POPUP) || !!trigger.querySelector(OPEN_POPUP));
+}
+
 export function Tooltip({
   content,
   children,
@@ -162,10 +169,40 @@ export function Tooltip({
 }: TooltipProps) {
   const hasProvider = React.useContext(HasProviderContext);
   const trigger = useTriggerElement(children);
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
+  const isKeyboardFocus = useTooltipFocusIntent(triggerRef);
+  const [innerOpen, setInnerOpen] = React.useState(defaultOpen ?? false);
+  const isOpen = open ?? innerOpen;
+  const handleOpenChange = React.useCallback((next: boolean) => {
+    if (next && (disabled || hasOpenPopup(triggerRef.current))) return;
+    if (open === undefined) setInnerOpen(next);
+    onOpenChange?.(next);
+  }, [disabled, open, onOpenChange]);
+
+  React.useEffect(() => {
+    const node = triggerRef.current;
+    if (!isOpen) return;
+    if (disabled) {
+      handleOpenChange(false);
+      return;
+    }
+    if (!node) return;
+    const closeForPopup = () => {
+      if (hasOpenPopup(node)) handleOpenChange(false);
+    };
+    closeForPopup();
+    // Observe only while visible; this also covers hover-open menus and raw Radix triggers.
+    const observer = new MutationObserver(closeForPopup);
+    observer.observe(node, { subtree: true, childList: true, attributes: true, attributeFilter: ['aria-expanded', 'data-menu-open'] });
+    return () => observer.disconnect();
+  }, [disabled, isOpen, handleOpenChange]);
 
   const tooltip = (
-    <TooltipPrimitive.Root open={open} defaultOpen={defaultOpen} onOpenChange={onOpenChange}>
-      <TooltipPrimitive.Trigger asChild>{trigger}</TooltipPrimitive.Trigger>
+    <TooltipPrimitive.Root open={disabled ? false : isOpen} onOpenChange={handleOpenChange}>
+      <TooltipPrimitive.Trigger asChild ref={triggerRef} onFocus={(event) => {
+        // Portals bubble through React parents, but are not part of the trigger's DOM.
+        if (!event.currentTarget.contains(event.target) || !isKeyboardFocus(event.nativeEvent)) event.preventDefault();
+      }}>{trigger}</TooltipPrimitive.Trigger>
       {!disabled && (
         <TooltipPrimitive.Portal>
           <TooltipPrimitive.Content

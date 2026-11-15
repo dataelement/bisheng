@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import request from '~/api/request';
 import { Button } from '~/components/ui/Button';
 import { Input } from '~/components/ui/Input';
+import { useLocalize } from '~/hooks';
 
 type CaptchaData = { captcha_key: string; user_capthca: boolean; captcha: string };
 type ApiEnvelope<T> = { status_code: number; status_message: string; data: T };
@@ -19,6 +20,7 @@ async function encryptPwd(raw: string): Promise<string> {
 
 export default function DevLogin() {
   const navigate = useNavigate();
+  const localize = useLocalize();
   const mailRef = useRef<HTMLInputElement>(null);
   const pwdRef = useRef<HTMLInputElement>(null);
   const captchaRef = useRef<HTMLInputElement>(null);
@@ -42,7 +44,7 @@ export default function DevLogin() {
 
   const submit = async () => {
     setErr('');
-    const mail = mailRef.current?.value?.trim();
+    const mail = mailRef.current?.value;
     const pwd = pwdRef.current?.value;
     if (!mail || !pwd) {
       setErr('请输入账号和密码');
@@ -96,14 +98,14 @@ export default function DevLogin() {
           <Input
             ref={mailRef}
             type="email"
-            placeholder="账号 / email"
+            placeholder={localize('accountIdentity.account')}
             autoComplete="email"
             onKeyDown={(e) => e.key === 'Enter' && pwdRef.current?.focus()}
           />
           <Input
             ref={pwdRef}
             type="password"
-            placeholder="密码"
+            placeholder={localize('com_auth_password')}
             onKeyDown={(e) => e.key === 'Enter' && submit()}
           />
           {captcha.user_capthca && (

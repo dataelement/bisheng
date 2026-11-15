@@ -23,13 +23,23 @@ import { SkillList, SkillListSkeleton, type SkillSort } from './SkillList';
  * stay on. The open detail lives in the URL (`?skill=<id>`).
  */
 
-interface SkillCenterPaneProps { search: string; uploadOpen: boolean; onUploadOpenChange: (open: boolean) => void; onSearchClear?: () => void }
-export function SkillCenterPane({ search, uploadOpen, onUploadOpenChange: setUploadOpen, onSearchClear }: SkillCenterPaneProps) {
+interface SkillCenterPaneProps {
+  search: string;
+  uploadOpen: boolean;
+  onUploadOpenChange: (open: boolean) => void;
+  onSearchClear?: () => void;
+  /** Enterprise rows the caller renders under this list (tools on the 全部 tab). */
+  extraProvidedCount?: number;
+}
+export function SkillCenterPane({ search, uploadOpen, onUploadOpenChange: setUploadOpen, onSearchClear, extraProvidedCount }: SkillCenterPaneProps) {
   const localize = useLocalize();
   const { showToast } = useToastContext();
   const { platform, personal, mutation, personalCount, enterpriseCount } = useSkillCenter();
   const [target, setTarget] = useState<SkillRecord>();
   const [enabledOverride, setEnabledOverride] = useState<Record<number, boolean>>({});
+  // One entry per toggle still being saved. A single mutation's `variables` only
+  // tracks the latest call, so it cannot tell which rows are busy.
+  const [pendingIds, setPendingIds] = useState<ReadonlySet<number>>(() => new Set());
   const [notice, setNotice] = useState('');
   const sort: SkillSort = 'recent';
   const [params, setParams] = useSearchParams();
@@ -56,23 +66,30 @@ export function SkillCenterPane({ search, uploadOpen, onUploadOpenChange: setUpl
   const handleRetry = () => { void personal.refetch(); };
   const handleToggle = (skill: SkillRecord, enabled: boolean) => {
     setEnabledOverride((prev) => ({ ...prev, [skill.id]: enabled }));
-    mutation.mutate({ kind: 'toggle', target: skill, enabled }, {
-      onError: (error) => {
-        setEnabledOverride((prev) => ({ ...prev, [skill.id]: skill.enabled }));
-        if (isApiError(error) && (error.presentation !== 'none' || error.kind === 'canceled')) return;
-        const message = isApiError(error)
-          ? translateApiErrorMessage({
-            status_code: error.status_code,
-            status_message: error.status_message,
-            data: error.data,
-          })
-          : '';
-        showToast({
-          message: message || localize('com_skill_center_error_storage'),
-          severity: NotificationSeverity.ERROR,
-        });
-        if (isApiError(error)) error.presentation = 'toast';
-      },
+    setPendingIds((prev) => new Set(prev).add(skill.id));
+    // mutateAsync, not mutate: per-call callbacks of mutate only fire for the latest
+    // call, so a failed earlier toggle would never roll back.
+    mutation.mutateAsync({ kind: 'toggle', target: skill, enabled }).catch((error: unknown) => {
+      setEnabledOverride((prev) => ({ ...prev, [skill.id]: skill.enabled }));
+      if (isApiError(error) && (error.presentation !== 'none' || error.kind === 'canceled')) return;
+      const message = isApiError(error)
+        ? translateApiErrorMessage({
+          status_code: error.status_code,
+          status_message: error.status_message,
+          data: error.data,
+        })
+        : '';
+      showToast({
+        message: message || localize('com_skill_center_error_storage'),
+        severity: NotificationSeverity.ERROR,
+      });
+      if (isApiError(error)) error.presentation = 'toast';
+    }).finally(() => {
+      setPendingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(skill.id);
+        return next;
+      });
     });
   };
   const handleSaved = () => {
@@ -107,7 +124,8 @@ export function SkillCenterPane({ search, uploadOpen, onUploadOpenChange: setUpl
           sort={sort}
           createdCount={personalCount}
           providedCount={enterpriseCount}
-          pendingId={mutation.isLoading ? mutation.variables?.target?.id : undefined}
+          extraProvidedCount={extraProvidedCount}
+          pendingIds={pendingIds}
           onSelect={(skill) => updateParams(String(skill.id))}
           onToggle={handleToggle}
           createdEmptyHint={keyword ? undefined : (
@@ -138,7 +156,7 @@ export function SkillCenterPane({ search, uploadOpen, onUploadOpenChange: setUpl
       {selected && !uploadOpen && (
         <SkillDetails
           skill={selected}
-          toggling={mutation.isLoading && mutation.variables?.kind === 'toggle'}
+          toggling={pendingIds.has(selected.id)}
           onClose={() => updateParams()}
           onToggle={handleToggle}
           onUpdate={(skill) => { setTarget(skill); setUploadOpen(true); }}

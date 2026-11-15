@@ -20,8 +20,7 @@ class SkillPermissionAdapter:
         personal_owner = owner_user_id or (row.created_by if row.source == "personal" else 0)
         if personal_owner and (actor.subject_type != "user" or personal_owner != actor.user_id):
             raise PermissionInvalidResourceError()
-        if action == "use" and not row.enabled:
-            raise PermissionInvalidResourceError()
+        # Disabled skills remain manageable; executable selection checks enabled.
         version, context = await self.runtime.get_permission_version(
             tenant_id=row.tenant_id,
             resource_type="linsight_skill",
@@ -51,7 +50,7 @@ async def ensure_builtin_skill_permission(skill):
                 tenant_id=skill.tenant_id,
                 resource_type="linsight_skill",
                 resource_id=str(skill.id),
-                action_codes=("use", "visible"),
+                action_codes=("visible",),
                 context_version=f"skill:{skill.id}",
             ),
         ),

@@ -1,0 +1,830 @@
+pageType: content
+background:
+  type: solid
+  color: '#151611'
+notes: Authored trend composition. All new example statements and figures are illustrative, not reported facts. Replace them with user evidence. Labeled six-point trend with common scale and a separate interpretation
+elements:
+  - elementId: s1
+    elementType: shape
+    bounds:
+      - 868
+      - 24
+      - 10
+      - 10
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E6FF3D'
+    border:
+      width: 0
+      color: '#E6FF3D'
+  - elementId: s2
+    elementType: shape
+    bounds:
+      - 888
+      - 24
+      - 10
+      - 10
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E6FF3D'
+    border:
+      width: 0
+      color: '#E6FF3D'
+  - elementId: s3
+    elementType: shape
+    bounds:
+      - 878
+      - 34
+      - 10
+      - 10
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E6FF3D'
+    border:
+      width: 0
+      color: '#E6FF3D'
+  - elementId: s4
+    elementType: shape
+    bounds:
+      - 868
+      - 44
+      - 10
+      - 10
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E6FF3D'
+    border:
+      width: 0
+      color: '#E6FF3D'
+  - elementId: s5
+    elementType: shape
+    bounds:
+      - 888
+      - 44
+      - 10
+      - 10
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E6FF3D'
+    border:
+      width: 0
+      color: '#E6FF3D'
+  - elementId: t6
+    elementType: text
+    bounds:
+      - 48
+      - 27
+      - 665
+      - 20
+    content:
+      text: NEO-GRID BOLD
+      fontFamily: &ref_0
+        latin: Arial
+        mac: PingFang SC
+        win: Microsoft YaHei
+        ea: Noto Sans CJK SC
+      fontSize: 10
+      lineHeight: 1.1
+      color: '#F5F4EF'
+      bold: false
+  - elementId: l7
+    elementType: line
+    bounds:
+      - 48
+      - 59
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.6
+      color: '#585954'
+  - elementId: t8
+    elementType: text
+    bounds:
+      - 48
+      - 76
+      - 864
+      - 64
+    content:
+      text: 阅读趋势，追问停顿的原因
+      fontFamily: &ref_1
+        latin: Arial Black
+        mac: PingFang SC
+        win: Microsoft YaHei
+        ea: Noto Sans CJK SC
+      fontSize: 32
+      lineHeight: 1.1
+      color: '#F5F4EF'
+      bold: true
+  - elementId: t9
+    elementType: text
+    bounds:
+      - 754
+      - 46
+      - 158
+      - 13
+    content:
+      text: 图示 03
+      fontFamily: *ref_0
+      fontSize: 9
+      lineHeight: 1.1
+      color: '#b2b1ac'
+      bold: false
+      align: right
+  - elementId: t10
+    elementType: text
+    bounds:
+      - 48
+      - 152
+      - 850
+      - 25
+    content:
+      text: A / 每周指数 · 基期 = 100
+      fontFamily: *ref_0
+      fontSize: 13
+      lineHeight: 1.1
+      color: '#F5F4EF'
+      bold: false
+  - elementId: s11
+    elementType: shape
+    bounds:
+      - 328
+      - 190
+      - 91
+      - 236
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#2a2d15'
+    border:
+      width: 0
+      color: '#2a2d15'
+  - elementId: l12
+    elementType: line
+    bounds:
+      - 87
+      - 426
+      - 528
+      - 1
+    viewBox:
+      - 528
+      - 1
+    points: 0,0 528,0
+    border:
+      width: 0.5
+      color: '#373732'
+  - elementId: t13
+    elementType: text
+    bounds:
+      - 48
+      - 416
+      - 30
+      - 22
+    content:
+      text: '0'
+      fontFamily: *ref_0
+      fontSize: 11
+      lineHeight: 1.1
+      color: '#b2b1ac'
+      bold: false
+      align: right
+  - elementId: l14
+    elementType: line
+    bounds:
+      - 87
+      - 370
+      - 528
+      - 1
+    viewBox:
+      - 528
+      - 1
+    points: 0,0 528,0
+    border:
+      width: 0.5
+      color: '#373732'
+  - elementId: t15
+    elementType: text
+    bounds:
+      - 48
+      - 360
+      - 30
+      - 22
+    content:
+      text: '40'
+      fontFamily: *ref_0
+      fontSize: 11
+      lineHeight: 1.1
+      color: '#b2b1ac'
+      bold: false
+      align: right
+  - elementId: l16
+    elementType: line
+    bounds:
+      - 87
+      - 314
+      - 528
+      - 1
+    viewBox:
+      - 528
+      - 1
+    points: 0,0 528,0
+    border:
+      width: 0.5
+      color: '#373732'
+  - elementId: t17
+    elementType: text
+    bounds:
+      - 48
+      - 304
+      - 30
+      - 22
+    content:
+      text: '80'
+      fontFamily: *ref_0
+      fontSize: 11
+      lineHeight: 1.1
+      color: '#b2b1ac'
+      bold: false
+      align: right
+  - elementId: l18
+    elementType: line
+    bounds:
+      - 87
+      - 258
+      - 528
+      - 1
+    viewBox:
+      - 528
+      - 1
+    points: 0,0 528,0
+    border:
+      width: 0.5
+      color: '#373732'
+  - elementId: t19
+    elementType: text
+    bounds:
+      - 48
+      - 248
+      - 30
+      - 22
+    content:
+      text: '120'
+      fontFamily: *ref_0
+      fontSize: 11
+      lineHeight: 1.1
+      color: '#b2b1ac'
+      bold: false
+      align: right
+  - elementId: l20
+    elementType: line
+    bounds:
+      - 87
+      - 202
+      - 528
+      - 1
+    viewBox:
+      - 528
+      - 1
+    points: 0,0 528,0
+    border:
+      width: 0.5
+      color: '#373732'
+  - elementId: t21
+    elementType: text
+    bounds:
+      - 48
+      - 192
+      - 30
+      - 22
+    content:
+      text: '160'
+      fontFamily: *ref_0
+      fontSize: 11
+      lineHeight: 1.1
+      color: '#b2b1ac'
+      bold: false
+      align: right
+  - elementId: s22
+    elementType: shape
+    bounds:
+      - 100.8
+      - 282.8
+      - 6.4
+      - 6.4
+    shapeName: ellipse
+    fill:
+      type: solid
+      color: '#F5F4EF'
+    border:
+      width: 0
+      color: '#F5F4EF'
+  - elementId: t23
+    elementType: text
+    bounds:
+      - 81
+      - 256
+      - 47
+      - 25
+    content:
+      text: '100'
+      fontFamily: *ref_0
+      fontSize: 15
+      lineHeight: 1.1
+      color: '#F5F4EF'
+      bold: false
+      align: center
+  - elementId: t24
+    elementType: text
+    bounds:
+      - 88
+      - 437
+      - 37
+      - 24
+    content:
+      text: W1
+      fontFamily: *ref_0
+      fontSize: 12
+      lineHeight: 1.1
+      color: '#F5F4EF'
+      bold: false
+      align: center
+  - elementId: l25
+    elementType: line
+    bounds:
+      - 104
+      - 274.79999999999995
+      - 98
+      - 11.200000000000045
+    viewBox:
+      - 98
+      - 11.200000000000045
+    points: 0,11.200000000000045 98,0
+    border:
+      width: 1.8
+      color: '#F5F4EF'
+  - elementId: s26
+    elementType: shape
+    bounds:
+      - 198.8
+      - 271.59999999999997
+      - 6.4
+      - 6.4
+    shapeName: ellipse
+    fill:
+      type: solid
+      color: '#F5F4EF'
+    border:
+      width: 0
+      color: '#F5F4EF'
+  - elementId: t27
+    elementType: text
+    bounds:
+      - 179
+      - 244.79999999999995
+      - 47
+      - 25
+    content:
+      text: '108'
+      fontFamily: *ref_0
+      fontSize: 15
+      lineHeight: 1.1
+      color: '#F5F4EF'
+      bold: false
+      align: center
+  - elementId: t28
+    elementType: text
+    bounds:
+      - 186
+      - 437
+      - 37
+      - 24
+    content:
+      text: W2
+      fontFamily: *ref_0
+      fontSize: 12
+      lineHeight: 1.1
+      color: '#F5F4EF'
+      bold: false
+      align: center
+  - elementId: l29
+    elementType: line
+    bounds:
+      - 202
+      - 266.4
+      - 98
+      - 8.399999999999977
+    viewBox:
+      - 98
+      - 8.399999999999977
+    points: 0,8.399999999999977 98,0
+    border:
+      width: 1.8
+      color: '#F5F4EF'
+  - elementId: s30
+    elementType: shape
+    bounds:
+      - 296.8
+      - 263.2
+      - 6.4
+      - 6.4
+    shapeName: ellipse
+    fill:
+      type: solid
+      color: '#F5F4EF'
+    border:
+      width: 0
+      color: '#F5F4EF'
+  - elementId: t31
+    elementType: text
+    bounds:
+      - 277
+      - 236.39999999999998
+      - 47
+      - 25
+    content:
+      text: '114'
+      fontFamily: *ref_0
+      fontSize: 15
+      lineHeight: 1.1
+      color: '#F5F4EF'
+      bold: false
+      align: center
+  - elementId: t32
+    elementType: text
+    bounds:
+      - 284
+      - 437
+      - 37
+      - 24
+    content:
+      text: W3
+      fontFamily: *ref_0
+      fontSize: 12
+      lineHeight: 1.1
+      color: '#F5F4EF'
+      bold: false
+      align: center
+  - elementId: l33
+    elementType: line
+    bounds:
+      - 300
+      - 266.4
+      - 98
+      - 2.800000000000068
+    viewBox:
+      - 98
+      - 2.800000000000068
+    points: 0,0 98,2.800000000000068
+    border:
+      width: 1.8
+      color: '#F5F4EF'
+  - elementId: s34
+    elementType: shape
+    bounds:
+      - 393
+      - 264.20000000000005
+      - 10
+      - 10
+    shapeName: ellipse
+    fill:
+      type: solid
+      color: '#E6FF3D'
+    border:
+      width: 0
+      color: '#E6FF3D'
+  - elementId: t35
+    elementType: text
+    bounds:
+      - 375
+      - 239.20000000000005
+      - 47
+      - 25
+    content:
+      text: '112'
+      fontFamily: *ref_0
+      fontSize: 15
+      lineHeight: 1.1
+      color: '#F5F4EF'
+      bold: false
+      align: center
+  - elementId: t36
+    elementType: text
+    bounds:
+      - 382
+      - 437
+      - 37
+      - 24
+    content:
+      text: W4
+      fontFamily: *ref_0
+      fontSize: 12
+      lineHeight: 1.1
+      color: '#F5F4EF'
+      bold: false
+      align: center
+  - elementId: l37
+    elementType: line
+    bounds:
+      - 398
+      - 246.79999999999998
+      - 98
+      - 22.400000000000063
+    viewBox:
+      - 98
+      - 22.400000000000063
+    points: 0,22.400000000000063 98,0
+    border:
+      width: 1.8
+      color: '#F5F4EF'
+  - elementId: s38
+    elementType: shape
+    bounds:
+      - 492.8
+      - 243.6
+      - 6.4
+      - 6.4
+    shapeName: ellipse
+    fill:
+      type: solid
+      color: '#F5F4EF'
+    border:
+      width: 0
+      color: '#F5F4EF'
+  - elementId: t39
+    elementType: text
+    bounds:
+      - 473
+      - 216.79999999999998
+      - 47
+      - 25
+    content:
+      text: '128'
+      fontFamily: *ref_0
+      fontSize: 15
+      lineHeight: 1.1
+      color: '#F5F4EF'
+      bold: false
+      align: center
+  - elementId: t40
+    elementType: text
+    bounds:
+      - 480
+      - 437
+      - 37
+      - 24
+    content:
+      text: W5
+      fontFamily: *ref_0
+      fontSize: 12
+      lineHeight: 1.1
+      color: '#F5F4EF'
+      bold: false
+      align: center
+  - elementId: l41
+    elementType: line
+    bounds:
+      - 496
+      - 227.20000000000002
+      - 98
+      - 19.599999999999966
+    viewBox:
+      - 98
+      - 19.599999999999966
+    points: 0,19.599999999999966 98,0
+    border:
+      width: 1.8
+      color: '#F5F4EF'
+  - elementId: s42
+    elementType: shape
+    bounds:
+      - 590.8
+      - 224.00000000000003
+      - 6.4
+      - 6.4
+    shapeName: ellipse
+    fill:
+      type: solid
+      color: '#F5F4EF'
+    border:
+      width: 0
+      color: '#F5F4EF'
+  - elementId: t43
+    elementType: text
+    bounds:
+      - 571
+      - 197.20000000000002
+      - 47
+      - 25
+    content:
+      text: '142'
+      fontFamily: *ref_0
+      fontSize: 15
+      lineHeight: 1.1
+      color: '#F5F4EF'
+      bold: true
+      align: center
+  - elementId: t44
+    elementType: text
+    bounds:
+      - 578
+      - 437
+      - 37
+      - 24
+    content:
+      text: W6
+      fontFamily: *ref_0
+      fontSize: 12
+      lineHeight: 1.1
+      color: '#F5F4EF'
+      bold: false
+      align: center
+  - elementId: t45
+    elementType: text
+    bounds:
+      - 274
+      - 186
+      - 155
+      - 25
+    content:
+      text: W4 / 停顿
+      fontFamily: *ref_0
+      fontSize: 13
+      lineHeight: 1.1
+      color: '#F5F4EF'
+      bold: false
+  - elementId: l46
+    elementType: line
+    bounds:
+      - 365
+      - 210
+      - 33
+      - 49.200000000000045
+    viewBox:
+      - 33
+      - 49.200000000000045
+    points: 0,0 33,49.200000000000045
+    border:
+      width: 0.6
+      color: '#858580'
+  - elementId: l47
+    elementType: line
+    bounds:
+      - 652
+      - 169
+      - 1
+      - 281
+    viewBox:
+      - 1
+      - 281
+    points: 0,0 0,281
+    border:
+      width: 0.6
+      color: '#585954'
+  - elementId: t48
+    elementType: text
+    bounds:
+      - 679
+      - 163
+      - 233
+      - 25
+    content:
+      text: B / 变化解读
+      fontFamily: *ref_0
+      fontSize: 13
+      lineHeight: 1.1
+      color: '#F5F4EF'
+      bold: false
+  - elementId: t49
+    elementType: text
+    bounds:
+      - 679
+      - 202
+      - 233
+      - 78
+    content:
+      text: +42%
+      fontFamily: *ref_1
+      fontSize: 56
+      lineHeight: 1.1
+      color: '#F5F4EF'
+      bold: true
+  - elementId: t50
+    elementType: text
+    bounds:
+      - 679
+      - 286
+      - 229
+      - 55
+    content:
+      text: 相对基期的增长
+      fontFamily: *ref_0
+      fontSize: 18
+      lineHeight: 1.1
+      color: '#F5F4EF'
+      bold: false
+  - elementId: l51
+    elementType: line
+    bounds:
+      - 679
+      - 354
+      - 233
+      - 1
+    viewBox:
+      - 233
+      - 1
+    points: 0,0 233,0
+    border:
+      width: 0.6
+      color: '#4d4e49'
+  - elementId: t52
+    elementType: text
+    bounds:
+      - 679
+      - 369
+      - 229
+      - 22
+    content:
+      text: 下一步检查
+      fontFamily: *ref_0
+      fontSize: 10
+      lineHeight: 1.1
+      color: '#F5F4EF'
+      bold: true
+  - elementId: t53
+    elementType: text
+    bounds:
+      - 679
+      - 404
+      - 229
+      - 50
+    content:
+      text: 第四周为何出现停顿？
+      fontFamily: *ref_1
+      fontSize: 20
+      lineHeight: 1.1
+      color: '#F5F4EF'
+      bold: true
+  - elementId: l54
+    elementType: line
+    bounds:
+      - 48
+      - 465
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.6
+      color: '#464742'
+  - elementId: t55
+    elementType: text
+    bounds:
+      - 48
+      - 475
+      - 864
+      - 25
+    content:
+      text: 解读：整体方向向好；第四周的停顿仍需解释。
+      fontFamily: *ref_0
+      fontSize: 13
+      lineHeight: 1.1
+      color: '#F5F4EF'
+      bold: false
+  - elementId: t56
+    elementType: text
+    bounds:
+      - 48
+      - 507
+      - 783
+      - 16
+    content:
+      text: 版式示例 / 数据为模拟值
+      fontFamily: *ref_0
+      fontSize: 9
+      lineHeight: 1.1
+      color: '#F5F4EF'
+      bold: false
+  - elementId: t57
+    elementType: text
+    bounds:
+      - 871
+      - 504
+      - 41
+      - 22
+    content:
+      text: '04'
+      fontFamily: *ref_0
+      fontSize: 11
+      lineHeight: 1.1
+      color: '#F5F4EF'
+      bold: false

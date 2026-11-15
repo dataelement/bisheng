@@ -1,0 +1,15 @@
+{
+  "name": "@bisheng/identity",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/rules.ts",
+  "types": "./src/rules.ts",
+  "exports": { ".": "./src/rules.ts" },
+  "scripts": {
+    "test": "vitest run --maxWorkers=1 --minWorkers=1",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "devDependencies": { "typescript": "catalog:", "vitest": "catalog:" }
+}

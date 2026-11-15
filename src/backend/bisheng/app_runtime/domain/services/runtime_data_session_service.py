@@ -252,6 +252,11 @@ class RuntimeDataSessionService:
                 "startup": {},
             },
         }
+        if (node.capabilities or {}).get("configuration"):
+            from bisheng.app_runtime.domain.services.runtime_deployment_policy import expected_policy, policy_digest
+
+            raw, _ = expected_policy(node.id)
+            payload.update(execution_policy_json=raw, execution_policy_digest=policy_digest(raw))
         op = RuntimeOperation(
             tenant_id=app.tenant_id,
             app_id=app.id,

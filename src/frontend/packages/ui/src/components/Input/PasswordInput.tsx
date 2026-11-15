@@ -17,9 +17,9 @@ import { Input, type InputProps } from './Input';
  * needs a different glyph.
  */
 export interface PasswordInputProps extends Omit<InputProps, 'type' | 'suffix'> {
-  /** Shown while the value is masked — clicking it reveals the text. Default: `Outlined.Eye`. */
+  /** Shown while the value is masked — clicking it reveals the text. Default: `Outlined.EyeClose`. */
   revealIcon?: React.ReactNode;
-  /** Shown while the value is visible — clicking it masks the text again. Default: `Outlined.EyeClose`. */
+  /** Shown while the value is visible — clicking it masks the text again. Default: `Outlined.Eye`. */
   hideIcon?: React.ReactNode;
   /** Accessible name of the toggle while masked (caller-supplied copy). */
   revealLabel?: string;
@@ -68,7 +68,7 @@ export const PasswordInput = React.forwardRef<HTMLInputElement, PasswordInputPro
             onMouseDown={(event) => event.preventDefault()}
             onClick={toggle}
           >
-            {visible ? hideIcon ?? <Outlined.EyeClose /> : revealIcon ?? <Outlined.Eye />}
+            {visible ? hideIcon ?? <Outlined.Eye /> : revealIcon ?? <Outlined.EyeClose />}
           </button>
         }
         {...props}

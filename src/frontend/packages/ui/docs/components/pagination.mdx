@@ -155,6 +155,8 @@ export default () => (
 
 弹窗、抽屉、侧栏等窄容器用 `simple`：`‹ 6 / 13 ›`，中间只显示、不能点，换页靠两侧箭头，不带每页条数和跳页。不传 `simple` 时，**手机上自动换成简洁型**，small 档同时升到 medium。
 
+服务端不返回总数时，传入 `total={null}` 和 `hasNextPage`，分页器显示当前页和两侧箭头（如 `‹ 6 ›`）。
+
 ```tsx
 import { Pagination } from '@bisheng/ui';
 
@@ -202,7 +204,8 @@ export default () => (
 
 | 属性 | 说明 | 类型 | 默认值 |
 |---|---|---|---|
-| `total` | 总条数；空列表传 0 | `number` | — |
+| `total` | 总条数；空列表传 0，未知传 `null` | `number \| null` | — |
+| `hasNextPage` | 是否可以翻到下一页；`total` 为 `null` 时必传 | `boolean` | — |
 | `current` / `defaultCurrent` | 当前页（受控 / 非受控） | `number` | `1` |
 | `pageSize` / `defaultPageSize` | 每页条数（受控 / 非受控） | `number` | `10` |
 | `onChange` | 换页、改条数时触发；改条数时 `page` 恒为 1；末页删空自动退页时也会触发 | `(page, pageSize) => void` | — |

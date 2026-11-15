@@ -6,7 +6,7 @@ from io import BytesIO
 from typing import Literal, Union
 from urllib import parse
 
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Query, Request, UploadFile
 from loguru import logger
 from sse_starlette import EventSourceResponse
 from starlette.responses import StreamingResponse
@@ -29,14 +29,22 @@ from bisheng.common.errcode.linsight import (
     LinsightUseUpError,
 )
 from bisheng.common.errcode.server import InvalidOperationError, ResourceDownloadError
+from bisheng.common.errcode.workstation import DepartmentDailyChatConcurrentLimitError
 from bisheng.common.schemas.telemetry.event_data_schema import ApplicationAliveEventData, ApplicationProcessEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
+from bisheng.common.services.failure_context import FailureContextAdapter
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.context.tenant import bypass_tenant_filter_if, get_current_tenant_id
 from bisheng.core.logger import trace_id_var
+from bisheng.core.session_activity import business_activity
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
-from bisheng.database.models.session import MessageSessionDao
+from bisheng.database.models.session import MessageSessionDao, SensitiveStatus
+from bisheng.department.domain.services.department_flow_service import (
+    DepartmentFlowService,
+    SlotOutcome,
+    lease_id_from_headers,
+)
 from bisheng.linsight.domain import utils as linsight_execute_utils
 from bisheng.linsight.domain.models.linsight_execute_task import ExecuteTaskStatusEnum
 from bisheng.linsight.domain.models.linsight_session_version import (
@@ -64,8 +72,8 @@ from bisheng.linsight.domain.services.state_message_manager import (
 )
 from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
 from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import SensitiveWordPolicyService
-from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
+from bisheng.share_link.domain.services.share_token_dependencies import header_share_token_parser
 from bisheng.utils import util
 
 router = APIRouter()
@@ -172,7 +180,9 @@ async def linsight_file_preview(
 
 # Submit an Idea User Issue Request
 @router.post("/workbench/submit", summary="Submit an Idea User Issue Request")
+@business_activity()
 async def submit_linsight_workbench(
+    request: Request,
     submit_obj: LinsightQuestionSubmitSchema = Body(..., description="Idea User Issue Submitter"),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> EventSourceResponse:
@@ -194,6 +204,10 @@ async def submit_linsight_workbench(
             submit_obj.session_id or "",
         )
 
+        session_id = submit_obj.session_id if isinstance(submit_obj.session_id, str) else ""
+        if session_id:
+            MessageSessionDao.update_sensitive_status(session_id, SensitiveStatus.VIOLATIONS)
+
         async def blocked_generator():
             auto_reply = blocked.auto_reply or ""
             yield {
@@ -207,6 +221,24 @@ async def submit_linsight_workbench(
         """
         Event generator for generatingSSE events
         """
+        # A page lease sent by the session page's heartbeat already covers this
+        # session, so only renew it here. Without one, hold an execution lease
+        # for exactly this submit call.
+        execution_lease = None
+        execution_task = None
+        page_lease_id = lease_id_from_headers(getattr(request, "headers", None))
+        if page_lease_id is not None:
+            outcome, _ = await DepartmentFlowService.ensure_lease(login_user, page_lease_id)
+            if outcome is SlotOutcome.REJECTED:
+                yield DepartmentDailyChatConcurrentLimitError().to_sse_event_instance()
+                return
+        else:
+            outcome, execution_lease = await DepartmentFlowService.ensure_lease(login_user)
+            if outcome is SlotOutcome.REJECTED:
+                yield DepartmentDailyChatConcurrentLimitError().to_sse_event_instance()
+                return
+            if outcome is SlotOutcome.HELD and execution_lease is not None:
+                execution_task = DepartmentFlowService.start_renewal(execution_lease)
         try:
             system_config = await settings.aget_all_config()
 
@@ -229,11 +261,16 @@ async def submit_linsight_workbench(
         except BaseErrorCode as e:
             # Typed business errors (folder-upload limits, …) keep their own code so
             # the client can show the right copy instead of a generic submit failure.
-            yield e.to_sse_event_instance()
+            yield FailureContextAdapter.public_sse_event(e)
             return
         except Exception as e:
-            yield LinsightQuestionError(exception=e).to_sse_event_instance()
+            yield FailureContextAdapter.public_sse_event(LinsightQuestionError(), cause=e)
             return
+        finally:
+            # The lease covers the submit only — title generation below runs after
+            # the slot is handed back.
+            if execution_task is not None or execution_lease is not None:
+                await DepartmentFlowService.stop_renewal(execution_task, execution_lease)
 
         yield {"event": "linsight_workbench_submit", "data": json.dumps(response_data)}
 
@@ -252,6 +289,7 @@ async def submit_linsight_workbench(
 
 # workbench to process
 @router.post("/workbench/start-execute", summary="Start Executing Reims", response_model=UnifiedResponseModel)
+@business_activity()
 async def start_execute(
     linsight_session_version_id: str = Body(..., description="Inspiration Conversation VersionID", embed=True),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
@@ -325,6 +363,7 @@ async def start_execute(
 
 
 @router.post("/workbench/continue", summary="Continue a task-mode conversation with a new turn")
+@business_activity()
 async def continue_conversation(
     session_version_id: str = Body(..., description="Existing session version id to continue", embed=True),
     question: str = Body(..., description="Follow-up user message", embed=True),
@@ -388,6 +427,7 @@ async def continue_conversation(
 
 # workbench User input
 @router.post("/workbench/user-input", summary="User input Ideas", response_model=UnifiedResponseModel)
+@business_activity()
 async def user_input(
     session_version_id: str = Body(..., description="Inspiration Conversation VersionID"),
     linsight_execute_task_id: str = Body(..., description="Inspiration Task ExecutionID"),
@@ -591,7 +631,9 @@ async def get_execute_task_detail(
     """
 
     with bypass_tenant_filter_if(share_link is not None):
-        execute_task_models = await LinsightWorkbenchImpl.get_execute_task_detail(session_version_id)
+        execute_task_models = await LinsightWorkbenchImpl.get_execute_task_detail(
+            session_version_id, login_user=login_user
+        )
 
         if not execute_task_models:
             return resp_200([])

@@ -15,6 +15,9 @@ from bisheng.open_api.domain.context import OpenApiPrincipal
 from bisheng.open_api.domain.schemas.task_mode import OpenTaskSubmitReq
 from bisheng.open_api.domain.services import task_mode_service
 from bisheng.open_api.domain.services.task_mode_service import OpenTaskModeService
+from bisheng.permission.application.identity import get_current_permission_actor
+from bisheng.permission.domain.schemas import VerifiedPermissionTarget
+from bisheng.permission.domain.services.permission_action_service import PermissionActor
 
 CONFIG = {
     "models": [{"id": "7", "name": "qwen"}],
@@ -65,7 +68,7 @@ def _req(**overrides) -> OpenTaskSubmitReq:
 
 
 def _knowledge(knowledge_id: int, knowledge_type: int):
-    return SimpleNamespace(id=knowledge_id, type=knowledge_type)
+    return SimpleNamespace(id=knowledge_id, type=knowledge_type, tenant_id=9)
 
 
 def install_task_mode_seams(monkeypatch):
@@ -79,6 +82,8 @@ def install_task_mode_seams(monkeypatch):
         visible=set(),
         blocked=None,
         permission_error=None,
+        permission_calls=[],
+        loaded_actor=None,
     )
 
     async def _menu(_user_id, _key):
@@ -95,12 +100,52 @@ def install_task_mode_seams(monkeypatch):
         return [state.knowledge[i] for i in ids if i in state.knowledge]
 
     async def _batch_actions(_login_user, *, resource_type, resource_ids, actions):
+        assert actions == ("visible",)
+        state.permission_calls.append((resource_type, tuple(resource_ids), actions))
         if state.permission_error:
             raise state.permission_error
-        return {str(i): frozenset({"use"}) for i in resource_ids if int(i) in state.use_allowed}
+        # The historical fixture name denotes the original library's admission;
+        # migrated IDs use the space namespace rather than borrowing that set.
+        allowed = state.use_allowed if resource_type == "knowledge_library" else state.visible
+        assert resource_type in {"knowledge_library", "knowledge_space"}
+        return {str(i): frozenset({"visible"}) for i in resource_ids if int(i) in allowed}
 
     async def _batch_visible(_login_user, *, resource_type, resource_ids):
+        assert resource_type == "knowledge_space"
+        if state.permission_error:
+            raise state.permission_error
         return {str(i): int(i) in state.visible for i in resource_ids}
+
+    async def _actor(_login_user):
+        return get_current_permission_actor() or PermissionActor(
+            subject_type="service_account", subject_id=31, tenant_id=9
+        )
+
+    async def _loaded(*, rows, resource_type, actor):
+        assert actor.tenant_id == 9
+        assert all(row.tenant_id == 9 for row in rows)
+        state.loaded_actor = actor
+        state.permission_calls.append((resource_type, tuple(row.id for row in rows), ("visible",)))
+        return tuple(
+            VerifiedPermissionTarget.from_business_service(
+                tenant_id=9,
+                resource_type=resource_type,
+                resource_id=str(row.id),
+                resource_version=1,
+                context_version="task-fixture",
+            )
+            for row in rows
+        )
+
+    async def _batch_loaded_visible(*, actor, targets):
+        if state.permission_error:
+            raise state.permission_error
+        assert actor is state.loaded_actor
+        return {
+            (target.resource_type, target.resource_id): int(target.resource_id)
+            in (state.use_allowed if target.resource_type == "knowledge_library" else state.visible)
+            for target in targets
+        }
 
     async def _submit(data, login_user, **kwargs):
         state.submitted = (data, kwargs)
@@ -110,11 +155,21 @@ def install_task_mode_seams(monkeypatch):
     monkeypatch.setattr("bisheng.llm.domain.llm.base.BishengBase.get_model_server_info", _model_info)
     monkeypatch.setattr(OpenTaskModeService, "enabled_skill_rows", staticmethod(_enabled))
     monkeypatch.setattr(task_mode_service.KnowledgeDao, "aget_list_by_ids", _by_ids)
+    monkeypatch.setattr(task_mode_service, "get_current_tenant_id", lambda: 9, raising=False)
     monkeypatch.setattr(
         "bisheng.permission.application.business_authorization.batch_check_business_actions", _batch_actions
     )
     monkeypatch.setattr(
         "bisheng.permission.application.business_authorization.batch_check_business_visible", _batch_visible
+    )
+    monkeypatch.setattr("bisheng.permission.application.identity.resolve_permission_actor", _actor)
+    monkeypatch.setattr(
+        "bisheng.permission.application.access.get_f048_resource_adapter",
+        AsyncMock(return_value=SimpleNamespace(resolve_permission_targets_from_rows=_loaded)),
+    )
+    monkeypatch.setattr(
+        "bisheng.permission.application.business_authorization.batch_check_verified_business_visible",
+        _batch_loaded_visible,
     )
     monkeypatch.setattr(task_mode_service.TempUploadService, "assert_owned_references", AsyncMock())
     monkeypatch.setattr(

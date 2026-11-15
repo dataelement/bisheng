@@ -40,8 +40,8 @@ export const ModelSelect = ({
 }) => {
   const { t } = useTranslation();
   const selectLabels = useSelectLabels();
-  const cascaderOptions = useMemo(() => toModelCascaderOptions(options), [options]);
-  const cascaderValue = useMemo(() => toModelCascaderValue(value, options), [options, value]);
+  const cascaderOptions = useMemo(() => toModelCascaderOptions(options, value, t('references.unavailable')), [options, value, t]);
+  const cascaderValue = useMemo(() => toModelCascaderValue(value, options, true), [options, value]);
 
   return (
     <div className="min-w-0">
@@ -87,6 +87,8 @@ export default function WorkbenchModel({ data, onBack }) {
 
   const lastSaveFormDataRef = useRef(null);
   const [saveload, setSaveLoad] = useState(false);
+  // The collapsed section holds the required embedding model; open it when it blocks a save.
+  const [otherSettingsOpen, setOtherSettingsOpen] = useState(false);
 
   const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
 
@@ -136,7 +138,7 @@ export default function WorkbenchModel({ data, onBack }) {
         chat_default_model_id: chatDefaultModelId ? String(chatDefaultModelId) : null,
         asr_model: asrModelId ? { id: String(asrModelId) } : null, // Accept an empty value.
         tts_model: ttsModelId ? { id: String(ttsModelId) } : null, // Accept an empty value.
-        // Model used to generate app conversation titles.
+        // Model that names new conversations (workbench, knowledge spaces, apps).
         chat_title_llm: chatTitleLlmId ? { id: String(chatTitleLlmId) } : null, // Accept an empty value.
         image_read_model: imageReadModelId ? { id: String(imageReadModelId) } : null,
       };
@@ -197,9 +199,8 @@ export default function WorkbenchModel({ data, onBack }) {
   const handleSave = () => {
     if (form.models.some((model) => String(model.description ?? "").length > 50)) return;
     const errors = [];
-    if (!enterpriseConfig?.enabled && !form.models.length) {
-      errors.push(t("model.chatModelRequired"));
-    }
+    // Every online chat model is offered by default (narrowed by visibility), so
+    // the stored list only holds optional labels and may be empty.
     // Reject blank rows: a model without an id serializes to `{ id: '' }`,
     // which reaches the client model picker as <SelectItem value="">
     // (empty string) and crashes the whole page in Radix. Force the admin
@@ -209,6 +210,7 @@ export default function WorkbenchModel({ data, onBack }) {
     }
     if (!hasValidWorkbenchEmbeddingModelId(form.sourceModelId)) {
       errors.push(t("model.workVectorModel") + t("bs:required"));
+      setOtherSettingsOpen(true);
     }
     if (errors.length) {
       toast.show({ type: "error", message: errors.filter(Boolean).join("\n") });
@@ -294,7 +296,11 @@ export default function WorkbenchModel({ data, onBack }) {
           }))
         }
       />
-      <details className="mt-2 border-t pt-4">
+      <details
+        className="mt-2 border-t pt-4"
+        open={otherSettingsOpen}
+        onToggle={(event) => setOtherSettingsOpen(event.currentTarget.open)}
+      >
         <summary className="cursor-pointer text-sm text-muted-foreground">
           {t("model.otherModelSettings")}
         </summary>
@@ -302,7 +308,7 @@ export default function WorkbenchModel({ data, onBack }) {
           <ModelSelect
             close
             label={t("model.linsightDefaultModel")}
-            tooltipText={t("model.linsightDefaultModelTooltip")}
+            tooltipText={`${t("model.linsightDefaultModelTooltip")} ${t("model.defaultModelVisibilityNote")}`}
             value={form.linsightDefaultModelId}
             options={llmOptions}
             onChange={(val) => handleDefaultModelChange("linsightDefaultModelId", val)}
@@ -310,6 +316,7 @@ export default function WorkbenchModel({ data, onBack }) {
           <ModelSelect
             close
             label={t("model.dailyDefaultModel")}
+            tooltipText={`${t("model.dailyDefaultModelTooltip")} ${t("model.defaultModelVisibilityNote")}`}
             value={form.chatDefaultModelId}
             options={llmOptions}
             onChange={(val) => handleDefaultModelChange("chatDefaultModelId", val)}
@@ -345,6 +352,7 @@ export default function WorkbenchModel({ data, onBack }) {
           <ModelSelect
             close
             label={t("model.sessionTitleGenerationModel")}
+            tooltipText={t("model.sessionTitleGenerationModelTooltip")}
             value={form.chatTitleLlmId}
             options={llmOptions}
             onChange={(val) => setForm({ ...form, chatTitleLlmId: val })}

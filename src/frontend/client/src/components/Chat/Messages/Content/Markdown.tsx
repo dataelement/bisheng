@@ -222,6 +222,7 @@ const Markdown = memo(({
   resolveImageSrc,
   resolveArtifactLink,
   onArtifactPreview,
+  renderFileLink,
   compactImages = false,
   onOpenSourcePreview,
 }: TContentProps & {
@@ -243,6 +244,12 @@ const Markdown = memo(({
   resolveArtifactLink?: ArtifactLinkResolver;
   /** Open the matched artifact in the Linsight preview panel. */
   onArtifactPreview?: (file: unknown) => void;
+  /**
+   * Daily chat: render a link that names a file the answer carries. Returning
+   * undefined leaves the link to the default renderer. Ignored when
+   * `resolveArtifactLink` is set.
+   */
+  renderFileLink?: (href: string, children: React.ReactNode) => React.ReactNode | undefined;
   /**
    * F074: hand a cited document to the host instead of the floating drawer —
    * the task-mode workspace shows it beside the report, on every screen width.
@@ -425,7 +432,10 @@ const Markdown = memo(({
                       {children}
                     </ArtifactLinkAnchor>
                   )
-                : a,
+                : renderFileLink
+                  ? ({ href, children }: TAnchorProps) =>
+                      renderFileLink(href, children) ?? React.createElement(a, { href, children })
+                  : a,
               p,
               artifact: Artifact,
               // Resolve relative image refs (Linsight deliverable preview) only when

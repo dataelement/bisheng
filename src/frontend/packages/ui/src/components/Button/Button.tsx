@@ -61,19 +61,18 @@ const buttonStyles = cva(
         text: '',
         link: '',
       },
-      // Heights/radii per §2 (24/32/40, 4/6/8px). Font sizes reference the
-      // PRIMITIVE type scale vars on purpose: the semantic --text-body remaps
-      // 14→16 under 768px, but control text must not follow (§5.5 / 适配原则 §3).
+      // Heights/radii per §2 (24/32/40, 4/6/8px). Compact-control typography
+      // stays independent of the responsive reading and field roles.
       // Icon size is one 14/16/18 ladder for BOTH icon-only and text+icon (§3.2/3.3).
       // Horizontal padding here is the borderless value (8/16/16); bordered
       // variants override to 7/15/15 in compoundVariants (visual-width parity).
       size: {
         small:
-          'h-6 gap-1 rounded px-2 text-[length:var(--font-size-3)] leading-[var(--line-height-3)] [&_svg]:size-3.5',
+          'h-6 gap-1 rounded px-2 text-control [&_svg]:size-3.5',
         medium:
-          'btn-touch-hit h-8 gap-2 rounded-md px-4 text-[length:var(--font-size-3)] leading-[var(--line-height-3)] [&_svg]:size-4',
+          'btn-touch-hit h-8 gap-2 rounded-md px-4 text-control [&_svg]:size-4',
         large:
-          'h-10 gap-2 rounded-lg px-4 text-[length:var(--font-size-4)] leading-[var(--line-height-4)] [&_svg]:size-[18px]',
+          'h-10 gap-2 rounded-lg px-4 text-control-lg [&_svg]:size-[18px]',
       },
       // `circle` is declared AFTER `size` so its rounded-full wins the merge
       // over the per-size radius; resolveVariants restricts it to icon-only (§1).

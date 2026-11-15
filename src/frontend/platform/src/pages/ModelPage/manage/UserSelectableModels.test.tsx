@@ -36,3 +36,17 @@ it('preserves hidden descriptions and offline rows while adding a desktop-only m
     expect(added[1]).toEqual({ id: '2', key: '2', name: 'desktop-only', displayName: 'Desktop label' })
     expect(original[0].displayName).toBe('Existing')
 })
+
+it('offers visibility without the desktop module but no credit multiplier', () => {
+    render(<UserSelectableModels data={[{ id: 1, name: 'Provider A', models: [
+        { id: 42, model_name: 'vendor-model', model_type: 'llm', online: true },
+    ] }]} configuredModels={[]} enterpriseEnabled={false} disabled={false} onMetadataChange={vi.fn()} />)
+    expect(screen.getByText('model.userSelectableModelsHelpBasic')).toBeVisible()
+    expect(screen.getAllByRole('columnheader')).toHaveLength(5)
+    expect(screen.getByRole('columnheader', { name: 'model.visibilityScope' })).toBeVisible()
+    expect(screen.queryByText('rate-control')).toBeNull()
+    expect(screen.queryByText('vision-control')).toBeNull()
+    // No display name or vision edit is needed for the model to be configurable.
+    fireEvent.click(screen.getByRole('button', { name: 'model.configureVisibility' }))
+    expect(screen.getByRole('dialog')).toHaveTextContent('vendor-model')
+})

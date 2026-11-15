@@ -210,6 +210,17 @@ class BackendAuthzClient(HmacClient):
             },
         )
 
+    async def redeem_desktop(self, *, slug: str, ticket: str) -> dict:
+        response = await self._send("POST", "/api/v1/internal/app-proxy/desktop-session",
+                                    json={"slug": slug, "ticket": ticket})
+        if response.status_code != 200:
+            raise InternalRpcError(self.peer, "Desktop ticket rejected")
+        envelope = response.json()
+        payload = self._unwrap(envelope)
+        if not isinstance(payload, dict) or not str(payload.get("session", "")).startswith("bs-view-"):
+            raise InternalRpcError(self.peer, "Desktop ticket rejected")
+        return payload
+
     async def authorize_preview(
         self,
         *,

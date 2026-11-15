@@ -1,6 +1,7 @@
 import os
 import re
 import shutil
+import threading
 import uuid
 from abc import ABC, abstractmethod
 from datetime import timedelta
@@ -106,7 +107,9 @@ EXECUTION_BOUNDARY_RULES = (
     "not provide the platform's environment variables, configuration files, keys, credentials "
     "or internal service addresses. Do not write code that reads or prints them — no "
     "os.environ dumps, no /proc, no platform config files or installed platform source code, "
-    "no connecting to the platform's database, cache or object storage. If the user asks for "
+    "no connecting to the platform's database, cache or object storage. An external business "
+    "database whose connection details are written in a skill's SKILL.md is not a platform "
+    "service and may be queried as that skill describes. If the user asks for "
     "any of these, reply that the task environment does not provide platform configuration or "
     "credentials, do not try another way to get them, and carry on with the rest of the task. "
     "Files the user uploaded under `uploads/` (including .env or config files) are the user's "
@@ -222,6 +225,12 @@ class BaseExecutor(ABC):
         self.workspace_prefix = kwargs.get("workspace_prefix", None)
         # Request-scoped knowledge-image stage (workstation daily chat); None elsewhere.
         self._kb_stage: Any = None
+        # Opt-in record of what was published under ``output/``. The daily chat attaches
+        # it to the answer; long-lived executors (deep research) leave it off so the
+        # list cannot grow for the life of a task.
+        self.collect_deliverables = False
+        self.published_deliverables: list[dict] = []
+        self._deliverables_lock = threading.Lock()
 
     # Executors that run scripts through ``run_with_dir`` can write the stage's images
     # into the working directory; others (E2B) leave this False and ignore the stage.
@@ -352,9 +361,24 @@ class BaseExecutor(ABC):
             if not os.path.isfile(file_name):
                 continue
             file_ext = os.path.splitext(rel)[-1]
-            file_list.append(self.upload_minio(f"{uuid.uuid4().hex}.{file_ext}", file_name))
+            url = self.upload_minio(f"{uuid.uuid4().hex}{file_ext}", file_name)
+            file_list.append(url)
+            self._record_deliverable(rel, file_name, url)
         self.sync_to_workspace(dir_path, touched)
         return file_list
+
+    def _record_deliverable(self, rel: str, file_name: str, url: str) -> None:
+        rel_key = rel.replace(os.sep, "/")
+        if not self.collect_deliverables or not url or not rel_key.startswith(f"{OUTPUT_DIR_NAME}/"):
+            return
+        entry = {
+            "path": rel_key,
+            "name": os.path.basename(rel_key),
+            "size": os.path.getsize(file_name),
+            "url": url,
+        }
+        with self._deliverables_lock:
+            self.published_deliverables.append(entry)
 
     def sync_files_to_local(self, files_info: list[DirEntry], root_path: str):
         if not files_info:

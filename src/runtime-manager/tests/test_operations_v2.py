@@ -11,9 +11,12 @@ from runtime_manager.config import Config
 from runtime_manager.container_runner import ExecutionError
 from runtime_manager.operations import OperationExecutor
 from runtime_manager.platform_client import PREFIX, PlatformClient, PlatformError
+from tests.fakes import stage_permit
 
 
 class Platform:
+    authorize_step = staticmethod(stage_permit)
+
     def __init__(self, kind="stop"):
         self.op = {
             "operation_id": "operation-a",
@@ -338,6 +341,7 @@ def test_preflight_records_starting_before_readiness_failure(tmp_path, monkeypat
     """AC-17, AC-63: terminal cleanup retains the last actual execution stage."""
     platform = Platform(kind)
     executor = OperationExecutor(Config(data_root=tmp_path, node_id="node-a"), platform, Docker())
+    monkeypatch.setattr(executor.runtime, "preflight", lambda operation: None)
 
     def failed_launch(*args, **kwargs):
         raise ExecutionError("readiness_timeout")
@@ -604,6 +608,7 @@ def cleanup_runtime(platform, outcomes):
         return cleanup(None) if action == "finish-session" else {"exec_ref": "data-pod"}
 
     runtime = SimpleNamespace(
+        preflight=lambda operation: None,
         prepare=prepare,
         cleanup=cleanup,
         launch=launch,
@@ -1352,6 +1357,23 @@ def test_expired_stop_special_cleanup_does_not_change_docker_failure_path(tmp_pa
         executor._failure(platform.op, None, PlatformError("operation_expired", 409))
         assert calls == ["operation-a"] and platform.op["status"] == "failed"
         assert platform.op["failure"]["reason"] == "execution_failed"
+    finally:
+        executor.close()
+
+
+def test_disk_full_failure_keeps_stable_reason_after_diagnostic_expiry(tmp_path):
+    platform = Platform("deploy")
+    platform.op["stage"] = "starting"
+    runtime = SimpleNamespace(
+        cleanup=lambda operation: {"complete": True},
+        diagnostics=lambda operation: "docker: no space left on device",
+        cleanup_local_scratch=lambda operation: None,
+    )
+    executor = OperationExecutor(Config(data_root=tmp_path), platform=platform, runtime=runtime)
+    try:
+        executor._failure(platform.op, None, RuntimeError("container create failed"))
+        assert platform.op["failure"]["reason"] == "disk_full"
+        assert platform.op["failure"]["failed_stage"] == "starting"
     finally:
         executor.close()
 

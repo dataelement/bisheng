@@ -40,7 +40,7 @@ module.exports = {
   },
   // Transform all source-shipped workspace packages in Jest.
   transformIgnorePatterns: [
-    'node_modules/(?!(@bisheng/ui|@bisheng/file-viewers|@bisheng/chat|@bisheng/api-client|@zattoo/use-double-click)/)',
+    'node_modules/(?!(@bisheng/ui|@bisheng/file-viewers|@bisheng/chat|@bisheng/api-client|@bisheng/identity|@zattoo/use-double-click)/)',
   ],
   preset: 'ts-jest',
   setupFilesAfterEnv: ['@testing-library/jest-dom/extend-expect', '<rootDir>/test/setupTests.js'],

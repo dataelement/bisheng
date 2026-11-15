@@ -32,7 +32,8 @@ afterEach(cleanup)
 
 it('keeps administrator navigation and switches real shared tabs', async () => {
     render(<Fixture user={{ role: 'admin' }} apiEnabled><SystemPage /></Fixture>)
-    expect(screen.getAllByRole('tab')).toHaveLength(8)
+    expect(screen.getAllByRole('tab')).toHaveLength(9)
+    expect(screen.getByRole('tab', { name: 'system.inviteCode.tab' })).toBeInTheDocument()
     expect(screen.getByText('Organization content')).toBeVisible()
     await userEvent.click(screen.getByRole('tab', { name: 'openApiManagement.serviceAccount.title' }))
     expect(screen.getByText('Accounts content')).toBeVisible()
@@ -46,6 +47,7 @@ it('keeps instance settings hidden for child administrators', () => {
     expect(screen.queryByRole('tab', { name: 'system.systemConfiguration' })).not.toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'orgSync:title' })).not.toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'system.appearanceSettings' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'system.inviteCode.tab' })).not.toBeInTheDocument()
 })
 it('respects the deployment flag and the legacy user-only entry', () => {
     render(<Fixture user={{ role: 'user' }}><SystemPage /></Fixture>)

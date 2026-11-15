@@ -5,6 +5,7 @@ import type { SkillRecord } from '~/components/Skills/types';
 import { useLocalize } from '~/hooks';
 import { DemoTag } from '~/mock/demo/DemoTag';
 import { cn } from '~/utils';
+import { MODULE_HOME_GROUPS } from '~/components/ModuleHome';
 
 export type SkillSort = 'recent' | 'name';
 
@@ -24,13 +25,15 @@ const byRecent = (left: SkillRecord, right: SkillRecord) => {
 
 interface SkillRowProps {
   skill: SkillRecord;
-  /** Id of the skill whose toggle is being saved — its switch shows the spinner. */
-  pendingId?: number;
+  /** Ids of skills whose toggle is being saved. Only those rows show a spinner;
+   *  every other switch stays usable. */
+  pendingIds?: ReadonlySet<number>;
   onSelect: (skill: SkillRecord) => void;
   onToggle: (skill: SkillRecord, enabled: boolean) => void;
 }
 
-function SkillRow({ skill, pendingId, onSelect, onToggle }: SkillRowProps) {
+function SkillRow({ skill, pendingIds, onSelect, onToggle }: SkillRowProps) {
+  const pending = pendingIds?.has(skill.id) ?? false;
   const localize = useLocalize();
   const personal = skill.source === 'personal' ? skill : null;
   const switchLabel = `${localize('com_skill_center_enabled_setting')}: ${skill.displayName}`;
@@ -70,8 +73,8 @@ function SkillRow({ skill, pendingId, onSelect, onToggle }: SkillRowProps) {
           size="small"
           className="relative z-[1] shrink-0"
           checked={skill.enabled}
-          loading={pendingId === skill.id}
-          disabled={pendingId !== undefined && pendingId !== skill.id}
+          loading={pending}
+          disabled={pending}
           aria-label={switchLabel}
           onCheckedChange={(enabled) => onToggle(skill, enabled)}
         />
@@ -104,6 +107,9 @@ interface SkillListProps extends Omit<SkillRowProps, 'skill'> {
   sort: SkillSort;
   createdCount?: number;
   providedCount?: number;
+  /** Enterprise rows rendered after this list by the caller (the 全部 tab appends the
+   *  tools). They belong to 企业提供, so the group header counts them too. */
+  extraProvidedCount?: number;
   /** Shown under 我创建的 while it is empty (and nothing is being searched for). */
   createdEmptyHint?: ReactNode;
 }
@@ -114,14 +120,14 @@ interface SkillListProps extends Omit<SkillRowProps, 'skill'> {
  * dense on purpose: name, where it came from, and one line of description. Only a skill
  * the user created has an on / off switch. Clicking a row opens its details.
  */
-export function SkillList({ skills, sort, createdCount, providedCount, createdEmptyHint, ...rowProps }: SkillListProps) {
+export function SkillList({ skills, sort, createdCount, providedCount, extraProvidedCount = 0, createdEmptyHint, ...rowProps }: SkillListProps) {
   const localize = useLocalize();
   const compare = sort === 'name' ? byName : byRecent;
   const created = skills.filter((skill) => skill.source === 'personal').sort(compare);
   const provided = skills.filter((skill) => skill.source === 'platform').sort(compare);
 
   return (
-    <div className="flex w-full flex-col gap-6">
+    <div className={cn(MODULE_HOME_GROUPS, 'flex w-full flex-col gap-6')}>
       {(created.length > 0 || createdEmptyHint) && (
         <SkillGroup title={localize('com_skill_center_group_created')} count={createdCount ?? created.length}>
           {created.length > 0 ? (
@@ -133,11 +139,13 @@ export function SkillList({ skills, sort, createdCount, providedCount, createdEm
           )}
         </SkillGroup>
       )}
-      {provided.length > 0 && (
-        <SkillGroup title={localize('com_skill_center_group_platform')} count={providedCount ?? provided.length}>
-          <ul className="flex w-full flex-col">
-            {provided.map((skill) => <SkillRow key={skill.id} skill={skill} {...rowProps} />)}
-          </ul>
+      {(provided.length > 0 || extraProvidedCount > 0) && (
+        <SkillGroup title={localize('com_skill_center_group_platform')} count={(providedCount ?? provided.length) + extraProvidedCount}>
+          {provided.length > 0 && (
+            <ul className="flex w-full flex-col">
+              {provided.map((skill) => <SkillRow key={skill.id} skill={skill} {...rowProps} />)}
+            </ul>
+          )}
         </SkillGroup>
       )}
     </div>

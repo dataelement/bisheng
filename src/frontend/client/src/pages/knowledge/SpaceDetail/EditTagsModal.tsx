@@ -1,7 +1,17 @@
+import { useKnowledgeBatch } from "../hooks/useKnowledgeBatch";
+import { BatchOperationDialog } from "./BatchOperationDialog";
+import type { BatchItem, BatchResult } from "~/api/knowledgeBatch";
 import { useState, KeyboardEvent, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Trash2, X } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, Button } from "~/components/ui";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  Button,
+} from "~/components/ui";
 import { useToastContext } from "~/Providers";
 import { showApiError } from "~/api/request";
 import {
@@ -10,7 +20,6 @@ import {
   addSpaceTagApi,
   deleteSpaceTagApi,
   updateFileTagsApi,
-  batchUpdateTagsApi,
 } from "~/api/knowledge";
 import { useLocalize } from "~/hooks";
 import { getFullWidthLength } from "~/utils";
@@ -20,6 +29,9 @@ interface EditTagsModalProps {
   onClose: (confirmClose: boolean) => void;
   /** Called after tags are saved successfully so parent can refresh */
   onSaved?: () => void;
+  onBatchSaved?: (result: BatchResult) => void;
+  availableTags?: SpaceTag[];
+  batchItems?: BatchItem[];
   spaceId: string;
   /** Single file edit — mutually exclusive with fileIds */
   fileId?: string | null;
@@ -33,6 +45,9 @@ export function EditTagsModal({
   isOpen,
   onClose,
   onSaved,
+  onBatchSaved,
+  availableTags,
+  batchItems,
   spaceId,
   fileId,
   fileIds,
@@ -48,14 +63,19 @@ export function EditTagsModal({
   const { showToast } = useToastContext();
   const queryClient = useQueryClient();
 
+  const batch = useKnowledgeBatch(JSON.stringify([spaceId, fileIds]));
+  const [pendingNames, setPendingNames] = useState<string[]>([]);
   const isBatchMode = !!(fileIds && fileIds.length > 0);
 
   // Fetch space tags and reset state when opened
   useEffect(() => {
     if (!isOpen || !spaceId) return;
     setInputValue("");
+    setPendingNames([]);
     setSelectedTagIds(new Set(initialTagIds));
-    getSpaceTagsApi(spaceId).then(setSpaceTags).catch(showApiError);
+    if (isBatchMode)
+      setSpaceTags([...new Map((availableTags ?? []).map((tag) => [tag.id, tag])).values()]);
+    else getSpaceTagsApi(spaceId).then(setSpaceTags).catch(showApiError);
   }, [isOpen, spaceId]);
 
   // Toggle a space tag selection
@@ -65,8 +85,11 @@ export function EditTagsModal({
       if (next.has(tag.id)) {
         next.delete(tag.id);
       } else {
-        if (next.size >= 10) {
-          showToast({ message: localize("com_knowledge.tags_count_limit_exceeded"), status: "warning" });
+        if (next.size + pendingNames.length >= 10) {
+          showToast({
+            message: localize("com_knowledge.tags_count_limit_exceeded"),
+            status: "warning",
+          });
           return prev;
         }
         next.add(tag.id);
@@ -82,7 +105,7 @@ export function EditTagsModal({
   // Returns whether it's safe to proceed, plus the committed tag id — callers
   // that immediately read tag ids need it because setSelectedTagIds is async
   // and won't have re-rendered within the same handler.
-  const commitInput = async (): Promise<{ ok: boolean; tagId?: number }> => {
+  const commitInput = async (): Promise<{ ok: boolean; tagId?: number; tagName?: string }> => {
     const trimmed = inputValue.trim();
     if (!trimmed) return { ok: true };
 
@@ -91,8 +114,11 @@ export function EditTagsModal({
       return { ok: false };
     }
 
-    if (selectedTagIds.size >= 10) {
-      showToast({ message: localize("com_knowledge.tags_count_limit_exceeded"), status: "warning" });
+    if (selectedTagIds.size + pendingNames.length >= 10) {
+      showToast({
+        message: localize("com_knowledge.tags_count_limit_exceeded"),
+        status: "warning",
+      });
       return { ok: false };
     }
 
@@ -106,15 +132,26 @@ export function EditTagsModal({
     }
 
     if (spaceTags.length >= 50) {
-      showToast({ message: localize("com_knowledge.space_tags_limit_exceeded"), status: "warning" });
+      showToast({
+        message: localize("com_knowledge.space_tags_limit_exceeded"),
+        status: "warning",
+      });
       return { ok: false };
     }
 
+    if (isBatchMode) {
+      setPendingNames((old) => [...new Set([...old, trimmed])]);
+      setInputValue("");
+      return { ok: true, tagName: trimmed };
+    }
     // Create a new tag in the space
     try {
       const newTag = await addSpaceTagApi(spaceId, trimmed);
       if (!newTag || newTag.id === undefined || newTag.id === null) {
-        showToast({ message: localize("com_knowledge.create_tag_failed_abnormal"), status: "warning" });
+        showToast({
+          message: localize("com_knowledge.create_tag_failed_abnormal"),
+          status: "warning",
+        });
         return { ok: false };
       }
       setSpaceTags((prev) => [...prev, newTag]);
@@ -151,12 +188,21 @@ export function EditTagsModal({
         tagIds.push(committed.tagId);
       }
       if (isBatchMode && fileIds) {
-        // Batch append mode
-        await batchUpdateTagsApi(spaceId, {
-          file_ids: fileIds.map(Number),
+        const result = await batch.open({
+          spaceId: Number(spaceId),
+          operation: "tag",
+          items: batchItems ?? fileIds.map((id) => ({ id: Number(id), type: "file" })),
           tag_ids: tagIds,
+          new_tag_names: [
+            ...new Set([...pendingNames, ...(committed.tagName ? [committed.tagName] : [])]),
+          ],
         });
-        showToast({ message: localize("com_knowledge.batch_add_tags_success"), status: "success" });
+        if (!result) return;
+        onBatchSaved?.(result);
+        if (!onBatchSaved) onSaved?.();
+        void queryClient.invalidateQueries({ queryKey: ["spaceTags", spaceId] });
+        onClose(true);
+        return;
       } else if (fileId) {
         // Single file overwrite mode
         await updateFileTagsApi(spaceId, fileId, tagIds);
@@ -195,8 +241,9 @@ export function EditTagsModal({
 
   const handleClose = () => {
     const hasChanges = isBatchMode
-      ? selectedTagIds.size > 0
-      : JSON.stringify(Array.from(selectedTagIds).sort()) !== JSON.stringify([...initialTagIds].sort());
+      ? selectedTagIds.size > 0 || pendingNames.length > 0
+      : JSON.stringify(Array.from(selectedTagIds).sort()) !==
+        JSON.stringify([...initialTagIds].sort());
     onClose(!hasChanges);
   };
 
@@ -204,131 +251,152 @@ export function EditTagsModal({
   const selectedTags = spaceTags.filter((t) => selectedTagIds.has(t.id));
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent
-        onPointerDownOutside={(e) => e.preventDefault()}
-        onInteractOutside={(e) => e.preventDefault()}
-        className="flex w-[600px] max-w-[600px] flex-col items-stretch gap-0 border-none bg-white p-0 shadow-[0px_5px_22px_0px_rgba(61,68,110,0.2)] [outline:none] rounded-none sm:rounded-none md:rounded-xl max-md:inset-0 max-md:left-0 max-md:top-0 max-md:h-dvh max-md:w-screen max-md:max-w-none max-md:translate-x-0 max-md:translate-y-0 [&>button]:hidden"
-      >
-        <DialogHeader className="relative h-12 shrink-0 justify-center space-y-0 px-5 py-3 text-left max-md:h-auto max-md:px-4 max-md:pt-6 max-md:pb-4">
-          <DialogTitle className="text-[16px] leading-6 font-medium text-text-1">
-            {isBatchMode ? localize("com_knowledge.batch_add_tags") : localize("com_knowledge.edit_tags")}
-          </DialogTitle>
-          <button
-            type="button"
-            onClick={handleClose}
-            className="absolute right-4 top-1/2 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-text-2 transition-colors hover:bg-fill-2"
-            aria-label={localize("com_knowledge.close") || "Close"}
-          >
-            <X className="size-4" />
-          </button>
-        </DialogHeader>
+    <>
+      <Dialog open={isOpen && !batch.view} onOpenChange={(open) => !open && handleClose()}>
+        <DialogContent
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+          className="flex w-[600px] max-w-[600px] flex-col items-stretch gap-0 border-none bg-white p-0 shadow-[0px_5px_22px_0px_rgba(61,68,110,0.2)] [outline:none] rounded-none sm:rounded-none md:rounded-xl max-md:inset-0 max-md:left-0 max-md:top-0 max-md:h-dvh max-md:w-screen max-md:max-w-none max-md:translate-x-0 max-md:translate-y-0 [&>button]:hidden"
+        >
+          <DialogHeader className="relative h-12 shrink-0 justify-center space-y-0 px-5 py-3 text-left max-md:h-auto max-md:px-4 max-md:pt-6 max-md:pb-4">
+            <DialogTitle className="text-[16px] leading-6 font-medium text-text-1">
+              {isBatchMode
+                ? localize("com_knowledge.batch_add_tags")
+                : localize("com_knowledge.edit_tags")}
+            </DialogTitle>
+            <button
+              type="button"
+              onClick={handleClose}
+              className="absolute right-4 top-1/2 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-text-2 transition-colors hover:bg-fill-2"
+              aria-label={localize("com_knowledge.close") || "Close"}
+            >
+              <X className="size-4" />
+            </button>
+          </DialogHeader>
 
-        <div className="flex flex-1 flex-col gap-4 px-5 py-3 max-md:px-4 max-md:py-4">
-          {/* Tags Input Box */}
-          <div
-            className="relative flex min-h-8 cursor-text flex-wrap items-center gap-1 rounded-lg border border-border-base bg-white px-3 py-[5px] pr-[40px] transition-[border-color,box-shadow] focus-within:border-[#ddd] focus-within:shadow-[0_0_0_2px_#f1f5f9]"
-            onClick={() => document.getElementById("tag-input")?.focus()}
-          >
-            {selectedTags.map((tag) => (
-              <span
-                key={tag.id}
-                className="flex items-center justify-center bg-fill-2 text-text-2 px-2 h-[22px] rounded-[4px] text-sm leading-[22px] whitespace-nowrap gap-1"
-              >
-                {tag.name}
-                <button
-                  className="text-text-3 hover:text-text-2 flex items-center justify-center w-4 h-4"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleTag(tag);
-                  }}
+          <div className="flex flex-1 flex-col gap-4 px-5 py-3 max-md:px-4 max-md:py-4">
+            {/* Tags Input Box */}
+            <div
+              className="relative flex min-h-8 cursor-text flex-wrap items-center gap-1 rounded-lg border border-border-base bg-white px-3 py-[5px] pr-[40px] transition-[border-color,box-shadow] focus-within:border-[#ddd] focus-within:shadow-[0_0_0_2px_#f1f5f9]"
+              onClick={() => document.getElementById("tag-input")?.focus()}
+            >
+              {selectedTags.map((tag) => (
+                <span
+                  key={tag.id}
+                  className="flex items-center justify-center bg-fill-2 text-text-2 px-2 h-[22px] rounded-[4px] text-sm leading-[22px] whitespace-nowrap gap-1"
                 >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </span>
-            ))}
-            <input
-              id="tag-input"
-              type="text"
-              autoComplete="off"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={
-                selectedTags.length === 0 && !inputValue
-                  ? localize("com_knowledge.input_tags_placeholder")
-                  : ""
-              }
-              className="flex-1 min-w-[120px] bg-transparent outline-none text-sm leading-[22px] text-text-1 placeholder-text-3 min-h-[22px]"
-              // maxLength={8}
-            />
-            <span className="absolute right-3 top-0 flex h-full items-center text-[14px] leading-[22px] text-text-3">
-              {selectedTagIds.size}/10
-            </span>
-          </div>
-
-          {/* <div className="w-full h-px bg-fill-3 my-[-1px]" /> */}
-
-          {/* Existing Space Tags */}
-          <div className="flex flex-col gap-3">
-            <div className="text-[14px] leading-[22px] font-medium text-text-1">
-              {localize("com_knowledge.existing_tags")}
-            </div>
-            <div className="flex flex-wrap gap-1">
-              {spaceTags.length === 0 && (
-                <span className="text-[14px] text-text-3">{localize("com_knowledge.no_tags")}</span>
-              )}
-              {spaceTags.map((tag) => {
-                const isSelected = selectedTagIds.has(tag.id);
-                return (
-                  <span
-                    key={tag.id}
-                    onClick={() => toggleTag(tag)}
-                    className={`group h-5 flex items-center justify-center gap-1 px-2 text-[12px] leading-5 rounded-sm transition-colors ${
-                      isSelected
-                        ? "text-blue-500 cursor-default bg-primary/10"
-                        : "bg-fill-2 text-text-2 hover:bg-fill-3 cursor-pointer"
-                    }`}
+                  {tag.name}
+                  <button
+                    className="text-text-3 hover:text-text-2 flex items-center justify-center w-4 h-4"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleTag(tag);
+                    }}
                   >
-                    {tag.name}
-                    {/* Trash reveals on hover so resting pills stay clean per design. */}
-                    <button
-                      type="button"
-                      className="hidden group-hover:flex items-center justify-center text-text-3 hover:text-[#f53f3f] disabled:cursor-not-allowed disabled:text-text-4"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void handleDeleteSpaceTag(tag);
-                      }}
-                      disabled={deletingTagId === tag.id}
-                      title={localize("com_knowledge.delete")}
-                    >
-                      <Trash2 className="size-3" />
-                    </button>
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </span>
+              ))}
+              <input
+                id="tag-input"
+                type="text"
+                autoComplete="off"
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={
+                  selectedTags.length === 0 && !inputValue
+                    ? localize("com_knowledge.input_tags_placeholder")
+                    : ""
+                }
+                className="flex-1 min-w-[120px] bg-transparent outline-none text-sm leading-[22px] text-text-1 placeholder-text-3 min-h-[22px]"
+                // maxLength={8}
+              />
+              <span className="absolute right-3 top-0 flex h-full items-center text-[14px] leading-[22px] text-text-3">
+                {selectedTagIds.size}/10
+              </span>
+            </div>
+
+            {/* <div className="w-full h-px bg-fill-3 my-[-1px]" /> */}
+
+            {/* Existing Space Tags */}
+            <div className="flex flex-col gap-3">
+              <div className="text-[14px] leading-[22px] font-medium text-text-1">
+                {localize("com_knowledge.existing_tags")}
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {spaceTags.length === 0 && (
+                  <span className="text-[14px] text-text-3">
+                    {localize("com_knowledge.no_tags")}
                   </span>
-                );
-              })}
+                )}
+                {spaceTags.map((tag) => {
+                  const isSelected = selectedTagIds.has(tag.id);
+                  return (
+                    <span
+                      key={tag.id}
+                      onClick={() => toggleTag(tag)}
+                      className={`group h-5 flex items-center justify-center gap-1 px-2 text-[12px] leading-5 rounded-sm transition-colors ${
+                        isSelected
+                          ? "text-blue-500 cursor-default bg-primary/10"
+                          : "bg-fill-2 text-text-2 hover:bg-fill-3 cursor-pointer"
+                      }`}
+                    >
+                      {tag.name}
+                      {/* Trash reveals on hover so resting pills stay clean per design. */}
+                      <button
+                        type="button"
+                        className="hidden group-hover:flex items-center justify-center text-text-3 hover:text-[#f53f3f] disabled:cursor-not-allowed disabled:text-text-4"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleDeleteSpaceTag(tag);
+                        }}
+                        disabled={deletingTagId === tag.id}
+                        title={localize("com_knowledge.delete")}
+                      >
+                        <Trash2 className="size-3" />
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
             </div>
           </div>
-        </div>
 
-        <DialogFooter className="flex h-14 shrink-0 items-center justify-end gap-3 border-none px-5 py-3 max-md:!mt-auto max-md:!h-auto max-md:!flex-row max-md:!justify-stretch max-md:border-t max-md:border-border-base max-md:px-4 max-md:py-3 sm:space-x-0">
-          <Button
-            variant="outline"
-            className="h-8 min-w-[60px] rounded-md border-border-base bg-white/50 px-4 font-normal text-[#070038] hover:bg-white/70 max-md:flex-1"
-            onClick={handleClose}
-          >
-            {localize("com_knowledge.cancel")}
-          </Button>
-          <Button
-            variant="default"
-            className="h-8 min-w-[60px] rounded-md px-4 font-normal max-md:flex-1"
-            onClick={handleSave}
-            disabled={loading}
-          >
-            {localize("com_knowledge.confirm")}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          {pendingNames.length > 0 && (
+            <div className="space-y-1 px-5">
+              <p>{localize("com_knowledge.batch.draft_notice")}</p>
+              {pendingNames.map((name) => (
+                <Button
+                  key={name}
+                  variant="text"
+                  onClick={() => setPendingNames((old) => old.filter((value) => value !== name))}
+                >
+                  {name} ×
+                </Button>
+              ))}
+            </div>
+          )}
+          <DialogFooter className="flex h-14 shrink-0 items-center justify-end gap-3 border-none px-5 py-3 max-md:!mt-auto max-md:!h-auto max-md:!flex-row max-md:!justify-stretch max-md:border-t max-md:border-border-base max-md:px-4 max-md:py-3 sm:space-x-0">
+            <Button
+              variant="outline"
+              className="h-8 min-w-[60px] rounded-md border-border-base bg-white/50 px-4 font-normal text-[#070038] hover:bg-white/70 max-md:flex-1"
+              onClick={handleClose}
+            >
+              {localize("com_knowledge.cancel")}
+            </Button>
+            <Button
+              variant="default"
+              className="h-8 min-w-[60px] rounded-md px-4 font-normal max-md:flex-1"
+              onClick={handleSave}
+              disabled={loading}
+            >
+              {localize("com_knowledge.confirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <BatchOperationDialog operation={batch} />
+    </>
   );
 }

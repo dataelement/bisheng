@@ -8,7 +8,14 @@ from starlette.concurrency import run_in_threadpool
 from starlette.responses import FileResponse
 
 from bisheng.api.services import knowledge_imp
-from bisheng.api.v1.schemas import ChunkInput, ExcelRule, KnowledgeFileOne, KnowledgeFileProcess, resp_200
+from bisheng.api.v1.schemas import (
+    ChunkInput,
+    ExcelRule,
+    FileProcessBase,
+    KnowledgeFileOne,
+    KnowledgeFileProcess,
+    resp_200,
+)
 from bisheng.app_publish.domain.services.capability_bus_service import (
     CapabilityBusService,
     hosted_app_access_user,
@@ -18,12 +25,17 @@ from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.errcode.knowledge import KnowledgeTypeNotSupportedError
 from bisheng.common.services import telemetry_service
 from bisheng.core.cache.utils import async_file_download, save_download_file
+from bisheng.core.database import get_async_db_session
 from bisheng.core.logger import trace_id_var
 from bisheng.knowledge.api.dependencies import (
     get_knowledge_document_repository,
     get_knowledge_document_version_repository,
     get_knowledge_file_repository,
 )
+from bisheng.knowledge.application.deletion_compatibility import delete_legacy_files
+from bisheng.knowledge.application.file_processing_adapter import capture_legacy_processing_overrides
+from bisheng.knowledge.application.knowledge_deletion import get_deletion_application
+from bisheng.knowledge.application.space_upload import SpaceUploadApplication
 from bisheng.knowledge.domain.models.knowledge import (
     AuthTypeEnum,
     KnowledgeCreate,
@@ -136,6 +148,14 @@ def _build_space_service(
     )
     svc.version_repo = version_repo
     svc.doc_repo = doc_repo
+    svc.deletion_application_factory = get_deletion_application
+    svc.upload_application_factory = lambda: SpaceUploadApplication(
+        login_user=login_user,
+        session_factory=get_async_db_session,
+        admit_upload=svc._require_action,
+        make_permission_record=svc._new_file_permission_record,
+        actor_provider=svc._permission_actor,
+    )
     return svc
 
 
@@ -154,6 +174,18 @@ async def create(
     workbench embedding model. Type 2 and invalid values are unsupported.
     """
     login_user = await get_open_api_operator_async()
+    if knowledge.type == KnowledgeTypeEnum.NORMAL.value:
+        from bisheng.knowledge.application.legacy_documents import LegacyDocumentsApplication
+
+        knowledge.auth_type = AuthTypeEnum.PUBLIC
+        knowledge.is_released = False
+        result = await LegacyDocumentsApplication().acreate(
+            request=request,
+            identity=login_user,
+            command=knowledge,
+            entry_kind="open_api",
+        )
+        return resp_200(result)
     if knowledge.type in _KB_TYPES:
         # auth_type / is_released only apply to knowledge spaces (AD-07);
         # force defaults so they have no effect on knowledge bases.
@@ -176,6 +208,7 @@ async def create(
             description=knowledge.description,
             auth_type=knowledge.auth_type,
             is_released=knowledge.is_released,
+            entry_kind="open_api",
         )
         # Spaces use a different permission model than KBs; populate user_name and
         # the creator's effective space actions for a consistent output.
@@ -218,7 +251,9 @@ async def update_knowledge(
             description=knowledge.description if knowledge.description is not None else "",
             is_released=row.is_released,
         )
-        return resp_200(updated)
+        from bisheng.knowledge.application.legacy_documents import LegacyDocumentsApplication
+
+        return resp_200(LegacyDocumentsApplication.view(updated))
     if row.type in _KB_TYPES:
         # update_knowledge is sync and uses run_async_safe internally; run it in a
         # threadpool so it is not invoked on the endpoint's running event loop.
@@ -246,6 +281,17 @@ async def get_knowledge(
     Response is ``PageInfiniteCursorData`` (data/page_size/has_more/next_cursor).
     """
     login_user = await get_open_api_operator_async()
+    if knowledge_type == KnowledgeTypeEnum.NORMAL.value:
+        from bisheng.knowledge.application.legacy_documents import LegacyDocumentsApplication
+
+        page = await LegacyDocumentsApplication().alist(
+            identity=login_user,
+            name=name,
+            sort_by=sort_by,
+            page_size=page_size,
+            cursor=cursor,
+        )
+        return resp_200(page)
     if knowledge_type in _KB_TYPES:
         page = await KnowledgeService.get_knowledge(
             request,
@@ -391,10 +437,33 @@ async def upload_file(
     # Knowledge space: delegate to the space file-add path (handles parent_id).
     if db_knowledge.type == KnowledgeTypeEnum.SPACE.value:
         space_svc = _build_space_service(request, loging_user, version_repo, doc_repo)
+        provided = await request.form()
+        rule_values = {
+            "split_mode": split_mode,
+            "separator": separator,
+            "separator_rule": separator_rule,
+            "chunk_size": chunk_size,
+            "chunk_overlap": chunk_overlap,
+            "hierarchy_level": hierarchy_level,
+            "append_title": append_title,
+            "max_chunk_size": max_chunk_size,
+            "retain_images": retain_images,
+            "force_ocr": force_ocr,
+            "enable_formula": enable_formula,
+            "filter_page_header_footer": filter_page_header_footer,
+            "excel_rule": excel_rule,
+        }
+        overrides = capture_legacy_processing_overrides(
+            FileProcessBase(
+                knowledge_id=knowledge_id, **{name: value for name, value in rule_values.items() if name in provided}
+            )
+        )
         res = await space_svc.add_file(
             knowledge_id=knowledge_id,
             file_path=[file_path],
             parent_id=parent_id,
+            **({"callback_url": callback_url} if callback_url else {}),
+            processing_overrides=overrides if overrides.document is not None or overrides.table is not None else None,
         )
         return resp_200(data=res[0])
 
@@ -433,19 +502,19 @@ async def upload_file(
 
 @router.delete("/file/{file_id}", status_code=200)
 @open_api_scope("knowledge:write")
-def delete_knowledge_file(request: Request, file_id: int):
+async def delete_knowledge_file(request: Request, file_id: int):
     """Delete files in the Knowledge Base"""
-    login_user = get_open_api_operator()
-    KnowledgeService.delete_knowledge_file(request, login_user, [file_id])
+    login_user = await get_open_api_operator_async()
+    await delete_legacy_files(request=request, identity=login_user, file_ids=[file_id])
     return resp_200()
 
 
 @router.post("/delete_file", status_code=200)
 @open_api_scope("knowledge:write")
-def delete_file_batch_api(request: Request, file_ids: list[int]):
+async def delete_file_batch_api(request: Request, file_ids: list[int]):
     """Bulk delete knowledge file information"""
-    login_user = get_open_api_operator()
-    KnowledgeService.delete_knowledge_file(request, login_user, file_ids)
+    login_user = await get_open_api_operator_async()
+    await delete_legacy_files(request=request, identity=login_user, file_ids=file_ids)
     return resp_200()
 
 
@@ -556,6 +625,12 @@ async def post_chunks(
     )
 
     upload_limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(login_user)
+    knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
+    if knowledge is not None and knowledge.type == KnowledgeTypeEnum.SPACE.value:
+        from bisheng.knowledge.application.legacy_files import LegacyFilesApplication
+
+        res = await LegacyFilesApplication(request=request, identity=login_user).aprocess(req_data, inline=True)
+        return resp_200(data=res[0])
     res = await run_in_threadpool(
         KnowledgeService.sync_process_knowledge_file,
         request,
@@ -576,7 +651,7 @@ async def post_string_chunks(request: Request, document: ChunkInput):
         raise NotFoundError.http_exception()
     # The chunks use the document knowledge base schema; QA libraries and
     # knowledge spaces store files differently.
-    if db_knowledge.type != KnowledgeTypeEnum.NORMAL.value:
+    if db_knowledge.type not in (KnowledgeTypeEnum.NORMAL.value, KnowledgeTypeEnum.SPACE.value):
         raise KnowledgeTypeNotSupportedError.http_exception()
 
     # String saved to file
@@ -595,6 +670,13 @@ async def post_string_chunks(request: Request, document: ChunkInput):
     )
 
     upload_limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(login_user)
+    if db_knowledge.type == KnowledgeTypeEnum.SPACE.value:
+        from bisheng.knowledge.application.legacy_files import LegacyFilesApplication
+
+        result = await LegacyFilesApplication(request=request, identity=login_user).aprocess(
+            req_data, inline=True, documents=document.documents
+        )
+        return resp_200(data=result[0])
     knowledge, failed_files, process_files, _ = await KnowledgeService.asave_knowledge_file(
         login_user,
         req_data,
@@ -626,6 +708,20 @@ def download_statistic_file(
     return FileResponse(file_path, filename=file_name)
 
 
+def _audit_open_qa(login_user, event_type: str, knowledge_id: int, note: str) -> None:
+    from bisheng.api.services.audit_log import AuditLogService
+
+    AuditLogService.record(
+        operator_id=login_user.user_id,
+        operator_name=login_user.user_name,
+        system_id="knowledge",
+        event_type=event_type,
+        object_type="knowledge",
+        object_id=str(knowledge_id),
+        note=note,
+    )
+
+
 @router.post("/add_qa")
 @open_api_scope("knowledge:write")
 def add_qa(*, knowledge_id: int = Body(embed=True), data: list[APIAddQAParam] = Body(embed=True)):
@@ -647,6 +743,9 @@ def add_qa(*, knowledge_id: int = Body(embed=True), data: list[APIAddQAParam] = 
 
         res.append(knowledge_imp.add_qa(knowledge, qa_insert))
 
+    _audit_open_qa(
+        login_user, "create_qa", knowledge_id, f"库={knowledge_id}；数量={len(res)}；来源=开放接口；结果=成功"
+    )
     return resp_200(res)
 
 
@@ -665,7 +764,14 @@ def append_qa(*, knowledge_id: int = Body(embed=True), data: APIAppendQAParam = 
     qa_insert = QAKnowledgeUpsert.validate(t)
     qa_insert.questions.extend(data.relative_questions)
 
-    return resp_200(knowledge_imp.add_qa(knowledge, qa_insert))
+    saved = knowledge_imp.add_qa(knowledge, qa_insert)
+    _audit_open_qa(
+        login_user,
+        "update_qa",
+        knowledge_id,
+        f"库={knowledge_id}；条目={data.id}；来源=开放接口；字段=相似问题；结果=成功",
+    )
+    return resp_200(saved)
 
 
 @router.delete("/qa/{qa_id}", status_code=200)
@@ -695,6 +801,12 @@ def delete_qa_data(*, qa_id: int, question: str | None = None):
     knowledge_imp.delete_vector_data(knowledge, file_ids=[qa_id])
     if keep_pair:
         knowledge_imp.QA_save_knowledge(knowledge, qa)
+    _audit_open_qa(
+        login_user,
+        "update_qa" if keep_pair else "delete_qa",
+        knowledge.id,
+        f"库={knowledge.id}；条目={qa_id}；来源=开放接口；结果=成功",
+    )
     return resp_200()
 
 
@@ -727,6 +839,17 @@ def update_qa(
     if question or answer:
         knowledge_imp.delete_vector_data(knowledge, file_ids=[id])
         knowledge_imp.QA_save_knowledge(knowledge, qa)
+    changed = []
+    if question is not None or original_question:
+        changed.append("问题")
+    if answer:
+        changed.append("答案")
+    _audit_open_qa(
+        login_user,
+        "update_qa",
+        knowledge.id,
+        f"库={knowledge.id}；条目={id}；来源=开放接口；字段={','.join(changed) or '无'}；结果=成功",
+    )
     return resp_200()
 
 
@@ -796,6 +919,7 @@ async def retrieve_chunks(
     principal = get_current_open_api_principal()
     if principal is not None and principal.actor_kind == HOSTED_APP_ACTOR_KIND:
         result = await CapabilityBusService.retrieve(
+            principal=principal,
             app_id=principal.subject_ref or "",
             access_user_id=hosted_app_access_user(request, principal),
             query=req.query,

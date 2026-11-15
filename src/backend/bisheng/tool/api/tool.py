@@ -78,13 +78,13 @@ async def test_web_search(
 async def get_tool_list(
     *,
     is_preset: int | None = None,
-    action: Literal["visible", "use"] = "use",
+    action: Literal["visible", "use"] = "visible",
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """Query all visibletool Vertical"""
     res = await ToolServices(login_user=login_user).get_tool_list(
         is_preset,
-        action,
+        "visible" if action == "use" else action,
     )
     return resp_200(data=res)
 

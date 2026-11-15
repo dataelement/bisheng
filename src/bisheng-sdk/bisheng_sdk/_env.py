@@ -111,3 +111,8 @@ def trust_env() -> bool:
 
 def app_id() -> str:
     return (os.environ.get(ENV_APP_ID) or "").strip()
+
+
+def workbench_database_path() -> str:
+    """The persistent single-writer database supplied by the hosted runtime."""
+    return os.environ.get("BISHENG_APP_DB_PATH") or "app.db"

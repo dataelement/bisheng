@@ -20,7 +20,7 @@
  *
  * ── Runtime behaviour ────────────────────────────────────────────────────────────────
  * Themeable / responsive tokens still resolve through CSS custom properties defined in
- * src/style.css (brand blue⇄green switch; ≤768px type remap). This file owns the token
+ * src/styles/tokens.css (brand blue⇄green switch; opt-in typography drafts). This file owns the token
  * NAMES + documented values and drives the Tailwind theme keys; the CSS vars remain the
  * runtime carrier. Regenerating :root from this file is a later step (app migration).
  */
@@ -52,17 +52,29 @@ const FONT_FAMILY = {
  * Array order = primitive ladder order; PrimitiveTable derives `font-size-N`
  * from the 0-based index (caption-sm sits BELOW the original 1–9 ladder as
  * font-size-0, so existing numbered vars never renumber). */
+// `desktop` is the active baseline at every width. `mobile` is reserved draft
+// data, only used by CSS when <html data-mobile-typography="enabled"> opts in.
 const TYPE_SCALE = [
   { name: 'caption-sm', desktop: [10, 18], mobile: [10, 18], weight: 400, cssVar: '--text-caption-sm', leadingVar: '--leading-caption-sm', usage: '角标、徽标数字、极小标注（仅纯展示，禁用于可点击文字）' },
   { name: 'caption',  desktop: [12, 20], mobile: [12, 20], weight: 400, cssVar: '--text-caption',  leadingVar: '--leading-caption',  usage: '时间戳、标签、水印' },
   { name: 'body-sm',  desktop: [13, 21], mobile: [14, 22], weight: 400, cssVar: '--text-body-sm',  leadingVar: '--leading-body-sm',  usage: '密集表格、侧栏次要项' },
-  { name: 'body',     desktop: [14, 22], mobile: [16, 24], weight: 400, cssVar: '--text-body',     leadingVar: '--leading-body',     usage: '正文基准，表单、表格默认' },
+  { name: 'body',     desktop: [14, 22], mobile: [16, 24], weight: 400, cssVar: '--text-body',     leadingVar: '--leading-body',     usage: '正文基准、表格阅读内容' },
   { name: 'h4',       desktop: [16, 24], mobile: [16, 24], weight: 500, cssVar: '--text-h4',       leadingVar: '--leading-h4',       usage: '强调正文、四级标题' },
   { name: 'h3',       desktop: [18, 26], mobile: [17, 25], weight: 500, cssVar: '--text-h3',       leadingVar: '--leading-h3',       usage: '卡片标题' },
   { name: 'h2',       desktop: [20, 28], mobile: [18, 26], weight: 500, cssVar: '--text-h2',       leadingVar: '--leading-h2',       usage: '区块标题' },
   { name: 'h1',       desktop: [24, 32], mobile: [22, 30], weight: 500, cssVar: '--text-h1',       leadingVar: '--leading-h1',       usage: '页面标题' },
   { name: 'display',  desktop: [30, 38], mobile: [26, 34], weight: 500, cssVar: '--text-display',  leadingVar: '--leading-display',  usage: '大标题、营销场景' },
   { name: 'metric',   desktop: [36, 44], mobile: [30, 38], weight: 500, cssVar: '--text-metric',   leadingVar: '--leading-metric',   usage: 'Dashboard 核心指标数字' },
+];
+
+/** Control roles stay separate from the reading ladder and its primitive indices.
+ * Mobile values are dormant behind the shared root opt-in attribute.
+ * Weight belongs to the component, so these roles only set size and line height. */
+const CONTROL_TYPE_SCALE = [
+  { name: 'field', desktop: [14, 22], mobile: [16, 24], cssVar: '--text-field', leadingVar: '--leading-field', usage: '表单字段、搜索输入、描边选择器' },
+  { name: 'field-lg', desktop: [16, 24], mobile: [16, 24], cssVar: '--text-field-lg', leadingVar: '--leading-field-lg', usage: 'large 表单字段' },
+  { name: 'control', desktop: [14, 22], mobile: [14, 22], cssVar: '--text-control', leadingVar: '--leading-control', usage: '按钮、紧凑选择器、菜单选项' },
+  { name: 'control-lg', desktop: [16, 24], mobile: [16, 24], cssVar: '--text-control-lg', leadingVar: '--leading-control-lg', usage: 'large 紧凑控件' },
 ];
 
 const FONT_WEIGHT = [
@@ -342,6 +354,9 @@ const fontSize = {};
 TYPE_SCALE.forEach((s) => {
   fontSize[s.name] = [`var(${s.cssVar})`, { lineHeight: `var(${s.leadingVar})`, fontWeight: String(s.weight) }];
 });
+CONTROL_TYPE_SCALE.forEach((s) => {
+  fontSize[s.name] = [`var(${s.cssVar})`, { lineHeight: `var(${s.leadingVar})` }];
+});
 
 const boxShadow = {};
 SHADOW.forEach((s) => {
@@ -370,6 +385,7 @@ const MIGRATION = [
 module.exports = {
   FONT_FAMILY,
   TYPE_SCALE,
+  CONTROL_TYPE_SCALE,
   FONT_WEIGHT,
   BRAND,
   BRAND_STEPS,

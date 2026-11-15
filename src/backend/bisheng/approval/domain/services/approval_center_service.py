@@ -545,6 +545,7 @@ class ApprovalCenterService:
             },
             operator_name=operator_user_name,
             object_name=instance.business_name,
+            note=instance.scenario_name,
             ip_address=ip_address,
         )
         # Notify approvers who had tasks on this instance
@@ -666,6 +667,7 @@ class ApprovalCenterService:
             },
             operator_name=operator_user_name,
             object_name=instance.business_name,
+            note=instance.scenario_name,
         )
 
         approver_ids = list({one.approver_user_id for one in tasks if one.approver_user_id != operator_user_id})
@@ -842,6 +844,7 @@ class ApprovalCenterService:
             },
             operator_name=operator_user_name,
             object_name=instance.business_name,
+            note=instance.scenario_name,
             ip_address=ip_address,
         )
         db_user = await UserDao.aget_user(instance.applicant_user_id)
@@ -935,6 +938,7 @@ class ApprovalCenterService:
                 },
                 operator_name=operator_user_name,
                 object_name=instance.business_name,
+                note=instance.scenario_name,
                 ip_address=ip_address,
             )
             await self.__class__._send_approval_notify(
@@ -989,6 +993,7 @@ class ApprovalCenterService:
             },
             operator_name=operator_user_name,
             object_name=instance.business_name,
+            note=instance.scenario_name,
             ip_address=ip_address,
         )
 
@@ -1223,6 +1228,7 @@ class ApprovalCenterService:
         metadata: dict | None = None,
         operator_name: str | None = None,
         object_name: str | None = None,
+        note: str | None = None,
         target_type: str = "approval_instance",
         ip_address: str | None = None,
     ) -> None:
@@ -1237,5 +1243,6 @@ class ApprovalCenterService:
             metadata=metadata,
             operator_name=operator_name,
             object_name=object_name,
+            note=note,
             ip_address=ip_address,
         )

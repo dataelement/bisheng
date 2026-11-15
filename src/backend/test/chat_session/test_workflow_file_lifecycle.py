@@ -35,6 +35,9 @@ SOURCE = "http://storage/tmp/a.pdf?old"
 
 @pytest.fixture
 async def async_database(database, monkeypatch):
+    from bisheng.chat_session.domain.models.project import ChatProjectMembership
+
+    ChatProjectMembership.__table__.create(database, checkfirst=True)
     engine = create_async_engine(str(database.url).replace("sqlite:", "sqlite+aiosqlite:"))
 
     @asynccontextmanager
@@ -46,6 +49,9 @@ async def async_database(database, monkeypatch):
     monkeypatch.setattr("bisheng.database.models.session.get_async_db_session", connection)
     monkeypatch.setattr("bisheng.database.models.message.get_sync_db_session", repository_module.get_sync_db_session)
     monkeypatch.setattr("bisheng.chat_session.domain.chat.FlowDao.aget_flow_by_id", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        "bisheng.chat_session.domain.chat.WorkflowHistoryRepository.aget_by_ids", AsyncMock(return_value=[])
+    )
     monkeypatch.setattr("bisheng.chat_session.domain.chat.telemetry_service.log_event", AsyncMock())
     try:
         yield database
@@ -242,15 +248,20 @@ async def test_owner_can_delete_and_repeat_failed_physical_cleanup(async_databas
 async def test_bulk_delete_predicate_binds_user_tenant_and_subject(
     async_database, user_id, tenant_id, subject, deleted
 ):
-    """AC-07: bulk UPDATE remains scoped even when SELECT tenant filtering is bypassed."""
+    """AC-05/07: bulk statements stay scoped; deleting an owned session unbinds its project membership."""
+    from bisheng.chat_session.domain.models.project import ChatProjectMembership
+
     with Session(async_database) as session:
         row = session.exec(select(MessageSession)).one()
         row.api_subject_type = subject
         session.add(row)
+        session.add(ChatProjectMembership(tenant_id=1, user_id=7, chat_id="c1", project_id="p1"))
         session.commit()
     await WorkflowFileRepository.soft_delete_owned_session("c1", user_id=user_id, tenant_id=tenant_id)
     with Session(async_database) as session:
         assert session.exec(select(MessageSession)).one().is_delete is deleted
+        remaining = session.exec(select(ChatProjectMembership)).all()
+        assert len(remaining) == (0 if user_id == 7 and tenant_id == 1 else 1)
 
 
 @pytest.mark.parametrize(

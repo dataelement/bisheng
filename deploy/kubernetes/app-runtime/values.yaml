@@ -1,16 +1,15 @@
-# Supply immutable image references and existing credentials before installing.
-# The chart installs the runtime only; backend and platform storage are external.
+# Public example passwords must be changed; install crypto roots are generated once.
 platform:
-  origin: ""
-  backendBase: ""
-  caConfigMap: runtime-platform-ca
+  origin: ''
+  backendBase: ''
+  caConfigMap: ''
 services:
-  namespace: bisheng-runtime-system
-  credentialsSecret: runtime-service-identities
-  materialIssuerSecret: runtime-material-issuer
-  admissionTlsSecret: runtime-admission-tls
-  managerAccount: runtime-manager
-  pullSecret: ""
+  namespace: ''
+  credentialsSecret: ''
+  materialIssuerSecret: ''
+  admissionTlsSecret: ''
+  managerAccount: ''
+  pullSecret: ''
   managerReplicas: 1
   entryReplicas: 1
   egressReplicas: 1
@@ -19,40 +18,94 @@ services:
   managerNodePort: 30091
   entryType: ClusterIP
   entryNodePort: 30080
-  egressClusterIP: ""
+  egressClusterIP: ''
+  resources: {}
+  placement:
+    nodeSelector: {}
+    affinity: {}
+    tolerations: []
+  probes:
+    readiness:
+      periodSeconds: 10
+      timeoutSeconds: 2
+      failureThreshold: 6
+    liveness:
+      periodSeconds: 10
+      timeoutSeconds: 2
+      failureThreshold: 6
+    startup:
+      periodSeconds: 5
+      failureThreshold: 60
+      timeoutSeconds: 2
+  apiTimeoutSeconds: 10
+  dnsTimeoutSeconds: 120
 execution:
-  namespace: bisheng-runtime-apps
+  namespace: ''
   clusterId: bisheng-k8s
-  nodeId: bisheng-k8s-amd64
-  installationId: bisheng-runtime
+  nodeId: ''
+  installationId: ''
   architecture: amd64
   memoryBudgetMi: 4096
   cpuBudgetMillicores: 4000
   maxPods: 64
   temporaryStorageMi: 4096
-  runtimeClass: ""
+  runtimeClass: ''
   sandbox: default
-  runtimeClasses: {recommended: "", hardened: ""}
+  runtimeClasses:
+    recommended: ''
+    hardened: ''
   statusPolicyRevision: v1
-  cniUsername: ""
-  # Explicit controller usernames for PVC binding/protection; never natural users or groups.
-  storageControllerUsernames: [system:kube-controller-manager, system:kube-scheduler]
-  pullSecret: ""
-  dataKeyConfigMap: runtime-data-public-keys
+  cniUsername: ''
+  storageControllerUsernames:
+  - system:kube-controller-manager
+  - system:kube-scheduler
+  pullSecret: ''
+  dataKeyConfigMap: ''
   dataPublicKeys: {}
-  # Written only by the privileged verification tool after actual cluster probes.
   probeReport: {}
-  # Optional immutable canary approvals for the installation verification tool.
   canaryPlans: {}
-  # Frozen native CRI checks; only python/node/nginx version commands are accepted.
   canaryProfiles: []
+  helperResources:
+    image-check:
+      memory_mb: 256
+      cpu_millicores: 1000
+    prepare-download:
+      memory_mb: 128
+      cpu_millicores: 100
+    prepare-install:
+      memory_mb: 1024
+      cpu_millicores: 1000
+    prepare-upload:
+      memory_mb: 128
+      cpu_millicores: 100
+    assemble:
+      memory_mb: 1024
+      cpu_millicores: 1000
+    data:
+      memory_mb: 128
+      cpu_millicores: 100
+    sidecar:
+      memory_mb: 128
+      cpu_millicores: 25
+    init:
+      memory_mb: 128
+      cpu_millicores: 25
+  timeouts:
+    image_check: 120
+    init_phase: 90
+    health: 90
+  placement:
+    nodeSelector: {}
+    affinity: {}
+    tolerations: []
+  operationTimeoutSeconds: 1800
 images:
-  manager: ""
-  entry: ""
-  egress: ""
-  admission: ""
-  helper: ""
-  assembler: ""
+  manager: ''
+  entry: ''
+  egress: ''
+  admission: ''
+  helper: ''
+  assembler: ''
 network:
   podCidrs: []
   serviceCidrs: []
@@ -61,30 +114,39 @@ network:
   kubernetesApiCidrs: []
   dnsCidrs: []
   backendCidrs: []
-  backendPorts: [443, 7860]
-  egressPorts: [80, 443]
+  backendPorts:
+  - 443
+  - 7860
+  egressPorts:
+  - 80
+  - 443
   apiServer: https://kubernetes.default.svc
+  platformPodPort: 8443
 storage:
-  className: ""
+  className: null
   sizeMi: 1024
   scratchSizeMi: 4096
   filesystem: ext4
   sqliteCompatible: false
-  nodeLocal: true
-  # Directories must already exist on mounted, bounded filesystems.
+  nodeLocal: false
   localRoot: /var/lib/bisheng-runtime
   volumes: []
 admission:
-  # Base64 public CA certificate matching the persistent TLS secret.
-  caBundle: ""
+  caBundle: ''
   timeoutSeconds: 5
+  managedByParent: false
 offline:
-  enabled: true
-  packageIndex: ""
-  extraPackageIndex: ""
-  npmRegistry: ""
+  enabled: false
+  packageIndex: https://pypi.org/simple
+  extraPackageIndex: ''
+  npmRegistry: ''
   packageEndpoints: []
-  imageRepository: ""
+  imageRepository: ''
   imageRegistryEndpoints: []
-  registrySecret: ""
+  registrySecret: ''
   insecureRegistry: false
+namespaceManagement:
+  createControl: false
+  createExecution: true
+diagnostics:
+  enabled: false

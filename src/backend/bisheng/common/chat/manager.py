@@ -20,12 +20,14 @@ from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTe
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.public_endpoints import PublicGuestAccessDisabledError
+from bisheng.common.interfaces.resource_execution import WorkflowExecutionPort
 from bisheng.common.schemas.telemetry.event_data_schema import ApplicationAliveEventData
 from bisheng.common.services import telemetry_service
 from bisheng.core.cache.flow import InMemoryCache
 from bisheng.core.cache.manager import Subject, cache_manager
 from bisheng.core.database import get_sync_db_session
 from bisheng.core.logger import trace_id_var
+from bisheng.core.session_activity import record_authenticated_activity
 from bisheng.permission.application.business_authorization import (
     check_business_action,
 )
@@ -204,7 +206,7 @@ class ChatManager:
             login_user,
             resource_type=object_type,
             resource_id=client_id,
-            action="use",
+            action="visible",
         )
 
     async def _dispatch_message(
@@ -215,8 +217,11 @@ class ChatManager:
         login_user,
         work_type,
         client_id,
+        connection: WebSocket | None = None,
         message_admission: Callable[[], AbstractAsyncContextManager[ChatMessageExecution]] | None = None,
     ) -> bool:
+        await record_authenticated_activity(connection, message=payload)
+
         async def deliver(execution=None):
             operator = execution.operator if execution is not None else login_user
             if not await self._has_use_action(operator, work_type, client_id):
@@ -243,7 +248,9 @@ class ChatManager:
         graph_data: dict | None = None,
         session_subject=None,
         execution_snapshot: dict | None = None,
+        flow_lease_id: str | None = None,
         message_admission: Callable[[], AbstractAsyncContextManager[ChatMessageExecution]] | None = None,
+        workflow_execution_port: WorkflowExecutionPort | None = None,
     ):
         start_time = time.time()
         client_key = generate_uuid()
@@ -260,6 +267,7 @@ class ChatManager:
                 graph_data=graph_data,
                 session_subject=session_subject,
                 execution_snapshot=execution_snapshot,
+                flow_lease_id=flow_lease_id,
             )
         else:
             chat_client = WorkflowClient(
@@ -273,6 +281,8 @@ class ChatManager:
                 websocket,
                 session_subject=session_subject,
                 execution_snapshot=execution_snapshot,
+                flow_lease_id=flow_lease_id,
+                workflow_execution_port=workflow_execution_port,
             )
         await self.accept_client(client_key, chat_client, websocket)
         logger.debug(f"act=accept_client client_key={client_key} client_id={client_id} chat_id={chat_id}")
@@ -295,6 +305,7 @@ class ChatManager:
                         login_user=login_user,
                         work_type=work_type,
                         client_id=client_id,
+                        connection=websocket,
                         message_admission=message_admission,
                     ):
                         logger.warning(
@@ -350,6 +361,12 @@ class ChatManager:
             except Exception as e:
                 logger.exception(e)
             self.clear_client(client_key)
+            # Department concurrency: cancel the renewal task first, then hand the
+            # slot back. Runs however the connection ended. A page lease belongs
+            # to the browser tab, so nothing is released for it.
+            from bisheng.common.chat.clients.base import release_client_execution_lease
+
+            await release_client_execution_lease(chat_client)
             if work_type == WorkType.GPTS:
                 app_info = await AssistantService.get_one_assistant(client_id)
                 app_type = ApplicationTypeEnum.ASSISTANT

@@ -80,6 +80,9 @@ class AppAccessLog(SQLModelSerializable, table=True):
         default=None,
         sa_column=Column(String(64), nullable=True, comment="app-proxy request id of the entry request"),
     )
+    # F003 organisation snapshot of the visitor; sentinels in ``database/models/org_snapshot.py``.
+    operator_dept_id: int | None = Field(default=None, sa_column=Column(Integer, nullable=True, index=True))
+    operator_dept_path: str | None = Field(default=None, sa_column=Column(String(1024), nullable=True))
 
 
 class AppAccessLogDao:

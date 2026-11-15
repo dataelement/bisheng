@@ -30,7 +30,9 @@ from bisheng.common.errcode.sandbox import SandboxConfigurationError
 from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
+from bisheng.common.services.failure_context import FailureContextAdapter
 from bisheng.common.utils.think_tags import strip_think_block
+from bisheng.common.utils.title_generator import ainvoke_without_thinking
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.cache.utils import save_file_to_folder
 from bisheng.core.logger import trace_id_var
@@ -273,6 +275,7 @@ class LinsightWorkbenchImpl:
         api_meta: dict | None = None,
         telemetry_source: str = "platform",
         session_name: str = "New Chat",
+        project_intent: dict | None = None,
     ) -> tuple[MessageSession, LinsightSessionVersion]:
         """
         Submit user issue and create session
@@ -358,7 +361,17 @@ class LinsightWorkbenchImpl:
                 if session_subject is not None:
                     message_session = session_subject.stamp(message_session)
 
-                message_session = await MessageSessionDao.async_insert_one(message_session)
+                if project_intent is not None:
+                    from bisheng.chat_session.domain.chat import ChatSessionService
+                    from bisheng.common.errcode.chat import ProjectInputError
+
+                    if session_subject is not None or api_meta is not None:
+                        raise ProjectInputError()
+                    message_session = await ChatSessionService.create_owned_project_session(
+                        message_session, login_user, project_intent["project_id"]
+                    )
+                else:
+                    message_session = await MessageSessionDao.async_insert_one(message_session)
 
                 # RecordTelemetryJournal
                 await telemetry_service.log_event(
@@ -431,7 +444,7 @@ class LinsightWorkbenchImpl:
             raise
         except Exception as e:
             logger.error(f"Failed to submit user question: {e!s}")
-            raise cls.LinsightError(f"Failed to submit user question: {e!s}")
+            raise cls.LinsightError("Failed to submit user question") from e
 
     @classmethod
     async def terminate(cls, session_version_model: LinsightSessionVersion) -> None:
@@ -702,7 +715,8 @@ class LinsightWorkbenchImpl:
                     "relative_path": submit_file.relative_path,
                     "parsing_status": "failed",
                     "valid": False,
-                    "error_message": str(e),
+                    "error_message": FailureContextAdapter.safe_detail(e),
+                    **({"failure_info": info} if (info := FailureContextAdapter.from_error(e)) else {}),
                 }
             processed_files.append(entry)
             if on_progress is not None:
@@ -753,7 +767,8 @@ class LinsightWorkbenchImpl:
                 "relative_path": submit_file.relative_path,
                 "parsing_status": "failed",
                 "valid": False,
-                "error_message": f"file download failed: {e}",
+                "error_message": FailureContextAdapter.safe_detail(e),
+                **({"failure_info": info} if (info := FailureContextAdapter.from_error(e)) else {}),
             }
 
         file_name = submit_file.file_name or dl_name
@@ -875,6 +890,7 @@ class LinsightWorkbenchImpl:
             entry = await cls._keep_original_in_workspace(
                 submit_file, file_name, chat_id, minio_client, local_path, e, used_names
             )
+            entry = FailureContextAdapter.public_payload(entry, exc=e)
             if is_media:
                 cls._log_media_ingest(
                     "DEGRADED",
@@ -1640,7 +1656,7 @@ class LinsightWorkbenchImpl:
             prompt = await cls._generate_title_prompt(question)
 
             # Generate task title
-            task_title = await llm.ainvoke(prompt)
+            task_title = await ainvoke_without_thinking(llm, prompt)
 
             # Clean reasoning-model <think> noise + clamp; falls back to the
             # question when the model returns nothing usable (see _normalize_title).
@@ -2118,6 +2134,17 @@ class LinsightWorkbenchImpl:
 
         # 4. Returns the root node list of the task tree
         result = [node.to_dict() for node in task_tree]
+
+        def project_nodes(nodes):
+            for node in nodes:
+                for step in node.get("history") or []:
+                    if isinstance(step, dict) and "extra_info" in step:
+                        step["extra_info"] = FailureContextAdapter.public_step_metadata(step["extra_info"])
+                    if isinstance(step, dict) and step.get("step_type") in ("tool", "knowledge", "tool_call"):
+                        step["output"] = FailureContextAdapter.public_tool_result(step.get("output"))
+                project_nodes(node.get("children") or [])
+
+        project_nodes(result)
 
         return result
 

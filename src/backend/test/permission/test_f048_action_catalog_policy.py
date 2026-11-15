@@ -76,8 +76,8 @@ def test_unassigned_inactive_and_resource_scope_are_not_effective() -> None:
         active=False,
         scopes=("workflow",),
     )
-    actions[DEFAULT_ACTION_CODES.index("use")] = _action(
-        "use",
+    actions[DEFAULT_ACTION_CODES.index("share")] = _action(
+        "share",
         level=None,
         active=True,
         scopes=("workflow",),

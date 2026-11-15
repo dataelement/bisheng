@@ -9,6 +9,7 @@ from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType
 from bisheng.core.database.retry import retry_on_transient_db_conflict
+from bisheng.database.models.org_snapshot import astamp_session, stamp_session
 from bisheng.database.models.user_group import UserGroupDao
 
 
@@ -70,6 +71,16 @@ class MessageSessionBase(SQLModelSerializable):
     dislike: int | None = Field(default=0, description="Number of messages clicked")
     copied: int | None = Field(default=0, description="Number of messages copied")
     sensitive_status: int = Field(default=SensitiveStatus.PASS.value, description="Review Status")
+    # F003: initiator's primary department when the session was created; later
+    # messages inherit it. Sentinels as in ``database/models/org_snapshot.py``.
+    operator_dept_id: int | None = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=True, index=True, comment="F003: initiator primary department snapshot"),
+    )
+    operator_dept_path: str | None = Field(
+        default=None,
+        sa_column=Column(String(1024), nullable=True, comment="F003: department name path at the time"),
+    )
     create_time: datetime | None = Field(
         default=None, sa_column=Column(DateTime, nullable=False, index=True, server_default=text("CURRENT_TIMESTAMP"))
     )
@@ -99,6 +110,7 @@ class MessageSessionDao(MessageSessionBase):
         if not data.group_ids:
             user_groups = UserGroupDao.get_user_group(data.user_id)
             data.group_ids = [ug.group_id for ug in user_groups]
+        stamp_session(data)
 
         with get_sync_db_session() as session:
             session.add(data)
@@ -113,6 +125,7 @@ class MessageSessionDao(MessageSessionBase):
         if not data.group_ids:
             user_groups = await UserGroupDao.aget_user_group(data.user_id)
             data.group_ids = [ug.group_id for ug in user_groups]
+        await astamp_session(data)
 
         async with get_async_db_session() as session:
             session.add(data)

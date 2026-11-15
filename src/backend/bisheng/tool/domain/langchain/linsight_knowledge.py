@@ -10,6 +10,7 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     cache_citation_registry_items,
     collect_rag_citation_registry_items,
 )
+from bisheng.common.services.failure_context import FailureContextAdapter
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
@@ -92,7 +93,11 @@ class SearchKnowledgeBase(BaseTool):
         except Exception as e:
             logger.warning(f"search_knowledge_base failed for knowledge_id={knowledge_id!r}: {e}")
             return json.dumps(
-                {"状态": "无结果", "错误信息": f"知识库检索失败或知识库不存在: {e}"},
+                {
+                    "状态": "失败",
+                    "错误信息": FailureContextAdapter.safe_detail(e),
+                    **({"failure_info": info} if (info := FailureContextAdapter.from_error(e)) else {}),
+                },
                 ensure_ascii=False,
             )
 

@@ -40,6 +40,8 @@ class UserSkillsService:
             rows = [row for row in candidates if visible_to(row, self.user_id)]
         if self.user_id is None:
             return []
+        if available_only:
+            rows = [row for row in rows if row.enabled]
         from bisheng.common.dependencies.user_deps import UserPayload
         from bisheng.core.context.tenant import get_current_tenant_id
         from bisheng.permission.application.business_authorization import batch_check_business_actions
@@ -55,9 +57,9 @@ class UserSkillsService:
                 is_global_super=await _check_is_global_super(self.user_id),
             )
         actions = await batch_check_business_actions(
-            user, resource_type="linsight_skill", resource_ids=(row.id for row in rows), actions=("use",)
+            user, resource_type="linsight_skill", resource_ids=(row.id for row in rows), actions=("visible",)
         )
-        rows = [row for row in rows if "use" in actions.get(str(row.id), ())]
+        rows = [row for row in rows if "visible" in actions.get(str(row.id), ())]
         disabled = await self.repository.disabled_ids(self.user_id) if self.user_id is not None else set()
         return [(row, row.id not in disabled) for row in rows if not available_only or row.id not in disabled]
 

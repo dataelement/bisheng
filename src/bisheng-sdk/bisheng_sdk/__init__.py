@@ -1,22 +1,16 @@
-"""BiSheng application SDK — three things an application must not get wrong.
+"""BiSheng application capabilities, independent of the backend package.
 
-The public surface is **exactly** three capability modules plus the exception
-module they all raise from:
+* auth: the current visitor, supplied by trusted platform ingress.
+* retrieve: search through the platform as that visitor.
+* storage: application attachments without exposing storage credentials.
+* realtime: F113 single-writer record revisions, idempotency and durable events.
+* errors: exceptions for the platform request capabilities.
 
-* :mod:`bisheng_sdk.auth` — who is visiting *right now*. Read from the headers
-  the platform injects; never invented, never defaulted, never ``None``.
-* :mod:`bisheng_sdk.retrieve` — search knowledge as **that visitor**, through
-  the platform's one retrieval face.
-* :mod:`bisheng_sdk.storage` — the application's own attachment space, with no
-  bucket, key prefix, endpoint or credential ever reaching the application.
-* :mod:`bisheng_sdk.errors` — one exception per next action the caller can take.
-
-Model calls and the application database are **deliberately not here** (PRD-1
-DEV-07): they are the official OpenAI-compatible client and a standard database
-driver, wired through environment variables the platform injects. The admission
-bar for a fourth module is "platform specific ∧ getting it wrong is a security
-incident", and ``tests/test_public_surface.py`` is where that bar is enforced —
-change the set there first, or the new module does not ship.
+F113 adds an optional transactional collaboration protocol. It is not an ORM
+or a platform-database client: application data stays in the application's
+persistent SQLite volume. The application still authorizes every business
+operation and event. Model clients and general database drivers remain outside
+the SDK. The public-surface tests pin this deliberate 0.1.2 extension.
 """
 
 from __future__ import annotations
@@ -24,10 +18,10 @@ from __future__ import annotations
 #: Independent of the platform's version on purpose (design D6 / decision 6):
 #: an application's dependency list pins this, and a platform upgrade must not
 #: invalidate every deployed application.
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
-from bisheng_sdk import auth, retrieve, storage
+from bisheng_sdk import auth, realtime, retrieve, storage
 
 #: The capability surface. ``errors`` is importable but not a capability, so it
 #: is not listed here (design D2).
-__all__ = ("auth", "retrieve", "storage")
+__all__ = ("auth", "realtime", "retrieve", "storage")

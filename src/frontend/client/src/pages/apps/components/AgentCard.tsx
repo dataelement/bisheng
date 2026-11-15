@@ -21,10 +21,18 @@ interface AgentCardProps {
   isPinned?: boolean;
   onTogglePin?: (agent: AppItem) => void;
   onStartChat: (agent: AppItem) => void;
+  openLabel?: string;
   onShare: (agent: AppItem) => void;
 }
 
-export function AgentCard({ agent, isPinned = false, onTogglePin, onStartChat, onShare }: AgentCardProps) {
+export function AgentCard({
+  agent,
+  isPinned = false,
+  onTogglePin,
+  onStartChat,
+  openLabel,
+  onShare,
+}: AgentCardProps) {
   const localize = useLocalize();
   const isMobileCard = useMediaQuery("(max-width: 576px)");
   const canHover = useMediaQuery("(hover: hover) and (pointer: fine)");
@@ -37,7 +45,7 @@ export function AgentCard({ agent, isPinned = false, onTogglePin, onStartChat, o
   // surface at `/apps/{slug}`. Their primary action says "enter app", not "start chat".
   const HOSTED_APP_FLOW_TYPE = 35;
   const primaryActionLabel =
-    agent.flow_type === HOSTED_APP_FLOW_TYPE ? localize("com_app_enter_app") : localize("com_app_start_chat");
+    openLabel ?? (agent.flow_type === HOSTED_APP_FLOW_TYPE ? localize("com_app_enter_app") : localize("com_app_start_chat"));
 
   const handleShare = () => {
     onShare({ ...agent, can_share: true });

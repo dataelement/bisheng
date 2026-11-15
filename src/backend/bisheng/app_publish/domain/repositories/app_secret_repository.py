@@ -14,11 +14,12 @@ from bisheng.core.database import get_async_db_session
 from bisheng.database.models.app import App
 from bisheng.database.models.app_version import AppVersion
 from bisheng.database.models.audit_log import AuditLog
+from bisheng.database.models.org_snapshot import astamp_audit_logs
 
 
 class AppSecretConfigRepository:
-    def __init__(self, session_factory=get_async_db_session):
-        self._factory = session_factory
+    def __init__(self, session_factory=None):
+        self._factory = session_factory or get_async_db_session
 
     @asynccontextmanager
     async def transaction(self):
@@ -123,19 +124,19 @@ class AppSecretConfigRepository:
         return expected_revision + 1
 
     async def append_audit(self, session, app, actor, *, name, action, revision, present):
-        session.add(
-            AuditLog(
-                tenant_id=app.tenant_id,
-                operator_tenant_id=actor.tenant_id,
-                operator_id=actor.user_id,
-                operator_name=actor.user_name,
-                action=action,
-                target_type="app",
-                target_id=app.id,
-                object_name=app.name,
-                audit_metadata={"app_id": app.id, "name": name, "revision": revision, "present": present},
-            )
+        entry = AuditLog(
+            tenant_id=app.tenant_id,
+            operator_tenant_id=actor.tenant_id,
+            operator_id=actor.user_id,
+            operator_name=actor.user_name,
+            action=action,
+            target_type="app",
+            target_id=app.id,
+            object_name=app.name,
+            audit_metadata={"app_id": app.id, "name": name, "revision": revision, "present": present},
         )
+        await astamp_audit_logs([entry])
+        session.add(entry)
         await session.flush()
 
     async def delete_asset(self, session, app_id):

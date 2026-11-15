@@ -38,7 +38,7 @@ export function AppInfoCard({
             <div className="overflow-hidden">
               <h3 className="font-bold text-gray-900 truncate">{app.name}</h3>
               <p className="text-xs text-gray-400 truncate">
-                {app.description || '暂无描述'}
+                {app.description || localize('com_app_no_description')}
               </p>
             </div>
           </div>
@@ -46,7 +46,7 @@ export function AppInfoCard({
             onClick={onSwitchApp}
             disabled={switchDisabled}
             className="p-1 text-gray-300 hover:text-gray-500 transition-colors disabled:opacity-30 disabled:cursor-not-allowed mt-1"
-            title={switchDisabled ? '暂无可切换应用' : '切换应用'}
+            title={localize(switchDisabled ? 'com_app_no_switchable_app' : 'com_app_switch_app')}
           >
             <ArrowLeftRight size={14} />
           </button>

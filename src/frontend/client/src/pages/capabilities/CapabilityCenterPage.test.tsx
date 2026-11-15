@@ -42,7 +42,8 @@ jest.mock('@bisheng/ui', () => ({
   SearchInput: ({ value, onChange, ...props }: { value: string; onChange: (event: unknown) => void; 'aria-label': string }) =>
     <input aria-label={props['aria-label']} value={value} onChange={onChange} />,
   StateView: ({ title }: { title: string }) => <p>{title}</p>,
-  Switch: () => null, Tabs: () => null, Input: () => null,
+  Switch: () => null, Input: () => null,
+  Tabs: ({ items, onChange }: { items: { key: string; label: string }[]; onChange: (key: string) => void }) => <div>{items.map(item => <button key={item.key} onClick={() => onChange(item.key)}>{item.label}</button>)}</div>,
 }));
 jest.mock('~/components/ui/Dialog', () => ({
   Dialog: ({ children }: { children: ReactNode }) => <div role="dialog">{children}</div>,
@@ -79,4 +80,14 @@ test('an open detail and its list follow a language change together', async () =
   expect(screen.getByRole('button', { name: chinese.name })).toBeInTheDocument();
   expect(within(screen.getByRole('dialog')).getByRole('heading', { name: chinese.name })).toBeInTheDocument();
   expect(within(screen.getByRole('dialog')).getByText(chinese.desc)).toBeInTheDocument();
+});
+
+test('keeps the entered search when changing capability categories', () => {
+  render(<Page />);
+  fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Company basic' } });
+  fireEvent.click(screen.getByRole('button', { name: i18n.t('com_capability_center.all') }));
+  expect(screen.getByRole('textbox')).toHaveValue('Company basic');
+  fireEvent.click(screen.getByRole('button', { name: i18n.t('com_capability_center.tool') }));
+  expect(screen.getByRole('button', { name: english.name })).toBeInTheDocument();
+  expect(screen.getByRole('textbox')).toHaveValue('Company basic');
 });

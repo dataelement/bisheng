@@ -1,4 +1,7 @@
-"""Ordinary grants govern public capability access and revocation."""
+"""Ordinary grants govern public capability access and revocation.
+
+覆盖 AC: AC-78, AC-79, AC-81, AC-83.
+"""
 
 from dataclasses import replace
 from types import SimpleNamespace
@@ -19,7 +22,15 @@ from test.permission.test_f048_grant_policy import FakeGrantState, FakeProjectio
 
 def capability_context(resource_type="tool"):
     context = _context(capabilities=(), system_authorized=True)
-    model = GrantModelSnapshot(model_key="viewer", active=True, action_codes=("use",), derived_level=1)
+    model = GrantModelSnapshot(
+        model_key="viewer",
+        active=True,
+        action_codes=(),
+        derived_level=1,
+        visibility_only_resource_types=(resource_type,),
+        visibility_level=1,
+        visibility_only=True,
+    )
     target = VerifiedPermissionTarget.from_business_service(
         tenant_id=7, resource_type=resource_type, resource_id="42", resource_version=3, context_version="v3"
     )
@@ -28,7 +39,7 @@ def capability_context(resource_type="tool"):
 
 
 @pytest.mark.parametrize("resource_type", ["tool", "linsight_skill"])
-async def test_tenant_grant_revoke_removes_use_and_visibility(resource_type):
+async def test_tenant_grant_revoke_removes_visibility_and_ordinary_assignee(resource_type):
     context = capability_context(resource_type)
     projection = FakeProjection()
     sources = GrantSourceService()
@@ -99,20 +110,23 @@ async def test_tenant_grant_rejects_cross_tenant_and_management(tenant_id, actio
         (8, "builtin", None, True, False),
         (7, "personal", 9, True, False),
         (7, "personal", 2, True, True),
-        (7, "builtin", None, False, False),
+        (7, "builtin", None, False, True),
     ],
 )
-async def test_skill_target_checks_tenant_owner_status(tenant, source, owner, enabled, allowed):
+@pytest.mark.parametrize("action", ["visible", "edit", "delete"])
+async def test_skill_management_target_preserves_tenant_owner_and_disabled_visibility(
+    tenant, source, owner, enabled, allowed, action
+):
     row = SimpleNamespace(id=42, tenant_id=tenant, source=source, created_by=owner, enabled=enabled, update_time=None)
     runtime = SimpleNamespace(get_permission_version=AsyncMock(return_value=(3, "current")))
     adapter = SkillPermissionAdapter(runtime, SimpleNamespace(get=AsyncMock(return_value=row)))
     actor = PermissionActor(user_id=2, current_tenant_id=7)
     if allowed:
-        target = await adapter.resolve_permission_target(resource_id="42", actor=actor, action="use")
+        target = await adapter.resolve_permission_target(resource_id="42", actor=actor, action=action)
         assert (target.resource_type, target.tenant_id) == ("linsight_skill", 7)
     else:
         with pytest.raises(PermissionInvalidResourceError):
-            await adapter.resolve_permission_target(resource_id="42", actor=actor, action="use")
+            await adapter.resolve_permission_target(resource_id="42", actor=actor, action=action)
         runtime.get_permission_version.assert_not_awaited()
 
 
@@ -142,7 +156,7 @@ async def test_default_grant_uses_tenant_members_and_migration_deletes_public_ma
     context = capability_context()
     runtime = object.__new__(F048PermissionRuntime)
     runtime._sources = GrantSourceService()
-    catalog = SimpleNamespace(models=[SimpleNamespace(snapshot=context.models[0])])
+    catalog = SimpleNamespace(models=[SimpleNamespace(snapshot=context.models[0])], action_resource_scopes=())
     runtime.current_catalog = AsyncMock(return_value=catalog)
     runtime.build_grant_context = AsyncMock(return_value=context)
     runtime._grants = SimpleNamespace(mutate=AsyncMock())

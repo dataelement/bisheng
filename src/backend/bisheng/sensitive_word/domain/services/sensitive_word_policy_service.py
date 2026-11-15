@@ -159,6 +159,22 @@ class SensitiveWordPolicyService:
             scope_id=str(tenant_id),
         )
         cls.clear_cache()
+        from bisheng.api.services.audit_log import AuditLogService
+
+        AuditLogService.record(
+            operator_id=login_user.user_id,
+            operator_name=login_user.user_name,
+            system_id="system",
+            event_type="update_sensitive_policy",
+            object_type="none",
+            object_id=business_type.value,
+            object_name=business_type.value,
+            note=(
+                f"适用业务={business_type.value}；启停={'开' if payload.enabled else '关'}；"
+                f"变更字段=enabled,words_types,custom_words,auto_reply,extra_config；"
+                f"词条数量={len(cls.normalize_words(payload.custom_words or ''))}；结果=成功"
+            ),
+        )
         return cls.to_response(policy, tenant_id, business_type.value)
 
     @classmethod

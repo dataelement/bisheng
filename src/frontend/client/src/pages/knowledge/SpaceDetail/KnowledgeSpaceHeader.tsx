@@ -16,6 +16,7 @@ import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
 import { useRecoilValue } from "recoil";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
+import desktopLayout from "./KnowledgeSpaceLayout.module.css";
 
 /**
  * Space header: location trail (space anchor + folder path, with the space action
@@ -261,16 +262,14 @@ export function KnowledgeSpaceHeader({
   );
 
   return (
-    <div className="flex min-h-8 items-center justify-between gap-3 px-4 pb-4 pt-4 max-[767px]:gap-2 max-[767px]:pb-3">
+    <div className={`${desktopLayout.header} flex min-h-8 items-center justify-between gap-3 px-4 pb-4 pt-4 max-[767px]:gap-2 max-[767px]:pb-3`}>
       {/* 左侧：返回 + 位置面包屑。首段永远是空间本身，空间级操作挂在它的下拉里，
                 所以下钻到任意层级都不会丢失「我在哪个空间」和空间级操作（设计稿 11772:70584） */}
       {/* -ml-2 pulls the whole group 8px left on its own, without touching the
                 row's px-4 — that padding is shared with the right-hand actions, so
                 shrinking it there would drag those 8px right along with it. */}
       <div className="-ml-2 flex min-w-0 flex-1 items-center gap-1 text-sm">
-        {/* Desktop back button. The module has no space / folder column any more,
-                    so this is the way up: folder → parent folder → space root → the
-                    知识空间 home. Mobile keeps its own top bar and Title ▾ drawer. */}
+        {/* This header is desktop-only, including when the DSH pane is narrow. */}
         <button
           type="button"
           onClick={() => {
@@ -282,11 +281,11 @@ export function KnowledgeSpaceHeader({
             onNavigateFolder(parent?.id);
           }}
           aria-label={localize("com_ui_go_back")}
-          className="inline-flex size-8 shrink-0 items-center justify-center rounded-md p-2 text-text-2 transition-colors hover:bg-fill-1 max-[767px]:hidden"
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-md p-2 text-text-2 transition-colors hover:bg-fill-1"
         >
           <Outlined.ArrowLeft className="size-4" />
         </button>
-        <div className="mx-1 h-4 w-px shrink-0 bg-border-base max-[767px]:hidden" aria-hidden />
+        <div className="mx-1 h-4 w-px shrink-0 bg-border-base" aria-hidden />
         <SpaceBreadcrumb
           space={space}
           currentPath={currentPath}

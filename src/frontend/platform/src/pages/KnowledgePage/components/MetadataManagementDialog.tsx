@@ -91,6 +91,12 @@ interface MetadataManagementDialogProps {
     onSave?: (metadata: Metadata[]) => void;
     hasManagePermission?: boolean;
     id: string;
+    presentation?: "page";
+    mutations?: {
+        add: (name: string, type: string) => Promise<void>;
+        rename: (name: string, next: string) => Promise<void>;
+        remove: (name: string) => Promise<void>;
+    };
     initialMetadata?: Array<{ field_name: string; field_type: string; updated_at?: number }>;
 }
 
@@ -100,7 +106,7 @@ export function MetadataManagementDialog({
     onSave,
     hasManagePermission = true,
     id,
-    initialMetadata,
+    initialMetadata, presentation, mutations,
 }: MetadataManagementDialogProps) {
     const { t } = useTranslation('knowledge')
     const mainDialogRef = useRef<HTMLDivElement>(null)
@@ -124,7 +130,7 @@ export function MetadataManagementDialog({
     const [isSideDialogReady, setIsSideDialogReady] = useState(false);
 
     useEffect(() => {
-        if (open && initialMetadata && initialMetadata.length > 0) {
+        if (open && initialMetadata) {
             const formattedMetadata = initialMetadata.map((item) => ({
                 id: `meta_${item.field_name}`,
                 name: item.field_name,
@@ -231,18 +237,21 @@ export function MetadataManagementDialog({
 
         setIsLoading(true);
         try {
-            await addMetadata(id, [{ field_name: newName, field_type: newType.toLowerCase() }]);
-            const newMetadata: Metadata = { id: `meta_${newName}`, name: newName, type: newType, createdAt: new Date(), updatedAt: new Date() };
-            setMetadataList((prev) => [newMetadata, ...prev]);
+            if (mutations) await mutations.add(newName, newType.toLowerCase());
+            else await addMetadata(id, [{ field_name: newName, field_type: newType.toLowerCase() }]);
+            if (!mutations) {
+                const newMetadata: Metadata = { id: `meta_${newName}`, name: newName, type: newType, createdAt: new Date(), updatedAt: new Date() };
+                setMetadataList((prev) => [newMetadata, ...prev]);
+            }
             closeSideDialog();
             if (onSave) onSave(metadataList);
         } catch (err: any) {
             setError(err.message || t('createFailed'));
-            console.error("创建失败:", err);
+            console.error("Metadata creation failed:", err);
         } finally {
             setIsLoading(false);
         }
-    }, [newName, newType, id, closeSideDialog, validateName, metadataList, onSave, t]);
+    }, [newName, newType, id, closeSideDialog, validateName, metadataList, onSave, t, mutations]);
 
     const handleRenameSave = useCallback(async () => {
         if (!id || !selectedMetadata) { setError(t('operationFailed')); return; }
@@ -252,17 +261,18 @@ export function MetadataManagementDialog({
 
         setIsLoading(true);
         try {
-            await updateMetadataFields(id, [{ old_field_name: selectedMetadata.name, new_field_name: newName }]);
-            setMetadataList((prev) => prev.map((m) => m.id === selectedMetadata.id ? { ...m, name: newName, updatedAt: new Date() } : m));
+            if (mutations) await mutations.rename(selectedMetadata.name, newName);
+            else await updateMetadataFields(id, [{ old_field_name: selectedMetadata.name, new_field_name: newName }]);
+            if (!mutations) setMetadataList((prev) => prev.map((m) => m.id === selectedMetadata.id ? { ...m, name: newName, updatedAt: new Date() } : m));
             closeSideDialog();
             if (onSave) onSave(metadataList);
         } catch (err: any) {
             setError(err.message || t('renameFailed'));
-            console.error("重命名失败:", err);
+            console.error("Metadata rename failed:", err);
         } finally {
             setIsLoading(false);
         }
-    }, [newName, selectedMetadata, id, closeSideDialog, validateName, metadataList, onSave, t]);
+    }, [newName, selectedMetadata, id, closeSideDialog, validateName, metadataList, onSave, t, mutations]);
 
     const handleDelete = useCallback(async (metadata: Metadata) => {
         if (!id) {
@@ -272,16 +282,17 @@ export function MetadataManagementDialog({
 
         setIsLoading(true);
         try {
-            await deleteMetadataFields(id, [metadata.name]);
-            setMetadataList((prev) => prev.filter((m) => m.id !== metadata.id));
+            if (mutations) await mutations.remove(metadata.name);
+            else await deleteMetadataFields(id, [metadata.name]);
+            if (!mutations) setMetadataList((prev) => prev.filter((m) => m.id !== metadata.id));
             if (onSave) onSave(metadataList);
         } catch (err: any) {
             setError(err.message || t('deleteFailed'));
-            console.error("删除失败:", err);
+            console.error("Metadata deletion failed:", err);
         } finally {
             setIsLoading(false);
         }
-    }, [id, metadataList, onSave, t]);
+    }, [id, metadataList, onSave, t, mutations]);
 
     const sortedMetadata = [...metadataList].sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime());
 
@@ -310,6 +321,7 @@ export function MetadataManagementDialog({
         return (
             <div ref={triggerRef} className="relative inline-block">
                 <button
+                    aria-label={t("delete")}
                     onClick={() => setIsOpen(!isOpen)}
                     className="p-1.5 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     disabled={trigger.props.disabled}
@@ -371,33 +383,19 @@ export function MetadataManagementDialog({
                         {children}
                         <DialogPrimitive.Close className="absolute right-3 top-3 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
                             <Outlined.Close className={isSmallScreen ? "h-3 w-3" : "h-4 w-4"} />
-                            <span className="sr-only">Close</span>
+                            <span className="sr-only">{t('close', { ns: 'bs' })}</span>
                         </DialogPrimitive.Close>
                     </DialogPrimitive.Content>
                 </DialogPortal>
             )
         )
-        , [sideDialogWidth, isSmallScreen, sideDialogPosition, isSideDialogReady]);
+        , [sideDialogWidth, isSmallScreen, sideDialogPosition, isSideDialogReady, t]);
     SideDialogContent.displayName = "SideDialogContent";
 
-    return (
-        <>
-            <Dialog open={open} onOpenChange={onOpenChange}>
-                <DialogContent
-                    ref={mainDialogRef}
-                    className={cname("max-h-[70vh] overflow-y-auto", typeof mainDialogMaxWidth === "string" ? "" : `w-[${mainDialogMaxWidth}px]`)}
-                    style={{
-                        width: mainDialogMaxWidth, maxWidth: "none",
-                        left: isSideDialogAtRisk ? "8px" : isSmallScreen ? "calc(50% - 300px)" : "calc(50% - 600px)",
-                        top: "50%", transform: "translateY(-50%)", minWidth: 580
-                    }}
-                >
-                    <DialogHeader>
-                        <DialogTitle className={isSmallScreen ? "text-base" : ""}>{t('metaData')}</DialogTitle>
-                    </DialogHeader>
+    const content = (
                     <div className="meta-dialog space-y-6">
                         <button
-                            onClick={handleCreateClick} disabled={!hasManagePermission}
+                            onClick={handleCreateClick} disabled={!hasManagePermission || isLoading}
                             className={cname("w-full flex items-center justify-center gap-2 rounded-lg bg-muted hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed transition-colors", isSmallScreen ? "py-2" : "py-3")}
                         >
                             <Outlined.Plus size={isSmallScreen ? 16 : 20} />
@@ -435,6 +433,7 @@ export function MetadataManagementDialog({
                                     </div>
                                     <div className="flex gap-1">
                                         <button
+                                            aria-label={t("rename")}
                                             onClick={() => handleEditClick(metadata)} disabled={!hasManagePermission || isLoading}
                                             className="p-1.5 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                         >
@@ -475,7 +474,26 @@ export function MetadataManagementDialog({
                             </div>
                         </div>
                     </div>
-                </DialogContent>
+    );
+    return (
+        <>
+            <Dialog open={open} onOpenChange={onOpenChange}>
+                {presentation === "page" ? <section ref={mainDialogRef} className="space-y-6">
+                    <h2 className="text-heading-sm font-medium">{t('metaData')}</h2>{content}
+                </section> : <DialogContent
+                    ref={mainDialogRef}
+                    className={cname("max-h-[70vh] overflow-y-auto", typeof mainDialogMaxWidth === "string" ? "" : `w-[${mainDialogMaxWidth}px]`)}
+                    style={{
+                        width: mainDialogMaxWidth, maxWidth: "none",
+                        left: isSideDialogAtRisk ? "8px" : isSmallScreen ? "calc(50% - 300px)" : "calc(50% - 600px)",
+                        top: "50%", transform: "translateY(-50%)", minWidth: 580
+                    }}
+                >
+                    <DialogHeader>
+                        <DialogTitle className={isSmallScreen ? "text-base" : ""}>{t('metaData')}</DialogTitle>
+                    </DialogHeader>
+                    {content}
+                </DialogContent>}
             </Dialog>
 
             <Dialog key="metadata-side-dialog" open={sideDialog.open} onOpenChange={closeSideDialog}>

@@ -100,3 +100,9 @@ class SkillGitHubImportRequest(BaseModel):
     """Import-from-GitHub payload: a public github.com URL pointing at a skill directory."""
 
     url: str = Field(..., max_length=2048, description="https://github.com/{owner}/{repo}/tree/{branch}/{path}")
+
+
+class SkillGiteeImportRequest(BaseModel):
+    """Import-from-Gitee payload: a public gitee.com URL pointing at a skill directory."""
+
+    url: str = Field(..., max_length=2048, description="https://gitee.com/{owner}/{repo}/tree/{branch}/{path}")

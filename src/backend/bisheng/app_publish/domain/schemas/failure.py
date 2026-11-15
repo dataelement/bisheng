@@ -39,5 +39,7 @@ def failure_from_error(exc: BaseErrorCode, *, stage: str) -> dict[str, Any]:
         "code": int(getattr(exc, "code", 0) or 0),
         "message": str(getattr(exc, "message", "") or ""),
         "details": details if isinstance(details, dict) else ({"value": details} if details is not None else {}),
-        "hints": [str(hint) for hint in hints] if isinstance(hints, (list, tuple)) else ([] if not hints else [str(hints)]),
+        "hints": [str(hint) for hint in hints]
+        if isinstance(hints, (list, tuple))
+        else ([] if not hints else [str(hints)]),
     }

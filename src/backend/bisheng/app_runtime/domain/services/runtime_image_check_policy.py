@@ -9,11 +9,13 @@ _IMAGE = re.compile(r"[A-Za-z0-9][A-Za-z0-9./:_-]*@sha256:[a-f0-9]{64}")
 
 
 def frozen_targets(operation, node):
+    from bisheng.app_runtime.domain.services.runtime_deployment_policy import operation_policy
+
     payload = operation.payload
     preparing = operation.kind == "prepare"
     delivery = payload.get("delivery", {}) if preparing else payload.get("resolved_delivery", {})
     profile = (payload.get("profile") if preparing else delivery.get("profile")) or {}
-    capabilities = node.capabilities or {}
+    capabilities = operation_policy(operation) or node.capabilities or {}
     mode = delivery.get("mode", "bundle")
     targets = [{"role": "helper", "reference": capabilities.get("helper_image", ""), "image_id": ""}]
     if preparing and mode in {"bundle", "source-image"}:
@@ -48,7 +50,12 @@ def frozen_targets(operation, node):
 def check_document(operation, node):
     targets = frozen_targets(operation, node)
     document = {"platform": node.platform, "targets": targets}
-    capabilities = node.capabilities or {}
+    from bisheng.app_runtime.domain.services.runtime_deployment_policy import operation_policy
+
+    frozen = operation_policy(operation)
+    if frozen:
+        document["timeout_seconds"] = frozen.get("timeouts", {}).get("image_check", 120)
+    capabilities = frozen or node.capabilities or {}
     if capabilities.get("insecure_registry") is True:
         repository = capabilities.get("image_repository", "")
         first = repository.split("/", 1)[0]
@@ -76,7 +83,9 @@ def registry_sources(operation, node):
             parsed = urlsplit("https://" + authority)
             scheme = "http" if authority in document.get("insecure_registries", []) else "https"
             sources.add(f"{scheme}://{parsed.hostname}:{parsed.port or (80 if scheme == 'http' else 443)}")
-    endpoints = (node.capabilities or {}).get("image_registry_endpoints", [])
+    from bisheng.app_runtime.domain.services.runtime_deployment_policy import operation_policy
+
+    endpoints = (operation_policy(operation) or node.capabilities or {}).get("image_registry_endpoints", [])
     if not isinstance(endpoints, list) or len(endpoints) > 32:
         raise RuntimeConflict("image_check_registry_endpoints_invalid")
     for endpoint in endpoints:

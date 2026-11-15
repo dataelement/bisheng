@@ -22,6 +22,8 @@ class ProspectiveGrantRuntimePort(Protocol):
 
     async def prospective_owner_grantable_models(
         self,
+        *,
+        resource_type: str | None = None,
     ) -> tuple[RuntimeCatalogSnapshot, tuple[RuntimeModelSnapshot, ...]]: ...
 
 

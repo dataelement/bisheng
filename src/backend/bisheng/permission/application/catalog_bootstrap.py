@@ -145,13 +145,7 @@ async def _write_catalog_tuples(
 async def _initial_release_exists() -> bool:
     with bypass_tenant_filter():
         async with get_async_db_session() as session:
-            existing = (
-                await session.execute(
-                    select(PermissionCatalogRelease.id)
-                    .where(PermissionCatalogRelease.release_key == INITIAL_CATALOG_RELEASE_KEY)
-                    .limit(1)
-                )
-            ).scalar_one_or_none()
+            existing = (await session.execute(select(PermissionCatalogRelease.id).limit(1))).scalar_one_or_none()
     return existing is not None
 
 
@@ -165,7 +159,7 @@ async def _seed_control_plane(
     relations_checksum: str,
     action_release,
     model_release: PermissionModelRelease,
-) -> None:
+) -> bool:
     now = datetime.now(UTC)
     with bypass_tenant_filter():
         async with get_async_db_session() as session:
@@ -173,13 +167,9 @@ async def _seed_control_plane(
                 # Re-check inside the transaction so the common concurrent case
                 # is a clean skip rather than an IntegrityError.
                 if (
-                    await session.execute(
-                        select(PermissionCatalogRelease.id)
-                        .where(PermissionCatalogRelease.release_key == INITIAL_CATALOG_RELEASE_KEY)
-                        .limit(1)
-                    )
+                    await session.execute(select(PermissionCatalogRelease.id).limit(1))
                 ).scalar_one_or_none() is not None:
-                    return
+                    return False
 
                 auth_release = (
                     (
@@ -265,6 +255,8 @@ async def _seed_control_plane(
                         kind=model.kind,
                         config_scope=model.config_scope,
                         derived_level=model.derived_level,
+                        visibility_only_resource_types=list(model.visibility_only_resource_types),
+                        visibility_level=model.visibility_level,
                         active=model.active,
                         allow_same_level=model.allow_same_level,
                         legacy_source_key=None,
@@ -283,6 +275,7 @@ async def _seed_control_plane(
                                 action_id=action_id,
                             )
                         )
+    return True
 
 
 def normalize_environment(value: object) -> str:
@@ -337,7 +330,7 @@ async def seed_initial_permission_catalog(
         # authorization tuples. Idempotent via ignore_duplicate_writes.
         await _write_catalog_tuples(client, INITIAL_CATALOG_RELEASE_KEY, model_release)
 
-        await _seed_control_plane(
+        created = await _seed_control_plane(
             store_id=store_id,
             model_id=model_id,
             model_checksum=model_checksum,
@@ -347,6 +340,8 @@ async def seed_initial_permission_catalog(
             action_release=action_release,
             model_release=model_release,
         )
+        if not created:
+            return False
     except IntegrityError:
         # Another starting process seeded concurrently; its rows win.
         logger.info("F048 initial permission Catalog already seeded by a concurrent process")
@@ -361,78 +356,3 @@ async def seed_initial_permission_catalog(
         model_id,
     )
     return True
-
-
-_SKILL_RESOURCE_TYPE = "linsight_skill"
-
-
-def skill_catalog_scope_actions() -> tuple[str, ...]:
-    """Actions whose published scope must include a personal skill."""
-
-    from bisheng.permission.domain.services.catalog_policy import ACTION_RESOURCE_SCOPES
-
-    return tuple(action for action, scopes in ACTION_RESOURCE_SCOPES.items() if _SKILL_RESOURCE_TYPE in scopes)
-
-
-async def ensure_linsight_skill_action_scopes() -> int:
-    """Add ``linsight_skill`` to the CURRENT catalog where the policy allows it.
-
-    A fresh install already has these rows. A catalog published before personal
-    skills were added to the action scope does not, so the owner's own enable
-    or delete fails with 25001. Only missing rows are inserted.
-    """
-
-    actions = skill_catalog_scope_actions()
-    added = 0
-    with bypass_tenant_filter():
-        async with get_async_db_session() as session:
-            async with session.begin():
-                release = (
-                    (
-                        await session.execute(
-                            select(PermissionCatalogRelease).where(
-                                PermissionCatalogRelease.status == "CURRENT",
-                            )
-                        )
-                    )
-                    .scalars()
-                    .first()
-                )
-                if release is None or release.id is None or release.write_fenced:
-                    return 0
-                rows = [
-                    row
-                    for row in (
-                        await session.execute(
-                            select(PermissionAction).where(
-                                PermissionAction.catalog_release_id == release.id,
-                            )
-                        )
-                    )
-                    .scalars()
-                    .all()
-                    if row.active and row.code in actions
-                ]
-                for action in rows:
-                    if action.id is None:
-                        continue
-                    exists = (
-                        await session.execute(
-                            select(PermissionActionResourceScope.id).where(
-                                PermissionActionResourceScope.action_id == action.id,
-                                PermissionActionResourceScope.resource_type == _SKILL_RESOURCE_TYPE,
-                            )
-                        )
-                    ).scalar_one_or_none()
-                    if exists is not None:
-                        continue
-                    session.add(
-                        PermissionActionResourceScope(
-                            action_id=int(action.id),
-                            resource_type=_SKILL_RESOURCE_TYPE,
-                        )
-                    )
-                    added += 1
-    if added:
-        logger.info("Attached linsight_skill to %s CURRENT catalog action scopes", added)
-    return added

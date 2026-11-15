@@ -37,6 +37,7 @@ export interface Step2PersistState {
 
 // 接口仅新增2个必要props，不改动原有参数
 interface IProps {
+    previewRenderer?: (props: { rules: import("./uploadWizardRules").WizardRules; applyEachCell: boolean; cellGeneralConfig: import("./uploadWizardRules").WizardStrategy["cellGeneralConfig"]; previewCount: number; step: number }) => import("react").ReactNode;
     step: number;
     resultFiles: FileItem[];
     isSubmitting: boolean;
@@ -59,7 +60,7 @@ const enum DisplayModeType {
 
 
 const FileUploadStep2 = forwardRef(({
-    step, resultFiles, isSubmitting, onNext, onPrev, isAdjustMode, kId,
+    step, resultFiles, isSubmitting, onNext, onPrev, isAdjustMode, kId, previewRenderer,
     persistState,
     onPersistStateChange
 }: IProps, ref) => {
@@ -159,12 +160,12 @@ const FileUploadStep2 = forwardRef(({
 
     const internalHandleNext = () => {
         if (vildateCell()) return;
-        const hasEmptyCustomRule = (strategies || []).some(s => String(s?.regex ?? '') === '');
+        const hasEmptyCustomRule = rules.splitMode !== 'auto' && (strategies || []).some(s => String(s?.regex ?? '') === '');
         if (hasEmptyCustomRule) {
             notification.open({ type: 'warning', description: String(t('customRuleNotEmpty') ?? '') });
             return;
         }
-        if (!rules.separator || rules.separator.length === 0) {
+        if (rules.splitMode !== 'auto' && (!rules.separator || rules.separator.length === 0)) {
             notification.open({ type: 'warning', description: String(t('addAtLeastOneSplitRule') ?? '') });
             return;
         }
@@ -210,12 +211,12 @@ const FileUploadStep2 = forwardRef(({
 
     const handlePreview = () => {
         if (vildateCell()) return;
-        const hasEmptyCustomRule = (strategies || []).some(s => String(s?.regex ?? '') === '');
+        const hasEmptyCustomRule = rules.splitMode !== 'auto' && (strategies || []).some(s => String(s?.regex ?? '') === '');
         if (hasEmptyCustomRule) {
             notification.open({ type: 'warning', description: String(t('customRuleNotEmpty') ?? '') });
             return;
         }
-        if (!rules.separator || rules.separator.length === 0) {
+        if (rules.splitMode !== 'auto' && (!rules.separator || rules.separator.length === 0)) {
             notification.open({ type: 'warning', description: String(t('addAtLeastOneSplitRule') ?? '') });
             return;
         }
@@ -241,7 +242,7 @@ const FileUploadStep2 = forwardRef(({
                     ) : <div className="h-9" />}
 
                     {displayStep === 2 && (
-                        <Button variant="outlined" className="h-9 rounded-md border-[#e4e8ee] bg-white px-4 shadow-sm hover:bg-accent" onClick={handlePreview} disabled={strategies.length === 0} color="default">
+                        <Button variant="outlined" className="h-9 rounded-md border-[#e4e8ee] bg-white px-4 shadow-sm hover:bg-accent" onClick={handlePreview} disabled={rules.splitMode !== 'auto' && strategies.length === 0} color="default">
                             <SearchCheck size={16} />
                             {showPreview ? t('repreviewSegmentation') : t('previewResults')}
                         </Button>
@@ -280,7 +281,7 @@ const FileUploadStep2 = forwardRef(({
 
                     {(showPreview || (step === 3 && !isAdjustMode)) ? (
                         <div className="relative min-w-0 min-h-0 h-full overflow-y-auto pb-28 pr-1">
-                            <PreviewResult
+                            {previewRenderer ? previewRenderer({ rules: applyRule.rules, applyEachCell: applyRule.applyEachCell, cellGeneralConfig: applyRule.cellGeneralConfig, previewCount, step }) : <PreviewResult
                                 showPreview={showPreview}
                                 onFileTypeChange={setStrategyTab}
                                 step={step}
@@ -294,7 +295,7 @@ const FileUploadStep2 = forwardRef(({
                                     setPreviewFailed(!isSuccess);
                                     setPreviewLoading(false);
                                 }}
-                            />
+                            />}
                         </div>
                     ) : null}
                 </div>
@@ -307,7 +308,7 @@ const FileUploadStep2 = forwardRef(({
                     }} color="default">
                     {t('previousStep')}
                 </Button>
-                <Button disabled={previewFailed || isSubmitting || strategies.length === 0} onClick={internalHandleNext}>
+                <Button disabled={previewFailed || isSubmitting || (rules.splitMode !== 'auto' && strategies.length === 0)} onClick={internalHandleNext}>
                     {isSubmitting ? (
                         <Outlined.Loading className="animate-spin h-12 w-12" />
                     ) : (
@@ -377,10 +378,10 @@ const useFileProcessingRules = (
     const [cellGeneralConfig, setCellGeneralConfig] = useState(() => {
         if (parentCellGeneralConfig) return parentCellGeneralConfig;
         return {
-            slice_length: splitRule?.excel_rule?.slice_length || 10,
-            append_header: splitRule?.excel_rule?.append_header || true,
-            header_start_row: splitRule?.excel_rule?.header_start_row || 1,
-            header_end_row: splitRule?.excel_rule?.header_end_row || 1
+            slice_length: parsedSplitRule?.excel_rule?.slice_length ?? 10,
+            append_header: parsedSplitRule?.excel_rule?.append_header ?? true,
+            header_start_row: parsedSplitRule?.excel_rule?.header_start_row ?? 1,
+            header_end_row: parsedSplitRule?.excel_rule?.header_end_row ?? 1
         };
     });
 
@@ -412,7 +413,7 @@ const useFileProcessingRules = (
     });
     // Update rules when strategies change（不过滤只含换行的规则）
     useEffect(() => {
-        const cleaned = (strategies || []).filter(s => String(s?.regex ?? '') !== '');
+        const cleaned = rules.splitMode === 'auto' ? (strategies || []) : (strategies || []).filter(s => String(s?.regex ?? '') !== '');
         const [separator, separatorRule] = cleaned.reduce(([_separator, _separatorRule], strategy) => {
             const regex = String(strategy.regex).replace(/\n/g, '\\n');
             const position = strategy.position || 'after';
@@ -424,7 +425,7 @@ const useFileProcessingRules = (
             separator,
             separatorRule
         }));
-    }, [strategies]);
+    }, [strategies, rules.splitMode]);
 
     // Initialize rules when resultFiles change
     useEffect(() => {
@@ -438,13 +439,11 @@ const useFileProcessingRules = (
                     previewUrl: file.previewUrl,
                     suffix: file.suffix,
                     fileType: file.fileType,
-                    excelRule: file.fileType === 'table' ? {
-                        ...cellGeneralConfig
-                    } : {}
+                    excelRule: file.fileType === 'table' ? (applyEachCell ? prev.fileList?.find(one => one.filePath === file.file_path)?.excelRule ?? { ...cellGeneralConfig } : { ...cellGeneralConfig }) : {}
                 }))
             }));
         }
-    }, [resultFiles, kid, cellGeneralConfig]);
+    }, [resultFiles, kid, cellGeneralConfig, applyEachCell]);
 
     return {
         rules,

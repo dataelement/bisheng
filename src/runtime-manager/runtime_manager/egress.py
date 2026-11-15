@@ -621,15 +621,34 @@ def build_destinations(config: Config) -> tuple[Destination, ...]:
     of the thing being built.
     """
     return merge_destinations(
-        config.build_index_url,
+        build_package_sources(config),
         config.build_trusted_host,
-        config.build_npm_registry,
         config.platform_base_url,
         config.egress_build_allow,
-        # All five come from the deployment; a private package mirror is the
-        # normal shape of an air-gapped install, not something to refuse.
+        # Every entry comes from the deployment; a private package mirror is
+        # the normal shape of an air-gapped install, not something to refuse.
         trusted=True,
     )
+
+
+def build_package_sources(config: Config) -> tuple[str, ...]:
+    """Return deployment-owned download endpoints for an operation-bound policy.
+
+    PyPI's simple index links wheels from ``files.pythonhosted.org``.  Allowing
+    only ``pypi.org`` therefore permits index lookup but blocks the actual
+    artifact download at the egress proxy.  Add the official file host only
+    when the configured primary index is the official PyPI service; private
+    mirrors remain restricted to their explicitly configured endpoints.
+    """
+    sources = [
+        config.build_index_url,
+        config.build_extra_index_url,
+        config.build_npm_registry,
+    ]
+    index = urlsplit(config.build_index_url)
+    if index.hostname in {"pypi.org", "www.pypi.org"}:
+        sources.append("https://files.pythonhosted.org")
+    return tuple(dict.fromkeys(source for source in sources if source))
 
 
 def proxy_url(config: Config, *, principal: str, token: str) -> str:

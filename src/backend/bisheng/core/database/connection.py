@@ -18,6 +18,16 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 logger = logging.getLogger(__name__)
 
+_ASYNC_DRIVERS = {
+    "mysql+pymysql": "mysql+aiomysql",
+    "postgresql+psycopg2": "postgresql+asyncpg",
+    "dm+dmPython": "dm+dmAsync",
+}
+
+
+def _redacted_database_url(url: str) -> str:
+    return make_url(url).render_as_string(hide_password=True)
+
 
 def _install_db_metric_events(engine: Engine, engine_name: str) -> None:
     """Attach cursor-timing metric listeners to a sync Engine (F042 T005).
@@ -88,14 +98,12 @@ class DatabaseConnectionManager:
         self._async_session_maker: async_sessionmaker | None = None
 
     def _convert_to_async_url(self, url: str) -> str:
-        """Database will be synchronizedURLConvert to AsynchronousURL"""
-        if "pymysql" in url:
-            return url.replace("pymysql", "aiomysql")
-        elif "psycopg2" in url:
-            return url.replace("psycopg2", "asyncpg")
-        elif "dmPython" in url:
-            return url.replace("dmPython", "dmAsync")
-        return url
+        """Swap only the driver name. The password is rendered by SQLAlchemy, not str(URL)."""
+        parsed = make_url(url)
+        async_driver = _ASYNC_DRIVERS.get(parsed.drivername)
+        if async_driver is None:
+            return url
+        return parsed.set(drivername=async_driver).render_as_string(hide_password=False)
 
     def _get_default_engine_config(self) -> dict[str, Any]:
         """Get default engine configuration"""
@@ -118,7 +126,7 @@ class DatabaseConnectionManager:
                 }
             )
         # MySQLSPECIAL CONFIGURATION
-        elif "mysql" in self.database_url:
+        elif make_url(self.database_url).get_backend_name() == "mysql":
             if "connect_args" not in config:
                 config["connect_args"] = {}
             config["connect_args"]["charset"] = "utf8mb4"
@@ -199,7 +207,7 @@ class DatabaseConnectionManager:
             # the query string), so database_url is used as-is for every engine.
             self._engine = create_engine(self.database_url, **config)
             _install_db_metric_events(self._engine, "sync")
-            logger.debug(f"Created sync database engine for {self.database_url}")
+            logger.debug("Created sync database engine for %s", _redacted_database_url(self.database_url))
 
         return self._engine
 
@@ -216,7 +224,7 @@ class DatabaseConnectionManager:
             # Cursor events fire on the underlying sync engine; the async pool is
             # reached via sync_engine.pool (design §5 坑 9).
             _install_db_metric_events(self._async_engine.sync_engine, "async")
-            logger.debug(f"Created async database engine for {self.async_database_url}")
+            logger.debug("Created async database engine for %s", _redacted_database_url(self.async_database_url))
 
         return self._async_engine
 

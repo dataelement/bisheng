@@ -5,8 +5,8 @@ import { SkillDetails } from '~/components/Skills/SkillDetails';
 import { useSkillCenter } from '~/components/Skills/useSkillCenter';
 import { matchesSkillSearch } from '~/components/Skills/localization';
 import { useLocalize } from '~/hooks';
+import { SquareBanner } from '~/pages/square/SquareBanner';
 import { SkillGrid, SkillGridSkeleton } from './SkillGrid';
-import { SkillSquareBanner } from './SkillSquareBanner';
 
 const noop = () => undefined;
 
@@ -39,15 +39,17 @@ export function SkillSquarePane() {
   const emptyKind = keyword ? 'search' : failed ? 'failed' : 'square';
   return (
     <div className="flex h-full min-h-0 w-full flex-col items-center overflow-hidden">
-      <SkillSquareBanner />
-      <div className="flex w-full max-w-[1000px] shrink-0 items-center justify-end px-5 py-5">
+      <SquareBanner
+        title={localize('com_skill_center_square_title')}
+        description={localize('com_skill_center_square_description')}
+      />
+      <div className="mb-5 mt-6 w-full max-w-[480px] shrink-0 max-[767px]:px-4">
         <SearchInput
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           onClear={() => setSearch('')}
           placeholder={localize('com_skill_center_search')}
           aria-label={localize('com_skill_center_search')}
-          className="w-full min-[576px]:w-64"
         />
       </div>
       <main className="scrollbar-os flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto">

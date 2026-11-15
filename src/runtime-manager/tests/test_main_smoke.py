@@ -17,6 +17,10 @@ not hold the secret).
 
 from __future__ import annotations
 
+from threading import Event
+from types import SimpleNamespace
+from unittest.mock import Mock
+
 from fastapi.testclient import TestClient
 
 from runtime_manager.config import set_config
@@ -64,11 +68,17 @@ def test_every_v1_endpoint_is_mounted_and_signed(rtm_client):
     assert rtm_client.get("/v1/nope", sign=False).status_code == 404
 
 
-def test_lifespan_starts_and_stops_the_reconcile_loop(rtm_config, fake_docker):
+def test_lifespan_starts_and_stops_the_reconcile_loop(rtm_config, fake_docker, monkeypatch):
     """AC-50 — booting the process is what triggers the alignment pass."""
     set_config(rtm_config.with_overrides(reconcile_enabled=True))
+    # Protocol v2 reconciles the platform ledger rather than the old local store.
+    first_pass = Event()
+    worker = SimpleNamespace(config=rtm_config, reconcile=Mock(side_effect=first_pass.set), close=Mock())
+    monkeypatch.setattr("runtime_manager.api.operations.executor", lambda: worker)
     with TestClient(app):
         loop = get_reconcile_loop()
         assert loop is not None
-        assert loop.wait_for_first_pass(timeout=5.0) is True
+        assert first_pass.wait(timeout=5.0) is True
     assert get_reconcile_loop() is None
+    worker.reconcile.assert_called()
+    worker.close.assert_called_once()

@@ -23,6 +23,7 @@ build, not of any tenant, which is what lets the endpoints stay anonymous.
 from __future__ import annotations
 
 import gzip
+import hashlib
 import io
 import json
 import re
@@ -120,6 +121,7 @@ class DistributionSnapshot:
     cli: CliArtifact | None
     platform_version: str | None
     sdk: SdkArtifact | None = None
+    sdk_history: tuple[SdkArtifact, ...] = ()
 
 
 def _read_manifest() -> dict | None:
@@ -201,7 +203,24 @@ def read_snapshot() -> DistributionSnapshot:
             path=sdk_path,
         )
 
-    return DistributionSnapshot(cli=cli, platform_version=platform_version, sdk=sdk)
+    historical = []
+    history = manifest.get("sdk_history")
+    for meta in history if isinstance(history, list) else []:
+        if not isinstance(meta, dict):
+            continue
+        filename, digest, version = meta.get("filename", ""), meta.get("sha256", ""), meta.get("version")
+        if not isinstance(filename, str) or not re.fullmatch(
+            r"bisheng_sdk-[a-zA-Z0-9_.!+-]+-py3-none-any\.whl", filename
+        ):
+            continue
+        if not isinstance(digest, str) or not re.fullmatch(r"[a-f0-9]{64}", digest) or not isinstance(version, str):
+            continue
+        path = ARTIFACTS_DIR / filename
+        if path.is_symlink() or not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+            continue
+        if sdk is None or filename != sdk.filename:
+            historical.append(SdkArtifact(version, meta.get("min_compatible") or version, filename, digest, path))
+    return DistributionSnapshot(cli=cli, platform_version=platform_version, sdk=sdk, sdk_history=tuple(historical))
 
 
 @dataclass(frozen=True)
@@ -313,4 +332,16 @@ def read_sdk_guide() -> str | None:
         return path.read_text(encoding="utf-8")
     except OSError:
         logger.exception("dev_toolkit sdk guide at {} is unreadable; serving the degraded 404", path)
+        return None
+
+
+def read_workbench_guide(language: str = "zh") -> str | None:
+    """Serve the enterprise-hosted protocol; never resolve a caller-supplied path."""
+    if language not in {"zh", "en"}:
+        raise ValueError("Unsupported workbench guide language")
+    path = GUIDES_DIR / f"workbench-guide.{language}.md"
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError:
+        logger.exception("dev_toolkit workbench guide at {} is unreadable; serving the degraded 404", path)
         return None

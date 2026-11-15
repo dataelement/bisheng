@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { dailyFailureMetadata, type FailureInfo } from '~/utils/failureInfo';
 import { getCitationAccessScope } from './citationScope';
 import { hydrateStreamChatCitations } from './hydrateStreamChatCitations';
 /**
@@ -65,6 +66,7 @@ export interface AgentToolCall {
     args?: Record<string, any>;
     results?: any;
     error?: string | null;
+    failure_info?: FailureInfo;
     /** True while the backend is still running this tool (no `end` event seen yet). */
     inflight?: boolean;
     /** Epoch ms when the start event arrived; lets the UI compute a live duration. */
@@ -118,6 +120,9 @@ export interface ChatMessage {
     /** raw upstream text (provider message, parser error, offending filename) kept
         behind the card's "view details" disclosure. */
     errorDetail?: string;
+    /** support reference when the failure has no dependency failure_id */
+    referenceId?: string;
+    failureInfo?: FailureInfo;
     unfinished?: boolean;
     isCreatedByUser?: boolean;
     createdAt?: string;
@@ -226,7 +231,17 @@ export async function getAgentMessages(
     const headers = shareToken ? { 'share-token': shareToken } : undefined;
     const res = await http.get(API.agentMessages(conversationId), headers ? { headers } : undefined);
     const rows: any[] = res?.data ?? res ?? [];
-    return rows.map(mapAgentResponseItem);
+    // Linear agent history has no persisted parent IDs. Rebuild the links the
+    // retry action uses to find the original question after a history reload.
+    let previousMessageId = "";
+    let questionMessageId = "";
+    return rows.map((row) => {
+        const message = mapAgentResponseItem(row);
+        message.parentMessageId = message.isCreatedByUser ? previousMessageId : questionMessageId;
+        if (message.isCreatedByUser) questionMessageId = message.messageId;
+        previousMessageId = message.messageId;
+        return message;
+    });
 }
 
 /**
@@ -265,6 +280,16 @@ function mapAgentResponseItem(row: any): ChatMessage {
         liked: row.liked,
     };
 
+    let failureExtra = row.extra;
+    if (typeof failureExtra === 'string') {
+        try { failureExtra = JSON.parse(failureExtra); } catch { failureExtra = undefined; }
+    }
+    if (failureExtra?.error) {
+        base.error = true;
+        base.errorCode = failureExtra.error_code;
+        base.errorText = failureExtra.error_msg;
+        Object.assign(base, dailyFailureMetadata(failureExtra));
+    }
     if (category === "question" && raw && typeof raw === "object") {
         base.text = raw.query ?? "";
         if (!base.files?.length && Array.isArray(raw.files)) {

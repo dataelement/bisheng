@@ -1,0 +1,18 @@
+/* Body portals use the native window; the application keeps its original seat. */
+:global(html[data-bisheng-surface='desktop']) .surface {
+  width: var(--dsh-chat-viewport-width, 100%);
+  height: var(--dsh-chat-viewport-height, 100dvh);
+  min-height: 0;
+  container: workbench / inline-size;
+}
+
+.surface > main {
+  height: 100%;
+  min-height: 0;
+}
+
+.surface .viewport {
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+}

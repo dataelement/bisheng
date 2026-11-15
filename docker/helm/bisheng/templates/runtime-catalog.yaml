@@ -1,0 +1,9 @@
+{{- if .Values.runtime.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "bisheng.component" (list . "official-catalog") }}
+data:
+  catalog.json: {{ .Files.Get "files/runtime-catalog/catalog.json" | quote }}
+  catalog.lock.json: {{ .Files.Get "files/runtime-catalog/catalog.lock.json" | quote }}
+{{- end }}

@@ -1,0 +1,259 @@
+pageType: evidence
+background:
+  type: solid
+  color: $white
+elements:
+- elementId: top-band
+  elementType: shape
+  bounds:
+  - 0
+  - 0
+  - 960
+  - 8
+  shapeName: rect
+  fill:
+    type: solid
+    color: $red
+  border:
+    color: $red
+    width: 0
+- elementId: top-gold
+  elementType: shape
+  bounds:
+  - 0
+  - 8
+  - 960
+  - 2
+  shapeName: rect
+  fill:
+    type: solid
+    color: $gold
+  border:
+    color: $gold
+    width: 0
+- elementId: kicker
+  elementType: text
+  bounds:
+  - 48
+  - 28
+  - 600
+  - 16
+  content:
+    text: 一、年度工作总体情况
+    style: $kicker
+- elementId: title
+  elementType: text
+  bounds:
+  - 48
+  - 46
+  - 864
+  - 36
+  content:
+    text: 营业收入五年增长 46%，新兴业务贡献过半增量
+    style: $title
+- elementId: title-mark
+  elementType: shape
+  bounds:
+  - 48
+  - 88
+  - 56
+  - 3
+  shapeName: rect
+  fill:
+    type: solid
+    color: $gold
+  border:
+    color: $gold
+    width: 0
+- elementId: footer-rule
+  elementType: line
+  bounds:
+  - 48
+  - 502
+  - 864
+  - 1
+  viewBox:
+  - 864
+  - 1
+  points: 0,0 864,0
+  border:
+    color: $rule
+    width: 0.8
+- elementId: footer-org
+  elementType: text
+  bounds:
+  - 48
+  - 508
+  - 500
+  - 16
+  content:
+    text: 示例单位 · 2026 年度工作汇报
+    style: $meta
+- elementId: footer-no
+  elementType: text
+  bounds:
+  - 852
+  - 508
+  - 60
+  - 16
+  content:
+    text: '05'
+    style: $meta
+    align:
+    - right
+    - top
+- elementId: rev-chart
+  elementType: chart
+  bounds:
+  - 48
+  - 112
+  - 540
+  - 330
+  data:
+    cols:
+    - year
+    - base
+    - new
+    rows:
+    - - '2022'
+      - 238
+      - 26
+    - - '2023'
+      - 249
+      - 41
+    - - '2024'
+      - 258
+      - 62
+    - - '2025'
+      - 268
+      - 87.6
+    - - '2026'
+      - 276
+      - 110.2
+  series:
+  - type: bar
+    name: 传统业务
+    encode:
+      x: year
+      y: base
+    fill: $red
+    dataLabels:
+      show: false
+  - type: bar
+    name: 新兴业务
+    encode:
+      x: year
+      y: new
+    fill: $gold
+    dataLabels:
+      show: false
+  xAxis:
+    label:
+      fontSize: 11
+      color: $muted
+    gridLine: false
+  yAxis:
+    min: 0
+    label:
+      fontSize: 10
+      color: $muted
+    gridLine:
+      color: $rule
+      style: dot
+  legend:
+    show: true
+    position: top
+    fontSize: 11
+  fontFamily:
+    latin: Arial
+    ea: Microsoft YaHei
+  fill:
+    type: solid
+    color: '#FFFFFF00'
+  border:
+    color: '#FFFFFF00'
+    width: 0
+- elementId: rev-unit
+  elementType: text
+  bounds:
+  - 48
+  - 446
+  - 400
+  - 16
+  content:
+    text: 单位：亿元；数据为示例
+    style: $meta
+- elementId: rev-divider
+  elementType: line
+  bounds:
+  - 616
+  - 120
+  - 1
+  - 320
+  viewBox:
+  - 1
+  - 320
+  points: 0,0 0,320
+  border:
+    color: $rule
+    width: 0.8
+- elementId: rev-h1
+  elementType: text
+  bounds:
+  - 640
+  - 122
+  - 272
+  - 22
+  content:
+    text: 增量主要来自新兴业务
+    style: $lead
+- elementId: rev-b1
+  elementType: text
+  bounds:
+  - 640
+  - 148
+  - 272
+  - 72
+  content:
+    text: 新兴业务收入由 26 亿元增至 110.2 亿元，五年累计贡献收入增量的 69%。
+    style: $body
+- elementId: rev-h2
+  elementType: text
+  bounds:
+  - 640
+  - 232
+  - 272
+  - 22
+  content:
+    text: 传统业务保持稳定
+    style: $lead
+- elementId: rev-b2
+  elementType: text
+  bounds:
+  - 640
+  - 258
+  - 272
+  - 72
+  content:
+    text: 传统业务年均增长 3.8%，继续承担现金流与就业稳定的基础作用。
+    style: $body
+- elementId: rev-h3
+  elementType: text
+  bounds:
+  - 640
+  - 342
+  - 272
+  - 22
+  content:
+    text: 下一步关注
+    style: $lead
+- elementId: rev-b3
+  elementType: text
+  bounds:
+  - 640
+  - 368
+  - 272
+  - 72
+  content:
+    text: 新兴业务毛利率仍低于传统业务 4 个百分点，需要在规模扩张中同步提升盈利质量。
+    style: $body

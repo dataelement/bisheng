@@ -7,6 +7,7 @@ from langchain_core.embeddings import Embeddings
 from loguru import logger
 from pydantic import Field
 
+from bisheng.common.services.failure_context import failure_boundary
 from bisheng.core.ai import (
     AzureOpenAIEmbeddings,
     OllamaEmbeddings,
@@ -203,6 +204,7 @@ class BishengEmbedding(BishengBase, Embeddings):
         return params
 
     @wrapper_bisheng_model_limit_check
+    @failure_boundary("model_service", "embedding", "embed")
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         """embedding"""
         ret = self.embeddings.embed_documents(texts)
@@ -214,6 +216,7 @@ class BishengEmbedding(BishengBase, Embeddings):
         return ret
 
     @wrapper_bisheng_model_limit_check
+    @failure_boundary("model_service", "embedding", "embed")
     def embed_query(self, text: str) -> list[float]:
         """embedding"""
         ret = self.embeddings.embed_query(text)

@@ -14,11 +14,15 @@ class AppReviewGrant:
     task_id: int
 
 
-async def pending_app_reviews(viewer_user_id: int, app_id: str, version_ids: set[str]) -> tuple[AppReviewGrant, ...]:
+async def pending_app_reviews(
+    viewer_user_id: int, app_id: str, version_ids: set[str], *, session=None, for_update=False
+) -> tuple[AppReviewGrant, ...]:
     if type(viewer_user_id) is not int or viewer_user_id <= 0 or not app_id or not version_ids:
         return ()
     result = []
-    for instance, task in await AppReviewRepository.pending_for_viewer(viewer_user_id, app_id):
+    for instance, task in await AppReviewRepository.pending_for_viewer(
+        viewer_user_id, app_id, session=session, for_update=for_update
+    ):
         payload = instance.payload_snapshot if isinstance(instance.payload_snapshot, dict) else {}
         version_id = str(payload.get("version_id") or "")
         if (
@@ -30,6 +34,7 @@ async def pending_app_reviews(viewer_user_id: int, app_id: str, version_ids: set
             and task.approver_user_id == viewer_user_id
             and task.tenant_id == instance.tenant_id
             and bool(version_id)
+            and version_id in version_ids
         ):
             result.append(AppReviewGrant(instance.tenant_id, app_id, version_id, instance.id, task.id))
     return tuple(result)

@@ -9,9 +9,19 @@ import pytest
 import bisheng.channel.domain.services.channel_service as mod
 from bisheng.approval.domain.services.channel_subscribe_scenario_handler import ChannelSubscribeScenarioHandler
 from bisheng.channel.domain.models.channel import ChannelVisibilityEnum
-from bisheng.channel.domain.schemas.channel_manager_schema import SubscribeChannelRequest
+from bisheng.channel.domain.repositories.reference_binding_repository import ChannelReferenceBindingRepository
+from bisheng.channel.domain.schemas.channel_manager_schema import (
+    CreateChannelRequest,
+    SubscribeChannelRequest,
+    UpdateChannelRequest,
+)
 from bisheng.channel.domain.services.channel_service import ChannelService
-from bisheng.common.models.space_channel_member import MembershipStatusEnum, UserRoleEnum
+from bisheng.common.models.space_channel_member import MembershipStatusEnum, SpaceChannelMember, UserRoleEnum
+from test.knowledge_unification import test_ch_bindings as sql_fixtures
+
+store = sql_fixtures.store
+tenant = sql_fixtures.tenant
+business = sql_fixtures.business
 
 
 @pytest.fixture(autouse=True)
@@ -263,33 +273,41 @@ async def test_legacy_approval_failure_keeps_pending(monkeypatch):
     repo.update.assert_not_awaited()
 
 
-async def test_public_transition_activates_each_member_after_grant(monkeypatch):
-    member = SimpleNamespace(id=1, status=MembershipStatusEnum.PENDING, user_id=42, user_role=UserRoleEnum.MEMBER)
+async def test_public_transition_activates_each_member_after_grant(monkeypatch, business):
+    root = await business.service.create_channel(
+        CreateChannelRequest(name="review", visibility="review"), business.user
+    )
+    async with business.sessions() as session, session.begin():
+        session.add(
+            SpaceChannelMember(
+                business_id=root.id,
+                business_type="channel",
+                user_id=42,
+                user_role=UserRoleEnum.MEMBER,
+                status=MembershipStatusEnum.PENDING,
+            )
+        )
     order = []
 
     async def grant(*_args, **_kwargs):
-        assert member.status == MembershipStatusEnum.PENDING
+        assert order == []
         order.append("permission")
 
-    repo = SimpleNamespace(
-        find_all=AsyncMock(return_value=[member]),
-        update=AsyncMock(side_effect=lambda _: order.append("membership")),
-        remove_rejected_members=AsyncMock(),
-    )
-    service = ChannelService(
-        channel_repository=SimpleNamespace(),
-        space_channel_member_repository=repo,
-        channel_info_source_repository=SimpleNamespace(),
-    )
+    original = ChannelReferenceBindingRepository.amutate_members
+
+    async def membership(repo, session, channel, **kwargs):
+        order.append("membership")
+        return await original(repo, session, channel, **kwargs)
+
     monkeypatch.setattr(ChannelService, "sync_direct_channel_user_permissions", grant)
-    await service._apply_channel_visibility_transition(
-        SimpleNamespace(id="channel-1"),
-        old_visibility=ChannelVisibilityEnum.REVIEW,
-        new_visibility=ChannelVisibilityEnum.PUBLIC,
-        login_user=SimpleNamespace(user_id=9),
-    )
+    monkeypatch.setattr(ChannelReferenceBindingRepository, "amutate_members", membership)
+    await business.service.update_channel(root.id, UpdateChannelRequest(visibility="public"), business.user)
     assert order == ["permission", "membership"]
-    assert member.status == MembershipStatusEnum.ACTIVE
+    state = await sql_fixtures.state(business)
+    member = next(
+        row for row in state["space_channel_member"] if row["business_id"] == root.id and row["user_id"] == 42
+    )
+    assert member["status"] == MembershipStatusEnum.ACTIVE
 
 
 async def test_subscription_preserves_a_restricted_administrator_role(monkeypatch):

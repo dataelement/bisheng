@@ -190,6 +190,10 @@ module.exports = {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
+        popover: {
+          DEFAULT: 'hsl(var(--popover))',
+          foreground: 'hsl(var(--popover-foreground))',
+        },
       },
       borderRadius: {
         // Tailwind's ladder ends at 3xl (24px); the spec's largest container

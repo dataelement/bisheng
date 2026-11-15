@@ -23,6 +23,7 @@ vi.mock("./ModelAuditBody", () => ({
 }));
 vi.mock("./ModelAuditParent", () => ({ ModelAuditParent: () => null }));
 import { ModelAuditRequests } from "./ModelAuditPanel";
+import { ModelAuditGroup } from "./ModelAuditGroup";
 const ready = { status_ready: true, name_ready: true, indexing_pending: false };
 const group = {
   conversation_key: "a".repeat(64),
@@ -199,4 +200,34 @@ it("keeps real readiness failures visible while already saved requests remain re
   expect(await screen.findByText("dsh.modelAuditView.loadError")).toBeVisible();
   expect(screen.queryByText("dsh.modelAuditView.index_preparing")).toBeNull();
   expect(screen.queryByText("Synthetic private readiness failure")).toBeNull();
+});
+
+it("shows current message ratings on an expanded audit conversation", async () => {
+  api.groupRequests.mockResolvedValue({
+    items: [record],
+    next_cursor: null,
+    progress: { last_write_at: null },
+    message_feedback: [{
+      message_id: "msg-1",
+      rating: "negative",
+      category: "other",
+      note: "private note",
+      event_seq: 4,
+    }],
+  });
+  render(
+    <ModelAuditGroup
+      group={{ ...group, like_count: 0, dislike_count: 1 }}
+      progress={ready}
+      query={{ limit: 20 }}
+      expanded
+      onToggle={vi.fn()}
+    />,
+  );
+  expect(screen.getByText("dsh.modelAuditView.group_like")).toBeVisible();
+  expect(screen.getByText("dsh.modelAuditView.group_dislikes")).toBeVisible();
+  expect(await screen.findByText("private note")).toBeVisible();
+  expect(screen.getByText("msg-1")).toBeVisible();
+  expect(screen.getByText("dsh.modelAuditView.feedback.rating.negative")).toBeVisible();
+  expect(screen.getByText("dsh.modelAuditView.feedback.category.other")).toBeVisible();
 });

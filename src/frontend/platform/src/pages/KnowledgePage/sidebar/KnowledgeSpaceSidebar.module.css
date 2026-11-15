@@ -1,0 +1,33 @@
+/* Match the Client tree: keep the scrollbar space stable and show its thumb while scrolling. */
+.scrollOnScroll {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  scrollbar-gutter: stable;
+  transition: scrollbar-color 0.3s ease;
+}
+
+.scrollOnScroll::-webkit-scrollbar {
+  width: 0.5rem;
+  height: 0.5rem;
+}
+
+.scrollOnScroll::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  transition: background-color 0.3s ease;
+}
+
+.scrollOnScroll[data-scrolling="true"] {
+  scrollbar-color: rgb(0 0 0 / 10%) transparent;
+}
+
+.scrollOnScroll[data-scrolling="true"]::-webkit-scrollbar-thumb {
+  background-color: rgb(0 0 0 / 10%);
+}
+
+:global(.dark) .scrollOnScroll[data-scrolling="true"] {
+  scrollbar-color: rgb(255 255 255 / 10%) transparent;
+}
+
+:global(.dark) .scrollOnScroll[data-scrolling="true"]::-webkit-scrollbar-thumb {
+  background-color: rgb(255 255 255 / 10%);
+}

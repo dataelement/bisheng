@@ -516,10 +516,11 @@ def test_shared_system_read_is_resource_specific_and_read_only() -> None:
     }
     evaluator = ModelEvaluator(model, base)
     assert evaluator.check("user:7", "visible", "knowledge_library:k1")
-    assert evaluator.check("user:7", "can_use", "knowledge_library:k1")
+    assert "can_use" not in evaluator._types["knowledge_library"]["relations"]
     assert not evaluator.check("user:7", "can_edit", "knowledge_library:k1")
     assert evaluator.check("user:7", "can_download", "knowledge_file:f1")
-    assert not evaluator.check("user:7", "can_use", "knowledge_file:f1")
+    assert "can_use" not in evaluator._types["knowledge_file"]["relations"]
+    assert evaluator.check("user:7", "visible", "knowledge_file:f1")
 
 
 def test_visible_is_single_slot_shallow_and_has_no_ab_switch() -> None:

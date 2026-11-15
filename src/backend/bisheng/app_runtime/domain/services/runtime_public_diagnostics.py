@@ -3,8 +3,41 @@
 import re
 from copy import deepcopy
 
-from bisheng.common.errcode.app_factory import AppProbeFailedError
+from bisheng.common.errcode.app_factory import AppCapacityInsufficientError, AppProbeFailedError
+from bisheng.common.errcode.app_publish import AppCapacityInsufficientError as AppPublishCapacityInsufficientError
 from bisheng.common.errcode.app_publish import AppDependencyBuildFailedError, AppStartupProbeFailedError
+
+_QUOTA_RESOURCES = frozenset(
+    {
+        "cpu",
+        "memory",
+        "requests.cpu",
+        "limits.cpu",
+        "requests.memory",
+        "limits.memory",
+        "requests.storage",
+        "pods",
+        "count/pods",
+        "persistentvolumeclaims",
+        "count/persistentvolumeclaims",
+    }
+)
+_QUANTITY = re.compile(r"[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+|[EPTGMKk]i?|[mun])?")
+
+
+def quota_details(value):
+    """Runtime quota metadata is quantities only, never an upstream response."""
+    if not isinstance(value, dict):
+        return {}
+    result = {}
+    for resource in sorted(_QUOTA_RESOURCES):
+        item = value.get(resource)
+        if not isinstance(item, dict):
+            continue
+        quantities = {key: item.get(key) for key in ("requested", "used", "limit")}
+        if all(isinstance(x, str) and len(x) <= 32 and _QUANTITY.fullmatch(x) for x in quantities.values()):
+            result[resource] = quantities
+    return result
 
 
 def stored_failure(value):
@@ -43,7 +76,13 @@ def runtime_failure_error(operation):
     }
     error = AppProbeFailedError
     hints = ["依据操作标识检查当前阶段;数据维护或清理未完成时先确认状态再重试"]
-    if operation.status == "failed" and operation.kind == "prepare":
+    if operation.status == "failed" and reason == "k8s_quota_exceeded":
+        error = AppPublishCapacityInsufficientError if operation.kind == "prepare" else AppCapacityInsufficientError
+        quota = quota_details(failure.get("quota"))
+        if quota:
+            details["quota"] = quota
+        hints = ["请平台管理员检查部署资源配额与当前占用;资源释放或调整配额后重试, 无需修改应用依赖"]
+    elif operation.status == "failed" and operation.kind == "prepare":
         error = AppDependencyBuildFailedError
         hints = ["检查固定镜像、入口和精确版本依赖材料;离线模式请导入对应平台材料后重试"]
     elif (

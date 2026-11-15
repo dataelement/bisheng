@@ -207,3 +207,32 @@ def test_multi_tenant_no_jwt_does_not_raise_on_sdk_routes(staged_artifacts, clie
     assert client.get(SDK_DOWNLOAD_PATH).status_code == 200
     assert client.get(SIMPLE_PROJECT_PATH).status_code == 200
     assert client.get(SDK_GUIDE_PATH).status_code == 200
+
+
+def test_f113_old_pinned_sdk_remains_installable_without_advertising_unlisted_files(staged_artifacts, client_factory):
+    import hashlib
+    import json
+
+    archive_name = "bisheng_sdk-0.0.9-py3-none-any.whl"
+    content = b"old immutable sdk"
+    (staged_artifacts / archive_name).write_bytes(content)
+    (staged_artifacts / "bisheng_sdk-unlisted-py3-none-any.whl").write_bytes(b"not registered")
+    manifest_file = staged_artifacts / "manifest.json"
+    manifest = json.loads(manifest_file.read_text())
+    manifest["sdk_history"] = [
+        {
+            "version": "0.0.9",
+            "min_compatible": "0.0.1",
+            "filename": archive_name,
+            "sha256": hashlib.sha256(content).hexdigest(),
+        }
+    ]
+    manifest_file.write_text(json.dumps(manifest))
+    client = client_factory()
+    index = client.get(SIMPLE_PROJECT_PATH)
+    assert archive_name in index.text
+    assert "unlisted" not in index.text
+    assert client.get("/api/v1/dev-toolkit/sdk/download/" + archive_name).content == content
+    (staged_artifacts / archive_name).write_bytes(b"corrupted")
+    assert archive_name not in client.get(SIMPLE_PROJECT_PATH).text
+    assert client.get("/api/v1/dev-toolkit/sdk/download/" + archive_name).status_code == 404

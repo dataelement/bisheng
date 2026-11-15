@@ -217,7 +217,11 @@ def _serve_sdk_wheel(filename: str | None):
     verified the hash of.
     """
     snapshot = artifact_service.read_snapshot()
-    if snapshot.sdk is None or (filename is not None and filename != snapshot.sdk.filename):
+    available = ([snapshot.sdk] if snapshot.sdk else []) + list(snapshot.sdk_history)
+    selected = (
+        snapshot.sdk if filename is None else next((item for item in available if item.filename == filename), None)
+    )
+    if selected is None:
         # A real 404, not the 200-plus-envelope habit of /api/v1 — pip is a
         # client on this route and would try to install the envelope.
         return JSONResponse(
@@ -226,8 +230,8 @@ def _serve_sdk_wheel(filename: str | None):
         )
 
     return FileResponse(
-        snapshot.sdk.path,
-        filename=snapshot.sdk.filename,
+        selected.path,
+        filename=selected.filename,
         media_type="application/octet-stream",
     )
 
@@ -270,7 +274,7 @@ def sdk_simple_index_root():
 
 @router.get("/simple/bisheng-sdk/")
 def sdk_simple_index_project():
-    """PEP 503 project page — one link, hash-pinned.
+    """PEP 503 project page — current and retained versions, hash-pinned.
 
     The ``#sha256=`` fragment is what makes an unauthenticated, plain-HTTP
     intranet index safe to install from: pip verifies the digest before
@@ -279,19 +283,19 @@ def sdk_simple_index_project():
     so the page works unchanged behind a gateway path prefix.
     """
     snapshot = artifact_service.read_snapshot()
-    if snapshot.sdk is None:
+    available = ([snapshot.sdk] if snapshot.sdk else []) + list(snapshot.sdk_history)
+    if not available:
         return JSONResponse(
             status_code=404,
             content=resp_500(code=404, message=SDK_MISSING_MESSAGE).model_dump(),
         )
-
-    href = f"../../sdk/download/{snapshot.sdk.filename}"
-    if snapshot.sdk.sha256:
-        href = f"{href}#sha256={snapshot.sdk.sha256}"
-    return _simple_index_html(
-        SDK_PROJECT_NAME,
-        [f'<a href="{href}">{snapshot.sdk.filename}</a>'],
-    )
+    links = []
+    for item in available:
+        href = f"../../sdk/download/{item.filename}"
+        if item.sha256:
+            href = f"{href}#sha256={item.sha256}"
+        links.append(f'<a href="{href}">{item.filename}</a>')
+    return _simple_index_html(SDK_PROJECT_NAME, links)
 
 
 @router.get("/sdk-guide.md")
@@ -358,3 +362,21 @@ def download_skill_pack(pack: str):
     if archive.version:
         headers[PACK_VERSION_HEADER] = archive.version
     return Response(content=archive.content, media_type="application/gzip", headers=headers)
+
+
+def _workbench_guide_response(language: str):
+    content = artifact_service.read_workbench_guide(language)
+    if content is None:
+        return JSONResponse(status_code=404, content={"message": "Workbench guide is not included in this deployment"})
+    return Response(content=content, media_type="text/markdown; charset=utf-8", headers={"Cache-Control": "no-cache"})
+
+
+@router.get("/workbench-guide.md")
+def get_workbench_guide():
+    """Public instructions only; no user identity, credentials or business data."""
+    return _workbench_guide_response("zh")
+
+
+@router.get("/workbench-guide-en.md")
+def get_workbench_guide_en():
+    return _workbench_guide_response("en")

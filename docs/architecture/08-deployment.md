@@ -37,9 +37,11 @@ bisheng-milvus-standalone
   └── depends_on: minio
 ```
 
-### 附加 Compose 文件
+### 可选服务
 
-除主编排文件外，项目还提供三个可选编排文件，按需独立启动：
+模型微调 `bisheng-ft` 已恢复为主编排文件的 `ft` profile（默认关闭），通过 `bash docker/install.sh --ft` 启用。沿用 `ft_server` 服务名、NVIDIA GPU 预留和旧版模型/训练输出挂载路径；配置及平台服务登记见 [部署说明](../../docker/README.md#模型微调-bisheng-ft可选)。
+
+附加 Compose 文件：
 
 | 文件 | 容器名 | 镜像 | 端口 | 用途 |
 |------|--------|------|------|------|
@@ -152,7 +154,6 @@ workflow:
 | `vector_stores` | `VectorStores` | Milvus + Elasticsearch 配置 |
 | `object_storage` | `ObjectStore` | MinIO 对象存储配置 |
 | `celery_task` | `CeleryConf` | Celery 任务路由和定时任务 |
-| `workflow_conf` | `WorkflowConf` | 工作流执行参数（max_steps=50, timeout=720min） |
 | `linsight_conf` | `LinsightConf` | 灵思 Agent 参数（max_steps=200, retry_num=3） |
 | `logger_conf` | `LoggerConf` | 日志级别与处理器 |
 | `password_conf` | `PasswordConf` | 密码策略（有效期、错误锁定） |
@@ -162,6 +163,33 @@ workflow:
 | `mcp` | `McpConf` | MCP 协议配置 |
 | `information_conf` | `IntelligenceCenterConf` | 情报中心配置 |
 | `open_api` | `OpenApiConf` | 开放 API：个人密钥开关、`public_base_url`（对外地址，见下节） |
+
+### 工作流参数的配置入口
+
+工作流参数只读取后台「系统配置」中的 `workflow`，不读取服务器 `config.yaml`。
+例如，在后台系统配置中设置：
+
+```yaml
+workflow:
+  max_steps: 20
+  timeout: 30
+```
+
+`max_steps` 是节点最大运行步数，`timeout` 是等待用户输入的超时时间，单位为分钟。
+新安装和升级补齐缺项使用 `initdb_config.yaml`，随包值为 `max_steps: 50`、`timeout: 5`；
+已经保存的系统配置不会被这些值覆盖。运行时如仍缺少字段，`WorkflowConf` 的类默认值
+（50 步、720 分钟）仅用于本次读取，不会写回系统配置。
+
+旧的 `config.yaml` 中若留有 `workflow_conf`，可以删除；保留时会记录未知字段警告并忽略，
+不会再校验该配置块，也不会影响工作流实际配置或阻止启动。
+
+### 配置文件的未知字段
+
+加载 `config.yaml` 时，未知顶层字段会输出启动警告 `Ignoring unknown top-level config key`，
+随后忽略该字段并继续启动。请根据日志移除旧字段或修正拼写；忽略不代表新功能已启用。
+警告仅包含字段名和文件路径，不输出配置值。合法字段仍执行原有类型校验；YAML 语法错误、
+缺少必需的环境变量或合法字段类型错误仍会报错，不会被当作未知字段跳过。
+本行为只适用于包含此次修复的版本，旧镜像仍可能因未知顶层字段而拒绝启动。
 
 ### 反向代理与对外地址
 
@@ -367,6 +395,21 @@ real-account acceptance are recorded separately.
 - **步骤 4 说明**：需要完整 app context（写技能 bundle）。**不调用 LLM**——技能描述取 SOP 原描述，缺失时用 SOP 名称兜底（技能描述为必填，不会留空）。产出 JSON 迁移摘要（成功/跳过/失败，**运维产物，无管理页报告界面**），失败 / 超大 SOP 项需人工处理（拆分后经管理页重建）。`linsight_sop` 原表保留归档、不删。
 - **幂等**：四步均可安全重跑。步骤 2/3 重复启动是 no-op；步骤 4 借 `metadata.sop-id` 识别已迁移项并覆盖自身 bundle，不会重复产生带后缀的技能。
 - 步骤 4 单租户灰度可加 `--tenant-id <id>`。
+
+### v3.0 · 工作台模型配置升级为「用户可选模型」
+
+从 < v3.0 升级时，旧工作台配置（`linsight_llm`）有两项要带进 3.0 的系统模型设置。两步都在服务启动时自动执行（`main.lifespan`，幂等，失败只记日志、不阻塞启动）；`scripts/backfill_workbench_upgrade.py` 仅用于 dry-run 核对或手动补跑（`--apply` 写入）。
+
+| # | 步骤 | 触发方式 | 不执行的后果 |
+|---|------|---------|-------------|
+| 1 | **日常模式默认模型**：`chat_default_model_id` 缺失或为 null 的配置行，设为模型列表的最后一个（2.x 客户端未选模型时用它，3.0 客户端没有默认值时也回退到它） | ✅ 启动自动 | 后台默认模型显示为空；开启 DSH 时默认模型变成可选列表的第一个，与升级前不一致 |
+| 2 | **用户可选模型可见范围**：每个活跃租户的工作台模型设为「所有成员可见」；每租户只执行一次（审计 `migration:workbench-visibility-v1`），之后管理员的修改不会被覆盖 | ✅ 启动自动 | 开启 DSH 后这些模型对所有人不可见，日常模式和任务模式的模型下拉为空 |
+
+要点：
+
+- 已有任何 `dsh_model_visibility` 记录的租户，启动时跳过步骤 2：这说明管理员已在用 DSH 可见范围，未配置的模型可能是有意关闭的。如果这类租户确实是升级后漏配，运行 `backfill_workbench_upgrade.py --apply --tenant-id <id> --include-configured-tenants`，只补没有记录的模型，已配置的保持原样。
+- 继承 Root 配置的子租户，按继承到的模型列表各自写入本租户的可见范围。
+- 存有旧版 DSH 授权（`dsh_user_policy` / `dsh_subject_policy`）且尚未导入统一积分的租户，步骤 2 会跳过：先运行 `scripts/dsh/migrate_unified_credits.py --apply` 导入旧授权，再运行 `backfill_workbench_upgrade.py --apply` 补齐。
 
 ### v3.0 · 灵思技能 bundle 迁至对象存储
 

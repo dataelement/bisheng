@@ -55,6 +55,8 @@ class EffectiveQuotaItem(BaseModel):
     tenant_used: int | float  # tenant total usage
     user_used: int | float  # user's own usage
     effective: int | float  # min(tenant_remaining, role_quota), -1=unlimited
+    available: int | float = -1
+    usage_state: str = "AVAILABLE"
 
 
 class MenuUpdateRequest(BaseModel):

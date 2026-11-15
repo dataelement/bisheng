@@ -2,6 +2,7 @@
 import {LinsightInfo} from "~/store/linsight";
 import request from "./request";
 import { getShareTokenFromPath } from "~/utils/shareToken";
+import { getClientEnvironment } from "~/utils/clientEnvironment";
 
 // 获取灵思会话信息
 export function getLinsightSessionVersionList(ConversationId: string, shareToken: string): Promise<any> {
@@ -99,8 +100,19 @@ export interface SelectableSkill {
     default_checked?: boolean;
 }
 
+/**
+ * Skills the desktop client's Chat does not offer: the desktop makes PPT in its
+ * local Work mode, which renders and reviews pages, so its Chat hides the server
+ * PPT skill. Picker only — the task runtime still mounts every enabled skill.
+ */
+export const DESKTOP_HIDDEN_SKILLS: ReadonlySet<string> = new Set(['bisheng-pptx']);
+
 export function getSelectableSkills(): Promise<SelectableSkill[]> {
-    return request.get('/api/v1/linsight/skill/selectable').then((res: any) => res?.data || []);
+    return request.get('/api/v1/linsight/skill/selectable').then((res: any) => {
+        const skills: SelectableSkill[] = res?.data || [];
+        if (getClientEnvironment().channel !== 'desktop') return skills;
+        return skills.filter((skill) => !DESKTOP_HIDDEN_SKILLS.has(skill.name));
+    });
 }
 
 /**

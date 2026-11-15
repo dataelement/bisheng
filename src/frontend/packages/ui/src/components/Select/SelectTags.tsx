@@ -15,6 +15,9 @@ const SEARCH_MIN_WIDTH = 24;
  */
 const FIT_SLACK = 2;
 
+/** Selected values inherit the trigger role; measuring copies use the same type. */
+const TAG_TYPE = 'h-auto text-[length:inherit] leading-[inherit]';
+
 /** Rendered width, rounded UP — `offsetWidth` rounds to nearest and under-counts. */
 function widthOf(node: Element | undefined): number {
   return node ? Math.ceil(node.getBoundingClientRect().width) : 0;
@@ -96,7 +99,7 @@ export function SelectTags({ options, disabled, removeLabel, onRemove, search }:
   const renderTag = (option: SelectOption) => (
     <Tag
       size="small"
-      className="max-w-full whitespace-nowrap [&>span:first-child]:truncate"
+      className={`${TAG_TYPE} max-w-full whitespace-nowrap [&>span:first-child]:truncate`}
       closable={!disabled}
       disabled={disabled}
       closeLabel={removeLabel}
@@ -120,7 +123,7 @@ export function SelectTags({ options, disabled, removeLabel, onRemove, search }:
           </span>
         ))}
         <span className="shrink-0">
-          <Tag size="small">+{options.length}</Tag>
+          <Tag size="small" className={TAG_TYPE}>+{options.length}</Tag>
         </span>
       </div>
 
@@ -146,7 +149,7 @@ export function SelectTags({ options, disabled, removeLabel, onRemove, search }:
           }
         >
           <span className="flex shrink-0">
-            <Tag size="small">+{folded.length}</Tag>
+            <Tag size="small" className={TAG_TYPE}>+{folded.length}</Tag>
           </span>
         </Tooltip>
       )}

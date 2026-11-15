@@ -1,0 +1,87 @@
+pageType: cover
+background:
+  type: solid
+  color: '#2E4A2A'
+notes: Native PPTD adaptation of Zara Zhang / Editorial Forest. MIT. Example figures are illustrative.
+elements:
+  - elementId: t1
+    elementType: text
+    bounds:
+      - 48
+      - 34
+      - 800
+      - 24
+    content:
+      text: 经营季刊 / 2026
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 12
+      color: '#EFE7D4'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t2
+    elementType: text
+    bounds:
+      - 48
+      - 122
+      - 790
+      - 300
+    content:
+      text: |-
+        季度
+        经营复盘
+        2026
+      fontFamily:
+        latin: Georgia
+        ea: Noto Serif CJK SC
+        mac: Songti SC
+        win: SimSun
+      fontSize: 78
+      color: '#E89CB1'
+      lineHeight: 1.12
+      bold: false
+  - elementId: l3
+    elementType: line
+    bounds:
+      - 48
+      - 468
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      color: '#EFE7D4'
+      width: 0.7
+  - elementId: t4
+    elementType: text
+    bounds:
+      - 48
+      - 506
+      - 760
+      - 16
+    content:
+      text: 自编示例
+      fontFamily: *ref_0
+      fontSize: 9
+      color: '#EFE7D4'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t5
+    elementType: text
+    bounds:
+      - 870
+      - 503
+      - 40
+      - 20
+    content:
+      text: '01'
+      fontFamily: *ref_0
+      fontSize: 11
+      color: '#EFE7D4'
+      lineHeight: 1.12
+      bold: false

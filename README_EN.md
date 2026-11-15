@@ -1,12 +1,12 @@
-> Crafted in China. Like the teams behind [Deepseek] and [Black Myth: Wukong], we hope to bring more beauty to the world.
+> Crafted in China. Like the teams behind DeepSeek and Black Myth: Wukong, we hope to bring more beauty to the world.
 
-<img src="https://dataelem.com/bs/face.png" alt="Bisheng banner">
+<img src="docs/images/readme/bisheng-banner-en.png" alt="Bisheng banner">
 
 <p align="center">
     <a href="https://dataelem.feishu.cn/wiki/ZxW6wZyAJicX4WkG0NqcWsbynde"><img src="https://img.shields.io/badge/docs-Wiki-brightgreen"></a>
     <img src="https://img.shields.io/github/license/dataelement/bisheng" alt="license"/>
     <img src="https://img.shields.io/docker/pulls/dataelement/bisheng-frontend" alt="docker-pull-count" />
-    <a href=""><img src="https://img.shields.io/github/last-commit/dataelement/bisheng"></a>
+    <a href="https://github.com/dataelement/bisheng/commits"><img src="https://img.shields.io/github/last-commit/dataelement/bisheng"></a>
     <a href="https://star-history.com/#dataelement/bisheng&Timeline"><img src="https://img.shields.io/github/stars/dataelement/bisheng?color=yellow"></a> 
 </p>
 <p align="center">
@@ -21,14 +21,6 @@
 <p align="center">
   <a href="https://trendshift.io/repositories/717" target="_blank"><img src="https://trendshift.io/api/badge/repositories/717" alt="dataelement%2Fbisheng | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 </p>
-<div class="column" align="middle">
-  <!-- <a href="https://bisheng.slack.com/join/shared_invite/"> -->
-    <!-- <img src="https://img.shields.io/badge/Join-Slack-orange" alt="join-slack"/> -->
-  </a>
-  <!-- <img src="https://img.shields.io/github/license/bisheng-io/bisheng" alt="license"/> -->
-  <!-- <img src="https://img.shields.io/docker/pulls/bisheng-io/bisheng" alt="docker-pull-count" /> -->
-</div>
-
 
 BISHENG is an **open-source, all-in-one enterprise Agent platform** focused on office productivity and putting enterprise AI applications to work. It is used by leading organizations across industries and Fortune 500 companies.
 
@@ -40,7 +32,7 @@ Simply put, think of it as an open-source alternative to WorkBuddy / Doubao Work
 
 ![BISHENG web, desktop and mobile interfaces](docs/images/readme/bisheng-platform-overview.png)
 
-[Download BISHENG Desktop](https://dshdesktop.com/zh/enterprise/)
+[Download BISHENG Desktop](https://dshdesktop.com/zh/enterprise/) · [BISHENG Desktop User Guide](https://dataelem.feishu.cn/wiki/BWSMwdc2Ciwif4kfe5HcyGHgn3b#share-QZrMdHGRdokzWixRl6vc30w1n8P)
 
 To customize the client (for example, to replace the logo), you can modify the [open-source client code](https://github.com/dataelement/bisheng-desktop).
 
@@ -53,24 +45,26 @@ To customize the client (for example, to replace the logo), you can modify the [
 1. **🖥️ BISHENG Desktop: connect local work with your enterprise cloud**
 
    - **Two ways to work: Chat and Work**: Chat supports knowledge Q&A and multi-step cloud tasks. Work organizes materials in authorized local directories, generates editable Word, Excel and PowerPoint files, and keeps refining them based on your feedback.
-   - **Enterprise resources authorized by identity**: Use your enterprise account to access approved models, API/MCP tools, skills and knowledge spaces, or open published assistants and workflows in the Application Center. Knowledge retrieval continues to enforce space and file permissions.
+   - **Enterprise resources authorized by identity**: Use your enterprise account to access approved models, API/MCP tools, skills and knowledge spaces, or open published apps in the Application Center. Knowledge retrieval returns only the spaces and file content that the employee has permission to access.
    - **Central model and credit management**: Administrators manage model access, monthly credits and call records. Enterprise model calls in Chat and Work share the current user's credit ledger; users can check their balance and usage.
    - **Central distribution of enterprise extensions**: Administrators import plugins and workbenches centrally. Employees receive them according to enterprise configuration and authorization.
 
-2. **🛠️ Application Workshop: publish Vibe Apps for your team**
+2. **🛠️ Hosted Apps: publish apps your team builds to your colleagues**
 
-   - **Turn business needs into applications**: Build dedicated pages for registration forms, project registers or department dashboards, and let colleagues open them from the Application Center.
-   - **From local development to team use**: Submit an application developed locally or with a Coding Agent. After preflight checks, secret scanning, build and release approval, set its access scope and publish it to the Application Center.
-   - **Reuse platform capabilities**: Applications can reuse platform sign-in and visitor identity, and access models and knowledge resources as needed, reducing duplicate infrastructure. Capabilities and configuration requirements depend on the relevant release documentation.
+   - **Turn business needs into apps**: Build dedicated pages for registration forms, project registers or department dashboards. After an app goes online, employees with access click "Enter App" in the Application Center and use it in a new tab, without signing in again.
+   - **Develop locally, then submit to the platform**: Developers install the bisheng command-line tool, sign in with a service account key, and develop and debug the app locally, optionally with help from a Coding Agent. In the app manifest, the developer declares the runtime, resource tier, and the platform models and knowledge bases the app uses, then submits the app to the platform. The platform runs preflight checks, secret scanning and the build.
+   - **Go online after approval**: Approvers open the Approval Center, review the app's source file tree, preview the app, and then approve or reject it.
+   - **Central management by the app owner**: In Build → Apps, the app owner checks the resource tier, sets the visibility scope, enters third-party secrets, views and edits app data online, and takes the app online, offline or deletes it.
+   - **Reuse platform capabilities**: The platform injects the current visitor's identity into the app, so the app does not need its own sign-in. The app can call platform models and search knowledge bases with the visitor's permissions.
 
-   ![Vibe App release management in BISHENG Application Workshop](docs/images/readme/bisheng-vibe-app.png)
+   ![Release management of a BISHENG Hosted App](docs/images/readme/bisheng-vibe-app.png)
 
 3. **🚀 Task Mode: a general-purpose agent for complex, multi-step work**
-   You give it a goal and, if needed, attach files, knowledge bases, tools and skills. The agent breaks the goal into tasks, runs them step by step, and delivers a report, PPT, Excel or Word file.
+   You give it a goal and, if needed, attach files, knowledge bases, tools and skills. The agent breaks the goal into tasks, runs them step by step, and delivers an HTML, Markdown, PPT, Excel or Word file.
 
    - 🧠 **Task planning + parallel sub-agents**: The main agent builds a task checklist, tracks progress, and gives independent research tasks to sub-agents that run in parallel.
    - 🙋 **Human in the loop**: When the agent needs information that only you have, the task pauses until you answer.
-   - 🧰 **Plug-and-play skills**: Three built-in skill packs (PPT, Excel, Word) work out of the box. You can also import your team's own skills from a local file or from GitHub.
+   - 🧰 **Plug-and-play skills**: Four built-in skill packs (Word, Excel, PPT and HTML report) work out of the box. You can also import your team's own skills from a local file or from GitHub.
    - 📎 **Traceable conclusions**: Reports carry citation markers. Click a marker to open the source and go to the cited passage.
    <p align="center"><img src="docs/images/readme/task-mode.png" alt="task-mode"></p>
 
@@ -97,7 +91,7 @@ To customize the client (for example, to replace the logo), you can modify the [
 
 7. **🏢 Enterprise-grade features: the controls that enterprise AI needs**
 
-   - **Central desktop client management**: Administrators centrally configure the models, skills, API/MCP tools and knowledge spaces available in the client, granting employees access according to enterprise configuration and resource permissions. The enterprise plugin marketplace distributes plugins and workbenches, while monthly credits, call usage and audit records are managed centrally.
+   - **Central desktop client management**: Administrators centrally configure the models, skills, API/MCP tools and knowledge spaces available in BISHENG Desktop, distribute plugins and workbenches through the enterprise plugin marketplace, and manage model access, monthly credits and call records.
    - **Department and user management**: Maintain the organization structure, users and quotas.
    - **Separate feature and resource permissions**: RBAC roles control feature menus and actions. ReBAC controls access to knowledge spaces, folders and individual files, with grants to individuals, departments (including sub-departments) or user groups. Folders and files inherit parent permissions by default and can also be configured independently.
    - **Approvals**: Joining a knowledge space, subscribing to a channel, requesting menu permissions and other actions can require approval. You can customize approval flows and nodes.
@@ -117,38 +111,55 @@ To customize the client (for example, to replace the logo), you can modify the [
    <p align="center"><img src="https://dataelem.com/bs/ocr.png" alt="ocr"></p>
 
 
-## Quick start 
+## Quick start
 
-Please ensure the following conditions are met before installing BISHENG:
-- CPU >= 8 Core
+Before installing BISHENG, ensure the following requirements are met:
+
+- CPU >= 8 cores
 - RAM >= 32 GB
-- Docker 19.03.9+
-- Docker Compose 1.25.1+
-> In addition to installing BISHENG, we will also install the following third-party components by default: ES, Milvus, and Onlyoffice.
+- Docker installed and running
+- Docker Compose (V2 recommended)
+- Bash
 
-Download BISHENG
+The default deployment includes MySQL, Redis, MinIO, OpenFGA, ES, and Milvus, among other components. OnlyOffice is optional and is not started by the base deployment.
+
+Download BISHENG using either of the following methods:
+
 ```bash
 git clone https://github.com/dataelement/bisheng.git
-# Enter the installation directory
-cd bisheng/docker
-
-# If the system does not have the git command, you can download the BISHENG code as a zip file.
-wget https://github.com/dataelement/bisheng/archive/refs/heads/main.zip
-# Unzip and enter the installation directory
-unzip main.zip && cd bisheng-main/docker
+cd bisheng
 ```
-Start BISHENG
+
+If Git is unavailable, download and extract the ZIP archive:
+
 ```bash
-docker compose -f docker-compose.yml -p bisheng up -d
+wget https://github.com/dataelement/bisheng/archive/refs/heads/main.zip
+unzip main.zip
+cd bisheng-main
 ```
-After the startup is complete, access http://IP:3001 in the browser. The login page will appear, proceed with user registration. 
 
-By default, the first registered user will become the system admin. 
+Run the installer from the repository root:
 
-For more installation and deployment issues, refer to:：[Self-hosting](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
+```bash
+bash docker/install.sh
+```
 
-## Acknowledgement 
-This repo benefits from [langchain](https://github.com/langchain-ai/langchain) [langflow](https://github.com/logspace-ai/langflow) [unstructured](https://github.com/Unstructured-IO/unstructured) and [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory) . Thanks for their wonderful works.
+On the first run, the installer creates `docker/.env` from `docker/.env.example`, validates the configuration, logs in to the image registry, pulls images, and starts the services. An existing `.env` is preserved. Run the installer before using `docker compose up`; the Compose configuration requires `.env`. Deployment uses prebuilt images and does not compile the downloaded source code.
+
+Check service status and startup logs:
+
+```bash
+cd docker
+docker compose ps
+docker compose logs -f backend backend_worker
+```
+
+Once the services are ready, open `http://SERVER_IP:3001` in your browser and register a user. By default, the first registered user becomes the system admin. Configure your models afterward.
+
+To enable all features (BISHENG Desktop, Hosted Apps, fine-tuning, and more), see the documentation: [Self-hosting](https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc)
+
+## Acknowledgement
+This repo benefits from [langchain](https://github.com/langchain-ai/langchain), [unstructured](https://github.com/Unstructured-IO/unstructured) and [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory). Thanks for their wonderful works.
 
 <b>Thank you to our contributors：</b>
 
@@ -158,7 +169,7 @@ This repo benefits from [langchain](https://github.com/langchain-ai/langchain) [
 
 
 
-## Community & contact 
+## Community & contact
 Welcome to join our discussion group
 
 <img src="https://www.dataelem.com/nstatic/qrcode.png" alt="Wechat QR Code">

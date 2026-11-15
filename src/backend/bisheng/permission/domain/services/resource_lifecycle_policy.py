@@ -146,8 +146,7 @@ def build_create_plan(
     )
     protected_offset = len(staging)
     staging.extend(
-        replace(delta, phase="STAGE", sequence=protected_offset + index)
-        for index, delta in enumerate(protected_deltas)
+        replace(delta, phase="STAGE", sequence=protected_offset + index) for index, delta in enumerate(protected_deltas)
     )
     enabled = _marker_deltas(
         target,
@@ -252,3 +251,26 @@ def build_delete_plan(
         operator_id=operator_id,
         idempotency_key=idempotency_key,
     )
+
+
+def compile_existing_mode_tuples(mode) -> tuple[ProjectionTupleDelta, ...]:
+    """Pure stored Mode facts; this does not construct a verified target."""
+    if mode.mode not in {"CUSTOM", "INHERIT"} or (mode.parent_type is None) != (mode.parent_id is None):
+        raise InvalidPermissionModeError()
+    result = (
+        *_marker_deltas(mode, relation=f"{mode.mode.lower()}_mode", action="WRITE", phase="STAGE", sequence=0),
+        *_marker_deltas(mode, relation="permission_enabled", action="WRITE", phase="COMMIT", sequence=0),
+    )
+    if mode.parent_type:
+        result = (
+            *result,
+            ProjectionTupleDelta(
+                phase="STAGE",
+                sequence=len(result),
+                action="WRITE",
+                user=f"{mode.parent_type}:{mode.parent_id}",
+                relation="parent",
+                object=f"{mode.resource_type}:{mode.resource_id}",
+            ),
+        )
+    return result

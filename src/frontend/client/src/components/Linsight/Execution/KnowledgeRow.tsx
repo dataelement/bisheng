@@ -3,6 +3,8 @@
  * fig.11). Expanded: hit entries (icon + title) best-effort parsed from
  * extra_info.file_info / output; plain output text as fallback.
  */
+import { ChatErrorCard } from '~/components/ChatErrorCard';
+import { parseFailureInfo } from '~/utils/failureInfo';
 import { Outlined } from 'bisheng-icons';
 import { cn } from '~/utils';
 import { ACCENT, BODY, INK, MUTED } from './execTokens';
@@ -41,6 +43,7 @@ export function KnowledgeRow({ step }: { step: MergedStep }) {
             : <Outlined.BookOpenText size={16} style={{ color: INK }} />;
     return (
         <StepRow icon={icon} title={step.name} running={step.running}>
+            {parseFailureInfo(step.extraInfo?.failure_info) && <ChatErrorCard failureInfo={step.extraInfo?.failure_info} />}
             {step.callReason && <p className={detailTextCls} style={{ color: BODY }}>{step.callReason}</p>}
             {step.params?.query != null && <p className={detailTextCls} style={{ color: BODY }}>{String(step.params.query)}</p>}
             {hits.length > 0 && (

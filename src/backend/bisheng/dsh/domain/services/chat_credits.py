@@ -1,6 +1,7 @@
 """Account for every Chat agent model invocation in the shared Work ledger."""
 
 import asyncio
+from contextvars import ContextVar
 from datetime import UTC, datetime
 from functools import wraps
 from types import SimpleNamespace
@@ -10,6 +11,11 @@ from zoneinfo import ZoneInfo
 
 _runtimes = WeakKeyDictionary()
 
+# Set once a task-mode round has passed its quota check. Calls made inside that
+# round are still admitted and settled in the ledger, but skip the monthly-limit
+# comparison, so an allowance that runs out mid-round never cuts the round off.
+_round_admitted: ContextVar[bool] = ContextVar("dsh_round_admitted", default=False)
+
 
 def governed(model) -> bool:
     from bisheng.common.services.config_service import settings
@@ -17,7 +23,20 @@ def governed(model) -> bool:
     return settings.dsh.enabled and model.app_type in {"daily_chat", "linsight"}
 
 
-async def start(model):
+async def admit_round(model) -> None:
+    """Check the monthly allowance once before a task-mode round starts.
+
+    Runs the same identity, model and quota checks as a per-call admission
+    without writing a ledger request, then marks the current context so the
+    round's calls skip the quota comparison. Raises the same DSH errors.
+    """
+    if not governed(model):
+        return
+    await start(model, mode="probe")
+    _round_admitted.set(True)
+
+
+async def start(model, *, mode: str = ""):
     from bisheng.common.errcode.dsh import (
         DshModelNotAllowedError,
         DshMonthlyTokenLimitExceededError,
@@ -66,7 +85,7 @@ async def start(model):
         started_at=now,
     )
     try:
-        event = await service.usage.check_and_start(event, monthly_token_limit=policy.monthly_token_limit)
+        event = await service.usage.check_and_start(event, monthly_token_limit=policy.monthly_token_limit, mode=mode)
     except QuotaRejected as error:
         if error.reason == "quota_exceeded":
             raise DshMonthlyTokenLimitExceededError() from error
@@ -86,10 +105,16 @@ def observe(execution, result):
 async def finish(state, succeeded: bool):
     service, event, execution = state
     await service.settle_usage(
-        event, execution.usage, "SUCCEEDED" if succeeded else "FAILED",
+        event,
+        execution.usage,
+        "SUCCEEDED" if succeeded else "FAILED",
         None if succeeded else "chat_call_interrupted",
         provider_request_id=execution.provider_request_id,
     )
+
+
+def _call_mode() -> str:
+    return "unmetered" if _round_admitted.get() else ""
 
 
 def account_async(function):
@@ -97,7 +122,7 @@ def account_async(function):
     async def wrapped(model, *args, **kwargs):
         if not governed(model):
             return await function(model, *args, **kwargs)
-        state = await start(model)
+        state = await start(model, mode=_call_mode())
         succeeded = False
         try:
             result = await function(model, *args, **kwargs)
@@ -117,7 +142,8 @@ def account_sync(function):
 
         if not governed(model):
             return function(model, *args, **kwargs)
-        state = run_async_safe(start(model))
+        # Read the round flag here: run_async_safe may run start() on another loop.
+        state = run_async_safe(start(model, mode=_call_mode()))
         succeeded = False
         try:
             result = function(model, *args, **kwargs)
@@ -137,7 +163,7 @@ def account_async_stream(function):
             async for chunk in function(model, *args, **kwargs):
                 yield chunk
             return
-        state = await start(model)
+        state = await start(model, mode=_call_mode())
         succeeded = False
         source = function(model, *args, **kwargs)
         try:
@@ -162,7 +188,7 @@ def account_sync_stream(function):
         if not governed(model):
             yield from function(model, *args, **kwargs)
             return
-        state = run_async_safe(start(model))
+        state = run_async_safe(start(model, mode=_call_mode()))
         succeeded = False
         source = function(model, *args, **kwargs)
         try:

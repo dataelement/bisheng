@@ -12,8 +12,8 @@ export interface ModelProviderNode {
  * Values are stringified so numeric ids from forms and string ids from APIs
  * resolve to the same controlled Cascader path.
  */
-export function toModelCascaderOptions(tree: ModelProviderNode[] | undefined): CascaderOption[] {
-    return (tree ?? []).flatMap((provider) => {
+export function toModelCascaderOptions(tree: ModelProviderNode[] | undefined, saved?: unknown, unavailable = ''): CascaderOption[] {
+    const options: CascaderOption[] = (tree ?? []).flatMap((provider) => {
         if (provider.value == null || provider.value === '') return [];
 
         const children = (provider.children ?? [])
@@ -24,12 +24,18 @@ export function toModelCascaderOptions(tree: ModelProviderNode[] | undefined): C
             ? [{ value: String(provider.value), label: provider.label, children }]
             : [];
     });
+    if (saved != null && saved !== '' && !toModelCascaderValue(saved, tree)) {
+        options.push({ value: `__saved_model__:${saved}`, label: unavailable, disabled: true,
+            children: [{ value: String(saved), label: `${unavailable}: ${saved}`, disabled: true }] });
+    }
+    return options;
 }
 
 /** Resolve a stored leaf id to the full provider/model path required by Cascader. */
 export function toModelCascaderValue(
     value: unknown,
     tree: ModelProviderNode[] | undefined,
+    preserveMissing = false,
 ): CascaderPath | null {
     if (value == null || value === '') return null;
 
@@ -41,7 +47,7 @@ export function toModelCascaderValue(
             return [String(provider.value), modelId];
         }
     }
-    return null;
+    return preserveMissing ? [`__saved_model__:${modelId}`, modelId] : null;
 }
 
 /** The API stores only the selected model id, not the provider path. */
@@ -51,8 +57,8 @@ export function fromModelCascaderValue(path: CascaderPath | null): string | null
 }
 
 /** Flatten a provider tree into Select rows. The provider name is the group title. */
-export function toGroupedModelOptions(tree: ModelProviderNode[] | undefined): SelectOption[] {
-    return (tree ?? []).flatMap((provider) =>
+export function toGroupedModelOptions(tree: ModelProviderNode[] | undefined, saved?: unknown, unavailable = ''): SelectOption[] {
+    const options: SelectOption[] = (tree ?? []).flatMap((provider) =>
         (provider.children ?? [])
             .filter((model) => model.value != null && model.value !== '')
             .map((model) => ({
@@ -61,6 +67,10 @@ export function toGroupedModelOptions(tree: ModelProviderNode[] | undefined): Se
                 group: provider.label,
             })),
     );
+    if (saved != null && saved !== '' && !options.some(option => option.value === String(saved))) {
+        options.push({ value: String(saved), label: `${unavailable}: ${saved}`, disabled: true });
+    }
+    return options;
 }
 
 /** Select values are strings. Empty stored ids stay unselected. */

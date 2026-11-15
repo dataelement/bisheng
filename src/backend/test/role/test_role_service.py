@@ -4,11 +4,34 @@ Covers AC-01~AC-12: role CRUD, scope filtering, builtin protection,
 menu permissions, permission checks.
 """
 
-from contextlib import asynccontextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+from bisheng.role.domain.repositories.role_definition_repository import RoleDefinitionRepository
+
+
+@pytest.fixture(autouse=True)
+def definition_store(monkeypatch):
+    """Service tests isolate persistence; real transactions are covered by F009 ORM tests."""
+
+    async def create(role, menu_ids=None):
+        return role
+
+    async def update(role, changes, menu_ids=None, *, operator_id=None):
+        for name, value in changes.items():
+            setattr(role, name, value)
+        return role
+
+    store = MagicMock()
+    store.create = AsyncMock(side_effect=create)
+    store.update = AsyncMock(side_effect=update)
+    store.delete = AsyncMock()
+    store.menu = AsyncMock(return_value=[])
+    for name in ("create", "update", "delete", "menu"):
+        monkeypatch.setattr(RoleDefinitionRepository, name, getattr(store, name))
+    return store
 
 
 @pytest.fixture
@@ -589,7 +612,7 @@ class TestDeleteRole:
             await RoleService.delete_role(role_id=15, login_user=mock_admin_user)
 
         mock_sync.assert_awaited_once_with(15)
-        mock_dao.adelete_role.assert_called_once_with(15)
+        RoleDefinitionRepository.delete.assert_awaited_once_with(role, operator_id=mock_admin_user.user_id)
 
     @pytest.mark.asyncio
     async def test_tenant_admin_can_delete_tenant_role_created_by_other_admin(self, mock_tenant_admin):
@@ -613,7 +636,7 @@ class TestDeleteRole:
             await RoleService.delete_role(role_id=15, login_user=mock_tenant_admin)
 
         mock_sync.assert_awaited_once_with(15)
-        mock_dao.adelete_role.assert_awaited_once_with(15)
+        RoleDefinitionRepository.delete.assert_awaited_once_with(role, operator_id=mock_tenant_admin.user_id)
 
 
 class TestCreatorResolution:
@@ -724,11 +747,8 @@ class TestUpdateRole:
                 login_user=mock_admin_user,
             )
 
-        mock_dao.aget_role_by_name.assert_awaited_once_with(
-            tenant_id=mock_admin_user.tenant_id,
-            role_type="tenant",
-            role_name="New Name",
-            department_id=8,
+        RoleDefinitionRepository.update.assert_awaited_once_with(
+            role, {"role_name": "New Name", "department_id": 8}, operator_id=mock_admin_user.user_id
         )
 
     @pytest.mark.asyncio
@@ -754,11 +774,8 @@ class TestUpdateRole:
                 login_user=mock_admin_user,
             )
 
-        mock_dao.aget_role_by_name.assert_awaited_once_with(
-            tenant_id=mock_admin_user.tenant_id,
-            role_type="tenant",
-            role_name="Global Name",
-            department_id=None,
+        RoleDefinitionRepository.update.assert_awaited_once_with(
+            role, {"role_name": "Global Name", "department_id": None}, operator_id=mock_admin_user.user_id
         )
         assert role.department_id is None
 
@@ -829,7 +846,9 @@ class TestUpdateRole:
                 login_user=mock_tenant_admin,
             )
 
-        mock_dao.update_role.assert_awaited_once_with(role)
+        RoleDefinitionRepository.update.assert_awaited_once_with(
+            role, {"remark": "attempt"}, operator_id=mock_tenant_admin.user_id
+        )
 
     @pytest.mark.asyncio
     async def test_tenant_admin_can_update_missing_creator_legacy_role(self, mock_tenant_admin):
@@ -854,176 +873,58 @@ class TestUpdateRole:
                 login_user=mock_tenant_admin,
             )
 
-        mock_dao.update_role.assert_awaited_once_with(role)
+        RoleDefinitionRepository.update.assert_awaited_once_with(
+            role, {"remark": "attempt"}, operator_id=mock_tenant_admin.user_id
+        )
 
 
 class TestMenuPermissions:
-    """AC-11, AC-12."""
+    """The service normalizes menus and delegates one owner transaction."""
 
-    @pytest.mark.asyncio
-    async def test_update_menu(self, mock_admin_user):
-        """AC-11: Update role menu permissions."""
-        from bisheng.role.domain.services.role_service import RoleService
-
-        role = _make_role(15, "Test", role_type="tenant")
-        db_now = object()
-        session = MagicMock()
-        exec_result = MagicMock()
-        exec_result.first.return_value = role
-        session.exec = AsyncMock(return_value=exec_result)
-        session.commit = AsyncMock()
-        session.refresh = AsyncMock()
-
-        @asynccontextmanager
-        async def fake_session():
-            yield session
-
-        with (
-            patch("bisheng.role.domain.services.role_service.RoleDao") as mock_role_dao,
-            patch("bisheng.role.domain.services.role_service.func") as mock_func,
-            patch("bisheng.role.domain.services.role_service.select") as mock_select,
-            patch("bisheng.role.domain.services.role_service.get_async_db_session", fake_session),
-            patch.object(RoleService, "_replace_menu_access_in_session", new_callable=AsyncMock) as mock_replace,
-        ):
-            mock_role_dao.aget_role_by_id = AsyncMock(return_value=role)
-            mock_func.now.return_value = db_now
-            mock_select.return_value.where.return_value = MagicMock()
-
-            await RoleService.update_menu(
-                role_id=15,
-                menu_ids=["workstation", "build", "knowledge"],
-                login_user=mock_admin_user,
-            )
-
-        mock_replace.assert_called_once()
-        mock_func.now.assert_called_once_with()
-        assert role.update_time is db_now
-        session.add.assert_called_once_with(role)
-        session.commit.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_update_role_with_menu_touches_role_timestamp_for_menu_only_edits(self, mock_admin_user):
+    @pytest.mark.parametrize("entry", ["update_menu", "update_role_with_menu"])
+    async def test_menu_save_uses_definition_transaction(self, mock_admin_user, entry):
         from bisheng.role.domain.schemas.role_schema import RoleUpdateRequest
         from bisheng.role.domain.services.role_service import RoleService
 
-        role = _make_role(16, "Menu Only", role_type="tenant")
-        req = RoleUpdateRequest(menu_ids=["workstation", "knowledge"])
-        db_now = object()
-
-        session = MagicMock()
-        exec_result = MagicMock()
-        exec_result.first.return_value = role
-        session.exec = AsyncMock(return_value=exec_result)
-        session.commit = AsyncMock()
-        session.refresh = AsyncMock()
-
-        @asynccontextmanager
-        async def fake_session():
-            yield session
-
+        role = _make_role(15, "Test")
         with (
-            patch("bisheng.role.domain.services.role_service.RoleDao") as mock_role_dao,
-            patch("bisheng.role.domain.services.role_service.func") as mock_func,
-            patch("bisheng.role.domain.services.role_service.select") as mock_select,
-            patch("bisheng.role.domain.services.role_service.get_async_db_session", fake_session),
-            patch("bisheng.role.domain.services.role_service.QuotaService") as mock_qs,
-            patch.object(RoleService, "_replace_menu_access_in_session", new_callable=AsyncMock) as mock_replace,
+            patch.object(RoleService, "_check_role_permission", AsyncMock()),
+            patch.object(RoleService, "_ensure_role_mutation_access", AsyncMock()),
+            patch("bisheng.role.domain.services.role_service.RoleDao.aget_role_by_id", AsyncMock(return_value=role)),
         ):
-            mock_role_dao.aget_role_by_id = AsyncMock(return_value=role)
-            mock_func.now.return_value = db_now
-            mock_select.return_value.where.return_value = MagicMock()
-            mock_qs.validate_quota_config = MagicMock()
+            if entry == "update_menu":
+                await RoleService.update_menu(15, ["build", "build", "system_config"], mock_admin_user)
+                RoleDefinitionRepository.update.assert_awaited_once_with(role, {}, ["build"])
+            else:
+                await RoleService.update_role_with_menu(
+                    15, RoleUpdateRequest(menu_ids=["build", "build"]), mock_admin_user
+                )
+                RoleDefinitionRepository.update.assert_awaited_once_with(role, {}, ["build"], operator_id=1)
 
-            await RoleService.update_role_with_menu(
-                role_id=16,
-                req=req,
-                login_user=mock_admin_user,
-            )
-
-        mock_replace.assert_awaited_once()
-        mock_func.now.assert_called_once_with()
-        assert role.update_time is db_now
-        session.add.assert_called_once_with(role)
-        session.commit.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_get_menu(self, mock_admin_user):
-        """AC-12: Get role menu permissions."""
+    async def test_get_menu(self, mock_admin_user, definition_store):
         from bisheng.role.domain.services.role_service import RoleService
 
-        role = _make_role(15, "Test", role_type="tenant")
-        menu_records = [MagicMock(third_id="workstation"), MagicMock(third_id="build")]
-
+        role = _make_role(15)
+        definition_store.menu.return_value = [MagicMock(third_id="build"), MagicMock(third_id="system_config")]
         with (
-            patch("bisheng.role.domain.services.role_service.RoleDao") as mock_role_dao,
-            patch("bisheng.role.domain.services.role_service.RoleAccessDao") as mock_ra_dao,
+            patch.object(RoleService, "_check_role_permission", AsyncMock()),
+            patch.object(RoleService, "_ensure_role_scope_access", AsyncMock()),
+            patch("bisheng.role.domain.services.role_service.RoleDao.aget_role_by_id", AsyncMock(return_value=role)),
         ):
-            mock_role_dao.aget_role_by_id = AsyncMock(return_value=role)
-            mock_ra_dao.aget_role_access = AsyncMock(return_value=menu_records)
+            assert await RoleService.get_menu(15, mock_admin_user) == ["build"]
+        definition_store.menu.assert_awaited_once_with(role)
 
-            result = await RoleService.get_menu(role_id=15, login_user=mock_admin_user)
-
-        assert result == ["workstation", "build"]
-
-    @pytest.mark.asyncio
     async def test_dept_admin_cannot_update_menu_outside_subtree(self, mock_dept_admin):
         from bisheng.common.errcode.role import RolePermissionDeniedError
         from bisheng.role.domain.services.role_service import RoleService
 
-        role = _make_role(22, "Tenant Role", role_type="tenant", department_id=99)
-
+        role = _make_role(22, department_id=99)
         with (
-            patch("bisheng.role.domain.services.role_service.RoleDao") as mock_role_dao,
-            patch.object(RoleService, "_check_role_permission", new_callable=AsyncMock),
-            patch.object(RoleService, "_get_permission_level", new_callable=AsyncMock, return_value="dept_admin"),
-            patch.object(RoleService, "_get_dept_subtree_ids", new_callable=AsyncMock, return_value=[5, 6]),
+            patch.object(RoleService, "_check_role_permission", AsyncMock()),
+            patch.object(RoleService, "_get_permission_level", AsyncMock(return_value="dept_admin")),
+            patch.object(RoleService, "_get_dept_subtree_ids", AsyncMock(return_value=[5, 6])),
+            patch("bisheng.role.domain.services.role_service.RoleDao.aget_role_by_id", AsyncMock(return_value=role)),
         ):
-            mock_role_dao.aget_role_by_id = AsyncMock(return_value=role)
-
             with pytest.raises(RolePermissionDeniedError):
-                await RoleService.update_menu(
-                    role_id=22,
-                    menu_ids=["workstation"],
-                    login_user=mock_dept_admin,
-                )
-
-    @pytest.mark.asyncio
-    async def test_update_role_with_menu_touches_update_time_on_menu_only_edit(self, mock_admin_user):
-        from bisheng.role.domain.schemas.role_schema import RoleUpdateRequest
-        from bisheng.role.domain.services.role_service import RoleService
-
-        role = _make_role(25, "Menu Only", role_type="tenant")
-        req = RoleUpdateRequest(menu_ids=["workstation", "knowledge"])
-        session = MagicMock()
-        exec_result = MagicMock()
-        exec_result.first.return_value = role
-        session.exec = AsyncMock(return_value=exec_result)
-        session.commit = AsyncMock()
-        session.refresh = AsyncMock()
-
-        @asynccontextmanager
-        async def fake_session():
-            yield session
-
-        with (
-            patch("bisheng.role.domain.services.role_service.RoleDao") as mock_role_dao,
-            patch.object(RoleService, "_check_role_permission", new_callable=AsyncMock),
-            patch.object(RoleService, "_ensure_role_mutation_access", new_callable=AsyncMock),
-            patch("bisheng.role.domain.services.role_service.select") as mock_select,
-            patch("bisheng.role.domain.services.role_service.get_async_db_session", fake_session),
-            patch.object(RoleService, "_replace_menu_access_in_session", new_callable=AsyncMock) as mock_replace,
-        ):
-            mock_role_dao.aget_role_by_id = AsyncMock(return_value=role)
-            mock_select.return_value.where.return_value = MagicMock()
-
-            result = await RoleService.update_role_with_menu(
-                role_id=25,
-                req=req,
-                login_user=mock_admin_user,
-            )
-
-        assert result is role
-        assert role.update_time is not None
-        session.add.assert_called_once_with(role)
-        mock_replace.assert_called_once()
-        session.commit.assert_awaited_once()
+                await RoleService.update_menu(22, ["build"], mock_dept_admin)
+        RoleDefinitionRepository.update.assert_not_awaited()

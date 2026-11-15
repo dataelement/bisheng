@@ -145,6 +145,15 @@ export type AuditConversation = {
   updated_at: string;
   request_count: number;
   abnormal_count: number;
+  like_count?: number;
+  dislike_count?: number;
+};
+export type AuditMessageFeedback = {
+  message_id?: string;
+  rating?: string;
+  category?: string | null;
+  note?: string | null;
+  event_seq?: number;
 };
 export type AuditGroupPage = {
   items: AuditConversation[];
@@ -187,6 +196,7 @@ export type AuditTreePage = Omit<AuditGroupPage, "items"> & {
 export type ModelAuditPage = {
   items: ModelAuditRecord[];
   next_cursor: string | null;
+  message_feedback?: AuditMessageFeedback[];
   progress: {
     last_write_at: string | null;
     coverage: string;

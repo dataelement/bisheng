@@ -1,0 +1,41 @@
+@keyframes scatter-outward {
+  from {
+    transform: translateX(var(--scatter-x));
+  }
+
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes scatter-arc {
+  from {
+    animation-timing-function: cubic-bezier(0.22, 0.7, 0.45, 1);
+    opacity: 0;
+    transform: translateY(var(--scatter-y)) rotate(calc(-0.5 * var(--scatter-turn)));
+  }
+
+  42% {
+    animation-timing-function: cubic-bezier(0.4, 0, 0.35, 1);
+    opacity: 1;
+    transform: translateY(var(--scatter-crest-y)) rotate(var(--scatter-turn));
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) rotate(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Independent horizontal and vertical motion keeps the crest smooth. */
+  .scatterArtwork .artworkFlight {
+    --scatter-duration: 460ms;
+    animation: scatter-outward var(--scatter-duration) cubic-bezier(0.3, 0.45, 0.55, 1) var(--scatter-delay) backwards;
+  }
+
+  .scatterArtwork .artworkIcon {
+    transform-origin: 0 0;
+    animation: scatter-arc var(--scatter-duration) linear var(--scatter-delay) backwards;
+  }
+}

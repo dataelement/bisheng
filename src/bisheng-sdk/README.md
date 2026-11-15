@@ -6,9 +6,9 @@
 ```python
 from bisheng_sdk import auth, retrieve, storage
 
-user = auth.current_user()                      # 当前访问者；无注入身份即抛错
+user = auth.current_user()  # 当前访问者；无注入身份即抛错
 hits = retrieve.search("年假怎么休", knowledge_base_ids=[12])  # 以该访问者的身份检索
-meta = storage.put("报告/2026.pdf", data)        # 存进本应用的附件空间
+meta = storage.put("报告/2026.pdf", data)  # 存进本应用的附件空间
 ```
 
 ## 安装

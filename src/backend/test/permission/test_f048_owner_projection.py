@@ -444,7 +444,7 @@ async def test_system_owned_requires_code_allowlist_and_business_predicate() -> 
             system_owned=True,
             system_predicate=True,
         ),
-        system_action_codes=("visible", "use"),
+        system_action_codes=("visible",),
         target=VerifiedPermissionTarget.from_business_service(
             tenant_id=5,
             resource_type="tool",
@@ -455,7 +455,15 @@ async def test_system_owned_requires_code_allowlist_and_business_predicate() -> 
     )
 
     sources = GrantSourceService()
-    public_model = GrantModelSnapshot(model_key="viewer", active=True, action_codes=("use",), derived_level=1)
+    public_model = GrantModelSnapshot(
+        model_key="viewer",
+        active=True,
+        action_codes=(),
+        derived_level=1,
+        visibility_only_resource_types=("tool",),
+        visibility_level=1,
+        visibility_only=True,
+    )
     public_grant = GrantSnapshot(
         grant_id="public-tool",
         tenant_id=5,

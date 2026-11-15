@@ -113,9 +113,8 @@ export function panelClass(radius: PanelRadius, className?: string): string {
 }
 
 /**
- * §5.2 / §7.2 — one 32px row: 14/22 text (the PRIMITIVE scale — the semantic
- * body size remaps to 16 under 768px for reading text, which a control must
- * not follow), 6px side padding, gray `fill-2` for both hover and the keyboard
+ * §5.2 / §7.2 — one 32px row: compact-control text, independent of reading
+ * and field sizes, 6px side padding, gray `fill-2` for both hover and the keyboard
  * highlight (the same look on purpose), disabled in `text-4` with the "not
  * allowed" cursor. A one-line description makes the row grow: 5px top/bottom.
  *
@@ -125,7 +124,7 @@ export function panelClass(radius: PanelRadius, className?: string): string {
 export function optionClass(radius: PanelRadius, className?: string): string {
   return cn(
     'relative flex min-h-8 w-full cursor-pointer select-none items-center gap-2 px-1.5 py-[5px]',
-    'text-[length:var(--font-size-3)] leading-[var(--line-height-3)] text-text-1 outline-none transition-colors',
+    'text-control text-text-1 outline-none transition-colors',
     'data-[highlighted]:bg-fill-2',
     'data-[disabled]:cursor-not-allowed data-[disabled]:text-text-4 data-[disabled]:data-[highlighted]:bg-transparent',
     OPTION_RADIUS_CLASS[radius],
@@ -138,7 +137,7 @@ export const OPTION_ICON = 'flex size-4 shrink-0 items-center justify-center [&>
 
 /** §5.2 — the one-line description under a label: 12/20 hint gray, 2px below. */
 export const OPTION_DESCRIPTION =
-  'mt-0.5 truncate text-[length:var(--font-size-1)] leading-[var(--line-height-1)] text-text-3';
+  'mt-0.5 truncate text-caption text-text-3';
 
 /** §7.2 — the selected check: 16px, brand, at the right end of the row. */
 export const OPTION_CHECK = 'ml-auto size-4 shrink-0 text-blue-500';
@@ -148,7 +147,7 @@ export const OPTION_CHECK = 'ml-auto size-4 shrink-0 text-blue-500';
  * follows other rows gets 8px more above it, so each group visibly starts a new block.
  */
 export const GROUP_LABEL =
-  'select-none px-1.5 py-1 text-[length:var(--font-size-1)] leading-[var(--line-height-1)] text-text-3 [&:not(:first-child)]:mt-2';
+  'select-none px-1.5 py-1 text-caption text-text-3 [&:not(:first-child)]:mt-2';
 
 /**
  * §5.3 — 1px `border-base`, as wide as the rows: it sits inside the panel's
@@ -162,4 +161,4 @@ export const SEPARATOR = 'h-px bg-border-base';
  * illustration: a temporary overlay is not a card.
  */
 export const PANEL_MESSAGE =
-  'flex items-center justify-center gap-2 py-4 text-[length:var(--font-size-3)] leading-[var(--line-height-3)] text-text-3';
+  'flex items-center justify-center gap-2 py-4 text-control text-text-3';

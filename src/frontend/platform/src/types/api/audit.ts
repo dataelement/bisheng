@@ -29,6 +29,37 @@ export interface AuditRow {
     tenant_name?: string | null
     operator_kind?: 'service_account' | null
     operator_key_mask?: string | null
+    // F003 organisation snapshot: null = not recorded, 0 = no department,
+    // -1 = not applicable, > 0 = department id with its name path.
+    operator_dept_id?: number | null
+    operator_dept_path?: string | null
+}
+
+/** One department of the audit organisation picker (`/api/v1/audit/departments`). */
+export interface AuditDeptNode {
+    id: number
+    dept_id: string
+    external_id: string | null
+    name: string
+    path_name: string
+    parent_id: number | null
+    tenant_id: number
+    has_children: boolean
+}
+
+export interface AuditDeptCandidates {
+    active: AuditDeptNode[]
+    archived: AuditDeptNode[]
+    show_none: boolean
+    show_unrecorded: boolean
+}
+
+/** What the organisation panel hands to a page's draft filters. */
+export interface OrgSelection {
+    deptIds: number[]
+    includeDescendants: boolean
+    includeNone: boolean
+    includeUnrecorded: boolean
 }
 
 /** One option of the object-application selector (`/api/v1/audit/apps`). */

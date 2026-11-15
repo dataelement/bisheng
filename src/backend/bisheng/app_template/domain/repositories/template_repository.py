@@ -45,7 +45,7 @@ class TemplateRepository:
                 if flow_type == 5:
                     stmt = select(Assistant).where(Assistant.id == source_id, Assistant.is_delete == 0)
                 else:
-                    stmt = select(Flow).where(Flow.id == source_id, Flow.flow_type == 10)
+                    stmt = select(Flow).where(Flow.is_delete == 0).where(Flow.id == source_id, Flow.flow_type == 10)
                 row = (await session.exec(stmt)).first()
                 return row.model_dump() if row else None
 

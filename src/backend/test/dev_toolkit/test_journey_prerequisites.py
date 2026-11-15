@@ -60,7 +60,8 @@ class TestJourneyStepsTheSkillPackTeaches:
         # The keys that do *not* exist matter as much: the manifest rejects
         # unknown fields outright, so an agent inventing `command:` gets 16221
         # rather than a default.
-        assert "没有 `health` / `command` / `entry` / `start` 这些字段" in skill_text
+        assert "顶层没有 `health` / `command` / `entry` / `start` 字段" in skill_text
+        assert "delivery.startup.command" in skill_text
 
     def test_step_three_deploy(self, skill_text):
         assert "bisheng deploy ." in skill_text

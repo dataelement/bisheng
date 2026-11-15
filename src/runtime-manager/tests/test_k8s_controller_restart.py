@@ -141,7 +141,11 @@ def test_held_controller_never_claims_operation_or_fails_existing_install_and_ne
     assert case.platform.resource(case.reference)["uid"] == case.uid
     assert saved["result"]["prepare_progress"]["inputs"] == before[2]["result"]["prepare_progress"]["inputs"]
     assert saved["result"]["prepare_progress"]["resolve"] == before[2]["result"]["prepare_progress"]["resolve"]
-    assert len([event for event in case.events if event[:2] == ("create", "pods")]) == 4
+    assert len([event for event in case.events if event[:2] == ("create", "pods")]) == 5
+    assert (
+        len([row for row in case.platform.rows.values() if row["kind"] == "Pod" and row["purpose"] == "image-check"])
+        == 1
+    )
     assert case.claims == [case.op["operation_id"]]
 
 

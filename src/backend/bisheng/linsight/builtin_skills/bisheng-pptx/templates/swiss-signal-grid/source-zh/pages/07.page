@@ -1,0 +1,194 @@
+pageType: comparison
+background:
+  type: solid
+  color: $paper
+elements:
+  - elementId: model-index-field
+    elementType: shape
+    bounds:
+      - 0
+      - 0
+      - 52
+      - 540
+    shapeName: rect
+    fill:
+      type: solid
+      color: $black
+    border:
+      color: $black
+      width: 0
+  - elementId: model-red-tab
+    elementType: shape
+    bounds:
+      - 52
+      - 424
+      - 10
+      - 116
+    shapeName: rect
+    fill:
+      type: solid
+      color: $red
+    border:
+      color: $red
+      width: 0
+  - elementId: model-rule-top
+    elementType: line
+    bounds:
+      - 80
+      - 42
+      - 808
+      - 1
+    viewBox:
+      - 808
+      - 1
+    points: 0,0 808,0
+    border:
+      color: $black
+      width: 1.2
+  - elementId: model-table
+    elementType: table
+    bounds:
+      - 80
+      - 168
+      - 808
+      - 288
+    style: $swiss-matrix
+    columnWidths:
+      - 0.18
+      - 0.27
+      - 0.27
+      - 0.28
+    rowHeights:
+      - 0.14
+      - 0.14
+      - 0.14
+      - 0.14
+      - 0.14
+      - 0.15
+      - 0.15
+    rows:
+      - - text: 经营维度
+        - text: 平台型
+        - text: 独立站
+        - text: 本地履约
+      - - text: 获客
+        - text: 平台流量 / 快
+        - text: 自主投放 / 可积累
+        - text: 本地渠道 / 更深
+      - - text: 用户资产
+        - text: 弱
+        - text: 强
+        - text: 强 + 服务触点
+      - - text: 交付时效
+        - text: 受平台方案约束
+        - text: 由仓网能力决定
+        - text: 本地承诺更稳定
+      - - text: 库存风险
+        - text: 相对轻
+        - text: 中等
+        - text: 前置备货 / 更高
+      - - text: 合规与售后
+        - text: 平台规则驱动
+        - text: 企业自主承担
+        - text: 当地责任更完整
+      - - text: 适合目标
+        - text: 验证需求 / 提周转
+        - text: 建品牌 / 沉淀用户
+        - text: 提体验 / 做长期经营
+  - elementId: model-index
+    elementType: text
+    bounds:
+      - 10
+      - 426
+      - 32
+      - 84
+    rotation: 270
+    content:
+      text: 07 / MODEL
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 9
+      bold: true
+      letterSpacing: 1.2
+      color: $white
+      align:
+        - center
+        - middle
+  - elementId: model-kicker
+    elementType: text
+    bounds:
+      - 80
+      - 54
+      - 500
+      - 18
+    content:
+      text: OPERATING MODEL / CONTROL VS. COMMITMENT
+      fontFamily: *ref_0
+      fontSize: 9
+      bold: true
+      letterSpacing: 1.2
+      color: $red
+  - elementId: model-title
+    elementType: text
+    bounds:
+      - 80
+      - 78
+      - 808
+      - 42
+    content:
+      style: $title
+      text: 三条链路不是替代关系，而是控制权与投入深度的递进
+  - elementId: model-lead
+    elementType: text
+    bounds:
+      - 80
+      - 126
+      - 808
+      - 24
+    content:
+      style: $lead
+      text: 平台验证速度，独立站沉淀用户，本地履约兑现长期体验
+  - elementId: model-decision
+    elementType: text
+    bounds:
+      - 80
+      - 474
+      - 808
+      - 26
+    content:
+      text: 组合策略｜先用平台验证需求，再把复购用户与高价值 SKU 迁移到自主渠道和本地履约。
+      fontFamily: *ref_0
+      fontSize: 13.5
+      bold: true
+      color: $red
+  - elementId: model-source
+    elementType: text
+    bounds:
+      - 80
+      - 512
+      - 720
+      - 12
+    content:
+      text: 管理层研判：基于三类经营模式在流量、用户资产、履约、库存与合规责任上的差异。
+      fontFamily: *ref_0
+      fontSize: 8.2
+      color: $gray
+  - elementId: model-page
+    elementType: text
+    bounds:
+      - 856
+      - 510
+      - 32
+      - 12
+    content:
+      text: '07'
+      fontFamily: *ref_0
+      fontSize: 9
+      bold: true
+      color: $black
+      align:
+        - right
+        - bottom

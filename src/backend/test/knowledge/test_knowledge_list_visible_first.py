@@ -12,19 +12,18 @@ These tests cover the three branches added to
   * every returned row carries only the already-proven ``visible`` marker;
   * empty visible set → an empty page is returned without hitting the DB.
 
-Plus a handler-level check that ``type=3`` (SPACE) is rejected with the new
-``KnowledgeSpaceListNotSupportedError``.
+Plus a handler-level check that explicit ``type=3`` uses the bounded SPACE facade
+and retains its actual public type.
 """
 
 from __future__ import annotations
 
 from datetime import datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from bisheng.common.errcode.knowledge import KnowledgeSpaceListNotSupportedError
 from bisheng.knowledge.domain.models.knowledge import (
     Knowledge,
     KnowledgeState,
@@ -96,7 +95,7 @@ def _stub_enrichment(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_regular_user_threads_visible_ids_into_dao_and_runs_use_check(
+async def test_regular_user_threads_visible_ids_into_dao_and_runs_edit_check(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _stub_enrichment(monkeypatch)
@@ -111,7 +110,7 @@ async def test_regular_user_threads_visible_ids_into_dao_and_runs_use_check(
     async def _fake_aget_all_knowledge(*args, **kwargs):
         dao_calls.append(kwargs)
         # First (and only) call returns two rows — the second is dropped because
-        # the per-batch ``use`` check filters it out.
+        # the per-batch ``edit`` check filters it out.
         return [_knowledge(100), _knowledge(101)]
 
     monkeypatch.setattr(ks_mod.KnowledgeDao, "aget_all_knowledge", _fake_aget_all_knowledge)
@@ -120,8 +119,8 @@ async def test_regular_user_threads_visible_ids_into_dao_and_runs_use_check(
 
     async def _fake_action_map(login_user, ids, actions):
         action_map_calls.append(list(actions))
-        # Only id=100 has ``use``; id=101 is visible but not use-able.
-        return {100: {"use", "visible"}, 101: {"visible"}}
+        # Only id=100 has ``edit``; id=101 is visible but not editable.
+        return {100: {"edit", "visible"}, 101: {"visible"}}
 
     with patch.object(
         KnowledgeService.permission_service,
@@ -133,7 +132,7 @@ async def test_regular_user_threads_visible_ids_into_dao_and_runs_use_check(
             login_user=_User(),
             knowledge_type=KnowledgeTypeEnum.NORMAL,
             page_size=10,
-            action="use",
+            action="edit",
         )
 
     # visible enumeration was asked for the library type at the shared cap.
@@ -146,11 +145,11 @@ async def test_regular_user_threads_visible_ids_into_dao_and_runs_use_check(
     assert dao_calls, "DAO must be called for a non-empty visible set"
     assert dao_calls[0]["id_in"] == [100, 101, 102]
 
-    # Only the requested ``use`` filter is checked. The surviving page is not
+    # Only the requested ``edit`` filter is checked. The surviving page is not
     # decorated with unrelated actions.
-    assert action_map_calls == [["use"]]
+    assert action_map_calls == [["edit"]]
 
-    # Only id=100 survived the ``use`` check; the row is decorated from the
+    # Only id=100 survived the ``edit`` check; the row is decorated from the
     # already-proven visible marker.
     assert [row.id for row in page.data] == [100]
     assert page.data[0].actions == ["visible"]
@@ -288,26 +287,37 @@ async def test_admin_bypass_skips_permission_runtime_and_returns_visible_only(
 
 
 @pytest.mark.asyncio
-async def test_handler_rejects_knowledge_space_type() -> None:
-    """`/api/v1/knowledge` does not serve knowledge spaces regardless of role.
-
-    The handler raises ``KnowledgeSpaceListNotSupportedError`` before any
-    service work runs — a super admin previously received the full SPACE set
-    because the resource-type mismatch was only detected inside F048 target
-    resolution, which super_admin bypassed.
-    """
+async def test_handler_dispatches_explicit_space_to_typed_bounded_facade(monkeypatch) -> None:
     from bisheng.knowledge.api.endpoints import knowledge as endpoint
+    from bisheng.knowledge.application.legacy_documents import LegacyDocumentsApplication
 
-    with pytest.raises(Exception) as excinfo:
-        await endpoint.get_knowledge(
-            request=None,
-            login_user=MagicMock(),
-            action="visible",
-            name=None,
-            knowledge_type=KnowledgeTypeEnum.SPACE.value,
-            sort_by="update_time",
-            preferred_ids=None,
-            page_size=10,
-            cursor=None,
-        )
-    assert excinfo.value.status_code == KnowledgeSpaceListNotSupportedError.Code
+    page = {"data": [], "page_size": 10, "has_more": False, "next_cursor": None}
+    spaces = AsyncMock(return_value=page)
+    ordinary = AsyncMock(side_effect=AssertionError("SPACE must not enter the library namespace"))
+    monkeypatch.setattr(LegacyDocumentsApplication, "alist", spaces)
+    monkeypatch.setattr(KnowledgeService, "get_knowledge", ordinary)
+    user = _User()
+    result = await endpoint.get_knowledge(
+        request=None,
+        login_user=user,
+        action="visible",
+        name=None,
+        knowledge_type=KnowledgeTypeEnum.SPACE.value,
+        sort_by="update_time",
+        preferred_ids=None,
+        page_size=10,
+        cursor=None,
+        has_abnormal=False,
+    )
+    assert result.data == page
+    assert spaces.await_args.kwargs == {
+        "identity": user,
+        "name": None,
+        "sort_by": "update_time",
+        "cursor": None,
+        "page_size": 10,
+        "preferred_ids": None,
+        "has_abnormal": False,
+        "legacy_view": False,
+    }
+    ordinary.assert_not_awaited()

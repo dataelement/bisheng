@@ -15,6 +15,13 @@ def normalize_scopes(scopes: list[str]) -> list[str]:
     return list(dict.fromkeys(scope.strip() for scope in scopes if scope.strip()))
 
 
+def _local_naive_expiry(value: datetime | None) -> datetime | None:
+    """Keep the existing local, timezone-free database and comparison contract."""
+    if value is not None and value.utcoffset() is not None:
+        return value.astimezone().replace(tzinfo=None)
+    return value
+
+
 class DelegateScopeInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -34,6 +41,11 @@ class KeyIssueRequest(BaseModel):
     expires_at: datetime | None = None
     delegate_scopes: list[DelegateScopeInput] = Field(default_factory=list)
 
+    @field_validator("expires_at")
+    @classmethod
+    def validate_expiry(cls, value: datetime | None) -> datetime | None:
+        return _local_naive_expiry(value)
+
     @field_validator("scopes")
     @classmethod
     def validate_scopes(cls, value: list[str]) -> list[str]:
@@ -47,6 +59,11 @@ class KeyUpdateRequest(BaseModel):
     scopes: list[str] | None = None
     expires_at: datetime | None = None
     delegate_scopes: list[DelegateScopeInput] | None = None
+
+    @field_validator("expires_at")
+    @classmethod
+    def validate_expiry(cls, value: datetime | None) -> datetime | None:
+        return _local_naive_expiry(value)
 
     @field_validator("scopes")
     @classmethod

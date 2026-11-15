@@ -45,6 +45,60 @@ and citations in Work. Keep the account enable switch and document permissions i
 the acceptance path. Code deployment, successful data upgrade, and real Work task
 acceptance are separate delivery states.
 
+## Departed membership visibility repair
+
+`repair_f048_membership_orphan.py` cleans the exact direct `visible` tuple left
+by the membership reactivation version bug. Deploy the code fix first. Run from
+`src/backend` with the same `config` as the live service:
+
+```bash
+python scripts/repair_f048_membership_orphan.py \
+  --tenant-id 1 --resource-key knowledge_space:14 --user-id 10
+```
+
+The default is read-only. The JSON plan contains the Store/model, resource
+version, historical source evidence, exact tuple selection and `plan_checksum`.
+It requires no ACTIVE business membership, only INACTIVE unprotected membership
+sources, and evidence of a RETIRED projection with an older source version.
+All current SQL source contributions are checked before selecting an orphan.
+An ACTIVE persisted contribution (including protected/non-Grant sources) also
+prevents deletion. Other users' tuples are never selected.
+
+For apply, back up the business and OpenFGA databases, stop **all permission
+writers using this Store**, including API, workers and periodic jobs, then wait
+for F048 heartbeats to expire (default TTL 45 seconds). Use an isolated maintenance
+process with the same config, mounts, network and installed backend image;
+copying this script is sufficient because it reuses the shipped reconciliation
+module. Do not restart the normal API entrypoint to run maintenance.
+
+```bash
+python scripts/repair_f048_membership_orphan.py \
+  --tenant-id 1 --resource-key knowledge_space:14 --user-id 10 \
+  --apply --operator-id 1 --confirm-store-id <preview-store-id> \
+  --confirm-plan-checksum <preview-plan-checksum>
+```
+
+Apply repeats the preview, checks Store/plan confirmations, refuses live runtime
+heartbeats or nonterminal projections, and deletes through the durable F048
+projection ledger. It verifies that the selected tuple disappeared and all other
+direct visible tuples stayed unchanged. The resource version advances through
+the normal finalizer; retired source records and memberships remain as history.
+Repeated successful apply is a no-op. A changed plan must be previewed again.
+
+Resume the stopped services and verify the departed ordinary user's joined list
+and resource/file visibility, as well as the creator's access. No full-Store
+reconcile, model publication, Catalog cutover or table deletion is performed.
+For another confirmed case, repeat with its exact tenant/resource/user; channels
+use `--resource-key channel:<id>`. The script intentionally does not infer that
+every unsupported relation was caused by this bug.
+
+Exit codes: `0` success/read-only preview; `2` invalid arguments; `3` a safety or
+data invariant blocked the operation; other nonzero codes indicate runtime failure.
+Retain the preview, database backups and projection operation IDs. On a partial
+failure, keep writers stopped and recover the recorded operation with the existing
+projection recovery procedure; do not restore a tuple without reviewing current
+authorization sources.
+
 ## Diagnostic Scripts
 
 ### `measure_dsh_model_audit.py`
@@ -95,6 +149,54 @@ The script never writes to the database. Exit `0` means reflection found the
 column, exit `2` confirms a catalog/reflection mismatch, exit `3` means the
 column is absent from the DM catalog, and exit `4` means the diagnostic itself
 failed.
+
+## Model Configuration Upgrade
+
+### `migrate_model_token_configs.py`
+
+Convert legacy LLM `config.max_tokens` into advanced `config.user_kwargs` while
+preserving the effective limit and other parameters. Ollama writes `num_ctx`;
+other LLM providers write `max_tokens`. Model IDs, status, tenant ownership and
+provider daily-call quotas retain their values.
+
+Run from `src/backend/` with the live service's `config` environment:
+
+```bash
+python scripts/migrate_model_token_configs.py --all-tenants
+python scripts/migrate_model_token_configs.py --tenant-id 1
+```
+
+Dry-run is the default. After draining model calls and stopping API/Worker/
+Linsight configuration writers, use the new backend runtime and a fresh private
+backup path to apply. Complete the target schema upgrade first:
+
+```bash
+python scripts/migrate_model_token_configs.py --all-tenants --apply \
+  --backup-file /secure-backups/model-tokens-before.json
+```
+
+Any invalid legacy configuration blocks the entire batch. The script creates
+an exclusive mode-0600 backup before writing; an existing backup path blocks
+writes. Re-running migrated rows is a no-op. Reports contain identifiers and
+counts; protect the backup because model configuration can contain credentials.
+Restart API/Worker/Linsight after migration to clear process-local model caches.
+Never delete daily-call Redis counters during this upgrade.
+
+To restore from a reviewed backup in the same maintenance window:
+
+```bash
+python scripts/migrate_model_token_configs.py --all-tenants \
+  --restore-backup /secure-backups/model-tokens-before.json
+python scripts/migrate_model_token_configs.py --all-tenants --apply \
+  --restore-backup /secure-backups/model-tokens-before.json \
+  --backup-file /secure-backups/model-tokens-before-restore.json
+```
+
+Restore checks the saved identity and post-upgrade configuration before writing.
+A later edit or a missing model blocks the batch; newly created models stay
+intact. Fix reported conflicts before retrying. MySQL/DM8 JSON conversion runs
+in Python; this procedure performs data maintenance outside Alembic revisions.
+See [the feature upgrade runbook](../../../features/v3.0.0/model-discovery/upgrade.md).
 
 ### `verify_mcp_stdio_blocked.py`
 
@@ -1050,6 +1152,34 @@ config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/migrate_linsight_task_
 config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/migrate_linsight_task_model_to_default.py --apply    # write
 ```
 
+### `backfill_workbench_upgrade.py`
+
+> **v3.0 upgrade — AUTO at startup.** Both steps run on service startup
+> (`main.lifespan`, idempotent, failure never blocks boot). This CLI is for a
+> dry-run preview or a manual re-run. See `docs/architecture/08-deployment.md` → 升级 checklist.
+
+Carries pre-3.0 workbench model settings into the 3.0 model settings:
+
+1. **Daily-mode default model** — a `linsight_llm` row whose `chat_default_model_id` is
+   absent or `null` gets the last listed model, which is what the 2.x client opened daily
+   chat with (and what the 3.0 client still falls back to when no default is set).
+2. **User-selectable model visibility** — each active tenant's workbench models become
+   "visible to all members". Runs once per tenant (audit
+   `migration:workbench-visibility-v1`), so an admin's later edits are kept. A tenant that
+   already has any `dsh_model_visibility` row is skipped (its admin already manages
+   visibility); pass `--include-configured-tenants` to fill only its unconfigured models.
+   A tenant holding unmigrated legacy DSH grants is skipped: run
+   `scripts/dsh/migrate_unified_credits.py` for it first, then rerun this script.
+
+Usage (from `src/backend/`):
+
+```bash
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_workbench_upgrade.py            # dry-run
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_workbench_upgrade.py --apply    # write
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_workbench_upgrade.py --apply --tenant-id 2 --actor-id 1
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_workbench_upgrade.py --apply --tenant-id 2 --include-configured-tenants
+```
+
 ### `seed_overflow_skill.py`
 
 > **Dev/QA fixture — NOT part of any upgrade checklist.** Seeds ONE throwaway
@@ -1315,6 +1445,15 @@ check. Only missing digests are filled; original names and bodies remain unchang
 Historical exact-name lookup is incomplete until this operation finishes. No fuzzy
 query fallback or automatic startup backfill is performed.
 
+## 启用 DSH 前补齐模型可见范围
+
+不部署 DSH 时，没有可见范围记录的对话模型默认全员可见；启用 DSH 后，没有记录的模型对所有人不可见。启用 DSH 之前，对每个租户运行一次，为缺少记录的对话模型（本租户及 Root 共享、含已下线）补一条「全员可见」记录；只新增，不改已有记录。
+
+```bash
+python scripts/backfill_model_visibility_everyone.py --tenant-id 1                              # 预览
+python scripts/backfill_model_visibility_everyone.py --tenant-id 1 --apply --actor-user-id 1    # 写入
+```
+
 ## DSH audit presentation preparation
 
 Run from `src/backend/` using the live service config. `python scripts/backfill_dsh_audit_presentation.py --tenant-id 1` previews one bounded batch; add `--apply --max-batches 20` to prepare historical presentation statuses and mark conversation projection. Resume with the reported `--after-request-id`, then rerun from the start to catch late rows. The independent audit inspection task projects groups; no model bodies, policy or keys are changed.
@@ -1391,3 +1530,112 @@ establish those guarantees.
 ## 工具与技能全员授权升级（f048-v6）
 
 `migrate_capability_authorization.py` 将现有内置工具及企业技能的全员可用状态转换为所属租户成员的可撤销 Grant。默认 dry-run，apply 需要 Store 确认与操作人；在发布授权模型后、业务进程停止期间执行。重复执行保留管理员的撤销结果。完整顺序见 [升级说明](../../../features/local/tools-skills-authorization/upgrade.md)。
+
+### F009 managed tenant inventory (read-only)
+
+From `src/backend/`: `python scripts/managed_tenant_preflight.py --tenant-id <T> [--user-id <id>] [--limit 100]`. Lists current role eligibility differences and pending resource/copy associations within the specified scope. There is no apply mode. Historical READY defaults are not proof of complete permission projections; verify against the existing permission inventory before rollout. Resolve pending/uncertain copies manually before downgrading the four columns.
+
+## F118 knowledge-space unification
+
+Existing channel sync selections with the old picker's `new-folder-<digits>`
+folder ID retain their original SQL configuration. M2 logs the channel/sync IDs
+requiring manual rebind, skips only that invalid folder reference, and keeps
+space/other real references. The selected invalid sync item cannot deliver to
+the space root; users must remove or rebind it in the channel configuration.
+Other malformed IDs and explicitly saved new selections remain strict.
+
+### Historical preparation before a new M2 freeze
+
+`prepare_f118_history.py` backs and cleans proven orphan files/documents/versions,
+invalid tags/members, repairs parent ownership/depth and unmapped empty-resource
+embedding names, and purges invalid derived permissions. Exact orphan MinIO
+objects and ES/Milvus slices are backed before deletion; live index bindings,
+shared stores, audit, roles and queues remain. Operators stop every writer/consumer.
+
+```bash
+cd src/backend
+export config=config.yaml
+export PYTHONPATH=./
+python scripts/prepare_f118_history.py --plan /secure/upgrade/f118-history.json
+python scripts/prepare_f118_history.py --plan /secure/upgrade/f118-history.json --apply --operator-id 7
+```
+
+Preview saves a private, checksummed selected-row/FGA backup and plan using
+exclusive creation. Apply and retries read exactly that plan; never overwrite
+it with a new baseline. The adjacent `.events.jsonl` retains execution events.
+An active frozen Run is rejected. Missing/ambiguous parents, changed facts,
+unknown types or remaining downstreams are reported, never guessed away.
+Apply returns permission operation IDs; exit 2 means selected repairs completed
+but blocked items remain, and exit 3 means an error requiring the same plan to
+be inspected/resumed. Preview exit 0 does not certify migration readiness.
+SQL evidence is saved before physical inspection in `.candidates.json`; exact
+payload backups use `.payloads/`. Missing original bindings/file identities stop
+cleanup; no whole-index deletion or guessed replacement is allowed. This selected
+evidence does not replace a full environment backup. See
+[implemented rules and complete flow](../../../docs/reviews/f118-confirmed-rules-implementation-20261113.md).
+
+### Formal stopped-service migration
+
+Run from `src/backend` after the operator has stopped all business writers and
+created the immutable backup/schema evidence artifacts. Use the same `config`
+as the service. For a new Run, default preview executes the same complete
+SQL/permission/six-source inventory and plan validation as fresh M2, without
+SQL/FGA/MinIO writes or freezing a Run. Private local scratch pages are removed
+on success or failure. Output is `validation_scope=current_inventory`,
+`preflight_complete=true`, `frozen=false`, `ready=false`; passing preflight is
+not a completed migration or permission publication.
+
+The supplied backup/schema artifacts must belong to this Run/environment/writer
+and the current tenant inventory. Materials for an earlier 30-tenant scope
+cannot be reused as evidence for a new 31-tenant scope. If another process
+freezes this Run between the CLI lookup and scanning, fresh preview stops
+instead of reporting the frozen graph as a complete current-data scan.
+
+For an existing frozen Run, preview validates its original graph and reports
+`validation_scope=frozen_run`, `preflight_complete=false`. `--resume` requires
+that original Run; it does not rescan or replace its baseline. An old Run's
+tenant inventory mismatch remains a recovery/review blocker, not proof that a
+new inventory has failed.
+
+New inventories do not inspect Redis broker/queued-task contents or make unrelated
+full Role/UserRole eligibility cleanup a prerequisite. Space membership roles
+and permission-source subjects still participate in their exact migration checks;
+the command does not copy or rebind tenant roles. It still rejects uncommitted business delete cutovers/tombstones;
+these checks do not detect Celery consumption or whether services are stopped.
+Normal resources preserve the SQL `index_name`/`collection_name` bindings without
+ES/Milvus existence, schema or count queries, or per-file MinIO stat. Physical
+store health and SQL/vector inconsistencies are separate diagnostics. The
+historical preparation above still requires exact payload backup/deletion when
+an approved orphan cleanup needs it; missing cleanup evidence remains blocking.
+MinIO reads of backup/schema and frozen migration artifacts remain necessary.
+
+```bash
+python scripts/unify_knowledge_spaces.py --run-id maintenance-1 --environment production \
+  --backup-ref '{"object_key":"f118/unification/maintenance-1/verification/<hash>.json","sha256":"<hash>"}' \
+  --schema-ref '{"object_key":"f118/unification/maintenance-1/verification/<schema-hash>.json","sha256":"<schema-hash>"}'
+```
+
+Add `--apply --operator-id 7` for the actual M2 freeze, original SQL conversion,
+permission publication, six-source backfill, full reconciliation and persisted
+Coverage certificate. After interruption, repeat the identical arguments with
+`--apply --resume`; this requires the same already-frozen Run and never rebuilds
+its baseline. Old frozen artifacts retain their original codec and evidence
+checks; missing required legacy facts remain blocking rather than being invented
+or bypassed by rewriting the baseline. Output
+contains the Run/hashes, tenant scope, six-source proofs and the immutable plan
+reference containing the invalid-slot inventory. Nonzero exit preserves the
+checkpoint and never restarts services. Enable business traffic only after the
+operator has accepted the overall upgrade verification and real environment
+checks; a local component test is not that acceptance.
+
+F118 deliberately uses a narrow context assembly rather than the general
+`initialize_app_context` convention: the eager general initializer constructs
+`MinioStorage` and may initialize buckets/policies. The command registers the
+original DB/Redis managers from the live service settings and closes each owned
+manager explicitly; its owned raw MinIO artifact and permission
+adapters never invoke the API startup, default seeds or bucket/policy writers.
+This feature-specific exception preserves the frozen read-only inventory
+contract and does not change general script initialization. The migration
+runtime does not open ES/Milvus clients. Current query order, comparison rules,
+conversion and publication boundaries are shown in the
+[complete current flow](../../../docs/reviews/f118-migration-current-flow-20261113.md).

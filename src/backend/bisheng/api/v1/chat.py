@@ -25,7 +25,7 @@ async def get_online_chat(
     sort_by: str | None = None,
     search_description: bool | None = False,
     action: str = Query(
-        default="use",
+        default="visible",
         pattern="^(visible|use)$",
         description="Concrete action required for each app",
     ),
@@ -46,6 +46,7 @@ async def get_online_chat(
         - True: keyword matches name OR description.
     """
     total_start = perf_counter()
+    action = "visible" if action == "use" else action
     page_size = limit or 10
     if sort_by == "update_time":
         result = await WorkFlowService.get_all_flows_envelope(

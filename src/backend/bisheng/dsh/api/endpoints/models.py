@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import ValidationError
 
 from bisheng.common.errcode.dsh import DshInvalidRequestError, DshModelNotAllowedError, DshQuotaUnavailableError
+from bisheng.core.session_activity import business_activity
 from bisheng.dsh.api.dependencies import DshRuntime, desktop_principal, get_runtime
 from bisheng.dsh.api.responses import DshRoute
 from bisheng.dsh.domain.schemas.chat import DshChatRequest
@@ -93,6 +94,7 @@ async def _complete(request, model, principal, runtime):
 
 
 @router.post("/dsh/chat/completions", openapi_extra=_body_schema(DshChatRequest))
+@business_activity()
 async def complete(
     request: Request,
     principal: DshPrincipal = Depends(desktop_principal),
@@ -102,6 +104,7 @@ async def complete(
 
 
 @router.post("/dsh/responses", openapi_extra=_body_schema(DshResponsesRequest))
+@business_activity()
 async def native_responses(
     request: Request,
     principal: DshPrincipal = Depends(desktop_principal),

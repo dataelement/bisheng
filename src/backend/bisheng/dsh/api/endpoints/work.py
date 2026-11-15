@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, StrictBool
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import resp_200
+from bisheng.core.session_activity import business_activity
 from bisheng.dsh.domain.services.work_capabilities import WorkCapabilitiesService
 from bisheng.dsh.work_mcp import WorkMcpResponse
 
@@ -19,8 +20,9 @@ class WorkPublicationInput(BaseModel):
 
 
 @router.api_route("/dsh/work/mcp", methods=["GET", "POST", "DELETE"])
+@business_activity(http=False, rpc_methods=("tools/call",))
 async def work_mcp(request: Request, user: UserPayload = Depends(UserPayload.get_login_user)):
-    return WorkMcpResponse(request.app.state.work_mcp_runtime, user)
+    return WorkMcpResponse(request.app.state.work_mcp_runtime, user, connection=request)
 
 
 @router.get("/dsh/work/publications")

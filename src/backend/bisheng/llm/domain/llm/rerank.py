@@ -1,64 +1,66 @@
-from typing import Dict, Optional, Sequence
+from collections.abc import Sequence
+from typing import Self
 
 import dashscope
 from langchain_core.callbacks import Callbacks
 from langchain_core.documents import BaseDocumentCompressor, Document
 from loguru import logger
 from pydantic import Field
-from typing_extensions import Self
 
-from bisheng.core.ai import XinferenceRerank, CommonRerank, DashScopeRerank
-from bisheng.llm.domain.const import LLMServerType, LLMModelType
-from .llm import BishengBase
+from bisheng.common.services.failure_context import failure_boundary
+from bisheng.core.ai import CommonRerank, DashScopeRerank, XinferenceRerank
+from bisheng.llm.domain.const import LLMModelType, LLMServerType
+
 from ..utils import wrapper_bisheng_model_limit_check, wrapper_bisheng_model_limit_check_async
+from .llm import BishengBase
 
 
 def _get_xinference_params(params: dict, server_config: dict, model_config: dict) -> dict:
-    params['base_url'] = server_config.get('openai_api_base') or server_config.get('base_url')
-    params['api_key'] = server_config.get('openai_api_key') or server_config.get('api_key') or 'empty'
-    params['model_uid'] = params.pop('model', '')
+    params["base_url"] = server_config.get("openai_api_base") or server_config.get("base_url")
+    params["api_key"] = server_config.get("openai_api_key") or server_config.get("api_key") or "empty"
+    params["model_uid"] = params.pop("model", "")
     return params
 
 
 def _get_common_params(params: dict, server_config: dict, model_config: dict) -> dict:
-    params['base_url'] = server_config.get('openai_api_base') or server_config.get('base_url')
-    params['api_key'] = server_config.get('openai_api_key') or server_config.get('api_key') or 'empty'
-    params['rerank_endpoint'] = '/rerank'
+    params["base_url"] = server_config.get("openai_api_base") or server_config.get("base_url")
+    params["api_key"] = server_config.get("openai_api_key") or server_config.get("api_key") or "empty"
+    params["rerank_endpoint"] = "/rerank"
     return params
 
 
 def _get_openai_params(params: dict, server_config: dict, model_config: dict) -> dict:
     # OpenAI-compatible gateways expose /v1/rerank; the base URL field is optional in the provider form.
     params = _get_common_params(params, server_config, model_config)
-    params['base_url'] = params['base_url'] or 'https://api.openai.com/v1'
+    params["base_url"] = params["base_url"] or "https://api.openai.com/v1"
     return params
 
 
 def _get_qwen_params(params: dict, server_config: dict, model_config: dict) -> dict:
-    params['dashscope_api_key'] = server_config.get('openai_api_key', '')
-    params['top_n'] = None  # return all documents
+    params["dashscope_api_key"] = server_config.get("openai_api_key", "")
+    params["top_n"] = None  # return all documents
     params["client"] = dashscope.TextReRank
     return params
 
 
-_node_type: Dict = {
+_node_type: dict = {
     # Open source inference framework
-    LLMServerType.XINFERENCE.value: {'client': XinferenceRerank, 'params_handler': _get_xinference_params},
-    LLMServerType.LLAMACPP.value: {'client': CommonRerank, 'params_handler': _get_common_params},
-    LLMServerType.VLLM.value: {'client': CommonRerank, 'params_handler': _get_common_params},
-
+    LLMServerType.XINFERENCE.value: {"client": XinferenceRerank, "params_handler": _get_xinference_params},
+    LLMServerType.LLAMACPP.value: {"client": CommonRerank, "params_handler": _get_common_params},
+    LLMServerType.VLLM.value: {"client": CommonRerank, "params_handler": _get_common_params},
     # OfficalapiSERVICES
-    LLMServerType.OPENAI.value: {'client': CommonRerank, 'params_handler': _get_openai_params},
-    LLMServerType.QWEN.value: {'client': DashScopeRerank, 'params_handler': _get_qwen_params},
-    LLMServerType.QIAN_FAN.value: {'client': CommonRerank, 'params_handler': _get_common_params},
-    LLMServerType.SILICON.value: {'client': CommonRerank, 'params_handler': _get_common_params},
-    LLMServerType.OPENAI_COMPATIBLE.value: {'client': CommonRerank, 'params_handler': _get_common_params},
+    LLMServerType.OPENAI.value: {"client": CommonRerank, "params_handler": _get_openai_params},
+    LLMServerType.QWEN.value: {"client": DashScopeRerank, "params_handler": _get_qwen_params},
+    LLMServerType.QIAN_FAN.value: {"client": CommonRerank, "params_handler": _get_common_params},
+    LLMServerType.SILICON.value: {"client": CommonRerank, "params_handler": _get_common_params},
+    LLMServerType.OPENAI_COMPATIBLE.value: {"client": CommonRerank, "params_handler": _get_common_params},
 }
 
 
 class BishengRerank(BishengBase, BaseDocumentCompressor):
     """Rerank LLM wrapper class"""
-    rerank: Optional[BaseDocumentCompressor] = Field(None, description="Rerank client instance")
+
+    rerank: BaseDocumentCompressor | None = Field(None, description="Rerank client instance")
 
     @classmethod
     async def get_bisheng_rerank(cls, **kwargs) -> Self:
@@ -66,36 +68,38 @@ class BishengRerank(BishengBase, BaseDocumentCompressor):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.model_id = kwargs.get('model_id')
+        self.model_id = kwargs.get("model_id")
         if not self.model_id:
-            raise Exception('No bulkpost found in Trashrerankmodel config')
+            raise Exception("No bulkpost found in Trashrerankmodel config")
         if "model_info" in kwargs and "server_info" in kwargs:
-            self._init_client(model_info=kwargs.pop('model_info'), server_info=kwargs.pop('server_info'), **kwargs)
+            self._init_client(model_info=kwargs.pop("model_info"), server_info=kwargs.pop("server_info"), **kwargs)
         else:
             model_info, server_info = self.get_model_server_info_sync(self.model_id)
             self._init_client(model_info=model_info, server_info=server_info, **kwargs)
 
     def _init_client(self, model_info, server_info, **kwargs):
-        ignore_online = kwargs.get('ignore_online', False)
+        ignore_online = kwargs.get("ignore_online", False)
         if not model_info:
-            raise Exception('rerankModel configuration has been deleted, please reconfigure the model')
+            raise Exception("rerankModel configuration has been deleted, please reconfigure the model")
         if not server_info:
-            raise Exception('Service provider configuration has been deleted, please reconfigurererankModels')
+            raise Exception("Service provider configuration has been deleted, please reconfigurererankModels")
         if model_info.model_type != LLMModelType.RERANK.value:
-            raise Exception(f'Support onlyRerankModel of type, not supported{model_info.model_type}Type of model')
+            raise Exception(f"Support onlyRerankModel of type, not supported{model_info.model_type}Type of model")
         if not ignore_online and not model_info.online:
-            raise Exception(f'{server_info.name}under{model_info.model_name}The model is offline, please contact the administrator to launch the corresponding model')
-        logger.debug(f'init_bisheng_rerank: server_id: {server_info.id}, model_id: {model_info.id}')
+            raise Exception(
+                f"{server_info.name}under{model_info.model_name}The model is offline, please contact the administrator to launch the corresponding model"
+            )
+        logger.debug(f"init_bisheng_rerank: server_id: {server_info.id}, model_id: {model_info.id}")
 
         node_conf = _node_type.get(server_info.type)
         if not node_conf:
-            raise Exception(f'Not supportedrerankService Provider:{server_info.type}')
+            raise Exception(f"Not supportedrerankService Provider:{server_info.type}")
         self.model_info = model_info
         self.model_name = model_info.model_name
         self.server_info = server_info
 
-        params_handler = node_conf['params_handler']
-        client_class = node_conf['client']
+        params_handler = node_conf["params_handler"]
+        client_class = node_conf["client"]
         params = {
             "model": self.model_name,
         }
@@ -103,23 +107,25 @@ class BishengRerank(BishengBase, BaseDocumentCompressor):
         try:
             self.rerank = client_class(**params)
         except Exception as e:
-            logger.exception('init_bisheng_rerank error')
-            raise Exception(f'init bisheng rerank error，error msg：{e}')
+            logger.exception("init_bisheng_rerank error")
+            raise Exception(f"init bisheng rerank error，error msg：{e}")
 
     @wrapper_bisheng_model_limit_check
+    @failure_boundary("model_service", "rerank", "rerank")
     def compress_documents(
-            self,
-            documents: Sequence[Document],
-            query: str,
-            callbacks: Optional[Callbacks] = None,
+        self,
+        documents: Sequence[Document],
+        query: str,
+        callbacks: Callbacks | None = None,
     ) -> Sequence[Document]:
         return self.rerank.compress_documents(documents, query, callbacks=callbacks)
 
     @wrapper_bisheng_model_limit_check_async
+    @failure_boundary("model_service", "rerank", "rerank")
     async def acompress_documents(
-            self,
-            documents: Sequence[Document],
-            query: str,
-            callbacks: Optional[Callbacks] = None,
+        self,
+        documents: Sequence[Document],
+        query: str,
+        callbacks: Callbacks | None = None,
     ) -> Sequence[Document]:
         return await self.rerank.acompress_documents(documents, query, callbacks=callbacks)

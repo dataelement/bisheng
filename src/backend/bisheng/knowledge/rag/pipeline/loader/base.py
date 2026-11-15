@@ -118,6 +118,9 @@ class BaseBishengLoader(BaseLoader):
         if not content or not self.local_image_dir or not self.image_object_dir:
             return content
         if self.image_url_builder:
+            # Pandoc creates extract-media's media directory only when the document contains images.
+            if not os.path.isdir(self.local_image_dir):
+                return content
             for filename in sorted(os.listdir(self.local_image_dir), key=len, reverse=True):
                 content = content.replace(os.path.join(self.local_image_dir, filename), self.build_image_url(filename))
             return content

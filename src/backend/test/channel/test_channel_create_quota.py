@@ -14,10 +14,16 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from bisheng.channel.domain.models.channel import ChannelVisibilityEnum
+from bisheng.channel.domain.models.channel import Channel, ChannelVisibilityEnum
 from bisheng.channel.domain.schemas.channel_manager_schema import CreateChannelRequest
 from bisheng.channel.domain.services.channel_service import ChannelService
 from bisheng.common.errcode.channel import ChannelCreateLimitExceededError
+from bisheng.common.models.space_channel_member import SpaceChannelMember
+from test.knowledge_unification import test_ch_bindings as fixtures
+
+store = fixtures.store
+tenant = fixtures.tenant
+business = fixtures.business
 
 _QUOTA_PATCH = "bisheng.channel.domain.services.channel_service.QuotaService.get_effective_quota"
 
@@ -109,76 +115,34 @@ async def test_create_channel_quota_is_authoritative_not_hardcoded_ten():
     assert exc_info.value.kwargs.get("quota") == 3
 
 
-@pytest.mark.asyncio
-async def test_create_channel_unlimited_allows_beyond_legacy_ten():
-    """effective == -1 (unlimited) creates successfully even with >10 existing channels."""
-    channel = SimpleNamespace(
-        id="channel-1",
-        name="资讯频道",
-        source_list=[],
-        tenant_id=1,
-    )
-    channel_repository = SimpleNamespace(save=AsyncMock(return_value=channel))
-    member_repository = SimpleNamespace(
-        # 15 existing — old hardcoded cap of 10 would have blocked this
-        find_channel_memberships=AsyncMock(return_value=[object()] * 15),
-        add_member=AsyncMock(),
-    )
-    service = _service(member_repository, channel_repository)
-
-    with (
-        patch(_QUOTA_PATCH, new=AsyncMock(return_value=-1)),
-        patch(
-            "bisheng.channel.domain.services.channel_service.get_f048_resource_adapter",
-            new=AsyncMock(return_value=SimpleNamespace(authorize_created=AsyncMock())),
-        ),
-        patch(
-            "bisheng.channel.domain.services.channel_service.get_bisheng_information_client",
-            new=AsyncMock(return_value=SimpleNamespace(subscribe_information_source=AsyncMock())),
-        ),
-    ):
-        result = await service.create_channel(_create_request(), _LoginUser())
-
-    member_repository.add_member.assert_awaited_once()
-    assert result.id == "channel-1"
+async def test_create_channel_unlimited_allows_beyond_legacy_ten(business):
+    """Unlimited still creates beyond 10; root+creator+zero source are real."""
+    async with business.sessions() as session, session.begin():
+        for value in range(15):
+            ident = f"existing-{value}"
+            session.add(Channel(id=ident, tenant_id=101, user_id=7, name=ident, visibility="public"))
+            session.add(SpaceChannelMember(business_id=ident, business_type="channel", user_id=7, user_role="creator"))
+    with patch(_QUOTA_PATCH, new=AsyncMock(return_value=-1)):
+        result = await business.service.create_channel(_create_request(), business.user)
+    state = await fixtures.state(business)
+    assert len([row for row in state["channel"] if row["id"].startswith("existing-")]) == 15
+    assert any(row["id"] == result.id for row in state["channel"])
+    assert len([row for row in state["space_channel_member"] if row["business_id"] == result.id]) == 1
 
 
-@pytest.mark.asyncio
-async def test_create_channel_ignores_orphan_membership():
-    """Regression: an orphan creator membership (its channel was already deleted) must NOT
-    count toward the quota.
-
-    1 real channel + 1 orphan membership, quota 2 → still creatable. Before the fix the check
-    used ``len(find_channel_memberships)`` (== 2) which hit ``2 >= 2`` and blocked one slot
-    early — the "configured 14, only 13 usable" bug. Now the count intersects with channels
-    that still exist, so the orphan is ignored and the 2nd channel can be created.
-    """
-    saved = SimpleNamespace(
-        id="channel-new",
-        name="资讯频道",
-        source_list=[],
-        tenant_id=1,
-    )
-    member_repository = SimpleNamespace(
-        find_channel_memberships=AsyncMock(return_value=[_membership("real-1"), _membership("orphan-1")]),
-        add_member=AsyncMock(),
-    )
-    # Only "real-1" still has a channel row; "orphan-1" is dropped by the WHERE id IN filter.
-    channel_repository = _channel_repo(existing_ids={"real-1"}, saved=saved)
-    service = _service(member_repository, channel_repository)
-
-    with (
-        patch(_QUOTA_PATCH, new=AsyncMock(return_value=2)),
-        patch(
-            "bisheng.channel.domain.services.channel_service.get_f048_resource_adapter",
-            new=AsyncMock(return_value=SimpleNamespace(authorize_created=AsyncMock())),
-        ),
-        patch(
-            "bisheng.channel.domain.services.channel_service.get_bisheng_information_client",
-            new=AsyncMock(return_value=SimpleNamespace(subscribe_information_source=AsyncMock())),
-        ),
-    ):
-        result = await service.create_channel(_create_request(), _LoginUser())
-
-    member_repository.add_member.assert_awaited_once()
-    assert result.id == "channel-new"
+async def test_create_channel_ignores_orphan_membership(business):
+    """One real + one orphan creator membership at quota 2 remains creatable."""
+    async with business.sessions() as session, session.begin():
+        session.add(Channel(id="real-1", tenant_id=101, user_id=7, name="real", visibility="public"))
+        session.add_all(
+            [
+                SpaceChannelMember(business_id=ident, business_type="channel", user_id=7, user_role="creator")
+                for ident in ("real-1", "orphan-1")
+            ]
+        )
+    with patch(_QUOTA_PATCH, new=AsyncMock(return_value=2)):
+        result = await business.service.create_channel(_create_request(), business.user)
+    state = await fixtures.state(business)
+    assert any(row["id"] == result.id for row in state["channel"])
+    assert not any(row["id"] == "orphan-1" for row in state["channel"])
+    assert len([row for row in state["space_channel_member"] if row["business_id"] == result.id]) == 1

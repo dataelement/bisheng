@@ -1,5 +1,6 @@
 // @ts-strict-ignore
 // src/hooks/useLinsightManager.ts
+import { resolveLinsightSubmitFailure, type PendingSubmitFailure } from './linsightSubmitFailure';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -14,6 +15,8 @@ import { ConversationData, QueryKeys } from '~/types/chat';
 import { useToastContext } from '~/Providers';
 import store from '~/store';
 import { activeSessionIdState, LinsightInfo, linsightMapState, SopStatus, submissionState, SubmissionState } from '~/store/linsight';
+import { refreshInviteQuota } from '~/hooks/inviteQuotaRefresh';
+import { useLocalize } from '~/hooks';
 import { taskErrorInfoFromOutput } from '~/hooks/linsightErrorInfo';
 import {
     addConversation,
@@ -268,7 +271,9 @@ export const useLinsightSessionManager = (versionId: string) => {
  * then starts execution directly (no SOP generation step anymore).
  * sessionId规则说明: 新建会话 [new]
  */
-export const useLinsightSubmit = (versionId, setVersionId, setVersions) => {
+export const useLinsightSubmit = (versionId, setVersionId, setVersions, ensureFlowLeaseId?) => {
+    const [pendingSubmitFailure, setPendingSubmitFailure] = useState<PendingSubmitFailure>();
+    const failureOwnerPath = useRef('');
     const [loading, setLoading] = useState(false); // 多会话共用
     // F035: a new round always submits under the 'new' key (the next version has
     // no id yet). Watch 'new' fixed — NOT `versionId` — otherwise follow-up rounds
@@ -278,6 +283,7 @@ export const useLinsightSubmit = (versionId, setVersionId, setVersions) => {
     const { createLinsight, updateLinsight } = useLinsightManager()
     const queryClient = useQueryClient();
     const { showToast } = useToastContext();
+    const localize = useLocalize();
     const [error, setError] = useState(false);
     const { setConversation } = store.useCreateConversationAtom(0);
     // 使用 ref 存储当前活跃版本 ID
@@ -295,17 +301,43 @@ export const useLinsightSubmit = (versionId, setVersionId, setVersions) => {
     }, [versionId])
 
     useEffect(() => {
-        if (linsightSubmission) {
-            console.log('linsightSubmission :>> ', linsightSubmission);
+        if (!linsightSubmission) return
+        // Capture it: the state entry is cleared as soon as the round is kicked off.
+        const submission = linsightSubmission
 
-            // 新建会话获取详情
-            if (linsightSubmission.isNew) {
-                setLoading(true)
-                toggleNav(false)
+        const resetAfterSubmit = () => {
+            updateLinsight(versionId, {
+                status: SopStatus.SopGenerating,
+                taskError: '',
+                sopError: '',
+                sop: ''
+            })
+            clearLinsightSubmission('new')
+            setError(false)
+        }
 
-                const { org_knowledge_enabled, personal_knowledge_enabled, tools } = convertTools(linsightSubmission.tools)
+        // F035 Track H (P5): the legacy non-isNew branch (re-execute via the
+        // removed generate-sop SSE) is gone together with SOPEditor/TaskFlow.
+        // 新建会话获取详情
+        if (!submission.isNew) {
+            resetAfterSubmit()
+            return
+        }
+
+        // Department concurrency (docs/部门流量控制方案.md): refresh this page's
+        // lease before the submit SSE goes out, so this submit reuses the page
+        // lease instead of taking a second execution lease. A full department
+        // aborts the submit here.
+        const run = async () => {
+            const presence = ensureFlowLeaseId ? await ensureFlowLeaseId() : null
+            if (presence?.blocked) return
+
+            setLoading(true)
+            toggleNav(false)
+
+            const { org_knowledge_enabled, personal_knowledge_enabled, tools } = convertTools(submission.tools)
                 const payload = {
-                    question: linsightSubmission.question,
+                    question: submission.question,
                     org_knowledge_enabled,
                     personal_knowledge_enabled,
                     files: linsightSubmission.files,
@@ -325,14 +357,19 @@ export const useLinsightSubmit = (versionId, setVersionId, setVersions) => {
                 const sse = new SSE(`${__APP_ENV__.BASE_URL}/api/v1/linsight/workbench/submit`, {
                     payload: JSON.stringify(payload),
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        ...(presence?.leaseId ? { 'X-Flow-Lease-Id': presence.leaseId } : {}),
                     },
                 });
 
+                failureOwnerPath.current = window.location.pathname;
+                setPendingSubmitFailure(undefined);
                 let versionId = ''
                 sse.addEventListener('linsight_workbench_submit', (e: MessageEvent) => {
                     const data = JSON.parse(e.data);
                     const { linsight_session_version, message_session } = data;
+                    // A new-task submit has already committed its invite use, if the switch is on.
+                    refreshInviteQuota();
 
                     versionId = linsight_session_version.id
                     setVersionId(versionId)
@@ -343,13 +380,14 @@ export const useLinsightSubmit = (versionId, setVersionId, setVersions) => {
 
                     // replaceUrl
                     window.history.replaceState({}, '', `${__APP_ENV__.BASE_URL}/linsight/${linsight_session_version.session_id}`);
+                    failureOwnerPath.current = window.location.pathname;
 
                     createLinsight(versionId, {
                         status: SopStatus.SopGenerating, //linsight_session_version.status,
                         tools: tools,
                         files: linsight_session_version.files?.map(file => ({ ...file, file_name: decodeURIComponent(file.original_filename) })) || [],
                         user_id: linsight_session_version.user_id,
-                        question: linsightSubmission.question,
+                        question: submission.question,
                         org_knowledge_enabled,
                         personal_knowledge_enabled,
                         sop: '',
@@ -409,7 +447,7 @@ export const useLinsightSubmit = (versionId, setVersionId, setVersions) => {
                     }).catch((err) => {
                         console.error('start-execute failed :>> ', err);
                         if (versionId === activeVersionIdRef.current) {
-                            showToast({ message: '任务启动失败，请联系管理员检查灵思任务执行模型状态', status: 'warning' });
+                            showToast({ message: localize('api_errors.11130'), status: 'warning' });
                             setError(true)
                             setLoading(false)
                         }
@@ -422,37 +460,26 @@ export const useLinsightSubmit = (versionId, setVersionId, setVersions) => {
                 });
 
                 sse.addEventListener('error', async (e: MessageEvent) => {
-                    console.error('object :>> ', e);
-                    if (versionId === activeVersionIdRef.current) { // 只有当前活跃会话才展示错误
-                        showToast({
-                            message: 'SOP 生成失败，请联系管理员检查灵思任务执行模型状态',
-                            status: 'warning',
-                        });
-                        setError(true)
-                        setLoading(false)
+                    let payload: unknown;
+                    try { payload = JSON.parse(e.data); } catch { payload = e; }
+                    const { failure, metadata } = resolveLinsightSubmitFailure(payload, localize, 'api_errors.11040');
+                    setPendingSubmitFailure(failure);
+                    if (!versionId || versionId === activeVersionIdRef.current) {
+                        showToast({ message: failure.message, status: 'warning' });
+                        setError(true);
+                        setLoading(false);
                     }
-                    updateLinsight(versionId, {
-                        sopError: e.data,
-                        status: SopStatus.SopGenerated,
-                    })
+                    if (versionId) updateLinsight(versionId, {
+                        taskError: failure.message, taskErrorInfo: metadata, status: SopStatus.Stoped,
+                    });
                 })
                 sse.stream();
-            }
-            // F035 Track H (P5): the legacy non-isNew branch (re-execute via the
-            // removed generate-sop SSE) is gone together with SOPEditor/TaskFlow.
-
-            updateLinsight(versionId, {
-                status: SopStatus.SopGenerating,
-                taskError: '',
-                sopError: '',
-                sop: ''
-            })
-            clearLinsightSubmission('new')
-            setError(false)
         }
-    }, [linsightSubmission])
+        resetAfterSubmit()
+        void run()
+    }, [linsightSubmission, ensureFlowLeaseId])
 
-    return [loading, error]
+    return [loading, error, failureOwnerPath.current === window.location.pathname ? pendingSubmitFailure : undefined] as const
 }
 
 

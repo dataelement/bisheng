@@ -6,11 +6,9 @@ from fastapi import APIRouter, BackgroundTasks, File, Form, Query, Request, Uplo
 
 from bisheng.api.v1.schemas import resp_200
 from bisheng.common.errcode.http_error import ServerError
-from bisheng.core.cache.utils import save_download_file, save_uploaded_file
+from bisheng.common.errcode.knowledge import KnowledgeTypeNotSupportedError
+from bisheng.core.cache.utils import save_uploaded_file
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
-from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
-from bisheng.role.domain.services.quota_service import QuotaService
-from bisheng.utils.util import sync_func_to_async
 from bisheng.workstation.domain.services import WorkStationService
 from bisheng.workstation.domain.services.media_cover_service import (
     MediaUploadStageTimer,
@@ -69,20 +67,11 @@ async def knowledge_upload(
     login_user=LoginUserDep,
 ):
     try:
-        file_path = await sync_func_to_async(save_download_file)(file.file, "bisheng", file.filename)
-        upload_limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(login_user)
-        res = await WorkStationService.uploadPersonalKnowledge(
-            request,
-            login_user,
-            file_path=file_path,
-            background_tasks=background_tasks,
-            upload_limit_bytes=upload_limit_bytes,
-        )
-        return resp_200(data=res[0])
-    except Exception as exc:
-        raise ServerError(msg=f"Knowledge base upload failed: {exc!s}", exception=exc)
+        # Reject before staging: this is the retired personal-KB endpoint,
+        # not the separate /files temporary conversation attachment endpoint.
+        raise KnowledgeTypeNotSupportedError()
     finally:
-        file.file.close()
+        await file.close()
 
 
 @router.get("/queryKnowledge")
@@ -92,8 +81,10 @@ async def query_knowledge_list(request: Request, page: int, size: int, login_use
 
 
 @router.delete("/deleteKnowledge")
-def delete_knowledge(request: Request, file_id: int, login_user=LoginUserDep):
-    res = KnowledgeService.delete_knowledge_file(request, login_user, [file_id])
+async def delete_knowledge(request: Request, file_id: int, login_user=LoginUserDep):
+    from bisheng.knowledge.application.deletion_compatibility import delete_legacy_files
+
+    res = await delete_legacy_files(request=request, identity=login_user, file_ids=[file_id])
     return resp_200(data=res)
 
 

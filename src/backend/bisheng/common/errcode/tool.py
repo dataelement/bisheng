@@ -1,6 +1,11 @@
 from bisheng.common.errcode import BaseErrorCode
 
 
+class ToolCreationPendingError(BaseErrorCode):
+    Code: int = 15090
+    Msg: str = "Tool creation has not finished. The tool cannot be used yet."
+
+
 class ToolTypeRepeatError(BaseErrorCode):
     Code: int = 15000
     Msg: str = "Tool name already exists"

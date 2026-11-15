@@ -1,0 +1,78 @@
+pageType: section
+background:
+  type: solid
+  color: $red
+elements:
+- elementId: section-deep
+  elementType: shape
+  bounds:
+  - 0
+  - 0
+  - 300
+  - 540
+  shapeName: rect
+  fill:
+    type: solid
+    color: $deepred
+  border:
+    color: $deepred
+    width: 0
+- elementId: section-no
+  elementType: text
+  bounds:
+  - 60
+  - 196
+  - 200
+  - 120
+  content:
+    text: '01'
+    style: $title
+    fontSize: 96
+    color: $gold
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: section-gold
+  elementType: shape
+  bounds:
+  - 340
+  - 230
+  - 80
+  - 3
+  shapeName: rect
+  fill:
+    type: solid
+    color: $gold
+  border:
+    color: $gold
+    width: 0
+- elementId: section-title
+  elementType: text
+  bounds:
+  - 340
+  - 248
+  - 560
+  - 50
+  content:
+    text: 年度工作总体情况
+    style: $title
+    fontSize: 36
+    color: $white
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: section-desc
+  elementType: text
+  bounds:
+  - 340
+  - 310
+  - 560
+  - 48
+  content:
+    text: 经营指标全面完成，改革发展质量稳步提升
+    style: $body
+    fontSize: 16
+    color: $lightgold
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei

@@ -19,13 +19,13 @@ PACKAGE_DIR = Path(bisheng_sdk.__file__).parent
 SOURCES = sorted(PACKAGE_DIR.glob("*.py"))
 
 
-def test_public_modules_are_exactly_auth_retrieve_storage_errors():
+def test_public_modules_include_record_collaboration():
     public = {name for _finder, name, _pkg in pkgutil.iter_modules([str(PACKAGE_DIR)]) if not name.startswith("_")}
-    assert public == {"auth", "retrieve", "storage", "errors"}
+    assert public == {"auth", "retrieve", "storage", "errors", "realtime"}
 
 
-def test_dunder_all_is_the_three_capability_modules():
-    assert bisheng_sdk.__all__ == ("auth", "retrieve", "storage")
+def test_dunder_all_is_the_four_capability_modules():
+    assert bisheng_sdk.__all__ == ("auth", "realtime", "retrieve", "storage")
 
 
 @pytest.mark.parametrize("name", ["chat", "appdb", "llm", "db", "client", "models"])
@@ -66,6 +66,8 @@ _DOCSTRING_OWNERS = (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctio
 def test_no_model_or_database_convenience_wrapper(needle: str):
     """两条标准库接法刻意不进 SDK：顺手包一层就是把它们请进来了。"""
     for source in SOURCES:
+        if needle == "sqlite3" and source.name == "realtime.py":
+            continue  # F113 explicitly adds transactional SQLite collaboration only here.
         assert needle not in _code_strings(source), f"{source.name} 的代码里用到了 {needle}"
 
 
@@ -107,7 +109,7 @@ def test_storage_never_exposes_a_url_or_bucket():
 
 
 def test_version_declared_once():
-    assert bisheng_sdk.__version__ == "0.1.1"
+    assert bisheng_sdk.__version__ == "0.1.2"
     hits = [source.name for source in SOURCES if '__version__ = "' in source.read_text(encoding="utf-8")]
     assert hits == ["__init__.py"]
 

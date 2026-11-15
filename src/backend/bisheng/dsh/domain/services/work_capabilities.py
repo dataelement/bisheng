@@ -29,7 +29,7 @@ class WorkCapabilitiesService:
     async def _tools(self):
         from bisheng.tool.domain.services.tool import ToolServices
 
-        groups = await ToolServices(login_user=self.user).get_tool_list(action="use")
+        groups = await ToolServices(login_user=self.user).get_tool_list(action="visible")
         from bisheng.tool.domain.services.user_availability import UserToolAvailabilityService
 
         tools = [tool for group in groups for tool in group.children if not tool.is_delete]
@@ -40,7 +40,7 @@ class WorkCapabilitiesService:
         """Apply the tool catalog boundary to dedicated desktop adapters too."""
         if any(tool.tool_key == tool_key for tool in (await self._tools()).values()):
             return
-        raise HTTPException(403, "Enable this tool in Tools & Skills and verify its use permission")
+        raise HTTPException(403, "Enable this tool in Tools & Skills and verify its visibility")
 
     async def _skills(self):
         from bisheng.linsight.domain.services.user_skills import UserSkillsService

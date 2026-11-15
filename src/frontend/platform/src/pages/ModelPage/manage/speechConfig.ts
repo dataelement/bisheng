@@ -12,7 +12,8 @@ export interface ConfigField {
 }
 export type ProviderConfig = Record<string, string>;
 export const speechProviders = ['volcengine', 'qianfan', 'tencent'];
-export const asrProviders = ['openai', 'azure_openai', 'qwen', ...speechProviders];
+export const fileAsrProviders = ['openai', 'azure_openai', 'qwen'];
+export const realtimeAsrProviders = ['volcengine', 'qianfan', 'tencent', 'qwen'];
 export const ttsProviders = ['openai', 'azure_openai', 'qwen', 'qianfan'];
 export const speechDocs: Record<string, string> = {
     volcengine: 'https://docs.volcengine.com/docs/DoubaoVoice/LargemodelstreamingautomaticspeechrecognitionAPI?lang=zh',
@@ -31,9 +32,12 @@ export function isSpeechModelType(modelType: string): boolean {
     return modelType === 'asr' || modelType === 'asr_rt';
 }
 
-/** Every provider can pick either mode. Save-time calls decide whether it works. */
-export function speechModelTypes(): string[] {
-    return ['asr', 'asr_rt'];
+/** Speech types follow the clients this provider actually has. */
+export function speechModelTypes(provider: string): string[] {
+    const types: string[] = [];
+    if (fileAsrProviders.includes(provider)) types.push('asr');
+    if (realtimeAsrProviders.includes(provider)) types.push('asr_rt');
+    return types;
 }
 
 /** Realtime engine names stay on asr_rt rows. File rows use a separate hint. */
@@ -43,13 +47,21 @@ export function asrHintKey(provider: string, modelType: string): string | undefi
     return undefined;
 }
 
+/** Tencent catalog signing uses the same pair as realtime speech. */
+export function tencentConnectionFields(): ConfigField[] {
+    const field = (key: string, label: string, type = 'text'): ConfigField =>
+        ({ key, label, type, required: true, default: '' });
+    return [field('speech_secret_id', 'SecretId'), field('speech_secret_key', 'SecretKey', 'password')];
+}
+
 export function getSpeechFields(provider: string, config: ProviderConfig, t: TFunction): ConfigField[] {
     const field = (key: string, label: string, type = 'text', defaultValue = ''): ConfigField =>
         ({ key, label, type, required: true, default: defaultValue });
     const app = field('speech_app_id', 'AppID');
     const api = field('speech_api_key', 'API Key', 'password');
     if (provider === 'qianfan') return [app, api];
-    if (provider === 'tencent') return [app, field('speech_secret_id', 'SecretId'), field('speech_secret_key', 'SecretKey', 'password')];
+    // SecretId and SecretKey sit with the API Key. Only AppID stays in the speech box.
+    if (provider === 'tencent') return [app];
     if (provider !== 'volcengine') return [];
     const mode = config.speech_auth_mode || 'api_key';
     const resourceIds = [
@@ -70,7 +82,14 @@ export function getSpeechFields(provider: string, config: ProviderConfig, t: TFu
 export function configWithDefaults(config: ProviderConfig, fields: ConfigField[], showDefault: boolean): ProviderConfig {
     const result = { ...config };
     for (const field of fields) {
-        if (result[field.key] === undefined && (showDefault || field.key.startsWith('speech_'))) {
+        const current = result[field.key];
+        // A saved blank address still uses the vendor default at request time.
+        // Show that address instead of an empty box, including while editing.
+        if ((current === undefined || current.trim() === '') && field.default.trim()) {
+            result[field.key] = field.default;
+            continue;
+        }
+        if (current === undefined && (showDefault || field.key.startsWith('speech_'))) {
             result[field.key] = field.default;
         }
     }

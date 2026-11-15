@@ -1,6 +1,6 @@
 import { Button, Input, notification } from '@bisheng/ui';
 // F035: import a skill from a local file (.md or .zip/.skill bundle, archive root
-// must contain SKILL.md) or from a public GitHub directory URL. The size check here
+// must contain SKILL.md) or from a public GitHub / Gitee directory URL. The size check here
 // covers the uploaded bytes only; the cap comes from 系统配置
 // (linsight.skill_upload_max_size_mb) via /skill/upload-limit, so the copy and the
 // server agree on the number. The backend separately caps the unpacked contents
@@ -34,6 +34,7 @@ const DEFAULT_UPLOAD_LIMIT: SkillUploadLimit = {
     max_unpacked_mb: 500,
 };
 const GITHUB_URL_PREFIX = "https://github.com/";
+const GITEE_URL_PREFIXES = ["https://gitee.com/", "https://www.gitee.com/"];
 
 // Human-readable size so a 10MB bundle doesn't render as an unwieldy "10240.0 KB".
 function formatBytes(bytes: number): string {
@@ -47,7 +48,12 @@ function fileIcon(name: string) {
     return name.toLowerCase().endsWith(".md") ? FileText : FileArchive;
 }
 
-type ImportMode = "file" | "github";
+type ImportMode = "file" | "github" | "gitee";
+
+function hasRemotePrefix(url: string, prefixes: string[]): boolean {
+    const value = url.trim().toLowerCase();
+    return prefixes.some((prefix) => value.startsWith(prefix));
+}
 
 interface SkillUploadDialogProps {
     open: boolean;
@@ -61,6 +67,7 @@ export function SkillUploadDialog({ open, onOpenChange, onUploaded }: SkillUploa
     const [file, setFile] = useState<File | null>(null);
     const [uploading, setUploading] = useState(false);
     const [githubUrl, setGithubUrl] = useState("");
+    const [giteeUrl, setGiteeUrl] = useState("");
     const [importing, setImporting] = useState(false);
     const [limit, setLimit] = useState<SkillUploadLimit>(DEFAULT_UPLOAD_LIMIT);
 
@@ -69,6 +76,7 @@ export function SkillUploadDialog({ open, onOpenChange, onUploaded }: SkillUploa
             setMode("file");
             setFile(null);
             setGithubUrl("");
+            setGiteeUrl("");
             // Refresh the cap on every open: an admin may have just raised it in 系统配置.
             skillApi
                 .getUploadLimit()
@@ -132,13 +140,16 @@ export function SkillUploadDialog({ open, onOpenChange, onUploaded }: SkillUploa
     };
 
     const githubUrlValid = githubUrl.trim().startsWith(GITHUB_URL_PREFIX);
+    const giteeUrlValid = hasRemotePrefix(giteeUrl, GITEE_URL_PREFIXES);
 
-    const handleGithubImport = async () => {
-        const url = githubUrl.trim();
-        if (!githubUrlValid || importing) return;
+    const handleRemoteImport = async (kind: "github" | "gitee") => {
+        const url = (kind === "github" ? githubUrl : giteeUrl).trim();
+        const valid = kind === "github" ? githubUrlValid : giteeUrlValid;
+        if (!valid || importing) return;
         setImporting(true);
         try {
-            const detail = await skillApi.importSkillFromGithub(url);
+            const detail =
+                kind === "github" ? await skillApi.importSkillFromGithub(url) : await skillApi.importSkillFromGitee(url);
             toastImported(detail);
             onOpenChange(false);
             onUploaded();
@@ -163,6 +174,7 @@ export function SkillUploadDialog({ open, onOpenChange, onUploaded }: SkillUploa
                         items={[
                             { key: "file", label: t("skillManage.uploadDialog.tabFile") },
                             { key: "github", label: t("skillManage.uploadDialog.tabGithub") },
+                            { key: "gitee", label: t("skillManage.uploadDialog.tabGitee") },
                         ]}
                     />
 
@@ -242,14 +254,29 @@ export function SkillUploadDialog({ open, onOpenChange, onUploaded }: SkillUploa
                         </div>
                     )}
 
-                    {mode === "github" && (
+                    {(mode === "github" || mode === "gitee") && (
                         <div className="space-y-3 mt-3">
                             <div className="space-y-2">
-                                <Input value={githubUrl} onChange={(e) => setGithubUrl(e.target.value)} onKeyDown={(e) => {
-                                        if (e.key === "Enter") handleGithubImport();
-                                    }} placeholder={t("skillManage.uploadDialog.githubUrlPlaceholder")} />
+                                <Input
+                                    value={mode === "github" ? githubUrl : giteeUrl}
+                                    onChange={(e) =>
+                                        (mode === "github" ? setGithubUrl : setGiteeUrl)(e.target.value)
+                                    }
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Enter") handleRemoteImport(mode);
+                                    }}
+                                    placeholder={t(
+                                        mode === "github"
+                                            ? "skillManage.uploadDialog.githubUrlPlaceholder"
+                                            : "skillManage.uploadDialog.giteeUrlPlaceholder",
+                                    )}
+                                />
                                 <p className="text-xs text-muted-foreground">
-                                    {t("skillManage.uploadDialog.githubHint")}
+                                    {t(
+                                        mode === "github"
+                                            ? "skillManage.uploadDialog.githubHint"
+                                            : "skillManage.uploadDialog.giteeHint",
+                                    )}
                                 </p>
                             </div>
                             <div className="text-xs text-muted-foreground space-y-1">
@@ -257,7 +284,13 @@ export function SkillUploadDialog({ open, onOpenChange, onUploaded }: SkillUploa
                                     {t("skillManage.uploadDialog.requirementsTitle")}
                                 </p>
                                 <ul className="list-disc pl-4 space-y-0.5">
-                                    <li>{t("skillManage.uploadDialog.githubReqHost")}</li>
+                                    <li>
+                                        {t(
+                                            mode === "github"
+                                                ? "skillManage.uploadDialog.githubReqHost"
+                                                : "skillManage.uploadDialog.giteeReqHost",
+                                        )}
+                                    </li>
                                     <li>{t("skillManage.uploadDialog.githubReqDir")}</li>
                                     <li>
                                         {t("skillManage.uploadDialog.reqSize", {
@@ -281,7 +314,10 @@ export function SkillUploadDialog({ open, onOpenChange, onUploaded }: SkillUploa
                             {t("skillManage.uploadDialog.confirm")}
                         </Button>
                     ) : (
-                        <Button onClick={handleGithubImport} disabled={!githubUrlValid || importing}>
+                        <Button
+                            onClick={() => handleRemoteImport(mode)}
+                            disabled={(mode === "github" ? !githubUrlValid : !giteeUrlValid) || importing}
+                        >
                             {importing && <Loader2 className="size-4 mr-1.5 animate-spin" />}
                             {t("skillManage.uploadDialog.confirm")}
                         </Button>

@@ -40,11 +40,20 @@ def _session(*, model: str | None, svid: str = "SV-1") -> LinsightSessionVersion
 
 @pytest.fixture
 def patch_linsight_conf(monkeypatch: pytest.MonkeyPatch):
+    from bisheng.dsh.domain.services import model_catalog
+
     monkeypatch.setattr(
         agent_factory,
         "settings",
         SimpleNamespace(get_linsight_conf=lambda: SimpleNamespace(default_temperature=0.1)),
     )
+
+    # These tests pin model resolution, not the user-facing catalog (covered in
+    # test/dsh/test_model_visibility_without_dsh.py): keep the config as given.
+    async def _as_given(config, _user_id):
+        return config
+
+    monkeypatch.setattr(model_catalog, "project_workbench_config", _as_given)
 
 
 async def test_get_llm_uses_per_task_model(monkeypatch: pytest.MonkeyPatch, patch_linsight_conf):
