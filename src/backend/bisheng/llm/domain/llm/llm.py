@@ -356,7 +356,7 @@ class BishengLLM(BishengBase, BaseChatModel):
     @staticmethod
     def _get_llm_class(server_type: str) -> type[BaseChatModel]:
         if server_type not in _llm_node_type:
-            raise Exception(f"not support llm type: {server_type}")
+            raise ValueError(f"not support llm type: {server_type}")
         class_type = _llm_node_type[server_type]["client"]
         return class_type
 
