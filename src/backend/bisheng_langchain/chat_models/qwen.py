@@ -218,7 +218,7 @@ class ChatQWen(BaseChatModel):
         elif 'output' not in rsp_dict:
             logger.error(f'proxy_llm_error resp={rsp_dict}')
             message = rsp_dict['message']
-            raise Exception(message)
+            raise ValueError(message)
         else:
             return rsp_dict['output'], rsp_dict.get('usage', '')
 
