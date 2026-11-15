@@ -11,9 +11,11 @@ export function memoryTypeLabel(type: string, localize: Localize): string {
   return (MEMORY_ITEM_TYPES as readonly string[]).includes(type) ? localize(`memory.type.${type}`) : type;
 }
 
-/** "Added by hand", or the scene (plus app name) the item came from; auto-consolidated items say so. */
+/** "Added by hand", or the scene (plus app name) the item came from; auto-consolidated items say so.
+ *  Only the scene says where an item came from: editing or AI-revising an item keeps its scene and
+ *  only switches ``origin`` to manual, so ``origin`` must not turn a chat-born item into "added by hand". */
 export function memorySourceLabel(source: MemorySource | null | undefined, localize: Localize): string {
-  if (!source || source.origin === "manual" || source.scene === "manual") return localize("memory.source.manual");
+  if (!source || source.scene === "manual") return localize("memory.source.manual");
   const scene = source.scene && SCENES.has(source.scene) ? localize(`memory.source.${source.scene}`) : localize("memory.source.unknown");
   const where = source.app_name ? `${scene} · ${source.app_name}` : scene;
   return source.origin === "auto" ? localize("memory.source.auto", { source: where }) : where;
