@@ -60,7 +60,7 @@ class BaseClient(ABC):
 
     @abstractmethod
     async def _handle_message(self, message: dict[any, any]):
-        raise Exception('handle_message must be implemented')
+        raise ValueError('handle_message must be implemented')
 
     async def wrapper_task(self, task_id: str, fn: Callable, *args, **kwargs):
         logger.debug("wrapper_task task_id=%s", task_id)
