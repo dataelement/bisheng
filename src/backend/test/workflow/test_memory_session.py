@@ -36,6 +36,7 @@ from test.workflow.memory_fixtures import (  # noqa: F401  (fixtures)
     memory_db,
     memory_runtime_config,
     register_chat,
+    run_tasks_in_flow_tenant,
     seed_online_workflow,
     seed_user,
     service,
@@ -70,6 +71,13 @@ def logged_in_callback(monkeypatch):
     dispatch = AsyncMock()
     monkeypatch.setattr(wf_api.chat_manager, "dispatch_client", dispatch)
     monkeypatch.setattr(wf_api, "require_business_action", AsyncMock())
+
+    @asynccontextmanager
+    async def _scope(identity, _workflow_id, **_kwargs):
+        # Tenant binding of the connection is covered by test_browser_scope.
+        yield identity
+
+    monkeypatch.setattr(wf_api, "browser_workflow_scope", _scope)
     login = _login()
     return SimpleNamespace(dispatch=dispatch, login=login, endpoint=wf_api.workflow_ws)
 
@@ -181,7 +189,9 @@ class FakeWorkflow:
 
     outcome = WorkflowStatus.SUCCESS.value
 
-    def __init__(self, *args, chat_id="", memory_enabled=False, **kwargs):
+    def __init__(self, workflow_id="", *args, chat_id="", memory_enabled=False, tenant_id=None, **kwargs):
+        self.workflow_id = workflow_id
+        self.tenant_id = tenant_id
         self.graph_engine = SimpleNamespace(graph_state=SimpleNamespace(chat_id=chat_id, memory_enabled=memory_enabled))
         self._status = WorkflowStatus.RUNNING.value
 
@@ -221,6 +231,7 @@ def worker(monkeypatch, memory_db):
 
     monkeypatch.setattr(MemoryActivity, "end_turn_sync", classmethod(_spy))
     monkeypatch.setattr(tasks, "_global_workflow", {})
+    run_tasks_in_flow_tenant(monkeypatch, tasks)
     FakeWorkflow.outcome = WorkflowStatus.SUCCESS.value
     return SimpleNamespace(tasks=tasks, calls=calls)
 
