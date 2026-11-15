@@ -10,7 +10,6 @@ from bisheng.api.v1.schemas import WorkstationConfig
 from bisheng.common.errcode.memory import MemoryNoModelError
 from bisheng.llm.domain.schemas import WorkbenchModelConfig, WSModel
 from bisheng.llm.domain.services import llm as llm_service
-from bisheng.llm.domain.services.llm import LLMService
 from bisheng.memory.domain.services import consolidation_model
 
 
@@ -36,11 +35,13 @@ def test_workstation_config_has_no_memory_field():
 
 
 def test_memory_llm_is_a_checked_model_reference():
-    """Inaccessible models are dropped like the other single-model fields."""
+    """memory_llm is a saved model reference like the other single-model fields, so deleting
+    or hiding the model is fenced and an invalid id fails the admitted read."""
+    from bisheng.llm.domain.services.default_reference_extractor import extract_model_default_references
+
     cfg = WorkbenchModelConfig(memory_llm=WSModel(id="5"), chat_title_llm=WSModel(id="6"))
-    assert "5" in llm_service._workbench_model_ref_values(cfg)
-    filtered = LLMService._filter_workbench_config(cfg, {6})
-    assert filtered.memory_llm is None and filtered.chat_title_llm.id == "6"
+    slots = {ref.slot_key: ref.target.target_id for ref in extract_model_default_references("linsight_llm", cfg)}
+    assert slots["memory_llm.id"] == "5" and slots["chat_title_llm.id"] == "6"
 
 
 def _cfg(memory_llm=None, models=None):
@@ -68,19 +69,11 @@ async def test_ac106_no_model_available(monkeypatch, cfg):
 
 
 async def test_ac106_child_tenant_inherits_root_value(monkeypatch):
-    """A child tenant without its own row gets the root value through the settings inheritance."""
+    """A child tenant without its own row reads the root value the admitted read returns."""
+    from types import SimpleNamespace
+
     root_value = json.dumps({"memory_llm": {"id": "9"}})
-    monkeypatch.setattr(llm_service, "_resolve_tenant_id", lambda tenant_id: 2)
-    monkeypatch.setattr(
-        llm_service.TenantSystemModelConfigDao, "aresolve", AsyncMock(return_value=(root_value, True, False))
-    )
-    monkeypatch.setattr(
-        LLMService,
-        "_sanitize_workbench_config_refs",
-        classmethod(lambda cls, cfg, _tid, inherited_from_root: _identity(cfg)),
-    )
+    runtime = SimpleNamespace(arequire_default=AsyncMock(return_value=SimpleNamespace(payload_json=root_value)))
+    monkeypatch.setattr(llm_service, "get_model_default_read_runtime", lambda: runtime)
+    monkeypatch.setattr(llm_service, "current_model_default_tenant", lambda _tenant_id: 2)
     assert await consolidation_model.resolve_memory_model_id() == 9
-
-
-async def _identity(value):
-    return value

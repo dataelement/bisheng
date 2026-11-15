@@ -79,9 +79,11 @@ async def test_ac10_initialize_registers_before_the_question_row(monkeypatch):
     monkeypatch.setattr(
         chat_service.WorkStationService, "aget_config", AsyncMock(return_value=SimpleNamespace(models=[model]))
     )
-    from bisheng.common.services.config_service import settings as enterprise_settings
-
-    assert not enterprise_settings.dsh.enabled  # default: workbench models come from the config
+    # The user-facing model list comes from the shared catalog (online models the
+    # user may see); this test only needs model "m1" to be selectable.
+    monkeypatch.setattr(
+        "bisheng.dsh.domain.services.model_catalog.user_workbench_models", AsyncMock(return_value=[model])
+    )
     monkeypatch.setattr(chat_service.MessageSessionDao, "async_insert_one", AsyncMock())
     monkeypatch.setattr(chat_service.telemetry_service, "log_event", AsyncMock())
 
@@ -101,7 +103,9 @@ async def test_ac10_initialize_registers_before_the_question_row(monkeypatch):
     async def _register(chat_id):
         order.append(("register", chat_id))
 
-    data = SimpleNamespace(model="m1", conversationId=None, files=None, text="hi")
+    # skip_llm marks the session as a content-safety hit; that write is not under test.
+    monkeypatch.setattr(chat_service, "mark_session_content_violation", lambda _chat_id: None)
+    data = SimpleNamespace(model="m1", conversationId=None, files=None, text="hi", project_id=None)
     out = await chat_service._agent_initialize_chat(data, login_user(), skip_llm=True, memory_register=_register)
     chat_id = out[1].chat_id
     assert order == [("register", chat_id), ("question", chat_id)]

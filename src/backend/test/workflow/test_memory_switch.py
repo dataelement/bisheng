@@ -7,6 +7,7 @@ version in the database (R5, decision 17), never from the graph the client sent.
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -31,6 +32,7 @@ from test.workflow.memory_fixtures import (  # noqa: F401  (fixtures)
     memory_runtime_config,
     register_chat,
     retriever_node,
+    run_tasks_in_flow_tenant,
     seed_online_workflow,
     service,
     wired,
@@ -89,13 +91,34 @@ async def test_ac70_only_editors_can_save_the_switch(monkeypatch):
     from bisheng.api.services.flow import FlowService
 
     version = SimpleNamespace(
-        flow_id="wf-1", is_current=0, name="v", description="", data=graph(memory_enabled=False), is_delete=0
+        id=7, flow_id="wf-1", is_current=0, name="v", description="", data=graph(memory_enabled=False), is_delete=0
     )
-    saved = AsyncMock(side_effect=lambda v: v)
+    saved = AsyncMock(side_effect=lambda _session, _root, v: v)
     monkeypatch.setattr(flow_service.telemetry_service, "log_event", AsyncMock())
     monkeypatch.setattr(flow_service.FlowVersionDao, "aget_version_by_id", AsyncMock(return_value=version))
-    monkeypatch.setattr(flow_service.FlowVersionDao, "aupdate_version", saved)
     monkeypatch.setattr(FlowService, "update_flow_hook", AsyncMock())
+    # The reference-binding unit around the save is not under test; only what it writes is.
+    root = SimpleNamespace(id="wf-1", tenant_id=1)
+    repo = flow_service.WorkflowVersionRepository
+    monkeypatch.setattr(repo, "aget_root", AsyncMock(return_value=root))
+    monkeypatch.setattr(repo, "aget_version", AsyncMock(return_value=version))
+    monkeypatch.setattr(repo, "aupdate_version", saved)
+    monkeypatch.setattr(FlowService, "_workflow_management_tenant", classmethod(lambda cls: 1))
+    monkeypatch.setattr(FlowService, "_workflow_version_snapshot", staticmethod(lambda v: None))
+    monkeypatch.setattr(FlowService, "_assert_workflow_source_configuration", staticmethod(lambda *a: None))
+    monkeypatch.setattr(FlowService, "_require_new_workflow_knowledge_visible", AsyncMock())
+    runtime = SimpleNamespace(
+        aprepare_source_bindings=AsyncMock(return_value=SimpleNamespace(verified=SimpleNamespace(references=()))),
+        aapply_source_bindings=AsyncMock(),
+    )
+    monkeypatch.setattr(flow_service, "get_reference_binding_runtime", AsyncMock(return_value=runtime))
+    session = SimpleNamespace(commit=AsyncMock(), refresh=AsyncMock())
+
+    @asynccontextmanager
+    async def _session():
+        yield session
+
+    monkeypatch.setattr(flow_service, "get_async_db_session", _session)
     body = SimpleNamespace(name=None, description=None, data=graph(memory_enabled=True))
 
     monkeypatch.setattr(FlowService, "judge_flow_write_permission", AsyncMock(side_effect=UnAuthorizedError()))
@@ -103,9 +126,11 @@ async def test_ac70_only_editors_can_save_the_switch(monkeypatch):
         await FlowService.update_version_info(Mock(), SimpleNamespace(user_id=2), 7, body)
     saved.assert_not_awaited()
 
-    monkeypatch.setattr(FlowService, "judge_flow_write_permission", AsyncMock(return_value=SimpleNamespace(status=1)))
+    monkeypatch.setattr(
+        FlowService, "judge_flow_write_permission", AsyncMock(return_value=SimpleNamespace(id="wf-1", status=1))
+    )
     await FlowService.update_version_info(Mock(), SimpleNamespace(user_id=1), 7, body)
-    assert start_node_memory_enabled(saved.await_args.args[0].data) is True
+    assert start_node_memory_enabled(saved.await_args.args[2].data) is True
 
 
 # ---- AC-85 / AC-80 publish check ----------------------------------------------------------
@@ -126,8 +151,18 @@ def publish(monkeypatch):
     )
     monkeypatch.setattr(wf_service, "require_business_action", AsyncMock())
     monkeypatch.setattr(wf_service.FlowVersionDao, "aget_version_by_id", _version)
-    monkeypatch.setattr(wf_service.FlowVersionDao, "change_current_version", state.change)
-    monkeypatch.setattr(wf_service.FlowDao, "aupdate_flow", state.update)
+    from bisheng.api.services.flow import FlowService
+
+    async def _transition(user, flow_id, version_id, *, status=None, validate_version=None):
+        # The locked SQL unit is not under test; it runs validate_version before switching.
+        if validate_version is not None:
+            root = SimpleNamespace(name="报销流程", tenant_id=1, user_id=1)
+            validate_version(root, await _version(version_id))
+            await state.change(flow_id, version_id)
+        else:
+            await state.update(flow_id, status)
+
+    monkeypatch.setattr(FlowService, "transition_current_version", _transition)
     monkeypatch.setattr(wf_service.telemetry_service, "log_event", AsyncMock())
 
     async def _go(data, status=2):
@@ -216,6 +251,7 @@ def worker(monkeypatch):
         return wf
 
     monkeypatch.setattr(tasks, "Workflow", _capture)
+    run_tasks_in_flow_tenant(monkeypatch, tasks)
     return SimpleNamespace(tasks=tasks, built=built)
 
 

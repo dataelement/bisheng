@@ -405,8 +405,22 @@ def test_ac69_update_request_and_detail_carry_memory_enabled():
 def update_env(monkeypatch):
     row = Assistant(id=ASSISTANT_ID, name="差旅助手", tenant_id=TENANT_A, user_id=1, memory_enabled=False)
     saved = []
-    monkeypatch.setattr(assistant_service_module.AssistantDao, "get_one_assistant", staticmethod(lambda _id: row))
-    monkeypatch.setattr(assistant_service_module.AssistantDao, "update_assistant", staticmethod(saved.append))
+
+    async def persist(cls, assistant_id, user_payload, *, changes=None, **_kwargs):
+        # Stands in for the reference-fenced writer: the edit check, then the field writes.
+        await cls.check_update_permission_async(row, user_payload)
+        for key, value in (changes or {}).items():
+            setattr(row, key, value)
+        saved.append(row)
+        return row
+
+    monkeypatch.setattr(AssistantService, "_persist_assistant_changes", classmethod(persist))
+    monkeypatch.setattr(
+        assistant_service_module,
+        "get_async_db_session",
+        MagicMock(return_value=MagicMock(__aenter__=AsyncMock(), __aexit__=AsyncMock(return_value=False))),
+    )
+    monkeypatch.setattr(assistant_service_module.AssistantRepository, "alist_links", AsyncMock(return_value=[]))
     monkeypatch.setattr(assistant_service_module.telemetry_service, "log_event", AsyncMock())
     monkeypatch.setattr(AssistantService, "get_link_info", classmethod(lambda cls, *a: ([], [], [])))
     monkeypatch.setattr(AssistantService, "update_assistant_hook", classmethod(lambda cls, *a: True))
@@ -424,7 +438,9 @@ async def test_ac69_editor_can_switch_memory_on_and_off(update_env, monkeypatch)
     )
     assert update_env.row.memory_enabled is True and info.memory_enabled is True and update_env.saved
 
-    info = await AssistantService.update_assistant(MagicMock(), login, AssistantUpdateReq(id=ASSISTANT_ID, temperature=0.5))
+    info = await AssistantService.update_assistant(
+        MagicMock(), login, AssistantUpdateReq(id=ASSISTANT_ID, temperature=0.5)
+    )
     assert info.memory_enabled is True  # absent = untouched
 
     await AssistantService.update_assistant(
@@ -438,7 +454,9 @@ async def test_ac69_non_editor_cannot_change_memory_switch(update_env, monkeypat
     monkeypatch.setattr(AssistantService, "check_update_permission_async", AsyncMock(side_effect=UnAuthorizedError()))
     with pytest.raises(UnAuthorizedError):
         await AssistantService.update_assistant(
-            MagicMock(), SimpleNamespace(user_id=USER_2), AssistantUpdateReq(id=ASSISTANT_ID, temperature=0.5, memory_enabled=True)
+            MagicMock(),
+            SimpleNamespace(user_id=USER_2),
+            AssistantUpdateReq(id=ASSISTANT_ID, temperature=0.5, memory_enabled=True),
         )
     assert update_env.row.memory_enabled is False and update_env.saved == []
 
