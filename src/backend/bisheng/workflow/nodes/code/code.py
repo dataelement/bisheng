@@ -48,7 +48,7 @@ class CodeNode(BaseNode):
         try:
             self._code_parser.parse_code()
         except Exception as e:
-            raise Exception(f"CodeNode {self.name} exec code error: " + str(e))
+            raise ValueError(f"CodeNode {self.name} exec code error: " + str(e))
 
     def _run(self, unique_id: str):
         main_params = self._parse_code_input()
@@ -81,10 +81,10 @@ class CodeNode(BaseNode):
         if result is None:
             raise SandboxCodeNodeNoResultError()
         if not isinstance(result, dict):
-            raise Exception(f"CodeNode {self.name} main function output must be dict")
+            raise ValueError(f"CodeNode {self.name} main function output must be dict")
         ret = {}
         for one in self._code_output:
             if one["key"] not in result:
-                raise Exception(f"CodeNode {self.name} main function output must have key {one['key']}")
+                raise KeyError(f"CodeNode {self.name} main function output must have key {one['key']}")
             ret[one["key"]] = result.get(one["key"])
         return ret
