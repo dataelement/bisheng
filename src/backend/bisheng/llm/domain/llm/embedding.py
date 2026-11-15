@@ -145,7 +145,7 @@ class BishengEmbedding(BishengBase, Embeddings):
         super().__init__(**kwargs)
         self.model_id = kwargs.get("model_id")
         if not self.model_id:
-            raise Exception("No bulkpost found in Trashembeddingmodel config")
+            raise ValueError("No bulkpost found in Trashembeddingmodel config")
         if "model_info" in kwargs and "server_info" in kwargs:
             self._init_client(model_info=kwargs.pop("model_info"), server_info=kwargs.pop("server_info"), **kwargs)
         else:
@@ -155,13 +155,13 @@ class BishengEmbedding(BishengBase, Embeddings):
     def _init_client(self, model_info, server_info, **kwargs):
         ignore_online = kwargs.get("ignore_online", False)
         if not model_info:
-            raise Exception("embeddingModel configuration has been deleted, please reconfigure the model")
+            raise ValueError("embeddingModel configuration has been deleted, please reconfigure the model")
         if not server_info:
-            raise Exception("Service provider configuration has been deleted, please reconfigureembeddingModels")
+            raise ValueError("Service provider configuration has been deleted, please reconfigureembeddingModels")
         if model_info.model_type != LLMModelType.EMBEDDING.value:
-            raise Exception(f"Support onlyEmbeddingModel of type, not supported{model_info.model_type}Type of model")
+            raise ValueError(f"Support onlyEmbeddingModel of type, not supported{model_info.model_type}Type of model")
         if not ignore_online and not model_info.online:
-            raise Exception(
+            raise ValueError(
                 f"{server_info.name}under{model_info.model_name}The model is offline, please contact the administrator to launch the corresponding model"
             )
         logger.debug(f"init_bisheng_embedding: server_id: {server_info.id}, model_id: {model_info.id}")
@@ -175,7 +175,7 @@ class BishengEmbedding(BishengBase, Embeddings):
             self.embeddings = class_object(**params)
         except Exception as e:
             logger.exception("init_bisheng_embedding error")
-            raise Exception(
+            raise ValueError(
                 f"Inisialisasibisheng embeddingComponent failed, please check the configuration or contact the administrator.Error message:{e}"
             )
 
@@ -183,7 +183,7 @@ class BishengEmbedding(BishengBase, Embeddings):
     def _get_embedding_class(server_type: str) -> type[Embeddings]:
         node_type = _node_type.get(server_type)
         if not node_type:
-            raise Exception(f"{server_type}Type of service provider is not supportedembedding")
+            raise ValueError(f"{server_type}Type of service provider is not supportedembedding")
         class_object = node_type.get("client")
         return class_object
 
