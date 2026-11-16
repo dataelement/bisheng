@@ -3935,6 +3935,7 @@
     "server": "Platform address",
     "copyServer": "Copy platform address",
     "login": "Sign in to BiSheng",
+        "loginRequired": "Sign in to your web account first. After signing in, you will return here to authorize the client.",
     "confirm": "Confirm",
     "authorizeHelp": "Authorize Client as {{name}} ({{tenant}}). Confirm that you started this sign-in in the desktop app.",
     "authorize_without_tenant": "Authorize Client as {{name}}. Confirm that you started this sign-in in the desktop app.",

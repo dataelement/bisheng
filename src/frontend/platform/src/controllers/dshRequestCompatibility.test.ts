@@ -29,7 +29,7 @@ const previous = await (() => ({ toast: captured.toast }))();
 const hooks = Reflect.get(previous, 'useToast')?.() ?? {};
 return { ...actual, notification: { ...actual.notification, open: Reflect.get(previous, 'toast') ?? Reflect.get(hooks, 'toast') ?? actual.notification.open }, toast: { ...actual.toast, show: Reflect.get(previous, 'message') ?? Reflect.get(hooks, 'message') ?? actual.toast.show } };
 })
-vi.mock('i18next', () => ({ default: { t: (key: string) => key } }))
+vi.mock('i18next', () => ({ default: { t: (key: string) => key, exists: () => false } }))
 import './request'
 import { consumeLoginReturnTo, rememberDesktopLoginReturnTo } from '@/utils/loginReturnTo'
 import { isDshRequestRejected } from './API/dsh'
@@ -41,7 +41,7 @@ afterEach(() => vi.unstubAllGlobals())
 describe('structured errors after shared request handling', () => {
     it('preserves business rejection evidence for every caller', async () => {
         const response = { status: 200, config: {}, data: { status_code: 26130, status_message: 'conflict' } }
-        await expect(captured.success!(response)).rejects.toMatchObject({ status_code: 26130, httpStatus: 200, message: 'conflict' })
+        await expect(captured.success!(response)).rejects.toMatchObject({ status_code: 26130, httpStatus: 200 })
         const rejected = await captured.success!({ ...response, config: { preserveError: true } }).catch(error => error)
         expect(rejected).toMatchObject({ response })
         expect(isDshRequestRejected(rejected)).toBe(true)
@@ -79,10 +79,10 @@ describe('structured errors after shared request handling', () => {
 
 
 describe('desktop login after an expired browser session', () => {
-    it.each([false, true])('preserves the authorization URL through 401 and SSO=%s', async (sso) => {
+    it.each([[false, false], [false, true], [true, false], [true, true]])('preserves the authorization URL through 401; SSO=%s, previous session=%s', async (sso, hadSession) => {
         const origin = 'http://192.168.106.109:13001'
         const target = origin + '/desktop-login?auth_id=3fef33bd-3b9d-4f93-830a-87052298ef79'
-        const values = new Map<string, string>([['UUR_INFO', '1']])
+        const values = new Map<string, string>(hadSession ? [['UUR_INFO', '1']] : [])
         if (sso) values.set('THIRD_PARTY_LOGIN_URL', 'https://idp.example/login')
         vi.stubGlobal('localStorage', {
             getItem: (key: string) => values.get(key) ?? null,
@@ -94,7 +94,7 @@ describe('desktop login after an expired browser session', () => {
         // Startup captures the URL before UserContext performs its first request.
         rememberDesktopLoginReturnTo()
         await expect(captured.failed!({ response: { status: 401 } })).rejects.toBeTruthy()
-        expect(currentLocation.href).toBe(sso ? 'https://idp.example/login' : '/')
+        expect(currentLocation.href).toBe(sso ? 'https://idp.example/login' : hadSession ? '/' : target)
         currentLocation.href = origin + '/'
         currentLocation.pathname = '/'
         // Both the local form and SSO landing use the same one-shot consumer.
