@@ -9,8 +9,8 @@
 ## Wave 0：基础设施与决策
 
 - [ ] **T001** 基础设施：核对 `src/backend/bisheng/tool/domain/models/gpts_tools.py` 中 WebSearchSecret 的 owner tenant/category/provider 唯一键、密文版本与审计字段，确保 MySQL/DM8 可建表；回滚采用停用 custom、备份后由运维单独移除新增表，不能把数据迁移放入 Alembic。依赖：无。
-- [ ] **T002** 基础设施：在 `src/backend/bisheng/tool/domain/services/web_search.py` 核实独立 keyring/active key 环境配置，缺失 fail closed，旧 provider 不受影响；与运维确认注入 API、Celery、Linsight 的方式。依赖：无。
-- [ ] **T003** 决策与登记：确认功能编号、v3.0.0 release-contract 的新密钥对象归属及共享工具写入影响；确认历史子项覆盖处理、私网 CIDR/端口授权、HTTP 内网策略、网络限制值、keyring 托管及轮换恢复责任。依赖：无。登记需走项目正常流程；本次只记录待办。
+- [x] **T002** 基础设施：原环境变量方案由 P1 修复替代；共享数据库自动初始化随机 keyring/active，复用平台存储加密，损坏数据 fail closed。33 项相关回归及 115 API/worker 解密验证通过；旧 provider 不变。
+- [ ] **T003** 决策与登记：功能编号已收纳为 F017 并登记 v3.1.0-beta1 release-contract；继续确认新密钥对象归属及共享工具写入影响；确认历史子项覆盖处理、私网 CIDR/端口授权、HTTP 内网策略、网络限制值、keyring 托管及轮换恢复责任。依赖：无。登记需走项目正常流程；本次只记录待办。
 - [ ] **T004** 安全评审：按用户已确认决定保留通用原文预览，对已知秘密及可识别编码脱敏；按已修订 AC-12 评审并记录上游任意变形、拆分或未知秘密无法识别的已接受残余风险；不得将有限脱敏描述为绝对保证。依赖：无。
 
 ## Wave 1：后端 Domain（测试先于实现）
