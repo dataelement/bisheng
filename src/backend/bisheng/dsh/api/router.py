@@ -23,7 +23,8 @@ from bisheng.dsh.api.endpoints.web_session import router as web_session_router
 from bisheng.dsh.api.endpoints.work import router as work_router
 
 scope_overrides(unified_policy_router, S.IDENTITY, "personal_credits")
-scope_overrides(settings_router, S.IDENTITY, "browser_config")
+# Desktop login discovers launch/download settings before any session exists.
+scope_overrides(settings_router, S.PUBLIC, "browser_config")
 router = APIRouter()
 router.include_router(skill_center_router, request_scope=S.CREDENTIAL)
 router.include_router(local_auth_router, request_scope=S.CREDENTIAL)
