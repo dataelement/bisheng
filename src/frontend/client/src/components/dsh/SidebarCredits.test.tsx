@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { SidebarCredits } from './SidebarCredits';
 import { getDshCredits } from '~/api/dsh';
@@ -41,16 +41,26 @@ beforeEach(() => {
 it('F016: shows the remaining balance with two decimals and opens the credits card', async () => {
   const navigate = show();
   const row = await screen.findByRole('button', { name: /dsh.creditsRemaining/ });
-  expect(row).toHaveTextContent('899.49 / 1,000');
+  expect(row).toHaveTextContent('899.49');
   fireEvent.click(row);
   expect(screen.getByTestId('path')).toHaveTextContent('/settings/desktop');
   expect(navigate).toHaveBeenCalled();
 });
 
-it('F016: an exhausted member sees the raised allowance with what is left of it', async () => {
-  jest.mocked(getDshCredits).mockResolvedValue({ ...credits, limit: '1000', used: '500', remaining: '500' });
-  show();
-  expect(await screen.findByRole('button', { name: /dsh.creditsRemaining/ })).toHaveTextContent('500 / 1,000');
+it('F016: rereads the balance when the window regains focus, though the app turns that off globally', async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } }, logger: { log: () => undefined, warn: () => undefined, error: () => undefined } });
+  render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter><SidebarCredits /></MemoryRouter>
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByRole('button', { name: /dsh.creditsRemaining/ })).toHaveTextContent('899.49');
+  // The administrator raises the allowance while the member is in another window.
+  jest.mocked(getDshCredits).mockResolvedValue({ ...credits, limit: '2000', remaining: '1899.48728' });
+  act(() => { focusManager.setFocused(false); });
+  act(() => { focusManager.setFocused(true); });
+  await waitFor(() => expect(screen.getByRole('button', { name: /dsh.creditsRemaining/ })).toHaveTextContent('1,899.49'));
+  focusManager.setFocused(undefined);
 });
 
 it('F016: says unlimited instead of a number', async () => {

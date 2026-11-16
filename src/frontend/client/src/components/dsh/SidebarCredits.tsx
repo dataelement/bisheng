@@ -32,6 +32,8 @@ export function SidebarCredits({ onNavigate }: SidebarCreditsProps) {
         retry: false,
         staleTime: 0,
         refetchInterval: REFRESH_INTERVAL_MS,
+        // The app turns focus refetch off globally; an administrator may have changed the allowance.
+        refetchOnWindowFocus: true,
         queryFn: ({ signal }) => getDshCredits(signal),
     })
     const { refetch } = credits
@@ -50,14 +52,12 @@ export function SidebarCredits({ onNavigate }: SidebarCreditsProps) {
 
     // An unreadable balance stays on the settings card, which explains it and offers a retry.
     if (!enabled || !credits.data) return null
-    const { unlimited, remaining, limit } = credits.data
-    const number = new Intl.NumberFormat(i18n.language, { maximumFractionDigits: 2 })
-    // "remaining / allowance": raising an exhausted member's allowance visibly changes the row.
+    const { unlimited, remaining } = credits.data
     const value = unlimited
         ? t('dsh.creditsUnlimited')
         : remaining == null
           ? '—'
-          : `${number.format(Number(remaining))} / ${number.format(Number(limit))}`
+          : new Intl.NumberFormat(i18n.language, { maximumFractionDigits: 2 }).format(Number(remaining))
 
     const openCredits = () => {
         const alreadyInSettings = /^\/settings(?:\/|$)/.test(location.pathname)
