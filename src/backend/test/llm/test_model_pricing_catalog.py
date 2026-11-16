@@ -1,4 +1,4 @@
-"""F016 built-in price catalog: bundled data validity and exact matching."""
+"""F016 built-in price catalog: bundled data validity, exact matching and gateway prefixes."""
 
 import copy
 
@@ -11,13 +11,23 @@ from bisheng.llm.domain.pricing.catalog import PriceCatalog, catalog_pricing, lo
 
 def test_bundled_catalog_is_valid_and_prices_convert():
     catalog = load_catalog()
-    assert catalog.version == "2026-11-10"
-    assert len(catalog.entries) >= 30
+    assert catalog.version == "2026-11-16"
+    assert len(catalog.entries) >= 80
     for entry in catalog.entries:
         pricing = catalog_pricing(entry)
         assert isinstance(pricing, ModelPricing)
-        assert (pricing.source, pricing.catalog_key, pricing.catalog_version) == ("CATALOG", entry.key, "2026-11-10")
+        assert (pricing.source, pricing.catalog_key, pricing.catalog_version) == ("CATALOG", entry.key, "2026-11-16")
         assert entry.source_url.startswith("https://")
+
+
+def test_every_entry_can_be_picked_for_a_gateway_and_vendors_stay_grouped():
+    entries = load_catalog().entries
+    assert all("openai_compatible" in entry.provider_types for entry in entries)
+    # The model picker groups rows by vendor in catalog order, so a vendor's entries are contiguous.
+    order = [entry.vendor for entry in entries]
+    vendors = list(dict.fromkeys(order))
+    assert order == sorted(order, key=vendors.index)
+    assert len(vendors) >= 13
 
 
 def test_exact_native_match():
@@ -25,11 +35,18 @@ def test_exact_native_match():
     assert found.entry.key == "qwen/qwen-max"
     assert not found.via_name
     assert (found.entry.input, found.entry.cache_read, found.entry.cache_write, found.entry.output) == (
-        "12",
-        "1.2",
-        "15",
-        "36",
+        "2.4",
+        "0.48",
+        "3",
+        "9.6",
     )
+
+
+def test_domestic_vendor_types_match_their_cny_prices():
+    assert match("zhipu", "glm-5.3").entry.currency == "CNY"
+    assert match("moonshot", "kimi-k3.1-pro").entry.key == "moonshot/kimi-k3.1-pro"
+    assert match("tencent", "hy4").entry.key == "tencent/hy4"
+    assert not match("qianfan", "ernie-5.1").via_name
 
 
 def test_case_and_surrounding_spaces_are_ignored():
@@ -44,6 +61,24 @@ def test_openai_compatible_matches_by_name_and_asks_for_review():
 
 def test_explicit_dated_alias_matches():
     assert match("anthropic", "claude-haiku-4-5-20251001").entry.key == "anthropic/claude-haiku-4-5"
+    # Ark model IDs are dashed and dated.
+    found = match("volcengine", "doubao-seed-2-1-pro-260915")
+    assert found.entry.key == "volcengine/doubao-seed-2.1-pro" and not found.via_name
+
+
+@pytest.mark.parametrize(
+    ("server_type", "model_name", "key"),
+    [
+        ("openai_compatible", "openai/gpt-5.5", "openai/gpt-5.5"),
+        ("openai_compatible", "deepseek-ai/DeepSeek-V4-Pro", "deepseek/deepseek-v4-pro"),
+        ("openai_compatible", "anthropic/claude-opus-4.5", "anthropic/claude-opus-4-5"),
+        ("deepseek", "deepseek-ai/deepseek-v4-pro", "deepseek/deepseek-v4-pro"),
+    ],
+)
+def test_gateway_vendor_prefix_is_dropped_and_asks_for_review(server_type, model_name, key):
+    found = match(server_type, model_name)
+    assert found.entry.key == key
+    assert found.via_name
 
 
 @pytest.mark.parametrize(
@@ -52,8 +87,9 @@ def test_explicit_dated_alias_matches():
         ("openai", "gpt-4.1-2025-04-14"),  # dated snapshots are never stripped to the base price
         ("anthropic", "claude-sonnet-4-5-20990101"),
         ("qwen", "gpt-4.1"),  # another vendor's model under a native provider
-        ("zhipu", "glm-4.7"),  # domestic Zhipu may price differently in CNY; only the intl entry exists
-        ("minimax", "minimax-m3"),
+        ("openai_compatible", "openai/gpt-4.1-2025-04-14"),  # a dropped prefix never strips the date
+        ("openai_compatible", "openai/"),
+        ("silicon", "deepseek-ai/deepseek-v4-pro"),  # gateways with their own price list never match
         ("vllm", "qwen-max"),  # self-hosted provider types never match
         ("ollama", "deepseek-v4-pro"),
         ("volcengine", "ep-20261110-abcde"),  # Ark endpoint IDs cannot be matched

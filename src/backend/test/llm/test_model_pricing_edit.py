@@ -24,12 +24,12 @@ from bisheng.llm.domain.models.llm_server import LLMModel, LLMServer
 from bisheng.llm.domain.pricing import service
 from bisheng.llm.domain.repositories import model_pricing_repository as repository
 
-QWEN_MAX = {"currency": "CNY", "input": "12", "cache_read": "1.2", "cache_write": "15", "output": "36"}
+QWEN_MAX = {"currency": "CNY", "input": "2.4", "cache_read": "0.48", "cache_write": "3", "output": "9.6"}
 STORED = {
     **QWEN_MAX,
     "source": "CATALOG",
     "catalog_key": "qwen/qwen-max",
-    "catalog_version": "2026-11-10",
+    "catalog_version": "2026-11-16",
     "ref_key": None,
     "revision": 3,
 }

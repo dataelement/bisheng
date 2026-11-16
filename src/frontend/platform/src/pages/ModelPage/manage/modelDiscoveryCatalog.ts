@@ -5,8 +5,9 @@ import { getPriceCatalog } from "@/controllers/API/modelPricing";
 export const PRICE_CATALOG_ONLY = new Set(["openai_compatible"]);
 
 /**
- * F016: price-catalog models for a provider type. Picking one fills the price from the same
- * catalog. The names are the catalog's, so the vendor's own naming still needs a check.
+ * F016: price-catalog models for a provider type, in catalog order (grouped by vendor). Picking
+ * one fills the price from the same catalog. The names are the catalog's, so the vendor's own
+ * naming still needs a check.
  */
 export async function priceCatalogModels(provider: string): Promise<DiscoveredModel[]> {
   const catalog = await getPriceCatalog();
@@ -17,5 +18,12 @@ export async function priceCatalogModels(provider: string): Promise<DiscoveredMo
       display_name: entry.label,
       model_type: "llm",
       type_source: "registry",
+      catalog: {
+        vendor: entry.vendor,
+        label: entry.label,
+        currency: entry.currency,
+        input: entry.input,
+        output: entry.output,
+      },
     }));
 }

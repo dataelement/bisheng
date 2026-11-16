@@ -2,8 +2,10 @@
 
 Matching is exact on the provider type plus the normalized model name; dated
 snapshot names are listed explicitly instead of being stripped, because a
-snapshot can be priced differently from its base model. ``catalog.json`` is
-validated on first load, and the test suite keeps the bundled file valid.
+snapshot can be priced differently from its base model. A gateway's vendor
+prefix ("openai/gpt-5.5") is dropped when the full name has no entry, and such a
+match asks the admin to verify. ``catalog.json`` is validated on first load, and
+the test suite keeps the bundled file valid.
 """
 
 import json
@@ -88,13 +90,26 @@ def load_catalog() -> PriceCatalog:
     return PriceCatalog.model_validate(json.loads(CATALOG_PATH.read_text(encoding="utf-8")))
 
 
+def _find(server_type: str, name: str) -> CatalogEntry | None:
+    for entry in load_catalog().entries:
+        if server_type in entry.provider_types and name in entry.aliases:
+            return entry
+    return None
+
+
 def match(server_type: str, model_name: str) -> CatalogMatch | None:
     name = normalize_model_name(model_name or "")
     if not name:
         return None
-    for entry in load_catalog().entries:
-        if server_type in entry.provider_types and name in entry.aliases:
-            return CatalogMatch(entry, via_name=server_type == LLMServerType.OPENAI_COMPATIBLE.value)
+    entry = _find(server_type, name)
+    if entry is not None:
+        return CatalogMatch(entry, via_name=server_type == LLMServerType.OPENAI_COMPATIBLE.value)
+    # Gateways often prefix the vendor: "openai/gpt-5.5", "deepseek-ai/deepseek-v4-pro".
+    base = name.rsplit("/", 1)[-1].strip()
+    if base and base != name:
+        entry = _find(server_type, base)
+        if entry is not None:
+            return CatalogMatch(entry, via_name=True)
     return None
 
 

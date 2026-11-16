@@ -6,7 +6,7 @@ from bisheng.common.errcode.llm import ModelPricingConflictError, ModelPricingIn
 from bisheng.llm.domain.models.llm_server import LLMModel
 from bisheng.llm.domain.pricing.service import apply_pricing_on_save, resolve_model_pricing
 
-QWEN_MAX = {"currency": "CNY", "input": "12", "cache_read": "1.2", "cache_write": "15", "output": "36"}
+QWEN_MAX = {"currency": "CNY", "input": "2.4", "cache_read": "0.48", "cache_write": "3", "output": "9.6"}
 
 
 def stored(**changes):
@@ -14,7 +14,7 @@ def stored(**changes):
         **QWEN_MAX,
         "source": "CATALOG",
         "catalog_key": "qwen/qwen-max",
-        "catalog_version": "2026-11-10",
+        "catalog_version": "2026-11-16",
         "ref_key": None,
         "revision": 3,
     }
@@ -59,7 +59,7 @@ def test_restoring_the_catalog_price_marks_it_catalog_again():
     result = resolve_model_pricing(
         "qwen",
         "qwen-max",
-        incoming={**QWEN_MAX, "input": "12.000000", "revision": 4},
+        incoming={**QWEN_MAX, "input": "2.400000", "revision": 4},
         existing=stored(input="6", source="MANUAL", revision=4),
     )
     assert (result["source"], result["revision"]) == ("CATALOG", 5)

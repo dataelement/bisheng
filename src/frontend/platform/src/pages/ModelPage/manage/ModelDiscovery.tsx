@@ -20,7 +20,7 @@ import {
   discoverModels,
 } from "@/controllers/API/modelDiscovery";
 import { Loader2, Plus, RefreshCw } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   availableModelTypes,
@@ -41,6 +41,8 @@ const manualSpeechProviders = new Set([
   "spark",
   "minimax",
 ]);
+const money = (currency: string, value: string) =>
+  `${currency === "USD" ? "$" : "¥"}${value}`;
 
 interface ModelDiscoveryProps {
   provider: string;
@@ -71,6 +73,7 @@ export function ModelDiscovery({
   const [types, setTypes] = useState<Record<string, ModelType>>({});
   const [keyword, setKeyword] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [vendorFilter, setVendorFilter] = useState("all");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   // The vendor list failed but the price catalog stands in; the reason is kept as a notice.
@@ -82,6 +85,17 @@ export function ModelDiscovery({
   const supported = discoveryProviders.has(provider) || catalogOnly;
   const allowedTypes = availableModelTypes(provider);
   const needsDeployment = resultInfo?.scope === "azure_models";
+  // F016: price-catalog rows are all text models; they are filtered and grouped by vendor instead.
+  const catalogMode = resultInfo?.scope === "price_catalog";
+  const vendors = catalogMode
+    ? [
+        ...new Set(
+          (catalog || []).flatMap((model) =>
+            model.catalog ? [model.catalog.vendor] : [],
+          ),
+        ),
+      ]
+    : [];
   const candidates = importableModels(
     catalog || [],
     selected,
@@ -106,11 +120,13 @@ export function ModelDiscovery({
   const visible = (catalog || []).filter((model) => {
     const type = types[model.model_name] || model.model_type;
     return (
-      `${model.model_name} ${model.display_name}`
+      `${model.model_name} ${model.display_name} ${model.catalog?.vendor || ""}`
         .toLowerCase()
         .includes(keyword.trim().toLowerCase()) &&
-      (typeFilter === "all" ||
-        (typeFilter === "unknown" ? !type : type === typeFilter))
+      (catalogMode
+        ? vendorFilter === "all" || model.catalog?.vendor === vendorFilter
+        : typeFilter === "all" ||
+          (typeFilter === "unknown" ? !type : type === typeFilter))
     );
   });
   const selectable = visible.filter((model) => {
@@ -140,6 +156,7 @@ export function ModelDiscovery({
     setTypes({});
     setKeyword("");
     setTypeFilter("all");
+    setVendorFilter("all");
     setError("");
     setFallbackNotice("");
     setLoading(false);
@@ -176,6 +193,7 @@ export function ModelDiscovery({
     setCatalog(null);
     setSelected(new Set());
     setTypes({});
+    setVendorFilter("all");
     try {
       if (!connection) {
         if (!(await showPriceCatalog(version)) && version === requestVersion.current)
@@ -313,23 +331,42 @@ export function ModelDiscovery({
                 placeholder={t("model.searchDiscoveredModels")}
                 onChange={(event) => setKeyword(event.target.value)}
               />
-              <Select
-                {...selectLabels}
-                aria-label={t("model.filterModelType")}
-                className="w-40 shrink-0"
-                value={typeFilter}
-                onChange={(value) => {
-                  if (value) setTypeFilter(String(value));
-                }}
-                options={[
-                  { value: "all", label: t("model.allModelTypes") },
-                  ...modelTypes.map((type) => ({
-                    value: type,
-                    label: t(`model.type_${type}`),
-                  })),
-                  { value: "unknown", label: t("model.unknownModelType") },
-                ]}
-              />
+              {catalogMode ? (
+                <Select
+                  {...selectLabels}
+                  aria-label={t("model.filterVendor")}
+                  className="w-40 shrink-0"
+                  value={vendorFilter}
+                  onChange={(value) => {
+                    if (value) setVendorFilter(String(value));
+                  }}
+                  options={[
+                    { value: "all", label: t("model.allVendors") },
+                    ...vendors.map((vendor) => ({
+                      value: vendor,
+                      label: vendor,
+                    })),
+                  ]}
+                />
+              ) : (
+                <Select
+                  {...selectLabels}
+                  aria-label={t("model.filterModelType")}
+                  className="w-40 shrink-0"
+                  value={typeFilter}
+                  onChange={(value) => {
+                    if (value) setTypeFilter(String(value));
+                  }}
+                  options={[
+                    { value: "all", label: t("model.allModelTypes") },
+                    ...modelTypes.map((type) => ({
+                      value: type,
+                      label: t(`model.type_${type}`),
+                    })),
+                    { value: "unknown", label: t("model.unknownModelType") },
+                  ]}
+                />
+              )}
             </div>
             <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
               <label className="flex items-center gap-2 cursor-pointer">
@@ -354,7 +391,12 @@ export function ModelDiscovery({
               <div className="flex items-center gap-2">
                 {catalog && (
                   <span>
-                    {t("model.discoveredCount", { count: catalog.length })}
+                    {t(
+                      catalogMode
+                        ? "model.priceCatalogCount"
+                        : "model.discoveredCount",
+                      { count: catalog.length },
+                    )}
                   </span>
                 )}
                 <Button
@@ -388,7 +430,10 @@ export function ModelDiscovery({
               )}
               {!loading &&
                 !error &&
-                visible.map((model) => {
+                visible.map((model, index) => {
+                  const vendor = model.catalog?.vendor;
+                  const groupStart =
+                    !!vendor && vendor !== visible[index - 1]?.catalog?.vendor;
                   const added = existing.includes(
                     needsDeployment
                       ? deploymentNames[model.model_name]?.trim()
@@ -399,102 +444,123 @@ export function ModelDiscovery({
                     model.type_source === "unsupported" ||
                     (!!type && !allowedTypes.includes(type));
                   return (
-                    <div
-                      key={model.model_name}
-                      className="flex items-center gap-3 px-3 py-2.5"
-                    >
-                      <Checkbox
-                        aria-label={model.model_name}
-                        checked={selected.has(model.model_name)}
-                        disabled={
-                          added ||
-                          unsupported ||
-                          !type ||
-                          (needsDeployment &&
-                            !deploymentNames[model.model_name]?.trim())
-                        }
-                        onCheckedChange={(checked) =>
-                          setSelected((previous) => {
-                            const next = new Set(previous);
-                            if (checked === true) next.add(model.model_name);
-                            else next.delete(model.model_name);
-                            return next;
-                          })
-                        }
-                      />
-                      <div className="flex min-w-0 flex-1 items-center gap-2">
-                        <p
-                          className="min-w-0 truncate text-sm"
-                          title={model.model_name}
-                        >
-                          {model.model_name}
-                        </p>
-                        {(added || unsupported) && (
-                          <span className="shrink-0 text-xs text-muted-foreground">
+                    <Fragment key={model.model_name}>
+                      {groupStart && (
+                        <div className="sticky top-0 z-10 bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground">
+                          {vendor}
+                        </div>
+                      )}
+                      <div className="flex items-center gap-3 px-3 py-2.5">
+                        <Checkbox
+                          aria-label={model.model_name}
+                          checked={selected.has(model.model_name)}
+                          disabled={
+                            added ||
+                            unsupported ||
+                            !type ||
+                            (needsDeployment &&
+                              !deploymentNames[model.model_name]?.trim())
+                          }
+                          onCheckedChange={(checked) =>
+                            setSelected((previous) => {
+                              const next = new Set(previous);
+                              if (checked === true) next.add(model.model_name);
+                              else next.delete(model.model_name);
+                              return next;
+                            })
+                          }
+                        />
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                          <div className="min-w-0">
+                            <p
+                              className="truncate text-sm"
+                              title={model.model_name}
+                            >
+                              {model.model_name}
+                            </p>
+                            {model.catalog && (
+                              <p className="truncate text-xs text-muted-foreground">
+                                {t("model.catalogPrice", {
+                                  label: model.catalog.label,
+                                  input: money(
+                                    model.catalog.currency,
+                                    model.catalog.input,
+                                  ),
+                                  output: money(
+                                    model.catalog.currency,
+                                    model.catalog.output,
+                                  ),
+                                })}
+                              </p>
+                            )}
+                          </div>
+                          {(added || unsupported) && (
+                            <span className="shrink-0 text-xs text-muted-foreground">
+                              {t(
+                                added
+                                  ? "model.modelAlreadyAdded"
+                                  : "model.discoveryUnsupportedType",
+                              )}
+                            </span>
+                          )}
+                        </div>
+                        {needsDeployment && (
+                          <Input
+                            className="w-36"
+                            aria-label={t("model.discoveryDeploymentFor", {
+                              name: model.model_name,
+                            })}
+                            placeholder={t("model.discoveryDeploymentName")}
+                            value={deploymentNames[model.model_name] || ""}
+                            maxLength={100}
+                            onChange={(event) =>
+                              setDeploymentNames((previous) => ({
+                                ...previous,
+                                [model.model_name]: event.target.value,
+                              }))
+                            }
+                          />
+                        )}
+                        {((model.type_source === "unknown" ||
+                          model.type_source === "speech") &&
+                          !added &&
+                          !unsupported) ? (
+                          <Select
+                            {...selectLabels}
+                            aria-label={t("model.confirmModelTypeFor", {
+                              name: model.model_name,
+                            })}
+                            className="w-36"
+                            placeholder={t("model.confirmModelType")}
+                            value={type || null}
+                            onChange={(value) => {
+                              if (value)
+                                setTypes((previous) => ({
+                                  ...previous,
+                                  [model.model_name]: value as ModelType,
+                                }));
+                            }}
+                            options={(model.type_source === "speech"
+                              ? (["asr", "asr_rt"] as const)
+                              : allowedTypes
+                            ).map((value) => ({
+                              value,
+                              label: t(`model.type_${value}`),
+                            }))}
+                          />
+                        ) : (
+                          <span className="shrink-0 rounded bg-muted px-2 py-1 text-xs text-muted-foreground">
                             {t(
-                              added
-                                ? "model.modelAlreadyAdded"
-                                : "model.discoveryUnsupportedType",
+                              type
+                                ? `model.type_${type}`
+                                : model.type_source === "unsupported"
+                                  ? "model.discoveryAdapterBadge"
+                                  : "model.unknownModelType",
                             )}
                           </span>
                         )}
                       </div>
-                      {needsDeployment && (
-                        <Input
-                          className="w-36"
-                          aria-label={t("model.discoveryDeploymentFor", {
-                            name: model.model_name,
-                          })}
-                          placeholder={t("model.discoveryDeploymentName")}
-                          value={deploymentNames[model.model_name] || ""}
-                          maxLength={100}
-                          onChange={(event) =>
-                            setDeploymentNames((previous) => ({
-                              ...previous,
-                              [model.model_name]: event.target.value,
-                            }))
-                          }
-                        />
-                      )}
-                      {((model.type_source === "unknown" ||
-                        model.type_source === "speech") &&
-                        !added &&
-                        !unsupported) ? (
-                        <Select
-                          {...selectLabels}
-                          aria-label={t("model.confirmModelTypeFor", {
-                            name: model.model_name,
-                          })}
-                          className="w-36"
-                          placeholder={t("model.confirmModelType")}
-                          value={type || null}
-                          onChange={(value) => {
-                            if (value)
-                              setTypes((previous) => ({
-                                ...previous,
-                                [model.model_name]: value as ModelType,
-                              }));
-                          }}
-                          options={(model.type_source === "speech"
-                            ? (["asr", "asr_rt"] as const)
-                            : allowedTypes
-                          ).map((value) => ({
-                            value,
-                            label: t(`model.type_${value}`),
-                          }))}
-                        />
-                      ) : (
-                        <span className="shrink-0 rounded bg-muted px-2 py-1 text-xs text-muted-foreground">
-                          {t(
-                            type
-                              ? `model.type_${type}`
-                              : model.type_source === "unsupported"
-                                ? "model.discoveryAdapterBadge"
-                                : "model.unknownModelType",
-                          )}
-                        </span>
-                      )}
-                    </div>
+                    </Fragment>
                   );
                 })}
               {!loading && !error && catalog && visible.length === 0 && (

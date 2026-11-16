@@ -230,7 +230,7 @@ billed_tokens = ⌈raw ÷ credit_value_micro⌉
 
 | 模块 / 文件 | 职责 | 不做什么 |
 |---|---|---|
-| `llm/domain/pricing/catalog.py`、`catalog.json` | 价格表加载、校验、精确别名匹配 | 不去日期后缀；计费路径不读 |
+| `llm/domain/pricing/catalog.py`、`catalog.json` | 价格表加载、校验、精确别名匹配；全名没有条目时去掉中转站的厂商前缀（`openai/`）再匹配，并要求管理员核对 | 不去日期后缀；计费路径不读 |
 | `llm/domain/pricing/service.py` | 保存时补价、来源判定、revision 比较交换 | 不直接写 ORM |
 | `llm/domain/repositories/model_pricing_repository.py` | 不经缓存读价格；事务内加锁写价格 | 不新增 DAO 入口 |
 | `llm/api/pricing.py` | 价格表、匹配、改价接口的参数与鉴权 | 不写业务逻辑 |

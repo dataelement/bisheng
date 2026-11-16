@@ -18,7 +18,7 @@ async def _client():
 async def test_catalog_lists_every_entry():
     async with await _client() as client:
         data = (await client.get("/api/v1/llm/price-catalog")).json()["data"]
-    assert data["version"] == "2026-11-10"
+    assert data["version"] == "2026-11-16"
     assert any(entry["key"] == "qwen/qwen-max" for entry in data["entries"])
 
 
@@ -38,9 +38,9 @@ async def test_match_prefills_known_models_and_flags_name_only_matches():
             await client.get("/api/v1/llm/price-catalog/match", params={"server_type": "vllm", "model_name": "my-qwen"})
         ).json()["data"]
     assert native["matched"] and not native["via_name"]
-    assert (native["entry"]["input"], native["entry"]["output"]) == ("12", "36")
+    assert (native["entry"]["input"], native["entry"]["output"]) == ("2.4", "9.6")
     assert gateway["matched"] and gateway["via_name"]
-    assert unknown == {"matched": False, "via_name": False, "catalog_version": "2026-11-10", "entry": None}
+    assert unknown == {"matched": False, "via_name": False, "catalog_version": "2026-11-16", "entry": None}
 
 
 async def test_match_requires_both_parameters():

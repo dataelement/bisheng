@@ -277,7 +277,11 @@
       "statusManual": "Prices entered manually.",
       "help": "Each call is billed from the usage the provider reports: every token type times its price. An empty cache-write price uses the input price."
     },
-    "discoveryScope_price_catalog": "These are common models from the price catalog; picking one fills in its price. Check that your provider uses the same model names before adding them."
+    "discoveryScope_price_catalog": "Common models from each vendor in the price catalog; picking one fills in its price. Gateways may name models differently from the vendor, so check the names your provider uses before adding them.",
+    "priceCatalogCount": "{{count}} models in the price catalog",
+    "filterVendor": "Filter vendor",
+    "allVendors": "All vendors",
+    "catalogPrice": "{{label}} · per 1M tokens: {{input}} in / {{output}} out"
   },
   "finetune": {
     "rtServiceManagement": "FT Service Management",

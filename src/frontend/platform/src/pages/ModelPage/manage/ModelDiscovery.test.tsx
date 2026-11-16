@@ -526,9 +526,9 @@ it("uses the release structured error payload for missing workspace information"
 });
 
 describe("F016 price-catalog model list", () => {
-  const entry = (key: string, label: string, providers: string[]) => ({
+  const entry = (key: string, label: string, providers: string[], vendor = "v") => ({
     key,
-    vendor: "v",
+    vendor,
     label,
     provider_types: providers,
     aliases: [key.split("/")[1]],
@@ -561,8 +561,39 @@ describe("F016 price-catalog model list", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "qwen-max" }));
     fireEvent.click(screen.getByRole("button", { name: "model.addSelectedModels" }));
     expect(input.onImport).toHaveBeenCalledWith([
-      { model_name: "qwen-max", display_name: "Qwen Max", model_type: "llm", type_source: "registry" },
+      {
+        model_name: "qwen-max",
+        display_name: "Qwen Max",
+        model_type: "llm",
+        type_source: "registry",
+        catalog: { vendor: "v", label: "Qwen Max", currency: "CNY", input: "1", output: "2" },
+      },
     ]);
+  });
+  it("groups catalog rows by vendor with their prices and filters by vendor instead of type", async () => {
+    vi.mocked(getPriceCatalog).mockResolvedValue({
+      version: "2026-11-16",
+      entries: [
+        entry("qwen/qwen-max", "Qwen Max", ["qwen", "openai_compatible"], "阿里千问"),
+        entry("qwen/qwen-plus", "Qwen Plus", ["qwen", "openai_compatible"], "阿里千问"),
+        entry("openai/gpt-4.1", "gpt-4.1", ["openai", "openai_compatible"], "OpenAI"),
+      ],
+    });
+    const input = { ...props(), provider: "openai_compatible", existing: [], getConnection: vi.fn(() => null) };
+    render(<ModelDiscovery {...input} />);
+    fireEvent.click(screen.getByRole("button", { name: "model.selectModels" }));
+    await screen.findByText("qwen-max");
+    // One header per vendor, one price line per model, and the catalog's own count copy.
+    expect(screen.getAllByText("阿里千问")).toHaveLength(1);
+    expect(screen.getAllByText("OpenAI")).toHaveLength(1);
+    expect(screen.getAllByText("model.catalogPrice")).toHaveLength(3);
+    expect(screen.getByText("model.priceCatalogCount")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "model.filterModelType" })).toBeNull();
+    fireEvent.click(screen.getByRole("combobox", { name: "model.filterVendor" }));
+    fireEvent.click(screen.getByRole("option", { name: "OpenAI" }));
+    expect(screen.getByText("gpt-4.1")).toBeInTheDocument();
+    expect(screen.queryByText("qwen-max")).toBeNull();
+    expect(screen.queryByText("qwen-plus")).toBeNull();
   });
   it("falls back to the provider's catalog models when the vendor list fails, keeping the reason", async () => {
     vi.mocked(discoverModels).mockRejectedValue({ kind: "network" });

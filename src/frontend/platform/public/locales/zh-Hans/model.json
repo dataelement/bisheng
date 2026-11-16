@@ -275,7 +275,11 @@
       "statusManual": "手动填写的价格。",
       "help": "每次调用按厂商返回的用量，每类 token 乘以对应价格计费；缓存写入不填时按输入价计。"
     },
-    "discoveryScope_price_catalog": "以下是价格表中的常用模型，选中后会自动带出价格。添加前请确认服务商使用的模型名称与此一致。"
+    "discoveryScope_price_catalog": "以下是价格表中各厂商的常用模型，选中后会自动带出价格。中转站的模型名称可能和官方不同，添加前请确认服务商使用的名称。",
+    "priceCatalogCount": "价格表中有 {{count}} 个模型",
+    "filterVendor": "筛选厂商",
+    "allVendors": "全部厂商",
+    "catalogPrice": "{{label}} · 每百万 token 输入 {{input}} / 输出 {{output}}"
   },
   "finetune": {
     "rtServiceManagement": "FT服务管理",
