@@ -2,25 +2,43 @@
 
 This directory contains manual maintenance and migration scripts for the backend.
 
-## Linsight checkpoint write indexes
+## Redis usage and Linsight processing indexes
 
-`backfill_linsight_checkpoint_indexes.py` indexes existing Redis checkpoints so
-resuming a task no longer scans the Redis database. From `src/backend`, export
-the same `config` as the service, then run:
+`backfill_redis_processing_indexes.py` is the explicit upgrade step for old DSH
+usage streams and Linsight checkpoints. Normal consumers, including their first
+invocation, never enumerate the Redis DB. From `src/backend`, export the same
+`config` as the target service and use the new image/code for this command:
+
+1. Close ingress and stop all old API, Celery Workers, Beat and Linsight Workers.
+   Keep Redis and the configured infrastructure available. Do not clear event
+   streams, broker queues, consumer groups, request ledgers or checkpoint data.
+2. Preview, apply, then verify while all producers/consumers remain stopped:
 
 ```bash
-python scripts/backfill_linsight_checkpoint_indexes.py
-# Stop all Linsight checkpoint writers before applying, then resume on the new code.
-python scripts/backfill_linsight_checkpoint_indexes.py --apply --writers-stopped
+python scripts/backfill_redis_processing_indexes.py
+python scripts/backfill_redis_processing_indexes.py --apply --services-stopped
+python scripts/backfill_redis_processing_indexes.py --verify
 ```
 
-The default inventories checkpoint keys without writing indexes. The command
-initializes and closes the service infrastructure clients. Apply adds only
-indexes, preserves checkpoint payloads and their TTLs, and can be repeated after
-interruption. Existing checkpoints without a complete index fail explicitly;
-new checkpoints are indexed atomically when written. Run against every service
-Redis database containing Linsight checkpoints. Do not leave old checkpoint
-writers running after backfill, since they cannot maintain these indexes.
+3. Require `ready: true` and exit code 0 before starting new consumers. On error,
+   keep the services stopped, investigate and repeat the command; partial index
+   additions are safe to repeat. Never discard events to bypass a migration error.
+4. Start the new Celery Worker and Beat to drain the registered usage backlog.
+   Confirm pending work has cleared and SQL projection is correct before starting
+   Linsight/API and reopening traffic. Do not run old and new code together.
+
+The default inventories and checks indexes without writing them; `--verify`
+returns nonzero for incomplete coverage. Apply refuses to run without the stopped
+service confirmation. The command initializes/closes service infrastructure
+clients. It registers every retained usage stream, schedules pending/unread work
+and invalidates old scheduling owners only. Payloads, stream IDs, group offsets,
+ACKs, request ledgers, counters, SQL and checkpoint TTLs are preserved. Drained
+streams are indexed for inspection without being unnecessarily queued again.
+Checkpoint completeness markers are published only after indexing old writes.
+Run against every service Redis DB being upgraded; usage migration is enabled
+when that service's DSH setting is enabled. Redis data/index restores require the
+same stopped-service verification. Fresh installs maintain indexes from their
+first writes and need no legacy scan.
 
 ## Built-in knowledge retrieval tool
 

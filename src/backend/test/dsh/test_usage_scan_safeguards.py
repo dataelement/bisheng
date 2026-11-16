@@ -19,7 +19,7 @@ def test_dispatch_task_uses_projection_runtime_without_scanning_or_fanout(monkey
     from test.dsh.test_task_request_context import ThreadLocalTaskApp
 
     service = SimpleNamespace()
-    dispatcher = SimpleNamespace(bootstrap=AsyncMock(), dispatch=AsyncMock(return_value=7))
+    dispatcher = SimpleNamespace(dispatch=AsyncMock(return_value=7))
 
     @asynccontextmanager
     async def factory():
@@ -29,7 +29,6 @@ def test_dispatch_task_uses_projection_runtime_without_scanning_or_fanout(monkey
     monkeypatch.setattr(_asyncio_utils, "run_async_task", lambda factory: asyncio.run(factory()))
     monkeypatch.setattr(registry, "UsageDispatcher", lambda actual: dispatcher if actual is service else None)
     assert registry.register_dsh_tasks(ThreadLocalTaskApp())["dispatch"].run() == 7
-    dispatcher.bootstrap.assert_awaited_once()
     dispatcher.dispatch.assert_awaited_once()
 
 

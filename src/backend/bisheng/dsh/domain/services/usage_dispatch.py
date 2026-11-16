@@ -51,68 +51,8 @@ class UsageDispatcher:
         logger.debug("DSH usage batch users={} events={} duration={:.3f}s", users, events, monotonic() - started)
         return events
 
-    async def bootstrap(self, *, max_pages=20, max_seconds=0.25):
-        """Discover pre-index streams once per Redis generation, with resumable bounded work.
-
-        New writes atomically register their partition. Normal dispatch and repair
-        never enumerate the database after this compatibility pass completes.
-        """
-        redis = self.quota.redis
-        base = self.quota.prefix + ":usage_inventory"
-        lease, cursor_key, done = base + ":lease", base + ":cursor", base + ":generation"
-        owner = uuid4().hex
-        async with self.quota.topology.lock:
-            await self.quota.topology.check()
-            generation = self.quota.topology.run_id
-            if await redis.get(done) == generation:
-                return True
-            if not await redis.set(lease, owner, nx=True, px=60000):
-                return False
-            # A restored Redis may have a different hash-table layout. An old
-            # unfinished SCAN cursor is not valid evidence for the new primary.
-            if await redis.get(base + ":cursor_generation") != generation:
-                await redis.set(cursor_key, 0)
-                await redis.set(base + ":cursor_generation", generation)
-        try:
-            started = monotonic()
-            for _ in range(max_pages):
-                async with self.quota.topology.lock:
-                    await self.quota.topology.check()
-                    cursor = int(await redis.get(cursor_key) or 0)
-                    next_cursor, streams = await redis.scan(cursor, match=self.quota.prefix + ":*:events", count=500)
-                for stream in streams:
-                    self.partition(stream)
-                    await self.work.mark(stream)
-                committed = await redis.eval(
-                    "if redis.call('GET',KEYS[1])~=ARGV[1] then return 0 end "
-                    "redis.call('SET',KEYS[2],ARGV[2]); "
-                    "if ARGV[2]=='0' then redis.call('SET',KEYS[3],ARGV[3]) end; return 1",
-                    3,
-                    lease,
-                    cursor_key,
-                    done,
-                    owner,
-                    next_cursor,
-                    generation,
-                )
-                if not committed:
-                    return False
-                if not next_cursor:
-                    return True
-                if monotonic() - started >= max_seconds:
-                    break
-            return False
-        finally:
-            await redis.eval(
-                "if redis.call('GET',KEYS[1])==ARGV[1] then return redis.call('DEL',KEYS[1]) end return 0",
-                1,
-                lease,
-                owner,
-            )
-
     async def repair(self):
         """Inspect registered partitions only; unrelated Redis keys never affect the sweep."""
-        await self.bootstrap()
         redis = self.quota.redis
         lease, owner = self.quota.prefix + ":usage_repair_lease", uuid4().hex
         cursor_key = self.quota.prefix + ":usage_repair_cursor"

@@ -57,9 +57,7 @@ def register_dsh_tasks(app):
     def dispatch_usage():
         async def execute():
             async with projection_worker_runtime() as service:
-                dispatcher = UsageDispatcher(service)
-                await dispatcher.bootstrap()
-                return await dispatcher.dispatch()
+                return await UsageDispatcher(service).dispatch()
 
         return run_async_task(execute)
 

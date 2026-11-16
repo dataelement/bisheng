@@ -127,7 +127,7 @@ class PlainRedisCheckpointer(BaseCheckpointSaver):
         if _INDEX_READY not in keys:
             raise RuntimeError(
                 "Legacy Linsight checkpoint needs write-index backfill; "
-                "run scripts/backfill_linsight_checkpoint_indexes.py before resuming existing tasks"
+                "run scripts/backfill_redis_processing_indexes.py before resuming existing tasks"
             )
         keys.discard(_INDEX_READY)
         writes: list[PendingWrite] = []

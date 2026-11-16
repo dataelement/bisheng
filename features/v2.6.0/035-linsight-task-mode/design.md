@@ -120,7 +120,7 @@ deepagents demo 用 `ChatOpenAI` 直连 DashScope，**严禁照搬**。BiSheng �
 ### 2.3.1 检查点与任务索引（2026-11-16）
 
 - Pending writes 使用每个 checkpoint 的 Set 索引 `linsight:ckpt:writes:{thread_id}:{checkpoint_ns}:{checkpoint_id}`。写入 payload、索引成员和 TTL 在同一事务中完成；读取通过 SMEMBERS 找到精确键，不使用 SCAN / KEYS。
-- 新 checkpoint 在创建时写入完整性标记。旧 checkpoint 缺少完整索引时明确失败，不能假装没有 pending writes；停止全部旧 checkpoint 写入进程后，执行 `scripts/backfill_linsight_checkpoint_indexes.py --apply --writers-stopped` 一次性补建。脚本默认只盘点、不写索引，保留 payload 和原 TTL，中断可重跑；不得在补建后继续运行旧写入代码。
+- 新 checkpoint 在创建时写入完整性标记。旧 checkpoint 缺少完整索引时明确失败，不能假装没有 pending writes；停止全部 API、Celery/Beat 和灵思生产者、消费者后，执行 `scripts/backfill_redis_processing_indexes.py --apply --services-stopped` 一次性补建。脚本统一补建用量与检查点索引，默认只盘点、不写索引，保留 payload 和原 TTL，中断可重跑；启动新版前使用 `--verify` 校验，不得在补建后继续运行旧写入代码。
 - 会话任务 payload 与任务 ID Set 原子更新。旧会话首次读取时由 SQL 查询该会话任务 ID 补齐索引，再按精确键批量读 Redis，保留尚未刷入 SQL 的 thinking history；单条缓存过期则回读 SQL。正常列表、统计、会话清理均不使用 KEYS。无调用方的全会话清理入口已删除。
 - 取舍：不在热路径保留旧格式全库扫描兜底，也不通过忽略旧 pending writes 换取升级可用。索引迁移是发布前置步骤；仅在无法安排旧任务维护窗口时重新评估兼容策略。
 - 验证：`test/linsight/test_redis_indexes.py` 使用独立真实 Redis，覆盖并发写入、旧索引补建、TTL/数据不变及真实 LangGraph interrupt 后跨 saver 恢复；恢复过程中禁止 SCAN / KEYS。未据此宣称现场或模型供应商验证完成。

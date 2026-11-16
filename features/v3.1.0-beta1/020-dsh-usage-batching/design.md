@@ -26,14 +26,18 @@ seconds repair visits one SSCAN page of this set (COUNT 100), persists its curso
 after success, repairs pending work, inspects running requests and cleans
 retention. Normal projection and maintenance do not enumerate the Redis DB.
 
-On first upgrade, a resumable inventory discovers legacy streams with bounded
-SCAN work (at most 20 pages / 0.25 seconds between pages per dispatch). Cursor
-progress is committed under an owner lease; completion is pinned to the Redis
-generation. A primary-generation change restarts an unfinished inventory from
-zero. Subsequent dispatches skip the inventory. Stop predecessor writers before
-starting the new writer/consumer pair: an old writer cannot register new streams.
-The normal-load target applies with the new writer and consumer running, after
-legacy discovery; it does not bound a one-time migration over an arbitrary DB.
+Legacy stream discovery is an explicit offline migration, never a Worker startup
+or periodic task. Stop all API, Celery/Beat and Linsight producers/consumers and
+run `scripts/backfill_redis_processing_indexes.py --apply --services-stopped`,
+then `--verify` before starting the new consumers. The script registers all
+retained streams, queues unread/pending partitions, invalidates only old work
+owners and verifies coverage. It never changes payloads, consumer group offsets,
+ACK state, quota counters or SQL. Checkpoint indexes are migrated by the same
+command. Interruption is handled by repeating the migration while still stopped.
+New installations need no discovery; new writes maintain their indexes atomically.
+Redis restarts do not trigger keyspace discovery. After a partial index restore,
+repeat the offline migration before reopening traffic. There is no runtime
+inventory cursor, generation marker or migration gate in application health.
 
 Rejected: raising the scan interval alone does not fix recursive publication;
 one Celery message per event amplifies load; a separate consumer process adds an
@@ -66,7 +70,7 @@ deployment measurement; local tests do not establish those results.
 | Index or claimed work survives a worker exit | Durable lease score allows recovery after 30 seconds; owner tokens fence stale completion. |
 | Another consumer holds pending events | Wait for the existing 60-second reclaim age rather than spin. |
 | SQL transaction outlives a lease | Existing SQL idempotence remains necessary; batch bounds do not interrupt SQL. |
-| Legacy inventory requires one complete DB pass | This is upgrade/recovery work only. Normal orphan inspection and retention use the registered-partition set. Do not clear the partition set independently of its inventory marker. |
+| Legacy stream discovery requires a complete DB pass | Only the stopped-service migration scans the DB. Verify complete coverage before starting new consumers; runtime never discovers old keys. |
 | Throughput exceeds 16 users per invocation | The 10-second target requires enough worker capacity; reconsider measured batch bounds or dedicated consumers under sustained backlog. |
 
 ## Revision history
@@ -78,3 +82,7 @@ deployment measurement; local tests do not establish those results.
   cursor binding; register maintenance partitions atomically and replace
   recurring full-DB scans with SSCAN. Real Redis/SQLite regressions cover
   10,000/100,000 unrelated keys and fenced queue completion.
+
+- 2026-11-16: per explicit user direction, remove automatic startup/generation
+  discovery entirely. Move legacy usage/checkpoint indexing and coverage
+  verification into one stopped-service migration command.

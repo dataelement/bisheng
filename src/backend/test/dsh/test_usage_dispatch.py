@@ -11,6 +11,7 @@ from sqlmodel import Session, select
 from bisheng.dsh.domain.models.model_call import DshModelCall
 from bisheng.dsh.domain.services.usage_dispatch import UsageDispatcher
 from bisheng.dsh.infrastructure.quota_redis import QuotaRejected
+from bisheng.dsh.infrastructure.usage_index_backfill import backfill_usage_indexes
 from bisheng.dsh.infrastructure.usage_work import UsageWorkQueue
 from test.dsh.test_quota_admission import quota as quota
 from test.dsh.test_quota_admission import running
@@ -210,15 +211,13 @@ async def test_expired_projection_lease_keeps_work_scheduled(quota, usage_db, mo
     assert await service.drain_user(2, 20, max_seconds=60) == (500, True)
 
 
-async def test_repair_rediscovers_legacy_backlog_without_celery_messages(quota, usage_db):
+async def test_offline_migration_rediscovers_legacy_backlog_without_celery_messages(quota, usage_db):
     await quota.check_and_start(running().model_copy(update={"started_at": datetime.now(UTC).replace(tzinfo=None)}))
     work = UsageWorkQueue(quota)
     await quota.redis.delete(work.ready)
     dispatcher = UsageDispatcher(projector(quota, usage_db))
-    for _ in range(50):
-        await dispatcher.repair()
-        if await quota.redis.zcard(work.ready):
-            break
+    migrated = await backfill_usage_indexes(quota.redis, prefix=quota.prefix, apply=True)
+    assert migrated["ready"]
     assert await dispatcher.dispatch() == 1
 
 
@@ -232,7 +231,7 @@ async def test_projection_does_not_run_retention(quota, usage_db, monkeypatch):
 
 
 @pytest.mark.parametrize("noise_count", [10000, 100000])
-async def test_bootstrap_once_then_noise_never_affects_dispatch_or_inspection(
+async def test_offline_migration_then_runtime_never_scans_even_with_unrelated_keys(
     quota, usage_db, monkeypatch, noise_count
 ):
     event = running().model_copy(update={"started_at": datetime.now(UTC).replace(tzinfo=None)})
@@ -246,18 +245,16 @@ async def test_bootstrap_once_then_noise_never_affects_dispatch_or_inspection(
             for i in range(start, start + 1000):
                 pipe.set(f"{quota.prefix}:unrelated:{i}", "value")
             await pipe.execute()
-    complete = False
-    for _ in range(500):
-        complete = await dispatcher.bootstrap(max_pages=1)
-        if complete:
-            break
-    assert complete
+    preview = await backfill_usage_indexes(quota.redis, prefix=quota.prefix)
+    assert not preview["ready"] and preview["unindexed_partitions"] == 1
+    assert not await quota.redis.exists(work.ready, work.partitions)
+    migrated = await backfill_usage_indexes(quota.redis, prefix=quota.prefix, apply=True)
+    assert migrated["ready"] and migrated["backlog_streams"] == 1
     assert await quota.redis.smembers(work.partitions) == {quota.keys(event)[5]}
     no_scan = AsyncMock(side_effect=AssertionError("Steady-state work must not scan the database"))
     steady_start = monotonic()
     with monkeypatch.context() as patch:
         patch.setattr(quota.redis, "scan", no_scan)
-        assert await dispatcher.bootstrap()
         assert await dispatcher.dispatch() == 1
         assert await dispatcher.repair() == 1
         assert monotonic() - steady_start < 5
@@ -273,20 +270,79 @@ async def test_partition_index_type_checked_before_admission_mutates_ledger(quot
     assert not await quota.redis.exists(quota.keys(event)[5])
 
 
-async def test_bootstrap_discards_cursor_from_a_previous_redis_generation(quota, usage_db, monkeypatch):
+async def test_fresh_worker_never_scans_without_migration_or_generation_marker(quota, usage_db, monkeypatch):
     dispatcher = UsageDispatcher(projector(quota, usage_db))
-    base = quota.prefix + ":usage_inventory"
-    await quota.redis.set(base + ":cursor", 123456)
-    await quota.redis.set(base + ":cursor_generation", "old-primary")
-    await quota.redis.set(base + ":generation", "old-primary")
-    original, cursors = quota.redis.scan, []
+    no_scan = AsyncMock(side_effect=AssertionError("Even the first invocation must not SCAN"))
+    with monkeypatch.context() as patch:
+        patch.setattr(quota.redis, "scan", no_scan)
+        assert await dispatcher.dispatch() == 0
+        assert await dispatcher.repair() == 0
+        no_scan.assert_not_awaited()
 
-    async def observe(cursor, **kwargs):
-        cursors.append(cursor)
-        return await original(cursor, **kwargs)
+
+async def test_offline_migration_preserves_pending_events_and_replay_is_idempotent(quota, usage_db):
+    import os
+
+    from redis.asyncio import Redis
+
+    event = running().model_copy(update={"started_at": datetime.now(UTC).replace(tzinfo=None)})
+    await quota.check_and_start(event)
+    await quota.record_usage(terminal(event), 1)
+    service = projector(quota, usage_db)
+    stream = quota.keys(event)[5]
+    await quota.redis.xgroup_create(stream, service.group, id="0-0")
+    await quota.redis.xreadgroup(service.group, "old-worker", {stream: ">"}, count=1)
+    pending = await quota.redis.xpending_range(stream, service.group, "-", "+", 1)
+    await quota.redis.xclaim(stream, service.group, "old-worker", 0, [pending[0]["message_id"]], idle=60001)
+    before = await quota.redis.xrange(stream)
+    ledger = {key: await quota.redis.hgetall(key) for key in [*quota.keys(event)[:3], quota.keys(event)[4]]}
+    groups = await quota.redis.xinfo_groups(stream)
+    work = UsageWorkQueue(quota)
+    await quota.redis.delete(work.ready, work.partitions)
+    # The CLI uses the ordinary byte-returning service connection, unlike quota Redis.
+    raw = Redis.from_url(os.environ["DSH_TEST_REDIS_URL"])
+    try:
+        for _ in range(2):
+            result = await backfill_usage_indexes(raw, prefix=quota.prefix, apply=True)
+            assert result["ready"] and result["backlog_streams"] == 1
+        assert await quota.redis.xrange(stream) == before
+        assert await quota.redis.xinfo_groups(stream) == groups
+        assert {key: await quota.redis.hgetall(key) for key in ledger} == ledger
+    finally:
+        await raw.aclose()
+    dispatcher = UsageDispatcher(service)
+    assert await dispatcher.dispatch() == 1
+    # The first batch reclaims the old PEL; the next normal 2-second tick
+    # consumes the unread settlement. Neither batch bypasses SQL-before-ACK.
+    import asyncio
+
+    await asyncio.sleep(2.05)
+    assert await dispatcher.dispatch() == 1
+    with Session(usage_db) as db:
+        rows = list(db.exec(select(DshModelCall)))
+        assert len(rows) == 1 and rows[0].total_tokens == 300
+    await backfill_usage_indexes(quota.redis, prefix=quota.prefix, apply=True)
+    assert await dispatcher.dispatch() == 0
+    assert (await backfill_usage_indexes(quota.redis, prefix=quota.prefix))["ready"]
+
+
+async def test_interrupted_offline_usage_migration_can_repeat_without_touching_events(quota, monkeypatch):
+    event = running()
+    await quota.check_and_start(event)
+    stream = quota.keys(event)[5]
+    before = await quota.redis.xrange(stream)
+    work = UsageWorkQueue(quota)
+    await quota.redis.delete(work.ready, work.partitions)
+    original = quota.redis.scan_iter
+
+    async def interrupted(*args, **kwargs):
+        async for key in original(*args, **kwargs):
+            yield key
+            raise RuntimeError("injected interruption")
 
     with monkeypatch.context() as patch:
-        patch.setattr(quota.redis, "scan", observe)
-        await dispatcher.bootstrap(max_pages=1)
-    assert cursors == [0]
-    assert await quota.redis.get(base + ":cursor_generation") == quota.topology.run_id
+        patch.setattr(quota.redis, "scan_iter", interrupted)
+        with pytest.raises(RuntimeError, match="injected interruption"):
+            await backfill_usage_indexes(quota.redis, prefix=quota.prefix, apply=True)
+    assert (await backfill_usage_indexes(quota.redis, prefix=quota.prefix, apply=True))["ready"]
+    assert await quota.redis.xrange(stream) == before
