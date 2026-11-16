@@ -1,4 +1,3 @@
-import ast
 import pickle
 import typing
 
@@ -21,15 +20,6 @@ class RedisClient:
         if isinstance(redis_url, dict):
             redis_conf = dict(redis_url)
             mode = redis_conf.pop("mode", "sentinel")
-            if mode == "single":
-                url = redis_conf.pop("url")
-                self.pool = ConnectionPool.from_url(url, max_connections=max_connections, **redis_conf)
-                self.async_pool = redis.asyncio.ConnectionPool.from_url(
-                    url, max_connections=max_connections, **redis_conf
-                )
-                self.connection = redis.StrictRedis(connection_pool=self.pool)
-                self.async_connection = redis.asyncio.Redis.from_pool(self.async_pool)
-                return
             if mode == "cluster":
                 # Cluster Mode
                 cluster_url = ""
@@ -46,7 +36,7 @@ class RedisClient:
                     cluster_url, **redis_conf, retry=Retry(ExponentialBackoff(), 6), cluster_error_retry_attempts=1
                 )
                 return
-            hosts = [ast.literal_eval(x) if isinstance(x, str) else x for x in redis_conf.pop("sentinel_hosts")]
+            hosts = [eval(x) for x in redis_conf.pop("sentinel_hosts")]
             password = redis_conf.pop("sentinel_password", None)
             master = redis_conf.pop("sentinel_master")
             sentinel = Sentinel(sentinels=hosts, sentinel_kwargs={"password": password})

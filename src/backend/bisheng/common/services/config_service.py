@@ -2,14 +2,11 @@ import json
 import os
 
 import yaml
-from cryptography.fernet import InvalidToken
 from loguru import logger
 
 from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
 from bisheng.common.repositories.implementations.config_repository_impl import ConfigRepositoryImpl
 from bisheng.core.cache.redis_manager import get_redis_client_sync
-from bisheng.core.config.credential_loader import config_path, load_config, validate_runtime
-from bisheng.core.config.secret_crypto import CredentialConfigurationError
 from bisheng.core.config.settings import (
     CofcoForwardingConf,
     DailyChatConf,
@@ -56,15 +53,15 @@ def write_sandbox_endpoint_cache(payload: dict) -> None:
 
 
 def _merge_sandbox_page(base, payload: dict):
-    """Overlay a valid page payload; a nonempty invalid ciphertext fails explicitly."""
+    """Overlay a valid page payload onto deployment config. None means decrypt failed."""
     update: dict = {}
     if payload["endpoints"]:
         update["endpoints"] = list(payload["endpoints"])
     if payload["token_enc"]:
         try:
             update["token"] = decrypt_token(payload["token_enc"])
-        except InvalidToken:
-            raise CredentialConfigurationError("sandbox.token: page credential cannot be decrypted") from None
+        except Exception:
+            return None
     if not update:
         return base
     return base.model_copy(update=update)
@@ -144,7 +141,6 @@ class ConfigService(Settings):
     """Configure service classes, inherited fromSettingsto provide configuration access"""
 
     def __init__(self, **data):
-
         super().__init__(**data)
 
     @staticmethod
@@ -164,16 +160,30 @@ class ConfigService(Settings):
 
     @classmethod
     def load_settings_from_yaml(cls, file_path: str) -> "ConfigService":
-        settings_dict = load_config(config_path(file_path)).data
+        # Sign up for customYAMLConstructor to handle environment variables
+        yaml.SafeLoader.add_constructor("!env", cls.env_var_constructor)
+        # Get current path
+        current_path = os.path.dirname(os.path.abspath(__file__))
+        # Look up the previous two levels of the catalog
+        current_path = os.path.dirname(os.path.dirname(current_path))
+        # Check if a string is a valid path or a file name
+        if "/" not in file_path:
+            file_path = os.path.join(current_path, file_path)
+
+        with open(file_path, encoding="utf-8") as f:
+            settings_dict = yaml.safe_load(f)
 
         if "admin" in settings_dict:
             # Old deployment files must remain loadable, but cannot create users.
             settings_dict.pop("admin")
             logger.warning("Ignoring retired admin bootstrap setting; the first registered user becomes administrator")
 
-        # Validate in this exact model instance, not via model_dump/reparse:
-        # the latter would feed already-decrypted credentials to validators.
-        return validate_runtime(settings_dict, model_type=cls)
+        for key in settings_dict:
+            if key not in Settings.model_fields.keys():
+                raise KeyError(f"Key {key} not found in settings")
+            logger.debug(f"Loading {key} from {file_path}")
+
+        return ConfigService(**settings_dict)
 
     async def init_config(self):
         # Inisialisasiconfig
@@ -406,13 +416,12 @@ class ConfigService(Settings):
         # return a non-string object (e.g. a MagicMock in tests); yaml.safe_load
         # would then treat it as an infinite input stream — an unbounded read
         # loop that balloons memory. Fail fast with a clear error instead.
-        if not isinstance(raw, (str, bytes, bytearray)):
+        if not isinstance(raw, str | bytes | bytearray):
             raise TypeError(f"config payload must be str/bytes, got {type(raw).__name__}")
         return yaml.safe_load(raw)
 
     @staticmethod
     def get_all_config():
-
         redis_key = "config:initdb_config"
         cache = get_redis_client_sync().get(redis_key)
         if cache:
@@ -430,7 +439,6 @@ class ConfigService(Settings):
 
     @staticmethod
     async def aget_all_config():
-
         redis_key = "config:initdb_config"
         cache = await get_redis_client_sync().aget(redis_key)
         if cache:
