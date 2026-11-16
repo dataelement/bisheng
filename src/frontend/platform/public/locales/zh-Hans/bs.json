@@ -1170,7 +1170,21 @@
       "searXNG": "searXNG",
       "deepseek": "DeepSeek 网页搜索",
       "serverUrl": "服务器地址",
-      "serverUrlPlaceholder": "填写您部署 searXNG 的访问地址，例如：http://localhost:8080"
+      "serverUrlPlaceholder": "填写您部署 searXNG 的访问地址，例如：http://localhost:8080",
+      "parameterValuesHint": "填写参数值；需要使用测试搜索词的位置填写 {{query}}，每次生成请求 ID 可填写 {{uuid}}。",
+      "editRequestJson": "编辑完整请求 JSON",
+      "advancedSettings": "高级配置",
+      "importSection": "接口导入",
+      "requestSection": "请求与认证",
+      "responseSection": "响应",
+      "testSection": "测试",
+      "mediaType": "请求格式",
+      "requestTemplate": "请求参数",
+      "requestTemplateHint": "按接口结构填写参数。在对应值中使用 {{query}} 传入搜索词，使用 {{uuid}} 每次生成请求标识。query、path、header、cookie 分别填写对应位置的参数，body 保留完整请求体。密钥请在下方单独配置。",
+      "rawResponseHint": "完整保留接口响应，并按 OpenAPI 声明校验。网页展示映射可选，不要求固定的结果字段。",
+      "responseSchema": "查看响应声明",
+      "testNotSaved": "测试不会保存当前配置。",
+      "invalidJson": "请求参数必须是有效的 JSON。"
     },
     "errors": {
       "maxCharacters": "最多{{count}}个字符",

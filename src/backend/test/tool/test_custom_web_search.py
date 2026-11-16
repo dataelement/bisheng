@@ -172,7 +172,14 @@ async def test_shared_openapi_import_for_custom_tool_and_search(store, method, l
         method.upper(),
         "/search",
     )
-    assert imported["parameters"] == [{"name": "q", "location": location, "type": "string", "required": True}]
+    assert imported["version"] == 2
+    if method == "get":
+        assert imported["parameters"][0]["schema"] == {"type": "string"}
+    else:
+        assert (
+            imported["declaration"]["request_body"]["content"]["application/json"]["schema"]
+            == operation["requestBody"]["content"]["application/json"]["schema"]
+        )
     if method == "post":
         operation["requestBody"]["content"]["application/json"]["schema"]["properties"]["options"] = {
             "type": "object",
@@ -180,9 +187,13 @@ async def test_shared_openapi_import_for_custom_tool_and_search(store, method, l
         }
         nested = await ToolServices.parse_openapi_schema(None, json.dumps(document))
         assert nested.children[0].api_params[1]["schema"]["properties"] == {"language": {"type": "string"}}
-        with pytest.raises(HTTPException) as exc:
-            await search_service.schema_preview(16, {"content": json.dumps(document)})
-        assert exc.value.status_code == 422
+        nested_import = (await search_service.schema_preview(16, {"content": json.dumps(document)}))["operations"][0]
+        assert (
+            nested_import["declaration"]["request_body"]["content"]["application/json"]["schema"]["properties"][
+                "options"
+            ]["type"]
+            == "object"
+        )
     operation["parameters"] = [{"name": "q", "in": "query", "schema": {"$ref": "https://other.example/schema"}}]
     with pytest.raises(ValueError):
         OpenApiSchema.from_content(json.dumps(document))
@@ -519,7 +530,17 @@ async def test_import_save_executor_http(tmp_path, monkeypatch):
         current = await search_service.get_settings(16)
         request = draft(current["revision"], {"action": "replace", "value": "test-secret"})
         request.providers["custom"]["proof"] = imported["proof"]
-        request.providers["custom"]["operation"]["server"] = origin
+        request.providers["custom"]["operation"] = {
+            "version": 2,
+            "server": origin,
+            "method": "GET",
+            "path": "/search",
+            "declaration": imported["declaration"],
+            "media_type": "",
+            "request": {"query": {"q": "{{query}}"}},
+            "auth": {"location": "header", "name": "X-Key"},
+            "response_mode": "raw",
+        }
         saved = await search_service.put_settings(16, request, 42)
         assert saved["custom_secret_configured"]
         with sync_session() as db:
@@ -530,8 +551,8 @@ async def test_import_save_executor_http(tmp_path, monkeypatch):
             tool_id=38, app_id="app", app_name="app", app_type=ApplicationTypeEnum.WORKFLOW, user_id=7
         )
         result = json.loads(await tool.ainvoke({"query": "hello world"}))
-        assert len(result) == 1
-        assert (result[0]["title"], result[0]["url"], result[0]["snippet"]) == (
+        assert set(result) == {"results"}
+        assert (result["results"][0]["title"], result["results"][0]["url"], result["results"][0]["snippet"]) == (
             "Found",
             "https://example.org/item",
             "Text",

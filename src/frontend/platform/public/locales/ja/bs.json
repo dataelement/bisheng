@@ -1164,7 +1164,21 @@
       "searXNG": "searXNG",
       "deepseek": "DeepSeek ウェブ検索",
       "serverUrl": "サーバーアドレス",
-      "serverUrlPlaceholder": "searXNG をデプロイしたアクセスアドレスを入力してください。例：http://localhost:8080"
+      "serverUrlPlaceholder": "searXNG をデプロイしたアクセスアドレスを入力してください。例：http://localhost:8080",
+      "parameterValuesHint": "パラメータ値を入力します。検索語には {{query}}、毎回生成する ID には {{uuid}} を指定します。",
+      "editRequestJson": "リクエスト JSON 全体を編集",
+      "advancedSettings": "詳細設定",
+      "importSection": "インターフェースの読み込み",
+      "requestSection": "リクエストと認証",
+      "responseSection": "レスポンス",
+      "testSection": "テスト",
+      "mediaType": "リクエスト形式",
+      "requestTemplate": "リクエストパラメーター",
+      "requestTemplateHint": "定義された構造を保持してください。値に {{query}} を使うと検索語、{{uuid}} を使うと呼び出しごとのIDを挿入します。query、path、header、cookie に各パラメーターを、body に完全な本文を指定します。認証情報は下で別途設定してください。",
+      "rawResponseHint": "完全なレスポンスを保持し、OpenAPIの定義で検証します。Web表示のマッピングは任意です。固定の結果フィールドは不要です。",
+      "responseSchema": "レスポンス定義を表示",
+      "testNotSaved": "テストでは設定を保存しません。",
+      "invalidJson": "パラメーターには有効なJSONを入力してください。"
     },
     "errors": {
       "maxCharacters": "最大 {{count}} 文字までです",
