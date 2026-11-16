@@ -55,10 +55,10 @@
     ]
   },
   {
-    "name": "Dalle3绘画",
+    "name": "图像生成",
     "logo": null,
     "desc": "根据提示词生成图像。",
-    "tool_key": "dalle_image_generator",
+    "tool_key": "image_generation",
     "type": 4,
     "is_preset": 1,
     "is_delete": 0,

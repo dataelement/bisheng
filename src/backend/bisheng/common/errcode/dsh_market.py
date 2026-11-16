@@ -25,6 +25,11 @@ class MarketWorkbenchBundleError(BaseErrorCode):
     Code: int = 26205
     Msg: str = "Invalid workbench archive"
 
+    def __init__(self, *, msg=None, validation_error=None):
+        super().__init__(msg=msg)
+        # Preserve the numeric API code alongside the machine-readable validation code.
+        self.kwargs.update(validation_error or {})
+
 
 class MarketWorkbenchConflictError(BaseErrorCode):
     Code: int = 26206

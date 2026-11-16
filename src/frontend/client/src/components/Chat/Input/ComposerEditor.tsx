@@ -126,8 +126,15 @@ export const ComposerEditor = forwardRef<HTMLDivElement, ComposerEditorProps>(fu
             bookmark.current = null;
         }
         const wanted = new Set(references.map((reference) => reference.key));
+        const byKey = new Map(references.map((reference) => [reference.key, reference]));
         for (const token of root.querySelectorAll<HTMLElement>(tokenSelector)) {
             if (!wanted.has(token.dataset.composerReference!)) token.remove();
+            else {
+                const reference = byKey.get(token.dataset.composerReference!)!;
+                const label = token.querySelector('.dsh-inline-reference-label');
+                if (label && label.textContent !== reference.label) label.textContent = reference.label;
+                token.title = reference.label;
+            }
         }
         const present = new Set(readComposerDocument(root).keys);
         const added = references.filter((reference) => !present.has(reference.key));

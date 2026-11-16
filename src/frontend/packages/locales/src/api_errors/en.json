@@ -781,5 +781,10 @@
   "19404": "Resource usage could not be verified. Adding resources is temporarily unavailable.",
   "19405": "The resource owner has moved to another tenant. Complete the resource handover first.",
   "15090": "Tool creation is pending. Contact an administrator for inspection.",
-  "10590": "Workflow creation is pending. Contact an administrator for inspection."
+  "10590": "Workflow creation is pending. Contact an administrator for inspection.",
+  "WORKBENCH_ARCHIVE_LIMIT": "Workbench archive exceeds the allowed limits",
+  "WORKBENCH_ARCHIVE_INVALID": "Workbench archive is corrupt or invalid",
+  "WORKBENCH_VALIDATION_FAILED": "Workbench package content is invalid",
+  "workbenchUploadTooLarge": "The server rejected the upload because it exceeds its size limit (HTTP 413). Choose a smaller archive.",
+  "15033": "Invalid image generation settings. Check the API address, API key and model; Azure is not supported."
 }

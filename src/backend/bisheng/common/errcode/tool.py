@@ -96,3 +96,8 @@ class ToolMcpUrlError(BaseErrorCode):
 class ToolMcpRequestError(BaseErrorCode):
     Code: int = 15032
     Msg: str = "Failed to retrieve MCP tools. Check the service status and configuration."
+
+
+class ToolImageConfigError(BaseErrorCode):
+    Code: int = 15033
+    Msg: str = "Invalid image generation settings. Check the API address, API key and model; Azure is not supported."
