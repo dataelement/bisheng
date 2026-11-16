@@ -27,8 +27,15 @@ FIXED_CUSTOM_TYPES = frozenset(
         # is visible to its owner alone (AC-11). INHERIT is not an option — an
         # app has no canonical parent resource to inherit an audience from.
         "app",
+        # F022 enterprise market items: system-owned, audience set by grants.
+        "dsh_market_plugin",
+        "dsh_market_workbench",
     }
 )
+
+# System-owned capabilities whose default audience is an ordinary, revocable
+# grant to the tenant's members (never the `user:*` public marker).
+TENANT_SHARED_CAPABILITY_TYPES = frozenset({"tool", "linsight_skill", "dsh_market_plugin", "dsh_market_workbench"})
 
 
 def default_permission_mode(resource_type: str, *, has_parent: bool) -> str:

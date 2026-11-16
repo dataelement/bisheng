@@ -116,6 +116,9 @@ async def test_desktop_credential_cannot_manage_market(market_app):
         ("GET", "/api/v1/dsh/market/capabilities", True),
         ("POST", "/api/v1/dsh/market/sync", True),
         ("GET", "/api/v1/dsh/market/plugins/" + "a" * 32 + "/versions/" + "b" * 32 + "/artifact", True),
+        # F022: Desktop asks whether its installed enterprise workbenches are still visible.
+        ("POST", "/api/v1/dsh/market/workbenches/access", True),
+        ("GET", "/api/v1/dsh/market/workbenches/access", False),
         ("GET", "/api/v1/dsh/market/admin/plugins", False),
         ("POST", "/api/v1/dsh/market/admin/imports", False),
         ("POST", "/api/v1/dsh/market/catalog", False),

@@ -87,6 +87,7 @@ from bisheng.permission.domain.services.projection_service import (
     restore_projection_plan,
 )
 from bisheng.permission.domain.services.resource_lifecycle_policy import (
+    TENANT_SHARED_CAPABILITY_TYPES,
     build_delete_plan,
     build_move_plan,
     copy_permission_mode,
@@ -603,7 +604,9 @@ class F048PermissionRuntime:
         if expected_mode != "CUSTOM":
             raise InvalidPermissionModeError()
         catalog = await self._runtime_catalog()
-        shared = self.tenant_use_grant(target, catalog) if target.resource_type in {"tool", "linsight_skill"} else None
+        shared = (
+            self.tenant_use_grant(target, catalog) if target.resource_type in TENANT_SHARED_CAPABILITY_TYPES else None
+        )
         return await self._owner.project_created(
             OwnerProjectionContext(
                 target=target,

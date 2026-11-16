@@ -257,21 +257,26 @@ class MarketRepository:
             db.refresh(task)
             return task.model_dump()
 
+    @staticmethod
+    def _list_clauses(tenant, query="", status="all", employee=False):
+        clauses = [MarketPlugin.tenant_id == tenant, MarketPlugin.deleted == false()]
+        if query:
+            escaped = query.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            clauses.append(
+                or_(
+                    func.lower(MarketPlugin.display_name).like(f"%{escaped}%", escape="\\"),
+                    func.lower(MarketPlugin.description).like(f"%{escaped}%", escape="\\"),
+                )
+            )
+        if employee or status == "published":
+            clauses += [MarketPlugin.disabled == false(), MarketPlugin.current_version_id.is_not(None)]
+        elif status == "unpublished":
+            clauses.append(or_(MarketPlugin.disabled == true(), MarketPlugin.current_version_id.is_(None)))
+        return clauses
+
     def list(self, tenant, query="", status="all", page=1, size=20, employee=False):
         with self.sessions() as db:
-            clauses = [MarketPlugin.tenant_id == tenant, MarketPlugin.deleted == false()]
-            if query:
-                escaped = query.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-                clauses.append(
-                    or_(
-                        func.lower(MarketPlugin.display_name).like(f"%{escaped}%", escape="\\"),
-                        func.lower(MarketPlugin.description).like(f"%{escaped}%", escape="\\"),
-                    )
-                )
-            if employee or status == "published":
-                clauses += [MarketPlugin.disabled == false(), MarketPlugin.current_version_id.is_not(None)]
-            elif status == "unpublished":
-                clauses.append(or_(MarketPlugin.disabled == true(), MarketPlugin.current_version_id.is_(None)))
+            clauses = self._list_clauses(tenant, query, status, employee)
             total = db.exec(select(func.count()).select_from(MarketPlugin).where(*clauses)).one()
             rows = db.exec(
                 select(MarketPlugin)
@@ -306,6 +311,73 @@ class MarketRepository:
         ]
         result["status"] = "published" if plugin.current_version_id and not plugin.disabled else "unpublished"
         return result
+
+    # Authorization reads (F022). They report records whatever their business
+    # status; callers keep applying the status filters above.
+    @staticmethod
+    def _permission_records(rows):
+        return [{"id": row[0], "tenant_id": row[1], "revision": row[2]} for row in rows]
+
+    def employee_candidates(self, tenant, query=""):
+        """Employee catalog rows in display order, before authorization."""
+        with self.sessions() as db:
+            rows = db.exec(
+                select(MarketPlugin.id, MarketPlugin.tenant_id, MarketPlugin.revision)
+                .where(*self._list_clauses(tenant, query, employee=True))
+                .order_by(MarketPlugin.updated_at.desc(), MarketPlugin.id)
+            ).all()
+            return self._permission_records(rows)
+
+    def employee_views(self, tenant, plugin_ids):
+        """Employee views of authorized ids, in the given order."""
+        if not plugin_ids:
+            return []
+        with self.sessions() as db:
+            rows = {
+                row.id: row
+                for row in db.exec(
+                    select(MarketPlugin).where(
+                        *self._list_clauses(tenant, employee=True), MarketPlugin.id.in_(plugin_ids)
+                    )
+                ).all()
+            }
+            return [self._view(db, tenant, rows[plugin_id], True) for plugin_id in plugin_ids if plugin_id in rows]
+
+    def permission_record(self, plugin_id):
+        with self.sessions() as db:
+            rows = db.exec(
+                select(MarketPlugin.id, MarketPlugin.tenant_id, MarketPlugin.revision).where(
+                    MarketPlugin.id == plugin_id
+                )
+            ).all()
+            return next(iter(self._permission_records(rows)), None)
+
+    def permission_records(self, tenant, plugin_ids):
+        if not plugin_ids:
+            return []
+        with self.sessions() as db:
+            rows = db.exec(
+                select(MarketPlugin.id, MarketPlugin.tenant_id, MarketPlugin.revision).where(
+                    MarketPlugin.tenant_id == tenant, MarketPlugin.id.in_(plugin_ids)
+                )
+            ).all()
+            return self._permission_records(rows)
+
+    def all_permission_records(self):
+        """Every plugin of every tenant; the caller must bypass the tenant filter."""
+        with self.sessions() as db:
+            rows = db.exec(
+                select(MarketPlugin.id, MarketPlugin.tenant_id, MarketPlugin.revision).order_by(
+                    MarketPlugin.tenant_id, MarketPlugin.id
+                )
+            ).all()
+            return self._permission_records(rows)
+
+    def item_for_version(self, tenant, version_id):
+        with self.sessions() as db:
+            return db.exec(
+                select(MarketVersion.plugin_id).where(MarketVersion.tenant_id == tenant, MarketVersion.id == version_id)
+            ).first()
 
     def get(self, tenant, plugin_id):
         with self.sessions() as db:

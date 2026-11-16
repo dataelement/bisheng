@@ -2,6 +2,8 @@ import { Button, notification, Pagination } from "@bisheng/ui";
 import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
+import { hasResourceAction, useResourceActions } from "@/components/bs-comp/permission/useResourceActions";
 import { showApiError } from "@/controllers/request";
 import { getMarketContext } from "@/controllers/API/dshMarket";
 import {
@@ -14,7 +16,7 @@ import { useTranslation } from "react-i18next";
 import { WorkbenchImportDialog } from "./WorkbenchImportDialog";
 
 export function WorkbenchMarketSection() {
-    const { t } = useTranslation(["dshMarket", "api_errors"]);
+    const { t } = useTranslation(["dshMarket", "api_errors", "permission"]);
     const paginationLocale = usePaginationLocale();
     const [tenant, setTenant] = useState<number | null>(null);
     const [page, setPage] = useState(1);
@@ -26,6 +28,9 @@ export function WorkbenchMarketSection() {
     const [busy, setBusy] = useState(false);
     const [uploadOpen, setUploadOpen] = useState(false);
     const [refresh, setRefresh] = useState(0);
+    const [permissionTarget, setPermissionTarget] = useState<MarketWorkbench | null>(null);
+    // Who may see each enterprise workbench is set per workbench (F022).
+    const { actions } = useResourceActions("dsh_market_workbench", data.data.map(row => row.id), ["manage_permission"]);
     const mounted = useRef(true);
     const deletion = useRef<AbortController | null>(null);
     const deleteLock = useRef(false);
@@ -121,6 +126,8 @@ export function WorkbenchMarketSection() {
                 <td className="p-4">{row.workbench_key || row.legacy_id}</td>
                 <td className="p-4">{new Date(/(?:Z|[+-]\d{2}:\d{2})$/.test(row.updated_at) ? row.updated_at : `${row.updated_at}Z`).toLocaleString()}</td>
                 <td className="p-4"><div className="flex gap-2"><Button variant="outlined" color="default" onClick={() => void openDetail(row.id)}>{t("details")}</Button>
+                    {hasResourceAction(actions, row.id, "manage_permission") && <Button variant="outlined" color="default" disabled={busy}
+                        onClick={() => setPermissionTarget(row)}>{t("permission:dialog.tabGrant")}</Button>}
                     <Button variant="outlined" color="danger" disabled={busy} onClick={() => handleDelete(row)}>{t("delete")}</Button></div></td>
             </tr>)}</tbody></table>
             {!data.data.length && <p className="p-10 text-center text-muted-foreground">{t("workbenchEmpty")}</p>}
@@ -163,5 +170,8 @@ export function WorkbenchMarketSection() {
                     </div></>}
             </DialogContent>
         </Dialog>
+        {permissionTarget && <PermissionDialog open onOpenChange={open => { if (!open) setPermissionTarget(null); }}
+            resourceType="dsh_market_workbench" resourceId={permissionTarget.id}
+            resourceName={permissionTarget.display_name} allowAllMembers />}
     </section>;
 }

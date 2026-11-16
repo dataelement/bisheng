@@ -36,6 +36,7 @@ from bisheng.permission.domain.services.projection_service import (
     ProjectionPlan,
     ProjectionTupleDelta,
 )
+from bisheng.permission.domain.services.resource_lifecycle_policy import TENANT_SHARED_CAPABILITY_TYPES
 from bisheng.permission.domain.services.visibility_projection_service import (
     VisibilityProjectionCompilation,
     VisibilityProjectionCompiler,
@@ -302,7 +303,7 @@ class GrantService:
                     (s for g in grants.values() for s in g.sources if s.source_id == change.assignee_id), None
                 )
             if source is not None and source.subject_type == "tenant":
-                if context.target.resource_type not in {"tool", "linsight_skill"} or source.subject_id != str(
+                if context.target.resource_type not in TENANT_SHARED_CAPABILITY_TYPES or source.subject_id != str(
                     context.target.tenant_id
                 ):
                     raise GrantLevelForbiddenError(msg="Tenant grant belongs to another resource scope")

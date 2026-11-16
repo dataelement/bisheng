@@ -43,6 +43,9 @@ GRANT_SUBJECT_RESOURCE_TYPES = frozenset(
         "dashboard",
         # F054 hosted applications.
         "app",
+        # F022 enterprise market plugins and workbenches.
+        "dsh_market_plugin",
+        "dsh_market_workbench",
     }
 )
 

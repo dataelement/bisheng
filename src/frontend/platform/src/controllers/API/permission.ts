@@ -18,6 +18,9 @@ export type PermissionResourceType =
   // components/bs-comp/permission/types.ts — add to both or the dialog and
   // its API layer disagree on what is grantable.
   | "app"
+  // F022 enterprise market plugins and workbenches; same twin rule as "app".
+  | "dsh_market_plugin"
+  | "dsh_market_workbench"
 
 export type PermissionActionLevel = 1 | 2 | 3 | 4
 export type PermissionModelKind = "STANDARD" | "CUSTOM"

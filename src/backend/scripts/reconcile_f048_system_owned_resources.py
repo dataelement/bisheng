@@ -6,6 +6,14 @@ the F048 facade. Existing CURRENT resources retain their grants, including
 revoked all-member access. Preset dashboards are user-owned examples and are deliberately
 outside this system-resource reconciler.
 
+``--resource-type`` selects what to reconcile (default: preset tools). F022
+upgrades backfill the existing enterprise market items -- every record, deleted
+ones included -- as system-owned and visible to all members, after the
+authorization model is published and before the services start::
+
+    PYTHONPATH=./ .venv/bin/python scripts/reconcile_f048_system_owned_resources.py \
+      --resource-type dsh_market_plugin --resource-type dsh_market_workbench
+
 Run from ``src/backend`` with the live config:
 
     PYTHONPATH=./ .venv/bin/python scripts/reconcile_f048_system_owned_resources.py
@@ -28,6 +36,7 @@ if _BACKEND_ROOT not in sys.path:
     sys.path.insert(0, _BACKEND_ROOT)
 
 from bisheng.api.services.f048_system_resource_bootstrap import (  # noqa: E402
+    load_market_system_owned_inventory,
     load_system_owned_resource_inventory,
 )
 from bisheng.common.services.config_service import settings  # noqa: E402
@@ -41,6 +50,7 @@ from bisheng.permission.application.system_resource_reconcile import (  # noqa: 
     reconcile_system_owned_resources,
 )
 
+RESOURCE_TYPES = ("tool", "dsh_market_plugin", "dsh_market_workbench")
 EXIT_OK = 0
 EXIT_BLOCKED = 3
 EXIT_RUNTIME_ERROR = 4
@@ -74,7 +84,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=1,
         help="Positive audit operator ID recorded in projection operations (default: 1)",
     )
+    parser.add_argument(
+        "--resource-type",
+        dest="resource_types",
+        action="append",
+        choices=RESOURCE_TYPES,
+        help="Resource type to reconcile; repeat for several (default: tool)",
+    )
     args = parser.parse_args(argv)
+    args.resource_types = list(dict.fromkeys(args.resource_types or ["tool"]))
     if args.apply and not args.confirm_store_id:
         parser.error("--apply requires --confirm-store-id")
     return args
@@ -92,9 +110,13 @@ async def run(args: argparse.Namespace) -> int:
     await components.marker.wait_until_ready(
         timeout_seconds=float(settings.openfga.recent_consistency_window_seconds) + 5.0,
     )
-    inventory = await load_system_owned_resource_inventory()
-    resources = inventory.resources
-    invalid = inventory.invalid
+    resources, invalid = (), ()
+    if "tool" in args.resource_types:
+        inventory = await load_system_owned_resource_inventory()
+        resources, invalid = inventory.resources, inventory.invalid
+    market_types = tuple(resource_type for resource_type in args.resource_types if resource_type != "tool")
+    if market_types:
+        resources = (*resources, *await load_market_system_owned_inventory(market_types))
     if invalid:
         details = ", ".join(f"{item.object_key} ({item.reason})" for item in invalid)
         if args.apply:
@@ -109,7 +131,7 @@ async def run(args: argparse.Namespace) -> int:
         "mode": report.mode,
         "store_id": client.store_id,
         "model_id": client.model_id,
-        "selected_resource_types": ["tool"],
+        "selected_resource_types": args.resource_types,
         "resource_count": len(resources),
         "missing_count": report.missing_count,
         "blocked_count": report.blocked_count,

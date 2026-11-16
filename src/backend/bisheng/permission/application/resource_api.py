@@ -46,6 +46,7 @@ from bisheng.permission.domain.services.permission_action_service import (
 from bisheng.permission.domain.services.permission_explain_service import (
     PermissionExplanation,
 )
+from bisheng.permission.domain.services.resource_lifecycle_policy import TENANT_SHARED_CAPABILITY_TYPES
 
 
 class PermissionSubjectDirectoryPort(Protocol):
@@ -406,7 +407,7 @@ class F048ResourcePermissionApi:
         catalog = await self._runtime.current_catalog()
         can_manage = await self._can_manage(actor, target)
         sharing = {}
-        if can_manage and resource_type in {"tool", "linsight_skill"}:
+        if can_manage and resource_type in TENANT_SHARED_CAPABILITY_TYPES:
             grant_context = await self._runtime.build_grant_context(actor=actor, target=target)
             shared = self._runtime.tenant_use_grant(target, catalog)
             sharing = {
@@ -644,7 +645,7 @@ class F048ResourcePermissionApi:
         for change in request.changes:
             source = None
             if change.subject is not None:
-                if change.subject.type == "tenant" and resource_type not in {"tool", "linsight_skill"}:
+                if change.subject.type == "tenant" and resource_type not in TENANT_SHARED_CAPABILITY_TYPES:
                     raise PermissionInvalidResourceError()
                 source = await self._subjects.canonical_source(
                     tenant_id=target.tenant_id,

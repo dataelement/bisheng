@@ -27,6 +27,7 @@ from bisheng.permission.domain.services.projection_plan import (
     merge_projection_deltas,
 )
 from bisheng.permission.domain.services.resource_lifecycle_policy import (
+    TENANT_SHARED_CAPABILITY_TYPES,
     build_create_plan,
 )
 from bisheng.permission.domain.services.visibility_projection_service import (
@@ -36,7 +37,9 @@ from bisheng.permission.domain.services.visibility_projection_service import (
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_OWNED_RESOURCE_ALLOWLIST = frozenset({"workflow", "assistant", "tool", "linsight_skill"})
+SYSTEM_OWNED_RESOURCE_ALLOWLIST = frozenset(
+    {"workflow", "assistant", "tool", "linsight_skill", "dsh_market_plugin", "dsh_market_workbench"}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,7 +138,7 @@ class F048OwnerProjectionService:
             self._validate_system_owned(context)
             grant = None
             source = None
-            if context.target.resource_type in {"tool", "linsight_skill"}:
+            if context.target.resource_type in TENANT_SHARED_CAPABILITY_TYPES:
                 if len(context.creation_grants) != 1:
                     raise PermissionInvalidResourceError()
                 protected_deltas = ()

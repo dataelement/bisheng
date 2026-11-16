@@ -44,7 +44,11 @@ from typing import Any
 # (114, 2026-09-15) hold the same model — checksum 3266b35a…, unchanged by the
 # rename — and need no action.
 # F118 retains the predecessor label and identifies its use-retirement shape.
-MODEL_VERSION = "f048-v6-app-f118"
+# F022 adds the two enterprise market types (`dsh_market_plugin`,
+# `dsh_market_workbench`); release-line numbering stays with the release line,
+# so the branch only appends its suffix. Existing environments must publish it
+# during a maintenance window (F022 upgrade-guide.md), never at startup.
+MODEL_VERSION = "f048-v6-app-f118-f022"
 
 DEFAULT_ACTION_CODES: tuple[str, ...] = (
     "manage_permission",
@@ -76,6 +80,10 @@ MIGRATED_RESOURCE_TYPES: tuple[str, ...] = (
     # model (miss it and every tuple write 400s), that one validates Catalog
     # rows on every snapshot load (miss it and Catalog reads raise outright).
     "app",
+    # F022 enterprise market plugins and workbenches. Same twin-list rule as
+    # `app`; both are system-owned with a revocable all-member grant.
+    "dsh_market_plugin",
+    "dsh_market_workbench",
 )
 
 OWNER_PROJECTION_RESOURCE_TYPES: tuple[str, ...] = ()

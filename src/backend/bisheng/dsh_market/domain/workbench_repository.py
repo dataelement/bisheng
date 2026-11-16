@@ -104,12 +104,18 @@ class WorkbenchRepository:
         reason = "identity_conflict" if conflict else ""
         # A deleted workbench can be restored with equivalent build metadata.
         # Exact reimports of its restored current version remain allowed.
-        check_equivalent = workbench and workbench.current_version_id is not None and (
-            current is None or current.version != manifest["version"]
+        check_equivalent = (
+            workbench
+            and workbench.current_version_id is not None
+            and (current is None or current.version != manifest["version"])
         )
-        if not reason and check_equivalent and any(
-            row.version != manifest["version"] and compare_semver(manifest["version"], row.version) == 0
-            for row in versions
+        if (
+            not reason
+            and check_equivalent
+            and any(
+                row.version != manifest["version"] and compare_semver(manifest["version"], row.version) == 0
+                for row in versions
+            )
         ):
             reason = "version_conflict"
         if not reason and versions and any(compare_semver(manifest["version"], row.version) < 0 for row in versions):
@@ -139,6 +145,7 @@ class WorkbenchRepository:
 
     def create_import(self, tenant, actor, digest, display_name):
         with self.sessions() as db:
+
             def reset_existing(row):
                 if row.status in {"failed", "completed"}:
                     row.status, row.error, row.error_code = "validating", "", ""
@@ -322,9 +329,13 @@ class WorkbenchRepository:
             result["package_metadata"] = version.manifest["package_metadata"]
         return result
 
+    @staticmethod
+    def _listed(tenant):
+        return (MarketWorkbench.tenant_id == tenant, MarketWorkbench.current_version_id.is_not(None))
+
     def list(self, tenant, page=1, size=20):
         with self.sessions() as db:
-            clauses = (MarketWorkbench.tenant_id == tenant, MarketWorkbench.current_version_id.is_not(None))
+            clauses = self._listed(tenant)
             total = db.exec(select(func.count()).select_from(MarketWorkbench).where(*clauses)).one()
             rows = db.exec(
                 select(MarketWorkbench)
@@ -334,6 +345,73 @@ class WorkbenchRepository:
                 .limit(size)
             ).all()
             return {"data": [self._view(db, tenant, row) for row in rows], "total": total}
+
+    # Authorization reads (F022). They report records whatever their business
+    # status; callers keep applying the status filters above.
+    @staticmethod
+    def _permission_records(rows):
+        return [{"id": row[0], "tenant_id": row[1], "revision": row[2]} for row in rows]
+
+    def employee_candidates(self, tenant):
+        """Listed workbenches in display order, before authorization."""
+        with self.sessions() as db:
+            rows = db.exec(
+                select(MarketWorkbench.id, MarketWorkbench.tenant_id, MarketWorkbench.revision)
+                .where(*self._listed(tenant))
+                .order_by(MarketWorkbench.updated_at.desc(), MarketWorkbench.id)
+            ).all()
+            return self._permission_records(rows)
+
+    def employee_views(self, tenant, workbench_ids):
+        """List views of authorized ids, in the given order."""
+        if not workbench_ids:
+            return []
+        with self.sessions() as db:
+            rows = {
+                row.id: row
+                for row in db.exec(
+                    select(MarketWorkbench).where(*self._listed(tenant), MarketWorkbench.id.in_(workbench_ids))
+                ).all()
+            }
+            return [self._view(db, tenant, rows[item]) for item in workbench_ids if item in rows]
+
+    def permission_record(self, workbench_id):
+        with self.sessions() as db:
+            rows = db.exec(
+                select(MarketWorkbench.id, MarketWorkbench.tenant_id, MarketWorkbench.revision).where(
+                    MarketWorkbench.id == workbench_id
+                )
+            ).all()
+            return next(iter(self._permission_records(rows)), None)
+
+    def permission_records(self, tenant, workbench_ids):
+        if not workbench_ids:
+            return []
+        with self.sessions() as db:
+            rows = db.exec(
+                select(MarketWorkbench.id, MarketWorkbench.tenant_id, MarketWorkbench.revision).where(
+                    MarketWorkbench.tenant_id == tenant, MarketWorkbench.id.in_(workbench_ids)
+                )
+            ).all()
+            return self._permission_records(rows)
+
+    def all_permission_records(self):
+        """Every workbench of every tenant; the caller must bypass the tenant filter."""
+        with self.sessions() as db:
+            rows = db.exec(
+                select(MarketWorkbench.id, MarketWorkbench.tenant_id, MarketWorkbench.revision).order_by(
+                    MarketWorkbench.tenant_id, MarketWorkbench.id
+                )
+            ).all()
+            return self._permission_records(rows)
+
+    def item_for_version(self, tenant, version_id):
+        with self.sessions() as db:
+            return db.exec(
+                select(MarketWorkbenchVersion.workbench_id).where(
+                    MarketWorkbenchVersion.tenant_id == tenant, MarketWorkbenchVersion.id == version_id
+                )
+            ).first()
 
     def get(self, tenant, workbench_id):
         with self.sessions() as db:
