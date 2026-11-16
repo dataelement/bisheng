@@ -10,8 +10,20 @@ from zoneinfo import ZoneInfo
 from loguru import logger
 
 from bisheng.core.context.tenant import get_current_tenant_id
+from bisheng.dsh.domain.schemas.unified_policy import MAX_TOKEN_LIMIT
 from bisheng.dsh.domain.schemas.usage import UsageEvent
 from bisheng.dsh.infrastructure.quota_redis import QuotaRejected
+
+
+def _valid_counter(value: str | None) -> bool:
+    return (
+        isinstance(value, str)
+        and 0 < len(value) <= 19
+        and value.isascii()
+        and value.isdecimal()
+        and (value == "0" or value[0] != "0")
+        and int(value) <= MAX_TOKEN_LIMIT
+    )
 
 
 class AutomaticQuotaRecovery:
@@ -30,10 +42,14 @@ class AutomaticQuotaRecovery:
         if (
             gate.get("state") != "READY"
             or gate.get("policy_revision_schema") != "2"
+            or gate.get("quota_limit_schema") != "shared"
+            or not _valid_counter(gate.get("limit"))
             or gate.get("write_in_progress") == "1"
             or gate.get("running_index") != "1"
             or int(gate.get("running_count", -1)) != await redis.zcard(base + ":running")
         ):
+            return False
+        if any(gate.get("limit:" + key[6:]) != gate["limit"] for key in gate if key.startswith("model:")):
             return False
         if any(value.startswith("STORAGE_UNCERTAIN:") for value in await redis.smembers(base + ":blocks")):
             return False
@@ -45,6 +61,10 @@ class AutomaticQuotaRecovery:
                 redis.hgetall(base + ":month:" + value), redis.hgetall(base + ":models:" + value)
             )
             if not totals or not models or totals.get("epoch") != gate.get("epoch"):
+                return False
+            if not _valid_counter(totals.get("used")) or any(
+                not _valid_counter(value) for key, value in models.items() if key != "_initialized"
+            ):
                 return False
             if sum(int(v) for k, v in models.items() if k != "_initialized") != int(totals.get("used", -1)):
                 return False
@@ -163,10 +183,11 @@ class AutomaticQuotaRecovery:
             epoch = policy["quota_epoch"]
             gate = {
                 "policy_revision_schema": "2",
+                "quota_limit_schema": "shared",
                 "redis_generation": self.quota.topology.run_id,
                 "epoch": str(epoch),
                 "version": str(policy["version"]),
-                "limit": "0",
+                "limit": str(policy["shared_token_limit"]),
                 "running_index": "1",
                 "running_count": "0",
             }
@@ -178,8 +199,8 @@ class AutomaticQuotaRecovery:
                 gate["direct_version:" + model] = str(row["version"] if direct_version is None else direct_version)
                 if row["enabled"]:
                     gate["model:" + model] = "1"
-                    gate["limit:" + model] = str(row["monthly_token_limit"])
-                    gate["limit"] = str(int(gate["limit"]) + row["monthly_token_limit"])
+                    # All visible models spend the same personal allowance.
+                    gate["limit:" + model] = gate["limit"]
                 operation_id = row.get("pending_operation_id")
                 if operation_id:
                     operation = operations[operation_id]
