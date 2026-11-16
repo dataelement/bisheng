@@ -2,10 +2,12 @@
 
 Matching is exact on the provider type plus the normalized model name; dated
 snapshot names are listed explicitly instead of being stripped, because a
-snapshot can be priced differently from its base model. A gateway's vendor
-prefix ("openai/gpt-5.5") is dropped when the full name has no entry, and such a
-match asks the admin to verify. ``catalog.json`` is validated on first load, and
-the test suite keeps the bundled file valid.
+snapshot can be priced differently from its base model. Platforms that resell
+other vendors' models (``MULTI_VENDOR_PROVIDER_TYPES``) also match those models by
+name, and a gateway's vendor prefix ("openai/gpt-5.5") is dropped when the full
+name has no entry; such matches carry the vendor's list price and ask the admin to
+verify. ``catalog.json`` is validated on first load, and the test suite keeps the
+bundled file valid.
 """
 
 import json
@@ -20,6 +22,19 @@ from bisheng.llm.domain.pricing.schemas import Currency, ModelPricing, Price
 
 CATALOG_PATH = Path(__file__).with_name("catalog.json")
 _PROVIDER_TYPES = {item.value for item in LLMServerType}
+# 百炼, 方舟, 千帆, TokenHub, 硅基流动 and gateways sell other vendors' models too: every catalog
+# model is offered there. Single-vendor APIs (DeepSeek, Kimi, ...) and self-hosted types are not.
+MULTI_VENDOR_PROVIDER_TYPES = frozenset(
+    item.value
+    for item in (
+        LLMServerType.OPENAI_COMPATIBLE,
+        LLMServerType.QWEN,
+        LLMServerType.VOLCENGINE,
+        LLMServerType.QIAN_FAN,
+        LLMServerType.TENCENT,
+        LLMServerType.SILICON,
+    )
+)
 
 
 def normalize_model_name(name: str) -> str:
@@ -90,26 +105,28 @@ def load_catalog() -> PriceCatalog:
     return PriceCatalog.model_validate(json.loads(CATALOG_PATH.read_text(encoding="utf-8")))
 
 
-def _find(server_type: str, name: str) -> CatalogEntry | None:
+def _find(server_type: str, name: str) -> tuple[CatalogEntry, bool] | None:
+    """The entry for a name, and whether the provider type lists it as its own model."""
+    resold = None
     for entry in load_catalog().entries:
-        if server_type in entry.provider_types and name in entry.aliases:
-            return entry
+        if name in entry.aliases:
+            if server_type in entry.provider_types:
+                return entry, True
+            resold = resold or entry
+    if resold is not None and server_type in MULTI_VENDOR_PROVIDER_TYPES:
+        return resold, False
     return None
 
 
 def match(server_type: str, model_name: str) -> CatalogMatch | None:
     name = normalize_model_name(model_name or "")
-    if not name:
-        return None
-    entry = _find(server_type, name)
-    if entry is not None:
-        return CatalogMatch(entry, via_name=server_type == LLMServerType.OPENAI_COMPATIBLE.value)
     # Gateways often prefix the vendor: "openai/gpt-5.5", "deepseek-ai/deepseek-v4-pro".
-    base = name.rsplit("/", 1)[-1].strip()
-    if base and base != name:
-        entry = _find(server_type, base)
-        if entry is not None:
-            return CatalogMatch(entry, via_name=True)
+    for candidate in dict.fromkeys((name, name.rsplit("/", 1)[-1].strip())):
+        found = _find(server_type, candidate) if candidate else None
+        if found is not None:
+            entry, own = found
+            gateway = server_type == LLMServerType.OPENAI_COMPATIBLE.value
+            return CatalogMatch(entry, via_name=gateway or not own or candidate != name)
     return None
 
 

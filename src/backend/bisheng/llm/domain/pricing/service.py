@@ -134,10 +134,14 @@ async def save_model_pricing(operator, model_id: int, incoming) -> dict:
 
 def catalog_view() -> dict:
     """The built-in price catalog for the admin "pick a reference price" list."""
-    from bisheng.llm.domain.pricing.catalog import load_catalog
+    from bisheng.llm.domain.pricing.catalog import MULTI_VENDOR_PROVIDER_TYPES, load_catalog
 
     catalog = load_catalog()
-    return {"version": catalog.version, "entries": [entry.model_dump() for entry in catalog.entries]}
+    return {
+        "version": catalog.version,
+        "entries": [entry.model_dump() for entry in catalog.entries],
+        "multi_vendor_provider_types": sorted(MULTI_VENDOR_PROVIDER_TYPES),
+    }
 
 
 def match_view(server_type: str, model_name: str) -> dict:

@@ -66,7 +66,14 @@ export const matchPriceCatalog = (serverType: string, modelName: string, signal?
         params: { server_type: serverType, model_name: modelName }, signal, silent: true,
     })
 
-export const getPriceCatalog = (signal?: AbortSignal): Promise<{ version: string; entries: PriceCatalogEntry[] }> =>
+export type PriceCatalog = {
+    version: string
+    entries: PriceCatalogEntry[]
+    // Platforms that resell other vendors' models (百炼, 方舟, ...): every entry is offered there.
+    multi_vendor_provider_types: string[]
+}
+
+export const getPriceCatalog = (signal?: AbortSignal): Promise<PriceCatalog> =>
     request.get('/api/v1/llm/price-catalog', { signal, silent: true })
 
 const admin = '/api/v1/dsh/admin'

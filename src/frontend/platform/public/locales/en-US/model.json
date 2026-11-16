@@ -269,7 +269,7 @@
       "output": "Output",
       "invalid": "Enter a number from 0 to 999999.999999 with at most 6 decimal places.",
       "statusCatalog": "Filled from the price list: {{vendor}} {{label}} (official price as of {{date}})",
-      "statusReview": "Matched \"{{label}}\" in the price list by model name. Check that it is the same model.",
+      "statusReview": "Matched \"{{label}}\" in the price list by model name (vendor list price). Check that your provider's model and price are the same.",
       "statusEdited": "Edited. Price list: input {{input}} / cache hit {{cacheRead}} / cache write {{cacheWrite}} / output {{output}} ({{currency}})",
       "restore": "Restore list price",
       "defaultTag": "Default 0",
@@ -277,7 +277,7 @@
       "statusManual": "Prices entered manually.",
       "help": "Each call is billed from the usage the provider reports: every token type times its price. An empty cache-write price uses the input price."
     },
-    "discoveryScope_price_catalog": "Common models from each vendor in the price catalog; picking one fills in its price. Gateways may name models differently from the vendor, so check the names your provider uses before adding them.",
+    "discoveryScope_price_catalog": "Common models from each vendor in the price catalog; picking one fills in the vendor's list price. Gateways and model platforms may use different names or prices, so check them before adding.",
     "priceCatalogCount": "{{count}} models in the price catalog",
     "filterVendor": "Filter vendor",
     "allVendors": "All vendors",

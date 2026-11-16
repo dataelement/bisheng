@@ -20,6 +20,8 @@ async def test_catalog_lists_every_entry():
         data = (await client.get("/api/v1/llm/price-catalog")).json()["data"]
     assert data["version"] == "2026-11-16"
     assert any(entry["key"] == "qwen/qwen-max" for entry in data["entries"])
+    assert {"qwen", "volcengine", "openai_compatible"} <= set(data["multi_vendor_provider_types"])
+    assert "deepseek" not in data["multi_vendor_provider_types"]
 
 
 async def test_match_prefills_known_models_and_flags_name_only_matches():

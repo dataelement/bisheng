@@ -218,7 +218,7 @@
 - [x] **T27**: 模型下拉框倍率 — `client/src/types/chat/config.ts`、`components/Chat/AiModelSelect.tsx` · 覆盖 AC: AC-13 · 依赖: T16, T26
 - [x] **T34**: 「选择模型」用价格表兜底（2026-11-13 Callum 联调提出）— 服务商列表拉取失败时列出价格表里该类型的模型并保留失败原因；「OpenAI 兼容」新增按钮直接从价格表选 — `platform/.../ModelDiscovery.tsx`、`modelDiscoveryCatalog.ts`、`modelDiscoveryErrors.ts`（从 ModelDiscovery 拆出以守住 600 行） · 依赖: T02
 - [x] **T35**: 客户端常驻剩余积分（2026-11-13 Callum 联调提出）— 网页工作台左下角 `client/src/components/dsh/SidebarCredits.tsx`；桌面左下角账号行 `bisheng-desktop packages/dsh-desktop-settings`，对话结束后自动刷新 · 依赖: T33
-- [x] **T36**: 价格表重建（2026-11-16 Callum 提出：要更全、按厂商分类、收各家最新模型）— `llm/domain/pricing/catalog.json` 改为 13 家 87 个模型，版本 2026-11-16；`catalog.py` 名称没有条目时去掉中转站的厂商前缀再匹配；「选择模型」弹框按厂商分组、按厂商筛选、每行显示价格 `platform/src/pages/ModelPage/manage/ModelDiscovery.tsx`、`modelDiscoveryCatalog.ts`。取价规则和待复核清单见 `price-catalog.md` · 依赖: T34
+- [x] **T36**: 价格表重建（2026-11-16 Callum 提出：要更全、按厂商分类、收各家最新模型）— `llm/domain/pricing/catalog.json` 改为 13 家 87 个模型，版本 2026-11-16；`catalog.py` 名称没有条目时去掉中转站的厂商前缀再匹配；「选择模型」弹框按厂商分组、按厂商筛选、每行显示价格；百炼、方舟、千帆、TokenHub、硅基流动这类转售平台拉不到列表时列出全部厂商（自家在前），别家模型按名字带出官方价并提示核对（Callum 11-16 提出） `platform/src/pages/ModelPage/manage/ModelDiscovery.tsx`、`modelDiscoveryCatalog.ts`。取价规则和待复核清单见 `price-catalog.md` · 依赖: T34
 - [x] **T33**: 本月积分展示（2026-11-13 Callum 联调时提出：界面上看不到员工的积分）— 网页「设置 → 客户端」积分卡片 `client/src/components/dsh/DshCreditsCard.tsx`、`DshDesktopPanel.tsx`（读已有的 `/dsh/me/credits`）；后台「用量」按用户显示本月已用 / 额度 / 剩余 `platform/src/pages/SystemPage/dsh/UserCreditsCard.tsx`、`PolicyView.tsx`，新接口 `GET /dsh/admin/users/{id}/credits`（与 `/me/credits` 共用 `month_credits`）；「当前时段已消耗」改为最多 2 位小数 · 依赖: 无
 
 ### Wave 6 — 桌面（S8，bisheng-desktop）

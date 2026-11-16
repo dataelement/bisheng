@@ -267,7 +267,7 @@
       "output": "输出",
       "invalid": "价格为 0～999999.999999 之间的数字，最多 6 位小数。",
       "statusCatalog": "已按价格表带出：{{vendor}} {{label}}（{{date}} 官网价）",
-      "statusReview": "按模型名匹配到价格表里的「{{label}}」，请核对是否为同一个模型。",
+      "statusReview": "按模型名匹配到价格表里的「{{label}}」（官方价），请核对服务商的模型和价格是否一致。",
       "statusEdited": "已修改。价格表原价：输入 {{input}} / 缓存命中 {{cacheRead}} / 缓存写入 {{cacheWrite}} / 输出 {{output}}（{{currency}}）",
       "restore": "恢复原价",
       "defaultTag": "默认 0",
@@ -275,7 +275,7 @@
       "statusManual": "手动填写的价格。",
       "help": "每次调用按厂商返回的用量，每类 token 乘以对应价格计费；缓存写入不填时按输入价计。"
     },
-    "discoveryScope_price_catalog": "以下是价格表中各厂商的常用模型，选中后会自动带出价格。中转站的模型名称可能和官方不同，添加前请确认服务商使用的名称。",
+    "discoveryScope_price_catalog": "以下是价格表中各厂商的常用模型，选中后会自动带出官方价格。中转站和百炼这类平台的模型名称、价格可能和官方不同，添加前请核对。",
     "priceCatalogCount": "价格表中有 {{count}} 个模型",
     "filterVendor": "筛选厂商",
     "allVendors": "全部厂商",

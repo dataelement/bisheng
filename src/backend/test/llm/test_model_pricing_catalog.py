@@ -73,6 +73,7 @@ def test_explicit_dated_alias_matches():
         ("openai_compatible", "deepseek-ai/DeepSeek-V4-Pro", "deepseek/deepseek-v4-pro"),
         ("openai_compatible", "anthropic/claude-opus-4.5", "anthropic/claude-opus-4-5"),
         ("deepseek", "deepseek-ai/deepseek-v4-pro", "deepseek/deepseek-v4-pro"),
+        ("silicon", "Pro/deepseek-ai/DeepSeek-V4-Pro", "deepseek/deepseek-v4-pro"),
     ],
 )
 def test_gateway_vendor_prefix_is_dropped_and_asks_for_review(server_type, model_name, key):
@@ -86,10 +87,11 @@ def test_gateway_vendor_prefix_is_dropped_and_asks_for_review(server_type, model
     [
         ("openai", "gpt-4.1-2025-04-14"),  # dated snapshots are never stripped to the base price
         ("anthropic", "claude-sonnet-4-5-20990101"),
-        ("qwen", "gpt-4.1"),  # another vendor's model under a native provider
+        ("deepseek", "gpt-4.1"),  # a single-vendor API never serves another vendor's model
+        ("moonshot", "deepseek-v4-pro"),
+        ("anthropic", "openai/gpt-5.5"),
         ("openai_compatible", "openai/gpt-4.1-2025-04-14"),  # a dropped prefix never strips the date
         ("openai_compatible", "openai/"),
-        ("silicon", "deepseek-ai/deepseek-v4-pro"),  # gateways with their own price list never match
         ("vllm", "qwen-max"),  # self-hosted provider types never match
         ("ollama", "deepseek-v4-pro"),
         ("volcengine", "ep-20261110-abcde"),  # Ark endpoint IDs cannot be matched
@@ -98,6 +100,26 @@ def test_gateway_vendor_prefix_is_dropped_and_asks_for_review(server_type, model
 )
 def test_no_match_falls_back_to_default(server_type, model_name):
     assert match(server_type, model_name) is None
+
+
+@pytest.mark.parametrize(
+    ("server_type", "model_name", "key"),
+    [
+        ("qwen", "deepseek-v4-pro", "deepseek/deepseek-v4-pro"),  # 百炼 resells DeepSeek
+        ("volcengine", "kimi-k3", "moonshot/kimi-k3"),
+        ("qianfan", "qwen3.7-plus", "qwen/qwen3.7-plus"),
+        ("tencent", "glm-5.3", "zhipu/glm-5.3"),
+    ],
+)
+def test_multi_vendor_platforms_match_other_vendors_at_list_price_for_review(server_type, model_name, key):
+    found = match(server_type, model_name)
+    assert found.entry.key == key
+    assert found.via_name
+
+
+def test_multi_vendor_platform_own_models_stay_exact():
+    assert not match("qwen", "qwen-max").via_name
+    assert not match("volcengine", "doubao-seed-2.1-pro").via_name
 
 
 def test_free_catalog_entry():

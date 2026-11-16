@@ -544,6 +544,7 @@ describe("F016 price-catalog model list", () => {
     vi.mocked(discoverModels).mockReset();
     vi.mocked(getPriceCatalog).mockReset().mockResolvedValue({
       version: "2026-11-10",
+      multi_vendor_provider_types: ["openai_compatible", "qwen"],
       entries: [
         entry("qwen/qwen-max", "Qwen Max", ["qwen", "openai_compatible"]),
         entry("openai/gpt-4.1", "gpt-4.1", ["openai", "openai_compatible"]),
@@ -573,6 +574,7 @@ describe("F016 price-catalog model list", () => {
   it("groups catalog rows by vendor with their prices and filters by vendor instead of type", async () => {
     vi.mocked(getPriceCatalog).mockResolvedValue({
       version: "2026-11-16",
+      multi_vendor_provider_types: ["openai_compatible", "qwen"],
       entries: [
         entry("qwen/qwen-max", "Qwen Max", ["qwen", "openai_compatible"], "阿里千问"),
         entry("qwen/qwen-plus", "Qwen Plus", ["qwen", "openai_compatible"], "阿里千问"),
@@ -594,6 +596,22 @@ describe("F016 price-catalog model list", () => {
     expect(screen.getByText("gpt-4.1")).toBeInTheDocument();
     expect(screen.queryByText("qwen-max")).toBeNull();
     expect(screen.queryByText("qwen-plus")).toBeNull();
+  });
+  it("offers every vendor's models on a reselling platform, its own first", async () => {
+    vi.mocked(discoverModels).mockRejectedValue({ kind: "network" });
+    vi.mocked(getPriceCatalog).mockResolvedValue({
+      version: "2026-11-16",
+      multi_vendor_provider_types: ["openai_compatible", "qwen"],
+      entries: [
+        entry("deepseek/deepseek-v4-pro", "DeepSeek V4 Pro", ["deepseek", "openai_compatible"], "DeepSeek"),
+        entry("qwen/qwen-max", "Qwen Max", ["qwen", "openai_compatible"], "阿里千问"),
+      ],
+    });
+    render(<ModelDiscovery {...props()} provider="qwen" existing={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "model.selectModels" }));
+    await screen.findByText("deepseek-v4-pro");
+    const names = screen.getAllByRole("checkbox").map((box) => box.getAttribute("aria-label"));
+    expect(names.filter((name) => name !== "model.selectVisibleModels")).toEqual(["qwen-max", "deepseek-v4-pro"]);
   });
   it("falls back to the provider's catalog models when the vendor list fails, keeping the reason", async () => {
     vi.mocked(discoverModels).mockRejectedValue({ kind: "network" });
