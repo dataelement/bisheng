@@ -146,6 +146,7 @@ def destroy(runtime, tmp_path):
     (backups / "previous.sqlite").write_bytes(b"private-backup-fixture")
     create = cluster.create
     helper_runs = []
+    helper_results = {}
 
     def finished(kind, template):
         obj = create(kind, template)
@@ -159,11 +160,17 @@ def destroy(runtime, tmp_path):
 
     def logs(name, **kwargs):
         pod = cluster.objects["pods", name]
+        # Reading an immutable Pod log is not another execution of its helper.
+        uid = pod["metadata"]["uid"]
+        if uid in helper_results:
+            return helper_results[uid]
         container = pod["spec"]["containers"][0]
         document = json.loads(next(row["value"] for row in container["env"] if row["name"] == "MATERIAL_PLAN"))
         assert container["name"] == "maintenance" and document["action"] == "purge"
         helper_runs.append(document["operation"]["operation_id"])
-        return "BISHENG_RUNTIME_RESULT " + json.dumps(run_maintenance(document, None, volume=volume))
+        result = "BISHENG_RUNTIME_RESULT " + json.dumps(run_maintenance(document, None, volume=volume))
+        helper_results[uid] = result
+        return result
 
     cluster.create, cluster.logs = finished, logs
     executors, transports = [], []

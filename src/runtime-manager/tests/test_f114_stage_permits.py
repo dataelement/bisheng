@@ -73,7 +73,12 @@ def runner(tmp_path, *, refuse=None, lost_reply=False):
         events.append("data:" + action)
         return {}
 
-    runtime = SimpleNamespace(data=data, retire_others=lambda op: None, cleanup_preparation=lambda op: None)
+    runtime = SimpleNamespace(
+        preflight=lambda op: None,
+        data=data,
+        retire_others=lambda op: None,
+        cleanup_preparation=lambda op: None,
+    )
     executor = OperationExecutor(Config(data_root=tmp_path, node_id="node"), platform=platform, runtime=runtime)
     executor.stop_instances = lambda *a, **k: events.append("stop-old")
     executor._launch = lambda *a, **k: {"exec_ref": "new-exec", "target": {"host": "10.0.0.1", "port": 8080}}
