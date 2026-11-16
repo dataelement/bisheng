@@ -198,6 +198,7 @@
   **文件**: 无代码改动
   **逻辑**: `scripts/arch-guard.sh`；`test/permission/`、`test/dsh_market/` 全量与 `feat/3.1.0-beta2` 干净基线对比新增失败为 0；platform vitest 相关目录；桌面全量 `npm test`；确认无新增 DDL、新 SQL 只用 SQLModel 表达式（C2 静态）；请同事在达梦环境执行补登记预览 / 执行与 TC-MKP-034。
   **覆盖 AC**: AC-21
+  **状态**: 除达梦外已完成（2026-11-16，见验证记录）；达梦待同事环境
   **依赖**: T025
 
 ---
@@ -207,6 +208,7 @@
 **自动化（2026-11-16）**
 - 后端：`test/permission` + `test/dsh_market` 全量与改动前基线（同一 venv、同一选择）逐条对比，新增失败 0；剩余失败为改动前已有（无中间件环境、截图用例并发不稳定）。新增测试：`test_dsh_market_resource_types.py`（12）、`test_market_permission.py`（23）、`test_market_permission_api.py`（17）、`test_publish_authorization_model_change_f022.py`、`test_reconcile_system_owned_resource_types.py`，均通过；关键断言做过变异验证（去掉共享常量中的新类型 → 5 条失败）。
 - 管理后台：`src/pages/BuildPage/dsh/` vitest 54 通过；`pnpm typecheck`（1256 个严格文件）通过；改动文件 ESLint 通过。
+- 共享权限代码的回归：`test/tool` + `test/linsight` + `test/dsh` + `test/api` 与改动前（4315308da）同一选择对比，两边均为 4020 通过 / 89 失败 / 57 收集错误，失败用例逐条一致，新增失败 0（失败均为本机无数据库 / 中间件）。`scripts/arch-guard.sh` 对 30 个改动文件无告警；改动的 Python 文件 `ruff format --check` 通过、`ruff check` 问题数与改动前相同。管理后台 `src/test/f048PermissionDialog.test.tsx` 有 1 条失败，在改动前版本上同样失败。
 - 桌面端（`feat/v131-market-permission`）：`npm test` 全量 3903 通过，1 条无关的 PPT 模板用例在全量并发下偶发失败（单独重跑 3/3 通过，上一轮全量通过）；`npm run typecheck`、`git diff --check` 通过。
 
 **本机真实环境（2026-11-16，独立容器 + 后端 + 管理后台 + 工作台网页 + 桌面开发版）**
