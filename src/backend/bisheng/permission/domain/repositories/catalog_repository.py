@@ -38,15 +38,6 @@ class _RepositorySessionMixin:
         )
 
     @asynccontextmanager
-    async def bind_session(self, session: AsyncSession) -> AsyncIterator[None]:
-        """Borrow an Owner UOW; never commit or close the caller's session."""
-        token = self._active_session.set(session)
-        try:
-            yield
-        finally:
-            self._active_session.reset(token)
-
-    @asynccontextmanager
     async def transaction(self) -> AsyncIterator[_RepositorySessionMixin]:
         current = self._active_session.get()
         if current is not None:
@@ -80,38 +71,6 @@ class CatalogRepository(
     _RepositorySessionMixin,
     PermissionCatalogRepositoryPort,
 ):
-    async def aget_recovery_environment(self, *, lock: bool = False) -> dict:
-        """Read or lock the exact global release used by an operational recovery."""
-        from bisheng.common.errcode.permission import PermissionPublishNotReadyError
-        from bisheng.permission.domain.models import AuthorizationModelRelease
-
-        with bypass_tenant_filter():
-            async with self._session() as session:
-                statement = select(PermissionCatalogRelease).where(PermissionCatalogRelease.status == "CURRENT")
-                if lock:
-                    statement = statement.with_for_update(nowait=True).execution_options(populate_existing=True)
-                rows = list((await session.execute(statement)).scalars().all())
-                if len(rows) != 1 or rows[0].write_fenced:
-                    raise PermissionPublishNotReadyError(msg="Recovery Catalog is missing, ambiguous or fenced")
-                catalog = rows[0]
-                statement = select(AuthorizationModelRelease).where(
-                    AuthorizationModelRelease.id == catalog.required_authorization_model_release_id,
-                )
-                if lock:
-                    statement = statement.with_for_update(nowait=True).execution_options(populate_existing=True)
-                model = (await session.execute(statement)).scalars().first()
-                if model is None or model.status != "ACTIVE":
-                    raise PermissionPublishNotReadyError(msg="Recovery authorization release is not ACTIVE")
-                return {
-                    "catalog_id": int(catalog.id),
-                    "catalog_version": int(catalog.version),
-                    "catalog_checksum": catalog.checksum,
-                    "model_release_id": int(model.id),
-                    "store_id": model.store_id,
-                    "model_id": model.model_id,
-                    "model_checksum": model.model_checksum,
-                }
-
     async def aget_current_release(
         self,
         *,

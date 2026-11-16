@@ -208,10 +208,6 @@ async def initialize_f048_api_runtime(
     background-process counterpart and shares the same resource registry build.
     """
 
-    from bisheng.api.services.department_recovery_runtime import build_department_executor
-    from bisheng.department.domain.services.department_projection_scope import configure_department_executor_factory
-
-    configure_department_executor_factory(build_department_executor)
     configure_department_context(client, DepartmentPermissionContextProvider())
     components = await build_f048_permission_runtime(
         client,
@@ -287,10 +283,6 @@ async def initialize_f048_worker_runtime(
     APIs) stays API-only.
     """
 
-    from bisheng.api.services.department_recovery_runtime import build_department_executor
-    from bisheng.department.domain.services.department_projection_scope import configure_department_executor_factory
-
-    configure_department_executor_factory(build_department_executor)
     configure_department_context(client, DepartmentPermissionContextProvider())
     components = await initialize_f048_background_runtime(
         client,

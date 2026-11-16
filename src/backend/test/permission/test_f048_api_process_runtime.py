@@ -110,8 +110,6 @@ async def test_permission_and_department_contexts_initialize_on_separate_first_a
 
     monkeypatch.setattr(process_runtime, "app_context", context)
     monkeypatch.setattr(department_projection_scope, "app_context", context)
-    factory = AsyncMock(return_value=SimpleNamespace())
-    monkeypatch.setattr(department_projection_scope, "_executor_factory", factory)
     monkeypatch.setattr(process_runtime, "_components", lambda value: value.components)
     monkeypatch.setattr(process_runtime, "run_f048_process_heartbeat", heartbeat)
 
@@ -127,7 +125,6 @@ async def test_permission_and_department_contexts_initialize_on_separate_first_a
     assert manager.heartbeats == 1
 
     department_runtime = await department_projection_scope.get_department_projection_runtime()
-    factory.assert_awaited_once()
     assert department_runtime._ledger is projection
     assert initialize_calls == 1
 

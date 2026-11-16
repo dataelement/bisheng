@@ -29,7 +29,6 @@ def _no_default_root():
     top-level items keep their original ``parent_id=None`` semantics.
     """
     with (
-        patch(f"{MODULE}.DepartmentTopologyProjectionService.sync_recovery_hints", AsyncMock(return_value={})),
         patch(
             f"{MODULE}.DepartmentDao.aget_tenant_root_via_pointer",
             new_callable=AsyncMock,

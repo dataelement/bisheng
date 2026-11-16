@@ -233,7 +233,6 @@ async def test_projecting_department_resumes_its_durable_operation(
         AsyncMock(return_value=runtime),
     )
     department = SimpleNamespace(
-        tenant_id=1,
         permission_projection_state="PROJECTING",
         permission_projection_operation_id=41,
     )

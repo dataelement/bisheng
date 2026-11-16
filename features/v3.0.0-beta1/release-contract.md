@@ -22,7 +22,6 @@
 
 | 领域对象 | Owner Feature | 说明 |
 |---------|--------------|------|
-| —（无新增领域对象；Spec/Design R1已确认；本地实现/验证，部署待验收） | F086-cofco-department-projection-recovery | 中粮部门投影故障修复、同绑定当前事实可证明的自动恢复，以及默认dry-run手动校对；模型变化/IAM重挂归档只走人工确认。复用既有部门、权限台账和审计，无新schema，不放宽鉴权；未实现/未生产验证 |
 | —（无新增领域对象） | F084-cofco-qa-failure-feedback / F085-cofco-knowledge-step-name | 日常/任务消息的既有 JSON 可选增加 failure_info、knowledge_target（version=1）；按真实依赖归并五类提示，检索名称按现有可见权限形成快照。无 DDL、回填、权限规则或全局 HTTP 拦截变更；代码与定向回归完成，场内联调待执行 |
 | —（无新增领域对象） | F083-cofco-folder-deleting | 中粮文件夹删除状态：复用既有 KnowledgeFile.status/user_metadata，跨刷新恢复与安全核对；既有变更记录及步骤作成功证据，权限/审批/后台清理保留。无 DDL/回填；状态功能已实现，真实双库及浏览器验收待执行；loading问题延期 |
 | —（无新增领域对象） | F079-cofco-space-info-read-optimization | 中粮 1028 `/info` 复用入口可见性并将 actions 收窄为入口提示；详情/广场可见优先；补充分段指标，保留角色、超管真实加入、下载与租户守卫，无数据库变更。用户已评审并授权实现 |

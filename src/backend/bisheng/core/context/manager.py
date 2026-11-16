@@ -31,15 +31,8 @@ class ApplicationContextManager:
         self._dependencies: dict[str, list[str]] = {}
         self._optional_contexts: set[str] = set()
         self._lazy_contexts: set[str] = set()
-        self._selected_context_names: tuple[str, ...] | None = None
 
-    async def initialize(
-        self,
-        config: Settings,
-        *,
-        instance_role: str = "api",
-        context_names: tuple[str, ...] | None = None,
-    ) -> None:
+    async def initialize(self, config: Settings, *, instance_role: str = "api") -> None:
         """Initialize app context
 
         Args:
@@ -48,24 +41,14 @@ class ApplicationContextManager:
         Raises:
             ContextError: Thrown on initialization failure
         """
-        if context_names is not None:
-            if not context_names or set(context_names) - {"database", "redis"}:
-                raise ValueError("context_names must select database and/or redis")
-            context_names = tuple(sorted(set(context_names)))
         async with self._initialization_lock:
             if self._initialized:
-                if context_names != self._selected_context_names:
-                    raise ValueError("Application context is already initialized with another selection")
                 logger.debug("Application context already initialized")
                 return
 
             try:
                 # Register default context manager
-                if context_names is None:
-                    self._register_default_contexts(config or {}, instance_role=instance_role)
-                else:
-                    self._register_selected_contexts(config, context_names)
-                self._selected_context_names = context_names
+                self._register_default_contexts(config or {}, instance_role=instance_role)
 
                 # Initialize all contexts in dependency order
                 await self._initialize_contexts_in_order()
@@ -78,22 +61,6 @@ class ApplicationContextManager:
                 # Clean Up Initialized Resources
                 await self.async_close()
                 raise ContextError(f"Application context initialization failed: {e}") from e
-
-    def _register_selected_contexts(self, config: Settings, context_names: tuple[str, ...]) -> None:
-        """Initialize only explicitly selected operational infrastructure."""
-        if "database" in context_names:
-            from bisheng.core.database.manager import DatabaseManager
-
-            self.register_context(
-                DatabaseManager(
-                    database_url=config.database_url,
-                    engine_config=config.database_pool.as_engine_kwargs(),
-                )
-            )
-        if "redis" in context_names:
-            from bisheng.core.cache.redis_manager import RedisManager
-
-            self.register_context(RedisManager(redis_url=config.redis_url))
 
     def _register_default_contexts(self, config: Settings, *, instance_role: str) -> None:
         """Register default context manager"""
@@ -462,22 +429,14 @@ class ApplicationContextManager:
 app_context = ApplicationContextManager()
 
 
-async def initialize_app_context(
-    config: Settings,
-    *,
-    instance_role: str = "api",
-    context_names: tuple[str, ...] | None = None,
-) -> None:
+async def initialize_app_context(config: Settings, *, instance_role: str = "api") -> None:
     """
     Initialize global app context
     :param config:
     :return:
     """
 
-    if context_names is None:
-        await app_context.initialize(config, instance_role=instance_role)
-    else:
-        await app_context.initialize(config, instance_role=instance_role, context_names=context_names)
+    await app_context.initialize(config, instance_role=instance_role)
 
 
 def get_context(name: str) -> BaseContextManager:

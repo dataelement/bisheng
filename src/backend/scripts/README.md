@@ -1184,7 +1184,3 @@ config=config.yaml PYTHONPATH=./ python scripts/seed_load_test_org.py --purge --
 # 或用 shell 包装（自动探测解释器 / PYTHONPATH / config）：
 bash scripts/seed_load_test_org.sh --departments 200 --users 50000 --apply
 ```
-
-### 部门权限投影校对（F086 / cofco-1111）
-
-`reconcile_department_projections.py` 默认只读扫描；显式 `--apply` 按当前业务/模型及必要IAM证明执行可续跑修复。无新表，不要求pyproject字节匹配或重复备份，保留串行、限速与安全核验。步骤、备份确认、停服加速、证据清理及告警见 [F086运维手册](../../../features/v3.0.0-beta1/086-cofco-department-projection-recovery/OPERATIONS.md)。

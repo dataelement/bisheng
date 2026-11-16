@@ -289,11 +289,6 @@ class CeleryConf(BaseModel):
                 "schedule": crontab.from_string("*/10 * * * *"),  # every 10 minutes
             }
 
-        if "recover_department_projections" not in self.beat_schedule:
-            self.beat_schedule["recover_department_projections"] = {
-                "task": "bisheng.worker.department.projection_recovery.recover_department_projections",
-                "schedule": 300.0,
-            }
         # convert str to crontab
         for key, task_info in self.beat_schedule.items():
             if isinstance(task_info["schedule"], str):
@@ -840,16 +835,6 @@ class ApprovalInviteConf(BaseModel):
         return self
 
 
-class DepartmentProjectionRecoveryConf(BaseModel):
-    enabled: bool = True
-    interval_seconds: int = Field(default=300, ge=30, le=86400)
-    batch_limit: int = Field(default=20, ge=1, le=100)
-    page_size: int = Field(default=500, ge=1, le=500)
-    max_scan_rows: int = Field(default=50000, ge=1, le=200000)
-    run_budget_seconds: int = Field(default=120, ge=5, le=600)
-    max_fga_qps: float = Field(default=2, gt=0, le=5)
-
-
 class Settings(BaseModel):
     """Application Settings"""
 
@@ -897,9 +882,6 @@ class Settings(BaseModel):
     object_storage: ObjectStore = ObjectStore()
     workflow_conf: WorkflowConf = WorkflowConf()
     celery_task: CeleryConf = CeleryConf()
-    department_projection_recovery: DepartmentProjectionRecoveryConf = Field(
-        default_factory=DepartmentProjectionRecoveryConf
-    )
     knowledge_file_worker: KnowledgeFileWorkerConf = KnowledgeFileWorkerConf()
     knowledge_qa_filter: KnowledgeQAFilterConf = KnowledgeQAFilterConf()
     knowledge_space_read_bypass: KnowledgeSpaceReadBypassConf = KnowledgeSpaceReadBypassConf()
@@ -948,27 +930,6 @@ class Settings(BaseModel):
                 value = new_mysql_url
 
         return value
-
-    @model_validator(mode="before")
-    @classmethod
-    def configure_department_recovery_schedule(cls, values):
-        if not isinstance(values, dict):
-            return values
-        recovery = values.get("department_projection_recovery") or {}
-        if not isinstance(recovery, dict) or "interval_seconds" not in recovery:
-            return values
-        celery = values.setdefault("celery_task", {})
-        if isinstance(celery, dict):
-            schedule = celery.setdefault("beat_schedule", {})
-            if isinstance(schedule, dict):
-                schedule.setdefault(
-                    "recover_department_projections",
-                    {
-                        "task": "bisheng.worker.department.projection_recovery.recover_department_projections",
-                        "schedule": recovery["interval_seconds"],
-                    },
-                )
-        return values
 
     @model_validator(mode="before")
     @classmethod
