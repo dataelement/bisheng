@@ -50,12 +50,14 @@ export function SidebarCredits({ onNavigate }: SidebarCreditsProps) {
 
     // An unreadable balance stays on the settings card, which explains it and offers a retry.
     if (!enabled || !credits.data) return null
-    const { unlimited, remaining } = credits.data
+    const { unlimited, remaining, limit } = credits.data
+    const number = new Intl.NumberFormat(i18n.language, { maximumFractionDigits: 2 })
+    // "remaining / allowance": raising an exhausted member's allowance visibly changes the row.
     const value = unlimited
         ? t('dsh.creditsUnlimited')
         : remaining == null
           ? '—'
-          : new Intl.NumberFormat(i18n.language, { maximumFractionDigits: 2 }).format(Number(remaining))
+          : `${number.format(Number(remaining))} / ${number.format(Number(limit))}`
 
     const openCredits = () => {
         const alreadyInSettings = /^\/settings(?:\/|$)/.test(location.pathname)

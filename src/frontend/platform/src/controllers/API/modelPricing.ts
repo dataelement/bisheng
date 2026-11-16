@@ -111,5 +111,10 @@ export type MonthCredits = {
     remaining: string | null
     unlimited: boolean
 }
-export const getUserCredits = (userId: number, signal?: AbortSignal): Promise<MonthCredits> =>
-    request.get(`${admin}/users/${userId}/credits`, { signal, silent: true })
+/** `preview`: the balance if the user's own credit rule were saved as given (nothing is written). */
+export const getUserCredits = (
+    userId: number,
+    signal?: AbortSignal,
+    preview?: { monthly_credits: string; enabled: boolean },
+): Promise<MonthCredits> =>
+    request.get(`${admin}/users/${userId}/credits`, { params: preview, signal, silent: true })

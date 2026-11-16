@@ -2,10 +2,12 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { beforeEach, expect, it, vi } from 'vitest'
 import { CreditRulesView } from './CreditRulesView'
 import { getCreditRules, getPolicySubjects, saveCreditRule } from '@/controllers/API/dshUnified'
-vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
+import { getUserCredits } from '@/controllers/API/modelPricing'
+vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'zh-Hans' } }) }))
 vi.mock('@/controllers/API/dshUnified', () => ({ getCreditRules: vi.fn(), getPolicySubjects: vi.fn(), saveCreditRule: vi.fn() }))
 vi.mock('@/components/bs-comp/selectComponent/Users', () => ({ default: () => null }))
 vi.mock('@/utils/dshRequestError', () => ({ getDshRequestErrorKey: () => 'dsh.conflict' }))
+vi.mock('@/controllers/API/modelPricing', () => ({ getUserCredits: vi.fn() }))
 beforeEach(() => {
     vi.clearAllMocks()
     Element.prototype.scrollIntoView = vi.fn()
@@ -14,6 +16,8 @@ beforeEach(() => {
     vi.mocked(getCreditRules).mockResolvedValue([])
     vi.mocked(getPolicySubjects).mockResolvedValue([{ kind: 'DEPARTMENT', id: 10, name: 'Engineering', depth: 0 }])
     vi.mocked(saveCreditRule).mockResolvedValue({ subject_type: 'DEPARTMENT', subject_id: 10, version: 1, enabled: true, monthly_credits: '500' })
+    vi.mocked(getUserCredits).mockResolvedValue({ month: '2026-11', billing_timezone: 'Asia/Shanghai', reset_at: '2026-11-30T16:00:00Z',
+        limit: '10000', used: '1284.75', remaining: '8715.25', unlimited: false })
 })
 function selectScope(name: string) {
     fireEvent.click(screen.getByRole('radio', { name }))
@@ -58,6 +62,9 @@ it('separates scopes and saves edits within their original row', async () => {
     expect(screen.queryByText('Editors')).toBeNull()
     fireEvent.click(within(row).getByRole('button', { name: 'dsh.unified.edit' }))
     fireEvent.change(within(row).getByRole('textbox'), { target: { value: '10000' } })
+    // Editing a member's own allowance previews this month's balance; departments and roles do not.
+    expect(await within(row).findByText('dsh.unified.previewBalance')).toBeInTheDocument()
+    expect(getUserCredits).toHaveBeenLastCalledWith(2, expect.any(AbortSignal), { monthly_credits: '10000', enabled: true })
     fireEvent.click(within(row).getByRole('button', { name: 'dsh.unified.save' }))
     await waitFor(() => expect(saveCreditRule).toHaveBeenCalledWith({ kind: 'USER', id: 2 }, { version: 4, enabled: true, monthly_credits: '10000' }))
     await waitFor(() => expect(within(row).queryByRole('textbox')).toBeNull())

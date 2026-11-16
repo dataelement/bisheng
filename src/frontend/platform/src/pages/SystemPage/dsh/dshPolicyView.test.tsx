@@ -247,6 +247,18 @@ describe('F016 selected user credits', () => {
         expect(figure(region, 'remaining')).toBe('899.49')
         expect(await screen.findByText('15')).toBeTruthy()
     })
+    it('says how far a member is over the allowance after a call overdrew it', async () => {
+        vi.mocked(getUserCredits).mockResolvedValue(credits({ used: '1284.754515', remaining: '0' }))
+        render(<PolicyView />)
+        const region = await card()
+        expect(figure(region, 'remaining')).toBe('0')
+        expect(within(region).getByText('dsh.unified.creditsOverdrawn')).toBeTruthy()
+    })
+    it('says nothing about overdraft within the allowance', async () => {
+        render(<PolicyView />)
+        const region = await card()
+        expect(within(region).queryByText('dsh.unified.creditsOverdrawn')).toBeNull()
+    })
     it('says unlimited instead of the int64 ceiling for a member no rule caps', async () => {
         vi.mocked(getUserCredits).mockResolvedValue(
             credits({ unlimited: true, limit: '9223372036854.775807', remaining: '9223372036854.675294' }),

@@ -4372,6 +4372,11 @@
       "creditsUnlimited": "不限额",
       "creditsUnavailable": "暂时无法读取该用户的积分",
       "monthCreditsHelp": "按自然月统计，Chat 和 Work 共用，不随时间范围变化。",
+      "previewBalance": "本月已用 {{used}}，保存后本月剩余 {{remaining}} / {{limit}}。",
+      "previewUnlimited": "本月已用 {{used}}，保存后本月不限额。",
+      "previewHigherRule": "他所在部门或角色的额度更高，按 {{limit}} 计。",
+      "previewOverdrawn": "本月已透支，额度要大于 {{used}} 才能继续使用。",
+      "creditsOverdrawn": "本月已超出额度 {{amount}}（已用 {{used}}）。调用结束后才结算，余额不够时最后一次调用会透支；要让他继续使用，额度需大于本月已用。",
       "monthlyCreditsHelp": "每位用户的月度积分上限，Chat 和 Work 共用",
       "monthlyCreditsHelpLabel": "积分额度说明"
     },

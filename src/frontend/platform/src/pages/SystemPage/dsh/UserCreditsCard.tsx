@@ -65,6 +65,14 @@ export function UserCreditsCard({ userId }: UserCreditsCardProps) {
           </div>
         ))}
       </dl>
+      {!credits.unlimited && credits.used != null && Number(credits.used) > Number(credits.limit) && (
+        <p role="status" className="text-xs text-amber-600">
+          {t("dsh.unified.creditsOverdrawn", {
+            amount: number.format(Number(credits.used) - Number(credits.limit)),
+            used: format(credits.used),
+          })}
+        </p>
+      )}
       <p className="text-xs text-muted-foreground">{t("dsh.unified.monthCreditsHelp")}</p>
     </section>
   );

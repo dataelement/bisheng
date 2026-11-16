@@ -75,3 +75,32 @@ async def test_authorization_precedes_any_policy_or_ledger_read(credits_api):
     assert response.status_code == 403
     credits_api.read_policy.assert_not_awaited()
     credits_api.prepare_month.assert_not_awaited()
+
+
+async def test_rule_editor_previews_the_balance_with_the_members_own_rule(credits_api, monkeypatch):
+    from bisheng.dsh.api.endpoints import unified_policy as api
+
+    previews = []
+
+    class Repo:
+        def preview_user_limit(self, user_id, value):
+            previews.append((user_id, value.monthly_credits, value.enabled))
+            return 1_500_000_000
+
+    async def transaction(callback):
+        return callback(Repo())
+
+    monkeypatch.setattr(api, "policy_transaction", transaction)
+    response = await credits_api.client.get("/api/v1/dsh/admin/users/20/credits?tenant_id=2&monthly_credits=1500")
+    data = response.json()["data"]
+    assert (data["limit"], data["used"], data["remaining"]) == ("1500", "100.51272", "1399.48728")
+    assert previews == [(20, "1500", True)]
+    credits_api.read_policy.assert_not_awaited()
+    assert credits_api.state.attempts == [(90, 2, 20)]
+
+
+@pytest.mark.parametrize("value", ["abc", "1000000.5", "-1", "1.25"])
+async def test_rule_preview_rejects_what_the_rule_editor_would_reject(credits_api, value):
+    response = await credits_api.client.get(f"/api/v1/dsh/admin/users/20/credits?monthly_credits={value}")
+    assert response.status_code == 422
+    assert credits_api.state.attempts == []

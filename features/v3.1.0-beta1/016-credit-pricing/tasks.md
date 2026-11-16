@@ -15,7 +15,7 @@
 | test-cases.md | ✅ 已生成 | QA 参考，不作为开发门禁 |
 | runbook.md | 🔄 部分实测 | MySQL 与 Redis 已实测；达梦与全流程待执行 |
 | tasks.md | 🔲 草稿 | |
-| 实现 | 🔄 进行中 | 39 / 40（T26 不做；T04 已恢复并完成；T33–T36 为联调后新增；本机自测完成，剩 T32 测试服务器验收） |
+| 实现 | 🔄 进行中 | 40 / 41（T26 不做；T04 已恢复并完成；T33–T37 为联调后新增；本机自测完成，剩 T32 测试服务器验收） |
 
 ---
 
@@ -219,6 +219,7 @@
 - [x] **T34**: 「选择模型」用价格表兜底（2026-11-13 Callum 联调提出）— 服务商列表拉取失败时列出价格表里该类型的模型并保留失败原因；「OpenAI 兼容」新增按钮直接从价格表选 — `platform/.../ModelDiscovery.tsx`、`modelDiscoveryCatalog.ts`、`modelDiscoveryErrors.ts`（从 ModelDiscovery 拆出以守住 600 行） · 依赖: T02
 - [x] **T35**: 客户端常驻剩余积分（2026-11-13 Callum 联调提出）— 网页工作台左下角 `client/src/components/dsh/SidebarCredits.tsx`；桌面左下角账号行 `bisheng-desktop packages/dsh-desktop-settings`，对话结束后自动刷新 · 依赖: T33
 - [x] **T36**: 价格表重建（2026-11-16 Callum 提出：要更全、按厂商分类、收各家最新模型）— `llm/domain/pricing/catalog.json` 改为 13 家 87 个模型，版本 2026-11-16；`catalog.py` 名称没有条目时去掉中转站的厂商前缀再匹配；「选择模型」弹框按厂商分组、按厂商筛选、每行显示价格；百炼、方舟、千帆、TokenHub、硅基流动这类转售平台拉不到列表时列出全部厂商（自家在前），别家模型按名字带出官方价并提示核对（Callum 11-16 提出） `platform/src/pages/ModelPage/manage/ModelDiscovery.tsx`、`modelDiscoveryCatalog.ts`。取价规则和待复核清单见 `price-catalog.md` · 依赖: T34
+- [x] **T37**: 额度用完后加额度「看不到变化」（2026-11-16 Callum 联调提出）— 员工端显示「剩余 / 额度」：网页左下角 `client/src/components/dsh/SidebarCredits.tsx`、桌面账号行 `bisheng-desktop packages/dsh-desktop-settings`（不限额显示「积分不限」）；后台改用户额度时预览「本月已用、保存后剩余」`platform/src/pages/SystemPage/dsh/CreditRulePreview.tsx`，后端 `GET /dsh/admin/users/{id}/credits` 加可选 `monthly_credits`、`enabled` 预览参数（按用户 / 部门 / 角色取最高的同一规则计算，不写库）；用量页用户卡片显示透支 · 依赖: T33、T35
 - [x] **T33**: 本月积分展示（2026-11-13 Callum 联调时提出：界面上看不到员工的积分）— 网页「设置 → 客户端」积分卡片 `client/src/components/dsh/DshCreditsCard.tsx`、`DshDesktopPanel.tsx`（读已有的 `/dsh/me/credits`）；后台「用量」按用户显示本月已用 / 额度 / 剩余 `platform/src/pages/SystemPage/dsh/UserCreditsCard.tsx`、`PolicyView.tsx`，新接口 `GET /dsh/admin/users/{id}/credits`（与 `/me/credits` 共用 `month_credits`）；「当前时段已消耗」改为最多 2 位小数 · 依赖: 无
 
 ### Wave 6 — 桌面（S8，bisheng-desktop）
@@ -282,6 +283,7 @@
 - T34 说明：上游「选择模型」按 API Key 实时拉取服务商的模型列表，只有智谱、讯飞、MiniMax、腾讯 4 家有内置目录，「OpenAI 兼容」不在支持列表里，没有按钮。拉取失败（地址、Key、代理不对）时只显示错误。现在改为列出价格表里该类型的模型（OpenAI 8 个、OpenAI 兼容 37 个……），名称取价格表别名的第一项，提示管理员核对服务商实际使用的名称。导入的模型由价格区按名称带出价格。
 - T35 说明与自测中发现的问题：桌面主进程缓存用量，内嵌网页 Chat 的调用不经过主进程，原来账号行不会更新。为此桌面本机刷新接口 `/api/enterprise.models.refresh` 增加可选 `{"includeUsage": true}`（broker 只放行这一个字段），账号行在 Chat 结束、打开菜单时读最新值，收到主进程其他通知时读本机缓存。新对话的标题生成是单独一次计费调用，比回答晚约 11 秒结算，所以网页和桌面都在对话结束后读两次（约 1.5 秒和 20 秒），网页另有 60 秒兜底。详细过程见 `self-test-2026-11-13.md`。
 - T36 说明：旧表 37 条里千问 qwen-max / qwen-plus / qwen-flash 三个价格错用了新一代型号的价格，gpt-5.6-sol 已调价，智谱和 MiniMax 是国际站美元价；这次按官网重查。智谱、MiniMax 改为国内站人民币价，并加上 zhipu、moonshot、minimax、qianfan、tencent、spark 六种服务商类型，这些类型「选择模型」拉不到列表时也能退回价格表。日期后缀仍然不去（快照可能另有价格），只把豆包方舟常用的带日期型号逐个列为别名。已添加模型的价格不受影响（保存时才取价格表）。检查：后端 test/llm + test/dsh 与改动前同为 47 失败 / 61 报错，无新增，新增 7 条通过；platform 全量 69 条失败与改动前相同，`ModelDiscovery.test.tsx` 42 条通过（新增 1 条）；tsc 无新增错误；本机浏览器打开「OpenAI 兼容 → 选择模型」核对分组、筛选、价格，匹配接口核对带前缀名称。
+- T37 说明：额度是每月上限，剩余 = 上限 − 本月已用，原逻辑就是这样；问题出在显示和透支。调用前只检查「已用 < 上限」，费用在调用结束后结算，单次调用可以透支（本机 f015user 一次调用约 929 积分：当时 DeepSeek 输入价被改成 100 元/百万、1 积分 = 0.01 元），透支后把额度改到低于已用，剩余仍是 0；员工端原来只显示剩余，看不出额度变了。这次只改显示和预览，不改额度分配和准入检查（与 design「非目标」一致）；调用前预估花费防透支要改账本 Lua，留给账本负责人。检查：后端新增 `test/dsh/test_credit_rule_preview.py` 1 条、`test_admin_user_credits.py` 加 5 条，test/llm + test/dsh 失败列表与改动前相同；platform 新增 `CreditRulePreview.test.tsx` 5 条、`dshPolicyView` 2 条、`CreditRulesView` 断言预览，全量 69 条失败与改动前相同；client `components/dsh` + `WorkbenchSidebar` 27 条通过；两端 tsc-strict、eslint、check-i18n、arch-guard 通过；桌面全量 3,865 条 0 失败。本机浏览器核对后台预览（1000 → 剩余 0 并提示透支；1500 → 215.25 / 1,500）、用量页「超出额度 284.75」、网页左下角「0 / 1,000」。桌面开发版未重启目视（Callum 可能在用）。
 - 2026-11-13 第二轮自测（计划与结果见 `self-test-2026-11-13.md`）：后端 A 组 4,113 条，platform 相关 622 条，client 相关 261 + 13 条，桌面全量，均无新增失败；浏览器与桌面端到端 13 项全部通过（真实模型，扣费与独立重算一致）。
 - 2026-11-13 Callum 对待确认项的决定：①缺价拒绝调用（AC-22）按现方案；②默认汇率改为当前汇率 6.72（`DEFAULT_USD_CNY_RATE_MICRO`，原 7.2），管理员可改、不自动更新。按默认值写的换算测试改为显式使用 7.2（它们验证的是设计文档里的算例），另加一条测试锁定默认值；③桌面倍率标签与 DeepSeek 1017 标签同时显示：倍率不再注册 single 插槽，改为按模型选择包 README 的方式，用名字外层 `data-provider-id` / `data-model-id` 注入样式、以 `::after` 显示（design 决策 12 改为 C）；④租户结构与现设计一致，待确认各子租户积分单价不同导致扣分不同是否可接受；⑤缓存数大于输入的口径已解释，建议保持「加回」，待确认。
 - 自测：后端 A 组 4,114 条无新增失败；桌面全量 3,691 条 0 失败、typecheck 通过；桌面开发版实测 Work 下拉框三个模型分别显示 4.17x、1.00x（基准）、Free，旧插槽组件不再出现。本机没有 DeepSeek 官方账号，1017 标签与倍率同屏未实际看到。

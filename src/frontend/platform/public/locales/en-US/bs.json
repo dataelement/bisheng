@@ -4427,6 +4427,11 @@
       "creditsUnlimited": "Unlimited",
       "creditsUnavailable": "This user's credits can't be loaded right now.",
       "monthCreditsHelp": "Counted per calendar month and shared by Chat and Work; the time range does not change it.",
+      "previewBalance": "{{used}} used this month; after saving, {{remaining}} / {{limit}} left this month.",
+      "previewUnlimited": "{{used}} used this month; after saving, no limit this month.",
+      "previewHigherRule": "A department or role allowance of {{limit}} is higher and applies.",
+      "previewOverdrawn": "Overdrawn this month: the allowance must exceed {{used}} for further use.",
+      "creditsOverdrawn": "{{amount}} over the allowance this month ({{used}} used). Calls are settled when they end, so the last call can overdraw; to allow further use, set the allowance above this month's usage.",
       "monthlyCreditsHelp": "The monthly credit limit for each user, shared by Chat and Work",
       "monthlyCreditsHelpLabel": "About credit allowances"
     },

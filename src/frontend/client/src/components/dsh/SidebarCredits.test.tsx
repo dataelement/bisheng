@@ -41,10 +41,16 @@ beforeEach(() => {
 it('F016: shows the remaining balance with two decimals and opens the credits card', async () => {
   const navigate = show();
   const row = await screen.findByRole('button', { name: /dsh.creditsRemaining/ });
-  expect(row).toHaveTextContent('899.49');
+  expect(row).toHaveTextContent('899.49 / 1,000');
   fireEvent.click(row);
   expect(screen.getByTestId('path')).toHaveTextContent('/settings/desktop');
   expect(navigate).toHaveBeenCalled();
+});
+
+it('F016: an exhausted member sees the raised allowance with what is left of it', async () => {
+  jest.mocked(getDshCredits).mockResolvedValue({ ...credits, limit: '1000', used: '500', remaining: '500' });
+  show();
+  expect(await screen.findByRole('button', { name: /dsh.creditsRemaining/ })).toHaveTextContent('500 / 1,000');
 });
 
 it('F016: says unlimited instead of a number', async () => {

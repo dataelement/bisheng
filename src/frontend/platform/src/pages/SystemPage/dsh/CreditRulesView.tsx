@@ -10,6 +10,7 @@ import { Segmented } from "@bisheng/ui"
 import { getCreditRules, getPolicySubjects, saveCreditRule, type CreditRule, type PolicySubject, type PolicySubjectOption } from '@/controllers/API/dshUnified'
 import { getDshRequestErrorKey } from '@/utils/dshRequestError'
 import { MAX_MONTHLY_CREDITS, isValidMonthlyCredits } from '@/utils/dshCreditAmount'
+import { CreditRulePreview } from './CreditRulePreview'
 import { useEffect, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -75,6 +76,7 @@ export function CreditRulesView() {
             className={validCredits ? 'text-xs text-muted-foreground' : 'text-xs text-destructive'}>
             {t('dsh.unified.creditRangeHint', { max: MAX_MONTHLY_CREDITS })}
         </p>
+        {draft.subject?.kind === 'USER' && <CreditRulePreview userId={draft.subject.id} credits={draft.credits} enabled={draft.enabled} />}
         {!draft.isNew && <label className="flex items-center gap-2 text-sm">
             <Checkbox disabled={pending} checked={draft.enabled}
                 onCheckedChange={checked => setDraft({ ...draft, enabled: checked === true })} />
