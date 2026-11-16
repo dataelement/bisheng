@@ -96,6 +96,7 @@ DSH_CREDENTIAL_ROUTES = frozenset(
         ("GET", "/api/v1/dsh/market/catalog"),
         ("GET", "/api/v1/dsh/market/workbenches"),
         ("POST", "/api/v1/dsh/market/sync"),
+        ("POST", "/api/v1/dsh/market/workbenches/access"),
         ("POST", "/api/v1/dsh/chat/completions"),
         ("POST", "/api/v1/dsh/responses"),
         ("POST", "/api/v1/dsh/web-session"),

@@ -27,7 +27,15 @@ from bisheng.channel.domain.services.f048_channel_permission import (
     ChannelDaoPermissionLoader,
     F048ChannelPermissionAdapter,
 )
+from bisheng.core.database import get_sync_db_session
 from bisheng.department.domain.services.permission_context import DepartmentPermissionContextProvider
+from bisheng.dsh_market.domain.permission import (
+    PLUGIN_RESOURCE_TYPE,
+    WORKBENCH_RESOURCE_TYPE,
+    MarketPermissionAdapter,
+)
+from bisheng.dsh_market.domain.repository import MarketRepository
+from bisheng.dsh_market.domain.workbench_repository import WorkbenchRepository
 from bisheng.knowledge.domain.services.knowledge_permission_service import (
     F048KnowledgeContainerPermissionAdapter,
     F048KnowledgeFilePermissionAdapter,
@@ -182,6 +190,13 @@ def build_f048_resource_composition(
         permission=runtime,
     )
     skill = SkillPermissionAdapter(runtime)
+    # F022 enterprise market items load through the market's own sync repositories.
+    market_plugin = MarketPermissionAdapter(
+        runtime, PLUGIN_RESOURCE_TYPE, MarketRepository(get_sync_db_session).permission_record
+    )
+    market_workbench = MarketPermissionAdapter(
+        runtime, WORKBENCH_RESOURCE_TYPE, WorkbenchRepository(get_sync_db_session).permission_record
+    )
     adapters: dict[str, object] = {
         "workflow": application,
         "assistant": application,
@@ -199,6 +214,8 @@ def build_f048_resource_composition(
         # not configured") — far from this file.
         "app": hosted_app,
         "linsight_skill": skill,
+        PLUGIN_RESOURCE_TYPE: market_plugin,
+        WORKBENCH_RESOURCE_TYPE: market_workbench,
     }
     registry = ResourceAuthorizationRegistry()
     for resource_type in (
@@ -221,6 +238,8 @@ def build_f048_resource_composition(
     registry.register("dashboard", dashboard)
     registry.register("app", hosted_app)
     registry.register("linsight_skill", skill)
+    registry.register(PLUGIN_RESOURCE_TYPE, market_plugin)
+    registry.register(WORKBENCH_RESOURCE_TYPE, market_workbench)
     return adapters, registry
 
 

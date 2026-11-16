@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-11-16 `/sdd-review spec` 6 项意见已修订（含 F019 恢复语义选 A），需求方 Callum 确认 |
 | design.md | ✅ 已评审 | 2026-11-16 `/sdd-review design` 修订（登记方式、7 个员工侧入口、升级脚本修正与备份回滚、工作台可见性查询接口），需求方 Callum 确认；接手时的第一入口 |
 | tasks.md | ✅ 已拆解 | 2026-11-16 `/sdd-review tasks` 两轮：首轮 1 项 medium（桌面端任务文件未落定）已修；剩 1 项 low 记录不改（AC-16、AC-21 只由手动 / 同事环境任务覆盖，属「行为不变 / 达梦」类验收） |
-| 实现 | 🚧 进行中 | 5 / 26 完成。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🚧 进行中 | 11 / 26 完成。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
 
 ---
 
@@ -64,37 +64,37 @@
 
 ### Wave 2 — 企业市场后端（适配器、可见性服务、接口）
 
-- [ ] **T006**: 适配器与可见性服务单元测试
+- [x] **T006**: 适配器与可见性服务单元测试
   **文件**: `src/backend/test/dsh_market/test_market_permission.py`（新建）
   **逻辑**: 用 `test_market.py` 的 SQLite 内存库 fixture 造数据，F048 runtime 用假对象（记录调用、按预设集合返回可见）。用例：适配器对不存在 / 跨租户 id 拒绝，对已删除插件、无当前版本工作台仍构造目标；列表「先过滤后分页」（可见项分布在多页时页数、`total` 正确，无空页）；单项不可见与不存在抛同一异常；同步策略只保留可见插件且保留可见的已删除插件；`access` 查询对不存在 / 跨租户 / 不可见返回 false；确保登记调用 `reconcile_system_owned_resources`，参数为系统所有 + `("visible",)`，对同一 id 重复调用不改已有授权（假 runtime 记录 MISSING / CURRENT）；存量清单含已删除记录。
   **覆盖 AC**: AC-03, AC-07, AC-08, AC-14, AC-17, AC-18
   **依赖**: 无
 
-- [ ] **T007**: 仓储新增候选查询
+- [x] **T007**: 仓储新增候选查询
   **文件**: `src/backend/bisheng/dsh_market/domain/repository.py`、`src/backend/bisheng/dsh_market/domain/workbench_repository.py`
   **逻辑**: 同步方法，不含权限：`MarketRepository.employee_candidate_ids(tenant, q)`（沿用 `list(employee=True)` 的业务条件，返回有序 id）、`list_by_ids(tenant, ids, page, size)`（按传入顺序分页组装，返回与现有 `list` 相同结构与 `total`）、`permission_record(tenant, plugin_id)`（含已删除）、`all_ids()`（全部租户、全部记录，供存量清单）；`WorkbenchRepository` 对应 `employee_candidate_ids`、`list_by_ids`、`permission_record`、`all_ids`。不改现有方法的行为（坑 13：管理端共用 `list`）。
   **测试**: T006 中仓储相关用例通过；`test/dsh_market/test_market.py`、`test_workbench.py` 不回归
   **依赖**: T006
 
-- [ ] **T008**: 适配器 + 可见性服务
+- [x] **T008**: 适配器 + 可见性服务
   **文件**: `src/backend/bisheng/dsh_market/domain/permission.py`（新建）
   **逻辑**: `MarketPluginPermissionAdapter` / `MarketWorkbenchPermissionAdapter`（仿 `linsight/domain/services/skill_permission.py`：经 `call` 在线程中读 `permission_record`，不存在或租户不符抛 `PermissionInvalidResourceError`，用 `runtime.get_permission_version` 构造 `VerifiedPermissionTarget`；不按业务状态拒绝，design 决策 5 适配器口径）。`MarketVisibility`：`visible_ids(actor, resource_type, ids)`（`batch_check_business_actions(actions=("visible",))`）、`require_visible(...)`（不可见抛与不存在相同的 `LookupError`，决策 6）、`filter_policies(...)`、`access(...)`、`ensure_registered(tenant_id, resource_type, resource_id, operator_id)`（`reconcile_system_owned_resources(apply=True)`，`action_codes=("visible",)`，决策 3）、`system_owned_inventory(resource_types)`（返回 `SystemOwnedResourceSpec` 元组，供 T015）。只依赖 `permission.application` 导出的接口（C4）。
   **测试**: T006 全部通过
   **依赖**: T005, T007
 
-- [ ] **T009**: 适配器注册
+- [x] **T009**: 适配器注册
   **文件**: `src/backend/bisheng/api/services/f048_permission_runtime.py`
   **逻辑**: 在 `build_f048_resource_composition` 中 `registry.register("dsh_market_plugin", ...)`、`registry.register("dsh_market_workbench", ...)`（API 与 worker 共用，坑 3）。
   **测试**: T010 中经真实注册表解析新类型的用例通过；`test/permission/test_resource_type_registry.py` 不回归
   **依赖**: T008
 
-- [ ] **T010**: 市场接口测试
+- [x] **T010**: 市场接口测试
   **文件**: `src/backend/test/dsh_market/test_market_permission_api.py`（新建）
   **逻辑**: TestClient + 依赖覆盖（`market_actor` / `market_admin`、`get_market_service`、可见性服务假对象）。员工侧：`/catalog` 分页只含可见项；插件下载、工作台详情 / 截图 / 下载对不可见项返回与不存在相同；`/sync` 的 `policies` 只含可见项；`POST /workbenches/access` 返回布尔映射、超过 500 个 id 返回 422；新获得权限后再次请求即可见。管理端：`/admin/plugins`、`/admin/workbenches` 不过滤；插件导入、插件续传、工作台导入、工作台续传成功后各调用一次 `ensure_registered`，失败的导入不调用，`ensure_registered` 抛错时接口返回错误；删除后重新导入同一包时 `ensure_registered` 收到同一 id。不受影响：`/capabilities`、`/admin/install-policy` 响应不变。
   **覆盖 AC**: AC-03, AC-06, AC-07, AC-08, AC-09, AC-10, AC-15, AC-17, AC-18
   **依赖**: T008
 
-- [ ] **T011**: 市场接口接入可见性服务
+- [x] **T011**: 市场接口接入可见性服务
   **文件**: `src/backend/bisheng/dsh_market/api/endpoints.py`
   **逻辑**: 员工侧 7 个入口（`catalog`、插件 `artifact`、`sync`、`workbenches`、`workbench_detail`、`workbench_screenshot`、`workbench_artifact`）按 design 决策 5 叠加可见过滤（列表：候选 id → `visible_ids` → `list_by_ids` 分页）；新增 `POST /workbenches/access`（请求 `{"workbench_ids": [...]}`，≤ 500，响应 `{id: bool}`，§4.2）；4 个导入完成入口在结果状态为成功时调用 `ensure_registered`（插件取结果中的插件 id，工作台取工作台 id）。管理端接口不变。
   **测试**: T010 全部通过
@@ -214,3 +214,5 @@
 > 推翻已 ★ 确认的决策时，先停下与用户重新确认（§3 第四个 ★），再记录。
 
 - 拆解时：确保登记与存量补登记改用现有对账助手 / 脚本 → design 决策 3、7（修订历史 2026-11-16 实现细节条）
+- T004：共享常量放在 `resource_lifecycle_policy.py`（避免循环导入），任务描述已同步
+- T006–T011：列表与同步改用批量快照判定 → design 坑 21；`workbenches/access` 需登记桌面令牌白名单（`utils/http_middleware.py`，T011 多改 1 个文件）→ design 坑 20；`test/dsh_market/conftest.py` 让原有业务测试默认「全部可见」

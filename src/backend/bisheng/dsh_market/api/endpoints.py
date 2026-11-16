@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile
 from pydantic import BaseModel, Field
@@ -14,6 +14,7 @@ from bisheng.common.errcode.dsh_market import (
     MarketWorkbenchNotFoundError,
 )
 from bisheng.common.schemas.api import resp_200
+from bisheng.dsh_market.domain import permission as market_permission
 from bisheng.dsh_market.domain.bundle import MAX_UPLOAD_BYTES, BundleError
 from bisheng.dsh_market.domain.repository import ConflictError
 from bisheng.dsh_market.domain.workbench_bundle import (
@@ -53,6 +54,32 @@ async def call_workbench(function, *args, **kwargs):
         raise MarketWorkbenchNotFoundError() from exc
 
 
+async def employee_call(awaitable, not_found):
+    """Map an authorization flow's domain errors the way ``call`` does.
+
+    A hidden item raises the same not-found as a missing one (F022 design 6).
+    """
+    try:
+        return await awaitable
+    except WorkbenchArtifactError as exc:
+        raise MarketWorkbenchArtifactError(msg=str(exc)) from exc
+    except LookupError as exc:
+        raise not_found() from exc
+
+
+async def registered_import(resource_type, repository, actor, task):
+    """Register a completed import's item as visible to all members, once."""
+    await employee_call(
+        market_permission.ensure_import_registered(
+            resource_type, repository, actor.tenant_id, task, operator_id=actor.user_id
+        ),
+        MarketNotFoundError
+        if resource_type == market_permission.PLUGIN_RESOURCE_TYPE
+        else MarketWorkbenchNotFoundError,
+    )
+    return task
+
+
 class ChangeRequest(BaseModel):
     revision: int = Field(ge=1)
     action: Literal["publish", "unpublish", "disable"]
@@ -69,6 +96,10 @@ class InstalledPlugin(BaseModel):
 class DeviceReport(BaseModel):
     device_id: str = Field(pattern=r"^[a-zA-Z0-9-]{1,64}$")
     plugins: list[InstalledPlugin] = Field(max_length=500)
+
+
+class WorkbenchAccessRequest(BaseModel):
+    workbench_ids: list[Annotated[str, Field(max_length=64)]] = Field(max_length=market_permission.MAX_ACCESS_IDS)
 
 
 class InstallPolicyChange(BaseModel):
@@ -117,13 +148,22 @@ async def catalog(
     service=Depends(get_market_service),
 ):
     response.headers["Cache-Control"] = "no-store"
-    return resp_200(await call(service.list_plugins, actor.tenant_id, q.strip(), page=page, size=size, employee=True))
+    return resp_200(
+        await employee_call(
+            market_permission.employee_plugins(actor, service.repository, q.strip(), page=page, size=size),
+            MarketNotFoundError,
+        )
+    )
 
 
 @router.get("/plugins/{plugin_id}/versions/{version_id}/artifact")
 async def artifact(
     plugin_id: str, version_id: str, actor: MarketActor = Depends(market_actor), service=Depends(get_market_service)
 ):
+    await employee_call(
+        market_permission.require_visible(actor, market_permission.PLUGIN_RESOURCE_TYPE, service.repository, plugin_id),
+        MarketNotFoundError,
+    )
     data, digest = await call(service.download, actor.tenant_id, plugin_id, version_id)
     gzip_archive = data.startswith(b"\x1f\x8b")
     return Response(
@@ -155,6 +195,8 @@ async def sync(
         report.device_id,
         [v.model_dump() for v in report.plugins],
     )
+    # A plugin missing from the receipt is stopped and disabled by Desktop.
+    receipt["policies"] = await market_permission.visible_policies(actor, receipt["policies"])
     return resp_200(receipt)
 
 
@@ -222,7 +264,10 @@ async def import_bundle(
         data = await file.read(MAX_UPLOAD_BYTES + 1)
         if len(data) > MAX_UPLOAD_BYTES:
             raise MarketBundleError(msg="Upload exceeds 512 MiB")
-        return resp_200(await call(service.import_bundle, actor.tenant_id, actor.user_id, data))
+        task = await call(service.import_bundle, actor.tenant_id, actor.user_id, data)
+        return resp_200(
+            await registered_import(market_permission.PLUGIN_RESOURCE_TYPE, service.repository, actor, task)
+        )
     finally:
         await file.close()
 
@@ -234,7 +279,8 @@ async def imports(actor: MarketActor = Depends(market_admin), service=Depends(ge
 
 @router.post("/admin/imports/{task_id}/resume")
 async def resume_import(task_id: str, actor: MarketActor = Depends(market_admin), service=Depends(get_market_service)):
-    return resp_200(await call(service.validate_import, actor.tenant_id, task_id))
+    task = await call(service.validate_import, actor.tenant_id, task_id)
+    return resp_200(await registered_import(market_permission.PLUGIN_RESOURCE_TYPE, service.repository, actor, task))
 
 
 @router.get("/admin/devices")
@@ -262,7 +308,10 @@ async def import_workbench(
 ):
     try:
         data = await file.read(MAX_WORKBENCH_UPLOAD_BYTES + 1)
-        return resp_200(await call_workbench(service.import_bundle, actor.tenant_id, actor.user_id, data, display_name))
+        task = await call_workbench(service.import_bundle, actor.tenant_id, actor.user_id, data, display_name)
+        return resp_200(
+            await registered_import(market_permission.WORKBENCH_RESOURCE_TYPE, service.repository, actor, task)
+        )
     finally:
         await file.close()
 
@@ -276,7 +325,8 @@ async def workbench_imports(actor: MarketActor = Depends(market_admin), service=
 async def resume_workbench_import(
     task_id: str, actor: MarketActor = Depends(market_admin), service=Depends(get_workbench_service)
 ):
-    return resp_200(await call_workbench(service.resume, actor.tenant_id, task_id))
+    task = await call_workbench(service.resume, actor.tenant_id, task_id)
+    return resp_200(await registered_import(market_permission.WORKBENCH_RESOURCE_TYPE, service.repository, actor, task))
 
 
 @router.get("/admin/workbenches")
@@ -308,7 +358,33 @@ async def workbenches(
     service=Depends(get_workbench_service),
 ):
     response.headers["Cache-Control"] = "no-store"
-    return resp_200(await call_workbench(service.list, actor.tenant_id, page, size))
+    return resp_200(
+        await employee_call(
+            market_permission.employee_workbenches(actor, service.repository, page=page, size=size),
+            MarketWorkbenchNotFoundError,
+        )
+    )
+
+
+async def require_visible_workbench(actor, service, workbench_id):
+    await employee_call(
+        market_permission.require_visible(
+            actor, market_permission.WORKBENCH_RESOURCE_TYPE, service.repository, workbench_id
+        ),
+        MarketWorkbenchNotFoundError,
+    )
+
+
+@router.post("/workbenches/access")
+async def workbench_access(
+    body: WorkbenchAccessRequest,
+    response: Response,
+    actor: MarketActor = Depends(market_actor),
+    service=Depends(get_workbench_service),
+):
+    """Which installed workbenches the caller may still use (F022 design 9)."""
+    response.headers["Cache-Control"] = "no-store"
+    return resp_200(await market_permission.workbench_access(actor, service.repository, body.workbench_ids))
 
 
 @router.get("/workbenches/{workbench_id}")
@@ -319,6 +395,7 @@ async def workbench_detail(
     service=Depends(get_workbench_service),
 ):
     response.headers["Cache-Control"] = "no-store"
+    await require_visible_workbench(actor, service, workbench_id)
     return resp_200(await call_workbench(service.detail, actor.tenant_id, workbench_id))
 
 
@@ -330,6 +407,7 @@ async def workbench_screenshot(
     actor: MarketActor = Depends(market_actor),
     service=Depends(get_workbench_service),
 ):
+    await require_visible_workbench(actor, service, workbench_id)
     data, metadata = await call_workbench(service.screenshot, actor.tenant_id, workbench_id, version_id, image_id)
     return Response(
         data,
@@ -349,6 +427,7 @@ async def workbench_artifact(
     actor: MarketActor = Depends(market_actor),
     service=Depends(get_workbench_service),
 ):
+    await require_visible_workbench(actor, service, workbench_id)
     data, digest = await call_workbench(service.download, actor.tenant_id, workbench_id, version_id)
     return Response(
         data,

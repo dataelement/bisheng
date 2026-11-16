@@ -195,7 +195,7 @@
 | 「可撤销全员 / 系统所有」类型集合：`permission/application/runtime.py`（`authorize_system_owned`、`migrate_capability_default`）、`resource_api.py`（弹窗 `all_members_*`、租户主体授权校验）、`domain/services/grant_service.py`、`domain/services/owner_service.py`（`SYSTEM_OWNED_RESOURCE_ALLOWLIST` 及系统所有分支） | 加入两种新类型，并集中为一个共享常量 | `migrate_capability_default`（替换旧 `user:*` 标记）不对新类型开放 |
 | `dsh_market` 新增权限适配器 | 按 id + 租户加载记录（含已删除），构造 `VerifiedPermissionTarget` | 不查 OpenFGA、不判定、不按业务状态拒绝（C4，决策 5） |
 | `dsh_market` 新增异步可见性服务 | 员工侧过滤、先过滤后分页、单项检查、可见性查询、导入后确保登记 | 不改仓储的同步事务 |
-| `dsh_market/api/endpoints.py` | 员工侧 7 个入口改走可见性服务；新增 `workbenches/access`；4 个导入完成入口成功后确保登记 | 管理端列表不过滤 |
+| `dsh_market/api/endpoints.py`、`utils/http_middleware.py`（桌面令牌路由白名单） | 员工侧 7 个入口改走可见性服务；新增 `workbenches/access` 并登记到桌面令牌白名单；4 个导入完成入口成功后确保登记 | 管理端列表不过滤 |
 | `scripts/publish_authorization_model_change.py`、`scripts/reconcile_f048_system_owned_resources.py`（清单组合在 `api/services/f048_system_resource_bootstrap.py`） | 维护窗口内发布模型、补作用域、重推导标准模型、校验；存量补登记 | 不在启动流程中执行；不负责停服与备份；不碰 `migrate_capability_authorization.py` |
 | 前端 `pages/BuildPage/dsh/PluginMarketPage.tsx`、`WorkbenchMarketSection.tsx`、`components/bs-comp/permission/types.ts` | 权限按钮 + `PermissionDialog`（`allowAllMembers`） | 不直接调 HTTP（C7，经 controllers API） |
 | 桌面 `packages/dsh-desktop-enterprise/market.js` | 插件停用原因码 | 不改离线行为 |
@@ -226,6 +226,8 @@
 | 17 | C4 判定顺序中租户管理员直接放行，管理员在员工侧（桌面端）也看得到全部 | 用管理员账号测员工侧过滤，结果永远「全可见」 | §7 用普通员工账号验证 |
 | 18 | 桌面插件离线时停止运行实例、保留 `enabled`（恢复在线后继续）；工作台装好后今天没有任何核对 | 误以为两者一致 | 决策 8 / 9；spec AC-14 |
 | 19 | 不要用 `force_write_model` | 只写 OpenFGA 不写 SQL、生产禁用 | `docs/architecture/10-permission-rbac.md` §10.1 |
+| 20 | 桌面端的专用令牌只在 `utils/http_middleware.py` 的 `DSH_CREDENTIAL_ROUTES`（及其正则）登记过的路由上被接受 | 新增员工侧接口不登记，桌面端调用会被当作浏览器请求拒绝，而网页端测试照样通过 | `POST /dsh/market/workbenches/access` 已登记；`test/dsh_market/test_desktop_auth.py` 守护 |
+| 21 | 列表与同步的可见判定走「批量读取权限快照 + `batch_check_verified_business_visible`」，不走逐个解析的 `batch_check_business_actions` | 逐个解析时每项一次数据库读取；同步每台设备每 60 秒一次，插件多、设备多时压力大 | `dsh_market/domain/permission.py` 的 `_visible_ids` |
 
 ---
 
