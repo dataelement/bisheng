@@ -1,4 +1,5 @@
 import { Outlined } from "bisheng-icons";
+import { Button } from "@bisheng/ui";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -45,25 +46,28 @@ export function Header({
   };
 
   return (
-    <div className="z-30 flex min-h-14 items-start">
+    <div className="flex min-w-0 items-center gap-3">
       {showBackButton && (
         <KnowledgeTooltip content={t("back")} side="top">
-          <button
-            className="extra-side-bar-buttons w-[36px]"
+          <Button
+            variant="text"
+            color="default"
+            iconOnly
+            className="shrink-0"
             aria-label={t("back")}
             onClick={handleBack}
           >
-            <Outlined.ArrowLeft className="side-bar-button-size" />
-          </button>
+            <Outlined.ArrowLeft />
+          </Button>
         </KnowledgeTooltip>
       )}
       {fileTitle && (
-        <div>
-          <span className="max-w-80 truncate pl-4 text-sm font-black text-foreground">
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-h3 text-text-1" title={controlled ? (title ?? "") : legacyTitle}>
             {controlled ? (title ?? "") : legacyTitle}
-          </span>
+          </h1>
           {controlled && description && (
-            <p className="text-hint max-w-80 truncate pl-4 text-xs">
+            <p className="mt-1 truncate text-body-sm text-text-3" title={description}>
               {description}
             </p>
           )}

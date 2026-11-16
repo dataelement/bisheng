@@ -1,6 +1,10 @@
 import { mapSessionVersionStatus } from './useLinsightManager';
 import { SopStatus } from '~/store/linsight';
 
+jest.mock('sse.js', () => ({ SSE: class {} }));
+jest.mock('~/Providers', () => ({ useToastContext: () => ({ showToast: jest.fn() }) }));
+jest.mock('~/hooks', () => ({ useLocalize: () => (key: string) => key }));
+
 describe('mapSessionVersionStatus', () => {
     it('maps in_progress to Running', () => {
         expect(mapSessionVersionStatus('in_progress')).toBe(SopStatus.Running);

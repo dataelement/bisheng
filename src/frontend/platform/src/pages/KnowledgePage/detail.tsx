@@ -70,8 +70,8 @@ function SpaceDetail({
       : String(parents[parents.length - 1]?.file_name ?? "");
 
   return (
-    <div className="relative size-full bg-background-login px-2">
-      <div className="pt-4">
+    <div className="relative flex h-full min-h-0 min-w-0 flex-col gap-4 overflow-hidden bg-bg-page p-6">
+      <div className="shrink-0">
         <Header
           fileTitle
           title={title}
@@ -81,6 +81,7 @@ function SpaceDetail({
       </div>
       {parentId !== null && parents.length > 0 && (
         <Breadcrumb
+          className="shrink-0"
           ariaLabel={t("f118.current_folder")}
           expandLabel={(count) => t("f118.expand_folders", { count })}
           items={[

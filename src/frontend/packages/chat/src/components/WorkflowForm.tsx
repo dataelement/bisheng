@@ -37,7 +37,8 @@ export function WorkflowForm({ fields, canExecute, submitLabel, requiredMessage,
     if (errors.length) { onInvalid?.(errors); return; }
     locked.current = true; setPending(true);
     try {
-      await onSubmit({ ...values }, summarizeFormValues(fields, values, names.current));
+      const submittedValues = Object.fromEntries(fields.map(field => [field.key, values[field.key] ?? '']));
+      await onSubmit(submittedValues, summarizeFormValues(fields, submittedValues, names.current));
       setSubmitted(true);
     } catch (error) { onError?.(error); }
     finally { locked.current = false; setPending(false); }

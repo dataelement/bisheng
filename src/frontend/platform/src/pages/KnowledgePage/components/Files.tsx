@@ -10,7 +10,7 @@ import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-quer
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
-import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import { knowledgeSpaceApi, type KnowledgeSpaceChild } from "@/controllers/API/knowledgeSpace";
 import { knowledgeFilesApi, type SpaceFilePreview } from "@/controllers/API/knowledgeFiles";
 import { getMyResourcePermissionsApi } from "@/controllers/API/permission";
@@ -20,6 +20,7 @@ import { FileStatusFilter } from "./FileStatusFilter";
 import { SpaceDirectoryOverlays } from "./SpaceDirectoryOverlays";
 import { KnowledgeDeletionDialog } from "./KnowledgeDeletionDialog";
 import { useDirectoryDeletion } from "../hooks/useDirectoryDeletion";
+import { useDirectoryDownloadPermissions } from "../hooks/useDirectoryDownloadPermissions";
 import { SpaceDirectoryRow } from "./SpaceDirectoryRow";
 import { SpaceDirectoryToolbar } from "./SpaceDirectoryToolbar";
 export { StatusIndicator } from "./KnowledgeFileStatus";
@@ -180,6 +181,11 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder }: Di
     ],
     [keyword, search.data, ordinary.data],
   );
+  const downloadIds = useDirectoryDownloadPermissions({
+    prefix: epoch.prefix,
+    spaceId,
+    pages: keyword ? (search.data ? [search.data] : []) : (ordinary.data?.pages ?? []),
+  });
   const rowLifetimes = useRef(new Map<string, RowLifetime>());
   const rowKeys = new Set(rows.map(rowKey));
   for (const [key, lifetime] of rowLifetimes.current) {
@@ -312,14 +318,8 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder }: Di
     }
   };
   const handleDownload = async (item: KnowledgeSpaceChild) => {
-    const token = menu?.token;
-    if (
-      !token ||
-      token.item.id !== item.id ||
-      !menu.actions.includes("download") ||
-      !isCurrent(token)
-    )
-      return;
+    const token = { epoch, item, rowLifetime: rowLifetimes.current.get(rowKey(item)) };
+    if (item.file_type !== 1 || !downloadIds.has(item.id) || !isCurrent(token)) return;
     try {
       const data = await knowledgeFilesApi.getSpaceFileDownload(spaceId, item.id);
       if (!isCurrent(token) || !data.original_url) return;
@@ -376,7 +376,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder }: Di
   };
   const containerActions = container?.epoch === epoch ? container.actions : [];
   return (
-    <div className="relative space-y-4">
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden">
       {move && <MoveDialog scope={scope} spaceId={spaceId} parentId={parentId} items={move.items} mode={move.mode} onClose={() => setMove(null)} />}
       {selectionError === epoch && <p role="alert">{t("deletion.reason_no_permission")}</p>}
       <SpaceDirectoryToolbar
@@ -406,12 +406,16 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder }: Di
         }}
         onReferences={selectedRows.length ? () => references(selectedRows) : undefined}
       />
-      <Table>
-        <TableHeader>
+      <Table
+        containerClassName="min-h-0 flex-1 overscroll-contain rounded-lg border border-border-base"
+        className="min-w-[760px] table-fixed border-collapse border-spacing-0 text-body text-text-1 [&_td]:!rounded-none [&_td]:!bg-transparent [&_th]:bg-fill-1 [&_th]:text-body [&_th]:text-text-2"
+        aria-label={t("fileName")}
+      >
+        <TableHeader className="sticky top-0 z-10 bg-fill-1">
           <TableRow>
-            <TableHead>{t("fileName")}</TableHead>
-            <TableHead>{t("updateTime")}</TableHead>
-            <TableHead>
+            <TableHead className="px-4">{t("fileName")}</TableHead>
+            <TableHead className="w-48">{t("updateTime")}</TableHead>
+            <TableHead className="w-36">
               <span className="inline-flex items-center gap-1">
                 {t("status")}
                 <FileStatusFilter
@@ -434,10 +438,23 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder }: Di
                 />
               </span>
             </TableHead>
-            <TableHead className="text-right">{t("operations")}</TableHead>
+            <TableHead className="w-28 px-4 text-right">{t("operations")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
+          {(active.isInitialLoading || !!active.error || (!rows.length && !hasMore)) && (
+            <TableRow>
+              <TableCell colSpan={4} className="h-48 text-center text-body text-text-3">
+                <div className="flex flex-col items-center gap-3" role="status">
+                  {active.isInitialLoading ? t("f118.loading_directory") : active.error ? (
+                    <Button variant="outlined" onClick={() => { void active.refetch(); }}>
+                      {t("retry")}
+                    </Button>
+                  ) : t("f118.directory_empty")}
+                </div>
+              </TableCell>
+            </TableRow>
+          )}
           {rows.map((item) => {
             const itemMenu =
               menu && menu.token.epoch === epoch && menu.token.item.id === item.id ? menu : null;
@@ -468,6 +485,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder }: Di
                     references([item]);
                 }}
                 onRename={() => handleEdit(item)}
+                canDownload={downloadIds.has(item.id)}
                 onDownload={() => {
                   void handleDownload(item);
                 }}
@@ -487,21 +505,10 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder }: Di
           })}
         </TableBody>
       </Table>
-      {active.isInitialLoading && <p role="status">{t("f118.loading_directory")}</p>}
-      {!active.isInitialLoading && !active.error && !rows.length && !hasMore && (
-        <p>{t("f118.directory_empty")}</p>
-      )}
-      {!!active.error && (
-        <Button
-          onClick={() => {
-            void active.refetch();
-          }}
-        >
-          {t("retry")}
-        </Button>
-      )}
       {!keyword && ordinary.hasNextPage && (
         <Button
+          className="shrink-0 self-center"
+          variant="text"
           disabled={ordinary.isFetchingNextPage}
           onClick={() => {
             void ordinary.fetchNextPage();
@@ -511,7 +518,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder }: Di
         </Button>
       )}
       {!!keyword && (
-        <div className="flex justify-end gap-2">
+        <div className="flex shrink-0 justify-end gap-2">
           <Button
             disabled={page === 1 || search.isFetching}
             onClick={() => setPage((value) => value - 1)}

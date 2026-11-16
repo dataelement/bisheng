@@ -54,45 +54,48 @@ export function SpaceDirectoryToolbar({
     });
   };
   return (
-    <div className="flex items-center justify-end gap-3">
-      {selectedCount > 0 && (
-        <>
-          <Button variant="outlined" onClick={onMove}>{t("move.title")}</Button>
-          <Button variant="outlined" onClick={onBatchDownload}>
-            {t("batch.download")}
-          </Button>
-          <Button variant="outlined" onClick={onBatchTag}>
-            {t("batch.tag")}
-          </Button>
-          <Button variant="outlined" onClick={onBatchRetry}>
-            {t("batch.retry")}
-          </Button>
-        </>
-      )}
-      {onMoveJobs && <Button variant="outlined" onClick={onMoveJobs}>{t("move.jobs")}</Button>}
-      {selectedCount > 0 && (
-        <Button color="danger" variant="outlined" onClick={onDeleteSelected}>
-          {t("deletion.selected")} ({selectedCount})
-        </Button>
-      )}
-      {onReferences && (
-        <Button variant="outlined" onClick={onReferences}>
-          {t("deletion.references")}
-        </Button>
-      )}
+    <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
       <SearchInput
+        className="w-full sm:w-72"
         aria-label={t("searchFileName")}
         placeholder={t("searchFileName")}
         value={keyword}
         onChange={(event) => onKeywordChange(event.target.value)}
       />
-      {canCreateFolder && <Button onClick={onCreateFolder}>{t("f118.create_folder")}</Button>}
-      {canUpload && knowledgeUploadCapabilities.webLink && onWebLink && <Button variant="link" onClick={onWebLink}>{t("webLink")}</Button>}
-      {canUpload && (
-        <Button variant="link" onClick={handleUpload}>
-          {t("uploadFile")}
-        </Button>
-      )}
+      <div className="flex flex-wrap items-center gap-2">
+        {selectedCount > 0 && (
+          <>
+            <Button variant="outlined" onClick={onMove}>{t("move.title")}</Button>
+            <Button variant="outlined" onClick={onBatchDownload}>
+              {t("batch.download")}
+            </Button>
+            <Button variant="outlined" onClick={onBatchTag}>
+              {t("batch.tag")}
+            </Button>
+            <Button variant="outlined" onClick={onBatchRetry}>
+              {t("batch.retry")}
+            </Button>
+          </>
+        )}
+        {onMoveJobs && <Button variant="text" color="default" onClick={onMoveJobs}>{t("move.jobs")}</Button>}
+        {selectedCount > 0 && (
+          <Button color="danger" variant="outlined" onClick={onDeleteSelected}>
+            {t("deletion.selected")} ({selectedCount})
+          </Button>
+        )}
+        {onReferences && (
+          <Button variant="outlined" onClick={onReferences}>
+            {t("deletion.references")}
+          </Button>
+        )}
+        {canCreateFolder && <Button variant="outlined" onClick={onCreateFolder}>{t("f118.create_folder")}</Button>}
+        {canUpload && knowledgeUploadCapabilities.webLink && onWebLink && <Button variant="link" onClick={onWebLink}>{t("webLink")}</Button>}
+        {canUpload && (
+          <Button onClick={handleUpload}>
+            {t("uploadFile")}
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

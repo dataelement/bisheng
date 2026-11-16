@@ -28,6 +28,7 @@ interface SpaceDirectoryRowProps {
   onOpen: () => void;
   onPreview: () => void;
   onRename: () => void;
+  canDownload?: boolean;
   onDownload: () => void;
 }
 export function SpaceDirectoryRow({
@@ -47,6 +48,7 @@ export function SpaceDirectoryRow({
   onOpen,
   onPreview,
   onRename,
+  canDownload = false,
   onDownload,
 }: SpaceDirectoryRowProps) {
   const { t } = useTranslation("knowledge");
@@ -70,9 +72,12 @@ export function SpaceDirectoryRow({
   );
   const [history, setHistory] = useState<typeof epoch | null>(null);
   return (
-    <TableRow>
-      <TableCell>
-        <div className="flex items-center gap-2">
+    <TableRow
+      data-state={selected ? "selected" : undefined}
+      className="h-14 odd:bg-bg-page even:bg-fill-1 hover:bg-fill-2 data-[state=selected]:bg-blue-50 data-[state=selected]:hover:bg-blue-50"
+    >
+      <TableCell className="px-4 py-2">
+        <div className="flex min-w-0 items-center gap-2">
           {known && onSelect && (
             <Checkbox
               aria-label={`${t("deletion.select")} ${item.file_name}`}
@@ -81,77 +86,85 @@ export function SpaceDirectoryRow({
             />
           )}
           {folder ? (
-            <Outlined.FolderClose aria-hidden="true" />
+            <Outlined.FolderClose className="size-8 shrink-0 text-text-2" aria-hidden="true" />
           ) : (
             <FileIcon
+              className="size-8 shrink-0"
               type={(item.file_name.split(".").pop()?.toLowerCase() ?? "txt") as FileType}
             />
           )}
-          <Button variant="link" disabled={!known} onClick={folder ? onOpen : onPreview}>
-            {item.file_name}
+          <Button className="min-w-0 max-w-full justify-start px-0 text-body" variant="link" disabled={!known} onClick={folder ? onOpen : onPreview} title={item.file_name}>
+            <span className="truncate">{item.file_name}</span>
           </Button>
         </div>
       </TableCell>
-      <TableCell>{item.update_time?.replace("T", " ") || "--"}</TableCell>
-      <TableCell>
+      <TableCell className="whitespace-nowrap text-body text-text-3 tabular-nums">{item.update_time?.replace("T", " ") || "--"}</TableCell>
+      <TableCell className="whitespace-nowrap">
         {!folder && typeof item.status === "number" && (
           <StatusIndicator status={item.status} remark={item.remark ?? undefined} />
         )}
       </TableCell>
-      <TableCell className="text-right">
-        {known && (
-          <Dropdown
-            align="end"
-            open={open}
-            onOpenChange={onMenu}
-            menu={
-              <>
-                {loading && <DropdownItem disabled>{t("loading")}</DropdownItem>}
-                {error && (
-                  <DropdownItem onSelect={() => queueMicrotask(() => onMenu(true))}>
-                    {t("retry")}
-                  </DropdownItem>
-                )}
-                {!loading && !error && actions.includes("rename") && (
-                  <DropdownItem onSelect={onRename}>{t("rename")}</DropdownItem>
-                )}
-                {!loading && !error && actions.includes("delete") && (
-                  <>
-                    <DropdownItem onSelect={onReferences}>{t("deletion.references")}</DropdownItem>
-                    <DropdownItem danger onSelect={onDelete}>
-                      {t("deletion.delete_items")}
-                    </DropdownItem>
-                  </>
-                )}
-                {historyEnabled && !loading && !error && actions.includes("visible") && (
-                  <DropdownItem onSelect={() => setHistory(epoch)}>
-                    {t("f118.version_history")}
-                  </DropdownItem>
-                )}
-                {!folder && !loading && !error && actions.includes("download") && (
-                  <DropdownItem onSelect={onDownload}>{t("downloadOriginal")}</DropdownItem>
-                )}
-              </>
-            }
-          >
-            <Button
-              variant="text"
-              color="default"
-              iconOnly
-              aria-label={`${t("more", { ns: "bs" })} ${item.file_name}`}
-            >
-              <Outlined.More />
+      <TableCell className="px-4 text-right whitespace-nowrap">
+        <div className="flex items-center justify-end gap-2">
+          {!folder && canDownload && (
+            <Button variant="text" color="default" iconOnly aria-label={t("downloadOriginal")} onClick={onDownload}>
+              <Outlined.Download />
             </Button>
-          </Dropdown>
-        )}
-        {!folder && (
-          <SpaceFileTools
-            scope={scope}
-            spaceId={spaceId}
-            fileId={item.id}
-            status={item.status}
-          />
-        )}
+          )}
+          {known && (
+            <SpaceFileTools
+              scope={scope}
+              spaceId={spaceId}
+              fileId={item.id}
+              status={item.status}
+              enabled={!folder}
+            >
+              {(tools) => (
+                <Dropdown
+                  align="end"
+                  open={open}
+                  onOpenChange={onMenu}
+                  menu={
+                    <>
+                      {loading && <DropdownItem disabled>{t("loading")}</DropdownItem>}
+                      {error && (
+                        <DropdownItem onSelect={() => queueMicrotask(() => onMenu(true))}>
+                          {t("retry")}
+                        </DropdownItem>
+                      )}
+                      {!loading && !error && actions.includes("rename") && (
+                        <DropdownItem onSelect={onRename}>{t("rename")}</DropdownItem>
+                      )}
+                      {tools}
+                      {!loading && !error && actions.includes("delete") && (
+                        <>
+                          <DropdownItem onSelect={onReferences}>{t("deletion.references")}</DropdownItem>
+                          <DropdownItem danger onSelect={onDelete}>
+                            {t("deletion.delete_items")}
+                          </DropdownItem>
+                        </>
+                      )}
+                      {historyEnabled && !loading && !error && actions.includes("visible") && (
+                        <DropdownItem onSelect={() => setHistory(epoch)}>
+                          {t("f118.version_history")}
+                        </DropdownItem>
+                      )}
+                    </>
+                  }
+                >
+                  <Button
+                    variant="text"
+                    color="default"
+                    iconOnly
+                    aria-label={`${t("more", { ns: "bs" })} ${item.file_name}`}
+                  >
+                    <Outlined.More />
+                  </Button>
+                </Dropdown>
+              )}
+            </SpaceFileTools>
+          )}
+        </div>
         <SpaceVersionHistorySheet
           scope={epoch.scope}
           spaceId={epoch.spaceId}

@@ -144,10 +144,10 @@ export function LazyDepartmentTree(props: LazyDepartmentTreeProps) {
   return (
     <div className={cn("flex flex-1 flex-col overflow-hidden", className)}>
       {showSearch && (
-        <SearchInput placeholder={searchPlaceholder ?? t("bs:subjectSearch.departmentPlaceholder")} {...controller.searchInputProps} className={"mb-2"} />
+        <SearchInput placeholder={searchPlaceholder ?? t("bs:subjectSearch.departmentPlaceholder")} {...controller.searchInputProps} className="mb-2 shrink-0" />
       )}
       <div
-        className="flex-1 overflow-y-auto"
+        className="min-h-0 flex-1 overflow-y-auto"
         onWheel={
           wheelScrollFix
             ? (e) => {

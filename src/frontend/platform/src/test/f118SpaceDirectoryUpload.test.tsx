@@ -136,6 +136,8 @@ beforeEach(() => {
     },
   );
   mocks.post.mockImplementation(async (url: string) => {
+    if (url.endsWith("/files/batch/download/inspect"))
+      return { check_complete: true, can_execute: false, valid_items: [], invalid_items: [], requires_skip_confirmation: false, impact: {} };
     if (url === "/api/v1/knowledge/upload/7")
       return { file_path: "tmp/report.md", repeat: false };
     if (url === "/api/v1/knowledge/space/7/files") return [row(81, 5)];
@@ -205,11 +207,12 @@ it("navigates the real folder entry into the real upload route, register and exa
     }),
   );
   await screen.findByText("completed");
-  expect(mocks.post.mock.calls.map(([url]) => url)).toEqual([
+  const uploads = mocks.post.mock.calls.filter(([url]) => !url.endsWith("/inspect"));
+  expect(uploads.map(([url]) => url)).toEqual([
     "/api/v1/knowledge/upload/7",
     "/api/v1/knowledge/space/7/files",
   ]);
-  expect(mocks.post.mock.calls[1][1]).toEqual({
+  expect(uploads[1][1]).toEqual({
     file_path: ["tmp/report.md"],
     parent_id: 9,
   });

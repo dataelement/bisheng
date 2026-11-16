@@ -49,7 +49,7 @@ vi.mock("@/controllers/API/knowledgeFiles", () => ({
   knowledgeFilesApi: { getSpaceFilePreview: mocks.preview },
 }));
 vi.mock("@/pages/KnowledgePage/components/SpaceFileTools", () => ({
-  SpaceFileTools: () => null,
+  SpaceFileTools: ({ children }: { children?: (items: React.ReactNode) => React.ReactNode }) => children?.(null) ?? null,
 }));
 vi.mock("@/pages/KnowledgePage/components/PreviewFile", () => ({
   default: ({ file }: { file: { id: number } }) => (

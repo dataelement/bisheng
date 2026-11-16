@@ -11,6 +11,7 @@ import {
 import { showApiError } from "@/controllers/request";
 import { useKnowledgePageScope } from "@/hooks/useKnowledgePageScope";
 import { SpaceFileUploadPanel } from "./components/SpaceFileUploadPanel";
+import Header from "./components/Header";
 
 const parseId = (value: string | null | undefined): number | null => {
   if (!value || !/^\d+$/.test(value)) return null;
@@ -46,20 +47,18 @@ function UploadTarget({ scope, spaceId, parentId }: UploadTargetProps) {
     if (permissions.error) showApiError(permissions.error);
   }, [permissions.error]);
   return (
-    <div className="space-y-4 p-4">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">{t("uploadFile")}</h1>
-        <Button
-          variant="link"
-          onClick={() =>
+    <div className="flex h-full min-h-0 min-w-0 flex-col gap-4 overflow-hidden bg-bg-page p-6">
+      <div className="shrink-0">
+        <Header
+          fileTitle
+          title={t("uploadFile")}
+          onBack={() =>
             navigate({
               pathname: `/filelib/${spaceId}`,
               search: params.toString(),
             })
           }
-        >
-          {t("back")}
-        </Button>
+        />
       </div>
       {permissions.isInitialLoading ? (
         <div role="status">{t("f118.loading_directory")}</div>

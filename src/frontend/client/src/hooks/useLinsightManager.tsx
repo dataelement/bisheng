@@ -1,5 +1,4 @@
 // @ts-strict-ignore
-// src/hooks/useLinsightManager.ts
 import { resolveLinsightSubmitFailure, type PendingSubmitFailure } from './linsightSubmitFailure';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -23,7 +22,6 @@ import {
     formatTime,
     toggleNav
 } from '~/utils';
-
 
 /**
  * Backend SessionVersionStatusEnum values a run can no longer leave, i.e. the
@@ -149,7 +147,7 @@ export const useLinsightManager = () => {
     // F035 多轮对话：在已完成的同一会话里追加新一轮。
     // 复用同一 session_version (versionId) + 同一 agent thread，后端保留全部上下文；
     // 前端把当前轮快照进 history，再清空顶层字段开新轮，WS 事件继续更新顶层（=当前轮）。
-    const continueConversation = useCallback(async (versionId: string, question: string) => {
+    const continueConversation = useCallback(async (versionId: string, question: string, model?: string) => {
         updateLinsight(versionId, (prev) => ({
             history: [
                 ...(prev.history || []),
@@ -178,12 +176,18 @@ export const useLinsightManager = () => {
             status: SopStatus.Running,
         }));
         try {
-            await continueLinsight(versionId, question);
+            await continueLinsight(versionId, question, model);
         } catch (e) {
             console.error('continueLinsight failed :>> ', e);
             updateLinsight(versionId, { status: SopStatus.Stoped, taskError: String(e) });
         }
     }, [updateLinsight]);
+
+    const retryConversation = useRecoilCallback(({ snapshot }) => async (versionId: string, question: string) => {
+        // Read at click time: the selector may have changed since this task failed.
+        const selectedModel = await snapshot.getPromise(store.chatModel);
+        await continueConversation(versionId, question, selectedModel.id > 0 ? String(selectedModel.id) : undefined);
+    }, [continueConversation]);
 
     // 切换当前会话
     const switchSession = useCallback((versionId: string) => {
@@ -223,6 +227,7 @@ export const useLinsightManager = () => {
         switchSession,
         switchAndUpdateLinsight,
         continueConversation,
+        retryConversation,
         reconcileLinsightFromServer,
         linsightMap
     };
@@ -237,7 +242,6 @@ export const useActiveLinsight = () => {
         ? linsightMap.get(activeSessionId) || null
         : null;
 };
-
 
 export const useLinsightSessionManager = (versionId: string) => {
     const linsightSubmission = useRecoilValue(submissionState(versionId));
@@ -263,7 +267,6 @@ export const useLinsightSessionManager = (versionId: string) => {
         clearLinsightSubmission
     };
 };
-
 
 /**
  * F035 Track H (P5): submit pipeline for a new task-mode session.
@@ -482,8 +485,6 @@ export const useLinsightSubmit = (versionId, setVersionId, setVersions, ensureFl
     return [loading, error, failureOwnerPath.current === window.location.pathname ? pendingSubmitFailure : undefined] as const
 }
 
-
-
 // 工具转换数据结构  筛选 -> sop二级列表
 const convertTools = (tools) => {
     let org_knowledge_enabled = false
@@ -520,7 +521,6 @@ const convertTools = (tools) => {
         tools: sopTools
     }
 }
-
 
 /**
  * Map a backend session-version status (SessionVersionStatusEnum) to the
@@ -561,25 +561,7 @@ export function mapSessionVersionStatus(status: string, executeFeedback?: string
     }
 }
 
-/**
- * Project the server's task rows onto the shape the panels render.
- *
- * Status is passed through as-is. There used to be a sticky `hasTerminated` flag
- * here that rewrote EVERY row after the first `terminated`/`failed` one to
- * `not_started` (to hide them), back when `terminated` could only mean "the user
- * hit stop". It no longer can: `_diff_todos` now also marks a todo `terminated` when
- * the MODEL prunes it from its own plan, so one pruned todo silently buried every
- * task after it — a session with 8 successful tasks rendered "3/18" with grey
- * rings, and since `isTaskStarted('not_started')` is false, those tasks' steps
- * vanished from the timeline too.
- *
- * Nothing is lost by passing status through: a manually stopped run has its
- * unfinished rows swept to TERMINATED by the backend (`_terminate_unfinished_tasks`)
- * and its in-flight row rewritten by `getLinsightTaskList`, `TaskPanel` keys the
- * stopped-run rendering off its own `terminated` prop, and a pruned row with no
- * history is dropped by TaskStepRow's empty guard. The live WS path never called
- * this function at all — so this is the reload view converging on the live one.
- */
+// Preserve task statuses: one pruned or stopped row must not hide later tasks.
 function buildTaskTree(tasks) {
     const newTasks = tasks.map(task => {
         const taskTree = {
@@ -615,51 +597,4 @@ function buildTaskTree(tasks) {
     })
     return newTasks
 
-    // 创建任务ID到任务的映射
-    // const taskMap = new Map();
-    // tasks.forEach(task => taskMap.set(task.id, task));
-
-    // // 存储根任务（一级任务）
-    // const rootTasks: any[] = [];
-    // // 存储二级任务（按parent_task_id分组）
-    // const childTasksMap = new Map();
-
-    // // 第一次遍历：分离一级和二级任务
-    // tasks.forEach(task => {
-    //     if (task.parent_task_id === null) {
-    //         // 一级任务
-    //         rootTasks.push({
-    //             id: task.id,
-    //             name: task.task_data?.target || '',
-    //             status: task.status,
-    //             history: task.history || [],
-    //             event_type: task.status === 'waiting_for_user_input' ? 'user_input' : '',
-    //             call_reason: '',
-    //             children: []  // 初始化子任务数组
-    //         });
-    //     } else {
-    //         // 二级任务（按父ID分组）
-    //         const parentId = task.parent_task_id;
-    //         if (!childTasksMap.has(parentId)) {
-    //             childTasksMap.set(parentId, []);
-    //         }
-    //         childTasksMap.get(parentId).push({
-    //             id: task.id,
-    //             name: task.task_data?.target || '',
-    //             status: task.status,
-    //             history: task.history || [],
-    //             event_type: task.status === 'waiting_for_user_input' ? 'user_input' : '',
-    //             call_reason: ''
-    //             // 二级任务没有children字段
-    //         });
-    //     }
-    // });
-
-    // // 第二次遍历：将二级任务挂载到一级任务
-    // rootTasks.forEach(rootTask => {
-    //     const children = childTasksMap.get(rootTask.id) || [];
-    //     rootTask.children = children;
-    // });
-
-    // return rootTasks;
 }

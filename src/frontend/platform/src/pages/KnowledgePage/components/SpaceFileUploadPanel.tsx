@@ -503,60 +503,62 @@ export function SpaceFileUploadPanel({
     sync();
   };
   return (
-    <section aria-label={t("uploadFile")} className="space-y-4">
-      <div className="space-y-3">
-        <Checkbox
-          label={t("f118.upload_temporary")}
-          checked={temporary}
-          onCheckedChange={(checked) =>
-            setRules({
-              epoch,
-              enabled: checked === true,
-              draft: activeRules?.draft,
-            })
-          }
+    <section aria-label={t("uploadFile")} className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden">
+      <div className="relative max-h-[60%] min-h-0 shrink-0 space-y-4 overflow-y-auto overscroll-contain">
+        <div className="space-y-3 rounded-lg border border-border-base p-4">
+          <Checkbox
+            label={t("f118.upload_temporary")}
+            checked={temporary}
+            onCheckedChange={(checked) =>
+              setRules({
+                epoch,
+                enabled: checked === true,
+                draft: activeRules?.draft,
+              })
+            }
+          />
+          <p className="text-caption text-text-3">
+            {t("f118.upload_rules_hint")}
+          </p>
+          {temporary &&
+            (activeRules?.draft ? (
+              <ProcessingDefaultsEditor
+                value={activeRules.draft}
+                onChange={(draft) => setRules({ epoch, enabled: true, draft })}
+              />
+            ) : settings.isError ? (
+              <div role="alert">
+                <p>{t("f118.load_failed")}</p>
+                <Button
+                  variant="outlined"
+                  onClick={() => {
+                    void settings.refetch();
+                  }}
+                >
+                  {t("retry")}
+                </Button>
+              </div>
+            ) : (
+              <p role="status">{t("f118.loading_defaults")}</p>
+            ))}
+        </div>
+        <DropZone onDrop={handleDrop} compact />
+        <Button variant="outlined" onClick={() => folderInput.current?.click()}>
+          {t("f118.upload_folder")}
+        </Button>
+        <input
+          type="file"
+          multiple
+          className="hidden"
+          aria-label={t("f118.upload_folder")}
+          ref={folderInput}
+          {...{ webkitdirectory: "", directory: "" }}
+          onChange={(event) => {
+            handleFolder(Array.from(event.target.files ?? []));
+            event.target.value = "";
+          }}
         />
-        <p className="text-body-sm text-text-2">
-          {t("f118.upload_rules_hint")}
-        </p>
-        {temporary &&
-          (activeRules?.draft ? (
-            <ProcessingDefaultsEditor
-              value={activeRules.draft}
-              onChange={(draft) => setRules({ epoch, enabled: true, draft })}
-            />
-          ) : settings.isError ? (
-            <div role="alert">
-              <p>{t("f118.load_failed")}</p>
-              <Button
-                variant="outlined"
-                onClick={() => {
-                  void settings.refetch();
-                }}
-              >
-                {t("retry")}
-              </Button>
-            </div>
-          ) : (
-            <p role="status">{t("f118.loading_defaults")}</p>
-          ))}
       </div>
-      <DropZone onDrop={handleDrop} />
-      <Button variant="outlined" onClick={() => folderInput.current?.click()}>
-        {t("f118.upload_folder")}
-      </Button>
-      <input
-        type="file"
-        multiple
-        className="hidden"
-        aria-label={t("f118.upload_folder")}
-        ref={folderInput}
-        {...{ webkitdirectory: "", directory: "" }}
-        onChange={(event) => {
-          handleFolder(Array.from(event.target.files ?? []));
-          event.target.value = "";
-        }}
-      />
       <SpaceUploadProgress
         jobs={jobs}
         observed={observed}
@@ -566,17 +568,8 @@ export function SpaceFileUploadPanel({
           job.phase = "queued";
           sync();
         }}
+        onRefresh={() => { void status.refetch(); }}
       />
-      {unavailable && (
-        <Button
-          variant="outlined"
-          onClick={() => {
-            void status.refetch();
-          }}
-        >
-          {t("retry")}
-        </Button>
-      )}
     </section>
   );
 }
