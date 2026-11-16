@@ -31,6 +31,7 @@ bisheng/
 | [商业版 API 网关](./11-gateway.md) | Gateway 架构、SSO/OAuth 流程、内容安全、流控、开发环境 |
 | [多租户架构](./12-multi-tenant.md) | 逻辑隔离、租户上下文传播、自动过滤、存储隔离、Celery 传递 |
 | [列表 Cursor 翻页与无限滚动](./13-cursor-pagination.md) | F027 — cursor envelope、keyset DM8 兼容、fetch-until-enough、前端 LoadMore 模式 |
+| [知识空间与知识库的区别和联系](./15-knowledge-space-vs-knowledge-base.md) | 同一聚合根下的两种知识资源：库级 vs 文件级权限、组织形态、成员/订阅、检索行为与选型 |
 
 ## 快速导航
 
@@ -44,3 +45,4 @@ bisheng/
 - 想了解商业版网关（SSO/OAuth、内容安全、流控）的架构和开发方式，请看 [商业版 API 网关](./11-gateway.md)
 - 想了解多租户隔离机制、租户上下文传播和开发注意事项，请看 [多租户架构](./12-multi-tenant.md)
 - 想新加一个走 cursor 翻页 + 无限滚动的列表接口，请看 [列表 Cursor 翻页与无限滚动](./13-cursor-pagination.md)
+- 想搞清楚「知识库」和「知识空间」到底差在哪、什么时候用哪个，请看 [知识空间与知识库的区别和联系](./15-knowledge-space-vs-knowledge-base.md)
