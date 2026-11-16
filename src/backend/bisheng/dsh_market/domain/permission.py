@@ -28,6 +28,7 @@ from bisheng.permission.application.system_resource_reconcile import (
     reconcile_system_owned_resources,
 )
 from bisheng.permission.domain.schemas import VerifiedPermissionTarget
+from bisheng.permission.domain.services.data_scope import DATA_SCOPE_ALL
 
 PLUGIN_RESOURCE_TYPE = "dsh_market_plugin"
 WORKBENCH_RESOURCE_TYPE = "dsh_market_workbench"
@@ -115,6 +116,11 @@ async def _visible_ids(actor, resource_type, records) -> set[str]:
     records = [record for record in records if record.tenant_id == int(actor.tenant_id)]
     if not records:
         return set()
+    permission_actor = await resolve_permission_actor(_identity(actor))
+    if permission_actor.super_admin and permission_actor.data_scope == DATA_SCOPE_ALL:
+        # Same short-cut as batch_check_business_actions (skills): an unnarrowed
+        # global super admin sees everything. Tenant admins follow the grants.
+        return {record.id for record in records}
     runtime = await get_f048_runtime()
     snapshots = await runtime.get_permission_snapshots(
         tuple((record.tenant_id, resource_type, record.id) for record in records)
@@ -126,7 +132,6 @@ async def _visible_ids(actor, resource_type, records) -> set[str]:
             targets.append(_target(resource_type, record, snapshot.version, snapshot.context_version))
     if not targets:
         return set()
-    permission_actor = await resolve_permission_actor(_identity(actor))
     allowed = await batch_check_verified_business_visible(actor=permission_actor, targets=tuple(targets))
     return {resource_id for (_, resource_id), visible in allowed.items() if visible}
 

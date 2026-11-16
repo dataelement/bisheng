@@ -267,6 +267,35 @@ async def test_workbench_list_filters_before_paginating(monkeypatch, sessions, w
     assert page["total"] == 3
 
 
+async def test_global_super_admin_sees_every_listable_item_like_skills(monkeypatch, sessions, plugins):
+    ids = [add_plugin(sessions, number, age=number) for number in range(1, 4)]
+    auth = FakeAuthorization(monkeypatch, visible=())
+
+    async def super_admin(identity):
+        return PermissionActor(user_id=identity.user_id, current_tenant_id=identity.tenant_id, super_admin=True)
+
+    monkeypatch.setattr(market_permission, "resolve_permission_actor", super_admin)
+    result = await market_permission.employee_plugins(EMPLOYEE, plugins, "", page=1, size=20)
+    assert [row["id"] for row in result["data"]] == ids
+    # Same short-cut as batch_check_business_actions: no per-item decision is made.
+    assert auth.checked == []
+
+
+async def test_tenant_admins_follow_grants_on_the_employee_side(monkeypatch, sessions, plugins):
+    shown = add_plugin(sessions, 1)
+    add_plugin(sessions, 2)  # granted to nobody
+    FakeAuthorization(monkeypatch, visible={shown})
+
+    async def tenant_admin(identity):
+        return PermissionActor(
+            user_id=identity.user_id, current_tenant_id=identity.tenant_id, tenant_admin_tenant_ids=frozenset({2})
+        )
+
+    monkeypatch.setattr(market_permission, "resolve_permission_actor", tenant_admin)
+    result = await market_permission.employee_plugins(EMPLOYEE, plugins, "", page=1, size=20)
+    assert [row["id"] for row in result["data"]] == [shown]
+
+
 # --- single items -----------------------------------------------------------------
 
 
