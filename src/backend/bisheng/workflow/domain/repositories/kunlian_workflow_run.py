@@ -46,7 +46,15 @@ _RUN_EVENTS = {
 
 class RunRepository:
     def __init__(
-        self, registration, *, clock=time, queue_seconds=60, run_seconds=60, retain_seconds=3600, wait_seconds=900
+        self,
+        registration,
+        *,
+        clock=time,
+        queue_seconds=60,
+        run_seconds=60,
+        retain_seconds=3600,
+        wait_seconds=900,
+        max_active_per_user=None,
     ):
         self.registration = registration
         self.clock = clock
@@ -56,6 +64,51 @@ class RunRepository:
         self.retain_seconds = retain_seconds
         # TODO [F123][EXT-03] 确认等待、恢复排队和执行窗口。
         self.wait_seconds = wait_seconds
+        if max_active_per_user is not None and (
+            type(max_active_per_user) is not int or not 1 <= max_active_per_user <= 1000
+        ):
+            raise ValueError("max_active_per_user must be an integer in [1, 1000]")
+        self.max_active_per_user = max_active_per_user
+
+    @staticmethod
+    def _lock_formal_user(session, scope, user_id):
+        # User is global (has no tenant_id). Lock the trusted existing person,
+        # then verify the selected active membership, never invent a quota owner.
+        from bisheng.database.models.tenant import UserTenant
+        from bisheng.user.domain.models.user import User
+
+        user = session.exec(select(User).where(User.user_id == user_id).with_for_update()).first()
+        if user is None or user.delete != 0:
+            raise RunError("FORBIDDEN")
+        memberships = session.exec(select(UserTenant).where(UserTenant.user_id == user_id).with_for_update()).all()
+        if not any(row.tenant_id == scope.tenant_id and row.status == "active" for row in memberships):
+            raise RunError("FORBIDDEN")
+
+    def _check_formal_quota(self, session, scope, user_id):
+        from bisheng.common.errcode.open_api import OpenApiKunlianRateLimitedError
+
+        # A locking/current read avoids an older MySQL REPEATABLE READ snapshot
+        # created by replay/version reads. User lock serializes admissions across
+        # *all* workflows; Flow lock alone cannot provide this guarantee.
+        rows = session.exec(
+            select(Run)
+            .where(
+                build_tenant_filter_clause(Run.tenant_id),
+                Run.connection_id == scope.connection_id,
+                Run.user_id == user_id,
+                Run.status.notin_(_TERMINAL),
+            )
+            .with_for_update()
+        ).all()
+        active = sum(
+            row.tenant_id == scope.tenant_id
+            and isinstance(row.material, dict)
+            and row.material.get("runtime_contract") == "published-workflow"
+            and isinstance(row.material.get("kunlian_identity"), dict)
+            for row in rows
+        )
+        if active >= self.max_active_per_user:
+            raise OpenApiKunlianRateLimitedError()
 
     @staticmethod
     def _by_key(session, scope, user_id, key):
@@ -84,9 +137,16 @@ class RunRepository:
         with tenant_execution_scope(tenant_id), self.registration.transaction() as session:
             self.registration.invocation_flow(session, tenant_id, workflow_id)
 
-    def admit(self, scope, user_id, key, body, *, run_control=False):
+    def admit(self, scope, user_id, key, body, *, run_control=False, identity=None):
         key_digest = sha256(key.encode()).hexdigest()
         digest = canonical_digest(body.model_dump(exclude={"mode"} if body.mode is None else None))
+        from bisheng.workflow.domain.repositories.kunlian_registration import PublishedRunRegistrationRepository
+
+        formal_quota = (
+            self.max_active_per_user is not None
+            and identity is not None
+            and isinstance(self.registration, PublishedRunRegistrationRepository)
+        )
         with tenant_execution_scope(scope.tenant_id):
             with self.registration.transaction() as session:
                 row = self._by_key(session, scope, user_id, key_digest)
@@ -94,8 +154,11 @@ class RunRepository:
                     return self._replay(row, digest)
             try:
                 with self.registration.transaction() as session:
+                    if formal_quota:
+                        self._lock_formal_user(session, scope, user_id)
                     flow = self.registration.invocation_flow(session, scope.tenant_id, body.workflow_id, lock=True)
-                    # 新事务先锁 Flow,再建立读视图。跨工作流竞争由唯一键裁定。
+                    # Formal admission locks User before Flow across workflows.
+                    # Candidate idempotency remains protected by the unique key.
                     row = self._by_key(session, scope, user_id, key_digest)
                     if row is not None:
                         return self._replay(row, digest)
@@ -103,6 +166,10 @@ class RunRepository:
                         session, scope, flow, body.workflow_version_id
                     )
                     material = execution_material(graph, descriptor, body.input, body.mode)
+                    if identity is not None:
+                        material["kunlian_identity"] = identity
+                    if formal_quota:
+                        self._check_formal_quota(session, scope, user_id)
                     now = int(self.clock())
                     if run_control:
                         control = RunControl(trace_id=uuid4().hex)
@@ -114,7 +181,7 @@ class RunRepository:
                         connection_id=scope.connection_id,
                         user_id=user_id,
                         workflow_id=body.workflow_id,
-                        workflow_version_id=body.workflow_version_id,
+                        workflow_version_id=int(descriptor["workflow_version_id"]),
                         key_digest=key_digest,
                         request_digest=digest,
                         status="QUEUED",
@@ -168,7 +235,7 @@ class RunRepository:
     def _terminal(self, now, *, output=None, error=None, material=None):
         kept = {
             key: material[key]
-            for key in ("interaction_id", "receipt")
+            for key in ("interaction_id", "receipt", "kunlian_identity", "runtime_contract")
             if isinstance(material, dict) and key in material
         }
         return {
@@ -202,6 +269,12 @@ class RunRepository:
                 control.append(now, "CANCEL_ACCEPTED", status)
             control.append(now, _RUN_EVENTS[status], status)
             material = values.get("material", row.material)
+            # Keep original non-secret identity reference through every terminal path.
+            if isinstance(row.material, dict) and "kunlian_identity" in row.material:
+                material = {
+                    **(material if isinstance(material, dict) else {}),
+                    "kunlian_identity": row.material["kunlian_identity"],
+                }
             values["material"] = {
                 **(material if isinstance(material, dict) else {}),
                 "run_control": control.model_dump(),
@@ -478,10 +551,148 @@ class RunRepository:
             error = "RESUME_QUEUE_TIMEOUT" if row.deadline_at <= now else "RESUME_STATE_INVALID"
             self._update_current(session, row, now=now, **self._terminal(now, error=error, material=row.material))
 
-    def reconcile(self, scope, limit=100, *, include_resumes=False):
+    @staticmethod
+    def _formal_cleanup_identity(row):
+        """Allow only row-bound, non-secret identity facts into the tombstone."""
+        material = row.material
+        if not isinstance(material, dict) or material.get("runtime_contract") != "published-workflow":
+            return None
+        identity = material.get("kunlian_identity")
+        if not isinstance(identity, dict):
+            return None
+        for key in ("tenant_id", "user_id", "credential_id", "policy_revision"):
+            if type(identity.get(key)) is not int or identity[key] <= 0:
+                return None
+        if (identity["tenant_id"], identity.get("connection_id"), identity["user_id"]) != (
+            row.tenant_id,
+            row.connection_id,
+            row.user_id,
+        ):
+            return None
+        for key in ("connection_id", "identity_connection_id", "external_tenant_id", "external_user_id"):
+            if not isinstance(identity.get(key), str) or not identity[key]:
+                return None
+        keys = (
+            "tenant_id",
+            "connection_id",
+            "user_id",
+            "credential_id",
+            "identity_connection_id",
+            "external_tenant_id",
+            "external_user_id",
+            "policy_revision",
+        )
+        return {key: identity[key] for key in keys if key in identity}
+
+    def formal_cleanup_page(self, after=None, limit=100):
+        """Discover one keyset page of expired terminals; never authorize by discovery.
+
+        No JSON database predicates: MySQL/DM8 use the same relational query.
+        Invalid/candidate rows consume page space so scanning remains bounded.
+        """
+        from bisheng.core.context.tenant import bypass_tenant_filter
+
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise ValueError("Invalid cleanup limit")
+        with bypass_tenant_filter(), self.registration.transaction() as session:
+            stmt = select(Run).where(Run.status.in_(tuple(_TERMINAL)), Run.expires_at <= int(self.clock()))
+            if after is not None:
+                stmt = stmt.where(Run.session_id > after)
+            rows = session.exec(stmt.order_by(Run.session_id).limit(limit + 1)).all()
+            page = rows[:limit]
+            references = [
+                (row.tenant_id, row.connection_id, row.session_id)
+                for row in page
+                if self._formal_cleanup_identity(row) is not None
+            ]
+            return references, page[-1].session_id if len(rows) > limit else None
+
+    def cleanup_formal_expired(self, tenant_id, connection_id, session_id):
+        """Revalidate under the row lock, scrub payloads, retain permanent key facts.
+
+        Never delete the run: its unique key/request digests must reject old keys
+        even after outputs and frozen graph/input/answer/snapshot are removed.
+        """
+        with tenant_execution_scope(tenant_id), self.registration.transaction() as session:
+            row = self._locked_row(session, tenant_id, session_id)
+            now = int(self.clock())
+            if (
+                row is None
+                or row.connection_id != connection_id
+                or row.status not in _TERMINAL
+                or row.expires_at is None
+                or row.expires_at > now
+            ):
+                return False
+            identity = self._formal_cleanup_identity(row)
+            if identity is None:
+                return False
+            material = {"runtime_contract": "published-workflow", "kunlian_identity": identity}
+            if row.output is None and row.material == material:
+                return False
+            return (
+                session.execute(
+                    update(Run)
+                    .where(
+                        build_tenant_filter_clause(Run.tenant_id),
+                        Run.tenant_id == tenant_id,
+                        Run.connection_id == connection_id,
+                        Run.session_id == session_id,
+                        Run.user_id == row.user_id,
+                        Run.status == row.status,
+                        Run.expires_at == row.expires_at,
+                        Run.expires_at <= now,
+                    )
+                    .values(output=null(), material=material)
+                    .execution_options(synchronize_session=False)
+                ).rowcount
+                == 1
+            )
+
+    def formal_recovery_page(self, after=None, limit=100):
+        """Bounded cross-tenant discovery only; mutations always restore row scope.
+
+        JSON predicates are deliberately avoided for MySQL/DM8 parity. Candidate
+        rows may be inspected but are never returned as trusted formal references.
+        """
+        from bisheng.core.context.tenant import bypass_tenant_filter
+
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise ValueError("Invalid recovery limit")
+        with bypass_tenant_filter(), self.registration.transaction() as session:
+            stmt = select(Run).where(Run.status.in_((*_PHASE_TIMEOUTS, "CANCEL_REQUESTED")))
+            if after is not None:
+                stmt = stmt.where(Run.session_id > after)
+            rows = session.exec(stmt.order_by(Run.session_id).limit(limit + 1)).all()
+            page = rows[:limit]
+            references = []
+            for row in page:
+                if (row.material or {}).get("runtime_contract") != "published-workflow":
+                    continue
+                identity = (row.material or {}).get("kunlian_identity")
+                if not isinstance(identity, dict) or (
+                    identity.get("tenant_id"),
+                    identity.get("connection_id"),
+                    identity.get("user_id"),
+                ) != (row.tenant_id, row.connection_id, row.user_id):
+                    continue
+                if type(identity.get("credential_id")) is not int or identity["credential_id"] <= 0:
+                    continue
+                if any(
+                    not isinstance(identity.get(key), str) or not identity[key]
+                    for key in ("identity_connection_id", "external_tenant_id", "external_user_id")
+                ):
+                    continue
+                references.append((row.tenant_id, row.connection_id, row.session_id))
+            return references, page[-1].session_id if len(rows) > limit else None
+
+    def reconcile(self, scope, limit=100, *, include_resumes=False, session_ids=None):
         now = int(self.clock())
         with tenant_execution_scope(scope.tenant_id), self.registration.transaction() as session:
             tenant_filter = build_tenant_filter_clause(Run.tenant_id)
+            if session_ids is not None:
+                # The formal dispatcher supplies only persisted identity-bound IDs.
+                tenant_filter = tenant_filter & Run.session_id.in_(tuple(session_ids))
             cancellations = select(Run).where(
                 tenant_filter,
                 Run.connection_id == scope.connection_id,

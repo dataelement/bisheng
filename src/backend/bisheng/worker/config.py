@@ -21,6 +21,14 @@ task_routes.setdefault("bisheng.worker.sso_sync.tasks.*", {"queue": "celery"})
 redis_backend_health_check_interval = 5
 
 beat_schedule = dict(settings.celery_task.beat_schedule)
+beat_schedule.setdefault(
+    "kunlian-formal-run-recovery",
+    {
+        "task": "kunlian.formal_workflow_reconcile",
+        "schedule": 15.0,
+        "options": {"queue": "celery", "headers": {"tenant_id": 1}},
+    },
+)
 if settings.sso_sync.kunlian.connection_id:
     beat_schedule.setdefault(
         "kunlian-session-material-expiry",

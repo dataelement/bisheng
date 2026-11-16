@@ -752,6 +752,22 @@ class KunlianDirectoryRepository:
             ).first()
             return key is not None
 
+    async def find_account_bindings(self, connection_id: str, user_id: int) -> list[KunlianIdentityBinding]:
+        """Read-only reverse discovery; callers must still run full identity qualification."""
+        async with self._session() as session:
+            rows = (
+                await session.exec(
+                    select(KunlianIdentityBinding)
+                    .where(
+                        KunlianIdentityBinding.connection_id == connection_id,
+                        KunlianIdentityBinding.local_user_id == user_id,
+                    )
+                    .limit(2)
+                )
+            ).all()
+            # Equality can be case-insensitive in the database. Never broaden a connection.
+            return [row for row in rows if row.connection_id == connection_id and row.local_user_id == user_id]
+
     async def get_binding(self, identity_key: str) -> KunlianIdentityBinding | None:
         async with self._session() as session:
             return await session.get(KunlianIdentityBinding, identity_key)

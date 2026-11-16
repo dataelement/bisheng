@@ -515,3 +515,42 @@ class RegistrationRepository:
                 return receipt.status == expected
             row.receipt = receipt.model_dump(exclude_none=True)
             return True
+
+
+class PublishedRunRegistrationRepository(RegistrationRepository):
+    """Formal runs use the existing online/current publication, not F121 registration."""
+
+    def invocation_version(self, session, scope, flow, version_id):
+        from bisheng.workflow.domain.services.kunlian_descriptor import prepare_descriptor
+
+        versions = session.exec(
+            select(FlowVersion)
+            .where(
+                FlowVersion.flow_id == flow.id,
+                FlowVersion.is_delete == 0,
+                FlowVersion.is_current == 1,
+            )
+            .with_for_update()
+        ).all()
+        if flow.status != FlowStatus.ONLINE.value or len(versions) != 1:
+            raise WorkflowRegistrationConflict()
+        version = versions[0]
+        if version.tenant_id != scope.tenant_id or (version_id is not None and version.id != version_id):
+            raise WorkflowRegistrationConflict()
+        graph = version.data
+        descriptor = prepare_descriptor(flow, version, graph, {}, {})
+        if descriptor is None:
+            raise WorkflowRegistrationConflict()
+        return graph, {**descriptor, "runtime_contract": "published-workflow", "flow_user_id": flow.user_id}
+
+    def describe_published(self, tenant_id, workflow_id, version_id=None):
+        """Read the exact supported current-publication contract, never return its graph."""
+        from types import SimpleNamespace
+
+        with tenant_execution_scope(tenant_id), self.transaction() as session:
+            flow = self.invocation_flow(session, tenant_id, workflow_id)
+            _, descriptor = self.invocation_version(session, SimpleNamespace(tenant_id=tenant_id), flow, version_id)
+            return {
+                key: descriptor[key]
+                for key in ("workflow_id", "workflow_version_id", "name", "description", "input_schema", "output_schema")
+            }

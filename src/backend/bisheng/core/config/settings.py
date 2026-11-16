@@ -193,10 +193,25 @@ class WorkflowRegistrationConf(BaseModel):
     workflow_ids: set[str] = Field(default_factory=set)
 
 
+class KunlianApiConf(BaseModel):
+    """Server-owned formal API request and active-run budgets."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    queue_seconds: int = Field(default=120, strict=True, gt=0, le=86400)
+    run_seconds: int = Field(default=300, strict=True, gt=0, le=86400)
+    wait_seconds: int = Field(default=900, strict=True, gt=0, le=86400)
+    retain_seconds: int = Field(default=86400, strict=True, gt=0, le=2592000)
+    max_active_per_user: int = Field(default=5, strict=True, gt=0, le=1000)
+    request_limit: int = Field(default=120, strict=True, gt=0, le=100000)
+    request_window_seconds: int = Field(default=60, strict=True, gt=0, le=86400)
+
+
 class WorkflowConf(BaseModel):
     """Workflow Configuration"""
 
     max_steps: int = Field(default=50, description="Maximum number of steps a node can run")
+    kunlian_api: KunlianApiConf = Field(default_factory=KunlianApiConf)
     platform_agent: PlatformAgentConf = Field(default_factory=PlatformAgentConf)
     platform_knowledge: PlatformKnowledgeConf = Field(default_factory=PlatformKnowledgeConf)
     timeout: int = Field(default=720, description="Node timeout (min)")
@@ -340,7 +355,11 @@ class CeleryConf(BaseModel):
             ("memory_scan_sessions", "bisheng.worker.memory.tasks.scan_memory_sessions", 60.0),
             ("memory_reconcile", "bisheng.worker.memory.tasks.reconcile_memory", 3600.0),
             ("memory_flush_metrics", "bisheng.worker.memory.tasks.flush_memory_metrics", 600.0),
-            ("memory_cleanup_turns", "bisheng.worker.memory.tasks.cleanup_memory_turns", crontab.from_string("40 4 * * *")),
+            (
+                "memory_cleanup_turns",
+                "bisheng.worker.memory.tasks.cleanup_memory_turns",
+                crontab.from_string("40 4 * * *"),
+            ),
         ):
             if key not in self.beat_schedule:
                 self.beat_schedule[key] = {"task": task, "schedule": schedule}

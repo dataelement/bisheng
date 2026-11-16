@@ -27,8 +27,9 @@ from bisheng.workflow.graph.workflow import Workflow
 
 
 class ResultCallback(BaseCallback):
-    def __init__(self, output_node):
+    def __init__(self, output_node, *, allow_intermediate=False):
         self.output_node = output_node
+        self.allow_intermediate = allow_intermediate
         self.result = None
         self.input_node = None
 
@@ -36,6 +37,10 @@ class ResultCallback(BaseCallback):
         self.input_node = data.node_id
 
     def on_output_msg(self, data):
+        if data.node_id != self.output_node and self.allow_intermediate:
+            # Native LLM/agent nodes can emit presentation messages; only the
+            # declared output node defines the API result, never intermediate data.
+            return
         if data.node_id != self.output_node or data.files or self.result is not None:
             raise RunError("INVALID_OUTPUT")
         self.result = data.msg
@@ -43,7 +48,9 @@ class ResultCallback(BaseCallback):
 
 def build_workflow(row, user, *, node_entry_check=None):
     material = row.material
-    callback = ResultCallback(material["output_node"])
+    callback = ResultCallback(
+        material["output_node"], allow_intermediate=material.get("runtime_contract") == "published-workflow"
+    )
     config = settings.get_workflow_conf()
     workflow = Workflow(
         workflow_id=row.workflow_id,
@@ -53,6 +60,7 @@ def build_workflow(row, user, *, node_entry_check=None):
         timeout=config.timeout,
         callback=callback,
         tenant_id=user.tenant_id,
+        flow_user_id=material.get("flow_user_id"),
         redact_errors=True,
         node_entry_check=node_entry_check,
     )
@@ -145,7 +153,7 @@ async def execute_run(service, tenant_id, session_id, interaction_id=None):
         try:
             options = {}
             if read_run_control(row.material) is not None:
-                options["node_entry_check"] = partial(
+                check_control = partial(
                     repository.assert_node_entry,
                     tenant_id,
                     row.connection_id,
@@ -153,6 +161,14 @@ async def execute_run(service, tenant_id, session_id, interaction_id=None):
                     claim,
                     "RESUMING" if resuming else "RUNNING",
                 )
+
+                def check_entry():
+                    check_control()
+                    identity_check = getattr(service, "check_node_entry", None)
+                    if identity_check is not None:
+                        identity_check(row)
+
+                options["node_entry_check"] = check_entry
             if resuming:
                 output = await to_thread(resume_graph, row, user, **options)
             elif row.material.get("mode") == "interactive":

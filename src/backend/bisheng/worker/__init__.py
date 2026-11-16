@@ -35,6 +35,11 @@ from bisheng.worker.knowledge.space_delete import dispatch_pending_deletes, purg
 from bisheng.worker.knowledge.stale_projection_reconciler import (
     reconcile_stale_parent_projections as reconcile_stale_parent_projections,
 )
+from bisheng.worker.linsight.personal_skill_sweep import (
+    dispatch_personal_skill_orphan_sweep,
+    sweep_personal_skill_orphans,
+)
+from bisheng.worker.main import bisheng_celery
 from bisheng.worker.memory.tasks import (
     cleanup_memory_turns,
     consolidate_memory_user,
@@ -42,11 +47,6 @@ from bisheng.worker.memory.tasks import (
     reconcile_memory,
     scan_memory_sessions,
 )
-from bisheng.worker.linsight.personal_skill_sweep import (
-    dispatch_personal_skill_orphan_sweep,
-    sweep_personal_skill_orphans,
-)
-from bisheng.worker.main import bisheng_celery
 from bisheng.worker.permission.retry_failed_tuples import (
     cleanup_succeeded_failed_tuples,
     retry_failed_tuples,
@@ -61,6 +61,7 @@ from bisheng.worker.telemetry.mid_table import (
 )
 from bisheng.worker.tenant_reconcile.tasks import reconcile_user_tenant_assignments
 from bisheng.worker.test.test import add
+from bisheng.worker.workflow.kunlian_runtime import run as run_kunlian_workflow
 from bisheng.worker.workflow.tasks import continue_workflow, execute_workflow, stop_workflow
 
 register_dsh_tasks(bisheng_celery)

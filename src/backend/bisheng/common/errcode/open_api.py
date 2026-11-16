@@ -372,6 +372,12 @@ class ServiceAccountOwnerTenantUnresolvedError(OpenApiAuthError):
     http_status = 403
 
 
+class OpenApiKunlianRateLimitedError(OpenApiAuthError):
+    Code: int = 26074
+    Msg = "Kunlian API request or active-run limit exceeded; retry later"
+    http_status = 429
+
+
 class ServiceAccountManagementScopeChangedError(OpenApiAuthError):
     Code = 26073
     Msg = "The service account management tenant has changed; select the tenant and refresh before retrying"

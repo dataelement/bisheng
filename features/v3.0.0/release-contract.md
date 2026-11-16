@@ -452,3 +452,13 @@ Mock 优先交付，保留 `TODO [F119][EXT-NN]`。真实协议适配 T041—T04
 - 记忆表的读写显式按"当前租户 + 本人"过滤，是对 C3 的一处显式例外（design 决策 9）：租户自动过滤给出的是可见租户集合，不满足 INV-44。
 - 模块编码：**121**（memory），2026-11-13 已落码 12100–12111，并回写「已分配模块编码」表与 `docs/constitution.md` C5。
 
+## F133 昆联 Workflow 开放接口（2026-11-16；本地实施中，NOT_READY）
+
+用户确认按 SG filelib 模式实现 API Key 认证与 Query 外部租户/用户解析，再复用现有 Workflow 和 F048 服务。允许单 Key 显式覆盖多个昆联租户，普通平台 Key 委托规则不变；允许代表租户管理员，禁止代表全局超级管理员。仅平台超管管理凭据。
+
+- [规格](./133-kunlian-workflow-openapi/spec.md)、[设计](./133-kunlian-workflow-openapi/design.md)、[任务](./133-kunlian-workflow-openapi/tasks.md)与[验证](./133-kunlian-workflow-openapi/verification.md)登记真实范围；未授权部署、签发真实Key或环境数据写入。
+- open_api拥有窄昆联凭据元数据与准入；sso_sync拥有已有外部身份映射；Workflow拥有运行与授权重试回执，F048保持业务权限权威。跨租户Key不通过篡改单租户service account principal实现。
+- 新业务入口为 `/api/v2/kunlian`；现有普通v2及浏览器合同不变。正式运行冻结当前发布版本，不依赖Mock登记；受理前明确拒绝未装配的节点/输入输出协议，不宣称任意Workflow完全支持。
+- 新错误码 **26074**：OpenApiKunlianRateLimitedError，昆联专用请求速率超限HTTP429；已核对原Owner未占用并补三语，不复用模型服务限流错误。
+- 本地联合回归checkpoint205项通过，Python实际3.14；3.11、MySQL/DM8、真实权限/Broker与昆联联调未执行，不计完整交付。
+

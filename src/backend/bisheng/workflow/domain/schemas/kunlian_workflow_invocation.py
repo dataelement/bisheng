@@ -27,7 +27,7 @@ class TextInput(RegistrationContract):
 
 class RunRequest(TextInput):
     workflow_id: str = Field(pattern=r"^[0-9a-f]{32}$")
-    workflow_version_id: int = Field(gt=0, le=2**63 - 1)
+    workflow_version_id: int | None = Field(default=None, gt=0, le=2**63 - 1)
     input: dict[str, str] = Field(default_factory=dict)
     mode: Literal["interactive"] | None = None
 
@@ -52,6 +52,11 @@ class RunSubject:
     tenant_id: int
     connection_id: str
     user_id: int
+    credential_id: int | None = None
+    identity_connection_id: str | None = None
+    external_tenant_id: str | None = None
+    external_user_id: str | None = None
+    policy_revision: int | None = None
 
 
 RUN_EVENT_LIMIT = 32
@@ -175,8 +180,58 @@ def validate_interaction_input(schema, inputs):
         raise RunError("INVALID_INPUT")
 
 
+def _published_nodes(graph, mode):
+    from bisheng.workflow.common.node import BaseNodeData, NodeType
+    from bisheng.workflow.edges.edges import EdgeBase
+
+    # Published graphs already passed the owning publication validator. Check the
+    # transport/executor boundary without replacing its topology or node runtime.
+    try:
+        for item in graph["nodes"]:
+            BaseNodeData.model_validate(item["data"])
+        for item in graph["edges"]:
+            EdgeBase.model_validate(item)
+    except ValidationError as exc:
+        raise RunError("VERSION_UNAVAILABLE") from exc
+    grouped = {}
+    ids = set()
+    for node in graph["nodes"]:
+        kind = node["data"]["type"]
+        if kind == NodeType.NOTE.value:
+            continue
+        if kind not in {item.value for item in NodeType} or kind in {
+            "platform_agent",
+            "platform_knowledge_retriever",
+            "fake_output",
+        }:
+            # These platform nodes require separate dispatch contexts not supplied
+            # by this worker. Never accept them only to fail after admission.
+            raise RunError("VERSION_UNAVAILABLE")
+        if node["id"] != node["data"]["id"] or node["id"] in ids:
+            raise RunError("VERSION_UNAVAILABLE")
+        ids.add(node["id"])
+        grouped.setdefault(kind, []).append(node)
+    if any(len(grouped.get(kind, [])) != 1 for kind in ("start", "output")) or len(grouped.get("input", [])) > 1:
+        raise RunError("VERSION_UNAVAILABLE")
+    if not grouped.get("end") or any(edge["source"] not in ids or edge["target"] not in ids for edge in graph["edges"]):
+        raise RunError("VERSION_UNAVAILABLE")
+    nodes = {kind: values[0] for kind, values in grouped.items()}
+    if mode == "interactive":
+        # Existing durable wait snapshot is valid only before other nodes run.
+        start = nodes["start"]["id"]
+        input_id = nodes.get("input", {}).get("id")
+        if [edge["target"] for edge in graph["edges"] if edge["source"] == start] != [input_id]:
+            raise RunError("VERSION_UNAVAILABLE")
+        if [edge["source"] for edge in graph["edges"] if edge["target"] == input_id] != [start]:
+            raise RunError("VERSION_UNAVAILABLE")
+    return nodes
+
+
 def execution_material(graph, descriptor, inputs, mode=None):
     try:
+        if descriptor.get("runtime_contract") == "published-workflow":
+            nodes = _published_nodes(graph, mode)
+            return _text_material(graph, descriptor, inputs, mode, nodes)
         nodes = {node["data"]["type"]: node for node in graph["nodes"]}
         order = ["start", "input", "output", "end"] if "input" in nodes else ["start", "output", "end"]
         if set(nodes) != set(order) or len(graph["nodes"]) != len(order):
@@ -191,33 +246,40 @@ def execution_material(graph, descriptor, inputs, mode=None):
             or descriptor["dependencies"]
         ):
             raise RunError("VERSION_UNAVAILABLE")
-        input_schema = descriptor["input_schema"]
-        output_schema = descriptor["output_schema"]
-        _validate_text_contract(nodes, input_schema, output_schema)
-        material = {
-            "graph": graph,
-            "input": inputs,
-            "input_schema": input_schema,
-            "output_schema": output_schema,
-            "input_node": nodes["input"]["id"] if "input" in nodes else None,
-            "output_node": nodes["output"]["id"],
-        }
-        if mode == "interactive":
-            if inputs:
-                raise RunError("INVALID_INPUT")
-            if not material["input_node"] or not input_schema["properties"]:
-                raise RunError("VERSION_UNAVAILABLE")
-            material["mode"] = mode
-            required = set(input_schema["required"])
-            material["input_schema"] = {
-                **input_schema,
-                "properties": {
-                    key: {**field, "pattern": r"\S"} if key in required else field
-                    for key, field in input_schema["properties"].items()
-                },
-            }
-        else:
-            validate_text_input(input_schema, inputs)
-        return material
+        return _text_material(graph, descriptor, inputs, mode, nodes)
     except (KeyError, TypeError, AttributeError) as exc:
         raise RunError("VERSION_UNAVAILABLE") from exc
+
+
+def _text_material(graph, descriptor, inputs, mode, nodes):
+    input_schema = descriptor["input_schema"]
+    output_schema = descriptor["output_schema"]
+    _validate_text_contract(nodes, input_schema, output_schema)
+    material = {
+        "graph": graph,
+        "input": inputs,
+        "input_schema": input_schema,
+        "output_schema": output_schema,
+        "input_node": nodes["input"]["id"] if "input" in nodes else None,
+        "output_node": nodes["output"]["id"],
+    }
+    if descriptor.get("runtime_contract") == "published-workflow":
+        material["flow_user_id"] = descriptor["flow_user_id"]
+        material["runtime_contract"] = "published-workflow"
+    if mode == "interactive":
+        if inputs:
+            raise RunError("INVALID_INPUT")
+        if not material["input_node"] or not input_schema["properties"]:
+            raise RunError("VERSION_UNAVAILABLE")
+        material["mode"] = mode
+        required = set(input_schema["required"])
+        material["input_schema"] = {
+            **input_schema,
+            "properties": {
+                key: {**field, "pattern": r"\S"} if key in required else field
+                for key, field in input_schema["properties"].items()
+            },
+        }
+    else:
+        validate_text_input(input_schema, inputs)
+    return material

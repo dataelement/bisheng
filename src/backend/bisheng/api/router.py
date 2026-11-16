@@ -29,7 +29,6 @@ from bisheng.brand.api.router import router as brand_router
 from bisheng.channel.api.router import router as channel_router
 from bisheng.chat_session.api.router import router as session_router
 from bisheng.citation.api.router import router as citation_router
-from bisheng.memory.api.router import router as memory_router
 from bisheng.commercial_license.api.router import router as commercial_license_router
 from bisheng.common.services.config_service import settings
 from bisheng.department.api.router import router as department_router
@@ -48,8 +47,10 @@ from bisheng.knowledge.api.router import (
 )
 from bisheng.linsight.api.router import router as linsight_router
 from bisheng.llm.api.router import router as llm_router
+from bisheng.memory.api.router import router as memory_router
 from bisheng.message.api.router import router as message_router
 from bisheng.open_api.api.dependencies import verify_open_api_access
+from bisheng.open_api.api.endpoints.kunlian_credentials import router as kunlian_credentials_router
 from bisheng.open_api.api.router import management_router as open_api_management_router
 from bisheng.open_api.api.router import model_gateway_router
 from bisheng.open_api.api.router import rpc_router as open_api_rpc_router
@@ -123,6 +124,7 @@ router.include_router(guest_link_router)
 router.include_router(role_router)
 router.include_router(org_sync_router)
 router.include_router(sso_sync_router)
+router.include_router(kunlian_credentials_router)
 router.include_router(relink_router)
 router.include_router(tenant_router)
 router.include_router(citation_router)

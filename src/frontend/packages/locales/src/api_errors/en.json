@@ -620,6 +620,7 @@
   "26071": "The owner's tenant differs from the service account tenant. Contact an administrator.",
   "26072": "The owner's current tenant cannot be determined. Contact an administrator.",
   "26073": "The service account management tenant has changed. Select the tenant and refresh before retrying.",
+  "26074": "Kunlian API request or active-run limit exceeded. Retry later.",
   "26101": "Invalid request",
   "26102": "Unsupported parameter",
   "26103": "Model context length exceeded",
