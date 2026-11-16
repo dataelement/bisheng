@@ -293,6 +293,8 @@ export function KnowledgePageContent({ model }: KnowledgePageContentProps) {
             <KnowledgeSpaceContent
               space={activeSpace}
               files={fileManager.files}
+              downloadPages={fileManager.downloadPages}
+              downloadEpoch={fileManager.downloadEpoch}
               total={fileManager.total}
               onLoadMore={fileManager.loadMore}
               hasMore={fileManager.hasMore}
