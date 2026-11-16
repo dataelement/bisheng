@@ -3,10 +3,18 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
 from bisheng.linsight.domain.models.linsight_skill import LinsightSkill
+
+SkillProvider = Literal["personal", "platform"]
+
+
+def skill_provider(skill: LinsightSkill) -> SkillProvider:
+    """Whether a user uploaded the skill for themselves or the tenant provides it."""
+    return "personal" if skill.source == "personal" or skill.owner_user_id else "platform"
 
 
 class SkillBrief(BaseModel):
@@ -54,6 +62,8 @@ class SkillRuntimeEntry(SkillSelectable):
 
     id: int
     content_hash: str
+    # Lets clients group a user's own uploads apart from the skills the tenant provides.
+    source: SkillProvider
 
 
 class SkillFileEntry(BaseModel):
