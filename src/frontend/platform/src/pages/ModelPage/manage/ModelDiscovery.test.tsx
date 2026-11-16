@@ -576,8 +576,8 @@ describe("F016 price-catalog model list", () => {
       version: "2026-11-16",
       multi_vendor_provider_types: ["openai_compatible", "qwen"],
       entries: [
-        entry("qwen/qwen-max", "Qwen Max", ["qwen", "openai_compatible"], "阿里千问"),
-        entry("qwen/qwen-plus", "Qwen Plus", ["qwen", "openai_compatible"], "阿里千问"),
+        entry("qwen/qwen-max", "Qwen Max", ["qwen", "openai_compatible"], "Alibaba Qwen"),
+        entry("qwen/qwen-plus", "Qwen Plus", ["qwen", "openai_compatible"], "Alibaba Qwen"),
         entry("openai/gpt-4.1", "gpt-4.1", ["openai", "openai_compatible"], "OpenAI"),
       ],
     });
@@ -586,7 +586,7 @@ describe("F016 price-catalog model list", () => {
     fireEvent.click(screen.getByRole("button", { name: "model.selectModels" }));
     await screen.findByText("qwen-max");
     // One header per vendor, one price line per model, and the catalog's own count copy.
-    expect(screen.getAllByText("阿里千问")).toHaveLength(1);
+    expect(screen.getAllByText("Alibaba Qwen")).toHaveLength(1);
     expect(screen.getAllByText("OpenAI")).toHaveLength(1);
     expect(screen.getAllByText("model.catalogPrice")).toHaveLength(3);
     expect(screen.getByText("model.priceCatalogCount")).toBeInTheDocument();
@@ -604,7 +604,7 @@ describe("F016 price-catalog model list", () => {
       multi_vendor_provider_types: ["openai_compatible", "qwen"],
       entries: [
         entry("deepseek/deepseek-v4-pro", "DeepSeek V4 Pro", ["deepseek", "openai_compatible"], "DeepSeek"),
-        entry("qwen/qwen-max", "Qwen Max", ["qwen", "openai_compatible"], "阿里千问"),
+        entry("qwen/qwen-max", "Qwen Max", ["qwen", "openai_compatible"], "Alibaba Qwen"),
       ],
     });
     render(<ModelDiscovery {...props()} provider="qwen" existing={[]} />);

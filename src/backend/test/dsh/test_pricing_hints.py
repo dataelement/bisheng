@@ -17,6 +17,8 @@ DEEPSEEK = {"currency": "CNY", "input": "9", "cache_read": "0.3", "output": "27"
 GPT41 = {"currency": "USD", "input": "2", "cache_read": "0.5", "output": "8", "source": "CATALOG"}
 QWEN_FLASH = {"currency": "CNY", "input": "0.2", "cache_read": "0.02", "output": "0.8", "source": "CATALOG"}
 FREE = {"currency": "CNY", "input": "0", "cache_read": "0", "output": "0", "source": "DEFAULT"}
+# Valid and not free, yet 3 x input + output is zero: it cannot be the ratio's denominator.
+CACHE_ONLY = {"currency": "CNY", "input": "0", "cache_read": "0.5", "output": "0", "source": "MANUAL"}
 # The design examples convert at 7.2 CNY per USD; the default rate is tested in test_credit_settings.
 SETTING = CreditSettingState(usd_cny_rate_micro=7_200_000)
 
@@ -46,6 +48,15 @@ def test_free_missing_and_baseless_models_show_no_ratio():
     assert pricing_hint(8, GPT41, context(base=None)) == {"ratio": None, "base": False, "free": False}
 
 
+def test_a_base_without_input_or_output_price_shows_no_ratio_instead_of_dividing_by_zero():
+    assert pricing_hint(8, GPT41, context(base=CACHE_ONLY, base_id=10)) == {"ratio": None, "base": False, "free": False}
+    assert pricing_hint(10, CACHE_ONLY, context(base=CACHE_ONLY, base_id=10)) == {
+        "ratio": None,
+        "base": True,
+        "free": False,
+    }
+
+
 def test_changing_the_base_changes_only_the_ratio():
     assert pricing_hint(8, GPT41, context(base=QWEN_FLASH, base_id=9))["ratio"] == "72.00"
     assert build_snapshot(GPT41, SETTING) == build_snapshot(GPT41, SETTING)  # billing is unaffected
@@ -56,7 +67,7 @@ def llm(monkeypatch):
     from bisheng.dsh import runtime
     from bisheng.llm.domain.services.llm import LLMService
 
-    models = {7: DEEPSEEK, 8: GPT41, 9: FREE}
+    models = {7: DEEPSEEK, 8: GPT41, 9: FREE, 10: CACHE_ONLY}
     offline = set()
 
     async def snapshot(model_id):
@@ -87,6 +98,10 @@ async def test_configured_base_wins_and_unusable_bases_hide_ratios(llm):
     assert (await service.read_hint_context()).base is None  # offline or deleted
     llm.runtime.read_credit_setting.return_value = CreditSettingState(base_model_id=9, usd_cny_rate_micro=7_200_000)
     assert (await service.read_hint_context()).base is None  # free base
+    llm.runtime.read_credit_setting.return_value = CreditSettingState(base_model_id=10, usd_cny_rate_micro=7_200_000)
+    assert (await service.read_hint_context()).base is None  # cache-only price: no denominator
+    hints = await service.workbench_pricing_hints(["7", "8", "10"])
+    assert all(hint["ratio"] is None for hint in hints.values())
 
 
 async def test_workbench_hints_are_keyed_by_picker_ids(llm):

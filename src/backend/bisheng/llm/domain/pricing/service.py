@@ -89,14 +89,18 @@ def resolve_model_pricing(server_type: str, model_name: str, *, incoming, existi
     return candidate.model_dump()
 
 
-def apply_pricing_on_save(server_type: str, models, old_models: dict) -> None:
-    """Fill ``config["pricing"]`` on every LLM model of a provider save, in place."""
+def apply_pricing_on_save(server_type: str, models, stored_configs: dict) -> None:
+    """Fill ``config["pricing"]`` on every LLM model of a provider save, in place.
+
+    ``stored_configs`` maps a saved model's id to its config as read inside the writing
+    transaction, after the provider lock: a price edited meanwhile is kept (price omitted)
+    or reported as a conflict (stale revision), never overwritten.
+    """
     for model in models:
         if model.model_type != LLMModelType.LLM.value:
             continue
         config = dict(model.config or {})
-        old = old_models.get(model.id) if model.id else None
-        existing = (old.config or {}).get("pricing") if old is not None else None
+        existing = (stored_configs.get(model.id) or {}).get("pricing") if model.id else None
         config["pricing"] = resolve_model_pricing(
             server_type, model.model_name, incoming=config.get("pricing"), existing=existing
         )

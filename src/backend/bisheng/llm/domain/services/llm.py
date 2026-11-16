@@ -965,8 +965,8 @@ class LLMService:
                     model_dict[one.model_name].server_id = exist_server.id
             else:
                 raise ModelNameRepeatError.http_exception()
-        # F016: the form replaces each config wholesale; an omitted price keeps the stored one.
-        apply_pricing_on_save(server.type, model_dict.values(), old_model_dict)
+        # F016: prices are resolved by both write paths inside their locked transaction
+        # (LLMDao.update_server_with_models, ModelMutationRepository.aupdate_server).
 
         retained_ids = tuple(one.id for one in server.models if one.id)
         if len(retained_ids) != len(set(retained_ids)) or not set(retained_ids) <= set(old_model_dict):

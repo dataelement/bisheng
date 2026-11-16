@@ -59,7 +59,9 @@ RATIO_STEP = Decimal("0.01")
 class HintContext(NamedTuple):
     setting: CreditSettingState
     base_model_id: int | None
-    base: PricingSnapshot | None  # None when the base model is missing, offline, unpriced or free
+    # None when the base model is missing, offline, unpriced, free, or has no input or output
+    # price (cache-only prices leave the ratio's denominator at zero).
+    base: PricingSnapshot | None
 
 
 def blended_micro(snapshot: PricingSnapshot) -> int:
@@ -82,7 +84,7 @@ def pricing_hint(model_id: int, pricing_config, context: HintContext) -> dict:
         return {"ratio": None, "base": is_base, "free": False}
     if snapshot.free:
         return {"ratio": None, "base": is_base, "free": True}
-    if context.base is None:
+    if context.base is None or not blended_micro(context.base):
         return {"ratio": None, "base": is_base, "free": False}
     return {"ratio": format_ratio(blended_micro(snapshot), blended_micro(context.base)), "base": is_base, "free": False}
 
@@ -110,7 +112,7 @@ async def read_hint_context() -> HintContext:
         try:
             model, _ = await LLMService.get_dsh_model_snapshot(base_id)  # online LLM of this tenant
             snapshot = build_snapshot((model.config or {}).get("pricing"), setting)
-            base = None if snapshot.free else snapshot
+            base = None if snapshot.free or not blended_micro(snapshot) else snapshot
         except (DshModelNotAllowedError, DshModelPricingMissingError):
             base = None
     return HintContext(setting, base_id, base)

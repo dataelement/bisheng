@@ -117,7 +117,8 @@ def test_apply_on_save_only_touches_llm_models_and_keeps_other_config():
     new_llm = model("qwen-max", config={"max_tokens": 8192})
     edited = model("qwen-plus", config={"user_kwargs": {"x": 1}}, model_id=5)
     embedding = model("text-embedding-v4", model_type="embedding", config={"dims": 1024})
-    old = {5: model("qwen-plus", config={"pricing": stored(input="3", source="MANUAL"), "user_kwargs": {}}, model_id=5)}
+    # The stored configs, as the write path reads them inside its locked transaction.
+    old = {5: {"pricing": stored(input="3", source="MANUAL"), "user_kwargs": {}}}
     apply_pricing_on_save("qwen", [new_llm, edited, embedding], old)
     assert new_llm.config["max_tokens"] == 8192 and new_llm.config["pricing"]["catalog_key"] == "qwen/qwen-max"
     assert edited.config["user_kwargs"] == {"x": 1} and edited.config["pricing"]["input"] == "3"
