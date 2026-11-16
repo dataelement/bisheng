@@ -39,6 +39,7 @@ const TERMINAL_SESSION_STATUSES = new Set([
 export const useLinsightManager = () => {
     const [linsightMap, setLinsightMap] = useRecoilState(linsightMapState);
     const setActiveSessionId = useSetRecoilState(activeSessionIdState);
+    const continuingVersions = useRef(new Set<string>());
     // 创建新会话信息
     const createLinsight = useCallback((versionId: string, initialData: Omit<LinsightInfo, 'id'>) => {
         const newLinsight: LinsightInfo = {
@@ -78,36 +79,7 @@ export const useLinsightManager = () => {
         return linsightMap.get(versionId) || null;
     };
 
-    /**
-     * Re-sync one session version from the server and adopt a TERMINAL state.
-     *
-     * The task-message-stream WS is the only carrier of terminal events
-     * (final_result / task_terminated / error_message), and the backend hands
-     * them out with a destructive BLPOP: a socket that dies between the pop and
-     * the send takes the event with it. The reconnect that follows then blocks
-     * on an empty queue forever, so a run that finished inside the disconnect
-     * window leaves the panel spinning on its last live snapshot (and its task
-     * progress frozen mid-count) until the user reloads the page.
-     *
-     * Reconciling against the DB — the authority — closes that window. It runs
-     * on every WS open rather than only on reconnects, because the same event
-     * can also be swallowed by a competing consumer of the shared queue (a
-     * second tab on the same session, or a previous connection's server-side
-     * coroutine still parked in BLPOP), which a first connection is no more
-     * immune to than a relink.
-     *
-     * Deliberately one-way: server state is adopted ONLY once the run has
-     * reached a terminal status. A still-running session is left untouched —
-     * the snapshot is fetched asynchronously and would otherwise clobber live
-     * WS events that landed while it was in flight. Terminal states take no
-     * further events, so there is nothing left to lose.
-     *
-     * Reads the store through a Recoil snapshot: the caller lives inside the
-     * WS pump's `[]`-deps connect callback, where a captured `getLinsight`
-     * would be a first-render closure.
-     *
-     * @returns true if a terminal state was adopted, false if left alone.
-     */
+    /** Repair missed terminal events, without replacing a later conversation round. */
     const reconcileLinsightFromServer = useRecoilCallback(({ snapshot }) => async (versionId: string) => {
         const map = await snapshot.getPromise(linsightMapState);
         const current = map.get(versionId);
@@ -121,59 +93,76 @@ export const useLinsightManager = () => {
         // Same shape the reload path builds (switchAndUpdateLinsight), so a
         // reconciled panel is indistinguishable from a freshly loaded one.
         const tasks = await getLinsightTaskList(versionId, item, '');
-        updateLinsight(versionId, {
-            status: mapSessionVersionStatus(item.status, item.execute_feedback),
-            output_result: item.output_result,
-            execute_feedback: item.execute_feedback,
-            tasks: buildTaskTree(tasks),
-            file_list: item.output_result?.final_files || [],
-            taskError: 'failed' === item.status ? item.output_result?.error_message : '',
-            taskErrorInfo: taskErrorInfoFromOutput(item.status, item.output_result),
-            // Carry the persisted task ChatMessage id + verdict, exactly as the
-            // live final_result handler does, so like/dislike targets the right
-            // row instead of a streaming placeholder.
-            ...(item.message_id != null ? { message_id: item.message_id, liked: item.liked } : {}),
-            queueCount: 0,
+        let adopted = false;
+        updateLinsight(versionId, (latest) => {
+            // Continuing appends a new history array, retiring reads from the old round.
+            if (latest.history !== current.history) return {};
+            adopted = true;
+            return {
+                status: mapSessionVersionStatus(item.status, item.execute_feedback),
+                output_result: item.output_result,
+                execute_feedback: item.execute_feedback,
+                tasks: buildTaskTree(tasks),
+                file_list: item.output_result?.final_files || [],
+                taskError: 'failed' === item.status ? item.output_result?.error_message : '',
+                taskErrorInfo: taskErrorInfoFromOutput(item.status, item.output_result),
+                // Carry the persisted task ChatMessage id + verdict, exactly as the
+                // live final_result handler does, so like/dislike targets the right
+                // row instead of a streaming placeholder.
+                ...(item.message_id != null ? { message_id: item.message_id, liked: item.liked } : {}),
+                queueCount: 0,
+            };
         });
-        return true;
+        return adopted;
     }, [updateLinsight]);
 
     // F035 多轮对话：在已完成的同一会话里追加新一轮。
     // 复用同一 session_version (versionId) + 同一 agent thread，后端保留全部上下文；
     // 前端把当前轮快照进 history，再清空顶层字段开新轮，WS 事件继续更新顶层（=当前轮）。
     const continueConversation = useCallback(async (versionId: string, question: string, model?: string) => {
-        updateLinsight(versionId, (prev) => ({
-            history: [
-                ...(prev.history || []),
-                {
-                    // Stable id for React keys: position-derived but never reused
-                    // (history is append-only, so the length is monotonic).
-                    roundId: `${versionId}_round_${(prev.history || []).length}`,
-                    question: prev.question,
-                    tasks: prev.tasks || [],
-                    sessionSteps: prev.sessionSteps || [],
-                    output_result: prev.output_result,
-                    file_list: prev.file_list || [],
-                    // Carry the finished round's terminal state so ConversationRound
-                    // can render its own stopped/error banner in history.
-                    status: prev.status,
-                    taskError: prev.taskError,
-                    taskErrorInfo: prev.taskErrorInfo,
-                },
-            ],
-            question,
-            tasks: [],
-            sessionSteps: [],
-            output_result: null,
-            file_list: [],
-            taskError: '',
-            status: SopStatus.Running,
-        }));
+        if (continuingVersions.current.has(versionId)) return;
+        continuingVersions.current.add(versionId);
         try {
+            // Accept the new round before Running opens a socket and reconciles server state.
             await continueLinsight(versionId, question, model);
+            updateLinsight(versionId, (prev) => ({
+                history: [
+                    ...(prev.history || []),
+                    {
+                        // Stable id for React keys: position-derived but never reused
+                        // (history is append-only, so the length is monotonic).
+                        roundId: `${versionId}_round_${(prev.history || []).length}`,
+                        question: prev.question,
+                        tasks: prev.tasks || [],
+                        sessionSteps: prev.sessionSteps || [],
+                        output_result: prev.output_result,
+                        file_list: prev.file_list || [],
+                        // Carry the finished round's terminal state so ConversationRound
+                        // can render its own stopped/error banner in history.
+                        status: prev.status,
+                        taskError: prev.taskError,
+                        taskErrorInfo: prev.taskErrorInfo,
+                    },
+                ],
+                question,
+                tasks: [],
+                sessionSteps: [],
+                output_result: null,
+                file_list: [],
+                taskError: '',
+                taskErrorInfo: undefined,
+                execute_feedback: null,
+                queueCount: 0,
+                status: SopStatus.Running,
+            }));
         } catch (e) {
             console.error('continueLinsight failed :>> ', e);
-            updateLinsight(versionId, { status: SopStatus.Stoped, taskError: String(e) });
+            updateLinsight(versionId, (prev) => ({
+                status: SopStatus.Stoped, taskError: String(e), taskErrorInfo: undefined,
+                output_result: prev.output_result?.error_message ? null : prev.output_result,
+            }));
+        } finally {
+            continuingVersions.current.delete(versionId);
         }
     }, [updateLinsight]);
 
