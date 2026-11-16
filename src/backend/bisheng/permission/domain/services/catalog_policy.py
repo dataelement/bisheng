@@ -45,6 +45,10 @@ MIGRATED_RESOURCE_TYPES: frozenset[str] = frozenset(
         # while the DB already carries `app` scope rows fails the whole release
         # (not just hosted apps).
         "app",
+        # F022 enterprise market plugins and workbenches; twin of the same
+        # entries in core/openfga/authorization_model_f048.py.
+        "dsh_market_plugin",
+        "dsh_market_workbench",
     }
 )
 

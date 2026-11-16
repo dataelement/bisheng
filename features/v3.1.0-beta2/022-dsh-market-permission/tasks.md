@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-11-16 `/sdd-review spec` 6 项意见已修订（含 F019 恢复语义选 A），需求方 Callum 确认 |
 | design.md | ✅ 已评审 | 2026-11-16 `/sdd-review design` 修订（登记方式、7 个员工侧入口、升级脚本修正与备份回滚、工作台可见性查询接口），需求方 Callum 确认；接手时的第一入口 |
 | tasks.md | ✅ 已拆解 | 2026-11-16 `/sdd-review tasks` 两轮：首轮 1 项 medium（桌面端任务文件未落定）已修；剩 1 项 low 记录不改（AC-16、AC-21 只由手动 / 同事环境任务覆盖，属「行为不变 / 达梦」类验收） |
-| 实现 | 🔲 未开始 | 0 / 26 完成。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🚧 进行中 | 5 / 26 完成。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
 
 ---
 
@@ -32,31 +32,31 @@
 
 ### Wave 1 — 权限基础设施（资源类型登记）
 
-- [ ] **T001**: 新资源类型登记测试
+- [x] **T001**: 新资源类型登记测试
   **文件**: `src/backend/test/permission/test_dsh_market_resource_types.py`（新建）
   **逻辑**: 断言两种新类型同时出现在 `core/openfga/authorization_model_f048.MIGRATED_RESOURCE_TYPES`、`permission/domain/services/catalog_policy.MIGRATED_RESOURCE_TYPES`、`resource_lifecycle_policy.FIXED_CUSTOM_TYPES`（`default_permission_mode` 返回 `CUSTOM`）、`permission/api/endpoints/grant_subjects.GRANT_SUBJECT_RESOURCE_TYPES`；`build_f048_authorization_model()` 生成的模型含两种类型定义、`MODEL_VERSION` 以 `-f022` 结尾；新共享常量（T004 产出，名为 `TENANT_SHARED_CAPABILITY_TYPES`）等于 `{"tool","linsight_skill","dsh_market_plugin","dsh_market_workbench"}`，`SYSTEM_OWNED_RESOURCE_ALLOWLIST` 包含两种新类型；`F048PermissionRuntime.tenant_use_grant` 对新类型的目标返回租户成员 Grant（仿 `test/permission/test_capability_authorization.py` 的 `capability_context`，参数化到新类型）；`migrate_capability_default` 对新类型仍拒绝。
   **覆盖 AC**: AC-01, AC-02, AC-03, AC-05, AC-19
   **依赖**: 无
 
-- [ ] **T002**: 授权模型与目录策略登记新类型
+- [x] **T002**: 授权模型与目录策略登记新类型
   **文件**: `src/backend/bisheng/core/openfga/authorization_model_f048.py`、`src/backend/bisheng/permission/domain/services/catalog_policy.py`
   **逻辑**: 两处 `MIGRATED_RESOURCE_TYPES` 追加两种新类型（带注释说明 F022 与双胞胎关系）；`RESOURCE_ACTION_SCOPES` / `ACTION_RESOURCE_SCOPES` 中 `manage_permission`、`delete` 已按全部类型生成，不额外加 `edit` 等动作；`MODEL_VERSION` 改为 `"f048-v6-app-f118-f022"`，在其上方注释写明本次变化（design 决策 1、10，坑 1）。
   **测试**: T001 中对应断言通过
   **依赖**: T001
 
-- [ ] **T003**: 生命周期策略与授权主体接口登记新类型
+- [x] **T003**: 生命周期策略与授权主体接口登记新类型
   **文件**: `src/backend/bisheng/permission/domain/services/resource_lifecycle_policy.py`、`src/backend/bisheng/permission/api/endpoints/grant_subjects.py`
   **逻辑**: `FIXED_CUSTOM_TYPES`、`GRANT_SUBJECT_RESOURCE_TYPES` 追加两种新类型（缺后者时弹窗选不到人，坑 1）。
   **测试**: T001 中对应断言通过
   **依赖**: T001
 
-- [ ] **T004**: 共享常量 + 所有者 / Grant 服务接入
+- [x] **T004**: 共享常量 + 所有者 / Grant 服务接入
   **文件**: `src/backend/bisheng/permission/domain/services/owner_service.py`、`src/backend/bisheng/permission/domain/services/grant_service.py`
-  **逻辑**: 在 `owner_service.py` 定义 `TENANT_SHARED_CAPABILITY_TYPES = frozenset({"tool","linsight_skill","dsh_market_plugin","dsh_market_workbench"})`；`SYSTEM_OWNED_RESOURCE_ALLOWLIST` 加两种新类型；`owner_service.py:138` 与 `grant_service.py:305` 的 `{"tool", "linsight_skill"}` 改用该常量（design 坑 2）。
+  **逻辑**: 在 `resource_lifecycle_policy.py`（owner_service、grant_service、runtime、resource_api 都已依赖的纯策略模块，避免循环导入）定义 `TENANT_SHARED_CAPABILITY_TYPES = frozenset({"tool","linsight_skill","dsh_market_plugin","dsh_market_workbench"})`；`SYSTEM_OWNED_RESOURCE_ALLOWLIST` 加两种新类型；`owner_service.py:138` 与 `grant_service.py:305` 的 `{"tool", "linsight_skill"}` 改用该常量（design 坑 2）。
   **测试**: T001 中对应断言通过；`test/permission/test_capability_authorization.py`、`test_f048_owner_projection.py` 不回归
   **依赖**: T001
 
-- [ ] **T005**: runtime 与资源授权接口接入共享常量
+- [x] **T005**: runtime 与资源授权接口接入共享常量
   **文件**: `src/backend/bisheng/permission/application/runtime.py`、`src/backend/bisheng/permission/application/resource_api.py`
   **逻辑**: `runtime.py:606`（`authorize_system_owned` 的租户成员 Grant）、`resource_api.py:409`（弹窗 `all_members_*`）、`resource_api.py:647`（允许租户主体授权）改用 `TENANT_SHARED_CAPABILITY_TYPES`；`runtime.py:1154`（`migrate_capability_default`，替换旧 `user:*` 标记）**保持**只允许 `tool`、`linsight_skill`。
   **测试**: T001 全部通过；`test/permission/` 中 capability、grant subjects、skill grant subjects 相关用例不回归
