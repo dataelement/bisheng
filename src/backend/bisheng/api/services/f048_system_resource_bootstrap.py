@@ -10,7 +10,10 @@ from sqlmodel import select
 from bisheng.common.errcode.permission import PermissionPublishNotReadyError
 from bisheng.common.services.config_service import settings
 from bisheng.core.context.tenant import bypass_tenant_filter
-from bisheng.core.database import get_async_db_session
+from bisheng.core.database import get_async_db_session, get_sync_db_session
+from bisheng.dsh_market.domain.permission import system_owned_inventory
+from bisheng.dsh_market.domain.repository import MarketRepository
+from bisheng.dsh_market.domain.workbench_repository import WorkbenchRepository
 from bisheng.permission.application.process_runtime import get_f048_process_runtime
 from bisheng.permission.application.system_resource_reconcile import (
     SYSTEM_RESOURCE_BOOTSTRAP_OPERATOR_ID,
@@ -84,6 +87,19 @@ async def load_system_owned_resource_inventory() -> SystemOwnedResourceInventory
     return SystemOwnedResourceInventory(
         resources=tuple(resources),
         invalid=tuple(invalid),
+    )
+
+
+async def load_market_system_owned_inventory(resource_types) -> tuple[SystemOwnedResourceSpec, ...]:
+    """Every enterprise market item of the selected types, deleted ones included (F022).
+
+    Only the explicit upgrade backfill reads this; startup reconciliation and
+    the fresh-install seeder keep using the preset-tool inventory alone.
+    """
+    return await system_owned_inventory(
+        tuple(resource_types),
+        MarketRepository(get_sync_db_session),
+        WorkbenchRepository(get_sync_db_session),
     )
 
 

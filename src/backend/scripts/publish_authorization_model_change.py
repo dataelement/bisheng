@@ -22,6 +22,18 @@ Run from ``src/backend`` with the live ``config`` value::
 Dry-run is the default. Apply refuses active F048 runtime heartbeats, in-flight
 permission projection operations, a write-fenced CURRENT Catalog, or a Store /
 checksum confirmation mismatch.
+
+Action scopes come from the code: a resource type that the CURRENT Catalog has
+never scoped (F022 added ``dsh_market_plugin`` and ``dsh_market_workbench``)
+receives the scopes ``ACTION_RESOURCE_SCOPES`` gives it; types the Catalog
+already knows keep their current scopes. Custom permission models keep their
+F118 visibility provenance through the republished Catalog.
+
+After apply, and before starting the services again, verify read-only that
+the CURRENT Catalog passes the same consistency check every process runs at
+startup and carries the code's model and scopes::
+
+    PYTHONPATH=./ .venv/bin/python scripts/publish_authorization_model_change.py --verify
 """
 
 from __future__ import annotations
@@ -43,6 +55,7 @@ if _BACKEND_ROOT not in sys.path:
 from sqlalchemy import func, update  # noqa: E402
 from sqlmodel import select  # noqa: E402
 
+from bisheng.common.errcode.permission import PermissionPublishNotReadyError  # noqa: E402
 from bisheng.common.services.config_service import settings  # noqa: E402
 from bisheng.core.context.manager import (  # noqa: E402
     close_app_context,
@@ -66,12 +79,14 @@ from bisheng.permission.application.catalog_api import (  # noqa: E402
     SqlCatalogImpact,
     SqlCatalogState,
 )
+from bisheng.permission.application.control_state import SqlPermissionControlState  # noqa: E402
 from bisheng.permission.application.sql_runtime import RedisConsistencyMarker  # noqa: E402
 from bisheng.permission.domain.models import (  # noqa: E402
     AuthorizationModelRelease,
     PermissionCatalogRelease,
     PermissionProjectionOperation,
 )
+from bisheng.permission.domain.services.catalog_policy import ACTION_RESOURCE_SCOPES  # noqa: E402
 from bisheng.permission.domain.services.catalog_service import (  # noqa: E402
     CatalogDraftBuildInput,
     CatalogService,
@@ -134,10 +149,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
         "--apply",
         action="store_true",
         help="Ensure service-account resource markers and publish/reuse the model and CURRENT Catalog pin",
+    )
+    mode.add_argument(
+        "--verify",
+        action="store_true",
+        help="Read-only: check the CURRENT Catalog as the services will at startup",
     )
     parser.add_argument(
         "--confirm-store-id",
@@ -290,6 +311,79 @@ async def _retire_other_active_models(current: CurrentRelease) -> None:
                 )
 
 
+def _target_actions(actions):
+    """Scope resource types the Catalog has never seen; leave the rest untouched."""
+    known = {resource_type for action in actions for resource_type in action.resource_types}
+    return tuple(
+        replace(action, resource_types=action.resource_types | added)
+        if (added := frozenset(ACTION_RESOURCE_SCOPES.get(action.code, frozenset()) - known))
+        else action
+        for action in actions
+    )
+
+
+def _custom_selections(model_release):
+    """Republish custom models unchanged, F118 visibility provenance included."""
+    return tuple(
+        CustomModelSelection(
+            model_key=model.model_key,
+            name=model.name,
+            action_codes=model.selected_action_codes,
+            active=model.active,
+            allow_same_level=model.allow_same_level,
+            config_scope=model.config_scope,
+            visibility_only_resource_types=model.visibility_only_resource_types,
+            visibility_level=model.visibility_level,
+            retired_use_level_floor=model.retired_use_level_floor,
+        )
+        for model in model_release.models
+        if model.kind == "CUSTOM"
+    )
+
+
+def _verification_problems(catalog, target_checksum: str) -> list[str]:
+    problems = []
+    if catalog.model_checksum != target_checksum:
+        problems.append(
+            f"CURRENT model checksum {catalog.model_checksum} differs from the code model {target_checksum}"
+        )
+    scopes = {code: set(types) for code, types in catalog.action_resource_scopes}
+    missing = sorted(
+        f"{code}:{resource_type}"
+        for code, expected in ACTION_RESOURCE_SCOPES.items()
+        if code in scopes
+        for resource_type in expected - scopes[code]
+    )
+    if missing:
+        problems.append("CURRENT Catalog lacks action scopes " + ", ".join(missing))
+    return problems
+
+
+async def _verify() -> int:
+    target_checksum = authorization_model_checksum(get_authorization_model_f048())
+    try:
+        with bypass_tenant_filter():
+            catalog = await SqlPermissionControlState().current_catalog()
+        problems = _verification_problems(catalog, target_checksum)
+    except PermissionPublishNotReadyError as exc:
+        # The same refusal the services would report as 503 after starting.
+        problems = [f"CURRENT Catalog fails the startup check: {exc}"]
+    print(
+        json.dumps(
+            {
+                "event": "authorization_model_verification",
+                "verified": not problems,
+                "target_model_checksum": target_checksum,
+                "model_version": MODEL_VERSION,
+                "problems": problems,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+    )
+    return EXIT_OK if not problems else EXIT_BLOCKED
+
+
 async def _publish_catalog_cutover(
     *,
     current: CurrentRelease,
@@ -320,18 +414,7 @@ async def _publish_catalog_cutover(
         projector=OpenFGACatalogProjector(client=target_client, marker=marker),
     )
     if not reservation.complete:
-        customs = tuple(
-            CustomModelSelection(
-                model_key=model.model_key,
-                name=model.name,
-                action_codes=model.selected_action_codes,
-                active=model.active,
-                allow_same_level=model.allow_same_level,
-                config_scope=model.config_scope,
-            )
-            for model in before.model_release.models
-            if model.kind == "CUSTOM"
-        )
+        customs = _custom_selections(before.model_release)
         standard_policy = {
             model.model_key: model.allow_same_level for model in before.model_release.models if model.kind == "STANDARD"
         }
@@ -343,12 +426,7 @@ async def _publish_catalog_cutover(
                 predecessor_release_key=reservation.predecessor_key,
                 before_actions=before.action_release,
                 before_models=before.model_release,
-                actions=tuple(
-                    replace(action, resource_types=action.resource_types | {"linsight_skill"})
-                    if action.code in {"use", "manage_permission", "edit", "delete"} and "tool" in action.resource_types
-                    else action
-                    for action in before.action_release.actions
-                ),
+                actions=_target_actions(before.action_release.actions),
                 custom_models=customs,
                 standard_allow_same_level=standard_policy,
                 grant_references=await state.grant_references(),
@@ -381,6 +459,11 @@ async def _assert_no_persisted_department_context(client: FGAClient) -> None:
 
 async def execute(args: argparse.Namespace, *, live_settings: Any = settings) -> int:
     await initialize_app_context(config=_offline_settings(live_settings))
+    if getattr(args, "verify", False):
+        try:
+            return await _verify()
+        finally:
+            await close_app_context()
     source_client: FGAClient | None = None
     target_client: FGAClient | None = None
     try:

@@ -455,6 +455,21 @@ PYTHONPATH=./ .venv/bin/python scripts/publish_authorization_model_change.py \
   --operator-id <operator-user-id>
 ```
 
+Action scopes follow the code: a resource type the CURRENT Catalog has never
+scoped receives the scopes `ACTION_RESOURCE_SCOPES` gives it, while types the
+Catalog already knows keep their current scopes. Custom permission models are
+republished unchanged, including their F118 visibility provenance
+(`visibility_only_resource_types`, `visibility_level`, `retired_use_level_floor`).
+
+After apply and before starting the services, `--verify` checks read-only that
+the CURRENT Catalog passes the same consistency check every process runs at
+startup and carries the code's model checksum and action scopes. It prints
+`"verified": true` or the list of problems and exits 3:
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/publish_authorization_model_change.py --verify
+```
+
 Apply refuses active F048 runtime heartbeats, in-flight permission projection
 operations, a write-fenced CURRENT Catalog, or a confirmation mismatch. It
 idempotently ensures `service_account:*` `permission_enabled` and the existing
@@ -636,8 +651,12 @@ empty.
 ### `reconcile_f048_system_owned_resources.py`
 
 Audit and repair missing F048 projections for business-verified platform
-resources. The current inventory covers preset tool categories
-(`is_preset=1 AND is_delete=0`), regardless of historical `user_id`. Preset dashboards are intentionally
+resources. `--resource-type` selects the inventory (repeatable; default `tool`):
+`tool` covers preset tool categories (`is_preset=1 AND is_delete=0`), regardless
+of historical `user_id`; `dsh_market_plugin` / `dsh_market_workbench` cover every
+enterprise market plugin / workbench record, deleted ones included, so a
+restoring re-import keeps its grants (F022 upgrade backfill, see
+`features/v3.1.0-beta2/022-dsh-market-permission/upgrade-guide.md`). Preset dashboards are intentionally
 excluded: they are ordinary resources owned by the first super administrator.
 The reconciler does not infer system ownership from the resource-type
 allowlist alone.
@@ -1526,6 +1545,10 @@ type-only errors; importing it does not change the host logging configuration.
 Errors omit SQL, credentials and payloads. MySQL/DM8 concurrency, interruption and
 recovery require the separate real-database acceptance; SQLite CLI tests do not
 establish those guarantees.
+
+## 企业插件与企业工作台授权升级（F022，f048-v6-app-f118-f022）
+
+已部署环境在维护窗口内依次执行：`publish_authorization_model_change.py`（预览 → `--apply`）、`reconcile_f048_system_owned_resources.py --resource-type dsh_market_plugin --resource-type dsh_market_workbench`（预览 → `--apply`）、`publish_authorization_model_change.py --verify`，然后启动全部进程。完整顺序、回退与 docker compose 写法见 [升级说明](../../../features/v3.1.0-beta2/022-dsh-market-permission/upgrade-guide.md)。全新安装无需操作。
 
 ## 工具与技能全员授权升级（f048-v6）
 

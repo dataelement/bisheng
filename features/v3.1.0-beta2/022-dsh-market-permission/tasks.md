@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-11-16 `/sdd-review spec` 6 项意见已修订（含 F019 恢复语义选 A），需求方 Callum 确认 |
 | design.md | ✅ 已评审 | 2026-11-16 `/sdd-review design` 修订（登记方式、7 个员工侧入口、升级脚本修正与备份回滚、工作台可见性查询接口），需求方 Callum 确认；接手时的第一入口 |
 | tasks.md | ✅ 已拆解 | 2026-11-16 `/sdd-review tasks` 两轮：首轮 1 项 medium（桌面端任务文件未落定）已修；剩 1 项 low 记录不改（AC-16、AC-21 只由手动 / 同事环境任务覆盖，属「行为不变 / 达梦」类验收） |
-| 实现 | 🚧 进行中 | 11 / 26 完成。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🚧 进行中 | 16 / 26 完成。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
 
 ---
 
@@ -102,31 +102,31 @@
 
 ### Wave 3 — 升级脚本
 
-- [ ] **T012**: 发布脚本测试
+- [x] **T012**: 发布脚本测试
   **文件**: `src/backend/test/permission/test_publish_authorization_model_change_f022.py`（新建）
   **逻辑**: 对 `scripts/publish_authorization_model_change.py` 的纯函数部分：动作作用域补齐只为 Catalog 中缺失的类型按代码 `RESOURCE_ACTION_SCOPES` 追加、不删除也不改其他类型现有作用域；重建自定义模型时 `visibility_only_resource_types`、`visibility_level`、`retired_use_level_floor` 原样带上；`--verify` 在缺新类型作用域、或已存模型与推导不一致时失败并给出原因，一致时通过；`--verify` 与默认预览均不写入（假 state 记录写调用）。参考 `test_authorization_model_publish_markers.py` 的构造方式。
   **覆盖 AC**: AC-04, AC-19, AC-20
   **依赖**: T002
 
-- [ ] **T013**: 发布脚本修正
+- [x] **T013**: 发布脚本修正
   **文件**: `src/backend/scripts/publish_authorization_model_change.py`
   **逻辑**: 抽出纯函数 `_target_actions(before_actions)`（替换写死 `"linsight_skill"`）与 `_custom_selections(before_models)`（带三项可见字段，同 `catalog_api.py`）；新增 `--verify`（只读：加载 CURRENT Catalog 走与运行时相同的一致性校验 `control_state`，检查两种新类型的作用域与模型校验值，输出 JSON）；更新文件头用法说明（design 决策 7 修正 1，坑 5、6、7）。
   **测试**: T012 全部通过；`test_authorization_model_publish_markers.py`、`test_contextual_model_publication.py` 不回归
   **依赖**: T012
 
-- [ ] **T014**: 补登记脚本测试
+- [x] **T014**: 补登记脚本测试
   **文件**: `src/backend/test/permission/test_reconcile_system_owned_resource_types.py`（新建）
   **逻辑**: `scripts/reconcile_f048_system_owned_resources.py` 的 `parse_args`：默认 `--resource-type` 为 `["tool"]`，可多选两种新类型，非法值报错；清单组合：选两种新类型时只调用市场清单、不调用工具清单，输出 `selected_resource_types` 与所选一致；对账结果中已登记项（CURRENT）不被改动、缺失项（MISSING）被登记（用假 runtime）。
   **覆盖 AC**: AC-04, AC-20
   **依赖**: T008
 
-- [ ] **T015**: 补登记脚本支持新类型
+- [x] **T015**: 补登记脚本支持新类型
   **文件**: `src/backend/scripts/reconcile_f048_system_owned_resources.py`、`src/backend/bisheng/api/services/f048_system_resource_bootstrap.py`
   **逻辑**: 脚本加 `--resource-type`（choices: `tool`、`dsh_market_plugin`、`dsh_market_workbench`，可重复，默认 `tool`）；`f048_system_resource_bootstrap.py` 新增按类型组合清单的函数，市场两类调用 T008 的 `system_owned_inventory`；现有 `load_system_owned_resource_inventory()`（全新安装启动与 web fetch 工具补投影在用）行为不变（design 决策 7 修正 2，坑 8、16）。
   **测试**: T014 全部通过；现有 system-owned 相关测试不回归
   **依赖**: T014
 
-- [ ] **T016**: 升级说明
+- [x] **T016**: 升级说明
   **文件**: `features/v3.1.0-beta2/022-dsh-market-permission/upgrade-guide.md`（新建）、`docs/architecture/10-permission-rbac.md`
   **逻辑**: 升级说明写维护窗口完整步骤（停全部进程：API / Celery×3 / Beat / Linsight worker → 一致备份业务库与 OpenFGA 存储库 → 发布预览 → 发布执行 → 补登记预览 → 补登记执行 → `--verify` → 启动全部进程 → 验收），每步的命令、预期输出、失败处理，回滚步骤（恢复两库 + 回退镜像），以及「只发程序不升级」的后果；`10-permission-rbac.md` §10.1 开头加一段：F118 之后新增资源类型使用 `publish_authorization_model_change.py` + `reconcile_f048_system_owned_resources.py`，不要用本节脚本（原因见 F022 design 坑 5）。
   **覆盖 AC**: AC-20
@@ -216,3 +216,5 @@
 - 拆解时：确保登记与存量补登记改用现有对账助手 / 脚本 → design 决策 3、7（修订历史 2026-11-16 实现细节条）
 - T004：共享常量放在 `resource_lifecycle_policy.py`（避免循环导入），任务描述已同步
 - T006–T011：列表与同步改用批量快照判定 → design 坑 21；`workbenches/access` 需登记桌面令牌白名单（`utils/http_middleware.py`，T011 多改 1 个文件）→ design 坑 20；`test/dsh_market/conftest.py` 让原有业务测试默认「全部可见」
+- T015：市场清单的组合函数 `load_market_system_owned_inventory` 放在 `api/services/f048_system_resource_bootstrap.py`，原 `load_system_owned_resource_inventory`（启动与 web fetch 补投影在用）不变
+- T016：另更新 `src/backend/scripts/README.md` 两个脚本条目并新增 F022 升级索引；升级说明含 docker compose 写法

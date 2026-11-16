@@ -50,7 +50,7 @@
 
 ## 部署注意（本版本）
 
-- **F022 改变 F048 授权模型**：全新安装无需操作；已部署环境升级到本版本时需要一个停服维护窗口：停止全部后端进程（API / Celery / Beat / Linsight worker）→ 一致备份业务库与 OpenFGA 存储库 → 发布授权模型（先预览、再执行）→ 补登记存量企业插件与企业工作台 → 校验 → 启动全部进程；失败时恢复备份并回退镜像。只更新程序、不执行升级，会使该环境**全部**权限判定不可用。不能使用 §10.1 的 `upgrade_f048_authorization_model.py`（原因与具体命令见 F022 design.md 决策 7、§7）。
+- **F022 改变 F048 授权模型**：全新安装无需操作；已部署环境升级到本版本时需要一个停服维护窗口：停止全部后端进程（API / Celery / Beat / Linsight worker）→ 一致备份业务库与 OpenFGA 存储库 → 发布授权模型（先预览、再执行）→ 补登记存量企业插件与企业工作台 → 校验 → 启动全部进程；失败时恢复备份并回退镜像。只更新程序、不执行升级，会使该环境**全部**权限判定不可用。不能使用 §10.1 的 `upgrade_f048_authorization_model.py`（原因见 F022 design.md 决策 7；步骤、回退与 docker compose 写法见 F022 [upgrade-guide.md](./022-dsh-market-permission/upgrade-guide.md)）。
 
 ---
 
