@@ -1,5 +1,5 @@
 import { ApiError } from '@bisheng/api-client';
-import request, { showApiError, translateApiErrorMessage } from './request';
+import request, { serviceProbeSettled, showApiError, translateApiErrorMessage } from './request';
 
 jest.mock('axios', () => {
   const actual = jest.requireActual('axios');
@@ -53,16 +53,60 @@ it('uses a local fallback for unregistered validation arrays and server template
   expect(translateApiErrorMessage({ status_code: 49999, status_message: '{message}', data: { message: 'clear reason' } })).toBe('Request failed. Please try again.');
 });
 
-it('runs maintenance handling for a binary business error before marking it handled', async () => {
+const PROBE = '/api/v1/env';
+const httpFailure = (config: object, status: number) => {
+  const { AxiosError } = jest.requireActual('axios');
+  const response = { config, status, statusText: 'Error', headers: {}, data: { status_code: status, status_message: 'boom' } };
+  return new AxiosError('Request failed', 'ERR_BAD_RESPONSE', config, null, response);
+};
+
+it('raises the maintenance overlay when a business 500 is confirmed by a failing service probe', async () => {
   const listener = jest.fn();
   window.addEventListener('bs:service-maintenance', listener);
   const blob = new Blob(['{"status_code":500,"status_message":"maintenance"}'], { type: 'application/json' });
-  transport.defaults.adapter = async config => ({ config, status: 200, statusText: 'OK', headers: {}, data: blob });
+  transport.defaults.adapter = async config => {
+    if (config.url === PROBE) throw httpFailure(config, 500);
+    return { config, status: 200, statusText: 'OK', headers: {}, data: blob };
+  };
   try {
     const error = await request.get('/test', { responseType: 'blob' }).catch(cause => cause);
-    expect(error).toMatchObject({ status_code: 500, presentation: 'global' });
+    expect(error).toMatchObject({ status_code: 500 });
+    await serviceProbeSettled();
     expect(listener).toHaveBeenCalledTimes(1);
-    expect(toast).not.toHaveBeenCalled();
+  } finally { window.removeEventListener('bs:service-maintenance', listener); }
+});
+
+it('keeps a single endpoint 500 local when the service probe succeeds', async () => {
+  const listener = jest.fn();
+  window.addEventListener('bs:service-maintenance', listener);
+  transport.defaults.adapter = async config => {
+    if (config.url === PROBE) return { config, status: 200, statusText: 'OK', headers: {}, data: { status_code: 200, data: {} } };
+    throw httpFailure(config, 500);
+  };
+  try {
+    const error = await request.post('/api/v1/linsight/workbench/file_download', {}).catch(cause => cause);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.presentation).not.toBe('global');
+    await serviceProbeSettled();
+    expect(listener).not.toHaveBeenCalled();
+    showApiError(error);
+    expect(toast).toHaveBeenCalledTimes(1);
+  } finally { window.removeEventListener('bs:service-maintenance', listener); }
+});
+
+it('shares one service probe across concurrent 500s', async () => {
+  const listener = jest.fn();
+  window.addEventListener('bs:service-maintenance', listener);
+  let probes = 0;
+  transport.defaults.adapter = async config => {
+    if (config.url === PROBE) { probes += 1; throw httpFailure(config, 502); }
+    throw httpFailure(config, 500);
+  };
+  try {
+    await Promise.all([request.get('/a').catch(() => null), request.get('/b').catch(() => null)]);
+    await serviceProbeSettled();
+    expect(probes).toBe(1);
+    expect(listener).toHaveBeenCalledTimes(1);
   } finally { window.removeEventListener('bs:service-maintenance', listener); }
 });
 
