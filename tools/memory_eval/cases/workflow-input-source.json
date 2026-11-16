@@ -1,0 +1,25 @@
+{
+  "id": "workflow-input-source",
+  "acs": [
+    "AC-49"
+  ],
+  "turns": [
+    {
+      "user": "（在开启记忆的报销工作流里）我的成本中心是 C-100",
+      "new_session": false,
+      "expect_write": null
+    }
+  ],
+  "question": {
+    "user": "我的成本中心是多少？",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "must_contain_any": [
+      "C-100"
+    ]
+  },
+  "notes": "在工作流会话里运行",
+  "requires_consolidation": true
+}

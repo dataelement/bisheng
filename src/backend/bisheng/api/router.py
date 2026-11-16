@@ -58,6 +58,7 @@ from bisheng.knowledge.api.router import (
 )
 from bisheng.linsight.api.router import router as linsight_router
 from bisheng.llm.api.router import router as llm_router
+from bisheng.memory.api.router import router as memory_router
 from bisheng.message.api.router import router as message_router
 from bisheng.open_api.api.dependencies import verify_open_api_access
 from bisheng.open_api.api.router import management_router as open_api_management_router
@@ -172,6 +173,7 @@ router.include_router(sso_sync_router, request_scope=S.CREDENTIAL)
 router.include_router(relink_router, request_scope=S.PLATFORM)
 router.include_router(tenant_router, request_scope=S.PLATFORM)
 router.include_router(citation_router, request_scope=S.TENANT)
+router.include_router(memory_router, request_scope=S.TENANT)
 router.include_router(commercial_license_router, request_scope=S.PLATFORM)
 router.include_router(admin_router, request_scope=S.IDENTITY)
 router.include_router(approval_router, request_scope=S.PERSONAL)

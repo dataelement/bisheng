@@ -1,0 +1,27 @@
+{
+  "id": "memory-off-explains",
+  "acs": [
+    "AC-35"
+  ],
+  "turns": [
+    {
+      "user": "记一下我下周去深圳出差",
+      "new_session": false,
+      "expect_write": false
+    }
+  ],
+  "question": {
+    "user": "你记下了吗？",
+    "new_session": false,
+    "expect_write": false
+  },
+  "rules": {
+    "must_contain_any": [
+      "未开启",
+      "没有开启",
+      "关闭"
+    ]
+  },
+  "notes": "在'我的记忆'关闭的条件下运行",
+  "requires_consolidation": false
+}

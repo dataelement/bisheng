@@ -1,0 +1,23 @@
+{
+  "id": "current-wins-2",
+  "acs": [
+    "AC-65"
+  ],
+  "turns": [
+    {
+      "user": "记住我偏好简短回答",
+      "new_session": false,
+      "expect_write": true
+    }
+  ],
+  "question": {
+    "user": "这次请详细展开讲讲多租户隔离的实现，越详细越好",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "regex": "[\\s\\S]{300,}"
+  },
+  "notes": "",
+  "requires_consolidation": false
+}

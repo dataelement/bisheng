@@ -16,6 +16,7 @@ from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.session_activity import business_activity
 from bisheng.database.models.assistant import Assistant
+from bisheng.memory.domain.services.gate import MemoryGate
 from bisheng.permission.application.business_authorization import (
     require_business_action,
 )
@@ -260,6 +261,12 @@ async def chat(
             resource_id=assistant_id,
             action="visible",
         )
+
+        async def memory_register(session_chat_id: str) -> None:
+            # F132 (decision 6, R2): only this logged-in endpoint registers sessions
+            # for long-term memory; guest and open API endpoints pass nothing.
+            await MemoryGate.open(session_chat_id, login_user)
+
         # ``flow_lease_id`` is the page lease opened by the session page; without
         # it the connection takes its own execution lease.
         await chat_manager.dispatch_client(
@@ -271,6 +278,7 @@ async def chat(
             websocket,
             conversation_persistence=ConversationPersistence(login_user.user_id, user=login_user),
             flow_lease_id=flow_lease_id,
+            memory_register=memory_register,
         )
     except UnAuthorizedError:
         await websocket.close(

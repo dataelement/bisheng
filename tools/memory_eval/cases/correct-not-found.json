@@ -1,0 +1,25 @@
+{
+  "id": "correct-not-found",
+  "acs": [
+    "AC-33"
+  ],
+  "turns": [
+    {
+      "user": "更正一下，我的汇报对象换成李总了",
+      "new_session": false,
+      "expect_write": null
+    }
+  ],
+  "question": {
+    "user": "我的汇报对象是谁？",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "must_contain_any": [
+      "李总"
+    ]
+  },
+  "notes": "找不到旧条目时说明没找到，可新记",
+  "requires_consolidation": false
+}

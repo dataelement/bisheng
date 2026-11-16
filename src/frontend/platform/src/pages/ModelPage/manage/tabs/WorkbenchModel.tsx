@@ -81,6 +81,7 @@ export default function WorkbenchModel({ data, onBack }) {
     ttsModelId: null,
     knowledgeSpaceLlmId: null,
     chatTitleLlmId: null,
+    memoryLlmId: null,
     imageReadModelId: null,
     models: [],
   });
@@ -120,6 +121,7 @@ export default function WorkbenchModel({ data, onBack }) {
       asrModelId,
       ttsModelId,
       chatTitleLlmId,
+      memoryLlmId,
       imageReadModelId,
       models,
     } = form;
@@ -140,6 +142,8 @@ export default function WorkbenchModel({ data, onBack }) {
         tts_model: ttsModelId ? { id: String(ttsModelId) } : null, // Accept an empty value.
         // Model that names new conversations (workbench, knowledge spaces, apps).
         chat_title_llm: chatTitleLlmId ? { id: String(chatTitleLlmId) } : null, // Accept an empty value.
+        // Model that consolidates long-term memory; empty falls back to the first daily-chat model.
+        memory_llm: memoryLlmId ? { id: String(memoryLlmId) } : null,
         image_read_model: imageReadModelId ? { id: String(imageReadModelId) } : null,
       };
 
@@ -164,6 +168,7 @@ export default function WorkbenchModel({ data, onBack }) {
         asrModelId: newConfig?.asr_model?.id || null,
         ttsModelId: newConfig?.tts_model?.id || null,
         chatTitleLlmId: newConfig?.chat_title_llm?.id || null,
+        memoryLlmId: newConfig?.memory_llm?.id || null,
         imageReadModelId: newConfig?.image_read_model?.id || null,
         knowledgeSpaceLlmId: newConfig?.knowledge_space_llm?.id || null,
         models: newConfig?.models || [],
@@ -177,6 +182,7 @@ export default function WorkbenchModel({ data, onBack }) {
         asr_model: { id: newConfig?.asr_model?.id },
         tts_model: { id: newConfig?.tts_model?.id },
         chat_title_llm: { id: newConfig?.chat_title_llm?.id },
+        memory_llm: { id: newConfig?.memory_llm?.id },
         image_read_model: { id: newConfig?.image_read_model?.id },
         knowledge_space_llm: { id: newConfig?.knowledge_space_llm?.id },
         models: newConfig?.models || [],
@@ -248,6 +254,7 @@ export default function WorkbenchModel({ data, onBack }) {
         asrModelId: linsightConfig.asr_model?.id || null,
         ttsModelId: linsightConfig.tts_model?.id || null,
         chatTitleLlmId: linsightConfig.chat_title_llm?.id || null,
+        memoryLlmId: linsightConfig.memory_llm?.id || null,
         imageReadModelId: linsightConfig.image_read_model?.id || null,
         knowledgeSpaceLlmId: linsightConfig.knowledge_space_llm?.id || null,
         models: linsightConfig.models || [],
@@ -261,6 +268,7 @@ export default function WorkbenchModel({ data, onBack }) {
         asr_model: { id: linsightConfig.asr_model?.id },
         tts_model: { id: linsightConfig.tts_model?.id },
         chat_title_llm: { id: linsightConfig.chat_title_llm?.id },
+        memory_llm: { id: linsightConfig.memory_llm?.id },
         image_read_model: { id: linsightConfig.image_read_model?.id },
         knowledge_space_llm: { id: linsightConfig.knowledge_space_llm?.id },
         models: linsightConfig.models || [],
@@ -357,6 +365,14 @@ export default function WorkbenchModel({ data, onBack }) {
             options={llmOptions}
             onChange={(val) => setForm({ ...form, chatTitleLlmId: val })}
           />
+          <ModelSelect
+            close
+            label={t("model.memoryLlm")}
+            tooltipText={t("model.memoryLlmTooltip")}
+            value={form.memoryLlmId}
+            options={llmOptions}
+            onChange={(val) => setForm({ ...form, memoryLlmId: val })}
+          />
           <SharedToolSettings disabled={saveload || !linsightConfig} />
         </div>
       </details>
@@ -392,6 +408,7 @@ export function useLinsightConfig() {
         tts_model: null,
         knowledge_space_llm: null,
         chat_title_llm: null,
+        memory_llm: null,
         image_read_model: null,
       };
       return {

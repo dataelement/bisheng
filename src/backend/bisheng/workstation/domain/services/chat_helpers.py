@@ -217,6 +217,19 @@ def _sse_resp(
     return f"event: message\ndata: {json.dumps(resp, ensure_ascii=False, default=custom_json_serializer)}\n\n"
 
 
+# F132: category of the long-term memory signal. The payload carries the turn id
+# and two flags only, never item text; the client fetches the notice and the
+# attribution from /api/v1/memory/turn.
+MEMORY_SSE_CATEGORY = "memory"
+_MEMORY_SIGNAL_KEYS = ("turn_id", "has_write", "has_attribution")
+
+
+def _memory_sse(signal: dict, chat_id: str, message_id=None) -> str:
+    """Build the `memory` SSE event: {turn_id, has_write, has_attribution}."""
+    payload = {key: signal[key] for key in _MEMORY_SIGNAL_KEYS}
+    return _sse_resp(MEMORY_SSE_CATEGORY, "over", payload, chat_id, message_id=message_id)
+
+
 def _is_new_format(msg: ChatMessage) -> bool:
     """Return True when `msg.message` is already the new JSON object format.
 

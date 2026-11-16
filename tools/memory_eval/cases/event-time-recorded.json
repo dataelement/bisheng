@@ -1,0 +1,23 @@
+{
+  "id": "event-time-recorded",
+  "acs": [
+    "AC-15"
+  ],
+  "turns": [
+    {
+      "user": "下个月 5 号我要参加信创适配评审，帮我记下",
+      "new_session": false,
+      "expect_write": true
+    }
+  ],
+  "question": {
+    "user": "信创适配评审是哪天？",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "regex": "\\d{4}-\\d{2}-05|\\d+月5日"
+  },
+  "notes": "",
+  "requires_consolidation": false
+}

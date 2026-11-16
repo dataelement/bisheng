@@ -1,0 +1,27 @@
+{
+  "id": "memory-off-explains-2",
+  "acs": [
+    "AC-35"
+  ],
+  "turns": [
+    {
+      "user": "请记住我偏好英文回答",
+      "new_session": false,
+      "expect_write": false
+    }
+  ],
+  "question": {
+    "user": "记住了吗？",
+    "new_session": false,
+    "expect_write": false
+  },
+  "rules": {
+    "must_contain_any": [
+      "未开启",
+      "没有开启",
+      "关闭"
+    ]
+  },
+  "notes": "",
+  "requires_consolidation": false
+}
