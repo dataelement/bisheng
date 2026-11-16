@@ -128,5 +128,17 @@ def test_title_is_scheduled_after_question_not_session_creation(
     monkeypatch.setattr(callback_module, "save_message_citations_sync", lambda **kwargs: None)
     monkeypatch.setattr(callback_module.telemetry_service, "log_event_sync", lambda **kwargs: None)
     monkeypatch.setattr(callback_module.thread_pool, "submit", lambda key, fn, *args: scheduled.append(fn))
+    from contextlib import nullcontext
+
+    def save_message(message, template):
+        return SimpleNamespace(id=1), insert_session(template) if template is not None else None
+
+    # This test owns title scheduling; durable storage is covered by real SQL
+    # in test_moderation_continuation rather than a live database here.
+    monkeypatch.setattr(
+        callback_module,
+        "ConversationPersistence",
+        lambda user_id: SimpleNamespace(scope=lambda *args: nullcontext(), save=save_message),
+    )
     callback.save_chat_message(callback_module.ChatResponse(category=category, message="Hello", source=0, type="over"))
     assert (callback.generate_session_title in scheduled) is should_schedule

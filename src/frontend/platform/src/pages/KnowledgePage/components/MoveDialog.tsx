@@ -181,7 +181,7 @@ function Content({
   return (
     <DialogContent
       aria-describedby={undefined}
-      className="max-h-[85vh] overflow-y-auto"
+      className={`max-h-[85vh] overflow-y-auto ${mode === "move" && !plan && !jobId && !completed ? "w-[calc(100vw-32px)] max-w-3xl" : ""}`}
     >
       <DialogHeader>
         <DialogTitle>
@@ -234,7 +234,7 @@ function Content({
       ) : (
         <>
           {!plan && (
-            <fieldset disabled={busy}>
+            <fieldset className="min-w-0" disabled={busy}>
               <MoveDestinationPicker
                 scope={scope}
                 sourceId={spaceId}

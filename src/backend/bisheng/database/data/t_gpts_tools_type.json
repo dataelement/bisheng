@@ -46,9 +46,9 @@
   },
   {
     "id": 4,
-    "name": "Dalle3绘画",
+    "name": "图像生成",
     "logo": "",
-    "description": "OpenAI 文生图模型",
+    "description": "根据提示词，使用配置的服务和模型生成图像。",
     "auth_method": null,
     "api_key": null,
     "auth_type": null,

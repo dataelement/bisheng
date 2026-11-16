@@ -5,6 +5,7 @@ import jwt
 from fastapi import APIRouter, Body, Depends, Query, Request, WebSocket, WebSocketException
 from fastapi import status as http_status
 from loguru import logger
+from starlette.websockets import WebSocketState
 
 from bisheng.api.services import report_template
 from bisheng.api.services.flow import FlowService
@@ -12,9 +13,11 @@ from bisheng.api.services.office_callback import afetch_office_document
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.v1.chat import chat_manager
 from bisheng.api.v1.schemas import FlowVersionCreate, resp_200
+from bisheng.chat_session.application.conversation_persistence import ConversationPersistence
 from bisheng.common.chat.types import WorkType
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.flow import AppWriteAuthError, WorkFlowOnlineEditError
 from bisheng.common.errcode.http_error import NotFoundError, ServerError, UnAuthorizedError
 from bisheng.common.services import telemetry_service
@@ -32,6 +35,7 @@ from bisheng.role.domain.services.quota_service import QuotaResourceType, requir
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import generate_uuid
+from bisheng.workflow.application.browser_scope import browser_workflow_scope
 from bisheng.workflow.application.execution_port import BoundWorkflowExecutionPort
 from bisheng_langchain.utils.requests import Requests
 
@@ -388,29 +392,37 @@ async def workflow_ws(
     login_user: UserPayload = Depends(UserPayload.get_login_user_from_ws),
 ):
     try:
-        await require_business_action(
-            login_user,
-            resource_type="workflow",
-            resource_id=workflow_id,
-            action="use",
-        )
-        # ``flow_lease_id`` is the page lease opened by the session page; without
-        # it the connection takes its own execution lease.
-        await chat_manager.dispatch_client(
-            websocket,
-            workflow_id,
-            chat_id,
-            login_user,
-            WorkType.WORKFLOW,
-            websocket,
-            flow_lease_id=flow_lease_id,
-            workflow_execution_port=BoundWorkflowExecutionPort(workflow_id, login_user),
-        )
+        async with browser_workflow_scope(
+            login_user, workflow_id, admitted=getattr(websocket.state, "admitted_request", None)
+        ) as execution_user:
+            await require_business_action(
+                execution_user,
+                resource_type="workflow",
+                resource_id=workflow_id,
+                action="use",
+            )
+            # The connection retains this target through dispatch and cleanup.
+            await chat_manager.dispatch_client(
+                websocket,
+                workflow_id,
+                chat_id,
+                execution_user,
+                WorkType.WORKFLOW,
+                websocket,
+                conversation_persistence=ConversationPersistence(execution_user.user_id, user=execution_user),
+                flow_lease_id=flow_lease_id,
+                workflow_execution_port=BoundWorkflowExecutionPort(workflow_id, execution_user),
+            )
     except UnAuthorizedError:
         await websocket.close(
             code=http_status.WS_1008_POLICY_VIOLATION,
             reason="No permission to use this app",
         )
+    except BaseErrorCode as exc:
+        if websocket.application_state == WebSocketState.CONNECTING:
+            await websocket.accept()
+        if websocket.application_state == WebSocketState.CONNECTED:
+            await exc.websocket_close_message(websocket)
     except WebSocketException as exc:
         logger.error(f"Websocket exception: {exc!s}")
         await websocket.close(code=http_status.WS_1011_INTERNAL_ERROR, reason=str(exc))

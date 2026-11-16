@@ -1,7 +1,7 @@
 import importlib
 import sys
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -23,6 +23,9 @@ tasks = importlib.import_module("bisheng.worker.workflow.tasks")
     ],
 )
 def test_telemetry_failure_does_not_change_workflow_task_outcome(monkeypatch, task, runner_name):
+    from bisheng.workflow.domain.repositories.creation_repository import CreationRepository
+
+    monkeypatch.setattr(CreationRepository, "tenant_for_message", lambda _: 1)
     runner = Mock()
     monkeypatch.setattr(tasks, runner_name, runner)
     monkeypatch.setattr(
@@ -31,6 +34,12 @@ def test_telemetry_failure_does_not_change_workflow_task_outcome(monkeypatch, ta
         Mock(side_effect=RuntimeError("telemetry metadata unavailable")),
     )
 
-    task.run("run-id", "workflow-id", "chat-id", 42)
+    from bisheng.core.context.tenant import tenant_execution_scope
+    from bisheng.worker import tenant_context as task_context
+
+    # Direct .run bypasses Celery; do not let the shared MagicMock invent a header.
+    monkeypatch.setattr(task_context, "current_task", SimpleNamespace(_get_current_object=lambda: None))
+    with tenant_execution_scope(1):
+        task.run("run-id", "workflow-id", "chat-id", 42)
 
     runner.assert_called_once_with("run-id", "workflow-id", "chat-id", 42, "platform")

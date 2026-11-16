@@ -369,7 +369,9 @@ function TenantPluginMarket() {
                     ? "lowerVersion"
                     : preview.reason === "version_conflict"
                       ? "versionConflict"
-                      : preview.duplicate
+                      : preview.allowed && preview.overwrite
+                        ? "overwriteVersion"
+                        : preview.duplicate
                         ? "duplicateVersion"
                         : "versionReady",
                 )}

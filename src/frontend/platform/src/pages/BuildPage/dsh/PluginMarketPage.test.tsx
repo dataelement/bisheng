@@ -7,7 +7,7 @@ import { PluginMarketPage } from './PluginMarketPage';
 import * as market from '@/controllers/API/dshMarket';
 
 vi.mock('@/contexts/userContext', async () => ({ userContext: (await import('react')).createContext({ user: {} }) }));
-vi.mock('@/controllers/API/dshMarket', () => ({ getMarketContext: vi.fn(), listMarketPlugins: vi.fn(), listMarketImports: vi.fn(), previewMarketBundle: vi.fn(), importMarketBundle: vi.fn(), getMarketPlugin: vi.fn(), deleteMarketPlugin: vi.fn(), resumeMarketImport: vi.fn() }));
+vi.mock('@/controllers/API/dshMarket', () => ({ getMarketContext: vi.fn(), getMarketInstallPolicy: vi.fn(), setMarketInstallPolicy: vi.fn(), listMarketPlugins: vi.fn(), listMarketImports: vi.fn(), previewMarketBundle: vi.fn(), importMarketBundle: vi.fn(), getMarketPlugin: vi.fn(), deleteMarketPlugin: vi.fn(), resumeMarketImport: vi.fn() }));
 interface FixtureProps { children: ReactNode; user?: Record<string, unknown> }
 function Fixture({ children, user = { role: 'admin', user_id: 1, tenant_id: 2 } }: FixtureProps) {
   const defaults = useContext(userContext);
@@ -16,6 +16,7 @@ function Fixture({ children, user = { role: 'admin', user_id: 1, tenant_id: 2 } 
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(market.getMarketContext).mockResolvedValue({ tenant_id: 2 });
+  vi.mocked(market.getMarketInstallPolicy).mockResolvedValue({ tenant_id: 2, allow_third_party_plugins: false, allow_third_party_workbenches: false });
   vi.mocked(market.listMarketPlugins).mockResolvedValue({ data: [], total: 0 });
   vi.mocked(market.listMarketImports).mockResolvedValue([]);
   vi.mocked(market.previewMarketBundle).mockResolvedValue({ name: 'plugin', display_name: 'Example plugin', current_version: null, incoming_version: '1.0.0', allowed: true, reason: 'new', duplicate: false });

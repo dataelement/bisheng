@@ -1,0 +1,45 @@
+name: Tenant Context Quality
+
+on:
+  pull_request:
+    paths:
+      - 'src/backend/**'
+      - 'src/frontend/packages/api-client/**'
+      - '.github/workflows/tenant-context-quality.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  admission-contract:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/backend
+    env:
+      PYTHONPATH: .
+      config: ${{ runner.temp }}/tenant-context-ci.yaml
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.11'
+          enable-cache: true
+      - name: Sync dependencies
+        run: uv sync --frozen
+      - name: Prepare isolated test configuration
+        run: python -c 'import os, pathlib; pathlib.Path(os.environ["config"]).write_text("{}\n")'
+      - name: Verify actual routes, generated metadata and tenant boundaries
+        run: >-
+          uv run pytest -q
+          test/admin/test_request_scope_registry.py
+          test/admin/test_request_scope_admission.py
+          test/admin/test_request_scope_bootstrap.py
+          test/admin/test_gateway_scope.py
+          test/permission/test_management_target_boundary.py
+          test/department/test_management_directory_scope.py
+          test/tenant/test_context_preflight.py
+          test/tenant/test_durable_task_scope.py
+          test/workflow/test_variable_tenant_boundary.py

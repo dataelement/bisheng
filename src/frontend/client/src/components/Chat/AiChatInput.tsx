@@ -25,6 +25,7 @@ import { ChatResourceMenu } from "~/components/Chat/Input/ChatResourceMenu";
 
 import { ComposerEditor } from "./Input/ComposerEditor";
 import { useComposerReferences } from "./Input/useComposerReferences";
+import { labelForGroup, type AvailableToolGroup } from "./Input/AgentToolSelector";
 import { handleComposerResourceKeyDown } from "./Input/composerResourceKeyboard";
 import { AttachmentBar } from "~/components/Chat/Input/AttachmentBar";
 import DragDropOverlay from "~/components/Chat/Input/Files/DragDropOverlay";
@@ -514,6 +515,10 @@ const AiChatInput = memo(
         const { references, onReferencesChange } = useComposerReferences(
             mountedSkills, isLingsi ? [] : selectedOrgKbs, setDailySkills, onSelectedOrgKbsChange,
             mountedTools, handleVisibleToolsChange,
+            (tool) => labelForGroup(
+                (bsConfig?.tools as AvailableToolGroup[] | undefined)?.find(group => group.id === tool.id) ?? tool,
+                localize,
+            ),
         );
         const hasMountedKbs = ((!!(selectedOrgKbs && selectedOrgKbs.length > 0) && !isLingsi) || mountedSkills.length > 0 || mountedTools.length > 0);
         const hasInlineAttachments = ((chatFiles && chatFiles.length > 0) || uploadingFiles.length > 0) && !isLingsi;

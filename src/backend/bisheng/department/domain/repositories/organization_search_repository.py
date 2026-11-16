@@ -7,12 +7,14 @@ from bisheng.common.subject_search import escape_like
 from bisheng.core.database import get_async_db_session
 from bisheng.core.database.tenant_filter import build_tenant_filter_clause
 from bisheng.database.models.department import Department, UserDepartment
+from bisheng.department.domain.repositories.directory_repository import directory_condition
 from bisheng.user.domain.models.user import User
 
 
 def tenant_scoped(statement):
     # Grouped counts and membership joins hide Department from the outer ORM hook.
     clause = build_tenant_filter_clause(Department.tenant_id)
+    statement = statement.where(directory_condition())
     return statement.where(clause) if clause is not None else statement
 
 

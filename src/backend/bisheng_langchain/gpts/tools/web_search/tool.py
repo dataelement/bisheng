@@ -1,6 +1,6 @@
 import json
-from abc import abstractmethod, ABC
-from typing import Any, Dict, Type
+from abc import ABC, abstractmethod
+from typing import Any
 from uuid import uuid4
 
 import requests
@@ -27,7 +27,7 @@ class SearchTool(ABC):
         self.kwargs = kwargs
 
     @staticmethod
-    def _get_optional_str(kwargs: Dict[str, Any], *keys: str) -> str | None:
+    def _get_optional_str(kwargs: dict[str, Any], *keys: str) -> str | None:
         """Return the first non-empty string value from the provided keys."""
         for key in keys:
             value = kwargs.get(key)
@@ -40,10 +40,10 @@ class SearchTool(ABC):
 
     def _requests(self, url: str, method: str, **kwargs):
         """Base requests method to handle GET and POST requests."""
-        kwargs.setdefault('timeout', self.request_timeout)
-        if method == 'GET':
+        kwargs.setdefault("timeout", self.request_timeout)
+        if method == "GET":
             response = requests.get(url, **kwargs)
-        elif method == 'POST':
+        elif method == "POST":
             response = requests.post(url, **kwargs)
         else:
             raise ValueError("Unsupported HTTP method. Use 'GET' or 'POST'.")
@@ -81,18 +81,18 @@ class SearchTool(ABC):
         site_icon: Any = None,
         date_published: Any = None,
         item_id: Any = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Normalize provider-specific search result fields into one protocol."""
-        normalized_url = str(url or '').strip()
-        normalized_source = str(source or '').strip() or cls.get_host_from_url(normalized_url) or ''
+        normalized_url = str(url or "").strip()
+        normalized_source = str(source or "").strip() or cls.get_host_from_url(normalized_url) or ""
         return {
-            'id': str(item_id or uuid4().hex[:8]),
-            'title': str(title or '').strip() or None,
-            'snippet': str(snippet or '').strip() or None,
-            'url': normalized_url,
-            'source': normalized_source or None,
-            'siteIcon': str(site_icon or '').strip() or None,
-            'datePublished': str(date_published or '').strip() or None,
+            "id": str(item_id or uuid4().hex[:8]),
+            "title": str(title or "").strip() or None,
+            "snippet": str(snippet or "").strip() or None,
+            "url": normalized_url,
+            "source": normalized_source or None,
+            "siteIcon": str(site_icon or "").strip() or None,
+            "datePublished": str(date_published or "").strip() or None,
         }
 
     @classmethod
@@ -106,14 +106,15 @@ class SearchTool(ABC):
     def init_search_tool(cls, name: str, *args, **kwargs) -> "SearchTool":
         """Initialize the search tool with the given name and arguments."""
         tool_class: dict = {
-            'bing': BingSearch,
-            'bocha': BoChaSearch,
-            'jina': JinaDeepSearch,
-            'serp': SerpSearch,
-            'tavily': TavilySearch,
-            'cloudsway': CloudswaySearch,
-            'searXNG': SearXNGSearch,
-            'deepseek': DeepSeekSearch,
+            "bing": BingSearch,
+            "bocha": BoChaSearch,
+            "jina": JinaDeepSearch,
+            "serp": SerpSearch,
+            "tavily": TavilySearch,
+            "cloudsway": CloudswaySearch,
+            "searXNG": SearXNGSearch,
+            "deepseek": DeepSeekSearch,
+            "custom": CustomSearch,
         }
         if name not in tool_class:
             raise ValueError(f"Tool {name} not found.")
@@ -121,11 +122,26 @@ class SearchTool(ABC):
         return c
 
 
+class CustomSearch(SearchTool):
+    """Custom search adapter with explicitly authorized outbound access."""
+
+    def _invoke(self, query: str, **kwargs):
+        from bisheng_langchain.gpts.tools.web_search.custom import build_request, execute_request, map_response
+
+        request = build_request(self.kwargs.get("operation"), query, self.kwargs.get("api_key"))
+        raw = execute_request(request)
+        _, results = map_response(
+            raw, self.kwargs.get("mapping"), self.normalize_result_item, self.kwargs.get("api_key")
+        )
+        return results
+
+
 class WebSearchTool(BaseTool):
     """web search tools."""
+
     name: str = "web_search"
     description: str = "使用 query 进行联网检索并返回结果。"
-    args_schema: Type[BaseModel] = SearchInput
+    args_schema: type[BaseModel] = SearchInput
     api_wrapper: SearchTool = Field(..., description="The search API wrapper to use for web search.")
 
     def _run(self, query: str, **kwargs) -> str:
@@ -136,56 +152,62 @@ class WebSearchTool(BaseTool):
 class BingSearch(SearchTool):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self.api_key = kwargs.get('api_key')
-        self.base_url = self._get_optional_str(kwargs, 'base_url')
+        self.api_key = kwargs.get("api_key")
+        self.base_url = self._get_optional_str(kwargs, "base_url")
 
     def _invoke(self, query: str, **kwargs) -> (str, list):
-        bingtool = BingSearchResults(api_wrapper=BingSearchAPIWrapper(bing_subscription_key=self.api_key,
-                                                                      bing_search_url=self.base_url),
-                                     num_results=10)
-        res = bingtool.invoke({'query': query})
+        bingtool = BingSearchResults(
+            api_wrapper=BingSearchAPIWrapper(bing_subscription_key=self.api_key, bing_search_url=self.base_url),
+            num_results=10,
+        )
+        res = bingtool.invoke({"query": query})
         if isinstance(res, str):
             res = eval(res)
         web_list = []
         for index, result in enumerate(res):
             # 处理搜索结果
-            web_list.append(self.normalize_result_item(
-                item_id=result.get('id') or result.get('link') or index,
-                title=result.get('title'),
-                url=result.get('link'),
-                snippet=result.get('snippet'),
-                site_icon=result.get('thumbnail'),
-                source=self.get_host_from_url(result.get('link')),
-            ))
+            web_list.append(
+                self.normalize_result_item(
+                    item_id=result.get("id") or result.get("link") or index,
+                    title=result.get("title"),
+                    url=result.get("link"),
+                    snippet=result.get("snippet"),
+                    site_icon=result.get("thumbnail"),
+                    source=self.get_host_from_url(result.get("link")),
+                )
+            )
         return web_list
 
 
 class BoChaSearch(SearchTool):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self.api_key = kwargs.get('api_key')
-        self.base_url = self._get_optional_str(kwargs, 'base_url') or 'https://api.bochaai.com/v1/web-search'
-        self.headers = {'Authorization': f'Bearer {self.api_key}'}
+        self.api_key = kwargs.get("api_key")
+        self.base_url = self._get_optional_str(kwargs, "base_url") or "https://api.bochaai.com/v1/web-search"
+        self.headers = {"Authorization": f"Bearer {self.api_key}"}
 
     def _invoke(self, query: str, **kwargs) -> (str, list):
         # Implement the search logic for BoCha here
         # For demonstration purposes, we'll just return a dummy response
-        result = self._requests(self.base_url, method='POST', json={'query': query, 'summary': True},
-                                headers=self.headers)
-        if result.get('code') != 200:
+        result = self._requests(
+            self.base_url, method="POST", json={"query": query, "summary": True}, headers=self.headers
+        )
+        if result.get("code") != 200:
             raise Exception(f"BoCha Error: {result}")
-        web_pages = result.get('data', {}).get('webPages', {}).get('value', [])
+        web_pages = result.get("data", {}).get("webPages", {}).get("value", [])
         web_list = []
         for index, item in enumerate(web_pages):
-            web_list.append(self.normalize_result_item(
-                item_id=item.get('id') or item.get('url') or index,
-                title=item.get('name'),
-                url=item.get('url'),
-                snippet=item.get('snippet'),
-                site_icon=item.get('siteIcon'),
-                source=item.get('siteName') or self.get_host_from_url(item.get('url')),
-                date_published=item.get('datePublished') or item.get('dateLastCrawled'),
-            ))
+            web_list.append(
+                self.normalize_result_item(
+                    item_id=item.get("id") or item.get("url") or index,
+                    title=item.get("name"),
+                    url=item.get("url"),
+                    snippet=item.get("snippet"),
+                    site_icon=item.get("siteIcon"),
+                    source=item.get("siteName") or self.get_host_from_url(item.get("url")),
+                    date_published=item.get("datePublished") or item.get("dateLastCrawled"),
+                )
+            )
         return web_list
 
 
@@ -195,151 +217,155 @@ class JinaDeepSearch(SearchTool):
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self.api_key = kwargs.get('api_key')
-        self.base_url = self._get_optional_str(kwargs, 'base_url') or 'https://deepsearch.jina.ai/v1/chat/completions'
-        self.headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}"
-        }
+        self.api_key = kwargs.get("api_key")
+        self.base_url = self._get_optional_str(kwargs, "base_url") or "https://deepsearch.jina.ai/v1/chat/completions"
+        self.headers = {"Content-Type": "application/json", "Authorization": f"Bearer {self.api_key}"}
 
     def _invoke(self, query: str, **kwargs) -> (str, list):
         req_data = {
             "model": "jina-deepsearch-v1",
             "messages": [
-                {
-                    "role": "user",
-                    "content": query
-                },
+                {"role": "user", "content": query},
             ],
             "stream": False,
             "reasoning_effort": "low",
             "max_attempts": 1,
-            "no_direct_answer": False
+            "no_direct_answer": False,
         }
-        result = self._requests(self.base_url, method='POST', json=req_data, headers=self.headers)
+        result = self._requests(self.base_url, method="POST", json=req_data, headers=self.headers)
 
-        choices = result.get('choices', [])
+        choices = result.get("choices", [])
         web_list = []
         for index, item in enumerate(choices):
-            item_message = item.get('message', {})
-            for one_web in item_message.get('annotations', []):
-                one_web_info = one_web.get('url_citation', {})
-                web_list.append(self.normalize_result_item(
-                    item_id=one_web.get('url') or index,
-                    title=one_web_info.get('title'),
-                    url=one_web.get('url'),
-                    snippet=one_web.get('exactQuote'),
-                    source=self.get_host_from_url(one_web.get('url')),
-                ))
+            item_message = item.get("message", {})
+            for one_web in item_message.get("annotations", []):
+                one_web_info = one_web.get("url_citation", {})
+                web_list.append(
+                    self.normalize_result_item(
+                        item_id=one_web.get("url") or index,
+                        title=one_web_info.get("title"),
+                        url=one_web.get("url"),
+                        snippet=one_web.get("exactQuote"),
+                        source=self.get_host_from_url(one_web.get("url")),
+                    )
+                )
         return web_list
 
 
 class SerpSearch(SearchTool):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self.api_key = kwargs.get('api_key')
-        self.engine = kwargs.get('engine')
-        self.base_url = self._get_optional_str(kwargs, 'base_url') or 'https://serpapi.com/search.json'
+        self.api_key = kwargs.get("api_key")
+        self.engine = kwargs.get("engine")
+        self.base_url = self._get_optional_str(kwargs, "base_url") or "https://serpapi.com/search.json"
 
     def _invoke(self, query: str, **kwargs) -> (str, list):
-        result = self._requests(self.base_url, method='GET', params={'q': query, 'api_key': self.api_key,
-                                                                     'engine': self.engine})
+        result = self._requests(
+            self.base_url, method="GET", params={"q": query, "api_key": self.api_key, "engine": self.engine}
+        )
 
-        answer_result = result.get('organic_results', [])
+        answer_result = result.get("organic_results", [])
         web_list = []
         for index, item in enumerate(answer_result):
-            web_list.append(self.normalize_result_item(
-                item_id=item.get('position') or item.get('link') or index,
-                title=item.get('title'),
-                url=item.get('link'),
-                snippet=item.get('snippet'),
-                site_icon=item.get('source_logo') or item.get('thumbnail'),
-                source=item.get('source') or self.get_host_from_url(item.get('link')),
-                date_published=item.get('date'),
-            ))
+            web_list.append(
+                self.normalize_result_item(
+                    item_id=item.get("position") or item.get("link") or index,
+                    title=item.get("title"),
+                    url=item.get("link"),
+                    snippet=item.get("snippet"),
+                    site_icon=item.get("source_logo") or item.get("thumbnail"),
+                    source=item.get("source") or self.get_host_from_url(item.get("link")),
+                    date_published=item.get("date"),
+                )
+            )
         return web_list
 
 
 class TavilySearch(SearchTool):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self.api_key = kwargs.get('api_key')
-        self.base_url = self._get_optional_str(kwargs, 'base_url') or 'https://api.tavily.com/search'
-        self.headers = {'Authorization': f'Bearer {self.api_key}'}
+        self.api_key = kwargs.get("api_key")
+        self.base_url = self._get_optional_str(kwargs, "base_url") or "https://api.tavily.com/search"
+        self.headers = {"Authorization": f"Bearer {self.api_key}"}
 
     def _invoke(self, query: str, **kwargs) -> (str, list):
-        result = self._requests(self.base_url, method='POST', json={'query': query}, headers=self.headers)
+        result = self._requests(self.base_url, method="POST", json={"query": query}, headers=self.headers)
 
-        answers = result.get('results', [])
+        answers = result.get("results", [])
 
         web_list = []
         for index, item in enumerate(answers):
-            web_list.append(self.normalize_result_item(
-                item_id=item.get('id') or item.get('url') or index,
-                title=item.get('title'),
-                url=item.get('url'),
-                snippet=item.get('content'),
-                site_icon=item.get('favicon'),
-                source=item.get('source') or self.get_host_from_url(item.get('url')),
-                date_published=item.get('published_date'),
-            ))
+            web_list.append(
+                self.normalize_result_item(
+                    item_id=item.get("id") or item.get("url") or index,
+                    title=item.get("title"),
+                    url=item.get("url"),
+                    snippet=item.get("content"),
+                    site_icon=item.get("favicon"),
+                    source=item.get("source") or self.get_host_from_url(item.get("url")),
+                    date_published=item.get("published_date"),
+                )
+            )
         return web_list
 
 
 class CloudswaySearch(SearchTool):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self.api_key = kwargs.get('api_key')
-        self.endpoint = kwargs.get('endpoint')
-        custom_base_url = self._get_optional_str(kwargs, 'base_url')
-        self.base_url = custom_base_url or f'https://searchapi.cloudsway.net/search/{self.endpoint}/smart'
-        self.headers = {'Authorization': f'Bearer {self.api_key}'}
+        self.api_key = kwargs.get("api_key")
+        self.endpoint = kwargs.get("endpoint")
+        custom_base_url = self._get_optional_str(kwargs, "base_url")
+        self.base_url = custom_base_url or f"https://searchapi.cloudsway.net/search/{self.endpoint}/smart"
+        self.headers = {"Authorization": f"Bearer {self.api_key}"}
 
     def _invoke(self, query: str, **kwargs) -> (str, list):
-        result = self._requests(self.base_url, method='GET', params={'q': query}, headers=self.headers)
+        result = self._requests(self.base_url, method="GET", params={"q": query}, headers=self.headers)
 
-        answers = result.get('webPages', {}).get('value', [])
+        answers = result.get("webPages", {}).get("value", [])
 
         # parse result
         web_list = []
         for index, item in enumerate(answers):
-            web_list.append(self.normalize_result_item(
-                item_id=item.get('id') or item.get('url') or index,
-                title=item.get('name'),
-                url=item.get('url'),
-                snippet=item.get('snippet'),
-                site_icon=item.get('thumbnailUrl'),
-                source=item.get('siteName') or self.get_host_from_url(item.get('url')),
-                date_published=item.get('datePublished') or item.get('dateLastCrawled'),
-            ))
+            web_list.append(
+                self.normalize_result_item(
+                    item_id=item.get("id") or item.get("url") or index,
+                    title=item.get("name"),
+                    url=item.get("url"),
+                    snippet=item.get("snippet"),
+                    site_icon=item.get("thumbnailUrl"),
+                    source=item.get("siteName") or self.get_host_from_url(item.get("url")),
+                    date_published=item.get("datePublished") or item.get("dateLastCrawled"),
+                )
+            )
         return web_list
 
 
 class SearXNGSearch(SearchTool):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        server_url = self._get_optional_str(kwargs, 'server_url', 'base_url')
+        server_url = self._get_optional_str(kwargs, "server_url", "base_url")
         if not server_url:
             raise ValueError("SearXNG search requires 'server_url' or 'base_url'.")
-        self.base_url = server_url.rstrip('/')
+        self.base_url = server_url.rstrip("/")
 
     def _invoke(self, query: str, **kwargs) -> (str, list):
-        result = self._requests(f'{self.base_url}/search', method='GET',
-                                params={'q': query, 'format': 'json'})
+        result = self._requests(f"{self.base_url}/search", method="GET", params={"q": query, "format": "json"})
 
-        answers = result.get('results', [])
+        answers = result.get("results", [])
 
         web_list = []
         for index, item in enumerate(answers):
-            web_list.append(self.normalize_result_item(
-                item_id=item.get('id') or item.get('url') or index,
-                title=item.get('title'),
-                url=item.get('url'),
-                snippet=item.get('content'),
-                site_icon=item.get('thumbnail'),
-                source=item.get('engine') or self.get_host_from_url(item.get('url')),
-                date_published=item.get('publishedDate'),
-            ))
+            web_list.append(
+                self.normalize_result_item(
+                    item_id=item.get("id") or item.get("url") or index,
+                    title=item.get("title"),
+                    url=item.get("url"),
+                    snippet=item.get("content"),
+                    site_icon=item.get("thumbnail"),
+                    source=item.get("engine") or self.get_host_from_url(item.get("url")),
+                    date_published=item.get("publishedDate"),
+                )
+            )
         return web_list
 
 
@@ -348,27 +374,28 @@ class DeepSeekSearch(SearchTool):
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self.api_key = kwargs.get('api_key')
-        self.base_url = self._get_optional_str(kwargs, 'base_url') or 'https://api.deepseek.com/v1/tools/search'
-        self.headers = {'Authorization': f'Bearer {self.api_key}'}
+        self.api_key = kwargs.get("api_key")
+        self.base_url = self._get_optional_str(kwargs, "base_url") or "https://api.deepseek.com/v1/tools/search"
+        self.headers = {"Authorization": f"Bearer {self.api_key}"}
 
     def _invoke(self, query: str, **kwargs) -> (str, list):
-        result = self._requests(self.base_url, method='POST', json={'query': query, 'count': 10},
-                                headers=self.headers)
+        result = self._requests(self.base_url, method="POST", json={"query": query, "count": 10}, headers=self.headers)
 
-        answers = result.get('results', [])
+        answers = result.get("results", [])
 
         web_list = []
         for index, item in enumerate(answers):
-            web_list.append(self.normalize_result_item(
-                item_id=item.get('url') or index,
-                title=item.get('title'),
-                url=item.get('url'),
-                # The long `summary` opens with page headings and metadata, which fills
-                # the citation card; the short `snippet` is query-focused body text.
-                snippet=item.get('snippet') or item.get('summary'),
-                site_icon=item.get('site_icon'),
-                source=item.get('site_name') or self.get_host_from_url(item.get('url')),
-                date_published=item.get('date'),
-            ))
+            web_list.append(
+                self.normalize_result_item(
+                    item_id=item.get("url") or index,
+                    title=item.get("title"),
+                    url=item.get("url"),
+                    # The long `summary` opens with page headings and metadata, which fills
+                    # the citation card; the short `snippet` is query-focused body text.
+                    snippet=item.get("snippet") or item.get("summary"),
+                    site_icon=item.get("site_icon"),
+                    source=item.get("site_name") or self.get_host_from_url(item.get("url")),
+                    date_published=item.get("date"),
+                )
+            )
         return web_list

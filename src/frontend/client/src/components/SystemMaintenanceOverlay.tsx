@@ -6,15 +6,17 @@ import { useLocalize } from "~/hooks";
 
 /**
  * Window event that surfaces the full-screen maintenance overlay. The axios
- * response interceptor (`~/api/request.ts`) dispatches it on any gateway/backend
- * HTTP 500 (service exception); keep the two string literals in sync.
+ * response interceptor (`~/api/request.ts`) dispatches it only when a 500 is
+ * followed by a failing service probe — a 500 from a single endpoint stays that
+ * caller's error. Keep the two string literals in sync.
  */
 export const SERVICE_MAINTENANCE_EVENT = "bs:service-maintenance";
 
 /**
  * Full-screen "system under maintenance" overlay shown when the backend service
- * is down (gateway returns HTTP 500). Mounted once at the app root; it stays
- * hidden until a 500 fires the event, then covers the app until a reload.
+ * is down (a request fails with 500 and the service probe fails too). Mounted
+ * once at the app root; it stays hidden until the event fires, then covers the
+ * app until a reload.
  */
 export function SystemMaintenanceOverlay() {
     const localize = useLocalize();

@@ -121,8 +121,22 @@ class SpaceCopyOwner:
             raise KnowledgeOperationPlanChangedError()
         return tuple(pairs)
 
+    @asynccontextmanager
+    async def _logical_target(self, source_id, target_id):
+        async with self.sessions() as session:
+            context = authority_context()
+            # Match acceptance's source-before-target order. The lock is scoped
+            # to one projection, not a potentially large whole-space copy.
+            await self.rows.aroot(session, source_id, lock=True)
+            root = await self.rows.aroot(session, target_id, lock=True)
+            if root.state not in {0, 1, 2} or root.model_transition is not None:
+                raise KnowledgeOperationPlanChangedError()
+            yield session, root
+            clean(session, context)
+            await session.commit()
+
     async def aensure_logical(self, target_id, job_id, *, identity=None, entry_kind=None):
-        root, payload, mapping, reference = await self._logical(target_id, job_id)
+        _, payload, mapping, reference = await self._logical(target_id, job_id)
         scope = SpaceCopyScope(**payload["scope"])
         async with admission.identity(
             reference, current=identity, entry_kind=entry_kind, required_action="upload_file"
@@ -133,31 +147,34 @@ class SpaceCopyOwner:
             pairs = self._pairs(payload, mapping, target_id, actor)
             # Children first, root last. Each original copy key is durable.
             for source, after, mode, operator in (*pairs[1:], pairs[0]):
-                async with admission.identity(
-                    reference, current=identity, entry_kind=entry_kind, required_action="upload_file"
-                ) as (current, _):
-                    await self.app.authorize(current, scope.source)
-                    await self.app.projection.aexecute_or_resume(
-                        source=source, target=after, actor=operator, owner_user_id=scope.source["user_id"], mode=mode
-                    )
+                # API, worker and retries share the same SQL exclusion. Never
+                # reconcile a live STAGING operation from another executor.
+                async with self._logical_target(scope.source["id"], target_id):
+                    async with admission.identity(
+                        reference, current=identity, entry_kind=entry_kind, required_action="upload_file"
+                    ) as (current, _):
+                        await self.app.authorize(current, scope.source)
+                        await self.app.projection.aexecute_or_resume(
+                            source=source,
+                            target=after,
+                            actor=operator,
+                            owner_user_id=scope.source["user_id"],
+                            mode=mode,
+                        )
             await self.app.authorize(actual, scope.source)
-            if root.state == 0:
-                await self._initialize(root, reference["actor_user_id"])
-            assert_authority(authority)
-            async with self.sessions() as session:
-                context = authority_context()
+            async with self._logical_target(scope.source["id"], target_id) as (session, actual_root):
                 current = await self.rows.aload_scope(session, scope.source["id"], lock=True)
                 if current.execution_digest != scope.execution_digest:
                     raise KnowledgeOperationPlanChangedError()
-                actual_root = await self.rows.aroot(session, target_id, lock=True)
                 await self.app.projection.arequire_completed(session, pairs=pairs)
-                if actual_root.state not in {0, 1, 2} or actual_root.model_transition is not None:
-                    raise KnowledgeOperationPlanChangedError()
+                # A waiter must use the state read after acquiring the lock,
+                # rather than the pre-lock snapshot returned by _logical.
+                if actual_root.state == 0:
+                    await self._initialize(actual_root.model_copy(deep=True), reference["actor_user_id"])
+                assert_authority(authority)
                 if actual_root.state == 0:
                     actual_root.state = 2 if job_id else 1
                     await session.flush()
-                clean(session, context)
-                await session.commit()
 
     @staticmethod
     async def _initialize(root, actor_id):

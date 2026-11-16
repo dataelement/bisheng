@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from bisheng.common.errcode.permission import PermissionInvalidResourceError, PermissionSubjectUnavailableError
 from bisheng.database.models.department import (
-    DepartmentDao,
     UserDepartmentDao,
 )
 from bisheng.database.models.group import GroupDao
@@ -60,7 +59,7 @@ class TenantPermissionSubjectDirectory:
                 name = person["name"]
             else:
                 row = names.get((kind, ident))
-                if row is None or row.tenant_id != tenant_id:
+                if row is None or (row.business_tenant_id if kind == "department" else row.tenant_id) != tenant_id:
                     continue
                 name = row.name if kind == "department" else row.group_name
             relation, children = source.userset_relation, source.include_children
@@ -234,15 +233,15 @@ class TenantPermissionSubjectDirectory:
             return frozenset({actor.fga_subject})
         projected = {actor.fga_subject, f"tenant:{actor.current_tenant_id}#member"}
         memberships = await UserDepartmentDao.aget_user_departments(actor.user_id)
-        departments = await DepartmentDao.aget_by_ids([row.department_id for row in memberships])
-        for department in departments:
-            if int(department.tenant_id or 0) != actor.current_tenant_id or department.status != "active":
+        from bisheng.department.application.business_scope import membership_policy_facts
+
+        for membership in memberships:
+            facts = await membership_policy_facts(membership.department_id, actor.current_tenant_id)
+            if facts is None:
                 continue
-            projected.add(f"department:{department.id}#member")
-            path_ids = [int(value) for value in (department.path or "").split("/") if value.isdigit()]
-            for ancestor_id in (*path_ids, int(department.id or 0)):
-                if ancestor_id > 0:
-                    projected.add(f"department:{ancestor_id}#subtree_member")
+            projected.add(f"department:{facts.department_id}#member")
+            for ancestor_id in facts.ancestor_ids:
+                projected.add(f"department:{ancestor_id}#subtree_member")
 
         member_groups = await UserGroupDao.aget_user_group(actor.user_id)
         admin_groups = await UserGroupDao.aget_user_admin_group(actor.user_id)
@@ -326,7 +325,14 @@ class TenantPermissionSubjectDirectory:
             if subject_type == "service_account" and subject_id.isdigit()
         ]
         users = await UserDao.aget_user_by_ids(user_ids) if user_ids else []
-        departments = await DepartmentDao.aget_by_ids(department_ids) if department_ids else []
+        from bisheng.core.context.tenant import get_current_tenant_id
+        from bisheng.department.application.directory import department_display_records
+
+        departments = (
+            list((await department_display_records(get_current_tenant_id(), department_ids)).values())
+            if department_ids
+            else []
+        )
         groups = await GroupDao.aget_group_by_ids(group_ids) if group_ids else []
         service_accounts = await ServiceAccountRepository.get_by_ids(service_account_ids)
         return {

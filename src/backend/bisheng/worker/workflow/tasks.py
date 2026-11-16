@@ -8,6 +8,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.telemetry.event_data_schema import ApplicationProcessEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
+from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import FlowDao
 from bisheng.open_api.domain.services.execution_context import restore_execution_context
@@ -17,6 +18,7 @@ from bisheng.public_endpoints.domain.services.guest_policy import should_skip_pu
 from bisheng.utils.exceptions import IgnoreException
 from bisheng.worker._asyncio_utils import run_async_task
 from bisheng.worker.main import bisheng_celery
+from bisheng.worker.tenant_context import PermissionTaskTenantContextError, durable_workload_scope
 from bisheng.worker.utils.stateful_worker import StatefulWorker
 from bisheng.worker.workflow.redis_callback import RedisCallback
 from bisheng.workflow.common.workflow import WorkflowStatus
@@ -60,6 +62,11 @@ def _execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: i
     # node tenant threading and RedisCallback's sync workbench reads.
     workflow_info = FlowDao.get_flow_by_id(workflow_id)
     flow_tenant_id = getattr(workflow_info, "tenant_id", None)
+    from bisheng.core.context.tenant import get_current_tenant_id
+    from bisheng.worker.tenant_context import PermissionTaskTenantContextError
+
+    if flow_tenant_id is None or flow_tenant_id != get_current_tenant_id():
+        raise PermissionTaskTenantContextError("workflow tenant disagrees with persistent target")
     # F041: Flow creator (config author) — nodes filter knowledge-space retrieval
     # by this identity when the permission toggle is OFF (distinct from `user_id`,
     # the runtime user who triggered the run).
@@ -89,7 +96,7 @@ def _execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: i
             flow_user_id=flow_user_id,
         )
         redis_callback.workflow = workflow
-        status, reason = workflow.run()
+        _status, _reason = workflow.run()
         _judge_workflow_status(redis_callback, workflow)
     except IgnoreException as e:
         logger.warning(f"execute_workflow ignore error: {e}")
@@ -158,10 +165,13 @@ def execute_workflow(
     trace_id_var.set(unique_id)
     start_time = time.time()
     try:
-        with restore_execution_context(execution_snapshot) as snapshot:
-            # Guest runs skip `use` only when session.flow_id matches this workflow.
-            _authorize_workflow_use(snapshot, user_id, workflow_id, chat_id)
-            _execute_workflow(unique_id, workflow_id, chat_id, user_id, source)
+        with durable_workload_scope("workflow", workflow_id) as expected_tenant:
+            with restore_execution_context(execution_snapshot) as snapshot:
+                if get_current_tenant_id() != expected_tenant:
+                    raise PermissionTaskTenantContextError("execution snapshot disagrees with workflow target")
+                # Guest runs skip `use` only when session.flow_id matches this workflow.
+                _authorize_workflow_use(snapshot, user_id, workflow_id, chat_id)
+                _execute_workflow(unique_id, workflow_id, chat_id, user_id, source)
     finally:
         _log_workflow_telemetry(workflow_id, chat_id, user_id, start_time)
 
@@ -173,13 +183,15 @@ def _continue_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: 
         workflow = _global_workflow.get(redis_callback.unique_id, None)
         if not workflow:
             raise Exception("workflow object not found maybe data is expired")
+        if workflow.tenant_id != get_current_tenant_id() or workflow.workflow_id != workflow_id:
+            raise PermissionTaskTenantContextError("cached workflow target mismatch")
         if workflow.status() not in [WorkflowStatus.INPUT.value, WorkflowStatus.INPUT_OVER.value]:
             raise Exception(f"workflow status is {workflow.status()} not INPUT")
         user_input = redis_callback.get_user_input()
         if not user_input:
             raise IgnoreException("workflow continue not found user input")
         redis_callback.set_workflow_status(WorkflowStatus.RUNNING.value)
-        status, reason = workflow.run(user_input)
+        _status, _reason = workflow.run(user_input)
         _judge_workflow_status(redis_callback, workflow)
     except IgnoreException as e:
         logger.warning(f"continue_workflow ignore error: {e}")
@@ -204,9 +216,12 @@ def continue_workflow(
     trace_id_var.set(unique_id)
     start_time = time.time()
     try:
-        with restore_execution_context(execution_snapshot) as snapshot:
-            _authorize_workflow_use(snapshot, user_id, workflow_id, chat_id)
-            _continue_workflow(unique_id, workflow_id, chat_id, user_id, source)
+        with durable_workload_scope("workflow", workflow_id) as expected_tenant:
+            with restore_execution_context(execution_snapshot) as snapshot:
+                if get_current_tenant_id() != expected_tenant:
+                    raise PermissionTaskTenantContextError("execution snapshot disagrees with workflow target")
+                _authorize_workflow_use(snapshot, user_id, workflow_id, chat_id)
+                _continue_workflow(unique_id, workflow_id, chat_id, user_id, source)
     finally:
         _log_workflow_telemetry(workflow_id, chat_id, user_id, start_time)
 
@@ -216,20 +231,23 @@ def stop_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: int):
     """Stopworkflow"""
     trace_id_var.set(unique_id)
 
-    redis_callback = RedisCallback(unique_id, workflow_id, chat_id, user_id)
-    if unique_id not in _global_workflow:
-        redis_callback.set_workflow_status(WorkflowStatus.FAILED.value, "workflow stop by user")
-        logger.warning("stop_workflow called but workflow not found in global cache")
-        return
-    workflow = _global_workflow[unique_id]
-    workflow.stop()
+    with durable_workload_scope("workflow", workflow_id):
+        redis_callback = RedisCallback(unique_id, workflow_id, chat_id, user_id)
+        if unique_id not in _global_workflow:
+            redis_callback.set_workflow_status(WorkflowStatus.FAILED.value, "workflow stop by user")
+            logger.warning("stop_workflow called but workflow not found in global cache")
+            return
+        workflow = _global_workflow[unique_id]
+        if workflow.tenant_id != get_current_tenant_id() or workflow.workflow_id != workflow_id:
+            raise PermissionTaskTenantContextError("cached workflow target mismatch")
+        workflow.stop()
 
-    while workflow.status() == WorkflowStatus.RUNNING.value:
-        time.sleep(0.3)
-    status, reason = workflow.status(), workflow.reason()
-    if status != WorkflowStatus.FAILED.value:
-        status = WorkflowStatus.FAILED.value
-        reason = "workflow stop by user"
-        redis_callback.set_workflow_status(status, reason)
-    _clear_workflow_obj(unique_id)
-    logger.info(f"workflow stop by user {user_id}")
+        while workflow.status() == WorkflowStatus.RUNNING.value:
+            time.sleep(0.3)
+        status, reason = workflow.status(), workflow.reason()
+        if status != WorkflowStatus.FAILED.value:
+            status = WorkflowStatus.FAILED.value
+            reason = "workflow stop by user"
+            redis_callback.set_workflow_status(status, reason)
+        _clear_workflow_obj(unique_id)
+        logger.info(f"workflow stop by user {user_id}")
