@@ -986,12 +986,14 @@ class SqlPermissionControlState:
         *,
         expected_release_id: int | None = None,
     ) -> PermissionCatalogRelease:
+        from bisheng.permission.domain.repositories.catalog_repository import execute_publication_read
+
         rows = list(
             (
-                await session.execute(
-                    select(PermissionCatalogRelease)
-                    .where(PermissionCatalogRelease.status == "CURRENT")
-                    .with_for_update()
+                await execute_publication_read(
+                    session,
+                    select(PermissionCatalogRelease).where(PermissionCatalogRelease.status == "CURRENT"),
+                    PermissionCatalogRelease.__table__,
                 )
             ).scalars()
         )

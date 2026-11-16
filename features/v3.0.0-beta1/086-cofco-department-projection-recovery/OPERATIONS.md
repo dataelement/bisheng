@@ -2,7 +2,9 @@
 
 这是cofco-1118同版服务源码内的长期工具，不是旧F078临时替换包。本次修复已按用户要求从cofco-1111撤销并迁至cofco-1118；部署时使用1118同版API、Worker、Beat和脚本。不新增表/列/索引，不用替换pyproject，不读取旧v5计划作为执行授权。
 
-测试交接见[QA-IMPACT.md](QA-IMPACT.md)，包含正常流程影响范围及24项重点回归；本地结果与待执行部署验收见[validation.md](validation.md)。
+测试交接见[QA-IMPACT.md](QA-IMPACT.md)，包含正常流程影响范围及28项重点回归；本地结果与待执行部署验收见[validation.md](validation.md)。
+
+本轮修正使用可并发的权限配置读屏障，普通资源授撤权与部门投影共用此校验；模型/Catalog发布仍须等待正在执行的投影。成员关系变更仍使用整个部门的PROJECTING/FAILED_CLOSED门禁，同部门其他普通成员及相关后代的上下文可能暂时拒绝，未改为单用户隔离。请按Q25–Q28验收，不以“共享锁”推断业务零影响。
 
 ## 部署与自动恢复
 

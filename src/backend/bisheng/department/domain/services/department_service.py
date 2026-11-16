@@ -846,8 +846,8 @@ class DepartmentTopologyProjectionService:
                 if department.id is None:
                     raise PermissionInvalidResourceError(msg="Synced department has no durable ID")
                 previous_path = department.path
-                department.path = cls._synced_path(parent_path, int(department.id))
-                if previous_path != department.path:
+                proposed_path = cls._synced_path(parent_path, int(department.id))
+                if previous_path != proposed_path or old_parent_id != normalized_parent_id:
                     await cls._update_synced_subtree_paths(session, department)
                 session.add(department)
                 await session.flush()
@@ -916,38 +916,9 @@ class DepartmentTopologyProjectionService:
 
     @staticmethod
     async def _update_synced_subtree_paths(session, department):
-        from bisheng.core.context.tenant import bypass_tenant_filter
+        from bisheng.department.domain.repositories.synced_tree_repository import SyncedDepartmentTreeRepository
 
-        visited = {int(department.id)}
-        frontier = {int(department.id): department.path}
-        for _ in range(100):
-            if not frontier:
-                return
-            following = {}
-            ids = list(frontier)
-            for start in range(0, len(ids), 500):
-                with bypass_tenant_filter():
-                    rows = (
-                        await session.exec(
-                            select(Department)
-                            .where(
-                                Department.parent_id.in_(ids[start : start + 500]),
-                            )
-                            .with_for_update()
-                        )
-                    ).all()
-                for child in rows:
-                    identity = int(child.id)
-                    if identity in visited or len(visited) >= 50000:
-                        raise PermissionInvalidResourceError(msg="Department subtree cycle or limit")
-                    if child.tenant_id != department.tenant_id or child.is_tenant_root or child.mounted_tenant_id:
-                        raise PermissionInvalidResourceError(msg="Department subtree crosses a tenant mount")
-                    visited.add(identity)
-                    child.path = f"{frontier[int(child.parent_id)]}{identity}/"
-                    session.add(child)
-                    following[identity] = child.path
-            frontier = following
-        raise PermissionInvalidResourceError(msg="Department subtree depth exceeds 100")
+        await SyncedDepartmentTreeRepository().rewrite_paths(session, department)
 
     @classmethod
     async def aarchive_synced_department(

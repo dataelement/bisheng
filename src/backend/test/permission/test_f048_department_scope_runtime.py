@@ -412,6 +412,9 @@ async def test_synced_department_resurrection_restores_same_parent_edge(
     async with session_factory() as session:
         async with session.begin():
             session.add(
+                Department(id=1, tenant_id=1, dept_id="BS@restore-root", name="Root", path="/1/", source="local")
+            )
+            session.add(
                 Department(
                     id=11,
                     tenant_id=1,

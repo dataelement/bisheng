@@ -7,7 +7,7 @@ from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from contextvars import ContextVar
 from typing import Any
 
-from sqlalchemy import and_, func, or_, update
+from sqlalchemy import and_, func, or_, text, update
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -22,6 +22,25 @@ from bisheng.permission.domain.repositories.interfaces import (
 )
 
 SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
+
+
+async def execute_publication_read(session, statement, table):
+    """Shared SQL publication barrier; only the small release tables qualify.
+
+    The pinned DM compiler ignores ``read=True``. Its shared table lock keeps
+    readers concurrent and blocks release DML for the caller's transaction.
+    """
+    from bisheng.permission.domain.models import AuthorizationModelRelease
+
+    if table not in (PermissionCatalogRelease.__table__, AuthorizationModelRelease.__table__):
+        raise ValueError("Publication barrier only supports release tables")
+    dialect = session.get_bind().dialect
+    if dialect.name == "dm":
+        name = dialect.identifier_preparer.format_table(table)
+        await session.execute(text(f"LOCK TABLE {name} IN SHARE MODE"))
+    else:
+        statement = statement.with_for_update(read=True)
+    return await session.execute(statement.execution_options(populate_existing=True))
 
 
 class _RepositorySessionMixin:
@@ -81,25 +100,37 @@ class CatalogRepository(
     PermissionCatalogRepositoryPort,
 ):
     async def aget_recovery_environment(self, *, lock: bool = False) -> dict:
-        """Read or lock the exact global release used by an operational recovery."""
+        """Read the release behind a concurrent-reader publication barrier.
+
+        MySQL supports shared locking reads. The pinned DM compiler ignores
+        ``read=True`` and emits FOR UPDATE, so DM takes shared *table* locks on
+        the two small release tables instead. Both prevent publication writes
+        until the borrowed Owner transaction ends, without excluding readers.
+        """
         from bisheng.common.errcode.permission import PermissionPublishNotReadyError
         from bisheng.permission.domain.models import AuthorizationModelRelease
 
         with bypass_tenant_filter():
             async with self._session() as session:
                 statement = select(PermissionCatalogRelease).where(PermissionCatalogRelease.status == "CURRENT")
-                if lock:
-                    statement = statement.with_for_update(nowait=True).execution_options(populate_existing=True)
-                rows = list((await session.execute(statement)).scalars().all())
+                result = (
+                    await execute_publication_read(session, statement, PermissionCatalogRelease.__table__)
+                    if lock
+                    else await session.execute(statement)
+                )
+                rows = list(result.scalars().all())
                 if len(rows) != 1 or rows[0].write_fenced:
                     raise PermissionPublishNotReadyError(msg="Recovery Catalog is missing, ambiguous or fenced")
                 catalog = rows[0]
                 statement = select(AuthorizationModelRelease).where(
                     AuthorizationModelRelease.id == catalog.required_authorization_model_release_id,
                 )
-                if lock:
-                    statement = statement.with_for_update(nowait=True).execution_options(populate_existing=True)
-                model = (await session.execute(statement)).scalars().first()
+                result = (
+                    await execute_publication_read(session, statement, AuthorizationModelRelease.__table__)
+                    if lock
+                    else await session.execute(statement)
+                )
+                model = result.scalars().first()
                 if model is None or model.status != "ACTIVE":
                     raise PermissionPublishNotReadyError(msg="Recovery authorization release is not ACTIVE")
                 return {

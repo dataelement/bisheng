@@ -4,6 +4,8 @@
 
 Spec R1及Design R1已于2026-11-16确认。交付目标按用户要求调整为cofco-1118，原开发基线为cofco-1111 / 00720a9c；验收范围不变，基线53项通过不代表本表执行。真实MySQL/DM/FGA/Redis及用户鉴权需隔离环境验证。
 
+R3修正增加正常流程专项，详见QA-IMPACT.md Q25–Q28：跨部门/跨资源读屏障并发及模型发布排斥、合法挂载路径/非法回滚、旧父级快照/重复批次、既有部门级门禁范围。自动化证据为test_f086_catalog_read_barrier、test_f086_catalog_read_barrier_mysql、test_f086_sync_normal_paths、test_f086_member_gate_scope；真实环境QA仍待执行，不能把单用户门禁视作已实现。
+
 ## 环境、账号与测试数据
 
 | 代号 | 角色或数据 | 准备方法 | 确认方式或待确认项 |
