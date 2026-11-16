@@ -53,6 +53,8 @@ export function QueryFilter({ isDark, component, isPreviewMode = false }: QueryF
             if (dimensionRequestVersions.current[fieldId] === requestVersion) {
                 setDimensionOptions(current => ({ ...current, [fieldId]: nextOptions }))
             }
+        } catch {
+            // Leave the dropdown empty. A bad field must not reject the dashboard page.
         } finally {
             if (dimensionRequestVersions.current[fieldId] === requestVersion) {
                 setDimensionLoading(current => ({ ...current, [fieldId]: false }))

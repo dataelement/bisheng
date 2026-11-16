@@ -9,7 +9,11 @@ from sqlalchemy import Row, RowMapping
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
-from bisheng.common.errcode.telemetry import DashboardMaxError, DashBoardShareAuthError
+from bisheng.common.errcode.telemetry import (
+    DashboardMaxError,
+    DashBoardShareAuthError,
+    QueryDimensionNotFoundError,
+)
 from bisheng.core.database import get_async_db_session
 from bisheng.core.search.elasticsearch.manager import get_es_connection
 from bisheng.database.models.group_resource import GroupResource, GroupResourceDao, ResourceTypeEnum
@@ -659,8 +663,11 @@ class DashboardService(BaseModel):
             if dimension.get("field")
         }
         allowed_fields = set(dimension_by_field)
+        # An unknown dimension is a bad filter config, not an authorization failure.
+        # 403 here makes the platform GET interceptor replace the whole dashboard
+        # with the no-access page.
         if field not in allowed_fields or (label_field and label_field not in allowed_fields):
-            raise UnAuthorizedError()
+            raise QueryDimensionNotFoundError()
         org_level = _org_level_for_field(field)
         if org_level is not None:
             return await self._get_org_unit_field_enums(
