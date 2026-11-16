@@ -69,7 +69,7 @@ interface MemberTableProps {
   onRequestLocateMember?: (payload: {
     primaryDeptDeptId: string
     userId: number
-  }) => void
+  }) => void | Promise<void>
 }
 
 export function MemberTable({
@@ -104,6 +104,9 @@ export function MemberTable({
   >([])
   const pageRef = useRef(page)
   pageRef.current = page
+  const memberRequestRef = useRef(0)
+  const locatingMemberRef = useRef(false)
+  const [locatedMember, setLocatedMember] = useState<{ deptId: string; userId: number } | null>(null)
 
   useEffect(() => {
     setMemberScope("dept")
@@ -183,6 +186,7 @@ export function MemberTable({
 
   const loadMembers = useCallback(() => {
     if (memberScope !== "dept") return
+    const requestId = ++memberRequestRef.current
     const params: Record<string, string | number> = {
       page: pageRef.current,
       limit: 20,
@@ -191,21 +195,29 @@ export function MemberTable({
     if (isPrimaryFilter !== "all") {
       params.is_primary = parseInt(isPrimaryFilter, 10)
     }
+    if (locatedMember?.deptId === deptId) {
+      params.focus_user_id = locatedMember.userId
+    }
     captureAndAlertRequestErrorHoc(
       getDepartmentMembersApi(deptId, params)
     ).then((res) => {
+      if (requestId !== memberRequestRef.current) return
       if (res) {
         setMembers(res.data)
         setTotal(res.total)
       }
     })
-  }, [deptId, keyword, isPrimaryFilter, memberScope])
+  }, [deptId, keyword, isPrimaryFilter, memberScope, locatedMember])
 
   useEffect(() => {
     if (memberScope !== "dept") return
     setPage(1)
     pageRef.current = 1
     loadMembers()
+    return () => {
+      // Ignore an older department/filter response after navigation or unmount.
+      memberRequestRef.current += 1
+    }
   }, [deptId, keyword, isPrimaryFilter, memberScope, loadMembers])
 
   useEffect(() => {
@@ -372,7 +384,10 @@ export function MemberTable({
           placeholder={t("bs:department.searchMember")}
           className="w-[200px]"
           value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
+          onChange={(e) => {
+            setLocatedMember(null)
+            setKeyword(e.target.value)
+          }}
         />
         {memberScope === "dept" && (
           <Select value={isPrimaryFilter} onValueChange={setIsPrimaryFilter}>
@@ -478,12 +493,25 @@ export function MemberTable({
                         onRequestLocateMember && "cursor-pointer hover:bg-accent/60",
                         r.enabled === false && "opacity-90"
                       )}
-                      onClick={() => {
-                        setMemberScope("dept")
-                        onRequestLocateMember?.({
-                          primaryDeptDeptId: r.primary_department_dept_id,
-                          userId: r.user_id,
-                        })
+                      onClick={async () => {
+                        if (locatingMemberRef.current) return
+                        locatingMemberRef.current = true
+                        try {
+                          setIsPrimaryFilter("all")
+                          setPage(1)
+                          pageRef.current = 1
+                          setMembers([])
+                          setTotal(0)
+                          setLocatedMember({ deptId: r.primary_department_dept_id, userId: r.user_id })
+                          // Keep the keyword; wait for location before switching scope.
+                          await onRequestLocateMember?.({
+                            primaryDeptDeptId: r.primary_department_dept_id,
+                            userId: r.user_id,
+                          })
+                          setMemberScope("dept")
+                        } finally {
+                          locatingMemberRef.current = false
+                        }
                       }}
                     >
                       <TableCell className="font-medium">

@@ -140,11 +140,12 @@ export function PlusMenu({
                             {/* ChevronRight is rendered by DropdownMenuSubTrigger itself */}
                         </DropdownMenuSubTrigger>
                         {/* Layout mirrors the daily-mode knowledge panel shell (ChatKnowledge `variant === 'knowledge'`).
-                            `align="center"` centers the panel vertically on the trigger row. */}
+                            `align="center"` centers the panel vertically on the trigger row.
+                            Match the skill tooltip's zoom-compensated viewport cap. */}
                         <DropdownMenuSubContent
                             align="center"
                             collisionPadding={8}
-                            className="ml-2 flex max-h-[440px] w-[280px] flex-col gap-0 overflow-hidden rounded-2xl border-0 bg-white px-3 pb-0 pt-3 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
+                            className="ml-2 flex max-h-[min(440px,calc(var(--bs-dvh,100dvh)-48px))] w-[280px] flex-col gap-0 overflow-hidden rounded-2xl border-0 bg-white px-3 pb-0 pt-3 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
                         >
                             <SkillSelector selected={selectedSkills} onChange={onSkillsChange} />
                         </DropdownMenuSubContent>

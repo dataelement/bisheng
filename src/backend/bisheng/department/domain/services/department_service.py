@@ -2119,46 +2119,22 @@ class DepartmentService:
         keyword: str,
         login_user,
         is_primary: int | None = None,
+        focus_user_id: int | None = None,
     ) -> dict:
 
         # Cap pagination params
         page = max(1, page)
         limit = max(1, min(limit, 100))
+        try:
+            keyword = normalize_keyword(keyword or "")
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
         async with get_async_db_session() as session:
             dept = await _get_dept_and_check_permission(session, dept_id, login_user)
-
-            from bisheng.user.domain.models.user import User
-
-            base = (
-                select(
-                    UserDepartment.user_id,
-                    User.user_name,
-                    User.external_id.label("user_external_id"),
-                    UserDepartment.department_id,
-                    UserDepartment.is_primary,
-                    UserDepartment.source,
-                    UserDepartment.create_time.label("member_join_time"),
-                    User.create_time.label("user_create_time"),
-                    User.update_time.label("user_update_time"),
-                    User.delete.label("user_deleted"),
-                    User.disable_source.label("user_disable_source"),
-                )
-                .join(User, User.user_id == UserDepartment.user_id)
-                .where(
-                    UserDepartment.department_id == dept.id,
-                )
+            rows, total = await ManagementSearchRepository.department_members(
+                session, dept.id, keyword, page, limit, is_primary, focus_user_id
             )
-            if keyword:
-                base = base.where(User.user_name.like(f"%{keyword}%"))
-            if is_primary is not None:
-                base = base.where(UserDepartment.is_primary == is_primary)
-
-            total_result = await session.exec(select(func.count()).select_from(base.subquery()))
-            total = total_result.one()
-
-            rows_result = await session.exec(base.offset((page - 1) * limit).limit(limit))
-            rows = rows_result.all()
 
         # Batch enrich: user_groups and roles
         user_ids = [r.user_id for r in rows]

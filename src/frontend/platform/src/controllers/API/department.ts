@@ -133,6 +133,7 @@ export async function getDepartmentMembersApi(
     limit: number
     keyword?: string
     is_primary?: number
+    focus_user_id?: number
   }
 ): Promise<{ data: DepartmentMember[]; total: number }> {
   return await axios.get(`/api/v1/departments/${depSeg(deptId)}/members`, { params })

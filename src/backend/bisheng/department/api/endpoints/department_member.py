@@ -20,7 +20,7 @@ from bisheng.department.domain.services.department_service import DepartmentServ
 router = APIRouter()
 
 
-@router.get('/{dept_id}/members/{user_id}/edit-form')
+@router.get("/{dept_id}/members/{user_id}/edit-form")
 async def get_member_edit_form(
     dept_id: str,
     user_id: int,
@@ -28,14 +28,16 @@ async def get_member_edit_form(
 ):
     try:
         data = await DepartmentService.aget_member_edit_form(
-            dept_id, user_id, login_user,
+            dept_id,
+            user_id,
+            login_user,
         )
         return resp_200(data)
     except BaseErrorCode as e:
         return e.return_resp_instance()
 
 
-@router.post('/{dept_id}/members/{user_id}/apply-edit')
+@router.post("/{dept_id}/members/{user_id}/apply-edit")
 async def apply_member_edit(
     dept_id: str,
     user_id: int,
@@ -49,26 +51,32 @@ async def apply_member_edit(
         return e.return_resp_instance()
 
 
-@router.get('/{dept_id}/members')
+@router.get("/{dept_id}/members")
 async def get_members(
     dept_id: str,
     page: int = 1,
     limit: int = 20,
-    keyword: str = '',
-    is_primary: Optional[int] = Query(None, description='Filter: 1=primary, 0=secondary'),
+    keyword: str = "",
+    is_primary: Optional[int] = Query(None, description="Filter: 1=primary, 0=secondary"),
+    focus_user_id: int | None = Query(None, ge=1, description="Show this matching member first when locating"),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     try:
         data = await DepartmentService.aget_members(
-            dept_id, page, limit, keyword, login_user,
+            dept_id,
+            page,
+            limit,
+            keyword,
+            login_user,
             is_primary=is_primary,
+            focus_user_id=focus_user_id,
         )
         return resp_200(data)
     except BaseErrorCode as e:
         return e.return_resp_instance()
 
 
-@router.post('/{dept_id}/members')
+@router.post("/{dept_id}/members")
 async def add_members(
     dept_id: str,
     data: DepartmentMemberAdd,
@@ -81,7 +89,7 @@ async def add_members(
         return e.return_resp_instance()
 
 
-@router.get('/{dept_id}/assignable-roles')
+@router.get("/{dept_id}/assignable-roles")
 async def list_assignable_roles(
     dept_id: str,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
@@ -93,7 +101,7 @@ async def list_assignable_roles(
         return e.return_resp_instance()
 
 
-@router.post('/{dept_id}/local-members')
+@router.post("/{dept_id}/local-members")
 async def create_local_member(
     dept_id: str,
     data: DepartmentLocalMemberCreate,
@@ -106,7 +114,7 @@ async def create_local_member(
         return e.return_resp_instance()
 
 
-@router.get('/{dept_id}/members/{user_id}/delete-check')
+@router.get("/{dept_id}/members/{user_id}/delete-check")
 async def check_local_member_delete(
     dept_id: str,
     user_id: int,
@@ -114,14 +122,16 @@ async def check_local_member_delete(
 ):
     try:
         data = await DepartmentService.acheck_local_member_delete(
-            dept_id, user_id, login_user,
+            dept_id,
+            user_id,
+            login_user,
         )
         return resp_200(data)
     except BaseErrorCode as e:
         return e.return_resp_instance()
 
 
-@router.delete('/{dept_id}/members/{user_id}/local-account')
+@router.delete("/{dept_id}/members/{user_id}/local-account")
 async def delete_local_organization_member(
     dept_id: str,
     user_id: int,
@@ -129,14 +139,16 @@ async def delete_local_organization_member(
 ):
     try:
         await DepartmentService.adelete_local_organization_member(
-            dept_id, user_id, login_user,
+            dept_id,
+            user_id,
+            login_user,
         )
         return resp_200()
     except BaseErrorCode as e:
         return e.return_resp_instance()
 
 
-@router.delete('/{dept_id}/members/{user_id}')
+@router.delete("/{dept_id}/members/{user_id}")
 async def remove_member(
     dept_id: str,
     user_id: int,

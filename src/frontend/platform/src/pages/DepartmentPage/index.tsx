@@ -97,14 +97,15 @@ export default function DepartmentPage() {
 
   const handleLocateMemberFromGlobal = useCallback(
     async ({ primaryDeptDeptId, userId }: { primaryDeptDeptId: string; userId: number }) => {
-      setMemberHighlightUserId(userId)
       // The global search row carries the business dept_id; resolve its internal
       // id, then reveal (expand + load) the branch and scroll to it.
       const detail = await captureAndAlertRequestErrorHoc(getDepartmentApi(primaryDeptDeptId))
       if (!detail) return
       await tree.reveal(detail.id)
-      const node = tree.getNode(detail.id)
-      if (node) selectNode(node)
+      // Keep the authorized detail as a fallback while the lazy tree commits,
+      // including when loading its branch fails.
+      selectNode({ ...detail, children: [] })
+      setMemberHighlightUserId(userId)
       window.setTimeout(() => {
         rowRefs.current.get(primaryDeptDeptId)?.scrollIntoView({ block: "nearest", behavior: "smooth" })
       }, 80)

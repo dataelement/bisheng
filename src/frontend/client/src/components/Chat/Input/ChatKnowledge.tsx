@@ -615,11 +615,12 @@ export const ChatKnowledge = ({
                   </DropdownMenuSubTrigger>
                   {/* Layout mirrors the knowledge panel shell (variant === 'knowledge' above).
                       `align="center"` centers the panel vertically on the trigger row
-                      instead of aligning their top edges. */}
+                      instead of aligning their top edges. Cap against the zoom-compensated
+                      viewport, matching the skill tooltip, so short WeCom windows fit. */}
                   <DropdownMenuSubContent
                     align="center"
                     collisionPadding={BOTTOM_GAP}
-                    className="ml-2 flex max-h-[440px] w-[280px] flex-col gap-0 overflow-hidden rounded-2xl border-0 bg-white px-3 pb-0 pt-3 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
+                    className="ml-2 flex max-h-[min(440px,calc(var(--bs-dvh,100dvh)-48px))] w-[280px] flex-col gap-0 overflow-hidden rounded-2xl border-0 bg-white px-3 pb-0 pt-3 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
                   >
                     {renderSkillSubmenu(() => setRootOpen(false))}
                   </DropdownMenuSubContent>
