@@ -229,7 +229,7 @@
 | 18 | 桌面插件离线时停止运行实例、保留 `enabled`（恢复在线后继续）；工作台装好后今天没有任何核对 | 误以为两者一致 | 决策 8 / 9；spec AC-14 |
 | 19 | 不要用 `force_write_model` | 只写 OpenFGA 不写 SQL、生产禁用 | `docs/architecture/10-permission-rbac.md` §10.1 |
 | 20 | 桌面端的专用令牌只在 `utils/http_middleware.py` 的 `DSH_CREDENTIAL_ROUTES`（及其正则）登记过的路由上被接受 | 新增员工侧接口不登记，桌面端调用会被当作浏览器请求拒绝，而网页端测试照样通过 | `POST /dsh/market/workbenches/access` 已登记；`test/dsh_market/test_desktop_auth.py` 守护 |
-| 22 | 企业工作台装好后桌面端原本不记录「企业 id ↔ 插件包名」，客户端靠企业目录按包名对应；收回后目录不再列出该项 | 无从得知要问哪个 id，收回永远不生效 | `enterprise-installs.json`（安装时写入）。**限制**：本版本之前装的企业工作台没有记录，需重新安装一次（或在授权仍在时由后续版本补记）才受收回约束 |
+| 22 | 企业工作台装好后桌面端原本不记录「企业 id ↔ 插件包名」，客户端靠企业目录按包名对应；收回后目录不再列出该项 | 无从得知要问哪个 id，收回永远不生效 | `enterprise-installs.json`（安装时写入）；升级前已安装的，在客户端读到企业目录（仍可见）时按包名补记（`/api/desktop-workbenches/enterprise-installs/adopt`，排除工作台市场与本地目录安装的同名包）。**剩余限制**：升级后首次同步前就已被收回的旧安装无法补记，需重新安装后才受约束 |
 | 23 | 桌面主进程按白名单转发企业市场请求（`parseMarketRequest`），只有 `sync` 允许请求体 | 新接口在桌面端本地就被拒绝，服务端测试照样通过 | `src/main/enterprise/enterprise-market.ts`，`test/enterprise-workbench-market.test.ts` 守护 |
 | 21 | 列表与同步的可见判定走「批量读取权限快照 + `batch_check_verified_business_visible`」，不走逐个解析的 `batch_check_business_actions` | 逐个解析时每项一次数据库读取；同步每台设备每 60 秒一次，插件多、设备多时压力大 | `dsh_market/domain/permission.py` 的 `_visible_ids` |
 
