@@ -20,6 +20,17 @@ export async function getUserInfo(): Promise<User> {
 export async function logoutApi() {
   return await axios.post(`/api/v1/user/logout`);
 }
+// F120: self-hosted WeCom SSO — whether the login entry exists at all.
+// `silent` because an unconfigured deployment answers "disabled", not an error,
+// and the login page must not toast anything in that case.
+export interface WeComSsoAvailability {
+  enabled: boolean;
+  mode: 'qr' | 'silent' | null;
+  login_path: string | null;
+}
+export async function getWeComSsoApi(): Promise<WeComSsoAvailability> {
+  return await axios.get(`/api/v1/user/wecom/availability`, { silent: true });
+}
 // 登录
 export async function loginApi(personId, pwd, captcha_key?, captcha?) {
   return await axios.post(`/api/v1/user/login`, {

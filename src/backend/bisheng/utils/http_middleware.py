@@ -35,6 +35,10 @@ TENANT_CHECK_EXEMPT_PATHS = (
     "/api/v1/internal/sso/login-sync",
     "/api/v1/internal/sso/gateway-wecom-org-sync",
     "/api/v1/departments/sync",
+    # v3.0.1 F120: self-hosted WeCom SSO. All three steps run before any
+    # session exists — the callback proves itself with a one-time Redis state
+    # instead of a JWT, so no tenant context can be derived from cookies.
+    "/api/v1/user/wecom/",
     # v2.5.1 F015: HMAC-signed relink + resolve-conflict endpoints.
     "/api/v1/internal/departments/relink",
     "/api/v1/internal/departments/relink/resolve-conflict",

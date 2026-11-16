@@ -192,7 +192,8 @@
     "passwordMismatch": "2回入力したパスワードが一致しません",
     "registrationSuccess": "登録に成功しました。ログイン用のパスワードを入力してください",
     "pleaseEnterCaptcha": "認証コードを入力してください",
-    "otherMethods": "その他のログイン方法"
+    "otherMethods": "その他のログイン方法",
+    "wecomLogin": "WeCom でログイン"
   },
   "menu": {
     "tenant": "テナント",

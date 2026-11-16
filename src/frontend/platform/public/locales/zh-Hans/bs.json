@@ -193,7 +193,8 @@
     "passwordMismatch": "两次密码不一致",
     "registrationSuccess": "注册成功,请输入密码进行登录",
     "pleaseEnterCaptcha": "请输入验证码",
-    "otherMethods": "其他登录方式"
+    "otherMethods": "其他登录方式",
+    "wecomLogin": "企业微信登录"
   },
   "menu": {
     "tenant": "租  户",

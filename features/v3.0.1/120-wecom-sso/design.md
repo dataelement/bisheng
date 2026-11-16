@@ -135,7 +135,7 @@ GET /api/v1/user/wecom/authorize?return_to=<abs>
 
 | 字段 / 结构 | 类型 / 格式 | 说明 | 谁会消费 |
 |---|---|---|---|
-| `GET /api/v1/user/wecom/availability` | `{enabled: bool, mode: "qr"\|"silent", authorize_url: str\|null}` | 前端判断是否渲染入口 | platform 登录页 |
+| `GET /api/v1/user/wecom/availability` | `{enabled: bool, mode: "qr"\|"silent"\|null, login_path: str\|null}` | 前端判断是否渲染入口；`login_path` 由前端拼 `return_to`（浏览器侧才知道当前地址） | platform 登录页 |
 | `GET /api/v1/user/wecom/authorize` | query: `return_to`（绝对 URL，同源或白名单）、可选 `mode`（qr/silent 覆盖 UA 判定） | 302 到企微 | platform 登录页 |
 | `GET /api/v1/user/wecom/callback` | query: `code`、`state` | 302 回 `return_to`，`Set-Cookie: access_token_cookie` | 浏览器 |
 | Redis `wecom_sso:state:{state}` | JSON `{"mode","return_to"}`，TTL 300s | 一次性，GETDEL | callback |
@@ -169,6 +169,8 @@ GET /api/v1/user/wecom/authorize?return_to=<abs>
 | 5 | **`/api/v1/user/wecom/*` 必须加入免登录白名单**（`utils/http_middleware.py` 的公开路径集合，参考 `/api/v1/user/login`）。 | 未登录请求会被中间件 401，根本进不了 callback。 | 同一处登记三个路径 |
 | 6 | **企微内 UA 判定**：企微内置浏览器 UA 含 `wxwork`（大小写不敏感）。 | 在企微里给用户弹扫码页，体验割裂。 | availability/authorize 的 mode 判定 |
 | 7 | **GETDEL 需 Redis ≥ 6.2**；本项目 Redis 版本需确认，若低于 6.2 退化为 `GET`+`DEL` 两步（用 Lua 保证原子）。 | 低版本上 GETDEL 报未知命令，登录全挂。 | `wecom_login_state` 实现处 |
+| 8 | **`LoginSyncRequest.ts` 是必填字段**（源系统时间戳，LOGIN-T12 用）。登录本身没有上游版本号。 | 漏传直接 Pydantic ValidationError → 500，且报错只说 `ts Field required`，看不出是登录链路。 | `wecom_login_service._build_payload` 统一填 `int(time.time())` |
+| 9 | **LoginSyncService 的拒绝是 `HTTPException`，不是 `BaseErrorCode`**（`UserForbiddenError.http_exception()`、`SsoUserLockBusyError.http_exception()`）。 | 只 catch `BaseErrorCode` 时，停用账号/并发登录会以 JSON 500 返回，浏览器停在回调地址（违反 AC-18）。 | `wecom_login` 端点同时 catch `HTTPException`，把 `status_code` 转成 `?wecom_error=` |
 
 > ⚠️ 坑 3 需在实现后按 §7 手工验证一次：新建的企微用户从企微登录 → 进入平台后不被要求改密；用「初始密码」从密码登录 → 被 10601 要求改密。
 
@@ -200,11 +202,12 @@ GET /api/v1/user/wecom/authorize?return_to=<abs>
 
 ## 7. 测试与可观测
 
-- **单元测试**（`src/backend/test/sso/`）：
+- **单元测试**（`src/backend/test/sso/`，均已实现并通过）：
   - `test_wecom_login_state.py`：state 写入/一次性消费/过期；Redis 不可用时 fail-closed。
-  - `test_wecom_oauth_client.py`：gettoken 缓存命中、errcode 40101/60011/40029 → 19334；`openid`-only 响应视为「不在可见范围」。
-  - `test_wecom_login_service.py`：唯一配置判定（0/1/多）、return_to 白名单、部门探测降级、payload 不带 `account_disabled`、首登超管开关。
-  - `test_wecom_login_api.py`：三个端点；callback 成功后校验 `Set-Cookie` 与 302 目标；失败路径 302 到 `?wecom_error=`。
+  - `test_wecom_oauth_client.py`：gettoken 缓存命中、errcode 40029 → 19333、`openid`-only → 19334、通讯录错误降级 / 凭据错误上抛。
+  - `test_wecom_login_service.py`：唯一配置判定、`bisheng_pro` 关闭入口、UA→mode、return_to 白名单、部门探测降级、payload 不含 `account_disabled`、callback 透传 `bootstrap_first_user_admin`。
+  - `test_wecom_login_api.py`：三个端点；callback 的 `Set-Cookie`（含非 HttpOnly）与 302 目标；`BaseErrorCode` 与 `HTTPException` 两条失败路径都回到 `?wecom_error=`。
+  - `test_wecom_first_user_bootstrap.py`：首登超管的 Redis 一次性守卫（空库/已有用户/并发/Redis 故障）。
 - **回归**：`test/sso/` 既有用例（LoginSyncService 加默认参数不得改变行为）、`test/api/test_route_path_naming.py`（新路径不含 `config`）。
 - **手工验证（真实企微租户）**：
   1. 在企微管理后台把自建应用可见范围覆盖测试成员，配置组织同步并执行一次同步；
@@ -230,3 +233,4 @@ GET /api/v1/user/wecom/authorize?return_to=<abs>
 | 日期 | 改动 | 触发原因 |
 |---|---|---|
 | 2026-11-16 | 初版（含 spec 评审 8 条发现的处理） | feature 启动 |
+| 2026-11-16 | §4.2 availability 契约改为 `login_path`；§5 增坑 8（`ts` 必填）、坑 9（HTTPException vs BaseErrorCode）；§7 记录已实现测试 | 实现期发现（偏差记录见 tasks.md） |

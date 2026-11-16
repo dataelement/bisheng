@@ -79,6 +79,9 @@ from bisheng.user.domain.services.user import UserService
 from bisheng.utils import md5_hash
 
 _USER_LOCK_KEY = "user:sso_lock:{external_user_id}"
+#: F120: one-shot guard so only the very first login of an empty platform can
+#: bootstrap the super admin, even when two replicas log in simultaneously.
+_FIRST_USER_BOOTSTRAP_KEY = "wecom_sso:first_user_bootstrap"
 
 
 class LoginSyncService:
@@ -103,7 +106,15 @@ class LoginSyncService:
         payload: LoginSyncRequest,
         request_ip: str = "",
         row_source: str = DEFAULT_SSO_SYNC_SOURCE,
+        bootstrap_first_user_admin: bool = False,
     ) -> LoginSyncResponse:
+        """Run the login-sync pipeline and return a signed JWT.
+
+        ``bootstrap_first_user_admin`` is F120-only: when the platform still has
+        no user at all, the account created by this call becomes the super admin
+        (the same bootstrap the legacy ``/api/v1/user/sso`` performed). It
+        defaults to False so the Gateway and older callers keep their behaviour.
+        """
         ttl = int(getattr(settings.sso_sync, "user_lock_ttl_seconds", 30) or 30)
         lock_key = _USER_LOCK_KEY.format(
             external_user_id=payload.external_user_id,
@@ -118,6 +129,7 @@ class LoginSyncService:
                 payload,
                 request_ip,
                 row_source,
+                bootstrap_first_user_admin=bootstrap_first_user_admin,
             )
 
     @classmethod
@@ -126,6 +138,7 @@ class LoginSyncService:
         payload: LoginSyncRequest,
         request_ip: str,
         row_source: str,
+        bootstrap_first_user_admin: bool = False,
     ) -> LoginSyncResponse:
         with bypass_tenant_filter():
             token = set_current_tenant_id(ROOT_TENANT_ID)
@@ -155,6 +168,7 @@ class LoginSyncService:
                     payload,
                     request_ip=request_ip,
                     row_source=row_source,
+                    bootstrap_first_user_admin=bootstrap_first_user_admin,
                 )
 
                 if full_department_override:
@@ -257,6 +271,7 @@ class LoginSyncService:
         payload: LoginSyncRequest,
         request_ip: str,
         row_source: str,
+        bootstrap_first_user_admin: bool = False,
     ) -> tuple[User, bool]:
         ext = payload.external_user_id
         attrs = payload.user_attrs
@@ -315,11 +330,23 @@ class LoginSyncService:
                     disable_source=ds,
                 )
                 try:
-                    user = await UserDao.add_user_and_default_role(new_user)
-                    await LegacyRBACSyncService.sync_user_auth_created(
-                        user.user_id,
-                        [DefaultRole],
-                    )
+                    if bootstrap_first_user_admin and await cls._claim_first_user_bootstrap():
+                        user = await UserDao.add_user_and_admin_role(new_user)
+                        await LegacyRBACSyncService.sync_user_auth_created(
+                            user.user_id,
+                            [AdminRole],
+                        )
+                        await UserService.areconcile_first_user_dashboard_permissions(user.user_id)
+                        logger.info(
+                            "wecom sso: first platform user {} bootstrapped as super admin",
+                            ext,
+                        )
+                    else:
+                        user = await UserDao.add_user_and_default_role(new_user)
+                        await LegacyRBACSyncService.sync_user_auth_created(
+                            user.user_id,
+                            [DefaultRole],
+                        )
                     # 2.5 SSO-401 fix: pre-create the user_tenant row with
                     # is_active=1 so the subsequent login-time
                     # UserTenantSyncService.sync_user finds an active row
@@ -374,6 +401,30 @@ class LoginSyncService:
         if int(getattr(user, "delete", 0) or 0) == 1 and payload.account_disabled is not True:
             raise UserForbiddenError.http_exception()
         return user, full_department_override
+
+    @classmethod
+    async def _claim_first_user_bootstrap(cls) -> bool:
+        """True exactly once, when the platform still has no user (F120 AC-11).
+
+        The Redis SETNX makes "only the first login bootstraps" hold across
+        replicas; without it two concurrent first logins could both observe an
+        empty ``user`` table and both become super admin. The sync DAO call is
+        the same one the legacy ``/user/sso`` used (``UserDao.get_all_users``).
+        """
+        try:
+            client = await get_redis_client()
+            acquired = await client.async_connection.set(
+                _FIRST_USER_BOOTSTRAP_KEY,
+                "1",
+                nx=True,
+                ex=60,
+            )
+        except Exception:
+            logger.exception("wecom sso: first-user bootstrap guard unavailable")
+            return False
+        if not acquired:
+            return False
+        return not UserDao.get_all_users(page=1, limit=1)
 
     @staticmethod
     def _normalize_contact_field(val: str | None) -> str | None:

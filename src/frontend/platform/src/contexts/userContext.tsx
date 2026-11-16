@@ -106,6 +106,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
             location.href = location.origin + location.pathname;
             return
         }
+        // F120: a WeCom SSO login hands the session over as a server-set cookie
+        // only. A few components read the token from localStorage (`ws_token`),
+        // so mirror it the same way the password login does.
+        if (!localStorage.getItem('ws_token')) {
+            const ssoToken = document.cookie.match(/(?:^|;\s*)access_token_cookie=([^;]+)/)?.[1]
+            if (ssoToken) localStorage.setItem('ws_token', decodeURIComponent(ssoToken))
+        }
         // record workspace auth
         const search = location.search;
         const params = new URLSearchParams(search);

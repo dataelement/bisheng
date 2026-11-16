@@ -19,9 +19,11 @@ import { getBrandAssetUrl } from "@/utils/brand";
 import { consumeLoginReturnTo } from "@/utils/loginReturnTo";
 import { getWorkspaceClientUrl } from "@/utils/workspaceUrl";
 import { useLocation, useNavigate } from "react-router-dom";
-import { getCaptchaApi, loginApi, registerApi } from "../../controllers/API/user";
+import { getCaptchaApi, getWeComSsoApi, loginApi, registerApi } from "../../controllers/API/user";
+import type { WeComSsoAvailability } from "../../controllers/API/user";
 import { showApiError } from "../../controllers/request";
 import LoginBridge from "./loginBridge";
+import { WeComLogin } from "./wecomLogin";
 import { PWD_RULE, handleEncrypt, handleLdapEncrypt } from "./utils";
 
 interface LoginPageProps {
@@ -49,6 +51,15 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
     // Check third-party redirect login before rendering the login form
     const [oauthLoading, setOauthLoading] = useState(true);
     const [oauthData, setOauthData] = useState<any>(null);
+    // F120: self-hosted WeCom sign-in, shown only when the backend has an
+    // enabled WeCom org-sync configuration and no commercial gateway.
+    const [wecomSso, setWecomSso] = useState<WeComSsoAvailability | null>(null);
+
+    useEffect(() => {
+        getWeComSsoApi()
+            .then((data) => setWecomSso(data))
+            .catch(() => setWecomSso(null));
+    }, []);
 
     useEffect(() => {
         if (forceLocal) {
@@ -351,6 +362,9 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
                                 </>
                             )}
                             {appConfig.isPro && <LoginBridge oauthData={oauthData} onHasLdap={setHasLdap} />}
+                            {wecomSso?.enabled && wecomSso.login_path && (
+                                <WeComLogin loginPath={wecomSso.login_path} mode={wecomSso.mode} />
+                            )}
                         </div>
                         <div className=" absolute right-[16px] bottom-[16px] flex">
                             <span className="mr-4 text-sm text-gray-400 relative top-2">v{json.version}</span>
@@ -385,6 +399,12 @@ export const useLoginError = () => {
         const code = queryParams.get("status_code");
         if (code) {
             notification.open({ type: "error", description: String(t("errors." + code) ?? '') });
+        }
+        // F120: the WeCom callback reports failures as ?wecom_error=<MMMEE>;
+        // the copy lives in the shared api_errors namespace.
+        const wecomCode = queryParams.get("wecom_error");
+        if (wecomCode) {
+            notification.open({ type: "error", description: String(t("api_errors:" + wecomCode)) });
         }
     }, [location]);
 };

@@ -193,6 +193,7 @@
     "registrationSuccess": "Registration successful. Please enter your password to log in",
     "pleaseEnterCaptcha": "Please enter captcha",
     "otherMethods": "Other login methods",
+    "wecomLogin": "Sign in with WeCom",
     "bottomText": "Bisheng"
   },
   "menu": {
