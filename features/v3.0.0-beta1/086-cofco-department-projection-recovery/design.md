@@ -4,6 +4,8 @@ R2，2026-11-16。R1规格/设计已由用户确认；R2记录实现细化及用
 
 ## 1. 现状与根因
 
+交付分支调整（2026-11-16）：按用户要求，cofco-1111使用revert撤销原提交，修复单独迁至cofco-1118。原开发基线和设计确认记录保留，功能、模型和schema边界不变；迁移验证见validation.md。
+
 原同步先提交业务部门及last_sync_ts，再执行FGA。提交后失败留下PROJECTING/FAILED_CLOSED；后续同父级upsert不产生新拓扑投影，原恢复只处理PROJECTING。时间戳守卫对旧消息短路，对相同ts的有效upsert仍APPLY；不能把相同ts一概写成SKIP。本次在守卫之前恢复原绑定义务，保留原时间戳决策。
 
 原SSO upsert只更新本节点path，未沿真实parent图更新后代；旧path已陈旧时不能用path前缀查子树。原部门finalize与operation FINALIZED分别提交，还存在历史CURRENT/目标版本+COMMITTED窗口。SSO外层bypass优先于strict，必须在单部门执行时显式取消bypass。

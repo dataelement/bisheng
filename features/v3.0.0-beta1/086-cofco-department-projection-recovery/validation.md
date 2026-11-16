@@ -1,5 +1,15 @@
 # F086 本地验证记录
 
+## 交付分支调整验证（2026-11-16）
+
+按用户要求仅调整发布分支，不变更修复逻辑。cofco-1111使用标准revert提交 `063a574764a5af08adf31fd78a77d160a0f6e3e2` 撤销原修复 `4557e685951bbcfd69be84a7ba0e1188fbb612da`，整棵Git tree与原修复父提交 `00720a9c697f55f19086fc7c7ad111986a95f4ac` 完全相同；中粮定制/Celery/单head/部门空间管理员回归 **57 passed**（日志 `/private/tmp/f086-revert-cofco1111.log`）。
+
+远端原无cofco-1118，从上述revert基线建立 `feat/cofco-1118-3.0.0-beta1`，以 `cherry-pick -x` 单独迁入修复（`8e08cf141d`）；迁入后完整tree与原修复相同，再仅更新交付文档中的目标分支及本验证记录。可执行源码、脚本及测试与原修复一致，配置/模型/schema/依赖锁/前端未变，无额外功能混入。重新执行原369项范围：**369 passed，无skip**，971条现有warning，日志 `/private/tmp/f086-cofco1118-migration.log`；`alembic heads`仍仅 `f076_subject_id_search_indexes (head)`，QA清单仍24项八列，客户端三语无重复key。
+
+下文保留原开发阶段基线与验证记录。实际交付使用cofco-1118及[QA-IMPACT.md](QA-IMPACT.md)；真实双库、多节点与生产验收边界不变。Git revert只撤销源码，不撤销客户已经执行的数据修复或运行中的镜像。
+
+## 原开发验证记录
+
 2026-11-16。基线：origin/feat/cofco-1111-3.0.0-beta1 / 00720a9c697f55f19086fc7c7ad111986a95f4ac；独立开发分支codex/cofco-1111-department-recovery。未操作客户生产数据、未改旧F078工作树/交付包，未部署。
 
 ## 结果
