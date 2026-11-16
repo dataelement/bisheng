@@ -90,7 +90,9 @@ it('opens the price editor for priced and unpriced models with the provider type
 
 it('keeps the community table free of pricing requests', () => {
     render(<UserSelectableModels data={servers} configuredModels={[]} enterpriseEnabled={false} disabled={false} onMetadataChange={vi.fn()} />)
-    expect(screen.getAllByRole('columnheader')).toHaveLength(4)
+    // Visibility is a platform column; ratio and price need the desktop module.
+    expect(screen.getAllByRole('columnheader')).toHaveLength(5)
+    expect(screen.queryByRole('columnheader', { name: /dsh.pricing/ })).toBeNull()
     expect(getModelPricingRows).not.toHaveBeenCalled()
 })
 
