@@ -38,7 +38,7 @@ from bisheng.common.errcode.department import (
     DepartmentRootExistsError,
     DepartmentSourceReadonlyError,
 )
-from bisheng.common.errcode.permission import PermissionInvalidResourceError
+from bisheng.common.errcode.permission import PermissionInvalidResourceError, PermissionVersionConflictError
 from bisheng.common.services.config_service import settings
 from bisheng.common.subject_search import normalize_keyword
 from bisheng.core.database import get_async_db_session
@@ -545,25 +545,48 @@ async def _execute_department_projection(
 
 async def _resume_department_projection_if_needed(
     department: Department,
+    session=None,
 ) -> bool:
     """Resume the operation durably bound to a PROJECTING department row."""
 
     if (
         not _uses_f048_department_projection()
-        or department.permission_projection_state != "PROJECTING"
+        or department.permission_projection_state not in {"PROJECTING", "FAILED_CLOSED", "CURRENT"}
         or not department.permission_projection_operation_id
     ):
         return False
+    from bisheng.core.context.tenant import exact_tenant_filter
     from bisheng.department.domain.services.department_projection_scope import (
         get_department_projection_runtime,
     )
 
-    runtime = await get_department_projection_runtime()
-    outcome = await runtime.reconcile_operation(
-        int(department.permission_projection_operation_id),
-    )
-    department.permission_projection_version = outcome.target_version
-    department.permission_projection_state = "CURRENT"
+    tenant_id = int(department.tenant_id)
+    operation_id = int(department.permission_projection_operation_id)
+    with exact_tenant_filter(tenant_id):
+        runtime = await get_department_projection_runtime()
+        if department.permission_projection_state == "CURRENT" and hasattr(runtime, "needs_recovery"):
+            if not await runtime.needs_recovery(operation_id):
+                return False
+    # Finish read session before another UOW obtains the department lock.
+    if session is not None:
+        await session.rollback()
+    from bisheng.core.context.tenant import exact_tenant_filter
+
+    with exact_tenant_filter(tenant_id):
+        outcome = await runtime.reconcile_operation(operation_id)
+    if session is not None:
+        await session.refresh(department)
+        if (
+            department.permission_projection_operation_id != operation_id
+            or department.permission_projection_version != outcome.target_version
+            or department.permission_projection_state != "CURRENT"
+        ):
+            raise PermissionVersionConflictError(msg="Department changed after recovery; retry with current facts")
+        # The refreshed ORM row is authoritative. Never overwrite a successor
+        # with the older recovery outcome and accidentally autoflush it.
+    else:
+        department.permission_projection_version = outcome.target_version
+        department.permission_projection_state = "CURRENT"
     return True
 
 
@@ -587,7 +610,9 @@ class DepartmentMembershipProjectionService:
                 department = (await session.exec(select(Department).where(Department.id == department_id))).first()
                 if department is None or department.status != "active":
                     raise DepartmentNotFoundError()
-                await _resume_department_projection_if_needed(department)
+                await _resume_department_projection_if_needed(department, session)
+                if department.status != "active" or department.is_deleted:
+                    raise DepartmentNotFoundError()
                 existing = (
                     await session.exec(
                         select(UserDepartment).where(
@@ -650,7 +675,7 @@ class DepartmentMembershipProjectionService:
                 department = (await session.exec(select(Department).where(Department.id == department_id))).first()
                 if department is None:
                     raise DepartmentNotFoundError()
-                await _resume_department_projection_if_needed(department)
+                await _resume_department_projection_if_needed(department, session)
                 membership = (
                     await session.exec(
                         select(UserDepartment).where(
@@ -705,6 +730,51 @@ class DepartmentTopologyProjectionService:
         return f"{base}{department_id}/".replace("//", "/")
 
     @classmethod
+    async def sync_recovery_hints(cls, source, external_ids):
+        """Skinny batch metadata, not N history/LOB queries for healthy rows."""
+        from collections import defaultdict
+
+        from bisheng.core.context.tenant import exact_tenant_filter
+        from bisheng.permission.application.department_recovery import load_bound_operation_metadata
+
+        rows = []
+        identities = sorted(set(external_ids))
+        async with get_async_db_session() as session:
+            for start in range(0, len(identities), 500):
+                rows.extend(
+                    (
+                        await session.exec(
+                            select(
+                                Department.id,
+                                Department.external_id,
+                                Department.tenant_id,
+                                Department.permission_projection_operation_id,
+                                Department.permission_projection_state,
+                            ).where(
+                                Department.source == source, Department.external_id.in_(identities[start : start + 500])
+                            )
+                        )
+                    ).all()
+                )
+        groups = defaultdict(list)
+        hints = {}
+        for row in rows:
+            op = row.permission_projection_operation_id
+            hints[row.external_id] = row.permission_projection_state != "CURRENT"
+            if op and row.permission_projection_state == "CURRENT":
+                groups[int(row.tenant_id)].append(row)
+        for tenant_id, group in groups.items():
+            with exact_tenant_filter(tenant_id):
+                ids = sorted({r.permission_projection_operation_id for r in group})
+                metadata = {}
+                for start in range(0, len(ids), 500):
+                    metadata.update(await load_bound_operation_metadata(ids[start : start + 500]))
+                for row in group:
+                    op = metadata.get(row.permission_projection_operation_id)
+                    hints[row.external_id] = op is None or op["status"] != "FINALIZED"
+        return hints
+
+    @classmethod
     async def aupsert_synced_department(
         cls,
         *,
@@ -737,6 +807,12 @@ class DepartmentTopologyProjectionService:
                     .with_for_update()
                 )
                 department = (await session.exec(statement)).first()
+                if department is not None and (
+                    int(department.last_sync_ts or 0) > last_sync_ts
+                    or (int(department.last_sync_ts or 0) == last_sync_ts and department.is_deleted == 1)
+                ):
+                    return department
+
                 was_active = bool(
                     department is not None and department.status == "active" and int(department.is_deleted or 0) == 0
                 )
@@ -769,10 +845,10 @@ class DepartmentTopologyProjectionService:
 
                 if department.id is None:
                     raise PermissionInvalidResourceError(msg="Synced department has no durable ID")
-                department.path = cls._synced_path(
-                    parent_path,
-                    int(department.id),
-                )
+                previous_path = department.path
+                department.path = cls._synced_path(parent_path, int(department.id))
+                if previous_path != department.path:
+                    await cls._update_synced_subtree_paths(session, department)
                 session.add(department)
                 await session.flush()
 
@@ -837,6 +913,41 @@ class DepartmentTopologyProjectionService:
                 )
             )
         return department
+
+    @staticmethod
+    async def _update_synced_subtree_paths(session, department):
+        from bisheng.core.context.tenant import bypass_tenant_filter
+
+        visited = {int(department.id)}
+        frontier = {int(department.id): department.path}
+        for _ in range(100):
+            if not frontier:
+                return
+            following = {}
+            ids = list(frontier)
+            for start in range(0, len(ids), 500):
+                with bypass_tenant_filter():
+                    rows = (
+                        await session.exec(
+                            select(Department)
+                            .where(
+                                Department.parent_id.in_(ids[start : start + 500]),
+                            )
+                            .with_for_update()
+                        )
+                    ).all()
+                for child in rows:
+                    identity = int(child.id)
+                    if identity in visited or len(visited) >= 50000:
+                        raise PermissionInvalidResourceError(msg="Department subtree cycle or limit")
+                    if child.tenant_id != department.tenant_id or child.is_tenant_root or child.mounted_tenant_id:
+                        raise PermissionInvalidResourceError(msg="Department subtree crosses a tenant mount")
+                    visited.add(identity)
+                    child.path = f"{frontier[int(child.parent_id)]}{identity}/"
+                    session.add(child)
+                    following[identity] = child.path
+            frontier = following
+        raise PermissionInvalidResourceError(msg="Department subtree depth exceeds 100")
 
     @classmethod
     async def aarchive_synced_department(
@@ -1776,7 +1887,10 @@ class DepartmentService:
                     raise DepartmentArchivedReadonlyError()
                 resumed_projection = await _resume_department_projection_if_needed(
                     dept,
+                    session,
                 )
+                if dept.status != "active" or dept.is_deleted:
+                    raise DepartmentArchivedReadonlyError()
                 raw_defaults = dept.default_role_ids or []
                 default_role_ids_snapshot = [int(x) for x in raw_defaults if x is not None]
 
@@ -1882,6 +1996,7 @@ class DepartmentService:
                     raise DepartmentArchivedReadonlyError()
                 resumed_projection = await _resume_department_projection_if_needed(
                     dept,
+                    session,
                 )
 
                 ud = (

@@ -108,6 +108,24 @@ class TokenSafeRedisLock:
         if not self._owned:
             raise RedisLockLostError(f"Redis lock is not owned: {self.key}")
 
+    async def verify_owned(self) -> None:
+        """Atomically verify the current token and extend it before a write."""
+        self.ensure_owned()
+        try:
+            renewed = await self._redis.eval(
+                _RENEW_SCRIPT,
+                1,
+                self.key,
+                self.token,
+                self.ttl_seconds,
+            )
+        except Exception as error:
+            self._owned = False
+            raise RedisLockLostError(f"Redis lock verification failed: {self.key}") from error
+        if not renewed:
+            self._owned = False
+            raise RedisLockLostError(f"Redis lock ownership lost: {self.key}")
+
     async def release(self) -> None:
         if self._renewal_task is not None:
             self._renewal_task.cancel()

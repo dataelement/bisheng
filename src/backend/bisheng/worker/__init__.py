@@ -7,6 +7,12 @@ from bisheng.worker.approval.decision_delivery_tasks import (
     deliver_approval_decision as deliver_approval_decision,
 )
 from bisheng.worker.approval.tasks import execute_approval_outbox, retry_approval_outbox
+from bisheng.worker.department.projection_recovery import (
+    recover_department_projection as recover_department_projection,
+)
+from bisheng.worker.department.projection_recovery import (
+    recover_department_projections as recover_department_projections,
+)
 from bisheng.worker.information.article import (
     dispatch_information_article_poll as dispatch_information_article_poll,
 )

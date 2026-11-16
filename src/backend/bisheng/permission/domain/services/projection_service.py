@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from hashlib import sha256
 from typing import Protocol
@@ -22,6 +24,7 @@ from bisheng.permission.domain.repositories.interfaces import (
     PermissionProjectionRepositoryPort,
 )
 from bisheng.permission.domain.services import projection_plan as projection_plan_types
+from bisheng.permission.domain.services.projection_diagnostics import emit_projection_alert, reason_from_exception
 from bisheng.permission.domain.services.projection_plan import (
     HIGHER_CONSISTENCY,
     MAX_ATOMIC_TUPLES,
@@ -129,6 +132,14 @@ class FailedClosedRecoveryPreview:
     confirmation_checksum: str
 
 
+MAINTENANCE_TYPES = frozenset({"DEPARTMENT_RECONCILE", "DEPARTMENT_CURRENT_REPAIR"})
+
+
+def reject_department_maintenance(operation):
+    if operation.operation_type in MAINTENANCE_TYPES:
+        raise PermissionPublishNotReadyError(msg="Use the dedicated department reconciliation CLI")
+
+
 def restore_projection_plan(
     operation: PermissionProjectionOperation,
     tuple_rows,
@@ -196,10 +207,13 @@ class ProjectionService:
         self._finalizer = finalizer or _NullFinalizer()
         self._events = events or _NullEvents()
         self._stage_batch_size = stage_batch_size
+        self._department_write_gate = ContextVar(f"department_write_gate_{id(self)}", default=None)
+        self._department_guard = ContextVar(f"department_guard_{id(self)}", default=None)
 
     async def execute(self, plan: ProjectionPlan) -> ProjectionOutcome:
         """Prepare, project, verify, and finalize one idempotent plan."""
 
+        reject_department_maintenance(plan)
         normalized = normalize_projection_plan(plan)
         request_checksum = projection_request_checksum(normalized)
         operation = await self.prepare(normalized)
@@ -215,6 +229,7 @@ class ProjectionService:
     ) -> PermissionProjectionOperation:
         """Persist the durable operation before any permission mirror changes."""
 
+        reject_department_maintenance(plan)
         normalized = normalize_projection_plan(plan)
         request_checksum = projection_request_checksum(normalized)
         existing = await self._repository.aget_operation_by_idempotency(normalized.idempotency_key)
@@ -243,6 +258,7 @@ class ProjectionService:
     ) -> None:
         """Close an operation whose SQL mirror prepare transaction was rejected."""
 
+        reject_department_maintenance(plan)
         normalized = normalize_projection_plan(plan)
         request_checksum = projection_request_checksum(normalized)
         operation = await self._repository.aget_operation_by_idempotency(normalized.idempotency_key)
@@ -266,6 +282,7 @@ class ProjectionService:
     async def reconcile(self, plan: ProjectionPlan) -> ProjectionOutcome:
         """Resume a durable operation using its original request checksum."""
 
+        reject_department_maintenance(plan)
         normalized = normalize_projection_plan(plan)
         request_checksum = projection_request_checksum(normalized)
         operation = await self._repository.aget_operation_by_idempotency(normalized.idempotency_key)
@@ -293,6 +310,7 @@ class ProjectionService:
             raise PermissionPublishNotReadyError(
                 msg="Projection operation does not exist",
             )
+        reject_department_maintenance(operation)
         tuple_rows = await self._repository.aget_operation_tuples(
             operation_id,
         )
@@ -373,10 +391,7 @@ class ProjectionService:
             )
         if len(preview.correction_deltas) > MAX_ATOMIC_TUPLES:
             raise PermissionPublishNotReadyError(
-                msg=(
-                    "FAILED_CLOSED recovery requires more than "
-                    f"{MAX_ATOMIC_TUPLES} atomic tuple corrections"
-                ),
+                msg=(f"FAILED_CLOSED recovery requires more than {MAX_ATOMIC_TUPLES} atomic tuple corrections"),
             )
         if not await self._scope_guard.is_failed_closed_recovery_scope(
             plan,
@@ -405,9 +420,7 @@ class ProjectionService:
         try:
             await self._marker.arm(plan)
             commit_checksum = (
-                await self._write(preview.correction_deltas)
-                if preview.correction_deltas
-                else operation.after_checksum
+                await self._write(preview.correction_deltas) if preview.correction_deltas else operation.after_checksum
             )
         except Exception as exc:
             if not await self._is_after(plan.deltas):
@@ -434,6 +447,98 @@ class ProjectionService:
             reconciled=True,
         )
 
+    @asynccontextmanager
+    async def department_uow(self, session, *, guard=None, write_gate=None):
+        """Borrow the Owner's session so ledger and department finalize together."""
+        token = self._department_guard.set(guard)
+        write_token = self._department_write_gate.set(write_gate)
+        try:
+            async with self._repository.bind_session(session):
+                yield
+        finally:
+            self._department_write_gate.reset(write_token)
+            self._department_guard.reset(token)
+
+    async def department_active_ids(self, department_id):
+        return await self._repository.adepartment_active_ids(department_id)
+
+    async def department_needs_recovery(self, operation_id):
+        metadata = await self._repository.aget_bound_operation_metadata([operation_id])
+        operation = metadata.get(operation_id)
+        return operation is None or operation["status"] != "FINALIZED"
+
+    async def department_plan(self, operation_id):
+        operation = await self._repository.aget_operation(operation_id)
+        if operation is None:
+            raise PermissionPublishNotReadyError(msg="Department operation missing")
+        reject_department_maintenance(operation)
+        if (
+            getattr(self._repository, "_active_session", None) is not None
+            and self._repository._active_session.get() is not None
+        ):
+            operation = await self._repository.alock_recovery_operation(operation_id)
+        rows = await self._repository.aget_operation_tuples(operation_id, limit=91)
+        if len(rows) > 90:
+            raise PermissionPublishNotReadyError(msg="Original department scope exceeds 90")
+        return operation, restore_projection_plan(operation, rows)
+
+    async def recover_department_operation(self, operation_id, *, verify_owner):
+        """Original intent only. The Owner must hold its SQL lock and lease.
+
+        verify_owner checks current model, binding and the ENTIRE owned tuple
+        target, including unrelated members. It runs before and after mutation.
+        This entry deliberately does not extend generic resource recovery.
+        """
+        operation, plan = await self._load_operation_plan(operation_id)
+        if plan.scope_type != "department" or any(d.phase != "COMMIT" for d in plan.deltas):
+            raise PermissionPublishNotReadyError(msg="Unsupported original department projection")
+        observed = await verify_owner(plan, operation)
+        if observed is None:
+            correction = await self._terminal_correction(plan.deltas)
+        else:
+            expected = projection_state_expectations(plan.deltas, after=True)
+            representatives = {d.key: d for d in plan.deltas}
+            correction = tuple(
+                replace(representatives[key], sequence=index, action="WRITE" if present else "DELETE")
+                for index, (key, present) in enumerate(sorted(expected.items()))
+                if (key in observed) != present
+            )
+        status = str(operation.status)
+        if status in {"COMMITTED", "FINALIZED"} and correction:
+            raise PermissionPublishNotReadyError(msg="COMMITTED_AFTER_STATE_MISSING")
+        if status == "FINALIZED":
+            return self._outcome(plan, operation, request_checksum=operation.request_checksum, idempotent=True)
+        if status not in {"PREPARED", "STAGING", "COMMIT_UNKNOWN", "FAILED_CLOSED", "COMMITTED"}:
+            raise PermissionPublishNotReadyError(msg="Unsupported original operation status")
+        if not await self._marker.is_ready():
+            raise PermissionPublishNotReadyError(msg="Permission marker unavailable")
+        await self._marker.arm(plan)
+        if correction:
+            try:
+                await self._write(correction)
+            except Exception:
+                after = await verify_owner(plan, operation)
+                if after is None:
+                    if not await self._is_after(plan.deltas):
+                        raise
+                elif any(
+                    (key in after) != present
+                    for key, present in projection_state_expectations(plan.deltas, after=True).items()
+                ):
+                    raise
+        after = await verify_owner(plan, operation)
+        if after is None and not await self._is_after(plan.deltas):
+            raise PermissionPublishNotReadyError(msg="Original department AFTER not verified")
+        if after is not None and any(
+            (key in after) != present for key, present in projection_state_expectations(plan.deltas, after=True).items()
+        ):
+            raise PermissionPublishNotReadyError(msg="Original department AFTER not verified")
+        if status != "COMMITTED":
+            await self._transition(
+                operation, expected=status, target="COMMITTED", commit_checksum=operation.after_checksum
+            )
+        return await self._finalize(plan, operation, request_checksum=operation.request_checksum, reconciled=True)
+
     async def _load_operation_plan(
         self,
         operation_id: int,
@@ -443,6 +548,12 @@ class ProjectionService:
             raise PermissionPublishNotReadyError(
                 msg="Projection operation does not exist",
             )
+        reject_department_maintenance(operation)
+        if (
+            getattr(self._repository, "_active_session", None) is not None
+            and self._repository._active_session.get() is not None
+        ):
+            operation = await self._repository.alock_recovery_operation(operation_id)
         tuple_rows = await self._repository.aget_operation_tuples(operation_id)
         return operation, restore_projection_plan(operation, tuple_rows)
 
@@ -531,6 +642,8 @@ class ProjectionService:
         *,
         request_checksum: str,
     ) -> ProjectionOutcome:
+        if plan.scope_type == "department" and self._department_guard.get() is None:
+            raise PermissionPublishNotReadyError(msg="Department projections require the Owner execution adapter")
         status = str(operation.status)
         if status == ProjectionOperationStatus.FINALIZED.value:
             return self._outcome(
@@ -654,6 +767,12 @@ class ProjectionService:
         self,
         deltas: tuple[ProjectionTupleDelta, ...],
     ) -> str:
+        guard = self._department_guard.get()
+        if guard is not None:
+            await guard()
+        write_gate = self._department_write_gate.get()
+        if write_gate is not None:
+            await write_gate()
         writes = tuple(delta for delta in deltas if delta.action == "WRITE")
         deletes = tuple(delta for delta in deltas if delta.action == "DELETE")
         return await self._fga.write_atomic(writes=writes, deletes=deletes)
@@ -796,6 +915,9 @@ class ProjectionService:
         reconciled: bool,
     ) -> ProjectionOutcome:
         try:
+            guard = self._department_guard.get()
+            if guard is not None:
+                await guard()
             await self._finalizer.finalize(plan, int(operation.id))
             await self._transition(
                 operation,
@@ -865,6 +987,24 @@ class ProjectionService:
         status: str,
         error: Exception | None = None,
     ) -> None:
+        if status in {"FAILED_CLOSED", "COMMIT_UNKNOWN", "MARKER_FAILED", "FAILED_CLOSED_RECOVERY_FAILED"}:
+            emit_projection_alert(
+                "FAILED",
+                reason_code=reason_from_exception(error) if error else "UNKNOWN_WRITE_OUTCOME",
+                tenant_id=plan.tenant_id,
+                operation_id=operation.id,
+                scope_type=plan.scope_type,
+                scope_key=plan.scope_key,
+                details={
+                    "operation_status": status,
+                    "expected_version": plan.expected_version,
+                    "target_version": plan.target_version,
+                    "store_id": plan.store_id,
+                    "model_id": plan.model_id,
+                    "phase": "projection_engine",
+                    "commit_state": "not_proven",
+                },
+            )
         fields = {
             "operation_id": operation.id,
             "operation_type": plan.operation_type,

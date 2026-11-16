@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -71,6 +73,37 @@ class SqlDepartmentProjectionScope:
     cannot project stale or invented department facts.
     """
 
+    def __init__(self):
+        self._active_session = ContextVar(f"department_scope_session_{id(self)}", default=None)
+        self._active_operation = ContextVar(f"department_scope_operation_{id(self)}", default=None)
+
+    @asynccontextmanager
+    async def bind_session(self, session, operation_id=None):
+        token = self._active_session.set(session)
+        operation_token = self._active_operation.set(operation_id)
+        try:
+            yield
+        finally:
+            self._active_operation.reset(operation_token)
+            self._active_session.reset(token)
+
+    @asynccontextmanager
+    async def _session(self):
+        current = self._active_session.get()
+        if current is not None:
+            yield current
+        else:
+            async with get_async_db_session() as session:
+                yield session
+
+    @asynccontextmanager
+    async def _transaction(self, session):
+        if self._active_session.get() is session:
+            yield
+        else:
+            async with session.begin():
+                yield
+
     async def bind(
         self,
         session: AsyncSession,
@@ -91,6 +124,13 @@ class SqlDepartmentProjectionScope:
                 permission_projection_operation_id=operation_id,
             )
         )
+        if plan.operation_type in {
+            "DEPARTMENT_CREATE",
+            "DEPARTMENT_MOVE",
+            "DEPARTMENT_RESTORE",
+            "DEPARTMENT_MEMBERS_ADD",
+        }:
+            statement = statement.where(Department.status == "active", Department.is_deleted == 0)
         result = await session.execute(statement)
         if result.rowcount:
             return
@@ -104,6 +144,11 @@ class SqlDepartmentProjectionScope:
             and row.permission_projection_version == plan.expected_version
             and row.permission_projection_state == DEPARTMENT_PROJECTION_PROJECTING
             and row.permission_projection_operation_id == operation_id
+            and (
+                plan.operation_type
+                not in {"DEPARTMENT_CREATE", "DEPARTMENT_MOVE", "DEPARTMENT_RESTORE", "DEPARTMENT_MEMBERS_ADD"}
+                or (row.status == "active" and row.is_deleted == 0)
+            )
         ):
             return
         raise PermissionVersionConflictError(msg="Department permission projection changed concurrently")
@@ -114,7 +159,7 @@ class SqlDepartmentProjectionScope:
         operation_id: int,
     ) -> None:
         self._identity(plan, operation_id)
-        async with get_async_db_session() as session:
+        async with self._session() as session:
             row = await self._load(
                 session,
                 plan,
@@ -136,7 +181,7 @@ class SqlDepartmentProjectionScope:
         operation_id: int,
     ) -> bool:
         self._identity(plan, operation_id)
-        async with get_async_db_session() as session:
+        async with self._session() as session:
             row = await self._load(session, plan)
         return bool(
             row is not None
@@ -152,8 +197,11 @@ class SqlDepartmentProjectionScope:
     ) -> None:
         del reason
         department_id = self._identity(plan)
-        async with get_async_db_session() as session:
-            async with session.begin():
+        operation_id = self._active_operation.get()
+        if operation_id is None:
+            raise PermissionPublishNotReadyError(msg="Department failure fence requires execution ownership")
+        async with self._session() as session:
+            async with self._transaction(session):
                 await session.execute(
                     update(Department)
                     .where(
@@ -161,6 +209,7 @@ class SqlDepartmentProjectionScope:
                         Department.tenant_id == plan.tenant_id,
                         Department.permission_projection_version == plan.expected_version,
                         Department.permission_projection_state == DEPARTMENT_PROJECTION_PROJECTING,
+                        Department.permission_projection_operation_id == operation_id,
                     )
                     .values(
                         permission_projection_state=(DEPARTMENT_PROJECTION_FAILED_CLOSED),
@@ -173,8 +222,8 @@ class SqlDepartmentProjectionScope:
         operation_id: int,
     ) -> None:
         department_id = self._identity(plan, operation_id)
-        async with get_async_db_session() as session:
-            async with session.begin():
+        async with self._session() as session:
+            async with self._transaction(session):
                 result = await session.execute(
                     update(Department)
                     .where(
@@ -193,6 +242,19 @@ class SqlDepartmentProjectionScope:
                 if result.rowcount:
                     return
                 row = await self._load(session, plan, for_update=True)
+                if (
+                    self._active_operation.get() == operation_id
+                    and row is not None
+                    and row.permission_projection_version == plan.target_version
+                    and row.permission_projection_state == DEPARTMENT_PROJECTION_FAILED_CLOSED
+                    and row.permission_projection_operation_id == operation_id
+                ):
+                    # Only the bound Owner execution adapter reaches this branch,
+                    # after full AFTER verification of historical split commits.
+                    row.permission_projection_state = DEPARTMENT_PROJECTION_CURRENT
+                    session.add(row)
+                    await session.flush()
+                    return
                 if (
                     row is not None
                     and row.permission_projection_version == plan.target_version
@@ -243,9 +305,11 @@ class DepartmentProjectionRuntime:
         *,
         ledger: DepartmentProjectionLedgerPort,
         scope: SqlDepartmentProjectionScope,
+        executor=None,
     ) -> None:
         self._ledger = ledger
         self.scope = scope
+        self.executor = executor
         self.handler = F048DepartmentChangeHandler(projection=ledger)
 
     async def prepare(
@@ -275,13 +339,20 @@ class DepartmentProjectionRuntime:
         self,
         prepared: PreparedDepartmentProjection,
     ) -> ProjectionOutcome:
+        if self.executor is not None:
+            return await self.executor.execute(prepared.operation_id, prepared.plan)
         return await self._ledger.execute(prepared.plan)
 
     async def reconcile_operation(
         self,
         operation_id: int,
     ) -> ProjectionOutcome:
+        if self.executor is not None:
+            return await self.executor.execute(operation_id)
         return await self._ledger.reconcile_operation(operation_id)
+
+    async def needs_recovery(self, operation_id):
+        return await self._ledger.department_needs_recovery(operation_id)
 
     async def abandon(
         self,
@@ -289,6 +360,14 @@ class DepartmentProjectionRuntime:
         error: Exception,
     ) -> None:
         await self._ledger.abandon_prepared(prepared.plan, error)
+
+
+_executor_factory = None
+
+
+def configure_department_executor_factory(factory):
+    global _executor_factory
+    _executor_factory = factory
 
 
 _scope = SqlDepartmentProjectionScope()
@@ -316,15 +395,20 @@ def register_department_projection_runtime_context() -> None:
         ledger = getattr(components, "projection", None)
         if ledger is None:
             raise PermissionPublishNotReadyError(msg="Permission projection ledger is unavailable")
-        return DepartmentProjectionRuntime(
-            ledger=ledger,
-            scope=_scope,
-        )
+        if _executor_factory is None:
+            raise PermissionPublishNotReadyError(msg="Department execution composition is not configured")
+        executor = await _executor_factory(components, _scope)
+        return DepartmentProjectionRuntime(ledger=ledger, scope=_scope, executor=executor)
+
+    async def cleanup(runtime):
+        if runtime.executor is not None and hasattr(runtime.executor, "close"):
+            await runtime.executor.close()
 
     app_context.register_context(
         FunctionContextManager(
             name=DEPARTMENT_PROJECTION_RUNTIME_CONTEXT,
             init_func=initialize,
+            cleanup_func=cleanup,
         ),
         dependencies=["permission_runtime"],
         lazy=True,

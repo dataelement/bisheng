@@ -9,6 +9,7 @@ from sqlalchemy import func, update
 from sqlmodel import select
 
 from bisheng.common.errcode.permission import PermissionVersionConflictError
+from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.database import get_async_db_session
 from bisheng.permission.domain.models import (
     PermissionProjectionOperation,
@@ -34,6 +35,62 @@ class ProjectionRepository(
         session_factory: SessionFactory = get_async_db_session,
     ) -> None:
         super().__init__(session_factory)
+
+    async def aget_bound_operation_metadata(self, operation_ids: list[int]) -> dict[int, dict]:
+        """Bounded tenant-scoped metadata, including CURRENT department mismatches."""
+        if not operation_ids:
+            return {}
+        if len(operation_ids) > 1000:
+            raise ValueError("Recovery operation metadata batch exceeds 1000")
+        async with self._session() as session:
+            rows = (
+                await session.execute(
+                    select(
+                        PermissionProjectionOperation.id,
+                        PermissionProjectionOperation.tenant_id,
+                        PermissionProjectionOperation.scope_type,
+                        PermissionProjectionOperation.scope_key,
+                        PermissionProjectionOperation.operation_type,
+                        PermissionProjectionOperation.status,
+                        PermissionProjectionOperation.target_version,
+                    ).where(
+                        PermissionProjectionOperation.id.in_(operation_ids),
+                    )
+                )
+            ).all()
+            return {
+                int(row.id): {
+                    "id": int(row.id),
+                    "tenant_id": int(row.tenant_id),
+                    "scope_type": row.scope_type,
+                    "scope_key": row.scope_key,
+                    "operation_type": row.operation_type,
+                    "status": row.status,
+                    "target_version": int(row.target_version),
+                }
+                for row in rows
+            }
+
+    async def alock_recovery_operation(self, operation_id: int):
+        async with self._session() as session:
+            return (
+                (
+                    await session.execute(
+                        select(PermissionProjectionOperation)
+                        .where(
+                            PermissionProjectionOperation.id == operation_id,
+                        )
+                        .with_for_update(nowait=True)
+                        .execution_options(populate_existing=True)
+                    )
+                )
+                .scalars()
+                .first()
+            )
+
+    async def arecovery_database_time(self) -> datetime:
+        async with self._session() as session:
+            return (await session.execute(select(func.current_timestamp()))).scalar_one()
 
     async def aget_operation(
         self,
@@ -91,6 +148,7 @@ class ProjectionRepository(
         commit_checksum: str | None = None,
         error_code: int | None = None,
         error_message: str | None = None,
+        tenant_id: int | None = None,
     ) -> bool:
         values: dict[str, object] = {
             "status": target_status,
@@ -109,15 +167,37 @@ class ProjectionRepository(
                 .where(
                     PermissionProjectionOperation.id == operation_id,
                     PermissionProjectionOperation.status == expected_status,
+                    PermissionProjectionOperation.tenant_id == (tenant_id or get_current_tenant_id()),
                 )
                 .values(**values)
             )
             result = await session.execute(statement)
             return bool(result.rowcount)
 
+    async def adepartment_active_ids(self, department_id: int, *, limit: int = 32) -> list[int]:
+        """Skinny single-status probes; never status-IN + LOB/order scan on DM."""
+        identities = set()
+        async with self._session() as session:
+            for status in ("PREPARED", "STAGING", "COMMIT_UNKNOWN", "COMMITTED"):
+                statement = (
+                    select(PermissionProjectionOperation.id)
+                    .where(
+                        PermissionProjectionOperation.scope_type == "department",
+                        PermissionProjectionOperation.scope_key == str(department_id),
+                        PermissionProjectionOperation.status == status,
+                    )
+                    .limit(limit + 1)
+                )
+                identities.update((await session.execute(statement)).scalars().all())
+                if len(identities) > limit:
+                    raise PermissionVersionConflictError(msg="Too many active department operations")
+        return sorted(identities)
+
     async def aget_operation_tuples(
         self,
         operation_id: int,
+        *,
+        limit: int | None = None,
     ) -> list[PermissionProjectionTuple]:
         async with self._session() as session:
             statement = (
@@ -129,6 +209,8 @@ class ProjectionRepository(
                     PermissionProjectionTuple.tuple_fingerprint,
                 )
             )
+            if limit is not None:
+                statement = statement.limit(limit)
             return list((await session.execute(statement)).scalars().all())
 
     async def aget_retry_cursor(
@@ -194,8 +276,7 @@ class ProjectionRepository(
                     PermissionVisibleSourceProjection.resource_id == source.resource_id,
                     PermissionVisibleSourceProjection.visibility_class == source.visibility_class,
                     PermissionVisibleSourceProjection.projected_subject == source.projected_subject,
-                    PermissionVisibleSourceProjection.contribution_fingerprint
-                    == source.contribution_fingerprint,
+                    PermissionVisibleSourceProjection.contribution_fingerprint == source.contribution_fingerprint,
                 )
                 .with_for_update()
             )
@@ -213,9 +294,7 @@ class ProjectionRepository(
                 "model_key",
             )
             if any(getattr(existing, field) != getattr(source, field) for field in collision_fields):
-                raise PermissionVersionConflictError(
-                    msg="Visible source contribution fingerprint collision"
-                )
+                raise PermissionVersionConflictError(msg="Visible source contribution fingerprint collision")
             if source.source_version < existing.source_version:
                 raise PermissionVersionConflictError(msg="Visible source version is stale")
 
@@ -229,9 +308,7 @@ class ProjectionRepository(
             if source.source_version == existing.source_version:
                 if all(getattr(existing, field) == getattr(source, field) for field in mutable_fields):
                     return existing
-                raise PermissionVersionConflictError(
-                    msg="Visible source version is bound to a different projection"
-                )
+                raise PermissionVersionConflictError(msg="Visible source version is bound to a different projection")
 
             for field in mutable_fields:
                 setattr(existing, field, getattr(source, field))

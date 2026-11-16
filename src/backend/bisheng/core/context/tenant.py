@@ -202,3 +202,21 @@ def get_is_management_api() -> bool:
 def set_is_management_api(value: bool):
     """Set the management-api flag. Returns a reset token."""
     return _is_management_api.set(value)
+
+
+@contextmanager
+def exact_tenant_filter(tenant_id: int):
+    """Enter one owner's strict scope, even inside an SSO bypass batch."""
+    if tenant_id <= 0:
+        raise ValueError("tenant_id must be positive")
+    tokens = (
+        (current_tenant_id, current_tenant_id.set(tenant_id)),
+        (_admin_scope_tenant_id, _admin_scope_tenant_id.set(None)),
+        (_bypass_tenant_filter, _bypass_tenant_filter.set(False)),
+        (_strict_tenant_filter, _strict_tenant_filter.set(True)),
+    )
+    try:
+        yield
+    finally:
+        for variable, token in reversed(tokens):
+            variable.reset(token)

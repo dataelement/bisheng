@@ -100,6 +100,7 @@ class F048RuntimeComponents:
     projection: ProjectionService
     marker: RedisConsistencyMarker
     relations: PermissionRelationApplication
+    client: FGAClient | None = None
 
 
 class F048PermissionRuntime:
@@ -1411,4 +1412,5 @@ async def build_f048_permission_runtime(
         projection=projection,
         marker=sql_projection.marker,
         relations=PermissionRelationApplication(client),
+        client=client,
     )

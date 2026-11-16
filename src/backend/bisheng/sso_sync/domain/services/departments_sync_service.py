@@ -84,6 +84,17 @@ class DepartmentsSyncService:
                 # tests. F048 projects every verified item through its ledger.
                 fga_ops: list = []
 
+                from bisheng.department.domain.services.department_service import _uses_f048_department_projection
+
+                recovery_hints = (
+                    (
+                        await DepartmentTopologyProjectionService.sync_recovery_hints(
+                            row_source, [item.external_id for item in payload.upsert]
+                        )
+                    )
+                    if _uses_f048_department_projection()
+                    else {}
+                )
                 # --- upsert round ---
                 for item in payload.upsert:
                     await cls._apply_upsert(
@@ -94,6 +105,7 @@ class DepartmentsSyncService:
                         row_source,
                         default_root,
                         fga_ops,
+                        recovery_required=recovery_hints.get(item.external_id),
                     )
                     # Freshly upserted rows can become parents for later
                     # items in the same batch — keep the cache in sync so
@@ -238,12 +250,23 @@ class DepartmentsSyncService:
         row_source: str = DEFAULT_SSO_SYNC_SOURCE,
         default_root: Department | None = None,
         fga_ops: list | None = None,
+        recovery_required: bool | None = None,
     ) -> None:
         try:
             existing = await DepartmentDao.aget_by_source_external_id(
                 row_source,
                 item.external_id,
             )
+            if (
+                existing is not None
+                and getattr(existing, "permission_projection_operation_id", None)
+                and recovery_required is not False
+            ):
+                from bisheng.department.domain.services.department_service import (
+                    _resume_department_projection_if_needed,
+                )
+
+                await _resume_department_projection_if_needed(existing)
             incoming_ts = int(item.ts or source_ts or 0)
             decision = await OrgSyncTsGuard.check_and_update(
                 existing,
@@ -253,7 +276,7 @@ class DepartmentsSyncService:
             if decision == GuardDecision.SKIP_TS:
                 result.skipped_ts_conflict += 1
                 logger.info(
-                    "F014 upsert skipped by ts guard: external_id=%s incoming_ts=%s last=%s",
+                    "F014 upsert skipped by ts guard: external_id={} incoming_ts={} last={}",
                     item.external_id,
                     incoming_ts,
                     getattr(existing, "last_sync_ts", 0),
@@ -273,7 +296,7 @@ class DepartmentsSyncService:
             # transient failure must not abort the whole batch; record and
             # move on.
             logger.warning(
-                "F014 upsert error for %s: %s",
+                "F014 upsert error for {}: {}",
                 item.external_id,
                 exc,
             )
@@ -303,7 +326,7 @@ class DepartmentsSyncService:
             if dept is None:
                 # Nothing to do; not an error. Happens on double-delete.
                 logger.info(
-                    "F014 remove skipped: external_id=%s not present",
+                    "F014 remove skipped: external_id={} not present",
                     external_id,
                 )
                 return
@@ -317,7 +340,7 @@ class DepartmentsSyncService:
             if decision == GuardDecision.SKIP_TS:
                 result.skipped_ts_conflict += 1
                 logger.info(
-                    "F014 remove skipped by ts guard: external_id=%s incoming_ts=%s last=%s",
+                    "F014 remove skipped by ts guard: external_id={} incoming_ts={} last={}",
                     external_id,
                     incoming_ts,
                     dept.last_sync_ts,
@@ -352,7 +375,7 @@ class DepartmentsSyncService:
             )
         except Exception as exc:
             logger.warning(
-                "F014 remove error for %s: %s",
+                "F014 remove error for {}: {}",
                 external_id,
                 exc,
             )
@@ -380,7 +403,7 @@ class DepartmentsSyncService:
             prefix = f"{prefix}/"
         if prefix in ("/", "//"):
             logger.warning(
-                "F014 cascade skipped: unsafe path prefix for dept_id=%s",
+                "F014 cascade skipped: unsafe path prefix for dept_id={}",
                 archived_parent_snapshot.id,
             )
             return
@@ -421,7 +444,7 @@ class DepartmentsSyncService:
                 result.applied_remove += 1
             except Exception as exc:
                 logger.warning(
-                    "F014 cascade archive failed dept_id=%s: %s",
+                    "F014 cascade archive failed dept_id={}: {}",
                     cid,
                     exc,
                 )
