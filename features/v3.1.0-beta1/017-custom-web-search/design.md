@@ -69,7 +69,7 @@ OpenAPI 输入和解析复用自定义工具现有能力：前端 `EditTool` 与
 
 原两入口提案（范围待评审和用户确认）：`ToolSet.tsx` 的父级提交和历史 `bench/Subscribe.tsx` 对话框的 isApi 提交统一改用专用 settings 的读写与 revision；目前仅前者有活跃打开入口，后者没有打开触发器。成功才关闭，冲突/失败保留草稿并允许用户显式重载。现有 `WebSearchFrom.tsx` 白名单重建配置会丢新 provider，需取消这一丢弃行为；`ToolSet.tsx` 的配置 console.log 必须移除，状态管理不得留存明文 secret。旧 `/tool/config`、旧列表/详情及其他写入口不能绕过白名单、脱敏、版本和验证：对 web_search 必须委派同一服务及 CAS 或拒绝旧写；必须验证升级前客户端兼容性，不能保留一条无版本覆盖通路。
 
-**实现对照（未完成独立评审）**：`web_search.py` 为每个 schema operation 生成 `proof`，实际 custom DTO 为 `{operation, mapping, proof}`；proof 为 `{key_id, ciphertext}` 的操作声明认证密封值，不是 API Key 的密文。`web_search.py` 使用独立域标签并绑定 tenant/category，测试、custom 保存和执行初始化校验 operation 的 server/method/path、参数、类型与 security。导入自动初始化数据库中的共享 keyring，密钥轮换须考虑已保存 proof 的可解密性；相关兼容性与轮换仍待测试。settings DTO 可返回操作 proof，但不得返回 API Key 明文或其存储密文。API 成功响应经 `resp_200(data=...)` 包装；schema 的 content/url 互斥且当前实现拒绝所有 URL 查询串，test 的 data 为 `{status, preview, results}`。上述为源代码观察，不代表安全、兼容性或端到端验证通过。
+**实现对照（未完成独立评审）**：`web_search.py` 为每个 schema operation 生成 `proof`，实际 custom DTO 为 `{operation, mapping, proof}`；proof 为 `{key_id, ciphertext}` 的操作声明认证密封值，不是 API Key 的密文。`web_search.py` 使用独立域标签并绑定 tenant/category，测试、custom 保存和执行初始化校验 operation 的 server/method/path、参数、类型与 security。导入直接使用平台 encrypt_token/decrypt_token，凭据更新须保留已保存 proof 的可解密性；相关兼容性与轮换仍待测试。settings DTO 可返回操作 proof，但不得返回 API Key 明文或其存储密文。API 成功响应经 `resp_200(data=...)` 包装；schema 的 content/url 互斥且当前实现拒绝所有 URL 查询串，test 的 data 为 `{status, preview, results}`。上述为源代码观察，不代表安全、兼容性或端到端验证通过。
 
 **设置实现边界**：`web_search.py` 使用非 custom provider 字段白名单；历史未知 provider 和字段在读取视图隐藏但保存时保留，新增或修改未知项被拒绝。旧 custom 凭据无法解密时，选择 custom 失败；选择其他 provider 仅在 prompt 和非 custom 配置不变等条件下允许，默认值也可能使配置变化而触发 409。详情及恢复条件见 [运维指南](./operations.md#保存时的凭据检查)。
 
@@ -85,11 +85,11 @@ OpenAPI 输入和解析复用自定义工具现有能力：前端 `EditTool` 与
 
 ### 4.6 密钥存储与多实例共享
 
-在工具域新增专用 secret 表/仓储，唯一键为 (owner tenant, category ID, provider=custom)，存密文、key_id、版本及审计元数据，不将明文或密文放在任何 category/child extra、通用 DTO 或日志。使用具域标签及 owner/category 绑定的认证加密信封，参考 `app_publish/domain/secret_security.py` 的 Fernet 模式而不直接复用其 app 专用类；不得直接用 `core/config/settings.py` 中源码固定密钥作为搜索凭据和 proof 的密钥。新表由现有模型发现/建表机制处理，架构与双库兼容遵循项目规范；事务内配置、密钥和 revision 一起提交。
+凭据专用表仅保存密文、固定 `platform` key_id、版本和审计元数据；加密根密钥由现有平台 `encrypt_token/decrypt_token` 封装提供，不在搜索域生成或存储。
 
-系统首次使用时生成独立随机 keyring，将包含 keys/active 的 JSON 用平台现有配置加密封装写入共享数据库 config.web_search_keyring；Config.key 唯一约束解决并发初始化，失败竞争者读取已提交的胜出记录。所有 API、Celery、Linsight 从数据库读取，不再依赖专用环境变量或本地文件。平台既有配置加密只承担存储封装，实际凭据和 proof 使用随机生成的搜索专用 key；不会直接用源码固定 key 签发 proof。损坏记录不自动覆盖。旧部署先迁入原 keyring/active，保留 ID 和已保存凭据可解密性，再删环境变量及重建容器，步骤见 operations.md。密文含版本和 key_id，解密后验证信封域及 owner/category 绑定；未知版本/key、缺钥、错钥和校验失败均 fail closed，不回退其他 provider 或用空密钥。执行于 `ToolExecutor._init_preset_tool` 中在受权、选定实际有效 extra 之后、调用 `load_tools` 之前注入深拷贝内存参数，不写回 ORM、缓存、队列或日志；独立的 `bisheng_langchain` 包不得反向导入 `bisheng`。长运行实例可能持有旧密钥，只承诺下次初始化生效，失效强制终止需另议。
+搜索 API Key 和 operation proof 直接调用现有 `encrypt_token / decrypt_token`；密文信封保留 domain、version、tenant_id、category_id 约束，凭据记录的 key_id 固定为 `platform`。不生成或持久化搜索专用 keyring，不新增 config 表行；API、Celery、Linsight 使用同一平台加密封装。旧部署先用旧 keyring 解密并迁移已有凭据/proof，再删环境变量，步骤见 operations.md。密文含版本和 key_id，解密后验证信封域及 owner/category 绑定；未知版本/key、缺钥、错钥和校验失败均 fail closed，不回退其他 provider 或用空密钥。执行于 `ToolExecutor._init_preset_tool` 中在受权、选定实际有效 extra 之后、调用 `load_tools` 之前注入深拷贝内存参数，不写回 ORM、缓存、队列或日志；独立的 `bisheng_langchain` 包不得反向导入 `bisheng`。长运行实例可能持有旧密钥，只承诺下次初始化生效，失效强制终止需另议。
 
-轮换提案：先在共享数据库保留新旧 key 并验证可解密，再切 active key；新写用新 key，使用可审计、限速、可重试的运维任务逐条重加密并与配置 revision 作原子 CAS，冲突重读重试，不输出密文或明文；完成并验证所有记录和备份恢复后，按保留期移除旧 key。备份密文数据库的同时通过独立安全渠道备份必要 keyring/版本，不同存储域、限制访问并演练恢复；密钥丢失不可恢复，需重新配置上游 key。是否已有统一 KMS、具体回滚窗口及值班机制待运维确认，不声称现有部署已支持。
+凭据轮换沿用平台加密封装；更新凭据时以新密文替换旧密文，旧 keyring 不再参与新写入。备份数据库密文时遵守平台既有密钥恢复流程。
 
 **轮换现状**：上述 CAS 批量重加密任务尚未实现；`web_search.py` 和 `web_search.py` 的 `keep` 不重加密，受控流程可逐分类显式替换凭据。替换不会更新既有 operation proof，旧 proof 和保留期内备份仍可能需要旧 key；不要提前移除，演练及恢复仍待验证。具体流程见 [运维指南](./operations.md#轮换备份和恢复)。
 
@@ -148,4 +148,4 @@ OpenAPI 输入和解析复用自定义工具现有能力：前端 `EditTool` 与
 
 ### 2026-11-15 P1 修复
 
-无需专用密钥环境变量；共享数据库自动初始化且保留并发、用途和租户绑定。新增部署要求造成界面配置失败的旧实现已移除。已知坑：仅重启容器不会移除环境变量，必须更新实际 env_file 并重建容器；先迁入旧 keyring 才能保留原凭据与 proof。
+无需专用密钥环境变量；直接使用平台 `encrypt_token/decrypt_token`，不创建独立搜索 keyring 或数据库配置项。旧环境升级必须先迁移密文，再从 env_file 移除旧变量并重建容器；仅重启不能改变容器环境。

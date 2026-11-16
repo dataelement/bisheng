@@ -35,6 +35,6 @@ config=/tmp/custom-web-search-test.yaml .venv/bin/python -m pytest -q \
 ## 2026-11-15 P1 修复验证
 
 - 本地 search/tool-config/timeout 三组回归共 33 项通过，Ruff 与架构检查通过。新增用例在两个专用密钥变量缺失时执行，并验证 8 个并发初始化者共享密钥、用途/租户绑定、损坏记录拒绝和旧 key ID 可解密。
-- 115 原 keyring 已迁入共享数据库，原有 1 条凭据解密通过；backend/worker 已重建，实际容器和 env_file 均移除两个变量，worker 也验证原凭据可解密。
+- 115 原有 1 条凭据已迁移为 platform 加密密文并解密通过；backend/worker 已重建，实际容器和 env_file 均移除两个变量，worker 也验证原凭据可解密。
 - 115 使用原已保存配置直接调用 search_preview 成功，返回 38 条结果。此为服务器 Service 调用验证，不等同于已登录界面操作或完整 Desktop 会话验收。
 - 部署只替换搜索密钥加载部分，保留线上已有的 OpenAPI v2 实现；服务器窄补丁不代表整个 PR 已部署。

@@ -9,8 +9,8 @@
 ## Wave 0：基础设施与决策
 
 - [ ] **T001** 基础设施：核对 `src/backend/bisheng/tool/domain/models/gpts_tools.py` 中 WebSearchSecret 的 owner tenant/category/provider 唯一键、密文版本与审计字段，确保 MySQL/DM8 可建表；回滚采用停用 custom、备份后由运维单独移除新增表，不能把数据迁移放入 Alembic。依赖：无。
-- [x] **T002** 基础设施：原环境变量方案由 P1 修复替代；共享数据库自动初始化随机 keyring/active，复用平台存储加密，损坏数据 fail closed。33 项相关回归及 115 API/worker 解密验证通过；旧 provider 不变。
-- [ ] **T003** 决策与登记：功能编号已收纳为 F017 并登记 v3.1.0-beta1 release-contract；继续确认新密钥对象归属及共享工具写入影响；确认历史子项覆盖处理、私网 CIDR/端口授权、HTTP 内网策略、网络限制值、keyring 托管及轮换恢复责任。依赖：无。登记需走项目正常流程；本次只记录待办。
+- [x] **T002** 基础设施：原环境变量方案由 P1 修复替代；直接复用平台 encrypt_token/decrypt_token，不创建搜索 keyring 或数据库配置项，损坏数据 fail closed。32 项相关回归及 115 API/worker 解密验证通过；旧 provider 不变。
+- [ ] **T003** 决策与登记：功能编号已收纳为 F017 并登记 v3.1.0-beta1 release-contract；继续确认新密钥对象归属及共享工具写入影响；确认历史子项覆盖处理、私网 CIDR/端口授权、HTTP 内网策略、网络限制值及平台加密恢复责任。依赖：无。登记需走项目正常流程；本次只记录待办。
 - [ ] **T004** 安全评审：按用户已确认决定保留通用原文预览，对已知秘密及可识别编码脱敏；按已修订 AC-12 评审并记录上游任意变形、拆分或未知秘密无法识别的已接受残余风险；不得将有限脱敏描述为绝对保证。依赖：无。
 
 ## Wave 1：后端 Domain（测试先于实现）
@@ -55,10 +55,10 @@
 
 ## Wave 4：Worker、集成与交付
 
-- [ ] **T033** 测试：在 `src/backend/test/tool/test_custom_web_search.py` 验证 API、Celery、Linsight 进程同 keyring 正确解密，密钥缺失 fail closed、实例重初始化生效；Celery tenant_id 从消息 headers 恢复 ContextVar，验证两租户和共享资源 use 授权。**覆盖 AC: AC-08, AC-09, AC-12**。依赖：T024。
+- [ ] **T033** 测试：在 `src/backend/test/tool/test_custom_web_search.py` 验证 API、Celery、Linsight 进程使用平台加密封装正确解密，密钥缺失 fail closed、实例重初始化生效；Celery tenant_id 从消息 headers 恢复 ContextVar，验证两租户和共享资源 use 授权。**覆盖 AC: AC-08, AC-09, AC-12**。依赖：T024。
 - [ ] **T034** 实现：在实际 Worker 初始化/部署注入入口补齐 T033 所需配置和租户传播，不把密钥写入消息；保持已有调用方授权，运行 T033。依赖：T033。
 - [ ] **T035** 测试：在 `src/backend/test/tool/test_custom_web_search.py` 用 MySQL 和 DM8 分别验证原子回滚、两个管理员 CAS、tenant 范围与建表；记录 CI 运行结果。**覆盖 AC: AC-07, AC-11, AC-12**。依赖：T014, T020。
-- [ ] **T036** 运维演练：验证新旧 keyring 滚动部署、限速 CAS 重加密中断重试、备份恢复和旧钥移除；记录操作与结果，不输出密钥。依赖：T003, T034。
+- [ ] **T036** 运维演练：验证旧密文迁移、备份恢复和回滚边界；记录操作与结果，不输出密钥。依赖：T003, T034。
 - [ ] **T037** E2E：在隔离部署和受控上游运行 `src/backend/test/e2e/test_e2e_custom_web_search.py` 并补足真实写入及执行覆盖：两入口导入、固定参数、测试、离线保存、重开、切换、错误/空结果，工作台、工作流、Linsight 引用及历史回放；覆盖双租户授权。**覆盖 AC: AC-01, AC-02, AC-03, AC-04, AC-05, AC-06, AC-07, AC-08, AC-09, AC-10, AC-11, AC-12, AC-13**。原 opt-in 只读权限检查占位测试已按用户要求删除，真实部署 E2E 仍未完成。依赖：T032, T034, T035。
 - [ ] **T038** 评审：执行 /sdd-review 本目录 tasks，逐条解决 checklist 问题；独立关闭 design 评审及 Constitution Check，确认安全残余风险、运维决定和版本归属。依赖：T003, T004。
 - [ ] **T039** 评审：每项实现按项目流程执行 /task-review 并记录结果；全任务及 E2E 完成后执行 /sdd-code-review --base 对应发版线，修复问题并记录结果。依赖：T036, T037, T038。
@@ -85,4 +85,4 @@
 
 - 按用户要求将 preview/proof/secret/settings 合并到 `web_search.py`，运行侧 worker 合并到 `custom.py`；继续保持 `bisheng` 管理服务与 `bisheng_langchain` 执行包边界，以及隔离子进程传输。
 
-- [x] P1：去除专用密钥环境变量依赖，自动初始化共享数据库 keyring；保留旧 ID 的迁移及无环境变量回归。
+- [x] P1：去除专用密钥环境变量依赖，平台 encrypt-token 密文迁移；保留旧 ID 的迁移及无环境变量回归。

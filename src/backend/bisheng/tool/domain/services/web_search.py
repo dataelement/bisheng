@@ -9,17 +9,15 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 from urllib.parse import urlsplit
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import InvalidToken
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, model_validator
-from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
 from bisheng.common.errcode import BaseErrorCode
-from bisheng.common.models.config import Config
 from bisheng.core.config.settings import decrypt_token, encrypt_token
 from bisheng.core.context.tenant import get_current_tenant_id
-from bisheng.core.database import get_async_db_session, get_sync_db_session
+from bisheng.core.database import get_async_db_session
 from bisheng.tool.domain.const import ToolPresetType
 from bisheng.tool.domain.models.gpts_tools import GptsTools, GptsToolsType, WebSearchSecret
 from bisheng.tool.domain.services.tool import ToolServices
@@ -40,46 +38,11 @@ class SecretUnavailable(RuntimeError):
 
 class WebSearchCipher:
     _domain = "bisheng-custom-web-search-secret-v1"
-    _storage_key = "web_search_keyring"
-
-    def __init__(self, keyring: dict[str, str], active_key_id: str):
-        try:
-            if not isinstance(keyring, dict) or not isinstance(active_key_id, str) or not active_key_id:
-                raise ValueError
-            if any(not isinstance(key_id, str) or not key_id or len(key_id) > 128 for key_id in keyring):
-                raise ValueError
-            self._keys = {key_id: Fernet(key.encode("ascii")) for key_id, key in keyring.items()}
-            if active_key_id not in self._keys:
-                raise ValueError
-            self._active = active_key_id
-        except (ValueError, TypeError, AttributeError, UnicodeError):
-            raise SecretUnavailable("Custom search secret keyring unavailable") from None
+    _key_id = "platform"
 
     @classmethod
     def configured(cls):
-        # The database is shared by API replicas and workers. Never generate a
-        # process-local key: another process must be able to verify the proof.
-        with get_sync_db_session() as session:
-            row = session.exec(select(Config).where(Config.key == cls._storage_key)).first()
-            stored = row.value if row is not None else None
-        if stored is None:
-            candidate = json.dumps({"keys": {"v1": Fernet.generate_key().decode("ascii")}, "active": "v1"})
-            encrypted = encrypt_token(candidate).decode("ascii")
-            try:
-                with get_sync_db_session() as session:
-                    session.add(Config(key=cls._storage_key, value=encrypted))
-                    session.commit()
-                stored = encrypted
-            except IntegrityError:
-                # A different replica won first initialization. Use its key.
-                with get_sync_db_session() as session:
-                    row = session.exec(select(Config).where(Config.key == cls._storage_key)).one()
-                    stored = row.value
-        try:
-            payload = json.loads(decrypt_token(stored.encode("ascii")))
-            return cls(payload["keys"], payload["active"])
-        except (KeyError, ValueError, TypeError, AttributeError, UnicodeError, InvalidToken):
-            raise SecretUnavailable("Custom search secret keyring unavailable") from None
+        return cls()
 
     def encrypt(self, value: str, *, tenant_id: int, category_id: int) -> tuple[str, str]:
         try:
@@ -94,14 +57,16 @@ class WebSearchCipher:
             "category_id": category_id,
             "value": value,
         }
-        token = self._keys[self._active].encrypt(json.dumps(payload, ensure_ascii=False).encode()).decode("ascii")
-        return self._active, token
+        token = encrypt_token(json.dumps(payload, ensure_ascii=False)).decode("ascii")
+        return self._key_id, token
 
     def decrypt(self, key_id: str, ciphertext: str, *, tenant_id: int, category_id: int) -> str:
         try:
             if not isinstance(ciphertext, str) or len(ciphertext) > 65536:
                 raise ValueError
-            data = json.loads(self._keys[key_id].decrypt(ciphertext.encode("ascii")))
+            if key_id != self._key_id:
+                raise ValueError
+            data = json.loads(decrypt_token(ciphertext.encode("ascii")))
             if (data["domain"], data["version"], data["tenant_id"], data["category_id"]) != (
                 self._domain,
                 1,

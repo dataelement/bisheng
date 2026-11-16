@@ -785,5 +785,6 @@
   "WORKBENCH_ARCHIVE_LIMIT": "Workbench archive exceeds the allowed limits",
   "WORKBENCH_ARCHIVE_INVALID": "Workbench archive is corrupt or invalid",
   "WORKBENCH_VALIDATION_FAILED": "Workbench package content is invalid",
-  "workbenchUploadTooLarge": "The server rejected the upload because it exceeds its size limit (HTTP 413). Choose a smaller archive."
+  "workbenchUploadTooLarge": "The server rejected the upload because it exceeds its size limit (HTTP 413). Choose a smaller archive.",
+  "15033": "Invalid image generation settings. Check the API address, API key and model; Azure is not supported."
 }

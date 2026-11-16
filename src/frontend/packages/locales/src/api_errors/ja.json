@@ -785,5 +785,6 @@
   "WORKBENCH_ARCHIVE_LIMIT": "ワークベンチの圧縮ファイルが制限を超えています",
   "WORKBENCH_ARCHIVE_INVALID": "ワークベンチの圧縮ファイルが破損しているか無効です",
   "WORKBENCH_VALIDATION_FAILED": "ワークベンチのパッケージ内容が無効です",
-  "workbenchUploadTooLarge": "アップロードがサーバーのサイズ制限を超えたため拒否されました（HTTP 413）。小さいファイルを選択してください。"
+  "workbenchUploadTooLarge": "アップロードがサーバーのサイズ制限を超えたため拒否されました（HTTP 413）。小さいファイルを選択してください。",
+  "15033": "画像生成の設定が無効です。API アドレス、API キー、モデルを確認してください。Azure はサポートしていません。"
 }
