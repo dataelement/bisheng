@@ -64,3 +64,11 @@ deployment measurement; local tests do not establish those results.
 
 - 2026-11-08: implement approved coalesced batching to remove historical scan
   fan-out and unknown-lag continuation loops; no API, DB table or dependency added.
+
+## Deployment regression check
+
+The registered `dsh.dispatch_usage` Celery entry point must call the bounded
+`UsageDispatcher.dispatch()` through `projection_worker_runtime`; testing the
+dispatcher class alone does not cover registration errors. The legacy inspection
+callback must preserve the returned continuation cursor. These entry points are
+covered by `test/dsh/test_usage_task_registration.py`.
