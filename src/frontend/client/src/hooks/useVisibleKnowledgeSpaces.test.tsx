@@ -7,7 +7,11 @@ import {
   type VisibleSpacesPage,
 } from "~/api/knowledgeVisible";
 import { useVisibleKnowledgeSpaces } from "./useVisibleKnowledgeSpaces";
-let mockIdentity = {
+let mockIdentity: {
+  user: { id: string } | undefined;
+  token: string | undefined;
+  isAuthenticated: boolean;
+} = {
   user: { id: "7" },
   token: "credential-one",
   isAuthenticated: true,
@@ -48,6 +52,63 @@ beforeEach(() => {
   };
   readTenant.mockReset().mockResolvedValue(101);
   readPage.mockReset();
+});
+test.each([undefined, ""])(
+  "loads visible spaces for an authenticated cookie session with token %p",
+  async (token) => {
+    mockIdentity = { ...mockIdentity, token };
+    readPage.mockResolvedValue(page(["cookie-visible"]));
+    const view = renderHook(() => useVisibleKnowledgeSpaces(), setup());
+    await waitFor(() =>
+      expect(view.result.current.spaces.map((space) => space.id)).toEqual([
+        "cookie-visible",
+      ]),
+    );
+    expect(readTenant).toHaveBeenCalledTimes(1);
+    expect(readPage).toHaveBeenCalledTimes(1);
+  },
+);
+test("cookie sessions wait for a verified user and isolate late responses after signing in again", async () => {
+  mockIdentity = { user: undefined, token: undefined, isAuthenticated: false };
+  let resolveOld: (value: VisibleSpacesPage) => void = () => {};
+  readPage
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveOld = resolve;
+        }),
+    )
+    .mockResolvedValue(page(["current-session"]));
+  const view = renderHook(() => useVisibleKnowledgeSpaces(), setup());
+  expect(readTenant).not.toHaveBeenCalled();
+  expect(readPage).not.toHaveBeenCalled();
+  mockIdentity = { ...mockIdentity, isAuthenticated: true };
+  view.rerender();
+  expect(readTenant).not.toHaveBeenCalled();
+  mockIdentity = { ...mockIdentity, user: { id: "7" }, isAuthenticated: false };
+  view.rerender();
+  expect(readTenant).not.toHaveBeenCalled();
+  mockIdentity = { ...mockIdentity, isAuthenticated: true };
+  view.rerender();
+  await waitFor(() => expect(readPage).toHaveBeenCalledTimes(1));
+  mockIdentity = { ...mockIdentity, isAuthenticated: false };
+  view.rerender();
+  expect(view.result.current.spaces).toEqual([]);
+  expect(view.result.current.isFetching).toBe(false);
+  mockIdentity = { ...mockIdentity, isAuthenticated: true };
+  view.rerender();
+  expect(view.result.current.spaces).toEqual([]);
+  await waitFor(() =>
+    expect(view.result.current.spaces.map((space) => space.id)).toEqual([
+      "current-session",
+    ]),
+  );
+  await act(async () => resolveOld(page(["previous-session"])));
+  expect(view.result.current.spaces.map((space) => space.id)).toEqual([
+    "current-session",
+  ]);
+  expect(readTenant).toHaveBeenCalledTimes(2);
+  expect(readPage).toHaveBeenCalledTimes(2);
 });
 test("does not prefetch; explicitly advances through empty pages and retries only the failed cursor", async () => {
   readPage
