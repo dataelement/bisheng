@@ -2,7 +2,7 @@
 
 ## 范围与决策
 
-Small feature：前端增加既有功能的入口，不改变 API、持久化形态或执行链路。沿用当前客户端配置所属分支 `v3.0.0-fix-dsh`，2026-11-09 按用户指示升级为 3.0.1-beta1，并合入 codex/custom-web-search；本地产物不纳入提交。
+Small feature：前端增加既有功能的入口，不改变 API、持久化形态或执行链路。本功能归属 v3.1.0-beta1 / F021；本地产物不纳入源码交付。
 
 - `SharedToolSettings` 位于 `WorkbenchModel` 的“其他模型配置”末尾。
 - 使用通用“搜索工具”“绘图工具”标签；复用 `WebSearchForm`、`ImageGeneration`，避免字段与校验分叉。绘图同时识别新 image_generation 和旧 dalle_image_generator 工具标识，入口不依赖供应商名称。

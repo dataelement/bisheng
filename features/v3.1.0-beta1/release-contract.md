@@ -252,3 +252,15 @@ PRD §2 审计功能优化、§3 添加模型列表与高级参数另行规划�
 按本聊天最新确认，新增AC-122/123：新Run保留SQL索引绑定，不查询普通资源ES/Milvus结构/数量或逐文件对象状态；底层服务健康和SQL/向量偏差独立处理。`physical_inventory_policy=bindings_only`独立于preparation policy 2；旧冻结材料无该字段时仍按原完整合同读验，新策略拒绝夹带physical页，不造空事实。历史准备中选中孤儿文件的精确物理备份/删除不受此收敛影响。
 
 默认新Run preview执行正式M2同一路径的完整只读预检，临时分页本地私有保存并在退出时删除，SQL/FGA/MinIO持久页零写入；`preflight_complete`不等于正式`ready`。旧Run复核保留原集合/证据约束，当前新增租户使用新的扫描材料，不改写历史基线。真实镜像、旧快照升级及现场业务验收另行执行。
+
+## PR #2694 收纳功能
+
+| Feature | 目录 | 边界 |
+| --- | --- | --- |
+| F017 | [自定义联网搜索](017-custom-web-search/spec.md) | 界面配置；随机系统密钥自动持久化；保留工具权限、租户绑定及出站限制 |
+| F018 | [通用图像生成](018-image-generation/spec.md) | 复用现有工具配置；OpenAI Images 兼容协议 |
+| F019 | [企业市场与工作台增量](019-dsh-market-workbench/spec.md) | 基于 F055，记录本版本覆盖、删除、批量导入及校验协议 |
+| F020 | [DSH usage 批处理](020-dsh-usage-batching/spec.md) | Redis 同步结算；SQL 投影批处理，不改权限和 API |
+| F021 | [客户端共享工具配置](021-client-shared-tools/spec.md) | 客户端与平台读写同一份工具配置，沿用超管权限 |
+
+原 features/local 及 v3.0.0 下本 PR 新增草稿归入上述目录；旧版 F055 基线保持原样，本版本差异以 F019 为准。本目录收纳不表示全部功能已完成目标环境验收。

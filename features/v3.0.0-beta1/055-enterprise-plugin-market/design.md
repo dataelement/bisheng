@@ -6,7 +6,7 @@ API endpoint → MarketService → MarketRepository → SQLModel，MinIO 制品�
 
 五张新表：dsh_market_plugin、dsh_market_version、dsh_market_import、dsh_market_audit、dsh_market_device。表模型已加入数据库发现；按项目新表创建机制建表，既有表结构保持原样。
 
-插件 ID 稳定，版本 ID 是稳定记录身份，同版本主动覆盖时 SHA-256、大小和 manifest 可更新；插件记录维护 current_version_id、disabled、deleted、revision。删除在 CAS 事务中置 deleted=true、清空当前版本并记录后台操作；普通列表和详情过滤 deleted，策略继续返回曾发布版本以支持已有安装。导入校验成功后，在同一个事务中创建版本或原位覆盖同版本内容、设置当前版本、更新展示元数据、递增 revision、记录前后状态，导入任务置为 completed。版本属性 published_once 记录曾发布资格，映射既有物理列 reviewed；保持现有数据结构与历史资格。导入任务以 tenant_id + digest 幂等，当前可用插件重复导入仍重新判断当前摘要，同版本不同内容覆盖并推进 revision；历史 completed digest 任务不得阻止 A→B→A；已删除、旧下架或旧禁用记录的明确重导入重新校验并恢复当前版本；失败保持原状态。validating 任务可在服务恢复后继续。旧 pending 任务对应的版本可由管理员重新导入恢复。
+插件 ID 稳定，版本 ID 与 ZIP SHA-256 绑定；插件记录维护 current_version_id、disabled、deleted、revision。删除在 CAS 事务中置 deleted=true、清空当前版本并记录后台操作；普通列表和详情过滤 deleted，策略继续返回曾发布版本以支持已有安装。导入校验成功后，在同一个事务中创建不可变版本、设置当前版本、更新展示元数据、递增 revision、记录前后状态，导入任务置为 completed。版本属性 published_once 记录曾发布资格，映射既有物理列 reviewed；保持现有数据结构与历史资格。导入任务以 tenant_id + digest 幂等，当前可用插件重复导入返回原任务并保留版本；已删除、旧下架或旧禁用记录的明确重导入重新校验并恢复当前版本；失败保持原状态。validating 任务可在服务恢复后继续。旧 pending 任务对应的版本可由管理员重新导入恢复。
 
 制品对象键为 `dsh-market/{tenant_id}/{sha256}.zip`，使用当前 BISHENG 的 MinIO bucket/config。生产环境配置持久化对象存储与数据库备份；全量历史保留。当前没有租户容量配额与自动清理任务。
 

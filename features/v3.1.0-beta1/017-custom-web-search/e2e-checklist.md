@@ -50,7 +50,7 @@
 
 ## 未覆盖与执行记录
 
-- 自动 API E2E：已编写但**未运行实际服务**的 AC-12 设置 GET 正反权限测试，见 [test_e2e_custom_web_search.py](../../../src/backend/test/e2e/test_e2e_custom_web_search.py)。显式设置 `CUSTOM_SEARCH_E2E=1`，以及 `CUSTOM_SEARCH_E2E_API_BASE`（以 `/api/v1` 结尾）、`CUSTOM_SEARCH_E2E_CATEGORY_ID`、`CUSTOM_SEARCH_E2E_ADMIN_TOKEN`、`CUSTOM_SEARCH_E2E_USER_TOKEN`，仅使用隔离部署和专用账号；从 `src/backend` 执行 `.venv/bin/pytest test/e2e/test_e2e_custom_web_search.py -v`。测试不写配置，不能自动证明部署隔离或 token 身份，执行者必须先确认。当前实现包含 settings/schema/test 路由；其行为尚未端到端验证。现有 helpers 的默认 localhost 和管理员凭据以及通用前缀清理不适合还原共享 provider 配置，故不使用。
+- 自动化回归：见 [test_custom_web_search.py](../../../src/backend/test/tool/test_custom_web_search.py)，覆盖 Schema 导入、保存、HTTP 测试/执行及权限拒绝。测试使用隔离 SQLite 与本地受控上游，不代表真实部署 UI 或全链路验收。
 - AC-01 至 AC-13 全部 **未验证**；上面分别列出人工验证路径，尚无通过证据。两入口、实际工作流/Linsight、跨租户、引用历史、密钥生命周期、并发和网络策略均需要隔离部署及受控上游。
 - 本清单无法证明任意恶意上游对密钥的拆分、变形或未知秘密回显均能被识别；设计 §4.8 已记录 AC-05 原始响应预览与 AC-12 绝对不泄密之间的残余风险。
 - MySQL/DM8 双库、密钥轮换及备份恢复、各工作进程密钥分发、完整网络重绑定与 TLS/peer 验证需要专门环境和额外测试；此处未执行，不应据此宣称覆盖。

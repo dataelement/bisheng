@@ -2,7 +2,7 @@
 
 **关联**：[spec.md](./spec.md) · [tasks.md](./tasks.md)
 **状态**：按用户最新要求简化，用户已确认；实施与验证状态见 tasks.md。
-**版本**：local 草稿，正式版本/编号待分配。
+**版本**：v3.1.0-beta1，F018。
 **更新**：2026-11-09。
 
 ## 1. 目标与范围
@@ -11,7 +11,7 @@
 
 ## 2. 约束与参考
 
-遵循 [constitution.md](../../../docs/constitution.md) C1–C8 和 [发布契约](../../v3.0.0/release-contract.md)。复用现有配置、权限、脱敏和对象存储；不新增表、路由或 provider 框架。
+遵循 [constitution.md](../../../docs/constitution.md) C1–C8 和 [发布契约](../release-contract.md)。复用现有配置、权限、脱敏和对象存储；不新增表、路由或 provider 框架。
 
 已读取参考仓库 `/Users/alex/Documents/Code/dataelem/dsh-desktop/packages/dsh-image-generation/`：`lib/provider.js` 集中处理地址规范化、`/images/generations` 请求、响应限量和安全错误；`index.js` 在调用时读取当前配置，随后保存图片。借鉴这条调用链及处理方式，不复制其模型目录、在线连接探测、凭据 profiles、本地资产提交及预览服务。
 
@@ -77,7 +77,7 @@ DSH 当前生成函数只接收第一张 Base64 图片并保存到本地工作�
 
 保留现有配置 HTTP API，工具输入 `{query: string}`，输出 Markdown 图片文本；新增 `image_generation`，保留 `dalle_image_generator` 别名。依赖现有 httpx、Pillow、MinIO、租户上下文及工具权限，无新中间件或二进制依赖。
 
-新模型配置不保证旧 DALL-E 代码能运行；部署时 API/Worker 使用同一代码版本，回滚前恢复兼容旧模型的配置。正式发布版本及编号仍待分配。
+新模型配置不保证旧 DALL-E 代码能运行；部署时 API/Worker 使用同一代码版本，回滚前恢复兼容旧模型的配置。归属 v3.1.0-beta1 / F018。
 
 ## 7. 验证
 

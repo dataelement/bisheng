@@ -84,3 +84,5 @@
 - 按用户要求复用自定义工具现有 OpenAPI 输入及解析：前端共用 `OpenApiSchemaInput`，后端共用 `ToolServices.load_openapi_schema` / `OpenApiSchema`，删除独立 `web_search_schema.py`。功能测试收敛为一个文件，不据此勾选 SDD 任务。
 
 - 按用户要求将 preview/proof/secret/settings 合并到 `web_search.py`，运行侧 worker 合并到 `custom.py`；继续保持 `bisheng` 管理服务与 `bisheng_langchain` 执行包边界，以及隔离子进程传输。
+
+- [x] P1：去除专用密钥环境变量依赖，自动初始化共享数据库 keyring；保留旧 ID 的迁移及无环境变量回归。

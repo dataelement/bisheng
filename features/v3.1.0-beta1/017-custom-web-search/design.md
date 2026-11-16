@@ -4,7 +4,7 @@
 
 **规格**：[spec.md](./spec.md)
 
-**版本**：v3.0.0；功能编号待分配
+**版本**：v3.1.0-beta1；F017
 **日期**：2026-11-05
 
 ## 1. 目标与边界
@@ -13,7 +13,7 @@
 
 ## 2. 约束
 
-遵循 [架构宪章](../../../docs/constitution.md) C1–C8 和 [v3.0.0 版本契约](../../v3.0.0/release-contract.md)；联网搜索与网页读取设置互不影响。
+遵循 [架构宪章](../../../docs/constitution.md) C1–C8 和 [v3.1.0-beta1 版本契约](../release-contract.md)；联网搜索与网页读取设置互不影响。
 
 首版接口范围：OpenAPI 3.0，单一 server，GET/POST，查询参数或 JSON body 的顶层标量字段；其他必填参数支持字符串、数字、布尔固定值，按 Schema 校验类型。拒绝无法表达的必填参数、外部引用、路径参数、文件上传及复杂嵌套请求；不静默忽略。响应必须为 JSON，结果路径定位数组，字段路径相对于数组元素，路径仅支持对象属性，不执行表达式或脚本。空路径表示响应根数组；映射字段的空路径不作为有效字段。结果需有可用 HTTP(S) 链接才能生成引用。
 
@@ -32,8 +32,8 @@
 
 ### 3.3 配置与密钥
 
-- 选定：延续联网搜索 `type` + `config` 的单服务商选择，新增 `custom` 配置；密钥在服务端加密保存，读接口只返回是否已配置，更新时区分保留、替换与清除。固定参数中不得包含密钥；认证单独配置。切换服务商保留其他配置。
-- 备选：沿用现有 `extra` 中明文回传的习惯，会违反本功能密钥不回显的要求。若项目提供统一密钥服务，优先接入并重新评估存储方式。
+- 选定：延续联网搜索 `type` + `config` 的单服务商选择，新增 `custom` 配置；密钥在服务端加密保存，读接口只返回是否已配置，更新时区分保留、替换与清除。固定参数中不得包含密钥；认证单独配置。切换服务商保留其他配置。系统随机密钥自动存于共享数据库，复用既有配置加密封装，不要求管理员新增搜索环境变量。
+- 备选：沿用现有 `extra` 中明文回传的习惯，会违反本功能密钥不回显的要求。强制部署专用环境变量会阻断界面配置；进程内生成密钥无法跨副本验证。若项目提供统一 KMS，重新评估数据库存储封装，保留 key ID 与旧密文的升级兼容。
 
 ## 4. 系统现状与拟议数据流
 
@@ -51,7 +51,7 @@ OpenAPI 输入和解析复用自定义工具现有能力：前端 `EditTool` 与
 
 | 项目 | 拟议契约与职责 |
 |---|---|
-| 配置 | `type: custom`，`config.custom` 保存所选 operation 的受限规范化描述、搜索词参数、固定参数、认证设置和结果映射，不保存完整 Schema；持久化前限制整个分类 extra 的 UTF-8 大小以适配 MySQL TEXT（上限 60 KiB），超限明确报错。密钥在专用表中以外部配置的专用 Fernet 密钥加密持久化，extra 和前端只见状态。原有 provider 数据结构不迁移。 |
+| 配置 | `type: custom`，`config.custom` 保存所选 operation 的受限规范化描述、搜索词参数、固定参数、认证设置和结果映射，不保存完整 Schema；持久化前限制整个分类 extra 的 UTF-8 大小以适配 MySQL TEXT（上限 60 KiB），超限明确报错。密钥在专用表中以自动生成并共享持久化的专用 Fernet 密钥加密持久化，extra 和前端只见状态。原有 provider 数据结构不迁移。 |
 | 运行输入 | `web_search` 的 `query: string`，保持现有调用方不变。 |
 | 运行输出 | JSON 数组，每项包含 `id`、`title`、`snippet`、`url`、`source`、`siteIcon`、`datePublished`；URL 无效的结果不作为网页引用，映射错误不能伪装为空数组。 |
 | 管理 API | 采用 §4.4 的专用 settings、schema 和 test 契约；原两入口提案及现状见 §4.1、§4.4。仅全局超管可管理，校验目标联网搜索预置工具及其归属，不复用仅验证登录的通用入口。 |
@@ -69,7 +69,7 @@ OpenAPI 输入和解析复用自定义工具现有能力：前端 `EditTool` 与
 
 原两入口提案（范围待评审和用户确认）：`ToolSet.tsx` 的父级提交和历史 `bench/Subscribe.tsx` 对话框的 isApi 提交统一改用专用 settings 的读写与 revision；目前仅前者有活跃打开入口，后者没有打开触发器。成功才关闭，冲突/失败保留草稿并允许用户显式重载。现有 `WebSearchFrom.tsx` 白名单重建配置会丢新 provider，需取消这一丢弃行为；`ToolSet.tsx` 的配置 console.log 必须移除，状态管理不得留存明文 secret。旧 `/tool/config`、旧列表/详情及其他写入口不能绕过白名单、脱敏、版本和验证：对 web_search 必须委派同一服务及 CAS 或拒绝旧写；必须验证升级前客户端兼容性，不能保留一条无版本覆盖通路。
 
-**实现对照（未完成独立评审）**：`web_search.py` 为每个 schema operation 生成 `proof`，实际 custom DTO 为 `{operation, mapping, proof}`；proof 为 `{key_id, ciphertext}` 的操作声明认证密封值，不是 API Key 的密文。`web_search.py` 使用独立域标签并绑定 tenant/category，测试、custom 保存和执行初始化校验 operation 的 server/method/path、参数、类型与 security。导入依赖已配置的 keyring，密钥轮换须考虑已保存 proof 的可解密性；相关兼容性与轮换仍待测试。settings DTO 可返回操作 proof，但不得返回 API Key 明文或其存储密文。API 成功响应经 `resp_200(data=...)` 包装；schema 的 content/url 互斥且当前实现拒绝所有 URL 查询串，test 的 data 为 `{status, preview, results}`。上述为源代码观察，不代表安全、兼容性或端到端验证通过。
+**实现对照（未完成独立评审）**：`web_search.py` 为每个 schema operation 生成 `proof`，实际 custom DTO 为 `{operation, mapping, proof}`；proof 为 `{key_id, ciphertext}` 的操作声明认证密封值，不是 API Key 的密文。`web_search.py` 使用独立域标签并绑定 tenant/category，测试、custom 保存和执行初始化校验 operation 的 server/method/path、参数、类型与 security。导入自动初始化数据库中的共享 keyring，密钥轮换须考虑已保存 proof 的可解密性；相关兼容性与轮换仍待测试。settings DTO 可返回操作 proof，但不得返回 API Key 明文或其存储密文。API 成功响应经 `resp_200(data=...)` 包装；schema 的 content/url 互斥且当前实现拒绝所有 URL 查询串，test 的 data 为 `{status, preview, results}`。上述为源代码观察，不代表安全、兼容性或端到端验证通过。
 
 **设置实现边界**：`web_search.py` 使用非 custom provider 字段白名单；历史未知 provider 和字段在读取视图隐藏但保存时保留，新增或修改未知项被拒绝。旧 custom 凭据无法解密时，选择 custom 失败；选择其他 provider 仅在 prompt 和非 custom 配置不变等条件下允许，默认值也可能使配置变化而触发 409。详情及恢复条件见 [运维指南](./operations.md#保存时的凭据检查)。
 
@@ -83,13 +83,13 @@ OpenAPI 输入和解析复用自定义工具现有能力：前端 `EditTool` 与
 
 **现有兼容限制**：`gpts_tools.py` 对没有任何历史子记录（包括已删除记录）的 preset 无法安全识别类型，普通列表隐藏其 `extra`、旧配置写入拒绝，即使实际为非搜索 preset 也受影响；可识别的非搜索 preset 保持原行为。部署影响和迁移策略待核实，见 [运维指南](./operations.md#已知未解决事项)。
 
-### 4.6 密钥存储、分发与轮换（待确认提案）
+### 4.6 密钥存储与多实例共享
 
-在工具域新增专用 secret 表/仓储，唯一键为 (owner tenant, category ID, provider=custom)，存密文、key_id、版本及审计元数据，不将明文或密文放在任何 category/child extra、通用 DTO 或日志。使用具域标签及 owner/category 绑定的认证加密信封，参考 `app_publish/domain/secret_security.py` 的 Fernet 模式而不直接复用其 app 专用类；切勿使用 `core/config/settings.py` 中源码固定密钥。新表由现有模型发现/建表机制处理，架构与双库兼容遵循项目规范；事务内配置、密钥和 revision 一起提交。
+在工具域新增专用 secret 表/仓储，唯一键为 (owner tenant, category ID, provider=custom)，存密文、key_id、版本及审计元数据，不将明文或密文放在任何 category/child extra、通用 DTO 或日志。使用具域标签及 owner/category 绑定的认证加密信封，参考 `app_publish/domain/secret_security.py` 的 Fernet 模式而不直接复用其 app 专用类；不得直接用 `core/config/settings.py` 中源码固定密钥作为搜索凭据和 proof 的密钥。新表由现有模型发现/建表机制处理，架构与双库兼容遵循项目规范；事务内配置、密钥和 revision 一起提交。
 
-从部署侧提供独立 keyring（key_id → Fernet key）及 active key_id，通过部署密钥管理注入 API、Celery、Linsight 所有实例，不写入仓库、普通配置文件、日志或备份明文；配置名、部署注入机制及密钥托管运维负责人待实施前确认。密文含版本和 key_id，解密后验证信封域及 owner/category 绑定；未知版本/key、缺钥、错钥和校验失败均 fail closed，不回退其他 provider 或用空密钥。执行于 `ToolExecutor._init_preset_tool` 中在受权、选定实际有效 extra 之后、调用 `load_tools` 之前注入深拷贝内存参数，不写回 ORM、缓存、队列或日志；独立的 `bisheng_langchain` 包不得反向导入 `bisheng`。长运行实例可能持有旧密钥，只承诺下次初始化生效，失效强制终止需另议。
+系统首次使用时生成独立随机 keyring，将包含 keys/active 的 JSON 用平台现有配置加密封装写入共享数据库 config.web_search_keyring；Config.key 唯一约束解决并发初始化，失败竞争者读取已提交的胜出记录。所有 API、Celery、Linsight 从数据库读取，不再依赖专用环境变量或本地文件。平台既有配置加密只承担存储封装，实际凭据和 proof 使用随机生成的搜索专用 key；不会直接用源码固定 key 签发 proof。损坏记录不自动覆盖。旧部署先迁入原 keyring/active，保留 ID 和已保存凭据可解密性，再删环境变量及重建容器，步骤见 operations.md。密文含版本和 key_id，解密后验证信封域及 owner/category 绑定；未知版本/key、缺钥、错钥和校验失败均 fail closed，不回退其他 provider 或用空密钥。执行于 `ToolExecutor._init_preset_tool` 中在受权、选定实际有效 extra 之后、调用 `load_tools` 之前注入深拷贝内存参数，不写回 ORM、缓存、队列或日志；独立的 `bisheng_langchain` 包不得反向导入 `bisheng`。长运行实例可能持有旧密钥，只承诺下次初始化生效，失效强制终止需另议。
 
-轮换提案：先将新旧 keyring 发至全部进程验证可解密，再切 active key；新写用新 key，使用可审计、限速、可重试的运维任务逐条重加密并与配置 revision 作原子 CAS，冲突重读重试，不输出密文或明文；完成并验证所有记录和备份恢复后，按保留期移除旧 key。备份密文数据库的同时通过独立安全渠道备份必要 keyring/版本，不同存储域、限制访问并演练恢复；密钥丢失不可恢复，需重新配置上游 key。是否已有统一 KMS、具体回滚窗口及值班机制待运维确认，不声称现有部署已支持。
+轮换提案：先在共享数据库保留新旧 key 并验证可解密，再切 active key；新写用新 key，使用可审计、限速、可重试的运维任务逐条重加密并与配置 revision 作原子 CAS，冲突重读重试，不输出密文或明文；完成并验证所有记录和备份恢复后，按保留期移除旧 key。备份密文数据库的同时通过独立安全渠道备份必要 keyring/版本，不同存储域、限制访问并演练恢复；密钥丢失不可恢复，需重新配置上游 key。是否已有统一 KMS、具体回滚窗口及值班机制待运维确认，不声称现有部署已支持。
 
 **轮换现状**：上述 CAS 批量重加密任务尚未实现；`web_search.py` 和 `web_search.py` 的 `keep` 不重加密，受控流程可逐分类显式替换凭据。替换不会更新既有 operation proof，旧 proof 和保留期内备份仍可能需要旧 key；不要提前移除，演练及恢复仍待验证。具体流程见 [运维指南](./operations.md#轮换备份和恢复)。
 
@@ -143,3 +143,9 @@ OpenAPI 输入和解析复用自定义工具现有能力：前端 `EditTool` 与
 - 正式功能编号及发版线登记。
 - 历史子项覆盖处理及企业内网授权网段的运维配置需按 §4.5 和 §4.7 落实；用户已接受的预览脱敏残余风险见 §4.8，仍需评审和交付记录；不能使用源码中的固定 Fernet 密钥作为安全凭据。
 - 不支持复杂请求体、分页、非 JSON、任意脚本和多搜索服务并行；有明确服务需求再扩展。
+
+## 修订历史
+
+### 2026-11-15 P1 修复
+
+无需专用密钥环境变量；共享数据库自动初始化且保留并发、用途和租户绑定。新增部署要求造成界面配置失败的旧实现已移除。已知坑：仅重启容器不会移除环境变量，必须更新实际 env_file 并重建容器；先迁入旧 keyring 才能保留原凭据与 proof。

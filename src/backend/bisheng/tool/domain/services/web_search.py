@@ -4,7 +4,6 @@ import asyncio
 import hashlib
 import json
 import math
-import os
 import uuid
 from datetime import UTC, datetime
 from typing import Any, Literal
@@ -13,11 +12,14 @@ from urllib.parse import urlsplit
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, model_validator
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
 from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.models.config import Config
+from bisheng.core.config.settings import decrypt_token, encrypt_token
 from bisheng.core.context.tenant import get_current_tenant_id
-from bisheng.core.database import get_async_db_session
+from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.tool.domain.const import ToolPresetType
 from bisheng.tool.domain.models.gpts_tools import GptsTools, GptsToolsType, WebSearchSecret
 from bisheng.tool.domain.services.tool import ToolServices
@@ -38,6 +40,7 @@ class SecretUnavailable(RuntimeError):
 
 class WebSearchCipher:
     _domain = "bisheng-custom-web-search-secret-v1"
+    _storage_key = "web_search_keyring"
 
     def __init__(self, keyring: dict[str, str], active_key_id: str):
         try:
@@ -54,12 +57,29 @@ class WebSearchCipher:
 
     @classmethod
     def configured(cls):
+        # The database is shared by API replicas and workers. Never generate a
+        # process-local key: another process must be able to verify the proof.
+        with get_sync_db_session() as session:
+            row = session.exec(select(Config).where(Config.key == cls._storage_key)).first()
+            stored = row.value if row is not None else None
+        if stored is None:
+            candidate = json.dumps({"keys": {"v1": Fernet.generate_key().decode("ascii")}, "active": "v1"})
+            encrypted = encrypt_token(candidate).decode("ascii")
+            try:
+                with get_sync_db_session() as session:
+                    session.add(Config(key=cls._storage_key, value=encrypted))
+                    session.commit()
+                stored = encrypted
+            except IntegrityError:
+                # A different replica won first initialization. Use its key.
+                with get_sync_db_session() as session:
+                    row = session.exec(select(Config).where(Config.key == cls._storage_key)).one()
+                    stored = row.value
         try:
-            keyring = json.loads(os.environ["BISHENG_WEB_SEARCH_SECRET_KEYRING"])
-            active = os.environ["BISHENG_WEB_SEARCH_SECRET_ACTIVE_KEY_ID"]
-        except (KeyError, ValueError, TypeError):
+            payload = json.loads(decrypt_token(stored.encode("ascii")))
+            return cls(payload["keys"], payload["active"])
+        except (KeyError, ValueError, TypeError, AttributeError, UnicodeError, InvalidToken):
             raise SecretUnavailable("Custom search secret keyring unavailable") from None
-        return cls(keyring, active)
 
     def encrypt(self, value: str, *, tenant_id: int, category_id: int) -> tuple[str, str]:
         try:

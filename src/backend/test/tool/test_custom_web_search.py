@@ -3,6 +3,7 @@
 import json
 import sys
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager, contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import SimpleNamespace
@@ -23,6 +24,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.models.config import Config
 from bisheng.tool.api.tool import router
 from bisheng.tool.domain.models.gpts_tools import (
     GptsTools,
@@ -45,6 +47,64 @@ from bisheng_langchain.gpts.tools.web_search.custom import (
 )
 
 
+@pytest.fixture(autouse=True)
+def key_store(tmp_path, monkeypatch):
+    engine = create_engine(f"sqlite:///{tmp_path / 'keys.db'}")
+    Config.__table__.create(engine)
+
+    @contextmanager
+    def session():
+        with Session(engine) as db:
+            yield db
+
+    monkeypatch.setattr(search_service, "get_sync_db_session", session)
+    monkeypatch.delenv("BISHENG_WEB_SEARCH_SECRET_KEYRING", raising=False)
+    monkeypatch.delenv("BISHENG_WEB_SEARCH_SECRET_ACTIVE_KEY_ID", raising=False)
+    yield session
+    engine.dispose()
+
+
+def test_keyring_is_shared_across_initializers_without_environment(key_store):
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        ciphers = list(pool.map(lambda _: search_service.WebSearchCipher.configured(), range(8)))
+    key_id, token = ciphers[0].encrypt("private-value", tenant_id=1, category_id=16)
+    for cipher in ciphers:
+        assert cipher.decrypt(key_id, token, tenant_id=1, category_id=16) == "private-value"
+        with pytest.raises(search_service.SecretUnavailable):
+            cipher.decrypt(key_id, token, tenant_id=2, category_id=16)
+    # Operation proofs cannot be substituted for credentials, even with the same key.
+    with pytest.raises(search_service.SecretUnavailable):
+        search_service.OperationCipher.configured().decrypt(key_id, token, tenant_id=1, category_id=16)
+    with key_store() as db:
+        row = db.exec(select(Config)).one()
+        assert "private-value" not in row.value
+        assert "v1" not in row.value
+        row.value = "corrupt"
+        db.add(row)
+        db.commit()
+    with pytest.raises(search_service.SecretUnavailable):
+        search_service.WebSearchCipher.configured()
+    with key_store() as db:
+        assert db.exec(select(Config)).one().value == "corrupt"
+
+
+def test_migrated_keyring_preserves_existing_credentials(key_store):
+    keys = {"old": Fernet.generate_key().decode(), "current": Fernet.generate_key().decode()}
+    old = search_service.WebSearchCipher(keys, "old")
+    key_id, token = old.encrypt("private-value", tenant_id=1, category_id=16)
+    with key_store() as db:
+        db.add(
+            Config(
+                key="web_search_keyring",
+                value=search_service.encrypt_token(json.dumps({"keys": keys, "active": "current"})).decode(),
+            )
+        )
+        db.commit()
+    cipher = search_service.WebSearchCipher.configured()
+    assert cipher.decrypt(key_id, token, tenant_id=1, category_id=16) == "private-value"
+    assert cipher.encrypt("replacement", tenant_id=1, category_id=16)[0] == "current"
+
+
 @pytest.fixture
 async def store(monkeypatch):
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
@@ -59,8 +119,6 @@ async def store(monkeypatch):
 
     monkeypatch.setattr(search_service, "get_async_db_session", session)
     monkeypatch.setattr(search_service, "get_current_tenant_id", lambda: 1)
-    monkeypatch.setenv("BISHENG_WEB_SEARCH_SECRET_KEYRING", json.dumps({"v1": Fernet.generate_key().decode()}))
-    monkeypatch.setenv("BISHENG_WEB_SEARCH_SECRET_ACTIVE_KEY_ID", "v1")
     async with session() as db:
         db.add(GptsToolsType(id=16, name="search", tenant_id=1, is_preset=1, extra="{}"))
         db.add(GptsTools(id=38, name="search", type=16, tool_key="web_search", tenant_id=1, is_preset=1))
@@ -464,8 +522,6 @@ async def test_import_save_executor_http(tmp_path, monkeypatch):
         monkeypatch.setattr("bisheng.utils.http_middleware._check_is_global_super", AsyncMock(return_value=False))
         monkeypatch.setattr(executor, "check_business_action", AsyncMock(return_value=True))
         monkeypatch.setattr(executor.telemetry_service, "log_event", AsyncMock())
-        monkeypatch.setenv("BISHENG_WEB_SEARCH_SECRET_KEYRING", json.dumps({"v1": Fernet.generate_key().decode()}))
-        monkeypatch.setenv("BISHENG_WEB_SEARCH_SECRET_ACTIVE_KEY_ID", "v1")
         monkeypatch.setenv("BS_CUSTOM_SEARCH_ORIGINS", origin)
         monkeypatch.setenv("BS_CUSTOM_SCHEMA_ORIGINS", origin)
         monkeypatch.setenv("BS_CUSTOM_SEARCH_PORTS", str(port))
@@ -528,7 +584,7 @@ async def test_import_save_executor_http(tmp_path, monkeypatch):
         assert requests[0][1] == "test-secret"
 
         monkeypatch.setattr(executor, "check_business_action", AsyncMock(return_value=False))
-        with pytest.raises(PermissionError, match="Permission denied: use"):
+        with pytest.raises(PermissionError, match="Permission denied: visible"):
             await ToolExecutor.init_by_tool_id(
                 tool_id=38, app_id="app", app_name="app", app_type=ApplicationTypeEnum.WORKFLOW, user_id=7
             )
