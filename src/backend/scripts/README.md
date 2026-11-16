@@ -2,6 +2,26 @@
 
 This directory contains manual maintenance and migration scripts for the backend.
 
+## Linsight checkpoint write indexes
+
+`backfill_linsight_checkpoint_indexes.py` indexes existing Redis checkpoints so
+resuming a task no longer scans the Redis database. From `src/backend`, export
+the same `config` as the service, then run:
+
+```bash
+python scripts/backfill_linsight_checkpoint_indexes.py
+# Stop all Linsight checkpoint writers before applying, then resume on the new code.
+python scripts/backfill_linsight_checkpoint_indexes.py --apply --writers-stopped
+```
+
+The default inventories checkpoint keys without writing indexes. The command
+initializes and closes the service infrastructure clients. Apply adds only
+indexes, preserves checkpoint payloads and their TTLs, and can be repeated after
+interruption. Existing checkpoints without a complete index fail explicitly;
+new checkpoints are indexed atomically when written. Run against every service
+Redis database containing Linsight checkpoints. Do not leave old checkpoint
+writers running after backfill, since they cannot maintain these indexes.
+
 ## Built-in knowledge retrieval tool
 
 `register_work_knowledge_tool.py` completes the Work knowledge-search upgrade in

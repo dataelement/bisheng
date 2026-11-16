@@ -20,11 +20,20 @@ inside Lua. Concurrent event writes retain ready work; unchanged, drained work
 is removed. Pending deliveries use the existing reclaim delay. Exceptions are
 logged and retained with 30-second backoff. No consumer publishes itself again.
 
-Every 60 seconds repair visits one SCAN page (COUNT 20 is a hint), persisting its
-cursor only after the page succeeds. It repairs pending work, inspects running
-requests and cleans retention. These maintenance delays depend on Redis keyspace
-size. On upgrade existing backlog is discovered incrementally; the 10-second
-target applies to new writes with the new writer and consumer running.
+Every event-producing Lua call also registers its stream in the persistent
+`projection_work:partitions` set, after preflighting the index type. Every 60
+seconds repair visits one SSCAN page of this set (COUNT 100), persists its cursor
+after success, repairs pending work, inspects running requests and cleans
+retention. Normal projection and maintenance do not enumerate the Redis DB.
+
+On first upgrade, a resumable inventory discovers legacy streams with bounded
+SCAN work (at most 20 pages / 0.25 seconds between pages per dispatch). Cursor
+progress is committed under an owner lease; completion is pinned to the Redis
+generation. A primary-generation change restarts an unfinished inventory from
+zero. Subsequent dispatches skip the inventory. Stop predecessor writers before
+starting the new writer/consumer pair: an old writer cannot register new streams.
+The normal-load target applies with the new writer and consumer running, after
+legacy discovery; it does not bound a one-time migration over an arbitrary DB.
 
 Rejected: raising the scan interval alone does not fix recursive publication;
 one Celery message per event amplifies load; a separate consumer process adds an
@@ -57,10 +66,15 @@ deployment measurement; local tests do not establish those results.
 | Index or claimed work survives a worker exit | Durable lease score allows recovery after 30 seconds; owner tokens fence stale completion. |
 | Another consumer holds pending events | Wait for the existing 60-second reclaim age rather than spin. |
 | SQL transaction outlives a lease | Existing SQL idempotence remains necessary; batch bounds do not interrupt SQL. |
-| Repair is incremental over the whole keyspace | Legacy discovery and orphan/retention latency grow with keyspace; reconsider a separate maintenance index if this becomes operationally significant. |
+| Legacy inventory requires one complete DB pass | This is upgrade/recovery work only. Normal orphan inspection and retention use the registered-partition set. Do not clear the partition set independently of its inventory marker. |
 | Throughput exceeds 16 users per invocation | The 10-second target requires enough worker capacity; reconsider measured batch bounds or dedicated consumers under sustained backlog. |
 
 ## Revision history
 
 - 2026-11-08: implement approved coalesced batching to remove historical scan
   fan-out and unknown-lag continuation loops; no API, DB table or dependency added.
+
+- 2026-11-16: fix the incomplete Celery dispatch registration and inspection
+  cursor binding; register maintenance partitions atomically and replace
+  recurring full-DB scans with SSCAN. Real Redis/SQLite regressions cover
+  10,000/100,000 unrelated keys and fenced queue completion.
