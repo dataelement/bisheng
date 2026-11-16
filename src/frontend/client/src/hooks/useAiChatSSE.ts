@@ -160,6 +160,7 @@ export function openChatStream(
 
     const sseUrl = submission.sseUrl || getSSEUrl();
     const sse = new SSE(sseUrl, {
+        start: false,
         payload: JSON.stringify({ ...payload, ...projectIntent }),
         headers: {
             "Content-Type": "application/json",

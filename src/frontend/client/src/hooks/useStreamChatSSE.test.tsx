@@ -27,6 +27,7 @@ class MockSSE {
 }
 
 jest.mock('sse.js', () => ({ SSE: jest.fn().mockImplementation(() => new MockSSE()) }));
+jest.mock('~/api/request', () => ({ prepareBrowserHeaders: jest.fn().mockResolvedValue({}), translateApiErrorMessage: () => '' }));
 
 function start() {
     const onFinal = jest.fn();
