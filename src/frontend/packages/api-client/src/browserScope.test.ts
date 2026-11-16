@@ -33,3 +33,10 @@ it('an older bootstrap cannot overwrite an explicitly reconfirmed target', async
   await expect(old).rejects.toThrow('management_scope_changed');
   expect(session.tenant).toBe(65);
 });
+
+it('legacy moderation callbacks use identity while normal tenant writes retain scope checks', () => {
+  expect(requestScopeKind('POST', '/api/v1/chat/message', 'http://localhost')).toBe('identity');
+  expect(needsBrowserScope('PUT', '/api/v1/chat/message/11', 'http://localhost')).toBe(false);
+  expect(needsBrowserScope('DELETE', '/api/v1/chat/message/11', 'http://localhost')).toBe(true);
+  expect(needsBrowserScope('POST', '/api/v1/workflow/create', 'http://localhost')).toBe(true);
+});

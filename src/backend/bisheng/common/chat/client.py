@@ -154,29 +154,35 @@ class ChatClient:
                 ),
             )
 
+    def _conversation_scope(self):
+        from contextlib import nullcontext
+
+        port = getattr(self, "kwargs", {}).get("conversation_persistence")
+        return port.scope(self.chat_id, self.client_id, self.user_id) if port and self.chat_id else nullcontext()
+
     async def add_message(self, msg_type: str, message: str, category: str, remark: str = ""):
-        self.chat_history.append({"category": category, "message": message, "remark": remark})
+        with self._conversation_scope():
+            return await self._add_message_in_scope(msg_type, message, category, remark)
+
+    async def _add_message_in_scope(self, msg_type, message, category, remark):
         if not self.chat_id:
-            # debugMode does not need to save history
+            self.chat_history.append({"category": category, "message": message, "remark": remark})
             return None
-        is_bot = 0 if msg_type == "human" else 1
-        msg = ChatMessageDao.insert_one(
-            ChatMessageModel(
-                is_bot=is_bot,
-                source=0,
-                message=message,
-                category=category,
-                type=msg_type,
-                extra=json.dumps({"client_key": self.client_key}, ensure_ascii=False),
-                flow_id=self.client_id,
-                chat_id=self.chat_id,
-                user_id=self.user_id,
-                remark=remark,
-            )
+        row = ChatMessageModel(
+            is_bot=0 if msg_type == "human" else 1,
+            source=0,
+            message=message,
+            category=category,
+            type=msg_type,
+            extra=json.dumps({"client_key": self.client_key}, ensure_ascii=False),
+            flow_id=self.client_id,
+            chat_id=self.chat_id,
+            user_id=self.user_id,
+            remark=remark,
         )
-        # Log Audit Logs, Is New Session
-        if len(self.chat_history) <= 1:
-            session = MessageSession(
+        template = None
+        if not self.chat_history:
+            template = MessageSession(
                 chat_id=self.chat_id,
                 flow_id=self.client_id,
                 flow_name=self.db_assistant.name,
@@ -184,10 +190,17 @@ class ChatClient:
                 user_id=self.user_id,
             )
             if self.session_subject is not None:
-                session = self.session_subject.stamp(session)
-            self.new_session = MessageSessionDao.insert_one(session)
-
-            # RecordTelemetryJournal
+                template = self.session_subject.stamp(template)
+        port = getattr(self, "kwargs", {}).get("conversation_persistence")
+        if port is not None:
+            msg, created = port.save(row, template)
+        else:
+            # Independent credential channels retain their existing subject handling.
+            msg = ChatMessageDao.insert_one(row)
+            created = MessageSessionDao.insert_one(template) if template is not None else None
+        self.chat_history.append({"category": category, "message": message, "remark": remark})
+        if created is not None:
+            self.new_session = created
             await telemetry_service.log_event(
                 user_id=self.user_id,
                 event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
@@ -200,7 +213,9 @@ class ChatClient:
                     app_type=ApplicationTypeEnum.ASSISTANT,
                 ),
             )
-            AuditLogService.create_chat_assistant(self.login_user, get_request_ip(self.request), self.client_id)
+            AuditLogService.create_chat_assistant(
+                self.login_user, get_request_ip(self.request), self.client_id, self.db_assistant
+            )
         return msg
 
     async def send_response(
@@ -280,6 +295,10 @@ class ChatClient:
             raise AssistantOtherError(exception=e)
 
     async def init_chat_history(self):
+        with self._conversation_scope():
+            await self._init_chat_history_in_scope()
+
+    async def _init_chat_history_in_scope(self):
         # Initialization history, not empty or no reinitialization
         if len(self.chat_history) > 0:
             return
@@ -455,20 +474,21 @@ class ChatClient:
 
             res = await self.add_message("bot", reasoning_content, "reasoning_answer")
             res = await self.add_message("bot", answer, "answer")
-            if res:
-                await save_message_citations(
-                    message_id=res.id,
-                    items=citation_items,
-                    chat_id=self.chat_id,
-                    flow_id=self.client_id,
-                )
-            else:
-                await save_message_citations(
-                    message_id=None,
-                    items=citation_items,
-                    chat_id=self.chat_id,
-                    flow_id=self.client_id,
-                )
+            with self._conversation_scope():
+                if res:
+                    await save_message_citations(
+                        message_id=res.id,
+                        items=citation_items,
+                        chat_id=self.chat_id,
+                        flow_id=self.client_id,
+                    )
+                else:
+                    await save_message_citations(
+                        message_id=None,
+                        items=citation_items,
+                        chat_id=self.chat_id,
+                        flow_id=self.client_id,
+                    )
             await self.send_response("answer", "start", "")
             await self.send_response(
                 "answer",

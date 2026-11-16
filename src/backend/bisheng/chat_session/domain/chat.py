@@ -44,9 +44,12 @@ class ChatSessionService:
 
     @staticmethod
     async def get_chat_history(
-        chat_id: str, flow_id: str, message_id: str | None = None, page_size: int | None = 20
+        chat_id: str, flow_id: str, message_id: str | None = None, page_size: int | None = 20, *, read_scope=None
     ) -> list["ChatMessageHistoryResponse"]:
         """Retrieve chat history for a user."""
+        if read_scope is not None:
+            with read_scope:
+                return await ChatSessionService.get_chat_history(chat_id, flow_id, message_id, page_size)
         from bisheng.api.v1.schema.chat_schema import ChatMessageHistoryResponse
 
         if not chat_id or not flow_id:
@@ -67,8 +70,13 @@ class ChatSessionService:
     async def get_session_info(
         chat_id: str,
         subject: SessionSubject | None = None,
+        *,
+        read_scope=None,
     ) -> MessageSession | None:
         """Get session details with logo URL resolved."""
+        if read_scope is not None:
+            with read_scope:
+                return await ChatSessionService.get_session_info(chat_id, subject)
         res = await MessageSessionDao.async_get_one(chat_id)
         if res and res.is_delete:
             res = None
@@ -444,6 +452,8 @@ class ChatSessionService:
         flow_id: str,
         login_user: UserPayload,
         request_ip: str,
+        *,
+        resource=None,
     ) -> MessageSession | None:
         """Get or create a session for Gateway's violation-message logging.
 
@@ -458,12 +468,26 @@ class ChatSessionService:
         """
         session_info = MessageSessionDao.get_one(chat_id=chat_id)
         if session_info:
+            if (
+                session_info.user_id != login_user.user_id
+                or session_info.tenant_id != _resolve_leaf_tenant_id(login_user)
+                or session_info.flow_id != flow_id
+                or session_info.is_delete
+                or session_info.api_subject_type is not None
+            ):
+                raise NotFoundError.http_exception()
             return session_info
 
         # F017 AC-11: resolve leaf tenant; raise 19504 if unavailable.
         leaf_tenant_id = _resolve_leaf_tenant_id(login_user)
 
-        flow_info = FlowDao.get_flow_by_id(flow_id)
+        flow_info = (
+            resource
+            if getattr(resource, "flow_type", None) == FlowType.WORKFLOW.value
+            else FlowDao.get_flow_by_id(flow_id)
+            if resource is None
+            else None
+        )
         if flow_info:
             session_info = MessageSessionDao.insert_one(
                 MessageSession(
@@ -479,7 +503,7 @@ class ChatSessionService:
             if flow_info.flow_type == FlowType.WORKFLOW.value:
                 AuditLogService.create_chat_workflow(login_user, request_ip, flow_id, flow_info)
         else:
-            assistant_info = AssistantDao.get_one_assistant(flow_id)
+            assistant_info = resource if resource is not None else AssistantDao.get_one_assistant(flow_id)
             if assistant_info:
                 session_info = MessageSessionDao.insert_one(
                     MessageSession(
@@ -492,7 +516,7 @@ class ChatSessionService:
                         tenant_id=leaf_tenant_id,
                     )
                 )
-                AuditLogService.create_chat_assistant(login_user, request_ip, flow_id)
+                AuditLogService.create_chat_assistant(login_user, request_ip, flow_id, assistant_info)
 
         if session_info:
             telemetry_service.log_event_sync(

@@ -187,3 +187,51 @@ async def test_phase_three_scope_proof_does_not_rehome_identity(dedicated):
     assert proof["home_tenant_id"] == facts["home_tenant_id"]
     after = assert_resp_200(await client.get(f"{API_BASE}/user/info", headers=admin))
     assert before["leaf_tenant_id"] == after["leaf_tenant_id"]
+
+
+async def test_legacy_gateway_cookie_only_moderation(dedicated):
+    """AC-61/62/63: original Cookie-only POST/PUT and verified Home attribution."""
+    from uuid import uuid4
+
+    client, admin, user, facts = dedicated
+    resource_id = facts.get("moderation_resource_id")
+    if not resource_id:
+        pytest.skip("Dedicated usable moderation_resource_id is required")
+    chat_id = f"e2e-f009-{uuid4().hex}"
+    payload = {
+        "flow_id": resource_id,
+        "chat_id": chat_id,
+        "human_message": "e2e-f009-question",
+        "answer_message": "e2e-f009-blocked",
+    }
+    try:
+        created = assert_resp_200(await client.post(f"{API_BASE}/chat/message", headers=user, json=payload))
+        assert len(created) == 2
+        assert {row["tenant_id"] for row in created} == {facts["home_tenant_id"]}
+        bot = next(row for row in created if row["is_bot"])
+        assert_resp_200(
+            await client.put(
+                f"{API_BASE}/chat/message/{bot['id']}", headers=user, json={"message": "e2e-f009-replaced"}
+            )
+        )
+        history = assert_resp_200(
+            await client.get(
+                f"{API_BASE}/chat/history", headers=user, params={"chat_id": chat_id, "flow_id": resource_id}
+            )
+        )
+        assert any(row["message"] == "e2e-f009-replaced" for row in history)
+        assert_resp_error(
+            await client.put(
+                f"{API_BASE}/chat/message/{bot['id']}", headers=admin, json={"message": "e2e-f009-not-owned"}
+            ),
+            403,
+        )
+        unchanged = assert_resp_200(
+            await client.get(
+                f"{API_BASE}/chat/history", headers=user, params={"chat_id": chat_id, "flow_id": resource_id}
+            )
+        )
+        assert any(row["message"] == "e2e-f009-replaced" for row in unchanged)
+    finally:
+        # Only this suite's fresh conversation is touched, including partial creation.
+        assert_resp_200(await client.delete(f"{API_BASE}/chat/{chat_id}", headers=user))
