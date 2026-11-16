@@ -5,6 +5,7 @@ umask 077
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${SCRIPT_DIR}/.env"
 source "${SCRIPT_DIR}/lib/install-env.sh"
+source "${SCRIPT_DIR}/lib/sandbox-security.sh"
 die() { printf '部署停止：%s\n' "$*" >&2; exit 1; }
 
 GATEWAY_CHOICE=""; LICENSE_FILE=""; PUBLIC_URL=""; PREPARE_ONLY=false
@@ -31,6 +32,7 @@ else die "请安装 Docker Compose（推荐 V2，也支持 docker-compose 命令
 # An existing .env is never replaced or merged automatically.
 [[ -f "$ENV_FILE" ]] || cp "${SCRIPT_DIR}/.env.example" "$ENV_FILE"
 chmod 600 "$ENV_FILE"
+sandbox_initialize_token
 compose() { "${COMPOSE[@]}" --env-file "$ENV_FILE" -f "${SCRIPT_DIR}/docker-compose.yml" "$@"; }
 profiles="$(env_get "$ENV_FILE" COMPOSE_PROFILES)"
 if [[ -n "$LICENSE_FILE" ]]; then

@@ -15,6 +15,7 @@ from bisheng.common.errcode.public_endpoints import PublicAccessError
 from bisheng.common.schemas.api import resp_200
 from bisheng.public_endpoints.api.exception_handlers import deny_public_websocket
 from bisheng.public_endpoints.domain.services.guest_policy import public_execution
+from bisheng.public_endpoints.domain.services.public_projection import public_assistant_view
 
 router = APIRouter(prefix="/assistant", tags=["PublicAPI", "Assistant"])
 
@@ -28,7 +29,7 @@ async def get_assistant_info(request: Request, assistant_id: UUID):
         # The anonymous channel exposes no way to create a share link, and a
         # super-admin operator would short-circuit the check to True. Reporting
         # that to a visitor is misleading and leaks whether the app is shareable.
-        return resp_200(data=data.model_copy(update={"can_share": False}))
+        return resp_200(data=public_assistant_view(data))
 
 
 @router.websocket("/chat/{assistant_id}")

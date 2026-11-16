@@ -264,6 +264,12 @@ class ChatManager:
                 flow_lease_id=flow_lease_id,
             )
         else:
+            if session_subject is None:
+                from bisheng.chat_session.domain.session_subject import SessionSubject
+
+                session_subject = SessionSubject.natural_person(
+                    tenant_id=login_user.tenant_id, user_id=login_user.user_id
+                )
             chat_client = WorkflowClient(
                 request,
                 client_key,

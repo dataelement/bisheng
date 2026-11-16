@@ -1,10 +1,8 @@
-import asyncio
 import hashlib
 import html as html_lib
 import ipaddress
 import logging
 import re
-import socket
 from dataclasses import dataclass
 from urllib.parse import urljoin, urlparse
 
@@ -13,16 +11,13 @@ from bs4 import BeautifulSoup, Comment
 from markdownify import markdownify
 
 from bisheng.common.errcode.knowledge import KnowledgeWebLinkImportError
+from bisheng.core.external.safe_download import is_public_address, public_astream
 
 logger = logging.getLogger(__name__)
 
-WEB_LINK_LOGIN_ENTRY_MARKDOWN = (
-    "该网页可能是登录、注册或权限入口页面，未能提取到适合入库的正文内容。"
-)
-WEB_LINK_NAVIGATION_PORTAL_MARKDOWN = (
-    "该网页主要是以导航或门户入口页面，正文信息不足，不建议作为知识库网页正文导入。"
-)
-WEB_LINK_DYNAMIC_RENDER_MARKDOWN = "该网页可能为动态渲染页面，未能提取到静态正文内容。"
+WEB_LINK_LOGIN_ENTRY_MARKDOWN = "该网页可能是登录、注册或权限入口页面,未能提取到适合入库的正文内容。"
+WEB_LINK_NAVIGATION_PORTAL_MARKDOWN = "该网页主要是以导航或门户入口页面,正文信息不足,不建议作为知识库网页正文导入。"
+WEB_LINK_DYNAMIC_RENDER_MARKDOWN = "该网页可能为动态渲染页面,未能提取到静态正文内容。"
 
 # Fixed low-value import bodies must not collide on content-hash dedup across URLs.
 WEB_LINK_NON_DEDUP_MARKDOWN_BODIES = frozenset(
@@ -162,42 +157,23 @@ class KnowledgeWebLinkImportService:
         response_url = current_url
 
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(20.0), follow_redirects=False) as client:
-                for _ in range(cls.MAX_REDIRECTS + 1):
-                    await cls._validate_url(current_url)
-                    async with client.stream("GET", current_url, headers=cls.REQUEST_HEADERS) as response:
-                        if response.is_redirect:
-                            location = response.headers.get("location")
-                            if not location:
-                                raise KnowledgeWebLinkImportError(msg="Web link redirect location is missing")
-                            current_url = str(response.url.join(location))
-                            continue
-
-                        if response.status_code >= 400:
-                            raise KnowledgeWebLinkImportError(
-                                msg=cls._http_status_error_message(response.status_code)
-                            )
-
-                        content_type = response.headers.get("content-type", "").lower()
-                        if not cls._is_supported_content_type(content_type):
-                            raise KnowledgeWebLinkImportError(msg="Web link content type is not supported")
-
-                        chunks: list[bytes] = []
-                        total = 0
-                        async for chunk in response.aiter_bytes():
-                            total += len(chunk)
-                            if total > cls.MAX_CONTENT_BYTES:
-                                raise KnowledgeWebLinkImportError(msg="Web link content is too large")
-                            chunks.append(chunk)
-                        content = b"".join(chunks)
-                        response_url = str(response.url)
-                        break
-                else:
-                    raise KnowledgeWebLinkImportError(msg="Web link redirects too many times")
-        except KnowledgeWebLinkImportError:
-            raise
-        except httpx.HTTPError as exc:
-            raise KnowledgeWebLinkImportError(msg=f"Web link request failed: {exc}") from exc
+            async with public_astream(current_url, headers=cls.REQUEST_HEADERS) as response:
+                if response.status_code >= 400:
+                    raise KnowledgeWebLinkImportError(msg=cls._http_status_error_message(response.status_code))
+                content_type = response.headers.get("content-type", "").lower()
+                if not cls._is_supported_content_type(content_type):
+                    raise KnowledgeWebLinkImportError(msg="Web link content type is not supported")
+                chunks: list[bytes] = []
+                total = 0
+                async for chunk in response.aiter_bytes():
+                    total += len(chunk)
+                    if total > cls.MAX_CONTENT_BYTES:
+                        raise KnowledgeWebLinkImportError(msg="Web link content is too large")
+                    chunks.append(chunk)
+                content = b"".join(chunks)
+                response_url = str(response.url)
+        except (ValueError, httpx.HTTPError) as exc:
+            raise KnowledgeWebLinkImportError(msg="Web link request failed or destination is not allowed") from exc
 
         if not content:
             raise KnowledgeWebLinkImportError(msg="Web link content is empty")
@@ -236,60 +212,9 @@ class KnowledgeWebLinkImportService:
             raise KnowledgeWebLinkImportError(msg="Web link URL is empty")
         return normalized
 
-    @classmethod
-    async def _validate_url(cls, url: str) -> None:
-        parsed = urlparse(url)
-        if parsed.scheme not in {"http", "https"}:
-            raise KnowledgeWebLinkImportError(msg="Only http/https web links are supported")
-        if not parsed.hostname:
-            raise KnowledgeWebLinkImportError(msg="Web link host is missing")
-
-        hostname = parsed.hostname.rstrip(".").lower()
-        if hostname in cls.BLOCKED_HOSTS:
-            raise KnowledgeWebLinkImportError(msg="This web link host is not allowed")
-
-        for ip_address in await cls._resolve_host(hostname, parsed.port):
-            if cls._is_blocked_ip(ip_address):
-                raise KnowledgeWebLinkImportError(msg="This web link address is not allowed")
-
-    @classmethod
-    async def _resolve_host(
-        cls,
-        hostname: str,
-        port: int | None,
-    ) -> list[ipaddress.IPv4Address | ipaddress.IPv6Address]:
-        try:
-            return [ipaddress.ip_address(hostname)]
-        except ValueError:
-            pass
-
-        def resolve() -> list[ipaddress.IPv4Address | ipaddress.IPv6Address]:
-            try:
-                infos = socket.getaddrinfo(hostname, port or 443, type=socket.SOCK_STREAM)
-            except socket.gaierror as exc:
-                raise KnowledgeWebLinkImportError(msg="Web link host cannot be resolved") from exc
-            resolved = []
-            for info in infos:
-                ip_value = info[4][0]
-                try:
-                    resolved.append(ipaddress.ip_address(ip_value))
-                except ValueError:
-                    continue
-            return resolved
-
-        addresses = await asyncio.to_thread(resolve)
-        if not addresses:
-            raise KnowledgeWebLinkImportError(msg="Web link host cannot be resolved")
-        return addresses
-
     @staticmethod
     def _is_blocked_ip(ip_address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
-        return (
-            ip_address.is_loopback
-            or ip_address.is_link_local
-            or ip_address.is_multicast
-            or ip_address.is_unspecified
-        )
+        return not is_public_address(ip_address)
 
     @staticmethod
     def _http_status_error_message(status_code: int) -> str:
@@ -305,10 +230,7 @@ class KnowledgeWebLinkImportService:
     def _is_supported_content_type(content_type: str) -> bool:
         if not content_type:
             return True
-        return any(
-            allowed in content_type
-            for allowed in ("text/html", "application/xhtml+xml", "text/plain")
-        )
+        return any(allowed in content_type for allowed in ("text/html", "application/xhtml+xml", "text/plain"))
 
     @staticmethod
     def _decode_content(content: bytes, content_type: str) -> str:
@@ -382,7 +304,7 @@ class KnowledgeWebLinkImportService:
                 "<body>",
                 "<main>",
                 f"<h1>{escaped_title}</h1>",
-                f'<p class="source">来源链接：<a href="{escaped_source}" target="_blank" rel="noreferrer">{escaped_source}</a></p>',
+                f'<p class="source">来源链接:<a href="{escaped_source}" target="_blank" rel="noreferrer">{escaped_source}</a></p>',
                 f"<article>{escaped_body}</article>",
                 "</main>",
                 "</body>",
@@ -392,43 +314,11 @@ class KnowledgeWebLinkImportService:
 
     @classmethod
     async def _fetch_rendered_content(cls, source_url: str) -> _RenderedContent | None:
-        try:
-            await cls._validate_url(source_url)
-            from playwright.async_api import async_playwright
-
-            async with async_playwright() as playwright:
-                browser = await playwright.chromium.launch(headless=True)
-                try:
-                    context = await browser.new_context(
-                        user_agent=cls.REQUEST_HEADERS["User-Agent"],
-                        extra_http_headers={
-                            "Accept-Language": cls.REQUEST_HEADERS["Accept-Language"],
-                        },
-                        ignore_https_errors=True,
-                    )
-                    page = await context.new_page()
-                    response = await page.goto(
-                        source_url,
-                        wait_until="domcontentloaded",
-                        timeout=cls.RENDER_TIMEOUT_MS,
-                    )
-                    final_url = page.url or source_url
-                    await cls._validate_url(final_url)
-                    if response and response.status >= 400:
-                        return None
-                    try:
-                        await page.wait_for_load_state("networkidle", timeout=5_000)
-                    except Exception:
-                        pass
-                    await page.wait_for_timeout(1_000)
-                    html = await page.content()
-                    await context.close()
-                    return _RenderedContent(html=html, final_url=final_url)
-                finally:
-                    await browser.close()
-        except Exception as exc:
-            logger.info("Rendered web link fallback failed for %s: %s", source_url, exc)
-            return None
+        # Browser DNS, redirects, JavaScript and subresources bypass the pinned
+        # HTTP transport. Disable network rendering until an isolated egress proxy
+        # can enforce the same policy on every browser connection.
+        logger.info("Rendered web link fallback disabled by egress policy")
+        return None
 
     @classmethod
     def _extract_markdown(cls, content: str, source_url: str, content_type: str) -> _MarkdownExtraction:
@@ -539,10 +429,7 @@ class KnowledgeWebLinkImportService:
             if not src:
                 image.decompose()
                 continue
-            alt_title = " ".join(
-                str(image.get(attr, ""))
-                for attr in ("alt", "title", "class", "id")
-            ).lower()
+            alt_title = " ".join(str(image.get(attr, "")) for attr in ("alt", "title", "class", "id")).lower()
             if src in seen_srcs and any(marker in alt_title for marker in cls.DECORATIVE_IMAGE_MARKERS):
                 image.decompose()
                 continue
@@ -647,7 +534,7 @@ class KnowledgeWebLinkImportService:
                 continue
             if lower.startswith(("<link ", "<style", "</style", "<script", "</script")):
                 continue
-            if "rel=\"stylesheet\"" in lower or "rel='stylesheet'" in lower:
+            if 'rel="stylesheet"' in lower or "rel='stylesheet'" in lower:
                 continue
             if re.search(r"[.#][\w\\-]+\s*\{[^}]{0,240}\}", stripped) and not re.search(r"[\u4e00-\u9fff]", stripped):
                 continue
@@ -681,8 +568,7 @@ class KnowledgeWebLinkImportService:
                 normalized_lines.append(stripped)
                 continue
             normalized_lines.extend(
-                stripped[index: index + max_line_length]
-                for index in range(0, len(stripped), max_line_length)
+                stripped[index : index + max_line_length] for index in range(0, len(stripped), max_line_length)
             )
         normalized = "\n".join(normalized_lines)
         return re.sub(r"\n{3,}", "\n\n", normalized).strip()
@@ -709,11 +595,11 @@ class KnowledgeWebLinkImportService:
             "<script",
             "</script",
             "<link",
-            "rel=\"stylesheet\"",
+            'rel="stylesheet"',
             "rel='stylesheet'",
             "display:none",
             "visibility:hidden",
-            "data-for=\"result\"",
+            'data-for="result"',
         )
         if any(marker in lower for marker in artifact_markers):
             return True
@@ -724,7 +610,7 @@ class KnowledgeWebLinkImportService:
 
         meaningful = re.sub(r"https?://\S+", "", normalized)
         meaningful = re.sub(r"!\[[^\]]*]\([^)]+\)|\[[^\]]+]\([^)]+\)", "", meaningful)
-        meaningful = re.sub(r"[#*_`>\-\s|:：,，.。/\\{}()[\]\"'=;；]+", "", meaningful)
+        meaningful = re.sub(r"[#*_`>\-\s|::,,.。/\\{}()[\]\"'=;;]+", "", meaningful)
         if len(meaningful) < cls.MIN_MEANINGFUL_BODY_LENGTH:
             return True
 
@@ -755,7 +641,7 @@ class KnowledgeWebLinkImportService:
         nav_hits = sum(1 for word in words_for_navigation if word.lower() in normalized)
         meaningful = re.sub(r"https?://\S+", "", normalized)
         meaningful = re.sub(r"!\[[^\]]*]\([^)]+\)|\[[^\]]+]\([^)]+\)", "", meaningful)
-        meaningful = re.sub(r"[#*_`>\-\s|:：,，.。/\\{}()[\]\"'=;；]+", "", meaningful)
+        meaningful = re.sub(r"[#*_`>\-\s|::,,.。/\\{}()[\]\"'=;;]+", "", meaningful)
         if nav_hits >= 4 and len(meaningful) < 220:
             return WEB_LINK_NAVIGATION_PORTAL_MARKDOWN
 

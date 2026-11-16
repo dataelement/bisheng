@@ -36,6 +36,16 @@ MinIO 默认账号密码为 `minioadmin/minioadmin`，MySQL 沿用 `1234`。数�
 
 端口和资源需要满足 Compose 配置；Elasticsearch 的宿主机配置、外部模型及文档服务按实际环境准备。首次启动后仍需注册用户、配置模型。
 
+## 隔离执行与端口安全变更
+
+用户可达的工作流 CodeNode、助手/工作流代码工具及灵思工具不再允许 `local` 后端。旧配置或未指定类型会明确报配置错误，不会自动回退到宿主机执行；请管理员选择并配置独立 `container` 或 `e2b` 执行器。`LOCAL_ISOLATION=off` 不能重新开放这些入口。此变更有意关闭共享后端主机执行能力，不能仅通过打开 CodeNode 开关恢复。
+
+安装器在任何 Compose 配置展开前生成 32 字节随机 `SANDBOX_TOKEN`，替换空值、公开旧默认值和短值，保留已有足够长的配置；不输出令牌。直接使用 Compose 时必须显式提供该值。多节点/外部 runner 必须协调相同控制令牌和轮换时机。
+
+MySQL、Redis、OpenFGA、Elasticsearch、Milvus 的宿主机映射默认只绑定 `127.0.0.1`；Docker 内部服务名访问不变。确有远程维护需要时，通过 `BISHENG_MIDDLEWARE_BIND_IP` 显式设置受控地址，并配置防火墙、认证及 TLS。不要无条件改为 `0.0.0.0`。MinIO 独立使用 `BISHENG_MINIO_BIND_IP`，默认也是 `127.0.0.1`；若浏览器预签名链接或外部 OnlyOffice 需要回源，应配置受保护的对象存储 ingress/TLS 与正确 sharepoint 后再显式开放，避免升级后误认为链接损坏而取消保护。前端3001和后端7860入口未在此变更中改绑。
+
+独立 runner 仍有公共网络出站，并与后端在 sandbox 网络互通；它不是“完全无网络”的环境。backend/worker 的旧 `seccomp:unconfined` 尚需 Linux 镜像验证后加固。不要把禁用本机执行、令牌和端口变更称作所有隔离风险已解决；修改后的源码与实际运行镜像还需配套发布及部署验收。
+
 ## 查看启动状态
 
 ```bash

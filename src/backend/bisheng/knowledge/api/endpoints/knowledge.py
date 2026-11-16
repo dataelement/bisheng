@@ -42,6 +42,7 @@ from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.cache.utils import save_uploaded_file
 from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter, tenant_execution_scope
 from bisheng.core.logger import trace_id_var
+from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.role_access import WebMenuResource
 from bisheng.knowledge.api.dependencies import get_knowledge_file_service, get_knowledge_service
 from bisheng.knowledge.domain.models.knowledge import (
@@ -68,6 +69,7 @@ from bisheng.knowledge.domain.schemas.knowledge_schema import (
 )
 from bisheng.knowledge.domain.services.knowledge_creation_policy import KnowledgeCreationPolicy
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+from bisheng.knowledge.domain.services.qa_import_service import QAImportService
 from bisheng.knowledge.domain.upload_file_size import validate_knowledge_upload_file_size
 from bisheng.llm.domain import LLMService
 from bisheng.llm.domain.const import LLMModelType
@@ -86,14 +88,21 @@ FILE_DOWNLOAD_PERMISSION_ACTION = "download"
 
 
 @router.post("/upload")
-async def upload_file(*, file: UploadFile = File(...)):
+async def upload_file(*, file: UploadFile = File(...), login_user: UserPayload = Depends(UserPayload.get_login_user)):
     try:
-        file_name = file.filename
+        from pathlib import PurePath
+
+        from bisheng.knowledge.domain.services.preview_source_service import PreviewSourceService
+
+        tenant_id = get_current_tenant_id()
+        if tenant_id is None or tenant_id != login_user.tenant_id:
+            raise UnAuthorizedError()
+        file_name = PurePath((file.filename or "upload").replace("\\", "/")).name
         validate_knowledge_upload_file_size(file_name, file.size)
 
         uuid_file_name = await KnowledgeService.save_upload_file_original_name(file_name)
-
-        file_path = await save_uploaded_file(file, "bisheng", uuid_file_name)
+        object_name = f"uploads/{tenant_id}/{login_user.user_id}/{uuid_file_name}"
+        file_path = await save_uploaded_file(file, "bisheng", object_name)
 
         if not isinstance(file_path, str):
             file_path = str(file_path)
@@ -102,7 +111,20 @@ async def upload_file(*, file: UploadFile = File(...)):
 
         cover_filepath = await WorkstationMediaCoverService.cover_for_uploaded_video(file, file_name)
 
-        return resp_200(UploadFileResponse(file_path=file_path, cover_filepath=cover_filepath))
+        minio = await get_minio_storage()
+        await PreviewSourceService.bind_owned_object(
+            bucket=minio.tmp_bucket, object_name=object_name, login_user=login_user
+        )
+        upload_ref = await PreviewSourceService.issue(
+            user_id=login_user.user_id,
+            knowledge_id=0,
+            object_name=object_name,
+            file_path=file_path,
+            file_name=file_name,
+        )
+        return resp_200(
+            UploadFileResponse(file_path=file_path, cover_filepath=cover_filepath, preview_upload_ref=upload_ref)
+        )
 
     except BaseErrorCode:
         raise
@@ -131,6 +153,9 @@ async def upload_knowledge_file(
         knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not knowledge:
             raise NotFoundError.http_exception()
+        tenant_id = get_current_tenant_id()
+        if tenant_id is None or tenant_id != login_user.tenant_id:
+            raise UnAuthorizedError()
         is_space = knowledge.type == KnowledgeTypeEnum.SPACE.value
         # Space upload is staging only; add_file authorizes the actual folder or
         # space target, which this endpoint does not receive.
@@ -141,9 +166,13 @@ async def upload_knowledge_file(
         file_name = file.filename
         validate_knowledge_upload_file_size(file_name, file.size)
 
-        # Save the uploaded file
+        # Keep display-name metadata separate from the caller-owned storage key.
+        from pathlib import PurePath
+
+        file_name = PurePath((file_name or "upload").replace("\\", "/")).name
         uuid_file_name = await KnowledgeService.save_upload_file_original_name(file_name)
-        file_path = await save_uploaded_file(file, "bisheng", uuid_file_name)
+        object_name = f"uploads/{tenant_id}/{login_user.user_id}/{uuid_file_name}"
+        file_path = await save_uploaded_file(file, "bisheng", object_name)
 
         if not isinstance(file_path, str):
             file_path = str(file_path)
@@ -158,10 +187,14 @@ async def upload_knowledge_file(
             knowledge_id=knowledge_id, file_name=file_name, md5_=file_md5
         )
 
+        minio = await get_minio_storage()
+        await PreviewSourceService.bind_owned_object(
+            bucket=minio.tmp_bucket, object_name=object_name, login_user=login_user
+        )
         preview_upload_ref = await PreviewSourceService.issue(
             user_id=login_user.user_id,
             knowledge_id=knowledge_id,
-            object_name=uuid_file_name,
+            object_name=object_name,
             file_path=file_path,
             file_name=file_name,
         )
@@ -418,7 +451,7 @@ async def get_knowledge(
     request: Request,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     action: Literal["visible", "use"] = Query(default="use"),
-    name: str = None,
+    name: str | None = None,
     knowledge_type: int = Query(default=KnowledgeTypeEnum.NORMAL.value, alias="type"),
     sort_by: Literal["create_time", "update_time", "name"] = Query(default="update_time"),
     preferred_ids: str | None = Query(
@@ -545,7 +578,7 @@ async def get_filelist(
     *,
     request: Request,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
-    file_name: str = None,
+    file_name: str | None = None,
     file_ids: list[int] = Query(default=None),
     knowledge_id: int = 0,
     page_size: int = 10,
@@ -728,7 +761,10 @@ def _audit_qa(login_user: UserPayload, event_type: str, knowledge_id: int, note:
 def qa_add(*, QACreate: QAKnowledgeUpsert, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """Add knowledge base information."""
     QACreate.user_id = login_user.user_id
+    QACreate.tenant_id = get_current_tenant_id()
     db_knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, QACreate.knowledge_id)
+    if QACreate.id:
+        QAImportService.bound_rows([QACreate.id], knowledge_id=db_knowledge.id)
 
     db_q = QAKnoweldgeDao.get_qa_knowledge_by_name(QACreate.questions, QACreate.knowledge_id, exclude_id=QACreate.id)
     # create repeat question or update
@@ -740,7 +776,7 @@ def qa_add(*, QACreate: QAKnowledgeUpsert, login_user: UserPayload = Depends(Use
         login_user,
         "update_qa" if QACreate.id else "create_qa",
         db_knowledge.id,
-        f"库={db_knowledge.id}；条目={getattr(saved, 'id', QACreate.id)}；来源=页面；结果=成功",
+        f"库={db_knowledge.id};条目={getattr(saved, 'id', QACreate.id)};来源=页面;结果=成功",
     )
     return resp_200()
 
@@ -753,11 +789,11 @@ def qa_status_switch(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """Modify Knowledge Base Information."""
-    qa_db = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(id)
+    qa_db = QAImportService.bound_rows([id])[0]
+    db_knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, qa_db.knowledge_id)
     if qa_db.status == status:
         return resp_200()
     previous_status = qa_db.status
-    db_knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, qa_db.knowledge_id)
 
     new_qa_db = knowledge_imp.qa_status_change(qa_db, status, db_knowledge)
     if not new_qa_db:
@@ -769,7 +805,7 @@ def qa_status_switch(
         login_user,
         "enable_qa" if status == QAStatus.ENABLED.value else "disable_qa",
         qa_db.knowledge_id,
-        f"库={qa_db.knowledge_id}；条目={id}；原状态={previous_status}；目标状态={status}；结果=成功",
+        f"库={qa_db.knowledge_id};条目={id};原状态={previous_status};目标状态={status};结果=成功",
     )
     return resp_200()
 
@@ -793,7 +829,7 @@ def qa_append(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """Add knowledge base information."""
-    qa_list = QAKnoweldgeDao.select_list(ids)
+    qa_list = QAImportService.bound_rows(ids)
     knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, qa_list[0].knowledge_id)
 
     for q in qa_list:
@@ -806,7 +842,7 @@ def qa_append(
         login_user,
         "update_qa",
         knowledge.id,
-        f"库={knowledge.id}；数量={len(qa_list)}；来源=相似问；字段=问题；结果=成功",
+        f"库={knowledge.id};数量={len(qa_list)};来源=相似问;字段=问题;结果=成功",
     )
     return resp_200()
 
@@ -814,13 +850,13 @@ def qa_append(
 @router.delete("/qa/delete", status_code=200)
 def qa_delete(*, ids: list[int] = Body(embed=True), login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """Delete Knowledge File Information"""
-    qa_list = QAKnoweldgeDao.select_list(ids)
-
+    qa_list = QAImportService.bound_rows(ids)
     knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, qa_list[0].knowledge_id)
+    validated_ids = [row.id for row in qa_list]
 
-    knowledge_imp.delete_vector_data(knowledge, ids)
-    QAKnoweldgeDao.delete_batch(ids)
-    _audit_qa(login_user, "delete_qa", knowledge.id, f"库={knowledge.id}；数量={len(ids)}；来源=页面；结果=成功")
+    knowledge_imp.delete_vector_data(knowledge, validated_ids)
+    QAKnoweldgeDao.delete_batch(validated_ids, knowledge_id=knowledge.id, tenant_id=get_current_tenant_id())
+    _audit_qa(login_user, "delete_qa", knowledge.id, f"库={knowledge.id};数量={len(ids)};来源=页面;结果=成功")
     telemetry_service.log_event_sync(
         user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.DELETE_KNOWLEDGE_FILE, trace_id=trace_id_var.get()
     )
@@ -856,7 +892,7 @@ async def get_export_url():
 
 
 @router.get("/qa/export/{qa_knowledge_id}", status_code=200)
-async def get_export_url(
+async def export_qa_knowledge(
     *,
     qa_knowledge_id: int,
     question: str | None = None,
@@ -920,7 +956,7 @@ async def get_export_url(
         login_user,
         "export_qa",
         qa_knowledge_id,
-        f"库={qa_knowledge_id}；数量={total_num}；筛选={filtered}；结果=成功",
+        f"库={qa_knowledge_id};数量={total_num};筛选={filtered};结果=成功",
     )
     return resp_200({"file_list": file_list})
 
@@ -934,18 +970,23 @@ def convert_excel_value(value: Any):
 
 
 @router.post("/qa/preview/{qa_knowledge_id}", status_code=200)
-def post_import_file(
+async def preview_qa_import_file(
     *,
     qa_knowledge_id: int,
     file_url: str = Body(..., embed=True),
+    preview_upload_ref: str | None = Body(default=None, embed=True),
     size: int | None = Body(default=0, embed=True),
     offset: int | None = Body(default=0, embed=True),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
-    df = pd.read_excel(file_url)
+    await KnowledgeService.ajudge_qa_knowledge_write(login_user, qa_knowledge_id)
+    source = await QAImportService.source(
+        login_user=login_user, file_url=file_url, preview_upload_ref=preview_upload_ref
+    )
+    df = await QAImportService.dataframe(source)
     columns = df.columns.to_list()
     if "Question" not in columns or "Answer" not in columns:
-        raise HTTPException(status_code=500, detail="file must have ‘Question’ Or ‘Answer’ column")
+        raise HTTPException(status_code=500, detail="file must have `Question` Or `Answer` column")
     data = df.T.to_dict().values()
     insert_data = []
     for dd in data:
@@ -974,22 +1015,29 @@ def post_import_file(
 
 
 @router.post("/qa/import/{qa_knowledge_id}", status_code=200)
-def post_import_file(
+async def post_import_file(
     *,
     qa_knowledge_id: int,
     file_list: list[str] = Body(..., embed=True),
+    preview_upload_refs: list[str] | None = Body(default=None, embed=True),
     background_tasks: BackgroundTasks,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     # Query the current knowledge base, whether there are write permissions
-    db_knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, qa_knowledge_id)
+    await KnowledgeService.ajudge_qa_knowledge_write(login_user, qa_knowledge_id)
+    if not preview_upload_refs or len(file_list) != len(preview_upload_refs):
+        raise NotFoundError()
+    # Resolve the entire capability set before parsing or importing any file.
+    sources = [
+        await QAImportService.source(login_user=login_user, file_url=url, preview_upload_ref=ref)
+        for url, ref in zip(file_list, preview_upload_refs, strict=True)
+    ]
 
     insert_result = []
     imported_count = 0
     error_result = []
-    have_question = []
-    for file_url in file_list:
-        df = pd.read_excel(file_url)
+    for source in sources:
+        df = await QAImportService.dataframe(source)
         columns = df.columns.to_list()
         if "Question" not in columns or "Answer" not in columns:
             insert_result.append(0)
@@ -1041,7 +1089,7 @@ def post_import_file(
         login_user,
         "create_qa",
         qa_knowledge_id,
-        f"库={qa_knowledge_id}；数量={imported_count}；来源=导入；结果=成功",
+        f"库={qa_knowledge_id};数量={imported_count};来源=导入;结果=成功",
     )
     return resp_200({"errors": error_result})
 
@@ -1091,7 +1139,7 @@ def update_knowledge_model(
     Update embedding Rebuild Knowledge Base on Model
     Receive:
     1. According to the incoming from the front-endmodel_id, model_type, let's first determine ifembeddingModels
-    2. If not, go backresp501("Is notembeddingModels") If so, place theknowledgeAll in the tabletypeare2DatastatusChange to...3，modelChange to Incomingmodel_id
+    2. If not, go backresp501("Is notembeddingModels") If so, place theknowledgeAll in the tabletypeare2DatastatusChange to...3,modelChange to Incomingmodel_id
     3. everyknowledge_idBoth initiate asynchronous tasks to rebuild the knowledge base
     """
     # 1. Verify that isembeddingModels

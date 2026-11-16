@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from fastapi import HTTPException
+
 from bisheng.approval.domain.models.approval_instance import (
     ApprovalActionLog,
     ApprovalInstance,
@@ -391,8 +393,22 @@ class ApprovalCenterService:
                 for nd in node_defs
             ]
 
+        execution_diagnostics = {}
+        if management:
+            outboxes = await ApprovalInstanceRepository.list_outbox(instance.id)
+            execution_diagnostics["executions"] = [
+                {
+                    "outbox_id": row.id,
+                    "status": row.status,
+                    "error_summary": row.error_summary,
+                    "update_time": row.update_time,
+                    "retry_count": row.retry_count,
+                }
+                for row in outboxes
+            ]
         return {
             "instance_id": instance.id,
+            **execution_diagnostics,
             **(await read_current_scenario_detail(instance, login_user, management=management)),
             "scenario_code": instance.scenario_code,
             "scenario_name": instance.scenario_name,
@@ -470,24 +486,32 @@ class ApprovalCenterService:
                 user_id=operator_user_id, user_name=operator_user_name or "", tenant_id=own.tenant_id
             )
             await authorize_app(actor, instance.business_resource_id, "withdraw")
-        tasks = await ApprovalInstanceRepository.list_tasks(instance.id)
-        for task in tasks:
-            if task.status == ApprovalTaskStatus.PENDING:
-                task.status = ApprovalTaskStatus.CANCELLED
-                task.acted_at = datetime.now()
-                await ApprovalInstanceRepository.update_task(task)
-        instance.status = ApprovalInstanceStatus.WITHDRAWN
-        await ApprovalInstanceRepository.update_instance(instance)
-        await ApprovalInstanceRepository.create_action_log(
-            ApprovalActionLog(
-                tenant_id=instance.tenant_id,
-                instance_id=instance.id,
-                action="withdrawn",
-                operator_user_id=operator_user_id,
-                operator_user_name=operator_user_name,
-                detail={"reason": reason},
+        async with ApprovalInstanceRepository.instance_transaction(
+            instance_id=instance.id, tenant_id=instance.tenant_id
+        ) as repo:
+            instance = await repo.get_instance(instance.id)
+            if instance is None or instance.applicant_user_id != operator_user_id:
+                raise ApprovalRequestPermissionDeniedError()
+            if instance.status != ApprovalInstanceStatus.PENDING:
+                raise ApprovalInstanceNotPendingError()
+            tasks = await repo.list_tasks(instance.id)
+            for task in tasks:
+                if task.status == ApprovalTaskStatus.PENDING:
+                    task.status = ApprovalTaskStatus.CANCELLED
+                    task.acted_at = datetime.now()
+                    await repo.update_task(task)
+            instance.status = ApprovalInstanceStatus.WITHDRAWN
+            await repo.update_instance(instance)
+            await repo.create_action_log(
+                ApprovalActionLog(
+                    tenant_id=instance.tenant_id,
+                    instance_id=instance.id,
+                    action="withdrawn",
+                    operator_user_id=operator_user_id,
+                    operator_user_name=operator_user_name,
+                    detail={"reason": reason},
+                )
             )
-        )
         return await cls._after_withdrawal(
             instance,
             tasks,
@@ -631,26 +655,38 @@ class ApprovalCenterService:
             # from the first call.
             return instance
 
-        tasks = await ApprovalInstanceRepository.list_tasks(instance.id)
-        for task in tasks:
-            if task.status == ApprovalTaskStatus.PENDING:
-                task.status = ApprovalTaskStatus.CANCELLED
-                task.acted_at = datetime.now()
-                await ApprovalInstanceRepository.update_task(task)
-
-        instance.status = ApprovalInstanceStatus.CANCELLED
-        instance.current_node_name = None
-        await ApprovalInstanceRepository.update_instance(instance)
-        await ApprovalInstanceRepository.create_action_log(
-            ApprovalActionLog(
-                tenant_id=instance.tenant_id,
-                instance_id=instance.id,
-                action="cancelled",
-                operator_user_id=operator_user_id,
-                operator_user_name=operator_user_name,
-                detail={"reason": reason},
+        async with ApprovalInstanceRepository.instance_transaction(
+            instance_id=instance.id, tenant_id=instance.tenant_id
+        ) as repo:
+            instance = await repo.get_instance(instance.id)
+            if instance is None:
+                return None
+            if instance.status in (
+                ApprovalInstanceStatus.CANCELLED,
+                ApprovalInstanceStatus.REJECTED,
+                ApprovalInstanceStatus.WITHDRAWN,
+                ApprovalInstanceStatus.EXECUTED,
+            ):
+                return instance
+            tasks = await repo.list_tasks(instance.id)
+            for task in tasks:
+                if task.status == ApprovalTaskStatus.PENDING:
+                    task.status = ApprovalTaskStatus.CANCELLED
+                    task.acted_at = datetime.now()
+                    await repo.update_task(task)
+            instance.status = ApprovalInstanceStatus.CANCELLED
+            instance.current_node_name = None
+            await repo.update_instance(instance)
+            await repo.create_action_log(
+                ApprovalActionLog(
+                    tenant_id=instance.tenant_id,
+                    instance_id=instance.id,
+                    action="cancelled",
+                    operator_user_id=operator_user_id,
+                    operator_user_name=operator_user_name,
+                    detail={"reason": reason},
+                )
             )
-        )
         await cls._write_audit_log(
             tenant_id=instance.tenant_id,
             operator_user_id=operator_user_id,
@@ -875,6 +911,52 @@ class ApprovalCenterService:
         comment: str | None = None,
         ip_address: str | None = None,
     ) -> None:
+        # Validate at the service boundary too: internal callers bypass Pydantic.
+        if action not in ("approve", "reject"):
+            raise HTTPException(status_code=422, detail="action must be approve or reject")
+        arguments = {
+            "task_id": task_id,
+            "action": action,
+            "operator_user_id": operator_user_id,
+            "operator_user_name": operator_user_name,
+            "operator_tenant_id": operator_tenant_id,
+            "operator_is_admin": operator_is_admin,
+            "comment": comment,
+            "ip_address": ip_address,
+        }
+        effects = []
+        async with self.instance_repository.decision_transaction(task_id=task_id, tenant_id=operator_tenant_id) as repo:
+            service = self.__class__(instance_repository=repo)
+            service._decision_effects = effects
+            await service._decide_task_locked(**arguments)
+        # No queue message, external hook or notification observes rolled-back state.
+        # Failures propagate after commit; durable action/outbox rows remain inspectable.
+        for callback, args, kwargs in effects:
+            result = callback(*args, **kwargs)
+            if hasattr(result, "__await__"):
+                await result
+
+    async def _decision_effect(self, callback, *args, **kwargs):
+        effects = getattr(self, "_decision_effects", None)
+        if effects is not None:
+            effects.append((callback, args, kwargs))
+            return
+        result = callback(*args, **kwargs)
+        if hasattr(result, "__await__"):
+            await result
+
+    async def _decide_task_locked(
+        self,
+        *,
+        task_id: int,
+        action: str,
+        operator_user_id: int,
+        operator_user_name: str,
+        operator_tenant_id: int,
+        operator_is_admin: bool = False,
+        comment: str | None = None,
+        ip_address: str | None = None,
+    ) -> None:
         task = await self.instance_repository.get_task(task_id)
         if task is None:
             raise ApprovalRequestNotFoundError()
@@ -885,7 +967,7 @@ class ApprovalCenterService:
             raise ApprovalRequestPermissionDeniedError()
         if not operator_is_admin and task.approver_user_id != operator_user_id:
             raise ApprovalRequestPermissionDeniedError()
-        if task.status != ApprovalTaskStatus.PENDING:
+        if task.status != ApprovalTaskStatus.PENDING or instance.status != ApprovalInstanceStatus.PENDING:
             raise ApprovalRequestAlreadyProcessedError()
 
         sibling_tasks = await self.instance_repository.list_tasks(instance.id)
@@ -922,7 +1004,8 @@ class ApprovalCenterService:
                     detail={"comment": comment},
                 )
             )
-            await self.__class__._write_audit_log(
+            await self._decision_effect(
+                self.__class__._write_audit_log,
                 tenant_id=instance.tenant_id,
                 operator_user_id=operator_user_id,
                 operator_tenant_id=instance.tenant_id,
@@ -941,7 +1024,8 @@ class ApprovalCenterService:
                 note=instance.scenario_name,
                 ip_address=ip_address,
             )
-            await self.__class__._send_approval_notify(
+            await self._decision_effect(
+                self.__class__._send_approval_notify,
                 sender=operator_user_id,
                 receiver_user_ids=[instance.applicant_user_id],
                 action_code="approval_task_rejected",
@@ -954,7 +1038,12 @@ class ApprovalCenterService:
                 from bisheng.approval.domain.services.approval_runtime_handler_factory import build_runtime_handler
 
                 handler = await build_runtime_handler(instance.handler_key or instance.scenario_code)
-                await handler.on_rejected(instance.id, instance.payload_snapshot or {}, comment)
+                await self._decision_effect(
+                    handler.on_rejected,
+                    instance_id=instance.id,
+                    payload_snapshot=instance.payload_snapshot or {},
+                    reason=comment,
+                )
             except Exception:
                 import logging
 
@@ -977,7 +1066,8 @@ class ApprovalCenterService:
                 detail={"task_id": task.id, "comment": comment},
             )
         )
-        await self.__class__._write_audit_log(
+        await self._decision_effect(
+            self.__class__._write_audit_log,
             tenant_id=instance.tenant_id,
             operator_user_id=operator_user_id,
             operator_tenant_id=instance.tenant_id,
@@ -1031,9 +1121,10 @@ class ApprovalCenterService:
         if instance.flow_version_id:
             from bisheng.approval.domain.repositories.approval_scenario_repository import ApprovalScenarioRepository
 
-            node_defs = await ApprovalScenarioRepository.list_node_definitions(
-                instance.tenant_id, instance.flow_version_id
+            node_reader = getattr(
+                self.instance_repository, "list_node_definitions", ApprovalScenarioRepository.list_node_definitions
             )
+            node_defs = await node_reader(instance.tenant_id, instance.flow_version_id)
             sorted_nodes = sorted(node_defs, key=lambda n: n.node_order)
             next_node = next(
                 (n for n in sorted_nodes if n.node_order > current_node_order),
@@ -1053,8 +1144,9 @@ class ApprovalCenterService:
                     payload_snapshot=instance.payload_snapshot,
                 )
             )
-            self.__class__._dispatch_outbox(outbox.id)
-            await self.__class__._send_approval_notify(
+            await self._decision_effect(self.__class__._dispatch_outbox, outbox.id)
+            await self._decision_effect(
+                self.__class__._send_approval_notify,
                 sender=operator_user_id,
                 receiver_user_ids=[instance.applicant_user_id],
                 action_code="approval_instance_approved",
@@ -1091,8 +1183,9 @@ class ApprovalCenterService:
                     payload_snapshot=instance.payload_snapshot,
                 )
             )
-            self.__class__._dispatch_outbox(outbox.id)
-            await self.__class__._send_approval_notify(
+            await self._decision_effect(self.__class__._dispatch_outbox, outbox.id)
+            await self._decision_effect(
+                self.__class__._send_approval_notify,
                 sender=operator_user_id,
                 receiver_user_ids=[instance.applicant_user_id],
                 action_code="approval_instance_approved",
@@ -1143,7 +1236,8 @@ class ApprovalCenterService:
             )
             from bisheng.approval.domain.services.approval_notification_service import ApprovalNotificationService
 
-            await ApprovalNotificationService.notify_admins(
+            await self._decision_effect(
+                ApprovalNotificationService.notify_admins,
                 tenant_id=instance.tenant_id,
                 applicant_user_id=instance.applicant_user_id,
                 action_code="approval_exception_approver_empty",
@@ -1174,7 +1268,8 @@ class ApprovalCenterService:
         instance.current_node_name = next_node.node_name
         await self.instance_repository.update_instance(instance)
         for task in created_tasks:
-            await self.__class__._send_approval_notify(
+            await self._decision_effect(
+                self.__class__._send_approval_notify,
                 sender=instance.applicant_user_id,
                 receiver_user_ids=[task.approver_user_id],
                 action_code="approval_task_pending",

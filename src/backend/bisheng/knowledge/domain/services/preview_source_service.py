@@ -20,6 +20,46 @@ class PreviewSource:
 
 
 class PreviewSourceService:
+    @staticmethod
+    def _owned_key(bucket: str, object_name: str) -> str:
+        import hashlib
+        import json
+
+        identity = json.dumps([bucket, object_name], separators=(",", ":"))
+        return "owned_upload_object:" + hashlib.sha256(identity.encode()).hexdigest()
+
+    @classmethod
+    async def bind_owned_object(cls, *, bucket: str, object_name: str, login_user, expiration: int = 604800) -> None:
+        """Called only after a trusted upload; names/URLs alone are not grants."""
+        tenant_id = get_current_tenant_id() or login_user.tenant_id
+        if type(tenant_id) is not int or tenant_id <= 0:  # noqa: E721  # exact type, bool must not pass as int
+            raise NotFoundError.http_exception()
+        redis = await get_redis_client()
+        await redis.aset(
+            cls._owned_key(bucket, object_name),
+            {
+                "tenant_id": tenant_id,
+                "user_id": login_user.user_id,
+                "bucket": bucket,
+                "object_name": object_name,
+            },
+            expiration=expiration,
+        )
+
+    @classmethod
+    async def is_owned_object(cls, *, bucket: str, object_name: str, login_user) -> bool:
+        tenant_id = get_current_tenant_id() or login_user.tenant_id
+        if type(tenant_id) is not int or tenant_id <= 0:  # noqa: E721  # exact type, bool must not pass as int
+            return False
+        redis = await get_redis_client()
+        value = await redis.aget(cls._owned_key(bucket, object_name))
+        return isinstance(value, dict) and value == {
+            "tenant_id": tenant_id,
+            "user_id": login_user.user_id,
+            "bucket": bucket,
+            "object_name": object_name,
+        }
+
     @classmethod
     async def issue(cls, *, user_id: int, knowledge_id: int, object_name: str, file_path: str, file_name: str) -> str:
         tenant_id = get_current_tenant_id()

@@ -289,7 +289,7 @@ class RagUtils(BaseNode):
         finally_docs = knowledge_retriever_tool._run(question)
         if self._knowledge_type not in ("knowledge", "space"):
             self.backfill_temp_source_paths(finally_docs, self._temp_source_by_document_id)
-        all_file_id = set([one.metadata.get("document_id") for one in finally_docs])
+        all_file_id = {one.metadata.get("document_id") for one in finally_docs}
         file_map = {}
         if finally_docs:
             if self._knowledge_type == "knowledge":
@@ -425,12 +425,25 @@ class RagUtils(BaseNode):
 
     def init_knowledge_retriever(self):
         """retriever from knowledge base"""
-        if not self._knowledge_vector_list:
+        from bisheng.knowledge.domain.services.workflow_knowledge_authorization import authorized_knowledge_ids
+
+        allowed_ids = authorized_knowledge_ids(
+            identity_user_id=self.user_id if self._knowledge_auth else self.flow_user_id,
+            tenant_id=self.tenant_id,
+            knowledge_ids=self._knowledge_value,
+        )
+        if self._knowledge_vector_list:
+            self._knowledge_vector_list = {
+                item: value for item, value in self._knowledge_vector_list.items() if item in allowed_ids
+            }
+        else:
             self._knowledge_vector_list = KnowledgeRag.get_multi_knowledge_vectorstore_sync(
                 invoke_user_id=self.user_id,
-                knowledge_ids=self._knowledge_value,
-                user_name=self.user_info.user_name,
-                check_auth=self._knowledge_auth,
+                knowledge_ids=allowed_ids,
+                # The IDs are already verified against the selected identity;
+                # check_auth here would re-resolve the runtime user's username
+                # and incorrectly replace author-sharing semantics.
+                check_auth=False,
                 include_es=self._keyword_weight > 0,
                 include_milvus=self._vector_weight > 0,
             )
@@ -447,7 +460,7 @@ class RagUtils(BaseNode):
         knowledge_ids = list(self._knowledge_vector_list.keys())
         excluded_file_ids = self._fetch_non_primary_file_ids(knowledge_ids)
 
-        for knowledge_id, knowledge_info in self._knowledge_vector_list.items():
+        for _knowledge_id, knowledge_info in self._knowledge_vector_list.items():
             knowledge = knowledge_info.get("knowledge")
             milvus_vector = knowledge_info.get("milvus")
             es_vector = knowledge_info.get("es")

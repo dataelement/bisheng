@@ -326,7 +326,7 @@ class AssistantService(BaseService, AssistantUtils):
                 flow_list.append(one.flow_id)
             else:
                 logger.error(f"not expect link info: {one.model_dump()}")
-        tool_list, flow_list, knowledge_list = cls.get_link_info(tool_list, flow_list, knowledge_list)
+        tool_list, flow_list, knowledge_list = await cls.get_link_info(login_user, tool_list, flow_list, knowledge_list)
         assistant.logo = await cls.get_logo_share_link_async(assistant.logo)
         can_share = await check_business_action(
             login_user,
@@ -524,6 +524,12 @@ class AssistantService(BaseService, AssistantUtils):
             raise AssistantNotExistsError()
 
         await cls.check_update_permission_async(assistant, login_user)
+        from bisheng.assistant.domain.services.assistant_boundary_service import AssistantBoundaryService
+
+        if req.knowledge_list is not None:
+            await AssistantBoundaryService.authorize_knowledge_bindings(login_user, req.knowledge_list)
+        if req.flow_list is not None:
+            await AssistantBoundaryService.authorize_flow_bindings(login_user, req.flow_list)
 
         # Update Assistant Data
         if req.name and req.name != assistant.name:
@@ -556,7 +562,9 @@ class AssistantService(BaseService, AssistantUtils):
         if req.knowledge_list is not None:
             # Using Configuredflow Perform skill replenishment
             AssistantLinkDao.update_assistant_knowledge(assistant.id, knowledge_list=req.knowledge_list, flow_id="")
-        tool_list, flow_list, knowledge_list = cls.get_link_info(req.tool_list, req.flow_list, req.knowledge_list)
+        tool_list, flow_list, knowledge_list = await cls.get_link_info(
+            login_user, req.tool_list, req.flow_list, req.knowledge_list
+        )
         cls.update_assistant_hook(request, login_user, assistant)
         can_share = await check_business_action(
             login_user,
@@ -644,7 +652,9 @@ class AssistantService(BaseService, AssistantUtils):
             raise AssistantNotExistsError()
 
         await cls.check_update_permission_async(assistant, user_payload)
+        from bisheng.assistant.domain.services.assistant_boundary_service import AssistantBoundaryService
 
+        await AssistantBoundaryService.authorize_flow_bindings(user_payload, flow_list)
         AssistantLinkDao.update_assistant_flow(assistant_id, flow_list=flow_list)
         return True
 
@@ -691,14 +701,17 @@ class AssistantService(BaseService, AssistantUtils):
         )
 
     @classmethod
-    def get_link_info(
+    async def get_link_info(
         cls,
+        login_user: UserPayload,
         tool_list: list[int],
         flow_list: list[str],
         knowledge_list: list[int] | None = None,
     ):
         tool_list = GptsToolsDao.get_list_by_ids(tool_list) if tool_list else []
-        flow_list = FlowDao.get_flow_by_ids(flow_list) if flow_list else []
+        from bisheng.assistant.domain.services.assistant_boundary_service import AssistantBoundaryService
+
+        flow_list = await AssistantBoundaryService.flow_views(login_user, flow_list)
         knowledge_list = KnowledgeDao.get_list_by_ids(knowledge_list) if knowledge_list else []
         return tool_list, flow_list, knowledge_list
 
@@ -839,5 +852,14 @@ class AssistantService(BaseService, AssistantUtils):
         flow_info = []
         for one in flow_list:
             if flow_dict.get(one):
-                flow_info.append(flow_dict[one])
+                from bisheng.database.models.flow import FlowRead
+
+                source = flow_dict[one]
+                # Suggestion/SSE consumers need identity and display metadata,
+                # never the executable graph or inline credentials.
+                flow_info.append(
+                    FlowRead.model_validate(
+                        source.model_dump(include={"id", "name", "description", "logo", "status", "flow_type"})
+                    )
+                )
         return flow_info

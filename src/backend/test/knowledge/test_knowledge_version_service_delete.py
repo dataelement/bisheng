@@ -1,7 +1,9 @@
 """delete_version: remove a historical (non-primary) version."""
+
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 from fastapi import HTTPException
-from unittest.mock import MagicMock, AsyncMock, patch
 
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
@@ -22,6 +24,7 @@ from bisheng.knowledge.domain.services.knowledge_version_service import Knowledg
 @pytest.fixture
 def enable_switch(monkeypatch):
     from bisheng.knowledge.domain.services import knowledge_version_service as kvs_mod
+
     mock_settings = MagicMock()
     conf = MagicMock()
     conf.version_management.enabled = True
@@ -52,7 +55,8 @@ async def _seed_two_version_doc(session):
 
 def _build_svc(session):
     return KnowledgeVersionService(
-        request=MagicMock(), login_user=MagicMock(),
+        request=MagicMock(),
+        login_user=MagicMock(),
         doc_repo=KnowledgeDocumentRepositoryImpl(session),
         version_repo=KnowledgeDocumentVersionRepositoryImpl(session),
         knowledge_file_repo=KnowledgeFileRepositoryImpl(session),
@@ -71,7 +75,7 @@ async def test_delete_history_removes_version_and_file(enable_switch, async_db_s
     # real connection setup in the unit test environment.
     monkeypatch.setattr(
         "bisheng.knowledge.domain.models.knowledge.KnowledgeDao.aquery_by_id",
-        AsyncMock(return_value=MagicMock(id=1)),
+        AsyncMock(return_value=Knowledge(id=1, tenant_id=1, name="space1", type=3, state=1)),
     )
     # delete_vector_files and delete_minio_files perform real I/O; stub them out.
     monkeypatch.setattr(
@@ -99,7 +103,7 @@ async def test_delete_history_removes_version_and_file(enable_switch, async_db_s
 
 @pytest.mark.asyncio
 async def test_delete_primary_is_rejected(enable_switch, async_db_session, monkeypatch):
-    doc, v1, v2 = await _seed_two_version_doc(async_db_session)
+    _doc, _v1, v2 = await _seed_two_version_doc(async_db_session)
     monkeypatch.setattr(
         "bisheng.knowledge.domain.services.knowledge_audit_telemetry_service."
         "KnowledgeAuditTelemetryService.audit_delete_file_version",
@@ -122,24 +126,29 @@ async def test_delete_404_when_version_not_found(enable_switch, async_db_session
 @pytest.mark.asyncio
 async def test_delete_rejected_when_switch_off(async_db_session, monkeypatch):
     from bisheng.knowledge.domain.services import knowledge_version_service as kvs_mod
+
     mock_settings = MagicMock()
     conf = MagicMock()
     conf.version_management.enabled = False
     mock_settings.async_get_knowledge = AsyncMock(return_value=conf)
     monkeypatch.setattr(kvs_mod, "bisheng_settings", mock_settings)
+    from bisheng.common.errcode.knowledge_space import VersionManagementDisabledError
+
     svc = _build_svc(async_db_session)
-    with pytest.raises(HTTPException) as ctx:
+    with pytest.raises(VersionManagementDisabledError) as ctx:
         await svc.delete_version(version_id=1)
-    assert ctx.value.status_code == 403
+    assert ctx.value.Code == 18060
+    assert await svc.version_repo.find_by_id(1) is None
 
 
 # ---------------------------------------------------------------------------
 # Cleanup (Milvus/ES/MinIO) behaviour tests — use pure mocks (no real DB)
 # ---------------------------------------------------------------------------
 
+
 def _build_mock_svc():
     """Build a KnowledgeVersionService whose repos are all MagicMock/AsyncMock."""
-    return KnowledgeVersionService(
+    svc = KnowledgeVersionService(
         request=MagicMock(),
         login_user=MagicMock(),
         doc_repo=MagicMock(),
@@ -147,10 +156,19 @@ def _build_mock_svc():
         knowledge_file_repo=MagicMock(),
     )
 
+    async def document(document_id):
+        file = await svc.knowledge_file_repo.find_by_id(0)
+        return KnowledgeDocument(id=document_id, knowledge_id=file.knowledge_id)
+
+    svc.doc_repo.find_by_id = AsyncMock(side_effect=document)
+    svc.version_repo.find_by_document_id = AsyncMock(return_value=[])
+    return svc
+
 
 def _patch_switch_enabled(monkeypatch):
     """Monkeypatch settings so the feature switch is enabled."""
     from bisheng.knowledge.domain.services import knowledge_version_service as kvs_mod
+
     mock_settings = MagicMock()
     conf = MagicMock()
     conf.version_management.enabled = True
@@ -167,7 +185,7 @@ async def test_delete_version_calls_vector_and_minio_cleanup(monkeypatch):
     svc = _build_mock_svc()
 
     # Fake version and knowledge file
-    fake_kf = KnowledgeFile(id=10, knowledge_id=5, file_name="report.pdf", file_type=1, status=2)
+    fake_kf = KnowledgeFile(id=10, tenant_id=1, knowledge_id=5, file_name="report.pdf", file_type=1, status=2)
     fake_version = MagicMock()
     fake_version.id = 42
     fake_version.is_primary = False
@@ -176,8 +194,7 @@ async def test_delete_version_calls_vector_and_minio_cleanup(monkeypatch):
     fake_version.version_no = 2
 
     # Fake knowledge (the space)
-    fake_knowledge = MagicMock()
-    fake_knowledge.id = 5
+    fake_knowledge = Knowledge(id=5, tenant_id=1, name="space5", type=3, state=1)
 
     svc.version_repo.find_by_id = AsyncMock(return_value=fake_version)
     svc.knowledge_file_repo.find_by_id = AsyncMock(return_value=fake_kf)
@@ -221,7 +238,7 @@ async def test_delete_version_vector_failure_still_succeeds_and_calls_minio(monk
 
     svc = _build_mock_svc()
 
-    fake_kf = KnowledgeFile(id=11, knowledge_id=5, file_name="doc.pdf", file_type=1, status=2)
+    fake_kf = KnowledgeFile(id=11, tenant_id=1, knowledge_id=5, file_name="doc.pdf", file_type=1, status=2)
     fake_version = MagicMock()
     fake_version.id = 43
     fake_version.is_primary = False
@@ -229,8 +246,7 @@ async def test_delete_version_vector_failure_still_succeeds_and_calls_minio(monk
     fake_version.document_id = 8
     fake_version.version_no = 3
 
-    fake_knowledge = MagicMock()
-    fake_knowledge.id = 5
+    fake_knowledge = Knowledge(id=5, tenant_id=1, name="space5", type=3, state=1)
 
     svc.version_repo.find_by_id = AsyncMock(return_value=fake_version)
     svc.knowledge_file_repo.find_by_id = AsyncMock(return_value=fake_kf)
@@ -267,7 +283,7 @@ async def test_delete_version_minio_failure_still_succeeds(monkeypatch):
 
     svc = _build_mock_svc()
 
-    fake_kf = KnowledgeFile(id=12, knowledge_id=5, file_name="img.pdf", file_type=1, status=2)
+    fake_kf = KnowledgeFile(id=12, tenant_id=1, knowledge_id=5, file_name="img.pdf", file_type=1, status=2)
     fake_version = MagicMock()
     fake_version.id = 44
     fake_version.is_primary = False
@@ -275,8 +291,7 @@ async def test_delete_version_minio_failure_still_succeeds(monkeypatch):
     fake_version.document_id = 9
     fake_version.version_no = 4
 
-    fake_knowledge = MagicMock()
-    fake_knowledge.id = 5
+    fake_knowledge = Knowledge(id=5, tenant_id=1, name="space5", type=3, state=1)
 
     svc.version_repo.find_by_id = AsyncMock(return_value=fake_version)
     svc.knowledge_file_repo.find_by_id = AsyncMock(return_value=fake_kf)
@@ -306,13 +321,13 @@ async def test_delete_version_minio_failure_still_succeeds(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_delete_version_knowledge_none_skips_vector_but_runs_minio(monkeypatch):
-    """When KnowledgeDao returns None (orphan kf), vector cleanup is skipped; MinIO still runs."""
+async def test_delete_version_missing_knowledge_rejected_before_cleanup(monkeypatch):
+    """An orphaned version is not authority to delete a file or stored objects."""
     _patch_switch_enabled(monkeypatch)
 
     svc = _build_mock_svc()
 
-    fake_kf = KnowledgeFile(id=13, knowledge_id=99, file_name="orphan.pdf", file_type=1, status=2)
+    fake_kf = KnowledgeFile(id=13, tenant_id=1, knowledge_id=99, file_name="orphan.pdf", file_type=1, status=2)
     fake_version = MagicMock()
     fake_version.id = 45
     fake_version.is_primary = False
@@ -340,10 +355,10 @@ async def test_delete_version_knowledge_none_skips_vector_but_runs_minio(monkeyp
     monkeypatch.setattr("bisheng.api.services.knowledge_imp.delete_vector_files", mock_dvf)
     monkeypatch.setattr("bisheng.api.services.knowledge_imp.delete_minio_files", mock_dmf)
 
-    result = await svc.delete_version(version_id=45)
-
-    assert result.deleted_version_no == 5
-    # Vector cleanup skipped because knowledge is None
+    with pytest.raises(HTTPException) as exc:
+        await svc.delete_version(version_id=45)
+    assert exc.value.status_code == 404
+    svc.version_repo.delete.assert_not_awaited()
+    svc.knowledge_file_repo.delete.assert_not_awaited()
     mock_dvf.assert_not_called()
-    # MinIO cleanup still attempted
-    mock_dmf.assert_called_once_with(fake_kf)
+    mock_dmf.assert_not_called()

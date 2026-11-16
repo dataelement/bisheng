@@ -17,13 +17,11 @@ from uuid import uuid4
 
 import aiofiles
 import cchardet
-import requests
 from appdirs import user_cache_dir
 from fastapi import UploadFile
 from urllib3 import BaseHTTPResponse
-from urllib3.util import parse_url
 
-from bisheng.core.external.http_client.http_client_manager import get_http_client
+from bisheng.core.external.safe_download import BoundedDownload, public_stream, same_origin
 from bisheng.core.storage.minio.minio_manager import get_minio_storage, get_minio_storage_sync
 
 CACHE: dict[str, Any] = {}
@@ -33,8 +31,9 @@ CACHE_DIR = user_cache_dir("bisheng", "bisheng")
 # F072: a bare local path is only honoured inside the directories this process
 # writes downloads to. ``file_download`` / ``async_file_download`` are reachable
 # from user-controlled strings (finetune preset files, chat attachments), so
-# "the file exists" alone turned them into an arbitrary-file read.
-_LOCAL_FILE_ROOTS = (Path(CACHE_DIR), Path(tempfile.gettempdir()))
+# neither existence nor placement in the shared OS tempdir proves ownership.
+# Internal downloads produced by save_download_file already live in CACHE_DIR.
+_LOCAL_FILE_ROOTS = (Path(CACHE_DIR),)
 
 
 def _ensure_allowed_local_file(path: str) -> None:
@@ -94,7 +93,6 @@ def memoize_dict(maxsize=128):
     cache = OrderedDict()
 
     def decorator(func):
-
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             hashed = compute_dict_hash(args[0])
@@ -263,9 +261,12 @@ async def save_file_to_folder(file: UploadFile, folder_name: str, file_name: str
 
 
 @create_cache_folder
-async def save_uploaded_file(file: UploadFile, folder_name, file_name, bucket_name: str = None):
+async def save_uploaded_file(file: UploadFile, folder_name, file_name, bucket_name: str | None = None):
     """
-    Save an uploaded file to the specified folder with a hash of its content as the file name.
+    Store an upload under a validated, server-selected object key.
+
+    HTTP callers must generate unpredictable caller-owned keys; preview and
+    Open API callers retain their existing server-key/reference contract.
 
     Args:
         file: The uploaded file object.
@@ -280,11 +281,21 @@ async def save_uploaded_file(file: UploadFile, folder_name, file_name, bucket_na
     if bucket_name is None:
         bucket_name = minio_client.tmp_bucket
 
-    cache_path = Path(CACHE_DIR)
-    folder_path = cache_path / folder_name
-    # Create the folder if it doesn't exist
-    if not folder_path.exists():
-        folder_path.mkdir(parents=True, exist_ok=True)
+    # Object storage is authoritative; an upload must not create local paths
+    # derived from flow IDs. Retain server-selected object keys for preview and
+    # Open API consumers, but reject path-like escape components defensively.
+    resolve_inside(CACHE_DIR, str(folder_name))
+    decoded_name = unquote(str(file_name))
+    while decoded_name != unquote(decoded_name):
+        decoded_name = unquote(decoded_name)
+    if (
+        not decoded_name
+        or decoded_name.startswith("/")
+        or "\\" in decoded_name
+        or any(part in {"", ".", ".."} for part in decoded_name.split("/"))
+        or any(ord(char) < 32 for char in decoded_name)
+    ):
+        raise ValueError("Invalid upload object name")
 
     file_ext = file_name.split(".")[-1].lower()
 
@@ -414,6 +425,14 @@ def save_download_file(file_input: Union[bytes, BinaryIO, BaseHTTPResponse], fol
             src_stream.close()
 
 
+def _minio_download_key(path: str, minio_client) -> tuple[str, str]:
+    """A bucket/path is not authority: require the exact live GET capability."""
+    from bisheng.core.storage.minio.signed_reference import verify_signed_reference
+
+    reference = verify_signed_reference(path, minio_client)
+    return reference.bucket, reference.object_name
+
+
 def file_download(file_path: str):
     """download file and return path"""
 
@@ -434,21 +453,20 @@ def file_download(file_path: str):
         url_obj = urlparse(file_path)
         filename = unquote(url_obj.path.split("/")[-1])
 
-        if file_path.startswith(minio_share_host):
-            # download file from minio sdk
-            bucket_name, object_name = url_obj.path.replace(minio_share_host, "", 1).lstrip("/").split("/", 1)
-            object_name = unquote(object_name)
-            file_response = minio_client.download_object_sync(bucket_name, object_name)
+        if same_origin(file_path, minio_share_host):
+            from bisheng.core.storage.minio.signed_reference import download_signed_reference
+
+            file_response = download_signed_reference(file_path, minio_client)
         else:
-            # download file from http url
-            r = requests.get(file_path, verify=False, stream=True)
-            if r.status_code != 200:
-                raise ValueError("Check the url of your file; returned status code %s" % r.status_code)
-            # Content-Disposition header to find the filename
-            content_disposition = r.headers.get("Content-Disposition")
-            if content_disposition:
-                filename = unquote(content_disposition).split("filename=")[-1].strip("\"'")
-            file_response = r
+            # Pin validated public DNS answers for every redirect; TLS stays verified.
+            with public_stream(file_path) as response:
+                if response.status_code != 200:
+                    raise ValueError("Remote file returned a non-200 status")
+                content_disposition = response.headers.get("Content-Disposition")
+                if content_disposition:
+                    filename = unquote(content_disposition).split("filename=")[-1].strip("\"'")
+                downloaded = save_download_file(BoundedDownload(response), "bisheng", filename)
+            return downloaded, filename
         try:
             file_path = save_download_file(file_response, "bisheng", filename)
         finally:
@@ -462,35 +480,21 @@ def file_download(file_path: str):
     # For Input: /bisheng/original/82324.docx?X-Amz-Algorithm=...
     # No in this case host, cannot be accessed _is_valid_url Branch
     elif file_path.startswith("/") and "X-Amz-Algorithm" in file_path:
+        minio_client = get_minio_storage_sync()
+        from bisheng.core.storage.minio.signed_reference import download_signed_reference
+
+        _bucket_name, object_name = _minio_download_key(file_path, minio_client)
+        file_response = download_signed_reference(file_path, minio_client)
         try:
-            minio_client = get_minio_storage_sync()
-
-            # Use urlparse parsing, it automatically separates path And query
-            url_obj = urlparse(file_path)
-            # path similar to /bisheng/original/82324.docx
-            # Remove the beginning /, and then split the first / Get bucket And object
-            path_parts = url_obj.path.lstrip("/").split("/", 1)
-
-            if len(path_parts) == 2:
-                bucket_name, object_name = path_parts
-                # Call Synchronized minio Method download
-                object_name = unquote(object_name)
-                file_response = None
-                try:
-                    file_response = minio_client.download_object_sync(bucket_name, object_name)
-                    filename = unquote(object_name.split("/")[-1])
-                    file_path = save_download_file(file_response, "bisheng", filename)
-                    return file_path, filename
-                finally:
-                    if file_response:
-                        file_response.close()
-                        file_response.release_conn()
-        except Exception as e:
-            # If the parsing fails, print the log and let the program continue to throw down ValueError
-            print(f"Error handling relative MinIO path: {e}")
+            filename = object_name.split("/")[-1]
+            return save_download_file(file_response, "bisheng", filename), filename
+        finally:
+            file_response.close()
+            if hasattr(file_response, "release_conn"):
+                file_response.release_conn()
 
     elif not os.path.isfile(file_path):
-        raise ValueError("File path %s is not a valid file or url" % file_path)
+        raise ValueError(f"File path {file_path} is not a valid file or url")
 
     # This is the one that handles purely local file paths (the one with no parameters) and is usually handled by the topmost logic 1 Interception
     _ensure_allowed_local_file(file_path)
@@ -500,66 +504,8 @@ def file_download(file_path: str):
 
 
 async def async_file_download(file_path: str):
-    """download file and return path"""
-
-    # Try processing as a local file first (extracted URL Parameters)
-    # If the system mounts the storage volume, this will solve the problem directly
-    local_candidate = file_path.split("?")[0]
-    if os.path.isfile(local_candidate):
-        _ensure_allowed_local_file(local_candidate)
-        file_name = os.path.basename(local_candidate)
-        # Is it included under processing?md5Logic of (Keep original logic)
-        file_name = file_name.split("_", 1)[-1] if "_" in file_name else file_name
-        return local_candidate, file_name
-
-    # Check if it is standard URL
-    if _is_valid_url(file_path):
-        http_client = await get_http_client()
-        minio_client = await get_minio_storage()
-        minio_share_host = minio_client.get_minio_share_host()
-        url_obj = parse_url(file_path)
-        filename = unquote(url_obj.path.split("/")[-1])
-
-        if file_path.startswith(minio_share_host):
-            # download file from minio sdk
-            bucket_name, object_name = url_obj.path.replace(minio_share_host, "", 1).lstrip("/").split("/", 1)
-            object_name = unquote(object_name)
-            file_content = await minio_client.get_object(bucket_name, object_name)
-        else:
-            r = await http_client.get(url=file_path, data_type="binary")
-            if r.status_code != 200:
-                raise ValueError("Check the url of your file; returned status code %s" % r.status_code)
-            content_disposition = r.headers.get("Content-Disposition") if r.headers else None
-            if content_disposition:
-                filename = unquote(content_disposition).split("filename=")[-1].strip("\"'")
-            file_content = r.body
-        file_path = save_download_file(file_content, "bisheng", filename)
-        return file_path, filename
-
-    # <g id="Bold">Medical Treatment:</g> MinIO Relative path (In / Starts with a signature parameter)
-    # For Input: /bisheng/original/82324.docx?X-Amz-Algorithm=...
-    elif file_path.startswith("/") and "X-Amz-Algorithm" in file_path:
-        try:
-            minio_client = await get_minio_storage()
-            # Resolve Path /bucket/object_key
-            url_obj = urlparse(file_path)
-            # path turned into /bisheng/original/82324.docx, remove the opening / and split the first one /
-            path_parts = url_obj.path.lstrip("/").split("/", 1)
-
-            if len(path_parts) == 2:
-                bucket_name, object_name = path_parts
-                object_name = unquote(object_name)
-                # Directly usable after finished products  leave the factory minio client Download without http Request
-                file_content = await minio_client.get_object(bucket_name, object_name)
-
-                filename = unquote(object_name.split("/")[-1])
-                file_path = save_download_file(file_content, "bisheng", filename)
-                return file_path, filename
-        except Exception as e:
-            # If parsing or downloading fails, log or drop it below ValueError
-            print(f"Error handling relative MinIO path: {e}")
-
-    raise ValueError("File path %s is not a valid file or url" % file_path)
+    """Use the same pinned streaming transport off-loop, including MinIO SDK I/O."""
+    return await asyncio.to_thread(file_download, file_path)
 
 
 def _is_valid_url(url: str):

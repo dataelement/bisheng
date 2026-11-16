@@ -66,7 +66,7 @@ services:
     image: ${MYSQL_IMAGE:?set MYSQL_IMAGE in docker/.env (see .env.example)}
     
     ports:
-      - "3306:3306"
+      - "${BISHENG_MIDDLEWARE_BIND_IP:-127.0.0.1}:3306:3306"
     environment:
       MYSQL_ROOT_PASSWORD: "1234"  # 数据库密码，如果修改需要同步修改bisheng/congfig/config.yaml配置database_url的mysql连接密码
       MYSQL_DATABASE: bisheng
@@ -116,9 +116,9 @@ services:
       OPENFGA_RESOLVE_NODE_LIMIT: "${OPENFGA_RESOLVE_NODE_LIMIT:-25}"
       OPENFGA_LIST_OBJECTS_MAX_RESULTS: 1000
     ports:
-      - "8080:8080"
-      - "8081:8081"
-      - "2112:2112"
+      - "${BISHENG_MIDDLEWARE_BIND_IP:-127.0.0.1}:8080:8080"
+      - "${BISHENG_MIDDLEWARE_BIND_IP:-127.0.0.1}:8081:8081"
+      - "${BISHENG_MIDDLEWARE_BIND_IP:-127.0.0.1}:2112:2112"
     depends_on:
       openfga-migrate:
         condition: service_completed_successfully
@@ -130,7 +130,7 @@ services:
     container_name: bisheng-redis
     image: ${REDIS_IMAGE:?set REDIS_IMAGE in docker/.env (see .env.example)}
     ports:
-      - "6379:6379"
+      - "${BISHENG_MIDDLEWARE_BIND_IP:-127.0.0.1}:6379:6379"
     environment:
       TZ: Asia/Shanghai
     volumes:
@@ -166,7 +166,7 @@ services:
       BS_MINIO_ACCESS_KEY: '${MINIO_ROOT_USER:?set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}'
       BS_MINIO_SECRET_KEY: '${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}'
       # Shared with code-runner-*; editor "run once" executes in this process.
-      BS_SANDBOX_CONF__TOKEN: ${SANDBOX_TOKEN:-bisheng-sandbox-local}
+      BS_SANDBOX_CONF__TOKEN: ${SANDBOX_TOKEN:?run bash docker/install.sh to generate a private sandbox token}
       # One URL per replica. Adding code-runner-3 means appending its URL here.
       BS_SANDBOX_CONF__ENDPOINTS: '["http://code-runner-1:8080","http://code-runner-2:8080"]'
       # Run local code execution under a throwaway uid; set LOCAL_ISOLATION=off in .env to disable.
@@ -220,7 +220,7 @@ services:
       BS_MINIO_ACCESS_KEY: '${MINIO_ROOT_USER:?set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}'
       BS_MINIO_SECRET_KEY: '${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}'
       # Shared with code-runner-*; override SANDBOX_TOKEN in .env for non-dev.
-      BS_SANDBOX_CONF__TOKEN: ${SANDBOX_TOKEN:-bisheng-sandbox-local}
+      BS_SANDBOX_CONF__TOKEN: ${SANDBOX_TOKEN:?run bash docker/install.sh to generate a private sandbox token}
       # One URL per replica. Adding code-runner-3 means appending its URL here.
       BS_SANDBOX_CONF__ENDPOINTS: '["http://code-runner-1:8080","http://code-runner-2:8080"]'
       # Run local code execution under a throwaway uid; set LOCAL_ISOLATION=off in .env to disable.
@@ -268,8 +268,8 @@ services:
     image: ${ELASTICSEARCH_IMAGE:?set ELASTICSEARCH_IMAGE in docker/.env (see .env.example)}
     user: root
     ports:
-      - "9200:9200"
-      - "9300:9300"
+      - "${BISHENG_MIDDLEWARE_BIND_IP:-127.0.0.1}:9200:9200"
+      - "${BISHENG_MIDDLEWARE_BIND_IP:-127.0.0.1}:9300:9300"
     environment:
       TZ: Asia/Shanghai
     volumes:
@@ -311,7 +311,7 @@ services:
     #          over every stored file and nothing in the stack needs it. Reach
     #          it with `ssh -L 9001:localhost:9001 <host>` when required.
     ports:
-      - "9100:9000"
+      - "${BISHENG_MINIO_BIND_IP:-127.0.0.1}:9100:9000"
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ${DOCKER_VOLUME_DIRECTORY:-.}/data/milvus-minio:/minio_data
@@ -347,8 +347,8 @@ services:
       timeout: 20s
       retries: 3
     ports:
-      - "19530:19530"
-      - "9091:9091"
+      - "${BISHENG_MIDDLEWARE_BIND_IP:-127.0.0.1}:19530:19530"
+      - "${BISHENG_MIDDLEWARE_BIND_IP:-127.0.0.1}:9091:9091"
     depends_on:
       - etcd
       - minio
@@ -550,7 +550,7 @@ services:
       - "find /sessions -mindepth 1 -delete || echo 'sandbox: stale session cleanup failed' >&2; exec python serve.py"
     environment:
       TZ: Asia/Shanghai
-      SANDBOX_TOKEN: ${SANDBOX_TOKEN:-bisheng-sandbox-local}
+      SANDBOX_TOKEN: ${SANDBOX_TOKEN:?run bash docker/install.sh to generate a private sandbox token}
       SANDBOX_SESSIONS_ROOT: /sessions
       SANDBOX_MAX_SESSIONS: "50"
       # Total bytes copied into one session (512 MiB); files past it are skipped and reported.

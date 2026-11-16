@@ -831,16 +831,17 @@ export async function getQaFile(id): Promise<{ file_list: string[] }> {
  */
 export async function postImportQaFile(
   id,
-  params,
+  params: { url: string; preview_upload_ref: string },
 ): Promise<{
   result: {
     answers: string;
     questions: string[];
   }[];
 }> {
-  const { url } = params;
+  const { url, preview_upload_ref } = params;
   return await axios.post(`/api/v1/knowledge/qa/import/${id}`, {
     file_list: [url],
+    preview_upload_refs: [preview_upload_ref],
   });
 }
 
@@ -849,16 +850,17 @@ export async function postImportQaFile(
  */
 export async function getQaFilePreview(
   id,
-  params,
+  params: { url: string; preview_upload_ref: string; size?: number; offset?: number },
 ): Promise<{
   result: {
     answers: string;
     questions: string[];
   }[];
 }> {
-  const { url, size, offset } = params;
+  const { url, size, offset, preview_upload_ref } = params;
   return await axios.post(`/api/v1/knowledge/qa/preview/${id}`, {
     file_url: url,
+    preview_upload_ref,
     size,
     offset,
   });

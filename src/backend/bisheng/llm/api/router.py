@@ -216,7 +216,7 @@ async def update_model_online(
     model_id: int = Body(..., embed=True, description="Model UniqueID"),
     online: bool = Body(..., embed=True, description="Online or not"),
 ):
-    ret = await LLMService.update_model_online(model_id, online)
+    ret = await LLMService.update_model_online(model_id, online, login_user)
     return resp_200(data=ret)
 
 

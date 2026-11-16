@@ -339,7 +339,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
             rows = (await session.exec(statement)).all()
         found: set[int] = set()
         for row in rows:
-            value = row[0] if isinstance(row, (tuple, list)) else getattr(row, "knowledge_id", row)
+            value = row[0] if isinstance(row, tuple | list) else getattr(row, "knowledge_id", row)
             found.add(int(value))
         return found
 
@@ -574,14 +574,14 @@ class KnowledgeFileDao(KnowledgeFileBase):
     def _build_file_filters_statement(
         cls,
         statement,
-        file_name: str = None,
-        status: list[int] = None,
-        file_ids: list[int] = None,
-        file_level_path: str = None,
-        extra_file_ids: list[int] = None,
+        file_name: str | None = None,
+        status: list[int] | None = None,
+        file_ids: list[int] | None = None,
+        file_level_path: str | None = None,
+        extra_file_ids: list[int] | None = None,
         *,
-        order_by: str = None,
-        order_field: str = None,
+        order_by: str | None = None,
+        order_field: str | None = None,
         order_sort: str = "desc",
     ):
         and_statement = []
@@ -622,11 +622,11 @@ class KnowledgeFileDao(KnowledgeFileBase):
     def get_file_by_filters(
         cls,
         knowledge_id: int,
-        file_name: str = None,
-        status: list[int] = None,
+        file_name: str | None = None,
+        status: list[int] | None = None,
         page: int = 0,
         page_size: int = 0,
-        file_ids: list[int] = None,
+        file_ids: list[int] | None = None,
     ) -> list[KnowledgeFile]:
         statement = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
         statement = cls._build_file_filters_statement(statement, file_name, status, file_ids, order_by="update_time")
@@ -639,13 +639,13 @@ class KnowledgeFileDao(KnowledgeFileBase):
     async def aget_file_by_filters(
         cls,
         knowledge_id: int,
-        file_name: str = None,
-        status: list[int] = None,
-        file_ids: list[int] = None,
-        extra_file_ids: list[int] = None,
-        file_level_path: str = None,
-        order_by: str = None,
-        order_field: str = None,
+        file_name: str | None = None,
+        status: list[int] | None = None,
+        file_ids: list[int] | None = None,
+        extra_file_ids: list[int] | None = None,
+        file_level_path: str | None = None,
+        order_by: str | None = None,
+        order_field: str | None = None,
         order_sort: str = "desc",
         *,
         page: int = 0,
@@ -721,11 +721,11 @@ class KnowledgeFileDao(KnowledgeFileBase):
     async def acount_file_by_filters(
         cls,
         knowledge_id: int,
-        file_name: str = None,
-        status: list[int] = None,
-        file_ids: list[int] = None,
-        extra_file_ids: list[int] = None,
-        file_level_path: str = None,
+        file_name: str | None = None,
+        status: list[int] | None = None,
+        file_ids: list[int] | None = None,
+        extra_file_ids: list[int] | None = None,
+        file_level_path: str | None = None,
     ) -> int:
         statement = select(func.count()).where(KnowledgeFile.knowledge_id == knowledge_id)
         statement = cls._build_file_filters_statement(
@@ -755,7 +755,11 @@ class KnowledgeFileDao(KnowledgeFileBase):
 
     @classmethod
     def count_file_by_filters(
-        cls, knowledge_id: int, file_name: str = None, status: list[int] = None, file_ids: list[int] = None
+        cls,
+        knowledge_id: int,
+        file_name: str | None = None,
+        status: list[int] | None = None,
+        file_ids: list[int] | None = None,
     ) -> int:
         statement = select(func.count(KnowledgeFile.id)).where(KnowledgeFile.knowledge_id == knowledge_id)
         if file_name:
@@ -769,7 +773,11 @@ class KnowledgeFileDao(KnowledgeFileBase):
 
     @classmethod
     async def async_count_file_by_filters(
-        cls, knowledge_id: int, file_name: str = None, status: list[int] = None, file_ids: list[int] = None
+        cls,
+        knowledge_id: int,
+        file_name: str | None = None,
+        status: list[int] | None = None,
+        file_ids: list[int] | None = None,
     ) -> int:
         statement = select(func.count(KnowledgeFile.id)).where(KnowledgeFile.knowledge_id == knowledge_id)
         if file_name:
@@ -1018,7 +1026,9 @@ class QAKnoweldgeDao(QAKnowledgeBase):
             return session.exec(select(QAKnowledge).where(QAKnowledge.id == qa_id)).first()
 
     @classmethod
-    def get_qa_knowledge_by_name(cls, question: list[str], knowledge_id: int, exclude_id: int = None) -> QAKnowledge:
+    def get_qa_knowledge_by_name(
+        cls, question: list[str], knowledge_id: int, exclude_id: int | None = None
+    ) -> QAKnowledge:
         from bisheng.core.database.dialect_helpers import json_array_contains
 
         with get_sync_db_session() as session:
@@ -1042,9 +1052,14 @@ class QAKnoweldgeDao(QAKnowledgeBase):
         return qa_knowledge
 
     @classmethod
-    def delete_batch(cls, qa_ids: list[int]) -> bool:
+    def delete_batch(cls, qa_ids: list[int], *, knowledge_id: int | None = None, tenant_id: int | None = None) -> bool:
+        statement = delete(QAKnowledge).where(QAKnowledge.id.in_(qa_ids))
+        if knowledge_id is not None:
+            if tenant_id is None:
+                raise ValueError("QA deletion requires tenant scope")
+            statement = statement.where(QAKnowledge.knowledge_id == knowledge_id, QAKnowledge.tenant_id == tenant_id)
         with get_sync_db_session() as session:
-            session.exec(delete(QAKnowledge).where(QAKnowledge.id.in_(qa_ids)))
+            session.exec(statement)
             session.commit()
             return True
 

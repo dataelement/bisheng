@@ -28,7 +28,6 @@ from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.database.models.mark_record import MarkRecordDao, MarkRecordStatus
-from bisheng.database.models.mark_task import MarkTaskDao
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao, SensitiveStatus
 from bisheng.database.models.user_group import UserGroupDao
@@ -343,25 +342,13 @@ class ChatSessionService:
         flow_ids: list = []
         user_ids: list = []
 
-        user_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
-
         if task_id:
-            if not login_user.is_admin():
-                task = MarkTaskDao.get_task_byid(task_id)
-                if str(login_user.user_id) not in task.process_users.split(","):
-                    raise UnAuthorizedError()
-                if user_groups:
-                    task = MarkTaskDao.get_task_byid(task_id)
-                    group_flow_ids = task.app_id.split(",")
-                    if not group_flow_ids:
-                        return PageList(list=[], total=0)
-                else:
-                    task = MarkTaskDao.get_task_byid(task_id)
-                    if str(login_user.user_id) not in task.process_users.split(","):
-                        raise UnAuthorizedError()
-                    group_flow_ids = MarkTaskDao.get_task_byid(task_id).app_id.split(",")
-            else:
-                group_flow_ids = MarkTaskDao.get_task_byid(task_id).app_id.split(",")
+            from bisheng.chat_session.domain.services.mark_read_authorization import require_mark_task_reader
+
+            task = require_mark_task_reader(task_id, login_user)
+            group_flow_ids = [value.strip() for value in task.app_id.split(",") if value.strip()]
+            if not group_flow_ids:
+                return PageList(list=[], total=0)
 
         if keyword:
             flows = WorkflowHistoryRepository.search_by_name(keyword)
@@ -378,11 +365,29 @@ class ChatSessionService:
 
         if group_flow_ids:
             if flow_ids and keyword:
-                flow_ids = flow_ids
+                flow_ids = sorted(set(flow_ids) & set(group_flow_ids))
+                if not flow_ids:
+                    return PageList(list=[], total=0)
             else:
                 flow_ids = group_flow_ids
 
-        res = MessageSessionDao.filter_session(flow_ids=flow_ids, user_ids=user_ids)
+        res = MessageSessionDao.filter_session(flow_ids=flow_ids, user_ids=user_ids, include_delete=False)
+        from bisheng.chat_session.domain.services.session_read_authorization import require_session_read
+        from bisheng.utils.async_utils import run_async_safe
+
+        authorized = []
+        for session in res:
+            if task_id:
+                if session.is_delete or session.tenant_id != task.tenant_id or session.flow_id not in group_flow_ids:
+                    continue
+            else:
+                try:
+                    run_async_safe(require_session_read(session, login_user))
+                except UnAuthorizedError:
+                    continue
+            if flow_type is None or session.flow_type == flow_type:
+                authorized.append(session)
+        res = authorized
         total = len(res)
 
         chat_status_ids = [one.chat_id for one in res]
@@ -418,6 +423,7 @@ class ChatSessionService:
                     continue
             result.append(tmp)
 
+        total = len(result)
         result = result[(page_num - 1) * page_size : page_num * page_size]
         return PageList(list=result, total=total)
 

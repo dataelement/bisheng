@@ -413,14 +413,23 @@ class LLMDao:
             return result.all()
 
     @classmethod
-    def update_model_status(cls, model_id: int, status: int, remark: str = ""):
-        """Update model status and stamp when it was decided."""
+    def update_model_status(
+        cls,
+        model_id: int,
+        status: int,
+        remark: str = "",
+        *,
+        tenant_id: int | None = None,
+        server_id: int | None = None,
+    ):
+        """Stamp a verdict; management probes bind their verified owner/parent."""
+        statement = update(LLMModel).where(col(LLMModel.id) == model_id)
+        if tenant_id is not None:
+            statement = statement.where(col(LLMModel.tenant_id) == tenant_id)
+        if server_id is not None:
+            statement = statement.where(col(LLMModel.server_id) == server_id)
         with get_sync_db_session() as session:
-            session.exec(
-                update(LLMModel)
-                .where(col(LLMModel.id) == model_id)
-                .values(status=status, remark=remark, status_update_time=datetime.now())
-            )
+            session.exec(statement.values(status=status, remark=remark, status_update_time=datetime.now()))
             session.commit()
 
     @classmethod
@@ -442,10 +451,18 @@ class LLMDao:
             session.commit()
 
     @classmethod
-    async def aupdate_model_online(cls, model_id: int, online: bool):
-        """Asynchronous update model online status"""
+    async def aupdate_model_online(cls, model_id: int, online: bool, *, tenant_id: int, server_id: int):
+        """Bind every management write to the verified model owner and parent.
+
+        Bulk UPDATE does not receive automatic SELECT tenant filtering.
+        """
+        statement = update(LLMModel).where(
+            col(LLMModel.id) == model_id,
+            col(LLMModel.tenant_id) == tenant_id,
+            col(LLMModel.server_id) == server_id,
+        )
         async with get_async_db_session() as session:
-            await session.exec(update(LLMModel).where(col(LLMModel.id) == model_id).values(online=online))
+            await session.exec(statement.values(online=online))
             await session.commit()
 
     @classmethod

@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import json
 import os
 import time
@@ -81,34 +82,37 @@ class RedisCallback(BaseCallback):
         self.workflow_status_key = f"workflow:{unique_id}:status"
         self.workflow_event_key = f"workflow:{unique_id}:event"
         self.workflow_input_key = f"workflow:{unique_id}:input"
+        self.workflow_pending_key = f"workflow:{unique_id}:pending_input"
         self.workflow_stop_key = f"workflow:{unique_id}:stop"
         self.workflow_expire_time = settings.get_workflow_conf().timeout * 60 + 60
 
-    def set_workflow_data(self, data: dict, override: dict = None):
+    def set_workflow_data(self, data: dict, override: dict | None = None):
         data = self.override_nodes_params(data, override)
         self.redis_client.set(self.workflow_data_key, data, expiration=self.workflow_expire_time)
 
     @staticmethod
-    def override_nodes_params(data: dict, override: dict = None) -> dict:
+    def override_nodes_params(data: dict, override: dict | None = None) -> dict:
         if not override:
             return data
 
-        def replace_param(one_params: list[dict], one_node_id: str):
-            for param in one_params:
-                param_key = param.get("key")
-                if param_key not in override[one_node_id]:
-                    continue
-                param["value"] = override[one_node_id][param_key]
-
-        nodes = data.get("nodes", [])
-        for node in nodes:
-            node_data = node.get("data", {})
-            node_id = node_data.get("id")
-            if node_id not in override:
-                continue
-            group_params = node_data.get("group_params", [])
-            for group_param in group_params:
-                replace_param(group_param.get("params", []), node_id)
+        if not isinstance(override, dict):
+            raise WorkFlowInvalidUserInputError(msg="override must be an object")
+        # Callers must authorize edit before using this mutation capability.
+        # Never alter the persisted graph object (including ORM JSON values).
+        data = copy.deepcopy(data)
+        nodes = {node.get("data", {}).get("id"): node.get("data", {}) for node in data.get("nodes", [])}
+        for node_id, values in override.items():
+            if node_id not in nodes or not isinstance(values, dict):
+                raise WorkFlowInvalidUserInputError(msg="override contains an unknown node or invalid parameters")
+            params = {
+                param.get("key"): param
+                for group in nodes[node_id].get("group_params", [])
+                for param in group.get("params", [])
+            }
+            if set(values) - set(params):
+                raise WorkFlowInvalidUserInputError(msg="override contains an unknown parameter")
+            for key, value in values.items():
+                params[key]["value"] = value
         return data
 
     async def async_set_workflow_data(self, data: dict):
@@ -117,7 +121,7 @@ class RedisCallback(BaseCallback):
     def get_workflow_data(self) -> dict:
         return self.redis_client.get(self.workflow_data_key)
 
-    def set_workflow_status(self, status: str, reason: str = None):
+    def set_workflow_status(self, status: str, reason: str | None = None):
         self.redis_client.set(
             self.workflow_status_key,
             {"status": status, "reason": reason, "time": time.time()},
@@ -128,7 +132,7 @@ class RedisCallback(BaseCallback):
             self.redis_client.delete(self.workflow_data_key)
             self.redis_client.delete(self.workflow_input_key)
 
-    async def async_set_workflow_status(self, status: str, reason: str = None):
+    async def async_set_workflow_status(self, status: str, reason: str | None = None):
         await self.redis_client.aset(
             self.workflow_status_key,
             {"status": status, "reason": reason, "time": time.time()},
@@ -335,9 +339,29 @@ class RedisCallback(BaseCallback):
                     continue
                 yield chat_response
 
+    def _remember_pending_input(self, response: ChatResponse):
+        self.redis_client.set(
+            self.workflow_pending_key,
+            {"message": response.message, "message_id": response.message_id},
+            expiration=self.workflow_expire_time,
+        )
+
+    def _verify_pending_input(self, pending: dict | None, data: dict, message_id: int | None):
+        if not pending or message_id != pending.get("message_id"):
+            raise WorkFlowInvalidUserInputError(msg="input does not match the current waiting message")
+        message = pending["message"]
+        if "input_schema" in message:
+            self._verify_input_schema(message, data)
+        else:
+            values = self._verify_node_input(message, data)
+            if not message.get("key") or set(values) != {message["key"]}:
+                raise WorkFlowInvalidUserInputError(msg="input contains undefined fields")
+
     def set_user_input(
-        self, data: dict, message_id: int = None, message_content: str = None, verify_input: bool = False
+        self, data: dict, message_id: int | None = None, message_content: str | None = None, verify_input: bool = False
     ):
+        if verify_input:
+            self._verify_pending_input(self.redis_client.get(self.workflow_pending_key), data, message_id)
         if self.chat_id and message_id:
             message_db = self._own_message(ChatMessageDao.get_message_by_id(message_id), verify_input)
             self.update_old_message(data, message_db, message_content, verify_input)
@@ -348,11 +372,13 @@ class RedisCallback(BaseCallback):
     async def async_set_user_input(
         self,
         data: dict,
-        message_id: int = None,
-        message_content: str = None,
+        message_id: int | None = None,
+        message_content: str | None = None,
         verify_input: bool = False,
         files: list | None = None,
     ):
+        if verify_input:
+            self._verify_pending_input(await self.redis_client.aget(self.workflow_pending_key), data, message_id)
         if self.chat_id and message_id:
             message_db = self._own_message(await ChatMessageDao.aget_message_by_id(message_id), verify_input)
             await self.async_update_old_message(data, message_db, message_content, verify_input, files)
@@ -370,7 +396,7 @@ class RedisCallback(BaseCallback):
     def _verify_node_input(input_schema_message: dict, user_input: dict) -> dict:
         """Return the input of the waiting node; the caller input must be an object per node."""
         node_id = input_schema_message["node_id"]
-        if not isinstance(user_input, dict) or node_id not in user_input:
+        if not isinstance(user_input, dict) or set(user_input) != {node_id}:
             raise WorkFlowInvalidUserInputError(msg=f"input does not contain the waiting node {node_id}")
         node_input = user_input[node_id]
         if not isinstance(node_input, dict):
@@ -392,8 +418,9 @@ class RedisCallback(BaseCallback):
             if user_input_keys:
                 raise WorkFlowInvalidUserInputError(msg=f"extra key {list(user_input_keys.keys())} found in user input")
         else:
-            if input_schema["key"] not in user_input:
-                raise WorkFlowInvalidUserInputError(msg=f"key {input_schema['key']} not found in user input")
+            allowed_keys = {input_schema["key"], "dialog_files_content"}
+            if input_schema["key"] not in user_input or set(user_input) - allowed_keys:
+                raise WorkFlowInvalidUserInputError(msg="dialog input does not match the defined fields")
 
     _INPUT_CATEGORIES = frozenset(
         {
@@ -428,8 +455,8 @@ class RedisCallback(BaseCallback):
                 raise WorkFlowInvalidUserInputError(msg="message_id does not refer to a message that waits for input")
             if message_db.category != WorkflowEventType.UserInput.value:
                 node_input = cls._verify_node_input(old_message, user_input)
-                if old_message["key"] not in node_input:
-                    raise WorkFlowInvalidUserInputError(msg=f"key {old_message['key']} not found in user input")
+                if set(node_input) != {old_message["key"]}:
+                    raise WorkFlowInvalidUserInputError(msg="output input does not match the defined field")
         if message_db.category == WorkflowEventType.OutputWithInput.value:
             old_message["hisValue"] = user_input[old_message["node_id"]][old_message["key"]]
         elif message_db.category == WorkflowEventType.OutputWithChoose.value:
@@ -823,6 +850,7 @@ class RedisCallback(BaseCallback):
         msg_id = self.save_chat_message(chat_response)
         if msg_id:
             chat_response.message_id = msg_id
+        self._remember_pending_input(chat_response)
         self.send_chat_response(chat_response)
 
     def on_guide_word(self, data: GuideWordData):
@@ -930,6 +958,7 @@ class RedisCallback(BaseCallback):
         )
         if msg_id:
             chat_response.message_id = msg_id
+        self._remember_pending_input(chat_response)
         self.send_chat_response(chat_response)
 
     def on_output_input(self, data: OutputMsgInputData):
@@ -952,4 +981,5 @@ class RedisCallback(BaseCallback):
         )
         if msg_id:
             chat_response.message_id = msg_id
+        self._remember_pending_input(chat_response)
         self.send_chat_response(chat_response)

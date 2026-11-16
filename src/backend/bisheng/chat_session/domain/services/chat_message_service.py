@@ -1,5 +1,3 @@
-from typing import Optional
-
 from loguru import logger
 
 from bisheng.api.services.chat_imp import comment_answer
@@ -29,7 +27,7 @@ def _resolve_leaf_tenant_id(login_user: UserPayload) -> int:
     tid = get_current_tenant_id()
     if tid is not None:
         return tid
-    if login_user is not None and getattr(login_user, 'tenant_id', None) is not None:
+    if login_user is not None and getattr(login_user, "tenant_id", None) is not None:
         return login_user.tenant_id
     raise TenantContextMissingError()
 
@@ -50,7 +48,7 @@ class ChatMessageService:
         """
         import json
 
-        logger.debug(f'gateway add_chat_messages {data}')
+        logger.debug(f"gateway add_chat_messages {data}")
         flow_id = data.flow_id
         chat_id = data.chat_id
         if not chat_id or not flow_id:
@@ -64,8 +62,8 @@ class ChatMessageService:
         if flow_info and flow_info.flow_type == FlowType.WORKFLOW.value:
             try:
                 tmp_human_message = json.loads(data.human_message)
-                for node_id, node_input in tmp_human_message.items():
-                    save_human_message = node_input.get('message')
+                for _node_id, node_input in tmp_human_message.items():
+                    save_human_message = node_input.get("message")
             except Exception:
                 save_human_message = data.human_message
 
@@ -76,8 +74,8 @@ class ChatMessageService:
             is_bot=False,
             message=save_human_message,
             sensitive_status=SensitiveStatus.VIOLATIONS.value,
-            type='human',
-            category='question',
+            type="human",
+            category="question",
             tenant_id=leaf_tenant_id,
         )
         bot_message = ChatMessage(
@@ -87,14 +85,15 @@ class ChatMessageService:
             is_bot=True,
             message=data.answer_message,
             sensitive_status=SensitiveStatus.PASS.value,
-            type='bot',
-            category='answer',
+            type="bot",
+            category="answer",
             tenant_id=leaf_tenant_id,
         )
         message_dbs = ChatMessageDao.insert_batch([human_message, bot_message])
         MessageSessionDao.update_sensitive_status(chat_id, SensitiveStatus.VIOLATIONS)
 
         from bisheng.chat_session.domain.chat import ChatSessionService
+
         ChatSessionService.get_or_create_session(chat_id, flow_id, login_user, request_ip)
 
         return message_dbs
@@ -107,10 +106,10 @@ class ChatMessageService:
         message: str,
         *,
         is_bot: bool = False,
-        category: str = 'question',
-        msg_type: str = 'human',
+        category: str = "question",
+        msg_type: str = "human",
         sensitive_status: int = SensitiveStatus.VIOLATIONS.value,
-        login_user: Optional[UserPayload] = None,
+        login_user: UserPayload | None = None,
     ) -> ChatMessage:
         """F017 §5.4 derived-data writer (new async path).
 
@@ -137,13 +136,11 @@ class ChatMessageService:
     def update_message(
         message_id: int,
         message: str,
-        category: Optional[str],
+        category: str | None,
         login_user: UserPayload,
     ) -> None:
         """Update message content with authorization check."""
-        logger.info(
-            f'update_chat_message message_id={message_id} message={message} login_user={login_user.user_name}'
-        )
+        logger.info(f"update_chat_message message_id={message_id} message={message} login_user={login_user.user_name}")
         chat_message = ChatMessageDao.get_message_by_id(message_id)
         if not chat_message:
             raise NotFoundError.http_exception()
@@ -165,12 +162,30 @@ class ChatMessageService:
         ChatMessageDao.delete_by_message_id(user_id, message_id)
 
     @staticmethod
-    def like_response(data: ChatInput) -> None:
-        """Process like/dislike with session counter updates."""
-        message_id = data.message_id
-        message = ChatMessageDao.get_message_by_id(data.message_id)
+    def _feedback_message(message_id: int, login_user: UserPayload) -> ChatMessage:
+        """A browser feedback write requires the real natural-person session owner."""
+        from bisheng.chat_session.domain.session_subject import SessionSubject
+
+        message = ChatMessageDao.get_message_by_id(message_id)
         if not message:
             raise NotFoundError.http_exception()
+        tenant_id = _resolve_leaf_tenant_id(login_user)
+        session = MessageSessionDao.get_one(message.chat_id)
+        subject = SessionSubject.natural_person(tenant_id=tenant_id, user_id=login_user.user_id)
+        if (
+            session is None
+            or not subject.matches(session)
+            or message.tenant_id != tenant_id
+            or message.user_id != login_user.user_id
+        ):
+            raise UnAuthorizedError.http_exception()
+        return message
+
+    @staticmethod
+    def like_response(data: ChatInput, login_user: UserPayload) -> None:
+        """Process like/dislike with session counter updates."""
+        message_id = data.message_id
+        message = ChatMessageService._feedback_message(message_id, login_user)
 
         if message.liked == data.liked:
             return
@@ -193,22 +208,21 @@ class ChatMessageService:
 
         message.liked = data.liked
         ChatMessageDao.update_message_model(message)
-        logger.info('k=s act=liked message_id={} liked={}', message_id, data.liked)
+        logger.info("k=s act=liked message_id={} liked={}", message_id, data.liked)
 
         MessageSessionDao.add_like_count(message.chat_id, like_count)
         MessageSessionDao.add_dislike_count(message.chat_id, dislike_count)
 
     @staticmethod
-    def mark_copied(message_id: int) -> None:
+    def mark_copied(message_id: int, login_user: UserPayload) -> None:
         """Mark a message as copied with session counter update."""
-        message = ChatMessageDao.get_message_by_id(message_id)
-        if not message:
-            raise NotFoundError.http_exception()
+        message = ChatMessageService._feedback_message(message_id, login_user)
         if message.copied != 1:
             ChatMessageDao.update_message_copied(message_id, 1)
             MessageSessionDao.add_copied_count(message.chat_id, 1)
 
     @staticmethod
-    def comment_on_answer(message_id: int, comment: str) -> None:
+    def comment_on_answer(message_id: int, comment: str, login_user: UserPayload) -> None:
         """Add a comment to a message answer."""
+        ChatMessageService._feedback_message(message_id, login_user)
         comment_answer(message_id, comment)

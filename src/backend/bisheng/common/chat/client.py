@@ -233,6 +233,16 @@ class ChatClient:
         )
 
     async def init_gpts_agent(self):
+        await AssistantAgent.authorize_chat_target(
+            self.login_user,
+            self.client_id,
+            self.chat_id,
+            self.session_subject,
+            original_assistant_id=self.client_id,
+        )
+        if self.gpts_agent is not None:
+            await self.gpts_agent.refresh_knowledge_authorization(self.gpts_async_callback)
+            return
         await self.init_chat_history()
         await self.init_gpts_callback()
         try:
@@ -373,8 +383,17 @@ class ChatClient:
             if not input_msg:
                 # Session needs to be switched
                 logger.debug(f"need switch agent, client_key: {self.client_key} inputs: {inputs}")
-                self.client_id = inputs.get("data").get("id")
-                self.chat_id = inputs.get("data").get("chatId")
+                target = inputs.get("data") or {}
+                target_id, target_chat_id = target.get("id"), target.get("chatId")
+                await AssistantAgent.authorize_chat_target(
+                    self.login_user,
+                    target_id,
+                    target_chat_id,
+                    self.session_subject,
+                    original_assistant_id=self.client_id,
+                )
+                self.client_id = target_id
+                self.chat_id = target_chat_id
                 self.gpts_agent = None
                 self.gpts_async_callback = None
                 self.chat_history = []

@@ -31,7 +31,16 @@ def _load_nodes(path, names, namespace):
 
 @pytest.fixture
 def lifecycle(monkeypatch):
-    row = SimpleNamespace(chat_id="chat-1", flow_id="app-1", flow_type=5, user_id=7, is_delete=False, flow_logo="logo", tenant_id=1, api_subject_type=None)
+    row = SimpleNamespace(
+        chat_id="chat-1",
+        flow_id="app-1",
+        flow_type=5,
+        user_id=7,
+        is_delete=False,
+        flow_logo="logo",
+        tenant_id=1,
+        api_subject_type=None,
+    )
     state = SimpleNamespace(session=row, share=None)
     dao = SimpleNamespace(async_get_one=AsyncMock(side_effect=lambda *a, **kw: state.session))
 
@@ -89,6 +98,7 @@ def lifecycle(monkeypatch):
 
 class User(BaseModel):
     user_id: int = 7
+    tenant_id: int = 1
 
     @staticmethod
     def get_login_user():
@@ -97,12 +107,20 @@ class User(BaseModel):
 
 class ShareLink(BaseModel):
     resource_id: str
+    tenant_id: int = 1
+    resource_type: str = "assistant"
+    meta_data: dict = {}
 
 
 @pytest.fixture
 async def client(lifecycle):
+    from bisheng.chat_session.domain.services.session_read_authorization import require_session_read
+
     router = APIRouter()
     namespace = {
+        "MessageSessionDao": lifecycle.dao,
+        "optional_session_reader": User.get_login_user,
+        "require_session_read": require_session_read,
         "router": router,
         "Depends": Depends,
         "Query": Query,

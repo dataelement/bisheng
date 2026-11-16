@@ -24,6 +24,17 @@ _FORBIDDEN_KB = 12
 _SPACE = 13
 
 
+@pytest.fixture(autouse=True)
+def current_tenant():
+    from bisheng.core.context.tenant import current_tenant_id
+
+    token = current_tenant_id.set(1)
+    try:
+        yield
+    finally:
+        current_tenant_id.reset(token)
+
+
 def _agent(*, knowledge_auth: bool) -> AssistantAgent:
     """An agent with only the attributes init_tools reads — no real __init__."""
     agent = object.__new__(AssistantAgent)
@@ -50,8 +61,8 @@ def _links():
 
 def _knowledge_rows():
     return [
-        SimpleNamespace(id=_ALLOWED_KB, type=KnowledgeTypeEnum.NORMAL.value, name="allowed"),
-        SimpleNamespace(id=_FORBIDDEN_KB, type=KnowledgeTypeEnum.NORMAL.value, name="forbidden"),
+        SimpleNamespace(id=_ALLOWED_KB, type=KnowledgeTypeEnum.NORMAL.value, name="allowed", tenant_id=1),
+        SimpleNamespace(id=_FORBIDDEN_KB, type=KnowledgeTypeEnum.NORMAL.value, name="forbidden", tenant_id=1),
     ]
 
 
@@ -70,8 +81,8 @@ async def _run_init_tools(agent, *, usable_ids):
         ),
         patch(
             "bisheng.knowledge.domain.services.space_flow_retrieval.abuild_scoped_login_user",
-            AsyncMock(return_value=SimpleNamespace(user_id=150041)),
-        ),
+            AsyncMock(side_effect=lambda user_id, tenant_id: SimpleNamespace(user_id=user_id)),
+        ) as identity_builder,
         patch.object(
             KnowledgeRag,
             "afilter_usable_knowledge_ids",
@@ -85,6 +96,10 @@ async def _run_init_tools(agent, *, usable_ids):
         patch.object(AssistantAgent, "_resolve_kb_name_by_id", staticmethod(lambda ids: {})),
     ):
         await agent.init_tools()
+        identity_builder.assert_awaited_once_with(
+            agent.invoke_user_id if agent.assistant.knowledge_auth else agent.assistant.user_id,
+            agent.assistant.tenant_id,
+        )
     built_for = [
         call.kwargs.get("knowledge_id", call.args[1] if len(call.args) > 1 else None)
         for call in init_knowledge_tool.await_args_list
@@ -110,12 +125,12 @@ async def test_toggle_on_asks_about_ordinary_knowledge_bases_only():
     assert _SPACE not in asked_for
 
 
-async def test_toggle_off_leaves_the_previous_behaviour_alone():
+async def test_toggle_off_still_requires_author_current_use_permission():
     agent = _agent(knowledge_auth=False)
     built_for, usable_filter = await _run_init_tools(agent, usable_ids=set())
 
-    assert built_for == [_ALLOWED_KB, _FORBIDDEN_KB]
-    usable_filter.assert_not_awaited()
+    assert built_for == []
+    usable_filter.assert_awaited_once()
 
 
 @pytest.mark.parametrize(

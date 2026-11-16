@@ -1,5 +1,5 @@
 // @ts-strict-ignore
-import { Input } from '@bisheng/ui';
+import { Button, Input } from '@bisheng/ui';
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { checkSassUrl } from "@/components/bs-comp/FileView";
 
@@ -13,6 +13,7 @@ import { useTranslation } from "react-i18next";
 import { getSourceChunksApi, splitWordApi } from "../../../controllers/API";
 import { downloadFile } from "../../../util/utils";
 import FileViewPanne from "./FileViewPanne";
+import { highlightSourceAnswer } from "./sourceAnswerHighlight";
 
 const Anwser = ({ id, msg, onInit, onAdd, fullScreen = false }) => {
     const [html, setHtml] = useState("");
@@ -25,8 +26,7 @@ const Anwser = ({ id, msg, onInit, onAdd, fullScreen = false }) => {
         const loadData = () => {
             splitWordApi(msg, id)
                 .then((res) => {
-                    const reg = new RegExp(`(${res.join("|")})`, "g");
-                    setHtml(msg.replace(reg, "<span>$1</span>"));
+                    setHtml(highlightSourceAnswer(msg, res));
                     onInit(res);
                 })
                 .catch((e) => {
@@ -44,7 +44,7 @@ const Anwser = ({ id, msg, onInit, onAdd, fullScreen = false }) => {
     useEffect(() => {
         const handleclick = (e) => {
             if (e.target.tagName === "SPAN") {
-                onAdd(e.target.innerText);
+                onAdd(e.target.textContent);
             }
         };
         pRef.current.addEventListener("click", handleclick);

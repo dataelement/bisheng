@@ -35,6 +35,7 @@ def harness(monkeypatch):
     )
     monkeypatch.setattr(sources, "get_current_tenant_id", lambda: 2)
     monkeypatch.setattr(sources, "get_minio_storage", AsyncMock(return_value=SimpleNamespace(tmp_bucket="temporary")))
+    monkeypatch.setattr(endpoint, "get_minio_storage", AsyncMock(return_value=SimpleNamespace(tmp_bucket="temporary")))
     monkeypatch.setattr(
         endpoint.KnowledgeDao, "aquery_by_id", AsyncMock(return_value=SimpleNamespace(id=3, user_id=7, type=1))
     )
@@ -134,7 +135,7 @@ async def test_upload_response_reference_is_accepted_by_preview(harness, monkeyp
     assert status["status"] == "completed", status
     assert status["data"]["chunks"][0]["text"] == "hello"
     assert permission.await_count == 2
-    storage.download_object_sync.assert_called_once_with("temporary", "server-generated.txt")
+    storage.download_object_sync.assert_called_once_with("temporary", "uploads/2/7/server-generated.txt")
     response_stream.close.assert_called_once()
     response_stream.release_conn.assert_called_once()
     network.assert_not_called()

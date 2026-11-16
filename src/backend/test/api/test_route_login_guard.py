@@ -104,7 +104,6 @@ GET /api/v1/mark/get_user
 GET /api/v1/open-api/skill-packs/{pack_name}
 GET /api/v1/personal-tokens
 GET /api/v1/personal-tokens/settings
-GET /api/v1/qa/keyword
 GET /api/v1/service-accounts
 GET /api/v1/service-accounts/management-scope
 GET /api/v1/service-accounts/owner-candidates
@@ -115,8 +114,6 @@ GET /api/v1/service-accounts/{service_account_id}/keys
 GET /api/v1/service-accounts/{service_account_id}/keys/page
 GET /api/v1/service-accounts/{service_account_id}/resource-grants
 GET /api/v1/share-link/{share_token}
-GET /api/v1/telemetry/dashboard/dataset/field/enums
-GET /api/v1/telemetry/dashboard/dataset/list
 GET /api/v1/tool/linsight/preset
 GET /api/v1/user/get_captcha
 GET /api/v1/user/public_key
@@ -125,8 +122,6 @@ GET /api/v1/web/config
 PATCH /api/v1/dsh/market/admin/install-policy
 PATCH /api/v1/service-accounts/{service_account_id}
 PATCH /api/v1/service-accounts/{service_account_id}/keys/{key_id}
-POST /api/v1/chat/comment
-POST /api/v1/chat/copied
 POST /api/v1/citations/resolve
 POST /api/v1/departments/sync
 POST /api/v1/dsh/apps/deploy
@@ -174,11 +169,8 @@ POST /api/v1/internal/departments/relink/resolve-conflict
 POST /api/v1/internal/dsh/content-safety-events
 POST /api/v1/internal/sso/gateway-wecom-org-sync
 POST /api/v1/internal/sso/login-sync
-POST /api/v1/knowledge/upload
-POST /api/v1/liked
 POST /api/v1/personal-tokens/holders/{user_id}/revoke
 POST /api/v1/personal-tokens/{credential_id}/revoke
-POST /api/v1/qa/chunk
 POST /api/v1/report/callback
 POST /api/v1/service-accounts
 POST /api/v1/service-accounts/{service_account_id}/delegate-candidates:filter
@@ -190,7 +182,6 @@ POST /api/v1/service-accounts/{service_account_id}/keys/{key_id}/revoke
 POST /api/v1/service-accounts/{service_account_id}/resource-grants:mutate
 POST /api/v1/tenants/
 POST /api/v1/tenants/{tenant_id}/users
-POST /api/v1/upload/{flow_id}
 POST /api/v1/user/change_password_public
 POST /api/v1/user/login
 POST /api/v1/user/logout
@@ -206,8 +197,14 @@ PUT /api/v1/service-accounts/management-scope
 )
 
 
+# Already shipped before this security batch (f07aeb0bf4): nginx auth_request
+# bucket allowlist probe returns only 204/403, never bytes or credentials. It
+# cannot require browser login because anonymous signed image URLs use it too.
+PUBLIC_VALUE_FREE_PROBES = frozenset({"GET /api/v1/storage/browser-bucket"})
+
+
 def test_no_new_route_without_login_dependency():
-    new_routes = _routes_without_login() - LEGACY_ROUTES_WITHOUT_LOGIN_DEPENDENCY
+    new_routes = _routes_without_login() - LEGACY_ROUTES_WITHOUT_LOGIN_DEPENDENCY - PUBLIC_VALUE_FREE_PROBES
     assert new_routes == set(), (
         "New /api/v1 routes must declare Depends(UserPayload.get_login_user) "
         f"(or an admin wrapper). Missing auth: {sorted(new_routes)}"
@@ -216,3 +213,18 @@ def test_no_new_route_without_login_dependency():
 
 def test_reported_report_temp_route_is_authenticated():
     assert "GET /api/v1/report/report_temp" not in _routes_without_login()
+
+
+def test_security_batch_routes_keep_login_dependency():
+    fixed = {
+        "GET /api/v1/qa/keyword",
+        "POST /api/v1/qa/chunk",
+        "POST /api/v1/chat/comment",
+        "POST /api/v1/chat/copied",
+        "POST /api/v1/liked",
+        "POST /api/v1/knowledge/upload",
+        "POST /api/v1/upload/{flow_id}",
+        "GET /api/v1/telemetry/dashboard/dataset/field/enums",
+        "GET /api/v1/telemetry/dashboard/dataset/list",
+    }
+    assert not (fixed & _routes_without_login())
