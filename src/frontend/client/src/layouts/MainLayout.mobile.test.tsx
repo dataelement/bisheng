@@ -12,6 +12,7 @@ import MainLayout from "./MainLayout";
 
 let mockMobile = true;
 let mockEmbedded = false;
+let mockHostHeader = false;
 const mockUser = { id: "mobile-test", username: "test" };
 const noop = () => undefined;
 const mockViewportListeners = new Set<() => void>();
@@ -45,10 +46,11 @@ jest.mock("~/hooks", () => ({
   useScrollRevealRef: () => noop,
 }));
 jest.mock("~/utils/clientEnvironment", () => {
-  const web = { channel: "web" };
-  const desktop = { channel: "desktop" };
   return {
-    getClientEnvironment: () => (mockEmbedded ? desktop : web),
+    getClientEnvironment: () => ({
+      channel: mockEmbedded ? "desktop" : "web",
+      capabilities: { hasHostChatHeader: mockHostHeader },
+    }),
     subscribeClientEnvironment: () => noop,
   };
 });
@@ -162,6 +164,7 @@ function createHarness() {
 beforeEach(() => {
   mockMobile = true;
   mockEmbedded = false;
+  mockHostHeader = false;
 });
 
 it("opens complete navigation from the narrow header without remounting the page draft", async () => {
@@ -212,6 +215,15 @@ it("returns to narrow layout with the menu closed after a desktop round trip", a
   expect(screen.getByRole("textbox", { name: "Draft" })).toHaveValue(
     "Resized draft",
   );
+});
+
+it("hides the narrow module header when the mobile app owns it", () => {
+  mockHostHeader = true;
+  render(createHarness().page);
+  expect(
+    screen.queryByRole("button", { name: "com_nav_open_sidebar" }),
+  ).not.toBeInTheDocument();
+  expect(screen.getByRole("textbox", { name: "Draft" })).toBeInTheDocument();
 });
 
 it("uses the desktop shell and host navigation even when its content is narrow", () => {
