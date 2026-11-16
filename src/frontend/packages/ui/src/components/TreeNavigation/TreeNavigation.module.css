@@ -1,0 +1,335 @@
+.viewport {
+  --tree-row-height: 1.75rem;
+  --tree-font-size: var(--text-caption);
+  --tree-line-height: var(--leading-caption);
+  --tree-heading-line-height: 1.125rem;
+  --tree-slot: 1.25rem;
+  --tree-indent: 1.25rem;
+  --tree-inset: 0px;
+  --tree-row-end-padding: 0.25rem;
+  --tree-row-end-inset: calc(var(--tree-inset) + var(--tree-row-end-padding));
+  --tree-action-gap: 0.5rem;
+  container-type: inline-size;
+  overflow: auto;
+  overscroll-behavior: contain;
+  color: rgb(var(--text-1));
+}
+
+.viewport[data-size='medium'] {
+  --tree-row-height: 2rem;
+  --tree-font-size: var(--text-body);
+  --tree-line-height: var(--leading-body);
+  --tree-heading-line-height: var(--leading-body);
+}
+
+.viewport:has([data-tree-group]) {
+  --tree-inset: 0.75rem;
+  scroll-padding-block-start: var(--tree-row-height);
+}
+
+.content {
+  inline-size: max-content;
+  min-inline-size: 100%;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.list:empty {
+  display: none;
+}
+
+.content > .list,
+.groupBody > .list {
+  margin-inline: var(--tree-inset);
+}
+
+.list > li + li,
+.row + .list {
+  margin-block-start: 2px;
+}
+
+.viewport[data-show-line='true'] [data-tree-node] > .list:not([hidden]):has(> [data-tree-node]) {
+  position: relative;
+}
+
+.viewport[data-show-line='true'] [data-tree-node] > .list:not([hidden]):has(> [data-tree-node])::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: calc((var(--tree-depth) + 0.5) * var(--tree-indent));
+  border-inline-start: 1px solid rgb(var(--border-base));
+  pointer-events: none;
+}
+
+.group {
+  padding-block-end: 1rem;
+}
+
+.groupHeader {
+  position: sticky;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  inline-size: 100cqi;
+  min-block-size: max(var(--tree-row-height), calc(var(--tree-heading-line-height) + 0.5rem));
+  margin-block-end: 0.5rem;
+  padding-inline: calc(var(--tree-inset) + 0.25rem);
+  background: var(--tree-surface, rgb(var(--bg-page)));
+  color: rgb(var(--text-2));
+  font-size: var(--tree-font-size);
+  line-height: var(--tree-heading-line-height);
+}
+
+.groupToggle,
+.groupAction,
+.disclosure,
+.target,
+.menuTrigger {
+  display: flex;
+  align-items: center;
+  border-radius: 0.375rem;
+  color: inherit;
+}
+
+.groupToggle {
+  align-self: stretch;
+  flex: 1;
+  min-inline-size: 0;
+  gap: 0.25rem;
+  text-align: start;
+}
+
+.row {
+  --tree-row-background: transparent;
+  --tree-menu-visibility: 0;
+  --tree-name-gutter: var(--tree-row-end-inset);
+  display: flex;
+  align-items: stretch;
+  min-block-size: max(var(--tree-row-height), calc(var(--tree-line-height) + 0.5rem));
+  padding-inline-start: calc(var(--tree-depth) * var(--tree-indent));
+  /* Keep the menu inset in the real row width so the label fits at scroll end. */
+  padding-inline-end: var(--tree-row-end-padding);
+  border-radius: 0.375rem;
+  color: rgb(var(--text-1));
+  background: var(--tree-row-background);
+  font-size: var(--tree-font-size);
+  line-height: var(--tree-line-height);
+}
+
+.row[data-current='true'] {
+  --tree-row-background: rgb(var(--fill-2));
+  font-weight: 500;
+}
+
+.row[data-actions] {
+  --tree-actions-gutter: calc(var(--tree-row-end-inset) + var(--tree-slot) + var(--tree-action-gap));
+}
+
+.row[data-actions]:focus-within,
+.row[data-actions]:has([data-tree-menu][data-state='open']) {
+  --tree-menu-visibility: 1;
+  --tree-name-gutter: var(--tree-actions-gutter);
+}
+
+.disclosure,
+.iconSlot,
+.groupAction,
+.menuTrigger {
+  flex: none;
+  inline-size: var(--tree-slot);
+  justify-content: center;
+  color: rgb(var(--text-2));
+}
+
+.iconSlot {
+  display: flex;
+  align-items: center;
+  inline-size: 1.25rem;
+  min-block-size: 1.25rem;
+}
+
+.row[data-current='true'] .iconSlot,
+.row[data-current='true'] .disclosure {
+  color: rgb(var(--text-1));
+}
+
+.groupToggle > svg,
+.groupAction > svg,
+.disclosure > svg,
+.iconSlot > svg,
+.menuTrigger > svg {
+  flex: none;
+  inline-size: 1rem;
+  block-size: 1rem;
+}
+
+.target {
+  flex: 1;
+  min-inline-size: 0;
+  text-align: start;
+  text-decoration: none;
+}
+
+.target:disabled,
+.groupAction:disabled,
+.menuTrigger:disabled {
+  color: rgb(var(--text-4));
+  cursor: not-allowed;
+}
+
+.nameSlot {
+  position: relative;
+  align-self: stretch;
+}
+
+.intrinsicName,
+.visibleName {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding-inline-start: 0.25rem;
+  white-space: nowrap;
+}
+
+.intrinsicName {
+  visibility: hidden;
+  min-block-size: 100%;
+}
+
+.visibleName {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  max-inline-size: max(0px, calc(var(--tree-name-room, 100cqi) - var(--tree-name-gutter)));
+  overflow: hidden;
+}
+
+.visibleName > :first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.visibleName > :not(:first-child) {
+  flex: none;
+}
+
+.intrinsicName > svg,
+.visibleName > svg {
+  flex: none;
+  inline-size: 0.75rem;
+  block-size: 0.75rem;
+}
+
+.rowActions {
+  position: sticky;
+  inset-inline-end: var(--tree-row-end-inset);
+  z-index: 1;
+  display: flex;
+  flex: none;
+  align-items: center;
+  margin-inline-start: var(--tree-action-gap);
+}
+
+.groupAction,
+.menuTrigger {
+  block-size: var(--tree-slot);
+}
+
+.groupAction[data-state='open'] {
+  background: rgb(var(--fill-2));
+}
+
+.menuTrigger {
+  opacity: var(--tree-menu-visibility);
+  background: var(--tree-row-background);
+}
+
+.menuTrigger[data-state='open'] {
+  background: rgb(var(--fill-3));
+}
+
+.viewport:focus-visible,
+.groupToggle:focus-visible,
+.groupAction:focus-visible,
+.disclosure:focus-visible,
+.target:focus-visible,
+.menuTrigger:focus-visible {
+  outline: 2px solid rgb(var(--brand-500));
+  outline-offset: -2px;
+}
+
+.status {
+  position: sticky;
+  inset-inline-start: var(--tree-inset);
+  box-sizing: border-box;
+  inline-size: calc(100cqi - 2 * var(--tree-inset));
+  min-block-size: var(--tree-row-height);
+  padding-block: 0.25rem;
+  padding-inline: min(calc(var(--tree-depth) * var(--tree-indent) + 0.5rem), 25cqi) 0.5rem;
+  color: rgb(var(--text-2));
+  font-size: var(--tree-font-size);
+  line-height: var(--tree-line-height);
+}
+
+@media (hover: hover) {
+  .row:not([data-current='true']):hover {
+    --tree-row-background: rgb(var(--fill-1));
+  }
+
+  .row[data-actions]:hover {
+    --tree-menu-visibility: 1;
+    --tree-name-gutter: var(--tree-actions-gutter);
+  }
+
+  .groupHeader:hover {
+    background: rgb(var(--fill-1));
+  }
+
+  .groupAction:enabled:hover {
+    background: rgb(var(--fill-2));
+  }
+
+  .menuTrigger:hover {
+    background: rgb(var(--fill-3));
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .viewport {
+    --tree-slot: 2.75rem;
+    --tree-row-height: 2.75rem;
+  }
+
+  .viewport[data-size='medium'] {
+    --tree-row-height: 2.75rem;
+  }
+
+  .target {
+    min-inline-size: 2.75rem;
+  }
+
+  .row[data-actions] {
+    --tree-menu-visibility: 1;
+    --tree-name-gutter: var(--tree-actions-gutter);
+  }
+
+  .row:not([data-current='true']):active,
+  .groupToggle:active {
+    background: rgb(var(--fill-1));
+  }
+
+  .groupAction:enabled:active {
+    background: rgb(var(--fill-2));
+  }
+
+  .menuTrigger:active {
+    background: rgb(var(--fill-3));
+  }
+}

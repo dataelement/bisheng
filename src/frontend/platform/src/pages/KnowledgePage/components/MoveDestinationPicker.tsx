@@ -1,7 +1,7 @@
-import { Button, SearchInput } from "@bisheng/ui";
+import { Button, SearchInput, TreeNavigation, TreeNavigationList, TreeNavigationNode } from "@bisheng/ui";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Outlined } from "bisheng-icons";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { knowledgeFilesApi } from "@/controllers/API/knowledgeFiles";
 import { knowledgeSpaceApi } from "@/controllers/API/knowledgeSpace";
@@ -11,9 +11,7 @@ import {
   type KnowledgeQueryScope,
 } from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
-import { KnowledgeFolderTree } from "../sidebar/KnowledgeFolderTree";
-import { ScrollableTreeName } from "../sidebar/ScrollableTreeName";
-import { useKnowledgeTreeScroll } from "../sidebar/useKnowledgeTreeScroll";
+import { KnowledgeFolderTree, knowledgeTreeNodeKey } from "../sidebar/KnowledgeFolderTree";
 
 interface MoveDestinationPickerProps {
   scope: KnowledgeQueryScope;
@@ -31,9 +29,7 @@ export function MoveDestinationPicker({
 }: MoveDestinationPickerProps) {
   const { t } = useTranslation("knowledge");
   const [keyword, setKeyword] = useState("");
-  const [expanded, setExpanded] = useState(() => new Set([value.spaceId]));
-  const treeRef = useRef<HTMLDivElement>(null);
-  useKnowledgeTreeScroll(treeRef);
+  const [expandedKeys, setExpandedKeys] = useState(() => new Set([knowledgeTreeNodeKey(value.spaceId)]));
   const prefix = knowledgeQueryKeys.scope(scope);
   const spaces = useInfiniteQuery({
     queryKey: [...prefix, "move-destination-spaces", keyword],
@@ -104,12 +100,28 @@ export function MoveDestinationPicker({
     options.find((space) => space.id === value.spaceId)?.name ??
     t(value.spaceId === sourceId ? "move.current_space" : "move.target_space");
   const path = parents.data ?? [];
+  const handleExpansionChange = (key: string, expanded: boolean) => {
+    setExpandedKeys((previous) => {
+      const next = new Set(previous);
+      if (expanded) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  };
+  useEffect(() => {
+    if (value.folderId === null) return;
+    const ancestors = parents.data?.filter((folder) => folder.id !== value.folderId) ?? [];
+    setExpandedKeys((previous) => new Set([
+      ...previous,
+      knowledgeTreeNodeKey(value.spaceId),
+      ...ancestors.map((folder) => knowledgeTreeNodeKey(value.spaceId, folder.id)),
+    ]));
+  }, [parents.data, value.folderId, value.spaceId]);
   const handleSelectSpace = (spaceId: number, name: string) => {
-    setExpanded((previous) => new Set(previous).add(spaceId));
+    handleExpansionChange(knowledgeTreeNodeKey(spaceId), true);
     onChange({ spaceId, folderId: null }, name);
   };
   const handleSelectFolder = (folderId: number, name: string) => {
-    setExpanded((previous) => new Set(previous).add(value.spaceId));
     onChange({ ...value, folderId }, `${spaceLabel} / ${name}`);
   };
 
@@ -124,103 +136,61 @@ export function MoveDestinationPicker({
             onChange={(event) => setKeyword(event.target.value)}
           />
         </div>
-        <div
-          ref={treeRef}
-          className="min-h-0 flex-1 overflow-auto px-2 pb-2 [container-type:inline-size]"
+        <TreeNavigation
+          aria-label={t("sidebar.navigation")}
+          className="min-h-0 flex-1 px-2 pb-2"
         >
-          <div className="w-max min-w-full">
-            {(["department", "personal"] as const).map((category) => {
-              const items = options.filter(
-                (space) =>
-                  (space.space_kind === "department") ===
-                  (category === "department"),
-              );
-              if (!items.length) return null;
-              return (
-                <section
-                  key={category}
-                  className="mb-2"
-                  aria-label={t(`sidebar.${category}`)}
-                >
-                  <h3 className="px-2 py-1 text-body-sm font-medium text-text-3">
-                    {t(`sidebar.${category}`)}
-                  </h3>
-                  <ul className="space-y-0.5">
-                    {items.map((space) => {
-                      const active = value.spaceId === space.id;
-                      const rootSelected = active && value.folderId === null;
-                      const isExpanded = expanded.has(space.id);
-                      const Icon =
-                        category === "department"
-                          ? Outlined.City
-                          : Outlined.Notebook;
-                      return (
-                        <li key={space.id}>
-                          <div
-                            className={`flex h-7 items-center rounded-md pr-1 text-body-sm text-text-1 ${rootSelected ? "bg-fill-2 font-semibold" : "hover:bg-fill-1"}`}
-                          >
-                            <button
-                              type="button"
-                              aria-label={`${t(isExpanded ? "sidebar.collapse" : "sidebar.expand")} ${space.name}`}
-                              aria-expanded={isExpanded}
-                              className="flex size-5 shrink-0 items-center justify-center"
-                              onClick={() =>
-                                setExpanded((previous) => {
-                                  const next = new Set(previous);
-                                  if (next.has(space.id)) next.delete(space.id);
-                                  else next.add(space.id);
-                                  return next;
-                                })
-                              }
-                            >
-                              <Outlined.Right
-                                aria-hidden
-                                className={`size-3.5 text-text-3 ${isExpanded ? "rotate-90" : ""}`}
-                              />
-                            </button>
-                            <button
-                              type="button"
-                              title={space.name}
-                              aria-current={
-                                rootSelected ? "location" : undefined
-                              }
-                              className="flex h-full min-w-0 flex-1 items-center text-left"
-                              onClick={() =>
-                                handleSelectSpace(space.id, space.name)
-                              }
-                            >
-                              <Icon
-                                aria-hidden
-                                className={`size-4 shrink-0 ${rootSelected ? "text-text-1" : "text-text-3"}`}
-                              />
-                              <ScrollableTreeName name={space.name} />
-                            </button>
-                          </div>
-                          {isExpanded && (
-                            <KnowledgeFolderTree
-                              scope={scope}
-                              spaceId={space.id}
-                              parentId={null}
-                              selectedId={active ? value.folderId : null}
-                              path={
-                                active ? path.map((folder) => folder.id) : []
-                              }
-                              onSelect={(spaceId, folderId) => {
-                                onChange(
-                                  { spaceId, folderId },
-                                  `${space.name} / ${t("move.current_folder")}`,
-                                );
-                              }}
-                            />
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </section>
-              );
-            })}
-          </div>
+          {(["department", "personal"] as const).map((category) => {
+            const isDepartment = category === "department";
+            const items = options.filter(
+              (space) => (space.space_kind === "department") === isDepartment,
+            );
+            if (!items.length) return null;
+            const Icon = isDepartment ? Outlined.City : Outlined.Notebook;
+            return (
+              <section key={category} className="mb-2" aria-label={t(`sidebar.${category}`)}>
+                <h3 className="px-2 py-1 text-body-sm font-medium text-text-3">
+                  {t(`sidebar.${category}`)}
+                </h3>
+                <TreeNavigationList>
+                  {items.map((space) => {
+                    const active = value.spaceId === space.id;
+                    const key = knowledgeTreeNodeKey(space.id);
+                    const expanded = expandedKeys.has(key);
+                    return (
+                      <TreeNavigationNode
+                        key={space.id}
+                        name={space.name}
+                        icon={<Icon />}
+                        current={active && value.folderId === null && "location"}
+                        onSelect={() => handleSelectSpace(space.id, space.name)}
+                        disclosure={{
+                          expanded,
+                          label: `${t(expanded ? "sidebar.collapse" : "sidebar.expand")} ${space.name}`,
+                          onToggle: () => handleExpansionChange(key, !expanded),
+                        }}
+                      >
+                        {expanded && (
+                          <KnowledgeFolderTree
+                            scope={scope}
+                            spaceId={space.id}
+                            parentId={null}
+                            selectedId={active ? value.folderId : null}
+                            path={active ? path.map((folder) => folder.id) : []}
+                            expandedKeys={expandedKeys}
+                            onExpansionChange={handleExpansionChange}
+                            onSelect={(spaceId, folderId) => {
+                              onChange({ spaceId, folderId }, `${space.name} / ${t("move.current_folder")}`);
+                            }}
+                          />
+                        )}
+                      </TreeNavigationNode>
+                    );
+                  })}
+                </TreeNavigationList>
+              </section>
+            );
+          })}
           {spaces.isInitialLoading && (
             <p
               role="status"
@@ -257,7 +227,7 @@ export function MoveDestinationPicker({
               {t("sidebar.more_spaces")}
             </Button>
           )}
-        </div>
+        </TreeNavigation>
       </div>
       <div
         className="flex min-w-0 flex-1 flex-col"

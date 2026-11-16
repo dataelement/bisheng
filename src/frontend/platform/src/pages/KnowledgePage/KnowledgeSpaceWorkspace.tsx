@@ -77,11 +77,11 @@ export function KnowledgeSpaceWorkspace({
         }}
       />
       <main
-        className="min-w-0 flex-1 overflow-auto px-4"
+        className="min-w-0 flex-1 overflow-auto bg-bg-page"
         aria-label={t("workspace.files")}
       >
         {invalid ? (
-          <p role="status">{t("f118.scope_unavailable")}</p>
+          <p role="status" className="p-4">{t("f118.scope_unavailable")}</p>
         ) : spaceId !== null ? (
           <SpaceDetail
             key={JSON.stringify([scope, spaceId, parentId])}
@@ -92,7 +92,7 @@ export function KnowledgeSpaceWorkspace({
             onOpenFolder={(id) => handleSelect(spaceId, id)}
           />
         ) : (
-          <div role="status" className="space-y-3 py-6">
+          <div role="status" className="space-y-3 px-4 py-6">
             <p>
               {t(
                 initial.error

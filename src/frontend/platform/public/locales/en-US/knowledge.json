@@ -710,13 +710,16 @@
         "load_failed": "Failed to load",
         "empty": "No spaces",
         "more_folders": "Load more folders",
-        "collapse_navigation": "Collapse space navigation",
-        "expand_navigation": "Expand space navigation",
+        "resize_navigation": "Resize knowledge navigation",
         "search": "Search spaces",
         "personal": "Personal spaces",
         "more_spaces": "Load more spaces"
     },
     "workspace": {
+        "clear_search": "Clear search",
+        "filter": "Filter",
+        "sort_field": "Sort by",
+        "status_failed": "Failed",
         "files": "Space files",
         "list_view": "List view",
         "card_view": "Card view",

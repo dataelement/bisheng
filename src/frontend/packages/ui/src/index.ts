@@ -97,6 +97,7 @@ export * from './components/DatePicker';
 // rows, toggle rows, one submenu level and click / hover triggering are baked
 // in; confirmation stays the caller's (`useConfirm` in `onSelect`).
 export * from './components/Dropdown';
+export * from './components/TreeNavigation';
 // Pagination — cut a long list into pages for finding, comparing and coming
 // back (组件-Pagination分页.md). The ellipsis rule, the brand-tinted current page,
 // the always-present pager, the jumper past 10 pages and the phone's simple
