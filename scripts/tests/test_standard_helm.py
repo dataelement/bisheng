@@ -360,7 +360,34 @@ def test_gateway_enabled_has_matching_initialization_and_license_binding(
         if item["kind"] == "ConfigMap" and "application.yml" in item.get("data", {})
     )
     parsed = yaml.safe_load(config)
-    assert len(parsed["spring"]["cloud"]["gateway"]["routes"][0]["predicates"]) == 1
+    docker = yaml.safe_load(
+        (ROOT / "docker/gateway/config/application.yml").read_text()
+    )
+    for application in (parsed, docker):
+        gateway = application["spring"]["cloud"]["gateway"]
+        routes = {route["id"]: route for route in gateway["routes"]}
+        http, mobile = routes["bisheng-http"], routes["bisheng-dsh-mobile-ws"]
+        assert len(http["predicates"]) == 1
+        assert mobile["order"] < http.get("order", 0)
+        assert mobile["uri"].startswith("ws://")
+        assert mobile["predicates"] == [
+            "Path=/api/v1/dsh/mobile/attach",
+            "Header=Upgrade, (?i)websocket",
+        ]
+        assert not mobile.get("filters")
+        assert gateway["global-filter"]["websocket-routing"]["enabled"] is False
+        prefixes = application["bisheng"]["websocket"]["anonymous-path-prefixes"]
+        assert "/api/v1/dsh/mobile/attach" in prefixes
+        for path in ("/api/v1/dsh/mobile/bind", "/api/v1/dsh/mobile/desktops"):
+            assert not any(
+                path == prefix or path.startswith(prefix + "/") for prefix in prefixes
+            )
+        assert (
+            application["logging"]["level"][
+                "com.dataelem.gateway.filter.SelfWebsocketRoutingFilter"
+            ]
+            == "warn"
+        )
     assert "customer-license" in yaml.safe_dump_all(documents)
 
 

@@ -19,6 +19,12 @@ data:
           global-filter:
             websocket-routing: {enabled: false}
           routes:
+            - id: bisheng-dsh-mobile-ws
+              order: -10
+              uri: ws://{{ include "bisheng.backendService" . }}:{{ .Values.backend.service.port }}
+              predicates:
+                - Path=/api/v1/dsh/mobile/attach
+                - Header=Upgrade, (?i)websocket
             - id: bisheng-http
               uri: http://{{ include "bisheng.backendService" . }}:{{ .Values.backend.service.port }}
               predicates: ["Path=/api/v1/**,/api/v2/**,/api/v3/**"]
@@ -41,6 +47,10 @@ data:
         username: {{ .Values.gateway.database.username }}
         password: ${GATEWAY_DATABASE_PASSWORD}
         url: jdbc:mysql://{{ $host }}:{{ .Values.gateway.database.port }}/{{ .Values.gateway.database.name }}?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC
+    logging:
+      level:
+        # The desktop bridge's first frame contains its authentication secret.
+        com.dataelem.gateway.filter.SelfWebsocketRoutingFilter: warn
     bisheng:
       license: ${BISHENG_LICENSE}
       gateway-hmac-secret: ${BISHENG_GATEWAY_HMAC_SECRET}
@@ -48,6 +58,11 @@ data:
       web-home-url: {{ .Values.publicUrl | quote }}
       bisheng-api-url: http://{{ include "bisheng.backendService" . }}:{{ .Values.backend.service.port }}
       enable-sync: false
+      websocket:
+        anonymous-path-prefixes:
+          - /api/v2
+          # The bridge uses backend first-frame authentication, not browser Cookies.
+          - /api/v1/dsh/mobile/attach
 {{- end }}
 ---
 apiVersion: v1
