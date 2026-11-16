@@ -10,6 +10,8 @@ export interface ConfiguredUserModel {
 export interface ModelServer {
     id: number
     name: string
+    /** Provider type, used to look the model up in the price catalog. */
+    type?: string
     models: Array<{ id: number; model_name: string; model_type: string; online: boolean }>
 }
 

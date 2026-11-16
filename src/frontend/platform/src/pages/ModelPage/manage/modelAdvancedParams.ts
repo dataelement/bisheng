@@ -1,4 +1,5 @@
 import { ModelType } from "@/controllers/API/modelDiscovery";
+import type { ModelPricing } from "@/controllers/API/modelPricing";
 import {
   getAdvancedParamsTemplate,
   templateToJsonString,
@@ -9,6 +10,8 @@ export interface ModelItemConfig {
   enable_web_search?: boolean;
   max_tokens?: number;
   user_kwargs?: string | Record<string, unknown>;
+  // F016: prices per million tokens; the server fills it on save when absent.
+  pricing?: ModelPricing;
 }
 
 export function parseAdvancedParams(input: string): Record<string, unknown> {

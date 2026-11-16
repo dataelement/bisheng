@@ -2713,6 +2713,13 @@
   "dsh_source_unavailable": "用量暂不可用",
   "dsh_unknown_usage": "有 {{count}} 次调用未获取到用量。",
   "dsh": {
+    "creditsTitle": "本月积分",
+    "creditsRemaining": "剩余积分",
+    "creditsDetail": "本月额度 {{limit}} · 已用 {{used}}",
+    "creditsUsedOnly": "本月已用 {{used}}",
+    "creditsUnlimited": "不限额",
+    "creditsReset": "{{date}}重置",
+    "creditsHelp": "Chat 和 Work 共用，每次调用按模型价格和实际用量扣除。",
     "launchHelp": "若客户端未打开，请点击“下载客户端”安装客户端；已安装时，请允许浏览器打开应用，或手动启动客户端。",
     "launchHelpNoDownload": "若客户端未打开，已安装时请允许浏览器打开应用，或手动启动客户端；未安装时请联系管理员获取下载地址。",
     "heatmapFuture": "未到时间",
@@ -2871,7 +2878,8 @@
   },
   "modelPicker": {
     "unknownProvider": "其他提供方",
-    "back": "返回"
+    "back": "返回",
+    "ratioFree": "免费"
   },
   "com_select": {
     "empty": "暂无数据",

@@ -1,0 +1,1694 @@
+{
+  "version": "2026-11-16",
+  "entries": [
+    {
+      "key": "deepseek/deepseek-v4-pro",
+      "vendor": "DeepSeek",
+      "label": "DeepSeek V4 Pro",
+      "provider_types": [
+        "deepseek",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "deepseek-v4-pro"
+      ],
+      "currency": "CNY",
+      "input": "9",
+      "cache_read": "0.3",
+      "cache_write": null,
+      "output": "27",
+      "source_url": "https://api-docs.deepseek.com/zh-cn/quick_start/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "deepseek/deepseek-flash",
+      "vendor": "DeepSeek",
+      "label": "DeepSeek Flash",
+      "provider_types": [
+        "deepseek",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "deepseek-flash"
+      ],
+      "currency": "CNY",
+      "input": "2",
+      "cache_read": "0.04",
+      "cache_write": null,
+      "output": "8",
+      "source_url": "https://api-docs.deepseek.com/zh-cn/quick_start/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "qwen/qwen4-max",
+      "vendor": "阿里千问",
+      "label": "千问 4 Max",
+      "provider_types": [
+        "qwen",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "qwen4-max"
+      ],
+      "currency": "CNY",
+      "input": "10",
+      "cache_read": "0.5",
+      "cache_write": "12.5",
+      "output": "30",
+      "source_url": "https://help.aliyun.com/zh/model-studio/model-pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "qwen/qwen3.8-max",
+      "vendor": "阿里千问",
+      "label": "千问 3.8 Max",
+      "provider_types": [
+        "qwen",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "qwen3.8-max"
+      ],
+      "currency": "CNY",
+      "input": "12",
+      "cache_read": "12",
+      "cache_write": null,
+      "output": "36",
+      "source_url": "https://help.aliyun.com/zh/model-studio/model-pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "qwen/qwen3.7-max",
+      "vendor": "阿里千问",
+      "label": "千问 3.7 Max",
+      "provider_types": [
+        "qwen",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "qwen3.7-max"
+      ],
+      "currency": "CNY",
+      "input": "12",
+      "cache_read": "2.4",
+      "cache_write": "15",
+      "output": "36",
+      "source_url": "https://help.aliyun.com/zh/model-studio/model-pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "qwen/qwen3.7-plus",
+      "vendor": "阿里千问",
+      "label": "千问 3.7 Plus",
+      "provider_types": [
+        "qwen",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "qwen3.7-plus"
+      ],
+      "currency": "CNY",
+      "input": "2",
+      "cache_read": "0.4",
+      "cache_write": "2.5",
+      "output": "8",
+      "source_url": "https://help.aliyun.com/zh/model-studio/model-pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "qwen/qwen3.6-plus",
+      "vendor": "阿里千问",
+      "label": "千问 3.6 Plus",
+      "provider_types": [
+        "qwen",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "qwen3.6-plus"
+      ],
+      "currency": "CNY",
+      "input": "2",
+      "cache_read": "0.4",
+      "cache_write": "2.5",
+      "output": "12",
+      "source_url": "https://help.aliyun.com/zh/model-studio/model-pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "qwen/qwen3.5-plus",
+      "vendor": "阿里千问",
+      "label": "千问 3.5 Plus",
+      "provider_types": [
+        "qwen",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "qwen3.5-plus"
+      ],
+      "currency": "CNY",
+      "input": "0.8",
+      "cache_read": "0.16",
+      "cache_write": "1",
+      "output": "4.8",
+      "source_url": "https://help.aliyun.com/zh/model-studio/model-pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "qwen/qwen3.8-flash",
+      "vendor": "阿里千问",
+      "label": "千问 3.8 Flash",
+      "provider_types": [
+        "qwen",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "qwen3.8-flash"
+      ],
+      "currency": "CNY",
+      "input": "0.8",
+      "cache_read": "0.8",
+      "cache_write": null,
+      "output": "2.7",
+      "source_url": "https://help.aliyun.com/zh/model-studio/model-pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "qwen/qwen3.7-flash",
+      "vendor": "阿里千问",
+      "label": "千问 3.7 Flash",
+      "provider_types": [
+        "qwen",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "qwen3.7-flash"
+      ],
+      "currency": "CNY",
+      "input": "0.2",
+      "cache_read": "0.04",
+      "cache_write": "0.25",
+      "output": "0.8",
+      "source_url": "https://help.aliyun.com/zh/model-studio/model-pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "qwen/qwen3.6-flash",
+      "vendor": "阿里千问",
+      "label": "千问 3.6 Flash",
+      "provider_types": [
+        "qwen",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "qwen3.6-flash"
+      ],
+      "currency": "CNY",
+      "input": "1.2",
+      "cache_read": "0.24",
+      "cache_write": "1.5",
+      "output": "7.2",
+      "source_url": "https://help.aliyun.com/zh/model-studio/model-pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "qwen/qwen3.5-flash",
+      "vendor": "阿里千问",
+      "label": "千问 3.5 Flash",
+      "provider_types": [
+        "qwen",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "qwen3.5-flash"
+      ],
+      "currency": "CNY",
+      "input": "0.2",
+      "cache_read": "0.04",
+      "cache_write": "0.25",
+      "output": "2",
+      "source_url": "https://help.aliyun.com/zh/model-studio/model-pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "qwen/qwen3-coder-flash",
+      "vendor": "阿里千问",
+      "label": "千问 3 Coder Flash",
+      "provider_types": [
+        "qwen",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "qwen3-coder-flash"
+      ],
+      "currency": "CNY",
+      "input": "1",
+      "cache_read": "0.2",
+      "cache_write": "1.25",
+      "output": "4",
+      "source_url": "https://help.aliyun.com/zh/model-studio/model-pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "qwen/qwen-max",
+      "vendor": "阿里千问",
+      "label": "千问 Max",
+      "provider_types": [
+        "qwen",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "qwen-max",
+        "qwen-max-latest"
+      ],
+      "currency": "CNY",
+      "input": "2.4",
+      "cache_read": "0.48",
+      "cache_write": "3",
+      "output": "9.6",
+      "source_url": "https://help.aliyun.com/zh/model-studio/model-pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "qwen/qwen-plus",
+      "vendor": "阿里千问",
+      "label": "千问 Plus",
+      "provider_types": [
+        "qwen",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "qwen-plus",
+        "qwen-plus-latest"
+      ],
+      "currency": "CNY",
+      "input": "0.8",
+      "cache_read": "0.16",
+      "cache_write": "1",
+      "output": "2",
+      "source_url": "https://help.aliyun.com/zh/model-studio/model-pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "qwen/qwen-flash",
+      "vendor": "阿里千问",
+      "label": "千问 Flash",
+      "provider_types": [
+        "qwen",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "qwen-flash"
+      ],
+      "currency": "CNY",
+      "input": "0.15",
+      "cache_read": "0.03",
+      "cache_write": "0.1875",
+      "output": "1.5",
+      "source_url": "https://help.aliyun.com/zh/model-studio/model-pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "qwen/qwen-long",
+      "vendor": "阿里千问",
+      "label": "千问 Long",
+      "provider_types": [
+        "qwen",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "qwen-long",
+        "qwen-long-latest"
+      ],
+      "currency": "CNY",
+      "input": "0.5",
+      "cache_read": "0.1",
+      "cache_write": "0.625",
+      "output": "2",
+      "source_url": "https://help.aliyun.com/zh/model-studio/model-pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "volcengine/doubao-seed-2.1-pro",
+      "vendor": "字节豆包",
+      "label": "豆包 Seed 2.1 Pro",
+      "provider_types": [
+        "volcengine",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "doubao-seed-2.1-pro",
+        "doubao-seed-2-1-pro",
+        "doubao-seed-2-1-pro-260915",
+        "doubao-seed-2-1-pro-260628"
+      ],
+      "currency": "CNY",
+      "input": "6",
+      "cache_read": "1.2",
+      "cache_write": null,
+      "output": "30",
+      "source_url": "https://www.volcengine.com/docs/82379/1544106",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "volcengine/doubao-seed-evolving",
+      "vendor": "字节豆包",
+      "label": "豆包 Seed Evolving",
+      "provider_types": [
+        "volcengine",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "doubao-seed-evolving"
+      ],
+      "currency": "CNY",
+      "input": "6",
+      "cache_read": "1.2",
+      "cache_write": null,
+      "output": "30",
+      "source_url": "https://www.volcengine.com/docs/82379/1544106",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "volcengine/doubao-seed-2.1-turbo",
+      "vendor": "字节豆包",
+      "label": "豆包 Seed 2.1 Turbo",
+      "provider_types": [
+        "volcengine",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "doubao-seed-2.1-turbo",
+        "doubao-seed-2-1-turbo",
+        "doubao-seed-2-1-turbo-260628"
+      ],
+      "currency": "CNY",
+      "input": "3",
+      "cache_read": "0.6",
+      "cache_write": null,
+      "output": "15",
+      "source_url": "https://www.volcengine.com/docs/82379/1544106",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "volcengine/doubao-seed-2.1-lite",
+      "vendor": "字节豆包",
+      "label": "豆包 Seed 2.1 Lite",
+      "provider_types": [
+        "volcengine",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "doubao-seed-2.1-lite",
+        "doubao-seed-2-1-lite",
+        "doubao-seed-2-1-lite-260915"
+      ],
+      "currency": "CNY",
+      "input": "0.8",
+      "cache_read": "0.16",
+      "cache_write": null,
+      "output": "2.7",
+      "source_url": "https://www.volcengine.com/docs/82379/1544106",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "volcengine/doubao-seed-2.0-pro",
+      "vendor": "字节豆包",
+      "label": "豆包 Seed 2.0 Pro",
+      "provider_types": [
+        "volcengine",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "doubao-seed-2.0-pro",
+        "doubao-seed-2-0-pro"
+      ],
+      "currency": "CNY",
+      "input": "3.2",
+      "cache_read": "0.64",
+      "cache_write": null,
+      "output": "16",
+      "source_url": "https://www.volcengine.com/docs/82379/1544106",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "volcengine/doubao-seed-1.6",
+      "vendor": "字节豆包",
+      "label": "豆包 Seed 1.6",
+      "provider_types": [
+        "volcengine",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "doubao-seed-1.6",
+        "doubao-seed-1-6",
+        "doubao-seed-1-6-251015",
+        "doubao-seed-1-6-250615"
+      ],
+      "currency": "CNY",
+      "input": "0.8",
+      "cache_read": "0.16",
+      "cache_write": null,
+      "output": "2",
+      "source_url": "https://www.volcengine.com/docs/82379/1544106",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "zhipu/glm-5.3",
+      "vendor": "智谱",
+      "label": "GLM-5.3",
+      "provider_types": [
+        "zhipu",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "glm-5.3"
+      ],
+      "currency": "CNY",
+      "input": "8",
+      "cache_read": "2",
+      "cache_write": null,
+      "output": "28",
+      "source_url": "https://open.bigmodel.cn/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "zhipu/glm-5.2",
+      "vendor": "智谱",
+      "label": "GLM-5.2",
+      "provider_types": [
+        "zhipu",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "glm-5.2"
+      ],
+      "currency": "CNY",
+      "input": "8",
+      "cache_read": "2",
+      "cache_write": null,
+      "output": "28",
+      "source_url": "https://open.bigmodel.cn/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "zhipu/glm-4.7",
+      "vendor": "智谱",
+      "label": "GLM-4.7",
+      "provider_types": [
+        "zhipu",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "glm-4.7"
+      ],
+      "currency": "CNY",
+      "input": "3",
+      "cache_read": "0.6",
+      "cache_write": null,
+      "output": "14",
+      "source_url": "https://open.bigmodel.cn/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "zhipu/glm-4.7-flash",
+      "vendor": "智谱",
+      "label": "GLM-4.7 Flash（免费）",
+      "provider_types": [
+        "zhipu",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "glm-4.7-flash",
+        "glm-4.5-flash"
+      ],
+      "currency": "CNY",
+      "input": "0",
+      "cache_read": "0",
+      "cache_write": null,
+      "output": "0",
+      "source_url": "https://open.bigmodel.cn/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "moonshot/kimi-k3.1-pro",
+      "vendor": "Kimi",
+      "label": "Kimi K3.1 Pro",
+      "provider_types": [
+        "moonshot",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "kimi-k3.1-pro"
+      ],
+      "currency": "CNY",
+      "input": "13",
+      "cache_read": "1.3",
+      "cache_write": "13",
+      "output": "68",
+      "source_url": "https://platform.moonshot.cn/docs/pricing/chat",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "moonshot/kimi-k3.1-pro-highspeed",
+      "vendor": "Kimi",
+      "label": "Kimi K3.1 Pro 高速版",
+      "provider_types": [
+        "moonshot",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "kimi-k3.1-pro-highspeed"
+      ],
+      "currency": "CNY",
+      "input": "26",
+      "cache_read": "1.3",
+      "cache_write": "26",
+      "output": "136",
+      "source_url": "https://platform.moonshot.cn/docs/pricing/chat",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "moonshot/kimi-k3",
+      "vendor": "Kimi",
+      "label": "Kimi K3",
+      "provider_types": [
+        "moonshot",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "kimi-k3"
+      ],
+      "currency": "CNY",
+      "input": "20",
+      "cache_read": "2",
+      "cache_write": "20",
+      "output": "100",
+      "source_url": "https://platform.moonshot.cn/docs/pricing/chat",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "minimax/minimax-m3",
+      "vendor": "MiniMax",
+      "label": "MiniMax-M3",
+      "provider_types": [
+        "minimax",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "minimax-m3"
+      ],
+      "currency": "CNY",
+      "input": "2.1",
+      "cache_read": "0.42",
+      "cache_write": null,
+      "output": "8.4",
+      "source_url": "https://platform.minimaxi.com",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "minimax/minimax-m3.1-flash",
+      "vendor": "MiniMax",
+      "label": "MiniMax-M3.1-Flash",
+      "provider_types": [
+        "minimax",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "minimax-m3.1-flash"
+      ],
+      "currency": "CNY",
+      "input": "1",
+      "cache_read": "0.1",
+      "cache_write": null,
+      "output": "4",
+      "source_url": "https://platform.minimaxi.com",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "qianfan/ernie-5.5-flash-preview",
+      "vendor": "百度文心",
+      "label": "文心 5.5 Flash Preview",
+      "provider_types": [
+        "qianfan",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "ernie-5.5-flash-preview"
+      ],
+      "currency": "CNY",
+      "input": "2",
+      "cache_read": "0.2",
+      "cache_write": null,
+      "output": "8",
+      "source_url": "https://cloud.baidu.com/doc/qianfan/s/wmh4sv6ya",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "qianfan/ernie-5.1",
+      "vendor": "百度文心",
+      "label": "文心 5.1",
+      "provider_types": [
+        "qianfan",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "ernie-5.1"
+      ],
+      "currency": "CNY",
+      "input": "4",
+      "cache_read": "4",
+      "cache_write": null,
+      "output": "18",
+      "source_url": "https://cloud.baidu.com/doc/qianfan/s/wmh4sv6ya",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "tencent/hy4",
+      "vendor": "腾讯混元",
+      "label": "混元 Hy4",
+      "provider_types": [
+        "tencent",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "hy4"
+      ],
+      "currency": "CNY",
+      "input": "6",
+      "cache_read": "0.3",
+      "cache_write": null,
+      "output": "18",
+      "source_url": "https://cloud.tencent.com/document/product/1823/130051",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "tencent/hy3",
+      "vendor": "腾讯混元",
+      "label": "混元 Hy3",
+      "provider_types": [
+        "tencent",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "hy3"
+      ],
+      "currency": "CNY",
+      "input": "1",
+      "cache_read": "0.25",
+      "cache_write": null,
+      "output": "4",
+      "source_url": "https://cloud.tencent.com/document/product/1823/130051",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "tencent/hy3-preview",
+      "vendor": "腾讯混元",
+      "label": "混元 Hy3 Preview",
+      "provider_types": [
+        "tencent",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "hy3-preview"
+      ],
+      "currency": "CNY",
+      "input": "1.2",
+      "cache_read": "0.4",
+      "cache_write": null,
+      "output": "4",
+      "source_url": "https://cloud.tencent.com/document/product/1823/130051",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "spark/spark-x2.6",
+      "vendor": "讯飞星火",
+      "label": "星火 X2.6",
+      "provider_types": [
+        "spark",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "spark-x2.6"
+      ],
+      "currency": "CNY",
+      "input": "1.5",
+      "cache_read": "1.5",
+      "cache_write": null,
+      "output": "6",
+      "source_url": "https://maas.xfyun.cn/modelSquare",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "spark/spark-x2.5",
+      "vendor": "讯飞星火",
+      "label": "星火 X2.5",
+      "provider_types": [
+        "spark",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "spark-x2.5"
+      ],
+      "currency": "CNY",
+      "input": "3.2",
+      "cache_read": "3.2",
+      "cache_write": null,
+      "output": "12",
+      "source_url": "https://maas.xfyun.cn/modelSquare",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "openai/gpt-6-astra",
+      "vendor": "OpenAI",
+      "label": "GPT-6 Astra",
+      "provider_types": [
+        "openai",
+        "azure_openai",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gpt-6-astra"
+      ],
+      "currency": "USD",
+      "input": "10",
+      "cache_read": "1",
+      "cache_write": null,
+      "output": "50",
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "openai/gpt-6.1-sol",
+      "vendor": "OpenAI",
+      "label": "GPT-6.1 Sol",
+      "provider_types": [
+        "openai",
+        "azure_openai",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gpt-6.1-sol"
+      ],
+      "currency": "USD",
+      "input": "2",
+      "cache_read": "0.1",
+      "cache_write": null,
+      "output": "10",
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "openai/gpt-6.1-terra",
+      "vendor": "OpenAI",
+      "label": "GPT-6.1 Terra",
+      "provider_types": [
+        "openai",
+        "azure_openai",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gpt-6.1-terra"
+      ],
+      "currency": "USD",
+      "input": "1",
+      "cache_read": "0.05",
+      "cache_write": null,
+      "output": "5",
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "openai/gpt-6-sol",
+      "vendor": "OpenAI",
+      "label": "GPT-6 Sol",
+      "provider_types": [
+        "openai",
+        "azure_openai",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gpt-6-sol"
+      ],
+      "currency": "USD",
+      "input": "2",
+      "cache_read": "0.2",
+      "cache_write": null,
+      "output": "10",
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "openai/gpt-6-luna",
+      "vendor": "OpenAI",
+      "label": "GPT-6 Luna",
+      "provider_types": [
+        "openai",
+        "azure_openai",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gpt-6-luna"
+      ],
+      "currency": "USD",
+      "input": "0.1",
+      "cache_read": "0.01",
+      "cache_write": null,
+      "output": "0.5",
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "openai/gpt-5.6-sol",
+      "vendor": "OpenAI",
+      "label": "GPT-5.6 Sol",
+      "provider_types": [
+        "openai",
+        "azure_openai",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gpt-5.6-sol"
+      ],
+      "currency": "USD",
+      "input": "4",
+      "cache_read": "0.4",
+      "cache_write": null,
+      "output": "20",
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "openai/gpt-5.6-terra",
+      "vendor": "OpenAI",
+      "label": "GPT-5.6 Terra",
+      "provider_types": [
+        "openai",
+        "azure_openai",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gpt-5.6-terra"
+      ],
+      "currency": "USD",
+      "input": "2",
+      "cache_read": "0.2",
+      "cache_write": null,
+      "output": "12",
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "openai/gpt-5.6-luna",
+      "vendor": "OpenAI",
+      "label": "GPT-5.6 Luna",
+      "provider_types": [
+        "openai",
+        "azure_openai",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gpt-5.6-luna"
+      ],
+      "currency": "USD",
+      "input": "0.2",
+      "cache_read": "0.02",
+      "cache_write": null,
+      "output": "1.2",
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "openai/gpt-5.5",
+      "vendor": "OpenAI",
+      "label": "GPT-5.5",
+      "provider_types": [
+        "openai",
+        "azure_openai",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gpt-5.5"
+      ],
+      "currency": "USD",
+      "input": "5",
+      "cache_read": "0.5",
+      "cache_write": null,
+      "output": "30",
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "openai/gpt-5.4",
+      "vendor": "OpenAI",
+      "label": "GPT-5.4",
+      "provider_types": [
+        "openai",
+        "azure_openai",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gpt-5.4"
+      ],
+      "currency": "USD",
+      "input": "2.5",
+      "cache_read": "0.25",
+      "cache_write": null,
+      "output": "15",
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "openai/gpt-5.4-mini",
+      "vendor": "OpenAI",
+      "label": "GPT-5.4 mini",
+      "provider_types": [
+        "openai",
+        "azure_openai",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gpt-5.4-mini"
+      ],
+      "currency": "USD",
+      "input": "0.75",
+      "cache_read": "0.075",
+      "cache_write": null,
+      "output": "4.5",
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "openai/gpt-5.4-nano",
+      "vendor": "OpenAI",
+      "label": "GPT-5.4 nano",
+      "provider_types": [
+        "openai",
+        "azure_openai",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gpt-5.4-nano"
+      ],
+      "currency": "USD",
+      "input": "0.2",
+      "cache_read": "0.02",
+      "cache_write": null,
+      "output": "1.25",
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "openai/gpt-5",
+      "vendor": "OpenAI",
+      "label": "GPT-5",
+      "provider_types": [
+        "openai",
+        "azure_openai",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gpt-5"
+      ],
+      "currency": "USD",
+      "input": "1.25",
+      "cache_read": "0.125",
+      "cache_write": null,
+      "output": "10",
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "openai/gpt-5-mini",
+      "vendor": "OpenAI",
+      "label": "GPT-5 mini",
+      "provider_types": [
+        "openai",
+        "azure_openai",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gpt-5-mini"
+      ],
+      "currency": "USD",
+      "input": "0.25",
+      "cache_read": "0.025",
+      "cache_write": null,
+      "output": "2",
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "openai/gpt-5-nano",
+      "vendor": "OpenAI",
+      "label": "GPT-5 nano",
+      "provider_types": [
+        "openai",
+        "azure_openai",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gpt-5-nano"
+      ],
+      "currency": "USD",
+      "input": "0.05",
+      "cache_read": "0.005",
+      "cache_write": null,
+      "output": "0.4",
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "openai/gpt-4.1",
+      "vendor": "OpenAI",
+      "label": "GPT-4.1",
+      "provider_types": [
+        "openai",
+        "azure_openai",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gpt-4.1"
+      ],
+      "currency": "USD",
+      "input": "2",
+      "cache_read": "0.5",
+      "cache_write": null,
+      "output": "8",
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "openai/gpt-4.1-mini",
+      "vendor": "OpenAI",
+      "label": "GPT-4.1 mini",
+      "provider_types": [
+        "openai",
+        "azure_openai",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gpt-4.1-mini"
+      ],
+      "currency": "USD",
+      "input": "0.4",
+      "cache_read": "0.1",
+      "cache_write": null,
+      "output": "1.6",
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "openai/gpt-4o",
+      "vendor": "OpenAI",
+      "label": "GPT-4o",
+      "provider_types": [
+        "openai",
+        "azure_openai",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gpt-4o"
+      ],
+      "currency": "USD",
+      "input": "2.5",
+      "cache_read": "1.25",
+      "cache_write": null,
+      "output": "10",
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "openai/gpt-4o-mini",
+      "vendor": "OpenAI",
+      "label": "GPT-4o mini",
+      "provider_types": [
+        "openai",
+        "azure_openai",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gpt-4o-mini"
+      ],
+      "currency": "USD",
+      "input": "0.15",
+      "cache_read": "0.075",
+      "cache_write": null,
+      "output": "0.6",
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "openai/o3",
+      "vendor": "OpenAI",
+      "label": "o3",
+      "provider_types": [
+        "openai",
+        "azure_openai",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "o3"
+      ],
+      "currency": "USD",
+      "input": "2",
+      "cache_read": "0.5",
+      "cache_write": null,
+      "output": "8",
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "anthropic/claude-fable-5-2",
+      "vendor": "Anthropic",
+      "label": "Claude Fable 5.2",
+      "provider_types": [
+        "anthropic",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "claude-fable-5-2",
+        "claude-fable-5.2"
+      ],
+      "currency": "USD",
+      "input": "8",
+      "cache_read": "0.2",
+      "cache_write": "10",
+      "output": "40",
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "anthropic/claude-fable-5-1",
+      "vendor": "Anthropic",
+      "label": "Claude Fable 5.1",
+      "provider_types": [
+        "anthropic",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "claude-fable-5-1",
+        "claude-fable-5.1"
+      ],
+      "currency": "USD",
+      "input": "10",
+      "cache_read": "0.25",
+      "cache_write": "12.5",
+      "output": "50",
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "anthropic/claude-opus-5-5",
+      "vendor": "Anthropic",
+      "label": "Claude Opus 5.5",
+      "provider_types": [
+        "anthropic",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "claude-opus-5-5",
+        "claude-opus-5.5"
+      ],
+      "currency": "USD",
+      "input": "4",
+      "cache_read": "0.2",
+      "cache_write": "5",
+      "output": "20",
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "anthropic/claude-opus-5",
+      "vendor": "Anthropic",
+      "label": "Claude Opus 5",
+      "provider_types": [
+        "anthropic",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "claude-opus-5"
+      ],
+      "currency": "USD",
+      "input": "5",
+      "cache_read": "0.5",
+      "cache_write": "6.25",
+      "output": "25",
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "anthropic/claude-sonnet-5-5",
+      "vendor": "Anthropic",
+      "label": "Claude Sonnet 5.5",
+      "provider_types": [
+        "anthropic",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "claude-sonnet-5-5",
+        "claude-sonnet-5.5"
+      ],
+      "currency": "USD",
+      "input": "2",
+      "cache_read": "0.1",
+      "cache_write": "2.5",
+      "output": "10",
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "anthropic/claude-sonnet-5",
+      "vendor": "Anthropic",
+      "label": "Claude Sonnet 5",
+      "provider_types": [
+        "anthropic",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "claude-sonnet-5"
+      ],
+      "currency": "USD",
+      "input": "2",
+      "cache_read": "0.2",
+      "cache_write": "2.5",
+      "output": "10",
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "anthropic/claude-haiku-5-5",
+      "vendor": "Anthropic",
+      "label": "Claude Haiku 5.5",
+      "provider_types": [
+        "anthropic",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "claude-haiku-5-5",
+        "claude-haiku-5.5"
+      ],
+      "currency": "USD",
+      "input": "0.1",
+      "cache_read": "0.01",
+      "cache_write": "0.125",
+      "output": "0.5",
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "anthropic/claude-opus-4-8",
+      "vendor": "Anthropic",
+      "label": "Claude Opus 4.8",
+      "provider_types": [
+        "anthropic",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "claude-opus-4-8",
+        "claude-opus-4.8"
+      ],
+      "currency": "USD",
+      "input": "5",
+      "cache_read": "0.5",
+      "cache_write": "6.25",
+      "output": "25",
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "anthropic/claude-opus-4-7",
+      "vendor": "Anthropic",
+      "label": "Claude Opus 4.7",
+      "provider_types": [
+        "anthropic",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "claude-opus-4-7",
+        "claude-opus-4.7"
+      ],
+      "currency": "USD",
+      "input": "5",
+      "cache_read": "0.5",
+      "cache_write": "6.25",
+      "output": "25",
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "anthropic/claude-opus-4-6",
+      "vendor": "Anthropic",
+      "label": "Claude Opus 4.6",
+      "provider_types": [
+        "anthropic",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "claude-opus-4-6",
+        "claude-opus-4.6"
+      ],
+      "currency": "USD",
+      "input": "5",
+      "cache_read": "0.5",
+      "cache_write": "6.25",
+      "output": "25",
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "anthropic/claude-opus-4-5",
+      "vendor": "Anthropic",
+      "label": "Claude Opus 4.5",
+      "provider_types": [
+        "anthropic",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "claude-opus-4-5",
+        "claude-opus-4.5",
+        "claude-opus-4-5-20251101"
+      ],
+      "currency": "USD",
+      "input": "5",
+      "cache_read": "0.5",
+      "cache_write": "6.25",
+      "output": "25",
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "anthropic/claude-sonnet-4-6",
+      "vendor": "Anthropic",
+      "label": "Claude Sonnet 4.6",
+      "provider_types": [
+        "anthropic",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "claude-sonnet-4-6",
+        "claude-sonnet-4.6"
+      ],
+      "currency": "USD",
+      "input": "3",
+      "cache_read": "0.3",
+      "cache_write": "3.75",
+      "output": "15",
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "anthropic/claude-sonnet-4-5",
+      "vendor": "Anthropic",
+      "label": "Claude Sonnet 4.5",
+      "provider_types": [
+        "anthropic",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "claude-sonnet-4-5",
+        "claude-sonnet-4.5",
+        "claude-sonnet-4-5-20250929"
+      ],
+      "currency": "USD",
+      "input": "3",
+      "cache_read": "0.3",
+      "cache_write": "3.75",
+      "output": "15",
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "anthropic/claude-haiku-4-5",
+      "vendor": "Anthropic",
+      "label": "Claude Haiku 4.5",
+      "provider_types": [
+        "anthropic",
+        "openai_compatible"
+      ],
+      "aliases": [
+        "claude-haiku-4-5",
+        "claude-haiku-4.5",
+        "claude-haiku-4-5-20251001"
+      ],
+      "currency": "USD",
+      "input": "1",
+      "cache_read": "0.1",
+      "cache_write": "1.25",
+      "output": "5",
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "google/gemini-4-carbon",
+      "vendor": "Google",
+      "label": "Gemini 4 Carbon",
+      "provider_types": [
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gemini-4-carbon"
+      ],
+      "currency": "USD",
+      "input": "2",
+      "cache_read": "0.1",
+      "cache_write": null,
+      "output": "10",
+      "source_url": "https://aistudio.google.com/docs/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "google/gemini-4-argon",
+      "vendor": "Google",
+      "label": "Gemini 4 Argon",
+      "provider_types": [
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gemini-4-argon"
+      ],
+      "currency": "USD",
+      "input": "2",
+      "cache_read": "0.1",
+      "cache_write": null,
+      "output": "10",
+      "source_url": "https://aistudio.google.com/docs/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "google/gemini-4-hydrogen",
+      "vendor": "Google",
+      "label": "Gemini 4 Hydrogen",
+      "provider_types": [
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gemini-4-hydrogen"
+      ],
+      "currency": "USD",
+      "input": "1.5",
+      "cache_read": "0.075",
+      "cache_write": null,
+      "output": "7.5",
+      "source_url": "https://aistudio.google.com/docs/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "google/gemini-3.8-flash",
+      "vendor": "Google",
+      "label": "Gemini 3.8 Flash",
+      "provider_types": [
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gemini-3.8-flash"
+      ],
+      "currency": "USD",
+      "input": "0.75",
+      "cache_read": "0.075",
+      "cache_write": null,
+      "output": "3.75",
+      "source_url": "https://aistudio.google.com/docs/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "google/gemini-3.6-flash",
+      "vendor": "Google",
+      "label": "Gemini 3.6 Flash",
+      "provider_types": [
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gemini-3.6-flash"
+      ],
+      "currency": "USD",
+      "input": "0.75",
+      "cache_read": "0.075",
+      "cache_write": null,
+      "output": "3.75",
+      "source_url": "https://aistudio.google.com/docs/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "google/gemini-3.5-flash-lite",
+      "vendor": "Google",
+      "label": "Gemini 3.5 Flash-Lite",
+      "provider_types": [
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gemini-3.5-flash-lite"
+      ],
+      "currency": "USD",
+      "input": "0.3",
+      "cache_read": "0.03",
+      "cache_write": null,
+      "output": "2.5",
+      "source_url": "https://aistudio.google.com/docs/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "google/gemini-3.1-pro-preview",
+      "vendor": "Google",
+      "label": "Gemini 3.1 Pro Preview",
+      "provider_types": [
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gemini-3.1-pro-preview"
+      ],
+      "currency": "USD",
+      "input": "2",
+      "cache_read": "0.2",
+      "cache_write": null,
+      "output": "12",
+      "source_url": "https://aistudio.google.com/docs/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "google/gemini-3.1-flash-lite",
+      "vendor": "Google",
+      "label": "Gemini 3.1 Flash-Lite",
+      "provider_types": [
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gemini-3.1-flash-lite"
+      ],
+      "currency": "USD",
+      "input": "0.25",
+      "cache_read": "0.025",
+      "cache_write": null,
+      "output": "1.5",
+      "source_url": "https://aistudio.google.com/docs/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "google/gemini-2.5-flash-lite",
+      "vendor": "Google",
+      "label": "Gemini 2.5 Flash-Lite",
+      "provider_types": [
+        "openai_compatible"
+      ],
+      "aliases": [
+        "gemini-2.5-flash-lite"
+      ],
+      "currency": "USD",
+      "input": "0.1",
+      "cache_read": "0.01",
+      "cache_write": null,
+      "output": "0.4",
+      "source_url": "https://aistudio.google.com/docs/pricing",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "xai/grok-4.7",
+      "vendor": "xAI",
+      "label": "Grok 4.7",
+      "provider_types": [
+        "openai_compatible"
+      ],
+      "aliases": [
+        "grok-4.7"
+      ],
+      "currency": "USD",
+      "input": "2",
+      "cache_read": "0.5",
+      "cache_write": null,
+      "output": "6",
+      "source_url": "https://docs.x.ai/docs/models",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "xai/grok-4.6",
+      "vendor": "xAI",
+      "label": "Grok 4.6",
+      "provider_types": [
+        "openai_compatible"
+      ],
+      "aliases": [
+        "grok-4.6"
+      ],
+      "currency": "USD",
+      "input": "2",
+      "cache_read": "0.5",
+      "cache_write": null,
+      "output": "6",
+      "source_url": "https://docs.x.ai/docs/models",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "xai/grok-4.5",
+      "vendor": "xAI",
+      "label": "Grok 4.5",
+      "provider_types": [
+        "openai_compatible"
+      ],
+      "aliases": [
+        "grok-4.5"
+      ],
+      "currency": "USD",
+      "input": "2",
+      "cache_read": "0.3",
+      "cache_write": null,
+      "output": "6",
+      "source_url": "https://docs.x.ai/docs/models",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "xai/grok-4.3",
+      "vendor": "xAI",
+      "label": "Grok 4.3",
+      "provider_types": [
+        "openai_compatible"
+      ],
+      "aliases": [
+        "grok-4.3"
+      ],
+      "currency": "USD",
+      "input": "1.25",
+      "cache_read": "0.2",
+      "cache_write": null,
+      "output": "2.5",
+      "source_url": "https://docs.x.ai/docs/models",
+      "verified_at": "2026-11-16"
+    },
+    {
+      "key": "xai/grok-build-0.1",
+      "vendor": "xAI",
+      "label": "Grok Build 0.1",
+      "provider_types": [
+        "openai_compatible"
+      ],
+      "aliases": [
+        "grok-build-0.1"
+      ],
+      "currency": "USD",
+      "input": "1",
+      "cache_read": "0.2",
+      "cache_write": null,
+      "output": "2",
+      "source_url": "https://docs.x.ai/docs/models",
+      "verified_at": "2026-11-16"
+    }
+  ]
+}

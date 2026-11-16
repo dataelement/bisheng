@@ -389,6 +389,9 @@ class QuotaRedis:
         # Preserve hashes of historical 1x events while fencing nondefault rates.
         if event.credit_rate != 100:
             data["credit_rate"] = event.credit_rate
+        # F016: fence the frozen prices; absent on historical events, so their hashes are unchanged.
+        if event.pricing is not None:
+            data["pricing"] = event.pricing.model_dump(mode="json")
         started = event.started_at
         if started.tzinfo is None:
             started = started.replace(tzinfo=UTC)

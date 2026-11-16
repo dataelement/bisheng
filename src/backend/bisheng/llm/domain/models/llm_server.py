@@ -271,6 +271,16 @@ class LLMDao:
                 raise LLMModelNotAccessibleError.http_exception()
             for field in ("name", "description", "type", "limit_flag", "limit", "config"):
                 setattr(current, field, getattr(server, field))
+            # F016: the form omits unchanged prices; fill them from the rows locked above so a
+            # price edited since the form loaded is kept, or a stale revision is refused.
+            from bisheng.llm.domain.pricing.service import apply_pricing_on_save
+
+            stored = await session.exec(
+                select(LLMModel.id, LLMModel.config).where(
+                    LLMModel.server_id == current.id, LLMModel.id.in_(retained or (0,))
+                )
+            )
+            apply_pricing_on_save(current.type, models, {row[0]: row[1] for row in stored.all()})
 
             add_models = []
             update_models = []

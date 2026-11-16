@@ -502,6 +502,14 @@ export type TStartupConfig = {
   instanceProjectId: string;
 };
 
+/** Display-only credit ratio computed by the server (input:output estimated at 3:1). */
+export type ModelPricingHint = {
+  /** Two decimals such as "3.00", "<0.01", or null when no ratio can be shown. */
+  ratio: string | null;
+  base: boolean;
+  free: boolean;
+};
+
 export type BsConfig = {
   /** Admin-curated tool groups and their initial checked state. */
   tools?: Array<{
@@ -551,6 +559,8 @@ export type BsConfig = {
     provider_id?: string | null;
     provider_name?: string | null;
     visual?: boolean;
+    /** Credit ratio against the tenant base model; only present while the enterprise client is enabled. */
+    pricing_hint?: ModelPricingHint | null;
   }>;
   voiceInput: {
     enabled: boolean;

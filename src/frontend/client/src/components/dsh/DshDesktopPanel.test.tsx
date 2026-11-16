@@ -1,10 +1,10 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DshDesktopPanel } from './DshDesktopPanel';
-import { getDshUsageSummary } from '~/api/dsh';
-import type { DshUsageTimeSummary } from '~/api/dsh';
+import { getDshCredits, getDshUsageSummary } from '~/api/dsh';
+import type { DshCredits, DshUsageTimeSummary } from '~/api/dsh';
 
-jest.mock('~/api/dsh', () => ({ getDshUsageSummary: jest.fn() }));
+jest.mock('~/api/dsh', () => ({ getDshUsageSummary: jest.fn(), getDshCredits: jest.fn() }));
 jest.mock('~/hooks', () => ({ useLocalize: () => (key: string) => key, useAuthContext: () => ({ user: { id: '20' } }) }));
 jest.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string, values?: Record<string, unknown>) => values ? `${key} ${JSON.stringify(values)}` : key, i18n: { language: 'en' } }) }));
 jest.mock('@bisheng/ui', () => ({ Button: ({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) => <button onClick={onClick}>{children}</button> }));
@@ -14,7 +14,8 @@ function show(downloadUrl: string | null = null) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, cacheTime: 0 } }, logger: { log: () => undefined, warn: console.warn, error: () => undefined } });
   return render(<QueryClientProvider client={client}><DshDesktopPanel downloadUrl={downloadUrl} launchUrl="dsh-desktop://login" /></QueryClientProvider>);
 }
-beforeEach(() => { jest.mocked(getDshUsageSummary).mockResolvedValue(summary); });
+const credits: DshCredits = { limit: '1000', used: '100.51272', remaining: '899.48728', reset_at: '2026-11-30T16:00:00Z', billing_timezone: 'Asia/Shanghai', unlimited: false };
+beforeEach(() => { jest.mocked(getDshUsageSummary).mockResolvedValue(summary); jest.mocked(getDshCredits).mockResolvedValue(credits); });
 it('renders the annual calendar and synchronizes metric totals and tooltip', async () => {
   show();
   const calendar = await screen.findByRole('list', { name: 'dsh.tokenActivity' });
@@ -76,4 +77,30 @@ it('allows retry after a summary request fails', async () => {
   fireEvent.click(screen.getByText('dsh_retry'));
   await screen.findByRole('list');
   await waitFor(() => expect(getDshUsageSummary).toHaveBeenCalledTimes(2));
+});
+
+it('F016: shows this month\'s credits with two decimals and the Beijing reset date', async () => {
+  show();
+  const card = await screen.findByRole('region', { name: 'dsh.creditsTitle' });
+  expect(within(card).getByText('899.49')).toBeInTheDocument();
+  expect(card).toHaveTextContent('dsh.creditsDetail {"limit":"1,000","used":"100.51"}');
+  // 2026-11-30T16:00Z is midnight on 1 December in Beijing.
+  expect(card).toHaveTextContent('dsh.creditsReset {"date":"December 1"}');
+  expect(await screen.findByRole('list', { name: 'dsh.tokenActivity' })).toBeInTheDocument();
+});
+it('F016: says unlimited instead of a remaining figure when no allowance applies', async () => {
+  jest.mocked(getDshCredits).mockResolvedValue({ ...credits, unlimited: true, remaining: null, limit: '0' });
+  show();
+  const card = await screen.findByRole('region', { name: 'dsh.creditsTitle' });
+  expect(within(card).getByText('dsh.creditsUnlimited')).toBeInTheDocument();
+  expect(card).toHaveTextContent('dsh.creditsUsedOnly {"used":"100.51"}');
+});
+it('F016: a credits failure keeps the usage chart and offers its own retry', async () => {
+  jest.mocked(getDshCredits).mockRejectedValueOnce(new Error('offline'));
+  show();
+  expect(await screen.findByRole('list', { name: 'dsh.tokenActivity' })).toBeInTheDocument();
+  const alert = await screen.findByRole('alert');
+  fireEvent.click(within(alert).getByText('dsh_retry'));
+  expect(await screen.findByRole('region', { name: 'dsh.creditsTitle' })).toBeInTheDocument();
+  expect(getDshCredits).toHaveBeenCalledTimes(2);
 });

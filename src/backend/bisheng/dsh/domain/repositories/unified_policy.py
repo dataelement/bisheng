@@ -1,7 +1,5 @@
 """Transactional visibility and credit policy storage within the current tenant."""
 
-from decimal import Decimal
-
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
@@ -49,7 +47,6 @@ class UnifiedPolicyRepository:
         return {
             "version": row.version if row else 0,
             "everyone": row.everyone if row else default_everyone,
-            "credit_multiplier": format(Decimal(row.credit_rate if row else 100) / 100, "f"),
             "subjects": row.subjects if row else [],
         }
 
@@ -140,7 +137,6 @@ class UnifiedPolicyRepository:
             raise DshOperationConflictError()
         if row is None:
             row = ModelVisibility(tenant_id=tenant, model_id=model_id, updated_by=actor)
-        row.credit_rate = value.credit_rate
         row.everyone = value.everyone
         row.subjects = [item.model_dump() for item in sorted(value.subjects, key=lambda item: (item.kind, item.id))]
         row.version = value.version + 1
@@ -179,6 +175,27 @@ class UnifiedPolicyRepository:
         after = self.rule_payload(row)
         self._audit(actor, f"credits:{subject.kind}:{subject.id}", before, after)
         return after
+
+    def preview_user_limit(self, user_id: int, value: CreditRuleValue) -> int:
+        """The effective limit if this user's own rule were saved as ``value``; writes nothing (F016)."""
+        require_tenant()
+        departments = self.memberships._department_ancestor_ids(user_id, [])
+        roles = self.memberships._role_ids(user_id)
+        with strict_tenant_filter():
+            rules = [
+                row.model_dump()
+                for row in self.session.exec(select(CreditRule)).all()
+                if (row.subject_type, row.subject_id) != ("USER", user_id)
+            ]
+        rules.append(
+            {
+                "subject_type": "USER",
+                "subject_id": user_id,
+                "enabled": value.enabled,
+                "monthly_token_limit": value.monthly_token_limit,
+            }
+        )
+        return effective_token_limit(user_id=user_id, departments=departments, roles=roles, rules=rules)
 
     def visible_model_ids(self, user_id: int, model_ids: list[int]) -> set[int]:
         """Models of ``model_ids`` this user may pick when DSH is not deployed.

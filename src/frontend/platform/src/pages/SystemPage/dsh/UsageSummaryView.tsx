@@ -34,7 +34,7 @@ export function UsageSummaryView({ summary }: UsageSummaryProps) {
             totals.total_tokens == null
               ? t("dsh.unavailable")
               : ((totals.billed_tokens ?? totals.total_tokens) / 1000000).toLocaleString(i18n.language, {
-                  maximumFractionDigits: 6,
+                  maximumFractionDigits: 2,
                 }),
         })}
       </p>

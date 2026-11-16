@@ -31,10 +31,14 @@ import { CustomForm } from "./CustomForm";
 import { ModelDiscovery } from "./ModelDiscovery";
 import { discoveredModelConfig } from "./modelDiscoveryState";
 import { ModelItem } from "./ModelItem";
+import { trimModelNames } from "./modelNameTrim";
 import {
-  hasDuplicateModelName,
-  trimModelNames,
-} from "./modelNameTrim";
+  findModelError,
+  loadedPricing,
+  providerNameErrorKey,
+  saveFailureMessage,
+  withChangedPricing,
+} from "./modelSavePayload";
 import {
   bishengModelProvider,
   matchesProviderSearch,
@@ -128,19 +132,22 @@ export default function ModelConfig({
     scopeTenantId: adminScope.scope_tenant_id,
   });
 
+  // Prices as loaded; unchanged ones are left out of the save (see withChangedPricing).
+  const pricingBaseline = useRef(loadedPricing([]));
   useEffect(() => {
     let active = true;
     setDetailError(null);
     setFormData({ ...defaultForm });
     rememberBaseline([]);
     setDetailLoading(id !== -1);
+    pricingBaseline.current = loadedPricing([]);
     if (id === -1) return;
     void getLLmServerDetail(id)
       .then((res) => {
-        if (active) {
-          rememberBaseline(res.models);
-          setFormData(res);
-        }
+        if (!active) return;
+        rememberBaseline(res.models);
+        pricingBaseline.current = loadedPricing(res.models);
+        setFormData(res);
       })
       .catch((error) => {
         if (!active) return;
@@ -230,19 +237,10 @@ export default function ModelConfig({
       return;
     setIsLoading(true);
     try {
-      const exists = onBerforSave(formData.id, formData.name);
-      if (exists) {
-        return toast.show({
-          type: "warning",
-          message: t("model.duplicateServiceProviderName"),
-        });
-      }
-      if (!formData.name || formData.name.length > 100) {
-        return toast.show({
-          type: "warning",
-          message: t("model.duplicateServiceProviderNameValidation"),
-        });
-      }
+      const providerError = onBerforSave(formData.id, formData.name)
+        ? "model.duplicateServiceProviderName"
+        : providerNameErrorKey(formData.name) && "model.duplicateServiceProviderNameValidation";
+      if (providerError) return toast.show({ type: "warning", message: t(providerError) });
       const [config, errorKey] = formRef.current.getData();
       if (errorKey) {
         return toast.show({
@@ -253,47 +251,12 @@ export default function ModelConfig({
 
       const normalizedModels = trimModelNames(formData.models);
       setFormData({ ...formData, models: normalizedModels });
-      const hasTTSVoiceError = normalizedModels.some(
-        (model) => model.model_type === "tts" && !model.config?.voice,
-      );
-      const blankName = normalizedModels.some((model) => !model.model_name);
-      const longName = normalizedModels.some(
-        (model) => (model.model_name ?? "").length > 100,
-      );
-      if (blankName) {
-        return toast.show({
-          type: "warning",
-          message: t("model.modelNameEmpty"),
-        });
-      }
-      if (longName) {
-        return toast.show({
-          type: "warning",
-          message: t("model.modelNameLength"),
-        });
-      }
-      if (normalizedModels.some((model) => !model.model_type)) {
-        return toast.show({
-          type: "warning",
-          message: t("model.modelNameValidation"),
-        });
-      }
-      if (hasDuplicateModelName(normalizedModels)) {
-        return toast.show({
-          type: "warning",
-          message: t("model.modelDuplicate"),
-        });
-      }
-      if (hasTTSVoiceError) {
-        return toast.show({
-          type: "warning",
-          message: t("model.voiceTypeRequired"),
-        });
-      }
+      const modelError = findModelError(normalizedModels);
+      if (modelError) return toast.show({ type: "warning", message: t(modelError) });
 
       const saveData = {
         ...formData,
-        models: normalizedModels,
+        models: withChangedPricing(normalizedModels, pricingBaseline.current),
         config,
       };
 
@@ -310,15 +273,9 @@ export default function ModelConfig({
       refetchConfig();
     } catch (error) {
       const generic = String(i18next.t("api_errors:fallback"));
-      const reported =
-        error && typeof error === "object"
-          ? (error as { message?: unknown }).message
-          : undefined;
-      const specific =
-        typeof reported === "string" && reported.trim() && reported !== generic;
       toast.show({
         type: "error",
-        message: specific ? reported : t("model.saveFailed", { ns: "model" }),
+        message: saveFailureMessage(error, generic) ?? t("model.saveFailed", { ns: "model" }),
       });
     } finally {
       setIsLoading(false);
@@ -437,13 +394,8 @@ export default function ModelConfig({
             onChange={(e) => {
               const name = e.target.value;
               setFormData({ ...formData, name });
-              setNameError(
-                !name
-                  ? t("model.cannotBeEmpty")
-                  : name.length > 100
-                    ? t("model.max100Characters")
-                    : "",
-              );
+              const nameErrorKey = providerNameErrorKey(name);
+              setNameError(nameErrorKey ? t(nameErrorKey) : "");
             }}
           ></Input>
           {nameError && (
