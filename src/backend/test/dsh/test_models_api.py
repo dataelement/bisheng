@@ -13,7 +13,9 @@ from starlette.requests import ClientDisconnect
 from bisheng.common.errcode.dsh import DshInvalidAccessTokenError, DshQuotaUnavailableError
 from bisheng.dsh.api.dependencies import get_runtime
 from bisheng.dsh.api.endpoints import models as endpoints
+from bisheng.dsh.domain.schemas.chat import ChatCapabilities
 from bisheng.dsh.domain.schemas.model_policy import DshModelQuotaConfig
+from bisheng.dsh.domain.schemas.reasoning import reasoning_declaration
 from bisheng.dsh.domain.services.model import PreparedStream
 from test.dsh.test_model_service import principal, service_setup  # noqa: F401
 
@@ -47,6 +49,56 @@ def app_setup(monkeypatch, service_setup):  # noqa: F811
     app.include_router(endpoints.router, prefix="/api/v1")
     app.dependency_overrides[get_runtime] = lambda: runtime
     return app, runtime, model_runtime, llm, ledger
+
+
+@pytest.mark.parametrize("encoded", [False, True])
+async def test_models_discovery_adds_only_configured_metadata(app_setup, encoded):
+    app, _runtime, runtime, *_ = app_setup
+    service = runtime.model
+    model, _server = await service.model_loader(42)
+    custom = {
+        "context_window": 131072,
+        "reasoning_efforts": [{"id": "high", "name": "More reasoning"}],
+        "reasoning_effort": "high",
+        "api_key": "NEVER-EXPOSE",
+        "base_instructions": "PRIVATE-PROMPT",
+        "supported_in_api": True,
+    }
+    model.config = {"user_kwargs": json.dumps(custom) if encoded else custom, "secret": "NEVER-EXPOSE"}
+    model.model_name = " org/model-v1 "
+    capabilities = ChatCapabilities(vision=True, reasoning=reasoning_declaration(model.config))
+    service.capabilities_for = lambda *_: capabilities
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://bisheng.example") as client:
+        response = await client.get("/api/v1/dsh/models", headers={"Authorization": "Bearer dedicated"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["object"] == "list" and len(body["data"]) == 1
+    item = body["data"][0]
+    assert item["id"] == "bisheng:42" and item["object"] == "model"
+    assert item["owned_by"] == "bisheng" and isinstance(item["created"], int)
+    assert item["display_name"] == "OpenAI / org/model-v1"
+    assert item["capabilities"] == capabilities.client_fields()
+    assert item["reasoning"] == capabilities.reasoning.model_dump(exclude_none=True)
+    assert item["slug"] == "org/model-v1"
+    assert item["context_window"] == 131072
+    assert item["input_modalities"] == ["text", "image"]
+    assert item["supported_reasoning_levels"] == [{"effort": "high", "description": "More reasoning"}]
+    assert item["default_reasoning_level"] == "high"
+    assert not {"user_kwargs", "config", "api_key", "secret", "base_instructions", "supported_in_api"} & item.keys()
+    assert "NEVER-EXPOSE" not in response.text and "PRIVATE-PROMPT" not in response.text
+
+
+async def test_models_discovery_omits_unknown_metadata(app_setup):
+    app, _runtime, runtime, *_ = app_setup
+    model, _server = await runtime.model.model_loader(42)
+    model.model_name = ""
+    model.config = {"context_window": 8192, "user_kwargs": {"max_tokens": 4096}}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://bisheng.example") as client:
+        response = await client.get("/api/v1/dsh/models", headers={"Authorization": "Bearer dedicated"})
+    assert response.status_code == 200
+    item = response.json()["data"][0]
+    assert item["input_modalities"] == ["text"]
+    assert not {"slug", "context_window", "supported_reasoning_levels", "default_reasoning_level"} & item.keys()
 
 
 async def test_cookie_never_substitutes_for_desktop_bearer(app_setup):

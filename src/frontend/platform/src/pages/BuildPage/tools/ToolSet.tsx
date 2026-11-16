@@ -7,7 +7,7 @@ import { useTranslation } from "react-i18next";
 import BingToolForm from "./builtInTool/BingSearch";
 import CodeExecutor from "./builtInTool/CodeExecutor";
 import CrawlerConfigForm from "./builtInTool/CrawlerConfig";
-import Dalle3ToolForm from "./builtInTool/Dalle3";
+import ImageGeneration from "./builtInTool/ImageGeneration";
 import EmailConfigForm from "./builtInTool/EmailConfig";
 import FeishuConfigForm from "./builtInTool/FeishuConfig";
 import JinaApiKeyForm from "./builtInTool/JinaConfig";
@@ -50,7 +50,6 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
             try {
                 if (item.extra) {
                     config = JSON.parse(item.extra);
-                    console.log('Parsed extra config:', config);
                 }
             } catch (e) {
                 console.error('api error');
@@ -64,33 +63,10 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
 
     const handleSubmit = async (formdata) => {
         await updateToolApi(idRef.current, formdata)
-        setConfig(formdata)
+        if (!toolKeys.some(key => ['image_generation', 'dalle_image_generator'].includes(key))) setConfig(formdata)
         setOpen(false)
         onChange()
     }
-
-    // const getFieldsToSubmit = () => {
-    //     const fields = {};
-    //     if (name === 'Dalle3绘画') {
-    //         if (formData.provider === 'openai') {
-    //             fields.openai_api_key = formData.openai_api_key;
-    //             fields.openai_api_base = formData.openai_api_base;
-    //             fields.openai_proxy = formData.openai_proxy;
-    //         } else {
-    //             fields.openai_api_key = formData.azure_api_key;
-    //             fields.azure_deployment = formData.azure_deployment;
-    //             fields.azure_endpoint = formData.azure_endpoint;
-    //             fields.openai_api_version = formData.openai_api_version;
-    //             fields.openai_api_type = 'azure';
-    //         }
-    //     } else if (name === 'Bing web搜索') {
-    //         fields.bing_subscription_key = formData.bing_subscription_key;
-    //         fields.bing_search_url = formData.bing_search_url;
-    //     } else if (name === '天眼查') {
-    //         fields.api_key = formData.api_key;
-    //     }
-    //     return fields;
-    // };
 
     const handleCancel = () => {
         setOpen(false);
@@ -100,9 +76,10 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
         if (toolKeys.includes('web_fetch')) {
             return <WebFetchForm formData={formData} onSubmit={handleSubmit} />;
         }
+        if (toolKeys.some(key => ['image_generation', 'dalle_image_generator'].includes(key))) {
+            return <ImageGeneration formData={formData} onSubmit={handleSubmit} />;
+        }
         switch (name) {
-            case 'Dalle3绘画':
-                return <Dalle3ToolForm formData={formData} onSubmit={handleSubmit} />;
             case 'Firecrawl':
                 return <CrawlerConfigForm formData={formData} onSubmit={handleSubmit} />;
             case 'Jina AI':
@@ -118,7 +95,7 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
             case '天眼查':
                 return <TianyanchaToolForm formData={formData} onSubmit={handleSubmit} />;
             case '联网搜索':
-                return <WebSearchForm formData={formData} onSubmit={handleSubmit} />;
+                return <WebSearchForm toolId={idRef.current} onSaved={() => { setOpen(false); onChange(); }} />;
             case '代码执行器':
                 return <CodeExecutor formData={formData} onSubmit={handleSubmit} />;
             case '经济金融数据':

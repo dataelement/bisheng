@@ -14,6 +14,7 @@ const toolKey = (item: Tool) => `tool:${item.id}`;
 export function useComposerReferences<S extends Skill, K extends Space, T extends Tool = Tool>(
     skills: S[], spaces: K[], onSkillsChange: (items: S[]) => void, onSpacesChange?: (items: K[]) => void,
     tools: T[] = EMPTY_TOOLS, onToolsChange?: (items: T[]) => void,
+    toolLabel?: (item: T) => string,
 ) {
     const catalog = useRef({ skills: new Map<string, S>(), spaces: new Map<string, K>(), tools: new Map<string, T>(), tags: new Map<string, NonNullable<Space['tag']>>() });
     skills.forEach((item) => catalog.current.skills.set(skillKey(item), item));
@@ -26,8 +27,8 @@ export function useComposerReferences<S extends Skill, K extends Space, T extend
             { key: spaceKey(item), kind: 'space' as const, label: String(item.name || item.id) },
             ...(item.tag ? [{ key: tagKey(item), kind: 'space' as const, label: `#${item.tag.name}` }] : []),
         ]),
-        ...tools.map((item) => ({ key: toolKey(item), kind: 'tool' as const, label: item.name })),
-    ], [skills, spaces, tools]);
+        ...tools.map((item) => ({ key: toolKey(item), kind: 'tool' as const, label: toolLabel?.(item) ?? item.name })),
+    ], [skills, spaces, tools, toolLabel]);
     const onReferencesChange = (keys: string[]) => {
         const nextSkills = keys.flatMap((key) => {
             const item = catalog.current.skills.get(key);

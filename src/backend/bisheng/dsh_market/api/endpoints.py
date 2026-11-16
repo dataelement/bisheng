@@ -44,7 +44,7 @@ async def call_workbench(function, *args, **kwargs):
     try:
         return await run_in_threadpool(function, *args, **kwargs)
     except WorkbenchBundleError as exc:
-        raise MarketWorkbenchBundleError(msg=str(exc)) from exc
+        raise MarketWorkbenchBundleError(msg=str(exc), validation_error=exc.details()) from exc
     except WorkbenchConflictError as exc:
         raise MarketWorkbenchConflictError(msg=str(exc)) from exc
     except WorkbenchArtifactError as exc:
@@ -289,6 +289,16 @@ async def admin_workbenches(
     return resp_200(await call_workbench(service.list, actor.tenant_id, page, size))
 
 
+@router.delete("/admin/workbenches/{workbench_id}")
+async def delete_workbench(
+    workbench_id: str,
+    revision: int = Query(ge=1),
+    actor: MarketActor = Depends(market_admin),
+    service=Depends(get_workbench_service),
+):
+    return resp_200(await call_workbench(service.delete, actor.tenant_id, actor.user_id, workbench_id, revision))
+
+
 @router.get("/workbenches")
 async def workbenches(
     response: Response,
@@ -310,6 +320,26 @@ async def workbench_detail(
 ):
     response.headers["Cache-Control"] = "no-store"
     return resp_200(await call_workbench(service.detail, actor.tenant_id, workbench_id))
+
+
+@router.get("/workbenches/{workbench_id}/versions/{version_id}/screenshots/{image_id}")
+async def workbench_screenshot(
+    workbench_id: str,
+    version_id: str,
+    image_id: str,
+    actor: MarketActor = Depends(market_actor),
+    service=Depends(get_workbench_service),
+):
+    data, metadata = await call_workbench(service.screenshot, actor.tenant_id, workbench_id, version_id, image_id)
+    return Response(
+        data,
+        media_type=metadata["media_type"],
+        headers={
+            "ETag": f'"{metadata["sha256"]}"',
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.get("/workbenches/{workbench_id}/versions/{version_id}/artifact")

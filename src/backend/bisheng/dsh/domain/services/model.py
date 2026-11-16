@@ -26,6 +26,7 @@ from bisheng.dsh.domain.schemas.responses import DshResponsesRequest
 from bisheng.dsh.domain.schemas.usage import UsageEvent
 from bisheng.dsh.domain.services.access import DshPrincipal, principal_scope
 from bisheng.dsh.domain.services.model_display import model_display_name
+from bisheng.dsh.domain.services.model_metadata import model_metadata
 from bisheng.dsh.infrastructure.chat_adapter import DshChatAdapter
 from bisheng.dsh.infrastructure.model_errors import is_context_length_error, model_failure_code
 from bisheng.dsh.infrastructure.quota_redis import QuotaRejected
@@ -112,6 +113,7 @@ class DshModelService:
                         "owned_by": "bisheng",
                         "display_name": model_display_name(model, server, names.get(str(model.id))),
                         "capabilities": capabilities.client_fields(),
+                        **model_metadata(model, capabilities),
                         **(
                             {"reasoning": capabilities.reasoning.model_dump(exclude_none=True)}
                             if capabilities.reasoning

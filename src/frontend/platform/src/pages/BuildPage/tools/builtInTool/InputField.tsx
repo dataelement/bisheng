@@ -48,7 +48,7 @@ export const SelectField = ({
     required = false,
     value,
     onChange,
-    options = [],
+    options = [] as { value: string; label: string }[],
     error = '',
     tooltip = ''
 }) => {

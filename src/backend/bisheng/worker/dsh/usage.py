@@ -31,7 +31,9 @@ def register_usage_tasks(app, runtime_factory):
                 with profile_scope(tenant_id):
                     count, more = await service.drain_user(tenant_id, user_id)
                 if more:
-                    project_usage.apply_async(args=[tenant_id, user_id], headers={"tenant_id": tenant_id})
+                    from bisheng.dsh.infrastructure.usage_work import UsageWorkQueue
+
+                    await UsageWorkQueue(service.quota).mark(f"{service.quota.prefix}:{{{tenant_id}:{user_id}}}:events")
                 return count
 
         from bisheng.worker._asyncio_utils import run_async_task

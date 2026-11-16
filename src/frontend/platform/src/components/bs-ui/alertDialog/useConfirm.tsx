@@ -1,10 +1,8 @@
-// @ts-strict-ignore
-
 import { TipIcon } from "@/components/bs-icons/tip"
 import { showApiError } from "@/controllers/request"
 import i18next from "i18next"
 import { X } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { createRoot } from "react-dom/client"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "."
 
@@ -30,46 +28,50 @@ function ConfirmWrapper() {
     const [open, setOpen] = useState(false)
     const [pending, setPending] = useState(false)
     const [revision, setRevision] = useState(0)
-    const paramRef = useRef(null)
+    const paramRef = useRef<ConfirmParams | null>(null)
     const settledRef = useRef(false)
+    const closedRef = useRef(true)
 
     openFn = (params: ConfirmParams) => {
         paramRef.current = params
+        closedRef.current = false
         settledRef.current = false
         setPending(false)
         setOpen(true)
         setRevision(value => value + 1)
     }
 
-    const close = () => {
-        paramRef.current?.onClose?.()
+    const close = useCallback((params: ConfirmParams | null = paramRef.current) => {
+        if (paramRef.current !== params || closedRef.current) return
+        // Mark closed before callbacks, which may synchronously abort the owner signal.
+        closedRef.current = true
         setOpen(false)
-    }
+        params?.onClose?.()
+    }, [])
 
     useEffect(() => {
         const params = paramRef.current
         const signal = params?.signal as AbortSignal | undefined
         if (!open || !signal) return
-        const abort = () => {
-            if (paramRef.current !== params) return
-            params.onClose?.()
-            setOpen(false)
-        }
+        const abort = () => close(params)
         signal.addEventListener("abort", abort, { once: true })
         if (signal.aborted) abort()
         return () => signal.removeEventListener("abort", abort)
-    }, [open, revision])
+    }, [open, revision, close])
 
     const handleOkClick = () => {
-        if (settledRef.current) return
+        if (settledRef.current || closedRef.current) return
         settledRef.current = true
         setPending(true)
-        void Promise.resolve().then(() => paramRef.current?.onOk
-            ? paramRef.current.onOk(close)
-            : close()).catch(showApiError).finally(() => {
-                settledRef.current = false
-                setPending(false)
-            })
+        const params = paramRef.current
+        void Promise.resolve().then(() => {
+            if (closedRef.current || paramRef.current !== params) return
+            return params?.onOk ? params.onOk(() => close(params)) : close(params)
+        }).catch(showApiError).finally(() => {
+            if (paramRef.current !== params) return
+            settledRef.current = false
+            setPending(false)
+        })
     }
 
     const handleCancelClick = () => {
@@ -93,13 +95,13 @@ function ConfirmWrapper() {
                     handleOkClick()
                     return
                 }
-                setOpen(next)
+                if (!next) close()
             }}
         >
             <AlertDialogContent>
                 <AlertDialogHeader className="relative">
                     <div><TipIcon /></div>
-                    {showClose && <X onClick={hideCancel ? handleOkClick : close} className="absolute right-0 top-[-0.5rem] cursor-pointer text-gray-400 hover:text-gray-600"></X>}
+                    {showClose && <X onClick={hideCancel ? handleOkClick : () => { if (!pending) close() }} className="absolute right-0 top-[-0.5rem] cursor-pointer text-gray-400 hover:text-gray-600"></X>}
                     <AlertDialogTitle>{title}</AlertDialogTitle>
                     <AlertDialogDescription className="whitespace-pre-line text-popover-foreground">
                         {desc}

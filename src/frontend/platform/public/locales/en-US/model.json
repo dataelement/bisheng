@@ -1,5 +1,11 @@
 {
   "model": {
+    "searchTool": "Search tool",
+    "drawingTool": "Drawing tool",
+    "configure": "Configure",
+    "configureTool": "Configure {{tool}}",
+    "sharedToolHint": "Shared with platform tools. Changes also apply to the platform. Tool settings are saved separately.",
+    "sharedToolUnavailable": "Unable to load tool settings. Check that the tool exists on the platform and has valid settings.",
     "editPrompt": "Edit Prompt",
     "docKnowledgeAbstractPrompt": "Document Knowledge Base Abstract Prompt",
     "docKnowledgeAbstractPromptTooltip": "When uploading files to the document knowledge base, the prompt used for summarizing the file",

@@ -71,3 +71,4 @@ async def test_weighted_usage_survives_full_redis_loss(quota, store):
     result = await quota.read_usage(2, 20, "2026-09")
     assert result["used"] == 100
     assert result["remaining"] == 99_900
+    assert await quota.redis.zscore(quota.prefix + ":projection_work", quota.keys(event)[5]) is not None

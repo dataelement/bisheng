@@ -60,7 +60,7 @@ class MarketRepository:
             if existing:
                 plugin = (
                     db.exec(
-                        select(MarketPlugin)
+                        select(MarketPlugin, MarketVersion.digest)
                         .join(MarketVersion, MarketVersion.plugin_id == MarketPlugin.id)
                         .where(
                             MarketPlugin.tenant_id == tenant,
@@ -73,7 +73,13 @@ class MarketRepository:
                     else None
                 )
                 if existing.status == "failed" or (
-                    plugin and (plugin.deleted or plugin.disabled or plugin.current_version_id != existing.version_id)
+                    plugin
+                    and (
+                        plugin[0].deleted
+                        or plugin[0].disabled
+                        or plugin[0].current_version_id != existing.version_id
+                        or plugin[1] != digest
+                    )
                 ):
                     existing.status, existing.error = "validating", ""
                     existing.actor_id, existing.created_at = actor, now()
@@ -87,7 +93,11 @@ class MarketRepository:
                 db.commit()
             except IntegrityError:
                 db.rollback()
-                return db.exec(query).one().model_dump()
+                # A concurrent creator may already have completed and then been overwritten.
+                # Reuse through the same digest/state checks instead of returning stale success.
+                db.exec(query).one()
+                db.rollback()
+                return self.create_import(tenant, actor, digest)
             db.refresh(task)
             return task.model_dump()
 
@@ -138,8 +148,6 @@ class MarketRepository:
         reason = ""
         if highest and compare_semver(meta["version"], highest.version) < 0:
             reason = "lower_version"
-        elif same and same.digest != digest:
-            reason = "version_conflict"
         return {
             "name": meta["name"],
             "display_name": meta["display_name"],
@@ -148,6 +156,7 @@ class MarketRepository:
             "allowed": not reason,
             "reason": reason,
             "duplicate": bool(same and same.digest == digest),
+            "overwrite": bool(not reason and same and same.digest != digest),
         }
 
     def preview(self, tenant, manifest, digest):
@@ -191,15 +200,15 @@ class MarketRepository:
                 preview = self.version_preview(db, tenant, meta, task.digest)
                 if not preview["allowed"]:
                     task.status, task.error = "failed", preview["reason"]
-                elif version and version.digest != task.digest:
-                    task.status, task.error = "failed", "Version already exists with a different digest"
                 else:
                     before = {
                         "current_version_id": plugin.current_version_id,
                         "disabled": plugin.disabled,
                         "deleted": plugin.deleted,
+                        "digest": version.digest if version else None,
                     }
                     fresh = version is None
+                    overwrite = bool(version and version.digest != task.digest)
                     if fresh:
                         version = MarketVersion(
                             tenant_id=tenant,
@@ -211,7 +220,10 @@ class MarketRepository:
                             published_once=True,
                         )
                         db.add(version)
-                    if fresh or plugin.deleted or plugin.disabled or plugin.current_version_id is None:
+                    elif overwrite:
+                        version.digest, version.size, version.manifest = task.digest, size, manifest
+                        db.add(version)
+                    if fresh or overwrite or plugin.deleted or plugin.disabled or plugin.current_version_id is None:
                         plugin.deleted = False
                         version.published_once = True
                         db.add(version)
@@ -231,7 +243,12 @@ class MarketRepository:
                                 action="import",
                                 revision=plugin.revision,
                                 before=before,
-                                after={"current_version_id": version.id, "disabled": False, "deleted": False},
+                                after={
+                                    "current_version_id": version.id,
+                                    "disabled": False,
+                                    "deleted": False,
+                                    "digest": version.digest,
+                                },
                             )
                         )
                     task.status, task.version_id = "completed", version.id

@@ -74,7 +74,9 @@ export const updateToolApi = async (tool_id, extra) => {
  * file_content string
  * @returns Promise<any> 下载或解析tool schema的结果
  */
-export const downloadToolSchema = async (data: { download_url: string } | { file_content: string }): Promise<any> => {
+export type OpenApiSchemaSource = { download_url: string } | { file_content: string };
+
+export const downloadToolSchema = async (data: OpenApiSchemaSource): Promise<any> => {
     return await axios.post(`/api/v1/tool/schema`, data);
 };
 
