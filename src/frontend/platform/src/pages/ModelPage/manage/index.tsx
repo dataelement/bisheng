@@ -166,8 +166,8 @@ export default function Management() {
                 </div>
                 <div className="flex gap-4">
                     {canManage && <Button onClick={() => setSystemModel(true)} variant="filled"
-                        className="gap-1 text-danger hover:text-danger" color="default">
-                        <Outlined.Setting className="text-danger" />
+                        className="gap-1" color="default">
+                        <Outlined.Setting />
                         {t('model.systemModelSettings')}
                     </Button>}
                     {canManage && <Button onClick={() => setModelId(-1)}>{t('model.addModel')}</Button>}

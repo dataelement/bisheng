@@ -37,7 +37,8 @@ export function UserSelectableModels({ data, configuredModels, enterpriseEnabled
     return <section className="space-y-4">
         <div>
             <h3 className="text-sm font-medium">{t('model.userSelectableModels')}</h3>
-            <p className="mt-1 text-xs text-muted-foreground">{t('model.userSelectableModelsHelp')}</p>
+            {/* Visibility is a platform setting; only credits need the desktop module. */}
+            <p className="mt-1 text-xs text-muted-foreground">{t(enterpriseEnabled ? 'model.userSelectableModelsHelp' : 'model.userSelectableModelsHelpBasic')}</p>
         </div>
         {enterpriseEnabled && <BaseModelPicker models={models} rows={pricing.data} />}
         {enterpriseEnabled && pricing.isError && <p role="alert" className="flex items-center gap-2 text-sm">
@@ -60,7 +61,7 @@ export function UserSelectableModels({ data, configuredModels, enterpriseEnabled
                         </span>
                     </TableHead>}
                     {enterpriseEnabled && <TableHead className="w-52">{t('dsh.pricing.price', { ns: 'bs' })}</TableHead>}
-                    {enterpriseEnabled && <TableHead className="w-28 text-left">{t('model.visibilityScope')}</TableHead>}
+                    <TableHead className="w-28 text-left">{t('model.visibilityScope')}</TableHead>
                 </TableRow></TableHeader>
                 <TableBody>{models.map(model => {
                     const row = pricing.data?.get(model.id)
@@ -81,12 +82,12 @@ export function UserSelectableModels({ data, configuredModels, enterpriseEnabled
                                 if (row) setPriced({ id: model.id, name: model.label, modelName: model.model_name, providerType: model.providerType, row })
                             }} />
                         </TableCell>}
-                        {enterpriseEnabled && <TableCell className="text-left">
+                        <TableCell className="text-left">
                             <Button variant="link" className="whitespace-nowrap px-0"
                                 onClick={() => setSelected({ id: model.id, name: model.label })}>
                                 {t('model.configureVisibility')}
                             </Button>
-                        </TableCell>}
+                        </TableCell>
                     </TableRow>
                 })}</TableBody>
             </Table>

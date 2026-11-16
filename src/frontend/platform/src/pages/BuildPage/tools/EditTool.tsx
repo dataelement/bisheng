@@ -1,22 +1,22 @@
 // @ts-strict-ignore
-import { Button, Dropdown, DropdownChevron, DropdownItem, Input, Textarea, toast } from '@bisheng/ui';
+import { Button, Input, Textarea, toast } from '@bisheng/ui';
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 import { Dialog,DialogContent,DialogHeader,DialogTitle } from "@/components/bs-ui/dialog";
 
 import { Label } from "@/components/bs-ui/label";
-import { Popover,PopoverClose,PopoverContent,PopoverTrigger } from "@/components/bs-ui/popover";
 import { Sheet,SheetContent,SheetFooter,SheetHeader,SheetTitle } from "@/components/bs-ui/sheet";
 import { Table,TableBody,TableCell,TableHead,TableHeader,TableRow } from "@/components/bs-ui/table";
 
 import { createTool,deleteTool,downloadToolSchema,testToolApi,updateTool } from "@/controllers/API/tools";
 import { showApiError } from "@/controllers/request";
 import { RadioGroup,Radio as RadioGroupItem } from "@bisheng/ui";
-import { Outlined } from "bisheng-icons";
 import { forwardRef,useEffect,useImperativeHandle,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AppHint } from "../components/AppHint";
-import { Example,formData } from "./toolSchemaExamples";
+import { formData } from "./toolSchemaExamples";
+import { OpenApiSchemaInput } from "./OpenApiSchemaInput";
+import type { OpenApiSchemaSource } from "@/controllers/API/tools";
 interface TestDialogProps {
     tool: any;
     formState: any;
@@ -69,7 +69,7 @@ export const TestDialog = forwardRef<{
             return toast.show({ type: 'warning', message: errors.filter(Boolean).join('\n') })
         }
         setLoading(true)
-        const { server_host, children, auth_method, parameter_name } = toolRef.current
+        const { server_host, children, parameter_name } = toolRef.current
         const { apiKey, apiLocation, authMethod, authType, parameter } = formRef.current.state
         await testToolApi({
             server_host,
@@ -138,7 +138,6 @@ const EditTool = forwardRef((props: any, ref) => {
         setShow(bln)
     }
     const [delShow, setDelShow] = useState(false)
-    const schemaUrl = useRef('')
     const [formState, setFormState] = useState({ ...formData });
     const fromDataRef = useRef<any>({}) // same as formState
     const [tableData, setTableData] = useApiTableData()
@@ -172,44 +171,19 @@ const EditTool = forwardRef((props: any, ref) => {
             [name]: value
         }));
     };
-    // sendRequest to backend to get Schema
-    const handleImportSchema = () => {
-        // http://192.168.106.120:3002/openapi-test.json
-        downloadToolSchema({ download_url: schemaUrl.current }).then(res => {
-            schemaUrl.current = ''
-            if (!res) return
-            fromDataRef.current = { ...res, id: fromDataRef.current.id }
-            const fetchedSchema = res.openapi_schema; // replace with the template
-            setFormState(prevState => ({
-                ...prevState,
-                schemaContent: fetchedSchema,
-                authMethod: res.auth_method === 1 ? 'apikey' : 'none',
-                authType: res.auth_type,
-                apiLocation: res.api_location,
-                parameter: res.parameter_name
-            }))
-            setTableData(res.children)
-        }).catch(showApiError)
-    };
-    // set schemaContent
-    const handleSelectTemplate = (key = '') => {
-        if (!editShow) return
-        const file_content = key ? Example[key] : formState.schemaContent
-        file_content && downloadToolSchema({ file_content }).then(res => {
-            schemaUrl.current = ''
-            if (!res) return
-            fromDataRef.current = { ...res, id: fromDataRef.current.id }
-            const fetchedSchema = res.openapi_schema; // replace with the template
-            setFormState(prevState => ({
-                ...prevState,
-                schemaContent: fetchedSchema,
-                authMethod: res.auth_method === 1 ? 'apikey' : 'none',
-                authType: res.auth_type,
-                apiLocation: res.api_location,
-                parameter: res.parameter_name
-            }));
-            setTableData(res.children)
-        }).catch(showApiError)
+    const handleImportSchema = async (source: OpenApiSchemaSource) => {
+        const res = await downloadToolSchema(source);
+        if (!res) return;
+        fromDataRef.current = { ...res, id: fromDataRef.current.id };
+        setFormState(prevState => ({
+            ...prevState,
+            schemaContent: res.openapi_schema,
+            authMethod: res.auth_method === 1 ? 'apikey' : 'none',
+            authType: res.auth_type,
+            apiLocation: res.api_location,
+            parameter: res.parameter_name
+        }));
+        setTableData(res.children);
     };
 
     const [saveLoading, setSaveLoading] = useState(false)
@@ -280,9 +254,6 @@ const EditTool = forwardRef((props: any, ref) => {
     }
     // test
     const testDialogRef = useRef(null)
-    const handleTest = (obj) => {
-        testDialogRef.current.open(obj)
-    }
     const { t } = useTranslation()
     return <div>
         <Sheet open={editShow} onOpenChange={setEditShow}>
@@ -296,40 +267,8 @@ const EditTool = forwardRef((props: any, ref) => {
                     <div className="px-6 mb-4" >
                         <Input id="toolName" name="toolName" placeholder={t('tools.enterToolName')} value={formState.toolName} onChange={handleInputChange} className={"mt-2"} />
                     </div>
-                    {/* schema */}
-                    <div className="px-6 flex items-center justify-between">
-                        <label htmlFor="open">OpenAPI Schema</label>
-                        <div className="flex gap-2">
-                            <Popover>
-                                <PopoverTrigger asChild>
-                                    <Button variant="outlined" color="default"><Outlined.Plus /> {t('tools.importFromUrl')}</Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-80" align="end">
-                                    <div className="flex items-center gap-4">
-                                        <Input id="schemaUrl" name="schemaUrl" placeholder="https://" onChange={(e) => schemaUrl.current = e.target.value} />
-                                        <PopoverClose>
-                                            <Button size="small" onClick={handleImportSchema}>{t('skills.import')}</Button>
-                                        </PopoverClose>
-                                    </div>
-                                </PopoverContent>
-                            </Popover>
-                            {/* Inserting an example is an action (the trigger never shows a value), so this is a menu, not a Select. */}
-                            <Dropdown
-                                align="end"
-                                menu={<>
-                                    <DropdownItem onSelect={() => handleSelectTemplate('json')}>{t('tools.weatherJson')}</DropdownItem>
-                                    <DropdownItem onSelect={() => handleSelectTemplate('yaml')}>{t('tools.petShopYaml')}</DropdownItem>
-                                </>}
-                            >
-                                <Button type="button" variant="outlined" color="default">
-                                    {t('tools.examples')}
-                                    <DropdownChevron />
-                                </Button>
-                            </Dropdown>
-                        </div>
-                    </div>
-                    <div className="px-6 mb-4" >
-                        <Textarea id="schemaContent" name="schemaContent" placeholder={t('tools.enterOpenAPISchema')} value={formState.schemaContent} onChange={handleInputChange} onBlur={() => handleSelectTemplate()} textareaClassName={"mt-2 min-h-52"} />
+                    <div className="px-6 mb-4">
+                        <OpenApiSchemaInput value={formState.schemaContent} onChange={(schemaContent) => setFormState(prev => ({ ...prev, schemaContent }))} onParse={handleImportSchema} />
                     </div>
                     <label htmlFor="open" className="px-6">{t('tools.authenticationType')}</label>
                     <div className="px-6">

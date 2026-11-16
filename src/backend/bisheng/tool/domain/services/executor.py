@@ -36,6 +36,7 @@ from bisheng.tool.domain.services.user_availability import (
 from bisheng.utils.async_utils import run_async_safe
 from bisheng_langchain.gpts.load_tools import load_tools
 from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
+from bisheng_langchain.gpts.tools.image_generation.tool import IMAGE_TOOL_KEYS, ImageGenerationError
 
 
 class ToolInitializationError(RuntimeError):
@@ -224,8 +225,52 @@ class ToolExecutor(BaseTool):
         return params
 
     @classmethod
-    def _init_preset_tool(cls, tool: GptsTools, tool_type: GptsToolsType, **kwargs) -> BaseTool:
+    def _init_preset_tool(
+        cls, tool: GptsTools, tool_type: GptsToolsType, *, image_user_id: int | None = None, **kwargs
+    ) -> BaseTool:
         params = cls.parse_preset_tool_params(tool, tool_type)
+        if tool.tool_key in IMAGE_TOOL_KEYS:
+            params["upload_image"] = cls._image_uploader(image_user_id)
+        if tool.tool_key == "web_search" and params.get("type") == "custom":
+            from sqlmodel import select
+
+            from bisheng.core.database import get_sync_db_session
+            from bisheng.tool.domain.models.gpts_tools import WebSearchSecret
+            from bisheng.tool.domain.services.web_search import SecretUnavailable, WebSearchCipher, verify_operation
+
+            tenant = get_current_tenant_id()
+            if (
+                not tenant
+                or tool_type.tenant_id != tenant
+                or tool.tenant_id != tenant
+                or tool.type != tool_type.id
+                or tool.extra
+                or tool.is_delete
+                or tool_type.is_delete
+                or tool.is_preset != ToolPresetType.PRESET.value
+                or tool_type.is_preset != ToolPresetType.PRESET.value
+            ):
+                raise SecretUnavailable("Custom search configuration unavailable")
+            custom = params.get("config", {}).get("custom")
+            if not isinstance(custom, dict) or "api_key" in custom:
+                raise SecretUnavailable("Custom search configuration unavailable")
+            verify_operation(custom.get("operation"), custom.get("proof"), tenant_id=tenant, category_id=tool_type.id)
+            custom.pop("proof")
+            auth = custom.get("operation", {}).get("auth", {})
+            if auth.get("location") != "none":
+                with get_sync_db_session() as session:
+                    record = session.exec(
+                        select(WebSearchSecret).where(
+                            WebSearchSecret.tenant_id == tenant,
+                            WebSearchSecret.category_id == tool_type.id,
+                            WebSearchSecret.provider == "custom",
+                        )
+                    ).first()
+                    if record is None:
+                        raise SecretUnavailable("Custom search secret unavailable")
+                    custom["api_key"] = WebSearchCipher.configured().decrypt(
+                        record.key_id, record.ciphertext, tenant_id=tenant, category_id=tool_type.id
+                    )
         tool_name_param = {tool.tool_key: params}
         tool_langchain = load_tools(tool_params=tool_name_param, **kwargs)
         if not tool_langchain:
@@ -276,7 +321,7 @@ class ToolExecutor(BaseTool):
                     raise PermissionError("Knowledge retrieval requires a tenant context.")
                 tool_instance = WorkKnowledgeSearch(user_id=user_id, tenant_id=tenant_id)
             else:
-                tool_instance = cls._init_preset_tool(tool, tool_type, **kwargs)
+                tool_instance = cls._init_preset_tool(tool, tool_type, image_user_id=user_id, **kwargs)
         elif tool.is_preset == ToolPresetType.API.value:
             tool_instance = cls._init_api_tool(tool, tool_type, **kwargs)
         elif tool.is_preset == ToolPresetType.MCP.value:
@@ -520,39 +565,87 @@ class ToolExecutor(BaseTool):
         kwargs.setdefault("ephemeral_source", True)
         return KnowledgeRagTool.init_knowledge_rag_tool(**kwargs)
 
+    @staticmethod
+    def _image_uploader(user_id: int | None):
+        tenant_id = get_current_tenant_id()
+
+        def upload(data: bytes, content_type: str) -> str:
+            from bisheng.core.storage.chat_attachment import build_chat_object_name
+            from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
+            from bisheng.core.storage.tenant_storage import get_minio_prefix
+            from bisheng.database.models.tenant import TenantDao
+
+            if not tenant_id or not user_id:
+                raise ImageGenerationError("Image storage requires a user and tenant context.")
+            tenant = TenantDao.get_by_id(tenant_id)
+            if tenant is None:
+                raise ImageGenerationError("Image storage tenant is unavailable.")
+            extension = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp"}[content_type]
+            object_name = get_minio_prefix(tenant_id, tenant.tenant_code) + build_chat_object_name(
+                user_id, f"image.{extension}"
+            )
+            storage = get_minio_storage_sync()
+            storage.put_object_sync(object_name=object_name, file=data, content_type=content_type)
+            public_base_url = settings.open_api.public_base_url.rstrip("/")
+            if public_base_url:
+                # Keep the storage signature intact while exposing the frontend proxy to API clients.
+                return public_base_url + storage.get_share_link_sync(object_name)
+            return storage.get_share_link_sync(object_name, clear_host=False)
+
+        return upload
+
+    async def _current_image_tool(self):
+        tool, group = await self._require_current_use()
+        if (
+            tool.tool_key not in IMAGE_TOOL_KEYS
+            or tool.is_preset != ToolPresetType.PRESET.value
+            or group.is_preset != ToolPresetType.PRESET.value
+            or tool.tenant_id != group.tenant_id
+        ):
+            raise PermissionError("Image tool is unavailable")
+        # Use a per-call instance: concurrent calls keep their configuration snapshot.
+        return self._init_preset_tool(tool, group, image_user_id=self.user_id)
+
     async def _require_current_use(self):
         tool = await GptsToolsDao.aget_one_tool(tool_id=self.tool_id)
-        if tool is None:
+        if tool is None or tool.is_delete:
             raise PermissionError("Tool is unavailable")
         group = await GptsToolsDao.aget_one_tool_type(tool_type_id=tool.type)
         if group is None or group.is_delete:
             raise PermissionError("Tool is unavailable")
         await self._ensure_use_permission_async(group, self.user_id)
+        return tool, group
 
     @wrapper_tool_sync
     def _run(
         self, *args: Any, config: RunnableConfig, run_manager: CallbackManagerForToolRun | None = None, **kwargs
     ) -> Any:
 
+        image_tool = self.tool_key in IMAGE_TOOL_KEYS and self.tool_is_preset == ToolPresetType.PRESET.value
+        instance = run_async_safe(self._current_image_tool()) if image_tool else self.tool_instance
         if uses_account_availability(self.app_type) and self.tool_id and self.tool_is_preset in (0, 1, 2):
-            run_async_safe(self._require_current_use())
+            if not image_tool:
+                run_async_safe(self._require_current_use())
             UserToolAvailabilityService(self.user_id).ensure_enabled_sync(self.tool_id)
-        if signature(self.tool_instance._run).parameters.get("config"):
+        if signature(instance._run).parameters.get("config"):
             kwargs["config"] = config
-        if signature(self.tool_instance._run).parameters.get("run_manager"):
+        if signature(instance._run).parameters.get("run_manager"):
             kwargs["run_manager"] = run_manager
-        return self.tool_instance._run(*args, **kwargs)
+        return instance._run(*args, **kwargs)
 
     @wrapper_tool
     async def _arun(
         self, *args: Any, config: RunnableConfig, run_manager: CallbackManagerForToolRun | None = None, **kwargs
     ) -> Any:
+        image_tool = self.tool_key in IMAGE_TOOL_KEYS and self.tool_is_preset == ToolPresetType.PRESET.value
+        instance = await self._current_image_tool() if image_tool else self.tool_instance
         if uses_account_availability(self.app_type) and self.tool_id and self.tool_is_preset in (0, 1, 2):
-            await self._require_current_use()
+            if not image_tool:
+                await self._require_current_use()
             await UserToolAvailabilityService(self.user_id).ensure_enabled(self.tool_id)
-        if signature(self.tool_instance._run).parameters.get("config"):
+        if signature(instance._run).parameters.get("config"):
             kwargs["config"] = config
-        if signature(self.tool_instance._run).parameters.get("run_manager"):
+        if signature(instance._run).parameters.get("run_manager"):
             kwargs["run_manager"] = run_manager
         # Linsight resilience (F035): a single tool failure must NOT crash the
         # whole task. The deepagents ToolNode re-raises non-ToolException errors,
@@ -561,7 +654,7 @@ class ToolExecutor(BaseTool):
         # agent sees "tool failed", can react, and the task keeps going.
         if self.app_type == ApplicationTypeEnum.LINSIGHT:
             try:
-                return await self.tool_instance._arun(*args, **kwargs)
+                return await instance._arun(*args, **kwargs)
             except Exception as e:
                 from loguru import logger as _logger
 
@@ -574,7 +667,7 @@ class ToolExecutor(BaseTool):
                     },
                     ensure_ascii=False,
                 )
-        return await self.tool_instance._arun(*args, **kwargs)
+        return await instance._arun(*args, **kwargs)
 
     def __getattr__(self, item):
         return getattr(self.tool_instance, item)

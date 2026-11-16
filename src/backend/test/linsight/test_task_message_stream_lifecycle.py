@@ -73,6 +73,41 @@ async def test_persisted_terminal_state_completes_a_quiet_socket(handler, monkey
         assert ws.send_json.call_args.args[0]["data"]["output_result"]["final_files"][0]["file_name"] == "report.docx"
 
 
+async def test_quiet_socket_failure_keeps_model_source_instead_of_only_content_filter(handler):
+    subject, ws = handler
+    attach_stream(subject, [None])
+    failure = {
+        "version": 1,
+        "failure_id": "model-failure-1",
+        "category": "model_service",
+        "service": "llm",
+        "service_name": "Test model",
+        "operation": "invoke_model",
+        "occurred_at": "2026-11-13T13:37:22+00:00",
+        "trace_id": "task-1",
+    }
+    stream.LinsightSessionVersionDao.get_by_id.return_value = SimpleNamespace(
+        status="failed",
+        output_result={
+            "error_message": "Service request failed (model_service)",
+            "error_code": 11090,
+            "error_type": "content_filter",
+            "failure_info": failure,
+            "reference_id": "support-1",
+            "detail": "Provider rejected the request",
+            "attempt_id": "attempt-1",
+        },
+    )
+    await asyncio.wait_for(subject.connect(), timeout=1)
+    payload = ws.send_json.call_args.args[0]["data"]
+    assert payload["failure_info"] == failure
+    assert payload["reference_id"] == "support-1"
+    assert payload["detail"] == "Provider rejected the request"
+    assert payload["attempt_id"] == "attempt-1"
+    assert payload["error_type"] == "content_filter"
+    ws.close.assert_awaited_once_with(code=1000, reason="Session finished")
+
+
 async def test_running_session_preserves_live_events_and_waits_for_completion(handler):
     subject, ws = handler
     closed = attach_stream(

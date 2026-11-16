@@ -1,8 +1,8 @@
 import { Dialog } from '@/components/bs-ui/dialog'
-import { cleanup,fireEvent,render,screen } from '@testing-library/react'
+import { cleanup,fireEvent,render,screen,waitFor } from '@testing-library/react'
 import { afterEach,expect,it,vi } from 'vitest'
 import CodeExecutor from './CodeExecutor'
-import Dalle3 from './Dalle3'
+import ImageGeneration from './ImageGeneration'
 
 afterEach(cleanup)
 it('changes sandbox execution mode without erasing saved provider settings', () => {
@@ -13,11 +13,19 @@ it('changes sandbox execution mode without erasing saved provider settings', () 
     fireEvent.click(screen.getByRole('button', { name: 'save' }))
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ type: 'container', config: expect.objectContaining({ official: { api_key: 'fixture-key' }, container: {} }) }))
 })
-it('switches image providers and preserves provider-specific form visibility', () => {
-    render(<Dialog open><Dalle3 formData={{ openai_api_key: 'fixture-key' }} onSubmit={vi.fn()} /></Dialog>)
-    fireEvent.click(screen.getByRole('radio', { name: 'Azure' }))
-    expect(screen.getByRole('radio', { name: 'Azure' })).toHaveAttribute('aria-checked', 'true')
-    expect(screen.getByLabelText(/Deployment Name/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('radio', { name: 'OpenAI' }))
-    expect(screen.queryByLabelText(/Deployment Name/)).not.toBeInTheDocument()
+it('saves a configurable image model without Azure fields', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    render(<Dialog open><ImageGeneration formData={{ openai_api_key: '********' }} onSubmit={onSubmit} /></Dialog>)
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText(/imageGeneration.model/), { target: { value: 'custom-image-model' } })
+    fireEvent.click(screen.getByRole('button', { name: 'confirm' }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith({ provider: 'openai', openai_api_base: 'https://api.openai.com/v1', openai_api_key: '********', model: 'custom-image-model', openai_proxy: '' }))
+})
+it('retains the image draft after a failed save', async () => {
+    const onSubmit = vi.fn().mockRejectedValue(new Error('save failed'))
+    render(<Dialog open><ImageGeneration formData={{ openai_api_key: '********', model: 'selected-model' }} onSubmit={onSubmit} /></Dialog>)
+    fireEvent.click(screen.getByRole('button', { name: 'confirm' }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledOnce())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'confirm' })).not.toBeDisabled())
+    expect(screen.getByLabelText(/imageGeneration.model/)).toHaveValue('selected-model')
 })

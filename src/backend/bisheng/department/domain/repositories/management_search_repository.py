@@ -7,6 +7,7 @@ from bisheng.common.subject_search import normalize_keyword
 from bisheng.core.database import get_async_db_session
 from bisheng.core.database.subject_search import exact_id_priority, subject_match_condition
 from bisheng.database.models.department import Department, UserDepartment
+from bisheng.department.domain.repositories.directory_repository import directory_condition
 
 
 class ManagementSearchRepository:
@@ -58,7 +59,7 @@ class ManagementSearchRepository:
                     )
                 elif admin_paths is not None:
                     stmt = stmt.where(or_(*[Department.path.like(f"{p}%") for p in admin_paths]))
-                return stmt
+                return stmt.where(directory_condition())
 
             page_stmt = (
                 _scoped(
@@ -91,7 +92,9 @@ class ManagementSearchRepository:
             ancestor_ids = {int(part) for dept in dept_rows for part in (dept.path or "").split("/") if part.isdigit()}
             name_ids = ancestor_ids | set(dept_by_id)
             name_rows = await session.exec(
-                select(Department.id, Department.name).where(Department.id.in_(name_ids), Department.status == "active")
+                select(Department.id, Department.name).where(
+                    Department.id.in_(name_ids), Department.status == "active", directory_condition()
+                )
             )
             id_to_name.update({int(row.id): row.name for row in name_rows.all()})
 
@@ -121,6 +124,7 @@ class ManagementSearchRepository:
         stmt = select(Department).where(
             subject_match_condition(Department.id, Department.name, Department.external_id, kw, name_prefix=False),
             Department.status.in_(["active", "archived"] if include_archived else ["active"]),
+            directory_condition(),
         )
         if path_prefixes:
             stmt = stmt.where(or_(*[Department.path.like(f"{path}%") for path in path_prefixes]))

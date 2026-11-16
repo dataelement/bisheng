@@ -1,5 +1,5 @@
 import json
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, Body, Depends, Request
 from pydantic import BaseModel, Field
@@ -15,10 +15,63 @@ from bisheng.tool.domain.schemas import TestToolReq
 from bisheng.tool.domain.services.openapi import OpenApiSchema
 from bisheng.tool.domain.services.sandbox_conf_service import SandboxConfService
 from bisheng.tool.domain.services.tool import ToolServices
+from bisheng.tool.domain.services.web_search import SettingsWrite
 from bisheng.utils import get_request_ip
 from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
 
 router = APIRouter(prefix="/tool", tags=["Tool"])
+
+
+async def _require_search_admin(user: UserPayload):
+    from bisheng.utils.http_middleware import _check_is_global_super
+
+    if not user.is_global_super or not await _check_is_global_super(user.user_id):
+        raise UnAuthorizedError()
+
+
+@router.get("/{tool_type_id}/web-search/settings")
+async def get_web_search_settings(tool_type_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    from bisheng.tool.domain.services.web_search import get_settings
+
+    await _require_search_admin(login_user)
+    return resp_200(data=await get_settings(tool_type_id))
+
+
+@router.put("/{tool_type_id}/web-search/settings")
+async def put_web_search_settings(
+    tool_type_id: int, req: Any = Body(...), login_user: UserPayload = Depends(UserPayload.get_login_user)
+):
+    from fastapi import HTTPException
+    from pydantic import ValidationError
+
+    from bisheng.tool.domain.services.web_search import put_settings
+
+    await _require_search_admin(login_user)
+    try:
+        validated = SettingsWrite.model_validate(req)
+    except ValidationError:
+        raise HTTPException(status_code=422, detail="Invalid search settings") from None
+    return resp_200(data=await put_settings(tool_type_id, validated, login_user.user_id))
+
+
+@router.post("/{tool_type_id}/web-search/schema")
+async def import_web_search_schema(
+    tool_type_id: int, req: Any = Body(...), login_user: UserPayload = Depends(UserPayload.get_login_user)
+):
+    from bisheng.tool.domain.services.web_search import schema_preview
+
+    await _require_search_admin(login_user)
+    return resp_200(data=await schema_preview(tool_type_id, req))
+
+
+@router.post("/{tool_type_id}/web-search/test")
+async def test_web_search(
+    tool_type_id: int, req: Any = Body(...), login_user: UserPayload = Depends(UserPayload.get_login_user)
+):
+    from bisheng.tool.domain.services.web_search import search_preview
+
+    await _require_search_admin(login_user)
+    return resp_200(data=await search_preview(tool_type_id, req))
 
 
 @router.get("")

@@ -1,5 +1,11 @@
 {
   "model": {
+    "searchTool": "検索ツール",
+    "drawingTool": "画像生成ツール",
+    "configure": "設定",
+    "configureTool": "{{tool}}を設定",
+    "sharedToolHint": "プラットフォームのツール設定と共通です。変更はプラットフォームにも反映されます。ツール設定は個別に保存されます。",
+    "sharedToolUnavailable": "ツール設定を読み込めません。プラットフォームにツールが存在し、設定が有効であることを確認してください。",
     "editPrompt": "プロンプトを編集",
     "docKnowledgeAbstractPrompt": "ドキュメント知識ベース要約プロンプト",
     "docKnowledgeAbstractPromptTooltip": "ドキュメント知識ベースのファイルアップロード時にファイルを要約するプロンプト",
@@ -9,6 +15,8 @@
     "promptSaved": "プロンプトが保存されました",
     "linsightDefaultModel": "詳細リサーチのデフォルトモデル",
     "dailyDefaultModel": "日常モードのデフォルトモデル",
+    "dailyDefaultModelTooltip": "日常チャットではデフォルトでこのモデルが選択されます。ユーザーはリストの別のモデルに切り替えられます。",
+    "defaultModelVisibilityNote": "このモデルの表示範囲が限定されている場合、表示できないユーザーは自分が使える最初のモデルに自動で切り替わります。",
     "linsightDefaultModelTooltip": "詳細リサーチはデフォルトでこのモデルを使ってタスクを実行します。ユーザーはタスク開始時に、このリストの別のモデルに切り替えられます。",
     "workbenchVoiceModel": "ワークベンチ音声モデル",
     "sessionTitleGenerationModel": "会話タイトル生成モデル",
@@ -222,6 +230,7 @@
     "desktop": "デスクトップ",
     "userSelectableModels": "ユーザー選択モデル",
     "userSelectableModelsHelp": "Chat と Work で選択できるモデルを設定します。表示名は保存後にクライアントへ同期されます。画像対応、クレジット倍率、表示範囲は変更時に個別保存されます。",
+    "userSelectableModelsHelpBasic": "日常チャットとディープリサーチで選択できるモデルを設定します。オンラインのチャットモデルは既定で全員が選択できます。表示範囲で部署・ロール・ユーザーに限定できます。表示名と画像対応は保存後に反映され、表示範囲は変更するとすぐに反映されます。",
     "otherModelSettings": "その他のモデル設定",
     "visibilityScope": "表示範囲",
     "configureVisibility": "表示範囲を設定",

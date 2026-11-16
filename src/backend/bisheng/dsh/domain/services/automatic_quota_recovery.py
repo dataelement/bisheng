@@ -12,6 +12,7 @@ from loguru import logger
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.dsh.domain.schemas.usage import UsageEvent
 from bisheng.dsh.infrastructure.quota_redis import QuotaRejected
+from bisheng.dsh.infrastructure.usage_work import with_usage_schedule
 
 
 class AutomaticQuotaRecovery:
@@ -67,9 +68,11 @@ class AutomaticQuotaRecovery:
             raise QuotaRejected("recovery_in_progress")
 
         async def apply(command, keys=(), arguments=()):
-            result = await redis.eval(
-                self.script, len(keys) + 2, lease, base + ":gate", *keys, owner, command, *arguments
-            )
+            script = self.script
+            if command == "events":
+                script = with_usage_schedule(script, stream_key=3)
+                keys = (*keys, self.quota.prefix + ":projection_work")
+            result = await redis.eval(script, len(keys) + 2, lease, base + ":gate", *keys, owner, command, *arguments)
             if result[0] != "OK":
                 raise QuotaRejected(result[1])
 

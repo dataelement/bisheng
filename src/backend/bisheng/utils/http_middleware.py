@@ -114,6 +114,9 @@ def owns_dsh_credential(method: str, path: str) -> bool:
                 re.fullmatch(r"/api/v1/dsh/market/plugins/[a-f0-9]{32}/versions/[a-f0-9]{32}/artifact", path)
                 or re.fullmatch(r"/api/v1/dsh/market/workbenches/[a-f0-9]{32}", path)
                 or re.fullmatch(r"/api/v1/dsh/market/workbenches/[a-f0-9]{32}/versions/[a-f0-9]{32}/artifact", path)
+                or re.fullmatch(
+                    r"/api/v1/dsh/market/workbenches/[a-f0-9]{32}/versions/[a-f0-9]{32}/screenshots/[a-f0-9]{64}", path
+                )
             )
             is not None
         )
@@ -262,6 +265,7 @@ async def _check_is_global_super(
     user_id: int,
     *,
     role_ids: Iterable[int] | None = None,
+    force_refresh: bool = False,
 ) -> bool:
     """FGA check: ``user:{id} super_admin system:global`` with Redis caching.
 
@@ -272,18 +276,27 @@ async def _check_is_global_super(
     """
     if not user_id:
         return False
+    from bisheng.common.request_scope import get_admitted_request_scope
+
+    admitted = get_admitted_request_scope()
+    if admitted is not None and admitted.user_id == user_id:
+        # Downstream legacy helpers must not reintroduce an older positive
+        # marker after the route has already established current identity.
+        return admitted.is_super
     cache_key = f"user:{user_id}:is_super"
     try:
         from bisheng.core.cache.redis_manager import get_redis_client
 
         redis = await get_redis_client()
-        cached = await redis.aget(cache_key)
-        if cached is not None:
-            return bool(int(cached))
+        if not force_refresh:
+            cached = await redis.aget(cache_key)
+            if cached is not None:
+                return bool(int(cached))
     except Exception:
         redis = None  # Fall through to FGA; no cache writes.
 
     is_super = False
+    qualification_error = None
     try:
         from bisheng.permission.application import (
             PermissionObject,
@@ -298,7 +311,8 @@ async def _check_is_global_super(
             resource=PermissionObject("system", "global"),
         )
     except Exception as exc:
-        logger.debug("FGA super-admin check failed for user %d: %s", user_id, exc)
+        qualification_error = exc
+        logger.debug("FGA super-admin check failed for user {}: {}", user_id, exc)
 
     if not is_super:
         try:
@@ -313,13 +327,20 @@ async def _check_is_global_super(
                 resolved_role_ids = role_ids
             is_super = any(int(role_id) == AdminRole for role_id in resolved_role_ids)
         except Exception as exc:
-            logger.debug("legacy AdminRole fallback failed for user %d: %s", user_id, exc)
+            qualification_error = exc
+            logger.debug("legacy AdminRole fallback failed for user {}: {}", user_id, exc)
+
+    if force_refresh and not is_super and qualification_error is not None:
+        from bisheng.common.errcode.admin_scope import AdminScopeUnavailableError
+
+        raise AdminScopeUnavailableError() from qualification_error
 
     try:
         if redis is not None:
             await redis.aset(cache_key, int(is_super), expiration=_IS_SUPER_CACHE_TTL_SECONDS)
     except Exception:
-        pass
+        # Optional cache refresh never replaces the confirmed current decision.
+        logger.opt(exception=True).debug("Optional super-admin cache refresh failed")
     return bool(is_super)
 
 
@@ -439,6 +460,24 @@ class CustomMiddleware(BaseHTTPMiddleware):
         ip = get_request_ip(request)
         req_path = request.url.path
         dsh_owned = owns_dsh_credential(request.method, req_path)
+        dsh_scope = dsh_owned
+        market_browser_token = None
+        if dsh_owned and req_path.startswith("/api/v1/dsh/market/"):
+            authorization = request.headers.get("authorization", "")
+            if authorization.startswith("Bearer "):
+                import jwt
+
+                candidate = authorization[7:]
+                try:
+                    desktop = jwt.get_unverified_header(candidate).get("typ") == "bisheng-dsh-access+jwt"
+                except jwt.PyJWTError:
+                    desktop = False
+                if not desktop:
+                    market_browser_token = candidate
+            else:
+                market_browser_token = request.cookies.get("access_token_cookie")
+            if market_browser_token:
+                dsh_owned = False
         path = req_path if req_path.startswith(("/api/v1/dsh/", "/api/dsh/", "/api/v1/internal/dsh/")) else request.url
         trace_id_var.set(trace_id)
 
@@ -449,13 +488,13 @@ class CustomMiddleware(BaseHTTPMiddleware):
         # owns its own credential. Browser credentials must not change any of
         # those channels' identity or errors.
         token = (
-            _extract_http_access_token(request) if _uses_browser_identity(request.url.path) and not dsh_owned else None
+            (market_browser_token or _extract_http_access_token(request))
+            if _uses_browser_identity(request.url.path) and not dsh_owned
+            else None
         )
         decoded_subject = _decode_jwt_subject(token) if token else None
-        tenant_id = None if dsh_owned else _set_tenant_context(token, decoded_subject=decoded_subject)
-
         dsh_scope_tokens = []
-        if dsh_owned:
+        if dsh_scope:
             from bisheng.core.context import tenant as tenant_context
 
             dsh_scope_tokens = [
@@ -466,6 +505,7 @@ class CustomMiddleware(BaseHTTPMiddleware):
                 tenant_context._bypass_tenant_filter.set(False),
                 tenant_context._strict_tenant_filter.set(False),
             ]
+        tenant_id = None if dsh_owned else _set_tenant_context(token, decoded_subject=decoded_subject)
 
         req_path = request.url.path
         is_exempt = req_path.startswith(TENANT_CHECK_EXEMPT_PATHS) or bool(

@@ -95,3 +95,42 @@ describe("shared streaming request policy", () => {
     expect(localStorage.getItem("noAccessUrl")).toContain("/api/v1/audit");
   });
 });
+
+
+it("rejects a mismatched stream target before handing out its reader", async () => {
+  const { acceptManagementScope } = await import("./managementScope");
+  acceptManagementScope(60);
+  const cancelled = vi.fn();
+  const body = new ReadableStream<Uint8Array>({cancel: cancelled});
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(body, {
+    headers: {"content-type": "application/x-ndjson", "x-management-tenant": "65"},
+  })));
+  const { requestStream } = await import("./requestStream");
+  await expect(requestStream("/api/v1/dsh/admin/model-audit/requests/synthetic/body-access")).rejects.toMatchObject({status_code: 19704});
+  expect(cancelled).toHaveBeenCalledTimes(1);
+});
+
+
+it("does not send the confirmed tenant to an unrelated origin", async () => {
+  const { acceptManagementScope, managementRequestScope } = await import("./managementScope");
+  acceptManagementScope(60);
+  const body = new ReadableStream<Uint8Array>();
+  const fetchMock = vi.fn().mockResolvedValue(new Response(body, {headers: {"content-type": "application/x-ndjson", "x-management-tenant": "65"}}));
+  vi.stubGlobal("fetch", fetchMock);
+  const { requestStream } = await import("./requestStream");
+  const result = await requestStream("https://external.example.invalid/api/v1/dsh/admin/model-audit/requests/synthetic/body-access");
+  expect(fetchMock.mock.calls[0]?.[1].headers["X-Management-Tenant"]).toBeUndefined();
+  expect(managementRequestScope()).toBe(60);
+  await result.cancel();
+});
+
+
+it("keeps a stale-scope error distinct from a successful HTTP envelope", async () => {
+  const { acceptManagementScope } = await import("./managementScope");
+  acceptManagementScope(60);
+  const { handleRequestResponse } = await import("./request");
+  await expect(handleRequestResponse({
+    config: {method: "get", url: "/api/v1/guest-link/workflow/synthetic", managementScopeSnapshot: 65},
+    headers: {"x-management-tenant": "60"}, status: 200, data: {status_code: 200, data: {}},
+  })).rejects.toMatchObject({status_code: 19704});
+});

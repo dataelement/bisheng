@@ -70,6 +70,12 @@ class UserService:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @staticmethod
+    def management_department_hints(user_ids):
+        from bisheng.user.domain.repositories.management_search_repository import ManagementSearchRepository
+
+        return ManagementSearchRepository.department_hints(user_ids)
+
+    @staticmethod
     def _dsh_enabled() -> bool:
         configuration = getattr(settings, "dsh", {})
         return configuration.get("enabled") is True if isinstance(configuration, dict) else bool(configuration.enabled)
@@ -297,19 +303,37 @@ class UserService:
         role_ids = list(dict.fromkeys(role_ids))
         if not role_ids:
             role_ids = [DefaultRole]
+        from bisheng.common.errcode.role import RolePermissionDeniedError
+        from bisheng.common.request_scope import get_admitted_request_scope
         from bisheng.core.context.tenant import strict_tenant_filter, tenant_execution_scope
+        from bisheng.department.application.business_scope import department_policy_facts
+        from bisheng.department.application.directory import initialize_account_at_mount, management_directory_facts
         from bisheng.role.application.effective_roles import validate_policy_role_ids
         from bisheng.tenant.domain.services.user_tenant_sync_service import UserTenantSyncService
         from bisheng.user.application.policy_bindings import grant_policy_bindings
 
-        # This legacy account form has no primary department: the authoritative initial home is Root.
-        # Creating a child-tenant member uses the department-member endpoint instead.
-        await validate_policy_role_ids(1, role_ids)
+        admitted = get_admitted_request_scope()
+        target = admitted.tenant_id if admitted is not None and admitted.kind == "tenant" else 1
+        directory = await management_directory_facts(target) if target != 1 else None
+        facts = await department_policy_facts(directory.root_id) if directory else None
+        await validate_policy_role_ids(target, role_ids, facts.ancestor_ids if facts else ())
+        if group_ids:
+            from bisheng.database.models.group import GroupDao
+
+            groups = GroupDao.get_group_by_ids(group_ids)
+            if {row.id for row in groups} != set(group_ids) or any(row.tenant_id != target for row in groups):
+                raise RolePermissionDeniedError()
         from bisheng.user.domain.services.account_identity_service import AccountIdentityService
 
         user = AccountIdentityService.create_local(user, group_ids=group_ids, role_ids=[])
-        with tenant_execution_scope(1), strict_tenant_filter():
-            home = await UserTenantSyncService.sync_user(user.user_id)
+        if directory is not None:
+            home = await initialize_account_at_mount(user, directory, login_user)
+            if home.id != target:
+                raise RolePermissionDeniedError()
+        else:
+            # Preserve legacy unassigned Root accounts; a child view uses its proven mount above.
+            with tenant_execution_scope(1), strict_tenant_filter():
+                home = await UserTenantSyncService.sync_user(user.user_id)
         await grant_policy_bindings(user.user_id, home.id, role_ids, operator_id=login_user.user_id)
         from bisheng.api.services.audit_log import AuditLogService
         from bisheng.utils import get_request_ip

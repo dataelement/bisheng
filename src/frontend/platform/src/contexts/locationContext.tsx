@@ -118,7 +118,7 @@ export function LocationProvider({ children }: { children: ReactNode }) {
         );
 
         // Then get workstation config separately
-        return getWorkstationConfigApi()
+        return getWorkstationConfigApi("navigation")
           .then(bench => {
             // Only update the benchMenu property
             setAppConfig(prev => ({

@@ -16,7 +16,11 @@ from test.knowledge_unification.test_ref_repo import tenant
 @pytest.fixture
 def config_store(monkeypatch):
     actor = UserPayload(user_id=7, user_name="admin", tenant_id=101, user_role=[])
-    store = {"workbench": WorkbenchModelConfig(), "saved": None, "actor": actor}
+    # Every other LLM setting is already chosen, so only the title slot is in play.
+    workbench = WorkbenchModelConfig(
+        models=[WSModel(id="11", name="m")], chat_default_model_id="11", linsight_default_model_id="11"
+    )
+    store = {"workbench": workbench, "saved": None, "actor": actor}
 
     @asynccontextmanager
     async def sessions():
@@ -26,6 +30,7 @@ def config_store(monkeypatch):
         payloads = {
             "knowledge_llm": '{"extract_title_model_id":11,"source_model_id":11,"qa_similar_model_id":11}',
             "evaluation_llm": '{"model_id":11}',
+            "workflow_llm": '{"model_id":11}',
             "assistant_llm": '{"auto_llm":{"model_id":11},"llm_list":[{"model_id":11}]}',
             "linsight_llm": store["workbench"].model_dump_json(),
         }

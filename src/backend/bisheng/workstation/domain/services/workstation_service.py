@@ -785,6 +785,16 @@ class WorkStationService(BaseService):
         return cls._apply_workbench_models(ret, await LLMService.get_workbench_llm())
 
     @classmethod
+    async def get_navigation_config(cls) -> dict:
+        """Read branding without resolving tools, knowledge or model policies."""
+        value, _, _, _ = await cls._aresolve_tenant_config(ConfigKeyEnum.WORKSTATION)
+        raw = json.loads(value) if value else {}
+        icon = WorkstationConfig(assistantIcon=raw.get("assistantIcon")).assistantIcon
+        if icon and icon.relative_path:
+            icon.image = cls.get_logo_share_link(icon.relative_path)
+        return {"assistantIcon": icon.model_dump() if icon else None}
+
+    @classmethod
     async def get_daily_chat_config(cls, *, for_picker: bool = False) -> WorkstationConfig | None:
         """Get the default workstation configuration for daily chat."""
         value, inherited, _, _ = await cls._aresolve_tenant_config(ConfigKeyEnum.WORKSTATION)
@@ -811,8 +821,12 @@ class WorkStationService(BaseService):
         tools = [tool.model_dump(mode="json") for tool in config.tools or []]
         if tools:
             tools = await cls.afilter_tools_by_use_permission(tools, login_user)
+        from bisheng.dsh.domain.services.model_catalog import user_workbench_models
+
+        # Same list chat completion validates against: online models this user may see.
+        models = await user_workbench_models(login_user.user_id)
         return {
-            "models": [model.model_dump(mode="json") for model in config.models or []],
+            "models": [model.model_dump(mode="json") for model in models],
             "tools": tools,
         }
 

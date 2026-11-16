@@ -10,7 +10,7 @@ from bisheng.common.errcode.role import RoleNameDuplicateError, RolePermissionDe
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.database.models.role import Role
 from bisheng.database.models.role_access import AccessType, RoleAccess
-from bisheng.role.domain.schemas.role_schema import RoleUpdateRequest
+from bisheng.role.domain.schemas.role_schema import RoleCreateRequest, RoleUpdateRequest
 from bisheng.role.domain.services.role_service import RoleService
 from test.fixtures.managed_tenant import managed_db as managed_db
 from test.fixtures.managed_tenant import management_scope
@@ -108,3 +108,43 @@ async def test_absent_menu_is_preserved_and_explicit_empty_clears(role_db):
     with bypass_tenant_filter():
         async with role_db.sessions() as session:
             assert (await session.exec(select(RoleAccess).where(RoleAccess.role_id == 20))).all() == []
+
+
+@pytest.mark.parametrize(("kind", "owner"), [("tenant", 2), ("global", 1)])
+async def test_create_definition_and_menu_in_exact_owner_without_touching_history(role_db, monkeypatch, kind, owner):
+    """AC-44: use real SQL and tenant hooks; legacy rows retain their owners."""
+    monkeypatch.setattr(RoleService, "_ensure_create_scope", AsyncMock())
+    actor = SimpleNamespace(user_id=7, tenant_id=1, is_admin=lambda: True)
+    with management_scope(home=1, target=2):
+        created = await RoleService.create_role_with_menu(
+            RoleCreateRequest(role_name="new-" + kind, role_type=kind, menu_ids=["build"]), actor
+        )
+    with bypass_tenant_filter():
+        async with role_db.sessions() as session:
+            rows = (await session.exec(select(Role).order_by(Role.id))).all()
+            menus = (await session.exec(select(RoleAccess).where(RoleAccess.role_id == created.id))).all()
+    assert (created.role_type, created.tenant_id, actor.tenant_id) == (kind, owner, 1)
+    assert [(row.id, row.tenant_id, row.role_type) for row in rows[:3]] == [
+        (20, 1, "global"),
+        (21, 1, "global"),
+        (22, 2, "tenant"),
+    ]
+    assert [(row.tenant_id, row.third_id) for row in menus] == [(owner, "build")]
+
+
+async def test_legacy_shared_definition_outside_root_keeps_menu_owner(role_db):
+    """AC-02/44: the new-Root convention never migrates old shared definitions."""
+    with bypass_tenant_filter():
+        async with role_db.sessions() as session:
+            session.add(Role(id=24, role_name="legacy-shared", role_type="global", tenant_id=3))
+            session.add(RoleAccess(role_id=24, tenant_id=3, type=AccessType.WEB_MENU.value, third_id="build"))
+            await session.commit()
+    actor = SimpleNamespace(user_id=7, tenant_id=1, is_admin=lambda: True)
+    with management_scope(home=1, target=2):
+        await RoleService.update_menu(24, ["knowledge"], actor)
+    with bypass_tenant_filter():
+        async with role_db.sessions() as session:
+            role = (await session.exec(select(Role).where(Role.id == 24))).one()
+            menu = (await session.exec(select(RoleAccess).where(RoleAccess.role_id == 24))).one()
+    assert role.tenant_id == menu.tenant_id == 3
+    assert menu.third_id == "knowledge"

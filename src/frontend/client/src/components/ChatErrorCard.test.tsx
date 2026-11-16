@@ -6,7 +6,10 @@ import { ChatErrorCard } from "./ChatErrorCard";
 
 const mockI18n = createInstance();
 jest.mock("~/hooks", () => ({ useLocalize: () => mockI18n.t.bind(mockI18n) }));
-jest.mock("bisheng-icons", () => ({ Outlined: new Proxy({}, { get: () => () => null }) }));
+jest.mock("bisheng-icons", () => ({
+  Outlined: new Proxy({}, { get: () => () => null }),
+  Filled: new Proxy({}, { get: () => () => null }),
+}));
 jest.mock("~/components/ServiceBusyNotice", () => ({ ServiceBusyNotice: () => null }));
 
 beforeAll(async () => {
@@ -33,6 +36,13 @@ it.each(['context_overflow', 'context_compress_failed', 'credit_exhausted'] as c
 it('shows the fixed service title for a provider authentication failure', () => {
     render(<ChatErrorCard errorType="auth_error" failureInfo={failureInfo} />);
     expect(screen.getByText(apiErrors.failure_model_service)).toBeInTheDocument();
+});
+
+it('shows the model-service failure for a provider content filter with service provenance', () => {
+    render(<ChatErrorCard errorType="content_filter" failureInfo={failureInfo} />);
+    expect(screen.getByText(apiErrors.failure_model_service)).toBeInTheDocument();
+    expect(screen.queryByText(zh.com_linsight_error_title_content_filter)).not.toBeInTheDocument();
+    expect(screen.queryByText(zh.com_linsight_error_hint_content_filter)).not.toBeInTheDocument();
 });
 
 // 116 test, 2026-11-12: an AttributeError in the quota check rendered as

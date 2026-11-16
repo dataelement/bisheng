@@ -49,3 +49,20 @@ it('cancels the active request and stops polling after unmount', async () => {
     await act(async () => { vi.advanceTimersByTime(90000); window.dispatchEvent(new Event('focus')); });
     expect(getDshBrowserConfig).toHaveBeenCalledTimes(1);
 });
+
+it('stops polling when DSH is not deployed', async () => {
+    vi.mocked(getDshBrowserConfig).mockResolvedValue({ management_enabled: false, enabled: false, download_url: null, launch_url: 'dsh-desktop://login' });
+    const { result } = renderHook(() => useDshBrowserConfig());
+    await act(async () => {});
+    expect(result.current.config?.management_enabled).toBe(false);
+    await act(async () => { vi.advanceTimersByTime(90000); window.dispatchEvent(new Event('focus')); });
+    expect(getDshBrowserConfig).toHaveBeenCalledTimes(1);
+});
+
+it('keeps polling the runtime toggle when DSH is deployed but switched off', async () => {
+    vi.mocked(getDshBrowserConfig).mockResolvedValue({ management_enabled: true, enabled: false, download_url: null, launch_url: 'dsh-desktop://login' });
+    renderHook(() => useDshBrowserConfig());
+    await act(async () => {});
+    await act(async () => { vi.advanceTimersByTime(30000); });
+    expect(getDshBrowserConfig).toHaveBeenCalledTimes(2);
+});

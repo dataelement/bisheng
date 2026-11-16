@@ -27,6 +27,7 @@ from bisheng.dsh.domain.schemas.responses import DshResponsesRequest
 from bisheng.dsh.domain.schemas.usage import INT64_MAX, UsageEvent
 from bisheng.dsh.domain.services.access import DshPrincipal, principal_scope
 from bisheng.dsh.domain.services.model_display import model_display_name
+from bisheng.dsh.domain.services.model_metadata import model_metadata
 from bisheng.dsh.domain.services.pricing import build_snapshot, pricing_hint
 from bisheng.dsh.infrastructure.chat_adapter import DshChatAdapter
 from bisheng.dsh.infrastructure.model_errors import is_context_length_error, model_failure_code
@@ -125,6 +126,7 @@ class DshModelService:
                         "owned_by": "bisheng",
                         "display_name": model_display_name(model, server, names.get(str(model.id))),
                         "capabilities": capabilities.client_fields(),
+                        **model_metadata(model, capabilities),
                         # F016: optional field; older desktop clients ignore unknown keys.
                         **(
                             {"pricing_hint": pricing_hint(model.id, (model.config or {}).get("pricing"), hint_context)}
