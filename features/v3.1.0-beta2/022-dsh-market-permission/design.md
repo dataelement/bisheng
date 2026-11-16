@@ -184,8 +184,8 @@
 | `POST /dsh/market/workbenches/access` 请求 | `{"workbench_ids": ["<32 hex>", ...]}`，≤ 500 | 本机已安装的企业工作台 | 服务端 |
 | 同上 响应 `data` | `{"<id>": true \| false}` | 不存在 / 跨租户 / 不可见均为 `false` | 桌面端 `dsh-desktop-workbenches` |
 | 员工侧详情 / 截图 / 下载对不可见项的响应 | 与不存在相同 | 不返回名称、描述、文件 | 桌面端市场与工作台客户端 |
-| 桌面端插件记录停用原因 | 新增「收回」原因码 | 界面区分「管理员已收回使用权限」与普通停用 | 桌面端插件页 |
-| 桌面端工作台安装记录（`local-installs.json`） | 新增「已收回」标记 | 停用后显示原因；恢复后允许手动启用 | `dsh-desktop-workbenches` |
+| 桌面端插件安装记录 `reason` | `revoked` / `disabled` / `version` | 在线同步确认后写入；授权恢复后清除（插件保持停用，由员工手动启用） | 「设置 → 插件 → 来自企业」页签显示「管理员已收回使用权限」 |
+| 桌面端企业工作台安装记录（`<工作台数据目录>/enterprise-installs.json`，新增） | `{ <企业工作台 id>: { id, pluginName, version, installedAt, revoked? } }` | 安装成功时写入；核对确认不可见时 `revoked: true` 并经 Plugin Manager `setBundleEnabled(name, false)` 停用 | `dsh-desktop-workbenches`（核对路由、卡片提示、启用前复核） |
 
 ### 4.3 关键模块职责
 
@@ -198,8 +198,10 @@
 | `dsh_market/api/endpoints.py`、`utils/http_middleware.py`（桌面令牌路由白名单） | 员工侧 7 个入口改走可见性服务；新增 `workbenches/access` 并登记到桌面令牌白名单；4 个导入完成入口成功后确保登记 | 管理端列表不过滤 |
 | `scripts/publish_authorization_model_change.py`、`scripts/reconcile_f048_system_owned_resources.py`（清单组合在 `api/services/f048_system_resource_bootstrap.py`） | 维护窗口内发布模型、补作用域、重推导标准模型、校验；存量补登记 | 不在启动流程中执行；不负责停服与备份；不碰 `migrate_capability_authorization.py` |
 | 前端 `pages/BuildPage/dsh/PluginMarketPage.tsx`、`WorkbenchMarketSection.tsx`、`components/bs-comp/permission/types.ts` | 权限按钮 + `PermissionDialog`（`allowAllMembers`） | 不直接调 HTTP（C7，经 controllers API） |
-| 桌面 `packages/dsh-desktop-enterprise/market.js` | 插件停用原因码 | 不改离线行为 |
-| 桌面 `packages/dsh-desktop-workbenches` | 企业工作台在线核对、停用、提示、恢复启用 | 离线或请求失败时不停用 |
+| 桌面 `packages/dsh-desktop-enterprise/market.js`、`client.js` | 插件停用原因码；「来自企业」页签显示收回提示 | 不改离线行为；不在服务端拼接展示文案 |
+| 桌面 `packages/dsh-desktop-enterprise/workbench-market.js`、`index.js` | `checkAccess(ids)`；经 `enterpriseWorkbenchPackages.access` 提供给工作台插件 | — |
+| 桌面 `src/main/enterprise/enterprise-market.ts` | 主进程只转发白名单内的企业市场请求；放行 `workbenches/access` 并校验请求体只含 ≤ 500 个工作台 id | — |
+| 桌面 `packages/dsh-desktop-workbenches/enterprise-access.mjs`、`index.js`、`client.js` | 记录「企业 id ↔ 插件包名」；`/api/desktop-workbenches/enterprise-access-check` 核对并停用；账号同步时触发；卡片提示；启用前复核 | 离线或请求失败时不停用；不卸载、不删数据 |
 
 ---
 
@@ -227,6 +229,8 @@
 | 18 | 桌面插件离线时停止运行实例、保留 `enabled`（恢复在线后继续）；工作台装好后今天没有任何核对 | 误以为两者一致 | 决策 8 / 9；spec AC-14 |
 | 19 | 不要用 `force_write_model` | 只写 OpenFGA 不写 SQL、生产禁用 | `docs/architecture/10-permission-rbac.md` §10.1 |
 | 20 | 桌面端的专用令牌只在 `utils/http_middleware.py` 的 `DSH_CREDENTIAL_ROUTES`（及其正则）登记过的路由上被接受 | 新增员工侧接口不登记，桌面端调用会被当作浏览器请求拒绝，而网页端测试照样通过 | `POST /dsh/market/workbenches/access` 已登记；`test/dsh_market/test_desktop_auth.py` 守护 |
+| 22 | 企业工作台装好后桌面端原本不记录「企业 id ↔ 插件包名」，客户端靠企业目录按包名对应；收回后目录不再列出该项 | 无从得知要问哪个 id，收回永远不生效 | `enterprise-installs.json`（安装时写入）。**限制**：本版本之前装的企业工作台没有记录，需重新安装一次（或在授权仍在时由后续版本补记）才受收回约束 |
+| 23 | 桌面主进程按白名单转发企业市场请求（`parseMarketRequest`），只有 `sync` 允许请求体 | 新接口在桌面端本地就被拒绝，服务端测试照样通过 | `src/main/enterprise/enterprise-market.ts`，`test/enterprise-workbench-market.test.ts` 守护 |
 | 21 | 列表与同步的可见判定走「批量读取权限快照 + `batch_check_verified_business_visible`」，不走逐个解析的 `batch_check_business_actions` | 逐个解析时每项一次数据库读取；同步每台设备每 60 秒一次，插件多、设备多时压力大 | `dsh_market/domain/permission.py` 的 `_visible_ids` |
 
 ---

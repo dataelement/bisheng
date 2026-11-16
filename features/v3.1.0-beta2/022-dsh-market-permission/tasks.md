@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-11-16 `/sdd-review spec` 6 项意见已修订（含 F019 恢复语义选 A），需求方 Callum 确认 |
 | design.md | ✅ 已评审 | 2026-11-16 `/sdd-review design` 修订（登记方式、7 个员工侧入口、升级脚本修正与备份回滚、工作台可见性查询接口），需求方 Callum 确认；接手时的第一入口 |
 | tasks.md | ✅ 已拆解 | 2026-11-16 `/sdd-review tasks` 两轮：首轮 1 项 medium（桌面端任务文件未落定）已修；剩 1 项 low 记录不改（AC-16、AC-21 只由手动 / 同事环境任务覆盖，属「行为不变 / 达梦」类验收） |
-| 实现 | 🚧 进行中 | 19 / 26 完成。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🚧 进行中 | 24 / 26 完成。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
 
 ---
 
@@ -156,31 +156,31 @@
 
 ### Wave 5 — 桌面端（bisheng-desktop 仓库）
 
-- [ ] **T020**: 插件收回原因测试
+- [x] **T020**: 插件收回原因测试
   **文件**: `test/enterprise-market.test.ts`（现有，`createMarketController` / `createManagedMarketSource` 的测试）
   **逻辑**: 同步回执中不含已安装插件 → 停止运行、`enabled=false`、原因码为 `revoked`；插件 `disabled` → 原因码为管理员停用；版本不匹配 → 原有原因；离线 → 停止运行、保留 `enabled`、无 `revoked`；恢复授权后手动启用成功并清除原因码；未恢复时启用失败。
   **覆盖 AC**: AC-11, AC-13, AC-14
   **依赖**: 无
 
-- [ ] **T021**: 插件收回原因实现
+- [x] **T021**: 插件收回原因实现
   **文件**: `packages/dsh-desktop-enterprise/market.js`、`packages/dsh-desktop-enterprise/managed-market.js`
   **逻辑**: `market.js` 的 `enforce()` 在线时按「策略中无此插件 / disabled / 版本不匹配」写入记录字段 `reason`（`revoked` / `disabled` / `version`）；`startRecord` 成功时清除。`managed-market.js` 的 `listBundles()` 现把 `record.error` 映射为插件页卡片的 `error`，新增：`reason === 'revoked'` 时映射为 `{ code: 'authorization-revoked', diagnostic: <按界面语言的「管理员已收回使用权限」/「Your administrator revoked access」> }`（design 决策 8）。
   **测试**: T020 全部通过；企业插件相关现有测试不回归
   **依赖**: T020
 
-- [ ] **T022**: 企业工作台核对测试
+- [x] **T022**: 企业工作台核对测试
   **文件**: `test/` 下新建 `enterprise-workbench-access.test.mjs`
   **逻辑**: 在线同步完成后对本机 `source: 'enterprise'` 的已安装工作台调用 `POST /api/v1/dsh/market/workbenches/access`；返回 false → 经 Plugin Manager 停用并标记 `revoked`；返回 true → 不变；请求失败 / 404 / 离线 → 不变；标记 `revoked` 的工作台手动启用前再查，true 才启用并清除标记、false 拒绝并提示。
   **覆盖 AC**: AC-12, AC-13, AC-14
   **依赖**: 无
 
-- [ ] **T023**: 企业工作台可见性查询客户端
+- [x] **T023**: 企业工作台可见性查询客户端
   **文件**: `packages/dsh-desktop-enterprise/workbench-market.js`、`packages/dsh-desktop-enterprise/workbench-market.d.ts`
   **逻辑**: `createWorkbenchMarketController` 新增 `checkAccess(ids)`：校验 id 为 32 位十六进制、≤ 500，经 `accountController.marketRequest` 请求 `POST /workbenches/access`，解析为 `{ [id]: boolean }`；非 200 / 结构不符抛错（由调用方当作「保持现状」）；`applyEnterpriseWorkbenchMarket` 暴露给工作台模块使用（与现有详情、下载同一账号校验）。
   **测试**: T022 中客户端部分通过
   **依赖**: T022
 
-- [ ] **T024**: 企业工作台核对、停用与恢复
+- [x] **T024**: 企业工作台核对、停用与恢复
   **文件**: `packages/dsh-desktop-workbenches/index.js`（宿主侧）、`packages/dsh-desktop-workbenches/client.js`（界面侧）
   **逻辑**: `index.js` 新增路由 `/api/desktop-workbenches/enterprise-access-check`：读取 `local-installs.json` 中 `source: 'enterprise'` 的记录，调用 T023 的 `checkAccess`，false → 经 Plugin Manager 停用并在记录上写 `revoked: true`，true → 清除标记；请求失败直接返回「保持现状」；企业工作台启用前同样核对。`client.js` 在现有企业账号同步时机（`dsh-desktop:enterprise-account-changed`、窗口 `focus` 触发的 `sync`）调用该路由，并对 `revoked` 的工作台显示「管理员已收回使用权限」、入口不可打开（design 决策 9）。
   **测试**: T022 全部通过；`test/enterprise-workbench-market.test.ts` 等现有测试不回归
@@ -218,4 +218,5 @@
 - T006–T011：列表与同步改用批量快照判定 → design 坑 21；`workbenches/access` 需登记桌面令牌白名单（`utils/http_middleware.py`，T011 多改 1 个文件）→ design 坑 20；`test/dsh_market/conftest.py` 让原有业务测试默认「全部可见」
 - T015：市场清单的组合函数 `load_market_system_owned_inventory` 放在 `api/services/f048_system_resource_bootstrap.py`，原 `load_system_owned_resource_inventory`（启动与 web fetch 补投影在用）不变
 - T018/T019：按钮沿用技能管理页的「添加权限」（`permission:dialog.tabGrant`），不新增文案；按 `useResourceActions` 的 `manage_permission` 决定是否显示（与技能管理一致）；工作台测试新建 `WorkbenchMarketSection.permission.test.tsx`
+- T020–T024（桌面端分支 `feat/v131-market-permission`，基于 V1.3.1）：收回提示放在「来自企业」页签（`client.js` 文案表），未改 `managed-market.js`；企业工作台新增本机记录 `enterprise-installs.json` 与模块 `enterprise-access.mjs` → design 坑 22；主进程转发白名单 `src/main/enterprise/enterprise-market.ts` 需放行新接口 → design 坑 23；客户端测试加在 `test/workbench-client.test.mjs`
 - T016：另更新 `src/backend/scripts/README.md` 两个脚本条目并新增 F022 升级索引；升级说明含 docker compose 写法
