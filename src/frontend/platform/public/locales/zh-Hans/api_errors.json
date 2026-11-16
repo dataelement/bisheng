@@ -726,10 +726,6 @@
   "28010": "深度研究的代码执行器配置有误，请联系管理员检查 local、container 或 e2b 配置后重试。",
   "90001": "您当前角色没有访问管理后台的权限。如有需要，请联系管理员开通。",
   "90002": "您当前角色没有访问工作台的权限。如有需要，请联系管理员开通。",
-  "WORKBENCH_ARCHIVE_LIMIT": "工作台压缩包超出限制",
-  "WORKBENCH_ARCHIVE_INVALID": "工作台压缩包损坏或格式无效",
-  "WORKBENCH_VALIDATION_FAILED": "工作台包内容校验失败",
-  "workbenchUploadTooLarge": "服务器拒绝了超出大小限制的上传（HTTP 413），请选择更小的压缩包。",
   "personIdAlreadyExists": "人员 ID 已存在",
   "network_error": "无法连接服务器，请检查网络连接后重试",
   "request_timeout": "请求超时，请先确认操作是否完成，再重试",
@@ -785,5 +781,9 @@
   "failure_service_network": "网络连接",
   "failure_service_etl4lm": "文档解析服务",
   "failure_service_bisheng_knowledge": "知识检索服务",
-  "failure_service_openfga": "权限服务"
+  "failure_service_openfga": "权限服务",
+  "WORKBENCH_ARCHIVE_LIMIT": "工作台压缩包超出限制",
+  "WORKBENCH_ARCHIVE_INVALID": "工作台压缩包损坏或格式无效",
+  "WORKBENCH_VALIDATION_FAILED": "工作台包内容校验失败",
+  "workbenchUploadTooLarge": "服务器拒绝了超出大小限制的上传（HTTP 413），请选择更小的压缩包。"
 }
