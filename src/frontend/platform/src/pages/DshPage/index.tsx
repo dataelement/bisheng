@@ -10,8 +10,7 @@ import { useContext, useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { DshManagement } from "@/pages/SystemPage/dsh";
 import { DshContentSafetySettings } from "@/pages/SystemPage/dsh/DshContentSafetySettings";
-import { ModelAuditTenantSelect } from "@/pages/SystemPage/dsh/ModelAuditTenantSelect";
-import { displayTenantName } from "@/utils/tenantDisplayName";
+import { DshTenantScope } from "@/pages/SystemPage/dsh/DshTenantScope";
 import { PluginMarketPage } from "@/pages/BuildPage/dsh/PluginMarketPage";
 import { DSH_SECTIONS, resolveDshSection, type DshSection } from "./sections";
 
@@ -110,35 +109,11 @@ export function DshPage() {
 
 function DshContentSafetyTenantPanel() {
   const { user } = useContext(userContext);
-  const { t } = useTranslation();
-  const identity = user as {
-    tenant_id?: unknown;
-    leaf_tenant_id?: unknown;
-    tenant_name?: string;
-    leaf_tenant_name?: string;
-    is_global_super?: boolean;
-    role?: string;
-    is_child_admin?: boolean;
-  };
-  const ownTenant = Number(identity?.leaf_tenant_id ?? identity?.tenant_id);
-  const initialTenant = Number.isSafeInteger(ownTenant) && ownTenant > 0 ? ownTenant : undefined;
-  const [selectedTenant, setTenant] = useState<number | undefined>();
-  const global = identity?.is_global_super === true;
-  const tenant = global ? selectedTenant : initialTenant;
-  const canConfigure = identity?.role === "admin" || global || identity?.is_child_admin === true;
+  const canConfigure = user?.role === "admin" || user?.is_global_super === true || user?.is_child_admin === true;
   return (
-    <div className="min-w-0 space-y-4">
-      {global ? (
-        <ModelAuditTenantSelect initialTenant={initialTenant} value={tenant} onChange={setTenant} />
-      ) : (
-        <p className="flex flex-wrap gap-2 text-sm">
-          <span className="text-muted-foreground">{t("dsh.modelAuditView.tenant")}</span>
-          {displayTenantName(identity?.leaf_tenant_name ?? identity?.tenant_name) ||
-            t("dsh.modelAuditView.managed_tenant")}
-        </p>
-      )}
-      <DshContentSafetySettings key={tenant ?? "no-tenant"} tenantId={tenant} canConfigure={canConfigure} />
-    </div>
+    <DshTenantScope>
+      {(tenant) => <DshContentSafetySettings tenantId={tenant} canConfigure={canConfigure} />}
+    </DshTenantScope>
   );
 }
 

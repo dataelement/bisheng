@@ -1,0 +1,201 @@
+---
+status: done
+component: TreeNavigation
+---
+
+# 树形结构 Tree
+
+树形结构用来展示父子层级。这里演示在知识空间和组织部门浏览内容的用法。点击箭头展开或收起分支，点击名称在相邻区域打开内容。用 Tab 在名称、箭头和菜单之间移动。
+
+## 基础树
+
+组织部门导航使用 `medium`。可以同时展开多个分支，当前节点由页面传入。
+
+```tsx
+import { useState } from 'react';
+import { Outlined } from 'bisheng-icons';
+import { DropdownItem, TreeNavigation, TreeNavigationList, TreeNavigationMenu, TreeNavigationNode } from '@bisheng/ui';
+
+const operationsCenter = '海外业务运营与客户服务质量管理中心';
+
+export default function DepartmentNavigation() {
+  const [current, setCurrent] = useState('研发中心');
+  const [expanded, setExpanded] = useState(new Set(['研发中心']));
+  const [addedDepartments, setAddedDepartments] = useState(new Set<string>());
+
+  return (
+    <TreeNavigation aria-label="组织部门" size="medium" style={{ width: '16rem', maxWidth: '100%' }}>
+      <TreeNavigationList>
+        {['研发中心', operationsCenter].map((name) => {
+          const open = expanded.has(name);
+          const child = name === '研发中心' ? '平台组' : '客户支持组';
+          const added = addedDepartments.has(name);
+          return (
+            <TreeNavigationNode key={name} name={name} icon={<Outlined.City />}
+              current={name === current} onSelect={() => setCurrent(name)}
+              actions={<TreeNavigationMenu label={`${name}的更多操作`} menu={(
+                <DropdownItem icon={<Outlined.Plus />} disabled={added} onSelect={() => {
+                  setAddedDepartments((keys) => new Set([...keys, name]));
+                  setExpanded((keys) => new Set([...keys, name]));
+                }}>创建子部门</DropdownItem>
+              )} />}
+              disclosure={{
+                expanded: open,
+                label: `${open ? '收起' : '展开'}${name}`,
+                onToggle: () => setExpanded((keys) => {
+                  const next = new Set(keys);
+                  if (next.has(name)) next.delete(name);
+                  else next.add(name);
+                  return next;
+                }),
+              }}>
+              <TreeNavigationNode name={child} icon={<Outlined.City />} depth={1}
+                current={child === current} onSelect={() => setCurrent(child)} />
+              {added && <TreeNavigationNode name={`${child}二组`} icon={<Outlined.City />} depth={1}
+                current={`${child}二组` === current} onSelect={() => setCurrent(`${child}二组`)} />}
+            </TreeNavigationNode>
+          );
+        })}
+      </TreeNavigationList>
+    </TreeNavigation>
+  );
+}
+```
+
+## 分组与长名称
+
+知识空间导航使用 `small`。纵向滚动时，当前分组的标题会吸顶。在树内横向滚动可以读到名称末尾，知识空间行尾的「更多」菜单仍停在右侧。
+
+此示例开启了 `showLine`。可以在「研发中心知识库」下方、两个子目录的左侧看到竖线。
+
+```tsx
+import { useState } from 'react';
+import { Outlined } from 'bisheng-icons';
+import {
+  Dropdown, DropdownItem, TreeNavigation, TreeNavigationGroup, TreeNavigationGroupAction, TreeNavigationList,
+  TreeNavigationMenu, TreeNavigationNode,
+} from '@bisheng/ui';
+
+interface SpaceNode {
+  name: string;
+  children?: SpaceNode[];
+}
+
+const longName = '企业知识管理与信息安全制度（2026 年第三季度修订版）';
+const groups: { label: string; spaces: SpaceNode[] }[] = [
+  {
+    label: '部门知识空间',
+    spaces: [
+      { name: '研发中心知识库', children: [
+        { name: '平台架构' },
+        { name: '工程规范', children: [{ name: '前端开发约定' }, { name: '接口设计约定' }] },
+      ] },
+      { name: '人力资源知识库', children: [{ name: '入职指南' }, { name: '员工福利' }] },
+    ],
+  },
+  {
+    label: '我创建的',
+    spaces: [
+      { name: '企业项目交付标准与验收材料手册（跨部门协作与归档流程）' },
+      { name: '产品知识库', children: [
+        { name: longName },
+        { name: '产品研发资料', children: [{ name: '版本发布说明' }, { name: '需求评审纪要' }] },
+        { name: '用户调研' },
+      ] },
+    ],
+  },
+  {
+    label: '我加入的',
+    spaces: [
+      { name: '客户支持知识库', children: [{ name: '常见问题' }, { name: '服务案例' }] },
+      { name: '运营协作空间', children: [{ name: '活动复盘' }, { name: '品牌物料' }] },
+    ],
+  },
+];
+
+function toggle(keys: ReadonlySet<string>, key: string) {
+  const next = new Set(keys);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  return next;
+}
+
+export default function KnowledgeNavigation() {
+  const [current, setCurrent] = useState('产品知识库');
+  const [collapsedGroups, setCollapsedGroups] = useState(new Set<string>());
+  const [expanded, setExpanded] = useState(new Set(['产品知识库', '产品研发资料', '研发中心知识库', '客户支持知识库']));
+  const [pinnedSpaces, setPinnedSpaces] = useState(new Set<string>());
+  const [nameSortedGroups, setNameSortedGroups] = useState(new Set<string>());
+
+  function renderNode({ name, children }: SpaceNode, department: boolean, depth = 0) {
+    const open = expanded.has(name);
+    const isSpace = depth === 0;
+    const pinned = pinnedSpaces.has(name);
+    return (
+      <TreeNavigationNode
+        key={name}
+        name={name}
+        depth={depth}
+        icon={isSpace
+          ? (department ? <Outlined.City /> : <Outlined.Notebook />)
+          : (open ? <Outlined.FolderOpen /> : <Outlined.FolderClose />)}
+        current={current === name}
+        onSelect={() => setCurrent(name)}
+        disclosure={children ? {
+          expanded: open,
+          label: `${open ? '收起' : '展开'}${name}`,
+          onToggle: () => setExpanded((keys) => toggle(keys, name)),
+        } : undefined}
+        marker={pinned && <Outlined.Pin aria-hidden />}
+        actions={isSpace && <TreeNavigationMenu label={`${name}的更多操作`} menu={(
+          <DropdownItem icon={pinned ? <Outlined.PinOff /> : <Outlined.Pin />} onSelect={() => setPinnedSpaces((keys) => toggle(keys, name))}>
+            {pinned ? '取消置顶' : '置顶'}
+          </DropdownItem>
+        )} />}
+      >
+        {open && children?.map((child) => renderNode(child, department, depth + 1))}
+      </TreeNavigationNode>
+    );
+  }
+
+  return (
+    <TreeNavigation aria-label="知识空间" showLine style={{ width: '20rem', maxWidth: '100%', maxHeight: '22rem' }}>
+      {groups.map(({ label, spaces }) => {
+        const sortByName = nameSortedGroups.has(label);
+        const sorted = [...spaces].sort((a, b) =>
+          Number(pinnedSpaces.has(b.name)) - Number(pinnedSpaces.has(a.name)) ||
+          (sortByName ? a.name.localeCompare(b.name, 'zh-Hans') : 0));
+        return (
+          <TreeNavigationGroup
+            key={label} label={label} expanded={!collapsedGroups.has(label)}
+            onToggle={() => setCollapsedGroups((keys) => toggle(keys, label))}
+            actions={(
+              <Dropdown align="end" menu={(
+                <DropdownItem checked={sortByName} onSelect={() => setNameSortedGroups((keys) => toggle(keys, label))}>按名称排序</DropdownItem>
+              )}>
+                <TreeNavigationGroupAction aria-label={`排序 ${label}`}><Outlined.Sort aria-hidden /></TreeNavigationGroupAction>
+              </Dropdown>
+            )}
+          >
+            <TreeNavigationList>{sorted.map((space) => renderNode(space, label === '部门知识空间'))}</TreeNavigationList>
+          </TreeNavigationGroup>
+        );
+      })}
+    </TreeNavigation>
+  );
+}
+```
+
+## 接入
+
+| 组件 | 用法 |
+| --- | --- |
+| `TreeNavigation` | 提供 `aria-label`、`size` 及容器宽高。传入 `showLine` 显示层级竖线，默认关闭。更新 `revealKey` 可再次定位当前节点 |
+| `TreeNavigationGroup` | 分组使用 `label`、`expanded` 和 `onToggle`。排序、新建等操作放入 `actions` |
+| `TreeNavigationGroupAction` | 分组标题的图标按钮，传入 `aria-label`，可作为 `Dropdown` 的触发器 |
+| `TreeNavigationList` | 承载根节点或组内的节点列表 |
+| `TreeNavigationNode` | 传入 `name`、`icon`、`depth` 和 `current`。同页导航传 `onSelect`，页面跳转传 `href`。传 `disclosure` 启用展开按钮，子节点直接嵌套 |
+| `TreeNavigationMenu` | 传入带节点名称的 `label` 和 `DropdownItem` 菜单，放在节点的 `actions` 中 |
+| `TreeNavigationStatus` | 在列表内显示加载、错误、重试、空状态或后续分页入口。加载时传 `loading` |
+
+节点数据、权限、展开状态和当前节点由调用方管理。完整尺寸和交互规则见[树形结构规范](/组件-TreeNavigation树形导航)。

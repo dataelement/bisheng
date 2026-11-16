@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createContext } from 'react'
 import english from '../../../public/locales/en-US/bs.json'
@@ -28,6 +29,10 @@ vi.mock('@/controllers/API/dsh', () => ({
 vi.mock('@/controllers/API/dshSettings', () => ({ getDshBrowserConfig: vi.fn() }))
 const origin = 'http://192.168.106.109:13001'
 const assign = vi.fn()
+function renderPage() {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, cacheTime: 0 } } })
+    return render(<QueryClientProvider client={client}><DshLogin /></QueryClientProvider>)
+}
 beforeEach(() => {
     vi.mocked(getDshBrowserConfig).mockResolvedValue({ management_enabled: true, enabled: true, download_url: null, launch_url: 'dsh-desktop://login' })
     vi.mocked(request.get).mockResolvedValue({ department_name: null })
@@ -47,16 +52,32 @@ afterEach(() => {
     vi.useRealTimers()
 })
 describe('desktop HTTP login entry', () => {
+    it('shows a login guide even when anonymous configuration loading fails, without issuing a ticket', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {})
+        vi.mocked(getDshBrowserConfig).mockRejectedValueOnce(new Error('unavailable'))
+        const target = origin + '/desktop-login?auth_id=fixture-authorization&source=desktop#consent'
+        vi.stubGlobal('location', { origin, pathname: '/desktop-login', href: target, search: '?auth_id=fixture-authorization&source=desktop', assign })
+        renderPage()
+        await waitFor(() => expect(getDshBrowserConfig).toHaveBeenCalled())
+        expect(screen.getByRole('status')).toHaveTextContent(english.dsh.loginRequired)
+        expect(screen.queryByText(english.dsh.unavailable)).toBeNull()
+        expect(screen.queryByRole('button', { name: english.dsh.authorize })).toBeNull()
+        fireEvent.click(screen.getByRole('button', { name: english.dsh.login }))
+        expect(assign).toHaveBeenCalledWith('/')
+        expect(consumeLoginReturnTo()).toBe(target)
+        expect(authorizeDsh).not.toHaveBeenCalled()
+    })
+
     it('uses the saved HTTP download address without a frontend build variable', async () => {
         vi.mocked(getDshBrowserConfig).mockResolvedValue({ management_enabled: true, enabled: true, download_url: 'http://downloads.test/dsh', launch_url: 'dsh-desktop://login' })
         vi.stubGlobal('location', { origin, pathname: '/desktop-login', search: '', assign })
-        render(<DshLogin />)
+        renderPage()
         expect(await screen.findByRole('link', { name: english.dsh.download })).toHaveAttribute('href', 'http://downloads.test/dsh')
     })
     it('removes download and launch actions when the business switch closes', async () => {
         vi.mocked(getDshBrowserConfig).mockResolvedValue({ management_enabled: true, enabled: false, download_url: 'http://downloads.test/dsh', launch_url: 'dsh-desktop://login' })
         vi.stubGlobal('location', { origin, pathname: '/desktop-login', search: '', assign })
-        render(<DshLogin />)
+        renderPage()
         await screen.findByText(english.dsh.disabled)
         expect(screen.queryByRole('button', { name: english.dsh.openDesktop })).toBeNull()
         expect(screen.queryByRole('link', { name: english.dsh.download })).toBeNull()
@@ -64,14 +85,14 @@ describe('desktop HTTP login entry', () => {
     it('returns to the complete authorization URL after the explicit login action', async () => {
         const search = '?auth_id=fixture-authorization'
         vi.stubGlobal('location', { origin, pathname: '/desktop-login', href: origin + '/desktop-login' + search, search, assign })
-        render(<DshLogin />)
+        renderPage()
         fireEvent.click(await screen.findByRole('button', { name: english.dsh.login }))
         expect(assign).toHaveBeenCalledWith('/')
         expect(consumeLoginReturnTo()).toBe(origin + '/desktop-login' + search)
     })
     it('allows launching Desktop with the HTTP platform address', async () => {
         vi.stubGlobal('location', { origin, pathname: '/desktop-login', href: origin + '/desktop-login', search: '', assign })
-        render(<DshLogin />)
+        renderPage()
         const launch = await screen.findByRole('button', { name: english.dsh.openDesktop })
         expect(launch).toBeEnabled()
         fireEvent.click(launch)
@@ -91,7 +112,7 @@ describe('desktop consent identity', () => {
         vi.mocked(request.get).mockResolvedValue({ department_name: department })
         identity.user = { user_id: 1, user_name: 'dshadmin', tenant_name: 'Hidden Tenant' }
         vi.stubGlobal('location', { origin, pathname: '/desktop-login', href: origin + '/desktop-login?auth_id=fixture', search: '?auth_id=fixture', assign })
-        render(<DshLogin />)
+        renderPage()
         await screen.findByRole('button', { name: english.dsh.authorize })
         await waitFor(() => expect(screen.getByText(/Authorize Client as/).textContent).toContain(expected))
         expect(screen.queryByText(/Hidden Tenant/)).toBeNull()
@@ -115,7 +136,7 @@ describe('desktop authorization completion', () => {
             redirect_uri: 'http://127.0.0.1:12345/callback',
             state: 'fixture-state',
         })
-        render(<DshLogin />)
+        renderPage()
         const authorizeButton = await screen.findByRole('button', {
             name: english.dsh.authorize,
         })
@@ -166,7 +187,7 @@ describe('desktop authorization completion', () => {
             redirect_uri: 'http://127.0.0.1:12345/callback',
             state: 'fixture-state',
         })
-        render(<DshLogin />)
+        renderPage()
         const denyButton = await screen.findByRole('button', {
             name: english.dsh.cancel,
         })
@@ -201,7 +222,7 @@ describe('desktop copy actions', () => {
             redirect_uri: 'http://127.0.0.1:12345/callback',
             state: 'fixture-state',
         })
-        render(<DshLogin />)
+        renderPage()
         fireEvent.click(await screen.findByRole('button', { name: english.dsh.authorize }))
         fireEvent.click(await screen.findByText(english.dsh.manualLoginFallback))
         return screen.findByRole('button', { name: english.dsh.copyTicket })
@@ -230,7 +251,7 @@ describe('desktop copy actions', () => {
             expect(document.querySelector('textarea')?.value).toBe(origin)
             return true
         }) })
-        render(<DshLogin />)
+        renderPage()
         fireEvent.click(await screen.findByRole('button', { name: english.dsh.copyServer }))
         await screen.findByText(english.dsh.copied)
         expect(document.querySelector('textarea')).toBeNull()

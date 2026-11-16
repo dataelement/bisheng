@@ -11,7 +11,8 @@ jest.mock('~/api/linsight', () => ({ getLinsightSessionVersionList: jest.fn(), g
 jest.mock('~/hooks', () => ({ useLocalize: () => (key: string) => key }));
 jest.mock('~/hooks/useAutoScroll', () => ({ useAutoScroll: jest.fn() }));
 jest.mock('~/hooks/useLinsightManager', () => ({ useLinsightManager: () => ({
-    continueConversation: mockContinue,
+    retryConversation: mockContinue,
+    continueConversation: jest.fn().mockResolvedValue(true),
     getLinsight: mockGetLinsight,
     switchAndUpdateLinsight: jest.fn(),
     updateLinsight: jest.fn(),

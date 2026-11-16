@@ -76,9 +76,6 @@ export function useMemberTableController({
   const pageRef = useRef(1);
   const requestRef = useRef<object | null>(null);
   const [loading, setLoading] = useState(false);
-  const [memberSearch, setMemberSearch] = useState('');
-  const memberKeywordRef = useRef('');
-  const searchDepartmentRef = useRef(deptId);
   const [highlightUserId, setHighlightUserId] = useState<number | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [editMember, setEditMember] = useState<DepartmentMember | null>(null);
@@ -101,7 +98,6 @@ export function useMemberTableController({
         const result = await getDepartmentMembersApi(deptId, {
           page: requestedPage,
           limit: 20,
-          ...(memberKeywordRef.current ? { keyword: memberKeywordRef.current } : {}),
           is_primary:
             isPrimaryFilter === "all" ? undefined : Number(isPrimaryFilter),
           ...(!directOnly && {
@@ -121,14 +117,9 @@ export function useMemberTableController({
   );
 
   useEffect(() => {
-    if (searchDepartmentRef.current !== deptId) {
-      searchDepartmentRef.current = deptId;
-      memberKeywordRef.current = '';
-      setMemberSearch('');
-    }
-    const freshLocation = location?.deptId === deptId && !memberKeywordRef.current;
-    const nextPage = freshLocation && location ? location.page : 1;
-    setHighlightUserId(freshLocation && location ? location.userId : null);
+    const departmentLocation = location?.deptId === deptId ? location : undefined;
+    const nextPage = departmentLocation?.page ?? 1;
+    setHighlightUserId(departmentLocation?.userId ?? null);
     setMembers([]);
     setPage(nextPage);
     pageRef.current = nextPage;
@@ -137,15 +128,6 @@ export function useMemberTableController({
       requestRef.current = null;
     };
   }, [deptId, isPrimaryFilter, location, loadMembers]);
-
-  const handleMemberSearch = (value: string) => {
-    memberKeywordRef.current = value;
-    setMemberSearch(value);
-    setPage(1);
-    pageRef.current = 1;
-    setHighlightUserId(null);
-    void loadMembers(1).catch(showApiError);
-  };
 
   useEffect(() => {
     if (membersRefreshSignal) void loadMembers().catch(showApiError);
@@ -304,9 +286,6 @@ export function useMemberTableController({
     inheritedAdmins,
     mrc,
     members,
-    memberSearch,
-    setMemberSearch,
-    handleMemberSearch,
     loading,
     highlightUserId,
     memberDisplayNames,

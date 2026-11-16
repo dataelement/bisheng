@@ -80,29 +80,32 @@ export function SpaceDetail({
   const directory = (toolbarTarget?: HTMLDivElement | null) => (
     <>
       {parentId !== null && parents.length > 0 && (
-        <Breadcrumb
-          ariaLabel={t("f118.current_folder")}
-          expandLabel={(count) => t("f118.expand_folders", { count })}
-          items={[
-            {
-              key: "space",
-              title: t("f118.spaces"),
-              onClick: () => onOpenFolder(null),
-            },
-            ...parents.map((folder) => ({
-              key: String(folder.id),
-              title: String(folder.file_name),
-              onClick: () => onOpenFolder(folder.id),
-            })),
-          ]}
-        />
+        <div className={presentation === "workspace" ? "shrink-0 px-4 py-2" : undefined}>
+          <Breadcrumb
+            ariaLabel={t("f118.current_folder")}
+            expandLabel={(count) => t("f118.expand_folders", { count })}
+            items={[
+              {
+                key: "space",
+                title: t("f118.spaces"),
+                onClick: () => onOpenFolder(null),
+              },
+              ...parents.map((folder) => ({
+                key: String(folder.id),
+                title: String(folder.file_name),
+                onClick: () => onOpenFolder(folder.id),
+              })),
+            ]}
+          />
+        </div>
       )}
       {facts.isInitialLoading && (
-        <div role="status">{t("f118.loading_directory")}</div>
+        <div role="status" className={presentation === "workspace" ? "px-4" : undefined}>{t("f118.loading_directory")}</div>
       )}
       {facts.isError && (
         <Button
           variant="text"
+          className={presentation === "workspace" ? "mx-4 self-start" : undefined}
           onClick={() => {
             void facts.refetch();
           }}
@@ -128,11 +131,15 @@ export function SpaceDetail({
     </>
   );
   if (fileParams.length > 0 && fileId === null) return <p role="status">{t("f118.scope_unavailable")}</p>;
-  if (presentation === "workspace" && fileId !== null) return <SpaceFileDetail
-    key={JSON.stringify([scope, spaceId, fileId])} scope={scope} spaceId={spaceId} fileId={fileId}
-    initialFile={openedFile?.id === fileId ? openedFile : undefined}
-    onBack={() => { const next = new URLSearchParams(searchParams); next.delete("file_id"); setSearchParams(next); }}
-  />;
+  if (presentation === "workspace" && fileId !== null) return (
+    <div className="h-full min-h-0 px-4">
+      <SpaceFileDetail
+        key={JSON.stringify([scope, spaceId, fileId])} scope={scope} spaceId={spaceId} fileId={fileId}
+        initialFile={openedFile?.id === fileId ? openedFile : undefined}
+        onBack={() => { const next = new URLSearchParams(searchParams); next.delete("file_id"); setSearchParams(next); }}
+      />
+    </div>
+  );
   if (presentation === "workspace") return (
     <SpaceManagementView scope={scope} spaceId={spaceId} parentId={parentId} title={title} description={parentId === null ? info?.description ?? "" : ""}>
       {(toolbarTarget) => directory(toolbarTarget)}

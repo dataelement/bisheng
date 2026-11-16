@@ -130,6 +130,20 @@ class CustomSearch(SearchTool):
 
         request = build_request(self.kwargs.get("operation"), query, self.kwargs.get("api_key"))
         raw = execute_request(request)
+        operation = self.kwargs.get("operation", {})
+        if operation.get("version") == 2:
+            from .openapi_request import read_openapi_response
+
+            result = read_openapi_response(raw, operation, self.kwargs.get("api_key"))
+            if operation.get("response_mode") == "raw":
+                return result
+            _, results = map_response(
+                json.dumps(result).encode(),
+                self.kwargs.get("mapping"),
+                self.normalize_result_item,
+                self.kwargs.get("api_key"),
+            )
+            return {"response": result, "web_results": results}
         _, results = map_response(
             raw, self.kwargs.get("mapping"), self.normalize_result_item, self.kwargs.get("api_key")
         )
