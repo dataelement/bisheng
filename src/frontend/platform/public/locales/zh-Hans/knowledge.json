@@ -710,13 +710,16 @@
         "load_failed": "加载失败",
         "empty": "暂无空间",
         "more_folders": "加载更多文件夹",
-        "collapse_navigation": "收起空间导航",
-        "expand_navigation": "展开空间导航",
+        "resize_navigation": "调整知识目录宽度",
         "search": "搜索空间",
         "personal": "个人知识空间",
         "more_spaces": "加载更多空间"
     },
     "workspace": {
+        "clear_search": "清空搜索",
+        "filter": "筛选",
+        "sort_field": "排序字段",
+        "status_failed": "失败",
         "files": "空间文件",
         "list_view": "列表视图",
         "card_view": "卡片视图",

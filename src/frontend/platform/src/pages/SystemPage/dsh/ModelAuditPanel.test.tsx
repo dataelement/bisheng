@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuditBodyFrame, ModelAuditRecord } from "@/types/dshModelAudit";
 import { userContext } from "@/contexts/userContext";
@@ -13,6 +13,12 @@ const api = vi.hoisted(() => ({
   tenants: vi.fn(),
 }));
 vi.mock("@/controllers/API/tenant", () => ({ getTenantsApi: api.tenants }));
+const management = vi.hoisted(() => ({
+  scope: { scope_tenant_id: 1 as number | null, expires_at: null },
+  loading: false,
+  refresh: vi.fn(),
+}));
+vi.mock("@/hooks/useAdminScope", () => ({ useAdminScope: () => management }));
 vi.mock("@/controllers/API/dshModelAudit", () => ({
   getModelAudit: api.page,
   getAuditReadiness: async () => ({
@@ -65,6 +71,9 @@ const record: ModelAuditRecord = {
 };
 beforeEach(() => {
   vi.clearAllMocks();
+  management.scope.scope_tenant_id = 1;
+  management.loading = false;
+  management.refresh.mockResolvedValue(undefined);
   api.tenants.mockReset();
   api.tenants.mockResolvedValue({
     data: [
@@ -118,153 +127,73 @@ function renderPanel(globalAdmin = true, tenantId = 1) {
   );
 }
 
-describe("audit tenant selection", () => {
-  it("defaults global administrators to the default tenant, not their own tenant or the first result", async () => {
-    api.tenants.mockResolvedValue({
-      data: [
-        { id: 2, tenant_name: "Second tenant", tenant_code: "second" },
-        { id: 1, tenant_name: "First tenant", tenant_code: "first" },
-      ],
-      total: 2,
-    });
-    renderPanel(true, 2);
-    await screen.findByText("First tenant (first)");
-    await waitFor(() =>
-      expect(api.page).toHaveBeenCalledWith({ tenant_id: 1, limit: 20 }, expect.any(AbortSignal)),
-    );
-    expect(api.mode).toHaveBeenCalledWith(1, expect.any(AbortSignal));
-    expect(api.page.mock.calls.every(([query]) => query.tenant_id === 1)).toBe(true);
-  });
-
-  it("defaults global administrators to the default tenant even without a personal tenant", async () => {
-    renderPanel(true, 0);
-    await screen.findByText("First tenant (first)");
-    await waitFor(() =>
-      expect(api.page).toHaveBeenCalledWith({ tenant_id: 1, limit: 20 }, expect.any(AbortSignal)),
-    );
-  });
-
-  it("uses a tenant administrator's managed tenant when identity finishes loading", async () => {
-    const view = renderPanel(false, 0);
-    expect(api.page).not.toHaveBeenCalled();
-    expect(api.mode).not.toHaveBeenCalled();
-    const value = {
-      user: {
-        tenant_id: 2,
-        role: "user",
-        is_child_admin: true,
-        is_global_super: false,
-      },
-    } as unknown as ContextType<typeof userContext>;
-    view.rerender(
-      <userContext.Provider value={value}>
-        <ModelAuditPanel />
-      </userContext.Provider>,
-    );
-    if (!screen.queryByText("Synthetic"))
-      fireEvent.click(
-        screen.getByRole("radio", {
-          name: "dsh.modelAuditView.views.unassociated",
-        }),
-      );
-    await screen.findByText("Synthetic");
-    expect(api.page).toHaveBeenCalledWith(
-      { tenant_id: 2, limit: 20, association_status: "UNASSOCIATED" },
-      expect.any(AbortSignal),
-    );
+describe("audit follows the shared management view", () => {
+  it("uses the selected child tenant instead of Root or the administrator's home", async () => {
+    management.scope.scope_tenant_id = 2;
+    renderPanel(true, 1);
+    await waitFor(() => expect(api.page).toHaveBeenCalledWith(
+      { tenant_id: 2, limit: 20 }, expect.any(AbortSignal),
+    ));
     expect(api.mode).toHaveBeenCalledWith(2, expect.any(AbortSignal));
     expect(api.tenants).not.toHaveBeenCalled();
-    expect(screen.queryByRole("button", { name: "dsh.save" })).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "dsh.modelAuditView.selectTenant" })).toBeNull();
   });
 
-  it("selects existing tenants by name and clears the previous tenant's originals", async () => {
-    renderPanel();
-    await screen.findByText("First tenant (first)");
-    expect(screen.queryByLabelText("dsh.modelAuditView.tenant")).toBeNull();
-    if (!screen.queryByText("Synthetic"))
-      fireEvent.click(
-        screen.getByRole("radio", {
-          name: "dsh.modelAuditView.views.unassociated",
-        }),
-      );
+  it("does not fall back to Root while management scope is loading or unavailable", async () => {
+    management.scope.scope_tenant_id = null;
+    management.loading = true;
+    const view = renderPanel();
+    expect(api.page).not.toHaveBeenCalled();
+    expect(api.mode).not.toHaveBeenCalled();
+    management.loading = false;
+    view.rerender(<userContext.Provider value={{ user: { role: "admin", is_global_super: true } } as unknown as ContextType<typeof userContext>}><ModelAuditPanel /></userContext.Provider>);
+    fireEvent.click(screen.getByRole("button", { name: "dsh.refresh" }));
+    await waitFor(() => expect(management.refresh).toHaveBeenCalledOnce());
+    expect(api.page).not.toHaveBeenCalled();
+    expect(api.mode).not.toHaveBeenCalled();
+  });
+
+  it("clears originals and aborts the old tenant's requests on scope change", async () => {
+    const value = { user: { user_id: 1, tenant_id: 1, role: "admin", is_global_super: true } } as unknown as ContextType<typeof userContext>;
+    const content = () => <userContext.Provider value={value}><ModelAuditPanel /></userContext.Provider>;
+    const view = render(content());
+    fireEvent.click(screen.getByRole("radio", { name: "dsh.modelAuditView.views.unassociated" }));
     await screen.findByText("Synthetic");
     fireEvent.click(screen.getByRole("button", { name: "dsh.modelAuditView.original" }));
     await screen.findByText(/private-original/);
     const oldSignal = api.page.mock.calls.at(-1)?.[1] as AbortSignal;
-    fireEvent.keyDown(screen.getByRole("combobox", { name: "dsh.modelAuditView.selectTenant" }), {
-      key: "ArrowDown",
-    });
-    fireEvent.click(await screen.findByRole("option", { name: "Second tenant (second)" }));
-    await waitFor(() =>
-      expect(api.page).toHaveBeenLastCalledWith({ tenant_id: 2, limit: 20 }, expect.any(AbortSignal)),
-    );
-    expect(oldSignal.aborted).toBe(true);
+    management.scope.scope_tenant_id = 2;
+    view.rerender(content());
     expect(screen.queryByText(/private-original/)).toBeNull();
+    expect(oldSignal.aborted).toBe(true);
+    await waitFor(() => expect(api.page).toHaveBeenLastCalledWith(
+      { tenant_id: 2, limit: 20 }, expect.any(AbortSignal),
+    ));
     expect(api.save).not.toHaveBeenCalled();
   });
 
-  it("does not request audit data until an existing tenant is confirmed", async () => {
-    api.tenants.mockReturnValue(new Promise(() => {}));
-    renderPanel();
-    expect(screen.getByRole("combobox")).toHaveAttribute("aria-disabled", "true");
-    expect(api.mode).not.toHaveBeenCalled();
-    expect(api.page).not.toHaveBeenCalled();
+  it("discards late data from the previous tenant", async () => {
+    let resolveOld!: (value: unknown) => void;
+    api.page.mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve; }));
+    const value = { user: { tenant_id: 1, role: "admin", is_global_super: true } } as unknown as ContextType<typeof userContext>;
+    const content = () => <userContext.Provider value={value}><ModelAuditPanel /></userContext.Provider>;
+    const view = render(content());
+    fireEvent.click(screen.getByRole("radio", { name: "dsh.modelAuditView.views.unassociated" }));
+    management.scope.scope_tenant_id = 2;
+    view.rerender(content());
+    await act(async () => resolveOld({ items: [{ ...record, model_name: "Old tenant secret" }], next_cursor: null }));
+    expect(screen.queryByText("Old tenant secret")).toBeNull();
   });
 
-  it("loads subsequent tenant pages and ignores invalid IDs", async () => {
-    api.tenants
-      .mockResolvedValueOnce({
-        data: [{ id: null }, { id: "" }, { id: -1 }],
-        total: 101,
-      })
-      .mockResolvedValueOnce({
-        data: [{ id: 2, tenant_name: "Second tenant", tenant_code: "second" }],
-        total: 101,
-      });
-    renderPanel();
-    const selector = screen.getByRole("combobox");
-    await waitFor(() => expect(selector).not.toHaveAttribute("aria-disabled", "true"));
-    expect(api.tenants).toHaveBeenLastCalledWith({ page: 2, page_size: 100 });
-    expect(api.page).not.toHaveBeenCalled();
-    fireEvent.keyDown(selector, { key: "ArrowDown" });
-    expect(await screen.findAllByRole("option")).toHaveLength(1);
-    fireEvent.click(screen.getByRole("option", { name: "Second tenant (second)" }));
-    await waitFor(() =>
-      expect(api.page).toHaveBeenCalledWith({ tenant_id: 2, limit: 20 }, expect.any(AbortSignal)),
-    );
-  });
-
-  it("offers retry after loading fails and handles an empty list", async () => {
-    api.tenants.mockRejectedValueOnce(new Error("unavailable")).mockResolvedValueOnce({ data: [], total: 0 });
-    renderPanel();
-    await screen.findByRole("alert");
-    expect(screen.getByRole("combobox")).toHaveAttribute("aria-disabled", "true");
-    fireEvent.click(screen.getByRole("button", { name: "dsh.refresh" }));
-    await screen.findByText("dsh.modelAuditView.noTenants");
-    expect(api.page).not.toHaveBeenCalled();
-    expect(api.mode).not.toHaveBeenCalled();
-  });
-
-  it("keeps tenant administrators scoped to their tenant without loading the global list", async () => {
+  it("uses a tenant administrator's home and keeps capture settings read-only", async () => {
+    management.scope.scope_tenant_id = 1;
     renderPanel(false, 2);
-    if (!screen.queryByText("Synthetic"))
-      fireEvent.click(
-        screen.getByRole("radio", {
-          name: "dsh.modelAuditView.views.unassociated",
-        }),
-      );
-    await screen.findByText("Synthetic");
+    await waitFor(() => expect(api.page).toHaveBeenCalledWith(
+      { tenant_id: 2, limit: 20 }, expect.any(AbortSignal),
+    ));
+    expect(api.mode).toHaveBeenCalledWith(2, expect.any(AbortSignal));
     expect(api.tenants).not.toHaveBeenCalled();
-    expect(
-      screen.queryByRole("combobox", {
-        name: "dsh.modelAuditView.selectTenant",
-      }),
-    ).toBeNull();
-    expect(api.page).toHaveBeenCalledWith(
-      { tenant_id: 2, limit: 20, association_status: "UNASSOCIATED" },
-      expect.any(AbortSignal),
-    );
-    expect(screen.queryByRole("button", { name: "dsh.save" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "dsh.modelAuditView.configure" })).toBeNull();
   });
 });
 describe("request-card audit UI", () => {

@@ -12,8 +12,10 @@ remain synchronous. This is an internal scheduling change, without new APIs.
   worker crashes and expired owners cannot lose pending work.
 - AC-04: unknown Redis consumer lag and empty reads never cause recursive
   Celery publication. Unclaimed pending deliveries wait for reclaim eligibility.
-- AC-05: low-frequency paginated repair discovers legacy/missed work and runs
-  orphan inspection and retention independently of normal projection.
+- AC-05: a stopped-service migration discovers and verifies retained legacy work.
+  Neither first startup nor periodic consumers enumerate Redis keys. Low-frequency
+  paginated repair inspects registered partitions for missed work, orphan requests
+  and retention independently of normal projection.
 - AC-06: normal-load admission/settlement-to-SQL completes within 10 seconds
   with a healthy consumer. Failures retain work with backoff; this is not a
   latency guarantee during downstream outages or overload.

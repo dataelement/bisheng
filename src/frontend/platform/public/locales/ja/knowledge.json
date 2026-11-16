@@ -704,13 +704,16 @@
         "load_failed": "読み込みに失敗しました",
         "empty": "スペースがありません",
         "more_folders": "フォルダーをさらに読み込む",
-        "collapse_navigation": "スペースナビゲーションを折りたたむ",
-        "expand_navigation": "スペースナビゲーションを展開",
+        "resize_navigation": "知識ナビゲーションの幅を調整",
         "search": "スペースを検索",
         "personal": "個人スペース",
         "more_spaces": "スペースをさらに読み込む"
     },
     "workspace": {
+        "clear_search": "検索をクリア",
+        "filter": "絞り込み",
+        "sort_field": "並べ替え",
+        "status_failed": "失敗",
         "files": "スペースのファイル",
         "list_view": "リスト表示",
         "card_view": "カード表示",

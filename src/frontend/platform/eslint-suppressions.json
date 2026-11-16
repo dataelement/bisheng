@@ -2429,14 +2429,6 @@
       "count": 21
     }
   },
-  "src/test/departmentPageRefresh.test.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    }
-  },
   "src/test/departmentSettingsPayload.test.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 13

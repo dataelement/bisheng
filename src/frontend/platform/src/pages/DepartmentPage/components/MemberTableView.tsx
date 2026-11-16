@@ -3,7 +3,6 @@ import {
   Checkbox,
   Pagination,
   Select,
-  SearchInput,
   Switch,
   Tag,
   Tooltip as SharedTooltip,
@@ -46,9 +45,6 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
     inheritedAdmins,
     mrc,
     members,
-    memberSearch,
-    setMemberSearch,
-    handleMemberSearch,
     loading,
     highlightUserId,
     memberDisplayNames,
@@ -117,10 +113,6 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
         )}
       </div>
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <SearchInput size="medium" className="w-[220px]" value={memberSearch ?? ''}
-          aria-label={t('accountIdentity.search')} placeholder={t('accountIdentity.search')}
-          clearLabel={t('sharedUi.clear')} onChange={event => setMemberSearch(event.target.value)}
-          onSearch={handleMemberSearch} onClear={() => handleMemberSearch('')} />
         <Select
           {...selectLabels}
           className="w-[140px]"

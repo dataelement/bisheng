@@ -5,7 +5,7 @@ import { BatchOperationDialog } from "./BatchOperationDialog";
 import { BatchTagDraftDialog } from "./BatchTagDraftDialog";
 import { MoveDialog } from "./MoveDialog";
 import type { MoveSelection } from "@/controllers/API/knowledgeMove";
-import { Button } from "@bisheng/ui";
+import { Button, EmptyStateIllustration, StateView } from "@bisheng/ui";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -436,13 +436,60 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
       />
     );
   };
+  const workspace = presentation === "workspace";
+  const directoryEmpty = !active.isInitialLoading && !active.error && !rows.length && !hasMore;
+  const directoryStatus = (
+    <>
+      {active.isInitialLoading && <p role="status" className={workspace ? "px-4 py-6 text-center text-body text-text-3" : undefined}>{t("f118.loading_directory")}</p>}
+      {directoryEmpty && (workspace ? (
+        <StateView size="panel" title={t("f118.directory_empty")} image={<EmptyStateIllustration />} />
+      ) : <p>{t("f118.directory_empty")}</p>)}
+      {!!active.error && (
+        <Button
+          className={workspace ? "mx-4 my-2" : undefined}
+          onClick={() => {
+            void active.refetch();
+          }}
+        >
+          {t("retry")}
+        </Button>
+      )}
+      {!keyword && ordinary.hasNextPage && (
+        <Button
+          className={workspace ? "mx-4 my-2" : undefined}
+          disabled={ordinary.isFetchingNextPage}
+          onClick={() => {
+            void ordinary.fetchNextPage();
+          }}
+        >
+          {t("f118.more_files")}
+        </Button>
+      )}
+      {!!keyword && (
+        <div className={`flex justify-end gap-2${workspace ? " p-4" : ""}`}>
+          <Button
+            disabled={page === 1 || search.isFetching}
+            onClick={() => setPage((value) => value - 1)}
+          >
+            {t("pagination.prev", { ns: "bs" })}
+          </Button>
+          <Button
+            disabled={!search.data?.has_more || search.isFetching}
+            onClick={() => setPage((value) => value + 1)}
+          >
+            {t("pagination.next", { ns: "bs" })}
+          </Button>
+        </div>
+      )}
+    </>
+  );
   return (
-    <div className="relative space-y-4">
+    <div className={workspace ? "relative flex min-h-0 min-w-0 flex-1 flex-col" : "relative space-y-4"}>
       {move && <MoveDialog scope={scope} spaceId={spaceId} parentId={parentId} items={move.items} mode={move.mode} onClose={() => setMove(null)} />}
       {selectionError === epoch && <p role="alert">{t("deletion.reason_no_permission")}</p>}
       <SpaceDirectoryToolbar
         toolbarTarget={toolbarTarget}
-        compact={presentation === "workspace"}
+        compact={workspace}
         spaceId={spaceId}
         parentId={parentId}
         keyword={keyword}
@@ -470,7 +517,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
         onReferences={selectedRows.length ? () => references(selectedRows) : undefined}
       />
       <SpaceDirectoryView
-        workspace={presentation === "workspace"}
+        workspace={workspace}
         viewMode={viewMode}
         onViewModeChange={setViewMode}
         sortField={sortField}
@@ -497,46 +544,9 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
         }}
         rows={rows}
         renderRow={renderRow}
+        footer={workspace ? directoryStatus : undefined}
       />
-      {active.isInitialLoading && <p role="status">{t("f118.loading_directory")}</p>}
-      {!active.isInitialLoading && !active.error && !rows.length && !hasMore && (
-        <p>{t("f118.directory_empty")}</p>
-      )}
-      {!!active.error && (
-        <Button
-          onClick={() => {
-            void active.refetch();
-          }}
-        >
-          {t("retry")}
-        </Button>
-      )}
-      {!keyword && ordinary.hasNextPage && (
-        <Button
-          disabled={ordinary.isFetchingNextPage}
-          onClick={() => {
-            void ordinary.fetchNextPage();
-          }}
-        >
-          {t("f118.more_files")}
-        </Button>
-      )}
-      {!!keyword && (
-        <div className="flex justify-end gap-2">
-          <Button
-            disabled={page === 1 || search.isFetching}
-            onClick={() => setPage((value) => value - 1)}
-          >
-            {t("pagination.prev", { ns: "bs" })}
-          </Button>
-          <Button
-            disabled={!search.data?.has_more || search.isFetching}
-            onClick={() => setPage((value) => value + 1)}
-          >
-            {t("pagination.next", { ns: "bs" })}
-          </Button>
-        </div>
-      )}
+      {!workspace && directoryStatus}
       <SpaceDirectoryOverlays
         instance={instance}
         editOpen={!!visibleEdit}

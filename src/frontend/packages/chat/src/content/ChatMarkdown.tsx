@@ -31,6 +31,8 @@ export interface ChatMarkdownProps {
 }
 function MarkdownLink({ href = '', children }: { href?: string; children?: ReactNode }) {
   const services = useMarkdownServices();
+  const custom = services.renderLink?.(href, children);
+  if (custom !== undefined) return <>{custom}</>;
   return <a href={href} target={href.startsWith('#') ? undefined : '_blank'} rel="noopener noreferrer" onClick={event => {
     if (href.startsWith('#')) {
       event.preventDefault(); let id = href.slice(1);

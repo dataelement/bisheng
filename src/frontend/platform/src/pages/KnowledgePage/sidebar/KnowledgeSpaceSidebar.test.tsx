@@ -1,8 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { KnowledgeSpaceSidebar } from "./KnowledgeSpaceSidebar";
+import { KnowledgeSpaceSidebar, type KnowledgeSpaceSidebarProps } from "./KnowledgeSpaceSidebar";
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(), post: vi.fn(), children: vi.fn(), parents: vi.fn(), error: vi.fn(),
@@ -17,22 +16,12 @@ vi.mock("@/controllers/hooks/knowledge", () => ({
     space: (scope: { identityKey: string; tenantId: number; managementTenantId: number | null; view: string }, id: number) => ["f118-knowledge", scope.identityKey, scope.tenantId, scope.managementTenantId, scope.view, "space", id],
   },
 }));
-vi.mock("@bisheng/ui", () => ({
-  SearchInput: ({ value, onChange, "aria-label": label }: InputHTMLAttributes<HTMLInputElement>) => <input type="search" value={value} onChange={onChange} aria-label={label} />,
-  Tooltip: ({ children }: { children: ReactNode }) => children,
-  Button: ({ children, onClick, disabled, "aria-label": label }: ButtonHTMLAttributes<HTMLButtonElement>) => <button type="button" onClick={onClick} disabled={disabled} aria-label={label}>{children}</button>,
-  Dropdown: ({ children, menu }: { children: ReactNode; menu: ReactNode }) => {
-    const [open, setOpen] = useState(false);
-    return <div><div onClick={() => setOpen((value) => !value)}>{children}</div>{open && <div role="menu">{menu}</div>}</div>;
-  },
-  DropdownItem: ({ children, onSelect, disabled }: { children: ReactNode; onSelect: () => void; disabled?: boolean }) => <button type="button" role="menuitem" disabled={disabled} onClick={onSelect}>{children}</button>,
-}));
 
 const scope = { identityKey: "user:2", tenantId: 60, managementTenantId: 60, view: "ordinary" as const };
 const page = (data: { id: number; knowledge_id: number; file_name: string; file_type: number }[], hasMore = false, cursor: string | null = null) => ({ data, page_size: 100, has_more: hasMore, next_cursor: cursor });
 const folder = (id: number, name: string) => ({ id, knowledge_id: 7, file_name: name, file_type: 0 });
 const clients: QueryClient[] = [];
-function setup(extra = {}) {
+function setup(extra: Partial<KnowledgeSpaceSidebarProps> = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   clients.push(client);
   const props = { scope, canCopy: true, onSelect: vi.fn(), ...extra };
@@ -64,6 +53,8 @@ it("preserves the three groups and only loads folders when their space is expand
   expect(screen.queryByText("Not a folder")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "sidebar.expand Root folder" }));
   await waitFor(() => expect(mocks.children).toHaveBeenLastCalledWith(7, { parent_id: 9, file_type: 0, page_size: 100 }));
+  await waitFor(() => expect(screen.queryByRole("button", { name: "sidebar.collapse Root folder" })).toBeNull());
+  expect(screen.getByRole("button", { name: "Root folder" })).toBeVisible();
   expect(screen.queryByRole("button", { name: "f118.create_space" })).toBeNull();
 });
 
@@ -77,20 +68,50 @@ it("advances an empty cursor page and does not truncate the folder tree", async 
   expect(mocks.children).toHaveBeenLastCalledWith(7, { parent_id: null, file_type: 0, page_size: 100, cursor: "opaque/+==" });
 });
 
-it("collapses the sidebar without losing expanded folders or fetching them again", async () => {
+it("resizes the sidebar without losing expanded folders or fetching them again", async () => {
   mocks.children.mockResolvedValue(page([folder(9, "Root folder")]));
   const f = setup();
   render(f.draw());
   fireEvent.click(await screen.findByRole("button", { name: "sidebar.expand My space" }));
   await screen.findByRole("button", { name: "Root folder" });
-  expect(screen.queryByRole("heading", { name: "f118.spaces" })).toBeNull();
   const reads = mocks.children.mock.calls.length;
-  fireEvent.click(screen.getByRole("button", { name: "sidebar.collapse_navigation" }));
-  expect(screen.queryByRole("button", { name: "Root folder" })).toBeNull();
-  expect(screen.getByRole("complementary")).toHaveClass("w-10");
-  fireEvent.click(screen.getByRole("button", { name: "sidebar.expand_navigation" }));
-  expect(screen.getByRole("button", { name: "Root folder" })).toBeVisible();
+  const handle = screen.getByRole("separator", { name: "sidebar.resize_navigation" });
+  const sidebar = screen.getByRole("complementary");
+  try {
+    fireEvent.keyDown(handle, { key: "Home" });
+    expect(sidebar).toHaveStyle({ width: "200px" });
+    expect(screen.getByRole("button", { name: "Root folder" })).toBeVisible();
+    fireEvent.keyDown(handle, { key: "End" });
+    expect(sidebar).toHaveStyle({ width: "480px" });
+    expect(screen.getByRole("button", { name: "Root folder" })).toBeVisible();
+  } finally {
+    fireEvent.doubleClick(handle);
+  }
+  expect(sidebar).toHaveStyle({ width: "240px" });
   expect(mocks.children).toHaveBeenCalledTimes(reads);
+});
+
+it("selects without expanding and restores nested expansion when a group reopens", async () => {
+  mocks.children.mockImplementation((_space: number, query: { parent_id: number | null }) => Promise.resolve(
+    query.parent_id === null ? page([folder(9, "Root folder")]) : page([folder(12, "Nested folder")]),
+  ));
+  const f = setup();
+  const view = render(f.draw());
+
+  fireEvent.click(await screen.findByRole("button", { name: "My space" }));
+  expect(f.props.onSelect).toHaveBeenCalledWith(7, null);
+  view.rerender(f.draw({ ...f.props, spaceId: 7 }));
+  expect(screen.getByRole("button", { name: "My space" })).toHaveAttribute("aria-current", "page");
+  expect(screen.getByRole("button", { name: "sidebar.expand My space" })).toHaveAttribute("aria-expanded", "false");
+  expect(mocks.children).not.toHaveBeenCalled();
+
+  fireEvent.click(screen.getByRole("button", { name: "sidebar.expand My space" }));
+  fireEvent.click(await screen.findByRole("button", { name: "sidebar.expand Root folder" }));
+  await screen.findByRole("button", { name: "Nested folder" });
+  fireEvent.click(screen.getByRole("button", { name: "sidebar.created" }));
+  expect(screen.queryByRole("button", { name: "Nested folder" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "sidebar.created" }));
+  expect(await screen.findByRole("button", { name: "Nested folder" })).toBeVisible();
 });
 
 it("restores a deep-linked folder through paginated ancestors", async () => {
@@ -113,12 +134,12 @@ it("sorts only the selected group and pins through the existing API contract", a
   const f = setup();
   render(f.draw());
   await screen.findByRole("button", { name: "My space" });
-  fireEvent.click(screen.getByRole("button", { name: "sidebar.sort sidebar.created" }));
-  fireEvent.click(screen.getByRole("menuitem", { name: "sidebar.sort_name" }));
+  fireEvent.keyDown(screen.getByRole("button", { name: "sidebar.sort sidebar.created" }), { key: "Enter" });
+  fireEvent.click(await screen.findByRole("menuitemcheckbox", { name: "sidebar.sort_name" }));
   await waitFor(() => expect(mocks.get).toHaveBeenCalledWith("/api/v1/knowledge/space/mine", { params: { order_by: "name" } }));
   expect(mocks.get).not.toHaveBeenCalledWith("/api/v1/knowledge/space/joined", { params: { order_by: "name" } });
-  fireEvent.click(screen.getByRole("button", { name: "more My space" }));
-  fireEvent.click(screen.getByRole("menuitem", { name: "sidebar.pin" }));
+  fireEvent.keyDown(await screen.findByRole("button", { name: "more My space" }), { key: "Enter" });
+  fireEvent.click(await screen.findByRole("menuitem", { name: "sidebar.pin" }));
   await waitFor(() => expect(mocks.post).toHaveBeenCalledWith("/api/v1/knowledge/space/7/set-pin", { is_pined: true }));
 });
 

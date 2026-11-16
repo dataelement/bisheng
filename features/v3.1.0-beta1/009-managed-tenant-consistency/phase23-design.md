@@ -36,3 +36,14 @@ Celery原有消息头格式、复制和权限任务门禁保持。工作流执�
 匹配发布Platform、Client、Python、Java和Worker；更新静态缓存，验证首次自举、旧页面拒绝及独立设备通道。仅回退一端不能保证兼容；整体回退对应版本组合，不回滚业务数据或恢复旧绑定。新增门禁增加权威查询，需在目标环境评估延迟；没有引入新的共享缓存或以性能为由放宽未知状态。
 
 本地回归和完整检查限制见[交付记录](phase23-delivery.md)、[自审记录](phase23-code-review.md)。真实部署、MySQL/DM8、外部系统及浏览器验收单列，不能以本地测试通过替代。
+
+
+## 2026-11-16 客户端审计与敏感词页面补漏
+
+用户明确要求两个页面沿用顶部管理视图。原ModelAuditPanel默认Root并独立选租户，敏感词页也有selectedTenant；显式tenant_id可能与公共请求层的X-Management-Tenant不一致。此处补齐既有AC-50、AC-51、AC-54，新增AC-68说明页面验收，不改变后端或Gateway接口。
+
+选定复用useAdminScope（其读取最终复用公共bootstrapManagementRequestScope及内存确认会话），在无选择能力的DshTenantScope组件中把已确认目标传给现有审计和策略组件；普通人员取leaf_tenant_id，兼容旧身份响应的tenant_id。删除两处selectedTenant及无其他调用的ModelAuditTenantSelect，不新增全局状态或租户存储。尚未确认、加载或失败时不挂载查询/保存组件，失败允许重试，不回落Root。
+
+公共切换流程仍暂停请求、重新确认并整页刷新。页面再按人员和租户编号重建子树，清除分页、正文、筛选、草稿和策略缓存；已有AbortSignal及公共响应范围检查保持。策略接口原tenant_id参数、审计设置URL中的编号均传同一目标，是协议参数而非第二份管理选择。审计采集权限仍仅原平台管理员，子租户管理员只读；敏感词原允许的管理员编辑资格保持。
+
+不改Java、Python、数据库和历史数据；DSH敏感词页面仍依赖既有Gateway对应能力可用。本补丁不证明截图内所有读取失败均已消失。跨标签刷新、真实Gateway和部署验收见[本轮交付](client-management-scope-delivery-20261116.md)。若将来取消整页刷新，应重新核对公共范围通知与旧表单丢弃，不能重新引入页面独立选择器。
