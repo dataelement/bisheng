@@ -25,7 +25,9 @@ def test_usage_scan_cursor_continuations_are_throttled():
             }
         ):
             continuations.append(node)
-    assert len(continuations) == 2
+    # Usage dispatch repairs in place (UsageDispatcher) and never re-enqueues the scan;
+    # only the running-request inspection pages onward.
+    assert [call.func.value.id for call in continuations] == ["inspect_usage"]
     for call in continuations:
         countdown = next((item.value for item in call.keywords if item.arg == "countdown"), None)
         assert isinstance(countdown, ast.Constant) and countdown.value == 1
