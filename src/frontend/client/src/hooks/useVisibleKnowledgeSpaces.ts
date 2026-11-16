@@ -8,7 +8,7 @@ import { useAuthContext } from "./AuthContext";
 
 let nextCredentialScope = 0;
 
-/** A credential change gets a fresh cache scope without placing a JWT in query keys. */
+/** Session or credential changes get a fresh cache scope without putting JWTs in keys. */
 export function useVisibleKnowledgeSpaces({
   enabled = true,
   keyword = "",
@@ -19,10 +19,12 @@ export function useVisibleKnowledgeSpaces({
   const { user, token, isAuthenticated } = useAuthContext();
   const userId = user?.id;
   const credentialScope = useMemo(
-    () => (userId != null && token ? ++nextCredentialScope : 0),
-    [userId, token],
+    () => (userId != null && isAuthenticated ? ++nextCredentialScope : 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Optional token refreshes must also rotate the cache scope.
+    [userId, token, isAuthenticated],
   );
-  const active = enabled && isAuthenticated && userId != null && !!token;
+  // Cookie-authenticated browser sessions do not populate the in-memory token.
+  const active = enabled && isAuthenticated && userId != null;
   const tenant = useQuery({
     queryKey: ["visible-space-tenant", userId, credentialScope],
     queryFn: ({ signal }) => getVisibleSpacesTenant(signal),
