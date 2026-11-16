@@ -35,6 +35,8 @@ function useKnowledgeSpaceDetail(
   {
     space,
     files,
+    downloadPages,
+    downloadEpoch,
     onLoadMore,
     hasMore,
     loading,
@@ -205,6 +207,8 @@ function useKnowledgeSpaceDetail(
     displayFiles,
     space,
     currentFolderId,
+    downloadPages,
+    downloadEpoch,
   });
   const {
     canCreateFolder,

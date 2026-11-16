@@ -213,7 +213,10 @@ export function KnowledgeSpacePresentation({ model }: KnowledgeSpacePresentation
                       file={file}
                       userRole={space.role}
                       onEnsureFilePermissions={ensureFilePermissions}
-                      permissionsLoading={pendingFileIds.has(String(file.id))}
+                      permissionsLoading={
+                        // A known download stays usable while the other menu actions resolve.
+                        pendingFileIds.has(String(file.id)) && !downloadEntryIds.has(file.id)
+                      }
                       isSelected={selectedFiles.has(file.id)}
                       onSelect={(selected) => handleSelectFile(file.id, selected)}
                       onDownload={() => handleSingleDownload(file.id)}

@@ -26,6 +26,7 @@ jest.mock("~/Providers", () => ({
 }));
 jest.mock("@tanstack/react-query", () => ({
   useQueryClient: () => mockQueryClient,
+  useQueries: () => [],
 }));
 jest.mock("~/api/permission", () => ({
   getMyResourcePermissions: () => mockPermissions(),
