@@ -122,9 +122,7 @@ async def test_system_owned_creation_projects_an_ordinary_tenant_grant(resource_
     # `user:*` also carries technical mode markers (`custom_mode`,
     # `permission_enabled`); a public visibility marker could not be revoked
     # through the permission dialog.
-    assert not any(
-        d.user == "user:*" and (d.relation == "visible" or d.relation.startswith("system_")) for d in deltas
-    )
+    assert not any(d.user == "user:*" and (d.relation == "visible" or d.relation.startswith("system_")) for d in deltas)
 
 
 @pytest.mark.parametrize("resource_type", MARKET_TYPES)
