@@ -13,6 +13,7 @@ from bisheng.api.services.office_callback import afetch_office_document
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.v1.chat import chat_manager
 from bisheng.api.v1.schemas import FlowVersionCreate, resp_200
+from bisheng.chat_session.application.conversation_persistence import ConversationPersistence
 from bisheng.common.chat.types import WorkType
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -408,6 +409,7 @@ async def workflow_ws(
                 execution_user,
                 WorkType.WORKFLOW,
                 websocket,
+                conversation_persistence=ConversationPersistence(execution_user.user_id, user=execution_user),
                 flow_lease_id=flow_lease_id,
                 workflow_execution_port=BoundWorkflowExecutionPort(workflow_id, execution_user),
             )

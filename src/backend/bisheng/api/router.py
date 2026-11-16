@@ -95,6 +95,7 @@ scope_query_variant(
     value="approval",
     kind=S.IDENTITY,
 )
+scope_overrides(session_router, S.IDENTITY, "add_chat_messages", "update_chat_message")
 scope_overrides(knowledge_router, S.IDENTITY, "upload_file")
 scope_overrides(department_router, S.IDENTITY, "get_user_primary_department")
 scope_overrides(user_router, S.IDENTITY, "get_admins")

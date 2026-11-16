@@ -1,0 +1,92 @@
+{
+  "date": "2026-11-16",
+  "target_branch": "feat/3.1.0-beta1",
+  "target_before_merge": "2581f2a410f6ff32475874ffa0c581f17bc951cb",
+  "source_commit": "eb90c77d213f57f2164145a06daa4b175e370b93",
+  "source_branch": "codex/3.1.0-beta1/optional-gateway-compat",
+  "merge_conflicts": false,
+  "source_files_preserved": 37,
+  "upstream_files_preserved": 9,
+  "tests": {
+    "backend_targeted_and_upstream": 125,
+    "assistant_stop": 11,
+    "f017": 7,
+    "shared_frontend": 23,
+    "client_request_contract": 12,
+    "platform_model_audit": 7,
+    "total_passed": 185,
+    "field_e2e_skipped": 13
+  },
+  "frontend_lint": "PASS",
+  "frontend_typecheck": "PASS",
+  "scope_metadata_routes": 963,
+  "client_test_environment": "Jest process only disables optional canvas detection; native canvas binary is absent; source/dependencies unchanged",
+  "static_checks": {
+    "python_files": 20,
+    "new_findings": [],
+    "preserved_arch_findings": [
+      {
+        "path": "src/backend/bisheng/api/v1/assistant.py",
+        "finding": "⚠️  [arch-guard] RULE-3 WARNING: assistant.py — Endpoint 直接导入 database/models（应通过 Domain 层）"
+      },
+      {
+        "path": "src/backend/bisheng/api/v1/workflow.py",
+        "finding": "⚠️  [arch-guard] RULE-3 WARNING: workflow.py — Endpoint 直接导入 database/models（应通过 Domain 层）"
+      },
+      {
+        "path": "src/backend/bisheng/chat_session/api/endpoints/chat.py",
+        "finding": "⚠️  [arch-guard] RULE-5 VIOLATION: chat.py — 禁止跨模块 API 层互相导入"
+      },
+      {
+        "path": "src/backend/bisheng/common/chat/client.py",
+        "finding": "⚠️  [arch-guard] RULE-1 VIOLATION: client.py — common/core 禁止导入领域模块"
+      },
+      {
+        "path": "src/backend/bisheng/common/chat/client.py",
+        "finding": "⚠️  [arch-guard] RULE-1 VIOLATION: client.py — common/core 禁止导入 api 层"
+      },
+      {
+        "path": "src/backend/bisheng/common/chat/clients/workflow_client.py",
+        "finding": "⚠️  [arch-guard] RULE-1 VIOLATION: workflow_client.py — common/core 禁止导入领域模块"
+      },
+      {
+        "path": "src/backend/bisheng/common/chat/clients/workflow_client.py",
+        "finding": "⚠️  [arch-guard] RULE-1 VIOLATION: workflow_client.py — common/core 禁止导入 api 层"
+      },
+      {
+        "path": "src/backend/bisheng/common/chat/manager.py",
+        "finding": "⚠️  [arch-guard] RULE-1 VIOLATION: manager.py — common/core 禁止导入领域模块"
+      },
+      {
+        "path": "src/backend/bisheng/common/chat/manager.py",
+        "finding": "⚠️  [arch-guard] RULE-1 VIOLATION: manager.py — common/core 禁止导入 api 层"
+      }
+    ],
+    "preserved_ruff_findings": [
+      {
+        "path": "src/backend/bisheng/api/services/audit_log.py",
+        "code": "RUF013",
+        "message": "PEP 484 prohibits implicit `Optional`"
+      },
+      {
+        "path": "src/backend/bisheng/api/services/audit_log.py",
+        "code": "RUF001",
+        "message": "String contains ambiguous `；` (FULLWIDTH SEMICOLON). Did you mean `;` (SEMICOLON)?"
+      },
+      {
+        "path": "src/backend/bisheng/api/services/audit_log.py",
+        "code": "B905",
+        "message": "`zip()` without an explicit `strict=` parameter"
+      },
+      {
+        "path": "src/backend/bisheng/api/services/audit_log.py",
+        "code": "RUF059",
+        "message": "Unpacked variable `total` is never used"
+      }
+    ]
+  },
+  "gateway_changed_or_pushed": false,
+  "schema_or_historical_data_changes": false,
+  "deployed": false,
+  "remote_verification": "Final remote ref verified after pushing, reported in delivery response"
+}

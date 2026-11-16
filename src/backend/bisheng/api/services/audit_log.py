@@ -524,13 +524,13 @@ class AuditLogService:
         await AuditLogDao.ainsert_audit_logs([audit_log])
 
     @classmethod
-    def create_chat_assistant(cls, user: UserPayload, ip_address: str, assistant_id: str):
+    def create_chat_assistant(cls, user: UserPayload, ip_address: str, assistant_id: str, assistant_info=None):
         """
         New Audit Log for Assistant Session
         """
         logger.info(f"act=create_chat_assistant user={user.user_name} ip={ip_address} assistant={assistant_id}")
         # Getting Assistant Details
-        assistant_info = AssistantDao.get_one_assistant(assistant_id)
+        assistant_info = assistant_info or AssistantDao.get_one_assistant(assistant_id)
         cls._chat_log(
             user,
             ip_address,
