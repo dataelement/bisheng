@@ -896,7 +896,21 @@
       "searXNG": "searXNG",
       "deepseek": "DeepSeek Web Search",
       "serverUrl": "Server URL",
-      "serverUrlPlaceholder": "Enter the searXNG access URL you deployed, e.g., http://localhost:8080"
+      "serverUrlPlaceholder": "Enter the searXNG access URL you deployed, e.g., http://localhost:8080",
+      "parameterValuesHint": "Enter parameter values. Use {{query}} for the search text or {{uuid}} for a new request ID.",
+      "editRequestJson": "Edit complete request JSON",
+      "advancedSettings": "Advanced settings",
+      "importSection": "Import interface",
+      "requestSection": "Request and authentication",
+      "responseSection": "Response",
+      "testSection": "Test",
+      "mediaType": "Request format",
+      "requestTemplate": "Request parameters",
+      "requestTemplateHint": "Keep the declared structure. Use {{query}} in a value for the search text and {{uuid}} for a new request ID on each call. Put parameters in query, path, header or cookie; keep the complete request body in body. Configure credentials separately below.",
+      "rawResponseHint": "Keep the complete response and validate it against OpenAPI. Web display mapping is optional; no fixed result fields are required.",
+      "responseSchema": "View response schema",
+      "testNotSaved": "Testing does not save the configuration.",
+      "invalidJson": "Request parameters must be valid JSON."
     },
     "errors": {
       "maxCharacters": "Maximum {{count}} characters",
