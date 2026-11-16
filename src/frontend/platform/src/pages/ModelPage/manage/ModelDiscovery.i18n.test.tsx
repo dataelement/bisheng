@@ -1,6 +1,5 @@
 import { discoverModels } from "@/controllers/API/modelDiscovery";
 import {
-  act,
   cleanup,
   fireEvent,
   render,
@@ -17,6 +16,10 @@ import { ModelDiscovery } from "./ModelDiscovery";
 vi.unmock("react-i18next");
 vi.mock("@/controllers/API/modelDiscovery", () => ({
   discoverModels: vi.fn(),
+}));
+// F016: a failed vendor list first tries the price catalog; unreachable here, so the error stays.
+vi.mock("@/controllers/API/modelPricing", () => ({
+  getPriceCatalog: vi.fn().mockRejectedValue(new Error("offline")),
 }));
 
 afterEach(cleanup);
@@ -89,10 +92,7 @@ describe("model discovery with actual language resources", () => {
       fireEvent.click(
         screen.getByRole("button", { name: resource.model.refreshModels }),
       );
-      await act(async () => {
-        await Promise.resolve();
-      });
-      expect(screen.getByRole("alert")).toHaveTextContent(
+      expect(await screen.findByRole("alert")).toHaveTextContent(
         resource.model.discoveryError_auth,
       );
       expect(document.body.textContent).not.toContain("model.");

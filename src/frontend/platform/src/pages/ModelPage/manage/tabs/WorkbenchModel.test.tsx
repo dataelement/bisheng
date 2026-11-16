@@ -15,7 +15,11 @@ vi.mock('@/controllers/request', () => ({ showApiError: vi.fn() }))
 vi.mock('..', () => ({ useModel: () => ({ llmOptions: [{ value: 'provider', label: 'Provider', children: [{ value: '42', label: 'Original' }, { value: '99', label: 'Hidden' }, { value: '7', label: 'New model' }] }], embeddings: [], asrModel: [], ttsModel: [] }) }))
 vi.mock('@/components/bs-ui/select/cascader', () => ({ default: () => null }))
 vi.mock('../dsh/ModelVisionSwitch', () => ({ ModelVisionSwitch: () => null }))
-vi.mock('../dsh/ModelMultiplierInput', () => ({ ModelMultiplierInput: () => null }))
+vi.mock('@/controllers/API/modelPricing', () => ({
+    getModelPricingRows: vi.fn(async () => []),
+    getCreditSettings: vi.fn(async () => ({ version: 1, currency: 'CNY', credit_value: '0.01', usd_cny_rate: '7.2', base_model_id: null })),
+    saveCreditSettings: vi.fn(),
+}))
 vi.mock('../dsh/ModelAccessDialog', () => ({ ModelAccessDialog: () => null }))
 const config = {
     models: [{ id: '42', displayName: 'Original', description: 'Retained' }, { id: '99', displayName: 'Hidden' }],

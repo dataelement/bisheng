@@ -16,11 +16,13 @@ from bisheng.core.context import tenant
 from bisheng.dsh import runtime as composition
 from bisheng.dsh.api.endpoints import models
 from bisheng.dsh.domain.repositories.identities import CurrentIdentityRecords
+from bisheng.dsh.domain.schemas.pricing import CreditSettingState
 from bisheng.dsh.domain.services import chat_credits
 from bisheng.dsh.domain.services.usage import DshUsageService
 from bisheng.dsh.infrastructure.quota_redis import QuotaRejected
 from bisheng.dsh.infrastructure.quota_topology import create_quota_redis
 from test.dsh import test_idle_sessions as idle_tests
+from test.dsh.pricing_fixtures import LEGACY_EQUIVALENT_PRICING
 from test.dsh.test_idle_sessions_http import http_idle as http_idle
 from test.dsh.test_idle_sessions_http import idle as idle
 from test.dsh.test_idle_sessions_http import native as native
@@ -100,6 +102,9 @@ async def test_normal_chat_wrapper_uses_real_factory_without_device_sessions(mon
     redis = create_quota_redis("redis://127.0.0.1:1/0")
     monkeypatch.setattr(composition, "create_quota_redis", lambda *_: redis)
     monkeypatch.setattr(composition.ModelRuntime, "activate", AsyncMock())
+    # F016: calls read prices and credit settings from the database; keep this path datastore-free.
+    monkeypatch.setattr(composition, "read_model_pricing", AsyncMock(return_value=LEGACY_EQUIVALENT_PRICING))
+    monkeypatch.setattr(composition, "read_credit_setting", AsyncMock(return_value=CreditSettingState()))
     admission = AsyncMock(side_effect=lambda event, **_: event)
     settlement = AsyncMock()
     monkeypatch.setattr(DshUsageService, "check_and_start", admission)
@@ -224,6 +229,8 @@ async def test_native_http_chat_uses_real_model_runtime_composition(http_idle, m
     redis = create_quota_redis("redis://127.0.0.1:1/0")
     monkeypatch.setattr(composition, "create_quota_redis", lambda *_: redis)
     monkeypatch.setattr(composition, "read_policy", fixture_model.policy_reader)
+    # F016: the desktop entry reads credit settings fresh; keep this path datastore-free.
+    monkeypatch.setattr(composition, "read_credit_setting", AsyncMock(return_value=CreditSettingState()))
     monkeypatch.setattr(composition.ModelRuntime, "activate", AsyncMock())
     monkeypatch.setattr(DshUsageService, "read_usage", AsyncMock(return_value={"used": 0}))
     monkeypatch.setattr(DshUsageService, "check_and_start", AsyncMock(side_effect=lambda event, **_: event))

@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from bisheng.common.errcode.dsh import DshInvalidRequestError, DshUnsupportedParameterError, DshUpstreamErrorError
 from bisheng.dsh.domain.schemas.chat import ChatCapabilities, DshChatRequest, SelectedTool, ToolCall
 from bisheng.dsh.domain.schemas.contracts import DshTokenUsage
+from bisheng.dsh.infrastructure.usage_contract import cache_writes, measured
 
 FINISH_REASONS = {"stop", "length", "tool_calls", "content_filter"}
 
@@ -36,21 +37,13 @@ def normalize_usage(message) -> DshTokenUsage:
     raw_details = raw.get("prompt_tokens_details") if isinstance(raw, dict) else None
     raw_details = raw_details if isinstance(raw_details, dict) else {}
 
-    def measured(*values):
-        # Missing or malformed optional detail must not invalidate reliable totals.
-        return next((value for value in values if type(value) is int and 0 <= value <= 9223372036854775807), None)
-
     normalized.cache_read_tokens = measured(
         details.get("cache_read"),
         raw_details.get("cached_tokens"),
         raw.get("cache_read_input_tokens"),
         raw.get("prompt_cache_hit_tokens"),
     )
-    normalized.cache_creation_tokens = measured(
-        details.get("cache_creation"),
-        raw_details.get("cache_creation_tokens"),
-        raw.get("cache_creation_input_tokens"),
-    )
+    normalized.cache_creation_tokens = cache_writes(details, raw_details, raw)
     return normalized
 
 

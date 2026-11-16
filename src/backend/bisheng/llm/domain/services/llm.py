@@ -50,6 +50,7 @@ from bisheng.llm.application.model_default import ModelDefaultApplication, curre
 from bisheng.llm.application.model_default_read import get_model_default_read_runtime
 from bisheng.llm.domain.const import LLMModelStatus, LLMModelType, LLMServerType
 from bisheng.llm.domain.models import LLMDao, LLMModel, LLMServer
+from bisheng.llm.domain.pricing.service import apply_pricing_on_save
 from bisheng.llm.domain.repositories.model_default_repository import ModelDefaultRepository
 from bisheng.llm.domain.schemas import (
     AssistantLLMConfig,
@@ -486,6 +487,18 @@ class LLMService:
         )
 
     @classmethod
+    async def read_model_pricing(cls, model_id: int) -> dict | None:
+        """F016: uncached price config of an already-authorized model, read at call start."""
+        from bisheng.core.database import get_sync_db_session
+        from bisheng.llm.domain.repositories.model_pricing_repository import ModelPricingRepository
+
+        def read():
+            with get_sync_db_session() as session:
+                return ModelPricingRepository(session).read(model_id)
+
+        return await asyncio.to_thread(read)
+
+    @classmethod
     async def get_dsh_model_snapshot(cls, model_id: int) -> tuple[LLMModel, LLMServer]:
         """Read an online governed model/provider pair for one DSH invocation."""
         return await cls._get_governed_dsh_model_snapshot(model_id, online_required=True)
@@ -651,6 +664,8 @@ class LLMService:
                 model_dict[one.model_name] = LLMModel(**one.model_dump(), user_id=login_user.user_id)
             else:
                 raise ModelNameRepeatError.http_exception()
+        # F016: every LLM model is saved with a price (catalog match, or 0 = free).
+        apply_pricing_on_save(server.type, model_dict.values(), {})
 
         db_server = LLMServer(**server.model_dump(exclude={"models", "share_to_children"}))
         db_server.config = cls.strip_config_whitespace(db_server.config)
@@ -950,6 +965,8 @@ class LLMService:
                     model_dict[one.model_name].server_id = exist_server.id
             else:
                 raise ModelNameRepeatError.http_exception()
+        # F016: prices are resolved by both write paths inside their locked transaction
+        # (LLMDao.update_server_with_models, ModelMutationRepository.aupdate_server).
 
         retained_ids = tuple(one.id for one in server.models if one.id)
         if len(retained_ids) != len(set(retained_ids)) or not set(retained_ids) <= set(old_model_dict):
@@ -1153,6 +1170,7 @@ class LLMService:
         cls,
         invoke_user_id: int,
         tenant_id: int | None = None,
+        app_type: ApplicationTypeEnum = ApplicationTypeEnum.RAG_TRACEABILITY,
     ) -> BaseChatModel | None:
         """Get the default model configuration for Knowledge Base Traceability"""
         knowledge_llm = cls.get_knowledge_llm(tenant_id=tenant_id)
@@ -1161,10 +1179,12 @@ class LLMService:
             return None
         return cls.get_bisheng_llm_sync(
             model_id=knowledge_llm.source_model_id,
-            app_id=ApplicationTypeEnum.RAG_TRACEABILITY.value,
-            app_name=ApplicationTypeEnum.RAG_TRACEABILITY.value,
-            app_type=ApplicationTypeEnum.RAG_TRACEABILITY,
+            app_id=app_type.value,
+            app_name=app_type.value,
+            app_type=app_type,
             user_id=invoke_user_id,
+            # F016: the workbench bills traceability as daily chat on this admin-chosen model.
+            admin_selected=True,
         )
 
     @classmethod
@@ -1172,6 +1192,7 @@ class LLMService:
         cls,
         invoke_user_id: int,
         tenant_id: int | None = None,
+        app_type: ApplicationTypeEnum = ApplicationTypeEnum.RAG_TRACEABILITY,
     ) -> BaseChatModel | None:
         """Get the default model configuration for Knowledge Base Traceability"""
         knowledge_llm = await cls.aget_knowledge_llm(tenant_id=tenant_id)
@@ -1180,10 +1201,12 @@ class LLMService:
             return None
         return await cls.get_bisheng_llm(
             model_id=knowledge_llm.source_model_id,
-            app_id=ApplicationTypeEnum.RAG_TRACEABILITY.value,
-            app_name=ApplicationTypeEnum.RAG_TRACEABILITY.value,
-            app_type=ApplicationTypeEnum.RAG_TRACEABILITY,
+            app_id=app_type.value,
+            app_name=app_type.value,
+            app_type=app_type,
             user_id=invoke_user_id,
+            # F016: the workbench bills traceability as daily chat on this admin-chosen model.
+            admin_selected=True,
         )
 
     @classmethod
