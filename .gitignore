@@ -332,3 +332,6 @@ src/backend/migration_reports
 .cursor/
 config-106120.yaml
 values-106120.yaml
+
+# Local TLS trust anchor for the private-CA HTTPS deployment (never commit)
+/bisheng-ca.crt
