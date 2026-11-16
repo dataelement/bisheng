@@ -151,7 +151,7 @@ async def test_real_manager_forwards_exact_port_to_workflow_client(monkeypatch):
 
     manager = object.__new__(manager_module.ChatManager)
     manager.accept_client = AsyncMock(side_effect=ReachedAccept)
-    constructor = Mock(return_value=object())
+    constructor = Mock(return_value=SimpleNamespace())
     monkeypatch.setattr(manager_module, "WorkflowClient", constructor)
     identity = UserPayload(user_id=7, user_name="u", tenant_id=101, user_role=[])
     port = BoundWorkflowExecutionPort("w", identity, allow_preview=False)
