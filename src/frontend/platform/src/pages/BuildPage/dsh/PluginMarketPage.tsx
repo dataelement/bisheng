@@ -3,6 +3,8 @@ import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
+import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
+import { hasResourceAction, useResourceActions } from "@/components/bs-comp/permission/useResourceActions";
 
 
 import { userContext } from "@/contexts/userContext";
@@ -62,7 +64,7 @@ function PluginMarketContent({ toolbarTarget }: PluginMarketPageProps) {
 }
 
 function TenantPluginMarket() {
-  const { t } = useTranslation("dshMarket");
+  const { t } = useTranslation(["dshMarket", "permission"]);
   const paginationLocale = usePaginationLocale();
   const [tenant, setTenant] = useState<number | null>(null);
   const [page, setPage] = useState(1);
@@ -79,7 +81,14 @@ function TenantPluginMarket() {
   const [file, setFile] = useState<File | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
   const [refresh, setRefresh] = useState(0);
+  const [permissionTarget, setPermissionTarget] = useState<MarketPlugin | null>(null);
   const upload = useRef<AbortController | null>(null);
+  // Who may see each enterprise plugin is set per plugin (F022).
+  const { actions } = useResourceActions(
+    "dsh_market_plugin",
+    data.data.map((plugin) => plugin.id),
+    ["manage_permission"],
+  );
 
   useEffect(() => {
     if (tenant !== null) return;
@@ -284,6 +293,11 @@ function TenantPluginMarket() {
                         <Button variant="outlined" disabled={busy} onClick={() => void openDetail(plugin.id)} color="default">
                           {t("details")}
                         </Button>
+                        {hasResourceAction(actions, plugin.id, "manage_permission") && (
+                          <Button variant="outlined" disabled={busy} onClick={() => setPermissionTarget(plugin)} color="default">
+                            {t("permission:dialog.tabGrant")}
+                          </Button>
+                        )}
                         <Button variant="outlined" color="danger" disabled={busy} onClick={() => remove(plugin)}>
                           {t("delete")}
                         </Button>
@@ -436,6 +450,18 @@ function TenantPluginMarket() {
           )}
         </DialogContent>
       </Dialog>
+      {permissionTarget && (
+        <PermissionDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setPermissionTarget(null);
+          }}
+          resourceType="dsh_market_plugin"
+          resourceId={permissionTarget.id}
+          resourceName={permissionTarget.display_name}
+          allowAllMembers
+        />
+      )}
     </main>
   );
 }

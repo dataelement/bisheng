@@ -14,6 +14,9 @@ export type ResourceType =
   // F054 hosted applications. Duplicated from
   // controllers/API/permission.ts — keep both in step.
   | 'app'
+  // F022 enterprise market plugins and workbenches.
+  | 'dsh_market_plugin'
+  | 'dsh_market_workbench'
 
 export type SubjectType = 'user' | 'department' | 'user_group'
 

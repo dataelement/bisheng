@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-11-16 `/sdd-review spec` 6 项意见已修订（含 F019 恢复语义选 A），需求方 Callum 确认 |
 | design.md | ✅ 已评审 | 2026-11-16 `/sdd-review design` 修订（登记方式、7 个员工侧入口、升级脚本修正与备份回滚、工作台可见性查询接口），需求方 Callum 确认；接手时的第一入口 |
 | tasks.md | ✅ 已拆解 | 2026-11-16 `/sdd-review tasks` 两轮：首轮 1 项 medium（桌面端任务文件未落定）已修；剩 1 项 low 记录不改（AC-16、AC-21 只由手动 / 同事环境任务覆盖，属「行为不变 / 达梦」类验收） |
-| 实现 | 🚧 进行中 | 16 / 26 完成。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🚧 进行中 | 19 / 26 完成。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
 
 ---
 
@@ -134,20 +134,20 @@
 
 ### Wave 4 — 管理后台（platform）
 
-- [ ] **T017**: 前端资源类型登记
+- [x] **T017**: 前端资源类型登记
   **文件**: `src/frontend/platform/src/components/bs-comp/permission/types.ts`、`src/frontend/platform/src/controllers/API/permission.ts`
   **逻辑**: 两处 `ResourceType` 联合类型追加两种新类型（两处为双胞胎，注释已要求同步）。
   **手动验证**: `npm run type-check`（或项目约定的 tsc 命令）通过
   **依赖**: T003
 
-- [ ] **T018**: 企业插件列表权限按钮
+- [x] **T018**: 企业插件列表权限按钮
   **文件**: `src/frontend/platform/src/pages/BuildPage/dsh/PluginMarketPage.tsx`、`src/frontend/platform/src/pages/BuildPage/dsh/PluginMarketPage.test.tsx`
   **逻辑**: 每行操作区加「权限」按钮，打开 `PermissionDialog`（`resourceType="dsh_market_plugin"`、`resourceId`、`resourceName=display_name`、`allowAllMembers`）；已删除的行不显示按钮；文案走 i18n（复用 permission 命名空间已有「权限」类键，无则在 zh-Hans / en-US / ja 补齐）；不直接调 HTTP（C7）。测试断言按钮显示条件与弹窗参数。
   **覆盖 AC**: AC-01, AC-06
   **手动验证**: 本机管理后台 `/dsh` → 企业插件 → 点「权限」→ 取消全企业可见、授权部门 D1 → 重开弹窗显示 D1
   **依赖**: T011, T017
 
-- [ ] **T019**: 企业工作台列表权限按钮
+- [x] **T019**: 企业工作台列表权限按钮
   **文件**: `src/frontend/platform/src/pages/BuildPage/dsh/WorkbenchMarketSection.tsx`、对应测试文件（`WorkbenchMarketSection.preview.test.tsx` 同目录新增或扩展）
   **逻辑**: 同 T018，`resourceType="dsh_market_workbench"`。
   **覆盖 AC**: AC-02, AC-06
@@ -217,4 +217,5 @@
 - T004：共享常量放在 `resource_lifecycle_policy.py`（避免循环导入），任务描述已同步
 - T006–T011：列表与同步改用批量快照判定 → design 坑 21；`workbenches/access` 需登记桌面令牌白名单（`utils/http_middleware.py`，T011 多改 1 个文件）→ design 坑 20；`test/dsh_market/conftest.py` 让原有业务测试默认「全部可见」
 - T015：市场清单的组合函数 `load_market_system_owned_inventory` 放在 `api/services/f048_system_resource_bootstrap.py`，原 `load_system_owned_resource_inventory`（启动与 web fetch 补投影在用）不变
+- T018/T019：按钮沿用技能管理页的「添加权限」（`permission:dialog.tabGrant`），不新增文案；按 `useResourceActions` 的 `manage_permission` 决定是否显示（与技能管理一致）；工作台测试新建 `WorkbenchMarketSection.permission.test.tsx`
 - T016：另更新 `src/backend/scripts/README.md` 两个脚本条目并新增 F022 升级索引；升级说明含 docker compose 写法
