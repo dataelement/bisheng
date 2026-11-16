@@ -18,6 +18,7 @@ import { showApiError } from "@/controllers/request";
 import { SpaceDirectoryOverlays } from "./SpaceDirectoryOverlays";
 import { KnowledgeDeletionDialog } from "./KnowledgeDeletionDialog";
 import { useDirectoryDeletion } from "../hooks/useDirectoryDeletion";
+import { useDirectoryDownloadPermissions } from "../hooks/useDirectoryDownloadPermissions";
 import { SpaceDirectoryRow } from "./SpaceDirectoryRow";
 import { SpaceDirectoryToolbar } from "./SpaceDirectoryToolbar";
 import { SpaceDirectoryView, type DirectorySortField, type DirectoryViewMode } from "./SpaceDirectoryView";
@@ -192,6 +193,11 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
     ],
     [keyword, search.data, ordinary.data],
   );
+  const downloadIds = useDirectoryDownloadPermissions({
+    prefix: epoch.prefix,
+    spaceId,
+    pages: keyword ? (search.data ? [search.data] : []) : (ordinary.data?.pages ?? []),
+  });
   const rowLifetimes = useRef(new Map<string, RowLifetime>());
   const rowKeys = new Set(rows.map(rowKey));
   for (const [key, lifetime] of rowLifetimes.current) {
@@ -325,14 +331,8 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
     }
   };
   const handleDownload = async (item: KnowledgeSpaceChild) => {
-    const token = menu?.token;
-    if (
-      !token ||
-      token.item.id !== item.id ||
-      !menu.actions.includes("download") ||
-      !isCurrent(token)
-    )
-      return;
+    const token = { epoch, item, rowLifetime: rowLifetimes.current.get(rowKey(item)) };
+    if (item.file_type !== 1 || !downloadIds.has(item.id) || !isCurrent(token)) return;
     try {
       const data = await knowledgeFilesApi.getSpaceFileDownload(spaceId, item.id);
       if (!isCurrent(token) || !data.original_url) return;
@@ -419,6 +419,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
             references([item]);
         }}
         onRename={() => handleEdit(item)}
+        canDownload={downloadIds.has(item.id)}
         onDownload={() => {
           void handleDownload(item);
         }}

@@ -30,6 +30,7 @@ interface SpaceDirectoryRowProps {
   onOpen: () => void;
   onPreview: () => void;
   onRename: () => void;
+  canDownload?: boolean;
   onDownload: () => void;
 }
 export function SpaceDirectoryRow({
@@ -50,6 +51,7 @@ export function SpaceDirectoryRow({
   onOpen,
   onPreview,
   onRename,
+  canDownload = false,
   onDownload,
 }: SpaceDirectoryRowProps) {
   const { t } = useTranslation("knowledge");
@@ -95,6 +97,11 @@ export function SpaceDirectoryRow({
   );
   const actionsContent = (
     <>
+      {!folder && canDownload && (
+        <Button variant="text" color="default" iconOnly aria-label={t("downloadOriginal")} onClick={onDownload}>
+          <Outlined.Download />
+        </Button>
+      )}
       {known && (
         <Dropdown
           align="end"
@@ -131,14 +138,7 @@ export function SpaceDirectoryRow({
                     {t("f118.version_history")}
                   </DropdownItem>
                 )}
-              {!folder &&
-                !loading &&
-                !error &&
-                actions.includes("download") && (
-                  <DropdownItem onSelect={onDownload}>
-                    {t("downloadOriginal")}
-                  </DropdownItem>
-                )}
+
             </>
           }
         >

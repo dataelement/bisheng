@@ -202,7 +202,7 @@ export function LazyDepartmentTree(props: LazyDepartmentTreeProps) {
   return (
     <div className={cn("flex flex-1 flex-col overflow-hidden", className)}>
       {showSearch && (
-        <SearchInput placeholder={searchPlaceholder ?? t("bs:subjectSearch.departmentPlaceholder")} {...controller.searchInputProps} className="mb-2" />
+        <SearchInput placeholder={searchPlaceholder ?? t("bs:subjectSearch.departmentPlaceholder")} {...controller.searchInputProps} className="mb-2 shrink-0" />
       )}
       {variant === "navigation" ? (
         <TreeNavigation size="medium" showLine revealKey={revealKey} aria-label={t("bs:department.tree")} className="min-h-0 flex-1" onWheel={handleWheel}>

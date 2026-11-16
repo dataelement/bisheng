@@ -23,6 +23,7 @@ import Header from "@/pages/KnowledgePage/components/Header";
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
+  post: vi.fn(),
   info: vi.fn(),
   children: vi.fn(),
   parents: vi.fn(),
@@ -34,7 +35,7 @@ const mocks = vi.hoisted(() => ({
   preview: vi.fn(),
 }));
 vi.mock("@/controllers/request", () => ({
-  default: { get: mocks.get },
+  default: { get: mocks.get, post: mocks.post },
   showApiError: mocks.error,
 }));
 vi.mock("@/controllers/API/permission", () => ({
@@ -143,6 +144,9 @@ function mount(path = "/filelib/7") {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.post.mockResolvedValue({
+    check_complete: true, can_execute: false, valid_items: [], invalid_items: [], requires_skip_confirmation: false, impact: {},
+  });
   const storage = new Map<string, string>();
   vi.stubGlobal("localStorage", {
     getItem: (key: string) => storage.get(key) ?? null,

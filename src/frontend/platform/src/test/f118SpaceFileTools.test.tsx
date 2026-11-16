@@ -1,7 +1,8 @@
 import "@testing-library/jest-dom/vitest";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { Button, Dropdown, DropdownItem } from "@bisheng/ui";
 import { SpaceFileTools } from "@/pages/KnowledgePage/components/SpaceFileTools";
 const mocks = vi.hoisted(() => ({ action: vi.fn(), summary: vi.fn() }));
 vi.mock("@/controllers/API/permission", () => ({
@@ -16,7 +17,7 @@ vi.mock("@/pages/KnowledgePage/components/SpaceIndexEditDialog", () => ({
   SpaceIndexEditDialog: () => null,
 }));
 const clients: QueryClient[] = [];
-function mount() {
+function mount(status = 2, enabled = true) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   clients.push(client);
   const element = (tenantId: number) => (
@@ -25,8 +26,13 @@ function mount() {
         scope={{ identityKey: "user:7", tenantId, managementTenantId: tenantId, view: "ordinary" }}
         spaceId={40}
         fileId={81}
-        status={2}
-      />
+        status={status}
+        enabled={enabled}
+      >
+        {(items) => <Dropdown menu={<><DropdownItem>rename</DropdownItem>{items}</>}>
+          <Button>more</Button>
+        </Dropdown>}
+      </SpaceFileTools>
     </QueryClientProvider>
   );
   const result = render(element(101));
@@ -43,7 +49,10 @@ afterEach(() => {
 it("admits the original edit action without looking up a visible-gated root summary", async () => {
   mocks.summary.mockRejectedValue(new Error("Root is not visible"));
   mount();
-  await screen.findByRole("button", { name: "f118.processing_title_file" });
+  await waitFor(() => expect(mocks.action).toHaveBeenCalledOnce());
+  fireEvent.keyDown(screen.getByRole("button", { name: "more" }), { key: "ArrowDown" });
+  await screen.findByRole("menuitem", { name: "f118.processing_title_file" });
+  expect(screen.queryByRole("button", { name: "f118.processing_title_file" })).not.toBeInTheDocument();
   expect(mocks.action).toHaveBeenCalledExactlyOnceWith({
     resource_type: "knowledge_space",
     resource_id: "40",
@@ -55,9 +64,9 @@ it("does not borrow other root actions or roles to render the tools", async () =
   mocks.action.mockResolvedValue({ allowed: false });
   mount();
   await waitFor(() => expect(mocks.action).toHaveBeenCalledOnce());
-  expect(
-    screen.queryByRole("button", { name: "f118.processing_title_file" }),
-  ).not.toBeInTheDocument();
+  fireEvent.keyDown(screen.getByRole("button", { name: "more" }), { key: "ArrowDown" });
+  expect(await screen.findByRole("menuitem", { name: "rename" })).toBeInTheDocument();
+  expect(screen.queryByRole("menuitem", { name: "f118.processing_title_file" })).not.toBeInTheDocument();
 });
 it("does not revive an old edit response through tenant A-B-A", async () => {
   let resolve!: (value: { allowed: boolean }) => void;
@@ -75,7 +84,30 @@ it("does not revive an old edit response through tenant A-B-A", async () => {
   view.tenant(101);
   await waitFor(() => expect(mocks.action).toHaveBeenCalledTimes(3));
   await act(async () => resolve({ allowed: true }));
-  expect(
-    screen.queryByRole("button", { name: "f118.processing_title_file" }),
-  ).not.toBeInTheDocument();
+  fireEvent.keyDown(screen.getByRole("button", { name: "more" }), { key: "ArrowDown" });
+  expect(await screen.findByRole("menuitem", { name: "rename" })).toBeInTheDocument();
+  expect(screen.queryByRole("menuitem", { name: "f118.processing_title_file" })).not.toBeInTheDocument();
+});
+
+it("keeps the processing dialog open after its menu item closes the dropdown", async () => {
+  mount();
+  await waitFor(() => expect(mocks.action).toHaveBeenCalledOnce());
+  fireEvent.keyDown(screen.getByRole("button", { name: "more" }), { key: "ArrowDown" });
+  fireEvent.click(await screen.findByRole("menuitem", { name: "f118.processing_title_file" }));
+  await screen.findByText("processing-open");
+  expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+});
+it.each([1, 4, 5])("retains disabled processing actions for file status %s", async status => {
+  mount(status);
+  await waitFor(() => expect(mocks.action).toHaveBeenCalledOnce());
+  fireEvent.keyDown(screen.getByRole("button", { name: "more" }), { key: "ArrowDown" });
+  expect(await screen.findByRole("menuitem", { name: "f118.processing_title_file" })).toHaveAttribute("aria-disabled", "true");
+  expect(screen.getByRole("menuitem", { name: "f118.index_edit_title" })).toHaveAttribute("aria-disabled", "true");
+});
+it("keeps folder actions without requesting file processing permissions", async () => {
+  mount(2, false);
+  fireEvent.keyDown(screen.getByRole("button", { name: "more" }), { key: "ArrowDown" });
+  await screen.findByRole("menuitem", { name: "rename" });
+  expect(mocks.action).not.toHaveBeenCalled();
+  expect(screen.queryByRole("menuitem", { name: "f118.processing_title_file" })).not.toBeInTheDocument();
 });

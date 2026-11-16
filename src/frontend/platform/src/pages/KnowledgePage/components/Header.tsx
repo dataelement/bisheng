@@ -1,4 +1,5 @@
 import { Outlined } from "bisheng-icons";
+import { Button } from "@bisheng/ui";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -47,23 +48,26 @@ export function Header({
   };
 
   return (
-    <div className="z-30 flex min-h-14 items-start">
+    <div className="flex min-w-0 items-center gap-3">
       {showBackButton && (
         <KnowledgeTooltip content={t("back")} side="top">
-          <button
-            className="extra-side-bar-buttons w-[36px]"
+          <Button
+            variant="text"
+            color="default"
+            iconOnly
+            className="shrink-0"
             aria-label={t("back")}
             onClick={handleBack}
           >
-            <Outlined.ArrowLeft className="side-bar-button-size" />
-          </button>
+            <Outlined.ArrowLeft />
+          </Button>
         </KnowledgeTooltip>
       )}
       {fileTitle && (
-        <div>
-          <span className={presentation === "workspace" ? "block max-w-full truncate text-base font-medium text-text-1" : "max-w-80 truncate pl-4 text-sm font-black text-foreground"}>
+        <div className="min-w-0 flex-1">
+          <h1 title={controlled ? (title ?? "") : legacyTitle} className={presentation === "workspace" ? "block max-w-full truncate text-base font-medium text-text-1" : "max-w-80 truncate pl-4 text-sm font-black text-foreground"}>
             {controlled ? (title ?? "") : legacyTitle}
-          </span>
+          </h1>
           {controlled && description && (
             <p className={presentation === "workspace" ? "mt-1 max-w-full truncate text-xs text-text-3" : "text-hint max-w-80 truncate pl-4 text-xs"}>
               {description}
