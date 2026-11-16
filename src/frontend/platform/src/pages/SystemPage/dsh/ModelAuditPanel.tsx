@@ -7,14 +7,13 @@ import type {
   AuditTreePage,
 } from "@/types/dshModelAudit";
 import { getAuditGroups, getAuditReadiness, getAuditTree } from "@/controllers/API/dshModelAudit";
-import { displayTenantName } from "@/utils/tenantDisplayName";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DshPager, dshTime } from "./common";
 import { ModelAuditCard } from "./ModelAuditCard";
 import { ModelAuditFilters } from "./ModelAuditFilters";
 import { ModelAuditMode } from "./ModelAuditMode";
-import { ModelAuditTenantSelect } from "./ModelAuditTenantSelect";
+import { DshTenantScope } from "./DshTenantScope";
 import { useModelAudit } from "./useModelAudit";
 import { ModelAuditGroup } from "./ModelAuditGroup";
 import { ModelAuditTree } from "./ModelAuditTree";
@@ -22,40 +21,24 @@ import { ModelAuditTree } from "./ModelAuditTree";
 export function ModelAuditPanel() {
   const { user } = useContext(userContext);
   const identity = user as {
-    tenant_id?: unknown;
-    tenant_name?: string;
+    user_id?: unknown;
     role?: unknown;
     is_global_super?: unknown;
     is_child_admin?: unknown;
   };
-  const ownTenant = Number(identity?.tenant_id);
   const canConfigure =
     identity?.is_child_admin !== true && (identity?.role === "admin" || identity?.is_global_super === true);
-  const initialTenant = canConfigure
-    ? 1
-    : Number.isSafeInteger(ownTenant) && ownTenant > 0
-      ? ownTenant
-      : undefined;
-  const [selectedTenant, setTenant] = useState<number | undefined>();
-  const tenant = canConfigure ? selectedTenant : initialTenant;
-  const { t } = useTranslation();
   return (
-    <div className="min-w-0 space-y-4">
-      <div className="grid items-center gap-3 border-b pb-4 md:grid-cols-[minmax(0,1fr)_auto]">
-        {canConfigure ? (
-          <ModelAuditTenantSelect initialTenant={initialTenant} value={tenant} onChange={setTenant} />
-        ) : (
-          <p className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="text-muted-foreground">{t("dsh.modelAuditView.tenant")}</span>
-            {displayTenantName(identity?.tenant_name) || t("dsh.modelAuditView.managed_tenant")}
-          </p>
-        )}
-        {tenant !== undefined && (
-          <ModelAuditMode key={"mode-" + tenant} tenantId={tenant} canConfigure={canConfigure} />
-        )}
-      </div>
-      {tenant !== undefined && <ModelAuditRequests key={"requests-" + tenant} tenantId={tenant} />}
-    </div>
+    <DshTenantScope key={`${identity?.user_id}:${identity?.is_global_super === true}`}>
+      {(tenant) => (
+        <div className="min-w-0 space-y-4">
+          <div className="grid items-center gap-3 border-b pb-4">
+            <ModelAuditMode tenantId={tenant} canConfigure={canConfigure} />
+          </div>
+          <ModelAuditRequests tenantId={tenant} />
+        </div>
+      )}
+    </DshTenantScope>
   );
 }
 
