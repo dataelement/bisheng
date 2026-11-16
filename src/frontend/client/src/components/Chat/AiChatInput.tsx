@@ -26,7 +26,6 @@ import { ChatResourceMenu } from "~/components/Chat/Input/ChatResourceMenu";
 import { ComposerEditor } from "./Input/ComposerEditor";
 import { useComposerReferences } from "./Input/useComposerReferences";
 import { labelForGroup, type AvailableToolGroup } from "./Input/AgentToolSelector";
-import { labelForGroup, type AvailableToolGroup } from "./Input/AgentToolSelector";
 import { handleComposerResourceKeyDown } from "./Input/composerResourceKeyboard";
 import { AttachmentBar } from "~/components/Chat/Input/AttachmentBar";
 import DragDropOverlay from "~/components/Chat/Input/Files/DragDropOverlay";
