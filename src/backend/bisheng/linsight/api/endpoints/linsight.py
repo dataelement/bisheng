@@ -3,7 +3,7 @@ import os
 import time
 import zipfile
 from io import BytesIO
-from typing import Literal, Union
+from typing import Annotated, Literal, Union
 from urllib import parse
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Query, Request, UploadFile
@@ -367,6 +367,7 @@ async def start_execute(
 async def continue_conversation(
     session_version_id: str = Body(..., description="Existing session version id to continue", embed=True),
     question: str = Body(..., description="Follow-up user message", embed=True),
+    model: Annotated[str | None, Body(min_length=1, description="Current model selection for a retry")] = None,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> UnifiedResponseModel:
     """Continue an already-finished task-mode conversation (F035 multi-turn).
@@ -396,10 +397,11 @@ async def continue_conversation(
 
     await MessageSessionDao.touch_session(session_version_model.session_id)
 
-    # Flip back to IN_PROGRESS BEFORE enqueue so the worker's pre-flight
-    # non-terminal guard accepts the continue item.
+    previous_status, previous_model = session_version_model.status, session_version_model.model
+    # Persist a retry's model together with the status before the worker can pick it up.
+    model_update = {"model": model} if model is not None else {}
     await LinsightSessionVersionDao.batch_update_session_versions_status(
-        [session_version_id], SessionVersionStatusEnum.IN_PROGRESS
+        [session_version_id], SessionVersionStatusEnum.IN_PROGRESS, **model_update
     )
 
     try:
@@ -416,9 +418,9 @@ async def continue_conversation(
         )
     except Exception as e:
         logger.error(f"Failed to continue the Ideas conversation: {e!s}")
-        # Roll back the status flip so the conversation isn't stuck IN_PROGRESS.
+        # Restore the original terminal state and model if dispatch was not accepted.
         await LinsightSessionVersionDao.batch_update_session_versions_status(
-            [session_version_id], SessionVersionStatusEnum.COMPLETED
+            [session_version_id], previous_status, **({"model": previous_model} if model is not None else {})
         )
         return LinsightStartTaskError.return_resp(data=str(e))
 

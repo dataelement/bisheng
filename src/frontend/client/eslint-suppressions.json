@@ -1412,11 +1412,6 @@
       "count": 2
     }
   },
-  "src/components/icons/TxtIcon.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    }
-  },
   "src/components/icons/XlsxIcon.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 2
@@ -2533,11 +2528,6 @@
   },
   "src/pages/knowledge/SpaceDetail/FileCard.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/pages/knowledge/SpaceDetail/FileIcon.tsx": {
-    "@typescript-eslint/no-explicit-any": {
       "count": 1
     }
   },

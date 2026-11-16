@@ -22,15 +22,18 @@ for i=1,#models,2 do
   end
 end
 if sum~=used then return {'DENY','incomplete_model_ledger'} end
+local shared=redis.call('HGET',KEYS[1],'quota_limit_schema')=='shared'
 local limits={}; local total_limit='0'
 for _,field in ipairs(redis.call('HKEYS',KEYS[1])) do
   if string.sub(field,1,6)=='model:' then
     local model=string.sub(field,7); local value=redis.call('HGET',KEYS[1],'limit:'..model)
     if not integer(value) or not integer(redis.call('HGET',KEYS[3],model)) then return {'DENY','missing_model_limit'} end
-    limits[#limits+1]=model; limits[#limits+1]=value; total_limit=add(total_limit,value)
+    if shared and value~=limit then return {'DENY','incomplete_model_limits'} end
+    limits[#limits+1]=model; limits[#limits+1]=value
+    if not shared then total_limit=add(total_limit,value) end
   end
 end
-if total_limit~=limit then return {'DENY','incomplete_model_limits'} end
+if not shared and total_limit~=limit then return {'DENY','incomplete_model_limits'} end
 local state='ready'
 if redis.call('HGET',KEYS[1],'state')~='READY' or redis.call('HGET',KEYS[2],'state')~='READY' or redis.call('HGET',KEYS[1],'epoch')~=ARGV[1] or redis.call('HGET',KEYS[2],'epoch')~=ARGV[1] or redis.call('HGET',KEYS[1],'write_in_progress')=='1' then state='unavailable'
 elseif redis.call('SCARD',KEYS[4])>0 then state='blocked' end
@@ -43,4 +46,4 @@ if unknown_type~='none' and unknown_type~='set' then return {'DENY','bad_usage_i
 -- Missing usage is observational and never changes the admission state.
 local unknown=redis.call('SCARD',KEYS[7])
 local now=redis.call('TIME')
-return {'OK',used,limit,state,now[1],now[2],models,tostring(unknown),limits}
+return {'OK',used,limit,state,now[1],now[2],models,tostring(unknown),limits,shared and 'shared' or 'model'}

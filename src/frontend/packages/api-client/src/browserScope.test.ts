@@ -40,3 +40,9 @@ it('legacy moderation callbacks use identity while normal tenant writes retain s
   expect(needsBrowserScope('DELETE', '/api/v1/chat/message/11', 'http://localhost')).toBe(true);
   expect(needsBrowserScope('POST', '/api/v1/workflow/create', 'http://localhost')).toBe(true);
 });
+
+it('keeps anonymous desktop discovery public while protecting global settings', () => {
+  expect(requestScopeKind('GET', '/api/v1/dsh/browser-config', 'http://localhost')).toBe('public');
+  expect(needsBrowserScope('GET', '/api/v1/dsh/browser-config', 'http://localhost')).toBe(false);
+  expect(requestScopeKind('PUT', '/api/v1/dsh/admin/settings', 'http://localhost')).toBe('platform');
+});

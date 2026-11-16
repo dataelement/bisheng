@@ -61,7 +61,7 @@ export function SpaceDirectoryToolbar({
   };
   if (toolbarTarget !== undefined) {
     const controls = (
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-3">
         <Dropdown
           align="end"
           menu={
@@ -111,9 +111,10 @@ export function SpaceDirectoryToolbar({
             </>
           }
         >
-          <Button variant="outlined" color="default" icon={<Outlined.Down />}>
+          <Button variant="outlined" color="default">
             {t("detail.batch")}
             {selectedCount > 0 ? ` (${selectedCount})` : ""}
+            <Outlined.Down />
           </Button>
         </Dropdown>
         {(canCreateFolder || canUpload) && (
@@ -141,7 +142,10 @@ export function SpaceDirectoryToolbar({
               </>
             }
           >
-            <Button icon={<Outlined.Plus />}>{t("detail.add")}</Button>
+            <Button variant="outlined" color="default" className="text-text-1">
+              {t("detail.add")}
+              <Outlined.Down />
+            </Button>
           </Dropdown>
         )}
       </div>

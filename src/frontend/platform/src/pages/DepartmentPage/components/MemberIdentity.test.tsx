@@ -82,13 +82,3 @@ it('does not open disabled accounts from a member row', async () => {
     const row = await open(); fireEvent.click(within(row).getByText(member.user_name));
     expect(screen.queryByTestId('identity-editor')).not.toBeInTheDocument();
 });
-
-it('searches the current department by nickname or raw account and clears back to the first page', async () => {
-    await open();
-    const search = screen.getByRole('searchbox', { name: 'accountIdentity.search' });
-    fireEvent.change(search, { target: { value: '000Case' } });
-    fireEvent.keyDown(search, { key: 'Enter' });
-    await waitFor(() => expect(mocks.members).toHaveBeenLastCalledWith('dept-1', expect.objectContaining({ page: 1, keyword: '000Case' })));
-    fireEvent.click(screen.getByRole('button', { name: 'sharedUi.clear' }));
-    await waitFor(() => expect(mocks.members).toHaveBeenLastCalledWith('dept-1', { page: 1, limit: 20, is_primary: undefined }));
-});

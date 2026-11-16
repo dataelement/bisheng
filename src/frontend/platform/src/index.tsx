@@ -10,6 +10,7 @@ import "./style/index.css";
 import '@bisheng/ui/tokens.css';
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createPlatformQueryClient } from "./queryClient";
+import { DSH_BROWSER_CONFIG_QUERY_KEY, subscribeDshBrowserConfigChanges } from '@bisheng/api-client';
 import { installPlatformThemeBridge } from './utils/platformThemeBridge';
 
 const stopThemeBridge = installPlatformThemeBridge();
@@ -65,6 +66,10 @@ window.addEventListener('vite:preloadError', (event) => {
 
 
 const queryClient = createPlatformQueryClient();
+const stopDshConfigSync = subscribeDshBrowserConfigChanges(() => {
+  void queryClient.invalidateQueries({ queryKey: DSH_BROWSER_CONFIG_QUERY_KEY });
+});
+if (import.meta.hot) import.meta.hot.dispose(stopDshConfigSync);
 root.render(
   <QueryClientProvider client={queryClient}>
     <ContextWrapper>

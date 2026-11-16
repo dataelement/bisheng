@@ -65,7 +65,7 @@ export function SpaceFileDetail({ scope, spaceId, fileId, initialFile, onBack }:
     });
   return (
     <section
-      className="flex h-[calc(100vh-156px-var(--license-banner-h,0px))] min-h-0 flex-col"
+      className="flex h-full min-h-0 flex-col"
       aria-label={t("detail.file_editor")}
     >
       <header className="flex flex-wrap items-center justify-between gap-3 py-4">

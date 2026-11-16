@@ -163,7 +163,7 @@
   "10995": "The resource is referenced by saved configuration. Update the references in the related business configuration first.",
   "10996": "A saved resource reference is invalid or its revision changed. Review and repair it.",
   "10997": "The business model or index configuration changed. This task is obsolete; start a new task.",
-  "10998": "The operation no longer matches its frozen reference plan. Check it again.",
+  "10998": "The configuration has been modified by someone else. Refresh the page and try again.",
   "10999": "A conflicting operation is processing this resource. Try again later.",
   "11001": "The Gateway license has expired. This capability is currently unavailable.",
   "11010": "Invalid SOP file format",
