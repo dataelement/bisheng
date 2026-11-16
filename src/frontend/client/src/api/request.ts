@@ -1,6 +1,8 @@
 // @ts-strict-ignore
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {
+  BrowserScopeSession,
+  needsBrowserScope,
   decodeErrorEnvelope,
   isApiError,
   isErrorEnvelope,
@@ -25,6 +27,28 @@ type ErrorOptions = {
 
 const customAxios = axios.create({
   baseURL: import.meta.env.BASE_URL,
+});
+
+const browserScope = new BrowserScopeSession();
+const scopeSnapshots = new WeakMap<object, number>();
+window.addEventListener('storage', event => {
+  if (event.key === 'bs:management-scope' && event.oldValue !== event.newValue && browserScope.source !== 'credential') window.location.reload();
+});
+
+export async function prepareBrowserHeaders(method: string, url: string): Promise<Record<string, string>> {
+  if (!needsBrowserScope(method, url, window.location.origin)) return {};
+  await browserScope.ensure(async () => {
+    const response = await customAxios.post('/api/v1/admin/request-scope/bootstrap');
+    return response.data.data;
+  });
+  return browserScope.tenant === null ? {} : {'X-Management-Tenant': String(browserScope.tenant)};
+}
+
+customAxios.interceptors.request.use(async config => {
+  const headers = await prepareBrowserHeaders(config.method || 'GET', config.url || '');
+  for (const [name, value] of Object.entries(headers)) config.headers.set(name, value);
+  if (headers['X-Management-Tenant'] && browserScope.tenant !== null) scopeSnapshots.set(config, browserScope.tenant);
+  return config;
 });
 
 async function _get<T>(url: string, options?: AxiosRequestConfig & ErrorOptions): Promise<T> {
@@ -198,6 +222,12 @@ const responsePresentation = new WeakMap<object, ErrorPresentation>();
 
 customAxios.interceptors.response.use(
   async (response) => {
+    const snapshot = scopeSnapshots.get(response.config);
+    const confirmed = response.headers?.['x-management-tenant'];
+    if (snapshot !== undefined && (snapshot !== browserScope.tenant || (confirmed !== undefined && Number(confirmed) !== snapshot))) {
+      throw await normalizeRequestFailure({status_code: 19704, status_message: 'management_scope_changed'}, response);
+    }
+    if ((response.config.url || '').includes('/user/login')) browserScope.reset();
     const envelope = (await decodeErrorEnvelope(response.data)) ?? response.data;
     const url = response.config?.url || "";
     if (
@@ -375,6 +405,7 @@ async function normalizeRequestFailure(cause, response?) {
     envelope,
     message: translateApiErrorMessage(envelope),
   });
+  if ([19703, 19704, 19705].includes(error.status_code ?? 0)) browserScope.pause();
   if (original && responsePresentation.has(original))
     error.presentation = responsePresentation.get(original)!;
   return error;

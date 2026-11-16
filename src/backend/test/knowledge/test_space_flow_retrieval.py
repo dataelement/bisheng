@@ -33,8 +33,8 @@ async def test_scoped_login_user_no_tenant_switch():
         result = await space_flow_retrieval.abuild_scoped_login_user(user_id=42, tenant_id=7)
 
     assert result is fake_payload
-    # Identity built within the passed (flow) tenant, not the author's active tenant.
-    assert init_mock.await_args.kwargs["tenant_id"] == 7
+    # Resource scope must not be asserted as the author's expected Home.
+    assert "tenant_id" not in init_mock.await_args.kwargs
     assert init_mock.await_args.kwargs["user_id"] == 42
     # The crucial invariant: current tenant is untouched.
     assert get_current_tenant_id() == 7
@@ -46,6 +46,34 @@ async def test_scoped_login_user_none_when_missing():
 
     with patch.object(space_flow_retrieval.UserDao, "aget_user", AsyncMock(return_value=None)):
         assert await space_flow_retrieval.abuild_scoped_login_user(user_id=999, tenant_id=1) is None
+
+
+async def test_root_author_in_child_flow_uses_real_home_policy(monkeypatch):
+    """AC-43: exercise the real payload initializer and Home consistency rule."""
+    from bisheng.core.context.tenant import tenant_execution_scope
+    from bisheng.role.application import effective_roles
+    from bisheng.utils import http_middleware
+
+    async def current_policy(user_id, *, expected_home_tenant_id=None):
+        # Run the actual policy consistency check; the old helper passes 60
+        # here and raises 24006 before returning an identity.
+        subject = SimpleNamespace(home_tenant_id=1, bindings=[])
+        effective_roles._resolve(subject, [], [], expected_home_tenant_id)
+        return effective_roles.EffectiveRoles(user_id, 1, (), (), frozenset(), False)
+
+    monkeypatch.setattr(effective_roles, "load_effective_roles", current_policy)
+    monkeypatch.setattr(
+        space_flow_retrieval.UserDao,
+        "aget_user",
+        AsyncMock(return_value=SimpleNamespace(user_id=42, user_name="author")),
+    )
+    fresh = AsyncMock(return_value=True)
+    monkeypatch.setattr(http_middleware, "_check_is_global_super", fresh)
+    with tenant_execution_scope(60):
+        identity = await space_flow_retrieval.abuild_scoped_login_user(42, 60)
+        assert (identity.user_id, identity.tenant_id) == (42, 1)
+        assert get_current_tenant_id() == 60
+    assert fresh.await_args.kwargs["force_refresh"] is True
 
 
 # --- filter-combination helpers (pure) ---

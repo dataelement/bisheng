@@ -16,9 +16,24 @@ def main():
     parser.add_argument("--tenant-id", type=int, required=True)
     parser.add_argument("--user-id", type=int, action="append", default=[])
     parser.add_argument("--limit", type=int, default=100)
+    parser.add_argument(
+        "--context-only", action="store_true", help="SQL relationship facts only; never repairs records"
+    )
+    parser.add_argument("--offset", type=int, default=0)
     args = parser.parse_args()
-    if args.tenant_id < 1 or not 1 <= args.limit <= 1000 or any(uid < 1 for uid in args.user_id):
+    if args.tenant_id < 1 or not 1 <= args.limit <= 1000 or any(uid < 1 for uid in args.user_id) or args.offset < 0:
         parser.error("IDs must be positive and limit must be between 1 and 1000")
+    if args.context_only:
+        from bisheng.tenant.application.managed_tenant_preflight import inspect_context_ownership
+
+        print(
+            json.dumps(
+                asyncio.run(inspect_context_ownership(args.tenant_id, limit=args.limit, offset=args.offset)),
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return
     from bisheng.tenant.application.managed_tenant_preflight import inspect_managed_tenant
 
     print(

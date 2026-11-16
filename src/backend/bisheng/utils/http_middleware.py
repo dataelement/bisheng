@@ -262,6 +262,7 @@ async def _check_is_global_super(
     user_id: int,
     *,
     role_ids: Iterable[int] | None = None,
+    force_refresh: bool = False,
 ) -> bool:
     """FGA check: ``user:{id} super_admin system:global`` with Redis caching.
 
@@ -272,18 +273,27 @@ async def _check_is_global_super(
     """
     if not user_id:
         return False
+    from bisheng.common.request_scope import get_admitted_request_scope
+
+    admitted = get_admitted_request_scope()
+    if admitted is not None and admitted.user_id == user_id:
+        # Downstream legacy helpers must not reintroduce an older positive
+        # marker after the route has already established current identity.
+        return admitted.is_super
     cache_key = f"user:{user_id}:is_super"
     try:
         from bisheng.core.cache.redis_manager import get_redis_client
 
         redis = await get_redis_client()
-        cached = await redis.aget(cache_key)
-        if cached is not None:
-            return bool(int(cached))
+        if not force_refresh:
+            cached = await redis.aget(cache_key)
+            if cached is not None:
+                return bool(int(cached))
     except Exception:
         redis = None  # Fall through to FGA; no cache writes.
 
     is_super = False
+    qualification_error = None
     try:
         from bisheng.permission.application import (
             PermissionObject,
@@ -298,7 +308,8 @@ async def _check_is_global_super(
             resource=PermissionObject("system", "global"),
         )
     except Exception as exc:
-        logger.debug("FGA super-admin check failed for user %d: %s", user_id, exc)
+        qualification_error = exc
+        logger.debug("FGA super-admin check failed for user {}: {}", user_id, exc)
 
     if not is_super:
         try:
@@ -313,13 +324,20 @@ async def _check_is_global_super(
                 resolved_role_ids = role_ids
             is_super = any(int(role_id) == AdminRole for role_id in resolved_role_ids)
         except Exception as exc:
-            logger.debug("legacy AdminRole fallback failed for user %d: %s", user_id, exc)
+            qualification_error = exc
+            logger.debug("legacy AdminRole fallback failed for user {}: {}", user_id, exc)
+
+    if force_refresh and not is_super and qualification_error is not None:
+        from bisheng.common.errcode.admin_scope import AdminScopeUnavailableError
+
+        raise AdminScopeUnavailableError() from qualification_error
 
     try:
         if redis is not None:
             await redis.aset(cache_key, int(is_super), expiration=_IS_SUPER_CACHE_TTL_SECONDS)
     except Exception:
-        pass
+        # Optional cache refresh never replaces the confirmed current decision.
+        logger.opt(exception=True).debug("Optional super-admin cache refresh failed")
     return bool(is_super)
 
 

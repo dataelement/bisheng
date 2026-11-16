@@ -57,11 +57,18 @@ MANAGEMENT_API_PREFIXES: tuple[str, ...] = (
     "/api/v1/user-groups",
     "/api/v1/tag",
     "/api/v1/evaluation",
+    "/api/v1/guest-link",
 )
 
 
 # Explicit mutating management routes only: shared reads and calls need no new header.
 _EXPECTED_SCOPE_WRITES = (
+    (frozenset({"PATCH"}), r"/api/v1/guest-link/(?:workflow|assistant)/[^/]+"),
+    (frozenset({"POST"}), r"/api/v1/knowledge/space/[^/]+/uploads(?:/[^/]+/previews)?"),
+    (
+        frozenset({"PUT", "DELETE"}),
+        r"/api/v1/knowledge/space/[^/]+/uploads/[^/]+/previews/[^/]+/chunks/[0-9]+",
+    ),
     (frozenset({"POST", "DELETE"}), r"/api/v1/skill/template/(?:create|[0-9]+)"),
     (frozenset({"PATCH", "DELETE"}), r"/api/v1/apps/[^/]+"),
     (frozenset({"POST"}), r"/api/v1/apps/[^/]+/actions/[^/]+"),
@@ -139,7 +146,18 @@ class AdminScopeMiddleware(BaseHTTPMiddleware):
         writing = requires_expected_management_tenant(request.method, path)
         scope = None
         try:
-            is_super = await _check_is_global_super(user_id)
+            current_identity = (
+                writing
+                or path.startswith("/api/v1/guest-link/")
+                or path == "/api/v1/llm/workbench"
+                or (path == "/api/v1/workstation/config" and request.query_params.get("purpose") != "navigation")
+            )
+            request.state.require_current_super = current_identity
+            is_super = (
+                await _check_is_global_super(user_id, force_refresh=True)
+                if current_identity
+                else await _check_is_global_super(user_id)
+            )
             scope = await resolve_management_scope(user_id, is_super=is_super, for_write=writing)
             if writing:
                 require_expected_management_tenant(request.headers.get("X-Management-Tenant"), scope)

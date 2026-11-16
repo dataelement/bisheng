@@ -16,7 +16,6 @@ from bisheng.app_runtime.domain.services.app_access_log_service import flush_pen
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.exceptions.auth import AuthJWTException
 from bisheng.common.init_data import init_default_data
-from bisheng.common.middleware.admin_scope import AdminScopeMiddleware
 from bisheng.common.services.config_service import settings
 from bisheng.core.context import close_app_context, initialize_app_context
 from bisheng.core.logger import set_logger_config
@@ -145,6 +144,9 @@ async def _prepare_native_reference_permissions() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from bisheng.admin.application.request_admission import install_request_admission
+
+    install_request_admission(app)
     async with AsyncExitStack() as stack:
         await stack.enter_async_context(app.state.open_mcp_runtime.lifespan())
         await stack.enter_async_context(app.state.work_mcp_runtime.run())
@@ -275,6 +277,7 @@ def create_app():
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["X-Management-Tenant", "X-Management-Tenant-Source", "X-Trace-ID", "Content-Disposition"],
     )
 
     # Starlette middleware uses LIFO registration — the middleware added
@@ -282,7 +285,7 @@ def create_app():
     # decode + visible_tenant_ids) to run *before* AdminScopeMiddleware on
     # the inbound path, which means AdminScopeMiddleware must be added
     # *first* (inner). See ``common/middleware/admin_scope.py`` docstring.
-    app.add_middleware(AdminScopeMiddleware)
+    # Scope admission is installed after routing; no competing prefix middleware.
     app.add_middleware(OpenMcpDispatchMiddleware, mcp_app=app.state.open_mcp_runtime.app)
     app.add_middleware(OpenApiAuditMiddleware)
     app.add_middleware(CustomMiddleware)
@@ -308,6 +311,19 @@ def create_app():
         prefix="/api/department-limit",
         tags=["Department traffic"],
     )
+    from bisheng.admin.application.request_admission import install_request_admission
+    from bisheng.common.request_scope import RequestScope, inherit_scope, request_scope
+
+    # External protocols retain their own authenticators and tenant proofs.
+    for own_router in (compatibility_router, router_public, runtime_material_router):
+        inherit_scope(own_router, RequestScope.CREDENTIAL)
+    # include_router copies route objects; metadata belongs to their endpoints.
+    inherit_scope(department_limit_router, RequestScope.TENANT)
+    for route in app.routes:
+        endpoint = getattr(route, "endpoint", None)
+        if getattr(endpoint, "__module__", "") == "fastapi.applications" or route.path == "/health":
+            request_scope(RequestScope.PUBLIC)(endpoint)
+    install_request_admission(app)
     if settings.debug:
         import tracemalloc
 

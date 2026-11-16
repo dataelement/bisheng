@@ -43,7 +43,7 @@ import {
 export function useRolesController() {
   const { t } = useTranslation();
   const { user } = useContext(userContext);
-  const isPlatformAdmin = user?.role === "admin";
+  const isPlatformAdmin = user?.is_global_super === true || user?.role === "admin";
 
   const [roles, setRoles] = useState<ROLE[]>([]);
   const [total, setTotal] = useState(0);
@@ -53,6 +53,7 @@ export function useRolesController() {
   const [editOpen, setEditOpen] = useState(false);
   const [activeRole, setActiveRole] = useState<ROLE | null>(null);
   const [roleName, setRoleName] = useState("");
+  const [roleType, setRoleType] = useState<"tenant" | "global">("tenant");
   const [departmentId, setDepartmentId] = useState<string>("none");
   const [quota, setQuota] = useState<RoleQuotaState>(createDefaultRoleQuota);
   const [menuIds, setMenuIds] = useState<string[]>([]);
@@ -120,6 +121,7 @@ export function useRolesController() {
    */
   const buildEditSnapshot = (input: {
     roleName: string;
+    roleType: string;
     departmentId: string;
     quota: RoleQuotaState;
     menuIds: string[];
@@ -128,6 +130,7 @@ export function useRolesController() {
   }) =>
     JSON.stringify({
       roleName: input.roleName,
+      roleType: input.roleType,
       departmentId: input.departmentId,
       quota: serializeRoleQuotaSnapshot(input.quota),
       menuIds: [...input.menuIds].sort(),
@@ -166,6 +169,7 @@ export function useRolesController() {
     const nextMenuIds = [...defaultMenuIds];
     setActiveRole(null);
     setRoleName("");
+    setRoleType("tenant");
     setDepartmentId(nextDepartmentId);
     const nextQuota = createDefaultRoleQuota();
     setQuota(nextQuota);
@@ -177,6 +181,7 @@ export function useRolesController() {
     setInitialEditSnapshot(
       buildEditSnapshot({
         roleName: "",
+        roleType: "tenant",
         departmentId: nextDepartmentId,
         quota: nextQuota,
         menuIds: nextMenuIds,
@@ -211,6 +216,7 @@ export function useRolesController() {
     setInitialEditSnapshot(
       buildEditSnapshot({
         roleName: role.role_name || "",
+        roleType: role.role_type || "tenant",
         departmentId: role.department_id ? String(role.department_id) : "none",
         quota: roleQuota,
         menuIds: ids,
@@ -231,6 +237,7 @@ export function useRolesController() {
   const openEdit = async (role: ROLE) => {
     setActiveRole(role);
     setRoleName(role.role_name || "");
+    setRoleType(role.role_type === "global" ? "global" : "tenant");
     setDepartmentId(role.department_id ? String(role.department_id) : "none");
     const roleQuota = parseRoleQuota(role.quota_config);
     setQuota(roleQuota);
@@ -274,7 +281,7 @@ export function useRolesController() {
     };
     try {
       if (!activeRole) {
-        await createRoleV2Api(payload);
+        await createRoleV2Api({ ...payload, role_type: roleType });
       } else {
         await updateRoleV2Api(activeRole.id, payload);
       }
@@ -375,7 +382,7 @@ export function useRolesController() {
 
   const scopeLabel = (el: ROLE) => {
     // 作用域以 department_id 为准；全路径优先用后端按 path 解析的字段（不受部门树裁剪影响）
-    if (!el.department_id) return t("system.scopeGlobal");
+    if (!el.department_id) return t("system.scopeAllDepartments");
     const fromApi = (el.department_scope_path || "").trim();
     if (fromApi) return fromApi;
     // F038: no full tree on hand for an ancestor-path lookup; fall back to the
@@ -405,6 +412,7 @@ export function useRolesController() {
     if (!editOpen || !initialEditSnapshot) return false;
     const current = buildEditSnapshot({
       roleName,
+      roleType,
       departmentId,
       quota,
       menuIds,
@@ -412,7 +420,7 @@ export function useRolesController() {
       adminApprovalMode,
     });
     return current !== initialEditSnapshot;
-  }, [editOpen, initialEditSnapshot, roleName, departmentId, quota, menuIds, workbenchApprovalMode, adminApprovalMode]);
+  }, [editOpen, initialEditSnapshot, roleName, roleType, departmentId, quota, menuIds, workbenchApprovalMode, adminApprovalMode]);
 
   const requestCloseEditDialog = () => {
     if (!hasUnsavedEditChanges) {
@@ -457,6 +465,8 @@ export function useRolesController() {
     activeRole,
     roleName,
     setRoleName,
+    roleType,
+    setRoleType,
     departmentId,
     setDepartmentId,
     isPlatformAdmin,

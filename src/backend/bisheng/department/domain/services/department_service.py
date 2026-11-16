@@ -51,6 +51,7 @@ from bisheng.database.models.department_admin_grant import (
 )
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.department.domain.repositories.department_member_repository import DepartmentMemberRepository
+from bisheng.department.domain.repositories.directory_repository import DirectoryRepository
 from bisheng.department.domain.repositories.management_search_repository import ManagementSearchRepository
 from bisheng.department.domain.schemas.department_schema import (
     DepartmentCreate,
@@ -61,6 +62,7 @@ from bisheng.department.domain.schemas.department_schema import (
     DepartmentTreeNode,
     DepartmentUpdate,
 )
+from bisheng.department.domain.schemas.directory_scope import current_directory_scope
 from bisheng.department.domain.services.department_change_handler import (
     DepartmentChangeHandler,
 )
@@ -68,6 +70,7 @@ from bisheng.department.domain.services.department_projection_scope import (
     DepartmentProjectionRuntime,
     PreparedDepartmentProjection,
 )
+from bisheng.department.domain.services.directory_scope import directory_business_data_scope
 from bisheng.permission.domain.services.department_change_handler import (
     DepartmentProjectionContext,
     F048DepartmentChangeHandler,
@@ -90,16 +93,23 @@ def _audit_department(
     from bisheng.api.services.audit_log import AuditLogService
 
     operator_id = int(getattr(login_user, "user_id", 0) or 0)
-    AuditLogService.record(
-        operator_id=operator_id,
-        operator_name=getattr(login_user, "user_name", "") or ("system" if operator_id == 0 else ""),
-        system_id="system",
-        event_type=event_type,
-        object_type=object_type,
-        object_id=object_id,
-        object_name=object_name,
-        note=note,
-    )
+    with directory_business_data_scope():
+        AuditLogService.record(
+            operator_id=operator_id,
+            operator_name=getattr(login_user, "user_name", "") or ("system" if operator_id == 0 else ""),
+            system_id="system",
+            event_type=event_type,
+            object_type=object_type,
+            object_id=object_id,
+            object_name=object_name,
+            note=note,
+        )
+
+
+async def _directory_children_existence(ids, include_archived=False):
+    if current_directory_scope.get() is not None:
+        return await DirectoryRepository.children_existence(ids, include_archived)
+    return await DepartmentDao.aget_children_existence(ids, include_archived=include_archived)
 
 
 # AdminRole = 1, same as bisheng.database.constants.AdminRole
@@ -129,6 +139,23 @@ async def _check_permission(
     The DB parent walk is a compatibility fallback for incomplete historical
     department projection data and never widens scope beyond the org tree.
     """
+    directory = current_directory_scope.get()
+    if directory is not None:
+        if dept_internal_id is None:
+            raise DepartmentPermissionDeniedError()
+        await DirectoryRepository.require_department(dept_internal_id)
+    else:
+        # Gateway-owned controls use this same business-owner boundary without
+        # entering the organization API's storage translation.
+        from bisheng.common.request_scope import get_admitted_request_scope
+
+        admitted = get_admitted_request_scope()
+        if admitted is not None and admitted.kind in {"tenant", "personal"} and dept_internal_id is not None:
+            from bisheng.department.application.business_scope import department_policy_facts
+
+            facts = await department_policy_facts(int(dept_internal_id))
+            if facts.business_tenant_id != admitted.tenant_id:
+                raise DepartmentPermissionDeniedError()
     # L1: System admin → pass
     if _is_admin(login_user):
         return
@@ -242,8 +269,9 @@ async def _aget_user_scope(login_user) -> tuple[bool, set[str]]:
     A node ``d`` is visible iff ``is_sys_admin`` or
     ``any(d.path.startswith(p) for p in admin_paths)``.
     """
+    directory = current_directory_scope.get()
     if _is_admin(login_user):
-        return True, set()
+        return (False, {directory.root_path}) if directory else (True, set())
     admin_depts = await DepartmentDao.aget_user_admin_departments(login_user.user_id)
     is_tenant_admin = await _is_tenant_admin(login_user)
     if not admin_depts and not is_tenant_admin:
@@ -253,6 +281,12 @@ async def _aget_user_scope(login_user) -> tuple[bool, set[str]]:
         tenant_root_path = await _aget_user_tenant_root_path(login_user)
         if tenant_root_path:
             admin_paths.add(tenant_root_path)
+    if directory:
+        admin_paths = {
+            directory.root_path if directory.root_path.startswith(path) else path
+            for path in admin_paths
+            if directory.contains(path) or directory.root_path.startswith(path)
+        }
     return False, admin_paths
 
 
@@ -279,6 +313,9 @@ def _path_in_scope(path: str | None, is_sys_admin: bool, admin_paths: set[str]) 
     ``d.path.startswith(p)``: system admin sees all; otherwise a node is visible
     iff its path is at/under one admin path (path ends with the node's own id, so
     siblings never match)."""
+    directory = current_directory_scope.get()
+    if directory is not None and not directory.contains(path):
+        return False
     if is_sys_admin:
         return True
     return bool(path) and any(path.startswith(p) for p in admin_paths)
@@ -1173,7 +1210,7 @@ class DepartmentService:
             # Subtree filter for non-sys-admin: union of dept-admin subtrees
             # and the tenant-admin mount subtree (Child Admin per PRD §4.5).
             if not is_sys_admin and admin_paths:
-                depts = [d for d in depts if d.path and any(d.path.startswith(p) for p in admin_paths)]
+                depts = [d for d in depts if _path_in_scope(d.path, False, admin_paths)]
                 if not depts:
                     return []
 
@@ -1251,11 +1288,10 @@ class DepartmentService:
                 raise DepartmentPermissionDeniedError()
             depts = await DepartmentDao.aget_children(parent_id, include_archived=include_archived)
 
+        depts = [d for d in depts if _path_in_scope(d.path, is_sys_admin, admin_paths)]
         if not depts:
             return []
-        existence = await DepartmentDao.aget_children_existence(
-            [d.id for d in depts], include_archived=include_archived
-        )
+        existence = await _directory_children_existence([d.id for d in depts], include_archived=include_archived)
         return [_dept_node_dict(d, has_children=d.id in existence) for d in depts]
 
     @classmethod
@@ -1357,9 +1393,7 @@ class DepartmentService:
         visible = [d for d in depts if _path_in_scope(d.path, is_sys_admin, admin_paths)]
         if not visible:
             return []
-        existence = await DepartmentDao.aget_children_existence(
-            [d.id for d in visible], include_archived=include_archived
-        )
+        existence = await _directory_children_existence([d.id for d in visible], include_archived=include_archived)
         nodes = {d.id: _dept_node_dict(d, has_children=d.id in existence, matched=d.id in matched_ids) for d in visible}
         roots: list[dict] = []
         for d in visible:
@@ -1654,6 +1688,8 @@ class DepartmentService:
                     login_user,
                 )
 
+                DirectoryRepository.require_subtree(dept.path)
+
                 # Load new parent
                 new_parent = (await session.exec(select(Department).where(Department.id == data.new_parent_id))).first()
                 if not new_parent or new_parent.status != "active":
@@ -1706,7 +1742,7 @@ class DepartmentService:
                 # Batch update subtree paths.
                 await session.execute(
                     update(Department)
-                    .where(Department.path.like(f"{old_path}%"))
+                    .where(Department.path.like(f"{old_path}%"), Department.tenant_id == dept.tenant_id)
                     .values(
                         path=func.replace(
                             Department.path,
@@ -2236,75 +2272,75 @@ class DepartmentService:
         roles_map: dict = {}
 
         if user_ids:
-            async with get_async_db_session() as session:
-                # User groups
-                from bisheng.database.models.group import Group
-                from bisheng.database.models.user_group import UserGroup
-                from bisheng.user_group.domain.services.user_group_service import (
-                    _can_view_all_groups,
-                )
+            with directory_business_data_scope():
+                async with get_async_db_session() as session:
+                    # User groups
+                    from bisheng.database.models.group import Group
+                    from bisheng.database.models.user_group import UserGroup
+                    from bisheng.user_group.domain.services.user_group_service import (
+                        _can_view_all_groups,
+                    )
 
-                viewer_group_ids: set[int] = set()
-                if not await _can_view_all_groups(login_user):
-                    raw_visible_group_ids = await UserGroupDao.aget_user_visible_group_ids(
-                        login_user.user_id,
-                    )
-                    viewer_group_ids = {
-                        int(x[0]) if isinstance(x, tuple) else int(x)
-                        for x in raw_visible_group_ids or []
-                        if x is not None
-                    }
-                ug_stmt = (
-                    select(
-                        UserGroup.user_id,
-                        Group.id,
-                        Group.group_name,
-                    )
-                    .join(Group, UserGroup.group_id == Group.id)
-                    .where(
-                        UserGroup.user_id.in_(user_ids),
-                    )
-                )
-                if not await _can_view_all_groups(login_user):
-                    if viewer_group_ids:
-                        ug_stmt = ug_stmt.where(
-                            or_(
-                                Group.visibility == "public",
-                                Group.create_user == login_user.user_id,
-                                Group.id.in_(viewer_group_ids),
-                            ),
+                    viewer_group_ids: set[int] = set()
+                    if not await _can_view_all_groups(login_user):
+                        raw_visible_group_ids = await UserGroupDao.aget_user_visible_group_ids(
+                            login_user.user_id,
                         )
-                    else:
-                        ug_stmt = ug_stmt.where(
-                            or_(
-                                Group.visibility == "public",
-                                Group.create_user == login_user.user_id,
-                            ),
+                        viewer_group_ids = {
+                            int(x[0]) if isinstance(x, tuple) else int(x)
+                            for x in raw_visible_group_ids or []
+                            if x is not None
+                        }
+                    ug_stmt = (
+                        select(
+                            UserGroup.user_id,
+                            Group.id,
+                            Group.group_name,
                         )
-                ug_result = await session.exec(ug_stmt)
-                for uid, gid, gname in ug_result.all():
-                    user_groups_map.setdefault(uid, []).append(
-                        {"id": gid, "group_name": gname},
+                        .join(Group, UserGroup.group_id == Group.id)
+                        .where(
+                            UserGroup.user_id.in_(user_ids),
+                        )
                     )
+                    if not await _can_view_all_groups(login_user):
+                        if viewer_group_ids:
+                            ug_stmt = ug_stmt.where(
+                                or_(
+                                    Group.visibility == "public",
+                                    Group.create_user == login_user.user_id,
+                                    Group.id.in_(viewer_group_ids),
+                                ),
+                            )
+                        else:
+                            ug_stmt = ug_stmt.where(
+                                or_(
+                                    Group.visibility == "public",
+                                    Group.create_user == login_user.user_id,
+                                ),
+                            )
+                    ug_result = await session.exec(ug_stmt)
+                    for uid, gid, gname in ug_result.all():
+                        user_groups_map.setdefault(uid, []).append(
+                            {"id": gid, "group_name": gname},
+                        )
 
-                # Roles
-                from bisheng.database.models.role import Role
-                from bisheng.user.domain.models.user_role import UserRole
+                    # Roles
+                    from bisheng.database.models.role import Role
+                    from bisheng.user.domain.models.user_role import UserRole
 
-                role_result = await session.exec(
-                    select(
-                        UserRole.user_id,
-                        Role.id,
-                        Role.role_name,
+                    role_result = await session.exec(
+                        select(
+                            UserRole.user_id,
+                            Role.id,
+                            Role.role_name,
+                        )
+                        .join(Role, UserRole.role_id == Role.id)
+                        .where(UserRole.user_id.in_(user_ids))
                     )
-                    .join(Role, UserRole.role_id == Role.id)
-                    .where(UserRole.user_id.in_(user_ids))
-                )
-                for uid, rid, rname in role_result.all():
-                    roles_map.setdefault(uid, []).append(
-                        {"id": rid, "role_name": rname},
-                    )
-
+                    for uid, rid, rname in role_result.all():
+                        roles_map.setdefault(uid, []).append(
+                            {"id": rid, "role_name": rname},
+                        )
         department_ids = sorted({r.department_id for r in rows})
         admin_user_ids = await asyncio.gather(
             *(cls._aget_department_admin_user_ids(department_id) for department_id in department_ids)
@@ -2395,19 +2431,10 @@ class DepartmentService:
 
         # 可见性裁剪：``admin_paths is None`` = 系统超管（不加过滤）。非超管时与
         # :meth:`aget_tree` 的 admin 路径集合构造逐项一致（dept-admin 子树 ∪ 租户挂载子树）。
-        admin_paths: set[str] | None = None
-        if not _is_admin(login_user):
-            admin_depts = await DepartmentDao.aget_user_admin_departments(login_user.user_id)
-            is_tenant_admin = await _is_tenant_admin(login_user)
-            if not admin_depts and not is_tenant_admin:
-                raise DepartmentPermissionDeniedError()
-            admin_paths = {d.path for d in admin_depts if d.path}
-            if is_tenant_admin:
-                tenant_root_path = await _aget_user_tenant_root_path(login_user)
-                if tenant_root_path:
-                    admin_paths.add(tenant_root_path)
-            if not admin_paths:
-                return {"data": [], "total": 0}
+        is_admin, visible = await _aget_user_scope(login_user)
+        admin_paths = None if is_admin else visible
+        if admin_paths == set():
+            return {"data": [], "total": 0}
 
         requested_root_path: str | None = None
         if root_dept_id is not None:
@@ -2523,11 +2550,45 @@ class DepartmentService:
             [],
         )
 
+        await cls.ainitialize_local_member(user, dept_id, login_user)
+        _audit_department(
+            login_user,
+            "create_local_user",
+            object_id=str(user.user_id),
+            object_name=user.user_name,
+            object_type="user_conf",
+            note="来源=组织成员；结果=成功",
+        )
+
+        from bisheng.department.application.business_scope import department_policy_facts
+        from bisheng.user.application.policy_bindings import grant_policy_bindings
+
+        await grant_policy_bindings(
+            user.user_id,
+            (await department_policy_facts(int(dept.id))).business_tenant_id,
+            final_role_ids,
+            operator_id=login_user.user_id,
+        )
+
+        return {
+            "user_id": user.user_id,
+            "user_name": user.user_name,
+            "person_id": person_id,
+            "dept_id": dept.dept_id,
+        }
+
+    @classmethod
+    async def ainitialize_local_member(cls, user, dept_id, login_user):
+        """Attach a newly created account through the existing org projection and Home sync."""
         projection = None
         business_committed = False
         try:
             async with get_async_db_session() as session:
-                dept = await _get_dept_or_raise(session, dept_id)
+                dept = await _get_dept_and_check_permission(session, dept_id, login_user)
+                if (
+                    await session.exec(select(UserDepartment.id).where(UserDepartment.user_id == user.user_id))
+                ).first() is not None:
+                    raise DepartmentMemberExistsError()
                 projection = await _prepare_department_projection(
                     department=dept,
                     login_user=login_user,
@@ -2572,35 +2633,11 @@ class DepartmentService:
             UserTenantSyncService,
         )
 
-        await UserTenantSyncService.sync_user(
+        home = await UserTenantSyncService.sync_user(
             user.user_id,
             trigger=UserTenantSyncTrigger.DEPT_CHANGE,
         )
-        _audit_department(
-            login_user,
-            "create_local_user",
-            object_id=str(user.user_id),
-            object_name=user.user_name,
-            object_type="user_conf",
-            note="来源=组织成员；结果=成功",
-        )
-
-        from bisheng.department.application.business_scope import department_policy_facts
-        from bisheng.user.application.policy_bindings import grant_policy_bindings
-
-        await grant_policy_bindings(
-            user.user_id,
-            (await department_policy_facts(int(dept.id))).business_tenant_id,
-            final_role_ids,
-            operator_id=login_user.user_id,
-        )
-
-        return {
-            "user_id": user.user_id,
-            "user_name": user.user_name,
-            "person_id": person_id,
-            "dept_id": dept.dept_id,
-        }
+        return home
 
     @classmethod
     def _person_display_id(cls, user) -> str:
@@ -2610,19 +2647,20 @@ class DepartmentService:
     @classmethod
     async def _manageable_group_options(cls, login_user) -> list[dict]:
         """Return groups the current user can actually mutate."""
-        from bisheng.user_group.domain.services.user_group_service import UserGroupService
+        with directory_business_data_scope():
+            from bisheng.user_group.domain.services.user_group_service import UserGroupService
 
-        res = await UserGroupService.alist_manageable_group_options(login_user)
-        out = []
-        for x in res or []:
-            out.append(
-                {
-                    "id": x["id"],
-                    "group_name": x.get("group_name", ""),
-                    "visibility": x.get("visibility", "public"),
-                }
-            )
-        return out
+            res = await UserGroupService.alist_manageable_group_options(login_user)
+            out = []
+            for x in res or []:
+                out.append(
+                    {
+                        "id": x["id"],
+                        "group_name": x.get("group_name", ""),
+                        "visibility": x.get("visibility", "public"),
+                    }
+                )
+            return out
 
     @classmethod
     async def _assignable_role_id_set(cls, dept_key: str, login_user) -> set:
@@ -2823,31 +2861,32 @@ class DepartmentService:
     @classmethod
     async def _count_user_owned_data_assets(cls, user_id: int) -> dict:
         """删除人员前：统计用户作为创建者挂载的常见数据资产。"""
-        from bisheng.database.models.assistant import Assistant
-        from bisheng.database.models.flow import Flow
-        from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
+        with directory_business_data_scope():
+            from bisheng.database.models.assistant import Assistant
+            from bisheng.database.models.flow import Flow
+            from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 
-        async with get_async_db_session() as session:
-            k = await session.scalar(
-                select(func.count(Knowledge.id)).where(
-                    Knowledge.user_id == user_id,
-                    Knowledge.type == KnowledgeTypeEnum.SPACE.value,
-                ),
-            )
-            f = await session.scalar(
-                select(func.count(Flow.id)).where(Flow.is_delete == 0).where(Flow.user_id == user_id),
-            )
-            a = await session.scalar(
-                select(func.count(Assistant.id)).where(
-                    Assistant.user_id == user_id,
-                    Assistant.is_delete == 0,
-                ),
-            )
-        return {
-            "knowledge_spaces": int(k or 0),
-            "flows": int(f or 0),
-            "assistants": int(a or 0),
-        }
+            async with get_async_db_session() as session:
+                k = await session.scalar(
+                    select(func.count(Knowledge.id)).where(
+                        Knowledge.user_id == user_id,
+                        Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+                    ),
+                )
+                f = await session.scalar(
+                    select(func.count(Flow.id)).where(Flow.is_delete == 0).where(Flow.user_id == user_id),
+                )
+                a = await session.scalar(
+                    select(func.count(Assistant.id)).where(
+                        Assistant.user_id == user_id,
+                        Assistant.is_delete == 0,
+                    ),
+                )
+            return {
+                "knowledge_spaces": int(k or 0),
+                "flows": int(f or 0),
+                "assistants": int(a or 0),
+            }
 
     @classmethod
     async def acheck_local_member_delete(
@@ -3088,29 +3127,31 @@ class DepartmentService:
         ctx_assignable_ids = {int(r["id"]) for r in catalog.get(ctx_dept.dept_id, [])}
         context_role_ids = sorted(list(role_ids_user & ctx_assignable_ids))
 
-        ug_links = await UserGroupDao.aget_user_group(user_id)
-        admin_group_links = await UserGroupDao.aget_user_admin_group(user_id)
-        member_group_ids = [int(x.group_id) for x in ug_links]
-        locked_group_ids = [int(x.group_id) for x in admin_group_links]
-        current_group_ids = sorted(list(dict.fromkeys(member_group_ids + locked_group_ids)))
-        manageable_groups = await cls._manageable_group_options(login_user)
-        manageable_group_ids = {int(item["id"]) for item in manageable_groups if item.get("id") is not None}
-        missing_current_group_ids = [group_id for group_id in current_group_ids if group_id not in manageable_group_ids]
-        if missing_current_group_ids:
-            missing_groups = await GroupDao.aget_group_by_ids(missing_current_group_ids)
-            existing_missing_group_ids = {int(group.id) for group in missing_groups}
-            for group in missing_groups:
-                manageable_groups.append(
-                    {
-                        "id": group.id,
-                        "group_name": group.group_name,
-                        "visibility": group.visibility,
-                    }
-                )
-            existing_group_ids = manageable_group_ids | existing_missing_group_ids
-            current_group_ids = [group_id for group_id in current_group_ids if group_id in existing_group_ids]
-            locked_group_ids = [group_id for group_id in locked_group_ids if group_id in existing_group_ids]
-
+        with directory_business_data_scope():
+            ug_links = await UserGroupDao.aget_user_group(user_id)
+            admin_group_links = await UserGroupDao.aget_user_admin_group(user_id)
+            member_group_ids = [int(x.group_id) for x in ug_links]
+            locked_group_ids = [int(x.group_id) for x in admin_group_links]
+            current_group_ids = sorted(list(dict.fromkeys(member_group_ids + locked_group_ids)))
+            manageable_groups = await cls._manageable_group_options(login_user)
+            manageable_group_ids = {int(item["id"]) for item in manageable_groups if item.get("id") is not None}
+            missing_current_group_ids = [
+                group_id for group_id in current_group_ids if group_id not in manageable_group_ids
+            ]
+            if missing_current_group_ids:
+                missing_groups = await GroupDao.aget_group_by_ids(missing_current_group_ids)
+                existing_missing_group_ids = {int(group.id) for group in missing_groups}
+                for group in missing_groups:
+                    manageable_groups.append(
+                        {
+                            "id": group.id,
+                            "group_name": group.group_name,
+                            "visibility": group.visibility,
+                        }
+                    )
+                existing_group_ids = manageable_group_ids | existing_missing_group_ids
+                current_group_ids = [group_id for group_id in current_group_ids if group_id in existing_group_ids]
+                locked_group_ids = [group_id for group_id in locked_group_ids if group_id in existing_group_ids]
         return {
             "edit_mode": edit_mode,
             "policy_editable": policy_editable,
@@ -3194,7 +3235,7 @@ class DepartmentService:
         actor = NicknameActor(
             user_id=login_user.user_id,
             user_name=getattr(login_user, "user_name", "") or "",
-            tenant_id=int(getattr(login_user, "tenant_id", None) or 1),
+            tenant_id=subject.home_tenant_id,
             ip_address=ip_address,
         )
         if proposed is not None and edit_mode == "local_primary":
@@ -3288,11 +3329,12 @@ class DepartmentService:
                 )
 
                 req = [int(x) for x in data.group_ids]
-                await UserGroupService.areplace_user_memberships(
-                    user_id,
-                    req,
-                    login_user,
-                )
+                with directory_business_data_scope():
+                    await UserGroupService.areplace_user_memberships(
+                        user_id,
+                        req,
+                        login_user,
+                    )
             return
 
         replace_ids: set[int] = set()
@@ -3367,11 +3409,12 @@ class DepartmentService:
             )
 
             req = [int(x) for x in data.group_ids]
-            await UserGroupService.areplace_user_memberships(
-                user_id,
-                req,
-                login_user,
-            )
+            with directory_business_data_scope():
+                await UserGroupService.areplace_user_memberships(
+                    user_id,
+                    req,
+                    login_user,
+                )
 
         from bisheng.user.application.policy_bindings import replace_policy_bindings
 

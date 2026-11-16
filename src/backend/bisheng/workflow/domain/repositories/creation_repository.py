@@ -4,11 +4,20 @@ from sqlalchemy import update
 from sqlmodel import select
 
 from bisheng.core.context.tenant import bypass_tenant_filter, strict_tenant_filter, tenant_execution_scope
-from bisheng.core.database import get_async_db_session
+from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.database.models.flow import Flow
 
 
 class CreationRepository:
+    @staticmethod
+    def tenant_for_message(resource_id):
+        # Exact trusted-workload recovery only, never a browser directory lookup.
+        with bypass_tenant_filter():
+            with get_sync_db_session() as session:
+                return session.exec(
+                    select(Flow.tenant_id).where(Flow.id == str(resource_id), Flow.flow_type == 10, Flow.is_delete == 0)
+                ).one_or_none()
+
     @staticmethod
     async def readiness_rows(resource_ids):
         # A negative-only state guard. This never grants resource access or exposes row contents.
