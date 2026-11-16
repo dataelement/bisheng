@@ -994,6 +994,24 @@ class WorkspaceBackend(FilesystemBackend):
             return LsResult(error=json.dumps(payload))
         return LsResult(entries=entries)
 
+    def _file_entry(self, rel_path: str) -> LsResult:
+        """The one object stored exactly at ``rel_path``, in ``ls`` entry shape (empty if none)."""
+        key = self._object_key(rel_path.rstrip("/"))
+        key_prefix = f"{WORKSPACE_PREFIX}/{self.svid}/"
+        try:
+            for obj in self.minio.minio_client_sync.list_objects(self._bucket(), prefix=key, recursive=False):
+                if obj.object_name != key:
+                    continue
+                size = int(getattr(obj, "size", 0) or 0)
+                return LsResult(entries=[FileInfo(path="/" + key[len(key_prefix) :], is_dir=False, size=size)])
+        except Exception as e:
+            logger.exception("workspace stat failed for svid={} path={}", self.svid, rel_path)
+            payload = {"error": "Workspace listing failed."}
+            if info := FailureContextAdapter.from_error(e):
+                payload["failure_info"] = info
+            return LsResult(error=json.dumps(payload))
+        return LsResult(entries=[])
+
     # -- edit (cache mutation + write-through) ------------------------------
     def edit(
         self,
@@ -1106,13 +1124,22 @@ class WorkspaceBackend(FilesystemBackend):
         ls_res = self.ls(base)
         if ls_res.error is not None:
             return GrepResult(error=ls_res.error)
+        entries = ls_res.entries or []
+        if base and not entries:
+            # ``ls`` ends the prefix at a directory boundary (``base/``), so a path
+            # naming one file lists nothing. Search that file instead of answering
+            # "No matches" for every pattern (106, 2026-11-16: 29 empty greps).
+            file_res = self._file_entry(base)
+            if file_res.error is not None:
+                return GrepResult(error=file_res.error)
+            entries = file_res.entries or []
         prefix = f"/{WORKSPACE_PREFIX}/{self.svid}/"
         matches: list = []
 
         terms = _grep_terms(pattern)
         skipped_large = 0
         skipped_binary = 0
-        for entry in ls_res.entries or []:
+        for entry in entries:
             full = entry["path"]
             rel_in_ws = full[len(prefix) :] if full.startswith(prefix) else full.lstrip("/")
             # Same spelling tolerance as ``glob`` — an absolute filter must not
