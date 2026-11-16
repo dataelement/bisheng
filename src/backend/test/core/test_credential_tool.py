@@ -51,6 +51,8 @@ def test_real_cli_prepares_checked_in_template_and_validates_native_consumers(tm
 
     import yaml
 
+    from bisheng.core.config.credential_artifacts import write_confidential
+
     root = Path(__file__).resolve().parents[4]
     key = tmp_path / "keys.json"
     assert run("keygen", "--out", key).returncode == 0
@@ -59,7 +61,7 @@ def test_real_cli_prepares_checked_in_template_and_validates_native_consumers(tm
     for name in ("mysql", "redis", "minio", "elasticsearch", "milvus"):
         value = secrets.token_urlsafe(18) + '@:#$\\"'
         file = tmp_path / (name + ".password")
-        file.write_text(value)
+        write_confidential(file, value.encode(), key_file=key, deployment="cli-test")
         values.append(value)
         manifest[name] = {"secret_key_file" if name == "minio" else "password_file": str(file)}
     user = tmp_path / "minio.user"
@@ -85,16 +87,19 @@ def test_real_cli_prepares_checked_in_template_and_validates_native_consumers(tm
         env,
         "--deployment-root",
         root / "docker",
+        "--deployment-id",
+        "cli-test",
     )
     assert result.returncode == 0, result.stderr
     assert all(value not in result.stdout + result.stderr for value in values)
     assert run("check", "--bundle", bundle, "--key-file", key, "--env-file", env, "--enforce").returncode == 0
-    before = (bundle / "mysql-client.cnf").read_bytes()
-    (bundle / "mysql-client.cnf").write_text("[client]\npassword=mismatched\n")
+    native = bundle / "mysql.password"
+    before = native.read_bytes()
+    native.write_text("mismatched-password-value")
     failure = run("check", "--bundle", bundle, "--key-file", key, "--env-file", env)
     assert failure.returncode == 2
-    assert "mismatched" not in failure.stderr
-    (bundle / "mysql-client.cnf").write_bytes(before)
+    assert "mismatched-password-value" not in failure.stderr
+    native.write_bytes(before)
 
 
 def test_installer_internal_commands_join_keys_privately_without_overwrite(tmp_path):
@@ -122,7 +127,7 @@ def test_installer_internal_commands_join_keys_privately_without_overwrite(tmp_p
     assert not (tmp_path / "failed.json").exists()
 
 
-def test_installer_requirements_and_inputs_do_not_need_keyring(tmp_path):
+def test_requirements_and_explicit_legacy_input_import_do_not_need_keyring(tmp_path):
     import secrets
 
     import yaml
@@ -144,8 +149,10 @@ def test_installer_requirements_and_inputs_do_not_need_keyring(tmp_path):
     manifest = tmp_path / "inputs.yaml"
     manifest.write_text(yaml.safe_dump({"version": 1, "mysql": {"password_file": str(password)}}))
     response = run("validate-inputs", "--inputs", manifest)
+    assert response.returncode == 2 and "encrypted input required" in response.stderr
+    response = run("validate-inputs", "--inputs", manifest, "--allow-legacy-inputs")
     assert response.returncode == 0 and password.read_text() not in response.stdout + response.stderr
     password.write_text("1234")
-    assert run("validate-inputs", "--inputs", manifest).returncode == 2
+    assert run("validate-inputs", "--inputs", manifest, "--allow-legacy-inputs").returncode == 2
     config.write_text("telemetry_elasticsearch: invalid\n")
     assert run("requirements", "--config", config).returncode == 2

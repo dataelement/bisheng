@@ -81,8 +81,21 @@ def test_es_reuses_verification_options_and_closes(monkeypatch):
     assert factory.call_args.kwargs["verify_certs"] is True
     assert factory.call_args.kwargs["ca_certs"] == "/certs/ca.pem"
     client.security.authenticate.assert_called_once()
+    client.info.assert_not_called()
     client.close.assert_called_once()
     client.indices.create.assert_not_called()
+
+
+def test_es_without_basic_auth_uses_anonymous_info(monkeypatch):
+    import elasticsearch
+
+    client = MagicMock()
+    factory = MagicMock(return_value=client)
+    monkeypatch.setattr(elasticsearch, "Elasticsearch", factory)
+    checks._es(SimpleNamespace(elasticsearch_url="http://elasticsearch:9200", ssl_verify={}))
+    client.info.assert_called_once()
+    client.security.authenticate.assert_not_called()
+    client.close.assert_called_once()
 
 
 def test_unknown_component_fails_before_any_client(monkeypatch):

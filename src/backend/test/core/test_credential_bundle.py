@@ -9,6 +9,7 @@ import yaml
 from cryptography.fernet import Fernet
 from sqlalchemy.engine import make_url
 
+from bisheng.core.config.credential_artifacts import bundle_native_files, write_bundle_native
 from bisheng.core.config.credential_bundle import prepare_bundle
 from bisheng.core.config.secret_crypto import CredentialConfigurationError, load_keyring
 
@@ -56,11 +57,13 @@ def test_fresh_package_encrypts_business_config_and_keeps_native_credentials(dep
     out = prepare_bundle(**deployment)
     conf = yaml.safe_load((out / "config.yaml").read_text())
     ring = load_keyring(deployment["key_file"])
-    mysql = (out / "mysql.password").read_text()
+    mysql = bundle_native_files(out, deployment["key_file"])["mysql.password"].decode()
     assert ring.decrypt(make_url(conf["database_url"]).password) == mysql
     minio = conf["object_storage"]["minio"]["secret_key"]
-    assert ring.decrypt(minio[8:-1]) == (out / "minio.password").read_text()
+    assert ring.decrypt(minio[8:-1]) == bundle_native_files(out, deployment["key_file"])["minio.password"].decode()
     assert mysql not in (out / "config.yaml").read_text()
+    assert (out / "mysql.password").read_text() == mysql
+    assert json.loads((out / "manifest.json").read_text())["native_storage"] == "plaintext"
     assert conf["password_conf"]["max_error_times"] == 7
     assert deployment["config"].read_bytes() == original
     assert json.loads((out / "manifest.json").read_text())["pending"] == []
@@ -76,7 +79,7 @@ def test_output_directory_never_overwritten(deployment):
     assert marker.read_text() == "original"
 
 
-def test_new_weak_password_rejected_without_partial_activation(deployment):
+def test_new_short_password_rejected_without_partial_activation(deployment):
     inputs = yaml.safe_load(deployment["inputs"].read_text())
     Path(inputs["mysql"]["password_file"]).write_text("1234")
     with pytest.raises(CredentialConfigurationError):
@@ -86,8 +89,10 @@ def test_new_weak_password_rejected_without_partial_activation(deployment):
 
 def test_component_change_preserves_other_service_credentials(deployment, tmp_path):
     base = prepare_bundle(**deployment)
-    old_mysql = (base / "mysql.password").read_bytes()
-    old_login = yaml.safe_load((base / "milvus.yaml").read_text())["common"]["security"]["defaultRootPassword"]
+    old_mysql = bundle_native_files(base, deployment["key_file"])["mysql.password"]
+    old_login = yaml.safe_load(bundle_native_files(base, deployment["key_file"])["milvus.yaml"].decode())["common"][
+        "security"
+    ]["defaultRootPassword"]
     inputs = yaml.safe_load(deployment["inputs"].read_text())
     password = tmp_path / "new-minio.password"
     password.write_text(secrets.token_urlsafe(24))
@@ -102,8 +107,8 @@ def test_component_change_preserves_other_service_credentials(deployment, tmp_pa
         base_bundle=base,
         component="minio",
     )
-    assert (out / "mysql.password").read_bytes() == old_mysql
-    native = yaml.safe_load((out / "milvus.yaml").read_text())
+    assert bundle_native_files(out, deployment["key_file"])["mysql.password"] == old_mysql
+    native = yaml.safe_load(bundle_native_files(out, deployment["key_file"])["milvus.yaml"].decode())
     assert native["common"]["security"]["defaultRootPassword"] == old_login
     assert native["minio"]["secretAccessKey"] == password.read_text()
 
@@ -115,11 +120,14 @@ def test_rotation_preserves_actual_passwords(deployment, tmp_path):
     new_keys.write_text(json.dumps({"version": 1, "keys": [Fernet.generate_key().decode(), old]}))
     new_keys.chmod(0o600)
     out = prepare_bundle(mode="key-rotation", key_file=new_keys, out_dir=tmp_path / "next", base_bundle=base)
-    assert (out / "mysql.password").read_bytes() == (base / "mysql.password").read_bytes()
+    assert (
+        bundle_native_files(out, new_keys)["mysql.password"]
+        == bundle_native_files(base, deployment["key_file"])["mysql.password"]
+    )
     conf = yaml.safe_load((out / "config.yaml").read_text())
     assert (
         load_keyring(new_keys).decrypt_primary(make_url(conf["database_url"]).password)
-        == (out / "mysql.password").read_text()
+        == bundle_native_files(out, new_keys)["mysql.password"].decode()
     )
 
 
@@ -131,31 +139,37 @@ def test_adopt_records_existing_insecure_state(deployment, tmp_path):
         .set(password=ring.encrypt("1234").decode())
         .render_as_string(hide_password=False)
     )
-    config["object_storage"]["minio"]["secret_key"] = "minioadmin"
+    config["object_storage"]["minio"]["secret_key"] = "short"
     deployment["config"].write_text(yaml.safe_dump(config))
     out = prepare_bundle(
         mode="adopt-key", config=deployment["config"], key_file=deployment["key_file"], out_dir=tmp_path / "adopt"
     )
     manifest = json.loads((out / "manifest.json").read_text())
     assert {"mysql", "redis", "minio", "milvus"} <= set(manifest["pending"])
-    assert (out / "mysql.password").read_text() == "1234"
-    assert not yaml.safe_load((out / "milvus.yaml").read_text())["common"]["security"]["authorizationEnabled"]
+    assert bundle_native_files(out, deployment["key_file"])["mysql.password"].decode() == "1234"
+    assert not yaml.safe_load(bundle_native_files(out, deployment["key_file"])["milvus.yaml"].decode())["common"][
+        "security"
+    ]["authorizationEnabled"]
 
 
 def test_shipped_template_can_prepare_without_legacy_secret_environment(deployment, tmp_path):
     root = Path(__file__).resolve().parents[4]
     deployment["config"] = root / "docker/bisheng/config/config.yaml"
     out = prepare_bundle(**deployment, environ={"BISHENG_GATEWAY_HMAC_SECRET": ""}, deployment_root=root / "docker")
-    assert (out / "gateway-application.yml").exists()
+    assert "gateway-application.yml" in bundle_native_files(out, deployment["key_file"])
     assert "encrypt(" in (out / "config.yaml").read_text()
 
 
 def test_redis_rotation_preserves_custom_acl_permissions(deployment, tmp_path):
     base = prepare_bundle(**deployment)
-    acl = base / "redis-users.acl"
-    acl.write_text(
-        acl.read_text().replace("~* &* +@all", "~tenant:* &events +get +set") + "user reader off ~read:* +get\n"
-    )
+    native = bundle_native_files(base, deployment["key_file"])
+    native["redis-users.acl"] = (
+        native["redis-users.acl"].decode().replace("~* &* +@all", "~tenant:* &events +get +set")
+        + "user reader off ~read:* +get\n"
+    ).encode()
+    manifest = json.loads((base / "manifest.json").read_text())
+    manifest.update(write_bundle_native(base, native))
+    (base / "manifest.json").write_text(json.dumps(manifest))
     password = tmp_path / "new-redis"
     password.write_text("replacement-" + __import__("secrets").token_urlsafe(20))
     inputs = tmp_path / "change.yaml"
@@ -168,7 +182,7 @@ def test_redis_rotation_preserves_custom_acl_permissions(deployment, tmp_path):
         base_bundle=base,
         out_dir=tmp_path / "next",
     )
-    result = (out / "redis-users.acl").read_text()
+    result = bundle_native_files(out, deployment["key_file"])["redis-users.acl"].decode()
     assert "~tenant:* &events +get +set" in result
     assert "user reader off ~read:* +get" in result
     assert "+@all" not in result
@@ -189,10 +203,13 @@ def test_redis_rotation_keeps_gateway_and_milvus_native_custom_settings(deployme
         base_bundle=base,
         out_dir=tmp_path / "next",
     )
-    gateway = yaml.safe_load((out / "gateway-application.yml").read_text())
+    gateway = yaml.safe_load(bundle_native_files(out, deployment["key_file"])["gateway-application.yml"].decode())
     assert gateway["spring"]["data"]["redis"]["password"] == password.read_text()
     assert gateway["spring"]["datasource"]["password"] == "${GATEWAY_DATABASE_PASSWORD}"
-    assert (out / "milvus.yaml").read_bytes() == (base / "milvus.yaml").read_bytes()
+    assert (
+        bundle_native_files(out, deployment["key_file"])["milvus.yaml"]
+        == bundle_native_files(base, deployment["key_file"])["milvus.yaml"]
+    )
 
 
 def test_external_dm_bundle_does_not_require_mysql_native_files(deployment, tmp_path, monkeypatch):
@@ -225,6 +242,7 @@ def test_adoption_materializes_actual_container_environment(deployment, tmp_path
     deployment["config"].write_text(deployment["config"].read_text() + "custom_endpoint: !env ${LEGACY_ENDPOINT}\n")
     snapshot = tmp_path / "runtime.json"
     snapshot.write_text(json.dumps(["LEGACY_ENDPOINT=https://existing.example.invalid/path?a=b"]))
+    snapshot.chmod(0o600)
     out = prepare_bundle(
         mode="adopt-key",
         config=deployment["config"],

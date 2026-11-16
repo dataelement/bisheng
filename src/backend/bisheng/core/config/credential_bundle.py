@@ -164,17 +164,22 @@ def _native(data, plain, milvus_login, deployment_root=None):
         if tls.get("enabled"):
             dsn += "&tls=true"
         files["openfga.yaml"] = _yaml({"datastore": {"engine": "mysql", "uri": dsn}})
+        # Locked openfga images may not accept --config; Compose loads this env file.
+        files["openfga.env"] = f"OPENFGA_DATASTORE_ENGINE=mysql\nOPENFGA_DATASTORE_URI={dsn}\n"
+    files["redis.password"] = plain.get("redis", "")
     if plain.get("redis"):
-        files["redis.password"] = plain["redis"]
         digest = hashlib.sha256(plain["redis"].encode()).hexdigest()
         files["redis-users.acl"] = f"user default on #{digest} ~* &* +@all\n"
+    else:
+        files["redis-users.acl"] = "user default on nopass ~* &* +@all\n"
     minio = data.get("object_storage", {}).get("minio", {})
     if plain.get("minio"):
         files["minio.password"] = plain["minio"]
         files["minio.user"] = minio.get("access_key") or ""
-    for name in ("elasticsearch", "telemetry_elasticsearch"):
-        if plain.get(name):
-            files[name + ".password"] = plain[name]
+    # Statistics ES is a backend client, not a second local native daemon.
+    for name in ("elasticsearch",):
+        if plain.get(name) or name == "elasticsearch":
+            files[name + ".password"] = plain.get(name, "")
     endpoint = minio.get("endpoint", "minio:9000")
     parsed_endpoint = urlparse("//" + endpoint)
     files["milvus.yaml"] = _yaml(
@@ -263,6 +268,8 @@ def prepare_bundle(
         raise CredentialConfigurationError("prepare: explicit component required")
     if mode != "password-change" and component:
         raise CredentialConfigurationError("prepare: component is only valid for password-change")
+    from bisheng.core.config.credential_artifacts import bundle_native_files, write_bundle_native
+
     ring = load_keyring(key_file)
     supplied = read_inputs(inputs)
     if inputs and mode in {"adopt-key", "key-rotation"}:
@@ -277,7 +284,9 @@ def prepare_bundle(
         if mode != "adopt-key":
             raise CredentialConfigurationError("prepare: runtime snapshot is only valid for legacy adoption")
         try:
-            values = json.loads(Path(runtime_env_file).read_text())
+            from bisheng.core.config.credential_artifacts import read_confidential
+
+            values = json.loads(read_confidential(runtime_env_file, key_file=key_file, allow_plaintext=True))
             if not isinstance(values, list):
                 raise ValueError
             runtime = dict(os.environ if environ is None else environ)
@@ -383,8 +392,9 @@ def prepare_bundle(
         if incremental:
             base = Path(base_bundle)
             manifest = json.loads((base / "manifest.json").read_text())
+            base_native = bundle_native_files(base, key_file, allow_legacy=True)
             related = {
-                "mysql": {"mysql.password", "mysql-client.cnf", "openfga.yaml"},
+                "mysql": {"mysql.password", "mysql-client.cnf", "openfga.yaml", "openfga.env"},
                 "redis": {"redis.password", "redis-users.acl", "gateway-application.yml"},
                 "minio": {"minio.user", "minio.password", "milvus.yaml"},
                 "elasticsearch": {"elasticsearch.password"},
@@ -395,30 +405,33 @@ def prepare_bundle(
                 if Path(filename).name != filename:
                     raise CredentialConfigurationError("bundle: invalid native filename")
                 if filename not in related:
-                    native[filename] = (base / filename).read_text()
+                    native[filename] = base_native[filename].decode()
+            for filename, value in base_native.items():
+                if filename.startswith(("es-config/", "milvus-config/")):
+                    native[filename] = value
             if component == "redis":
-                source_acl = base / "redis-users.acl"
                 value = data["redis_url"]
                 username = (
                     value.get("username", "default")
                     if isinstance(value, dict)
                     else (unquote(urlparse(value).username or "default"))
                 )
-                native["redis-users.acl"] = _rotate_acl(source_acl.read_text(), username, plain["redis"])
-                gateway_file = base / "gateway-application.yml"
-                if gateway_file.exists():
-                    gateway = yaml.safe_load(gateway_file.read_text())
+                native["redis-users.acl"] = _rotate_acl(
+                    base_native["redis-users.acl"].decode(), username, plain["redis"]
+                )
+                if "gateway-application.yml" in base_native:
+                    gateway = yaml.safe_load(base_native["gateway-application.yml"])
                     gateway["spring"]["data"]["redis"]["password"] = plain["redis"]
                     native["gateway-application.yml"] = _yaml(gateway)
             if component == "milvus":
-                previous = yaml.safe_load((base / "milvus.yaml").read_text())
+                previous = yaml.safe_load(base_native["milvus.yaml"])
                 security = previous.setdefault("common", {}).setdefault("security", {})
                 security["authorizationEnabled"] = bool(milvus_password)
                 security["defaultRootPassword"] = milvus_password
                 native["milvus.yaml"] = _yaml(previous)
 
             if component == "minio":
-                old_milvus = yaml.safe_load((base / "milvus.yaml").read_text())
+                old_milvus = yaml.safe_load(base_native["milvus.yaml"])
                 old_milvus["minio"]["secretAccessKey"] = plain["minio"]
                 old_milvus["minio"]["accessKeyID"] = objects.get("access_key") or ""
                 native["milvus.yaml"] = _yaml(old_milvus)
@@ -449,20 +462,28 @@ def prepare_bundle(
             target[int(name) if isinstance(target, list) else name] = raw[int(name) if isinstance(raw, list) else name]
         out.mkdir(mode=0o700, parents=True, exist_ok=False)
         try:
-            for name, content in native.items():
-                write_private(out / name, content)
+            revision = uuid.uuid4().hex
+            deployment = (
+                (manifest.get("deployment_id") if incremental else None)
+                or os.environ.get("BS_CREDENTIAL_DEPLOYMENT_ID")
+                or uuid.uuid4().hex
+            )
+            native_meta = write_bundle_native(out, native)
             write_private(out / "config.yaml", dump_document(data))
             write_private(
                 out / "manifest.json",
                 json.dumps(
                     {
-                        "version": 1,
-                        "revision": uuid.uuid4().hex,
+                        "version": 2,
+                        "revision": revision,
+                        "deployment_id": deployment,
+                        "es_security_enabled": bool(plain.get("elasticsearch")),
+                        "runtime_seeded": manifest.get("runtime_seeded", []) if incremental else [],
                         "mode": mode,
                         "component": component,
                         "pending": sorted(pending),
-                        "native_files": sorted(native),
                         "sources": {".".join(k): v for k, v in document.sources.items()},
+                        **native_meta,
                     },
                     ensure_ascii=False,
                     indent=2,

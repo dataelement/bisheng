@@ -103,7 +103,12 @@ def _es(conf):
     options.setdefault("max_retries", 0)
     client = Elasticsearch(hosts=conf.elasticsearch_url, **options)
     try:
-        client.security.authenticate()
+        # Unauthenticated clusters have no Security API. Anonymous info() is the
+        # matching probe before an enable-auth migration turns security on.
+        if options.get("basic_auth"):
+            client.security.authenticate()
+        else:
+            client.info()
     finally:
         client.close()
 

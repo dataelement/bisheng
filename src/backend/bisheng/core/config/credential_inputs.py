@@ -10,19 +10,17 @@ import yaml
 from bisheng.core.config.secret_crypto import CredentialConfigurationError
 
 COMPONENTS = ("mysql", "redis", "minio", "elasticsearch", "milvus", "telemetry_elasticsearch")
-# Public defaults/known weak choices form a rejection list, never credentials.
-_WEAK = {"1234", "123456", "12345678", "password", "root", "redis", "elastic", "minioadmin", "milvus", "changeme"}
 
 
 def validate_password(value: str, component: str) -> str:
     if not isinstance(value, str) or not value or any(x in value for x in ("\x00", "\n", "\r")):
         raise CredentialConfigurationError(f"{component}: nonempty single-line credential required")
-    if value.lower() in _WEAK or value.startswith("<") or value.startswith("${"):
-        raise CredentialConfigurationError(f"{component}: default or placeholder credential rejected")
+    if value.startswith("<") or value.startswith("${"):
+        raise CredentialConfigurationError(f"{component}: placeholder credential rejected")
+    if len(value) < 6:
+        raise CredentialConfigurationError(f"{component}: credential must contain at least 6 characters")
     if component == "minio" and len(value) < 8:
-        raise CredentialConfigurationError("minio: credential below component minimum")
-    if component in ("elasticsearch", "telemetry_elasticsearch") and len(value) < 6:
-        raise CredentialConfigurationError(f"{component}: credential below component minimum")
+        raise CredentialConfigurationError("minio: credential must contain at least 8 characters")
     if component == "milvus" and len(value.encode("utf-8")) > 72:
         raise CredentialConfigurationError("milvus: credential exceeds component limit")
     return value
@@ -35,12 +33,19 @@ def is_weak(value: str, component: str | None = None) -> bool:
             return False
         except CredentialConfigurationError:
             return True
-    return not value or value.lower() in _WEAK
+    return not value
 
 
-def read_secret(path: str | Path) -> str:
+def read_secret(path: str | Path, *, allow_plaintext=True) -> str:
     try:
-        value = Path(path).read_text(encoding="utf-8")
+        from bisheng.core.config.credential_artifacts import FORMAT, read_confidential
+
+        raw = Path(path).read_bytes()
+        if FORMAT.encode() in raw[:256]:
+            raw = read_confidential(path)
+        elif not allow_plaintext:
+            raise CredentialConfigurationError("credential_file: encrypted input required; use explicit legacy import")
+        value = raw.decode("utf-8")
     except (OSError, UnicodeError):
         raise CredentialConfigurationError("credential_file: cannot be read") from None
     if value.endswith("\r\n"):
@@ -52,7 +57,7 @@ def read_secret(path: str | Path) -> str:
     return value
 
 
-def read_inputs(path: str | Path | None) -> dict:
+def read_inputs(path: str | Path | None, *, allow_plaintext=True) -> dict:
     if path is None:
         return {}
     source = Path(path).resolve()
@@ -86,7 +91,7 @@ def read_inputs(path: str | Path | None) -> dict:
             if key.endswith("_file"):
                 target = Path(value)
                 target = target if target.is_absolute() else source.parent / target
-                loaded[key[:-5]] = read_secret(target)
+                loaded[key[:-5]] = read_secret(target, allow_plaintext=allow_plaintext or key == "access_key_file")
             else:
                 loaded[key] = value
         secret = loaded.get("secret_key" if name == "minio" else "password")

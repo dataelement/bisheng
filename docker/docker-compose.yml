@@ -104,12 +104,12 @@ services:
     restart: on-failure
 
   mysql:
-    group_add: ["${BISHENG_SECRET_FILE_GID:?set the protected credential file group ID}"]
+    group_add:
+    - ${BISHENG_SECRET_FILE_GID:?set the protected credential file group ID}
     container_name: bisheng-mysql
     image: ${MYSQL_IMAGE:?set MYSQL_IMAGE in docker/.env (see .env.example)}
     entrypoint: ["bash", "/credential-entrypoint.sh"]
     command: ["mysqld"]
-    
     ports:
       - "3306:3306"
     environment:
@@ -117,12 +117,12 @@ services:
       MYSQL_DATABASE: bisheng
       TZ: Asia/Shanghai
     volumes:
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/mysql/conf/my.cnf:/etc/mysql/my.cnf
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/mysql/data:/var/lib/mysql
-      - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/mysql.password:/run/secrets/mysql.password:ro
-      - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/mysql-client.cnf:/run/secrets/mysql-client.cnf:ro
-      - ./mysql/credential-health.sh:/credential-health.sh:ro
-      - ./mysql/credential-entrypoint.sh:/credential-entrypoint.sh:ro
+    - ${DOCKER_VOLUME_DIRECTORY:-.}/mysql/conf/my.cnf:/etc/mysql/my.cnf
+    - ${DOCKER_VOLUME_DIRECTORY:-.}/mysql/data:/var/lib/mysql
+    - ./mysql/credential-health.sh:/credential-health.sh:ro
+    - ./mysql/credential-entrypoint.sh:/credential-entrypoint.sh:ro
+    - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/mysql.password:/run/secrets/mysql.password:ro
+    - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/mysql-client.cnf:/run/secrets/mysql-client.cnf:ro
     healthcheck:
       test: ["CMD", "sh", "/credential-health.sh"]
       start_period: 30s
@@ -132,56 +132,64 @@ services:
     restart: on-failure
 
   mysql-init:
-    group_add: ["${BISHENG_SECRET_FILE_GID:?set the protected credential file group ID}"]
+    group_add:
+    - ${BISHENG_SECRET_FILE_GID:?set the protected credential file group ID}
     image: ${MYSQL_IMAGE:?set MYSQL_IMAGE in docker/.env}
     entrypoint: ["mysql", "--defaults-extra-file=/run/secrets/mysql-client.cnf", "--host=mysql", "--execute=CREATE DATABASE IF NOT EXISTS openfga;"]
     volumes:
-      - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/mysql-client.cnf:/run/secrets/mysql-client.cnf:ro
+    - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/mysql-client.cnf:/run/secrets/mysql-client.cnf:ro
     depends_on:
       mysql:
         condition: service_healthy
 
+  # Locked openfga:v1.15.2-dm has no --config flag. Datastore comes from
+  # openfga.env generated next to openfga.yaml (SSOT remains the YAML file).
   openfga-migrate:
-    group_add: ["${BISHENG_SECRET_FILE_GID:?set the protected credential file group ID}"]
+    group_add:
+    - ${BISHENG_SECRET_FILE_GID:?set the protected credential file group ID}
     container_name: bisheng-openfga-migrate
     image: ${OPENFGA_IMAGE:?set OPENFGA_IMAGE in docker/.env (see .env.example)}
-    command: migrate
-    environment:
-      OPENFGA_DATASTORE_ENGINE: mysql
+    entrypoint: ["/openfga"]
+    command: ["migrate"]
+    env_file:
+    - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/openfga.env
     volumes:
-      - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/openfga.yaml:/etc/openfga/config.yaml:ro
+    - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/openfga.yaml:/etc/openfga/config.yaml:ro
     depends_on:
       mysql-init:
         condition: service_completed_successfully
 
   openfga:
-    group_add: ["${BISHENG_SECRET_FILE_GID:?set the protected credential file group ID}"]
+    group_add:
+    - ${BISHENG_SECRET_FILE_GID:?set the protected credential file group ID}
     container_name: bisheng-openfga
     image: ${OPENFGA_IMAGE:?set OPENFGA_IMAGE in docker/.env (see .env.example)}
-    command: run
+    entrypoint: ["/openfga"]
+    command: ["run"]
+    env_file:
+    - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/openfga.env
     environment:
-      OPENFGA_DATASTORE_METRICS_ENABLED: "true"
-      OPENFGA_DATASTORE_ENGINE: mysql
+      OPENFGA_DATASTORE_METRICS_ENABLED: 'true'
       OPENFGA_LOG_FORMAT: json
-      OPENFGA_PLAYGROUND_ENABLED: "true"
-      OPENFGA_CHECK_QUERY_CACHE_ENABLED: "true"
+      OPENFGA_PLAYGROUND_ENABLED: 'true'
+      OPENFGA_CHECK_QUERY_CACHE_ENABLED: 'true'
       OPENFGA_CHECK_QUERY_CACHE_TTL: 30s
-      OPENFGA_CHECK_ITERATOR_CACHE_ENABLED: "true"
+      OPENFGA_CHECK_ITERATOR_CACHE_ENABLED: 'true'
       OPENFGA_CHECK_ITERATOR_CACHE_TTL: 30s
       OPENFGA_CHECK_ITERATOR_CACHE_MAX_RESULTS: 10000
-      OPENFGA_CACHE_CONTROLLER_ENABLED: "true"
+      OPENFGA_CACHE_CONTROLLER_ENABLED: 'true'
       OPENFGA_CACHE_CONTROLLER_TTL: 10s
       OPENFGA_DATASTORE_MAX_OPEN_CONNS: 80
       OPENFGA_DATASTORE_MAX_IDLE_CONNS: 40
-      OPENFGA_METRICS_ENABLE_RPC_HISTOGRAMS: "true"
-      OPENFGA_RESOLVE_NODE_LIMIT: "${OPENFGA_RESOLVE_NODE_LIMIT:-25}"
+      OPENFGA_METRICS_ENABLE_RPC_HISTOGRAMS: 'true'
+      OPENFGA_RESOLVE_NODE_LIMIT: ${OPENFGA_RESOLVE_NODE_LIMIT:-25}
       OPENFGA_LIST_OBJECTS_MAX_RESULTS: 1000
     ports:
       - "8080:8080"
       - "8081:8081"
       - "2112:2112"
     volumes:
-      - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/openfga.yaml:/etc/openfga/config.yaml:ro
+    - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/openfga.yaml:/etc/openfga/config.yaml:ro
     depends_on:
       openfga-migrate:
         condition: service_completed_successfully
@@ -190,19 +198,22 @@ services:
     restart: unless-stopped
 
   redis:
-    group_add: ["${BISHENG_SECRET_FILE_GID:?set the protected credential file group ID}"]
+    group_add:
+    - ${BISHENG_SECRET_FILE_GID:?set the protected credential file group ID}
     container_name: bisheng-redis
     image: ${REDIS_IMAGE:?set REDIS_IMAGE in docker/.env (see .env.example)}
+    entrypoint: ["sh", "/credential-entrypoint.sh"]
     ports:
       - "6379:6379"
     environment:
       TZ: Asia/Shanghai
     volumes:
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/redis:/data
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/redis/redis.conf:/etc/redis.conf:ro
-      - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/redis-users.acl:/run/secrets/redis-users.acl:ro
-      - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/redis.password:/run/secrets/redis.password:ro
-      - ./redis/credential-health.sh:/credential-health.sh:ro
+    - ${DOCKER_VOLUME_DIRECTORY:-.}/data/redis:/data
+    - ${DOCKER_VOLUME_DIRECTORY:-.}/redis/redis.conf:/etc/redis.conf:ro
+    - ./redis/credential-health.sh:/credential-health.sh:ro
+    - ./redis/credential-entrypoint.sh:/credential-entrypoint.sh:ro
+    - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/redis-users.acl:/run/secrets/redis-users.acl:ro
+    - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/redis.password:/run/secrets/redis.password:ro
     command: ["redis-server", "/etc/redis.conf", "--aclfile", "/run/secrets/redis-users.acl"]
     healthcheck:
       test: ["CMD", "sh", "/credential-health.sh"]
@@ -214,6 +225,8 @@ services:
   backend:
     container_name: bisheng-backend
     image: ${BISHENG_BACKEND_IMAGE:?set BISHENG_BACKEND_IMAGE in docker/.env (see .env.example)}
+    group_add:
+    - ${BISHENG_SECRET_FILE_GID:?set the protected credential file group ID}
     ports:
       - "7860:7860"
     environment:
@@ -263,6 +276,8 @@ services:
   backend_worker:
     container_name: bisheng-backend-worker
     image: ${BISHENG_BACKEND_IMAGE:?set BISHENG_BACKEND_IMAGE in docker/.env (see .env.example)}
+    group_add:
+    - ${BISHENG_SECRET_FILE_GID:?set the protected credential file group ID}
     environment:
       <<: *runtime-platform-env
       TZ: Asia/Shanghai
@@ -317,24 +332,22 @@ services:
       - backend
 
   elasticsearch:
-    group_add: ["${BISHENG_SECRET_FILE_GID:?set the protected credential file group ID}"]
+    group_add:
+    - ${BISHENG_SECRET_FILE_GID:?set the protected credential file group ID}
     container_name: bisheng-es
     image: ${ELASTICSEARCH_IMAGE:?set ELASTICSEARCH_IMAGE in docker/.env (see .env.example)}
-    user: root
     ports:
       - "9200:9200"
       - "9300:9300"
     environment:
       TZ: Asia/Shanghai
-      ELASTICSEARCH_ENABLE_SECURITY: "true"
+      ELASTICSEARCH_ENABLE_SECURITY: ${BISHENG_ES_SECURITY_ENABLED:-true}
       ELASTICSEARCH_PASSWORD_FILE: /run/secrets/elasticsearch.password
-      # Single-node HTTP baseline. TLS installations must provide certificate mounts.
       ELASTICSEARCH_ENABLE_REST_TLS: ${BISHENG_ES_REST_TLS:?explicit true or false}
       ELASTICSEARCH_SKIP_TRANSPORT_TLS: ${BISHENG_ES_SKIP_TRANSPORT_TLS:?explicit yes or no}
     volumes:
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/es:/bitnami/elasticsearch/data
-      - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/elasticsearch.password:/run/secrets/elasticsearch.password:ro
-    # Liveness only; credential_tool performs a separate authenticated check.
+    - ${DOCKER_VOLUME_DIRECTORY:-.}/data/es:/bitnami/elasticsearch/data
+    - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/elasticsearch.password:/run/secrets/elasticsearch.password:ro
     healthcheck:
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9200"]
       start_period: 30s
@@ -363,29 +376,21 @@ services:
       retries: 3
 
   minio:
-    group_add: ["${BISHENG_SECRET_FILE_GID:?set the protected credential file group ID}"]
+    group_add:
+    - ${BISHENG_SECRET_FILE_GID:?set the protected credential file group ID}
     container_name: bisheng-milvus-minio
     image: ${MINIO_IMAGE:?set MINIO_IMAGE in docker/.env (see .env.example)}
     environment:
       MINIO_ROOT_USER_FILE: /run/secrets/minio.user
       MINIO_ROOT_PASSWORD_FILE: /run/secrets/minio.password
-    # Object storage holds every uploaded document, knowledge-base file and
-    # report template.
-    #   9000 - data API. Published because the document server runs as its own
-    #          compose project and cannot resolve `minio`, so BS_MINIO_SHAREPOINT
-    #          has to name the host for report templates to load. Restrict it to
-    #          the networks that need it and put it behind TLS.
-    #   9001 - admin console, deliberately NOT published: it is a full web UI
-    #          over every stored file and nothing in the stack needs it. Reach
-    #          it with `ssh -L 9001:localhost:9001 <host>` when required.
     ports:
       - "9100:9000"
     volumes:
-      - /etc/localtime:/etc/localtime:ro
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/milvus-minio:/minio_data
-      - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/minio.user:/run/secrets/minio.user:ro
-      - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/minio.password:/run/secrets/minio.password:ro
-    command: minio server /minio_data --console-address ":9001"
+    - /etc/localtime:/etc/localtime:ro
+    - ${DOCKER_VOLUME_DIRECTORY:-.}/data/milvus-minio:/minio_data
+    - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/minio.user:/run/secrets/minio.user:ro
+    - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/minio.password:/run/secrets/minio.password:ro
+    command: ["minio", "server", "/minio_data", "--console-address", ":9001"]
     restart: on-failure
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
@@ -394,20 +399,21 @@ services:
       retries: 3
 
   milvus:
-    group_add: ["${BISHENG_SECRET_FILE_GID:?set the protected credential file group ID}"]
+    group_add:
+    - ${BISHENG_SECRET_FILE_GID:?set the protected credential file group ID}
     container_name: bisheng-milvus-standalone
     image: ${MILVUS_IMAGE:?set MILVUS_IMAGE in docker/.env (see .env.example)}
-    entrypoint: ["/tini", "--", "sh", "/credential-entrypoint.sh"]
+    entrypoint: ["sh", "/credential-entrypoint.sh"]
     security_opt:
     - seccomp:unconfined
     environment:
       ETCD_ENDPOINTS: etcd:2379
       MINIO_ADDRESS: minio:9000
     volumes:
-      - /etc/localtime:/etc/localtime:ro
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/milvus:/var/lib/milvus
-      - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/milvus.yaml:/milvus/configs/user.yaml:ro
-      - ./milvus/credential-entrypoint.sh:/credential-entrypoint.sh:ro
+    - /etc/localtime:/etc/localtime:ro
+    - ${DOCKER_VOLUME_DIRECTORY:-.}/data/milvus:/var/lib/milvus
+    - ./milvus/credential-entrypoint.sh:/credential-entrypoint.sh:ro
+    - ${BISHENG_CREDENTIALS_DIR:?set BISHENG_CREDENTIALS_DIR to a checked version directory}/milvus.yaml:/milvus/configs/user.yaml:ro
     restart: on-failure
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
@@ -430,6 +436,7 @@ services:
   #
   # 四者都**不 publish 端口**：外部流量一律经 frontend 的 nginx 进来；
   # docker-socket-proxy 与 egress-proxy 更是连内网都只对本层可见。
+
   runtime-manager:
     container_name: bisheng-runtime-manager
     profiles: [app-runtime]

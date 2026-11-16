@@ -1,11 +1,23 @@
+## 2026-11-14 用户确认：Milvus 原生持久消息例外
+
+用户明确要求“Milvus密码加密保持现状”。本次据此保留 Milvus 原生账号认证、凭据更新和 RocksMQ 持久消息机制；内部消息中可还原的 Base64 密码作为明确的验收例外，不认定为已加密。该例外只覆盖 Milvus 自身生成的内部消息和数据文件。应用配置里的受管密码字段仍须密文，密钥仍外置。原生中间件配置按 2026-11-15 选项 C 以受限明文挂载，不再要求密封进内存文件系统。迁移会话、改密计划和恢复备份里的敏感材料继续加密保存。
+
+不引入 Milvus 透明加密卷、FUSE、SYS_ADMIN 或原生镜像分叉。撤销仅因该发现而新增的整批改密拒绝门禁；保留正常的整批身份预检、维护确认、认证和故障恢复检查。仍执行原部署命令。其余未完成回归、业务、迁移和发布验收继续保留待验，不能据此宣布全部交付完成。
+
+下方此前“Milvus阻塞/需重新确认/拟增加拒绝门禁”是历史发现，按本节用户确认的新范围执行；原扫描证据保留。
+
+---
+
 # Design：中间件密码与配置加密治理
 
-**关联**：[已确认 spec](./spec.md) · [HTML 方案](../../../docs/中间件密码与配置加密治理方案.html) · [版本契约](../release-contract.md)
-**版本**：v3.1.0-beta2 / F003。**更新**：2026-11-12。
-**状态**：正式设计已确认；运行时、配置包/CLI、Compose/Helm 和存量维护代码已实施。本地验证通过，真实私有镜像、双 DB 和业务/恢复验收待执行；任务状态以 tasks.md 为准。保持当前分支与工作区。
-**核查基线**：`feat/3.1-beta2` / `285bfde44d`。当前获准只读检查部分缓存上游镜像；Docker daemon 不共享本机 bind 路径，隔离容器创建随后超时并已清理。未执行客户实际改密或部署，不将源码/上游支持当成交付验收。
+**关联**：[已确认 spec](./spec.md) · [HTML 方案](../../../docs/中间件密码与配置加密治理方案.html) · [版本契约](../release-contract.md) · [验收记录](./verification.md)
+**版本**：v3.1.0-beta2 / F003。**更新**：2026-11-16。
+**状态**：当前实现是选项 C。应用配置的受管密码字段为密文，密钥外置；原生中间件文件以 `native_storage=plaintext` 挂载；原命令负责输入、加密、同步、启动检查和恢复。Go `credential-runtime` 与 `sealed-files-v2` 交付门禁已拆除。HTML 方案 v2.1 的业务背景、入口、组件处理、旧版升级、旧 ES 无认证升级和验收范围已按代码并入本文。该 HTML「四、技术实现」里的静态启动工具、内存文件系统和交换分区拒绝条件与选项 C 及现码冲突，不再作为实现依据。DM、完整故障矩阵、L2 审查、正式发布镜像，以及 Gateway、rootless、未验证原生旧布局仍未关闭。Helm 自 2026-11-16 起不在本次范围。
+**核查基线**：凭据模块与 `docker/lib/credential-*.sh`、`docker/install.sh` 的当前工作区；验收数字以 [verification.md](./verification.md) 为准，不把 HTML 里的 213 项无跳过当作最新全量结果。
 
-## 0. 当前最高优先级修正：部署无感（2026-11-12）
+## 0. 当前状态：原命令部署及选择改密增量
+
+原入口逐组件选择改密已经实现并有独立实测。应用侧缺的是外置密钥和字段密文，不是把原生启动文件再密封一次。§4.14 是选项 C：普通宿主账号可部署，原生文件明文挂载且权限受限。不能用 v1 任务进度或覆盖镜像代替未关闭的交付门禁。
 
 用户要求保留原部署命令，由部署过程中引导补齐必要信息。本章取代下文把手动生成配置包作为日常安装前提的旧流程；下文纯加密、原生适配和恢复基础能力继续复用。本章的原入口引导、自动配置、身份复用与断点续跑已实施并有本地回归；真实配套镜像与全业务验收仍待完成。
 
@@ -27,9 +39,13 @@ bash docker/install.sh  或  bash scripts/deploy.sh install
 
 ## 1. 目标与非目标
 
-在现有配置与部署链路中增加客户独立外置密钥、统一密码解密、凭据配置准备/检查，以及可恢复的存量迁移。实际账号改密由显式运维步骤执行，应用加载配套配置后重建连接。
+客户环境使用各自的中间件密码，不能共用一套默认弱密码。运维仍只执行 `bash docker/install.sh` 或 `bash scripts/deploy.sh install`。部署程序完成密码输入、应用字段加密、原生配置同步、启动检查和故障恢复。重新部署时逐项询问 MySQL、Redis、MinIO、ES、Milvus 是否改密，默认保留；独立统计 ES 单独询问。首次部署隐藏输入并二次确认。运维不手工运行加解密命令。
 
-不新增业务 HTTP API，不改变账号权限、业务及租户归属，不强制 Vault/KMS，不提供密码热更新或零停机保证，不通过关闭认证、删数据恢复连接。只迁移当前共用加密工具保护的数据。
+MySQL、Redis、ES、Milvus 及统计 ES 至少 6 个字符；MinIO 原生密钥至少 8 个字符。不要求数字、字母、符号同时出现。空值、内嵌换行、NUL、占位符和已知默认弱密码仍拒绝。
+
+在这条原命令链路上，补齐外置密钥、应用配置密文和普通宿主账号部署。输入、历史计划和失败恢复走同一套检查点。应用重启直接读已挂载的明文原生文件和密文配置，不增加解密命令。
+
+不新增业务 HTTP API，不改变账号权限、业务及租户归属，不强制 Vault/KMS，不提供密码热更新或零停机保证，不通过关闭认证、删数据或关闭 TLS 恢复连接。不把 Helm、rootless、未验证的原生旧布局或 DM 算进本轮通过范围。只迁移当前共用加密工具保护的数据。Milvus 内部 Base64 消息保持用户确认的例外，不据此改原生镜像。
 
 ## 2. 关键约束
 
@@ -50,14 +66,14 @@ bash docker/install.sh  或  bash scripts/deploy.sh install
 - **备选**：源码固定密钥；普通环境变量包含密钥；强制 Vault/KMS；外部只读文件。
 - **选定**：通过 `BS_SECRET_KEYS_FILE` 读取外部文件，保留 Fernet；首密钥加密，所有有效密钥用于认证解密。
 - **原因**：消除源码固定秘密；复用已有算法/字段；不新增客户基础设施，且能在数据库连接前完成引导。
-- **重新考虑条件**：客户要求所有部署秘密静态加密或已有统一 KMS，再替换密钥提供层，不改业务密码契约。
+- **重新考虑条件**：客户已有统一KMS时替换密钥提供层；本次全量密码文件加密采用§4.14，不改变业务字段Fernet契约。
 
-### D2：配置准备与实际改密分离
+### D2：配置准备与实际改密分阶段，原入口协调
 
 - **备选**：安装时自动改所有账号；人工重复修改每个消费者；生成配置包并显式切换。
-- **选定**：离线生成未激活配置包，检查只读，真实改密走原生管理 runbook。
-- **原因**：初始化不等于存量改密，Milvus 失败响应还可能已写入密码。配置包减少 OpenFGA、Gateway、Milvus 对象存储等联动遗漏。
-- **重新考虑条件**：具有经过验证的独立管理身份、幂等改密和协调协议，再评估自动控制面。
+- **选定**：新增设计仍先离线生成未激活包、check只读；运维明确逐项选择与维护授权后，由原入口调用原生管理适配器，按阶段验证及激活。未支持的外部组合在预检阶段停止。
+- **原因**：用户2026-11-13明确要求五项均可选择改密；已验证手工原生流程可作为适配参考，但初始化不等于存量改密、Milvus超时不等于未写入，必须保留阶段计划及新连接核实。
+- **重新考虑条件**：独立外部控制面/无停机需求另行设计；本次仅在已验证管理身份和单机适配范围内编排，不承诺任意外部账号自动恢复。
 
 ### D3：沿用字段，在配置边界集中解密
 
@@ -110,7 +126,7 @@ bash docker/install.sh  或  bash scripts/deploy.sh install
   → 自动挂载并重建应用 → 业务验收
 ```
 
-真实账号改密、独立密钥轮换是维护变更；底层CLI生成产物仍不会自行激活，也不代替组件管理接口。
+真实账号改密属于显式维护分支：§4.13已将逐项选择、原生账号修改、配置激活与恢复编排接入原入口。底层离线prepare仍只生成产物。独立密钥轮换不随改密执行。
 
 
 运行与工具使用同一 YAML/`!env` 读取逻辑及 Settings 模型；将纯读取逻辑抽为无业务连接的共享函数，使用局部 SafeLoader。禁止 eval、source 客户输入或把密码拼进 Shell。
@@ -169,7 +185,7 @@ milvus:
 
 独立统计 ES 使用 `telemetry_elasticsearch` 同形输入，不默认复用另一个集群的凭据。Gateway 自有业务数据库密码不因 root 改密被覆盖。
 
-密码文件最多去掉一个结尾 LF/CRLF，保留前后空格；拒绝空值、内嵌换行/NUL、占位符、已知默认弱值以及超对应组件限制的输入。合法特殊字符交给各格式序列化，不用统一 Shell 转义或 percent-encoding 代替。长度按锁定版本验证，不猜测统一密码长度政策。
+密码文件最多去掉一个结尾 LF/CRLF，保留前后空格；拒绝空值、内嵌换行/NUL、占位符、已知默认弱值以及不满足组件长度限制的输入。MySQL、Redis、ES、Milvus 与统计 ES 最少 6 个字符；MinIO 原生密钥最少 8 个字符。纯数字、纯字母、纯符号均可，不要求字符种类组合。合法特殊字符交给各格式序列化，不用统一 Shell 转义或 percent-encoding 代替。
 
 输出到全新目录，由必填 `--out-dir` 指定，例如 `docker/.generated/credentials/<版本>/` 或外部安全目录；已有目录拒绝覆盖。失败不激活，原始配置文件不改。目录 0700、文件默认 0600；需要非 root 容器读取时明确设置最小 UID/GID/组权限。
 
@@ -269,12 +285,9 @@ OpenFGA 原生配置加载、Bitnami 安全入口与工具位置、Milvus 配置
 - 非空沙箱页 token 解密失败不再经 `_merge_sandbox_page/_probe_token` 静默改用部署凭据；仅 InvalidToken 转为脱敏配置失败。未配置页 token 时正常使用部署来源，其他无关回退语义不扩改。
 - `--verify-primary-only` 检查静态配置和所有目标 DB 值；未完成不能移除旧运行 key。恢复旧镜像必须配套旧密文，在停写窗口按字段恢复，不全库覆盖新增业务记录。
 
-### 4.9 Helm、源码与多节点
+### 4.9 源码、多节点与 Helm 边界
 
-- Helm 使用 `credentials.existingSecret` 与 `credentials.configRevision`。客户在集群外准备 Secret 的 `fernet-keys.json`、`config.yaml`；三个 Python Deployment 只读挂载同 Secret，YAML 挂载到原默认路径，key 指向 /run/secrets/bisheng-fernet-keys.json。
-- 旧 middleware/config values 拒绝并提示迁移；连接参数集中在外部 Secret 的 YAML，Nginx 非秘密地址移到 frontend.objectStorageEndpoint/objectStorageSharepoint。本次 MinIO 密码不再由 values 生成，Milvus/ES 密码不进入普通 env。发现旧秘密 values 时渲染报迁移错误，不默认继续生成明文 Secret。
-- 未纳入范围的 Gateway HMAC、独立 sandbox token 模板等不顺带迁移，不因名字相近就混进共用 Fernet 环。
-- configRevision 不含秘密，用于显式 rollout；external Secret 不能假设 Helm 自动 hash 内容。改 Secret 后更新 revision 并重建全部相关 Deployment。
+- 2026-11-16 起，Helm 不在本次密码治理范围。`docker/helm/bisheng` 恢复到治理前的 Chart：不增加外部凭据 Secret、`configRevision`，也不在 Helm 中改中间件密码或拒绝旧 values。下文若仍把 Helm 外部 Secret 写成当前实现，以本节为准。
 - 源码/systemd 设置 config、BS_SECRET_KEYS_FILE 绝对路径及读取权限，使用相同 preflight，无 Docker 依赖。
 - 多节点先确认均具备新 key 解密能力再切首 key；静态配置由运维逐节点分发，不依赖 API 本地共享。
 
@@ -287,8 +300,8 @@ OpenFGA 原生配置加载、Bitnami 安全入口与工具位置、Milvus 配置
 | `common/services/config_service.py` | 共享读取/来源校验、启动 preflight、沙箱解密错误显式失败 | 不生成 key，不用默认配置掩盖 InvalidToken |
 | `core/config/credential_tool.py`（新） | 配置包、CLI、只读 probe | 不实际改密或写业务数据，不调用全量初始化做 check |
 | `scripts/rewrap_credentials.py`（新） | 受控备份、跨租户重加密、缓存失效与恢复 | 不进入 Alembic，不取得业务 Owner 权限 |
-| Compose/install/credentials.sh + lib/credential-install.sh / credential-migrate.sh | 原入口引导、锁/状态恢复、新装编排、授权存量迁移及路径挂载 | 不source客户文件，不自动改真实账号；不停止未知节点 |
-| Helm | external Secret 和 revision rollout | 不生成客户 key，不修改外部中间件 |
+| Compose/install/credentials.sh + lib/credential-install.sh / credential-migrate.sh | 原入口引导、锁/状态恢复、新装编排、授权存量迁移及路径挂载 | 不source客户文件，不隐式改真实账号；新增显式维护分支见§4.13，不停止未知节点 |
+| Helm | 不在本次范围；Chart 保持治理前行为 | 不在本次交付中改 Helm 凭据、改密或 rollout |
 
 ### 4.11 构建产物与密钥隔离
 
@@ -300,15 +313,197 @@ OpenFGA 原生配置加载、Bitnami 安全入口与工具位置、Milvus 配置
 
 - 测试 conftest 在业务 premock 导入前提供临时测试配置/key，与生产引导隔离；旧数据库环境来源缺字段时也校验，YAML和运行环境冲突拒绝；prepare物化后目标检查不沿用旧源覆盖。外部DM配置包不强制要求MySQL原生文件。
 
-- `credentials.sh --image IMAGE [--network NETWORK] <命令>` 只使用本地工具镜像；输入清单/密码文件放同一安全目录，输出父目录独立。离线 network none，online 必须显式网络；远程 daemon 必须拥有所引用宿主路径。CLI 可直接在源码/配套镜像中运行。TLS 证书路径要额外显式挂载，标准安装器面向当前单机 HTTP 拓扑，不自动套用客户集群/TLS override。
+- `credentials.sh --image IMAGE [--network NETWORK] <命令>` 只使用本地工具镜像；输入清单/密码文件放同一安全目录；同目标挂载已合并，允许输出包与输入共父目录。离线 network none，online 必须显式网络；远程 daemon 必须拥有所引用宿主路径。CLI 可直接在源码/配套镜像中运行。TLS 证书路径要额外显式挂载，标准安装器面向当前单机 HTTP 拓扑，不自动套用客户集群/TLS override；新增改密分支须捕获并保留已验证的原生配置，不能从HTTP模板覆盖。
 - 新装需要配套镜像先可获得；正式安装先以离线help探测工具入口，发现旧镜像时原入口引导填写配套镜像地址，非交互明确停止；prepare-only 不拉取。正式安装先获得工具镜像并静态校验，再启动原生组件；等待 liveness 后只做一次认证检查，避免启动阶段反复尝试错误密码。API/Worker 显式 force-recreate，Worker 中的 Beat/Linsight 一并重建。
 - 标准 Compose 使用 default Redis 原有全权限语义。增量 Redis 改密保留旧 ACL 的命令/key/channel 权限及其他用户，仅换目标密码；带引号/转义的复杂 ACL 拒绝自动转换。Gateway Redis 配置从旧包保留后只替换密码。外部 Sentinel/Cluster/自定义初始 ACL 仍需专项适配验收。
 - Milvus override 挂载 `/milvus/configs/user.yaml`，增量 MinIO 只改其中对象凭据，增量 Milvus 只改登录安全字段，保留其他原生参数。token 与 user/password 冲突拒绝，真实账号不随改密变更。
 - 缓存上游 Bitnami ES8.12 支持 ELASTICSEARCH_PASSWORD_FILE；单机 HTTP 模板显式启认证及对应 TLS 开关，客户请求 TLS 时不自动关闭。MySQL 原生客户端继承 pool SSL 的 CA/cert/key 与校验模式；OpenFGA tls=true 使用 Go 信任根，私有 CA/双向 TLS 必须另外提供并验证，不能推断它与 Python 的文件挂载自动相同。
 - `check` 同时比较 MySQL client/OpenFGA、Redis ACL、MinIO user/password 与 Milvus对象凭据、Milvus native登录、Gateway Redis等已知消费者的配置一致性；不会用这些静态比较宣告服务器已实际改密。
-- `adopt-key`/`key-rotation` 不接受新密码 inputs。adopt 记录 pending，不通过普通安装器的全量 enforce 激活原生认证；在停写窗口完成静态/DB密文迁移与缓存清理后，以 --no-deps 重建现有应用，真实组件治理另做。
+- `adopt-key`/`key-rotation` 不接受新密码 inputs。adopt 记录 pending，不通过普通安装器的全量 enforce 激活原生认证；在停写窗口完成静态/DB密文迁移与缓存清理后，以 --no-deps 重建现有应用，当前真实组件治理仍须另做；新增原入口选择改密完成后按§4.13内部编排。
 - 构建扫描覆盖源码、镜像元数据和每层内容，识别 lower-layer 残留；真实交付镜像档案缺失时保持发布门禁未完成。
 - 直接维护脚本默认 dry-run，精确目标/跨租户显式授权。前向 resume 已实现；反向恢复由 DBA 按备份、租户与当前字段值核对执行，不提供盲目整库恢复。
+
+### 4.13 原入口逐组件选择改密（AC-48～AC-56，已实施，标准单机实测通过）
+
+#### 4.13.1 当前能力与本轮增量
+
+已实现逐项选择、服务端改密自动编排、持久化状态、部分改密后的复用策略及受控续跑/配对回退。新增能力使用独立live与192.168.106.166真实组件和业务证据验收，不以原9项live代替；完整交付仍受T035/T038门禁约束。
+
+Linux实测修正：Redis通过setpriv保留Docker明确授予的补充组，仍以redis UID/GID运行且不放宽秘密文件权限；ES等待最终Java主进程，避免初始化临时JVM被误判就绪。整批新旧认证及Docker目标归属在写入前核对；双通、未知身份、外部地址或DNS与实际容器不符时拒绝执行。
+
+原入口保持`bash docker/install.sh`及`bash scripts/deploy.sh install`，新增逻辑是内部维护分支；不新增运维必输的路径/版本参数，不让密码进入Shell求值、argv或普通环境变量，不更换现有有效密钥。只生成配置的prepare-only以及check继续无服务端写入。
+
+#### 4.13.2 交互与执行顺序
+
+1. 持有现有部署锁，先识别未完成改密计划；有计划时展示原选择/进度，重新确认本次维护条件后续跑，不再询问五项选择或重收已保存密码。
+2. 无未完成计划时，标准新装仍按原流程询问五项密码，不额外询问是否改密。交互处理已有部署时逐项询问`是否修改…密码？[y/N]`，回车/明确n均保留；非法回答重新询问。独立统计ES配置存在时独立列项，不能复用知识ES密码。
+3. 仅所选项隐藏输入/确认新密码；沿用组件校验，新值与现值相同则说明并要求重新输入或取消该项。Ctrl-C/取消恢复终端回显，没有进入真实改密。全部保留时无维护确认、不生成新改密计划，继续原有复用流程。
+4. 汇总只显示组件名称及保留/修改，说明预计重启的依赖服务、已有签名链接影响、备份与其他节点停写要求。新计划必须有独立的`yes`授权，不能沿用旧密钥迁移的永久authorized文件。
+5. 旧版场景先按既有授权完成外置密钥迁移、DB重加密及primary-only复检；可先收集选择，但真实改密必须在该阶段成功以后开始。旧版迁移失败不执行改密。
+6. 受限文件保存全部所选输入，离线生成完整的未激活阶段配置；拉取所需镜像，校验宿主机目录/备份可用性/组件归属与适配能力。对所有目标先做只读管理能力检查，任何目标不支持则整批停止，尚未修改服务端密码。
+7. 操作者确认其他节点及外部任务停写后，记录本机原运行消费者并暂停API、Worker（含Beat/Linsight）、前端、启用的Gateway和受影响的OpenFGA。脚本不能宣称自动排空外部写入者、提供全量一致性业务备份或保证在途任务恰好执行一次。
+8. 固定顺序执行MySQL、Redis、知识ES、统计ES、MinIO、Milvus中所选项；每项先记写入意图，修改实际账号，核实结果，更新相关原生挂载并按依赖重建，验证后推进检查点。任何失败立即停止后续项，业务保持暂停。
+9. 最后复检全部连接及未选身份不变，原子激活完整配置，按依赖恢复OpenFGA、API/Worker、Gateway、前端，检查就绪并输出本次改密结果与仍待治理的未选组件。全部业务恢复验证完成才写COMPLETE。
+
+非交互且没有显式改密请求时保持复用；自动化可在.env中提供受限`BISHENG_CREDENTIAL_ROTATION_INPUTS_FILE`清单（复用version=1组件密码文件格式，出现的组件即所选项）及`BISHENG_ALLOW_CREDENTIAL_ROTATION=yes`。缺少授权/输入/管理前提时在变更前停止。自动化不能把首次新装的输入文件变化解释为改密请求；一次已完成请求不能因.env仍指向同一清单而反复执行，应记录其请求ID/文件内容摘要并要求新的显式请求。
+
+#### 4.13.3 宿主编排与组件适配
+
+| 组件 | 只读前提检查 | 实际改密及持久化 | 必须同步/验证 |
+| --- | --- | --- | --- |
+| MySQL | MySQL方言、锁定镜像入口、现用管理连接、CURRENT_USER与目标User@Host清单及权限；标准管理root只覆盖经确认属于本部署的localhost/%身份，其他账号布局不猜测 | SQLAlchemy/PyMySQL绑定参数执行ALTER USER；每个User@Host独立意图/检查点，不能假设DDL事务回滚。localhost由宿主在MySQL容器中通过stdin受限CNF验证，密码不进argv；管理TCP连接依据已核实的新旧状态选择 | MySQL原生password/client CNF、健康检查、OpenFGA及其migration、Gateway root初始化配置、API/Worker；必要时重建MySQL更新健康检查挂载，数据目录不变 |
+| Redis | 仅标准单机；读取当前目标ACL、其他用户及命令/key/channel规则，检查ACL管理权限；复杂quoted ACL/集群/Sentinel拒绝套用 | ACL SETUSER仅替换目标口令，保留权限及其他用户；将旧nopass状态与密码状态分开记录。更新完整ACL文件并重建验证持久化，不对只读挂载执行ACL SAVE，也不把CONFIG REWRITE当作通用方案 | 缓存、Celery/Beat/Linsight、Gateway；新/旧及无凭据连接配对检查，队列不清空。无认证转认证需单独真实fixture通过才标记适配就绪 |
+| MinIO | 确认本部署root身份及FILE/旧环境来源、对象存储endpoint和Milvus依赖；账号标识不改，其他IAM身份不冒充root配置 | root凭据使用新受限文件/环境映射重建MinIO使其生效；不是修改普通IAM用户API。先停Milvus，MinIO新连接验证后再用新S3配置恢复Milvus | MinIO、毕昇、Milvus S3；保留原Milvus登录及其他参数，已有对象/collection与新对象验证；旧签名链接可能失效，需重新签发 |
+| ES/统计ES | 确认目标账号与安全管理能力、认证/TLS和证书、目标集群及builtin身份；两个实例分开 | 用当前有效管理身份调用security change_password API；同步原生password-file和应用basic_auth，保留证书/TLS。对已初始化节点不能以环境变量更新替代API改密 | 知识同步/异步ES、独立统计ES及原生恢复配置；匿名/旧密码不能被当作成功 |
+| Milvus | 锁定2.5.10与配套SDK、实际账号和认证状态；现有认证下验证当前密码，缺失时同入口隐藏询问；无认证时无法只读验证旧密码，不允许猜默认值或用未认证list_collections证明管理凭据有效 | 使用经验证的update_password(user,old,new)，之后用全新客户端核实；更新原生user.yaml并重建清理认证缓存；默认root初始化字段不能覆盖已有账号 | 毕昇所有Milvus路径、原native认证配置；对象存储凭据单独保留。无认证启用/未知旧root密码组合，在具备可验证管理通道前整批预检停止，不伪装成支持 |
+
+适配就绪是按实际镜像digest、认证模式和管理身份确定的能力，不是仅识别组件名称。标准已有认证路径、Redis无认证转认证、ES首次启用安全、Milvus未认证/缺管理凭据等分别标记READY或UNSUPPORTED；UNSUPPORTED必须在全部真实改密之前阻止计划，不能先改其他项后才发现不支持。当前5种手工认证改密证据仅作实现参考，新增编排仍需逐项复验。DM按用户要求保持待验证；不把DM地址交给MySQL适配器。
+
+#### 4.13.4 原生配置保留与部分治理
+
+- 对已有部署捕获原Compose文件列表、项目/网络、现用env和容器mount来源，保存受限渲染快照；从该快照生成仅用于所选原生服务及必要依赖的native编排文件，增量替换目标凭据。未知缺失来源/配置无法无损解析则预检停止。
+- native重建使用相同项目、容器名、网络、原数据挂载和保留的非凭据配置，显式`--no-deps`限定目标集合。不能因只改Redis就用新模板重建未选MySQL/ES/Milvus，也不能将adopt生成的最小milvus.yaml视为旧实例完整配置。MinIO选中时Milvus属于必要消费者，仍必须保留其原认证状态、日志/资源/存储参数。
+- 所选项执行过程使用预生成的阶段配置描述当前已完成组件；旧.env与旧包在所有目标预检前不变。每阶段原生配置采用独立会话env，最终.env只能指向与已验证服务端状态匹配的配置；所有业务消费者在完整切换成功前保持暂停。不能沿用当前install.sh在真实改密前先提交新.env的普通分支。
+- 旧版可能仍有未选择治理的弱密码或无认证组件。它们允许按已导入状态保留，必须列入结果的pending清单，不能为了全局enforce通过而默默修改，也不能导致成功改Redis后下次普通部署必然失败。
+- 现有`check --enforce`继续表示全量治理，不削弱为单项通过。新增计划校验独立检查所选项强度、实际认证与消费者一致性，并逐项比较未选身份/认证状态与已导入基线；持久化`deployment-policy.json`绑定基线revision、当前revision、已验证组件及保留pending项。后续复用由该策略验证受控继承；缺失/篡改/不匹配的记录必须停止，不提供通用弱密码放行开关。
+- 受管策略只能保留受限、不可变导入基线中实际存在且在本次未变的身份；不能通过手填pending新增弱账号。基线/策略/配置/key一并备份与恢复，迁移后优先原命令引导恢复。
+
+#### 4.13.5 状态、故障与恢复
+
+目录：`docker/.generated/credential-security/rotations/<run-id>/`，父目录0700，输入/原配置/env/容器快照和日志0600；需要native组读的派生文件按既有规则单独设置。密钥继续使用当前文件，不复制到源码，不做无关组织同步/沙箱重加密。锁复用已有安装锁。
+
+`plan.json`含version=1、run_id、原/目标/阶段revision、所选项、输入文件引用、目标身份、镜像与部署指纹、受影响服务以及原运行状态；不嵌入原文密码。`journal.json`含version=1、全局phase、当前component、每项及MySQL子账号phase、验证结果类别、业务暂停标记。密码及旧值仅在受限输入和配置文件中，不能进入进度提示。计划、输入和不可变产物需fsync后原子替换，写失败时不得进入下一项变更。
+
+```text
+COLLECTING → PREPARED → PREFLIGHT_OK → MAINTENANCE_CONFIRMED
+ → CONSUMERS_STOPPED → [CHANGE_INTENT → NATIVE_VERIFIED → FILES_PERSISTED] × 所选项
+ → ALL_VERIFIED → ACTIVATING → SERVICES_READY → COMPLETE
+失败：NEEDS_ATTENTION（保留原component/sub-account检查点及停写状态）
+恢复：识别同一plan → 再确认维护条件 → 核实实际身份 → 从未完成步骤续跑
+```
+
+网络/TLS/服务器启动失败只记UNKNOWN，不得记为旧密码拒绝。对单个可验证身份使用全新、带超时且禁盲目重试的连接分别判断：
+
+| 新身份 | 旧身份 | 恢复决策 |
+| --- | --- | --- |
+| 成功 | 认证拒绝 | 密码已变，推进文件/消费者，不重复改密码 |
+| 认证拒绝 | 成功 | 密码仍旧，确认维护后执行尚未完成的改密 |
+| 成功 | 成功 | 明确记录为仍有双凭据/认证缓存/未认证状态，不能标完成；仅Redis已计划的短暂双凭据允许按计划撤销旧值，其他情况停止核实 |
+| 均失败/任一无法判定 | 任意 | 停止后续变更，保留匹配管理通道/文件，修复网络或人工恢复，不猜测身份 |
+
+只允许一次计划内的旧/新探测，不能把认证拒绝当成网络重试循环，避免锁号。输入新旧相同在准备阶段排除。Milvus必须使用新连接并明确区分认证错误/不可达；先持久化操作意图再调用RPC，超时不能直接重发。MinIO等重建导致的网络启动阶段使用只读liveness等待，认证仅在就绪后探测。
+
+默认恢复是正向续跑。若运维在同一入口选择撤销/回退，必须另行显式确认并按逆序对已变目标执行服务端+native+消费者成对恢复；只有新管理身份有效、旧值/原挂载齐全、操作模式支持时才提供自动回退。禁止自动恢复原无认证状态、未知弱化操作或承诺丢失管理身份也能回退；不满足条件时明确NEEDS_ATTENTION和受控恢复材料。DB、队列、对象、索引及向量业务数据不做整库回滚、清空或覆盖。
+
+COMPLETE后清除活动计划指针、保留受限审计与恢复材料；后续交互重新询问五项选择。未完成计划优先于普通部署，不能因当前.env已变化或用户回车而忽略它。计划绑定的实例/数据目录/密钥身份发生变化时拒绝自动续跑。
+
+#### 4.13.6 模块、内部契约与测试门禁
+
+| 拟变更入口 | 职责及边界 |
+| --- | --- |
+| docker/install.sh、lib/credential-install.sh | 识别场景，未完成计划优先，接入分支，保留原入口；只准备不变更语义不变 |
+| docker/lib/credential-rotate.sh（新增） | 宿主机选择、输入、锁、维护确认、Docker/Compose生命周期、逐阶段恢复；宿主机仍无需Python |
+| core/config/credential_rotation.py（新增） | 纯计划/校验/状态转换与可恢复产物，不操作Docker、不导入业务domain/ORM |
+| core/config/credential_rotation_native.py、credential_rotation_cli.py（新增） | 容器内显式管理调用、只读预检与认证探测、脱敏退出；不连接Docker daemon、不在API进程运行 |
+| core/config/credential_tool.py、docker/credentials.sh | 暴露内部离线plan/policy命令与挂载；原check仍只读，不把rotate伪装成check。内部plan使用现有password-change生成阶段包 |
+| src/backend/test/deploy、test/credential_security | 真实PTY选择及取消、SDK边界故障、原生单机事务/认证/重启、完整恢复与镜像扫描 |
+
+内部输入仍使用受限密码清单；新增会话目录参数使用绝对路径，在线管理必须显式指定应用网络。宿主Docker容器运行工具时只挂载所需会话/config/key，不挂docker.sock，不传秘密环境，不改API/Worker的编排权限。配套工具镜像必须声明rotation-v1能力，旧工具镜像在同入口引导选择新镜像，不能仅凭`--help`存在就开始收集/改密。
+
+必须覆盖：全不选、五个单选、代表性多选/全选、各输入取消/不一致/非法、管理能力不足、无认证/弱值混合基线、未选原生配置完整保留、全部先预检、每个原生操作前后崩溃、MySQL子账号部分完成、Milvus超时实为成功、Redis认证持久化、MinIO/Milvus两者组合、旧签名URL、Gateway/统计ES启用/关闭、未知状态不重试、文件/磁盘故障、配对回退限制、同请求自动化幂等、原入口非交互复用、旧版先迁移以及镜像秘密扫描。每组件至少一个真实正反认证及原数据读写/重启保留；未经验证模式保持UNSUPPORTED，不能只写文档就交付。
+
+手动验收只需原命令，选中目标/输入新密码/确认维护；检查汇总与原业务。故障注入只在隔离可销毁环境执行；重新执行同一命令核对原计划和进度，密钥不变。该功能尚未实施，不在现有测试机直接试验账户变更；DM及原有完整交付门禁继续保留。
+
+上游依据仅验证接口约束，不替代锁定镜像门禁：[Milvus update_password](https://milvus.io/api-reference/pymilvus/v2.5.x/MilvusClient/Authentication/update_password.md)要求旧密码；[Redis ACL规则](https://redis.io/docs/latest/commands/acl-setuser/)区分nopass/resetpass；[ACL SAVE](https://redis.io/docs/latest/commands/acl-save/)写配置ACL文件，不能用于只读挂载。实际认证改密参考本地2026-11-13手工原生演练，当前新增自动编排无通过记录。
+
+### 4.14 普通宿主账号与持久密码加密（AC-57～AC-70）
+
+**2026-11-15 用户确认选项 C**：收窄本节。应用侧字段密文 + 外置密钥 + 原命令改密保留；原生中间件配置改回宿主机明文挂载；拆除 Go `credential-runtime` 交付与 `sealed-files-v2` 原生密封门禁。下文凡与选项 C 冲突的「原生必须密封 / tmpfs 明文 / Go 垫片」描述以本节为准废止。
+
+**2026-11-14真实验收发现（历史）**：RocksMQ 可还原 Base64 等 Milvus 内部持久化问题仍为已知例外，不扩大为「应用配置也可明文」。
+
+#### 4.14.1 约束与决策（选项 C）
+
+遵循constitution C1～C8与release-contract。不新增业务HTTP接口、业务表或运行时编排特权，不让后端服务读取Docker socket。全部Docker操作留在原宿主安装器。
+
+| 决策 | 选定及原因 | 被否方案 / 重新考虑条件 |
+| --- | --- | --- |
+| 应用加密 | 复用 Fernet；`config.yaml` 受管密码字段密文；Python cryptography | 不引入第二种自创加密协议 |
+| 原生加载 | Compose 直接 bind 明文原生文件（password/`_FILE`/yaml/conf/ACL）；无 Go 启动垫片 | 若未来再要求原生不落明文盘，需重新确认设计后再引入密封/垫片 |
+| 密钥可见性 | 外置主 keyring，仅挂给 backend/worker 等应用消费者 | 不把主 key 挂进 Redis/MySQL 等原生容器 |
+| 持久版本 | revisions 目录含密文 `config.yaml` + 明文原生文件；manifest 标记 `native_storage=plaintext` | 旧 `native/*.sealed.json` 仅作只读导入兼容，新产出不再生成 |
+| 非root宿主 | 部署账号生成文件，原生明文 0600/0640 + 必要组；不要求 root/sudo | rootless 另验 |
+
+后端镜像不再构建或携带 `/opt/bisheng/credential-runtime`。安装器只需 Python `credential_tool`（prepare/check/rotation）。
+
+#### 4.14.2 持久目录和格式契约（选项 C）
+
+```text
+credential-security/
+  keys/keys.json                 主 keyring（外置、受限）
+  revisions/<revision>/
+    config.yaml                  应用侧受管字段密文
+    manifest.json                version=2、revision、native_storage=plaintext、native_files
+    mysql.password / redis.password / …  明文原生文件（0600/0640）
+    openfga.yaml / openfga.env / milvus.yaml / …
+  rotations/<run-id>/            改密计划、密文敏感态、stages
+  migrations/<run-id>/           旧格式转换备份与进度
+```
+
+- 新产出 `native_storage=plaintext`；旧 `native/*.sealed.json` 仅只读导入兼容，不再生成。
+- 主 keyring 格式不变；HKDF salt 常量名仍为历史字符串 `bisheng/credential-runtime/v2`（密码学常量，不表示仍交付 Go 垫片）。
+- Compose 将原生明文文件 bind 到 `/run/secrets/…`（及 OpenFGA/Milvus 既定路径）；**不**挂载 Go 启动器、**不**使用 `/run/bisheng-secrets` tmpfs。
+
+#### 4.14.3 从输入到启动的数据流（选项 C）
+
+1. 原安装器取部署锁，核对 Docker/目录/既有配置；首装生成外置 key，已有环境复用或恢复，不替换有效旧 key。
+2. 交互密码经 stdin 密封输入；禁用 xtrace；禁止秘密进 argv/普通 env。
+3. `credential_tool` 准备 revision：密文 `config.yaml` + 明文原生文件；`check`/online 在工具进程内解密应用字段。
+4. Compose 直接挂载明文原生文件启动中间件；backend/worker 只挂主 key 读应用密文。
+5. 改密/ES 启用等维护路径仍用 §4.13 / ES migration 检查点；原生重建由 `compile_native` 导出**仅受影响服务**的 Compose，不依赖 credential-runtime binary。
+
+#### 4.14.4 逐组件适配边界（选项 C）
+
+沿用 §4.7 / §4.13 的受管身份、版本锁定与真实改密语义。原生文件以明文挂载为准：MySQL/Redis/MinIO/ES 使用 `/run/secrets/*_FILE` 或等价路径；OpenFGA 用 `openfga.env` + yaml；Milvus 挂 `user.yaml`/`milvus.yaml`。无认证 Milvus 的改密仍为 UNSUPPORTED，直至具备可验证管理通道。
+
+| 组件 | 当前处理 | 失败时 |
+| --- | --- | --- |
+| MySQL | 先核对 User@Host，再改原生账号，保存密文配置和明文 client/password 文件，重连后更新后端与依赖服务 | 维护窗口内可能短暂停服。保留计划与原材料，原命令核实后续跑。不把 DDL 当成可自动回滚，不盲目重复 ALTER |
+| Redis | 保留实际配置、其他用户和 ACL 规则，只换选中口令，切换明文 ACL 文件并验证新连接 | 缓存和任务需要重连。复杂 quoted ACL、集群和 Sentinel 在写入前拒绝，避免覆盖客户自定义配置 |
+| MinIO | 核验本部署 root，用明文 ROOT_*_FILE 更新原生凭据，同步后端和 Milvus 对象存储，验证文件读写 | 旧临时下载链接可能失效，对象保留，需重新签发。失败由原命令按计划恢复，不改 Milvus 登录密码 |
+| ES | 服务端识别认证状态。无认证时在原命令选择保留或启用；启用时保留原数据卷和索引并设密。已认证走 §4.13 改密 | 连接短暂中断。多节点、已有 TLS、未知 file realm 保持现状。失败保留现场，原命令续跑，或经确认后按 §4.15 配对回退 |
+| Milvus | 保持原生账号认证和凭据更新。部署生成的应用字段加密；原生 yaml 明文挂载。用户已接受 RocksMQ 内部 Base64 密码例外 | 不引入 FUSE、SYS_ADMIN、透明加密卷或原生镜像分叉。无认证或未知旧 root 在具备管理通道前整批预检停止 |
+
+#### 4.14.5 环境预检、权限和重启（选项 C）
+
+保留非 root 宿主、目录权限、Docker 授权与部署锁要求。删除「静态 Go 工具每次启动解密预检 / 强制 tmpfs 物化」作为交付条件；普通 `compose up`/容器 restart 直接读明文挂载即可。rootless、主机重启、DM、真实 K8s 等未验收项仍待专项。
+
+#### 4.14.6 旧格式转换与恢复（选项 C）
+
+经核验的受管 v1 包由 `credential_sealed_migration.prepare_migration` 转为 v2，真实密码不变。外层阶段是 `SEALED → VERIFIED → CONSUMERS_SWITCHED → COMPLETE`。切换前把旧文件写入加密备份；`config.yaml` 的受管字段保持密文，原生文件按选项 C 以明文写入新 bundle。旧 3.0.0 目录只读导入（`--allow-external-source`），记入 `external_backups`，不删除、不覆盖。
+
+清理发生在消费者切换之后。`cleanup` 要求会话里的 `deployment.id` 与当前存储一致，并先核对加密备份能还原出原字节。容器看不到某个旧文件，不能当成删除成功；`migrate-bindings` 发现仍有 bind 指向旧明文时拒绝清理。输入类副本在确认不再被恢复流程需要后才处理；客户原始文件和外部备份不擅自删除。中断后重新执行原命令，从 `sealed-migration.active` 续跑。失败不得删除状态目录、覆盖现用密钥，或在没有对应计划时改原生密码。
+
+主密钥要和对应凭据材料一起备份。这是运维要求，安装脚本不会把密钥拷到另一个审批位置。密钥丢失后不能从密文重建密码。不得再生成 Go 垫片或把明文应急目录当作恢复手段。改密中断的配对回退仍按 §4.13.5；ES 启用认证的回退按 §4.15，不把数据目录整份恢复或删除。
+
+#### 4.14.7 模块职责（选项 C）
+
+| 模块 | 增量职责 | 不承担 |
+| --- | --- | --- |
+| `secret_crypto.py` / `credential_artifacts.py` | 主 key、应用密文、明文原生读写、旧 sealed 只读导入 | Docker 生命周期 |
+| `credential_bundle.py` / `credential_tool` | prepare/check/rotation；`native_storage=plaintext` | 构建 Go 垫片 |
+| `credential_rotation*.py` / compose | 改密计划、仅导出选中服务的原生重建 | 猜测未认证管理身份 |
+| `docker/lib/credential-runtime.sh` | Option C 占位/权限辅助（无 Go 提取） | 安装宿主 Go 依赖 |
+| Compose / install / sealed-migrate / es-migrate | 明文挂载与原命令迁移 | 宣称 Helm sealed-files-v2 已验收 |
+
+#### 4.14.8 验收要点（选项 C）
+
+- 交付镜像与安装器路径不得依赖 `/opt/bisheng/credential-runtime`。
+- 现网挂载与 health 脚本使用 `/run/secrets`，不得再要求 `/run/bisheng-secrets`。
+- 改密 `compile_native` 在 plaintext 包上不得要求 `sealed_runtime`。
+- 协议层 Fernet/角色派生单测仍有效；原「Python↔Go 互通 / tmpfs 物化」验收项随垫片拆除而废止，见附录 A。
+
+> 选项 C 之前的 sealed-files-v2 / Go `credential-runtime` 详设见文末 **附录 A（已废止）**，不得再作为实现依据。
 
 ## 5. 已知坑与处理位置
 
@@ -414,12 +609,26 @@ python scripts/rewrap_credentials.py --verify-primary-only --all-tenants
 | AC-28、AC-29、AC-30、AC-31、AC-32、AC-33、AC-34、AC-35、AC-36 | §3 D5、§4.8、§6、§7 |
 | AC-37、AC-38、AC-39、AC-40、AC-41、AC-42 | §4.5、§4.6、§4.9、§7 |
 | AC-43、AC-44、AC-45、AC-46、AC-47 | §0、D6、§4.6.1、原入口/PTY回归 |
+| AC-48、AC-49、AC-50、AC-51、AC-52、AC-53、AC-54、AC-55、AC-56 | §4.13 |
+| AC-57、AC-58、AC-60、AC-62、AC-66、AC-67、AC-70 | §4.14 选项 C、§4.3、§6.3 |
+| AC-59、AC-61、AC-63、AC-64、AC-65、AC-68、AC-69 | §4.14.2～4.14.6；原生文件明文，应用字段密文 |
+| AC-71、AC-72、AC-73、AC-74、AC-75、AC-76 | §4.15 |
 
-本地自动化、Compose 静态渲染与 Helm 实际渲染已执行。上游 ES password-file/原生脚本、Milvus user.yaml、OpenFGA 配置加载机制已核查；私有镜像、双 DB、真实业务及回滚未完成，不标记交付完成。镜像机制验证是实现早期的放行门禁，业务写入与恢复演练是交付门禁。
+上游 ES password-file、Milvus user.yaml、OpenFGA 配置加载已按锁定镜像核查。Helm 渲染不再计入本次通过，见 verification.md 2026-11-16。私有发布镜像、DM、完整故障矩阵和 L2 审查未关闭，不标记交付完成。
+
+### 7.5 已有证据与仍开放的范围
+
+数字以 verification.md 为准。HTML 方案里的「213 项专项回归、无跳过」是 2026-11-14 的聚焦集，不是其后的最新全量。其后记录过密码规则调整后的 240 项，以及 ES 路径扩大后的 250 passed、1 skipped、0 failed；那 1 项跳过是当时缺 Helm 可执行文件。Helm 随后移出本次范围，这项跳过不能当成 Helm 通过，也不能再拿来要求 Chart 验收。
+
+192.168.106.166 上，UID 1000、已有 Docker 授权的隔离项目做过新装、五组件改密恢复、受管 v1 转换和旧文件清理。清理必须让工具看见完整源目录；容器内目录为空不能当成删除成功。单项 MinIO 改密，以及数据、业务、worker 复验和当次扫描，在 verification.md 2026-11-14 记为通过。这些运行使用本地覆盖镜像。业务探针用确定性嵌入，并带仅限夹具的对象下载路由。它们不代表最终成对发布镜像、真实模型质量或完整业务流程已经验收。
+
+仍开放：完整故障矩阵、L2 审查、正式发布镜像、DM。Gateway、rootless 和未经验证的原生旧布局明确拒绝，或不在本轮通过范围。不能据此说所有部署形态都已支持。
+
+运维步骤见 [中间件凭据运维手册](../../../docker/中间件凭据运维手册.html)。增量验收报告已清理，剩余证据以 verification.md 为准。
 
 ## 8. 后续改进与不实施项
 
-- Vault/KMS 或全持久化秘密加密：客户明确要求/已有基础设施时另行接入，本次接受受控明文 Secret。
+- Vault/KMS：不强制引入。应用字段密文与外置密钥仍按 §4.14；原生中间件文件按选项 C 明文挂载。不再把「禁止一切受限明文原生文件」当作交付条件。
 - 账号最小权限：先盘点 MinIO bucket/policy、ES 索引及 DB 迁移权限后另做，不与认证同时收紧。
 - 无停机/热更新：需要跨进程凭据版本与连接协议，本次维护窗口满足已确认规格。
 - Sentinel 支持差异和 Redis Cluster broker：不扩大支持范围，按已验证组合交付。
@@ -434,6 +643,9 @@ python scripts/rewrap_credentials.py --verify-primary-only --all-tenants
 | 2026-11-11 | 接入外置 key/字段解密、CLI、Compose/Helm、分批重加密与运维手册；补全 Redis ACL/既有配置接线 | 实施 tasks，真实私有镜像/双 DB/业务与恢复验收仍待执行 |
 
 | 2026-11-12 | 原入口自动管理输入/key/配置版本/挂载；维护授权与旧身份导入、断点续跑；修复stdin、终端回显和Bash3.2空数组 | 用户确认运维无感返工；真实镜像/双DB门禁仍待执行 |
+| 2026-11-14 | §4.14新增普通宿主账号、全量持久密码加密、逐容器内存加载、旧材料迁移及真实验收方案；当前v1与拟实现v2明确区分 | 用户已确认AC-57～AC-70及设计，实施中；原生消息持久密码问题阻塞，补充设计待确认 |
+| 2026-11-15 | §4.14收窄为选项 C：原生明文挂载，拆除 Go 垫片；§4.15补旧 ES 无认证升级 | 用户确认选项 C 与 AC-71～AC-76 |
+| 2026-11-16 | 将 HTML 方案 v2.1 并入本文，并以当前代码校正密封启动、明文原生文件、ES 设密路径和验收数字 | HTML 与选项 C、verification.md 不一致；Helm 移出本次范围 |
 
 ## 本地真实验收补充：MySQL原生初始化（2026-11-13）
 
@@ -454,3 +666,198 @@ python scripts/rewrap_credentials.py --verify-primary-only --all-tenants
 ## 本地真实验收补充：维护工具挂载合并（2026-11-13）
 
 真实password-change准备发现输入清单和输出配置包共用父目录时，原wrapper同时提交只读和可写的相同目标挂载，Docker报Duplicate mount point。现以精确目标路径合并，相同目标只保留一个挂载；显式输出父目录需可写，不随参数顺序重新降为只读。其他输入/key仍只读，容器根文件系统仍只读，不引入宿主Python或secret环境透传。原部署入口不变。
+
+2026-11-13修订：用户确认AC-48～AC-56；原入口选择改密设计草案见§4.13，替换D2人工协调决策，用户已确认，进入实施阶段。
+
+
+2026-11-13实施细化：内部入口并入 credential_tool rotation，原生独立SDK位于core/config，不新增scripts下需要初始化全应用上下文的脚本；部分维护身份不一致时全应用上下文不可用。Native编排以实际容器的挂载、环境和命令为准，原镜像ID生成本地固定别名；保留原网络和数据，未知归属拒绝。策略校验显式只读挂载整个受限凭据根以读取历史基线，当前计划另以精确可写挂载保存状态。
+
+实际SDK适配：MySQL8.0.43的SHOW GRANTS可能展开所有权限，允许明确CREATE USER+SYSTEM_USER；MinIO冻结S3Error需使用类式资源管理，避免contextmanager改写traceback掩盖签名拒绝；pymilvus2.6.15的重试装饰器在timeout存在时忽略retry_times上限，改密使用原准备RPC实现的单次调用、同一认证通道和状态检查。认证探测仍有5秒超时，原生写入不盲目重试。
+
+当前运行额外Gateway/独立消费者、独立统计ES、外部端点、Redis非default账号、Milvus无认证/身份未知均在写入前UNSUPPORTED。配对回退只支持被密封原计划绑定且旧密码符合现有输入规则的原账号，旧弱密码不自动恢复；保留停写和续跑计划，交付负责人处理。支持范围的完整验证仍以verification.md为准。
+
+
+## 4.15 旧 ES 无认证升级（AC-71～AC-76）
+
+纳入原部署脚本，不新增部署命令，也不另建运行栈。范围是原标准 Compose 的 Bitnami ES 8.12.0 单节点。`security_state` 遇到其他版本或节点数不是 1 时直接失败，不套用本节流程。
+
+HTML 方案写过「密码不落明文文件、设密走 tmpfs」。当前代码不是这条路径：原生 `elasticsearch.password` 按选项 C 明文挂到 `/run/secrets/elasticsearch.password`；容器内 `set +x` 后从该文件读出，经 stdin 传给官方 `elasticsearch-reset-password --username elastic --interactive --batch`。密码不进 argv，也不进 Docker Env。诊断输出经 `seal-stream` 加密。宿主交换分区和 coredump 策略不再作为本流程的拒绝门禁；该次 exec 只把自己的 core rlimit 设为 0。
+
+### 入口与识别
+
+`credential_es_select` 在 `credential_sealed_migration_prepare` 里、`migrate-prepare` 落盘之前执行。v1 包先选择再转换；已经是 v2 且后端缺少 ES 认证时，也在同一入口选择。首次安装直接返回，沿用现有初始化。有 ES 迁移会话时，`install.sh` 把 `credential_rotation_select` 推迟到 ES 迁移完成之后。
+
+识别不看 `config.yaml` 里有没有 `basic_auth`。`discover` 走原项目网络，读 xpack security 开关和认证结果：
+
+- 安全开关为 false，记为 `DISABLED`。
+- 安全开启且当前身份不是匿名，记为 `AUTHENTICATED`。
+- 安全开启但 `authentication_type=anonymous` 或用户名是 `_anonymous`，失败，不能当成安全关闭。
+- 客户端认证被拒，记为 `AUTH_REQUIRED`。
+- 网络失败、权限不足、安全开关类型不明，失败且不写账号。
+
+归属用 Compose 项目标签、服务名、数据挂载 `/bitnami/elasticsearch/data`、网络别名和配置里的主机名交叉核对。配置主机名对不上捕获到的容器时拒绝。新代码目录可以和原数据目录不同。源 bundle 不在凭据存储内时加 `--allow-external-source`，只读导入，不改旧 3.0.0 目录。
+
+`DISABLED` 时交互询问是否开启认证，默认保留。保留则去掉 `basic_auth`，`pending` 带上 elasticsearch，普通部署不强制改密。开启则隐藏输入 elastic 密码；用户名不是 elastic、或输入里还有别的组件，都拒绝。`AUTH_REQUIRED` 时在同一入口导入现用 elastic 密码，校验后保存，不重置未知账号。后端已配置且服务端已认证，则跳过本节，普通改密仍走 §4.13。非交互且尚未选择时停止。
+
+### 准备、执行与状态
+
+ES 子状态是 `PREPARED → FROZEN → PASSWORD_INTENT → PASSWORD_SET → VERIFIED`。外层是 `SEALED → VERIFIED → CONSUMERS_SWITCHED → COMPLETE`。跨服务写入前先落盘：`reset_intent` 在调用设密工具前写成 `PASSWORD_INTENT`；探针索引创建前先把名称和 token 写入加密会话。
+
+会话状态用外置密钥加密保存，并带 `key_identity`。索引基线、容器 inspect 和回退材料各自密封，另存密文文件的 sha256。`deployment-policy.json` 用密钥计算 MAC。集群 UUID 在密封基线里，原镜像 ID 在密封的运行配置里。这些记录不公开密码或单密码摘要。应用 `config.yaml` 仍是字段密文；给 ES 进程挂的密码文件是明文。
+
+`FROZEN` 之前刷新索引，记录业务索引的 UUID、文档数和别名，并核对同端点统计客户端的集群 UUID。只跳过 `index_baseline` 正则命中的系统索引（`.security`、`.security-<数字>`、`.security-tokens-<数字>`、`.security-profile-<数字>`）以及 `.ds-*` 数据流。名称只是以 `.security-` 开头、但不符合该正则的客户索引仍要计入。不删除索引，不重建数据目录。原 data 挂载和自定义配置保留，编排里的镜像钉死为捕获到的镜像 ID。配置备份不是数据备份。
+
+`ELASTICSEARCH_ENABLE_SECURITY` 和存量 elastic 密码是两步。开启安全后先 `observe_target`。目标身份已经可用（`READY`）且阶段已是 `PASSWORD_SET` 或 `VERIFIED` 时，不再设密。尚未设成目标密码且观察结果为 `DENIED` 时，才在该容器里跑官方 reset-password。`persist_password` 再用 `change_password` 确认；只完成 bootstrap 登录不能写成 `PASSWORD_SET`。不能假定 Bitnami 看见已有 data 会重新初始化密码。工具不适配时保持停写，不改成带密码的命令行。
+
+HTTP 端点才会走启用流程。URL 已是 HTTPS，或捕获配置里 REST TLS 已开启却与 HTTP 端点冲突，直接失败，不为了套用单节点流程去关 TLS。传输层 TLS 按捕获到的 elasticsearch.yml 保留，对应设置 `ELASTICSEARCH_SKIP_TRANSPORT_TLS`。
+
+同端点的统计 ES 同步同一目标身份。端点不同且统计侧没有可用凭据时拒绝，避免改到外部集群。adopt-key 且没有原生文件时，在进程内按目标身份生成原生文件，再由 `write_bundle_native` 写成明文；非密码运行配置来自 `docker inspect`。
+
+结果未知时不生成新密码。阶段仍是 `PREPARED` 或 `FROZEN` 时继续原计划。已经越过 `FROZEN` 时，原命令提供「继续」或「配对回退」。上次停在 `PASSWORD_INTENT` 时，必须再输入 `yes` 才用已保存的同一目标密码重试。就绪等待只认 Java 为 PID 1 之后的 `READY` / `KEEP` / `DENIED`；`UNKNOWN` 会继续等到超时，然后失败并保持应用暂停，不在超时当次重置账号。
+
+### 完成与失败恢复
+
+`verify` 同时检查：目标安全状态、匿名搜索业务索引被 401/403 拒绝、冻结基线里的集群 UUID、索引 UUID、文档数和别名。启用模式下，停在 `FROZEN` 不能通过，因为 bootstrap 登录还不等于密码已持久化。然后创建带 `_meta.bisheng_credential_probe` 的临时索引，写读删一条探针文档，不写客户业务文档。探针名称和 token 先写入加密会话；续跑只删除元数据 token 一致的索引。统计消费者还要再次核对集群 UUID。消费者切换后，`migrate-bindings` 确认没有容器再挂旧明文，才按 §4.14.6 清理。完成后再次执行原命令不重复设密。
+
+开启认证前失败：保留原服务、原配置和数据。停写后失败：应用保持暂停，重跑原命令。已经开启认证后失败：默认继续同一目标，不自动退回无认证。配对回退只在模式仍是 `enable`、阶段已冻结或更后、外层尚未 `COMPLETE` 时准备。交互里选 2 并再输入 `yes` 后，用密封的原配置和原镜像恢复安全关闭及原消费者配置，把 `BISHENG_ES_SECURITY_ENABLED` 设为 false，并重新检查索引与连接。不恢复、不删除数据目录。安全索引里如果已经有目标密码，回退只表示恢复安全关闭，不表示清掉安全索引；下一次开启仍以原生账号现状为准。保留选择不允许走这条回退去关闭认证。
+
+### 影响与边界
+
+影响 ES 容器，以及使用它的 API、worker 和统计客户端。维护期间搜索和写入会短暂停。MySQL、Redis、MinIO、Milvus 的密码不在这次操作里改变。多节点、已有 TLS、file realm 不可用的环境保持现状。改动留在凭据模块和原入口，不改业务表，也不改双数据库逻辑。C1、C2、C3、C4 无变化。C6 靠外置密钥保护应用密文和迁移会话；原生 ES 密码文件按选项 C 明文挂载，不把「会话密封」说成原生文件也已密封。
+
+证据要分开看。verification.md 记录：本地 Bitnami ES 8.12.0 单节点做过启用、匿名拒绝、索引身份保留、重启和显式配对回退；开发侧没有在 192.168.106.166 上代为安装或改 ES 账号，此前只读检查只证明后端缺少 `basic_auth`。HTML 方案写明用户已在 166 执行原命令并选择开启认证，同时写明这一次不能把验收矩阵改成全部通过。本仓库不能复核 166 现场。开发侧不因此再启动隔离栈或代操作原生账号。
+
+参考：[官方最小安全配置](https://www.elastic.co/docs/deploy-manage/security/set-up-minimal-security)，[官方设密工具](https://www.elastic.co/docs/reference/elasticsearch/command-line-tools/reset-password)。锁定版本的行为以实际测试为准。
+
+### 开发验收矩阵
+
+下表是设计门禁。本地主路径通过，或 166 上的一次原命令，都不把未执行的行记成通过。环境不可用时记未执行。真实集成只用已授权的本地或 CI 环境。
+
+| 优先级 | 风险 | 场景 | 预期结果 | 验证层级 | 当前证据 |
+| --- | --- | --- | --- | --- | --- |
+| P0 | 服务端识别 | 安全关闭、已开认证、匿名角色、网络失败 | 只有明确的安全关闭算无认证；未知状态不写账号 | SDK 边界与协议测试 | 识别规则有单测；166 原状态不能用「后端无 basic_auth」代替 |
+| P0 | 选择保留 | 旧无认证 ES，选择不启用 | 保持安全关闭，报告待治理，普通部署不被全量强度检查误挡 | 原命令 PTY 与迁移集成 | 代码路径已接；不把启用主路径的通过记到本行 |
+| P0 | 首次启用 | 单节点已有索引，用户选择启用 | 原镜像与数据卷不变；目标密码可用；匿名业务访问被拒绝 | 锁定版本集成 | 本地 8.12.0 单节点已做，见 verification.md；不是 166 的 AMD64 正式部署 |
+| P0 | 配置同步 | 主 ES 与同端点统计消费者 | 只更新对应凭据；后端和 worker 使用同一目标密码；外部端点不改 | 配置与业务集成 | 同端点判断在 `shared_endpoint`；业务调用链未随本地 ES 协议测试关闭 |
+| P0 | 写入前失败 | 预检或加密备份失败 | 没有原生账号和数据变更，不输出秘密 | 故障注入 | 未作为完整矩阵关闭 |
+| P0 | 设密后断线 | `PASSWORD_INTENT` 之后响应丢失 | 先验证已保存目标身份；成功则续跑；不能验证时须显式确认才用同一密码重试 | 故障注入与原命令恢复 | 状态机有单测；不把一次成功启用记成断线恢复已验 |
+| P0 | 配对回退 | 认证已开启、后端激活失败 | 原入口默认识续跑；回退要明确确认，并验证旧配置和索引；不能自动降级 | 状态机与真实集成 | 本地显式回退后原索引仍在；自动降级拒绝有代码约束 |
+| P0 | 数据与泄露 | 旧索引、别名、特殊字符、短密码 | 冻结后的 UUID 和文档数保留；探针写读删成功；密码不进 argv、Docker Env 或普通日志 | 扫描、索引及业务集成 | 本地索引与探针已覆盖。原生密码文件按选项 C 允许在宿主受限明文存在，不再把「无明文文件」当失败 |
+| P1 | 重复执行 | 已完成计划再次部署 | 读取已验证状态，不重复设密，不再要求录入相同密码 | 幂等与 PTY | 阶段判断会跳过已 `PASSWORD_SET` 的重置；未单列成交付通过 |
+| P0 | 不适配拓扑 | 多节点、已有 TLS、file realm 不可用 | 保持现状；不能关闭 TLS 或套用单节点 HTTP | 拒绝路径 | 版本、节点数、HTTPS 和 REST TLS 冲突会在改账号前失败。file realm 不可用没有单独预检；官方工具失败后保持停写，不能写成已经适配 |
+
+## 附录 A：已废止的 sealed-files-v2 / Go credential-runtime 设计（选项 C 前）
+
+> **状态：废止（2026-11-15 选项 C）**。仅作历史对照与导入兼容说明；新实现、验收与任务不得再依赖下列目录布局、Go 静态工具、tmpfs 物化或 `sealed-files-v2` 交付门禁。
+
+#### 4.14.2 持久目录和格式契约
+
+```text
+credential-security/
+  keys/keys.json                    主keyring（外置、受限，已有部署继续原路径）
+  keys/runtime/<role>.json          派生子keyring（受限，逐文件只读挂载）
+  tools/<image-id>/credential-runtime  无秘密静态工具
+  revisions/<revision>/
+    config.yaml                    后端字段加密配置
+    manifest.json                  v2版本、revision、角色和密文摘要
+    native/<role>.sealed.json      该角色完整文件payload的认证密文
+  rotations/<run-id>/
+    plan.json / journal.json       非敏感阶段、关联标识与密文摘要
+    sensitive/*.sealed.json       输入、inventory、env.before等敏感完整内容
+    stages/<component>/            完整v2加密配置包，用于恢复
+  migrations/<run-id>/             旧格式转换的加密备份与非敏感进度
+```
+
+- 主/子keyring格式均沿用源码中的`{"version":1,"keys":["<primary>","<retiring>..."]}`，首项加密、全有序列表解密；没有名为primary/retiring的新JSON字段。不在.env/argv/Docker Config.Env保存key原文。子key派生角色为固定allowlist，HKDF-SHA256输入为各主key的原始32字节，salt为UTF-8字节串`bisheng/credential-runtime/v2`，info为`role:`拼接固定角色ASCII名，输出32字节经base64url作为Fernet key，不使用密码或明文摘要。常量必须通过首个协议测试，发布后不可悄改。
+- 初始角色allowlist为`mysql`、`mysql-init`、`openfga-migrate`、`openfga`、`redis`、`minio`、`elasticsearch`、`milvus`、`gateway-db-init`、`gateway`；未启用角色不生成文件或挂载。独立统计ES/外部服务不借用知识ES角色，缺适配时仍先拒绝。一次性的迁移/改密敏感状态使用独立`maintenance`角色，该key不挂载给常驻中间件。
+- `sealed.json`外层只有`format="bisheng.credentials.v2"`、`role`、`revision`和`token`。token解密后再次包含相同format/role/revision、deployment_id及files；内外字段必须一致，且匹配启动器收到的预期部署/角色/版本，防止跨服务和跨阶段替换。JSON重复字段与未知协议字段均拒绝，不能让不同语言对同一对象有不同解释。静态部署token不设短TTL，避免机器重启后合法配置过期；旧版本拒绝依靠明确激活状态和预期revision。
+- files使用`{name, content_base64, mode}`列表，base64只在密文内部编码任意文件内容。每个角色的相对路径、目标UID/GID和模式有硬编码allowlist；禁止绝对路径、`..`、重复项、硬链接/软链接穿越及设备文件。默认总明文上限8MiB，超过拒绝，不截断后启动。元数据不写密码原文或单密码可离线猜测摘要。
+- 安装器用部署账号创建目录0700；主key/子key按读取主体0600或0640，所有者为部署账号，组为该账号已拥有的部署GID。只读挂载单个key/payload文件，不为了容器访问开放宿主整个父目录。容器内tmpfs按角色读者设置0700/0750及文件0400/0440；启动器可写，原生进程只读认证文件。
+- 新版本输出到临时密文目录，fsync、校验和改名后才更新.env中的bundle/key/revision路径；不得先写明文再加密。最终版本由最后一个已验证阶段复制密文并生成新的受校验manifest，角色payload内revision与最终版本一致后才发布；无需运行时解密到磁盘。
+
+#### 4.14.3 从输入到启动的数据流
+
+1. 原安装器获取部署锁，核对Docker权限、目录可写性、原配置状态、工具版本与环境条件。首装在收集密码前生成外置key；已有环境先使用或恢复有效key，不替换旧key。
+2. 交互仍逐项选择，read -s得到的密码经stdin管道交离线工具直接加密，写入的临时文件也只能是密文；禁用xtrace，禁止把秘密放env/argv。输入取消只留下可识别并可清理的密文残件。
+3. 自动化输入默认不配置，交互不被旧测试请求抢占。新自动化模式读取密文清单或stdin受控通道；v1明文文件只能走明确的旧版导入分支，原文件归属单独记录，不作为新格式长期支持或复制成新明文输入。
+4. 工具在内存渲染原生文件并按角色加密。`check`和真实SDK管理均在工具进程内解密；捕获文件、完整container inspect、私有诊断若含凭据，进入sealed payload或先结构脱敏，不直接落.json/.log。
+5. Compose给每个原生容器挂只读静态工具、自己的密文/子keyring及独立tmpfs。工具每次启动均验证环境、key权限、token完整性、role/revision、路径allowlist和tmpfs类型，再把完整内容原子物化到内存。
+6. 静态工具完成后exec实际镜像入口，保持原参数、信号、退出码与初始化/降权生命周期；不会持有Docker权限。普通容器restart也重新经过解密入口，不依赖安装器再次运行或上次内存仍存在。
+7. SDK新旧身份和依赖消费者验证成功后，按现有顺序恢复后端、Worker、前端。后端/Worker读取原字段密文，新增共享组确保其实际UID能读取主key；应用进程不增加本地明文配置文件。
+
+启动器固定内部接口：`credential-runtime run --role <role> --bundle <sealed-path> --key-file <role-keyring> --deployment <id> --revision <id> -- <trusted-vendor-argv>`。参数均为路径/标识和可信原生命令，不包含密码。没有把任意payload内的字符串当Shell求值的入口。online写账号仍由现有独立SDK模块承担。
+
+#### 4.14.4 逐组件适配和副作用边界
+
+| 角色 | 内存恢复内容 | 保持的原生行为与必须检查的回写 |
+| --- | --- | --- |
+| MySQL | mysql.password、客户端CNF；/tmp与socket目录为受控内存 | 复用现有安全bootstrap wrapper和mysql用户降权；SQL stdin/process substitution不转持久脚本；检查general/audit/binlog配置和实际写入，不让bootstrap/ALTER明文进入受管持久日志 |
+| mysql-init / Gateway初始化 | 仅该消费者需要的客户端CNF和配置 | 保持原完成依赖；不用带密码DSN argv或GATEWAY_DATABASE_PASSWORD创建环境。Gateway真实部署仍需有效许可及独立适配验收，否则预检拒绝 |
+| OpenFGA迁移与服务 | 各自OpenFGA配置 | 镜像可无shell；静态工具直接exec已有原生二进制，使用内存配置路径；迁移与run均覆盖，数据卷不改 |
+| Redis | 完整ACL、健康检查密码、经过核实的配置 | 保持redis UID/GID与显式补充组；aclfile/config位于内存，ACL SAVE/CONFIG REWRITE不得回写密码到宿主配置/数据路径；RDB/AOF仅保持原业务数据 |
+| MinIO | root账号/密码文件 | `_FILE`仅指内存路径，保持vendor入口与原data路径；扫描`.minio.sys`与日志核实没有实际root密码原文；已有凭据元数据的密码哈希不等同明文 |
+| ES | 密码文件与可写配置/keystore目录 | Bitnami setup可能写配置和keystore，整个敏感配置输出路径须在tmpfs；默认模板从精确镜像的独立未启动容器通过archive stdin送入工具内存封装，保留TLS和用户设置，不能先落宿主模板副本；仍等最终Java PID1就绪 |
+| Milvus | 默认配置及user.yaml等受管敏感配置 | 保留既有完整参数、root初始化字段和MinIO对象凭据；对被tmpfs遮蔽的基础配置从原镜像受控提取，禁止因只写user.yaml而丢默认文件；检查etcd和Milvus数据卷不留root/MinIO实际密码原文 |
+| Gateway | 加密完整Spring配置的内存恢复 | 去掉受管密码创建环境，保留许可与路由契约；没有合法镜像/许可/端到端证据时明确不支持，不能退回原明文配置 |
+| 后端/Worker/工具 | 不物化明文业务config | 原字段解密及SDK参数保持进程内；共享组只赋予必要消费者。后端不装Docker客户端、不使用运行时编排SDK |
+
+适配必须以锁定的实际私有镜像为准，自动捕获原入口/命令、环境、网络和数据挂载。对敏感配置路径以外的自定义include、未知镜像回写或已有外部消费者不能证明符合时，在任何账号写入前拒绝，而不是套标准参数覆盖客户配置。默认镜像里不可用的示例字符串不是本次实际客户密码，但检查报告必须区分，不把SDK源码常量误报为当前凭据。
+
+#### 4.14.5 环境预检、权限和重启
+
+- 部署前用同一工具镜像只读核实Docker daemon所在Linux环境。先尝试读取owner/GID和实际挂载访问，再做无秘密的密文/子key/tmpfs探针；宿主账号`id -u != 0`必须可通过。Docker已授权不等于无任何管理权限，安装器不自动追加docker组、不授予sudo。
+- 第一版严格接受无活动swap、无磁盘休眠入口、可关闭进程core输出且无未经核实管道式dump收集器的环境；容器core rlimit硬/软均为0，工具还检查`core_pattern`和`suid_dumpable`。无法核实的远程daemon、虚拟机内存快照、rootless或交换/转储策略不能谎报符合，说明限制并在变更前停止；不自动swapoff或改宿主sysctl。
+- 这不是防御拥有宿主root权限的主动攻击者或管理员外部快照的承诺；企业有受控加密swap/KMS时另行增加可证明适配，不用一个“我已确认”标志跳过安全检查。
+- 每次原生启动工具重复运行预检，不能只在安装当天检查。tmpfs自身不跨容器共享，普通/tmp是否tmpfs必须测fstatfs，不能按目录名猜测；空间限额明确设置，写失败不执行vendor进程。
+- 宿主部署目录不得要求`/root`。默认文件归属为调用者；对已由root创建的目录，在修改账号前报告路径和UID/GID，管理员一次性移交不属于普通账号能自行完成的操作。脚本不递归chown客户业务数据。
+- 子key与加密版本可重建运行态；静态工具、key/payload读取及健康检查不依赖网络。服务单独restart、整栈重建都必须通过；166上不得为验证主机重启而重启共享机器，主机重启门禁使用独立虚拟机，缺该环境则明确待验证。
+
+2026-11-14的166只读检查：无swap，core_pattern为`core`，suid_dumpable为0，电源state只有`freeze`，无UID1000～65533可登录普通账号，Docker非rootless。这些仅为环境可行性输入，不是v2验收通过。实施时由已授权管理员一次性建立隔离普通验收账号及其目录/Docker访问；之后真实部署日志证明操作UID非0且没有sudo。
+
+#### 4.14.6 旧格式转换、历史材料和恢复
+
+旧格式转换不是静默接受永久明文。新增内部格式版本门禁与`migration.active`，复用部署锁，顺序为DISCOVERED→SEALED→VERIFIED→CONSUMERS_SWITCHED→PLAINTEXT_CLEANED→COMPLETE；具体原生改密状态仍沿用§4.13，不合并成一条不透明成功标志。
+
+1. 只读发现当前引用、旧inputs/source/captured-base/stages、inventory/env.before及日志；按明确目录所有权建立清单，不递归收集任意业务数据。发现不可读项在服务端写入前停止，不能遗漏后仍宣告无明文。
+2. 直接从旧文件流到工具内存并写加密备份/完整v2版本，校验内存中内容等价及主key/子key可读。备份也必须加密；临时输出采用fsync+原子改名。对未知token或丢key不生成新key补救。
+3. 进入明确维护窗口，暂停必要消费者，以同一真实密码切换v2内存入口并实际验证；成功前不执行运维选定的真实改密。中断后原命令识别migration.active，从加密备份恢复；不能再次生成明文目录作为应急方案。
+4. 校验通过后，对脚本标记自有的旧明文副本逐项unlink并记录非敏感进度，再进行已选真实改密；外部客户输入/备份只提示归属及清理路径，需明确授权，不擅自删除。
+5. 若部分切换/清理失败，保留加密备份及未完成状态、保持必要停写并提示原命令续跑。已发生的账号变化必须通过旧/新身份探测核实，不执行盲目反向SQL或整库回滚。v2配对回退只使用加密保存的强旧身份。
+
+历史计划整体的密码/完整inspect/hash等敏感信息也封装，journal只保留非秘密阶段；禁止单密码SHA256泄露弱密码猜测面。对v1快照中曾含的任意秘密摘要，不按“已经是哈希”直接公开保留，应迁入加密payload或删除自有记录。
+
+输入/阶段密文可按恢复保留策略管理，不以删完所有历史作为首次交付前提。普通unlink不能证明SSD/快照/旧备份安全擦除：旧密码是否失效按用户选择的真实改密验证，不自动强迫修改未选组件。报告严格区分“当前受管文件无明文”与“旧介质不可能恢复”。
+
+#### 4.14.7 模块职责和契约影响
+
+| 模块 | 增量职责 | 不承担 |
+| --- | --- | --- |
+| `secret_crypto.py` + 新`credential_artifacts.py` | 主/角色key、Fernet封装、固定身份上下文及密文检查 | Docker生命周期、业务上下文初始化 |
+| `credential_inputs.py` / `credential_bundle.py` | stdin/密文输入，内存渲染与v2完整加密产物 | 生成持久明文临时文件 |
+| `credential_rotation*.py` / CLI | 敏感状态sealed读写、原SDK认证/单次写及恢复 | 在后端进程导入Docker SDK；自动猜管理身份 |
+| `tools/credential-runtime/` | 跨架构静态解密、环境/路径/tmpfs检查、固定适配和exec | 容器编排、在线账号改密、HTTP服务 |
+| `docker/lib/credential-runtime.sh` | 公共工具提取、无秘密兼容探针、原生入口挂载 | 把密钥/密码传argv/env、安装宿主依赖 |
+| `credential-install.sh` / `credential-rotate.sh` / 新迁移模块 | 原入口交互、v1迁移和v2激活，所有者/GID检查 | 系统级提权、无条件递归改数据归属 |
+| Compose / 构建 / Helm检查 | 固定角色、最小文件挂载、tmpfs、core限制及产物版本检查 | 对外部明文Secret或未适配的集群宣称v2支持 |
+
+格式是内部维护CLI的破坏性变更：v1仍有只读导入器，v2运行时拒绝v1明文；能力标识`sealed-files-v2`与既有rotation-v1并列。正式镜像必须有同架构静态工具及源码/依赖描述，旧镜像不能接新配置。`--prepare-only`不接收密码、不发起服务变更；发现v2所需能力不匹配时在改账号前停止并按原入口引导配套镜像。
+
+已有Helm/source/systemd产物不能因为后端字段已加密就标记符合本增量。第一批实际执行以标准Linux单机Compose为主；其他入口必须增加显式v2能力校验、拒绝未经证明的明文密码挂载，并把未验证模式列为门禁，不自动套用Docker内存目录设计。DM和完整交付仍保留原门禁。
+
+#### 4.14.8 验收与观测
+
+| 层次 | 覆盖 | 失败判定 |
+| --- | --- | --- |
+| 协议单元 | 官方Fernet向量、Python↔Go互通、角色/版本替换、错key/损坏token、路径穿越、同一明文产生随机密文 | 任一认证/身份/路径约束被绕过即P0 |
+| 离线集成 | 从stdin开始跟踪所有持久写入；v1输入及完整计划转换、原子激活、派生key权限、取消/中断 | 生成任何受管明文临时副本或无密钥覆盖都失败 |
+| 单组件真实 | 原镜像入口、降权、初始化/改密/健康检查、tmpfs和重启、原生回写及卷扫描 | 初始化成功但改密或重启失败、不明文扫描即不得通过 |
+| 非root全栈 | 新普通账号的可写隔离目录、无sudo的原命令；全保留/单项/组合/全选，重建后业务和数据保留 | 日志UID0、手工chmod/解密救场或偷偷提权均失败 |
+| 故障恢复 | 原生写后/配置激活前中断、迁移切换中断、清理中断；原命令从密文续跑和配对回退 | 依赖旧明文、重复已验证写入或丢身份判P0 |
+| 泄露与业务E2E | 当前/历史目录、受管卷、导出容器层、所有镜像层、日志与Docker创建元数据，匹配已知密码及定义编码；真实登录、ReBAC、知识检索和Worker | 只检查HTTP200、只检查宿主当前目录或跳过历史视为未验 |
+
+真实166仅使用新隔离普通账号和独立项目，不在原`/root`目录强行验证非root，不改客户原部署、Docker daemon或整机电源状态。最终普通账号的手工验证仍为进入拥有权限的项目根目录执行`bash docker/install.sh`；选择与维护确认沿用现有SOP，页面URL按隔离端口实际记录。账号由夹具明确标识，不在文档写测试密码；不把自动化输入路径留作手工部署默认值。
+
+日志只输出部署/计划标识、角色、阶段、结果及错误类别；错误不输出token/key或密码摘要。每个测试保存执行UID/GID、镜像ID、工具协议版本、tmpfs证据、扫描对象范围和通过/未运行原因。发布镜像必须重新全层扫描；166局部覆盖镜像不等同最终交付，主机重启/DM/真实K8s缺证据仍待验。
+
+参考：[Fernet格式](https://github.com/fernet/spec/blob/master/Spec.md)、[fernet-go](https://github.com/fernet/fernet-go)、[Docker tmpfs](https://docs.docker.com/engine/storage/tmpfs/)、[Compose secrets](https://docs.docker.com/compose/how-tos/use-secrets/)，已于2026-11-14核查。资料只支持协议/机制，不证明私有镜像适配成功。用户已确认本节，QA参考已补14项，新增任务T084～T117。
+

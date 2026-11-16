@@ -1642,7 +1642,7 @@ conversion and publication boundaries are shown in the
 
 ## 中间件凭据维护（v3.1.0-beta2）
 
-部署密钥不在源码中。配置准备/原生改密/备份恢复见 [凭据运维手册](../../../docs/中间件凭据运维手册.html)。以下从 src/backend 执行，使用与服务相同的 config 和 BS_SECRET_KEYS_FILE。
+部署密钥不在源码中。配置准备/原生改密/备份恢复见 [凭据运维手册](../../../docker/中间件凭据运维手册.html)。以下从 src/backend 执行，使用与服务相同的 config 和 BS_SECRET_KEYS_FILE。
 
 - `rewrap_credentials.sh` / `rewrap_credentials.py`：组织同步与沙箱页令牌的独立重加密；默认 dry-run，显式 --all-tenants，--apply 前 fsync 密文备份，失败按 journal resume，不修改真实中间件密码。
   ```bash
@@ -1654,3 +1654,13 @@ conversion and publication boundaries are shown in the
   ```bash
   python scripts/check_image_secrets.py --source-root . --image-archive /secure/release/backend.tar
   ```
+
+
+中间件逐项改密使用原部署入口 `bash docker/install.sh` / `bash scripts/deploy.sh install` 内部编排。容器内管理接口为 `python -m bisheng.core.config.credential_tool rotation`，独立SDK位于 `bisheng/core/config/credential_rotation_native.py`，不初始化全应用上下文，不持有Docker权限；正常运维无需手动执行内部子命令。实际验收范围见特性003的验证记录。
+
+
+### 中间件凭据 v2（2026-11-14）
+
+仍执行原部署入口，不要求运维手动调用加解密、重新加密或权限修改工具。首次隐藏输入；重部署逐项选择是否改密，默认保留。v2 输入、原生配置包、历史和恢复材料加密；主密钥外置并限制访问，运行所需明文只在经过检查的内存文件系统或进程内存中使用。受管 v1 转换失败时保留现场，再次执行原命令恢复。未经验证的旧原生布局不得绕过拒绝检查。
+
+Milvus 原生内部消息 Base64 凭据为用户确认的明确例外，部署器生成材料仍加密。DM、正式发布镜像及主机重启尚待验收，不能将本地覆盖镜像的通过结果扩展到所有部署形态。参见 [HTML 运维手册](../../../docker/中间件凭据运维手册.html)。

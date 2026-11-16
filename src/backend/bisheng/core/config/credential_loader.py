@@ -97,7 +97,12 @@ def _decode_env(raw: str) -> str:
 def read_env_file(path: str | Path) -> dict[str, str]:
     result = {}
     try:
-        lines = Path(path).read_text(encoding="utf-8").splitlines()
+        text = Path(path).read_text(encoding="utf-8")
+        if '"bisheng.credentials.v2"' in text[:256]:
+            from bisheng.core.config.credential_artifacts import read_confidential
+
+            text = read_confidential(path).decode("utf-8")
+        lines = text.splitlines()
         for line in lines:
             match = re.match(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$", line)
             if not match:
@@ -121,7 +126,16 @@ def load_config(
                 raise CredentialConfigurationError(f"environment.{name}: conflicting sources")
             environment[name] = value
     try:
-        raw = yaml.load(Path(path).read_text(encoding="utf-8"), Loader=_ConfigLoader)
+        text = Path(path).read_text(encoding="utf-8")
+        if '"bisheng.credentials.v2"' in text[:256]:
+            from bisheng.core.config.credential_artifacts import read_confidential
+
+            text = read_confidential(path).decode("utf-8")
+        raw = yaml.load(text, Loader=_ConfigLoader)
+    except FileNotFoundError:
+        raise CredentialConfigurationError(f"config: missing file: {path}") from None
+    except PermissionError:
+        raise CredentialConfigurationError(f"config: unreadable file: {path}") from None
     except (OSError, UnicodeError, yaml.YAMLError, ValueError):
         raise CredentialConfigurationError("config: invalid or unreadable YAML") from None
     if not isinstance(raw, dict):

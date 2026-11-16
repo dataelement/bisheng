@@ -41,12 +41,17 @@ def check_bundle(bundle, *, enforce=False, component=None, environ=None, env_fil
         manifest = json.loads((root / "manifest.json").read_text())
     except (OSError, ValueError):
         raise CredentialConfigurationError("bundle: readable manifest required") from None
-    if manifest.get("version") != 1 or not re.fullmatch(r"[0-9a-f]{32}", manifest.get("revision", "")):
+    if manifest.get("version") not in (1, 2) or not re.fullmatch(r"[0-9a-f]{32}", manifest.get("revision", "")):
         raise CredentialConfigurationError("bundle: invalid version or revision")
     names = manifest.get("native_files")
     if not isinstance(names, list) or any(not isinstance(name, str) or Path(name).name != name for name in names):
         raise CredentialConfigurationError("bundle: invalid file list")
-    for filename in {"config.yaml", "manifest.json", *names}:
+    storage = manifest.get("native_storage")
+    if storage == "plaintext" or manifest.get("version") == 1:
+        physical = list(names)
+    else:
+        physical = ["native/" + role + ".sealed.json" for role in manifest.get("roles", [])]
+    for filename in {"config.yaml", "manifest.json", *physical}:
         file = root / filename
         if file.is_symlink() or not file.is_file() or stat.S_IMODE(file.stat().st_mode) & 0o027:
             raise CredentialConfigurationError("bundle: missing or unsafe artifact")
@@ -74,16 +79,24 @@ def check_bundle(bundle, *, enforce=False, component=None, environ=None, env_fil
         "redis": "redis.password",
         "minio": "minio.password",
         "elasticsearch": "elasticsearch.password",
-        "telemetry_elasticsearch": "telemetry_elasticsearch.password",
     }
     if not make_url(settings.database_url).drivername.startswith("mysql"):
         native_name.pop("mysql")
     try:
+        from bisheng.core.config.credential_artifacts import bundle_native_files
+
+        native_files = bundle_native_files(root, os.environ["BS_SECRET_KEYS_FILE"], allow_legacy=True)
+        # The old key-adoption bundle described only the application config.
+        # Reconstruct expectations in memory, never write legacy password files.
+        if manifest["version"] == 1 and manifest.get("mode") == "adopt-key" and not names:
+            from bisheng.core.config.credential_bundle import _native
+
+            native_files = {k: v.encode() for k, v in _native(data, password, password["milvus"]).items()}
         for name, filename in native_name.items():
-            if password.get(name) and (root / filename).read_text() != password[name]:
+            if password.get(name) and native_files[filename].decode() != password[name]:
                 raise CredentialConfigurationError(f"{name}: native and application credentials differ")
         if password.get("minio"):
-            milvus_native = yaml.safe_load((root / "milvus.yaml").read_text())
+            milvus_native = yaml.safe_load(native_files["milvus.yaml"])
             if (
                 milvus_native["minio"]["secretAccessKey"] != password["minio"]
                 or milvus_native["minio"]["accessKeyID"] != settings.object_storage.minio.access_key
@@ -93,25 +106,26 @@ def check_bundle(bundle, *, enforce=False, component=None, environ=None, env_fil
 
         expected_native = _native(data, password, password["milvus"])
         for filename in ("mysql-client.cnf", "openfga.yaml", "minio.user"):
-            if filename in expected_native and (root / filename).read_text() != expected_native[filename]:
+            if filename in expected_native and native_files[filename].decode() != expected_native[filename]:
                 raise CredentialConfigurationError("bundle: native consumer credentials differ")
         if password.get("milvus"):
-            native_milvus = yaml.safe_load((root / "milvus.yaml").read_text())
+            native_milvus = yaml.safe_load(native_files["milvus.yaml"])
             security = native_milvus["common"]["security"]
             if not security.get("authorizationEnabled") or security.get("defaultRootPassword") != password["milvus"]:
                 raise CredentialConfigurationError("milvus: native login credentials differ")
         if password.get("redis"):
-            acl = (root / "redis-users.acl").read_text()
+            acl = native_files["redis-users.acl"].decode()
             if "#" + hashlib.sha256(password["redis"].encode()).hexdigest() not in acl.split():
                 raise CredentialConfigurationError("redis: native ACL credential differs")
-        gateway = root / "gateway-application.yml"
-        if gateway.exists():
-            gateway_config = yaml.safe_load(gateway.read_text())
+        if "gateway-application.yml" in native_files:
+            gateway_config = yaml.safe_load(native_files["gateway-application.yml"])
             if gateway_config["spring"]["data"]["redis"].get("password", "") != password["redis"]:
                 raise CredentialConfigurationError("gateway.redis: credentials differ")
     except (OSError, TypeError, KeyError, yaml.YAMLError):
         raise CredentialConfigurationError("bundle: native artifacts cannot be verified") from None
     pending = sorted(name for name, value in password.items() if is_weak(value, name))
+    if manifest.get("es_security_enabled") is False:
+        pending = sorted(set(pending) | {"elasticsearch"})
     if enforce and component:
         raise CredentialConfigurationError("check: component subset cannot enforce full deployment")
     if component and component not in password:
@@ -124,6 +138,8 @@ def _parser():
     sub = parser.add_subparsers(dest="command", required=True, parser_class=_Parser)
     validate = sub.add_parser("validate-inputs")
     validate.add_argument("--inputs", type=Path, required=True)
+    validate.add_argument("--key-file", type=Path)
+    validate.add_argument("--allow-legacy-inputs", action="store_true")
     requirements = sub.add_parser("requirements")
     requirements.add_argument("--config", type=Path, required=True)
     requirements.add_argument("--env-file", type=Path)
@@ -153,6 +169,15 @@ def _parser():
     check.add_argument("--env-file", type=Path)
     check.add_argument("--enforce", action="store_true")
     check.add_argument("--online", action="store_true")
+    from bisheng.core.config.credential_rotation_cli import parser as rotation_parser
+
+    rotation_parser(sub)
+    from bisheng.core.config.credential_artifact_cli import parser as artifact_parser
+
+    artifact_parser(sub)
+    for name, child in sub.choices.items():
+        if name != "artifact":
+            child.add_argument("--deployment-id")
     return parser
 
 
@@ -160,6 +185,19 @@ def main(argv=None):
     created = None
     try:
         args = _parser().parse_args(argv)
+        if getattr(args, "key_file", None):
+            os.environ["BS_SECRET_KEYS_FILE"] = str(args.key_file.absolute())
+            get_keyring.cache_clear()
+        if getattr(args, "deployment_id", None):
+            os.environ["BS_CREDENTIAL_DEPLOYMENT_ID"] = args.deployment_id
+        if args.command == "artifact":
+            from bisheng.core.config.credential_artifact_cli import execute
+
+            return execute(args)
+        if args.command == "rotation" and args.action in {"capabilities", "request-id", "request-components"}:
+            from bisheng.core.config.credential_rotation_cli import execute
+
+            return execute(args)
         if args.command == "join-keyrings":
             if args.out.resolve().is_relative_to(Path(__file__).resolve().parents[3]):
                 raise CredentialConfigurationError("keyring: output must remain outside backend build context")
@@ -171,7 +209,7 @@ def main(argv=None):
             print("keyring: transition prepared")
             return 0
         if args.command == "validate-inputs":
-            read_inputs(args.inputs)
+            read_inputs(args.inputs, allow_plaintext=args.allow_legacy_inputs)
             print("inputs: validated")
             return 0
         if args.command == "requirements":
@@ -194,9 +232,27 @@ def main(argv=None):
             write_private(path, json.dumps({"version": 1, "keys": [Fernet.generate_key().decode()]}))
             print("keygen: created private external key file")
             return 0
+        if args.key_file is None:
+            raise CredentialConfigurationError("keyring: explicit key file required")
         os.environ["BS_SECRET_KEYS_FILE"] = str(args.key_file.absolute())
         get_keyring.cache_clear()
         get_keyring()
+        if args.command in {"prepare", "rotation"} and getattr(args, "inputs", None):
+            read_inputs(args.inputs, allow_plaintext=False)
+        if args.command == "rotation":
+            from bisheng.core.config.credential_rotation_cli import execute
+
+            try:
+                return execute(args)
+            except CredentialConfigurationError:
+                raise
+            except Exception:
+                # Native SDK exceptions may include credentials/SQL. Keep the
+                # durable plan and fail explicitly without emitting their text.
+                print(
+                    "rotation: operation failed; preserve the plan and inspect native service health", file=sys.stderr
+                )
+                return 3
         if args.command == "validate-keyring":
             print("keyring: validated")
             return 0
@@ -243,7 +299,7 @@ def main(argv=None):
         from bisheng.core.config.credential_checks import CredentialConnectionError
 
         return 3 if isinstance(error, CredentialConnectionError) else 2
-    except (OSError, ValueError, TypeError):
+    except (OSError, ValueError, TypeError, KeyError, IndexError):
         if created is not None:
             shutil.rmtree(created)
         print("credential: artifact operation failed", file=sys.stderr)

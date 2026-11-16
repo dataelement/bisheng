@@ -27,3 +27,25 @@ def live_settings(monkeypatch):
     assert pending == [], "Live acceptance requires governed credentials"
     yield settings
     get_keyring.cache_clear()
+
+
+@pytest.fixture
+def live_rotation_deployment():
+    """Explicit opt-in to a separately prepared, marked disposable Compose fixture."""
+    import json
+
+    if os.getenv("BISHENG_ROTATION_LIVE_DISPOSABLE") != "true":
+        pytest.skip("NOT EXECUTED: disposable rotation deployment not configured")
+    location = os.getenv("BISHENG_ROTATION_LIVE_DEPLOYMENT")
+    if not location:
+        pytest.fail("Explicit disposable deployment directory required")
+    root = Path(location).resolve()
+    marker = root / ".rotation-disposable.json"
+    if not marker.is_file():
+        pytest.fail("Disposable deployment ownership marker required")
+    data = json.loads(marker.read_text())
+    if data.get("version") != 1 or not str(data.get("project", "")).startswith("rotation-acceptance-"):
+        pytest.fail("Invalid disposable deployment identity")
+    if not (root / "install.sh").is_file() or not (root / ".env").is_file():
+        pytest.fail("Prepared installer and .env required")
+    return root, data

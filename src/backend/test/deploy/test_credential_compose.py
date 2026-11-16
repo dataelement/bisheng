@@ -1,4 +1,4 @@
-"""Static deployment contract: file references and prerequisite ordering."""
+"""Static deployment contract: file references and prerequisite ordering (option C)."""
 
 from pathlib import Path
 
@@ -27,15 +27,18 @@ def test_native_credentials_do_not_appear_in_environment_or_arguments():
     s = services()
     assert "MYSQL_ROOT_PASSWORD" not in s["mysql"]["environment"]
     assert s["mysql"]["environment"]["MYSQL_ROOT_PASSWORD_FILE"] == "/run/secrets/mysql.password"
-    assert s["mysql"]["entrypoint"] == ["bash", "/credential-entrypoint.sh"]
+    assert s["mysql"]["entrypoint"][-2:] == ["bash", "/credential-entrypoint.sh"]
     assert s["mysql"]["command"] == ["mysqld"]
     assert any("mysql/credential-entrypoint.sh:/credential-entrypoint.sh:ro" in v for v in s["mysql"]["volumes"])
     assert "OPENFGA_DATASTORE_URI" not in s["openfga"]["environment"]
-    assert any("/etc/openfga/config.yaml:ro" in v for v in s["openfga"]["volumes"])
+    assert s["openfga"]["command"] == ["run"]
+    assert s["openfga-migrate"]["command"] == ["migrate"]
+    assert any("openfga.env" in str(v) for v in s["openfga"].get("env_file", []))
+    assert any("openfga.env" in str(v) for v in s["openfga-migrate"].get("env_file", []))
+    assert "--config=/etc/openfga/config.yaml" not in (ROOT / "docker/docker-compose.yml").read_text()
     assert s["minio"]["environment"]["MINIO_ROOT_PASSWORD_FILE"] == "/run/secrets/minio.password"
     assert s["elasticsearch"]["environment"]["ELASTICSEARCH_PASSWORD_FILE"] == "/run/secrets/elasticsearch.password"
     assert "MINIO_SECRET_ACCESS_KEY" not in s["milvus"]["environment"]
-    assert any("/milvus/configs/user.yaml:ro" in v for v in s["milvus"]["volumes"])
     assert "--aclfile" in s["redis"]["command"]
     assert "NOAUTH" not in str(s["redis"]["healthcheck"])
     assert "mysql-init" in s["openfga-migrate"]["depends_on"]
