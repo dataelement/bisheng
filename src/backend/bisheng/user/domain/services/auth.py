@@ -213,6 +213,7 @@ class AuthJwt:
 class LoginUser(BaseModel):
     _role_policy: object = PrivateAttr(default=None)
     _runtime_credential_reference: dict | None = PrivateAttr(default=None)
+    _dsh_web_session_tenant_id: int | None = PrivateAttr(default=None)
     user_id: int
     user_name: str = Field(default="")
     user_role: list[int] = Field(default_factory=list, description="Users GroupsIDVertical")
@@ -259,7 +260,7 @@ class LoginUser(BaseModel):
         return False
 
     def is_admin(self):
-        return self._check_admin
+        return self.is_global_super or self._check_admin
 
     @staticmethod
     def wrapper_access_check(func):
@@ -545,13 +546,17 @@ class LoginUser(BaseModel):
         tenant_id: int | None = None,
         token_version: int = 0,
         role_ids: Iterable[int] | None = None,
+        require_current_super: bool = False,
     ) -> Self:
         from bisheng.role.application.effective_roles import load_effective_roles
         from bisheng.utils.http_middleware import _check_is_global_super
 
         policy = await load_effective_roles(user_id, expected_home_tenant_id=tenant_id)
         resolved_role_ids = ([AdminRole] if policy.is_identity_admin else []) + list(policy.role_ids)
-        is_global_super = await _check_is_global_super(user_id, role_ids=resolved_role_ids)
+        super_options = {"role_ids": resolved_role_ids}
+        if require_current_super:
+            super_options["force_refresh"] = True
+        is_global_super = await _check_is_global_super(user_id, **super_options)
         login_user = cls(
             user_id=user_id,
             user_name=user_name,
@@ -586,14 +591,23 @@ class LoginUser(BaseModel):
 
     @classmethod
     async def get_login_user(cls, auth_jwt: AuthJwt = Depends()) -> Self:
+        cached = getattr(getattr(getattr(auth_jwt, "req", None), "state", None), "admitted_login_user", None)
+        if isinstance(cached, cls):
+            return cached
         subject = auth_jwt.get_subject()
+        request = getattr(auth_jwt, "req", None)
+        current_options = (
+            {"require_current_super": True}
+            if getattr(getattr(request, "state", None), "require_current_super", False) is True
+            else {}
+        )
         user = await cls.init_login_user(
             user_id=subject["user_id"],
             user_name=subject["user_name"],
             tenant_id=subject.get("tenant_id", DEFAULT_TENANT_ID),
             token_version=int(subject.get("token_version", 0) or 0),
+            **current_options,
         )
-        request = getattr(auth_jwt, "req", None)
         # Cookie first, then Bearer. Phone clients only send the header.
         token = auth_jwt.request_access_token()
         if token:
@@ -644,6 +658,9 @@ class LoginUser(BaseModel):
     async def get_login_user_from_ws(
         cls, websocket: WebSocket, auth_jwt: AuthJwt = Depends(), t: str | None = None
     ) -> Self:
+        cached = getattr(getattr(websocket, "state", None), "admitted_login_user", None)
+        if isinstance(cached, cls):
+            return cached
         subject = auth_jwt.get_subject(auth_from="websocket", websocket=websocket, token=t)
         if "dsh_web_session" in subject:
             from bisheng.dsh.domain.services.web_session import validate_web_session
@@ -654,7 +671,16 @@ class LoginUser(BaseModel):
             user_name=subject["user_name"],
             tenant_id=subject.get("tenant_id", DEFAULT_TENANT_ID),
             token_version=int(subject.get("token_version", 0) or 0),
+            **(
+                {"require_current_super": True}
+                if getattr(getattr(websocket, "state", None), "require_current_super", False) is True
+                else {}
+            ),
         )
+        if "dsh_web_session" in subject:
+            # Set only after validate_web_session verified the device grant and
+            # its exact tenant. This is not a client-selectable management view.
+            user._dsh_web_session_tenant_id = int(subject["tenant_id"])
         return user
 
     @classmethod

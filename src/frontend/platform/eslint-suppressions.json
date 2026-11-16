@@ -652,7 +652,7 @@
   },
   "src/controllers/API/pro.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 13
+      "count": 10
     }
   },
   "src/controllers/API/tenant.ts": {

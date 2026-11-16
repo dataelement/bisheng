@@ -7,6 +7,7 @@
 This module is imported by ``worker/main.py`` to trigger signal registration.
 """
 
+from contextlib import contextmanager
 from contextvars import ContextVar
 
 from celery import current_task
@@ -57,12 +58,11 @@ def _is_permission_task(sender, headers: dict | None) -> bool:
 
 
 def _parse_tenant_id(value) -> int:
-    if isinstance(value, bool):
+    if isinstance(value, str) and value.isascii() and value.isdigit():
+        value = int(value)
+    if type(value) is not int:
         raise PermissionTaskTenantContextError("permission task tenant_id must be a positive integer")
-    try:
-        tenant_id = int(value)
-    except (TypeError, ValueError) as exc:
-        raise PermissionTaskTenantContextError("permission task tenant_id must be a positive integer") from exc
+    tenant_id = value
     if tenant_id <= 0:
         raise PermissionTaskTenantContextError("permission task tenant_id must be a positive integer")
     return tenant_id
@@ -78,11 +78,85 @@ def _is_copy_task(sender):
     return (sender if isinstance(sender, str) else getattr(sender, "name", "")) in _COPY_TASKS
 
 
+_WORKFLOW_TASKS = frozenset(
+    {
+        "bisheng.worker.workflow.tasks.execute_workflow",
+        "bisheng.worker.workflow.tasks.continue_workflow",
+        "bisheng.worker.workflow.tasks.stop_workflow",
+    }
+)
+_EXPORT_TASK = "runtime_audit_export"
+
+
+def _durable_task_tenant(sender, header):
+    name = _task_name(sender)
+    if name not in _WORKFLOW_TASKS and name != _EXPORT_TASK:
+        return header
+    request = sender.request
+    args = getattr(request, "args", ()) or ()
+    kwargs = getattr(request, "kwargs", {}) or {}
+    if name in _WORKFLOW_TASKS:
+        from bisheng.workflow.domain.repositories.creation_repository import CreationRepository
+
+        resource_id = kwargs.get("workflow_id") or (args[1] if len(args) > 1 else None)
+        actual = CreationRepository.tenant_for_message(resource_id) if resource_id else None
+    else:
+        from bisheng.app_governance.domain.repositories.runtime_audit_export_repository import (
+            RuntimeAuditExportRepository,
+        )
+
+        job_id = kwargs.get("job_id") or (args[0] if args else None)
+        supplied = kwargs.get("tenant_id", args[1] if len(args) > 1 else None)
+        actual = RuntimeAuditExportRepository.tenant_for_message(job_id) if job_id else None
+        if actual is not None and _parse_tenant_id(supplied) != actual:
+            raise PermissionTaskTenantContextError("export payload disagrees with persistent target")
+    if actual is None or (header is not None and _parse_tenant_id(header) != actual):
+        raise PermissionTaskTenantContextError("workload tenant proof missing or conflicting")
+    return _parse_tenant_id(actual)
+
+
+@contextmanager
+def durable_workload_scope(kind, resource_id, payload_tenant=None):
+    # Celery signal receivers can log an exception without aborting execution.
+    # Enforce the same proof inside the task body, before restoring snapshots.
+    from bisheng.core.context.tenant import tenant_execution_scope
+
+    task = current_task._get_current_object()
+    header = (
+        (getattr(getattr(task, "request", None), "headers", None) or {}).get("tenant_id")
+        if task
+        else get_current_tenant_id()
+    )
+    if kind == "workflow":
+        from bisheng.workflow.domain.repositories.creation_repository import CreationRepository
+
+        actual = CreationRepository.tenant_for_message(resource_id)
+    else:
+        from bisheng.app_governance.domain.repositories.runtime_audit_export_repository import (
+            RuntimeAuditExportRepository,
+        )
+
+        actual = RuntimeAuditExportRepository.tenant_for_message(resource_id)
+        if actual is not None and _parse_tenant_id(payload_tenant) != actual:
+            raise PermissionTaskTenantContextError("export payload disagrees with persistent target")
+    if actual is None or (header is not None and _parse_tenant_id(header) != actual):
+        raise PermissionTaskTenantContextError("workload tenant proof missing or conflicting")
+    from bisheng.common.request_scope import admitted_request_scope
+
+    proof_token = admitted_request_scope.set(None)
+    try:
+        with tenant_execution_scope(_parse_tenant_id(actual)):
+            yield actual
+    finally:
+        admitted_request_scope.reset(proof_token)
+
+
 def inject_tenant_header(sender=None, headers=None, **kwargs):
     """Write current tenant_id into Celery task headers before publishing."""
     tid = get_current_tenant_id()
     permission_task = _is_permission_task(sender, headers) or _is_copy_task(sender)
-    if permission_task and (tid is None or headers is None):
+    tenant_task = permission_task or _task_name(sender) in _WORKFLOW_TASKS or _task_name(sender) == _EXPORT_TASK
+    if tenant_task and (tid is None or headers is None):
         raise PermissionTaskTenantContextError("permission task publish requires an explicit tenant context")
     if tid is not None and headers is not None:
         headers["tenant_id"] = _parse_tenant_id(tid)
@@ -94,7 +168,9 @@ def restore_tenant_context(sender=None, **kwargs):
     """Restore tenant_id ContextVar from task headers on worker side."""
     request = sender.request
     headers = getattr(request, "headers", None) or {}
-    tenant_id = headers.get("tenant_id")
+    # No tenant-scoped SQL may run before the exact resource/job proof.
+    request._bisheng_initial_tenant_token = current_tenant_id.set(None)
+    tenant_id = _durable_task_tenant(sender, headers.get("tenant_id"))
     permission_task = _is_permission_task(sender, headers) or _is_copy_task(sender)
     if permission_task:
         current_tenant_id.set(None)
@@ -171,6 +247,14 @@ def reset_tenant_context(sender=None, **kwargs):
             request._bisheng_tenant_context_token = None
     else:
         current_tenant_id.set(None)
+    initial = getattr(request, "_bisheng_initial_tenant_token", None)
+    if initial is not None:
+        try:
+            current_tenant_id.reset(initial)
+        except (LookupError, RuntimeError, TypeError, ValueError):
+            current_tenant_id.set(None)
+        finally:
+            request._bisheng_initial_tenant_token = None
 
 
 # Register after defining the handlers so direct unit tests still exercise the

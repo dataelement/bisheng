@@ -12,7 +12,7 @@ import os
 import httpx
 import pytest
 
-from test.e2e.helpers.api import API_BASE, assert_resp_200
+from test.e2e.helpers.api import API_BASE, assert_resp_200, assert_resp_error
 from test.e2e.helpers.auth import auth_headers, get_admin_token
 
 pytestmark = pytest.mark.e2e
@@ -70,9 +70,17 @@ async def test_management_scope_does_not_change_own_policy(dedicated):
 async def test_foreign_affiliation_form_has_no_policy_binding(dedicated):
     """AC-04/05/07: foreign membership shows organization facts and no local policy grant."""
     client, admin, _user, facts = dedicated
+    assert_resp_200(
+        await client.post(
+            f"{API_BASE}/admin/tenant-scope", headers=admin, json={"tenant_id": facts["management_tenant_id"]}
+        )
+    )
     key = facts["foreign_department_key"]
     form = assert_resp_200(
-        await client.get(f"{API_BASE}/departments/{key}/members/{facts['user_id']}/edit-form", headers=admin)
+        await client.get(
+            f"{API_BASE}/departments/{key}/members/{facts['user_id']}/edit-form",
+            headers={**admin, "X-Management-Tenant": str(facts["management_tenant_id"])},
+        )
     )
     assert form["policy_editable"] is False
     assert form["role_apply_status"] == "NOT_APPLICABLE_CROSS_TENANT"
@@ -88,3 +96,94 @@ async def test_management_identity_is_not_granted_to_an_ordinary_user(dedicated)
     assert {"status_code", "status_message", "data"}.issubset(body)
     assert response.status_code == 403
     assert body["status_code"] == 19701
+
+
+async def test_phase_one_navigation_is_metadata_and_identity_stays_home(dedicated):
+    """AC-42/48: the selected tenant's navigation does not project personal policy."""
+    client, admin, _, facts = dedicated
+    before = assert_resp_200(await client.get(f"{API_BASE}/user/info", headers=admin))
+    assert_resp_200(
+        await client.post(
+            f"{API_BASE}/admin/tenant-scope", headers=admin, json={"tenant_id": facts["management_tenant_id"]}
+        )
+    )
+    response = await client.get(
+        f"{API_BASE}/workstation/config",
+        headers={**admin, "X-Management-Tenant": str(facts["management_tenant_id"])},
+        params={"purpose": "navigation"},
+    )
+    navigation = assert_resp_200(response)
+    assert set(navigation) == {"assistantIcon"}
+    assert response.headers["X-Management-Tenant"] == str(facts["management_tenant_id"])
+    after = assert_resp_200(await client.get(f"{API_BASE}/user/info", headers=admin))
+    assert before["leaf_tenant_id"] == after["leaf_tenant_id"]
+    assert before["role"] == after["role"]
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("PATCH", "/guest-link/workflow/e2e-f009-phase1-unused"),
+        ("POST", "/knowledge/space/1/uploads"),
+        ("POST", "/knowledge/space/1/uploads/" + "a" * 32 + "/previews"),
+        ("PUT", "/knowledge/space/1/uploads/" + "a" * 32 + "/previews/" + "b" * 32 + "/chunks/0"),
+        ("DELETE", "/knowledge/space/1/uploads/" + "a" * 32 + "/previews/" + "b" * 32 + "/chunks/0"),
+    ],
+)
+async def test_phase_one_stale_writes_reject_before_parsing_or_mutating(dedicated, method, path):
+    """AC-41/45: intentionally invalid bodies also keep older targets non-mutating."""
+    client, admin, _, facts = dedicated
+    assert_resp_200(
+        await client.post(
+            f"{API_BASE}/admin/tenant-scope", headers=admin, json={"tenant_id": facts["management_tenant_id"]}
+        )
+    )
+    # The body cannot create an upload or parse as a settings DTO, even on an
+    # unpatched backend; only the dedicated admin's restored view is modified.
+    headers = {**admin, "Content-Type": "application/json"}
+    missing = await client.request(method, f"{API_BASE}{path}", headers=headers, content=b"not-json")
+    assert missing.status_code == 400
+    assert_resp_error(missing, 19703)
+    stale = await client.request(
+        method,
+        f"{API_BASE}{path}",
+        headers={**headers, "X-Management-Tenant": str(facts["home_tenant_id"])},
+        content=b"not-json",
+    )
+    assert stale.status_code == 409
+    assert_resp_error(stale, 19704)
+
+
+@pytest.mark.parametrize("path", ["/workflow/list", "/guest-link/workflow/e2e-f009-unused"])
+async def test_phase_three_reads_require_the_current_target(dedicated, path):
+    """AC-50/53: GET checks the target before lookup, including nonexistent resources."""
+    client, admin, _, facts = dedicated
+    assert_resp_200(
+        await client.post(
+            f"{API_BASE}/admin/tenant-scope", headers=admin, json={"tenant_id": facts["management_tenant_id"]}
+        )
+    )
+    missing = await client.get(f"{API_BASE}{path}", headers=admin)
+    assert missing.status_code == 400
+    assert_resp_error(missing, 19703)
+    stale = await client.get(
+        f"{API_BASE}{path}", headers={**admin, "X-Management-Tenant": str(facts["home_tenant_id"])}
+    )
+    assert stale.status_code == 409
+    assert_resp_error(stale, 19704)
+
+
+async def test_phase_three_scope_proof_does_not_rehome_identity(dedicated):
+    """AC-51/54: scope proof and real identity remain separate facts."""
+    client, admin, _, facts = dedicated
+    before = assert_resp_200(await client.get(f"{API_BASE}/user/info", headers=admin))
+    assert_resp_200(
+        await client.post(
+            f"{API_BASE}/admin/tenant-scope", headers=admin, json={"tenant_id": facts["management_tenant_id"]}
+        )
+    )
+    proof = assert_resp_200(await client.get(f"{API_BASE}/admin/request-scope", headers=admin))
+    assert proof["scope_tenant_id"] == facts["management_tenant_id"]
+    assert proof["home_tenant_id"] == facts["home_tenant_id"]
+    after = assert_resp_200(await client.get(f"{API_BASE}/user/info", headers=admin))
+    assert before["leaf_tenant_id"] == after["leaf_tenant_id"]

@@ -51,6 +51,7 @@ export type ROLE = {
     role_id?: number
     role_name: string
     role_type?: string
+    tenant_id?: number
     department_id?: number | null
     department_name?: string | null
     /** 组织根 → 作用域部门 全路径（后端按 Department.path 解析） */

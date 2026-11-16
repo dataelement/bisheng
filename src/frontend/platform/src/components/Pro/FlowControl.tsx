@@ -3,7 +3,7 @@ import { SearchInput } from '@bisheng/ui';
 import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 
-import { getGroupFlowsApi, getDepartmentFlowsApi } from "@/controllers/API/pro";
+import { getDepartmentFlowsApi } from "@/controllers/API/pro";
 import { useTable } from "@/util/hook";
 import { CircleHelp } from "lucide-react";
 import { useRef } from "react";
@@ -13,12 +13,12 @@ import { FlowRadio } from "./FlowRadio";
 
 type FlowControlProps = {
     entityId: number
-    entityType: 'group' | 'department'
+    entityType: 'department'
     type: number
     onChange: (vals: any[]) => void
 }
 
-export function FlowControl({ entityId, entityType, type, onChange }: FlowControlProps) {
+export function FlowControl({ entityId, type, onChange }: FlowControlProps) {
     const { t } = useTranslation()
     const paginationLocale = usePaginationLocale();
     const map: Record<number, { name: string; label: string; placeholder: string }> = {
@@ -28,7 +28,7 @@ export function FlowControl({ entityId, entityType, type, onChange }: FlowContro
     }
     const { name, label, placeholder } = map[type]
 
-    const fetchFn = entityType === 'department' ? getDepartmentFlowsApi : getGroupFlowsApi
+    const fetchFn = getDepartmentFlowsApi
 
     const { page, pageSize, data, total, setPage, search, refreshData } = useTable({ pageSize: 10 }, (params) =>
         fetchFn(params.page, params.pageSize, String(type), entityId, params.keyword)
@@ -42,7 +42,7 @@ export function FlowControl({ entityId, entityType, type, onChange }: FlowContro
         } else {
             itemsRef.current.push({
                 resource_id: id,
-                [entityType === 'department' ? 'department_id' : 'group_id']: entityId,
+                department_id: entityId,
                 resource_limit: value
             })
         }

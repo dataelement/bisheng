@@ -7,8 +7,8 @@
 // `useAdminScope` hook that wraps these calls. Keep this surface thin so
 // F020 can evolve the UI without touching the backend contract.
 
-import axios from "@/controllers/request"
-import { announceManagementScope } from "@/controllers/managementScope"
+import axios, { bootstrapManagementRequestScope } from "@/controllers/request"
+import { announceManagementScope, pauseManagementScope } from "@/controllers/managementScope"
 
 export interface AdminScopeResponse {
   // A server response always names one concrete tenant; null is loading-only.
@@ -32,9 +32,20 @@ export interface AdminScopeResponse {
 export async function setTenantScope(
   tenantId: number,
 ): Promise<AdminScopeResponse> {
-  const result: AdminScopeResponse = await axios.post("/api/v1/admin/tenant-scope", { tenant_id: tenantId })
-  if (result.scope_tenant_id && Number.isSafeInteger(result.scope_tenant_id)) announceManagementScope(result.scope_tenant_id)
-  return result
+  pauseManagementScope();
+  try {
+    await axios.post("/api/v1/admin/tenant-scope", { tenant_id: tenantId });
+    const confirmed: AdminScopeResponse = await axios.get("/api/v1/admin/request-scope");
+    if (confirmed.scope_tenant_id) announceManagementScope(confirmed.scope_tenant_id);
+    return confirmed;
+  } catch (error) {
+    // Redis may already have changed even when audit or response delivery failed.
+    try {
+      const confirmed: AdminScopeResponse = await axios.get("/api/v1/admin/request-scope");
+      if (confirmed.scope_tenant_id) announceManagementScope(confirmed.scope_tenant_id);
+    } catch { /* Keep requests paused until an explicit successful confirmation. */ }
+    throw error;
+  }
 }
 
 /**
@@ -42,5 +53,6 @@ export async function setTenantScope(
  * `{scope_tenant_id: null, expires_at: null}` if no scope is active.
  */
 export async function getTenantScope(): Promise<AdminScopeResponse> {
-  return await axios.get("/api/v1/admin/tenant-scope")
+  const proof = await bootstrapManagementRequestScope();
+  return { ...proof, expires_at: null }
 }

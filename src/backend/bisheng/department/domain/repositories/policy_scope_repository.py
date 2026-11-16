@@ -22,7 +22,7 @@ class DepartmentPolicyFacts:
 
 
 def _resolve(
-    rows: list[Department], tenants: dict[int, Tenant], home_tenant_id=None, for_binding_cleanup=False
+    rows: list[Department], tenants: dict[int, Tenant], home_tenant_id=None, for_binding_cleanup=False, directory=False
 ) -> DepartmentPolicyFacts | None:
     ordered = list(reversed(rows))
     if not ordered:
@@ -54,7 +54,7 @@ def _resolve(
     if not for_binding_cleanup and (
         root.status != "active"
         or any(
-            row.status != "active"
+            (row.status not in {"active", "archived"} if directory else row.status != "active")
             or row.is_deleted
             or row.permission_projection_state != "CURRENT"
             or (row.is_tenant_root and tenants[int(row.mounted_tenant_id)].status != "active")
@@ -148,6 +148,18 @@ class PolicyScopeRepository:
                 if _resolve(lineage, tenants, business_tenant_id) is not None:
                     result.append(row)
             return result
+
+    @staticmethod
+    async def directory_department(department_id):
+        """Negative directory boundary only; archived facts never authorize role bindings."""
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                rows = []
+                current = department_id
+                while current is not None:
+                    current = _next(rows, await session.get(Department, current))
+                tenants = (await session.exec(select(Tenant).where(Tenant.id.in_(_tenant_ids(rows))))).all()
+        return _resolve(rows, {int(row.id): row for row in tenants}, directory=True)
 
     @staticmethod
     async def defaults(department_ids):
