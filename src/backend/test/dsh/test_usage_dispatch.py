@@ -229,3 +229,64 @@ async def test_projection_does_not_run_retention(quota, usage_db, monkeypatch):
     monkeypatch.setattr(service, "cleanup_batch", cleanup)
     assert await UsageDispatcher(service).dispatch() == 1
     cleanup.assert_not_awaited()
+
+
+@pytest.mark.parametrize("noise_count", [10000, 100000])
+async def test_bootstrap_once_then_noise_never_affects_dispatch_or_inspection(
+    quota, usage_db, monkeypatch, noise_count
+):
+    event = running().model_copy(update={"started_at": datetime.now(UTC).replace(tzinfo=None)})
+    await quota.check_and_start(event)
+    dispatcher = UsageDispatcher(projector(quota, usage_db))
+    work = dispatcher.work
+    # Model streams written by the predecessor without either scheduling index.
+    await quota.redis.delete(work.ready, work.partitions)
+    for start in range(0, noise_count, 1000):
+        async with quota.redis.pipeline(transaction=False) as pipe:
+            for i in range(start, start + 1000):
+                pipe.set(f"{quota.prefix}:unrelated:{i}", "value")
+            await pipe.execute()
+    complete = False
+    for _ in range(500):
+        complete = await dispatcher.bootstrap(max_pages=1)
+        if complete:
+            break
+    assert complete
+    assert await quota.redis.smembers(work.partitions) == {quota.keys(event)[5]}
+    no_scan = AsyncMock(side_effect=AssertionError("Steady-state work must not scan the database"))
+    steady_start = monotonic()
+    with monkeypatch.context() as patch:
+        patch.setattr(quota.redis, "scan", no_scan)
+        assert await dispatcher.bootstrap()
+        assert await dispatcher.dispatch() == 1
+        assert await dispatcher.repair() == 1
+        assert monotonic() - steady_start < 5
+        no_scan.assert_not_awaited()
+
+
+async def test_partition_index_type_checked_before_admission_mutates_ledger(quota):
+    event = running()
+    await quota.redis.set(UsageWorkQueue(quota).partitions, "invalid")
+    with pytest.raises(QuotaRejected, match="bad_projection_partitions_type"):
+        await quota.check_and_start(event)
+    assert not await quota.redis.exists(quota.keys(event)[4])
+    assert not await quota.redis.exists(quota.keys(event)[5])
+
+
+async def test_bootstrap_discards_cursor_from_a_previous_redis_generation(quota, usage_db, monkeypatch):
+    dispatcher = UsageDispatcher(projector(quota, usage_db))
+    base = quota.prefix + ":usage_inventory"
+    await quota.redis.set(base + ":cursor", 123456)
+    await quota.redis.set(base + ":cursor_generation", "old-primary")
+    await quota.redis.set(base + ":generation", "old-primary")
+    original, cursors = quota.redis.scan, []
+
+    async def observe(cursor, **kwargs):
+        cursors.append(cursor)
+        return await original(cursor, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(quota.redis, "scan", observe)
+        await dispatcher.bootstrap(max_pages=1)
+    assert cursors == [0]
+    assert await quota.redis.get(base + ":cursor_generation") == quota.topology.run_id

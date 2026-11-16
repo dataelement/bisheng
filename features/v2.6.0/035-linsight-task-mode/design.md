@@ -98,7 +98,7 @@ deepagents demo 用 `ChatOpenAI` 直连 DashScope，**严禁照搬**。BiSheng �
 
 ### 2.3 checkpointer 取舍：用 Redis checkpointer 绕开 DM8，换取"可随时续跑"
 
-> **结论先行**：本期为 deepagents 内核挂 **Redis 持久化 checkpointer**（`langgraph-checkpoint-redis`），把 HITL 中断现场、graph thread state 落到 BiSheng 已有的 Redis，从而支持「用户隔任意时长回来续跑、Worker 重启不丢」（对应 PRD §4.4 / AC-5 / 决策）。`store` 留空（无跨 thread 共享需求）。
+> **结论先行**：本期为 deepagents 内核挂 **Redis 持久化 checkpointer**（当前实现为 `PlainRedisCheckpointer`），把 HITL 中断现场、graph thread state 落到 BiSheng 已有的 Redis，从而支持「用户隔任意时长回来续跑、Worker 重启不丢」（对应 PRD §4.4 / AC-5 / 决策）。`store` 留空（无跨 thread 共享需求）。
 
 **为什么不是 `checkpointer=None`**：deepagents demo 默认挂 `AsyncSqliteSaver`/`AsyncPostgresSaver`，二者均不兼容 DM8（违反双库 P0）。若据此简单留空 `checkpointer=None`，graph 在进程内就是无 checkpoint 的纯执行体——中断现场只活在 Worker 协程内存里，**用户离开超过某时长（或 Worker 重启）即无法精确回到 interrupt 点续跑**，这正是 2.0 自研引擎"Redis key TTL=3600s 被动失活、1 小时超时终止"的根因。本期产品决策要"可随时回来续跑"，故不能留空，必须挂一个 BiSheng 跑得起的持久化 checkpointer。
 
@@ -112,10 +112,18 @@ deepagents demo 用 `ChatOpenAI` 直连 DashScope，**严禁照搬**。BiSheng �
 | 自研 DM8/MySQL `BaseCheckpointSaver` | ✅ 纯双库 | 大（自建自维护） | ✅ | 工作量最大，留作后续 |
 
 **装配要点**：
-- 依赖 `langgraph-checkpoint-redis` 的 `AsyncRedisSaver`，连接复用 BiSheng `RedisManager` 的连接配置；`thread_id` 取 `session_version_id`，保证同一任务恢复到同一 thread。
-- checkpoint key 设较长或不过期 TTL（"可随时回来"语义），并制定**容量治理**：任务终态（completed/failed/terminated）后清理对应 thread 的 checkpoint，避免无界增长；非终态保留。
+- 当前使用原生 Redis 的 `PlainRedisCheckpointer`，不要求 Redis Stack / RediSearch；连接复用 BiSheng `RedisManager`，`thread_id` 取 `session_version_id`，恢复到同一 thread。
+- 当前 checkpoint 数据及索引默认 TTL 为 7 天；业务任务缓存默认 TTL 为 1 小时，不能混为同一保留期限。恢复能力受 checkpoint 保留期约束。
 - `LinsightStateMessageManager` 的 Redis+MySQL 双写**仍保留**，职责不变（它存的是业务事件/步骤实体，供前端 LPOP 消费与回拉对账）；checkpointer 与它是两层：checkpointer 存"图怎么续跑"，message manager 存"前端展示什么"。
 - ⚠️ POC 必验（R3）：langgraph 1.2.1 实测 `interrupt()` halt 期间 pending writes 不落 thread state（`deepagents/tools.py` 注释），需实测 Redis checkpointer 下"隔任意时长 + Worker 重启"续跑的保真度。
+
+### 2.3.1 检查点与任务索引（2026-11-16）
+
+- Pending writes 使用每个 checkpoint 的 Set 索引 `linsight:ckpt:writes:{thread_id}:{checkpoint_ns}:{checkpoint_id}`。写入 payload、索引成员和 TTL 在同一事务中完成；读取通过 SMEMBERS 找到精确键，不使用 SCAN / KEYS。
+- 新 checkpoint 在创建时写入完整性标记。旧 checkpoint 缺少完整索引时明确失败，不能假装没有 pending writes；停止全部旧 checkpoint 写入进程后，执行 `scripts/backfill_linsight_checkpoint_indexes.py --apply --writers-stopped` 一次性补建。脚本默认只盘点、不写索引，保留 payload 和原 TTL，中断可重跑；不得在补建后继续运行旧写入代码。
+- 会话任务 payload 与任务 ID Set 原子更新。旧会话首次读取时由 SQL 查询该会话任务 ID 补齐索引，再按精确键批量读 Redis，保留尚未刷入 SQL 的 thinking history；单条缓存过期则回读 SQL。正常列表、统计、会话清理均不使用 KEYS。无调用方的全会话清理入口已删除。
+- 取舍：不在热路径保留旧格式全库扫描兜底，也不通过忽略旧 pending writes 换取升级可用。索引迁移是发布前置步骤；仅在无法安排旧任务维护窗口时重新评估兼容策略。
+- 验证：`test/linsight/test_redis_indexes.py` 使用独立真实 Redis，覆盖并发写入、旧索引补建、TTL/数据不变及真实 LangGraph interrupt 后跨 saver 恢复；恢复过程中禁止 SCAN / KEYS。未据此宣称现场或模型供应商验证完成。
 
 ### 2.4 system_prompt 中文化
 
@@ -1052,3 +1060,7 @@ on after_code_run():
 | 文件工具注入 | `src/backend/bisheng/tool/domain/services/tool.py` |
 | 向量召回工具 | `src/backend/bisheng/tool/domain/langchain/linsight_knowledge.py` |
 | 状态/消息双写 | `src/backend/bisheng/linsight/domain/services/state_message_manager.py` |
+
+## 修订记录
+
+- 2026-11-16：同步当前原生 Redis checkpointer 与保留期限；增加检查点写入、会话任务索引及旧检查点补建边界。
