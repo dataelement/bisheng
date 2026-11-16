@@ -57,8 +57,8 @@ from bisheng.knowledge.api.router import (
     qa_router,
 )
 from bisheng.linsight.api.router import router as linsight_router
-from bisheng.llm.api.router import router as llm_router
 from bisheng.llm.api.pricing import router as llm_pricing_router
+from bisheng.llm.api.router import router as llm_router
 from bisheng.message.api.router import router as message_router
 from bisheng.open_api.api.dependencies import verify_open_api_access
 from bisheng.open_api.api.router import management_router as open_api_management_router
