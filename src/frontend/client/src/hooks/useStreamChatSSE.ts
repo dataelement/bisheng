@@ -77,6 +77,7 @@ export default function useStreamChatSSE(
         flushRef.current = flush;
 
         const sse = new SSE(sseUrl, {
+            start: false,
             payload: JSON.stringify(payload),
             headers: { "Content-Type": "application/json" },
         });

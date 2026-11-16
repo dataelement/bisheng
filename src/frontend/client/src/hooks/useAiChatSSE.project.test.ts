@@ -10,7 +10,7 @@ jest.mock('sse.js', () => ({ SSE: jest.fn().mockImplementation((_url, options) =
   return { addEventListener: (name: string, listener: Listener) => { listeners[name] = listener; }, stream: jest.fn(), close: jest.fn() };
 }) }));
 jest.mock('~/api/chatApi', () => ({ getSSEUrl: () => '/api/chat' }));
-jest.mock('~/api/request', () => ({ translateApiErrorMessage: () => '' }));
+jest.mock('~/api/request', () => ({ translateApiErrorMessage: () => '', prepareBrowserHeaders: jest.fn().mockResolvedValue({}) }));
 
 const projectId = '11111111-1111-4111-8111-111111111111';
 function start(overrides: Partial<SSESubmission> = {}) {
