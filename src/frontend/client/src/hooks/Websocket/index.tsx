@@ -106,6 +106,8 @@ export const useLinsightWebSocket = (versionId) => {
         };
 
         websocket.onmessage = (event) => {
+            // A closed socket can still deliver a queued callback from an earlier round.
+            if (connections[id] !== websocket || activeVersionIdRef.current !== id || !runningRef.current) return;
             const taskData = JSON.parse(event.data);
             /**
              * 生成一级任务list
