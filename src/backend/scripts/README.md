@@ -208,6 +208,9 @@ bash scripts/backfill_model_pricing.sh check    # gate: exit 0 passed, 2 somethi
 Models marked `default 0 (free)` in the dry run include paid cloud models whose names the catalog
 does not know (for example Volcengine Ark endpoint IDs); they stay free until an admin sets a price.
 
+Skipping the step does not stop conversations: a model without a price is billed as free (0 credits,
+with a warning log) and shows "price missing" in the admin table until it is backfilled or priced.
+
 ### `migrate_model_token_configs.py`
 
 Convert legacy LLM `config.max_tokens` into advanced `config.user_kwargs` while

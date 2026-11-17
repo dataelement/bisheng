@@ -52,7 +52,7 @@ docker compose run --rm --no-deps backend python scripts/backfill_model_pricing.
 docker compose run --rm --no-deps backend python scripts/backfill_model_pricing.py --check
 ```
 
-返回码必须为 0 才继续。检查项：所有大语言模型都有 `pricing`；`dsh_credit_setting` 表与三个新列存在。非 0 时按输出的明细处理后重跑第 4、5 步。
+返回码为 0 再继续。（2026-11-17 起漏跑第 4 步不会让对话不可用：没有价格的模型按免费计、后台显示「价格缺失」；但这些模型在补价前不扣积分，所以仍应补价后再开服。）检查项：所有大语言模型都有 `pricing`；`dsh_credit_setting` 表与三个新列存在。非 0 时按输出的明细处理后重跑第 4、5 步。
 
 ## 6. 冒烟（入口只对管理员开放）
 
