@@ -454,6 +454,7 @@
         "emptyTags": "暂无标签"
     },
     "f118": {
+        "specialized_processing_rules": "此类型文件沿用专用解析与切分规则，无需设置文档或表格参数。",
         "advanced_settings": "高级设置",
         "create_space": "新建空间",
         "defaults_title": "默认解析与切分",
@@ -506,7 +507,7 @@
         "version_uploader": "上传者",
         "processing_title_copy": "复制空间",
         "processing_title_embedding": "重建索引 / 更换模型",
-        "processing_title_file": "处理版本",
+        "processing_title_file": "调整分段策略",
         "processing_title_jobs": "处理任务",
         "processing_kind_embedding_rebuild": "重建索引",
         "processing_kind_file_reprocess": "重新解析",

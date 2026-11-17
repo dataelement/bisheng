@@ -488,3 +488,20 @@ async def test_advanced_plan_must_cover_exactly_the_complete_selected_batch(retr
         assert not (await session.exec(select(KnowledgeProcessingJob))).all()
     retry.storage.copy_object.assert_not_awaited()
     retry.upload.legacy.publish.assert_not_called()
+
+
+async def test_repeated_upload_conflicts_require_one_replacement_per_existing_file(retry):
+    async with retry.upload.context.sessions() as session:
+        row = await session.get(KnowledgeFile, 81)
+        row.md5 = "digest"
+        await session.commit()
+    duplicates = await retry.upload.service.add_file(40, ["opaque-document"] * 5)
+    assert len(duplicates) == 5 and {row.id for row in duplicates} == {81}
+    assert all(row.status == 3 for row in duplicates)
+    with pytest.raises(KnowledgeOperationPlanConflictError) as caught:
+        await batch(retry, [row.model_dump() for row in duplicates])
+    assert caught.value.kwargs["reason"] == "legacy_retry_invalid_file_id"
+    retry.storage.copy_object.assert_not_awaited()
+    await batch(retry, [duplicates[-1].model_dump()])
+    retry.storage.copy_object.assert_awaited_once()
+    retry.upload.legacy.publish.assert_called_once()

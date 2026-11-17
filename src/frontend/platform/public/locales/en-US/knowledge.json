@@ -454,6 +454,7 @@
         "emptyTags": "No tags"
     },
     "f118": {
+        "specialized_processing_rules": "This file uses its dedicated parsing and splitting rules. No document or table settings are needed.",
         "advanced_settings": "Advanced settings",
         "create_space": "Create space",
         "defaults_title": "Parsing and splitting defaults",
@@ -506,7 +507,7 @@
         "version_uploader": "Uploaded by",
         "processing_title_copy": "Copy space",
         "processing_title_embedding": "Rebuild index / change model",
-        "processing_title_file": "Process version",
+        "processing_title_file": "Adjust segmentation",
         "processing_title_jobs": "Processing tasks",
         "processing_kind_embedding_rebuild": "Rebuild index",
         "processing_kind_file_reprocess": "Reprocess",

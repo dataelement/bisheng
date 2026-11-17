@@ -15,6 +15,7 @@ from bisheng.knowledge.domain.schemas.processing_job import (
     ProcessingPrecheckRequest,
 )
 from bisheng.knowledge.domain.services.processing_job_service import ProcessingJobService
+from bisheng.permission.application.business_authorization import require_business_action
 
 
 class KnowledgeProcessingCommands:
@@ -62,6 +63,7 @@ class KnowledgeProcessingCommands:
         )
         if anchor is None or anchor.space.id != space_id:
             raise KnowledgeOperationPlanChangedError()
+        await require_business_action(identity, resource_type="knowledge_file", resource_id=file_id, action="visible")
         return ResourceVersionTarget(file_id=file_id, document_id=anchor.document.id, version_id=anchor.version.id)
 
     async def aprecheck(self, space_id, request, *, identity, entry_kind="web"):

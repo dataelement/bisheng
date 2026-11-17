@@ -1114,3 +1114,9 @@ Mode编译只迁移原before已存在的技术标记，permission_enabled/custom
 ### 2026-11-17 聊天重复知识入口退役
 
 移除 `ChatResourceMenu` 的“选择知识库”入口、`KnowledgeBaseDialog` 与三语言专用文案；`KnowledgePickerDialog` 仅服务空间选择，继续保留空间访问复核和确认前草稿。旧接口仍供历史调用使用；把旧响应中的类型标签当成未迁移存量会误判数据来源。`ChatResourceMenu.test.tsx` 验证仅有空间入口且可打开选择器，`KnowledgeSpaceDialog.test.tsx` 覆盖选择和访问校验。
+
+### 2026-11-17 文件可见性与覆盖上传修复
+
+分段更新/删除继续要求实际空间 edit、物理版本归属和 idle 状态，同时在索引 IO 前要求 knowledge_file visible；处理目标读取、文件重处理预检/确认使用同一可见性门槛。空间级模型/元数据任务仍按原空间编辑权限确定范围，不扩大此次文件级修复。
+
+用户端覆盖上传按已有物理文件 ID 合并重复冲突，保留最后一次暂存响应。既有 MD5/名称判重可令同一上传批次多次命中相同 ID，暂存对象也会被后一次覆盖；不能把这些响应重复传入严格拒绝重复 ID 的 retry 接口。此次没有改变判重规则、迁移配额或解析中删除保护。详见 [排查记录](../../../docs/reviews/knowledge-processing-bugfix-20261117.md)。

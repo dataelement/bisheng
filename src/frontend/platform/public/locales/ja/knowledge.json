@@ -448,6 +448,7 @@
         "emptyTags": "タグはありません"
     },
     "f118": {
+        "specialized_processing_rules": "この種類のファイルは専用の解析・分割ルールを使用します。文書や表の設定は不要です。",
         "advanced_settings": "詳細設定",
         "create_space": "スペースを作成",
         "defaults_title": "解析・分割の既定設定",
@@ -500,7 +501,7 @@
         "version_uploader": "アップロード者",
         "processing_title_copy": "スペースをコピー",
         "processing_title_embedding": "インデックス再構築 / モデル変更",
-        "processing_title_file": "バージョンを処理",
+        "processing_title_file": "分割設定を調整",
         "processing_title_jobs": "処理タスク",
         "processing_kind_embedding_rebuild": "インデックス再構築",
         "processing_kind_file_reprocess": "再解析",
