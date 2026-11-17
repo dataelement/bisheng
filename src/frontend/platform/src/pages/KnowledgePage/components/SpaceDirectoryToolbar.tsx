@@ -20,7 +20,6 @@ interface SpaceDirectoryToolbarProps {
   onBatchRetry?: () => void;
   onBatchTag?: () => void;
   onMove?: () => void;
-  onMoveJobs?: () => void;
   selectedCount?: number;
   onDeleteSelected?: () => void;
   onReferences?: () => void;
@@ -41,7 +40,6 @@ export function SpaceDirectoryToolbar({
   onBatchRetry,
   onBatchTag,
   onMove,
-  onMoveJobs,
   selectedCount = 0,
   onDeleteSelected,
   onReferences,
@@ -87,11 +85,6 @@ export function SpaceDirectoryToolbar({
               {onBatchRetry && (
                 <DropdownItem disabled={!selectedCount} onSelect={onBatchRetry}>
                   {t("batch.retry")}
-                </DropdownItem>
-              )}
-              {onMoveJobs && (
-                <DropdownItem onSelect={onMoveJobs}>
-                  {t("move.jobs")}
                 </DropdownItem>
               )}
               {onReferences && (
@@ -169,11 +162,6 @@ export function SpaceDirectoryToolbar({
             {t("batch.retry")}
           </Button>
         </>
-      )}
-      {onMoveJobs && (
-        <Button variant="outlined" onClick={onMoveJobs}>
-          {t("move.jobs")}
-        </Button>
       )}
       {selectedCount > 0 && (
         <Button color="danger" variant="outlined" onClick={onDeleteSelected}>

@@ -12,6 +12,7 @@ import {
   knowledgeSpaceApi,
   type OperationPrecheck,
   type ProcessingSettingsRead,
+  type ProcessingJobRead,
 } from "@/controllers/API/knowledgeSpace";
 import * as api from "@/controllers/API/knowledgeProcessing";
 import { SpaceProcessingDialog } from "@/pages/KnowledgePage/components/SpaceProcessingDialog";
@@ -248,4 +249,37 @@ it("loads only Embedding rebuild jobs for the embedded model history", async () 
   render(<QueryClientProvider client={client}><SpaceProcessingPanel scope={scope} spaceId={40} mode="jobs" jobKind="embedding_rebuild" /></QueryClientProvider>);
   await waitFor(() => expect(read).toHaveBeenCalledWith(40, { page: 1, page_size: 20, kind: "embedding_rebuild" }));
   expect(read.mock.calls.every(([, query]) => query.kind === "embedding_rebuild")).toBe(true);
+});
+
+it("shows move history beside rebuilds and preserves move routing through details and retry", async () => {
+  const { SpaceModelIndexPanel } = await import("@/pages/KnowledgePage/components/SpaceModelIndexPanel");
+  vi.spyOn(knowledgeSpaceApi, "getSpaceInfo").mockResolvedValue({ id: 40, name: "Space", model: "19" });
+  const move: ProcessingJobRead = {
+    id: "move-job", space_id: 40, kind: "move_index", state: "failed", revision: 3,
+    accepted_at: "2026-11-17", started_at: null, finished_at: null,
+    total_count: 1, succeeded_count: 0, failed_count: 1, pending_count: 0,
+    hidden_item_count: 0, retryable: true, obsolete_reason: null, error_code: null,
+  };
+  const read = vi.mocked(knowledgeSpaceApi.listProcessingJobs).mockImplementation(async (_, query) => (
+    query?.kind === "move_index" ? { data: [move], total: 1 } : { data: [], total: 0 }
+  ));
+  vi.mocked(api.readProcessingJob).mockResolvedValue(move);
+  vi.mocked(api.retryProcessing).mockResolvedValue({ job_id: move.id, accepted: true, state: "accepted", reused: false });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  clients.push(client);
+  render(<QueryClientProvider client={client}><SpaceModelIndexPanel scope={scope} spaceId={40} onSaved={vi.fn()} /></QueryClientProvider>);
+  expect(await screen.findByRole("heading", { name: "move.jobs" })).toBeVisible();
+  await waitFor(() => {
+    expect(read).toHaveBeenCalledWith(40, { page: 1, page_size: 20, kind: "embedding_rebuild" });
+    expect(read).toHaveBeenCalledWith(40, { page: 1, page_size: 20, kind: "move_index" });
+  });
+  fireEvent.click(await screen.findByRole("button", { name: "move.jobs · f118.processing_state_failed" }));
+  await waitFor(() => expect(api.readProcessingJob).toHaveBeenCalledWith(40, move.id, "move_index"));
+  expect(api.readProcessingItems).toHaveBeenCalledWith(40, move.id, { page: 1, page_size: 20 }, "move_index");
+  fireEvent.click(await screen.findByRole("button", { name: "retry" }));
+  await waitFor(() => expect(api.retryProcessing).toHaveBeenCalledWith(
+    40, move.id, { expected_job_revision: 3, idempotency_key: expect.any(String) }, "move_index",
+  ));
+  fireEvent.click(screen.getByRole("button", { name: "detail.back_to_jobs" }));
+  expect(await screen.findByRole("button", { name: "move.jobs · f118.processing_state_failed" })).toBeVisible();
 });

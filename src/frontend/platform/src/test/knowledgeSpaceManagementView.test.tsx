@@ -39,7 +39,9 @@ vi.mock("@/pages/KnowledgePage/components/SpaceMetadataPanel", () => ({
   SpaceMetadataPanel: () => <p>schema-form</p>,
 }));
 vi.mock("@/pages/KnowledgePage/components/SpaceProcessingDialog", () => ({
-  SpaceProcessingPanel: ({ mode }: { mode: string }) => <p>{mode}-form</p>,
+  SpaceProcessingPanel: ({ mode, jobKind }: { mode: string; jobKind?: string }) => (
+    <p>{jobKind === "move_index" ? "move-jobs" : mode}-form</p>
+  ),
 }));
 vi.mock("@/components/bs-comp/permission/PermissionDialog", () => ({
   PermissionDialog: ({ resourceId }: { resourceId: string }) => (
@@ -139,6 +141,7 @@ it.each(["ordinary", "admin"] as const)("offers the same five authorized panels 
   tab("detail.embedding");
   expect(await screen.findByText("embedding-form")).toBeVisible();
   expect(await screen.findByText("jobs-form")).toBeVisible();
+  expect(screen.getByText("move-jobs-form")).toBeVisible();
   expect(screen.queryByRole("tab", { name: "detail.jobs" })).toBeNull();
   tab("detail.settings");
   expect(await screen.findByText("settings-form")).toBeVisible();
@@ -223,6 +226,7 @@ it("redirects a saved task-tab link into model and index while preserving the di
   expect(await screen.findByRole("tab", { name: "detail.embedding" })).toHaveAttribute("data-state", "active");
   expect(await screen.findByText("embedding-form")).toBeVisible();
   expect(screen.getByText("jobs-form")).toBeVisible();
+  expect(screen.getByText("move-jobs-form")).toBeVisible();
   expect(screen.getByTestId("location")).toHaveTextContent("tab=embedding");
   expect(screen.getByTestId("location")).toHaveTextContent("parent_id=9");
 });

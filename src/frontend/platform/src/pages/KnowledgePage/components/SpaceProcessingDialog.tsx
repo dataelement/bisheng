@@ -144,7 +144,7 @@ function Content({
   const [job, setJob] = useState<{
     id: string;
     space: number;
-    kind?: "space_copy";
+    kind?: "space_copy" | "move_index";
   } | null>(null);
   const [busy, setBusy] = useState(false),
     [completed, setCompleted] = useState(false);
@@ -232,7 +232,11 @@ function Content({
   };
   return (
     <SpacePanelFrame
-      title={t(`f118.processing_title_${mode}`)}
+      title={t(
+        mode === "jobs" && jobKind === "move_index"
+          ? "move.jobs"
+          : `f118.processing_title_${mode}`,
+      )}
       presentation={presentation}
       busy={busy}
       className="max-h-[85vh] max-w-3xl overflow-y-auto"
@@ -308,11 +312,14 @@ function Content({
                     setJob({
                       id: row.id,
                       space: spaceId,
-                      ...(row.kind === "space_copy" ? { kind: "space_copy" as const } : {}),
+                      ...(row.kind === "space_copy" || row.kind === "move_index"
+                        ? { kind: row.kind }
+                        : {}),
                     })
                   }
                 >
-                  {t(`f118.processing_kind_${row.kind}`)} ·{" "}
+                  {t(row.kind === "move_index" ? "move.jobs" : `f118.processing_kind_${row.kind}`)}{" "}
+                  ·{" "}
                   {t(`f118.processing_state_${row.state}`)}
                 </Button>
               </li>
