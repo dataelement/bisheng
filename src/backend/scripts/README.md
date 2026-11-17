@@ -1735,3 +1735,12 @@ conversion and publication boundaries are shown in the
 仍执行原部署入口，不要求运维手动调用加解密、重新加密或权限修改工具。首次隐藏输入；重部署逐项选择是否改密，默认保留。v2 输入、原生配置包、历史和恢复材料加密；主密钥外置并限制访问，运行所需明文只在经过检查的内存文件系统或进程内存中使用。受管 v1 转换失败时保留现场，再次执行原命令恢复。未经验证的旧原生布局不得绕过拒绝检查。
 
 Milvus 原生内部消息 Base64 凭据为用户确认的明确例外，部署器生成材料仍加密。DM、正式发布镜像及主机重启尚待验收，不能将本地覆盖镜像的通过结果扩展到所有部署形态。参见 [HTML 运维手册](../../../docker/中间件凭据运维手册.html)。
+
+## 统一 agent 内核技术验证（F004 前置，v3.1.0-beta2）
+
+`spike_unified_runtime/` 下是只读的框架行为验证脚本，不连接任何中间件，不读写业务数据。结论与运行方法见 [spike_unified_runtime/README.md](spike_unified_runtime/README.md)。
+
+```bash
+.venv/bin/python scripts/spike_unified_runtime/s1_todo_and_tool_output.py
+.venv/bin/python scripts/spike_unified_runtime/s3b_diff_todos_alignment.py
+```
