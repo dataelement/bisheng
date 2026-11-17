@@ -6,6 +6,7 @@ from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.database.models.audit_log import AuditLog
 from bisheng.database.models.department import Department
 from bisheng.database.models.user_role import UserRole
+from bisheng.tenant.domain.constants import UserTenantSyncTrigger
 from bisheng.user.application.policy_bindings import seed_policy_defaults
 from test.fixtures.managed_tenant import managed_db as managed_db
 from test.role.test_effective_roles import policy_db as policy_db
@@ -79,7 +80,7 @@ async def test_first_sso_activation_rebinds_explicit_account_default_but_replay_
         "_write_relocation_audit",
     ):
         monkeypatch.setattr(UserTenantSyncService, name, AsyncMock())
-    await UserTenantSyncService.sync_user(79)
+    await UserTenantSyncService.sync_user(79, trigger=UserTenantSyncTrigger.DEPT_CHANGE)
     with bypass_tenant_filter():
         async with policy_db.sessions() as session:
             bindings = (await session.exec(select(UserRole).where(UserRole.user_id == 79))).all()
@@ -150,7 +151,7 @@ async def test_relocation_and_return_never_revive_historical_home_grants(policy_
                 home = await session.get(Tenant, home_id)
                 await session.commit()
         monkeypatch.setattr(TenantResolver, "resolve_user_leaf_tenant", AsyncMock(return_value=home))
-        await UserTenantSyncService.sync_user(77)
+        await UserTenantSyncService.sync_user(77, trigger=UserTenantSyncTrigger.DEPT_CHANGE)
         with bypass_tenant_filter():
             async with policy_db.sessions() as session:
                 bindings = (await session.exec(select(UserRole).where(UserRole.user_id == 77))).all()

@@ -22,7 +22,7 @@
 遵循[架构宪法](../../../docs/constitution.md) C1–C8。特有约束：
 
 - H是权威当前主属；M是已授权管理选择；B是部门挂载业务租户；S是部门存储租户；O是资源/定义归属；T是验证后冻结的写入目标。H不随M改写。
-- global仅共享角色定义，绑定按人员H；普通自定义角色只允许H内合法作用域。跨租户兼属仅产生组织事实，不发外国策略。
+- 新授予按人员H校验共享/本租户定义及部门资格；已有绑定按用户读取，不因存储租户、定义类型或部门范围而丢失。跨租户兼属本身不新发策略，具体资源仍按H及动作授权隔离。
 - 不修改全局tenant_filter、不新增全站bypass、不扩大管理中间件白名单。跨存储读取在owner Repository内限定精确主体/角色/部门，不把客户端tenant_id当授权。
 - 不恢复RoleAccess的资源授权；WEB_MENU与F048资源动作分开。管理员身份独立保留。
 - 普通quota仍为提交前检查，保留轻微并发超额合同。SQL与FGA/Redis/Celery不伪装成一个事务。
@@ -79,7 +79,7 @@
 | 链路 | 已核实位置/问题 | 必要变化；不做什么 |
 | --- | --- | --- |
 | MT01 | RoleService.update_role_with_menu/update_menu事务内重查；_replace_menu_access_in_session；查重使用login tenant | 定义O内读写/查重/refresh，菜单显式O；不普遍放开其他AccessType |
-| MT02 | RoleDao.aget_role_by_ids受环境过滤，Quota回默认；LoginUser/info/menu独立读 | 精确读取合法global+H定义及H绑定，统一当前E；不替换平台AdminRole |
+| MT02 | RoleDao.aget_role_by_ids受环境过滤，Quota回默认；LoginUser/info/menu独立读 | 精确读取该用户原绑定的角色ID及定义，统一当前E；不因绑定存储或定义类型过滤，不替换平台AdminRole |
 | MT03 | ToolServices.add_tools写H；GptsToolsDao.insert_tool_type父子两commit | T验证后父子都显式T，flush父ID后插children再一次commit；不建tool operation |
 | MT04 | workflow.create_flow写H，FlowDao.create_flow初始版本未继承T | flow/v0显式同T；保持原单事务；不改assistant/linsight等无关产品语义 |
 | MT05 | KnowledgeService.copy_knowledge调用覆写H/提前建索引helper；QA复制前也已改源 | 私有复制预留方法保持源O、真实actor，源/目标同SQL事务，关联后再投影/准备外部存储；不改普通建库helper的全局身份语义 |
@@ -89,22 +89,22 @@
 
 拟新增小型 `role.application.effective_roles` 入口，结果仅有 `user_id,home_tenant_id,role_ids,roles`；不带新generation/全局缓存或进行中操作引用。身份已由当前用户/合法目标解析；任意user_id不能直接拿来扩大读取。
 
-- User owner提供目标H/绑定读取；Role owner读取精确ID的global或H内定义；Department owner提供该主体计算资格所需的成员、祖先和B。普通成员事实读取不要求部门管理权；管理候选resolver另行校验管理员资格。
-- E对普通role去重，要求绑定H、定义合法、当前作用域有效；正常无角色与读取故障区分。缺失定义/组织事实不可确定抛明确错误，不回空角色。归属不明历史行进入只读盘点，不自动搬迁。
-- Menu只通过WEB_MENU定义关联读取O；个人UserMenuAccess显式取H，保持父子依赖及身份派生入口。资源权限仍走原F048。
+- User owner提供目标H/绑定读取；Role owner读取原绑定精确ID的定义（类型和归属不作既有授权读取过滤）；Department owner提供该主体计算资格所需的成员、祖先和B。普通成员事实读取不要求部门管理权；管理候选resolver另行校验管理员资格。
+- E对原普通绑定的角色ID去重，不以绑定租户、定义类型/归属或部门范围作读取过滤；H与主部门事实仍需一致，正常无角色与读取故障区分。缺失定义/组织事实不可确定抛明确错误，不回空角色。归属不明历史行进入只读盘点，不自动搬迁。
+- Menu只按已绑定角色ID读取WEB_MENU原记录，不额外要求菜单记录租户等于定义O；个人UserMenuAccess显式取H，保持父子依赖及身份派生入口。资源权限仍走原F048。
 - 仅接当前实际消费者：LoginUser init/info、菜单断言/申请模式、Quota、ApprovalGate动态role标签、DSH ROLE读取。sync/async共享纯判断，不在事件循环中阻塞等待async；不添加常驻跨请求E缓存。
 - 部门候选和管理写复用现有挂载权威校验（tenant owner的grant department事实），只新增需要的应用包装，不直接向外暴露跨tenant DAO。
 
 ### 4.3 绑定生产者：同步校验/删除，移除三层恢复编排
 
-纳入本地人员创建/编辑、批量默认发放、SSO角色替换、成员退出、部门归档/移动/挂载、两种主属更改中**直接产生策略结果的步骤**。不重做组织同步、凭据或身份投影框架。
+纳入本地人员创建/编辑、批量默认发放、SSO角色替换、成员退出、部门归档/移动、两种主属更改中**直接产生策略结果的步骤**。不重做组织同步、凭据或身份投影框架。
 
 - 所有字段先预检：跨租户兼属提交角色变更，在姓名/组/成员提交前拒绝；候选可见不等于写入合法。前端提供只读原因，后端独立拒绝。
 - 新绑定显式写目标H。无作用域/global直接策略离开同H单部门时保留；作用域角色失去最后支持才删除；不引入部门授予来源。
-- 定义缩小、成员变化和拓扑变化以同数据库UoW调用user owner的“按最终事实删除非法普通绑定”方法；Role/Department Service不能直接接管UserRole ORM。Role定义及其失效绑定在同事务提交；部门移动要枚举受影响主属与兼属成员，不能只做sync_subtree_primary_users。
+- 显式成员变化和部门移动（不含标记子租户）以同数据库UoW调用user owner的绑定维护方法；Role/Department Service不能直接接管UserRole ORM。角色定义保存不再自动删除人员绑定，与v3.0.0一致；显式删除/撤销仍走绑定owner。部门移动要枚举受影响主属与兼属成员，不能只做sync_subtree_primary_users。
 - 同步事务成功才报告该SQL步骤完成，失败整体回滚；不异步删除一批再返回成功。锁采用既定角色ID→用户ID顺序，所有相关新增绑定入口在锁内重验资格。规模/耗时需要集中测试；超时失败回滚，不未经测量加批量状态机。
 - SSO保存变更前成员事实，只对真实新增的合法同H成员/新H激活发默认；不重发相同成员快照下人工撤销的角色。将角色发放放在权威H解析之后，不在Root+bypass先写角色。
-- H迁移终止旧普通绑定，不复制同名角色/旧global授予；平台身份独立。现有主属入口组织结果保留，不把“降为兼属”和“删除旧关系”顺手统一。
+- 真正调岗、部门移动及解绑派生的H迁移终止旧普通绑定，不复制同名角色/旧global授予；标记子租户及主属补同步保留原绑定且不发默认角色，原角色按用户绑定继续读取并生效，具体资源按当前H和动作授权判定；平台身份独立。现有主属入口组织结果保留，不把“降为兼属”和“删除旧关系”顺手统一。
 - 现有组织/身份后置同步失败必须明确报错，不称完整成功；E读取发现当前主属与权威主部门/挂载不一致则拒绝敏感政策决策。恢复仍依现有身份同步及受控重试，不承诺新父子操作账本/全系统效果屏障。此为原AC-13/AC-14的范围收窄。
 - 绑定终止记录走现有业务审计，包含actor、subject、当前H及增删ID/原因；旧/新H由既有迁移审计事件记录；不把审计表当任务队列。审计和跨系统效果的原子恰好一次保证延期，不改全站审计sink。
 
@@ -149,11 +149,11 @@ Knowledge新增 `copy_source_id: int | null`（目标记源）与 `copy_target_i
 - 旧 `/user/info` 使用LoginUser请求内E；旧建人UserService.create_user改async（API唯一调用方同步await），初始Root无主属账户先校验合法角色，再同步H/发放；旧role重置不写操作者M。
 - E sync及部门业务目录接受内部可选session，DSH同UoW读当前事实；普通模型调用不先加载全组织目录。无新缓存或全模型刷新。
 - 工具更新按父creator预算、T及子项净增量判断；角色delta与租户delta分别计算，合法零增量替换保留。新增子项继承父T及creator。
-- 发布线FlowService.create_workflow负责父/v0/F118绑定同事务，SQL提交后complete_creation投影/READY，保留PENDING故障定位；挂载创建沿tenant_creation coverage factory同事务终止绑定，历史migration_origin只豁免个人空间数量。
+- 发布线FlowService.create_workflow负责父/v0/F118绑定同事务，SQL提交后complete_creation投影/READY，保留PENDING故障定位；挂载创建沿tenant_creation coverage factory建立边界及覆盖证明，保持原角色绑定不变，历史migration_origin只豁免个人空间数量。
 - 工具/Flow内部CreationRepository负责精确load/READY CAS；permission business_action负责super/public前负向就绪门禁。Flow联合应用查询、simple读和版本查询同样覆盖；这些都不提供新的权限ALLOW。
 - 原权限创建恢复使用现有稳定key（包含原owner）、冻结checksum与store/model；PREPARED且owner SQL未准备时按同key重新prepare；原操作FINALIZED后核实mode.operation_id/version=1/CURRENT和CREATOR，再完成owner/assignee/visible镜像。FAILED_CLOSED不重放。
 - 复制可信header仅两条copy任务启用，body T需匹配可信ContextVar；领取前和发布前复核当前actor。Knowledge复制过的库仍可再作源，copy_source_id是其历史来源，copy_target_id才是当前占用；正常未发布草稿不视为复制目标。
-- role绑定审计显式operator，系统同步为-1；迁移在激活前终止所有历史H普通绑定，首次SSO账户显式默认角色可在首次H合法重建，同快照/回迁不恢复。scope扩大和新增成员支持前先清旧无效绑定，避免历史脏行获得新资格。
+- role绑定审计显式operator，系统同步为-1；显式组织变更在激活前终止所有历史H普通绑定，首次显式主部门激活可承接明确账户默认角色；挂载、登录及定时/手工主属补同步不改绑、不补默认，真正调岗回迁不恢复。角色定义范围只约束新授予，不隐式撤销原绑定；真实组织变更仍按其显式维护边界处理，已撤销绑定不随范围变化恢复。
 - 人员表单E不可确定返回24006；政策混合请求在姓名/组写前验证H一致，跨租户兼属返回policy_editable=false、role_apply_status=NOT_APPLICABLE_CROSS_TENANT。同H为APPLICABLE；不新增UNAVAILABLE静默空政策。
 - SSO组织父路径变更同SQL更新后代路径，终止涉及主属+兼属的失效绑定；禁用挂载必须报政策不可确定，不能采纳旧resolver的Root回退。
 
@@ -165,7 +165,7 @@ Knowledge新增 `copy_source_id: int | null`（目标记源）与 `copy_target_i
 | --- | --- | --- |
 | 显式tenant会覆盖自动填充 | 自动filter存在但仍写错租户 | ToolServices.add_tools、workflow.create_flow、父子DAO |
 | S不等于B | 子租户部门候选仍取Root角色 | 部门业务事实包装、候选及最终写 |
-| global定义与H绑定不是同一scope | 放宽定义时顺手放开外国绑定 | effective_roles、WEB_MENU精确O读取 |
+| 普通角色延续不等于资源跨租户执行 | 恢复原角色后误将Root/外租户资源放行 | effective_roles仅供菜单/预算/标签；真实H、数据过滤与F048动作授权独立 |
 | 普通LegacyRBACSync不传播E | 调回调就误称已生效 | 当前消费者按次读取；不新增全模型屏障 |
 | super可能短路PDP | 权限失败半成品可执行 | 父creation_state、copy关联目标状态前置门禁 |
 | Broker异常不等于消息没发 | 重投/清理破坏正在写的目标 | copy关联诊断、未知不自动重试 |
@@ -287,3 +287,33 @@ config=/tmp/bisheng-managed-tenant-review-config.yaml PYTHONPATH=. PYTHONDONTWRI
 ## 首次拦截后继续聊天修复
 
 用户明确授权T131。已由公共持久化协议注入窄会话存储适配器，保持资源执行与消息归属分离、父/消息原子保存及合法已知会话历史/重连；最终数据流、边界及验证以[本轮交付](continuation-fix-delivery-20261116.md)和optional-gateway-compat.md最终实现段为准。首次记录不因继续而迁移，Java/表结构不变。旧架构依赖不在本轮扩大，现场仍待验。
+
+
+## 2026-11-17 子租户登录及挂载兼容修订
+
+依据本轮用户指令及 spec.md 同日修订。v3.0.0 已有 is_child_admin 前端管理放行和租户内资源权限，但其登录无角色检查也遗漏独立子租户管理员；本次补齐登录与管理端默认落点，不将身份转换为 AdminRole。
+
+LoginUser.is_home_tenant_admin 通过 permission.application 核验真实主属；不使用管理选择，不信任传入角色编号，Root及平台身份跳过子租户身份查询。管理入口只合并 admin/sys/system_config，原侧栏路由仍按 is_child_admin 放行租户业务功能；普通角色/额度及具体资源权限不变。权限服务错误传播，撤销后重新读取不放行。
+
+create_mounted_tenant_with_coverage 删除自动退役绑定步骤；UserTenantSyncService 仅在 DEPT_CHANGE、DEPT_MOVED、UNMOUNT_REDERIVE 显式组织变更时执行原角色终止及默认规则。MOUNT_BACKFILL、LOGIN、CELERY_RECONCILE、MANUAL 只同步主属与既有身份后置步骤，原绑定所有字段保持，目标部门有默认配置也不补授。这样挂载后首次补同步失败再经登录/Beat恢复，不会重新解释成角色授权操作。账号创建与真正组织变更保留原规则；SSO相同快照不清理原绑定，显式角色重置按全部存储租户的原绑定执行。
+
+此选择保持 v3.0.0 的挂载角色存储行为及当前有效角色隔离；不新增持久字段或挂载请求协议。若将来要求行政划分自动承接策略，应另行明确映射、原子性和撤权重试规则，不能重新在通用主属同步中推导授权。
+
+已知坑：仅按 mount.backfill 跳过角色操作不足以覆盖后续 login/Celery 补同步；保留记录不表示跨租户生效。既有挂载提交后人员同步/初始管理员授予仍分步骤，此补丁不承诺整流程原子恢复。
+
+修订记录：2026-11-17，按用户指定的 v3.0.0 兼容语义修订挂载及管理员入口；本地证据及现场待验见 child-admin-mount-compat-delivery-20261117.md。
+
+
+### 后续实现修订：读取与生效一并兼容v3.0.0
+
+本节依据用户后续明确指令，替代上轮仅保留记录的实现判断。`effective_roles._binding_ids`收集该用户所有仍存在的普通角色绑定；`_resolve`保留H/主部门一致性及定义完整性校验，原角色不再通过eligible_role过滤。eligible_role继续用于新增分配及显式作用域维护；不将维护规则用来否定升级读取。菜单仓储按角色编号+WEB_MENU类型读取原记录，sync/async消费者使用同一结果。
+
+PolicyBindingRepository.replace对新增picked减去existing的差集校验资格；保留旧绑定不重绑/重复授予。显式撤销按目标用户、角色集合删除各存储租户副本；旧role_add入口及LegacyRBACSync前后ID集合使用同一口径。只有当前主属管理员或原有有权操作者能修改目标，Home/管理准入及新授予资格不放宽。
+
+SSO入口在写成员前比较原主部门、已存在部门ID及本次明确要求的变化；兼属删除仍以Department.source判定维护权，不能用成员source或省略字段误判。只有实际请求组织变更、或后置客人部门等使成员集合变化时才调用原失效绑定清理；相同快照跳过清理，随后默认授予只接真实新增部门差集。挂载后待同步的Home变化本身不是新角色授权，也不会让SSO登录清掉旧Root绑定。
+
+没有引入读取兜底或长期双策略：登录、本人信息、菜单、Quota、审批动态标签和DSH读同一份原绑定集合。具体资源SQL、验证后的目标、F048动作顺序及Root共享通道不改；菜单存在但资源未授权仍拒绝。验证见test_v300_role_read_compatibility.py及更新后的挂载、配额、审批和DSH用例。
+
+RoleDefinitionRepository.update移除定义保存时的两段隐式绑定清理，避免原Root角色即使只保存原department_id也清掉子租户成员的授予。角色删除继续显式退役所有绑定；范围修改只影响新分配，已有角色的菜单/额度按新定义生效，但不改变原绑定主键/归属。新增回归同时验证保存定义后角色可用、真实撤销后扩大范围不恢复，以及不再具备新分配资格时显式重新授予拒绝。
+
+角色菜单显式替换按角色ID和WEB_MENU类型删除所有旧存储副本，再按定义所有者写入新菜单，沿v3.0.0写法；否则读取已恢复跨存储副本而菜单撤销只删定义所有者会留下旧菜单继续生效。此操作仅在有权管理员明确保存该角色菜单时执行，不动人员绑定或资源授权类型记录；SQL回归验证旧菜单撤销且资源类型行仍在。
