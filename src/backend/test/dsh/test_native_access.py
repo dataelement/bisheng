@@ -75,8 +75,8 @@ def snapshot(user="20", tenant="2", active=True):
     )
 
 
-@pytest.fixture
-def native(tmp_path):
+@pytest.fixture(params=[None, "https://platform.example"], ids=["request-origin", "fixed-origin"])
+def native(tmp_path, request):
     from bisheng.core.database.tenant_filter import register_tenant_filter_events
 
     register_tenant_filter_events()
@@ -105,15 +105,13 @@ def native(tmp_path):
         )
     )
     store = RedisStore()
-    authorizations = DshAuthorizationService(store, "https://platform.example")
+    authorizations = DshAuthorizationService(store, request.param)
     identity = IdentityService(TicketRepository(store), records, authorizations)
     keys = LocalTokenKeys(lambda: "synthetic-persistent-master-for-native-tests")
     # Existing absolute-session tests also exercise upgraded historical records.
     sessions = DshLocalSessionService(scope, identity, keys, refresh_grace_seconds=600, idle_seconds=None)
     access = DshAccessService(ISSUER, keys, identity, sessions)
-    runtime = DshRuntime(
-        SimpleNamespace(platform_public_url="https://platform.example"), identity, access, sessions, authorizations
-    )
+    runtime = DshRuntime(SimpleNamespace(platform_public_url=request.param), identity, access, sessions, authorizations)
     yield runtime, engine
     engine.dispose()
 
@@ -338,7 +336,7 @@ def test_pkce_browser_ticket_exchange_and_refresh_end_to_end(native, path):
     app.dependency_overrides[browser_user] = lambda: SimpleNamespace(tenant_id=2, user_id=20)
     verifier = "v" * 43
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
-    with TestClient(app) as client:
+    with TestClient(app, base_url="https://platform.example") as client:
         auth = client.post(
             path + "/authorizations",
             json={

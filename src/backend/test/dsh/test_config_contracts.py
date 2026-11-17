@@ -8,9 +8,9 @@ from pydantic import ValidationError
 from bisheng.dsh.config import DshSettings
 
 
-def test_disabled_defaults_and_invalid_capacity_bounds():
+def test_enabled_defaults_and_invalid_capacity_bounds():
     settings = DshSettings()
-    assert settings.enabled is False
+    assert settings.enabled is True
     assert settings.quota_memory_budget_bytes == 512 * 1024 * 1024
     assert settings.quota_memory_headroom_bytes == 64 * 1024 * 1024
     for values in (
@@ -82,15 +82,24 @@ def test_enabled_api_and_worker_factories_use_identical_capacity(tmp_path):
     assert result.returncode == 0, result.stderr[-5000:]
 
 
-@pytest.mark.parametrize("document", ["{}", "dsh: {}", "dsh:\n  enabled: false"])
-def test_application_settings_load_optional_typed_dsh(document):
+@pytest.mark.parametrize(
+    "document,enabled",
+    [
+        ("{}", True),
+        ("dsh: {}", True),
+        ("bs_client: {}", True),
+        ("dsh:\n  enabled: false", False),
+        ("bs_client:\n  enabled: false", False),
+    ],
+)
+def test_application_settings_load_optional_typed_dsh(document, enabled):
     import yaml
 
     from bisheng.core.config.settings import Settings
 
     settings = Settings.model_validate(yaml.safe_load(document))
     assert isinstance(settings.dsh, DshSettings)
-    assert settings.dsh.enabled is False
+    assert settings.dsh.enabled is enabled
 
 
 def test_application_settings_reject_duplicate_deployment_configuration():
@@ -109,8 +118,7 @@ def test_application_settings_reject_duplicate_deployment_configuration():
     ):
         with pytest.raises(ValidationError):
             Settings(dsh={field: "obsolete"})
-    with pytest.raises(ValidationError):
-        Settings(dsh={"enabled": True})
+    assert Settings(dsh={"enabled": True}).dsh.platform_public_url is None
 
 
 def test_application_schema_has_no_duplicate_trust_or_model_settings():
@@ -124,6 +132,24 @@ def test_settings_serialization_preserves_typed_configuration():
     from bisheng.core.config.settings import Settings
 
     settings = Settings(dsh={"billing_timezone": "Asia/Shanghai"})
-    payload = settings.model_dump(mode="json", include={"dsh"})
-    assert payload["dsh"]["billing_timezone"] == "Asia/Shanghai"
+    payload = settings.model_dump(mode="json", include={"bs_client"})
+    assert payload["bs_client"]["billing_timezone"] == "Asia/Shanghai"
     assert Settings.model_validate(payload).dsh == settings.dsh
+
+
+@pytest.mark.parametrize("new", [{}, {"enabled": False}])
+def test_new_client_block_wins_as_a_whole(new):
+    """覆盖 AC: AC-06, AC-08."""
+    from bisheng.core.config.settings import Settings
+
+    settings = Settings(bs_client=new, dsh={"enabled": False, "billing_timezone": "UTC", "obsolete": True})
+    assert settings.dsh is settings.bs_client
+    assert settings.bs_client.billing_timezone == "Asia/Shanghai"
+    assert settings.bs_client.enabled is new.get("enabled", True)
+    assert "dsh" not in settings.model_dump()
+
+
+@pytest.mark.parametrize("url", [None, "", "   "])
+def test_enabled_without_origin(url):
+    """覆盖 AC: AC-04."""
+    assert DshSettings(platform_public_url=url).platform_public_url is None

@@ -34,7 +34,7 @@ def http_app():
         ),
         inbound_auth=SimpleNamespace(verify=AsyncMock(return_value="i")),
     )
-    app.dependency_overrides[get_settings] = lambda: DshSettings()
+    app.dependency_overrides[get_settings] = lambda: DshSettings(enabled=False)
     app.dependency_overrides[get_runtime] = lambda: runtime
     app.dependency_overrides[browser_user] = lambda: SimpleNamespace(user_id=1, tenant_id=2)
     return app, runtime

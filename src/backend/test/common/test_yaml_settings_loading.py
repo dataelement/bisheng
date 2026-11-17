@@ -92,3 +92,41 @@ def test_invalid_yaml_still_blocks_startup(tmp_path, loader):
 
     with pytest.raises(yaml.YAMLError):
         service.load_settings_from_yaml(str(path))
+
+
+@pytest.mark.parametrize(
+    "document,enabled",
+    [
+        ("bs_client: {}", True),
+        ("dsh: {enabled: false}", False),
+        ("bs_client: {}\ndsh: {enabled: false, obsolete: true}", True),
+    ],
+)
+def test_client_keys_survive_yaml_filter(tmp_path, loader, document, enabled):
+    """覆盖 AC: AC-06, AC-08."""
+    service, logger = loader
+    path = tmp_path / "config.yaml"
+    path.write_text(document)
+    loaded = service.load_settings_from_yaml(str(path))
+    assert loaded.bs_client.enabled is enabled
+    logger.warning.assert_not_called()
+
+
+def test_shipped_compose_settings_connect_runtime_and_client(tmp_path, monkeypatch, loader):
+    """覆盖 AC: AC-01, AC-04 — load the actual shipped YAML and its env bindings."""
+    import re
+
+    service, _ = loader
+    path = Path(__file__).resolve().parents[4] / "docker/bisheng/config/config.yaml"
+    root = Path(__file__).resolve().parents[4]
+    environment = yaml.safe_load((root / "docker/docker-compose.yml").read_text())["services"]["backend"]["environment"]
+    for variable in re.findall(r"!env \$\{([^}]+)\}", path.read_text()):
+        raw = str(environment.get(variable, "test-deployment-value"))
+        monkeypatch.setenv(variable, "test-deployment-value" if "${" in raw else raw)
+    loaded = service.load_settings_from_yaml(str(path))
+    assert loaded.bs_client.enabled and loaded.bs_client.platform_public_url is None
+    assert loaded.app_runtime.enabled
+    assert loaded.app_runtime.manager_base_url == "http://runtime-manager:8091"
+    assert loaded.app_runtime.manager_hmac_secret == "test-deployment-value"
+    assert loaded.app_runtime.proxy_hmac_secret == "test-deployment-value"
+    assert loaded.app_runtime.obo_secret == "test-deployment-value"
