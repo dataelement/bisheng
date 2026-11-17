@@ -70,7 +70,7 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
     // tasks, even when their carrier omits the explicit readOnly prop.
     const { token: shareToken } = useParams<{ token?: string }>();
     const retryReadOnly = readOnly || Boolean(shareToken);
-    const { getLinsight, continueConversation, switchAndUpdateLinsight, updateLinsight } = useLinsightManager();
+    const { getLinsight, retryConversation, switchAndUpdateLinsight, updateLinsight } = useLinsightManager();
     // WS pump — self-guards on status===Running, so mounting it for a completed
     // historical turn is a no-op (no connection opened).
     const { sendInput, stop, networkFailure } = useLinsightWebSocket(versionId);
@@ -84,7 +84,7 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
         retryPendingRef.current = true;
         setRetrying(true);
         try {
-            await continueConversation(versionId, linsight.question);
+            await retryConversation(versionId, linsight.question);
         } finally {
             retryPendingRef.current = false;
             setRetrying(false);

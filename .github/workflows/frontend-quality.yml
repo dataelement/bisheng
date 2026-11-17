@@ -6,6 +6,11 @@ name: Frontend Quality
 # Any NEW lint violation or strict-mode type error fails this workflow.
 
 on:
+  push:
+    branches: ['feat/3.1.0-beta1']
+    paths:
+      - "src/frontend/**"
+      - ".github/workflows/frontend-quality.yml"
   pull_request:
     paths:
       - "src/frontend/**"
@@ -44,6 +49,14 @@ jobs:
 
       - name: Shared configuration tests and types
         run: pnpm test:config && pnpm typecheck:config
+
+      - name: Browser management context regression
+        run: >-
+          pnpm --filter @bisheng/api-client test &&
+          pnpm --filter bisheng exec vitest run --maxWorkers=1 --minWorkers=1
+          src/controllers/browserScopeRecovery.test.ts
+          src/controllers/managementScope.test.ts
+          src/controllers/requestStream.test.ts
 
       - name: Shared locale artifacts in sync (packages/locales)
         run: pnpm --filter @bisheng/locales check

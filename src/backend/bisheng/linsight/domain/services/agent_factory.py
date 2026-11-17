@@ -1095,7 +1095,9 @@ async def _annotate_web_search_items(output: Any) -> tuple[Any, list]:
         results = json.loads(output)
     except json.JSONDecodeError:
         return output, []
-    if not isinstance(results, list):
+    envelope = results if isinstance(results, dict) and set(results) == {"response", "web_results"} else None
+    results = envelope["web_results"] if envelope else results
+    if not isinstance(results, list) or any(not isinstance(item, dict) for item in results):
         return output, []
     annotated = annotate_web_results_with_citations(results)
     items = collect_web_citation_registry_items(annotated)
@@ -1103,7 +1105,9 @@ async def _annotate_web_search_items(output: Any) -> tuple[Any, list]:
     # groups them per page and those records carry no ``key`` / ``itemId``, so a
     # handle would map to a bare ``websearch_xxx`` that no marker parser accepts.
     await cache_citation_registry_items(items)
-    return json.dumps(annotated, ensure_ascii=False), list(items)
+    return json.dumps({**envelope, "web_results": annotated} if envelope else annotated, ensure_ascii=False), list(
+        items
+    )
 
 
 async def _annotate_web_search_output(output: Any) -> Any:

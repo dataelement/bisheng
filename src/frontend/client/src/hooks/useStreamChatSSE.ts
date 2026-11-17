@@ -77,6 +77,7 @@ export default function useStreamChatSSE(
         flushRef.current = flush;
 
         const sse = new SSE(sseUrl, {
+            start: false,
             payload: JSON.stringify(payload),
             headers: { "Content-Type": "application/json" },
         });
@@ -156,7 +157,7 @@ export default function useStreamChatSSE(
             onEnd();
         });
 
-        void prepareBrowserHeaders('POST', sseUrl).then(headers => {
+        void prepareBrowserHeaders('POST', sseUrl, sse.headers).then(headers => {
             if (finished) return;
             sse.headers = {...sse.headers, ...headers};
             sse.stream();

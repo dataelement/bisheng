@@ -1,4 +1,5 @@
 import request from "@/controllers/request";
+import type { PricingCurrency } from "./modelPricing";
 
 export type ModelType = "llm" | "embedding" | "rerank" | "asr" | "asr_rt" | "tts";
 export interface DiscoveredModel {
@@ -8,12 +9,15 @@ export interface DiscoveredModel {
   type_source: "metadata" | "registry" | "unknown" | "unsupported" | "speech";
   // Present when the vendor model list published a total context window.
   context_window?: number;
+  // F016: present on rows listed from the bundled price catalog.
+  catalog?: { vendor: string; label: string; currency: PricingCurrency; input: string; output: string };
 }
 export type DiscoverySource = "auto" | "live" | "preset";
 export interface DiscoveryResult {
   models: DiscoveredModel[];
   source?: "live" | "preset";
-  scope?: "catalog" | "local" | "deployments" | "azure_models";
+  // "price_catalog": F016 bundled price catalog, shown when no vendor list is available.
+  scope?: "catalog" | "local" | "deployments" | "azure_models" | "price_catalog";
   docs_url?: string;
   catalog_date?: string;
 }

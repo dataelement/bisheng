@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   knowledgeSpaceApi,
+  type JobState,
   type ProcessingKind,
 } from "@/controllers/API/knowledgeSpace";
 import {
@@ -16,6 +17,7 @@ import {
   useKnowledgeProcessingActions,
   type KnowledgeQueryScope,
 } from "@/controllers/hooks/knowledge";
+import { Progress } from "@/components/bs-ui/progress";
 import { showApiError } from "@/controllers/request";
 import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { createDshOperationId as createOperationId } from "@/util/dshOperationId";
@@ -26,6 +28,7 @@ interface SpaceProcessingProgressProps {
   jobId: string;
   kind?: ProcessingKind;
   onCompleted?: () => void;
+  onStateChange?: (state: JobState) => void;
 }
 export function SpaceProcessingProgress({
   scope,
@@ -33,8 +36,10 @@ export function SpaceProcessingProgress({
   jobId,
   kind,
   onCompleted,
+  onStateChange,
 }: SpaceProcessingProgressProps) {
   const { t } = useTranslation("knowledge");
+  const metadata = kind === "metadata_schema_change";
   const [page, setPage] = useState(1),
     [busy, setBusy] = useState(false);
   const locale = usePaginationLocale();
@@ -56,13 +61,17 @@ export function SpaceProcessingProgress({
     }),
     [kind],
   );
-  const job = useKnowledgeProcessingJob(scope, spaceId, jobId, api);
+  const queryOptions = metadata ? { refetchOnMount: "always" as const } : undefined;
+  const job = useKnowledgeProcessingJob(scope, spaceId, jobId, api, queryOptions);
+  const jobData = !metadata || job.isFetchedAfterMount ? job.data : undefined;
+  const hasFailures = (jobData?.failed_count ?? 0) > 0;
   const items = useKnowledgeProcessingItems(
     scope,
     spaceId,
     jobId,
-    { page, page_size: 20 },
+    { page, page_size: 20, state: metadata ? "failed" : undefined },
     api,
+    { enabled: !metadata || hasFailures, ...queryOptions },
   );
   const actions = useKnowledgeProcessingActions(scope, spaceId, api);
   const [retry, setRetry] = useState<{ revision: number; key: string } | null>(
@@ -75,7 +84,10 @@ export function SpaceProcessingProgress({
   const reported = useRef(false);
   const completedCallback = useRef(onCompleted);
   completedCallback.current = onCompleted;
-  const state = job.data?.state;
+  const state = jobData?.state;
+  useEffect(() => {
+    if (state) onStateChange?.(state);
+  }, [onStateChange, state]);
   const refreshJob = job.refetch,
     refreshItems = items.refetch;
   useEffect(() => {
@@ -85,16 +97,24 @@ export function SpaceProcessingProgress({
     }
     if (state !== "accepted" && state !== "running") return;
     const timer = window.setInterval(() => {
-      void Promise.all([refreshJob(), refreshItems()]).catch(showApiError);
+      if (metadata) {
+        void refreshJob()
+          .then(({ data }) => {
+            if (hasFailures && data?.failed_count) return refreshItems();
+          })
+          .catch(showApiError);
+      } else {
+        void Promise.all([refreshJob(), refreshItems()]).catch(showApiError);
+      }
     }, 2000);
     return () => window.clearInterval(timer);
-  }, [state, refreshJob, refreshItems]);
+  }, [metadata, state, hasFailures, refreshJob, refreshItems]);
   const handleRetry = async () => {
-    if (!job.data?.retryable || busy) return;
+    if (!jobData?.retryable || busy) return;
     const request =
-      retry?.revision === job.data.revision
+      retry?.revision === jobData.revision
         ? retry
-        : { revision: job.data.revision, key: createOperationId() };
+        : { revision: jobData.revision, key: createOperationId() };
     setRetry(request);
     setBusy(true);
     try {
@@ -102,57 +122,95 @@ export function SpaceProcessingProgress({
         expected_job_revision: request.revision,
         idempotency_key: request.key,
       });
-      await job.refetch();
-      await items.refetch();
+      if (metadata) {
+        setPage(1);
+      } else {
+        await job.refetch();
+        await items.refetch();
+      }
     } catch (error) {
       showApiError(error);
     } finally {
       setBusy(false);
     }
   };
+  const status = state && t(`f118.processing_state_${state}`);
+  const counts = jobData && t("f118.processing_counts", {
+    completed: jobData.succeeded_count,
+    failed: jobData.failed_count,
+    pending: jobData.pending_count,
+  });
+  let percent: number | undefined;
+  if (state === "succeeded") {
+    percent = 100;
+  } else if (jobData?.total_count) {
+    const processed = jobData.succeeded_count + jobData.failed_count;
+    percent = Math.min(100, Math.floor((processed / jobData.total_count) * 100));
+  }
+  const showItems = !metadata || hasFailures;
   return (
     <section className="space-y-3" aria-live="polite">
-      {!job.data ? (
-        <Button onClick={() => void job.refetch()}>{t("retry")}</Button>
+      {metadata && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <span>{status ?? t(job.isError ? "detail.load_failed" : "detail.loading")}</span>
+            {percent !== undefined && <span className="tabular-nums">{percent}%</span>}
+          </div>
+          <Progress
+            aria-label={t("f118.processing_kind_metadata_schema_change")}
+            aria-valuetext={counts}
+            className="h-2"
+            value={percent}
+            error={state === "failed" || state === "partial_failed"}
+          />
+        </div>
+      )}
+      {!jobData ? (
+        (!metadata || job.isError) && (
+          <Button onClick={() => void job.refetch()}>{t("retry")}</Button>
+        )
       ) : (
         <>
-          <p>{t(`f118.processing_state_${job.data.state}`)}</p>
-          <p>
-            {t("f118.processing_counts", {
-              completed: job.data.succeeded_count,
-              failed: job.data.failed_count,
-              pending: job.data.pending_count,
-            })}
-          </p>
-          {job.data.error_code && (
-            <p role="alert">{t(`api_errors:${job.data.error_code}`)}</p>
+          {!metadata && (
+            <>
+              <p>{status}</p>
+              <p>{counts}</p>
+            </>
           )}
-          {job.data.hidden_item_count > 0 && (
+          {jobData.error_code && (
+            <p role="alert">{t(`api_errors:${jobData.error_code}`)}</p>
+          )}
+          {showItems && jobData.hidden_item_count > 0 && (
             <p>
               {t("f118.processing_hidden", {
-                count: job.data.hidden_item_count,
+                count: jobData.hidden_item_count,
               })}
             </p>
           )}
-          {job.data.retryable && (
+          {jobData.retryable && (
             <Button disabled={busy} onClick={() => void handleRetry()}>
               {t("retry")}
             </Button>
           )}
         </>
       )}
-      <ul className="divide-y">
-        {items.data?.data.map((item, index) => (
-          <li className="py-2" key={item.id}>
-            {t("f118.processing_item_number", {
-              number: (page - 1) * 20 + index + 1,
-            })}
-            : {t(`f118.processing_item_${item.state}`)}
-            {item.error_code ? ` (${t(`api_errors:${item.error_code}`)})` : ""}
-          </li>
-        ))}
-      </ul>
-      {items.data && items.data.total > 20 && (
+      {metadata && hasFailures && items.isError && (
+        <Button onClick={() => void items.refetch()}>{t("retry")}</Button>
+      )}
+      {showItems && Boolean(items.data?.data.length) && (
+        <ul className="divide-y">
+          {items.data?.data.map((item, index) => (
+            <li className="py-2" key={item.id}>
+              {t("f118.processing_item_number", {
+                number: (page - 1) * 20 + index + 1,
+              })}
+              : {t(`f118.processing_item_${item.state}`)}
+              {item.error_code ? ` (${t(`api_errors:${item.error_code}`)})` : ""}
+            </li>
+          ))}
+        </ul>
+      )}
+      {showItems && items.data && items.data.total > 20 && (
         <Pagination
           current={page}
           total={items.data.total}

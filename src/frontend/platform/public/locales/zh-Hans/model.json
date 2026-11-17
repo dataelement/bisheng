@@ -265,7 +265,32 @@
       "channel_sync": "频道同步",
       "knowledge": "知识空间或知识库",
       "model_default": "默认模型设置"
-    }
+    },
+    "pricing": {
+      "title": "价格（每百万 token）",
+      "currency": "价格币种",
+      "currencyCNY": "人民币",
+      "currencyUSD": "美元",
+      "input": "输入（未命中缓存）",
+      "cacheRead": "缓存命中",
+      "cacheWrite": "缓存写入",
+      "cacheWritePlaceholder": "同输入价",
+      "output": "输出",
+      "invalid": "价格为 0～999999.999999 之间的数字，最多 6 位小数。",
+      "statusCatalog": "已按价格表带出：{{vendor}} {{label}}（{{date}} 官网价）",
+      "statusReview": "按模型名匹配到价格表里的「{{label}}」（官方价），请核对服务商的模型和价格是否一致。",
+      "statusEdited": "已修改。价格表原价：输入 {{input}} / 缓存命中 {{cacheRead}} / 缓存写入 {{cacheWrite}} / 输出 {{output}}（{{currency}}）",
+      "restore": "恢复原价",
+      "defaultTag": "默认 0",
+      "statusDefault": "价格表里没有这个模型，按免费处理，不扣积分。如果是收费模型，请填写价格。",
+      "statusManual": "手动填写的价格。",
+      "help": "每次调用按厂商返回的用量，每类 token 乘以对应价格计费；缓存写入不填时按输入价计。"
+    },
+    "discoveryScope_price_catalog": "以下是价格表中各厂商的常用模型，选中后会自动带出官方价格。中转站和百炼这类平台的模型名称、价格可能和官方不同，添加前请核对。",
+    "priceCatalogCount": "价格表中有 {{count}} 个模型",
+    "filterVendor": "筛选厂商",
+    "allVendors": "全部厂商",
+    "catalogPrice": "{{label}} · 每百万 token 输入 {{input}} / 输出 {{output}}"
   },
   "finetune": {
     "rtServiceManagement": "FT服务管理",

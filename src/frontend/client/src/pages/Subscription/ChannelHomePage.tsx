@@ -1,3 +1,4 @@
+import { useClientEnvironment } from "~/hooks/useClientEnvironment";
 import { WorkbenchMenuButton } from "~/layouts/WorkbenchMenuButton";
 import { Badge, Button } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
@@ -96,6 +97,8 @@ export function ChannelHomePage({
     const localize = useLocalize();
     const menuNames = useWorkbenchMenuNames();
     const isMobile = usePrefersMobileLayout();
+    const { capabilities } = useClientEnvironment();
+    const hostOwnsHeader = capabilities?.hasHostChatHeader === true;
     const isSingleMobileColumn = useMediaQuery("(max-width: 575px)");
 
     const sections = [
@@ -108,8 +111,7 @@ export function ChannelHomePage({
         // beside the column.
         <div className={cn(MODULE_HOME_FRAME, isMobile && "px-0 py-0")}>
             {isMobile ? (
-                <>
-                    {/* Global navigation remains available without a duplicate square switcher. */}
+                !hostOwnsHeader && (
                     <header className="w-full shrink-0 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
                         <div className="relative flex h-11 items-center px-4">
                             <WorkbenchMenuButton
@@ -123,7 +125,7 @@ export function ChannelHomePage({
                             <h1 className="pointer-events-none absolute left-1/2 max-w-[calc(100%-112px)] -translate-x-1/2 truncate text-h4 font-medium text-text-1">{menuNames.channel}</h1>
                         </div>
                     </header>
-                </>
+                )
             ) : (
                 <ModuleHomeHeader title={menuNames.channel}>
                     <Button onClick={onCreateChannel}>

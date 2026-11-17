@@ -218,7 +218,7 @@ it("uses parsed-file thumbnails in list and card views and falls back to file ic
   );
   fireEvent.click(screen.getByRole("button", { name: "workspace.card_view" }));
   const image = view.container.querySelector("img");
-  expect(image).toHaveClass("object-contain");
+  expect(image).toHaveClass("object-cover", "object-top");
   fireEvent.error(image!);
   expect(view.container.querySelector("img")).toBeNull();
   expect(screen.getAllByRole("button", { name: "report.pdf" })).toHaveLength(2);
@@ -229,8 +229,9 @@ it("restores list and card presentations without losing folder navigation, file 
   fireEvent.click(await screen.findByRole("button", { name: "Folder" }));
   expect(view.onOpenFolder).toHaveBeenCalledWith(9);
   expect(screen.queryByRole("table")).toBeNull();
-  expect(screen.getByText("2.0 KB")).toBeVisible();
-  expect(screen.getByText("Finance")).toBeVisible();
+  expect(screen.getAllByText("2026-11-12")).toHaveLength(2);
+  expect(screen.queryByText("2.0 KB")).toBeNull();
+  expect(screen.getByText("#Finance")).toBeVisible();
   fireEvent.click(
     screen.getByRole("checkbox", { name: "workspace.select_all" }),
   );
@@ -272,7 +273,10 @@ it("sends sort changes to the directory and search APIs and resets the cursor", 
       },
     ),
   );
-  fireEvent.change(screen.getByPlaceholderText("searchFileName"), {
+  fireEvent.click(screen.getByRole("button", { name: "search" }));
+  const search = screen.getByPlaceholderText("searchFileName");
+  expect(search).toHaveFocus();
+  fireEvent.change(search, {
     target: { value: "report" },
   });
   await waitFor(() =>

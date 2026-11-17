@@ -138,9 +138,6 @@
   "src/components/bs-comp/knowledgeUploadComponent/DropZone.tsx": {
     "@typescript-eslint/ban-ts-comment": {
       "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
     }
   },
   "src/components/bs-comp/knowledgeUploadComponent/ProgressItem.tsx": {
@@ -1919,11 +1916,6 @@
       "count": 1
     }
   },
-  "src/pages/KnowledgePage/components/MetadataManagementDialog.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    }
-  },
   "src/pages/KnowledgePage/components/ParagraphEdit.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 2
@@ -1960,7 +1952,7 @@
   },
   "src/pages/KnowledgePage/components/PreviewFile.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 6
+      "count": 5
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 3
@@ -2427,14 +2419,6 @@
     },
     "no-restricted-syntax": {
       "count": 21
-    }
-  },
-  "src/test/departmentPageRefresh.test.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
     }
   },
   "src/test/departmentSettingsPayload.test.tsx": {

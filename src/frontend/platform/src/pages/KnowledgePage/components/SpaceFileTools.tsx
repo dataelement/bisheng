@@ -1,6 +1,6 @@
 import { Button, Dropdown, DropdownItem } from "@bisheng/ui";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { checkResourceActionApi } from "@/controllers/API/permission";
 import { knowledgeQueryKeys, type KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
@@ -13,9 +13,13 @@ interface SpaceFileToolsProps {
   spaceId: number;
   fileId: number;
   status?: number | null;
+  enabled?: boolean;
+  // The owner keeps dialog state alive when the menu content unmounts.
+  children?: (items: ReactNode) => ReactNode;
 }
 export function SpaceFileTools(props: SpaceFileToolsProps) {
   const { t } = useTranslation("knowledge");
+  const enabled = props.enabled !== false;
   const scopeKey = JSON.stringify([
     ...knowledgeQueryKeys.space(props.scope, props.spaceId),
     props.fileId,
@@ -38,34 +42,33 @@ export function SpaceFileTools(props: SpaceFileToolsProps) {
       if (signal?.aborted) throw new DOMException("Retired permission read", "AbortError");
       return result;
     },
-    enabled: Boolean(props.scope.identityKey),
+    enabled: enabled && Boolean(props.scope.identityKey),
     cacheTime: 0,
     refetchOnWindowFocus: false,
   });
   useEffect(() => {
-    if (permissions.error) showApiError(permissions.error);
-  }, [permissions.error]);
-  if (permissions.isError || !permissions.data?.allowed || (permissions.isFetching && !active))
-    return null;
+    if (enabled && permissions.error) showApiError(permissions.error);
+  }, [enabled, permissions.error]);
+  const allowed = enabled && !permissions.isError && permissions.data?.allowed === true && (!permissions.isFetching || active !== null);
+  const disabled = [1, 4, 5].includes(props.status ?? -1);
+  const items = allowed ? (
+    <>
+      <DropdownItem disabled={disabled} onSelect={() => setActive("process")}>
+        {t("f118.processing_title_file")}
+      </DropdownItem>
+      <DropdownItem disabled={disabled} onSelect={() => setActive("index")}>
+        {t("f118.index_edit_title")}
+      </DropdownItem>
+    </>
+  ) : null;
   return (
     <>
-      <Dropdown
-        menu={
-          <>
-            <DropdownItem onSelect={() => setActive("process")}>
-              {t("f118.processing_title_file")}
-            </DropdownItem>
-            <DropdownItem onSelect={() => setActive("index")}>
-              {t("f118.index_edit_title")}
-            </DropdownItem>
-          </>
-        }
-      >
-        <Button variant="text" disabled={[1, 4, 5].includes(props.status ?? -1)}>
-          {t("f118.processing_title_file")}
-        </Button>
-      </Dropdown>
-      <SpaceProcessingDialog
+      {props.children ? props.children(items) : allowed && (
+        <Dropdown menu={items}>
+          <Button variant="text" disabled={disabled}>{t("f118.processing_title_file")}</Button>
+        </Dropdown>
+      )}
+      {allowed && <SpaceProcessingDialog
         scope={props.scope}
         spaceId={props.spaceId}
         fileId={props.fileId}
@@ -74,14 +77,16 @@ export function SpaceFileTools(props: SpaceFileToolsProps) {
         onOpenChange={(open) => {
           if (!open) setActive(null);
         }}
-      />
-      <SpaceIndexEditDialog
-        {...props}
+      />}
+      {allowed && <SpaceIndexEditDialog
+        scope={props.scope}
+        spaceId={props.spaceId}
+        fileId={props.fileId}
         open={active === "index"}
         onOpenChange={(open) => {
           if (!open) setActive(null);
         }}
-      />
+      />}
     </>
   );
 }

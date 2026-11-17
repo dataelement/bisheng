@@ -4,10 +4,10 @@ import asyncio
 import hashlib
 import json
 import math
+import re
 import uuid
 from datetime import UTC, datetime
 from typing import Any, Literal
-from urllib.parse import urlsplit
 
 from cryptography.fernet import InvalidToken
 from fastapi import HTTPException
@@ -102,6 +102,20 @@ def verify_operation(operation, proof, *, tenant_id: int, category_id: int):
         declaration = json.loads(decoded)
         if any(operation[k] != declaration[k] for k in ("server", "method", "path")):
             raise ValueError
+        if operation.get("version") == 2:
+            if declaration.get("version") != 2 or operation["declaration"] != declaration["declaration"]:
+                raise ValueError
+            required_auth = declaration["security"]
+            auth = operation["auth"]
+            if required_auth is not None and any(
+                required_auth.get(key) and auth[key] != required_auth[key] for key in ("location", "name")
+            ):
+                raise ValueError
+            if required_auth is not None and auth["location"] == "none":
+                raise ValueError
+            return
+        if declaration.get("version", 1) != 1:
+            raise ValueError
         allowed = {(p["location"], p["name"]): p for p in declaration["parameters"]}
         query = operation["query_parameter"]
         query_key = (query["location"], query["name"])
@@ -186,6 +200,38 @@ def _custom(value):
         or any(not isinstance(item, str) for item in proof.values())
     ):
         raise HTTPException(422, "Invalid custom search proof")
+    if isinstance(op, dict) and op.get("version") == 2:
+        if set(op) != {
+            "version",
+            "server",
+            "method",
+            "path",
+            "declaration",
+            "request",
+            "media_type",
+            "auth",
+            "response_mode",
+        }:
+            raise HTTPException(422, "Invalid OpenAPI search operation")
+        auth = op.get("auth")
+        if (
+            not isinstance(auth, dict)
+            or set(auth) != {"location", "name"}
+            or auth["location"] not in {"none", "header", "query", "cookie"}
+            or not isinstance(auth["name"], str)
+            or (auth["location"] != "none" and not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", auth["name"]))
+        ):
+            raise HTTPException(422, "Complete the OpenAPI authentication settings")
+        if op["response_mode"] not in {"raw", "mapped"}:
+            raise HTTPException(422, "Invalid OpenAPI response mode")
+        try:
+            build_request(op, "validation", "validation-key")
+            if op["response_mode"] == "mapped":
+                validate_mapping(mapping)
+        except (CustomSearchError, TypeError, ValueError, KeyError) as exc:
+            detail = str(exc) if isinstance(exc, CustomSearchError) else "Invalid OpenAPI request template"
+            raise HTTPException(422, detail) from None
+        return value
     if not isinstance(op, dict) or set(op) != {"server", "method", "path", "query_parameter", "fixed_params", "auth"}:
         raise HTTPException(422, "Invalid custom search operation")
     if not isinstance(op["query_parameter"], dict) or set(op["query_parameter"]) != {"location", "name"}:
@@ -286,6 +332,9 @@ def _view(category, children, secret):
     if "custom" in config:
         visible["custom"] = config["custom"]
     providers = JsonFieldMasker().mask_json(visible)
+    # New custom templates contain no stored plaintext credentials. Preserve schema field names.
+    if isinstance(visible.get("custom"), dict) and visible["custom"].get("operation", {}).get("version") == 2:
+        providers["custom"] = visible["custom"]
     if "custom" in providers:
         try:
             _custom(providers["custom"])
@@ -392,9 +441,11 @@ async def put_settings(category_id, req: SettingsWrite, user_id: int):
             old_custom = existing.get("custom")
             old_op = old_custom.get("operation", {}) if isinstance(old_custom, dict) else {}
             old_fixed = old_op.get("fixed_params", []) if isinstance(old_op, dict) else []
-            for item in custom["operation"]["fixed_params"]:
+            for item in custom["operation"].get("fixed_params", []):
                 if item not in old_fixed:
                     free_text.append(item["value"])
+        if req.type == "custom":
+            free_text.extend(_request_values(custom["operation"].get("request")))
         if contains_secret(free_text):
             raise HTTPException(422, "Credentials must not appear in search settings")
         if action == "replace":
@@ -409,6 +460,7 @@ async def put_settings(category_id, req: SettingsWrite, user_id: int):
                 params = chosen_custom["operation"].get("fixed_params", [])
                 if isinstance(params, list):
                     existing_text.extend(item.get("value") for item in params if isinstance(item, dict))
+                existing_text.extend(_request_values(chosen_custom["operation"].get("request")))
             if any(isinstance(value, str) and new_credential in value for value in existing_text):
                 raise HTTPException(422, "Credentials must not appear in search settings")
         if action == "replace":
@@ -480,85 +532,19 @@ async def _resolve(category_id, secret_input=None):
         )
 
 
+def _request_values(value):
+    if isinstance(value, dict):
+        return [item for child in value.values() for item in _request_values(child)]
+    if isinstance(value, list):
+        return [item for child in value for item in _request_values(child)]
+    return [value] if isinstance(value, str) else []
+
+
 def _search_operations(schema):
-    """Apply the search adapter's supported subset to shared OpenAPI discovery."""
-    document = schema.contents
-    servers = document.get("servers")
-    if not str(schema.version).startswith("3.0.") or not isinstance(servers, list) or len(servers) != 1:
-        raise ValueError("Unsupported search server")
-    server = servers[0]["url"]
-    parsed = urlsplit(server)
-    if (
-        parsed.scheme not in ("http", "https")
-        or not parsed.hostname
-        or parsed.username
-        or parsed.password
-        or parsed.query
-        or parsed.fragment
-        or "{" in server
-        or parsed.port == 0
-    ):
-        raise ValueError("Unsupported search server")
-    operations = []
-    for path, method, operation, params in schema.iter_operations():
-        if method not in ("get", "post"):
-            continue
-        if (
-            not path.startswith("/")
-            or path.startswith("//")
-            or any(c in path for c in "{}?#\\")
-            or document["paths"][path].get("servers")
-            or operation.get("servers")
-        ):
-            raise ValueError("Unsupported search path")
-        if "requestBody" in operation:
-            content = operation["requestBody"]["content"]
-            body = content["application/json"]["schema"]
-            if (
-                method != "post"
-                or set(content) != {"application/json"}
-                or body.get("type") != "object"
-                or any(key in body for key in ("allOf", "oneOf", "anyOf", "not"))
-            ):
-                raise ValueError("Unsupported search body")
-        parameters = []
-        for param in params:
-            spec, required = param.get("schema", {}), param.get("required", False)
-            if (
-                param["in"] not in ("query", "body")
-                or type(required) is not bool
-                or spec.get("type") not in ("string", "integer", "number", "boolean")
-                or any(key in spec for key in ("allOf", "oneOf", "anyOf", "not"))
-            ):
-                raise ValueError("Unsupported search parameter")
-            parameters.append(
-                {"name": param["name"], "location": param["in"], "type": spec["type"], "required": required}
-            )
-        scheme = schema.security_scheme(operation)
-        security = None
-        if scheme is not None:
-            requirements = operation.get("security", document.get("security", []))
-            if (
-                scheme.get("type") != "apiKey"
-                or scheme.get("in") not in ("header", "query")
-                or not isinstance(scheme.get("name"), str)
-                or not scheme["name"]
-                or any(scopes != [] for requirement in requirements for scopes in requirement.values())
-            ):
-                raise ValueError("Unsupported search authentication")
-            security = {"location": scheme["in"], "name": scheme["name"]}
-        responses = operation.get("responses", {})
-        if not isinstance(responses, dict) or not any(
-            str(code).startswith("2") and "application/json" in response.get("content", {})
-            for code, response in responses.items()
-        ):
-            raise ValueError("Search requires JSON responses")
-        operations.append(
-            {"server": server, "method": method.upper(), "path": path, "parameters": parameters, "security": security}
-        )
-    if not operations or len(operations) > 100:
-        raise ValueError("Unsupported search operations")
-    return operations
+    """Preserve declarations from shared OpenAPI discovery."""
+    from bisheng_langchain.gpts.tools.web_search.openapi_request import describe_operations
+
+    return describe_operations(schema)
 
 
 async def schema_preview(category_id, data):
@@ -577,6 +563,8 @@ async def schema_preview(category_id, data):
         for operation in operations:
             operation["proof"] = issue_proof(operation, tenant_id=get_current_tenant_id(), category_id=category_id)
         return {"operations": operations}
+    except CustomSearchError as exc:
+        raise HTTPException(422, str(exc)) from None
     except (BaseErrorCode, ValueError, TypeError, KeyError, AttributeError, IndexError, UnicodeError):
         raise HTTPException(422, "Unsupported or invalid OpenAPI schema") from None
 
@@ -593,7 +581,19 @@ async def search_preview(category_id, data):
     try:
         request = build_request(draft["operation"], query, secret)
         raw = await asyncio.to_thread(execute_request, request)
-        preview, results = map_response(raw, draft["mapping"], SearchTool.normalize_result_item, secret)
+        if draft["operation"].get("version") == 2:
+            from bisheng_langchain.gpts.tools.web_search.openapi_request import read_openapi_response
+
+            preview = read_openapi_response(raw, draft["operation"], secret)
+            results = preview
+            if draft["operation"]["response_mode"] == "mapped":
+                _, results = map_response(
+                    json.dumps(preview).encode(), draft["mapping"], SearchTool.normalize_result_item, secret
+                )
+        else:
+            preview, results = map_response(raw, draft["mapping"], SearchTool.normalize_result_item, secret)
         return {"status": "success", "preview": preview, "results": results}
-    except (CustomSearchError, ValueError, TypeError):
+    except CustomSearchError as exc:
+        raise HTTPException(422, str(exc)) from None
+    except (ValueError, TypeError):
         raise HTTPException(422, "Search test failed") from None

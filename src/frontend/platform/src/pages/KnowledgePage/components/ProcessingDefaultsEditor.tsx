@@ -28,6 +28,7 @@ interface ProcessingDefaultsEditorProps {
   value: ProcessingDefaultsDraft;
   onChange: (value: ProcessingDefaultsDraft) => void;
   disabled?: boolean;
+  compact?: boolean;
 }
 type DraftValidation =
   | { ok: true; value: ProcessingDefaults }
@@ -131,6 +132,7 @@ export function ProcessingDefaultsEditor({
   value,
   onChange,
   disabled = false,
+  compact = false,
 }: ProcessingDefaultsEditorProps) {
   const { t } = useTranslation("knowledge");
   const [active, setActive] = useState("documents");
@@ -140,11 +142,13 @@ export function ProcessingDefaultsEditor({
     <DocumentProcessingDefaultsFields
       value={document}
       disabled={disabled}
+      compact={compact}
       onChange={(next) => onChange({ ...value, document: next })}
     >
       {document.split_mode === "custom" && (
         <FileUploadSplitStrategy
           disabled={disabled}
+          compact={compact}
           pending={value.pendingPattern}
           pendingPosition={value.pendingPosition}
           onPositionChange={(pendingPosition) =>
@@ -181,6 +185,7 @@ export function ProcessingDefaultsEditor({
       <Tabs
         activeKey={active}
         onChange={setActive}
+        className={compact ? "[&>[role=tabpanel]]:pt-4" : undefined}
         items={[
           {
             key: "documents",
@@ -191,11 +196,18 @@ export function ProcessingDefaultsEditor({
             key: "tables",
             label: t("f118.tables"),
             children: (
-              <TableProcessingDefaultsFields
-                value={value.table}
-                disabled={disabled}
-                onChange={(table) => onChange({ ...value, table })}
-              />
+              <>
+                {compact && (
+                  <h3 className="mb-4 text-base font-medium">
+                    {t("splitSettings")}
+                  </h3>
+                )}
+                <TableProcessingDefaultsFields
+                  value={value.table}
+                  disabled={disabled}
+                  onChange={(table) => onChange({ ...value, table })}
+                />
+              </>
             ),
           },
         ]}

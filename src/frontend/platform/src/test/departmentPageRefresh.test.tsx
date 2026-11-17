@@ -1,19 +1,14 @@
 import userEvent from "@testing-library/user-event";
 import DepartmentPage from "@/pages/DepartmentPage";
-import {
-  getDepartmentApi,
-  getDepartmentChildrenApi,
-  getDepartmentPathTreeApi,
-  searchDepartmentsApi,
-} from "@/controllers/API/department";
+import { getDepartmentChildrenApi } from "@/controllers/API/department";
 import { fireEvent, render, screen, waitFor } from "@/test/test-utils";
 import type { DepartmentTreeNode } from "@/types/api/department";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // F038: DepartmentPage lazy-loads the tree (root layer via getDepartmentChildrenApi).
 vi.mock("@/controllers/API/department", () => ({
   getDepartmentChildrenApi: vi.fn(),
-  getDepartmentApi: vi.fn(),
   getDepartmentPathTreeApi: vi.fn(() => Promise.resolve({ roots: [], total_matches: 0, truncated: false })),
   searchDepartmentsApi: vi.fn(() => Promise.resolve({ roots: [], total_matches: 0, truncated: false })),
 }));
@@ -21,22 +16,17 @@ vi.mock("@/controllers/API/department", () => ({
 vi.mock("@/controllers/request", async (importOriginal) => ({
   ...await importOriginal<typeof import('@/controllers/request')>(),
   captureAndAlertRequestErrorHoc: vi.fn((promise: Promise<unknown>) => promise),
+  showApiError: vi.fn(),
 }));
-
-// Keep the real useLazyDepartmentTree hook but stub the visual tree (SVG import).
-vi.mock("@/components/bs-comp/department", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/components/bs-comp/department")>();
-  return { ...actual, LazyDepartmentTree: () => <div data-testid="lazy-tree" /> };
-});
 
 vi.mock("@/pages/DepartmentPage/components/MemberTable", () => ({
-  MemberTable: ({ membersRefreshSignal }: { membersRefreshSignal: number }) => (
-    <div data-testid="members-refresh-signal">{membersRefreshSignal}</div>
-  ),
+  MemberTable: ({ membersRefreshSignal, toolbarActions }: { membersRefreshSignal: number; toolbarActions: ReactNode }) => (
+    <><div data-testid="members-refresh-signal">{membersRefreshSignal}</div>{toolbarActions}</>
+  )
 }));
 
-vi.mock("@/pages/DepartmentPage/components/DepartmentSettings", () => ({
-  DepartmentSettings: ({ onChanged }: { onChanged: () => void }) => (
+vi.mock("@/pages/DepartmentPage/components/DepartmentSettingsDialog", () => ({
+  DepartmentSettingsDialog: ({ onChanged }: { onChanged: () => void }) => (
     <button type="button" onClick={() => onChanged()}>
       save department settings
     </button>
@@ -70,18 +60,14 @@ describe("DepartmentPage member refresh", () => {
     mockedChildren.mockImplementation((parentId: number | null) =>
       Promise.resolve(parentId == null ? [dept] : [])
     );
-    vi.mocked(getDepartmentApi).mockResolvedValue({ id: 1, dept_id: "BS@root" } as any);
   });
 
   it("refreshes the member table after department settings change", async () => {
     render(<DepartmentPage />);
 
-    await screen.findByText("Root");
-    expect(screen.getByTestId("members-refresh-signal")).toHaveTextContent("0");
-
-    await userEvent.click(screen.getByRole("tab", { name: "bs:department.settings" }));
+    expect(await screen.findByTestId("members-refresh-signal")).toHaveTextContent("0");
+    await userEvent.click(screen.getByRole("button", { name: "bs:department.settings" }));
     fireEvent.click(screen.getByRole("button", { name: "save department settings" }));
-    await userEvent.click(screen.getByRole("tab", { name: "bs:department.members" }));
 
     await waitFor(() => {
       expect(screen.getByTestId("members-refresh-signal")).toHaveTextContent("1");
@@ -89,5 +75,19 @@ describe("DepartmentPage member refresh", () => {
     // The root layer is refetched on change (the lazy equivalent of the old
     // full-tree refresh): once on mount, again after the settings change.
     expect(mockedChildren.mock.calls.filter(([parentId]) => parentId == null).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("retries a failed branch in place without changing the current department", async () => {
+    const branch = { ...dept, has_children: true };
+    const child = { ...dept, id: 2, dept_id: "BS@child", name: "Child", parent_id: dept.id, path: "/1/2/" };
+    mockedChildren.mockResolvedValueOnce([branch]).mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce([child]);
+    render(<DepartmentPage />);
+
+    const retry = await screen.findByRole("button", { name: "bs:organization.retry" });
+    expect(screen.getByRole("button", { name: "Root" })).toHaveAttribute("aria-current", "true");
+    fireEvent.click(retry);
+    expect(await screen.findByRole("button", { name: "Child" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Root" })).toHaveAttribute("aria-current", "true");
+    expect(mockedChildren).toHaveBeenLastCalledWith(dept.id, false);
   });
 });

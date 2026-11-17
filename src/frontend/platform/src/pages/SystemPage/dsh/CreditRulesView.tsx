@@ -10,6 +10,10 @@ import { Segmented } from "@bisheng/ui"
 import { getCreditRules, getPolicySubjects, saveCreditRule, type CreditRule, type PolicySubject, type PolicySubjectOption } from '@/controllers/API/dshUnified'
 import { getDshRequestErrorKey } from '@/utils/dshRequestError'
 import { MAX_MONTHLY_CREDITS, isValidMonthlyCredits } from '@/utils/dshCreditAmount'
+import { CreditRulePreview } from './CreditRulePreview'
+import { USER_CREDITS_QUERY_KEY } from './UserCreditsCard'
+import { UserMonthBalance } from './UserMonthBalance'
+import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -24,6 +28,7 @@ type CreditDraft = {
 
 export function CreditRulesView() {
     const { t } = useTranslation()
+    const queryClient = useQueryClient()
     const creditHintId = useId()
     const [rules, setRules] = useState<CreditRule[]>([])
     const [options, setOptions] = useState<PolicySubjectOption[]>([])
@@ -61,6 +66,8 @@ export function CreditRulesView() {
                 const exists = rows.some(row => row.subject_type === saved.subject_type && row.subject_id === saved.subject_id)
                 return exists ? rows.map(row => row.subject_type === saved.subject_type && row.subject_id === saved.subject_id ? next : row) : [...rows, next]
             })
+            // Any allowance can change a member's balance (department and role rules too).
+            void queryClient.invalidateQueries([USER_CREDITS_QUERY_KEY])
             cancel()
         } catch (reason) { setError(getDshRequestErrorKey(reason) ?? 'dsh.unavailable') }
         finally { setPending(false) }
@@ -75,6 +82,7 @@ export function CreditRulesView() {
             className={validCredits ? 'text-xs text-muted-foreground' : 'text-xs text-destructive'}>
             {t('dsh.unified.creditRangeHint', { max: MAX_MONTHLY_CREDITS })}
         </p>
+        {draft.subject?.kind === 'USER' && <CreditRulePreview userId={draft.subject.id} credits={draft.credits} enabled={draft.enabled} />}
         {!draft.isNew && <label className="flex items-center gap-2 text-sm">
             <Checkbox disabled={pending} checked={draft.enabled}
                 onCheckedChange={checked => setDraft({ ...draft, enabled: checked === true })} />
@@ -96,7 +104,7 @@ export function CreditRulesView() {
                 { value: 'ROLE', label: t('dsh.byRole') },
               ]} />
             <div className="flex gap-2">
-                <Button variant="outlined" disabled={pending} onClick={() => { cancel(); setRevision(old => old + 1) }}>{t('dsh.refresh')}</Button>
+                <Button variant="outlined" disabled={pending} onClick={() => { cancel(); setRevision(old => old + 1); void queryClient.invalidateQueries([USER_CREDITS_QUERY_KEY]) }}>{t('dsh.refresh')}</Button>
                 <Button disabled={pending || !loaded} onClick={() => {
                     setError(null); setUsers([]); setDraft({ subject: null, name: '', version: 0, credits: '500', enabled: true, isNew: true })
                 }}>{t('dsh.unified.addCredits')}</Button>
@@ -121,6 +129,10 @@ export function CreditRulesView() {
                             </TooltipProvider>
                         </span>
                     </th>
+                    {kind === 'USER' && <>
+                        <th className="w-32 font-medium">{t('dsh.unified.monthUsed')}</th>
+                        <th className="w-40 font-medium">{t('dsh.unified.monthRemaining')}</th>
+                    </>}
                     <th className="w-40" />
                 </tr></thead>
                 <tbody>
@@ -140,7 +152,7 @@ export function CreditRulesView() {
                                 </SelectContent>
                             </Select>}
                         </td>
-                        <td>{creditInput}</td><td>{actions}</td>
+                        <td>{creditInput}</td>{kind === 'USER' && <><td /><td /></>}<td>{actions}</td>
                     </tr>}
                     {visibleRules.map(rule => {
                         const editing = draft && !draft.isNew && draft.subject?.kind === rule.subject_type && draft.subject.id === rule.subject_id
@@ -150,13 +162,14 @@ export function CreditRulesView() {
                                 {rule.monthly_credits}
                                 {!rule.enabled && <span className="text-xs text-muted-foreground">{t('dsh.unified.no')}</span>}
                             </span>}</td>
+                            {rule.subject_type === 'USER' && <UserMonthBalance userId={rule.subject_id} ruleCredits={rule.monthly_credits} ruleEnabled={rule.enabled} />}
                             <td>{editing ? actions : <div className="flex justify-end"><Button variant="text" disabled={pending} onClick={() => {
                                 setError(null); setDraft({ subject: { kind: rule.subject_type, id: rule.subject_id }, name: rule.name ?? String(rule.subject_id),
                                     credits: rule.monthly_credits, enabled: rule.enabled, version: rule.version, isNew: false })
                             }}>{t('dsh.unified.edit')}</Button></div>}</td>
                         </tr>
                     })}
-                    {visibleRules.length === 0 && !draft?.isNew && <tr><td colSpan={3} className="py-12 text-center text-muted-foreground">{t('dsh.unified.emptyCredits')}</td></tr>}
+                    {visibleRules.length === 0 && !draft?.isNew && <tr><td colSpan={kind === 'USER' ? 5 : 3} className="py-12 text-center text-muted-foreground">{t('dsh.unified.emptyCredits')}</td></tr>}
                 </tbody>
             </table>
         </div>}

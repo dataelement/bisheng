@@ -12,14 +12,17 @@ interface KnowledgeHomeCardMenuProps {
   onOpen: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  canLeave: boolean;
+  allowDelete: boolean;
+  onLeave: () => void;
 }
 
 export function KnowledgeHomeCardMenu({
-  disabled, permissions, permissionsLoading, onOpen, onEdit, onDelete,
+  disabled, permissions, permissionsLoading, onOpen, onEdit, onDelete, canLeave, allowDelete, onLeave,
 }: KnowledgeHomeCardMenuProps) {
   const localize = useLocalize();
   const canEdit = permissions.includes('edit') || permissions.includes('manage_permission');
-  const canDelete = permissions.includes('delete');
+  const canDelete = allowDelete && !canLeave && permissions.includes('delete');
   const moreLabel = localize('com_knowledge.home_next.more');
 
   const handleDelete = async () => {
@@ -42,7 +45,12 @@ export function KnowledgeHomeCardMenu({
           {localize('com_knowledge.delete_space')}
         </DropdownItem>
       )}
-      {!canEdit && !canDelete && (
+      {canLeave && (
+        <DropdownItem icon={<Outlined.LogOut />} danger disabled={disabled} onSelect={onLeave}>
+          {localize('com_knowledge.exit_space_short')}
+        </DropdownItem>
+      )}
+      {!canEdit && !canDelete && !canLeave && (
         <DropdownItem disabled>{localize('com_knowledge.home_next.no_actions')}</DropdownItem>
       )}
     </>

@@ -41,7 +41,6 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceFolderDuplicateError,
     SpaceFolderNotFoundError,
     SpaceFolderUploadCountExceededError,
-    SpaceGrantedNotJoinedError,
     SpaceLimitError,
     SpaceNotFoundError,
     SpacePermissionDeniedError,
@@ -991,16 +990,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return PermissionActor(
             user_id=operator_user_id,
             current_tenant_id=tenant_id,
-        )
-
-    async def _revoke_direct_space_user_permissions(self, space_id: int, user_id: int) -> None:
-        """Remove direct ReBAC grants and UI binding metadata for a space user."""
-        await self.__class__.sync_direct_space_user_permissions(
-            space_id,
-            user_id,
-            None,
-            is_active=False,
-            operator_user_id=self.login_user.user_id,
         )
 
     async def _get_effective_actions(
@@ -2120,10 +2109,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         abnormal = await self.space_listing_repository.aexists_abnormal_files(space_ids=[row.id for row in rows])
         bindings = await DepartmentKnowledgeSpaceDao.aget_by_space_ids([row.id for row in rows]) if rows else []
         department_ids = {binding.space_id for binding in bindings}
+        creator_ids = sorted({row.user_id for row in rows if row.user_id is not None})
+        creators = await UserDao.aget_user_by_ids(creator_ids) if creator_ids else []
+        creator_names = {user.user_id: user.user_name for user in (creators or [])}
         return PageData[KnowledgeSpaceAdminListItemResp](
             data=[
                 KnowledgeSpaceAdminListItemResp.model_validate(row).model_copy(
                     update={
+                        "user_name": creator_names.get(row.user_id, ""),
                         "has_abnormal_files": row.id in abnormal,
                         "space_kind": "department" if row.id in department_ids else "normal",
                     }
@@ -5192,27 +5185,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
             scenario_code="knowledge_space_subscribe_request",
         )
 
+    async def get_space_exit_status(self, space_id: int):
+        from bisheng.knowledge.domain.services.knowledge_space_exit_service import KnowledgeSpaceExitService
+
+        return await KnowledgeSpaceExitService(self).status(space_id)
+
     async def unsubscribe_space(self, space_id: int) -> bool:
-        space = await KnowledgeDao.aquery_by_id(space_id)
-        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
-            raise SpaceNotFoundError()
+        from bisheng.knowledge.domain.services.knowledge_space_exit_service import KnowledgeSpaceExitService
 
-        current_membership = await SpaceChannelMemberDao.async_find_member(space_id, self.login_user.user_id)
-        if space.user_id == self.login_user.user_id or (
-            current_membership and current_membership.user_role == UserRoleEnum.CREATOR
-        ):
-            raise SpacePermissionDeniedError()
-
-        if not current_membership:
-            # The joined list is resolved from the `visible` decision, so it also
-            # carries spaces held through a Grant rather than by joining. Exiting
-            # one of those revoked nothing, deleted no row and still reported
-            # success, so the space came back on the next refresh.
-            raise SpaceGrantedNotJoinedError()
-
-        await self._revoke_direct_space_user_permissions(space_id, self.login_user.user_id)
-        deleted = await SpaceChannelMemberDao.delete_space_member(space_id, self.login_user.user_id)
-        return deleted
+        return await KnowledgeSpaceExitService(self).execute(space_id)
 
 
 def _f066_data_scope_narrowed() -> bool:

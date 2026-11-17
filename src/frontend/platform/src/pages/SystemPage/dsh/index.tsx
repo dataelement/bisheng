@@ -8,6 +8,7 @@ import type { DshSection } from '@/pages/DshPage/sections'
 import { useContext, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CreditRulesView } from './CreditRulesView'
+import { CreditSettingsPanel } from './CreditSettingsPanel'
 import { AuditHistory } from './AuditHistory'
 import { PolicyView } from './PolicyView'
 import { SettingsPanel } from './SettingsPanel'
@@ -27,7 +28,10 @@ export function DshManagement({ section = 'credits' }: DshManagementProps) {
     return <div className="flex h-full min-h-0 flex-col px-2 py-4">
         <div className="min-h-0 flex-1 overflow-y-auto">
             {activeSection === 'models' && <DshModelsView />}
-            {activeSection === 'credits' && <CreditRulesView />}
+            {activeSection === 'credits' && <div className="space-y-8">
+                <CreditSettingsPanel />
+                <CreditRulesView />
+            </div>}
             {activeSection === 'usage' && <PolicyView />}
             {activeSection === 'model-audit' && <ModelAuditPanel />}
             {activeSection === 'operations' && <AuditHistory revision={0} />}

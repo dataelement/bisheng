@@ -101,8 +101,27 @@ class ModelMutationRepository:
         self._check(session, tenant, transaction)
         if result.rowcount != 1 or ReferenceRepository.current_tenant_id() != tenant:
             raise KnowledgeOperationPlanChangedError()
+        # F016: the form omits unchanged prices. Fill them from the retained rows as stored now,
+        # inside this locked write (copies, so the confirmed command itself is not changed).
+        from bisheng.llm.domain.pricing.service import apply_pricing_on_save
+
+        models = [model.model_copy(deep=True) for model in server.models]
+        physical = LLMModel.__table__
+        retained_ids = [model.id for model in models if type(model.id) is int and model.id > 0]
+        with session.no_autoflush, bypass_tenant_filter():
+            stored = (
+                await session.execute(
+                    select(physical.c.id, physical.c.config).where(
+                        physical.c.tenant_id == tenant,
+                        physical.c.server_id == server.id,
+                        physical.c.id.in_(retained_ids or [0]),
+                    )
+                )
+            ).all()
+        self._check(session, tenant, transaction)
+        apply_pricing_on_save(server.type, models, {row[0]: row[1] for row in stored})
         retained, new = [], []
-        for model in server.models:
+        for model in models:
             if model.id is None or (type(model.id) is int and model.id == 0):
                 new.append(
                     LLMModel(
@@ -116,7 +135,6 @@ class ModelMutationRepository:
                 retained.append(model)
             else:
                 raise KnowledgeOperationPlanChangedError()
-        physical = LLMModel.__table__
         # Keep the original DAO's writable fields. Existing online/status values
         # are not silently broadened by this transaction refactor.
         statement = (

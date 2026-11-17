@@ -14,6 +14,7 @@ from bisheng.dsh.infrastructure.model_capabilities import model_capabilities
 from bisheng.llm.domain import utils as llm_utils
 from bisheng.llm.domain.llm.llm import BishengLLM
 from bisheng.llm.domain.models import LLMModel, LLMServer
+from test.dsh.pricing_fixtures import PRICED_CONFIG
 from test.dsh.test_model_service import service_setup  # noqa: F401
 from test.dsh.test_models_api import app_setup  # noqa: F401
 
@@ -70,7 +71,7 @@ def provider_setup(app_setup, monkeypatch):  # noqa: F811
             model_name="qwen-max",
             model_type="llm",
             online=True,
-            config={"user_kwargs": {"http_async_client": upstream, "max_retries": 0}},
+            config={"user_kwargs": {"http_async_client": upstream, "max_retries": 0}, **PRICED_CONFIG},
         )
         server = LLMServer(
             id=7,

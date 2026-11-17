@@ -3,6 +3,22 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { WorkflowForm } from './WorkflowForm';
 import { normalizeFormFields, validateFormValues } from '../core/workflowForm';
 afterEach(cleanup);
+it('submits empty values for untouched optional fields instead of omitting them', () => {
+  const onSubmit = vi.fn().mockReturnValue(new Promise(() => undefined));
+  const fields = normalizeFormFields([
+    { key: 'question', value: 'Question', type: 'text', required: true },
+    { key: 'extra', value: 'Additional information', type: 'text' },
+    { key: 'choice', value: 'Choice', type: 'select' },
+    { key: 'files', value: 'Files', type: 'file' },
+  ]);
+  render(<WorkflowForm fields={fields} canExecute submitLabel="Start" requiredMessage={label => label} onSubmit={onSubmit} />);
+  fireEvent.change(screen.getByLabelText(/Question/), { target: { value: 'Hi' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+  expect(onSubmit).toHaveBeenCalledWith(
+    { question: 'Hi', extra: '', choice: '', files: '' },
+    'Question:Hi\nAdditional information:\nChoice:\nFiles:\n',
+  );
+});
 it('validates whitespace and empty file arrays while retaining zero and false', () => {
   const fields = normalizeFormFields([{ key: 'q', value: 'Question', type: 'text', required: true }, { key: 'files', value: 'Files', type: 'file', required: true }]);
   expect(validateFormValues(fields, { q: ' ', files: [] }, label => label)).toEqual(['Question', 'Files']);

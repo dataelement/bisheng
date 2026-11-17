@@ -17,9 +17,10 @@ export const FILE_STATUSES: Record<number, { labelKey: string; color: TagColor }
 interface StatusIndicatorProps {
     status: number
     remark?: string
+    workspace?: boolean
 }
 
-export function StatusIndicator({ status, remark }: StatusIndicatorProps) {
+export function StatusIndicator({ status, remark, workspace = false }: StatusIndicatorProps) {
     const { t } = useTranslation()
     const config = FILE_STATUSES[status]
     const reason = useMemo(() => {
@@ -46,10 +47,21 @@ export function StatusIndicator({ status, remark }: StatusIndicatorProps) {
             return text
         }
     }, [remark, status, t])
-    if (!config) return null
-    const label = <Tag size="small" dot color={config.color} className="shrink-0 whitespace-nowrap">
-        {t(config.labelKey, { ns: 'knowledge' })}
+    if (!config || (workspace && status === 2)) return null
+    const color = workspace && (status === 1 || status === 4 || status === 5) ? 'default' : config.color
+    const labelKey = workspace && status === 3 ? 'workspace.status_failed'
+        : workspace && status === 4 ? 'processing' : config.labelKey
+    const label = <Tag size="small" dot color={color} className="shrink-0 whitespace-nowrap">
+        {t(labelKey, { ns: 'knowledge' })}
     </Tag>
+    if (workspace) {
+        const hint = status === 6 ? reason || t('timeoutTip', { ns: 'knowledge' }) : reason
+        return hint && status !== 5 ? (
+            <Tooltip content={hint} side="top">
+                <span tabIndex={0} className="inline-flex shrink-0">{label}</span>
+            </Tooltip>
+        ) : label
+    }
     if (status === 7 && reason) return <Tooltip content={reason}>{label}</Tooltip>
     const hint = status === 6 ? t('timeoutTip', { ns: 'knowledge' }) : status === 3 ? reason : ''
     return <span className="inline-flex items-center gap-1 whitespace-nowrap">

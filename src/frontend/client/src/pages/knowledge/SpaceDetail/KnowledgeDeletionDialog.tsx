@@ -20,9 +20,13 @@ export function KnowledgeDeletionDialog({ operation }: KnowledgeDeletionDialogPr
   const danger = consent.plan === plan && consent.danger;
   const impact = view.result?.impact ?? view.inspection;
   const complete = view.result?.check_complete ?? view.inspection?.check_complete;
+  const visibleCounts = (counts: Record<string, number>) =>
+    Object.entries(counts).filter(([kind]) =>
+      view.readonly || view.command.kind !== "delete" || !["knowledge", "model_default"].includes(kind),
+    );
   const hasReferences =
-    Object.values(impact?.source_counts ?? {}).some((count) => count > 0) ||
-    Object.values(impact?.restricted_counts ?? {}).some((count) => count > 0) ||
+    visibleCounts(impact?.source_counts ?? {}).some(([, count]) => count > 0) ||
+    visibleCounts(impact?.restricted_counts ?? {}).some(([, count]) => count > 0) ||
     !!view.page?.data.length || !!view.page?.has_more;
   const locked = view.busy || view.dispatched;
   const needsSkip = !!view.result?.requires_skip_confirmation;
@@ -147,15 +151,15 @@ export function KnowledgeDeletionDialog({ operation }: KnowledgeDeletionDialogPr
             <>
               <div>
                 <p>{tr("source_counts")}</p>
-                {Object.entries(impact.source_counts).map(([kind, count]) => (
+                {visibleCounts(impact.source_counts).map(([kind, count]) => (
                   <p key={kind}>
                     {kindLabel(kind)}: {count}
                   </p>
                 ))}
               </div>
-              {Object.values(impact.restricted_counts).some((count) => count > 0) && <div>
+              {visibleCounts(impact.restricted_counts).some(([, count]) => count > 0) && <div>
                 <p>{tr("restricted")}</p>
-                {Object.entries(impact.restricted_counts).map(([kind, count]) => (
+                {visibleCounts(impact.restricted_counts).map(([kind, count]) => (
                   <p key={kind}>
                     {kindLabel(kind)}: {count}
                   </p>

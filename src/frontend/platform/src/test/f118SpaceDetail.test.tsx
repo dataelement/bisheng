@@ -7,6 +7,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   MemoryRouter,
@@ -20,9 +21,11 @@ import { userContext } from "@/contexts/userContext";
 import type { User } from "@/types/api/user";
 import KnowledgePage from "@/pages/KnowledgePage";
 import Header from "@/pages/KnowledgePage/components/Header";
+import { ApiError } from "@bisheng/api-client";
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
+  post: vi.fn(),
   info: vi.fn(),
   children: vi.fn(),
   parents: vi.fn(),
@@ -32,9 +35,11 @@ const mocks = vi.hoisted(() => ({
   management: vi.fn(),
   error: vi.fn(),
   preview: vi.fn(),
+  copies: vi.fn(),
 }));
+vi.mock("@/controllers/API/knowledgeCopy", () => ({ listOwnedSpaceCopies: mocks.copies }));
 vi.mock("@/controllers/request", () => ({
-  default: { get: mocks.get },
+  default: { get: mocks.get, post: mocks.post },
   showApiError: mocks.error,
 }));
 vi.mock("@/controllers/API/permission", () => ({
@@ -143,6 +148,10 @@ function mount(path = "/filelib/7") {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.copies.mockResolvedValue([]);
+  mocks.post.mockResolvedValue({
+    check_complete: true, can_execute: false, valid_items: [], invalid_items: [], requires_skip_confirmation: false, impact: {},
+  });
   const storage = new Map<string, string>();
   vi.stubGlobal("localStorage", {
     getItem: (key: string) => storage.get(key) ?? null,
@@ -218,7 +227,14 @@ it.each([false, true])(
     user = { ...user, is_global_super: superAdmin };
     const view = mount();
     expect(await screen.findByText("Server 7")).toBeInTheDocument();
-    expect(screen.getByText("ID: 7 · Description 7")).toBeInTheDocument();
+    expect(screen.queryByText("Description 7")).not.toBeInTheDocument();
+    const interaction = userEvent.setup();
+    await interaction.hover(screen.getByRole("button", { name: "detail.space_info" }));
+    const info = await screen.findByRole("tooltip");
+    expect(info).toHaveTextContent("ID: 7");
+    expect(info).toHaveTextContent("Description 7");
+    await interaction.keyboard("{Escape}");
+    await waitFor(() => expect(info).not.toBeInTheDocument());
     expect(
       await screen.findByRole("button", { name: "report.pdf" }),
     ).toBeInTheDocument();
@@ -245,6 +261,7 @@ it("mounts visible-only child content when root info fails and never enters lega
   mocks.info.mockRejectedValue(error);
   mocks.containerEdit.mockResolvedValue({ allowed: false });
   mount();
+  expect(screen.queryByText("space_copy_ui.recovery_notice")).toBeNull();
   fireEvent.click(await screen.findByRole("button", { name: "report.pdf" }));
   expect(await screen.findByTestId("original-preview")).toBeInTheDocument();
   await waitFor(() => expect(mocks.error).toHaveBeenCalledWith(error));
@@ -253,6 +270,81 @@ it("mounts visible-only child content when root info fails and never enters lega
   ).toBe(true);
   expect(screen.queryByTestId("legacy-chunks")).not.toBeInTheDocument();
   expect(mocks.containerEdit).not.toHaveBeenCalled();
+});
+
+it("shows an initializing copy after a fresh page load without reading its files", async () => {
+  mocks.copies.mockResolvedValue([{ id: 7, name: "Background copy", user_id: 7, state: 0, job_id: "original-copy", job_state: "running", phase: "initializing", total_count: 10, succeeded_count: 0, failed_count: 0 }]);
+  mount();
+  expect(await screen.findByRole("heading", { name: "Background copy" })).toBeVisible();
+  expect(screen.getByText("space_copy_ui.phase_initializing")).toBeVisible();
+  expect(screen.getByText("space_copy_ui.background_notice")).toBeVisible();
+  expect(mocks.info).not.toHaveBeenCalled();
+  expect(mocks.children).not.toHaveBeenCalled();
+});
+
+it("opens a failed copy directly and retries the same job before returning to its files", async () => {
+  mocks.copies.mockResolvedValue([{ id: 7, name: "Background copy", user_id: 7, state: 0, job_id: "original-copy", job_state: "failed", phase: "failed", total_count: 10, succeeded_count: 0, failed_count: 10 }]);
+  const read = mocks.get.getMockImplementation()!;
+  const job = { id: "original-copy", space_id: 7, kind: "space_copy", state: "failed", revision: 1, total_count: 10, succeeded_count: 0, failed_count: 10, pending_count: 0, hidden_item_count: 10, retryable: true };
+  mocks.get.mockImplementation((url: string, options?: { params?: unknown }) => {
+    if (url.endsWith("/processing-jobs/original-copy/items")) return { data: [], total: 0 };
+    if (url.endsWith("/processing-jobs/original-copy")) return job;
+    return read(url, options);
+  });
+  const post = mocks.post.getMockImplementation()!;
+  mocks.post.mockImplementation(async (url: string, ...args: unknown[]) => {
+    if (!url.endsWith("/processing-jobs/original-copy/retry")) return post(url, ...args);
+    job.state = "succeeded";
+    mocks.copies.mockResolvedValue([]);
+    return { job_id: job.id, state: "accepted", accepted: true, reused: false };
+  });
+  mount();
+  await screen.findByText("space_copy_ui.phase_failed");
+  expect(mocks.children).not.toHaveBeenCalled();
+  fireEvent.click(await screen.findByRole("button", { name: "retry" }));
+  await waitFor(() => expect(mocks.post).toHaveBeenCalledWith(
+    "/api/v1/knowledge/space/7/processing-jobs/original-copy/retry",
+    { expected_job_revision: 1, idempotency_key: expect.any(String) },
+    { params: { kind: "space_copy" } },
+  ));
+  expect(await screen.findByRole("button", { name: "report.pdf" })).toBeVisible();
+});
+
+it("recovers the original copy from a detail page whose target permissions are not initialized", async () => {
+  mocks.info.mockRejectedValue(new ApiError({ status_code: 25008 }, { message: "Projection not ready" }));
+  const read = mocks.get.getMockImplementation()!;
+  const job = {
+    id: "original-copy", space_id: 7, kind: "space_copy", state: "failed", revision: 1,
+    accepted_at: "2026-11-16", started_at: null, finished_at: null,
+    total_count: 10, succeeded_count: 0, failed_count: 10, pending_count: 0,
+    hidden_item_count: 10, retryable: true, error_code: 25009, obsolete_reason: null,
+  };
+  mocks.get.mockImplementation((url: string, options?: { params?: unknown }) => {
+    if (url.endsWith("/processing-jobs")) return { data: [job], total: 1 };
+    if (url.endsWith("/processing-jobs/original-copy/items")) return { data: [], total: 0 };
+    if (url.endsWith("/processing-jobs/original-copy")) return job;
+    return read(url, options);
+  });
+  const post = mocks.post.getMockImplementation()!;
+  mocks.post.mockImplementation(async (url: string, ...args: unknown[]) => {
+    if (!url.endsWith("/processing-jobs/original-copy/retry")) return post(url, ...args);
+    mocks.info.mockResolvedValue({ id: 7, name: "Recovered copy", state: 1 });
+    return { job_id: job.id, state: "accepted", accepted: true, reused: false };
+  });
+  mount();
+  const heading = await screen.findByRole("heading", { name: "space_copy_ui.tasks" });
+  expect(screen.getByText("space_copy_ui.recovery_notice")).toBeVisible();
+  const recovery = within(heading.closest("section")!);
+  fireEvent.click(await recovery.findByRole("button", { name: "f118.processing_kind_space_copy · f118.processing_state_failed" }));
+  await recovery.findByText("f118.processing_counts");
+  fireEvent.click(await recovery.findByRole("button", { name: "retry" }));
+  await waitFor(() => expect(mocks.post).toHaveBeenCalledWith(
+    "/api/v1/knowledge/space/7/processing-jobs/original-copy/retry",
+    { expected_job_revision: 1, idempotency_key: expect.any(String) },
+    { params: { kind: "space_copy" } },
+  ));
+  expect(await screen.findByText("Recovered copy")).toBeVisible();
+  await waitFor(() => expect(screen.queryByText("space_copy_ui.recovery_notice")).toBeNull());
 });
 it("direct child admission uses current folder facts without a root info or visible precondition", async () => {
   mocks.containerEdit.mockResolvedValue({ allowed: false });
@@ -267,33 +359,53 @@ it("direct child admission uses current folder facts without a root info or visi
     expect.objectContaining({ parent_id: 9 }),
   );
   expect(mocks.permissions).toHaveBeenCalledWith("folder", "9");
+  const breadcrumb = await screen.findByRole("navigation", {
+    name: "f118.current_folder",
+  });
+  expect(within(breadcrumb).getByText("f118.spaces")).toBeVisible();
   expect(screen.queryByRole("tab", { name: "detail.settings" })).toBeNull();
   expect(mocks.info).not.toHaveBeenCalled();
   expect(mocks.containerEdit).not.toHaveBeenCalled();
 });
-it("updates only parent_id for folder and breadcrumb navigation and keeps the old status filter", async () => {
-  mount("/filelib/7?fileStatus=abnormal");
+it("keeps the breadcrumb in the header and preserves filters through folder navigation", async () => {
+  mocks.permissions.mockImplementation(async (resourceType: string) =>
+    permission(resourceType === "knowledge_space" ? ["visible"] : []),
+  );
+  const root = "/filelib/7?fileStatus=abnormal&keep=1";
+  mount(root);
   fireEvent.click(await screen.findByRole("button", { name: "Folder" }));
   await waitFor(() =>
-    expect(screen.getByTestId("location")).toHaveTextContent(
-      "fileStatus=abnormal&parent_id=9",
-    ),
+    expect(screen.getByTestId("location").textContent).toBe(`${root}&parent_id=9`),
   );
   const nav = await screen.findByRole("navigation", {
     name: "f118.current_folder",
   });
-  fireEvent.click(within(nav).getByRole("button", { name: "Parent" }));
-  await waitFor(() => expect(mocks.parents).toHaveBeenCalledWith(7, 8));
-  fireEvent.click(
-    within(
-      await screen.findByRole("navigation", { name: "f118.current_folder" }),
-    ).getByRole("button", { name: "f118.spaces" }),
-  );
+  const header = nav.closest("header");
+  expect(header).not.toBeNull();
+  expect(await within(nav).findByRole("button", { name: "Server 7" })).toBeVisible();
+  expect(within(nav).getByText("Child 9")).toHaveAttribute("aria-current", "page");
+
+  fireEvent.click(within(header!).getByRole("button", { name: "back" }));
   await waitFor(() =>
-    expect(screen.getByTestId("location")).toHaveTextContent(
-      "/filelib/7?fileStatus=abnormal",
-    ),
+    expect(screen.getByTestId("location").textContent).toBe(`${root}&parent_id=8`),
   );
+  fireEvent.click(await screen.findByRole("button", { name: "Folder" }));
+  const childPath = await screen.findByRole("navigation", {
+    name: "f118.current_folder",
+  });
+  fireEvent.click(within(childPath).getByRole("button", { name: "Parent" }));
+  await waitFor(() =>
+    expect(screen.getByTestId("location").textContent).toBe(`${root}&parent_id=8`),
+  );
+
+  const parentPath = await screen.findByRole("navigation", {
+    name: "f118.current_folder",
+  });
+  fireEvent.click(await within(parentPath).findByRole("button", { name: "Server 7" }));
+  await waitFor(() =>
+    expect(screen.getByTestId("location").textContent).toBe(root),
+  );
+  expect(screen.queryByRole("navigation", { name: "f118.current_folder" })).toBeNull();
   expect(
     mocks.children.mock.calls.every(
       ([, query]) => query.file_status?.join() === "3,6,7",
@@ -474,9 +586,9 @@ it.each(["file_id=0", "file_id=11&file_id=12"])("rejects invalid file targets be
   expect(mocks.get).not.toHaveBeenCalled();
 });
 
-it.each(["ordinary", "admin"])("opens the chunk editor in the %s view and returns to the same directory with its original filters", async (view) => {
-  user = { ...user, is_child_admin: view === "admin" };
-  const current = mount(`/filelib/7?parent_id=9&fileStatus=abnormal&keep=1${view === "admin" ? "&view=admin" : ""}`);
+it.each([false, true])("opens the chunk editor in the ordinary view and preserves directory filters for admin=%s", async (isAdmin) => {
+  user = { ...user, is_child_admin: isAdmin };
+  const current = mount("/filelib/7?parent_id=9&fileStatus=abnormal&keep=1");
   fireEvent.click(await screen.findByRole("button", { name: "report.pdf" }));
   await waitFor(() => expect(screen.getByTestId("detail-chunks")).toBeInTheDocument());
   expect(screen.getByTestId("location")).toHaveTextContent("file_id=11");
@@ -485,9 +597,9 @@ it.each(["ordinary", "admin"])("opens the chunk editor in the %s view and return
   expect(screen.getByTestId("location")).toHaveTextContent("parent_id=9&fileStatus=abnormal&keep=1");
   expect(screen.getByTestId("location")).not.toHaveTextContent("file_id=");
   const views = current.client.getQueryCache().getAll().map((query) => query.queryKey[4]);
-  expect(views).toContain(view);
-  expect(views).not.toContain(view === "admin" ? "ordinary" : "admin");
-  expect(screen.getByRole("tab", { name: view === "admin" ? "f118.manage_spaces" : "f118.spaces" })).toHaveAttribute("data-state", "active");
+  expect(views).toContain("ordinary");
+  expect(views).not.toContain("admin");
+  expect(screen.getByRole("tab", { name: "f118.spaces" })).toHaveAttribute("data-state", "active");
 });
 
 it("does not turn a forged management URL into an admin scope for an ordinary user", async () => {

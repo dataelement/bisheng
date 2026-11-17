@@ -1652,6 +1652,7 @@
     "tag_save_success": "Tag saved successfully",
     "tags_char_limit_exceeded": "Tag character limit exceeded",
     "tags_count_limit_exceeded": "Tags count limit exceeded",
+    "file_parse_failed_detail": "{{message}} (error code: {{code}})",
     "space_tags_limit_exceeded": "The number of tags in the current space has reached the limit of 50",
     "sensitive_violation_empty_hits": "No matched word details",
     "sensitive_violation_hits": "Matched words",
@@ -2784,6 +2785,13 @@
   "dsh_source_unavailable": "Usage unavailable",
   "dsh_unknown_usage": "Usage was not received for {{count}} calls.",
   "dsh": {
+    "creditsTitle": "Credits this month",
+    "creditsRemaining": "Credits remaining",
+    "creditsDetail": "Monthly allowance {{limit}} · used {{used}}",
+    "creditsUsedOnly": "Used this month {{used}}",
+    "creditsUnlimited": "Unlimited",
+    "creditsReset": "Resets {{date}}",
+    "creditsHelp": "Shared by Chat and Work. Each call is charged by the model price and its actual usage.",
     "launchHelp": "If Client did not open, click “Download Client” to install it. If already installed, allow your browser to open the app or start it manually.",
     "launchHelpNoDownload": "If Client did not open and is already installed, allow your browser to open the app or start it manually. If not installed, contact your administrator for a download link.",
     "heatmapFuture": "Upcoming interval",
@@ -2930,19 +2938,10 @@
   "com_skill_center_menu": "Skills",
   "com_skill_center_manage": "Manage skills",
   "com_skill_center_menu_available": "Available skills",
-  "knowledgeBasePicker": {
-    "search": "Search organization knowledge bases",
-    "column": "Knowledge base",
-    "selected": "{{count}} knowledge bases selected",
-    "loadError": "Could not load organization knowledge bases",
-    "loading": "Loading knowledge bases…",
-    "noMatch": "No matching knowledge bases",
-    "empty": "No organization knowledge bases available",
-    "limit": "Select up to 50 knowledge bases"
-  },
   "modelPicker": {
     "unknownProvider": "Other providers",
-    "back": "Back"
+    "back": "Back",
+    "ratioFree": "Free"
   },
   "com_select": {
     "empty": "No data",
@@ -3002,7 +3001,6 @@
     "modifiedColumn": "Modified",
     "addContext": "Add context",
     "selectKnowledge": "Select knowledge spaces",
-    "selectKnowledgeBases": "Select knowledge bases",
     "searchKnowledge": "Search knowledge spaces",
     "selectedKnowledge": "{{count}} knowledge spaces selected",
     "confirmKnowledge": "Confirm",

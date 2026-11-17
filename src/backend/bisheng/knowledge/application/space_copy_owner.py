@@ -6,7 +6,12 @@ from copy import deepcopy
 from types import SimpleNamespace
 
 from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
-from bisheng.common.errcode.knowledge import KnowledgeOperationPlanChangedError, KnowledgeProcessingObsoleteError
+from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.errcode.knowledge import (
+    KnowledgeOperationPlanChangedError,
+    KnowledgeProcessingObsoleteError,
+    ResourceReferenceInvalidError,
+)
 from bisheng.knowledge.application import move_processing_admission as admission
 from bisheng.knowledge.application.space_copy import (
     SpaceCopyApplication,
@@ -121,8 +126,22 @@ class SpaceCopyOwner:
             raise KnowledgeOperationPlanChangedError()
         return tuple(pairs)
 
+    @asynccontextmanager
+    async def _logical_target(self, source_id, target_id):
+        async with self.sessions() as session:
+            context = authority_context()
+            # Match acceptance's source-before-target order. The lock is scoped
+            # to one projection, not a potentially large whole-space copy.
+            await self.rows.aroot(session, source_id, lock=True)
+            root = await self.rows.aroot(session, target_id, lock=True)
+            if root.state not in {0, 1, 2} or root.model_transition is not None:
+                raise KnowledgeOperationPlanChangedError()
+            yield session, root
+            clean(session, context)
+            await session.commit()
+
     async def aensure_logical(self, target_id, job_id, *, identity=None, entry_kind=None):
-        root, payload, mapping, reference = await self._logical(target_id, job_id)
+        _, payload, mapping, reference = await self._logical(target_id, job_id)
         scope = SpaceCopyScope(**payload["scope"])
         async with admission.identity(
             reference, current=identity, entry_kind=entry_kind, required_action="upload_file"
@@ -133,40 +152,45 @@ class SpaceCopyOwner:
             pairs = self._pairs(payload, mapping, target_id, actor)
             # Children first, root last. Each original copy key is durable.
             for source, after, mode, operator in (*pairs[1:], pairs[0]):
-                async with admission.identity(
-                    reference, current=identity, entry_kind=entry_kind, required_action="upload_file"
-                ) as (current, _):
-                    await self.app.authorize(current, scope.source)
-                    await self.app.projection.aexecute_or_resume(
-                        source=source, target=after, actor=operator, owner_user_id=scope.source["user_id"], mode=mode
-                    )
+                # API, worker and retries share the same SQL exclusion. Never
+                # reconcile a live STAGING operation from another executor.
+                async with self._logical_target(scope.source["id"], target_id):
+                    async with admission.identity(
+                        reference, current=identity, entry_kind=entry_kind, required_action="upload_file"
+                    ) as (current, _):
+                        await self.app.authorize(current, scope.source)
+                        await self.app.projection.aexecute_or_resume(
+                            source=source,
+                            target=after,
+                            actor=operator,
+                            owner_user_id=scope.source["user_id"],
+                            mode=mode,
+                        )
             await self.app.authorize(actual, scope.source)
-            if root.state == 0:
-                await self._initialize(root, reference["actor_user_id"])
-            assert_authority(authority)
-            async with self.sessions() as session:
-                context = authority_context()
+            async with self._logical_target(scope.source["id"], target_id) as (session, actual_root):
                 current = await self.rows.aload_scope(session, scope.source["id"], lock=True)
                 if current.execution_digest != scope.execution_digest:
                     raise KnowledgeOperationPlanChangedError()
-                actual_root = await self.rows.aroot(session, target_id, lock=True)
                 await self.app.projection.arequire_completed(session, pairs=pairs)
-                if actual_root.state not in {0, 1, 2} or actual_root.model_transition is not None:
-                    raise KnowledgeOperationPlanChangedError()
+                # A waiter must use the state read after acquiring the lock,
+                # rather than the pre-lock snapshot returned by _logical.
+                if actual_root.state == 0:
+                    await self._initialize(
+                        actual_root.model_copy(deep=True), reference["actor_user_id"], session=session
+                    )
+                assert_authority(authority)
                 if actual_root.state == 0:
                     actual_root.state = 2 if job_id else 1
                     await session.flush()
-                clean(session, context)
-                await session.commit()
 
     @staticmethod
-    async def _initialize(root, actor_id):
+    async def _initialize(root, actor_id, *, session):
         vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(
-            actor_id, knowledge=root, metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA
+            actor_id, knowledge=root, reference_session=session, metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA
         )
         vector.col.load()
         es = await KnowledgeRag.init_knowledge_es_vectorstore(
-            knowledge=root, metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA
+            knowledge=root, reference_session=session, metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA
         )
         try:
             await asyncio.to_thread(es._store._create_index_if_not_exists)
@@ -179,7 +203,6 @@ class SpaceCopyOwner:
 
     async def astart(self, job_id, revision):
         job, reference = await self.aread(job_id)
-        await self.aensure_logical(job.space_id, job_id)
         async with admission.identity(reference, required_action="upload_file") as (identity, _):
             async with self.sessions() as session:
                 context = authority_context()
@@ -197,7 +220,16 @@ class SpaceCopyOwner:
                 )
                 clean(session, context)
                 await session.commit()
-                return result
+            if result is not None:
+                try:
+                    await self.aensure_logical(job.space_id, job_id)
+                except Exception as error:
+                    # The caller has not received the lease yet. Persist failure
+                    # with this exact lease so another executor cannot be failed.
+                    code = error.Code if isinstance(error, BaseErrorCode) else ResourceReferenceInvalidError.Code
+                    await self.afail(job_id, revision, lease=result, error_code=code)
+                    raise
+            return result
 
     async def aclaim(self, lease):
         async with self.sessions() as session:
@@ -373,9 +405,14 @@ class SpaceCopyOwner:
         async with admission.identity(
             reference, current=identity, entry_kind="web", allow_other=True, required_action="upload_file"
         ) as (actual, captured):
-            await self.aensure_logical(job.space_id, job_id, identity=actual, entry_kind="web")
+            _, payload, _, _ = await self._logical(job.space_id, job_id)
+            scope = SpaceCopyScope(**payload["scope"])
+            await self.app.authorize(actual, scope.source)
             async with self.sessions() as session:
                 context = authority_context()
+                current = await self.rows.aload_scope(session, scope.source["id"], lock=True)
+                if current.execution_digest != scope.execution_digest:
+                    raise KnowledgeOperationPlanChangedError()
                 root = await self.rows.aroot(session, job.space_id, lock=True)
                 if root.state == 1:
                     root.state = 2

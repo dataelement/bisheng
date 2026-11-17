@@ -1,4 +1,4 @@
-import { Button, Checkbox, Pagination } from "@bisheng/ui";
+import { Button, Checkbox } from "@bisheng/ui";
 import { useEffect, useRef, useState, type MutableRefObject } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -17,13 +17,11 @@ import {
 import type { OperationPrecheck } from "@/controllers/API/knowledgeSpace";
 import {
   knowledgeQueryKeys,
-  useKnowledgeProcessingJobs,
   type KnowledgeQueryScope,
 } from "@/controllers/hooks/knowledge";
 import { managementRequestScope } from "@/controllers/managementScope";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { showApiError } from "@/controllers/request";
-import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { createDshOperationId as createOperationId } from "@/util/dshOperationId";
 import { MoveDestinationPicker } from "./MoveDestinationPicker";
 import { SpaceProcessingProgress } from "./SpaceProcessingProgress";
@@ -33,7 +31,6 @@ interface MoveDialogProps {
   spaceId: number;
   parentId: number | null;
   items: readonly MoveSelection[];
-  mode?: "move" | "jobs";
   onClose: () => void;
 }
 /** Own one immutable review until success or an explicit stale-plan response. */
@@ -52,7 +49,6 @@ export function MoveDialog(props: MoveDialogProps) {
           props.spaceId,
           props.parentId,
           props.items,
-          props.mode,
         ])}
         {...props}
         closeGuard={closeGuard}
@@ -65,22 +61,17 @@ function Content({
   spaceId,
   parentId,
   items,
-  mode = "move",
   onClose,
   closeGuard,
 }: MoveDialogProps & { closeGuard: MutableRefObject<() => boolean> }) {
   const { t, i18n } = useTranslation("knowledge");
-  const locale = usePaginationLocale();
   const client = useQueryClient();
   const [destination, setDestination] = useState<MoveDestination>({
     spaceId,
     folderId: parentId,
   });
-  const [plan, setPlan] = useState<{
-    value: OperationPrecheck;
-    key: string;
-    destinationLabel: string;
-  } | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const [destinationSelected, setDestinationSelected] = useState(false);
   const [destinationLabel, setDestinationLabel] = useState(
     t(parentId === null ? "move.current_space" : "move.current_folder"),
   );
@@ -88,8 +79,26 @@ function Content({
     [busy, setBusy] = useState(false);
   const [dispatched, setDispatched] = useState(false),
     [completed, setCompleted] = useState(false);
-  const [jobId, setJobId] = useState<string | null>(null),
-    [page, setPage] = useState(1);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const tenant = scope.managementTenantId ?? scope.tenantId;
+  const review = useQuery({
+    queryKey: [...knowledgeQueryKeys.scope(scope), "move-review", spaceId, parentId, items, destination, attempt],
+    queryFn: async (): Promise<{ value: OperationPrecheck; key: string; destinationLabel: string }> => ({
+      value: await precheckMove(spaceId, items, destination, tenant),
+      key: createOperationId(),
+      destinationLabel,
+    }),
+    enabled: items.length > 0 && destinationSelected && !dispatched && !completed,
+    staleTime: Infinity,
+    cacheTime: 0,
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+  const plan = review.data;
+  useEffect(() => {
+    if (review.error) showApiError(review.error);
+  }, [review.error]);
   closeGuard.current = () => !busy && (!dispatched || !!jobId || completed);
   const alive = useRef(true);
   useEffect(() => {
@@ -98,15 +107,6 @@ function Content({
       alive.current = false;
     };
   }, []);
-  const jobs = useKnowledgeProcessingJobs(
-    mode === "jobs" ? scope : { ...scope, identityKey: "" },
-    spaceId,
-    { kind: "move_index", page, page_size: 20 },
-  );
-  useEffect(() => {
-    if (jobs.error) showApiError(jobs.error);
-  }, [jobs.error]);
-  const tenant = scope.managementTenantId ?? scope.tenantId;
   const current = () =>
     alive.current &&
     (managementRequestScope() === null || managementRequestScope() === tenant);
@@ -115,24 +115,11 @@ function Content({
       queryKey: knowledgeQueryKeys.scope(scope),
     });
   };
-  const handleReview = async () => {
-    if (busy || dispatched || !current()) return;
-    setBusy(true);
-    try {
-      const value = await precheckMove(spaceId, items, destination, tenant);
-      if (current()) {
-        setPlan({ value, key: createOperationId(), destinationLabel });
-        setSkip(false);
-      }
-    } catch (error) {
-      if (current()) showApiError(error);
-    } finally {
-      if (alive.current) setBusy(false);
-    }
-  };
   const handleConfirm = async () => {
     if (
       busy ||
+      review.isFetching ||
+      review.isError ||
       !current() ||
       !plan?.value.can_execute ||
       !plan.value.check_complete ||
@@ -163,7 +150,8 @@ function Content({
           ? error.status_code
           : undefined;
       if (code === 18087 || code === 18088) {
-        setPlan(null);
+        setAttempt((value) => value + 1);
+        setSkip(false);
         setDispatched(false);
       }
     } finally {
@@ -181,11 +169,11 @@ function Content({
   return (
     <DialogContent
       aria-describedby={undefined}
-      className={`max-h-[85vh] overflow-y-auto ${mode === "move" && !plan && !jobId && !completed ? "w-[calc(100vw-32px)] max-w-3xl" : ""}`}
+      className={`max-h-[85vh] overflow-y-auto ${!plan && !jobId && !completed ? "w-[calc(100vw-32px)] max-w-3xl" : ""}`}
     >
       <DialogHeader>
         <DialogTitle>
-          {t(mode === "jobs" ? "move.jobs" : "move.title")}
+          {t("move.title")}
         </DialogTitle>
       </DialogHeader>
       {jobId ? (
@@ -198,43 +186,9 @@ function Content({
         />
       ) : completed ? (
         <p role="status">{t("move.completed")}</p>
-      ) : mode === "jobs" ? (
-        <>
-          <ul>
-            {jobs.data?.data.map((job) => (
-              <li key={job.id}>
-                <Button variant="link" onClick={() => setJobId(job.id)}>
-                  {t(`f118.processing_state_${job.state}`)}
-                </Button>
-              </li>
-            ))}
-          </ul>
-          {jobs.isInitialLoading && (
-            <p role="status">{t("f118.loading_directory")}</p>
-          )}
-          {jobs.isError && (
-            <Button
-              onClick={() => {
-                void jobs.refetch();
-              }}
-            >
-              {t("retry")}
-            </Button>
-          )}
-          {jobs.data && jobs.data.total > 20 && (
-            <Pagination
-              current={page}
-              total={jobs.data.total}
-              pageSize={20}
-              onChange={setPage}
-              locale={locale}
-            />
-          )}
-        </>
       ) : (
         <>
-          {!plan && (
-            <fieldset className="min-w-0" disabled={busy}>
+            <fieldset className="min-w-0" disabled={busy || dispatched}>
               <MoveDestinationPicker
                 scope={scope}
                 sourceId={spaceId}
@@ -242,10 +196,12 @@ function Content({
                 onChange={(next, label) => {
                   setDestination(next);
                   setDestinationLabel(label);
+                  setDestinationSelected(true);
+                  setSkip(false);
                 }}
               />
             </fieldset>
-          )}
+          {review.isFetching && <p role="status">{t("move.checking")}</p>}
           {plan && (
             <section className="space-y-3">
               <p>
@@ -304,44 +260,25 @@ function Content({
         </Button>
         {!jobId &&
           !completed &&
-          mode === "move" &&
-          (plan ? (
-            <>
-              {!dispatched && (
-                <Button
-                  variant="outlined"
-                  disabled={busy}
-                  onClick={() => setPlan(null)}
-                >
-                  {t("f118.processing_review_again")}
-                </Button>
-              )}
+          (
               <Button
                 disabled={
                   busy ||
-                  !plan.value.can_execute ||
+                  review.isFetching ||
+                  (!review.isError && (!plan?.value.can_execute ||
                   !plan.value.check_complete ||
-                  (plan.value.invalid_items.length > 0 && !skip)
+                  (plan.value.invalid_items.length > 0 && !skip)))
                 }
                 onClick={() => {
-                  void handleConfirm();
+                  if (review.isError) void review.refetch();
+                  else void handleConfirm();
                 }}
               >
-                {t(dispatched ? "retry" : "confirm", {
-                  ns: dispatched ? "knowledge" : "bs",
+                {t(dispatched || review.isError ? "retry" : "confirm", {
+                  ns: dispatched || review.isError ? "knowledge" : "bs",
                 })}
               </Button>
-            </>
-          ) : (
-            <Button
-              disabled={busy || !items.length}
-              onClick={() => {
-                void handleReview();
-              }}
-            >
-              {t("f118.processing_review_action")}
-            </Button>
-          ))}
+          )}
       </DialogFooter>
     </DialogContent>
   );

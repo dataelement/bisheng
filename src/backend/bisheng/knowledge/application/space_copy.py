@@ -168,10 +168,9 @@ class SpaceCopyApplication:
                 current = await self.rows.aload_scope(session, source_space_id, lock=True)
                 if current != scope:
                     raise KnowledgeOperationPlanChangedError()
-                physical = any(row["file_type"] == 1 for row in scope.files)
                 result = await self.plans.acreate(
                     session,
-                    operation="space_copy" if physical else "space_copy_empty",
+                    operation="space_copy",
                     space_id=source_space_id,
                     actor_reference=captured.reference,
                     targets=[],
@@ -238,12 +237,12 @@ class SpaceCopyApplication:
             result = await self._accept(source_space_id, request, scope, actual)
             from bisheng.knowledge.application.space_copy_owner import SpaceCopyOwner
 
-            await SpaceCopyOwner(self).aensure_logical(
-                result["knowledge"].id,
-                result["processing_job"].job_id if result["processing_job"] else None,
-                identity=actual,
-                entry_kind=entry_kind,
-            )
+            # New copies, including empty spaces, execute only in the worker.
+            # Retain completion of already-consumed legacy empty-copy plans.
+            if result["processing_job"] is None:
+                await SpaceCopyOwner(self).aensure_logical(
+                    result["knowledge"].id, None, identity=actual, entry_kind=entry_kind
+                )
             async with self.sessions() as session:
                 context = authority_context()
                 row = await self.rows.aroot(session, result["knowledge"].id)

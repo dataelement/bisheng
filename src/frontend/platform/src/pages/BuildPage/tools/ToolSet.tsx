@@ -107,7 +107,7 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
-            <DialogContent className="sm:max-w-[625px] bg-background-login">
+            <DialogContent className={toolKeys.includes("web_search") ? "sm:max-w-[600px] max-h-[calc(100dvh-64px)] flex flex-col bg-background-login" : "sm:max-w-[625px] bg-background-login"}>
                 <DialogHeader>
                     <DialogTitle>{t('build.editTool')}</DialogTitle>
                 </DialogHeader>

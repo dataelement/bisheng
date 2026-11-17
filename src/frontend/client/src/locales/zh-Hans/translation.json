@@ -1577,6 +1577,7 @@
     "tag_save_success": "标签保存成功",
     "tags_char_limit_exceeded": "标签超过字符限制",
     "tags_count_limit_exceeded": "标签数超过限制",
+    "file_parse_failed_detail": "{{message}}（错误码：{{code}}）",
     "space_tags_limit_exceeded": "当前空间中标签已达50个上限",
     "sensitive_violation_empty_hits": "暂无命中词详情",
     "sensitive_violation_hits": "命中词",
@@ -2713,6 +2714,13 @@
   "dsh_source_unavailable": "用量暂不可用",
   "dsh_unknown_usage": "有 {{count}} 次调用未获取到用量。",
   "dsh": {
+    "creditsTitle": "本月积分",
+    "creditsRemaining": "剩余积分",
+    "creditsDetail": "本月额度 {{limit}} · 已用 {{used}}",
+    "creditsUsedOnly": "本月已用 {{used}}",
+    "creditsUnlimited": "不限额",
+    "creditsReset": "{{date}}重置",
+    "creditsHelp": "Chat 和 Work 共用，每次调用按模型价格和实际用量扣除。",
     "launchHelp": "若客户端未打开，请点击“下载客户端”安装客户端；已安装时，请允许浏览器打开应用，或手动启动客户端。",
     "launchHelpNoDownload": "若客户端未打开，已安装时请允许浏览器打开应用，或手动启动客户端；未安装时请联系管理员获取下载地址。",
     "heatmapFuture": "未到时间",
@@ -2859,19 +2867,10 @@
   "com_skill_center_menu": "技能",
   "com_skill_center_manage": "管理技能",
   "com_skill_center_menu_available": "可用技能",
-  "knowledgeBasePicker": {
-    "search": "搜索组织知识库",
-    "column": "知识库",
-    "selected": "已选择 {{count}} 个知识库",
-    "loadError": "组织知识库加载失败",
-    "loading": "正在加载知识库…",
-    "noMatch": "没有匹配的知识库",
-    "empty": "暂无可用的组织知识库",
-    "limit": "最多选择 50 个知识库"
-  },
   "modelPicker": {
     "unknownProvider": "其他提供方",
-    "back": "返回"
+    "back": "返回",
+    "ratioFree": "免费"
   },
   "com_select": {
     "empty": "暂无数据",
@@ -2931,7 +2930,6 @@
     "modifiedColumn": "修改时间",
     "addContext": "添加上下文",
     "selectKnowledge": "选择知识空间",
-    "selectKnowledgeBases": "选择知识库",
     "searchKnowledge": "搜索知识空间",
     "selectedKnowledge": "已选 {{count}} 个知识空间",
     "confirmKnowledge": "确认添加",

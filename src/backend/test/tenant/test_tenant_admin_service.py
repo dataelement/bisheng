@@ -194,3 +194,32 @@ async def test_grant_uses_permission_application_protocol():
 
     get_permissions.assert_awaited_once()
     permissions.grant.assert_awaited_once()
+
+
+# ── list_tenant_admin_users ─────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_list_admin_users_resolves_names_and_marks_failures():
+    """Root → [], lookup failure → None, deleted users dropped, names resolved."""
+
+    async def _list_subject_ids(*, resource, relation, subject_type):
+        if resource.resource_id == "6":
+            raise RuntimeError("permission down")
+        return {"5": ("7", "9", "404")}.get(resource.resource_id, ())
+
+    permissions = MagicMock()
+    permissions.list_subject_ids = AsyncMock(side_effect=_list_subject_ids)
+    users = [SimpleNamespace(user_id=7, user_name="alice"), SimpleNamespace(user_id=9, user_name="bob")]
+    with (
+        _patch_permissions(permissions),
+        patch("bisheng.user.domain.models.user.UserDao.aget_user_by_ids", AsyncMock(return_value=users)),
+    ):
+        result = await TenantAdminService.list_tenant_admin_users([1, 5, 6, 8])
+
+    assert result == {
+        1: [],
+        5: [{"user_id": 7, "user_name": "alice"}, {"user_id": 9, "user_name": "bob"}],
+        6: None,
+        8: [],
+    }

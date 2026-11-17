@@ -772,6 +772,14 @@ async def retry_space_files(
 # ──────────────────────────── Subscribe ───────────────────────────────────────
 
 
+@router.get("/{space_id}/exit-status")
+async def get_space_exit_status(
+    space_id: int,
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    return resp_200(await svc.get_space_exit_status(space_id))
+
+
 @router.post("/{space_id}/subscribe", response_model=None)
 async def subscribe_space(
     space_id: int,

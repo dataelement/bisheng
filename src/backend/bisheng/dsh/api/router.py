@@ -7,6 +7,7 @@ from bisheng.dsh.api.endpoints.admin import router as admin_router
 from bisheng.dsh.api.endpoints.apps import router as apps_router
 from bisheng.dsh.api.endpoints.capabilities import router as capability_router
 from bisheng.dsh.api.endpoints.content_safety_events import router as content_safety_router
+from bisheng.dsh.api.endpoints.credit_pricing import router as credit_pricing_router
 from bisheng.dsh.api.endpoints.identity import router as identity_router
 from bisheng.dsh.api.endpoints.local_auth import router as local_auth_router
 from bisheng.dsh.api.endpoints.mobile import router as mobile_router
@@ -23,13 +24,15 @@ from bisheng.dsh.api.endpoints.web_session import router as web_session_router
 from bisheng.dsh.api.endpoints.work import router as work_router
 
 scope_overrides(unified_policy_router, S.IDENTITY, "personal_credits")
-scope_overrides(settings_router, S.IDENTITY, "browser_config")
+# Desktop login discovers launch/download settings before any session exists.
+scope_overrides(settings_router, S.PUBLIC, "browser_config")
 router = APIRouter()
 router.include_router(skill_center_router, request_scope=S.CREDENTIAL)
 router.include_router(local_auth_router, request_scope=S.CREDENTIAL)
 router.include_router(capability_router, request_scope=S.CREDENTIAL)
 router.include_router(work_router, request_scope=S.CREDENTIAL)
 router.include_router(unified_policy_router, request_scope=S.TENANT)
+router.include_router(credit_pricing_router, request_scope=S.TENANT)
 router.include_router(web_session_router, request_scope=S.CREDENTIAL)
 router.include_router(content_safety_router, request_scope=S.CREDENTIAL)
 

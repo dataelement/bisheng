@@ -44,9 +44,10 @@ export default function MainLayout() {
   const localize = useLocalize();
   const menuNames = useWorkbenchMenuNames();
   const {
-    identity: { channel },
+    identity: { channel, capabilities },
     prefersMobileLayout: isMobile,
   } = useClientLayout();
+  const hostOwnsHeader = capabilities?.hasHostChatHeader === true;
   const outletScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
   const isAppsArea = pathname.includes("/apps");
 
@@ -300,6 +301,7 @@ export default function MainLayout() {
             {/* Unavailable pages have no menu trigger of their own; keep the
                 global menu reachable after the narrow sidebar closes. */}
             {shouldHideSidebarOnMobileAppsArea &&
+            !hostOwnsHeader &&
             !isChannelRoute &&
             !isAppChatRoute &&
             !isKnowledgeRoute ? (
@@ -379,6 +381,7 @@ export default function MainLayout() {
             >
                   {/* The narrow apps header opens the shared workbench menu. */}
               {shouldHideSidebarOnMobileAppsArea &&
+              !hostOwnsHeader &&
               isAppsArea &&
               !isAppChatRoute &&
               !isAppsExploreRoute ? (

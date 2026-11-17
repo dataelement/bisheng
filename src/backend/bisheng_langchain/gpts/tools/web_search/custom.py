@@ -83,6 +83,10 @@ def build_request(operation, query, api_key=None):
     """Build a restricted request description without performing network I/O."""
     if not isinstance(operation, dict) or not isinstance(query, str) or len(query) > MAX_FIELD_LENGTH:
         raise CustomSearchError("Invalid search request")
+    if operation.get("version") == 2:
+        from .openapi_request import build_openapi_request
+
+        return build_openapi_request(operation, query, api_key)
     server, method, path = operation.get("server"), operation.get("method"), operation.get("path")
     try:
         parsed = urlsplit(server)
@@ -216,7 +220,8 @@ def map_response(raw, mapping, normalize, api_key=None):
 
 
 _NETWORK_SLOTS = threading.BoundedSemaphore(4)
-_NETWORK_TIMEOUT = 20
+_NETWORK_TIMEOUT = 70
+_READ_TIMEOUT = 60
 
 
 def _run_worker(payload, command):
@@ -233,7 +238,9 @@ def _run_worker(payload, command):
             process.kill()
             process.communicate()
             raise CustomSearchError("Search service request timed out") from None
-        if process.returncode != 0 or len(output) > 4 * ((MAX_RESPONSE_BYTES + 2) // 3):
+        if process.returncode != 0 and output == b"timeout":
+            raise CustomSearchError("Search service request timed out")
+        if process.returncode != 0 or len(output) > 8 * ((MAX_RESPONSE_BYTES + 2) // 3):
             raise CustomSearchError("Search service request failed")
         try:
             return base64.b64decode(output, validate=True)
@@ -349,13 +356,12 @@ def fetch(data):
     headers = dict(request["headers"])
     headers["Host"] = authority + (f":{port}" if parsed.port is not None else "")
     headers["Accept-Encoding"] = "identity"
-    prepared = httpx.Request(
-        request["method"],
-        request["url"],
-        params=request["params"],
-        json=request["json"] if request["method"] == "POST" else None,
-        headers=headers,
+    body_args = (
+        {"content": base64.b64decode(request["body_base64"], validate=True)}
+        if "body_base64" in request
+        else {"json": request["json"] if request["method"] == "POST" else None}
     )
+    prepared = httpx.Request(request["method"], request["url"], params=request["params"], headers=headers, **body_args)
     connection = http.client.HTTPConnection(host, port, timeout=5)
     candidates = sorted(addresses)
     for index, address in enumerate(candidates):
@@ -372,6 +378,8 @@ def fetch(data):
             raise ValueError("peer mismatch")
         if parsed.scheme == "https":
             sock = ssl.create_default_context(cafile=data.get("ca_file")).wrap_socket(sock, server_hostname=host)
+        # Keep connection setup short; model-backed searches need longer to produce a response.
+        sock.settimeout(_READ_TIMEOUT)
         connection.sock = sock
         connection.request(
             prepared.method,
@@ -380,7 +388,9 @@ def fetch(data):
             headers=dict(prepared.headers),
         )
         response = connection.getresponse()
-        if not 200 <= response.status < 300 or response.getheader("content-encoding", "identity").lower() != "identity":
+        if (not request.get("response_metadata") and not 200 <= response.status < 300) or response.getheader(
+            "content-encoding", "identity"
+        ).lower() != "identity":
             raise ValueError("upstream error")
         declared = response.getheader("content-length")
         if declared is not None and (
@@ -393,6 +403,14 @@ def fetch(data):
             if not chunk:
                 if declared is not None and len(body) != int(declared):
                     raise ValueError("truncated response")
+                if request.get("response_metadata"):
+                    return json.dumps(
+                        {
+                            "status": response.status,
+                            "content_type": response.getheader("content-type", "application/octet-stream"),
+                            "body": base64.b64encode(body).decode(),
+                        }
+                    ).encode()
                 return bytes(body)
             body.extend(chunk)
             if len(body) > _LIMIT:
@@ -407,6 +425,10 @@ def main():
         data = json.loads(sys.stdin.buffer.read(_LIMIT + 1))
         result = fetch(data)
         sys.stdout.buffer.write(base64.b64encode(result))
+    except TimeoutError:
+        # Emit only a fixed classification, never request or exception details.
+        sys.stdout.buffer.write(b"timeout")
+        sys.exit(1)
     except Exception:
         # Do not print exception text, request data, response data, or headers.
         sys.exit(1)

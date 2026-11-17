@@ -3,7 +3,6 @@ import request from '@/controllers/request'
 export type PolicySubject = { kind: 'DEPARTMENT' | 'ROLE' | 'USER'; id: number }
 export type PolicySubjectOption = PolicySubject & { name: string; depth: number }
 export type ModelVisibility = {
-    credit_multiplier?: string
     version: number
     everyone: boolean
     subjects: PolicySubject[]
@@ -26,7 +25,6 @@ export const getModelVisibility = (id: number, signal?: AbortSignal): Promise<Mo
 export const saveModelVisibility = (id: number, value: ModelVisibility): Promise<ModelVisibility> =>
     request.put(`${admin}/models/${id}/visibility`, {
         version: value.version, everyone: value.everyone,
-        credit_multiplier: value.credit_multiplier ?? "1",
         subjects: value.everyone ? [] : value.subjects,
     })
 export const getCreditRules = (signal?: AbortSignal): Promise<CreditRule[]> =>

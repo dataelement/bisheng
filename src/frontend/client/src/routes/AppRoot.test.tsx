@@ -411,9 +411,24 @@ it("removes the entire chat bar and open history when a mobile App takes over th
   view.rerender(<AppRoot />);
   expect(view.container.querySelector(".dsh-mobile-chat-header")).toBeNull();
   expect(screen.queryByRole("region")).toBeNull();
-  expect(screen.getByText("Conversation content")).toBeVisible();
+  const conversation = screen.getByText("Conversation content");
+  expect(conversation).toBeVisible();
+  expect(conversation.parentElement?.previousElementSibling).toBeNull();
   mockHostChatHeader = false;
   view.rerender(<AppRoot />);
   expect(view.container.querySelector(".dsh-mobile-chat-header")).not.toBeNull();
   expect(screen.queryByRole("region")).toBeNull();
+});
+
+it("leaves the wide layout's floating back button to the mobile App host", () => {
+  mockMobile = true;
+  mockCompact = false;
+  mockSidebarVisible = false;
+  const view = render(<AppRoot />);
+  expect(screen.getByRole("button", { name: "com_ui_go_back" })).toBeVisible();
+
+  mockHostChatHeader = true;
+  view.rerender(<AppRoot />);
+  expect(screen.queryByRole("button", { name: "com_ui_go_back" })).toBeNull();
+  expect(screen.getByText("Conversation content")).toBeVisible();
 });

@@ -37,6 +37,11 @@ class SpaceSubscriptionStatusEnum(StrEnum):
     NOT_SUBSCRIBED = "not_subscribed"
 
 
+class KnowledgeSpaceExitStatus(BaseModel):
+    can_exit: bool
+    reason: Literal["creator", "organization_grant", "no_personal_grant"] | None = None
+
+
 class KnowledgeSpaceListItemResp(KnowledgeBase):
     """Lightweight knowledge-space list item without detail-only counters or metadata."""
 

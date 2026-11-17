@@ -1,5 +1,6 @@
 import request from '@/controllers/request'
 import { parseDshLaunchBase } from '@/utils/dshLaunch'
+import { notifyDshBrowserConfigChanged } from '@bisheng/api-client'
 
 export type DshManagementSettings = { enabled: boolean; download_url: string | null; launch_url: string }
 export type DshBrowserConfig = DshManagementSettings & { management_enabled: boolean }
@@ -29,6 +30,6 @@ export async function getDshBrowserConfig(signal?: AbortSignal): Promise<DshBrow
 
 export async function saveDshManagementSettings(value: DshManagementSettings): Promise<DshManagementSettings> {
     const result = parseDshManagementSettings(await request.put('/api/v1/dsh/admin/settings', value))
-    window.dispatchEvent(new Event('dsh-settings-changed'))
+    notifyDshBrowserConfigChanged()
     return result
 }

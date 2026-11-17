@@ -16,6 +16,7 @@ from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeS
 from bisheng.permission.application import business_authorization
 from bisheng.permission.application.control_state import PermissionResourceSnapshot
 from bisheng.permission.domain.services.permission_action_service import PermissionActor
+from bisheng.user.domain.models.user import UserDao
 from test.knowledge_unification import test_space_abnormal_listing_repository as fixtures
 
 file, space, store = fixtures.file, fixtures.space, fixtures.store
@@ -27,6 +28,7 @@ def listing(store, monkeypatch):
     from bisheng.knowledge.domain.services.knowledge_space_service import DepartmentKnowledgeSpaceDao
 
     monkeypatch.setattr(DepartmentKnowledgeSpaceDao, "aget_by_space_ids", AsyncMock(return_value=[]))
+    monkeypatch.setattr(UserDao, "aget_user_by_ids", AsyncMock(return_value=[]))
     allowed, checked = set(), []
 
     async def snapshots(keys):

@@ -18,6 +18,7 @@ interface DocumentProcessingDefaultsFieldsProps {
   onChange: (value: DocumentProcessingDefaultsDraft) => void;
   disabled?: boolean;
   children?: ReactNode;
+  compact?: boolean;
 }
 
 /** Default drafts are controlled separately from the legacy upload state. */
@@ -26,6 +27,7 @@ export function DocumentProcessingDefaultsFields({
   onChange,
   disabled = false,
   children,
+  compact = false,
 }: DocumentProcessingDefaultsFieldsProps) {
   const { t } = useTranslation("knowledge");
   const id = useId();
@@ -74,7 +76,7 @@ export function DocumentProcessingDefaultsFields({
           },
         ];
   return (
-    <fieldset disabled={disabled} className="space-y-6">
+    <fieldset disabled={disabled} className={cn("space-y-6", compact && "min-w-0")}>
       <div className="space-y-4">
         <h3 className="text-base font-medium">{t("docAnalysisStrategy")}</h3>
         <div className="space-y-4 rounded-lg border border-border-base p-4">
@@ -101,7 +103,10 @@ export function DocumentProcessingDefaultsFields({
         <div
           role="radiogroup"
           aria-label={t("docSplitStrategy")}
-          className="grid gap-4 lg:grid-cols-3"
+          className={cn(
+            "grid gap-4",
+            compact ? "grid-cols-[repeat(auto-fit,minmax(min(100%,10rem),1fr))]" : "lg:grid-cols-3",
+          )}
         >
           {modes.map((mode) => (
             <button
@@ -113,6 +118,7 @@ export function DocumentProcessingDefaultsFields({
               onClick={() => onChange({ ...value, split_mode: mode })}
               className={cn(
                 "flex min-h-[100px] flex-col rounded-lg border p-4 text-left disabled:cursor-not-allowed disabled:opacity-50",
+                compact && "min-w-0 break-words",
                 value.split_mode === mode
                   ? "border-primary bg-primary/5"
                   : "border-border-base hover:bg-fill-1",
@@ -121,9 +127,9 @@ export function DocumentProcessingDefaultsFields({
               <span className="mb-1 flex w-full items-center justify-between text-sm font-medium">
                 {t(`${mode}Split`)}
                 {value.split_mode === mode ? (
-                  <Outlined.CheckCircle className="size-5 text-primary" />
+                  <Outlined.CheckCircle className={cn("size-5 text-primary", compact && "shrink-0")} />
                 ) : (
-                  <Outlined.Round className="size-5 text-text-4" />
+                  <Outlined.Round className={cn("size-5 text-text-4", compact && "shrink-0")} />
                 )}
               </span>
               <span className="text-sm text-text-3">
@@ -136,17 +142,17 @@ export function DocumentProcessingDefaultsFields({
           <div className="space-y-6 rounded-lg border border-border-base p-5">
             <div className="flex flex-wrap gap-x-8 gap-y-4">
               {fields.map(({ key, label, min, max, unit }) => (
-                <div key={key} className="flex items-center gap-3">
+                <div key={key} className={cn("flex items-center gap-3", compact && "min-w-0 max-w-full flex-wrap")}>
                   <Label
                     htmlFor={`${id}-${key}`}
-                    className="whitespace-nowrap text-sm text-text-2"
+                    className={cn("text-sm text-text-2", !compact && "whitespace-nowrap")}
                   >
                     {t(label)}
                   </Label>
                   <InputNumber
                     id={`${id}-${key}`}
                     aria-label={t(label)}
-                    className="w-48"
+                    className={cn("w-48", compact && "min-w-0 max-w-full")}
                     suffix={t(unit)}
                     value={value[key]}
                     min={min}

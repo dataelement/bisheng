@@ -193,7 +193,7 @@ const WebSearchForm = ({ isApi = false, toolId, onSaved, onSavingChange }: WebSe
                 notification.open({ type: 'error', title: String(t('failed')), description: String(t('chatConfig.webSearch.proofRequired')) });
                 return;
             }
-            if (!operation?.server || !operation?.method || !operation?.path || !operation?.query_parameter?.name || !mapping?.title || !mapping?.url || !mapping?.snippet || (operation?.auth?.location !== 'none' && (!operation?.auth?.name || (secret.action !== 'replace' && !secretConfigured)))) {
+            if (!operation?.server || !operation?.method || !operation?.path || (operation?.version === 2 ? typeof operation.request !== "object" || operation.request === null : !operation?.query_parameter?.name || !mapping?.title || !mapping?.url || !mapping?.snippet) || (operation?.auth?.location !== 'none' && (!operation?.auth?.name || (secret.action !== 'replace' && !secretConfigured)))) {
                 notification.open({ type: 'error', title: String(t('failed')), description: String(t('chatConfig.webSearch.requiredFields')) });
                 return;
             }
@@ -420,17 +420,17 @@ const WebSearchForm = ({ isApi = false, toolId, onSaved, onSavingChange }: WebSe
 
     return (
         <>
-            <form onSubmit={handleSubmit} className="flex max-h-[75vh] flex-col gap-4 overflow-y-auto">
+            <form onSubmit={handleSubmit} className="flex min-h-0 max-h-[75vh] flex-col gap-4">
                 {/* Hide the close button for programmatic closing of the pop-up window after successful submission. */}
                 <DialogClose asChild>
                     <button ref={closeRef} className="hidden" />
                 </DialogClose>
+                <div className="min-h-0 overflow-y-auto space-y-4 pr-1">
                 <SelectField
                     label={t('chatConfig.webSearch.engine')}
                     value={selectedTool}
                     onChange={handleToolChange}
                     options={[
-                        { value: 'custom', label: t('chatConfig.webSearch.custom') },
                         { value: 'bing', label: t('chatConfig.webSearch.bing') },
                         { value: 'bocha', label: t('chatConfig.webSearch.bocha') },
                         { value: 'jina', label: t('chatConfig.webSearch.jina') },
@@ -439,6 +439,7 @@ const WebSearchForm = ({ isApi = false, toolId, onSaved, onSavingChange }: WebSe
                         { value: 'searXNG', label: t('chatConfig.webSearch.searXNG') },
                         { value: 'cloudsway', label: t('chatConfig.webSearch.cloudsway') },
                         { value: 'deepseek', label: t('chatConfig.webSearch.deepseek') },
+                        { value: 'custom', label: t('chatConfig.webSearch.custom') },
                     ]}
                     id="search-tool-selector"
                     name="search_tool"
@@ -449,7 +450,8 @@ const WebSearchForm = ({ isApi = false, toolId, onSaved, onSavingChange }: WebSe
                     {renderParams()}
                 </div>
 
-                <DialogFooter>
+                </div>
+                <DialogFooter className="shrink-0">
                     <DialogClose asChild>
                         <Button variant="outlined" type="button" color="default">
                             {t('build.cancel')}

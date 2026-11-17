@@ -159,6 +159,14 @@ async function openHistory() {
 let actions: string[];
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.post.mockImplementation(async () => ({
+    check_complete: true,
+    can_execute: actions.includes("download"),
+    valid_items: actions.includes("download") ? [{ id: 11, type: "file" }] : [],
+    invalid_items: [],
+    requires_skip_confirmation: false,
+    impact: {},
+  }));
   actions = ["visible"];
   mocks.children.mockResolvedValue(page([row()]));
   mocks.history.mockResolvedValue(history());
@@ -224,7 +232,10 @@ it("reads history from an actual file row with only child visible, without root/
     "/api/v1/knowledge/space/7/children",
     "/api/v1/knowledge/space/file/11/versions",
   ]);
-  expect(mocks.post).not.toHaveBeenCalled();
+  expect(mocks.post).toHaveBeenCalledWith(
+    "/api/v1/knowledge/space/7/files/batch/download/inspect",
+    { items: [{ id: 11, type: "file" }] },
+  );
   expect(mocks.put).not.toHaveBeenCalled();
   expect(mocks.legacy).not.toHaveBeenCalled();
   expect(
@@ -240,8 +251,8 @@ it("preserves rename/download actions without offering history when file.visible
     await within(opened).findByRole("menuitem", { name: "rename" }),
   ).toBeVisible();
   expect(
-    within(opened).getByRole("menuitem", { name: "downloadOriginal" }),
-  ).toBeVisible();
+    screen.getByRole("button", { name: "downloadOriginal", hidden: true }),
+  ).toBeInTheDocument();
   expect(
     within(opened).queryByRole("menuitem", { name: "f118.version_history" }),
   ).not.toBeInTheDocument();

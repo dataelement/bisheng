@@ -24,7 +24,7 @@ jest.mock('sse.js', () => ({
     },
 }));
 jest.mock('~/api/chatApi', () => ({ getSSEUrl: () => '/chat' }));
-jest.mock('~/api/request', () => ({ translateApiErrorMessage: () => '' }));
+jest.mock('~/api/request', () => ({ translateApiErrorMessage: () => '', prepareBrowserHeaders: jest.fn().mockResolvedValue({}) }));
 jest.mock('~/layouts/WorkbenchSidebar/projectChatCreation', () => ({
     captureProjectChatDraft: () => null,
     bindProjectChatCreation: () => ({}),

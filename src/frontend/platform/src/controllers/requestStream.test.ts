@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const toast = vi.hoisted(() => vi.fn());
 vi.mock("@bisheng/ui", () => ({ notification: { open: toast } }));
 vi.mock("i18next", () => ({ default: { t: (key: string) => key, exists: () => false } }));
-beforeEach(() => {
+beforeEach(async () => {
   vi.resetModules();
   const storage = () => {
     const values = new Map<string, string>();
@@ -17,6 +17,8 @@ beforeEach(() => {
   vi.stubGlobal("localStorage", storage());
   vi.stubGlobal("sessionStorage", storage());
   toast.mockClear();
+  const { acceptManagementScope } = await import("./managementScope");
+  acceptManagementScope(60);
 });
 afterEach(() => vi.unstubAllGlobals());
 

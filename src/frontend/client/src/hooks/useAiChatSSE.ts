@@ -163,6 +163,7 @@ export function openChatStream(
 
     const sseUrl = submission.sseUrl || getSSEUrl();
     const sse = new SSE(sseUrl, {
+        start: false,
         payload: JSON.stringify({ ...payload, ...projectIntent }),
         headers: {
             "Content-Type": "application/json",
@@ -511,7 +512,7 @@ export function openChatStream(
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
         handleOffline();
     } else {
-        void prepareBrowserHeaders('POST', sseUrl).then(headers => {
+        void prepareBrowserHeaders('POST', sseUrl, sse.headers).then(headers => {
             if (endCalled || expectedClose) return;
             sse.headers = {...sse.headers, ...headers};
             sse.stream();

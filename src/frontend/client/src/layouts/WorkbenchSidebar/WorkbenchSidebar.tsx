@@ -4,6 +4,7 @@ import { Outlined } from 'bisheng-icons';
 import type { MouseEvent, MutableRefObject, ReactElement, ReactNode } from 'react';
 import { cloneElement, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { SidebarCredits } from '~/components/dsh/SidebarCredits';
 import { useStartNewChat } from '~/components/Nav/NewChat';
 import { useAuthContext, useLocalize } from '~/hooks';
 import { useConversationsInfiniteQuery, useGetBsConfig } from '~/hooks/queries/data-provider';
@@ -197,6 +198,7 @@ export function WorkbenchSidebar({ hidden = false, mobile = false, open = false,
       )}
 
       <div className="h-px w-full shrink-0 bg-border-base" />
+      <SidebarCredits onNavigate={handleNavigate} />
       {/* Two controls, one row chrome: both 32px tall with the nav rows' 8px radius and
           fill-1 hover — the account button stretches, the admin link is the 32px square. */}
       <div className="flex w-full shrink-0 items-center justify-between gap-1">

@@ -58,6 +58,7 @@ from bisheng.knowledge.api.router import (
     qa_router,
 )
 from bisheng.linsight.api.router import router as linsight_router
+from bisheng.llm.api.pricing import router as llm_pricing_router
 from bisheng.llm.api.router import router as llm_router
 from bisheng.memory.api.router import router as memory_router
 from bisheng.message.api.router import router as message_router
@@ -145,6 +146,7 @@ router.include_router(audit_router, request_scope=S.TENANT)
 router.include_router(evaluation_router, request_scope=S.TENANT)
 router.include_router(tag_router, request_scope=S.TENANT)
 router.include_router(llm_router, request_scope=S.TENANT)
+router.include_router(llm_pricing_router, request_scope=S.TENANT)
 router.include_router(workflow_router, request_scope=S.TENANT)
 router.include_router(mark_router, request_scope=S.TENANT)
 router.include_router(workstation_router, request_scope=S.TENANT)

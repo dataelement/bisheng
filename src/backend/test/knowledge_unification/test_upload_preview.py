@@ -160,14 +160,61 @@ def test_rule_digest_is_order_independent():
     assert digest({"a": 0, "b": 1}) == digest({"b": 1, "a": 0})
 
 
-def test_frozen_cache_preserves_numeric_chunk_order_and_rejects_incomplete_data(monkeypatch):
+async def test_preview_keeps_domain_error_code_instead_of_generic(service, monkeypatch):
+    from bisheng.common.errcode.knowledge import KnowledgeMediaNoRecognizableAudioError
+    from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+
+    _, rule, pid = await service.start(7, "a" * 32, {})
+    monkeypatch.setattr(
+        KnowledgeService, "parse_staged_file", AsyncMock(side_effect=KnowledgeMediaNoRecognizableAudioError())
+    )
+    await service.parse(await service.read(7, "a" * 32), rule, pid)
+    preview = service.repository.value["preview"]
+    assert preview["status"] == "error"
+    assert preview["data"]["code"] == 10956
+
+
+async def test_preview_hides_unknown_exception_behind_generic_code(service, monkeypatch):
+    from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+
+    _, rule, pid = await service.start(7, "a" * 32, {})
+    monkeypatch.setattr(
+        KnowledgeService, "parse_staged_file", AsyncMock(side_effect=RuntimeError("/private/tmp/secret.html"))
+    )
+    await service.parse(await service.read(7, "a" * 32), rule, pid)
+    preview = service.repository.value["preview"]
+    assert preview["status"] == "error"
+    assert preview["data"] == {"code": 10952}
+
+
+@pytest.mark.parametrize("key_type", [str, lambda value: str(value).encode("ascii")])
+def test_frozen_cache_preserves_numeric_chunk_order_and_rejects_incomplete_data(monkeypatch, key_type):
     from bisheng.knowledge.rag.pipeline.transformer.preview_cache import KnowledgeUtils
 
-    values = {str(i): {"text": str(i), "metadata": {"chunk_index": i}} for i in [10, 2, 0]}
+    values = {key_type(i): {"text": str(i), "metadata": {"chunk_index": i}} for i in [10, 2, 0]}
     monkeypatch.setattr(KnowledgeUtils, "get_preview_cache", lambda key: values, raising=False)
     monkeypatch.setattr(KnowledgeUtils, "aggregate_chunk_metadata", lambda text, meta: text, raising=False)
     transformer = PreviewCacheTransformer("space_upload_frozen:test", {})
     assert [doc.page_content for doc in transformer.transform_documents([])] == ["0", "2", "10"]
-    values["2"] = {"text": "incomplete"}
+    values[key_type(2)] = {"text": "incomplete"}
     with pytest.raises(KnowledgePreviewError):
         transformer.transform_documents([])
+
+
+@pytest.mark.parametrize("key,index", [(b"bad", 0), (b"\xff", 0), (b"2", 1), ("٢", 2)])
+def test_frozen_cache_rejects_invalid_keys_and_indices(monkeypatch, key, index):
+    from bisheng.knowledge.rag.pipeline.transformer.preview_cache import KnowledgeUtils
+
+    values = {key: {"text": "content", "metadata": {"chunk_index": index}}}
+    monkeypatch.setattr(KnowledgeUtils, "get_preview_cache", lambda _: values, raising=False)
+    with pytest.raises(KnowledgePreviewError):
+        PreviewCacheTransformer("space_upload_frozen:test", {}).transform_documents([])
+
+
+def test_frozen_cache_rejects_duplicate_normalized_indices(monkeypatch):
+    from bisheng.knowledge.rag.pipeline.transformer.preview_cache import KnowledgeUtils
+
+    value = {"text": "content", "metadata": {"chunk_index": 0}}
+    monkeypatch.setattr(KnowledgeUtils, "get_preview_cache", lambda _: {b"0": value, "0": value}, raising=False)
+    with pytest.raises(KnowledgePreviewError):
+        PreviewCacheTransformer("space_upload_frozen:test", {}).transform_documents([])

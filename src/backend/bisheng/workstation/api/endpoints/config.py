@@ -38,6 +38,13 @@ async def get_config(
     # follows whichever loader_provider is actually selected and configured.
     knowledge_conf = await bisheng_settings.async_get_knowledge()
     ret = ret.model_dump(exclude_unset=True) if ret else {}
+    if bisheng_settings.dsh.enabled and ret.get("models"):
+        from bisheng.dsh.domain.services.pricing import workbench_pricing_hints
+
+        # F016: response-only field; WSModel is also the stored config, so it never carries it.
+        hints = await workbench_pricing_hints([str(item.get("id")) for item in ret["models"]])
+        for item in ret["models"]:
+            item["pricing_hint"] = hints.get(str(item.get("id")))
     from bisheng.dsh.domain.services.capability_catalog import CapabilityCatalogService
 
     ret["tools"] = await CapabilityCatalogService(login_user).picker_tools(configured_tools=ret.get("tools") or [])

@@ -31,6 +31,8 @@ vi.mock("@/controllers/API/dshModelAudit", () => ({
   }),
 }));
 vi.mock("@/controllers/API/tenant", () => ({ getTenantsApi: api.tenants }));
+const management = vi.hoisted(() => ({ scope: { scope_tenant_id: 1 }, loading: false }));
+vi.mock("@/hooks/useAdminScope", () => ({ useAdminScope: () => management }));
 import { ModelAuditPanel, ModelAuditRequests } from "./ModelAuditPanel";
 function applyFilters() {
   fireEvent.click(
@@ -52,6 +54,7 @@ function model() {
 }
 beforeEach(() => {
   vi.resetAllMocks();
+  management.scope.scope_tenant_id = 1;
   api.page.mockResolvedValue({
     items: [],
     next_cursor: null,
@@ -302,18 +305,14 @@ describe("unified audit filters", () => {
     const value = {
       user: { tenant_id: 1, role: "admin", is_global_super: true },
     } as unknown as ContextType<typeof userContext>;
-    render(
-      <userContext.Provider value={value}>
-        <ModelAuditPanel />
-      </userContext.Provider>,
-    );
-    await screen.findByText("First tenant (first)");
+    const content = () => <userContext.Provider value={value}><ModelAuditPanel /></userContext.Provider>;
+    const view = render(content());
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "dsh.modelAuditView.selectUser" }));
     await user.click(await screen.findByRole("option", { name: "Alice" }));
     const signal = api.users.mock.calls[0][1] as AbortSignal;
-    await user.click(screen.getByRole("combobox", { name: "dsh.modelAuditView.selectTenant" }));
-    await user.click(await screen.findByRole("option", { name: "Second tenant (second)" }));
+    management.scope.scope_tenant_id = 2;
+    view.rerender(content());
     expect(signal.aborted).toBe(true);
     await waitFor(() => expect(
       screen.getByRole("button", { name: "dsh.modelAuditView.selectUser" }),

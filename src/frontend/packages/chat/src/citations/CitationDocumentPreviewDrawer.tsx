@@ -1,5 +1,6 @@
 import { Outlined } from 'bisheng-icons';
 import { useEffect,useRef } from 'react';
+import { createPortal } from 'react-dom';
 import cn from '@bisheng/ui/cn';
 import { createCitationUtilities } from './preview';
 import { useCitationPreview } from './useCitationPreview';
@@ -75,9 +76,10 @@ export function CitationDocumentPreviewDrawer({
     <aside ref={drawerRef}
       className={cn(
         'fixed flex flex-col bg-white',
-        isFullBleedMobile && 'z-[120] inset-0 overflow-hidden overscroll-contain touch-pan-y',
+        'z-[140]',
+        isFullBleedMobile && 'inset-0 overflow-hidden overscroll-contain touch-pan-y',
         !isFullBleedMobile &&
-        'z-[121] inset-y-0 right-0 w-[min(520px,calc(100vw-24px))] border-l border-border-base shadow-[0_8px_28px_rgba(0,0,0,0.16)]',
+        'inset-y-0 right-0 w-[min(520px,calc(100vw-24px))] border-l border-border-base shadow-[0_8px_28px_rgba(0,0,0,0.16)]',
       )}
       aria-label={localize('com_citation.document_preview')}
       onClick={(event) => event.stopPropagation()}
@@ -141,9 +143,6 @@ export function CitationDocumentPreviewDrawer({
     </aside>
   );
 
-  if (isFullBleedMobile) {
-    return drawer;
-  }
-
-  return drawer;
+  // Escape parent stacking contexts so the preview sits above the reference panel.
+  return createPortal(drawer, document.body);
 }

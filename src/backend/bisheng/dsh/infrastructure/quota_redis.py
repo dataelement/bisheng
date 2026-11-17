@@ -389,6 +389,9 @@ class QuotaRedis:
         # Preserve hashes of historical 1x events while fencing nondefault rates.
         if event.credit_rate != 100:
             data["credit_rate"] = event.credit_rate
+        # F016: fence the frozen prices; absent on historical events, so their hashes are unchanged.
+        if event.pricing is not None:
+            data["pricing"] = event.pricing.model_dump(mode="json")
         started = event.started_at
         if started.tzinfo is None:
             started = started.replace(tzinfo=UTC)
@@ -456,7 +459,11 @@ class QuotaRedis:
         return {
             "used": used,
             "limit": limit,
-            "remaining": sum(max(allowed - models.get(model, 0), 0) for model, allowed in model_limits.items()),
+            "remaining": (
+                max(limit - used, 0)
+                if result[9] == "shared"
+                else sum(max(allowed - models.get(model, 0), 0) for model, allowed in model_limits.items())
+            ),
             "model_limits": model_limits,
             "source": "live",
             "as_of": datetime.fromtimestamp(int(result[4]) + int(result[5]) / 1000000, UTC),

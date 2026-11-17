@@ -413,10 +413,10 @@ function useKnowledgePage({
 
   // Leave the current joined space from the space page, then return to the list.
   // Mirrors useSpaceActions.handleLeaveSpace, including the organization-grant
-  // refusal (18071) that must not be reported as a generic failure.
+  // refusal (18080) that must not be reported as a generic failure.
   // Unsubscribe refusal for a space granted through an organization: the user
   // cannot leave on their own, so it is not reported as a generic failure.
-  const ORGANIZATION_GRANT_EXIT_DENIED_CODE = 18071;
+  const ORGANIZATION_GRANT_EXIT_DENIED_CODE = 18080;
 
   const handleLeaveActiveSpace = async (sp: KnowledgeSpace | null) => {
     if (!sp) return;
@@ -448,6 +448,11 @@ function useKnowledgePage({
           : extractApiErrorMessage(e) ||
             localize("com_knowledge.exit_space_failed");
       showToast({ message, severity: NotificationSeverity.WARNING });
+    } finally {
+      void queryClient.invalidateQueries({
+        predicate: (query) => query.queryKey[0] === "space-exit-status" &&
+          query.queryKey[query.queryKey.length - 1] === sp.id,
+      });
     }
   };
 
