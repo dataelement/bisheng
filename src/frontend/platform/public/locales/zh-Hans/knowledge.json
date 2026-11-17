@@ -476,7 +476,9 @@
         "separator_pattern": "分隔规则{{index}}",
         "separator_position": "规则{{index}}的切分位置",
         "space_description": "空间描述",
+        "space_description_placeholder": "请输入知识空间简介",
         "space_name": "空间名称",
+        "space_name_placeholder": "请输入知识空间名称",
         "spaces": "知识空间",
         "tables": "表格",
         "create_folder": "新建文件夹",
@@ -739,6 +741,7 @@
         "select_all": "全选"
     },
     "detail": {
+        "space_info": "空间信息",
         "save_failed": "修改尚未保存，请重试",
         "file_title": "文件 {{id}}",
         "file_editor": "文件分块详情",

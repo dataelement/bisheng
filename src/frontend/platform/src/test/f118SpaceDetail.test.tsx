@@ -7,6 +7,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   MemoryRouter,
@@ -222,7 +223,14 @@ it.each([false, true])(
     user = { ...user, is_global_super: superAdmin };
     const view = mount();
     expect(await screen.findByText("Server 7")).toBeInTheDocument();
-    expect(screen.getByText("ID: 7 · Description 7")).toBeInTheDocument();
+    expect(screen.queryByText("Description 7")).not.toBeInTheDocument();
+    const interaction = userEvent.setup();
+    await interaction.hover(screen.getByRole("button", { name: "detail.space_info" }));
+    const info = await screen.findByRole("tooltip");
+    expect(info).toHaveTextContent("ID: 7");
+    expect(info).toHaveTextContent("Description 7");
+    await interaction.keyboard("{Escape}");
+    await waitFor(() => expect(info).not.toBeInTheDocument());
     expect(
       await screen.findByRole("button", { name: "report.pdf" }),
     ).toBeInTheDocument();

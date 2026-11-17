@@ -18,7 +18,7 @@ import {
   type KnowledgeQueryScope,
 } from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
-import { KnowledgeLibraryDialog } from "@/pages/KnowledgePage/components/KnowledgeLibraryDialog";
+import { CreateSpaceForm, KnowledgeLibraryDialog } from "@/pages/KnowledgePage/components/KnowledgeLibraryDialog";
 
 const mocks = vi.hoisted(() => ({
   models: vi.fn(),
@@ -90,9 +90,6 @@ vi.mock("@/pages/ModelPage/manage/tabs/WorkbenchModel", () => ({
         ))}
     </select>
   ),
-}));
-vi.mock("@/pages/KnowledgePage/components/FileUploadSplitStrategy", () => ({
-  default: () => null,
 }));
 vi.mock("@/pages/KnowledgePage/components/KnowledgeTooltip", () => ({
   KnowledgeHint: () => null,
@@ -221,6 +218,52 @@ const fillName = () =>
   fireEvent.change(screen.getByRole("textbox", { name: "f118.space_name" }), {
     target: { value: "Created" },
   });
+
+it("applies the client's weighted text limits on the creation page", async () => {
+  const f = setup();
+  render(
+    <QueryClientProvider client={f.client}>
+      <CreateSpaceForm
+        presentation="page" scope={scope} api={f.api}
+        onCancel={f.changed} onLoadEnd={f.loaded}
+      />
+    </QueryClientProvider>,
+  );
+  await ready();
+  const name = screen.getByRole("textbox", { name: "f118.space_name" });
+  const description = screen.getByRole("textbox", { name: "f118.space_description" });
+  const create = screen.getByRole("button", { name: "finishCreate" });
+  const ideograph = String.fromCodePoint(0x4e00);
+  const mixedName = ideograph.repeat(9) + "ab";
+  const asciiDescription = "a".repeat(400);
+
+  expect(screen.getByText("0/10")).toBeVisible();
+  fireEvent.change(name, { target: { value: "a" } });
+  expect(screen.getByText("1/10")).toBeVisible();
+  fireEvent.change(name, { target: { value: "a".repeat(21) } });
+  expect(name).toHaveValue("a".repeat(20));
+  fireEvent.compositionStart(name);
+  fireEvent.change(name, { target: { value: mixedName + ideograph } });
+  expect(name).toHaveValue(mixedName + ideograph);
+  expect(create).toBeDisabled();
+  fireEvent.compositionEnd(name, { data: ideograph });
+  expect(name).toHaveValue(mixedName);
+  expect(screen.getByText("10/10")).toBeVisible();
+
+  fireEvent.compositionStart(description);
+  fireEvent.change(description, { target: { value: asciiDescription + ideograph } });
+  expect(description).toHaveValue(asciiDescription + ideograph);
+  expect(create).toBeDisabled();
+  fireEvent.compositionEnd(description, { data: ideograph });
+  expect(description).toHaveValue(asciiDescription);
+
+  fireEvent.click(create);
+  await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith("/filelib/8", { replace: true }));
+  expect(f.api.createSpace).toHaveBeenCalledWith(
+    expect.objectContaining({ name: mixedName, description: asciiDescription }),
+    101,
+  );
+});
 
 it("presents a known local scope error as readable copy instead of its internal code", async () => {
   const f = setup(),

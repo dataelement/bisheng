@@ -1,5 +1,5 @@
 import {
-  Button, Dropdown, DropdownItem, SearchInput,
+  Button, Dropdown, DropdownItem, SearchInput, Tooltip,
   TreeNavigation, TreeNavigationGroup, TreeNavigationGroupAction, TreeNavigationList, TreeNavigationMenu, TreeNavigationNode, TreeNavigationStatus,
 } from "@bisheng/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -22,6 +22,7 @@ export interface KnowledgeSpaceSidebarProps {
   spaceId?: number;
   parentId?: number | null;
   canCopy: boolean;
+  onCreate?: () => void;
   onSelect: (spaceId: number, parentId: number | null) => void;
   onDeleted?: (id: number) => void;
 }
@@ -108,7 +109,7 @@ interface SectionProps extends KnowledgeSpaceSidebarProps, SpaceMenuProps, Knowl
   path: readonly number[];
 }
 
-function SpaceSectionList({ section, path, keyword, catalog, departmentIds, createdIds, userId, ...props }: SectionProps) {
+function SpaceSectionList({ section, path, keyword, catalog, departmentIds, createdIds, userId, onCreate, ...props }: SectionProps) {
   const { t } = useTranslation("knowledge");
   const [collapsed, setCollapsed] = useState(false);
   const [sort, setSort] = useState<SpaceSort>("update_time");
@@ -154,6 +155,13 @@ function SpaceSectionList({ section, path, keyword, catalog, departmentIds, crea
       onToggle={() => setCollapsed((value) => !value)}
       actions={(
         <>
+          {section === "created" && onCreate && (
+            <Tooltip content={t("f118.create_space")}>
+              <TreeNavigationGroupAction aria-label={t("f118.create_space")} onClick={onCreate}>
+                <Outlined.Plus aria-hidden />
+              </TreeNavigationGroupAction>
+            </Tooltip>
+          )}
           <Dropdown align="end" menu={sorts.map((value) => (
             <DropdownItem key={value} checked={sort === value} onSelect={() => setSort(value)}>{t(`sidebar.sort_${value}`)}</DropdownItem>
           ))}>

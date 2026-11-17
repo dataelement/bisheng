@@ -1,10 +1,11 @@
 import { Button } from "@bisheng/ui";
 import { useContext, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { userContext } from "@/contexts/userContext";
-import { type KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
+import type { KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
 import { SpaceDetail, parseKnowledgeId } from "./detail";
+import { canCreateKnowledgeSpace } from "./knowledgeSpaceCreation";
 import { KnowledgeSpaceSidebar } from "./sidebar/KnowledgeSpaceSidebar";
 import { useInitialSpace } from "./sidebar/useInitialSpace";
 
@@ -22,6 +23,7 @@ export function KnowledgeSpaceWorkspace({
 }: KnowledgeSpaceWorkspaceProps) {
   const { t } = useTranslation("knowledge");
   const { user } = useContext(userContext);
+  const location = useLocation();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const spaceId = parseKnowledgeId(routeId);
@@ -44,9 +46,12 @@ export function KnowledgeSpaceWorkspace({
     );
   }, [initial.space, active, routeId, params, navigate]);
   const canCreate =
-    user?.is_global_super === true ||
-    user?.is_child_admin === true ||
-    user?.web_menu?.includes("create_knowledge") === true;
+    scope.view === "ordinary" && canCreateKnowledgeSpace(user);
+  const handleCreate = () => {
+    navigate("/filelib/create", {
+      state: { from: location.pathname + location.search + location.hash },
+    });
+  };
   const handleSelect = (
     id: number,
     folderId: number | null,
@@ -66,7 +71,8 @@ export function KnowledgeSpaceWorkspace({
         scope={scope}
         spaceId={invalid ? undefined : (spaceId ?? undefined)}
         parentId={invalid ? null : parentId}
-        canCopy={scope.view === "ordinary" && canCreate}
+        canCopy={canCreate}
+        onCreate={canCreate ? handleCreate : undefined}
         onSelect={(id, folderId) => handleSelect(id, folderId, true)}
         onDeleted={(id) => {
           if (id === spaceId)

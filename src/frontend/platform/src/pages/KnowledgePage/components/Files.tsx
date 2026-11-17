@@ -443,7 +443,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
     <>
       {active.isInitialLoading && <p role="status" className={workspace ? "px-4 py-6 text-center text-body text-text-3" : undefined}>{t("f118.loading_directory")}</p>}
       {directoryEmpty && (workspace ? (
-        <StateView size="panel" title={t("f118.directory_empty")} image={<EmptyStateIllustration />} />
+        <StateView size="page" title={t("f118.directory_empty")} image={<EmptyStateIllustration />} />
       ) : <p>{t("f118.directory_empty")}</p>)}
       {!!active.error && (
         <Button
