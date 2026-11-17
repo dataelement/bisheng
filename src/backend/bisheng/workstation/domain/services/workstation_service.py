@@ -838,7 +838,8 @@ class WorkStationService(BaseService):
             ConfigKeyEnum.WORKSTATION,
             payload=json.dumps(workstation_payload.model_dump(mode="json"), ensure_ascii=True),
         )
-        return await cls.get_daily_chat_config()
+        config, *_ = await cls.get_daily_chat_config_with_meta()
+        return config
 
     @classmethod
     async def get_daily_chat_config_with_meta(cls) -> tuple[WorkstationConfig | None, bool, int, bool, bool]:
@@ -869,7 +870,9 @@ class WorkStationService(BaseService):
             ret.tools = cls.sync_tool_info(ret.tools)
         if inherited:
             ret = await cls._aproject_daily_config_for_current_tenant(ret, source_tenant_id)
-        ret = cls._apply_workbench_models(ret, await LLMService.get_workbench_llm())
+        # This management read does not consume execution-time model defaults.
+        # Legacy stored model choices are owned by system model settings now.
+        ret.models = None
         return ret, inherited, source_tenant_id, has_override, is_fallback
 
     @classmethod
