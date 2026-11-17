@@ -479,15 +479,24 @@ async def test_work_free_model_is_admitted_unmetered(service_setup):
     assert ledger.events[-1].billed_tokens == 0
 
 
-async def test_work_model_without_price_is_refused_before_admission(service_setup):
-    from bisheng.common.errcode.dsh import DshModelPricingMissingError
-
-    service, _llm, ledger, _policy, _state = service_setup
+async def test_work_model_without_price_is_billed_as_free(service_setup):
+    service, llm, ledger, _policy, _state = service_setup
     model, _ = await service.model_loader(42)
     model.config.pop("pricing")
-    with pytest.raises(DshModelPricingMissingError):
-        await service.complete(principal(), request())
-    assert ledger.events == []
+    modes = []
+    original = ledger.check_and_start
+
+    async def check_and_start(event, *, monthly_token_limit=None, mode=""):
+        modes.append(mode)
+        return await original(event, monthly_token_limit=monthly_token_limit)
+
+    ledger.check_and_start = check_and_start
+    llm.measured = lambda: {"input_tokens": 30, "output_tokens": 50, "total_tokens": 80}
+    await service.complete(principal(), request())
+    # Upgrade backfill not run: the call goes through like a free model, at 0 credits.
+    assert modes == ["unmetered"]
+    assert ledger.events[-1].pricing.free
+    assert ledger.events[-1].billed_tokens == 0
 
 
 async def test_work_snapshot_uses_tenant_credit_settings(service_setup):

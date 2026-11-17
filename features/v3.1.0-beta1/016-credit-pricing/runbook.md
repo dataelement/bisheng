@@ -44,7 +44,7 @@ docker compose run --rm --no-deps backend python scripts/backfill_model_pricing.
 docker compose run --rm --no-deps backend python scripts/backfill_model_pricing.py --apply
 ```
 
-只给 `model_type == "llm"` 且没有 `pricing` 的模型写入；可重复执行。清单中「默认 0」的收费云模型（如火山方舟接入点、中转站新模型名）需要管理员开服后在后台改价，否则一直免费。
+只给 `model_type == "llm"` 且没有 `pricing`、或 `pricing` 通不过价格格式校验（损坏）的模型写入，损坏的会在预检里显示原值；有效价格不动，可重复执行。清单中「默认 0」的收费云模型（如火山方舟接入点、中转站新模型名）需要管理员开服后在后台改价，否则一直免费。
 
 ## 5. 门禁
 
@@ -52,7 +52,7 @@ docker compose run --rm --no-deps backend python scripts/backfill_model_pricing.
 docker compose run --rm --no-deps backend python scripts/backfill_model_pricing.py --check
 ```
 
-返回码必须为 0 才继续。检查项：所有大语言模型都有 `pricing`；`dsh_credit_setting` 表与三个新列存在。非 0 时按输出的明细处理后重跑第 4、5 步。
+返回码为 0 再继续。（2026-11-17 起漏跑第 4 步不会让对话不可用：没有价格的模型按免费计、后台显示「价格缺失」；但这些模型在补价前不扣积分，所以仍应补价后再开服。）检查项：所有大语言模型都有 `pricing`；`dsh_credit_setting` 表与三个新列存在。非 0 时按输出的明细处理后重跑第 4、5 步。
 
 ## 6. 冒烟（入口只对管理员开放）
 

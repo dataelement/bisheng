@@ -3,6 +3,8 @@ import { KnowledgeSpaceContent } from "./index";
 import type { KnowledgeSpaceModel } from "./index";
 import type { KnowledgeSpaceContentProps } from "./knowledgeSpaceTypes";
 
+jest.mock("../hooks/useSpaceExitStatus", () => ({ useSpaceExitStatus: () => ({ canExit: false }) }));
+
 let mockNarrow = true;
 const mockNoop = () => undefined;
 const mockQueryClient = { invalidateQueries: jest.fn() };

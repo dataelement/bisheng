@@ -51,7 +51,7 @@ async def start(model, *, mode: str = ""):
     from bisheng.dsh.domain.repositories.identities import CurrentIdentityRecords
     from bisheng.dsh.domain.schemas.contracts import DshTokenUsage
     from bisheng.dsh.domain.schemas.usage import UsageEvent
-    from bisheng.dsh.domain.services.pricing import build_snapshot
+    from bisheng.dsh.domain.services.pricing import billing_snapshot
     from bisheng.dsh.infrastructure.quota_redis import QuotaRejected
     from bisheng.dsh.runtime import get_model_runtime, read_credit_setting, read_model_pricing, read_policy
 
@@ -69,8 +69,8 @@ async def start(model, *, mode: str = ""):
     if model_id not in policy.allowed_model_ids and not getattr(model, "admin_selected", False):
         raise DshModelNotAllowedError()
     # F016: read prices fresh (never from the cached model_info) and freeze them for this call.
-    # Missing prices raise DshModelPricingMissingError before anything is admitted.
-    pricing = build_snapshot(await read_model_pricing(model_id), await read_credit_setting())
+    # A model without a usable price is billed as free (never refused).
+    pricing = billing_snapshot(await read_model_pricing(model_id), await read_credit_setting(), model_id=model_id)
     loop = asyncio.get_running_loop()
     runtime = _runtimes.setdefault(loop, SimpleNamespace(settings=settings.dsh))
     service = await get_model_runtime(runtime)

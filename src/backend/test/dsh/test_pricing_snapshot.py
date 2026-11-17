@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from bisheng.common.errcode.dsh import DshModelPricingMissingError
 from bisheng.dsh.domain.schemas.contracts import DshTokenUsage
 from bisheng.dsh.domain.schemas.pricing import CreditSettingState, PricingSnapshot, price_usage
-from bisheng.dsh.domain.services.pricing import build_snapshot
+from bisheng.dsh.domain.services.pricing import billing_snapshot, build_snapshot
 
 DEEPSEEK = {
     "currency": "CNY",
@@ -125,9 +125,17 @@ def test_unknown_usage_has_no_price():
 
 
 @pytest.mark.parametrize("config", [None, {}, {**DEEPSEEK, "input": "-1"}, {**DEEPSEEK, "source": "GUESS"}, "9"])
-def test_missing_or_corrupt_pricing_fails_closed(config):
+def test_missing_or_corrupt_pricing_is_reported_and_billed_as_free(config):
     with pytest.raises(DshModelPricingMissingError):
         build_snapshot(config, CNY)
+    snapshot = billing_snapshot(config, CNY, model_id=7)
+    assert snapshot.free and snapshot.currency == CNY.currency
+    assert snapshot.credit_value_micro == CNY.credit_value_micro
+    assert price_usage(usage(50_000, 5_000, read=10_000), snapshot).billed == 0
+
+
+def test_billing_snapshot_keeps_real_prices():
+    assert billing_snapshot(DEEPSEEK, CNY, model_id=7) == build_snapshot(DEEPSEEK, CNY)
 
 
 def test_snapshot_contract_is_strict():
