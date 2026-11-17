@@ -7,7 +7,6 @@
 import { Colored, Outlined } from 'bisheng-icons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NotificationSeverity } from '~/common';
-import Markdown from '~/components/Chat/Messages/Content/Markdown';
 import FilePreview from '~/pages/knowledge/FilePreview';
 import { Button } from '~/components/ui';
 import { LoadingIcon } from '~/components/ui/icon/Loading';
@@ -25,7 +24,7 @@ import {
     resolveDeliverableLink,
     stripEmptyHtmlPlaceholders,
 } from './artifactUtils';
-import { MarkdownOutline } from './MarkdownOutline';
+import { ArtifactMarkdownPreview } from './ArtifactMarkdownPreview';
 
 // Placeholder icons (bisheng-icons) for the "can't preview" fallback, by extension.
 // Prefer the Colored variant; types without one (pdf / image / unknown) fall back
@@ -162,9 +161,6 @@ export function PreviewBody({ file, versionId, fileList, onArtifactPreview }: Pr
     const { showToast } = useToastContext();
     const { loading, error, text, imageUrl, resolvedUrl } = usePreviewSource(file, versionId);
     const kind = getArtifactPreviewKind(file);
-    // The rendered markdown container — MarkdownOutline reads its headings back
-    // out of the DOM (rehype-slug has already stamped the anchor ids).
-    const markdownRef = useRef<HTMLDivElement>(null);
 
     // Resolve a relative image ref inside a markdown deliverable to a real presigned
     // URL by matching it against the session file list (see matchArtifactByRelPath).
@@ -277,23 +273,14 @@ export function PreviewBody({ file, versionId, fileList, onArtifactPreview }: Pr
         );
     }
     if (kind === 'markdown') {
-        // `group/mk` wakes the outline ticks while the pointer is over the
-        // document; the outline pins itself to the scrollport via sticky, so the
-        // panels above don't need to know it exists.
         return (
-            <div className="group/mk relative">
-                <MarkdownOutline contentRef={markdownRef} contentKey={markdownText} />
-                <div ref={markdownRef} className="bs-mkdown p-8">
-                    <Markdown
-                        content={markdownText}
-                        isLatestMessage={true}
-                        webContent={false}
-                        resolveImageSrc={resolveImageSrc}
-                        resolveArtifactLink={onArtifactPreview ? resolveArtifactLink : undefined}
-                        onArtifactPreview={onArtifactPreview ? handleArtifactPreview : undefined}
-                    />
-                </div>
-            </div>
+            <ArtifactMarkdownPreview
+                key={previewCacheKey(file, versionId)}
+                content={markdownText}
+                resolveImageSrc={resolveImageSrc}
+                resolveArtifactLink={onArtifactPreview ? resolveArtifactLink : undefined}
+                onArtifactPreview={onArtifactPreview ? handleArtifactPreview : undefined}
+            />
         );
     }
     // plain text

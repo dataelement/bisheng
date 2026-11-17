@@ -15,6 +15,7 @@ import {
     DropdownMenuTrigger,
 } from '~/components/ui';
 import { useLocalize } from '~/hooks';
+import { useScaledMenuBounds } from '~/hooks/useScaledMenuBounds';
 import type { TaskModeSkill } from '~/store/linsight';
 import { cn } from '~/utils';
 import { SkillSelector } from './SkillSelector';
@@ -47,6 +48,7 @@ export function PlusMenu({
     showAddSkill = true,
 }: PlusMenuProps) {
     const localize = useLocalize();
+    const submenuBounds = useScaledMenuBounds();
 
     return (
         <DropdownMenu>
@@ -141,11 +143,12 @@ export function PlusMenu({
                         </DropdownMenuSubTrigger>
                         {/* Layout mirrors the daily-mode knowledge panel shell (ChatKnowledge `variant === 'knowledge'`).
                             `align="center"` centers the panel vertically on the trigger row.
-                            Match the skill tooltip's zoom-compensated viewport cap. */}
+                            Bounds also compensate WeCom's pre-zoom rect coordinates. */}
                         <DropdownMenuSubContent
                             align="center"
-                            collisionPadding={8}
-                            className="ml-2 flex max-h-[min(440px,calc(var(--bs-dvh,100dvh)-48px))] w-[280px] flex-col gap-0 overflow-hidden rounded-2xl border-0 bg-white px-3 pb-0 pt-3 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
+                            collisionPadding={submenuBounds.collisionPadding}
+                            style={{ maxHeight: submenuBounds.maxHeight }}
+                            className="ml-2 flex w-[280px] flex-col gap-0 overflow-hidden rounded-2xl border-0 bg-white px-3 pb-0 pt-3 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
                         >
                             <SkillSelector selected={selectedSkills} onChange={onSkillsChange} />
                         </DropdownMenuSubContent>

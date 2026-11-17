@@ -179,13 +179,14 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
 
     // Filtering shrinks the list, and the panel is centred on its trigger, so a
     // shrinking panel visibly jumps. Sample the unfiltered height and hold it as
-    // a floor while a keyword is active.
+    // a preferred size while a keyword is active. It must still shrink when
+    // the window gets shorter; a min-height would push rows outside the panel.
     const listAreaRef = useRef<HTMLDivElement | null>(null);
     const [unfilteredHeight, setUnfilteredHeight] = useState<number>();
     useLayoutEffect(() => {
         if (keyword) return; // only the unfiltered list is a valid sample
         const el = listAreaRef.current;
-        if (el) setUnfilteredHeight(el.getBoundingClientRect().height);
+        if (el) setUnfilteredHeight(el.offsetHeight);
     }, [keyword, filtered.length]);
 
     const handleToggle = (skill: TaskModeSkill) => {
@@ -224,7 +225,7 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
             <div
                 ref={listAreaRef}
                 className="flex min-h-0 flex-1 flex-col"
-                style={keyword ? { minHeight: unfilteredHeight } : undefined}
+                style={keyword ? { flexBasis: unfilteredHeight } : undefined}
             >
             {isFetching && skills.length === 0 ? (
                 <div className="flex justify-center py-4">

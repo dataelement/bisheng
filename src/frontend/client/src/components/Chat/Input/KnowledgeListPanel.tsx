@@ -90,13 +90,14 @@ export const KnowledgeListPanel = ({
 
   // Filtering shrinks the list; on a panel that is centred on its trigger that
   // reads as the panel jumping. Sample the unfiltered height and hold it as a
-  // floor while a keyword is active.
+  // preferred size while a keyword is active, allowing a shorter window to
+  // shrink the list rather than push it beyond the menu's bounds.
   const listAreaRef = useRef<HTMLDivElement | null>(null);
   const [unfilteredHeight, setUnfilteredHeight] = useState<number>();
   useLayoutEffect(() => {
     if (!freezeHeightOnFilter || keyword) return; // only the unfiltered list is a valid sample
     const el = listAreaRef.current;
-    if (el) setUnfilteredHeight(el.getBoundingClientRect().height);
+    if (el) setUnfilteredHeight(el.offsetHeight);
   }, [freezeHeightOnFilter, keyword, totalCount]);
 
   // Edge shadows: visible only when there is content above / below the current
@@ -148,7 +149,7 @@ export const KnowledgeListPanel = ({
       <div
         ref={listAreaRef}
         className="relative flex min-h-0 flex-1 flex-col"
-        style={freezeHeightOnFilter && keyword ? { minHeight: unfilteredHeight } : undefined}
+        style={freezeHeightOnFilter && keyword ? { flexBasis: unfilteredHeight } : undefined}
       >
         {/* Top edge fade — solid popup-white fades to transparent so list
             content visually dissolves into the menu surface. */}

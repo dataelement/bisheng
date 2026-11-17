@@ -17,6 +17,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/comp
 import { useGetOrgToolList } from "~/hooks/queries/data-provider";
 import { BsConfig } from "~/types/chat";
 import { useCategorizedKnowledgeSpaces, useLocalize, useMediaQuery } from "~/hooks";
+import { useScaledMenuBounds } from "~/hooks/useScaledMenuBounds";
 import { useToastContext } from "~/Providers";
 import { cn } from "~/utils";
 import { KnowledgeListPanel } from "./KnowledgeListPanel";
@@ -99,6 +100,7 @@ export const ChatKnowledge = ({
   compact?: boolean;
 }) => {
   const localize = useLocalize();
+  const submenuBounds = useScaledMenuBounds();
   const PAGE_SIZE = 20;
   const MAX_KB_PER_TYPE = 50;
   const { showToast } = useToastContext();
@@ -487,10 +489,11 @@ export const ChatKnowledge = ({
                 (same placement rule as the skill panel below). */}
             <DropdownMenuSubContent
               align="center"
-              collisionPadding={BOTTOM_GAP}
-              className="ml-2 flex max-h-[440px] w-[240px] flex-col overflow-hidden rounded-2xl border-slate-100 bg-white pt-3 px-3 pb-0 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
+              collisionPadding={submenuBounds.collisionPadding}
+              className="ml-2 flex w-[240px] flex-col overflow-hidden rounded-2xl border-slate-100 bg-white pt-3 px-3 pb-0 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
               style={
                 {
+                  maxHeight: submenuBounds.maxHeight,
                   '--tw-enter-duration': '0.35s',
                   '--tw-enter-easing': 'ease-in-out',
                 } as React.CSSProperties
@@ -615,12 +618,13 @@ export const ChatKnowledge = ({
                   </DropdownMenuSubTrigger>
                   {/* Layout mirrors the knowledge panel shell (variant === 'knowledge' above).
                       `align="center"` centers the panel vertically on the trigger row
-                      instead of aligning their top edges. Cap against the zoom-compensated
-                      viewport, matching the skill tooltip, so short WeCom windows fit. */}
+                      instead of aligning their top edges. Bounds also compensate
+                      WeCom's pre-zoom rect coordinates. */}
                   <DropdownMenuSubContent
                     align="center"
-                    collisionPadding={BOTTOM_GAP}
-                    className="ml-2 flex max-h-[min(440px,calc(var(--bs-dvh,100dvh)-48px))] w-[280px] flex-col gap-0 overflow-hidden rounded-2xl border-0 bg-white px-3 pb-0 pt-3 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
+                    collisionPadding={submenuBounds.collisionPadding}
+                    style={{ maxHeight: submenuBounds.maxHeight }}
+                    className="ml-2 flex w-[280px] flex-col gap-0 overflow-hidden rounded-2xl border-0 bg-white px-3 pb-0 pt-3 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
                   >
                     {renderSkillSubmenu(() => setRootOpen(false))}
                   </DropdownMenuSubContent>
