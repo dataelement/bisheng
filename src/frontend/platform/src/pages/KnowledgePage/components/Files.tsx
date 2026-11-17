@@ -372,12 +372,13 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
     operation: "download" | "tag" | "retry",
     tag_ids?: number[],
     new_tag_names?: string[],
+    items = selectedRows,
   ) => {
     setBatchTagsOpen(false);
     const outcome = await batch.open({
       spaceId,
       operation,
-      items: selectedRows.map((item) => ({
+      items: items.map((item) => ({
         id: item.id,
         type: item.file_type === 0 ? "folder" : "file",
         name: item.file_name,
@@ -419,6 +420,9 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
             references([item]);
         }}
         onRename={() => handleEdit(item)}
+        onMove={() => setMove([{ id: item.id, type: item.file_type === 0 ? "folder" : "file" }])}
+        onRetry={() => { void runBatch("retry", undefined, undefined, [item]); }}
+        onChanged={() => client.invalidateQueries({ queryKey: base })}
         canDownload={downloadIds.has(item.id)}
         onDownload={() => {
           void handleDownload(item);

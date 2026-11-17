@@ -676,6 +676,7 @@
         "destination": "移动到：{{destination}}"
     },
     "versions": {
+        "manage": "版本管理",
         "new_version": "上传新版本",
         "merge": "关联已有文档",
         "as_version": "作为新版本",

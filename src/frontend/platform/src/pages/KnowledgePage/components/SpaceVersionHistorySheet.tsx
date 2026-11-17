@@ -34,6 +34,7 @@ interface SpaceVersionHistorySheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   hasSimilar?: boolean;
+  initialPanel?: "merge" | "similar" | null;
   api?: Partial<KnowledgeVersionsApi>;
 }
 
@@ -59,6 +60,7 @@ function HistoryContent({
   fileId,
   onOpenChange,
   hasSimilar = false,
+  initialPanel = null,
   api: customApi,
 }: SpaceVersionHistorySheetProps) {
   const { t } = useTranslation("knowledge");
@@ -66,7 +68,7 @@ function HistoryContent({
   const api = { ...knowledgeVersionsApi, ...customApi };
   const client = useQueryClient();
   const [panel, setPanel] = useState<"upload" | "merge" | "similar" | null>(
-    null,
+    initialPanel,
   );
   const [busy, setBusy] = useState(false),
     [uncertain, setUncertain] = useState(false);

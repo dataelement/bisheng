@@ -676,6 +676,7 @@
         "destination": "Move to: {{destination}}"
     },
     "versions": {
+        "manage": "Manage versions",
         "new_version": "Upload new version",
         "merge": "Add an existing document",
         "as_version": "Use as new version",

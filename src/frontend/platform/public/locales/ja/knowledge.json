@@ -670,6 +670,7 @@
         "destination": "移動先：{{destination}}"
     },
     "versions": {
+        "manage": "バージョン管理",
         "new_version": "新バージョンをアップロード",
         "merge": "既存ドキュメントを追加",
         "as_version": "新バージョンとして使用",
