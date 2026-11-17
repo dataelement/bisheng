@@ -8,9 +8,9 @@
 bash docker/install.sh
 ```
 
-脚本首次将 `.env.example` 复制为 `.env`，校验配置，使用默认公共账号登录 `cr.dataelem.com`，拉取镜像并执行 `up -d`。默认不启用 Gateway 和 FT，也不会询问是否启用。已有 `.env` 会保留，不自动覆盖或合并。部署需要 Bash 和常用系统命令，无需宿主机 Python。
+脚本首次将 `.env.example` 复制为 `.env`，校验配置，使用默认公共账号登录 `cr.dataelem.com`，拉取镜像并执行 `up -d`。默认启用 Vibe App 运行服务、沙箱和 BS Client；Gateway 和 FT 默认关闭。已有 `.env` 的开关、镜像、来源与凭据保留；启用 app-runtime 时仅补齐缺失的独立运行时密钥。部署需要 Bash 和常用系统命令，无需宿主机 Python。
 
-账号在 `.env` 的 `CR_REGISTRY_USERNAME` / `CR_REGISTRY_PASSWORD` 中配置；默认使用提供的公共账号，密码通过 `--password-stdin` 传入 Docker。`--prepare-only` 只生成、校验配置，不登录、不拉取、不启动服务。
+账号在 `.env` 的 `CR_REGISTRY_USERNAME` / `CR_REGISTRY_PASSWORD` 中配置；默认使用提供的公共账号，密码通过 `--password-stdin` 传入 Docker。`--prepare-only` 只生成、校验配置（含首次生成的独立运行时密钥），不登录、不拉取、不启动服务。
 
 ## Gateway（可选）
 
@@ -87,6 +87,18 @@ docker compose logs gateway
 
 ## 其他部署方式
 
-- VibeApp 运行环境是独立的 `app-runtime` profile，需要额外配置，见[应用工场部署说明](../docs/architecture/14-app-factory-deployment.md)。
+- Vibe App 的 `app-runtime` profile 在全新部署默认启用。宿主隔离、基础运行镜像和容量等实际运行前提见[应用工场部署说明](../docs/architecture/14-app-factory-deployment.md)与[宿主隔离说明](../deploy/runtime-manager/README.md)。这些条件尚未满足时操作会明确失败，默认开关不替代运行准入。
 - Kubernetes 部署见 [Helm 说明](helm/README.md)。
 - Office 可选服务使用 `docker-compose-office.yml`。
+
+## 默认客户端与依赖下载
+
+部署 YAML 使用 `bs_client`（旧 `dsh` 仍兼容）；两者同时存在时新块整块优先。`enabled` 默认开启，`platform_public_url` 可留空，登录、Chat、会话、Work 工具和技能按当前请求地址工作。需要固定公开地址时才配置它；URL 为不带路径的 HTTP(S) origin。
+
+标准代理保留公开 Host 与端口。外部 TLS 终止代理应覆盖客户端转发头，并在 `nginx/conf.d/default.conf` 与 `websocket.conf` 的 `geo $bs_trusted_edge` 中登记其真实 IP/CIDR；无需为此填写客户端部署地址。后端仅信任 `bs_client.trusted_proxy_hosts` 声明的代理，默认 Compose 为 frontend/gateway。直接访问后端时不会相信任意客户端传入的转发头。
+
+全新在线部署在受控准备阶段从 PyPI（含 wheel 文件域名）与 npm 下载基础镜像未预装的包；`.env` 中 `BISHENG_RTM_BUILD_INDEX_URL`、`BISHENG_RTM_BUILD_NPM_REGISTRY` 可改为企业源。`BISHENG_RUNTIME_OFFLINE=true` 选择离线，缺包明确失败，不自动改用公网。安装/编译和正式运行继续使用既有出站限制。
+
+首次运行 install.sh 为各运行时身份生成不同随机密钥，重跑不会轮换。关闭 Vibe 时将实际 YAML 的 `app_runtime.enabled` 改为 false，并从 `.env` 的 `COMPOSE_PROFILES` 移除 app-runtime；保留数据。仅修改 profile 不会修改用户自管 YAML。沙箱按现有 endpoints/执行器配置关闭，已有会话的停用需要单独安排。
+
+模板服务 tag 跟随 v3.1.0-beta1，实际安装需使用包含本次变更的后端/运行时发行镜像。源码验证不表示镜像已构建、已推送或线上已更新。
