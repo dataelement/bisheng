@@ -62,6 +62,16 @@ async def dispatch(application, monkeypatch):
     monkeypatch.setattr(processing_owner, "require_business_action", AsyncMock())
     monkeypatch.setattr(processing_identity, "resolve_web_runtime_identity", AsyncMock(return_value=app.context.user))
     monkeypatch.setattr("bisheng.permission.application.relation_api.is_tenant_admin", AsyncMock(return_value=False))
+    from bisheng.knowledge.domain.models.knowledge_processing_fence import (
+        KnowledgeProcessingArtifact,
+        KnowledgeProcessingFence,
+    )
+    from bisheng.knowledge.domain.models.knowledge_space_delete_job import KnowledgeSpaceDeleteJob
+    from bisheng.knowledge.domain.repositories import processing_fence_repository as fences
+
+    for model in (KnowledgeProcessingFence, KnowledgeProcessingArtifact, KnowledgeSpaceDeleteJob):
+        model.__table__.create(app.context.sync, checkfirst=True)
+    monkeypatch.setattr(fences, "get_sync_db_session", sessions)
     monkeypatch.setattr(handler, "get_sync_db_session", sessions)
     monkeypatch.setattr(file_module, "get_sync_db_session", sessions)
     monkeypatch.setattr(model_reference_read, "_runtime", runtime)

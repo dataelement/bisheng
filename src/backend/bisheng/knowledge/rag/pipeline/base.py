@@ -1,28 +1,31 @@
 import asyncio
 import time
 from abc import ABC, abstractmethod
-from typing import List
 
 from langchain_core.documents import BaseDocumentTransformer, Document
 from langchain_core.vectorstores import VectorStore
 
 from bisheng.knowledge.rag.pipeline.loader.base import BaseBishengLoader
-from bisheng.knowledge.rag.pipeline.types import PipelineStage, PipelineResult, PipelineConfig
+from bisheng.knowledge.rag.pipeline.types import PipelineConfig, PipelineResult, PipelineStage
 
 
 class BasePipeline(ABC):
-    def __init__(self,
-                 loader: BaseBishengLoader = None,
-                 transformers: List[BaseDocumentTransformer] = None,
-                 vector_store: List[VectorStore] = None,
-                 **kwargs):
+    def __init__(
+        self,
+        loader: BaseBishengLoader = None,
+        transformers: list[BaseDocumentTransformer] = None,
+        vector_store: list[VectorStore] = None,
+        **kwargs,
+    ):
+        self.processing_guard = kwargs.get("processing_guard")
         self.loader = loader
         self.transformers = transformers or []
         self.vector_store = vector_store or []
 
     @staticmethod
-    def _make_result(stage: PipelineStage = PipelineStage.INGEST, docs: List[Document] = None,
-                     start: float = 0) -> PipelineResult:
+    def _make_result(
+        stage: PipelineStage = PipelineStage.INGEST, docs: list[Document] = None, start: float = 0
+    ) -> PipelineResult:
         result = PipelineResult(
             stage_reached=stage,
             documents=docs,
@@ -45,23 +48,35 @@ class NormalPipeline(BasePipeline):
 
         start = time.time()
         # ① loader
+        if self.processing_guard:
+            self.processing_guard.checkpoint()
         docs = self.loader.load()
+        if self.processing_guard:
+            self.processing_guard.checkpoint()
         if config.stop_at == PipelineStage.LOAD:
             return self._make_result(stage=PipelineStage.LOAD, start=start)
 
         # transformer
         for transformer in self.transformers:
+            if self.processing_guard:
+                self.processing_guard.checkpoint()
             docs = transformer.transform_documents(docs)
         if config.stop_at == PipelineStage.TRANSFORMER:
             return self._make_result(stage=PipelineStage.TRANSFORMER, docs=docs, start=start)
 
         # insert vector
         for vectorstore in self.vector_store:
-            vectorstore.add_documents(docs)
+            if self.processing_guard:
+                with self.processing_guard.write():
+                    vectorstore.add_documents(docs)
+            else:
+                vectorstore.add_documents(docs)
 
         return self._make_result(stage=PipelineStage.INGEST, docs=docs, start=start)
 
     async def arun(self, config: PipelineConfig = None) -> PipelineResult:
+        if self.processing_guard:
+            return await asyncio.to_thread(self.run, config)
         if config is None:
             config = PipelineConfig()
 

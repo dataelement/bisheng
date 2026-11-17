@@ -18,6 +18,7 @@ from bisheng.core.context.tenant import get_current_tenant_id, tenant_execution_
 from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.application.processing_identity import restore_processing_actor
 from bisheng.knowledge.application.processing_owner import KnowledgeProcessingOwner
+from bisheng.knowledge.domain.repositories.processing_fence_repository import ProcessingCancelled
 from bisheng.knowledge.domain.repositories.processing_owner_repository import ProcessingOwnerRepository
 from bisheng.knowledge.domain.schemas.processing_job import ResourceVersionTarget
 from bisheng.knowledge.domain.services.processing_job_service import ProcessingJobService
@@ -313,6 +314,10 @@ async def _execute_processing_job(job_id: str, expected_dispatch_revision: int):
                     await session.commit()
                     if not completed:
                         return result
+    except ProcessingCancelled:
+        logger.info("Knowledge processing cancelled by deletion job={}", job_id)
+        async with get_async_db_session() as session:
+            return _summary(await owner.jobs.aget(session, job_id))
     except BaseErrorCode as error:
         logger.opt(exception=True).warning("Knowledge processing rejected job={} code={}", job_id, error.Code)
         return await _failed(owner, job_id, revision, lease, error.Code)

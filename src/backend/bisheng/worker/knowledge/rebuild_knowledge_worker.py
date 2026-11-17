@@ -24,12 +24,17 @@ from bisheng.knowledge.application.model_reference_read import get_knowledge_mod
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileDao, KnowledgeFileStatus
+from bisheng.knowledge.domain.repositories.processing_fence_repository import (
+    ProcessingCancelled,
+)
+from bisheng.knowledge.domain.services.processing_write_guard import ProcessingWriteGuard, guarded_processing
 from bisheng.llm.domain import LLMService
 from bisheng.resource_reference.application.contracts import canonical_target_id
 from bisheng.worker.main import bisheng_celery
 
 
 @bisheng_celery.task(acks_late=True)
+@guarded_processing(space_arg="knowledge_id", cancel_result="cancelled_by_deletion")
 def rebuild_knowledge_celery(
     knowledge_id: int,
     new_model_id: int | None,
@@ -73,6 +78,7 @@ def rebuild_knowledge_celery(
             knowledge, files, selected_model_id, invoke_user_id, **command
         )
 
+        ProcessingWriteGuard(knowledge_id).checkpoint()
         # 4. Update file status
         KnowledgeFileDao.update_status_bulk(success_files, KnowledgeFileStatus.SUCCESS)
 
@@ -241,7 +247,7 @@ def _rebuild_embeddings(
         for file in files:
             try:
                 success = _process_single_file(file, es_client, index_name, vector_client)
-            except KnowledgeUnificationError:
+            except (KnowledgeUnificationError, ProcessingCancelled):
                 raise
             except Exception as e:
                 logger.exception(f"Failed to rebuild embeddings for file_id={file.id}: {e!s}")
@@ -277,6 +283,7 @@ def _process_single_file(file, es_client, index_name, vector_client):
 
 def _process_file_chunks(file, es_client, index_name, vector_client) -> ProcessingFileResult:
     """Processing of individual filesembeddingRebuild"""
+    ProcessingWriteGuard(file.knowledge_id, file.id).checkpoint()
     logger.info(f"Rebuilding embeddings for file_id={file.id}")
 
     # FROMESGet all of this file inchunks
@@ -384,6 +391,7 @@ def _require_processing_model(
     return knowledge, admitted, scope
 
 
+@guarded_processing()
 def reset_processing_target(*, space_id: int, invoke_user_id: int, **expectations) -> bool:
     """Reset the original physical target before any file succeeds in this job."""
     knowledge, _, scope = _require_processing_model(space_id, **expectations)
@@ -400,6 +408,7 @@ def reset_processing_target(*, space_id: int, invoke_user_id: int, **expectation
     return True
 
 
+@guarded_processing(file_arg="file_id")
 def rebuild_processing_file(
     file_id: int,
     *,
@@ -468,6 +477,7 @@ def rebuild_knowledge_file_chunk(file_id: int):
         )
 
 
+@guarded_processing(space_arg="db_file.knowledge_id", file_arg="db_file.id")
 def _rebuild_knowledge_file_chunk(db_file: KnowledgeFile):
     db_knowledge = KnowledgeDao.query_by_id(db_file.knowledge_id)
     milvus_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(db_file.user_id, knowledge=db_knowledge)

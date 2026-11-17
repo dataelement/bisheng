@@ -1,6 +1,8 @@
 """T737: actual Celery entry, native Owner/J1 and native index IO boundaries.
 
-Only credential/FGA/broker and Milvus/ES transports are isolated. The real
+Only credential/FGA/broker and Milvus/ES transports are isolated.
+Index IO retains one separate physical-writer mutex transaction; the business
+Owner/lease transactions still finish before IO. The real
 Metadata Owner, model SourceRead runtime, handler, leases and SQL completion
 remain in the call chain; no fake service accepts an unavailable kind.
 """
@@ -42,6 +44,14 @@ processing, application, metadata, owner, flow = (
 
 @pytest.fixture
 async def execution(flow, monkeypatch):
+    from bisheng.knowledge.domain.models.knowledge_processing_fence import (
+        KnowledgeProcessingArtifact,
+        KnowledgeProcessingFence,
+    )
+    from bisheng.knowledge.domain.models.knowledge_space_delete_job import KnowledgeSpaceDeleteJob
+
+    for model in (KnowledgeProcessingFence, KnowledgeProcessingArtifact, KnowledgeSpaceDeleteJob):
+        model.__table__.create(flow.context.sync, checkfirst=True)
     state = SimpleNamespace(
         flow=flow, open_sessions=0, events=[], es_fail_files=set(), sql=[], after_io=None, deny=False
     )
@@ -49,7 +59,7 @@ async def execution(flow, monkeypatch):
 
     class Collection(native.NativeCollection):
         def query_iterator(self, *, batch_size, limit, expr, output_fields):
-            assert state.open_sessions == 0
+            assert state.open_sessions == 1
             assert batch_size == 1000 and limit == -1
             assert output_fields == [field.name for field in self.schema.fields]
             file_id = int(expr.removeprefix("document_id == "))
@@ -62,7 +72,7 @@ async def execution(flow, monkeypatch):
             return iterator
 
         def upsert(self, data):
-            assert state.open_sessions == 0
+            assert state.open_sessions == 1
             result = super().upsert(data)
             if state.after_io is not None:
                 state.after_io("milvus", data[0]["document_id"])
@@ -81,12 +91,12 @@ async def execution(flow, monkeypatch):
                 state.open_sessions -= 1
 
     def milvus(collection_name, embedding_function, **kwargs):
-        assert state.open_sessions == 0 and collection_name == "col40"
+        assert state.open_sessions == 1 and collection_name == "col40"
         assert isinstance(embedding_function, FakeEmbeddings)
         return SimpleNamespace(col=state.collection)
 
     async def update(*, index, body, refresh):
-        assert state.open_sessions == 0 and index == "idx40" and refresh is True
+        assert state.open_sessions == 1 and index == "idx40" and refresh is True
         file_id = body["query"]["term"]["metadata.document_id"]
         state.events.append(("es", file_id))
         if file_id in state.es_fail_files:
@@ -114,7 +124,7 @@ async def execution(flow, monkeypatch):
         )
 
     def elasticsearch(index_name, **kwargs):
-        assert state.open_sessions == 0 and index_name == "idx40"
+        assert state.open_sessions == 1 and index_name == "idx40"
         return SimpleNamespace(client=SimpleNamespace(update_by_query=update, close=state.close))
 
     state.close = AsyncMock()
@@ -270,7 +280,7 @@ async def test_guard_commits_obsolete_before_next_index_io_when_actual_configura
     job_id, _ = await fixtures.seed_accepted(execution.flow)
 
     def change(stage, file_id):
-        assert execution.open_sessions == 0
+        assert execution.open_sessions == 1
         if stage == "milvus":
             with Session(execution.flow.context.sync) as session:
                 root = session.get(Knowledge, 40)

@@ -1126,3 +1126,8 @@ Mode编译只迁移原before已存在的技术标记，permission_enabled/custom
 116 日志证实：新复制目标的 Milvus collection 是懒创建，直接 vector.col.load() 会在 None 上调用，导致 ES 初始化也未执行。复制初始化复用标准 schema bootstrap，创建并删除元数据种子后 load；两个模型引用读取继续复用持锁 session，避免自身事务重入。若以后替换向量库，需同时验证空目标建 schema 与已存在目标两条路径，不可仅 mock 出始终存在的 col。
 
 移动的源/目标应为已发布且就绪的空间；普通批次、跨空间范围和执行复核均要求 state=1，拒绝未初始化 state=0，防止逻辑迁入后才遇到目标 ES 404。旧复制源权限版本变化继续尊重冻结计划，不随修复自动重写或恢复任务。实际任务、日志与验证边界见 [116 根因记录](../../../docs/reviews/knowledge-copy-move-116-20261117.md)。
+
+
+### 2026-11-17 删除并发修复增量（用户已确认）
+
+复用现有删除计划、墓碑、处理任务租约、删除台账及 Beat。确认事务使旧任务失效；物理写入与清理由数据库互斥行协调，MinIO 生成物在上传前持久化；最终文件更新仅写现存行，模型配置 CAS 排除删除墓碑。处理中删除返回 accepted 并后台执行。完成后的物理输出复核复用原回执与有效租约，保持业务状态 SUCCEEDED；清空复核只操作原物理文件集合。新独立表为 `knowledge_processing_fence`、`knowledge_processing_artifact`；未修改已有表结构。实现边界、旧计划兼容和实机待验项见 [修复设计](../../../docs/reviews/knowledge-delete-processing-cancellation-20261117.md)。这替代本文件早期普通排队/解析阻断整空间删除的结论。
