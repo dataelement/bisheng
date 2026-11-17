@@ -11,6 +11,11 @@ import { SpaceRole, SpaceSortType as MockSpaceSortType, VisibilityType, type Kno
 import { deleteSpaceApi, unsubscribeSpaceApi } from '~/api/knowledge';
 const mockSpaceActionConfirm = jest.fn().mockResolvedValue(true);
 
+jest.mock('~/api/knowledgeSpaceExit', () => ({
+  resolveSpaceExitScope: async () => '1',
+  getSpaceExitStatus: async (id: string) => ({ can_exit: id === 'joined', reason: id === 'joined' ? null : 'creator' }),
+}));
+
 jest.mock('~/components/Chat/desktopEmbedding', () => ({ isDesktopEmbedded: () => true }));
 jest.mock('~/hooks/queries/data-provider', () => ({ useGetBsConfig: () => ({ data: {} }) }));
 jest.mock('~/api/apps', () => ({ getBysConfigApi: async () => ({ data: {} }) }));
@@ -84,8 +89,7 @@ class NavigationRequest {
 }
 Object.defineProperty(globalThis, 'Request', { configurable: true, value: NavigationRequest });
 
-function setup(path = '/knowledge') {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, cacheTime: 0 } } });
+function setup(path = '/knowledge', queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, cacheTime: 0 } } })) {
   const router = createMemoryRouter([{ element: <AliveScope><Outlet /></AliveScope>, children: [{ element: <MainLayout />, children: [
     { path: '/before', element: <div>Previous page</div> },
     { path: '/knowledge', element: <Knowledge /> },
@@ -191,4 +195,19 @@ it('retains the chosen sort when leaving and returning to the knowledge module',
   expect(screen.getByText('Previous page')).toBeInTheDocument();
   await act(async () => { await router.navigate('/knowledge'); });
   expect(await screen.findByRole('combobox')).toHaveTextContent('com_knowledge.home_next.sort_name');
+});
+
+
+it('refreshes shared exit eligibility after detail execution is denied by a new organization grant', async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, cacheTime: Infinity } } });
+  const affected = ['space-exit-status', 'user', '1', 0, 'joined'];
+  const unrelated = ['space-exit-status', 'user', '1', 0, 'other'];
+  client.setQueryData(affected, { can_exit: true, reason: null });
+  client.setQueryData(unrelated, { can_exit: true, reason: null });
+  jest.mocked(unsubscribeSpaceApi).mockRejectedValueOnce({ status_code: 18080 });
+  const router = setup('/knowledge/space/joined?tab=joined', client);
+  fireEvent.click(await screen.findByRole('button', { name: 'Leave joined space' }));
+  await waitFor(() => expect(client.getQueryState(affected)?.isInvalidated).toBe(true));
+  expect(client.getQueryState(unrelated)?.isInvalidated).toBe(false);
+  expect(router.state.location.pathname).toBe('/knowledge/space/joined');
 });
