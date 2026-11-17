@@ -29,6 +29,9 @@ from bisheng.linsight.domain.models.linsight_execute_task import (
     LinsightExecuteTaskDao,
 )
 from bisheng.linsight.domain.models.linsight_session_version import (
+    get_run_thread_id,
+    has_stored_run_thread_id,
+    set_run_thread_id,
     LinsightSessionVersion,
     LinsightSessionVersionDao,
     SessionVersionStatusEnum,
@@ -49,6 +52,8 @@ from bisheng.linsight.domain.services.workspace_backend import (
     LARGE_TOOL_RESULTS_DIR,
     OUTPUT_DIR,
     UPLOADS_DIR,
+    copy_workspace_prefix,
+    workspace_prefix_for,
 )
 from bisheng.tool.domain.services.tool import ToolServices
 from bisheng_langchain.gpts.tools.code_interpreter.local_run_registry import release_local_run
@@ -160,6 +165,16 @@ _INGEST_TERMINAL_PHASES = frozenset({"done", "failed", "aborted"})
 # Same contract, for the row saying a selected skill could not be loaded. Mirrored
 # in the client's execTypes.ts alongside the ingest row.
 _SKILL_LOAD_FAILED_STEP_NAME = "skill_load_failed"
+
+
+async def _unified_runtime_enabled(tenant_id: int | None) -> bool:
+    """Whether ``tenant_id`` is on the unified runtime (F004). Off means the legacy path.
+
+    Imported lazily: the workstation service module imports linsight modules.
+    """
+    from bisheng.workstation.domain.services.workstation_service import is_unified_runtime_enabled
+
+    return await is_unified_runtime_enabled(tenant_id)
 
 
 def _resolve_recursion_limit(linsight_conf) -> int:
@@ -540,6 +555,7 @@ class LinsightWorkflowTask:
         self.llm = await self._get_round_llm(session_model)
         # The previous round deleted file_dir. Put this session's output/ back
         # before the code interpreter copies the directory into the sandbox.
+        await self._merge_run_uploads(session_model)
         await self._sync_workspace_originals(session_model)
         # Before the code interpreter snapshots file_dir into the E2B file_list.
         await self._provision_session_skills(session_model)
@@ -595,7 +611,7 @@ class LinsightWorkflowTask:
         linsight_conf = settings.get_linsight_conf()
         mapper = StreamEventMapper(svid=session_model.id)
         config = {
-            "configurable": {"thread_id": session_model.id},
+            "configurable": {"thread_id": self._thread_id(session_model)},
             "recursion_limit": _resolve_recursion_limit(linsight_conf),
         }
         try:
@@ -674,6 +690,7 @@ class LinsightWorkflowTask:
         self.llm = await self._get_round_llm(session_model)
         # Same session workspace, new local dir: output/ from the previous round
         # is still in MinIO and must be back in file_dir before copy-in.
+        await self._merge_run_uploads(session_model)
         await self._sync_workspace_originals(session_model)
         # Before the code interpreter snapshots file_dir into the E2B file_list.
         await self._provision_session_skills(session_model)
@@ -705,7 +722,7 @@ class LinsightWorkflowTask:
         linsight_conf = settings.get_linsight_conf()
         mapper = StreamEventMapper(svid=session_model.id)
         config = {
-            "configurable": {"thread_id": session_model.id},
+            "configurable": {"thread_id": self._thread_id(session_model)},
             "recursion_limit": _resolve_recursion_limit(linsight_conf),
         }
         # Prepend the current-time block (same rationale as _build_agent_input):
@@ -733,6 +750,9 @@ class LinsightWorkflowTask:
     async def _execute_workflow(self, session_model: LinsightSessionVersion):
         """Execute the core logic of the workflow"""
 
+        # F004: decide this run's thread before the status write below persists the record.
+        await self._enter_conversation_thread(session_model)
+
         # Update session status to in progress
         await self._update_session_status(session_model, SessionVersionStatusEnum.IN_PROGRESS)
 
@@ -748,8 +768,9 @@ class LinsightWorkflowTask:
         # Cross-turn continuity: seed this turn's workspace from the previous turn
         # so a follow-up (e.g. "convert the report to HTML") can read and build on
         # the prior turn's deliverables. New-turn path only (resume reuses the same
-        # svid workspace). Best-effort — never blocks the turn.
-        await self._seed_workspace_from_previous(session_model)
+        # svid workspace). Best-effort — never blocks the turn. F004: a run on the
+        # conversation thread prepares the conversation workspace instead.
+        await self._prepare_run_workspace(session_model)
         # Must run between the seed and tool construction: the code interpreter's
         # file list is snapshotted from file_dir when the tool is built.
         await self._sync_workspace_originals(session_model)
@@ -1151,9 +1172,132 @@ class LinsightWorkflowTask:
         tools = await LinsightWorkbenchImpl.init_linsight_config_tools(
             session_version=session_model, llm=self.llm, need_upload=True, file_dir=self.file_dir
         )
+        self._retarget_code_interpreter(tools, session_model)
         # F132: memory_write / memory_search for this round (one place covers the
         # fresh, continue and resume paths); empty when memory is off.
         return [*tools, *self._memory_round().tools()]
+
+    # ==================== Conversation thread (F004 decision 7) ====================
+
+    @staticmethod
+    def _thread_id(session_model) -> str:
+        """The LangGraph thread of this run: the stored one, else ``session_version_id``."""
+        return get_run_thread_id(session_model)
+
+    @classmethod
+    def _on_conversation_thread(cls, session_model) -> bool:
+        session_id = getattr(session_model, "session_id", None)
+        return (
+            bool(session_id) and has_stored_run_thread_id(session_model) and cls._thread_id(session_model) == session_id
+        )
+
+    @classmethod
+    def _workspace_prefix(cls, session_model) -> str:
+        """``workspace/{conversation_id}`` on the conversation thread, else ``workspace/{svid}``."""
+        if cls._on_conversation_thread(session_model):
+            return workspace_prefix_for(session_model.session_id)
+        return workspace_prefix_for(session_model.id)
+
+    def _workspace_backend(self, session_model, minio, citation_scope=None):
+        from bisheng.linsight.domain.services.workspace_backend import WorkspaceBackend
+
+        return WorkspaceBackend(
+            svid=session_model.id,
+            minio=minio,
+            file_dir=self.file_dir,
+            citation_scope=citation_scope,
+            workspace_prefix=self._workspace_prefix(session_model),
+        )
+
+    def _retarget_code_interpreter(self, tools: list, session_model) -> None:
+        """Make the code interpreter mirror its files into the workspace the file tools read.
+
+        The tool binder addresses ``workspace/{svid}``. On the conversation thread
+        the file tools read ``workspace/{conversation_id}``; both must be the same prefix.
+        """
+        if not self._on_conversation_thread(session_model):
+            return
+        for tool in tools:
+            executor = getattr(tool, "executor", None)
+            if getattr(tool, "name", None) == CODE_INTERPRETER_TOOL and getattr(executor, "workspace_prefix", None):
+                executor.workspace_prefix = self._workspace_prefix(session_model)
+
+    async def _enter_conversation_thread(self, session_model: LinsightSessionVersion) -> None:
+        """New-turn path: put this run on the conversation thread when the tenant is on the unified runtime.
+
+        Only sets the field; the caller's next status write persists the record.
+        A record that already stores a thread id keeps it. With the switch off
+        nothing is stored and the thread stays ``session_version_id``.
+        """
+        if has_stored_run_thread_id(session_model) or not session_model.session_id:
+            return
+        if not await _unified_runtime_enabled(session_model.tenant_id):
+            return
+        set_run_thread_id(session_model, session_model.session_id)
+        logger.info(
+            "Run {} uses the conversation thread {} (unified runtime)", session_model.id, session_model.session_id
+        )
+
+    async def _thread_has_checkpoint(self, thread_id: str) -> bool:
+        from bisheng.linsight.domain.services.checkpointer import make_checkpointer
+
+        return await make_checkpointer().aget_tuple({"configurable": {"thread_id": thread_id}}) is not None
+
+    async def _prepare_run_workspace(self, session_model: LinsightSessionVersion) -> None:
+        """New-turn path: bring earlier files into this run's workspace.
+
+        Legacy thread: seed ``workspace/{svid}`` from the previous version (unchanged).
+        Conversation thread: the workspace is shared by every run of the conversation.
+        When the thread has no checkpoint (the conversation predates the unified
+        runtime, or the checkpoint expired), mark the run for a history rebuild
+        and take over the latest version's workspace.
+        """
+        if not self._on_conversation_thread(session_model):
+            await self._seed_workspace_from_previous(session_model)
+            return
+        self._thread_checkpoint_found = await self._thread_has_checkpoint(self._thread_id(session_model))
+        # This run's uploads go in first: copies never overwrite, so they win over older files.
+        await self._merge_run_uploads(session_model)
+        if self._thread_checkpoint_found:
+            return
+        try:
+            versions = await LinsightSessionVersionDao.get_session_versions_by_session_id(session_model.session_id)
+            prev = next((v for v in versions if v.id != session_model.id), None)
+            if prev is not None:
+                await self._merge_into_workspace(session_model, self._workspace_prefix(prev))
+        except Exception as e:
+            # Same contract as the legacy seed: a failure here never blocks the turn.
+            logger.opt(exception=True).warning("latest-version workspace takeover skipped (non-fatal): {}", e)
+
+    async def _merge_run_uploads(self, session_model: LinsightSessionVersion) -> None:
+        """Merge the files ingested under ``workspace/{svid}`` into the conversation workspace.
+
+        Attachment ingest still addresses the run's own prefix. No-op on the legacy
+        thread, where that prefix is the workspace. Best-effort, like the seed.
+        """
+        if not self._on_conversation_thread(session_model):
+            return
+        try:
+            await self._merge_into_workspace(session_model, workspace_prefix_for(session_model.id))
+        except Exception as e:
+            logger.opt(exception=True).warning("run uploads merge skipped (non-fatal): {}", e)
+
+    async def _merge_into_workspace(self, session_model: LinsightSessionVersion, src_prefix: str) -> None:
+        dst_prefix = self._workspace_prefix(session_model)
+        minio = await get_minio_storage()
+        copied = await copy_workspace_prefix(minio, src_prefix=src_prefix, dst_prefix=dst_prefix, only_if_empty=False)
+        if copied:
+            logger.info("Merged {} file(s) from {} into {}", copied, src_prefix, dst_prefix)
+
+    async def _prior_context_for_run(self, session_model: LinsightSessionVersion) -> str:
+        """Earlier turns rebuilt from ``ChatMessage`` for the first message of this run.
+
+        A conversation thread that already has a checkpoint carries the earlier
+        messages itself; adding the rebuilt summary would repeat them.
+        """
+        if self._on_conversation_thread(session_model) and getattr(self, "_thread_checkpoint_found", False):
+            return ""
+        return await linsight_execute_utils.build_prior_conversation_summary(session_model.session_id)
 
     async def _provision_session_skills(self, session_model: LinsightSessionVersion):
         """Copy task-candidate bundles, then record which row owns each directory.
@@ -1166,10 +1310,9 @@ class LinsightWorkflowTask:
         """
         from bisheng.linsight.domain.services.skill_provisioning import materialize_session_skills
         from bisheng.linsight.domain.services.unattended_run import is_unattended_run
-        from bisheng.linsight.domain.services.workspace_backend import WorkspaceBackend
 
         minio = await get_minio_storage()
-        backend = WorkspaceBackend(svid=session_model.id, minio=minio, file_dir=self.file_dir)
+        backend = self._workspace_backend(session_model, minio)
         result = await materialize_session_skills(
             backend,
             session_model.tenant_id,
@@ -1199,7 +1342,6 @@ class LinsightWorkflowTask:
         resume path passes a Redis-backed ``checkpointer`` so the parked
         interrupt checkpoint (thread_id = session_version_id) is located.
         """
-        from bisheng.linsight.domain.services.workspace_backend import WorkspaceBackend
 
         # Whether the code interpreter is actually bound this run (it is injected
         # through the current user permission policy). Everything that points the model at it —
@@ -1229,9 +1371,7 @@ class LinsightWorkflowTask:
         await citation_scope.load()
         await citation_scope.pin_contract()
         self._citation_scope = citation_scope
-        backend = WorkspaceBackend(
-            svid=session_model.id, minio=minio, file_dir=self.file_dir, citation_scope=citation_scope
-        )
+        backend = self._workspace_backend(session_model, minio, citation_scope=citation_scope)
         # Directories already recorded by the pre-tool provision are left as they
         # are. skills_present stays true when that earlier copy filled the snapshot.
         skills = await self._provision_session_skills(session_model)
@@ -1285,37 +1425,39 @@ class LinsightWorkflowTask:
         except Exception as e:
             logger.warning(f"Failed to push skill-load-failure step for {svid}: {e}")
 
-    async def _seed_workspace_from_previous(self, session_model: LinsightSessionVersion) -> None:
-        """Cross-turn continuity: copy the previous turn's deliverables/sources
-        into this turn's workspace (跨轮工作区延续).
+    async def _seed_workspace_from_previous(
+        self,
+        session_model: LinsightSessionVersion,
+        *,
+        src_prefix: str | None = None,
+        dst_prefix: str | None = None,
+    ) -> None:
+        """Cross-turn continuity: copy a source workspace's deliverables/sources
+        into this run's workspace (跨轮工作区延续).
 
-        A follow-up turn runs under a fresh ``session_version_id`` with an empty
-        ``workspace/{svid}/`` prefix, so it cannot see a prior turn's output
-        (e.g. ``output/report.md``) — ``read_file`` on it would otherwise fail.
-        Server-side copy the immediately-previous version's ``output/`` +
-        ``uploads/`` into this turn's prefix so ``read_file``/``ls`` transparently
-        surface them. Best-effort — a failure never blocks the turn; the first
-        turn (no predecessor) no-ops.
+        F004: both ends are workspace prefixes. ``dst_prefix`` defaults to this
+        turn's legacy prefix ``workspace/{svid}``. ``src_prefix`` defaults to the
+        immediately-previous version's prefix (versions are ordered DESC; that
+        workspace is cumulative, so one copy carries the whole conversation).
+        Server-side copy of ``output/`` + ``uploads/`` + ``large_tool_results/`` so
+        ``read_file``/``ls`` transparently surface them. Best-effort — a failure
+        never blocks the turn; the first turn (no predecessor) no-ops.
         """
         try:
-            from bisheng.linsight.domain.services.workspace_backend import seed_workspace_from_previous
-
-            versions = await LinsightSessionVersionDao.get_session_versions_by_session_id(session_model.session_id)
-            # Ordered by version DESC. The most recent OTHER version is the
-            # immediately-previous turn; its workspace is cumulative (it inherited
-            # its own predecessor), so one copy carries the whole conversation.
-            prev = next((v for v in versions if v.id != session_model.id), None)
-            if prev is None:
-                return
+            if dst_prefix is None:
+                dst_prefix = workspace_prefix_for(session_model.id)
+            if src_prefix is None:
+                versions = await LinsightSessionVersionDao.get_session_versions_by_session_id(session_model.session_id)
+                prev = next((v for v in versions if v.id != session_model.id), None)
+                if prev is None:
+                    return
+                src_prefix = workspace_prefix_for(prev.id)
             minio = await get_minio_storage()
-            copied = await seed_workspace_from_previous(minio, src_svid=prev.id, dst_svid=session_model.id)
+            copied = await copy_workspace_prefix(minio, src_prefix=src_prefix, dst_prefix=dst_prefix)
             if copied:
-                logger.info(
-                    f"Seeded {copied} file(s) from previous turn {prev.id[:8]} into "
-                    f"{session_model.id[:8]} (cross-turn continuity)"
-                )
+                logger.info("Seeded {} file(s) from {} into {} (cross-turn continuity)", copied, src_prefix, dst_prefix)
         except Exception as e:
-            logger.warning(f"workspace seed-from-previous skipped (non-fatal): {e}")
+            logger.opt(exception=True).warning("workspace seed-from-previous skipped (non-fatal): {}", e)
 
     async def _sync_workspace_originals(self, session_model: LinsightSessionVersion) -> None:
         """Make workspace originals reachable by the code interpreter this turn.
@@ -1334,10 +1476,8 @@ class LinsightWorkflowTask:
         Best-effort — a sync failure must never fail the turn.
         """
         try:
-            from bisheng.linsight.domain.services.workspace_backend import WorkspaceBackend
-
             minio = await get_minio_storage()
-            backend = WorkspaceBackend(svid=session_model.id, minio=minio, file_dir=self.file_dir)
+            backend = self._workspace_backend(session_model, minio)
             # output/: deliverables from an earlier round of this same workspace.
             # uploads/: raw xlsx/docx the code interpreter computes on. Markdown
             # views stay on read_file. large_tool_results/: offloaded tool dumps.
@@ -1541,7 +1681,7 @@ class LinsightWorkflowTask:
             # fresh task turn answers with the whole conversation in view, not just
             # this turn's question (the per-session checkpointer can't see earlier
             # daily/task turns — design §3.2).
-            history_summary = await linsight_execute_utils.build_prior_conversation_summary(session_model.session_id)
+            history_summary = await self._prior_context_for_run(session_model)
             # F035 unified-resource: deepagents flow skips the SOP step where the
             # knowledge list used to be injected, so resolve the user's KBs here
             # (coarse: all org/personal KBs of the enabled type) and feed their ids
@@ -1550,7 +1690,7 @@ class LinsightWorkflowTask:
             # First-message input: prior context + question + sop + file pointer block.
             task_input = self._build_agent_input(session_model, file_list, history_summary, knowledge_block)
             config = {
-                "configurable": {"thread_id": self.session_version_id},
+                "configurable": {"thread_id": self._thread_id(session_model)},
                 # max_steps -> recursion_limit (design §2.5)
                 "recursion_limit": _resolve_recursion_limit(linsight_conf),
             }

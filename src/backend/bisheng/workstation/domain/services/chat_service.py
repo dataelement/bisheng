@@ -68,7 +68,6 @@ from bisheng.common.image_view import (
     annotate,
 )
 from bisheng.common.image_view.annotate import has_markdown_image
-from bisheng.common.image_view.loop import IMAGE_VIEW_TOOL_KEY
 from bisheng.common.schemas.telemetry.event_data_schema import (
     ApplicationAliveEventData,
     ApplicationProcessEventData,
@@ -1411,80 +1410,20 @@ async def _prepare_tools(
     handled exclusively through the `search_knowledge_bases` tool built
     from `knowledge_bases_info`.
     """
-    tools: list[BaseTool] = []
-    # Failures surfaced to caller so the agent can emit synthetic tool_call
-    # events and let the user see why a tool they selected didn't run.
-    failures: list[dict] = []
+    # Shared with the unified runtime (F004 T022). Imported here because the
+    # linsight package imports this module.
+    from bisheng.linsight.domain.services.tool_assembly import assemble_daily_tools
 
-    for tp in tool_payloads or []:
-        tool_type = (tp.get("type") if isinstance(tp, dict) else getattr(tp, "type", None)) or "tool"
-        if tool_type != "tool":
-            continue
-        tool_key = tp.get("tool_key") if isinstance(tp, dict) else getattr(tp, "tool_key", None)
-        tool_id = tp.get("id") if isinstance(tp, dict) else getattr(tp, "id", None)
-        # Retired builtin row. Saved selections may still name it; loading it
-        # as a LangChain tool fails.
-        if tool_key == IMAGE_VIEW_TOOL_KEY:
-            continue
-
-        t = None
-        err: str | None = None
-        if tool_key == "web_search":
-            t, err = await _build_web_search_tool(login_user.user_id, int(tool_id) if tool_id else None)
-        elif tool_id:
-            try:
-                t = await ToolExecutor.init_by_tool_id(
-                    tool_id=int(tool_id),
-                    app_id=ApplicationTypeEnum.DAILY_CHAT.value,
-                    app_name=ApplicationTypeEnum.DAILY_CHAT.value,
-                    app_type=ApplicationTypeEnum.DAILY_CHAT,
-                    user_id=login_user.user_id,
-                )
-            except Exception as exc:
-                err = _handle_agent_tool_error(exc)
-                logger.warning(f"Failed to initialise tool id={tool_id} key={tool_key}: {err}")
-
-        if t is not None:
-            if kb_image_stage is not None:
-                _attach_kb_image_stage(t, kb_image_stage)
-            if tool_key == CODE_INTERPRETER_TOOL_KEY:
-                _enable_deliverable_collection(t)
-            tools.append(
-                _wrap_daily_chat_citation_tool(
-                    t,
-                    citation_collector,
-                    image_registry=image_registry,
-                    citation_scope=citation_scope,
-                    kb_image_stage=kb_image_stage,
-                )
-            )
-        elif err:
-            failures.append(
-                {
-                    "tool_key": tool_key or str(tool_id or ""),
-                    "tool_type": "web" if tool_key in _WEB_SEARCH_TOOL_NAMES else "tool",
-                    # display_name is resolved on the frontend via i18n — just
-                    # advertise the raw tool_key so the client can map it.
-                    "display_name": tool_key or "",
-                    "error": "Tool initialization failed." if FailureContextAdapter.from_payload(err) else err,
-                    **({"failure_info": info} if (info := FailureContextAdapter.from_payload(err)) else {}),
-                }
-            )
-
-    if knowledge_bases_info:
-        kb_tool = await _build_knowledge_search_tool(
-            knowledge_bases_info=knowledge_bases_info,
-            login_user=login_user,
-            max_token=getattr(ws_config, "maxTokens", 15000) or 15000,
-            citation_collector=citation_collector,
-            image_registry=image_registry,
-            citation_scope=citation_scope,
-            kb_image_stage=kb_image_stage,
-        )
-        if kb_tool is not None:
-            tools.append(kb_tool)
-
-    return tools, failures
+    return await assemble_daily_tools(
+        tool_payloads,
+        login_user,
+        ws_config,
+        citation_collector,
+        knowledge_bases_info=knowledge_bases_info,
+        image_registry=image_registry,
+        citation_scope=citation_scope,
+        kb_image_stage=kb_image_stage,
+    )
 
 
 async def log_telemetry_events(user_id: str, conversation_id: str, start_time: float):

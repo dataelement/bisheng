@@ -2442,49 +2442,10 @@ class LinsightWorkbenchImpl:
         Returns:
             Tools List
         """
-        tools = []
+        # Shared with the unified runtime (F004 T022).
+        from bisheng.linsight.domain.services.tool_assembly import assemble_planned_tools
 
-        tool_ids = list(dict.fromkeys(cls._extract_tool_ids(session_version.tools or [])))
-
-        # Task infrastructure is resolved on each execution/resume, independently
-        # of the optional tools selected in the composer. Initialization failures
-        # propagate before the model starts so capability loss is actionable.
-        if need_upload and file_dir:
-            tools.extend(
-                await cls._init_bisheng_code_tool(
-                    tool_ids, file_dir, user_id=session_version.user_id, session_version_id=session_version.id
-                )
-            )
-
-        # Retired builtin row. Saved task selections may still name it.
-        # Passing the row to load_tools raises "Got unknown tool image_view"
-        # and aborts the task before skills or any other tool run.
-        from bisheng.common.image_view.loop import IMAGE_VIEW_TOOL_KEY
-
-        image_view_tool = await GptsToolsDao.aget_tool_by_tool_key(tool_key=IMAGE_VIEW_TOOL_KEY)
-        if image_view_tool and image_view_tool.id in tool_ids:
-            tool_ids.remove(image_view_tool.id)
-            logger.info("skip image_view tool id={}: config row is not a callable tool", image_view_tool.id)
-
-        # Unified-resource direction (2026-06-16): task mode reuses the daily
-        # tool selection directly. Every selected tool id (a real GptsTools id
-        # the user already has access to) binds. The code interpreter is already
-        # consumed above when selected, so it is never built twice.
-        valid_tool_ids = tool_ids
-
-        # Initialization Tools
-        if valid_tool_ids:
-            tools.extend(
-                await ToolExecutor.init_by_tool_ids(
-                    valid_tool_ids,
-                    app_id=ApplicationTypeEnum.LINSIGHT.value,
-                    app_name=ApplicationTypeEnum.LINSIGHT.value,
-                    app_type=ApplicationTypeEnum.LINSIGHT,
-                    user_id=session_version.user_id,
-                )
-            )
-
-        return tools
+        return await assemble_planned_tools(session_version, need_upload=need_upload, file_dir=file_dir)
 
     @classmethod
     def _extract_tool_ids(cls, tools: list[dict]) -> list[int]:

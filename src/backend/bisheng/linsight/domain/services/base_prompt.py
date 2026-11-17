@@ -20,23 +20,35 @@ appends the Chinese text itself, at the position the English one used to hold.
 graph it builds, replacing declarative subagents' ``system_prompt`` outright,
 which would erase the researcher's prompt. ``with_base_prompt`` is applied to the
 main graph's prompt only, so the researcher keeps its own.
+
+F004: the factory builds two profiles. ``planned`` (deep research) keeps the text
+above unchanged. ``direct`` (daily chat) has no numbered workflow, so its base
+prompt drops the closing rule that points at "step 0"; when and how to ask the
+user is stated in the direct main prompt itself, next to the ``ask_user`` tool
+line, so it disappears together with the tool on unattended runs.
 """
 
 from __future__ import annotations
 
-LINSIGHT_BASE_PROMPT_ZH = (
+from typing import Literal
+
+_COMMON_RULES_ZH = (
     "# 基本要求\n\n"
     "- 简洁直接，不写客套开场，不预告“我现在要做 X”，直接做。\n"
     "- 以准确为先：用户的判断有误时如实指出，不附和、不堆砌赞美。\n"
     "- 一直做到任务完成再结束，不要做到一半停下来描述打算怎么做。\n\n"
     "# 出错时\n\n"
     "- 同一个操作连续失败时，先停下来分析失败原因，再换做法；不要用同样的参数重试。\n"
-    "- 读文件报 not found 时，先确认路径的根目录是否正确，必要时用 ls 查看。\n\n"
-    "# 向用户提问\n\n"
-    "- 是否向用户提问、何时提问，以上文第 0 步为准。"
+    "- 读文件报 not found 时，先确认路径的根目录是否正确，必要时用 ls 查看。"
 )
 
+LINSIGHT_BASE_PROMPT_ZH = _COMMON_RULES_ZH + "\n\n# 向用户提问\n\n- 是否向用户提问、何时提问，以上文第 0 步为准。"
 
-def with_base_prompt(system_prompt: str) -> str:
-    """``system_prompt`` followed by the Chinese base prompt."""
-    return f"{system_prompt}\n\n{LINSIGHT_BASE_PROMPT_ZH}"
+# ``direct`` profile: the same rules without the pointer to the planned workflow.
+LINSIGHT_DIRECT_BASE_PROMPT_ZH = _COMMON_RULES_ZH
+
+
+def with_base_prompt(system_prompt: str, profile: Literal["direct", "planned"] = "planned") -> str:
+    """``system_prompt`` followed by the Chinese base prompt of ``profile``."""
+    base = LINSIGHT_DIRECT_BASE_PROMPT_ZH if profile == "direct" else LINSIGHT_BASE_PROMPT_ZH
+    return f"{system_prompt}\n\n{base}"

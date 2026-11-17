@@ -546,6 +546,13 @@ class WorkstationConfig(BaseModel):
         max_length=20,
         description="App-center entry name in the client workbench sidebar; empty = client i18n default",
     )
+    # F004 (v3.1.0-beta2): per-tenant switch between the legacy daily-chat / deep-research
+    # channels and the unified agent runtime. Off by default; read through
+    # ``workstation_service.is_unified_runtime_enabled(tenant_id)``. Older images ignore the key.
+    unified_runtime_enabled: bool = Field(
+        default=False,
+        description="Route this tenant's daily chat and deep research through the unified agent runtime",
+    )
 
 
 class SubscriptionConfig(BaseModel):

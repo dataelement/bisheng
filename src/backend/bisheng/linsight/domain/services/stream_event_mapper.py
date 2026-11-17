@@ -26,6 +26,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 from uuid import uuid4
@@ -33,7 +34,9 @@ from uuid import uuid4
 from loguru import logger
 
 from bisheng.common.services.failure_context import FailureContextAdapter
+from bisheng.common.services.llm_error_classifier import classify_for_event
 from bisheng.common.utils.think_tags import strip_reasoning_tags
+from bisheng.linsight.domain.schemas import run_events
 from bisheng_langchain.linsight.event import (
     BaseEvent,
     ExecStep,
@@ -866,3 +869,314 @@ class StreamEventMapper:
                     parts.append(str(block))
             return "".join(parts)
         return str(content)
+
+
+# ==========================================================================
+# F004 unified run events — the mapper's second, opt-in output (design §4.3)
+# ==========================================================================
+
+# Receives one unified event ``{type, data, run_id?}``. In production this is
+# ``EventWriter.emit`` (or a wrapper around ``RunEventStream.append``); the mapper
+# itself still touches no Redis.
+UnifiedSink = Callable[[dict[str, Any]], Awaitable[Any]]
+
+_PLAN_STATUS_BY_TODO_STATUS = {
+    "pending": run_events.PLAN_PENDING,
+    "in_progress": run_events.PLAN_IN_PROGRESS,
+    "completed": run_events.PLAN_COMPLETED,
+    "done": run_events.PLAN_COMPLETED,
+}
+
+_ASK_USER_TOOL_NAME = "ask_user"
+
+
+class UnifiedEventOutput:
+    """Turn what a ``StreamEventMapper`` produces into unified run events.
+
+    The legacy output is untouched: ``feed`` calls ``mapper.normalize`` exactly as
+    the WebSocket path does and returns the same ``BaseEvent`` list, so a run
+    driver can keep persisting with them (design 决策 8) while every event also
+    goes to the unified channel through ``sink``.
+
+    Mapping:
+
+    - ``GenerateSubTask`` / ``TaskStart`` / ``TaskEnd`` -> one ``plan`` event
+      carrying the WHOLE plan, read from the mapper's own ``ctx.todos``;
+    - ``ExecStep`` -> ``thinking`` (a delta) or ``tool_call`` (start / end);
+    - ``NeedUserInput`` -> ``ask_user``;
+    - answer text of the main graph -> ``text`` (the legacy output has no event
+      for it: deep research takes its answer from the final state instead).
+
+    Run lifecycle and the events the mapper cannot see (``queued``, ``steer_*``,
+    ``file``, ``ask_user_answered``) are emitted through the helper methods.
+    After a terminal event nothing else is sent.
+
+    State kept here is translation bookkeeping of ONE run in ONE process, like
+    ``StreamContext``. The accumulated run state lives in the Redis snapshot the
+    sink maintains.
+    """
+
+    def __init__(self, mapper: StreamEventMapper, sink: UnifiedSink, *, run_id: str | None = None):
+        self.mapper = mapper
+        self.run_id = run_id
+        self._sink = sink
+        self._ended = False
+        # task_id -> wording before the most recent rewrite. The mapper reports it
+        # only on the update that reworded the row; a full snapshot must keep
+        # showing it afterwards (AC-10).
+        self._previous_content: dict[str, str] = {}
+        # task_id -> (position in the last emitted plan, row) for rows the model
+        # dropped. They are gone from ``ctx.todos`` but stay in the plan as
+        # ``cancelled`` (AC-11).
+        self._cancelled: dict[str, tuple[int, run_events.PlanItem]] = {}
+        self._plan_ids: list[str] = []
+
+    # -- stream ------------------------------------------------------------
+
+    async def feed(self, mode: str, chunk: Any, namespace: tuple[str, ...] | None = None) -> list[BaseEvent]:
+        """Normalize one stream chunk, publish its unified events, return the legacy ones."""
+        if self._ended or self.mapper.ctx.terminated:
+            return []
+        events = self.mapper.normalize(mode, chunk, namespace)
+        unified = self.convert(events)
+        text = self._answer_text(mode, chunk, namespace)
+        if text:
+            # Reasoning of the same chunk comes before the answer it led to; a tool
+            # call announced by the same message comes after its lead-in text.
+            position = max(
+                (i + 1 for i, event in enumerate(unified) if event["type"] == run_events.THINKING),
+                default=0,
+            )
+            unified.insert(position, self._event(run_events.TEXT, run_events.TextData(text=text)))
+        for event in unified:
+            await self._emit(event)
+        return events
+
+    def convert(self, events: list[BaseEvent]) -> list[dict[str, Any]]:
+        """Map the mapper's ``BaseEvent`` output of one chunk to unified events."""
+        out: list[dict[str, Any]] = []
+        plan_position: int | None = None
+        for event in events:
+            if isinstance(event, (GenerateSubTask, TaskStart, TaskEnd)):
+                if isinstance(event, TaskEnd) and event.status == _TODO_DROPPED_STATUS:
+                    self._note_cancelled(event)
+                if plan_position is None:
+                    plan_position = len(out)
+            elif isinstance(event, NeedUserInput):
+                out.append(self._ask_user_event(event))
+            elif isinstance(event, ExecStep):
+                out.append(self._step_event(event))
+        if plan_position is not None:
+            # One snapshot per chunk, however many rows changed in it.
+            out.insert(plan_position, self._plan_event())
+        return out
+
+    # -- lifecycle and events the mapper cannot see -------------------------
+
+    async def run_started(self, data: dict[str, Any] | None = None) -> None:
+        await self._emit(self._event(run_events.RUN_STARTED, data))
+
+    async def run_finished(self, data: dict[str, Any] | None = None) -> None:
+        await self._emit_terminal(self._event(run_events.RUN_FINISHED, data))
+
+    async def run_stopped(self, reason: str | None = None) -> None:
+        await self._emit_terminal(self._event(run_events.RUN_STOPPED, {"reason": reason} if reason else None))
+
+    async def run_failed(self, error: BaseException | str) -> None:
+        """Publish ``run_failed`` with deep research's error-card fields.
+
+        Same classification and redaction as ``task_exec._handle_task_failure``:
+        ``code`` / ``reason`` come from ``classify_for_event`` (a registered
+        business error code in the cause chain wins), ``detail`` and
+        ``reference_id`` from ``FailureContextAdapter``.
+        """
+        classified = classify_for_event(error)
+        if isinstance(error, BaseException):
+            payload = FailureContextAdapter.public_payload(
+                {"error_code": classified.error_code, "error_type": classified.error_type}, exc=error
+            )
+            failure_info = payload.get("failure_info")
+            data = run_events.RunFailedData(
+                code=payload["error_code"],
+                reason=payload["error_type"],
+                detail=payload["detail"],
+                # A dependency failure is found by its failure_id; a business error
+                # code needs no reference, so that case stays None.
+                reference_id=payload.get("reference_id") or (failure_info or {}).get("failure_id"),
+                failure_info=failure_info,
+            )
+        else:
+            data = run_events.RunFailedData(
+                code=classified.error_code,
+                reason=classified.error_type,
+                detail=FailureContextAdapter.public_text(error),
+                reference_id=None,
+            )
+        await self._emit_terminal(self._event(run_events.RUN_FAILED, data))
+
+    async def queued(self, position: int) -> None:
+        await self._emit(self._event(run_events.QUEUED, run_events.QueuedData(position=position)))
+
+    async def steer_accepted(self, message_id: str) -> None:
+        await self._emit(self._event(run_events.STEER_ACCEPTED, run_events.SteerData(message_id=message_id)))
+
+    async def steer_read(self, message_id: str) -> None:
+        await self._emit(self._event(run_events.STEER_READ, run_events.SteerData(message_id=message_id)))
+
+    async def ask_user_answered(self, call_id: str | None = None, answer: Any = None) -> None:
+        await self._emit(
+            self._event(run_events.ASK_USER_ANSWERED, run_events.AskUserAnsweredData(call_id=call_id, answer=answer))
+        )
+
+    async def file(
+        self, *, file_id: str, name: str, path: str, size: int | None = None, source: str | None = None
+    ) -> None:
+        await self._emit(
+            self._event(
+                run_events.FILE, run_events.FileData(file_id=file_id, name=name, path=path, size=size, source=source)
+            )
+        )
+
+    # -- internals ----------------------------------------------------------
+
+    def _event(self, event_type: str, data: Any = None) -> dict[str, Any]:
+        return run_events.make_event(event_type, data, run_id=self.run_id)
+
+    async def _emit(self, event: dict[str, Any]) -> None:
+        if self._ended:
+            return
+        await self._sink(event)
+
+    async def _emit_terminal(self, event: dict[str, Any]) -> None:
+        # First terminal event wins, like ``StreamEventMapper.terminate``.
+        if self._ended:
+            return
+        await self._sink(event)
+        self._ended = True
+
+    def _plan_event(self) -> dict[str, Any]:
+        items: list[run_events.PlanItem] = []
+        for todo in self.mapper.ctx.todos:
+            if todo.previous_content:
+                self._previous_content[todo.task_id] = todo.previous_content
+            # The model put a dropped row back with the same wording (same id).
+            self._cancelled.pop(todo.task_id, None)
+            if not todo.content.strip():
+                # A model that writes a plan row without text is misbehaving
+                # (measured once with qwen3.8-max, design 决策 6). Show it as it is
+                # and leave a trace; do not invent a title.
+                logger.warning(
+                    "unified_event_output: plan row without text svid={} task_id={}",
+                    self.mapper.ctx.svid,
+                    todo.task_id,
+                )
+            items.append(
+                run_events.PlanItem(
+                    id=todo.task_id,
+                    content=todo.content,
+                    previous_content=self._previous_content.get(todo.task_id),
+                    status=_PLAN_STATUS_BY_TODO_STATUS.get(todo.status, run_events.PLAN_PENDING),
+                )
+            )
+        cancelled_ids = set(self._cancelled)
+        for position, item in sorted(self._cancelled.values(), key=lambda entry: entry[0]):
+            items.insert(min(position, len(items)), item)
+        self._plan_ids = [item.id for item in items]
+        self._cancelled = {item.id: (i, item) for i, item in enumerate(items) if item.id in cancelled_ids}
+        return self._event(run_events.PLAN, run_events.PlanData(items=items))
+
+    def _note_cancelled(self, event: TaskEnd) -> None:
+        """Keep a row the model dropped, at the place it had in the last plan."""
+        task_id = event.task_id
+        position = self._plan_ids.index(task_id) if task_id in self._plan_ids else len(self._plan_ids)
+        self._cancelled[task_id] = (
+            position,
+            run_events.PlanItem(
+                id=task_id,
+                content=event.name,
+                previous_content=self._previous_content.get(task_id),
+                status=run_events.PLAN_CANCELLED,
+            ),
+        )
+
+    def _step_event(self, step: ExecStep) -> dict[str, Any]:
+        extra_info = dict(step.extra_info or {})
+        if step.step_type == "thinking":
+            return self._event(
+                run_events.THINKING,
+                run_events.TextData(
+                    text=step.output or "", call_id=step.call_id, namespace=extra_info.get("namespace")
+                ),
+            )
+        return self._event(
+            run_events.TOOL_CALL,
+            run_events.ToolCallData(
+                call_id=step.call_id,
+                name=step.name,
+                status="end" if step.status == "end" else "start",
+                step_type=step.step_type or "tool",
+                call_reason=step.call_reason or "",
+                params=step.params,
+                output=step.output,
+                extra_info=extra_info,
+            ),
+        )
+
+    def _ask_user_event(self, event: NeedUserInput) -> dict[str, Any]:
+        params = event.params if isinstance(event.params, dict) else {}
+        questions = []
+        for call in params.get("tool_calls") or []:
+            if not isinstance(call, dict):
+                continue
+            args = call.get("args") if isinstance(call.get("args"), dict) else {}
+            questions.append(
+                run_events.AskUserQuestion(
+                    id=str(call["id"]) if call.get("id") is not None else None,
+                    question=str(args.get("question") or ""),
+                    options=[str(option) for option in args.get("options") or []],
+                    multiple=bool(args.get("multiple")),
+                )
+            )
+        return self._event(
+            run_events.ASK_USER,
+            run_events.AskUserData(
+                call_id=self._ask_user_call_id(), reason=event.call_reason or "", questions=questions
+            ),
+        )
+
+    def _ask_user_call_id(self) -> str:
+        """Id of the ``ask_user`` tool call that is waiting for the answer.
+
+        An interrupt carries no tool-call id, but the call that raised it is the
+        one the mapper still holds open (it got a start frame and no end frame).
+        """
+        ctx = self.mapper.ctx
+        for open_call in reversed(list(ctx.open_calls.values())):
+            if open_call.name == _ASK_USER_TOOL_NAME and not open_call.namespace:
+                return open_call.call_id
+        # An interrupt that did not come from the ask_user tool.
+        return f"ask_user:{ctx.svid}:{ctx.run_token}"
+
+    @staticmethod
+    def _answer_text(mode: str, chunk: Any, namespace: tuple[str, ...] | None) -> str | None:
+        """Answer text of a main-graph model message in the ``messages`` stream.
+
+        A subagent's text is an intermediate result for the main graph, not the
+        answer, so namespaced chunks are skipped. Thinking blocks are not text.
+        """
+        if mode != "messages" or namespace:
+            return None
+        message = chunk[0] if isinstance(chunk, (list, tuple)) and chunk else chunk
+        if getattr(message, "type", None) not in ("ai", "AIMessageChunk"):
+            return None
+        content = getattr(message, "content", None)
+        if isinstance(content, str):
+            return content or None
+        if isinstance(content, list):
+            parts = [
+                str(block.get("text") or "")
+                for block in content
+                if isinstance(block, dict) and block.get("type") == "text"
+            ]
+            return "".join(parts) or None
+        return None
