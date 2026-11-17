@@ -361,3 +361,51 @@ test('an explicit new composer discards unsent files without a late send clearin
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send message' })); });
   expect(onSend).toHaveBeenLastCalledWith('Question B', null);
 });
+
+// ── F004 T048: a run in progress accepts messages on the unified runtime ──
+const unifiedConfig = { ...config, unified_runtime_enabled: true };
+
+test('unified runtime keeps the text box and send button usable next to stop while a run is in progress (AC-12)', () => {
+  const input = { ...props(), bsConfig: unifiedConfig, features: { taskMode: false } };
+  render(<AiChatInput {...input} composerIdentity="c1" allowConfiguration={false} isStreaming sendDisabled taskRunning value="Change step 3" />);
+  expect(screen.getByRole('textbox')).toHaveAttribute('contenteditable', 'true');
+  expect(screen.getByRole('button', { name: 'Stop generating' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+  expect(input.onSend).toHaveBeenCalledWith('Change step 3', null);
+  fireEvent.click(screen.getByRole('button', { name: 'Stop generating' }));
+  expect(input.onStop).toHaveBeenCalledTimes(1);
+});
+
+test('unified runtime sends on Enter while a run is in progress (AC-12)', () => {
+  const input = { ...props(), bsConfig: unifiedConfig, features: { taskMode: false } };
+  render(<AiChatInput {...input} composerIdentity="c1" allowConfiguration={false} isStreaming value="Go on" />);
+  fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
+  expect(input.onSend).toHaveBeenCalledWith('Go on', null);
+});
+
+test('unified runtime shows no stop button when nothing runs', () => {
+  const input = { ...props(), bsConfig: unifiedConfig };
+  render(<AiChatInput {...input} composerIdentity="c1" allowConfiguration={false} />);
+  expect(screen.queryByRole('button', { name: 'Stop generating' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Send message' })).toBeInTheDocument();
+});
+
+test.each([
+  ['the switch is off', { bsConfig: config, composerIdentity: 'c1' }],
+  ['the input is not the conversation composer', { bsConfig: unifiedConfig }],
+  ['the input is the /linsight composer', { bsConfig: unifiedConfig, composerIdentity: 'c1', isLingsi: true }],
+])('a streaming run still blocks the composer when %s', (_name, extra) => {
+  const input = { ...props(), features: { taskMode: false }, ...extra };
+  render(<AiChatInput {...input} allowConfiguration={false} isStreaming value="Change step 3" />);
+  expect(screen.getByRole('textbox')).toHaveAttribute('contenteditable', 'false');
+  expect(screen.queryByRole('button', { name: 'Send message' })).toBeNull();
+  fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
+  expect(input.onSend).not.toHaveBeenCalled();
+});
+
+test('sendDisabled still blocks the send button with the switch off', () => {
+  const input = { ...props(), features: { taskMode: false } };
+  render(<AiChatInput {...input} composerIdentity="c1" allowConfiguration={false} sendDisabled value="Next round" />);
+  expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
+});

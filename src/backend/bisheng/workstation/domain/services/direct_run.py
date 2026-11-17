@@ -115,6 +115,9 @@ class DirectRunContext:
     answer: Any = None
     # Events to append right after ``run_started`` (``SubmitResult.events``).
     initial_events: list = field(default_factory=list)
+    # Relay run: the inbox messages the runner took as this run's input. None
+    # until the runner has read the inbox; never part of a queue item.
+    inbox_messages: list | None = None
 
     def __post_init__(self) -> None:
         if isinstance(self.tenant_id, bool) or self.tenant_id is None or int(self.tenant_id) <= 0:
@@ -250,7 +253,9 @@ class DirectRunner:
     ``checkpointer``     LangGraph checkpointer; default ``make_checkpointer()``.
     ``admit(ctx)``       quota admission; raises to reject the run.
     ``assemble(ctx, file_dir)``  returns a ``ToolAssembly``.
-    ``build_agent(ctx, tools, checkpointer, file_dir)``  returns the graph.
+    ``build_agent(ctx, tools, checkpointer, file_dir)``  returns the graph. When it
+                         also declares an ``inbox`` parameter it receives the
+                         ``InboxMiddleware`` of the run (T041).
     ``build_input(ctx)`` returns the graph input of a new run.
     ``object_store()``   async, returns the MinIO client of the workspace.
     ``file_dir_for(ctx)``  local cache directory of the workspace.
@@ -500,6 +505,8 @@ class DirectRunner:
 
             graph_input: Any = Command(resume=ctx.answer)
         else:
+            if ctx.relay:
+                await self._read_relay_inbox(ctx, sink)
             graph_input = _with_attachments(await self._build_input(ctx), reading)
         config = run_metrics.with_metric_callback(
             {
@@ -524,7 +531,58 @@ class DirectRunner:
         assembly = await self._assemble(ctx, file_dir)
         for failure in getattr(assembly, "failures", None) or []:
             await sink(self._tool_failure_event(ctx, failure))
-        return await self._build_agent(ctx, list(assembly.tools), self._get_checkpointer(), file_dir)
+        return await self._build_agent(
+            ctx, list(assembly.tools), self._get_checkpointer(), file_dir, **self._inbox_kwargs(ctx, sink)
+        )
+
+    async def _read_relay_inbox(self, ctx: DirectRunContext, sink: Callable[[dict], Awaitable[None]]) -> None:
+        """T043: a relay run takes the unread inbox as its input and says so.
+
+        Each message gets ``steer_read``, like a message the inbox middleware
+        reads mid-run, so its "queued" mark is cleared (AC-14). A message that
+        arrives after this is read by the middleware at the first model call.
+        """
+        ctx.inbox_messages = await self.dispatch.drain_inbox(ctx.conversation_id)
+        metrics = run_metrics.current()
+        now_ms = self._clock() * 1000
+        for message in ctx.inbox_messages:
+            message_id = str(message.get("message_id") or "")
+            if metrics is not None and message.get("ts"):
+                metrics.record_steer_wait(max(0.0, now_ms - float(message["ts"])))
+            if message_id:
+                await sink(
+                    run_events.make_event(
+                        run_events.STEER_READ, run_events.SteerData(message_id=message_id), run_id=ctx.run_id
+                    )
+                )
+
+    def _inbox_kwargs(self, ctx: DirectRunContext, sink: Callable[[dict], Awaitable[None]]) -> dict[str, Any]:
+        """T041: ``inbox=<InboxMiddleware of this run>`` for a ``build_agent`` that takes it.
+
+        The middleware writes ``steer_read`` through ``sink``, so the event reaches
+        the stream and the event hooks. An injected ``build_agent`` with the
+        four-argument signature is called as before.
+        """
+        try:
+            parameters = inspect.signature(self._build_agent).parameters
+        except (TypeError, ValueError):
+            # Not introspectable (a C callable): treat it as the four-argument form.
+            return {}
+        if "inbox" not in parameters:
+            return {}
+        from bisheng.linsight.domain.services.inbox_middleware import InboxMiddleware
+
+        metrics = run_metrics.current()
+        return {
+            "inbox": InboxMiddleware(
+                ctx.conversation_id,
+                run_id=ctx.run_id,
+                drain=self.dispatch.drain_inbox,
+                emit=sink,
+                clock=self._clock,
+                record_wait=metrics.record_steer_wait if metrics is not None else None,
+            )
+        }
 
     async def _read_attachments_step(
         self, ctx: DirectRunContext, files: list, sink: Callable[[dict], Awaitable[None]]
@@ -657,7 +715,9 @@ class DirectRunner:
             )
         )
 
-    async def _default_build_agent(self, ctx: DirectRunContext, tools: list, checkpointer: Any, file_dir: str) -> Any:
+    async def _default_build_agent(
+        self, ctx: DirectRunContext, tools: list, checkpointer: Any, file_dir: str, inbox: Any = None
+    ) -> Any:
         from bisheng.linsight.domain.services import agent_factory
         from bisheng.linsight.domain.services.workspace_backend import WorkspaceBackend, workspace_prefix_for
 
@@ -676,6 +736,7 @@ class DirectRunner:
             backend=backend,
             checkpointer=checkpointer,
             profile=PROFILE,
+            inbox=inbox,
         )
 
     async def _default_read_attachments(self, ctx: DirectRunContext) -> AttachmentReading:
@@ -712,7 +773,11 @@ class DirectRunner:
 
         texts = [ctx.text] if ctx.text else []
         if ctx.relay:
-            for message in await self.dispatch.drain_inbox(ctx.conversation_id):
+            # ``_work`` has read the inbox; a direct caller of this function has not.
+            unread = ctx.inbox_messages
+            if unread is None:
+                unread = await self.dispatch.drain_inbox(ctx.conversation_id)
+            for message in unread:
                 if message.get("text"):
                     texts.append(message["text"])
         if not texts:

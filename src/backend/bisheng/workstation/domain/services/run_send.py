@@ -20,7 +20,17 @@ Send (``POST /chat/completions``)
      run state of record is the Redis state hash, nothing is passed in memory.
    * the message answers a parked ask_user -> the parked run is resumed
      (``direct`` here, ``planned`` through a resume item at the queue head).
-   * ``queued`` -> the message is in the inbox; nothing else happens here.
+   * ``queued`` -> the message is in the inbox. Its question row is written at
+     once with a "queued" mark and ``steer_accepted`` goes to the run's event
+     stream (AC-13); the mark is cleared when the run reads the message (AC-14,
+     ``run_message_persist``).
+
+Stop (``POST /conversations/{id}/stop``)
+----------------------------------------
+
+``stop_conversation_run`` asks the run that holds the conversation to stop, in
+whichever process it executes. A run without a live coroutine (parked on a
+question, or still waiting in the worker queue) is ended here.
 
 4. Response: with ``X-BS-Run-Protocol: 2`` a JSON body
    ``{run_id, disposition, message_id, conversation_id}``; without it the
@@ -80,7 +90,7 @@ from bisheng.linsight.domain.schemas import run_events
 from bisheng.linsight.domain.services.run_event_stream import HEARTBEAT_TYPE, RunEventStream
 from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import SensitiveWordPolicyService
 from bisheng.workstation.domain.schemas.chat import APIChatCompletion
-from bisheng.workstation.domain.services import chat_service
+from bisheng.workstation.domain.services import chat_service, run_message_persist
 from bisheng.workstation.domain.services.chat_helpers import _sse_resp, gen_title, user_message
 from bisheng.workstation.domain.services.content_safety import workbench_tenant_id
 from bisheng.workstation.domain.services.daily_memory import (
@@ -98,7 +108,13 @@ from bisheng.workstation.domain.services.run_dispatch import (
     RunDispatchService,
     SubmitResult,
 )
-from bisheng.workstation.domain.services.run_lease import STATUS_IDLE, STATUS_RUNNING, RunLeaseService
+from bisheng.workstation.domain.services.run_lease import (
+    STATUS_IDLE,
+    STATUS_RUNNING,
+    STATUS_WAITING,
+    RunLeaseService,
+    stop_key,
+)
 from bisheng.workstation.domain.services.run_projector_direct import DirectRunProjector
 
 RUN_PROTOCOL_HEADER = "X-BS-Run-Protocol"
@@ -127,6 +143,7 @@ class RunServices:
     stream: RunEventStream
     lease: RunLeaseService
     dispatch: RunDispatchService
+    redis: Any = None
 
 
 async def _redis() -> Any:
@@ -148,6 +165,7 @@ async def run_services() -> RunServices:
         stream=RunEventStream(redis),
         lease=RunLeaseService(redis),
         dispatch=RunDispatchService(redis, **_dispatch_wiring()),
+        redis=redis,
     )
 
 
@@ -289,6 +307,24 @@ async def _open_conversation(data: APIChatCompletion, login_user: UserPayload) -
     return conversation, is_new
 
 
+def _question_row(data: Any, login_user: Any, conversation_id: str, extra: dict | None = None) -> ChatMessage:
+    """The question row of one sent message; ``extra`` is empty for a normal turn."""
+    return ChatMessage(
+        user_id=login_user.user_id,
+        chat_id=conversation_id,
+        flow_id="",
+        type="over",
+        is_bot=False,
+        sender="User",
+        files=json.dumps(data.files) if data.files else None,
+        extra=json.dumps(extra, ensure_ascii=False) if extra else "{}",
+        message=json.dumps({"query": data.text or "", "files": data.files or []}, ensure_ascii=False),
+        category="question",
+        source=0,
+        sensitive_status=SensitiveStatus.PASS.value,
+    )
+
+
 async def _insert_question_row(
     data: APIChatCompletion, login_user: UserPayload, conversation_id: str, memory_register: MemoryRegister | None
 ) -> Any:
@@ -296,22 +332,25 @@ async def _insert_question_row(
     # F132: registration precedes this turn's question row (AC-40 of F132).
     await register_session(memory_register, conversation_id)
     await promote_chat_attachments(data.files, login_user.user_id)
-    return await ChatMessageDao.ainsert_one(
-        ChatMessage(
-            user_id=login_user.user_id,
-            chat_id=conversation_id,
-            flow_id="",
-            type="over",
-            is_bot=False,
-            sender="User",
-            files=json.dumps(data.files) if data.files else None,
-            extra="{}",
-            message=json.dumps({"query": data.text or "", "files": data.files or []}, ensure_ascii=False),
-            category="question",
-            source=0,
-            sensitive_status=SensitiveStatus.PASS.value,
-        )
-    )
+    return await ChatMessageDao.ainsert_one(_question_row(data, login_user, conversation_id))
+
+
+async def _insert_steer_row(
+    data: APIChatCompletion,
+    login_user: UserPayload,
+    conversation_id: str,
+    result: SubmitResult,
+    memory_register: MemoryRegister | None,
+) -> Any:
+    """Question row of a message that joined the inbox (AC-13).
+
+    Same steps and structure as ``_insert_question_row``; ``extra`` names the run
+    that will read the message and carries the "queued" mark.
+    """
+    await register_session(memory_register, conversation_id)
+    await promote_chat_attachments(data.files, login_user.user_id)
+    extra = run_message_persist.steer_extra(result.run_id, result.message_id, queued=True)
+    return await ChatMessageDao.ainsert_one(_question_row(data, login_user, conversation_id, extra))
 
 
 async def _model_display_name(data: APIChatCompletion, login_user: UserPayload) -> str:
@@ -516,6 +555,12 @@ async def _send(request, data: APIChatCompletion, login_user: UserPayload, negot
     tools = [tool.model_dump() for tool in (data.tools or [])]
 
     svc = await run_services()
+
+    async def save_queued(queued: SubmitResult, _message: dict) -> None:
+        row = await _insert_steer_row(data, login_user, conversation_id, queued, memory_register)
+        # The run may already have read the message; then the mark is cleared here.
+        await run_message_persist.bind_steer_row(svc.redis, conversation_id, queued.message_id, row.id, queued.run_id)
+
     result = await svc.dispatch.submit(
         conversation_id,
         {
@@ -528,10 +573,12 @@ async def _send(request, data: APIChatCompletion, login_user: UserPayload, negot
             "user_id": login_user.user_id,
             "tenant_id": tenant_id,
         },
+        on_queued=save_queued,
     )
 
     if result.kind not in (KIND_NEW_RUN, KIND_ANSWER):
-        # The message is in the inbox; the running (or relay) run reads it.
+        # The message is in the inbox and its question row is written; the
+        # running (or relay) run reads it.
         if negotiated:
             return _json(result, conversation_id)
         return StreamingResponse(iter(_closing_frames(conversation_id)), media_type=_SSE)
@@ -643,7 +690,22 @@ async def _start_direct(
         answer=(data.text or "") if is_resume else None,
         initial_events=list(result.events),
     )
-    start_direct_run(ctx, on_event=[projector.on_event])
+    # What a process without this projector needs to write the run's answer row:
+    # the worker (relay run), or whoever closes the run after this process died.
+    await run_message_persist.remember_direct_run(
+        svc.redis,
+        conversation_id,
+        result.run_id,
+        user_id=conversation.user_id,
+        tenant_id=tenant_id,
+        sender=sender,
+        model_id=data.model,
+    )
+    # The only attachment of these hooks: no process-wide hook factory is
+    # registered in the API process, or every row would be written twice.
+    start_direct_run(
+        ctx, on_event=[projector.on_event, run_message_persist.steer_read_hook(conversation_id, redis=svc.redis)]
+    )
     logger.info(
         "unified send: direct run={} conversation={} resume={} negotiated={}",
         result.run_id,
@@ -866,3 +928,149 @@ async def _legacy_direct_stream(
         if not done:
             logger.warning("direct run={} conversation={}: the client closed the stream; stopping", ctx.run_id, cid)
             _background(svc.lease.request_stop(ctx.run_id, cid), f"stop:{ctx.run_id}")
+
+
+# --------------------------------------------------------------------------- #
+# Stop
+# --------------------------------------------------------------------------- #
+
+STOP_NO_RUN = "idle"
+STOP_REQUESTED = "stopping"
+STOP_ENDED = "stopped"
+STOP_EXPIRED = "expired"
+
+
+async def _planned_run_record(conversation_id: str, run_id: str) -> Any:
+    """The run record of the planned run that holds the conversation, or None.
+
+    A run that is still in the worker queue has not stored its run id in the
+    record yet; it is the newest record of the conversation.
+    """
+    from bisheng.linsight.domain import task_exec
+    from bisheng.linsight.domain.models.linsight_session_version import (
+        LinsightSessionVersionDao,
+        SessionVersionStatusEnum,
+    )
+
+    record = await task_exec._find_run_record(conversation_id, run_id)
+    if record is not None:
+        return record
+    versions = await LinsightSessionVersionDao.get_session_versions_by_session_id(conversation_id)
+    # Only a record that has not ended can be the run in the queue; an ended one
+    # belongs to an earlier run and must not be touched.
+    active = (
+        SessionVersionStatusEnum.NOT_STARTED,
+        SessionVersionStatusEnum.IN_PROGRESS,
+        SessionVersionStatusEnum.WAITING_FOR_USER_INPUT,
+    )
+    if versions and versions[0].status in active:
+        return versions[0]
+    return None
+
+
+async def _terminate_planned_record(record: Any) -> None:
+    """What the deep-research stop does today: leave the queue, mark the record, tell the legacy subscribers."""
+    from bisheng.linsight.domain.models.linsight_session_version import SessionVersionStatusEnum
+    from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
+
+    if record.status in (SessionVersionStatusEnum.COMPLETED, SessionVersionStatusEnum.TERMINATED):
+        return
+    await LinsightWorkbenchImpl.terminate(record)
+
+
+async def _planned_run_is_driven(svc: RunServices, record: Any) -> bool:
+    """Whether a worker is executing the run right now (it holds the 30 s driver key)."""
+    from bisheng.linsight.domain.task_exec import LINSIGHT_RUN_LOCK_KEY_PREFIX
+
+    return bool(await svc.redis.exists(f"{LINSIGHT_RUN_LOCK_KEY_PREFIX}{record.id}"))
+
+
+async def _append_run_stopped(svc: RunServices, conversation_id: str, run_id: str) -> None:
+    """``run_stopped`` for a run without a coroutine, unless its stream is gone or already closed."""
+    snapshot = await svc.stream.snapshot(conversation_id)
+    if snapshot is None or snapshot.get("run_id") != run_id or snapshot.get("ended"):
+        return
+    await svc.stream.append(
+        conversation_id, run_events.make_event(run_events.RUN_STOPPED, {"reason": "user"}, run_id=run_id)
+    )
+
+
+async def stop_conversation_run(
+    conversation_id: str,
+    *,
+    session_version_id: str | None = None,
+    terminate_record: bool = True,
+    svc: RunServices | None = None,
+) -> dict:
+    """Stop the run that holds the conversation (AC-29). Returns ``{run_id, status}``.
+
+    * a running run sees the stop flag within a second, in whichever process it
+      executes, writes ``run_stopped`` and releases the conversation itself
+      (``status="stopping"``);
+    * a run parked on a question has no coroutine: it is ended here and the
+      conversation is idle when this returns (``"stopped"``);
+    * a deep-research run still waiting in the worker queue is taken out of the
+      queue and the conversation is released (``"stopped"``);
+    * a run whose lease lapsed is reported as failed (``"expired"``);
+    * no run: ``"idle"``.
+
+    ``session_version_id`` restricts the stop to that deep-research run (the
+    legacy terminate endpoint); ``terminate_record=False`` leaves the run record
+    to the caller.
+    """
+    svc = svc or await run_services()
+    state = await svc.lease.get_state(conversation_id)
+    run_id = state.run_id
+    if state.status == STATUS_IDLE or not run_id:
+        return {"run_id": None, "status": STOP_NO_RUN}
+
+    planned = state.profile == PROFILE_PLANNED
+    record = None
+    if planned:
+        record = await _planned_run_record(conversation_id, run_id)
+        if session_version_id is not None and (record is None or record.id != session_version_id):
+            # The conversation is held by another run than the one being terminated.
+            return {"run_id": None, "status": STOP_NO_RUN}
+    elif session_version_id is not None:
+        return {"run_id": None, "status": STOP_NO_RUN}
+
+    if state.status == STATUS_RUNNING and state.lease_until_ms <= int(time.time() * 1000):
+        # Nothing is executing it any more: report it instead of flagging a dead run.
+        await svc.dispatch.recover_expired(conversation_id)
+        return {"run_id": run_id, "status": STOP_EXPIRED}
+
+    # Read before the conversation is released: afterwards a new run may clear it.
+    parked_text = ""
+    if state.status == STATUS_WAITING and not planned:
+        snapshot = await svc.stream.snapshot(conversation_id)
+        if snapshot is not None and snapshot.get("run_id") == run_id:
+            parked_text = snapshot.get("text") or ""
+
+    result = await svc.lease.request_stop(run_id, conversation_id)
+    status = STOP_REQUESTED
+
+    if result.parked_run_released:
+        status = STOP_ENDED
+        # Nobody consumes the flag of a parked run, and a later execution under
+        # the same run id must not be stopped by it.
+        await svc.redis.delete(stop_key(run_id))
+        if not planned:
+            await run_message_persist.persist_stopped_direct_answer(
+                conversation_id, run_id, parked_text, redis=svc.redis
+            )
+        await _append_run_stopped(svc, conversation_id, run_id)
+    elif planned and record is not None and not await _planned_run_is_driven(svc, record):
+        # Still in the worker queue: no worker will see the flag.
+        status = STOP_ENDED
+        if terminate_record:
+            await _terminate_planned_record(record)
+        await svc.redis.delete(stop_key(run_id))
+        await svc.dispatch.on_run_finished(conversation_id, run_id)
+        logger.info("stop: queued planned run={} conversation={} left the queue", run_id, conversation_id)
+        return {"run_id": run_id, "status": status}
+
+    if planned and record is not None and terminate_record:
+        # A running deep-research run also stops through its record, as today.
+        await _terminate_planned_record(record)
+    logger.info("stop: run={} conversation={} profile={} status={}", run_id, conversation_id, state.profile, status)
+    return {"run_id": run_id, "status": status}

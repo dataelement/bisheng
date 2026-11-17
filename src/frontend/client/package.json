@@ -140,6 +140,7 @@
     "xlsx": "catalog:",
     "xlsx-populate": "^1.21.0",
     "zod": "^3.22.4",
+    "zustand": "^4.5.7",
     "@bisheng/chat": "workspace:*",
     "@bisheng/api-client": "workspace:*"
   },

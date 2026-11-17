@@ -35,6 +35,13 @@ const API = {
 };
 
 // --- Types ---
+// F004: run event types of the unified runtime live with the run store.
+export type {
+    RunEvent, RunEventType, RunEventDataMap, RunPlanItem, PlanItemStatus, RunTextData, RunToolCallData, RunAskUserData,
+    RunAskUserQuestion, RunAskUserAnsweredData, RunSteerData, RunFileData, RunQueuedData, RunFailedData, RunResyncData,
+    RunSendResult,
+} from '~/store/runStore';
+export { getRunEventsUrl, sendRunMessage, stopConversationRun } from './runApi';
 export type { ChatCitation, ChatCitationItem } from '@bisheng/chat/citations';
 import type { ChatCitation } from '@bisheng/chat/citations';
 
@@ -158,6 +165,12 @@ export interface ChatMessage {
     events?: AgentEvent[];
     /** F132: memory notice / attribution flags of this answer (owner only). */
     memory?: MemoryFlags;
+    /**
+     * F004: set on the local answer row that mirrors a run of the unified
+     * runtime. `''` while the send is still waiting for its run id. Never set
+     * on a row loaded from history.
+     */
+    liveRunId?: string;
 }
 
 export interface ContentPart {

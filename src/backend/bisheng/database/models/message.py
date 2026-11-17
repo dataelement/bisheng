@@ -440,6 +440,15 @@ class ChatMessageDao(MessageBase):
         return message
 
     @classmethod
+    async def update_fields_by_id(cls, message_id: int, **fields) -> None:
+        """Write the given columns of one row with a single UPDATE, without loading the row."""
+        if not fields:
+            return
+        async with get_async_db_session() as session:
+            await session.exec(update(ChatMessage).where(ChatMessage.id == message_id).values(**fields))
+            await session.commit()
+
+    @classmethod
     def update_message_copied(cls, message_id: int, copied: int):
         with get_sync_db_session() as session:
             statement = update(ChatMessage).where(ChatMessage.id == message_id).values(copied=copied)

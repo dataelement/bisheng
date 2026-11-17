@@ -605,6 +605,11 @@ async def test_worker_runs_direct_relay(monkeypatch: pytest.MonkeyPatch, fake_re
         calls.append(run_ctx)
 
     monkeypatch.setattr("bisheng.workstation.domain.services.direct_run.execute_direct_run", fake_execute)
+    # T043: the persistence hooks of a relay run need a real Redis; covered in
+    # test/workstation/test_direct_answer_recovery.py.
+    monkeypatch.setattr(
+        "bisheng.workstation.domain.services.run_message_persist.relay_run_hooks", AsyncMock(return_value=([], None))
+    )
     planned = AsyncMock()
     monkeypatch.setattr(worker_mod.LinsightWorkflowTask, "async_run", planned)
     session_lookup = AsyncMock()
@@ -635,6 +640,11 @@ async def test_queue_item_restores_tenant(monkeypatch: pytest.MonkeyPatch, fake_
         seen.append(current_tenant_id.get())
 
     monkeypatch.setattr("bisheng.workstation.domain.services.direct_run.execute_direct_run", fake_execute)
+    # T043: the persistence hooks of a relay run need a real Redis; covered in
+    # test/workstation/test_direct_answer_recovery.py.
+    monkeypatch.setattr(
+        "bisheng.workstation.domain.services.run_message_persist.relay_run_hooks", AsyncMock(return_value=([], None))
+    )
     token = current_tenant_id.set(None)
     try:
         await worker_mod.enqueue_relay_run(_relay_item())

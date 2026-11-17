@@ -30,7 +30,8 @@ import { SopStatus, taskModeSkillsState } from "~/store/linsight";
 import { isMediaAttachmentFile, type MediaParsingState } from "~/utils/mediaAttachmentUtils";
 import { useDesktopConversationActivity, useDesktopConversationRenamed } from "~/components/Chat/desktopConversationBridge";
 import { runningConversationIds } from "~/components/Chat/runningConversations";
-import { captureProjectChatDraft } from "~/layouts/WorkbenchSidebar/projectChatCreation";
+import { bindProjectChatCreation, captureProjectChatDraft } from "~/layouts/WorkbenchSidebar/projectChatCreation";
+import { useUnifiedRun } from "~/hooks/useUnifiedRun";
 
 /**
  * Turns that are still generating, across every mounted chat surface.
@@ -254,6 +255,21 @@ export default function useAiChat(
     // Admin-level org-KB toggle. Knowledge spaces remain available even when
     // the org knowledge base feature is disabled, so we only strip org ids.
     const { data: bsConfig } = useGetBsConfig();
+
+    // F004: a tenant on the unified runtime sends with `X-BS-Run-Protocol: 2`
+    // and reads the answer from the run event stream. With the switch off or
+    // missing, `unified` stays inert and every path below is today's.
+    const unifiedEnabled = bsConfig?.unified_runtime_enabled === true
+        && draftScope === "chat" && !isLingsi && !shareToken;
+    const unified = useUnifiedRun({
+        enabled: unifiedEnabled,
+        conversationId,
+        bucketId: activeBucketId,
+        messages,
+        isLoading,
+        setMessagesFor,
+        sender: chatModel.name || "AI",
+    });
     const { user } = useAuthContext();
     const knowledgeDefaults = useMemo<SelectedOrgKb[]>(() => bsConfig?.knowledgeBase?.enabled === false
         ? [] : (bsConfig?.orgKbs ?? []).filter((kb) => kb.default_checked)
@@ -485,7 +501,8 @@ export default function useAiChat(
         getAgentMessages(conversationId, shareToken || undefined)
             .then((msgs) => {
                 if (!active) return;
-                setMessages(msgs);
+                // F004: keeps the live row of a run in progress; returns `msgs` as is when the switch is off.
+                setMessages((prev) => unified.composeHistory(conversationId, msgs, prev));
                 setIsLoading(false);
                 // F132: memory flags are owner-only, so a share view never asks.
                 if (shareToken) return;
@@ -701,7 +718,15 @@ export default function useAiChat(
             };
 
             // Add both messages immediately
-            const updatedMessages = [...turnMessages, userMessage, initialResponse];
+            // F004: on the unified runtime the answer row mirrors a run. A run
+            // already in progress takes this message (as a steer or as the
+            // answer to its question), so no second answer row is added; an
+            // idle conversation gets a row that waits for its run id.
+            const updatedMessages = !unifiedEnabled
+                ? [...turnMessages, userMessage, initialResponse]
+                : unified.isBusy(turn.cid)
+                    ? [...turnMessages, userMessage]
+                    : [...turnMessages, userMessage, { ...initialResponse, liveRunId: "" }];
             setMessages(updatedMessages);
 
             // Build SSE payload (same structure as useChatFunctions.ask).
@@ -750,6 +775,59 @@ export default function useAiChat(
                 skills: taskMode ? dailyTaskSkills.map((s) => s.name) : [],
                 skill_ids: taskMode ? dailyTaskSkills.flatMap((s) => (typeof s.id === 'number' ? [s.id] : [])) : [],
             };
+
+            if (unifiedEnabled) {
+                // F004: one JSON answer instead of a stream; the run's progress
+                // arrives through the conversation's event subscription.
+                setIsStreaming(true);
+                const sent = await unified.send({
+                    payload: { ...payload, ...bindProjectChatCreation(projectDraft ?? undefined) },
+                    flowLeaseId: presence?.leaseId,
+                    conversationId: turn.cid,
+                    userMessageId,
+                    setMessages,
+                    onConversation: (serverConvoId) => {
+                        if (serverConvoId === turn.cid) return;
+                        // The optimistic rows are the truth for this turn; a
+                        // refetch now would replace them with the question alone.
+                        skipLoadConvoRef.current = serverConvoId;
+                        adoptConversationId(turn, serverConvoId);
+                    },
+                    onRejected: (message) => showToast({ message, status: "error" }),
+                });
+                setIsStreaming(false);
+                finishMediaParsing(userMessageId, turn.bucketId);
+                if (!sent.accepted) return false;
+                if (taskMode) refreshInviteQuota();
+                const sentConvoId = sent.conversationId;
+                if (wasNewConvo && sentConvoId) {
+                    queryClient.setQueryData<ConversationData>([QueryKeys.allConversations], (convoData) =>
+                        convoData ? addConversation(convoData, {
+                            conversationId: sentConvoId,
+                            title: localize('com_ui_new_chat'),
+                            createdAt: new Date().toISOString(),
+                            updatedAt: new Date().toISOString(),
+                            model: chatModel.name || '',
+                            endpoint: '',
+                            endpointType: 'custom',
+                            isArchived: false,
+                            tags: [],
+                        } as unknown as TConversation) : convoData);
+                    // The endpoint waits until the backend has stored a real name.
+                    dataService.genTitle({ conversationId: sentConvoId })
+                        .then((res: { title?: string }) => {
+                            if (!res?.title) return;
+                            setTitle(res.title);
+                            queryClient.setQueryData<ConversationData>([QueryKeys.allConversations], (convoData) =>
+                                convoData ? updateConvoFields(convoData, {
+                                    conversationId: sentConvoId,
+                                    title: res.title,
+                                } as TConversation) : convoData);
+                        })
+                        .catch(() => { /* non-critical: the placeholder name stays */ });
+                }
+                return true;
+            }
 
             // Correlation key for the user (question) message. Starts as the
             // client-side temp UUID, then gets promoted to the real persisted
@@ -1219,10 +1297,11 @@ export default function useAiChat(
             beginStream(turn.bucketId, submission);
             return true;
         },
-        [knowledgeAccessBlocked, knowledgeAccessMessage, conversationId, activeBucketId, isStreaming, chatModel, selectedOrgKbs, setSelectedOrgKbs, bsConfig, adoptConversationId, searchType, selectedAgentTools, dailyTaskSkills, isLingsi, createLinsight, updateLinsight, localize, showToast, queryClient, finishMediaParsing, ensureFlowLeaseId]
+        [knowledgeAccessBlocked, knowledgeAccessMessage, conversationId, activeBucketId, isStreaming, chatModel, selectedOrgKbs, setSelectedOrgKbs, bsConfig, adoptConversationId, searchType, selectedAgentTools, dailyTaskSkills, isLingsi, createLinsight, updateLinsight, localize, showToast, queryClient, finishMediaParsing, ensureFlowLeaseId, unifiedEnabled, unified.isBusy, unified.send]
     );
 
     // --- Stop generating ---
+    const unifiedStopRun = unified.stopRun;
     const stopGenerating = useCallback(() => {
         // Only the conversation being read. A turn generating in another one is
         // none of this button's business.
@@ -1230,7 +1309,12 @@ export default function useAiChat(
         cancelIngestPoll(conversationId);
         setIsStreaming(false);
         setIsParsingMedia(false);
-    }, [cancelIngestPoll, conversationId, activeBucketId, endStream, setIsParsingMedia, setIsStreaming]);
+        // F004: a run of the unified runtime lives on the server; ask it to
+        // stop. The `run_stopped` event ends it on screen. No-op otherwise.
+        unifiedStopRun().catch(() => {
+            /* the run keeps going and the stop button stays available */
+        });
+    }, [cancelIngestPoll, conversationId, activeBucketId, endStream, setIsParsingMedia, setIsStreaming, unifiedStopRun]);
 
     // --- Clear conversation ---
     const clearConversation = useCallback(() => {
@@ -1243,7 +1327,7 @@ export default function useAiChat(
     // --- Regenerate: add a new sibling response under the same parent ---
     const regenerate = useCallback(
         async (parentMessageId: string) => {
-            if (isStreaming) return;
+            if (isStreaming || unified.isRunning) return;
             const projectDraft = captureProjectChatDraft(conversationId === "new" ? null : conversationId);
             const turnMessages = messagesRef.current;
             if (knowledgeAccessBlocked) {
@@ -1416,7 +1500,7 @@ export default function useAiChat(
             setIsStreaming(true);
             beginStream(turn.bucketId, submission);
         },
-        [knowledgeAccessBlocked, knowledgeAccessMessage, conversationId, activeBucketId, isStreaming, chatModel, selectedOrgKbs, setSelectedOrgKbs, bsConfig, adoptConversationId, searchType, selectedAgentTools, localize, showToast, ensureFlowLeaseId]
+        [knowledgeAccessBlocked, knowledgeAccessMessage, conversationId, activeBucketId, isStreaming, unified.isRunning, chatModel, selectedOrgKbs, setSelectedOrgKbs, bsConfig, adoptConversationId, searchType, selectedAgentTools, localize, showToast, ensureFlowLeaseId]
     );
 
     return {
@@ -1424,14 +1508,17 @@ export default function useAiChat(
         isClearing: false,
         retryHistory,
         // State
-        messages,
+        // F004: with the unified runtime on, the row of a run in progress
+        // shows the run store's state; otherwise this is the bucket as is.
+        messages: unified.messages,
         // Legacy alias — kept null to maintain the old destructuring shape
         // without shipping tree-building on the hot path.
         messagesTree: null as unknown,
         conversationId,
         title,
         isLoading,
-        isStreaming,
+        // F004: also true while a run of the unified runtime is in progress.
+        isStreaming: isStreaming || unified.isRunning,
         isParsingMedia,
 
         selectedOrgKbs,
@@ -1444,5 +1531,11 @@ export default function useAiChat(
         clearConversation,
         regenerate,
         setConversationId,
+        // F004 (unified runtime only; inert when the tenant switch is off)
+        unifiedRuntime: unifiedEnabled,
+        /** A run is in progress (running, or waiting for the user's answer). */
+        isRunActive: unified.isRunning,
+        /** POST /conversations/{id}/stop for the run on screen. */
+        stopRun: unified.stopRun,
     };
 }

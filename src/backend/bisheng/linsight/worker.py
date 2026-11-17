@@ -560,7 +560,7 @@ class ScheduleCenterProcess(Process):
 
     async def _run_direct_relay(self, item: dict) -> None:
         """Execute a ``direct`` relay run in this worker, under the item's tenant."""
-        from bisheng.workstation.domain.services import direct_run
+        from bisheng.workstation.domain.services import direct_run, run_message_persist
 
         token = set_current_tenant_id(item["tenant_id"])
         try:
@@ -569,14 +569,21 @@ class ScheduleCenterProcess(Process):
                     from bisheng.linsight.domain import task_exec
 
                     await task_exec.ensure_linsight_permission_runtime()
+                # T043: no HTTP request owns this run, so its answer row and the
+                # "queued" marks of the messages it reads are written from here.
+                # This is the only attachment in this process (no hook factory).
+                hooks, model_id = await run_message_persist.relay_run_hooks(item)
             except Exception as e:
                 # The run never started, so nothing would end it: without this the
                 # conversation stays reserved until the queued lease lapses.
                 logger.exception("direct relay run %s could not start: %s", item["run_id"], e)
                 await self._fail_relay_run(item, "The worker could not start the run.")
                 return
+            if model_id and not item.get("model_id"):
+                # A relay item carries no model: answer with the conversation's model.
+                item = {**item, "model_id": model_id}
             # A run that fails reports it itself (run_failed) and does not raise.
-            await direct_run.execute_direct_run(item)
+            await direct_run.execute_direct_run(item, on_event=hooks)
         finally:
             current_tenant_id.reset(token)
 

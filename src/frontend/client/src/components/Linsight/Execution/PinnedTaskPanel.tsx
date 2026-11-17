@@ -4,16 +4,82 @@
  * this stays put above the input for the conversation's latest task turn — both
  * while it runs and after it completes.
  *
- * It only reads from the linsight store; hydration is owned by the in-stream
- * TaskTurnPanel (live WS pump for the active turn, lazy-load for history), so
- * this component re-renders reactively as that store entry fills in.
+ * Two sources, never mixed (F004 design 决策 11):
+ *   - Legacy path (and every tenant with `unified_runtime_enabled` off): the
+ *     linsight Recoil store, keyed by `versionId`. Hydration is owned by the
+ *     in-stream TaskTurnPanel (live WS pump for the active turn, lazy-load for
+ *     history), so the panel re-renders reactively as that store entry fills in.
+ *   - Unified runtime: the plan of the conversation's current run in `runStore`,
+ *     keyed by `conversationId`. The store is filled by the run-events
+ *     subscription, which replays the current run on mount, so the plan is back
+ *     after a refresh for as long as the server keeps the run's events. When the
+ *     store holds no plan (events expired, or the latest task turn predates the
+ *     switch), the panel falls back to the legacy source.
  */
+import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { SopStatus } from '~/store/linsight';
-import { TaskPanel } from './TaskPanel';
+import { selectRun, useRunStore, type RunPlanItem, type RunStatus } from '~/store/runStore';
+import { PLAN_ROW_CANCELLED, TaskPanel } from './TaskPanel';
 import type { ExecTask } from './TaskStepRow';
 
-export function PinnedTaskPanel({ versionId }: { versionId: string }) {
+interface PinnedTaskPanelProps {
+    /** Latest task turn of the conversation (legacy source). Empty when there is none. */
+    versionId?: string;
+    /** Conversation shown on the page (unified-runtime source). */
+    conversationId?: string;
+}
+
+/**
+ * Map the plan of a run to the rows TaskPanel renders. Pure.
+ * A row is "in progress" only while the run is active: after a stop or a
+ * failure nothing is executing, so no row may keep spinning.
+ */
+export function planItemsToTasks(items: RunPlanItem[], runStatus: RunStatus): ExecTask[] {
+    const active = runStatus === 'running' || runStatus === 'waiting';
+    return items.map((item, index) => {
+        let status = 'not_started';
+        if (item.status === 'completed') status = 'success';
+        else if (item.status === 'cancelled') status = PLAN_ROW_CANCELLED;
+        else if (item.status === 'in_progress' && active) status = 'in_progress';
+        return {
+            id: item.id || `row-${index}`,
+            name: item.content,
+            status,
+            previousName: item.previous_content || '',
+        };
+    });
+}
+
+export function PinnedTaskPanel({ versionId = '', conversationId = '' }: PinnedTaskPanelProps) {
+    const { data: bsConfig } = useGetBsConfig();
+    const unified = bsConfig?.unified_runtime_enabled === true && !!conversationId;
+    // With the switch off the selector reads a key that never exists, so the
+    // store cannot change what this component renders.
+    const run = useRunStore(selectRun(unified ? conversationId : ''));
+
+    if (unified && run && run.plan.length > 0) {
+        const stopped = run.status === 'stopped';
+        return (
+            <div className="pb-3">
+                {/* Key by conversation, not by run: a steer or a follow-up run must
+                    not collapse a panel the user has opened. */}
+                <TaskPanel
+                    key={conversationId}
+                    tasks={planItemsToTasks(run.plan, run.status)}
+                    completed={run.status === 'finished'}
+                    terminated={stopped || run.status === 'failed'}
+                    stopped={stopped}
+                    running={run.status === 'running' || run.status === 'waiting'}
+                />
+            </div>
+        );
+    }
+    if (!versionId) return null;
+    return <LegacyPinnedTaskPanel versionId={versionId} />;
+}
+
+function LegacyPinnedTaskPanel({ versionId }: { versionId: string }) {
     const { getLinsight } = useLinsightManager();
     const linsight = getLinsight(versionId);
 

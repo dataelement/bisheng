@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-11-18 用户确认，51 条 AC |
 | design.md | ✅ 已评审 | 2026-11-18 用户确认，决策 1 至决策 12；接手时的第一入口 |
 | tasks.md | ✅ 已拆解 | 2026-11-18 `/sdd-review tasks` 自审通过；任务编号 T001 至 T063，T063 排在 T044 之后 |
-| 实现 | 🔨 进行中 | 38 / 63 完成（Wave 0 与 Wave 1 的 T010–T038 已提交；T039 的界面步骤待人工执行，见 verification-p1.md）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🔨 进行中 | 50 / 63 完成（Wave 0–2 的代码任务已提交；T039、T051 的界面步骤待人工执行，见 verification-p1.md、verification-p2.md）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
 
 ---
 
@@ -297,63 +297,63 @@
 
 ### Wave 2（P2）：插话与改计划（用户可见）
 
-- [ ] **T040**: 收件箱中间件的单元测试
+- [x] **T040**: 收件箱中间件的单元测试
   **文件**: `test/linsight/test_inbox_middleware.py`
   **逻辑**: 用脚本化模型与 `fakeredis` 断言：运行中进入收件箱的消息出现在下一次模型调用的输入里，位置在上一步工具结果之后；多条消息按入箱顺序注入，各出现一次；每条被读取后发一个 `steer_read` 事件，带 `message_id`；最后一次模型调用期间入箱的消息留在收件箱；中间件只挂在主图，子代理的中间件列表里没有它；无人值守渠道不挂；`direct` 档同样生效；注入的消息进入会话状态。
   **测试**: `test_injected_before_next_model_call`、`test_order_and_exactly_once`、`test_steer_read_event`、`test_late_message_stays_queued`、`test_not_in_subagents`、`test_not_in_unattended`、`test_works_in_direct_profile`、`test_injected_message_persisted_in_state`
   **覆盖 AC**: AC-14, AC-15, AC-16, AC-18, AC-19, AC-23
   **依赖**: T016, T020
 
-- [ ] **T041**: 收件箱中间件实现
+- [x] **T041**: 收件箱中间件实现
   **文件**: `bisheng/linsight/domain/services/inbox_middleware.py`、`bisheng/linsight/domain/services/agent_factory.py`
   **逻辑**: `InboxMiddleware(AgentMiddleware)`：`abefore_model` 取出该会话收件箱里的全部消息，转成 `HumanMessage`，发 `steer_read`，返回 `{"messages": [...]}`。在工厂里只对主图、且非无人值守渠道挂载。参考实现见 `scripts/spike_unified_runtime/s3_inbox_middleware.py`。
   **测试**: T040 全部通过
   **覆盖 AC**: AC-14, AC-15, AC-16, AC-18, AC-19, AC-23
   **依赖**: T040
 
-- [ ] **T042**: 插话入箱事件与消息落库的单元测试
+- [x] **T042**: 插话入箱事件与消息落库的单元测试
   **文件**: `test/workstation/test_steer_message_persist.py`
   **逻辑**: 断言：消息进收件箱时立即写一条提问行（与普通提问行同结构，`extra` 标明所属运行），并发 `steer_accepted` 事件；刷新后历史接口返回这条消息；被读取后历史里的这条消息不再带“排队”标记。
   **测试**: `test_steer_row_written_on_enqueue`、`test_steer_accepted_event`、`test_history_reflects_read_state`
   **覆盖 AC**: AC-13, AC-14
   **依赖**: T016
 
-- [ ] **T043**: 插话入箱事件与消息落库实现
+- [x] **T043**: 插话入箱事件与消息落库实现
   **文件**: `bisheng/workstation/domain/services/run_dispatch.py`、`bisheng/workstation/domain/services/chat_service.py`
   **逻辑**: `submit` 的 `queued` 分支写提问行、发 `steer_accepted`。`steer_read` 时把该行 `extra` 的排队标记清掉（用 `update_fields_by_id`）。
   **测试**: T042 全部通过
   **覆盖 AC**: AC-13, AC-14
   **依赖**: T042
 
-- [ ] **T044**: 规划提示词的单元测试
+- [x] **T044**: 规划提示词的单元测试
   **文件**: `test/linsight/test_planning_prompt.py`
   **逻辑**: 断言 `planned` 档的系统提示词：包含“用户在执行中发来新要求时，先调用 write_todos 更新计划，再继续”；不再包含“不改写已有文案”的无条件表述，改为“只有用户要求时才改写”；仍包含“不写固定数量示例”的现有约束。
   **测试**: `test_prompt_allows_rewrite_on_user_request`、`test_prompt_requires_plan_update_on_steer`、`test_prompt_keeps_no_fixed_count_rule`
   **覆盖 AC**: AC-18
   **依赖**: T020
 
-- [ ] **T063**: 规划提示词改动
+- [x] **T063**: 规划提示词改动
   **文件**: `bisheng/linsight/domain/services/agent_factory.py`
   **逻辑**: 修改 `agent_factory.py:199-243` 一带的规划提示词，使 T044 通过。指令位置遵循 `linsight/AGENTS.md` 的尾部指令规则，措辞只限定计划的改写，不影响其他约束。
   **测试**: T044 全部通过
   **覆盖 AC**: AC-18
   **依赖**: T044
 
-- [ ] **T045**: 前端运行 store 的单测
+- [x] **T045**: 前端运行 store 的单测
   **文件**: `store/runStore.test.ts`
   **逻辑**: 断言事件归并：`text` 累加；`plan` 整体替换并保留条目顺序；`steer_accepted` 把对应消息标为排队中，`steer_read` 清除该标记；`resync` 整体替换当前运行；`run_started` 至 `run_finished` 之间 `isRunning` 为真；`ask_user` 设置待回答问题；`file` 追加且按 `file_id` 去重；`isRunning` 为真时 `canSend` 仍为真。
   **测试**: `merges text`、`replaces plan`、`steer queued then cleared`、`resync replaces run`、`running flags`、`pending question`、`file dedupe`、`can send while running`
   **覆盖 AC**: AC-08, AC-12, AC-13, AC-14
   **依赖**: T018
 
-- [ ] **T046**: 前端运行 store 与依赖
+- [x] **T046**: 前端运行 store 与依赖
   **文件**: `store/runStore.ts`、`../package.json`
   **逻辑**: 加入 `zustand` 依赖。store 按会话 id 保存：当前运行的文字与思考、计划、文件、待回答问题、消息的排队标记、运行状态。只提供纯归并函数与选择器，不发 HTTP（C7）。不与 Recoil `linsightMapState` 镜像同一份数据。
   **测试**: T045 全部通过
   **覆盖 AC**: AC-08, AC-12, AC-13, AC-14
   **依赖**: T045
 
-- [ ] **T047**: 前端事件订阅
+- [x] **T047**: 前端事件订阅
   **文件**: `hooks/useRunEvents.ts`、`api/chatApi.ts`
   **逻辑**: 用现有的 `sse.js` 订阅 `GET /api/v1/workstation/conversations/{id}/events`，断线重连时带 `Last-Event-ID`，把事件交给 `runStore`。发送改为带 `X-BS-Run-Protocol: 2`，按返回的 `disposition` 更新本地消息。类型定义放 `api/chatApi.ts`。
   **覆盖 AC**: AC-12, AC-31
@@ -362,7 +362,7 @@
   - 运行中断开网络 10 秒再恢复，断开期间的内容补齐，没有重复文字。
   **依赖**: T032, T046
 
-- [ ] **T048**: 会话页运行中可发送与排队标记
+- [x] **T048**: 会话页运行中可发送与排队标记
   **文件**: `components/Chat/AiChatInput.tsx`、`components/Chat/AiMessageBubble.tsx`
   **逻辑**: 去掉运行中禁用文本框与发送按钮的条件（`isStreaming`、`sendDisabled=taskRunning`），停止按钮与发送按钮并存。用户消息在排队时下方显示“已发送，排队处理中”，被读取后该文字消失。文案进三个语言文件（用 `/i18n-localizer`）。
   **覆盖 AC**: AC-12, AC-13, AC-14, AC-19
@@ -372,7 +372,7 @@
   - 对照原型场景 3。
   **依赖**: T043, T047
 
-- [ ] **T049**: 计划面板读新 store
+- [x] **T049**: 计划面板读新 store
   **文件**: `components/Linsight/Execution/PinnedTaskPanel.tsx`、`components/Linsight/Execution/TaskPanel.tsx`
   **逻辑**: 会话页的计划面板改读 `runStore` 的计划。被改写的条目显示改写后的文字，并用删除线保留改写前的文字；条目上不显示修改来源。`cancelled` 状态显示为“已取消”。头部显示“已完成条数 / 总条数”。
   **覆盖 AC**: AC-08, AC-09, AC-10, AC-11
@@ -382,7 +382,7 @@
   - 让 agent 去掉一条：该条显示“已取消”。
   **依赖**: T030, T047
 
-- [ ] **T050**: 提问卡片与停止接入新通道
+- [x] **T050**: 提问卡片与停止接入新通道
   **文件**: `components/Linsight/Execution/ClarifyCard.tsx`、`components/Chat/hooks/useTaskWorkspaceState.ts`
   **逻辑**: 提问卡片读 `runStore` 的待回答问题；点选项或在输入框输入都通过发送接口提交。停止调用现有终止接口并传运行 id；停止后计划面板显示“已停止”。等待回答时输入框占位文案为“点上面的选项，或者直接输入你的回答”。
   **覆盖 AC**: AC-20, AC-21, AC-29
@@ -512,3 +512,12 @@
 - **T038**：新增模块 `run_metrics.py`；指标行 domain 为 `agent_run`，字段定义见 design §7。`prep_ms` 的起点是发送入口接受消息的时刻。
 - **T035**：15 个用例，开关开与关的开放 API 应答逐字段相同，没有改生产代码。
 - **Wave 1 集成修正**：`run_send` 与 `DirectRunner` 的派发服务改用 `direct_run.production_dispatch_wiring()`，API 进程不再依赖启动钩子注册接力入队函数。
+- **T041**：工厂参数是已构造好的中间件（`inbox=`），不是会话 id 加 Redis。注入的消息 id 为 `steer-<message_id>`。入箱时间戳 `ts` 原本就在 `INBOX_FIELDS` 里。
+- **T043**：共享落库逻辑在新模块 `run_message_persist.py`。`submit(..., on_queued=...)` 用回调写提问行，派发服务不碰数据库。提问行 `extra` 带 `queued` 与 `steer_message_id`。新增 Redis 哈希 `bisheng:run:steer:{cid}`、`bisheng:run:direct:{cid}`。同组另做三件 P1 遗留：统一停止接口 `POST /api/v1/workstation/conversations/{id}/stop`、worker 接力运行的回答行、租约过期的 `direct` 运行的失败回答行。`ChatMessageDao` 新增 `update_fields_by_id`。
+- **T063**：新的规划措辞只在收件箱挂载时生效（开关开启且非无人值守）。开关关闭时 `planned` 提示词逐字节不变。`direct` 档在收件箱挂载时多一句“执行中可能收到新消息”。
+- **T046**：事件类型定义在 `store/runStore.ts`。`pnpm-lock.yaml` 手工加了 3 行 zustand 条目（与 platform 已解析的变体相同），没有运行 `pnpm install`。
+- **T047**：HTTP 函数在新文件 `api/runApi.ts`，`chatApi.ts` 只转出。新路径只覆盖主会话页，订阅侧栏与 `/linsight` 页仍走旧流。运行结束后用历史接口重载替换实时行。`ChatView.tsx` 未改。
+- **T048**：是否走新路径由 `bsConfig.unified_runtime_enabled` 与 `composerIdentity` 判断。排队文案键 `dshChat.messageQueued`，英文与日文为 agent 自拟。
+- **T049**：`PinnedTaskPanel` 新增 `conversationId`。store 无计划时回退旧数据源。失败运行沿用“任务已终止”。原型里的“等你回答后继续”头部、停止后的说明行、改写行闪动没有做。
+- **T050**：提问卡片挂在输入框上方，不在消息气泡内（原型在气泡内）。新卡片包住旧 `ClarifyCard`，保留“跳过”与关闭按钮。
+- **EventWriter**：合并只在 `type`、`call_id`、`namespace` 都相同时发生，合并后保留这两个字段。

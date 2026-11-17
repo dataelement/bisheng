@@ -443,6 +443,7 @@
   "com_linsight_exit_task_mode": "詳細リサーチを終了",
   "com_linsight_input_placeholder": "タスクの目標を入力すると、$t(com_linsight_task_mode)が進めます",
   "com_linsight_awaiting_reply": "上記の質問に回答してタスクを続行してください",
+  "com_linsight_answer_placeholder": "上の選択肢を選ぶか、回答を直接入力してください",
   "com_linsight_skill_empty": "利用可能なスキルはありません",
   "com_linsight_skill_search": "スキルを検索",
   "com_linsight_task_mode": "詳細リサーチ",
@@ -2948,6 +2949,7 @@
     "loadingConversation": "会話を読み込み中…",
     "recommendedApps": "おすすめのアプリ",
     "scrollToBottom": "一番下へ",
+    "messageQueued": "送信しました。処理待ちです",
     "preview": "プレビュー",
     "source": "ソース",
     "closeResearch": "詳細リサーチを終了",
@@ -3051,6 +3053,10 @@
       "name": "Excel スプレッドシート作成",
       "description": "データ表、集計表、予算表、財務モデル、見積書、台帳などの Excel ブック（.xlsx）を作成・編集します。.xlsx、.xls、.csv データの読み込みと整形、数式や書式の設定を行い、納品前にブックを再計算して確認します。"
     }
+  },
+  "runPlan": {
+    "cancelled": "キャンセル済み",
+    "stopped": "停止しました"
   },
   "appChat": {
     "unknownApp": "不明なアプリ",

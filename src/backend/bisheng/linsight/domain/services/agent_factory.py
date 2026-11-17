@@ -24,7 +24,7 @@ from __future__ import annotations
 import functools
 import json
 from collections.abc import Sequence
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, NotRequired
 
 from json_repair import json_repair
 from langchain.agents.middleware import TodoListMiddleware
@@ -39,7 +39,6 @@ from langgraph.types import interrupt
 from loguru import logger
 from pydantic import Field as PydanticField
 from pydantic import SkipValidation
-from typing_extensions import NotRequired
 
 from bisheng.common.services.config_service import settings
 from bisheng.linsight.domain.services.base_prompt import with_base_prompt
@@ -389,6 +388,52 @@ _UNATTENDED_FORMAT_PHRASE = "按任务描述要求的输出格式产出（未指
 _UNATTENDED_WORTH_LINE = "- 所有缺失信息都按以上默认假设或常识补齐，并在最终回复的「所做假设」中写明。\n"
 
 
+# F004 (AC-18): with the inbox mounted, the user can send a message while a run is
+# in progress and ask for a change of plan. The two places that forbid rewriting a
+# todo's text then allow it on request. Items the user did not ask about must keep
+# their text byte-identical: StreamEventMapper._diff_todos matches rows by content
+# first, so a reworded bystander would be paired by position and could steal a row.
+# Wording follows the spike that worked 10/10 on two real models
+# (scripts/spike_unified_runtime/s3c_steer_real_model.py) and the tail-rule scoping
+# in linsight/AGENTS.md: it governs the plan only, says so, claims no precedence,
+# and carries no numbered example. Without the inbox the legacy lines stay as is.
+_PLAN_STATUS_ONLY_STEP_LINE = (
+    "   更新待办时只翻转 status（pending/in_progress/completed），不改写已有文案，以保证任务标识稳定。\n"
+)
+_PLAN_STEERABLE_STEP_LINE = (
+    "   更新待办时一般只翻转 status（pending/in_progress/completed），以保证任务标识稳定；"
+    "只有用户要求时才改写条目文案。\n"
+    "   - 【执行中收到用户新消息】执行过程中用户可能随时发来新消息，它会出现在对话里。"
+    "用户在执行中发来新要求时，先调用 write_todos 更新计划，再继续：只改用户要求改的条目"
+    "（改写文字、增加条目，或删去不再需要的条目）；其余条目原样保留，文字逐字不变；"
+    "已完成的条目保持 completed，已写入 output/ 与 scratch/ 的文件保留，不要从头重做。"
+    "新消息只是补充信息、不改变要做的事时，不必更新计划。本条只约束计划的更新，不改变上文其它任何要求。\n"
+)
+_PLAN_STATUS_ONLY_TOOL_LINE = "- write_todos(todos)：维护有编号的待办清单；只翻转 status，不改写已有文案。\n"
+_PLAN_STEERABLE_TOOL_LINE = (
+    "- write_todos(todos)：维护有编号的待办清单；一般只翻转 status，只有用户要求时才改写条目文案，"
+    "用户没要求改的条目文字逐字不变。\n"
+)
+# The direct profile has no plan; it only learns that messages may arrive mid-run.
+_DIRECT_STEERABLE_LINE_ZH = (
+    "- 回答过程中用户可能发来新消息，它会出现在对话里：按新消息调整接下来要做的事，已经做完的部分保留，"
+    "不要从头重做。本条只说明如何对待新消息，不改变其它要求。\n"
+)
+
+
+def _to_steerable_prompt(prompt: str) -> str:
+    """Swap the two plan-rewrite lines of the planned prompt for the steerable wording."""
+
+    for old, new in (
+        (_PLAN_STATUS_ONLY_STEP_LINE, _PLAN_STEERABLE_STEP_LINE),
+        (_PLAN_STATUS_ONLY_TOOL_LINE, _PLAN_STEERABLE_TOOL_LINE),
+    ):
+        if prompt.count(old) != 1:
+            raise ValueError(f"steerable prompt marker missing: {old!r}")
+        prompt = prompt.replace(old, new)
+    return prompt
+
+
 def _cut_between(text: str, start: str, end: str, replacement: str) -> str:
     i = text.index(start)
     j = text.index(end, i)
@@ -485,8 +530,12 @@ def _build_linsight_system_prompt(
     citation_handles: bool = False,
     unattended: bool = False,
     has_data_analyst: bool = False,
+    steerable: bool = False,
 ) -> str:
     """Resolve the main system prompt, toggling search_knowledge_base mentions.
+
+    ``steerable`` (F004, AC-18) is true IFF the inbox middleware is mounted: the
+    plan may then be rewritten on the user's request (see _to_steerable_prompt).
 
     ``has_data_analyst`` (F013) adds the data-analyst delegation lines IFF that
     subagent is assembled, with the unattended NEED_CLARIFICATION variant when no
@@ -631,6 +680,8 @@ def _build_linsight_system_prompt(
         if unattended
         else _LINSIGHT_SYSTEM_PROMPT_TEMPLATE_ZH
     )
+    if steerable:
+        template = _to_steerable_prompt(template)
     return (
         template.replace("__KB_EXEC_LINE__", exec_line)
         .replace("__KB_TOOL_LINE__", tool_line)
@@ -693,8 +744,12 @@ def _build_direct_system_prompt(
     skills_present: bool = False,
     unattended: bool = False,
     has_data_analyst: bool = False,
+    steerable: bool = False,
 ) -> str:
     """The ``direct`` profile's main system prompt, generated from ``tool_names``.
+
+    ``steerable`` (F004) is true IFF the inbox middleware is mounted; it adds one
+    line on messages that arrive while the answer is in progress.
 
     ``tool_names`` is every tool bound on the main graph (business tools, HITL,
     deliverable tools, workspace file tools, ``task``). ``skills_present`` and
@@ -719,6 +774,8 @@ def _build_direct_system_prompt(
         "- 能直接回答的问题就直接回答，不调用工具；需要资料、计算或文件时再调用下方列出的工具，拿到结果后给出回答。\n"
         "- 不要先罗列步骤或方案再动手，也不要在回复里预告接下来要做什么；直接做，做完给出结果。\n"
     ]
+    if steerable:
+        parts.append(_DIRECT_STEERABLE_LINE_ZH)
     if has_ask_user:
         parts.append(
             "- 【何时提问】只在确有必要时调用 ask_user：缺的信息只有用户本人知道，而且按合理假设大概率会做错、"
@@ -1755,6 +1812,7 @@ async def create_linsight_agent(
     context_window_sink: dict | None = None,
     memory_prompt: str | None = None,
     profile: ProfileName = "planned",
+    inbox: AgentMiddleware | None = None,
 ):
     """Build the deepagents-backed Linsight agent (design §2.1).
 
@@ -1786,6 +1844,10 @@ async def create_linsight_agent(
             tools, ask_user, skills, memory, subagents, the state schema with its
             ``todos`` channel — is identical, so one checkpoint thread can
             alternate between the two.
+        inbox: F004 (design 决策 5). The ``InboxMiddleware`` of this run, built by
+            the caller from the run's conversation, dispatch service and event
+            sink. Mounted on the MAIN graph only, in both profiles, and never for
+            an unattended run. None (legacy path, tenant switch off) mounts nothing.
 
     Returns:
         ``CompiledStateGraph`` to be driven by ``agent.astream(...)``.
@@ -1873,6 +1935,12 @@ async def create_linsight_agent(
         # F087 P1: one tool result <= 10% of the usable input (known windows only).
         *_result_budget(backend, context_window),
     ]
+    # F004 T041: messages the user sends during the run are injected before the
+    # next model call. Main graph only: a second reader in a subagent would take
+    # messages the main agent never sees (design §5 pitfall 5). An unattended run
+    # has nobody sending messages (AC-23), same gate as ask_user.
+    if inbox is not None and not unattended:
+        middlewares.append(inbox)
     # F069 P1: per-turn source table (+ one-shot "add the handles" nudge after a
     # handle-less output/*.md write). awrap_model_call only — never wrap_tool_call
     # (design decision 5). Gated like the rules: citable tool AND handle contract.
@@ -2024,6 +2092,8 @@ async def create_linsight_agent(
     from bisheng.linsight.domain.services.context_budget import bisheng_summarization
 
     main_tools = [*tools, *hitl_tools, *export_tools]
+    # F004: same condition that mounts the inbox middleware above.
+    steerable = inbox is not None and not unattended
     if planned:
         main_prompt = _build_linsight_system_prompt(
             has_kb,
@@ -2035,6 +2105,7 @@ async def create_linsight_agent(
             citation_handles=citation_handles,
             unattended=unattended,
             has_data_analyst=data_analyst is not None,
+            steerable=steerable,
         )
     else:
         # Generated from what the main graph binds: the tools passed below, the
@@ -2044,6 +2115,7 @@ async def create_linsight_agent(
             skills_present=skills_advertised,
             unattended=unattended,
             has_data_analyst=data_analyst is not None,
+            steerable=steerable,
         )
 
     with bisheng_summarization(model):

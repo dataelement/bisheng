@@ -55,6 +55,11 @@ HEARTBEAT_TYPE = "heartbeat"
 # Field of ``data`` that carries the text delta of ``text`` / ``thinking``.
 TEXT_FIELD = "text"
 
+# Fields of ``data`` that identify a segment of ``text`` / ``thinking`` deltas
+# (see ``run_events.TextData``). Deltas merge only when these are all equal, and
+# the merged event keeps them.
+SEGMENT_FIELDS = ("call_id", "namespace")
+
 # Snapshot operations computed in Python and applied atomically by the script.
 _OP_NONE = "none"
 _OP_APPEND_TEXT = "append_text"  # arg: delta string, field = event type
@@ -430,9 +435,11 @@ class RunEventStream:
 class EventWriter:
     """Write the events of one run, merging ``text`` / ``thinking`` deltas.
 
-    Consecutive deltas of the same type are buffered and written as one entry
-    when the window (50 ms from the first buffered delta) has passed, when an
-    event of another type arrives, or when ``flush()`` is called. A background
+    Consecutive deltas of the same type, ``call_id`` and ``namespace`` are
+    buffered and written as one entry that keeps those fields. The buffer is
+    written when the window (50 ms from the first buffered delta) has passed,
+    when an event of another type or another segment arrives, or when
+    ``flush()`` is called. A background
     timer flushes a buffer that no later event closes. The buffer only lives
     for the window; the run state itself is in Redis.
     """
@@ -455,6 +462,8 @@ class EventWriter:
         self._sleep = sleep
         self._buf_type: str | None = None
         self._buf_parts: list[str] = []
+        # call_id / namespace of the buffered segment (only the fields that are set).
+        self._buf_segment: dict[str, str] = {}
         self._buf_started: float = 0.0
         self._timer: asyncio.Task | None = None
         self._lock = asyncio.Lock()
@@ -464,16 +473,21 @@ class EventWriter:
         typ = event.get("type")
         async with self._lock:
             if typ in COALESCED_TYPES:
+                data = event.get("data") or {}
+                segment = {k: data[k] for k in SEGMENT_FIELDS if data.get(k) is not None}
                 written = None
                 if self._buf_type is not None and (
-                    self._buf_type != typ or self._clock() - self._buf_started >= self.window_seconds
+                    self._buf_type != typ
+                    or self._buf_segment != segment
+                    or self._clock() - self._buf_started >= self.window_seconds
                 ):
                     written = await self._flush_locked()
                 if self._buf_type is None:
                     self._buf_type = typ
+                    self._buf_segment = segment
                     self._buf_started = self._clock()
                     self._start_timer()
-                self._buf_parts.append(str((event.get("data") or {}).get(TEXT_FIELD) or ""))
+                self._buf_parts.append(str(data.get(TEXT_FIELD) or ""))
                 return written
             await self._flush_locked()
             return await self.stream.append(self.conversation_id, {**event, "run_id": self.run_id})
@@ -489,11 +503,11 @@ class EventWriter:
     async def _flush_locked(self) -> str | None:
         if self._buf_type is None:
             return None
-        typ, text = self._buf_type, "".join(self._buf_parts)
-        self._buf_type, self._buf_parts = None, []
+        typ, text, segment = self._buf_type, "".join(self._buf_parts), self._buf_segment
+        self._buf_type, self._buf_parts, self._buf_segment = None, [], {}
         self._cancel_timer()
         return await self.stream.append(
-            self.conversation_id, {"type": typ, "run_id": self.run_id, "data": {TEXT_FIELD: text}}
+            self.conversation_id, {"type": typ, "run_id": self.run_id, "data": {TEXT_FIELD: text, **segment}}
         )
 
     def _start_timer(self) -> None:

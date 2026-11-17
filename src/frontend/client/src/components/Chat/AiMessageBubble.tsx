@@ -25,6 +25,7 @@ import { likeChatApi, disLikeCommentApi } from "~/api/apps";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { useAuthContext, useLocalize } from "~/hooks";
 import { useMessageSelection } from "~/hooks/useMessageSelection";
+import { selectIsMessageQueued, useRunStore } from "~/store/runStore";
 import {
     ExportSelectionButton,
     MessageCheckbox,
@@ -344,6 +345,10 @@ function UserBubble({
     onPreviewFile?: (file: ArtifactFile) => void;
 }) {
     const { user } = useAuthContext();
+    const localize = useLocalize();
+    // F004 AC-13/AC-14: sent while a run was busy and not read by the agent yet.
+    // The store only holds entries on the unified runtime.
+    const queued = useRunStore(selectIsMessageQueued(message.conversationId ?? "", message.messageId));
 
     // F028: render selection checkbox at the left margin when selection mode
     // is active for this conversation. ``mr-auto`` keeps the user bubble
@@ -422,6 +427,12 @@ function UserBubble({
                         </div>
                     </div>
                 </div>
+                {queued && (
+                    <div role="status" data-testid="message-queued" className="mt-1 flex items-center gap-1.5 text-caption text-text-3">
+                        <span aria-hidden className="size-1.5 rounded-full bg-current opacity-60 animate-pulse" />
+                        {localize("dshChat.messageQueued")}
+                    </div>
+                )}
                 {/* Action buttons */}
                 <div className="dsh-message-actions flex items-center justify-end gap-1 mt-1.5">
                     <MessageTime message={message} />
@@ -438,8 +449,8 @@ function UserBubble({
 // ==================== Assistant Bubble ====================
 function AssistantBubble({
     message,
-    isLatest,
-    isStreaming,
+    isLatest: isLatestProp,
+    isStreaming: isStreamingProp,
     onRegenerate,
     siblingIdx,
     siblingCount,
@@ -468,6 +479,12 @@ function AssistantBubble({
     onPreviewFile?: (file: ArtifactFile) => void;
 }) {
     const localize = useLocalize();
+    // F004: the answer row of a run in progress carries `liveRunId` until the run
+    // ends. It stops being the last row once the user sends a message into the
+    // run, so its streaming state cannot depend on its position in the list.
+    const isLiveRun = message.liveRunId !== undefined;
+    const isLatest = isLiveRun || isLatestProp;
+    const isStreaming = isLiveRun || isStreamingProp;
 
     // Prefer the backend's own classification; fall back to the status code so
     // pre-classification backends still split busy-vs-failed correctly, and land

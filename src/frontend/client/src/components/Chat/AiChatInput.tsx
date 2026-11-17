@@ -205,6 +205,14 @@ const AiChatInput = memo(
         // so reading it from bsConfig would silently fall back to 50MB.
         const envConfig = useRecoilValue(bishengConfState);
 
+        // F004: on the unified runtime a run in progress accepts messages (AC-12),
+        // so neither `isStreaming` nor `sendDisabled` blocks the composer. Only the
+        // conversation page passes a composer identity; the other surfaces that
+        // reuse this input (subscription dock, /linsight) keep the legacy stream.
+        const unifiedRuntime = bsConfig?.unified_runtime_enabled === true && !isLingsi && !!composerIdentity;
+        const blockedByRun = isStreaming && !unifiedRuntime;
+        const sendBlocked = sendDisabled && !unifiedRuntime;
+
         // Collapse toolbar labels to icons when the toolbar's own width (not the
         // viewport's) runs short — e.g. once the sidebar opens on a mid-size screen.
         const { ref: toolbarRef } = useContainerCompact(TOOLBAR_COMPACT_THRESHOLD);
@@ -399,7 +407,7 @@ const AiChatInput = memo(
         const handleSend = useCallback(async () => {
             const trimmed = text.trim();
             // Workbench: uploaded files require accompanying text before send.
-            if (!trimmed || disabled || sendDisabled || isStreaming || isParsingMedia || fileUploading || filesParsing) return;
+            if (!trimmed || disabled || sendBlocked || blockedByRun || isParsingMedia || fileUploading || filesParsing) return;
             if (sendPendingRef.current?.identity === composerIdentity) return;
             if (!taskMode && !isLingsi && chatFiles?.some((file) => !canProcessChatImage(
                 file.name || file.file_name || file.filename || '', supportsVision, supportsImageParsing,
@@ -440,7 +448,7 @@ const AiChatInput = memo(
                 window.clearTimeout(textareaScrollHideTimerRef.current);
                 textareaScrollHideTimerRef.current = null;
             }
-        }, [text, disabled, sendDisabled, isStreaming, isParsingMedia, fileUploading, filesParsing, onSend, chatFiles, setText, taskMode, isLingsi, supportsVision, supportsImageParsing, showToast, localize, composerIdentity]);
+        }, [text, disabled, sendBlocked, blockedByRun, isParsingMedia, fileUploading, filesParsing, onSend, chatFiles, setText, taskMode, isLingsi, supportsVision, supportsImageParsing, showToast, localize, composerIdentity]);
 
         // ── Handed-over ask (chatAskHandoff): upload its file, then send unattended ──
         const startedAskKeyRef = useRef<string | null>(null);
@@ -482,11 +490,11 @@ const AiChatInput = memo(
                     e.keyCode === 229;
                 if (e.key === "Enter" && !e.shiftKey && !composing) {
                     e.preventDefault();
-                    if (isStreaming) return;
+                    if (blockedByRun) return;
                     handleSend();
                 }
             },
-            [handleSend, isStreaming]
+            [handleSend, blockedByRun]
         );
 
         // Mirrors useTextarea's guard: true between compositionstart and
@@ -555,7 +563,7 @@ const AiChatInput = memo(
                 </div>}
 
                 <div
-                    onKeyDownCapture={(event) => handleComposerResourceKeyDown(event, !!disabled || !!isStreaming, isComposingRef.current)}
+                    onKeyDownCapture={(event) => handleComposerResourceKeyDown(event, !!disabled || blockedByRun, isComposingRef.current)}
                     className={cn(
                         // The composer owns its theme surface through dsh-composer-bg.
                         // z-[1] keeps it above the attached resource strip.
@@ -571,7 +579,7 @@ const AiChatInput = memo(
                         <AttachmentBar
                             uploadingFiles={uploadingFiles}
                             files={chatFiles || []}
-                            onRemoveFile={disabled || isStreaming ? undefined : (file) => {
+                            onRemoveFile={disabled || blockedByRun ? undefined : (file) => {
                                 // clientId, not name: a folder upload can carry the
                                 // same file name in several subdirectories.
                                 const id = String(file.clientId ?? file.id);
@@ -687,7 +695,7 @@ const AiChatInput = memo(
                             onCompositionEnd={() => { voice.compositionEnd(); handleCompositionEnd(); }}
                             onPaste={handlePaste}
                             onScroll={handleTextareaScroll}
-                            disabled={disabled || isStreaming}
+                            disabled={disabled || blockedByRun}
                             placeholder={placeholder || (allowConfiguration ? bsConfig?.inputPlaceholder || localize("dshChat.placeholder") : localize("dshChat.followupPlaceholder"))}
                             className={cn(size === 'mini' && 'min-h-0', removeFocusRings,
                                 isTextareaScrollable && isTextareaScrolling && 'scroll-on-scroll')}
@@ -768,7 +776,7 @@ const AiChatInput = memo(
                                     onAutoChange={onModelAutoChange}
                                 />
                             )}
-                            {isStreaming || taskRunning ? (
+                            {(isStreaming || taskRunning) && (
                                 <button
                                     type="button"
                                     className="dsh-composer-submit btn-brand-primary rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-fill-3 disabled:text-text-3 disabled:opacity-100"
@@ -793,7 +801,9 @@ const AiChatInput = memo(
                                         />
                                     </svg>
                                 </button>
-                            ) : (
+                            )}
+                            {/* Unified runtime: the send button stays next to the stop button. */}
+                            {(unifiedRuntime || !(isStreaming || taskRunning)) && (
                                 <div className="flex items-center gap-2">
                                 {showVoice && (
                                     <SpeechToTextComponent
@@ -809,7 +819,7 @@ const AiChatInput = memo(
                                     disabled={
                                         voice.busy || !text?.trim() ||
                                         disabled ||
-                                        sendDisabled ||
+                                        sendBlocked ||
                                         isParsingMedia ||
                                         fileUploading ||
                                         filesParsing

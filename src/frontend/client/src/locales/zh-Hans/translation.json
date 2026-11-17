@@ -446,6 +446,7 @@
   "com_linsight_exit_task_mode": "关闭深度研究",
   "com_linsight_input_placeholder": "请输入你的任务目标，交给$t(com_linsight_task_mode)完成",
   "com_linsight_awaiting_reply": "请在上方回答问题后继续任务",
+  "com_linsight_answer_placeholder": "点上面的选项，或者直接输入你的回答",
   "com_linsight_skill_empty": "暂无可用技能",
   "com_linsight_skill_search": "搜索技能",
   "com_linsight_task_mode": "深度研究",
@@ -2953,6 +2954,7 @@
     "loadingConversation": "正在加载会话…",
     "recommendedApps": "推荐应用",
     "scrollToBottom": "回到底部",
+    "messageQueued": "已发送，排队处理中",
     "preview": "预览",
     "source": "源文件",
     "closeResearch": "关闭深度研究",
@@ -3056,6 +3058,10 @@
       "name": "Excel 表格制作",
       "description": "创建和修改 Excel 工作簿（.xlsx），适用于数据表、汇总表、预算表、财务模型、报价单和台账。支持读取和清洗 .xlsx、.xls、.csv 数据，设置公式与格式，并在交付前重算和检查工作簿。"
     }
+  },
+  "runPlan": {
+    "cancelled": "已取消",
+    "stopped": "已停止"
   },
   "appChat": {
     "unknownApp": "未知应用",

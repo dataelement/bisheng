@@ -13,6 +13,8 @@ import { Outlined } from 'bisheng-icons';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Textarea } from '@bisheng/ui';
 import { useLocalize } from '~/hooks';
+import { useGetBsConfig } from '~/hooks/queries/data-provider';
+import { useRunStore, type RunAskUserData } from '~/store/runStore';
 import { cn } from '~/utils';
 import type { ClarifyQuestion, ExecStepEventData } from './stepUtils';
 import { composeClarifyAnswer, parseClarifyRequest } from './stepUtils';
@@ -34,6 +36,66 @@ interface ClarifyCardProps {
 export function ClarifyCard(props: ClarifyCardProps) {
     const hasQuestions = useMemo(() => parseClarifyRequest(props.data).questions.length > 0, [props.data]);
     return hasQuestions ? <ClarifyCardInteractive {...props} /> : <ClarifyFallbackCard {...props} />;
+}
+
+/**
+ * F004 (T050): map the pending question of a run (`ask_user` event, runStore)
+ * to the step shape the card parses. Pure. The unified runtime has no task id:
+ * the answer is the next message of the conversation.
+ */
+export function runQuestionToClarifyData(pending: RunAskUserData): ExecStepEventData {
+    return {
+        call_id: pending.call_id,
+        task_id: '',
+        step_type: 'call_user_input',
+        call_reason: pending.reason || '',
+        params: {
+            tool_calls: (pending.questions || []).map((q, index) => ({
+                id: q.id || `q_${index}`,
+                name: 'ask_user',
+                args: { question: q.question, options: q.options || [], multiple: !!q.multiple },
+            })),
+        },
+    };
+}
+
+interface RunClarifyCardProps {
+    /** Conversation shown on the page; the run store is keyed by it. */
+    conversationId: string;
+    /** The send entry of the page. `false` means the message was not accepted. */
+    onSend: (text: string) => Promise<boolean | void> | boolean | void;
+    /** True when another surface already shows this question (legacy task turn). */
+    suppressed?: boolean;
+}
+
+/**
+ * F004 (T050): the question a run of the unified runtime is waiting on (AC-20).
+ * It reads the run store only and submits the answer through the send entry,
+ * the same way as typing it in the input box (AC-21): the backend takes the
+ * next message of a waiting run as the answer. Renders nothing when the tenant
+ * switch is off, so the legacy card and its user-input API are untouched.
+ */
+export function RunClarifyCard({ conversationId, onSend, suppressed = false }: RunClarifyCardProps) {
+    const enabled = useGetBsConfig().data?.unified_runtime_enabled === true;
+    const pending = useRunStore((state) => {
+        if (!enabled || !conversationId) return null;
+        const run = state.conversations[conversationId]?.run;
+        return run?.status === 'waiting' ? run.pendingQuestion : null;
+    });
+    const data = useMemo(() => (pending ? runQuestionToClarifyData(pending) : null), [pending]);
+    // A rejected send re-mounts the card, so the user can answer again.
+    const [attempt, setAttempt] = useState(0);
+    if (!data || suppressed) return null;
+    const handleSubmit = async (_taskId: string, answer: string) => {
+        let accepted: boolean | void = false;
+        try {
+            accepted = await onSend(answer);
+        } catch {
+            accepted = false;
+        }
+        if (accepted === false) setAttempt((n) => n + 1);
+    };
+    return <ClarifyCard key={`${data.call_id}:${attempt}`} data={data} onSubmit={handleSubmit} />;
 }
 
 const CUSTOM_KEY = '__custom__';

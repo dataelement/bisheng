@@ -4,6 +4,8 @@ import { createPortal } from "react-dom";
 import AiChatInput from "~/components/Chat/AiChatInput";
 import AiChatMessages from "~/components/Chat/AiChatMessages";
 import { PinnedTaskPanel } from "~/components/Linsight/Execution/PinnedTaskPanel";
+import { RunClarifyCard } from "~/components/Linsight/Execution/ClarifyCard";
+import { useRunAwaitingAnswer } from "./hooks/useTaskWorkspaceState";
 import { WorkspacePanel } from "~/components/Linsight/Artifacts/WorkspacePanel";
 import { TaskTurnLoadContext } from "~/components/Linsight/Execution/taskTurnLoad";
 import { cn } from "~/utils";
@@ -94,6 +96,7 @@ export function ChatSurfacePresentation({
     handleStop,
     shareToken,
   } = model;
+  const runAwaitingAnswer = useRunAwaitingAnswer(shareToken ? "" : conversationId);
   return (
     <TaskTurnLoadContext.Provider value={reportTaskTurnLoadFailed}>
       <Presentation isLingsi={false}>
@@ -243,11 +246,16 @@ export function ChatSurfacePresentation({
                             </div>
                           ) : (
                             <div className="dsh-chat-composer-seat">
-                              {latestTaskVersionId && (
-                                <PinnedTaskPanel
-                                  versionId={latestTaskVersionId}
-                                />
-                              )}
+                              {/* F004: renders nothing when it has no rows. */}
+                              <PinnedTaskPanel
+                                versionId={latestTaskVersionId}
+                                conversationId={activeConvoId}
+                              />
+                              <RunClarifyCard
+                                conversationId={shareToken ? "" : conversationId}
+                                onSend={handleSend}
+                                suppressed={awaitingUserInput}
+                              />
                               {inviteQuotaBar}
                               <AiChatInput
                                 key={composerIdentity}
@@ -275,7 +283,9 @@ export function ChatSurfacePresentation({
                                 }}
                                 onToggleTaskMode={handleToggleTaskMode}
                                 placeholder={
-                                  awaitingUserInput
+                                  runAwaitingAnswer && !awaitingUserInput
+                                    ? t("com_linsight_answer_placeholder")
+                                    : awaitingUserInput
                                     ? t("com_linsight_awaiting_reply")
                                     : taskMode
                                       ? (

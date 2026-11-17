@@ -15,6 +15,22 @@ import {
 } from "~/components/Linsight/Execution/stepUtils";
 import type { ExecStepEventData } from "~/components/Linsight/Execution/stepUtils";
 import { collectChatAttachments } from "../attachments/collectChatAttachments";
+import { useGetBsConfig } from "~/hooks/queries/data-provider";
+import { useRunStore } from "~/store/runStore";
+
+/**
+ * F004 (T050): true while the run of this conversation (unified runtime) waits
+ * for the user's answer. The input box then takes the answer directly, so its
+ * placeholder changes. Always false when the tenant switch is off or missing.
+ */
+export function useRunAwaitingAnswer(conversationId: string): boolean {
+  const enabled = useGetBsConfig().data?.unified_runtime_enabled === true;
+  return useRunStore((state) => {
+    if (!enabled || !conversationId) return false;
+    const run = state.conversations[conversationId]?.run;
+    return run?.status === "waiting" && !!run.pendingQuestion;
+  });
+}
 
 export function useTaskWorkspaceState({
   conversationId,

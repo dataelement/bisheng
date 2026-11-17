@@ -1,0 +1,291 @@
+/**
+ * F004 (T047) — the conversation page's side of the unified agent runtime.
+ *
+ * `useAiChat` owns the message list; this hook adds what a tenant on the
+ * unified runtime needs and does nothing when `enabled` is false:
+ *   - follows the run events of the open conversation (`useRunEvents`);
+ *   - shows the answer of the run in progress as one row of the list;
+ *   - when the run ends, freezes that row and lets the history endpoint
+ *     replace the list;
+ *   - sends a message with `X-BS-Run-Protocol: 2` and applies the answer;
+ *   - asks the backend to stop the run.
+ */
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import type { ChatMessage } from '~/api/chatApi';
+import { getAgentMessages } from '~/api/chatApi';
+import { getMemoryFlagsApi, mergeMemoryFlags } from '~/api/memory';
+import { translateApiErrorMessage } from '~/api/request';
+import { sendRunMessage, stopConversationRun } from '~/api/runApi';
+import { useRunEvents } from '~/hooks/useRunEvents';
+import {
+    addLiveRow,
+    classifySendResponse,
+    dropSentMessages,
+    freezeLiveRun,
+    hasLiveRow,
+    historyHasAnswer,
+    isRunActive,
+    mergeHistoryWithQueued,
+    needsLiveRow,
+    reconcileSentMessages,
+    withLiveRun,
+} from '~/hooks/unifiedRun';
+import { selectConversationRun, useRunStore } from '~/store/runStore';
+
+type MessagesUpdater = ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[]);
+
+/** Waits between history reloads while the answer row of an ended run is not stored yet. */
+const HISTORY_RETRY_DELAYS_MS = [500, 1000, 2000, 4000, 8000];
+
+export interface UseUnifiedRunOptions {
+    /** Tenant switch `unified_runtime_enabled`; false keeps every legacy path. */
+    enabled: boolean;
+    /** Conversation on screen (`"new"` for an unsaved draft). */
+    conversationId: string;
+    /** Bucket of that conversation in `useAiChat`. */
+    bucketId: string;
+    /** The bucket's rows, without the live state merged in. */
+    messages: ChatMessage[];
+    /** History of the conversation is being loaded. */
+    isLoading: boolean;
+    setMessagesFor: (bucketId: string, updater: MessagesUpdater) => void;
+    /** Display name for a live answer row this hook has to create. */
+    sender: string;
+}
+
+export interface UnifiedSendArgs {
+    /** Request body, the same one the legacy stream sends. */
+    payload: Record<string, unknown>;
+    flowLeaseId?: string | null;
+    /** Conversation the message was typed in (`"new"` for a draft). */
+    conversationId: string;
+    /** Client id of the optimistic user row. */
+    userMessageId: string;
+    /** Writes into the bucket of this turn (follows a draft to its real id). */
+    setMessages: (updater: MessagesUpdater) => void;
+    /** The server named the conversation; move the turn onto that id first. */
+    onConversation: (conversationId: string) => void;
+    /** The send was rejected; the optimistic rows are already gone. */
+    onRejected: (message: string) => void;
+}
+
+export interface UnifiedSendResult {
+    accepted: boolean;
+    conversationId: string | null;
+    disposition: 'started' | 'queued' | 'legacy' | null;
+    runId: string | null;
+    /** The message answered the question the run was waiting on. */
+    answered: boolean;
+}
+
+const REJECTED: UnifiedSendResult = {
+    accepted: false,
+    conversationId: null,
+    disposition: null,
+    runId: null,
+    answered: false,
+};
+
+export function useUnifiedRun(options: UseUnifiedRunOptions) {
+    const { enabled, conversationId, bucketId, messages, isLoading, setMessagesFor, sender } = options;
+    const cid = enabled && conversationId && conversationId !== 'new' ? conversationId : '';
+    const conv = useRunStore(selectConversationRun(cid));
+    const run = conv?.run ?? null;
+    const runId = run?.runId ?? '';
+    const active = isRunActive(run);
+    const { follow } = useRunEvents(cid, enabled);
+
+    const mountedRef = useRef(true);
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => {
+            mountedRef.current = false;
+        };
+    }, []);
+    const senderRef = useRef(sender);
+    senderRef.current = sender;
+    // Runs for which "does this run need a live row?" was already answered.
+    const decidedRunsRef = useRef(new Set<string>());
+    // Runs whose end was already handled (row frozen, history requested).
+    const settledRunsRef = useRef(new Set<string>());
+
+    /**
+     * Rows to show for a history response: the persisted rows, the live row
+     * of the run in progress when the history has no row for it, and the
+     * messages that still wait in the inbox.
+     */
+    const composeHistory = useCallback(
+        (targetCid: string, history: ChatMessage[], prev: ChatMessage[]): ChatMessage[] => {
+            if (!enabled) return history;
+            const state = useRunStore.getState().conversations[targetCid];
+            const current = state?.run ?? null;
+            let rows = history;
+            if (current && isRunActive(current)) {
+                decidedRunsRef.current.add(current.runId);
+                rows = addLiveRow(history, current, senderRef.current);
+            }
+            return mergeHistoryWithQueued(rows, prev, state?.queuedMessages);
+        },
+        [enabled],
+    );
+
+    const reloadHistory = useCallback(
+        (targetCid: string, endedRunId: string | null, attempt = 0) => {
+            const retry = () => {
+                if (!endedRunId || attempt >= HISTORY_RETRY_DELAYS_MS.length) return;
+                setTimeout(() => {
+                    if (mountedRef.current) reloadHistory(targetCid, endedRunId, attempt + 1);
+                }, HISTORY_RETRY_DELAYS_MS[attempt]);
+            };
+            getAgentMessages(targetCid)
+                .then((history) => {
+                    if (!mountedRef.current) return;
+                    // The answer row is written when the run ends; until it is
+                    // there the frozen live row stays on screen.
+                    if (endedRunId && !historyHasAnswer(history)) {
+                        retry();
+                        return;
+                    }
+                    setMessagesFor(targetCid, (prev) =>
+                        // A newer send or run owns the list now; its own end reloads it.
+                        prev.some((m) => m.liveRunId !== undefined) ? prev : composeHistory(targetCid, history, prev),
+                    );
+                    getMemoryFlagsApi(targetCid)
+                        .then((flags) => {
+                            if (mountedRef.current) setMessagesFor(targetCid, (prev) => mergeMemoryFlags(prev, flags));
+                        })
+                        .catch(() => {
+                            /* flags are decoration; the history stays usable without them */
+                        });
+                })
+                .catch(retry);
+        },
+        [composeHistory, setMessagesFor],
+    );
+
+    // A run this page did not start (opened mid-run, relay run): give it a row.
+    const messagesRef = useRef(messages);
+    messagesRef.current = messages;
+    useEffect(() => {
+        if (!cid || !run || !active || isLoading || bucketId !== cid) return;
+        if (decidedRunsRef.current.has(run.runId)) return;
+        // A send in flight decides for its own run when the answer arrives.
+        if (messagesRef.current.some((m) => m.liveRunId === '')) return;
+        decidedRunsRef.current.add(run.runId);
+        if (needsLiveRow(messagesRef.current, run)) {
+            setMessagesFor(cid, (prev) => addLiveRow(prev, run, senderRef.current));
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- asked once per run, not on every delta
+    }, [cid, bucketId, runId, active, isLoading, setMessagesFor]);
+
+    // The run ended: keep its final state on screen, then take the stored turn.
+    const liveRowPresent = !!runId && hasLiveRow(messages, runId);
+    useEffect(() => {
+        if (!cid || !run || active || !liveRowPresent || bucketId !== cid) return;
+        if (settledRunsRef.current.has(run.runId)) return;
+        settledRunsRef.current.add(run.runId);
+        const errorText =
+            run.status === 'failed' ? translateApiErrorMessage({ status_code: run.error?.code ?? undefined }) : '';
+        setMessagesFor(cid, (prev) => freezeLiveRun(prev, run, errorText));
+        reloadHistory(cid, run.runId);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- reacts to the end of the run only
+    }, [cid, bucketId, runId, active, liveRowPresent, setMessagesFor, reloadHistory]);
+
+    const liveMessages = useMemo(
+        () => (cid && bucketId === cid ? withLiveRun(messages, run) : messages),
+        [cid, bucketId, messages, run],
+    );
+
+    const send = useCallback(
+        async (args: UnifiedSendArgs): Promise<UnifiedSendResult> => {
+            const reject = (message: string): UnifiedSendResult => {
+                args.setMessages((prev) => dropSentMessages(prev, args.userMessageId));
+                args.onRejected(message);
+                return REJECTED;
+            };
+            let raw: unknown;
+            try {
+                raw = await sendRunMessage(args.payload, { flowLeaseId: args.flowLeaseId });
+            } catch (err) {
+                const message = (err as { message?: string } | null)?.message;
+                return reject(message || translateApiErrorMessage(null));
+            }
+            const outcome = classifySendResponse(raw);
+            if (outcome.kind === 'invalid') return reject(translateApiErrorMessage(null));
+
+            if (outcome.kind === 'legacy') {
+                // No run started (a blocked input is stored as a normal turn):
+                // the stored turn is the answer.
+                const legacyCid =
+                    outcome.conversationId || (args.conversationId !== 'new' ? args.conversationId : '');
+                if (outcome.error && !outcome.conversationId) {
+                    return reject(
+                        translateApiErrorMessage({
+                            status_code: outcome.error.code,
+                            status_message: outcome.error.message,
+                        }),
+                    );
+                }
+                if (!legacyCid) return reject(translateApiErrorMessage(null));
+                args.onConversation(legacyCid);
+                args.setMessages((prev) => prev.filter((m) => m.liveRunId !== ''));
+                reloadHistory(legacyCid, null);
+                return { accepted: true, conversationId: legacyCid, disposition: 'legacy', runId: null, answered: false };
+            }
+
+            const { result } = outcome;
+            const targetCid = result.conversation_id || (args.conversationId !== 'new' ? args.conversationId : '');
+            if (!targetCid) return reject(translateApiErrorMessage(null));
+            const store = useRunStore.getState();
+            const before = store.conversations[targetCid]?.run ?? null;
+            const runKnown = !!before && before.runId === result.run_id;
+            const answered = runKnown && before?.status === 'waiting' && outcome.kind === 'started';
+            args.onConversation(targetCid);
+            if (outcome.kind === 'started') decidedRunsRef.current.add(result.run_id);
+            args.setMessages((prev) =>
+                reconcileSentMessages(prev, outcome, {
+                    userMessageId: args.userMessageId,
+                    sender: senderRef.current,
+                    runKnown,
+                }),
+            );
+            // `queued` marks the message; `started` makes the run current, or
+            // clears the pending question when the message answered it.
+            store.applySendResult(targetCid, result);
+            follow();
+            return {
+                accepted: true,
+                conversationId: targetCid,
+                disposition: outcome.kind,
+                runId: result.run_id,
+                answered,
+            };
+        },
+        [follow, reloadHistory],
+    );
+
+    /** Ask the backend to stop the run of the open conversation. */
+    const stopRun = useCallback(async (): Promise<void> => {
+        if (!cid) return;
+        const current = useRunStore.getState().conversations[cid]?.run ?? null;
+        if (!isRunActive(current)) return;
+        await stopConversationRun(cid, current?.runId);
+    }, [cid]);
+
+    /** True when the run store already shows a run in progress for `targetCid`. */
+    const isBusy = useCallback(
+        (targetCid: string) => enabled && isRunActive(useRunStore.getState().conversations[targetCid]?.run ?? null),
+        [enabled],
+    );
+
+    return {
+        /** Rows to render: the bucket with the live run merged in. */
+        messages: liveMessages,
+        /** A run of this conversation is in progress (running or waiting for an answer). */
+        isRunning: !!cid && active,
+        isBusy,
+        composeHistory,
+        send,
+        stopRun,
+    };
+}

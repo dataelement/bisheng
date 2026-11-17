@@ -220,21 +220,22 @@ async def mark_run_expired(conversation_id: str, run_id: str) -> None:
 
     Writes ``run_failed`` to the conversation's event stream and, when the run
     has a run record (a planned run), marks that record failed and tells the
-    legacy WebSocket subscribers. A direct run has no run record.
+    legacy WebSocket subscribers. A direct run has no run record: what it had
+    written is saved as a failed answer row (T043).
     """
-    await RunEventStream(await _run_redis()).append(
-        conversation_id,
-        {
-            "type": "run_failed",
-            "run_id": run_id,
-            "data": {
-                "code": EXECUTOR_GONE_ERROR_CODE,
-                "reason": "lease_expired",
-                "detail": EXECUTOR_GONE_MESSAGE,
-                "reference_id": run_id,
-            },
-        },
-    )
+    from bisheng.workstation.domain.services import run_message_persist
+
+    redis = await _run_redis()
+    failure = {
+        "code": EXECUTOR_GONE_ERROR_CODE,
+        "reason": "lease_expired",
+        "detail": EXECUTOR_GONE_MESSAGE,
+        "reference_id": run_id,
+    }
+    # Before run_failed is appended: the snapshot must still be this run's own.
+    # A no-op for a planned run; never raises.
+    await run_message_persist.persist_expired_direct_answer(conversation_id, run_id, failure, redis=redis)
+    await RunEventStream(redis).append(conversation_id, {"type": "run_failed", "run_id": run_id, "data": failure})
     # The caller may be an API request of the conversation's tenant or a worker
     # without tenant context; the record is addressed by id either way.
     with bypass_tenant_filter():
@@ -333,6 +334,12 @@ class _UnifiedRun:
         if self.lease_lost:
             return
         await self.writer.emit(event)
+        if event.get("type") == "steer_read":
+            # T043 (AC-14): this sink has no event hooks, and the run executes in
+            # the worker, so the "queued" mark of the message's row is cleared here.
+            from bisheng.workstation.domain.services import run_message_persist
+
+            await run_message_persist.on_run_event(self.conversation_id, event, redis=self.redis)
 
     async def claim(self) -> None:
         """Take the conversation for this run, or raise.
@@ -1889,6 +1896,27 @@ class LinsightWorkflowTask:
             context_window_sink=self._context_window,
             citation_scope=citation_scope,
             memory_prompt=self._memory_round().prompt(),
+            inbox=self._inbox_middleware(),
+        )
+
+    def _inbox_middleware(self):
+        """T041: the inbox middleware of this execution, or None on the legacy path."""
+        run = getattr(self, "_unified", None)
+        if run is None:
+            return None
+        from bisheng.linsight.domain.services.inbox_middleware import InboxMiddleware
+
+        async def emit(event: dict) -> None:
+            await run.emit(event)
+
+        metrics = run_metrics.current()
+        return InboxMiddleware(
+            run.conversation_id,
+            run_id=run.run_id,
+            drain=run.dispatch.drain_inbox,
+            emit=emit,
+            clock=self._unified_clock,
+            record_wait=metrics.record_steer_wait if metrics is not None else None,
         )
 
     async def _push_skill_load_failure(self, svid: str, names: list[str]) -> None:

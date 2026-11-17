@@ -109,6 +109,8 @@ EXPIRED_REASON = "lease_expired"
 EnqueueRelay = Callable[[dict], Awaitable[None]]
 OnRunExpired = Callable[[str, str], Awaitable[None]]
 QueuePosition = Callable[[str, str, dict], Awaitable[int | None]]
+# ``on_queued(result, message)``: persist the question row of a message that joined the inbox.
+OnQueued = Callable[["SubmitResult", dict], Awaitable[None]]
 
 
 def inbox_key(conversation_id: str) -> str:
@@ -257,10 +259,14 @@ class RunDispatchService:
             INBOX_TTL_SECONDS,
         )
 
-    async def submit(self, conversation_id: str, message: dict) -> SubmitResult:
+    async def submit(self, conversation_id: str, message: dict, *, on_queued: OnQueued | None = None) -> SubmitResult:
         """Decide what one sent message does. See the module docstring for the branches.
 
         Input safety checks (AC-38) are the caller's job and run BEFORE this.
+
+        ``on_queued(result, message)`` is awaited when the message joined the
+        inbox (disposition ``queued``), before ``steer_accepted`` is emitted: the
+        caller writes the message's question row there (AC-13).
         """
         msg = self._normalize(message)
         profile = profile_of(msg)
@@ -309,7 +315,7 @@ class RunDispatchService:
                 profile=run_profile,
                 inbox_length=inbox_length,
             )
-            await self._on_message_queued(conversation_id, result, msg)
+            await self._on_message_queued(conversation_id, result, msg, on_queued)
         elif branch == "relay":
             item = self._relay_item(conversation_id, run_id, run_profile, _s(res[5]))
             result = SubmitResult(
@@ -322,7 +328,7 @@ class RunDispatchService:
                 inbox_length=inbox_length,
                 relay=item,
             )
-            await self._on_message_queued(conversation_id, result, msg)
+            await self._on_message_queued(conversation_id, result, msg, on_queued)
             await self._enqueue(conversation_id, item)
         else:
             raise RuntimeError(f"run_dispatch.lua returned an unknown branch: {branch!r}")
@@ -339,12 +345,42 @@ class RunDispatchService:
         )
         return result
 
-    async def _on_message_queued(self, conversation_id: str, result: SubmitResult, message: dict) -> None:
-        """HOOK for T043 (AC-13): a message entered the inbox.
+    async def _on_message_queued(
+        self, conversation_id: str, result: SubmitResult, message: dict, on_queued: OnQueued | None
+    ) -> None:
+        """A message entered the inbox (AC-13): question row first, then ``steer_accepted``.
 
-        T043 writes the question row with its "queued" mark and emits
-        ``steer_accepted {message_id}`` here. Intentionally empty until then.
+        The message is already in the inbox and will be read whatever happens
+        here, so neither step may fail the send: an error is logged, and the user
+        is not told to send the same message again.
+
+        ``steer_accepted`` goes to the stream of the run that holds the
+        conversation. A relay run has not written ``run_started`` yet and that
+        event clears the stream, so nothing is emitted for it; the row's
+        "queued" mark is what a reader of the history sees.
         """
+        if on_queued is not None:
+            try:
+                await on_queued(result, message)
+            except Exception:
+                logger.exception(
+                    "could not save the question row of queued message={} conversation={}",
+                    result.message_id,
+                    conversation_id,
+                )
+        if result.kind != KIND_STEER:
+            return
+        from bisheng.linsight.domain.services.run_event_stream import RunEventStream
+
+        try:
+            await RunEventStream(self._redis).append(
+                conversation_id,
+                {"type": "steer_accepted", "run_id": result.run_id, "data": {"message_id": result.message_id}},
+            )
+        except Exception:
+            logger.exception(
+                "could not emit steer_accepted for message={} conversation={}", result.message_id, conversation_id
+            )
 
     # ------------------------------------------------------------------ finish
 

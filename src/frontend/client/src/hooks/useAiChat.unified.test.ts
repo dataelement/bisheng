@@ -1,0 +1,240 @@
+/**
+ * F004 (T047): the send path and the live answer row of a tenant on the
+ * unified runtime, and the proof that nothing changes with the switch off.
+ */
+import { act, renderHook, waitFor } from "@testing-library/react";
+
+jest.mock("react-activation", () => ({ useActivate: jest.fn() }));
+
+let mockBsConfig: Record<string, unknown> = {};
+jest.mock("./useKnowledgeSpaceAccess", () => ({
+  useKnowledgeSpaceAccess: (selection: unknown) => ({ available: selection, blocked: false, message: "" }),
+}));
+
+const mockOpenedStreams: unknown[] = [];
+jest.mock("sse.js", () => ({ SSE: jest.fn() }));
+jest.mock("./useAiChatSSE", () => ({
+  openChatStream: (submission: unknown) => {
+    mockOpenedStreams.push(submission);
+    return { close: jest.fn() };
+  },
+}));
+
+const mockFollow = jest.fn();
+const mockSubscribed: Array<[string, boolean]> = [];
+jest.mock("./useRunEvents", () => ({
+  useRunEvents: (cid: string, enabled: boolean) => {
+    mockSubscribed.push([cid, enabled]);
+    return { follow: mockFollow };
+  },
+}));
+
+const mockSendRunMessage = jest.fn();
+const mockStopConversationRun = jest.fn();
+jest.mock("~/api/runApi", () => ({
+  sendRunMessage: (...args: unknown[]) => mockSendRunMessage(...args),
+  stopConversationRun: (...args: unknown[]) => mockStopConversationRun(...args),
+}));
+
+const mockGetAgentMessages = jest.fn();
+jest.mock("~/api/chatApi", () => ({
+  getAgentMessages: (...args: unknown[]) => mockGetAgentMessages(...args),
+  getSessionName: () => Promise.resolve(""),
+  getSSEUrl: () => "/workstation/chat",
+}));
+jest.mock("~/api/memory", () => ({
+  getMemoryFlagsApi: () => Promise.resolve({}),
+  mergeMemoryFlags: (messages: unknown) => messages,
+}));
+jest.mock("~/api/request", () => ({ __esModule: true, default: {}, translateApiErrorMessage: () => "failed" }));
+
+jest.mock("recoil", () => ({
+  useRecoilState: (atom: { __testValue?: unknown }) => [atom?.__testValue, jest.fn()],
+}));
+jest.mock("~/store", () => ({
+  __esModule: true,
+  default: {
+    chatModel: { __testValue: { id: 1, name: "test-model" } },
+    searchType: { __testValue: "" },
+    selectedAgentTools: { __testValue: [] },
+  },
+}));
+jest.mock("~/store/linsight", () => ({
+  SopStatus: { Running: "running", Stoped: "stoped", SopGenerating: "sop_generating" },
+  taskModeSkillsState: () => ({ __testValue: [] }),
+}));
+jest.mock("~/hooks/AuthContext", () => ({ useAuthContext: () => ({ user: { id: "test-user" } }) }));
+jest.mock("~/hooks", () => ({ useLocalize: () => (key: string) => key }));
+const mockShowToast = jest.fn();
+jest.mock("~/Providers", () => ({ useToastContext: () => ({ showToast: mockShowToast }) }));
+jest.mock("~/hooks/queries/data-provider", () => ({ useGetBsConfig: () => ({ data: mockBsConfig }) }));
+jest.mock("~/utils/mediaAttachmentUtils", () => ({ isMediaAttachmentFile: () => false }));
+let mockUUIDSequence = 0;
+jest.mock("uuid", () => ({ v4: () => `test-${++mockUUIDSequence}` }));
+jest.mock("~/hooks/useLinsightManager", () => ({
+  useLinsightManager: () => ({ createLinsight: jest.fn(), updateLinsight: jest.fn(), linsightMap: new Map() }),
+}));
+jest.mock("~/api/linsight", () => ({ startLinsight: jest.fn(), getLinsightSessionVersionList: jest.fn() }));
+jest.mock("~/types/chat", () => ({
+  QueryKeys: { allConversations: "allConversations" },
+  dataService: { genTitle: jest.fn().mockResolvedValue({}) },
+}));
+jest.mock("~/utils", () => ({
+  addConversation: (data: unknown) => data,
+  updateConvoFields: (data: unknown) => data,
+}));
+jest.mock("@tanstack/react-query", () => ({
+  useQueryClient: () => ({ setQueryData: jest.fn(), getQueryData: jest.fn() }),
+}));
+
+import useAiChat from "./useAiChat";
+import { selectIsMessageQueued, useRunStore, type RunEvent } from "~/store/runStore";
+
+const row = (id: string, isCreatedByUser: boolean, text = id) => ({
+  text, sender: isCreatedByUser ? "User" : "AI", isCreatedByUser, messageId: id, parentMessageId: "",
+  conversationId: "c9", error: false,
+});
+const sendAnswer = (data: Record<string, unknown>) => ({ status_code: 200, status_message: "SUCCESS", data });
+let entry = 0;
+const emit = (cid: string, event: Record<string, unknown>) =>
+  act(() => {
+    useRunStore.getState().applyEvent(cid, { run_id: "r1", data: {}, ...event } as RunEvent, `9-${++entry}`);
+  });
+
+const renderChat = (conversationId: string) =>
+  renderHook(({ cid }: { cid: string }) => useAiChat(cid), { initialProps: { cid: conversationId } });
+
+beforeEach(() => {
+  mockUUIDSequence = 0;
+  entry = 0;
+  localStorage.clear();
+  mockOpenedStreams.length = 0;
+  mockSubscribed.length = 0;
+  mockBsConfig = { models: [{ id: 1, visual: true }], unified_runtime_enabled: true };
+  mockGetAgentMessages.mockResolvedValue([]);
+  mockSendRunMessage.mockReset();
+  mockStopConversationRun.mockReset().mockResolvedValue(undefined);
+  act(() => useRunStore.setState({ conversations: {} }));
+});
+
+describe("tenant switch off", () => {
+  it("sends through today's stream and never touches the unified runtime", async () => {
+    mockBsConfig = { models: [{ id: 1, visual: true }] };
+    const { result } = renderChat("new");
+    await act(async () => {
+      await result.current.sendMessage("hello");
+    });
+    expect(mockOpenedStreams).toHaveLength(1);
+    expect(mockSendRunMessage).not.toHaveBeenCalled();
+    expect(mockSubscribed.every(([, enabled]) => enabled === false)).toBe(true);
+    expect(result.current.unifiedRuntime).toBe(false);
+    expect(result.current.messages.map((m) => m.liveRunId)).toEqual([undefined, undefined]);
+    act(() => result.current.stopGenerating());
+    expect(mockStopConversationRun).not.toHaveBeenCalled();
+  });
+});
+
+describe("tenant switch on", () => {
+  it("starts a run, shows it in one row and lets the stored turn replace that row", async () => {
+    mockSendRunMessage.mockResolvedValue(
+      sendAnswer({ run_id: "r1", disposition: "started", message_id: "m1", conversation_id: "c9" }),
+    );
+    const { result } = renderChat("new");
+    let accepted: boolean | undefined;
+    await act(async () => {
+      accepted = await result.current.sendMessage("hello");
+    });
+    expect(accepted).toBe(true);
+    expect(mockOpenedStreams).toHaveLength(0);
+    expect(mockSendRunMessage.mock.calls[0][0]).toMatchObject({ text: "hello", conversationId: null, task_mode: false });
+    expect(result.current.conversationId).toBe("c9");
+    expect(result.current.messages.map((m) => m.messageId)).toEqual(["m1", "run:r1"]);
+    expect(result.current.isStreaming).toBe(true);
+    expect(mockFollow).toHaveBeenCalled();
+    // The new id must not trigger a history load over the optimistic rows.
+    expect(mockGetAgentMessages).not.toHaveBeenCalled();
+
+    emit("c9", { type: "run_started" });
+    emit("c9", { type: "thinking", data: { text: "hmm", call_id: "t" } });
+    emit("c9", { type: "text", data: { text: "Hi there" } });
+    expect(result.current.messages[1]).toMatchObject({ text: "Hi there", category: "agent_answer", liveRunId: "r1" });
+    expect(result.current.messages[1].events).toEqual([{ type: "thinking", content: "hmm" }]);
+
+    mockGetAgentMessages.mockResolvedValue([row("101", true, "hello"), row("102", false, "Hi there")]);
+    emit("c9", { type: "run_finished" });
+    await waitFor(() => expect(result.current.messages.map((m) => m.messageId)).toEqual(["101", "102"]));
+    expect(result.current.messages.some((m) => m.liveRunId !== undefined)).toBe(false);
+    expect(result.current.isStreaming).toBe(false);
+  });
+
+  it("queues a message sent during a run and marks it by the server id", async () => {
+    mockGetAgentMessages.mockResolvedValue([row("101", true, "first")]);
+    const { result } = renderChat("c9");
+    await waitFor(() => expect(result.current.messages).toHaveLength(1));
+    emit("c9", { type: "run_started" });
+    await waitFor(() => expect(result.current.messages.map((m) => m.messageId)).toEqual(["101", "run:r1"]));
+
+    mockSendRunMessage.mockResolvedValue(sendAnswer({ run_id: "r1", disposition: "queued", message_id: "m2" }));
+    await act(async () => {
+      expect(await result.current.sendMessage("change step 3")).toBe(true);
+    });
+    expect(result.current.messages.map((m) => m.messageId)).toEqual(["101", "run:r1", "m2"]);
+    expect(selectIsMessageQueued("c9", "m2")(useRunStore.getState())).toBe(true);
+
+    emit("c9", { type: "steer_read", data: { message_id: "m2" } });
+    expect(selectIsMessageQueued("c9", "m2")(useRunStore.getState())).toBe(false);
+  });
+
+  it("answers a pending question without a second answer row and clears the question", async () => {
+    mockGetAgentMessages.mockResolvedValue([row("101", true, "first")]);
+    const { result } = renderChat("c9");
+    await waitFor(() => expect(result.current.messages).toHaveLength(1));
+    emit("c9", { type: "run_started" });
+    emit("c9", { type: "ask_user", data: { call_id: "c", questions: [{ question: "which?" }] } });
+    expect(useRunStore.getState().conversations.c9.run?.pendingQuestion).not.toBeNull();
+
+    mockSendRunMessage.mockResolvedValue(sendAnswer({ run_id: "r1", disposition: "started", message_id: "m3" }));
+    await act(async () => {
+      await result.current.sendMessage("the second one");
+    });
+    expect(result.current.messages.map((m) => m.messageId)).toEqual(["101", "run:r1", "m3"]);
+    const run = useRunStore.getState().conversations.c9.run;
+    expect(run?.pendingQuestion).toBeNull();
+    expect(run?.status).toBe("running");
+  });
+
+  it("keeps the draft and leaves no row behind when the send is rejected", async () => {
+    mockSendRunMessage.mockRejectedValue(Object.assign(new Error("department is full"), { status_code: 19999 }));
+    const { result } = renderChat("new");
+    let accepted: boolean | undefined;
+    await act(async () => {
+      accepted = await result.current.sendMessage("hello");
+    });
+    expect(accepted).toBe(false);
+    expect(result.current.messages).toEqual([]);
+    expect(result.current.isStreaming).toBe(false);
+    expect(mockShowToast).toHaveBeenCalledWith({ message: "department is full", status: "error" });
+  });
+
+  it("asks the backend to stop the run on screen", async () => {
+    mockGetAgentMessages.mockResolvedValue([row("101", true, "first")]);
+    const { result } = renderChat("c9");
+    await waitFor(() => expect(result.current.messages).toHaveLength(1));
+    emit("c9", { type: "run_started" });
+    act(() => result.current.stopGenerating());
+    expect(mockStopConversationRun).toHaveBeenCalledWith("c9", "r1");
+    // The run ends on screen only when the server says so.
+    expect(result.current.isStreaming).toBe(true);
+    emit("c9", { type: "run_stopped" });
+    expect(result.current.isStreaming).toBe(false);
+  });
+
+  it("does not show a second answer for a turn the history already holds", async () => {
+    mockGetAgentMessages.mockResolvedValue([row("101", true, "q"), row("102", false, "stored task row")]);
+    const { result } = renderChat("c9");
+    await waitFor(() => expect(result.current.messages).toHaveLength(2));
+    emit("c9", { type: "run_started" });
+    emit("c9", { type: "text", data: { text: "live text" } });
+    expect(result.current.messages.map((m) => m.messageId)).toEqual(["101", "102"]);
+  });
+});

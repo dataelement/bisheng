@@ -191,6 +191,64 @@ async def test_text_coalescing(redis):
     assert (await stream.snapshot(CID))["text"] == "abcde"
 
 
+async def test_coalescing_same_segment_keeps_call_id_and_namespace(redis):
+    stream = RunEventStream(redis)
+    writer = EventWriter(stream, CID, RUN, clock=FakeClock(), sleep=_never_sleep)
+    for ch in "abc":
+        await writer.emit({"type": "thinking", "data": {"text": ch, "call_id": "seg-1", "namespace": "sub:r1"}})
+    await writer.aclose()
+
+    events = await _collect(stream)
+    assert [(e["type"], e["data"]) for e in events] == [
+        ("thinking", {"text": "abc", "call_id": "seg-1", "namespace": "sub:r1"}),
+    ]
+    assert (await stream.snapshot(CID))["thinking"] == "abc"
+
+
+async def test_coalescing_does_not_merge_across_call_id_or_namespace(redis):
+    stream = RunEventStream(redis)
+    writer = EventWriter(stream, CID, RUN, clock=FakeClock(), sleep=_never_sleep)
+    await writer.emit({"type": "thinking", "data": {"text": "a1", "call_id": "seg-1"}})
+    await writer.emit({"type": "thinking", "data": {"text": "a2", "call_id": "seg-1"}})
+    await writer.emit({"type": "thinking", "data": {"text": "b", "call_id": "seg-2"}})
+    await writer.emit({"type": "thinking", "data": {"text": "c", "call_id": "seg-2", "namespace": "sub:r1"}})
+    await writer.emit({"type": "thinking", "data": {"text": "d", "call_id": "seg-2"}})
+    await writer.aclose()
+
+    events = await _collect(stream)
+    assert [(e["type"], e["data"]) for e in events] == [
+        ("thinking", {"text": "a1a2", "call_id": "seg-1"}),
+        ("thinking", {"text": "b", "call_id": "seg-2"}),
+        ("thinking", {"text": "c", "call_id": "seg-2", "namespace": "sub:r1"}),
+        ("thinking", {"text": "d", "call_id": "seg-2"}),
+    ]
+    # The snapshot accumulation is unchanged: every delta, in arrival order.
+    assert (await stream.snapshot(CID))["thinking"] == "a1a2bcd"
+
+
+async def test_coalescing_preserves_order_across_segments(redis):
+    stream = RunEventStream(redis)
+    writer = EventWriter(stream, CID, RUN, clock=FakeClock(), sleep=_never_sleep)
+    await writer.emit({"type": "text", "data": {"text": "m1", "namespace": "sub:r1"}})
+    await writer.emit({"type": "text", "data": {"text": "x"}})
+    await writer.emit({"type": "text", "data": {"text": "m2", "namespace": "sub:r1"}})
+    await writer.emit({"type": "text", "data": {"text": "m3", "namespace": "sub:r1"}})
+    await writer.emit({"type": "thinking", "data": {"text": "t", "call_id": "seg-1"}})
+    await writer.emit({"type": "text", "data": {"text": "y"}})
+    await writer.aclose()
+
+    events = await _collect(stream)
+    assert [(e["type"], e["data"]) for e in events] == [
+        ("text", {"text": "m1", "namespace": "sub:r1"}),
+        ("text", {"text": "x"}),
+        ("text", {"text": "m2m3", "namespace": "sub:r1"}),
+        ("thinking", {"text": "t", "call_id": "seg-1"}),
+        ("text", {"text": "y"}),
+    ]
+    snap = await stream.snapshot(CID)
+    assert snap["text"] == "m1xm2m3y" and snap["thinking"] == "t"
+
+
 async def test_text_coalescing_timer_flushes_idle_buffer(redis):
     stream = RunEventStream(redis)
     writer = EventWriter(stream, CID, RUN, window_seconds=0.002)

@@ -129,3 +129,17 @@ async def conversation_events(
         # Same answer for "not yours" and "does not exist".
         return UnAuthorizedError.return_resp()
     return await run_send.subscribe_response(conversation_id, last_event_id)
+
+
+@router.post("/conversations/{conversation_id}/stop")
+async def stop_conversation(conversation_id: str, login_user=LoginUserDep):
+    """F004: stop the run that holds the conversation (AC-29). Owner only.
+
+    Works for a direct answer and for deep research, on any node. Returns
+    ``{run_id, status}``: ``stopping`` (the run ends within about a second and
+    writes ``run_stopped``), ``stopped`` (it was waiting for an answer or still
+    queued and is ended now), ``expired`` or ``idle`` (nothing to stop).
+    """
+    if not await run_send.owns_conversation(conversation_id, login_user):
+        return UnAuthorizedError.return_resp()
+    return resp_200(data=await run_send.stop_conversation_run(conversation_id))

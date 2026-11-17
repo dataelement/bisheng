@@ -518,6 +518,35 @@ async def user_input(
     return resp_200(data=True, message="User input submitted")
 
 
+async def _request_unified_stop(session_version_model) -> None:
+    """Ask the unified runtime to stop this run. Nothing happens for a tenant whose switch is off."""
+    from bisheng.workstation.domain.services.workstation_service import is_unified_runtime_enabled
+
+    if not await is_unified_runtime_enabled(session_version_model.tenant_id):
+        return
+    from bisheng.workstation.domain.services import run_send
+
+    try:
+        outcome = await run_send.stop_conversation_run(
+            session_version_model.session_id,
+            session_version_id=session_version_model.id,
+            # The record is terminated by the caller, as before.
+            terminate_record=False,
+        )
+    except Exception:
+        # The termination below still stops the run through its record; only the
+        # conversation lease may stay held until it lapses or the run ends.
+        logger.exception(
+            "unified stop failed for session version {} conversation {}",
+            session_version_model.id,
+            session_version_model.session_id,
+        )
+        return
+    logger.info(
+        "terminate-execute: unified stop of session version {} -> {}", session_version_model.id, outcome["status"]
+    )
+
+
 # workbench Termination
 @router.post(
     "/workbench/terminate-execute", summary="Termination of execution of Ideas", response_model=UnifiedResponseModel
@@ -549,6 +578,11 @@ async def terminate_execute(
     if session_version_model.status == SessionVersionStatusEnum.TERMINATED:
         # return resp_500(code=400, message="Execution terminated for Inspiration session version")
         return InvalidOperationError.return_resp()
+
+    # F004: on the unified runtime the conversation is held through the run
+    # lease. Without this a run parked on a question would keep the conversation
+    # "waiting" and the next message would be taken as its answer.
+    await _request_unified_stop(session_version_model)
 
     # F073: the termination itself is shared with the Open API; the ownership
     # and state checks above stay here (v1 behaviour unchanged).

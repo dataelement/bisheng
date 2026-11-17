@@ -458,6 +458,7 @@
   "com_linsight_exit_task_mode": "Turn off deep research",
   "com_linsight_input_placeholder": "Enter your task goal and let $t(com_linsight_task_mode) handle it",
   "com_linsight_awaiting_reply": "Answer the question above to continue the task",
+  "com_linsight_answer_placeholder": "Pick an option above, or type your answer here",
   "com_linsight_skill_empty": "No skills available",
   "com_linsight_skill_search": "Search skills",
   "com_linsight_task_mode": "Deep research",
@@ -3024,6 +3025,7 @@
     "loadingConversation": "Loading conversation…",
     "recommendedApps": "Recommended apps",
     "scrollToBottom": "Scroll to bottom",
+    "messageQueued": "Sent. Waiting to be processed",
     "preview": "Preview",
     "source": "Source",
     "closeResearch": "Turn off deep research",
@@ -3127,6 +3129,10 @@
       "name": "Excel spreadsheet creation",
       "description": "Create and edit Excel workbooks (.xlsx), including data tables, summaries, budgets, financial models, quotations and registers. Read and clean .xlsx, .xls and .csv data, apply formulas and formatting, and recalculate and check the workbook before delivery."
     }
+  },
+  "runPlan": {
+    "cancelled": "Cancelled",
+    "stopped": "Stopped"
   },
   "appChat": {
     "unknownApp": "Unknown app",
