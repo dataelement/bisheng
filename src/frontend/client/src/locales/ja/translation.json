@@ -1576,6 +1576,7 @@
     "tag_save_success": "タグの保存に成功しました",
     "tags_char_limit_exceeded": "タグの文字数制限を超えました",
     "tags_count_limit_exceeded": "タグ数の上限を超えました",
+    "file_parse_failed_detail": "{{message}}（エラーコード：{{code}}）",
     "space_tags_limit_exceeded": "現在のスペースのタグ数が上限の50個に達しました",
     "sensitive_violation_empty_hits": "一致した語句の詳細はありません",
     "sensitive_violation_hits": "一致した語句",

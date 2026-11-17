@@ -9,6 +9,7 @@ from bisheng.common.errcode.dsh import DshInvalidRequestError
 from bisheng.dsh.access_runtime import get_logout_runtime, get_runtime
 from bisheng.dsh.api.responses import DshRoute
 from bisheng.dsh.domain.schemas.contracts import DshContract
+from bisheng.dsh.request_origin import resolve_client_origin
 
 router = APIRouter(prefix="/dsh", route_class=DshRoute)
 
@@ -38,7 +39,7 @@ class LogoutRequest(DshContract):
 @router.post("/authorizations")
 async def authorization(body: AuthorizationRequest, request: Request, runtime=Depends(get_runtime)):
     await runtime.authorizations.rate("authorization", request.client.host if request.client else "unknown")
-    return await runtime.authorizations.create(body)
+    return await runtime.authorizations.create(body, origin=await resolve_client_origin(request, runtime.settings))
 
 
 @router.post("/token")

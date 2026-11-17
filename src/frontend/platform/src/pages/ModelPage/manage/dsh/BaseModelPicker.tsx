@@ -10,7 +10,7 @@ import { creditPricingErrorKey, useCreditSettings } from './useCreditPricing'
 const DEFAULT_BASE = 'default'
 
 interface BaseModelPickerProps {
-    models: { id: number; label: string }[]
+    models: { id: number; label: string; provider: string }[]
     rows?: Map<number, ModelPricingRow>
 }
 
@@ -47,13 +47,15 @@ export function BaseModelPicker({ models, rows }: BaseModelPickerProps) {
     return <div className="space-y-1">
         <div className="flex flex-wrap items-center gap-3">
             <span className="text-sm font-medium">{t('dsh.pricing.baseModel')}</span>
-            <Select {...selectLabels} className="w-72" aria-label={t('dsh.pricing.baseModel')}
+            <Select {...selectLabels} className="w-96" aria-label={t('dsh.pricing.baseModel')}
                 loading={!value} disabled={!value || mutation.isLoading}
                 value={value ? value.base_model_id ?? DEFAULT_BASE : null}
                 onChange={handleChange}
                 options={[
                     { value: DEFAULT_BASE, label: t('dsh.pricing.baseModelDefault') },
-                    ...models.map(model => ({ value: model.id, label: model.label })),
+                    // Relays often carry the same model name; the provider tells them apart,
+                    // also in the trigger once chosen.
+                    ...models.map(model => ({ value: model.id, label: t('dsh.pricing.baseModelOption', { model: model.label, provider: model.provider }) })),
                 ]} />
             {mutation.isLoading && <Loader2 className="size-4 animate-spin text-muted-foreground" aria-label={t('dsh.pricing.saving')} />}
             {mutation.isSuccess && !error && <Check className="size-4 text-green-600" aria-label={t('dsh.pricing.saved')} />}

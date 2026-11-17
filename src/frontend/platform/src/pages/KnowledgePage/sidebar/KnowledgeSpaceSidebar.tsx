@@ -7,7 +7,6 @@ import { Outlined } from "bisheng-icons";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { userContext } from "@/contexts/userContext";
-import { knowledgeFilesApi } from "@/controllers/API/knowledgeFiles";
 import type { KnowledgeSpaceInfo } from "@/controllers/API/knowledgeSpace";
 import { listNavigationSpaces, setNavigationSpacePin, type SpaceSection, type SpaceSort } from "@/controllers/API/knowledgeSpaceNavigation";
 import { knowledgeQueryKeys, type KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
@@ -16,6 +15,7 @@ import { KnowledgeFolderTree, knowledgeTreeNodeKey, type KnowledgeTreeExpansion 
 import { KnowledgeSidebarPane } from "./KnowledgeSidebarPane";
 import { useSpaceCatalog } from "./useSpaceCatalog";
 import { useSpaceActions } from "../hooks/useSpaceActions";
+import { useSpaceFolderPath } from "../hooks/useSpaceFolderPath";
 import { useSpaceCopyTasks } from "../useSpaceCopyTasks";
 import type { SpaceCopyTask } from "@/controllers/API/knowledgeCopy";
 
@@ -235,17 +235,7 @@ function ScopedKnowledgeSpaceSidebar(props: KnowledgeSpaceSidebarProps) {
     void client.cancelQueries({ predicate });
     client.removeQueries({ predicate });
   }, [client, prefix]);
-  const parents = useQuery({
-    queryKey: [...prefix, "navigation-path", spaceId, parentId],
-    queryFn: () => knowledgeFilesApi.listSpaceFolderParents(spaceId!, parentId!),
-    enabled: spaceId !== undefined && parentId != null,
-    keepPreviousData: false,
-    retry: false,
-    cacheTime: 0,
-  });
-  useEffect(() => {
-    if (parents.error) showApiError(parents.error);
-  }, [parents.error]);
+  const parents = useSpaceFolderPath(scope, spaceId, parentId);
   useEffect(() => {
     if (spaceId === undefined || (parentId == null && initialSpaceHandled.current)) return;
     initialSpaceHandled.current = true;

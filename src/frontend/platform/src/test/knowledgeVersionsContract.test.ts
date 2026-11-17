@@ -76,12 +76,14 @@ it("uses the wrapped request transport and leaves backend error normalization in
   const actual = await vi.importActual<typeof import("@/controllers/request")>(
     "@/controllers/request",
   );
+  const { acceptManagementScope } = await import("@/controllers/managementScope");
+  acceptManagementScope(101);
   request.get.mockImplementation((url, config) =>
     actual.default.get(url, {
       ...config,
       adapter: async (wire) => {
         expect(wire.url).toBe("/api/v1/knowledge/space/file/11/versions");
-        expect(wire.headers.get("X-Management-Tenant")).toBeUndefined();
+        expect(wire.headers.get("X-Management-Tenant")).toBe("101");
         return {
           data: { status_code: 19000, status_message: "denied", data: null },
           status: 200,
@@ -92,9 +94,11 @@ it("uses the wrapped request transport and leaves backend error normalization in
       },
     }),
   );
-  await expect(getSpaceFileVersions(11)).rejects.toMatchObject({
-    status_code: 19000,
-  });
+  try {
+    await expect(getSpaceFileVersions(11)).rejects.toMatchObject({ status_code: 19000 });
+  } finally {
+    acceptManagementScope(null);
+  }
 });
 
 it("uses bounded original cursor endpoints and preserves opaque cursors and candidate direction", async () => {

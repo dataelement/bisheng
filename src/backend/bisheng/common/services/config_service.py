@@ -174,6 +174,8 @@ class ConfigService(Settings):
         with open(file_path, encoding="utf-8") as f:
             settings_dict = yaml.safe_load(f)
 
+        settings_dict = Settings.normalize_client_settings(settings_dict)
+
         if "admin" in settings_dict:
             # Old deployment files must remain loadable, but cannot create users.
             settings_dict.pop("admin")

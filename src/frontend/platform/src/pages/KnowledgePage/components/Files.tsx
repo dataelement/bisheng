@@ -5,7 +5,7 @@ import { BatchOperationDialog } from "./BatchOperationDialog";
 import { BatchTagDraftDialog } from "./BatchTagDraftDialog";
 import { MoveDialog } from "./MoveDialog";
 import type { MoveSelection } from "@/controllers/API/knowledgeMove";
-import { Button, EmptyStateIllustration, StateView } from "@bisheng/ui";
+import { Button, EmptyStateIllustration, StateView, toast } from "@bisheng/ui";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -301,6 +301,12 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
         await knowledgeFilesApi.renameSpaceFolder(spaceId, token.item.id, body);
       else await knowledgeFilesApi.renameSpaceFile(spaceId, token.item.id, body);
       if (editToken.current !== token || !isCurrent(token)) return;
+      // Report the write as soon as it lands: the refreshed list may drop this
+      // row (current search/filter), which would otherwise end the flow silently.
+      toast.show({
+        type: "success",
+        message: t(token.item ? "renameSuccess" : "f118.folder_created"),
+      });
       await client.invalidateQueries({ queryKey: base });
       if (editToken.current === token && isCurrent(token)) closeEdit();
     } catch (error) {
@@ -372,12 +378,13 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
     operation: "download" | "tag" | "retry",
     tag_ids?: number[],
     new_tag_names?: string[],
+    items = selectedRows,
   ) => {
     setBatchTagsOpen(false);
     const outcome = await batch.open({
       spaceId,
       operation,
-      items: selectedRows.map((item) => ({
+      items: items.map((item) => ({
         id: item.id,
         type: item.file_type === 0 ? "folder" : "file",
         name: item.file_name,
@@ -419,6 +426,9 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
             references([item]);
         }}
         onRename={() => handleEdit(item)}
+        onMove={() => setMove([{ id: item.id, type: item.file_type === 0 ? "folder" : "file" }])}
+        onRetry={() => { void runBatch("retry", undefined, undefined, [item]); }}
+        onChanged={() => client.invalidateQueries({ queryKey: base })}
         canDownload={downloadIds.has(item.id)}
         onDownload={() => {
           void handleDownload(item);

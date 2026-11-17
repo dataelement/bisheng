@@ -1,6 +1,6 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { User } from '@/types/api/user'
 import { HeaderTenantScope } from '@/components/HeaderTenantScope'
 const mocks = vi.hoisted(() => ({ setScope: vi.fn(), tenants: vi.fn() }))
@@ -29,4 +29,29 @@ it('only offers concrete tenants and reloads effect-owned modules after selectio
  fireEvent.change(screen.getByRole('combobox'),{target:{value:'1'}})
  await waitFor(()=>expect(mocks.setScope).toHaveBeenCalledWith(1))
  expect(refresh).toHaveBeenCalledOnce()
+})
+
+afterEach(() => vi.unstubAllGlobals())
+it.each(['/filelib/4391', '/filelib/4391/settings', '/filelib/upload/4391'])(
+ 'replaces a previous tenant resource address after switching from %s', async pathname => {
+  const replace = vi.fn()
+  vi.stubGlobal('location', { pathname, search: '?view=admin&parent_id=9&file_id=11', replace })
+  const refresh = vi.fn()
+  render(<HeaderTenantScope user={user} onScopeChange={refresh} />, {wrapper})
+  await screen.findByRole('option', {name:'Child'})
+  fireEvent.change(screen.getByRole('combobox'), {target:{value:'1'}})
+  await waitFor(() => expect(replace).toHaveBeenCalledWith('/filelib?view=admin'))
+  expect(refresh).not.toHaveBeenCalled()
+ })
+it('keeps the resource address when switching the management tenant fails', async () => {
+ const replace = vi.fn()
+ vi.stubGlobal('location', {pathname:'/filelib/4391', search:'', replace})
+ mocks.setScope.mockRejectedValue(new Error('scope switch rejected'))
+ const refresh = vi.fn()
+ render(<HeaderTenantScope user={user} onScopeChange={refresh} />, {wrapper})
+ await screen.findByRole('option', {name:'Child'})
+ fireEvent.change(screen.getByRole('combobox'), {target:{value:'1'}})
+ await waitFor(() => expect(mocks.setScope).toHaveBeenCalledWith(1))
+ expect(replace).not.toHaveBeenCalled()
+ expect(refresh).not.toHaveBeenCalled()
 })

@@ -163,8 +163,8 @@ afterEach(() => {
   clients.length = 0;
 });
 
-it("mounts the real version sheet for a single-version file only under the original feature flag", async () => {
-  mocks.get.mockResolvedValue(history());
+it("opens version management for a parsed single-version file only with space edit and the feature flag", async () => {
+  mocks.get.mockImplementation(async (url: string) => url.endsWith("/my-permissions") ? { actions: ["edit"] } : history());
   const row = (
     <table>
       <tbody>
@@ -195,7 +195,7 @@ it("mounts the real version sheet for a single-version file only under the origi
   );
   const view = mount(row);
   fireEvent.click(
-    await screen.findByRole("menuitem", { name: "f118.version_history" }),
+    await screen.findByRole("menuitem", { name: "versions.manage" }),
   );
   expect(
     await screen.findByRole("button", { name: "versions.new_version" }),
@@ -207,7 +207,7 @@ it("mounts the real version sheet for a single-version file only under the origi
     ).not.toBeInTheDocument(),
   );
   expect(
-    screen.queryByRole("menuitem", { name: "f118.version_history" }),
+    screen.queryByRole("menuitem", { name: "versions.manage" }),
   ).not.toBeInTheDocument();
 });
 

@@ -21,7 +21,9 @@ interface KnowledgeTagSelectProps {
     knowledgeId: string | number;
     fileIds: number[];
     initialTags?: KnowledgeTagItem[];
-    children: React.ReactNode;
+    children?: React.ReactNode;
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
     onUpdate: () => void;
     isEditable?: boolean;
     mode?: 'auto' | 'single' | 'batch';
@@ -37,11 +39,15 @@ export default function KnowledgeTagSelect({
     children,
     onUpdate,
     isEditable = true,
-    mode = 'auto'
+    mode = 'auto',
+    open: controlledOpen,
+    onOpenChange
 }: KnowledgeTagSelectProps) {
 
     const { t } = useTranslation('knowledge');
-    const [open, setOpen] = useState(false);
+    const [internalOpen, setInternalOpen] = useState(false);
+    const open = controlledOpen ?? internalOpen;
+    const setOpen = (value: boolean) => { setInternalOpen(value); onOpenChange?.(value); };
     const [tags, setTags] = useState<KnowledgeTagItem[]>([]);
     const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
     const [inputValue, setInputValue] = useState("");
@@ -182,7 +188,7 @@ export default function KnowledgeTagSelect({
 
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
-            <DialogTrigger asChild>{children}</DialogTrigger>
+            {children && <DialogTrigger asChild>{children}</DialogTrigger>}
             <DialogContent
                 close={false}
                 className="w-[600px] max-w-[calc(100vw-32px)] gap-0 rounded-xl border-none p-0"

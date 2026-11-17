@@ -1,6 +1,10 @@
-import { Button, Checkbox, Dropdown, DropdownItem } from "@bisheng/ui";
+import { Button, Checkbox, Dropdown, DropdownItem, DropdownSeparator, Tag } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { useContext, useMemo, useState } from "react";
+import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
+import { FileAbnormalStatusCell } from "./FileAbnormalStatusCell";
+import KnowledgeTagSelect from "./tags/KnowledgeTagSelect";
+import { SpaceRowVersionMenu } from "./SpaceRowVersionMenu";
 import { useTranslation } from "react-i18next";
 import { TableCell, TableRow } from "@/components/bs-ui/table";
 import type { KnowledgeSpaceChild } from "@/controllers/API/knowledgeSpace";
@@ -30,6 +34,9 @@ interface SpaceDirectoryRowProps {
   onOpen: () => void;
   onPreview: () => void;
   onRename: () => void;
+  onMove?: () => void;
+  onRetry?: () => void;
+  onChanged?: () => Promise<unknown>;
   canDownload?: boolean;
   onDownload: () => void;
 }
@@ -51,6 +58,9 @@ export function SpaceDirectoryRow({
   onOpen,
   onPreview,
   onRename,
+  onMove,
+  onRetry,
+  onChanged,
   canDownload = false,
   onDownload,
 }: SpaceDirectoryRowProps) {
@@ -69,6 +79,8 @@ export function SpaceDirectoryRow({
       parentId,
       fileId: item.id,
       enabled: historyEnabled,
+      multiVersion: item.is_multi_version,
+      hasSimilar: item.has_similar,
     }),
     [
       identityKey,
@@ -79,9 +91,17 @@ export function SpaceDirectoryRow({
       parentId,
       item.id,
       historyEnabled,
+      item.is_multi_version,
+      item.has_similar,
     ],
   );
-  const [history, setHistory] = useState<typeof epoch | null>(null);
+  const [history, setHistory] = useState<{ epoch: typeof epoch; panel: "merge" | "similar" | null } | null>(null);
+  const [permission, setPermission] = useState<typeof epoch | null>(null);
+  const [tagsEditor, setTagsEditor] = useState<typeof epoch | null>(null);
+  const menuReady = !loading && !error;
+  const canRename = menuReady && actions.includes("rename");
+  const canManagePermission = menuReady && actions.includes("manage_permission");
+  const retryable = folder ? item.has_failed_files === true : [3, 6, 7].includes(item.status ?? -1);
   const selection = (layout || (known && onSelect)) && (
     <Checkbox
       aria-label={`${t("deletion.select")} ${item.file_name}`}
@@ -92,8 +112,14 @@ export function SpaceDirectoryRow({
     />
   );
   const icon = <SpaceDirectoryIcon item={item} layout={layout} />;
-  const status = !folder && typeof item.status === "number" && (
-    <StatusIndicator status={item.status} remark={item.remark ?? undefined} workspace={Boolean(layout)} />
+  const similarIndicator = <SpaceRowVersionMenu scope={scope} spaceId={spaceId} item={item} indicator
+    enabled={historyEnabled} onOpen={panel => setHistory({ epoch, panel })} />;
+  const status = folder ? <FileAbnormalStatusCell hasAbnormalFiles={item.has_abnormal_files} /> : (
+    <>
+      {typeof item.status === "number" && <StatusIndicator status={item.status} remark={item.remark ?? undefined} workspace={Boolean(layout)} />}
+      {similarIndicator}
+      {historyEnabled && item.is_multi_version === true && (item.version_no ?? 0) >= 1 && <Tag size="small">{`V${item.version_no}`}</Tag>}
+    </>
   );
   const actionsContent = (
     <>
@@ -125,30 +151,41 @@ export function SpaceDirectoryRow({
                   {t("retry")}
                 </DropdownItem>
               )}
-              {!loading && !error && actions.includes("rename") && (
-                <DropdownItem icon={<Outlined.Edit aria-hidden />} onSelect={onRename}>
-                  {t("rename")}
+              {menuReady && !folder && canDownload && (
+                <DropdownItem icon={<Outlined.Download aria-hidden />} onSelect={onDownload}>{t("downloadOriginal")}</DropdownItem>
+              )}
+              {canManagePermission && (
+                <DropdownItem icon={<Outlined.PeopleSafe aria-hidden />} onSelect={() => setPermission(epoch)}>
+                  {t("manage_permission", { ns: "permission" })}
                 </DropdownItem>
               )}
-              {!loading && !error && actions.includes("delete") && (
+              {canRename && !folder && (
+                <DropdownItem icon={<Outlined.Tag aria-hidden />} onSelect={() => setTagsEditor(epoch)}>{t("editTag")}</DropdownItem>
+              )}
+              {canRename && (
+                <DropdownItem icon={<Outlined.Edit aria-hidden />} onSelect={onRename}>{t("rename")}</DropdownItem>
+              )}
+              {menuReady && actions.includes("move") && onMove && (
+                <DropdownItem icon={<Outlined.MoveToFolder aria-hidden />} onSelect={onMove}>{t("move.title")}</DropdownItem>
+              )}
+              {canRename && retryable && onRetry && (
+                <DropdownItem icon={<Outlined.Refresh aria-hidden />} onSelect={onRetry}>{t("retry")}</DropdownItem>
+              )}
+              {historyEnabled && menuReady && actions.includes("visible") && item.is_multi_version === true && (
+                <DropdownItem icon={<Outlined.History aria-hidden />} onSelect={() => setHistory({ epoch, panel: null })}>
+                  {t("f118.version_history")}
+                </DropdownItem>
+              )}
+              <SpaceRowVersionMenu scope={scope} spaceId={spaceId} item={item}
+                enabled={historyEnabled && menuReady && open && actions.includes("visible")}
+                onOpen={panel => setHistory({ epoch, panel })} />
+              {menuReady && actions.includes("delete") && (
                 <>
-                  <DropdownItem icon={<Outlined.FileSearch aria-hidden />} onSelect={onReferences}>
-                    {t("deletion.references")}
-                  </DropdownItem>
-                  <DropdownItem danger icon={<Outlined.Delete aria-hidden />} onSelect={onDelete}>
-                    {t("delete")}
-                  </DropdownItem>
+                  <DropdownItem icon={<Outlined.FileSearch aria-hidden />} onSelect={onReferences}>{t("deletion.references")}</DropdownItem>
+                  <DropdownSeparator />
+                  <DropdownItem danger icon={<Outlined.Delete aria-hidden />} onSelect={onDelete}>{t("delete")}</DropdownItem>
                 </>
               )}
-              {historyEnabled &&
-                !loading &&
-                !error &&
-                actions.includes("visible") && (
-                  <DropdownItem icon={<Outlined.History aria-hidden />} onSelect={() => setHistory(epoch)}>
-                    {t("f118.version_history")}
-                  </DropdownItem>
-                )}
-
             </>
           }
         >
@@ -163,6 +200,10 @@ export function SpaceDirectoryRow({
           </Button>
         </Dropdown>
       )}
+      {permission === epoch && <PermissionDialog open onOpenChange={next => { if (!next) { setPermission(null); void onChanged?.(); } }}
+        resourceType={folder ? "folder" : "knowledge_file"} resourceId={String(item.id)} resourceName={item.file_name} />}
+      {tagsEditor === epoch && <KnowledgeTagSelect knowledgeId={spaceId} fileIds={[item.id]} initialTags={item.tags}
+        open onOpenChange={next => { if (!next) setTagsEditor(null); }} onUpdate={() => { void onChanged?.(); }} />}
       <SpaceVersionHistorySheet
         scope={epoch.scope}
         spaceId={epoch.spaceId}
@@ -173,7 +214,8 @@ export function SpaceDirectoryRow({
           item.is_multi_version !== true &&
           item.status === 2
         }
-        open={epoch.enabled && history === epoch}
+        open={epoch.enabled && history?.epoch === epoch}
+        initialPanel={history?.epoch === epoch ? history.panel : null}
         onOpenChange={(next) => {
           if (!next) setHistory(null);
         }}
@@ -214,7 +256,7 @@ export function SpaceDirectoryRow({
           <span className={`absolute right-2 top-2 z-20 inline-flex items-center transition-opacity ${open ? "" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 coarse-pointer:opacity-100"}`}>
             {actionsContent}
           </span>
-          <span className="absolute bottom-2.5 left-2.5 z-10">{status}</span>
+          <span className="absolute bottom-2.5 left-2.5 z-10 flex items-center gap-1">{status}</span>
         </div>
         <div className="flex min-w-0 flex-col gap-1 px-2 py-1.5">
           <button
@@ -267,7 +309,7 @@ export function SpaceDirectoryRow({
             )}
           </div>
         </div>
-        {status}
+        <span className="inline-flex items-center gap-1">{status}</span>
         <div className="flex min-w-[73px] shrink-0 items-center justify-end">{actionsContent}</div>
       </div>
     );

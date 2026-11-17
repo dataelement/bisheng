@@ -10,6 +10,7 @@ import { getTenantsApi } from "@/controllers/API/tenant"
 import { useAdminScope } from "@/hooks/useAdminScope"
 import { Tenant } from "@/types/api/tenant"
 import { User } from "@/types/api/user"
+import { knowledgeScopeLanding } from "@/pages/KnowledgePage/knowledgeScopeLanding"
 import { displayTenantName } from "@/utils/tenantDisplayName"
 
 
@@ -72,8 +73,10 @@ function SuperAdminScopeSwitcher({
             // Invalidate other react-query caches that surface llm-tenant
             // -aware data (e.g. ModelSelect dropdowns).
             queryClient.clear()
-            // Reload effect-owned pages as well as query caches; discard old forms.
-            if (onScopeChange) await onScopeChange()
+            // Retire resource IDs before reloading pages under the new tenant.
+            const landing = knowledgeScopeLanding(window.location.pathname, window.location.search)
+            if (landing) window.location.replace(landing)
+            else if (onScopeChange) await onScopeChange()
             else window.location.reload()
             notification.open({ type: "success", description: String(t("tenant.adminScope.switched", {
                         name: tenants.find((r) => r.id === next)?.tenant_name || "",

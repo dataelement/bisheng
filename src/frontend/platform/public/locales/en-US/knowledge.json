@@ -148,6 +148,7 @@
     "saving": "Saving...",
     "rename": "Rename",
     "renameDescription": "Please enter the new name",
+    "renameSuccess": "Renamed",
     "tip": "Tip",
     "confirmDelete": "Confirm deletion?",
     "confirmDeleteMetadata": "Confirm delete this metadata?",
@@ -485,6 +486,7 @@
         "tables": "Tables",
         "create_folder": "New folder",
         "folder_name": "Folder name",
+        "folder_created": "Folder created",
         "current_folder": "Current folder",
         "loading_directory": "Loading folder…",
         "directory_empty": "No items to show in this folder.",
@@ -676,6 +678,7 @@
         "destination": "Move to: {{destination}}"
     },
     "versions": {
+        "manage": "Manage versions",
         "new_version": "Upload new version",
         "merge": "Add an existing document",
         "as_version": "Use as new version",

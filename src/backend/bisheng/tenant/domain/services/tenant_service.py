@@ -189,9 +189,12 @@ class TenantService:
         # matches the dialog list source exactly. v2.5.0 ``aadd_users``
         # residue rows in UserTenant no longer surface as phantom members.
         tenant_ids = [t.id for t in tenants]
-        user_counts, usage_map = await asyncio.gather(
+        from bisheng.tenant.domain.services.tenant_admin_service import TenantAdminService
+
+        user_counts, usage_map, admin_map = await asyncio.gather(
             UserDepartmentDao.acount_users_by_tenant_subtree_batch(tenant_ids),
             QuotaService.get_storage_used_gb_batch(tenant_ids),
+            TenantAdminService.list_tenant_admin_users(tenant_ids),
         )
 
         # Strip the ``#archived#<ts>`` suffix injected by ``unmount_child`` so
@@ -215,6 +218,7 @@ class TenantService:
                     storage_used_gb=round(usage_map.get(t.id, 0.0), 2),
                     storage_quota_gb=_get_storage_quota(t),
                     create_time=t.create_time,
+                    admin_users=admin_map.get(t.id),
                 )
             )
         return {"data": [item.model_dump() for item in items], "total": total}
