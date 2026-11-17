@@ -1,4 +1,4 @@
-import { Button, Checkbox, Pagination } from "@bisheng/ui";
+import { Button, Checkbox } from "@bisheng/ui";
 import { useEffect, useRef, useState, type MutableRefObject } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -17,13 +17,11 @@ import {
 import type { OperationPrecheck } from "@/controllers/API/knowledgeSpace";
 import {
   knowledgeQueryKeys,
-  useKnowledgeProcessingJobs,
   type KnowledgeQueryScope,
 } from "@/controllers/hooks/knowledge";
 import { managementRequestScope } from "@/controllers/managementScope";
 import { useQueryClient } from "@tanstack/react-query";
 import { showApiError } from "@/controllers/request";
-import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { createDshOperationId as createOperationId } from "@/util/dshOperationId";
 import { MoveDestinationPicker } from "./MoveDestinationPicker";
 import { SpaceProcessingProgress } from "./SpaceProcessingProgress";
@@ -33,7 +31,6 @@ interface MoveDialogProps {
   spaceId: number;
   parentId: number | null;
   items: readonly MoveSelection[];
-  mode?: "move" | "jobs";
   onClose: () => void;
 }
 /** Own one immutable review until success or an explicit stale-plan response. */
@@ -52,7 +49,6 @@ export function MoveDialog(props: MoveDialogProps) {
           props.spaceId,
           props.parentId,
           props.items,
-          props.mode,
         ])}
         {...props}
         closeGuard={closeGuard}
@@ -65,12 +61,10 @@ function Content({
   spaceId,
   parentId,
   items,
-  mode = "move",
   onClose,
   closeGuard,
 }: MoveDialogProps & { closeGuard: MutableRefObject<() => boolean> }) {
   const { t, i18n } = useTranslation("knowledge");
-  const locale = usePaginationLocale();
   const client = useQueryClient();
   const [destination, setDestination] = useState<MoveDestination>({
     spaceId,
@@ -88,8 +82,7 @@ function Content({
     [busy, setBusy] = useState(false);
   const [dispatched, setDispatched] = useState(false),
     [completed, setCompleted] = useState(false);
-  const [jobId, setJobId] = useState<string | null>(null),
-    [page, setPage] = useState(1);
+  const [jobId, setJobId] = useState<string | null>(null);
   closeGuard.current = () => !busy && (!dispatched || !!jobId || completed);
   const alive = useRef(true);
   useEffect(() => {
@@ -98,14 +91,6 @@ function Content({
       alive.current = false;
     };
   }, []);
-  const jobs = useKnowledgeProcessingJobs(
-    mode === "jobs" ? scope : { ...scope, identityKey: "" },
-    spaceId,
-    { kind: "move_index", page, page_size: 20 },
-  );
-  useEffect(() => {
-    if (jobs.error) showApiError(jobs.error);
-  }, [jobs.error]);
   const tenant = scope.managementTenantId ?? scope.tenantId;
   const current = () =>
     alive.current &&
@@ -181,11 +166,11 @@ function Content({
   return (
     <DialogContent
       aria-describedby={undefined}
-      className={`max-h-[85vh] overflow-y-auto ${mode === "move" && !plan && !jobId && !completed ? "w-[calc(100vw-32px)] max-w-3xl" : ""}`}
+      className={`max-h-[85vh] overflow-y-auto ${!plan && !jobId && !completed ? "w-[calc(100vw-32px)] max-w-3xl" : ""}`}
     >
       <DialogHeader>
         <DialogTitle>
-          {t(mode === "jobs" ? "move.jobs" : "move.title")}
+          {t("move.title")}
         </DialogTitle>
       </DialogHeader>
       {jobId ? (
@@ -198,39 +183,6 @@ function Content({
         />
       ) : completed ? (
         <p role="status">{t("move.completed")}</p>
-      ) : mode === "jobs" ? (
-        <>
-          <ul>
-            {jobs.data?.data.map((job) => (
-              <li key={job.id}>
-                <Button variant="link" onClick={() => setJobId(job.id)}>
-                  {t(`f118.processing_state_${job.state}`)}
-                </Button>
-              </li>
-            ))}
-          </ul>
-          {jobs.isInitialLoading && (
-            <p role="status">{t("f118.loading_directory")}</p>
-          )}
-          {jobs.isError && (
-            <Button
-              onClick={() => {
-                void jobs.refetch();
-              }}
-            >
-              {t("retry")}
-            </Button>
-          )}
-          {jobs.data && jobs.data.total > 20 && (
-            <Pagination
-              current={page}
-              total={jobs.data.total}
-              pageSize={20}
-              onChange={setPage}
-              locale={locale}
-            />
-          )}
-        </>
       ) : (
         <>
           {!plan && (
@@ -304,7 +256,6 @@ function Content({
         </Button>
         {!jobId &&
           !completed &&
-          mode === "move" &&
           (plan ? (
             <>
               {!dispatched && (

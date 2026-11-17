@@ -31,7 +31,10 @@ class KnowledgeSpaceExitService:
         return actor, member, bool(creator)
 
     async def _permission_context(self, space_id, actor):
-        target = await self.owner.resolve_permission_target(resource_id=str(space_id), actor=actor, action="visible")
+        adapter = await access.get_f048_resource_adapter("knowledge_space")
+        target = await adapter.resolve_permission_target(
+            resource_type="knowledge_space", resource_id=str(space_id), actor=actor, action="visible"
+        )
         directory = await access.get_grant_subject_directory()
         subjects = await directory.actor_projected_subjects(actor)
         runtime = await access.get_f048_runtime()

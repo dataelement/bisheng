@@ -17,6 +17,15 @@ export function SpaceModelIndexPanel(props: SpaceModelIndexPanelProps) {
           jobKind="embedding_rebuild"
         />
       </div>
+      <div className="border-t border-border-base">
+        <SpaceProcessingPanel
+          scope={props.scope}
+          spaceId={props.spaceId}
+          mode="jobs"
+          jobKind="move_index"
+          onSaved={props.onSaved}
+        />
+      </div>
     </div>
   );
 }

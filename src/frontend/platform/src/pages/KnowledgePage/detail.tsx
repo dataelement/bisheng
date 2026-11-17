@@ -1,5 +1,6 @@
 import { Breadcrumb, Button } from "@bisheng/ui";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { isErrorEnvelope } from "@bisheng/api-client";
 import { useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -21,6 +22,7 @@ import Files from "./components/Files";
 import Header from "./components/Header";
 import { SpaceManagementView } from "./components/SpaceManagementView";
 import { SpaceFileDetail } from "./components/SpaceFileDetail";
+import { SpaceProcessingPanel } from "./components/SpaceProcessingDialog";
 
 export const parseKnowledgeId = (value: string | null | undefined): number | null => {
   if (!value || !/^\d+$/.test(value)) return null;
@@ -44,6 +46,7 @@ export function SpaceDetail({
   presentation,
 }: SpaceDetailProps) {
   const { t } = useTranslation("knowledge");
+  const client = useQueryClient();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const fileParams = searchParams.getAll("file_id");
@@ -72,6 +75,10 @@ export function SpaceDetail({
   }, [facts.error]);
   const info = !Array.isArray(facts.data) ? facts.data : undefined;
   const parents = Array.isArray(facts.data) ? facts.data : [];
+  const showCopyRecovery = parentId === null && (
+    info?.state === 0 || info?.state === 2 ||
+    (isErrorEnvelope(facts.error) && facts.error.status_code === 25008)
+  );
   const title =
     parentId === null
       ? (info?.name ?? "")
@@ -112,6 +119,20 @@ export function SpaceDetail({
         >
           {t("retry")}
         </Button>
+      )}
+      {showCopyRecovery && (
+        <div className={presentation === "workspace" ? "px-4" : undefined}>
+          <p role="status">{t("space_copy_ui.recovery_notice")}</p>
+          <SpaceProcessingPanel
+            scope={scope}
+            spaceId={spaceId}
+            mode="jobs"
+            jobKind="space_copy"
+            onSaved={() => {
+              void client.invalidateQueries({ queryKey: knowledgeQueryKeys.scope(scope) });
+            }}
+          />
+        </div>
       )}
       <Files
         key={fileStatus}

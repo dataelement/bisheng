@@ -83,8 +83,7 @@ export function SpaceCopyDialog({
     } catch (error) {
       if (
         isApiError(error) &&
-        (error.kind === "business" ||
-          (error.kind === "http" && (error.httpStatus ?? 0) < 500))
+        (error.status_code === 18087 || error.status_code === 18088)
       )
         pending.current = null;
       if (alive.current) showApiError(error);
@@ -123,7 +122,7 @@ export function SpaceCopyDialog({
                   void handleCreate();
                 }}
               >
-                {t("space_copy_ui.create")}
+                {t(pending.current ? "retry" : "space_copy_ui.create")}
               </Button>
             )}
           </>
@@ -131,6 +130,7 @@ export function SpaceCopyDialog({
       >
         {!result ? (
           <div className="space-y-5 py-2 text-body">
+            {pending.current && !busy && <p role="status">{t("space_copy_ui.retry_notice")}</p>}
             <label className="block space-y-2">
               <span className="font-medium">{t("space_copy_ui.name")}</span>
               <Input

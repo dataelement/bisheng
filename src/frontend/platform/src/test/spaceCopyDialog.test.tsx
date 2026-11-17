@@ -7,6 +7,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { SpaceCopyDialog } from "@/pages/KnowledgePage/components/SpaceCopyDialog";
+import { ApiError } from "@bisheng/api-client";
 const mocks = vi.hoisted(() => ({
   precheck: vi.fn(),
   confirm: vi.fn(),
@@ -105,10 +106,33 @@ it("reuses the same confirmation and idempotency key after a lost acknowledgemen
   mount();
   fireEvent.click(screen.getByRole("button", { name: "space_copy_ui.create" }));
   await waitFor(() => expect(mocks.error).toHaveBeenCalled());
-  fireEvent.click(screen.getByRole("button", { name: "space_copy_ui.create" }));
+  expect(screen.getByText("space_copy_ui.retry_notice")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "retry" }));
   await screen.findByText("space_copy_ui.created");
   expect(mocks.precheck).toHaveBeenCalledTimes(1);
   expect(mocks.confirm.mock.calls[0]).toEqual(mocks.confirm.mock.calls[1]);
+});
+
+it.each([25002, 25008, 25009])("keeps the accepted copy identity after recoverable business error %s", async (code) => {
+  mocks.confirm.mockRejectedValueOnce(new ApiError({ status_code: code }, { message: "Copy interrupted" }));
+  mount();
+  fireEvent.click(screen.getByRole("button", { name: "space_copy_ui.create" }));
+  await waitFor(() => expect(mocks.error).toHaveBeenCalled());
+  fireEvent.click(screen.getByRole("button", { name: "retry" }));
+  await screen.findByText("space_copy_ui.created");
+  expect(mocks.precheck).toHaveBeenCalledTimes(1);
+  expect(mocks.confirm.mock.calls[0]).toEqual(mocks.confirm.mock.calls[1]);
+});
+
+it.each([18087, 18088])("reviews a new plan only after explicit stale-plan error %s", async (code) => {
+  mocks.confirm.mockRejectedValueOnce(new ApiError({ status_code: code }, { message: "Plan expired" }));
+  mount();
+  fireEvent.click(screen.getByRole("button", { name: "space_copy_ui.create" }));
+  await waitFor(() => expect(mocks.error).toHaveBeenCalled());
+  fireEvent.click(screen.getByRole("button", { name: "space_copy_ui.create" }));
+  await screen.findByText("space_copy_ui.created");
+  expect(mocks.precheck).toHaveBeenCalledTimes(2);
+  expect(mocks.confirm.mock.calls[0][1].idempotency_key).not.toEqual(mocks.confirm.mock.calls[1][1].idempotency_key);
 });
 it("rejects incomplete plans and does not confirm a retired precheck", async () => {
   mocks.precheck.mockResolvedValueOnce({ ...plan, check_complete: false });

@@ -18,10 +18,9 @@ from bisheng.permission.domain.services.permission_action_service import Permiss
 def exit_context():
     actor = PermissionActor(user_id=764, current_tenant_id=1)
     target = SimpleNamespace(resource_id="4187", resource_version=4)
-    service = object.__new__(KnowledgeSpaceService)
-    service.login_user = SimpleNamespace(user_id=764, tenant_id=1)
+    service = KnowledgeSpaceService(request=None, login_user=SimpleNamespace(user_id=764, tenant_id=1))
     service._permission_actor = AsyncMock(return_value=actor)
-    service.resolve_permission_target = AsyncMock(return_value=target)
+    adapter = SimpleNamespace(resolve_permission_target=AsyncMock(return_value=target))
     service._require_action = AsyncMock()
     space = SimpleNamespace(id=4187, tenant_id=1, type=3, user_id=3)
     runtime = SimpleNamespace(
@@ -42,6 +41,7 @@ def exit_context():
             "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.delete_space_member",
             AsyncMock(return_value=1),
         ) as delete,
+        patch("bisheng.permission.application.access.get_f048_resource_adapter", AsyncMock(return_value=adapter)),
         patch("bisheng.permission.application.access.get_f048_runtime", AsyncMock(return_value=runtime)),
         patch("bisheng.permission.application.access.get_grant_subject_directory", AsyncMock(return_value=directory)),
     ):
@@ -54,6 +54,7 @@ def exit_context():
             member=member,
             delete=delete,
             directory=directory,
+            adapter=adapter,
         )
 
 
@@ -173,3 +174,28 @@ async def test_http_status_and_unsubscribe_use_the_verified_service(exit_context
         result = await client.post("/api/v1/knowledge/space/4187/unsubscribe")
         assert result.json()["data"] is True
     exit_context.runtime.exit_personal_space.assert_awaited_once()
+
+
+async def test_actual_request_factory_resolves_exit_without_legacy_adapter_injection(exit_context):
+    from bisheng.knowledge.api.dependencies import get_knowledge_space_service
+
+    c = exit_context
+    with patch("bisheng.knowledge.api.dependencies._get_message_service", AsyncMock(return_value=None)):
+        service = await get_knowledge_space_service(
+            request=None,
+            session=None,
+            login_user=c.service.login_user,
+            version_repo=None,
+            doc_repo=None,
+            knowledge_file_repo=None,
+        )
+    service._permission_actor = AsyncMock(return_value=c.actor)
+    service._require_action = AsyncMock()
+    assert (await service.get_space_exit_status(4187)).can_exit is True
+    assert await service.unsubscribe_space(4187) is True
+    c.adapter.resolve_permission_target.assert_awaited_with(
+        resource_type="knowledge_space",
+        resource_id="4187",
+        actor=c.actor,
+        action="visible",
+    )
