@@ -185,6 +185,22 @@ it("lets the AI change a memory, follows the new version, and undoes it (AC-107)
   expect(screen.queryByText("memory.revised")).toBeNull();
 });
 
+it("shows that the AI is working while a change is in flight (AC-107)", async () => {
+  mockApi.listMemoryItemsApi.mockResolvedValue([PLAIN]);
+  mockApi.reviseMemoryItemApi.mockReturnValue(new Promise(() => {}));
+  renderPane();
+  const box = await openMemory("Likes iced coffee");
+  fireEvent.change(box, { target: { value: "Make it hot coffee" } });
+  fireEvent.keyDown(box, { key: "Enter" });
+
+  expect(await screen.findByText("memory.revising")).toBeInTheDocument();
+  expect(box).toBeDisabled();
+  // One busy button: the spinner takes the arrow's place instead of sitting next to it.
+  const send = screen.getByRole("button", { name: "memory.revise_send" });
+  expect(send).toHaveAttribute("aria-busy", "true");
+  expect(send.querySelectorAll("svg")).toHaveLength(1);
+});
+
 it("keeps the request and shows why when the AI could not change it (AC-107)", async () => {
   mockApi.listMemoryItemsApi.mockResolvedValue([LONG]);
   mockApi.getMemoryItemDetailApi.mockResolvedValue("Old detail");

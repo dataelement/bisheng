@@ -2893,6 +2893,7 @@
     "revise_label": "AI にこの記憶を修正してもらう",
     "revise_placeholder": "この記憶をどう直すか AI に伝えてください（例：旅行は 1 月に変更）",
     "revise_send": "送信",
+    "revising": "AI がこのメモリーを修正しています…",
     "revised": "修正しました",
     "undo": "元に戻す",
     "revise_unchanged": "この記憶に修正が必要な箇所はありませんでした",
