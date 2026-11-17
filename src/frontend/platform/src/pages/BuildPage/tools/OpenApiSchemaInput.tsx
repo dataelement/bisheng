@@ -1,6 +1,6 @@
 import { Button, Dropdown, DropdownChevron, DropdownItem, Input, Textarea } from '@bisheng/ui';
 import { Outlined } from 'bisheng-icons';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from '@/components/bs-ui/popover';
@@ -21,6 +21,7 @@ interface OpenApiSchemaInputProps {
 export function OpenApiSchemaInput({ value, onChange, onParse, disabled = false, id = 'schemaContent', examples = true, parseOnBlur = true }: OpenApiSchemaInputProps) {
     const { t } = useTranslation();
     const [url, setUrl] = useState('');
+    const parsedContent = useRef<string | null>(null);
     const [busy, setBusy] = useState(false);
     const unavailable = disabled || busy;
     const handleParse = async (source: OpenApiSchemaSource) => {
@@ -28,6 +29,7 @@ export function OpenApiSchemaInput({ value, onChange, onParse, disabled = false,
         setBusy(true);
         try {
             await onParse(source);
+            if ('file_content' in source) parsedContent.current = source.file_content;
             if ('download_url' in source) setUrl('');
         } catch (error) {
             showApiError(error);
@@ -60,8 +62,8 @@ export function OpenApiSchemaInput({ value, onChange, onParse, disabled = false,
                 </Dropdown>}
             </div>
         </div>
-        <Textarea id={id} name="schemaContent" placeholder={String(t('tools.enterOpenAPISchema'))} value={value} onChange={(event) => onChange(event.target.value)} onBlur={() => {
-            if (parseOnBlur && value.trim()) void handleParse({ file_content: value });
+        <Textarea id={id} name="schemaContent" placeholder={String(t('tools.enterOpenAPISchema'))} value={value} disabled={unavailable} onChange={(event) => onChange(event.target.value)} onBlur={() => {
+            if (parseOnBlur && value.trim() && value !== parsedContent.current) void handleParse({ file_content: value });
         }} textareaClassName="mt-2 min-h-52" />
         {!parseOnBlur && <Button type="button" disabled={unavailable || !value.trim()} onClick={() => handleParse({ file_content: value })}>{t('chatConfig.webSearch.parse')}</Button>}
     </div>;

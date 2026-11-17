@@ -2,6 +2,54 @@
 
 This directory contains manual maintenance and migration scripts for the backend.
 
+## Single-version document path recovery
+
+Run `python scripts/repair_knowledge_document_path.py --tenant-id T --space-id S --file-id F`
+to preview a legacy logical-document/physical-file path mismatch. This command only accepts
+one primary version, an idle space/file, a valid folder chain and a CURRENT permission parent
+that already agrees with the physical file. It never moves files, rewrites indexes or grants access.
+Apply the inspected plan using `--apply --expected-digest HASH --backup /private/new-backup.json`.
+The backup must be new and is saved with mode 0600 before writing; changed facts reject the apply.
+Multi-version, ambiguous or permission-inconsistent data requires a separate recovery plan.
+
+## Redis usage and Linsight processing indexes
+
+`backfill_redis_processing_indexes.py` is the explicit upgrade step for old DSH
+usage streams and Linsight checkpoints. Normal consumers, including their first
+invocation, never enumerate the Redis DB. From `src/backend`, export the same
+`config` as the target service and use the new image/code for this command:
+
+1. Close ingress and stop all old API, Celery Workers, Beat and Linsight Workers.
+   Keep Redis and the configured infrastructure available. Do not clear event
+   streams, broker queues, consumer groups, request ledgers or checkpoint data.
+2. Preview, apply, then verify while all producers/consumers remain stopped:
+
+```bash
+python scripts/backfill_redis_processing_indexes.py
+python scripts/backfill_redis_processing_indexes.py --apply --services-stopped
+python scripts/backfill_redis_processing_indexes.py --verify
+```
+
+3. Require `ready: true` and exit code 0 before starting new consumers. On error,
+   keep the services stopped, investigate and repeat the command; partial index
+   additions are safe to repeat. Never discard events to bypass a migration error.
+4. Start the new Celery Worker and Beat to drain the registered usage backlog.
+   Confirm pending work has cleared and SQL projection is correct before starting
+   Linsight/API and reopening traffic. Do not run old and new code together.
+
+The default inventories and checks indexes without writing them; `--verify`
+returns nonzero for incomplete coverage. Apply refuses to run without the stopped
+service confirmation. The command initializes/closes service infrastructure
+clients. It registers every retained usage stream, schedules pending/unread work
+and invalidates old scheduling owners only. Payloads, stream IDs, group offsets,
+ACKs, request ledgers, counters, SQL and checkpoint TTLs are preserved. Drained
+streams are indexed for inspection without being unnecessarily queued again.
+Checkpoint completeness markers are published only after indexing old writes.
+Run against every service Redis DB being upgraded; usage migration is enabled
+when that service's DSH setting is enabled. Redis data/index restores require the
+same stopped-service verification. Fresh installs maintain indexes from their
+first writes and need no legacy scan.
+
 ## Built-in knowledge retrieval tool
 
 `register_work_knowledge_tool.py` completes the Work knowledge-search upgrade in
@@ -151,6 +199,29 @@ column is absent from the DM catalog, and exit `4` means the diagnostic itself
 failed.
 
 ## Model Configuration Upgrade
+
+### `backfill_model_pricing.py`
+
+F016 upgrade step: gives every existing LLM model a price (`llm_model.config.pricing`) with the
+same rule as saving a model in the admin UI — the built-in catalog price when the provider type and
+model name match, otherwise 0 (free) — then gates the upgrade. Existing prices are never touched.
+Run it after `alembic upgrade head` while the service is still stopped; the full sequence is in
+`features/v3.1.0-beta1/016-credit-pricing/runbook.md`.
+
+```bash
+cd src/backend/
+bash scripts/backfill_model_pricing.sh          # dry run: list what each model would get
+bash scripts/backfill_model_pricing.sh apply    # write prices for models that have none
+bash scripts/backfill_model_pricing.sh check    # gate: exit 0 passed, 2 something is missing
+```
+
+Models marked `default 0 (free)` in the dry run include paid cloud models whose names the catalog
+does not know (for example Volcengine Ark endpoint IDs); they stay free until an admin sets a price.
+
+Skipping the step does not stop conversations: a model without a price is billed as free (0 credits,
+with a warning log) and shows "price missing" in the admin table until it is backfilled or priced.
+An invalid stored price (fails the price schema) is treated the same way: the dry run lists it as
+`replace invalid` with its old value, `apply` replaces it, and `check` fails until it is fixed.
 
 ### `migrate_model_token_configs.py`
 

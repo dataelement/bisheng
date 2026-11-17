@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type {
+  JobState,
   MetadataSchemaChange,
   ProcessingCreateRequest,
 } from "@/controllers/API/knowledgeSpace";
@@ -11,6 +12,7 @@ import { readMetadataSchema } from "@/controllers/API/knowledgeProcessing";
 import {
   knowledgeQueryKeys,
   useKnowledgeProcessingActions,
+  useKnowledgeProcessingJobs,
   type KnowledgeQueryScope,
 } from "@/controllers/hooks/knowledge";
 import { createDshOperationId } from "@/util/dshOperationId";
@@ -20,6 +22,7 @@ import { SpaceProcessingProgress } from "./SpaceProcessingProgress";
 interface SpaceMetadataPanelProps {
   scope: KnowledgeQueryScope;
   spaceId: number;
+  onClose: () => void;
   onSaved?: () => void;
 }
 export function SpaceMetadataPanel(props: SpaceMetadataPanelProps) {
@@ -30,7 +33,7 @@ export function SpaceMetadataPanel(props: SpaceMetadataPanelProps) {
     />
   );
 }
-function MetadataPanel({ scope, spaceId, onSaved }: SpaceMetadataPanelProps) {
+function MetadataPanel({ scope, spaceId, onClose, onSaved }: SpaceMetadataPanelProps) {
   const { t } = useTranslation("knowledge");
   const alive = useRef(true),
     locked = useRef(false);
@@ -38,8 +41,23 @@ function MetadataPanel({ scope, spaceId, onSaved }: SpaceMetadataPanelProps) {
     signature: string;
     request: ProcessingCreateRequest;
   } | null>(null);
-  const [job, setJob] = useState<string | null>(null);
+  const [submittedJobId, setSubmittedJobId] = useState<string | null>(null);
+  const [observedJob, setObservedJob] = useState<{ id: string; state: JobState } | null>(null);
   const actions = useKnowledgeProcessingActions(scope, spaceId);
+  const recentJobs = useKnowledgeProcessingJobs(
+    scope,
+    spaceId,
+    { page: 1, page_size: 1, kind: "metadata_schema_change" },
+    undefined,
+    { refetchOnMount: "always" },
+  );
+  const lookupComplete = recentJobs.isFetchedAfterMount;
+  const latestJob = lookupComplete ? recentJobs.data?.data[0] : undefined;
+  const jobId = submittedJobId ?? latestJob?.id;
+  const jobState = observedJob && observedJob.id === jobId
+    ? observedJob.state
+    : submittedJobId ? "accepted" : latestJob?.state;
+  const processing = jobState === "accepted" || jobState === "running";
   const schema = useQuery({
     queryKey: [...knowledgeQueryKeys.space(scope, spaceId), "metadata-schema"],
     queryFn: () => readMetadataSchema(spaceId),
@@ -48,6 +66,7 @@ function MetadataPanel({ scope, spaceId, onSaved }: SpaceMetadataPanelProps) {
     refetchOnWindowFocus: false,
   });
   const { data: schemaData, refetch } = schema;
+  const canEdit = Boolean(schemaData) && lookupComplete && !processing;
   useEffect(() => {
     alive.current = true;
     return () => {
@@ -59,7 +78,7 @@ function MetadataPanel({ scope, spaceId, onSaved }: SpaceMetadataPanelProps) {
   }, [schema.error]);
   const change = useCallback(
     async (value: MetadataSchemaChange) => {
-      if (!alive.current || locked.current || job || !schemaData)
+      if (!alive.current || locked.current || !canEdit || !schemaData)
         throw new Error(t("f118.processing_unavailable"));
       locked.current = true;
       try {
@@ -94,7 +113,7 @@ function MetadataPanel({ scope, spaceId, onSaved }: SpaceMetadataPanelProps) {
         pending.current = null;
         if (!alive.current)
           throw new DOMException("Retired metadata editor", "AbortError");
-        if ("job_id" in accepted) setJob(accepted.job_id);
+        if ("job_id" in accepted) setSubmittedJobId(accepted.job_id);
         await refetch();
         if (alive.current) onSaved?.();
       } catch (error) {
@@ -110,7 +129,7 @@ function MetadataPanel({ scope, spaceId, onSaved }: SpaceMetadataPanelProps) {
         locked.current = false;
       }
     },
-    [actions, job, schemaData, refetch, onSaved, t],
+    [actions, canEdit, schemaData, refetch, onSaved, t],
   );
   const mutations = useMemo(
     () => ({
@@ -126,47 +145,53 @@ function MetadataPanel({ scope, spaceId, onSaved }: SpaceMetadataPanelProps) {
     }),
     [change, t],
   );
+  const handleStateChange = useCallback((state: JobState) => {
+    if (jobId) setObservedJob({ id: jobId, state });
+  }, [jobId]);
   const handleCompleted = useCallback(() => {
     if (!alive.current) return;
-    setJob(null);
     void refetch();
     onSaved?.();
     toast.show({ type: "success", message: t("detail.saved") });
   }, [refetch, onSaved, t]);
-  if (!schema.data)
-    return (
-      <div role={schema.isError ? "alert" : "status"}>
-        <p>{t(schema.isError ? "f118.load_failed" : "f118.loading_space")}</p>
-        {schema.isError && (
-          <Button
-            onClick={() => {
-              void refetch();
-            }}
-          >
-            {t("retry")}
-          </Button>
-        )}
-      </div>
-    );
   return (
-    <div className="space-y-6">
-      <MetadataManagementDialog
-        open
-        id={String(spaceId)}
-        onOpenChange={() => undefined}
-        presentation="page"
-        initialMetadata={schema.data.fields}
-        hasManagePermission={!job}
-        mutations={mutations}
-      />
-      {job && (
+    <MetadataManagementDialog
+      open
+      id={String(spaceId)}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      initialMetadata={schemaData?.fields}
+      hasManagePermission={canEdit}
+      mutations={mutations}
+      placeholder={schemaData ? undefined : (
+        <div role={schema.isError ? "alert" : "status"} className="space-y-3">
+          <p>{t(schema.isError ? "f118.load_failed" : "f118.loading_space")}</p>
+          {schema.isError && (
+            <Button onClick={() => { void refetch(); }}>
+              {t("retry")}
+            </Button>
+          )}
+        </div>
+      )}
+    >
+      {jobId && jobState !== "succeeded" && (
         <SpaceProcessingProgress
+          key={jobId}
           scope={scope}
           spaceId={spaceId}
-          jobId={job}
+          jobId={jobId}
+          kind="metadata_schema_change"
           onCompleted={handleCompleted}
+          onStateChange={handleStateChange}
         />
       )}
-    </div>
+      {!jobId && recentJobs.isError && (
+        <div className="space-y-3" role="alert">
+          <p>{t("detail.load_failed")}</p>
+          <Button onClick={() => { void recentJobs.refetch(); }}>{t("retry")}</Button>
+        </div>
+      )}
+    </MetadataManagementDialog>
   );
 }

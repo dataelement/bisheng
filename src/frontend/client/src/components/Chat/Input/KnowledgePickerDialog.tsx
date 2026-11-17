@@ -4,7 +4,7 @@ import { BookOpen } from "lucide-react";
 import { Button, Checkbox, Modal, SearchInput } from "@bisheng/ui";
 import { useLocalize } from "~/hooks";
 import { useKnowledgeSpaceAccess } from "~/hooks/useKnowledgeSpaceAccess";
-import type { KnowledgeItem, KnowledgeType } from "./knowledgeTypes";
+import type { KnowledgeItem } from "./knowledgeTypes";
 
 export interface KnowledgePickerGroup {
   key: string;
@@ -23,7 +23,6 @@ export interface KnowledgePickerSelectionProps {
 }
 
 interface KnowledgePickerDialogProps extends KnowledgePickerSelectionProps {
-  kind: KnowledgeType;
   keyword: string;
   onKeywordChange: (keyword: string) => void;
   groups: KnowledgePickerGroup[];
@@ -36,9 +35,8 @@ interface KnowledgePickerDialogProps extends KnowledgePickerSelectionProps {
 
 const MAX_SELECTED = 50;
 
-/** Both knowledge pickers keep a draft until confirmation, including across searches. */
+/** Keep a space draft until confirmation, including across searches. */
 export function KnowledgePickerDialog({
-  kind,
   value,
   onConfirm,
   onClose,
@@ -58,35 +56,22 @@ export function KnowledgePickerDialog({
     return () => presentation?.reportKnowledgeDialog?.(false);
   }, []);
   const [draft, setDraft] = useState(() =>
-    value.filter((item) => item.type === kind),
+    value.filter((item) => item.type === "space"),
   );
-  const access = useKnowledgeSpaceAccess(draft, "knowledge-picker", kind === "space");
+  const access = useKnowledgeSpaceAccess(draft, "knowledge-picker");
   const available = access.available;
   const selectedIds = new Set(available.map((item) => String(item.id)));
-  const copy =
-    kind === "org"
-      ? ({
-          title: "dshChat.selectKnowledgeBases",
-          search: "knowledgeBasePicker.search",
-          column: "knowledgeBasePicker.column",
-          selected: "knowledgeBasePicker.selected",
-          loadError: "knowledgeBasePicker.loadError",
-          loading: "knowledgeBasePicker.loading",
-          noMatch: "knowledgeBasePicker.noMatch",
-          empty: "knowledgeBasePicker.empty",
-          limit: "knowledgeBasePicker.limit",
-        } as const)
-      : ({
-          title: "dshChat.selectKnowledge",
-          search: "dshChat.searchKnowledge",
-          column: "dshChat.knowledgeColumn",
-          selected: "dshChat.selectedKnowledge",
-          loadError: "dshChat.knowledgeLoadError",
-          loading: "dshChat.loadingKnowledge",
-          noMatch: "dshChat.noKnowledgeMatch",
-          empty: "dshChat.noKnowledge",
-          limit: "dshChat.knowledgeLimit",
-        } as const);
+  const copy = {
+    title: "dshChat.selectKnowledge",
+    search: "dshChat.searchKnowledge",
+    column: "dshChat.knowledgeColumn",
+    selected: "dshChat.selectedKnowledge",
+    loadError: "dshChat.knowledgeLoadError",
+    loading: "dshChat.loadingKnowledge",
+    noMatch: "dshChat.noKnowledgeMatch",
+    empty: "dshChat.noKnowledge",
+    limit: "dshChat.knowledgeLimit",
+  } as const;
 
   const handleToggle = (id: string, name: string) => {
     setDraft((current) => {
@@ -94,12 +79,12 @@ export function KnowledgePickerDialog({
       return allowed.some((item) => String(item.id) === id)
         ? allowed.filter((item) => String(item.id) !== id)
         : allowed.length < MAX_SELECTED
-          ? [...allowed, { id, name, type: kind }]
+          ? [...allowed, { id, name, type: "space" }]
           : allowed;
     });
   };
   const handleConfirm = () => {
-    onConfirm([...value.filter((item) => item.type !== kind), ...available]);
+    onConfirm([...value.filter((item) => item.type !== "space"), ...available]);
     onClose();
   };
 

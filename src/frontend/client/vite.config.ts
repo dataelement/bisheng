@@ -143,6 +143,7 @@ export default defineConfig(({ command, mode }) => {
         '/workspace/api': createFrontendProxy(apiTarget, {
           verbose: proxyLog,
           rewrite: (url) => url.replace(/^\/workspace/, ''),
+          legacyAdminScope: env.VITE_DEV_LEGACY_ADMIN_SCOPE === 'true',
         }),
         '/workspace/tmp-dir': {
           target: minioTarget,

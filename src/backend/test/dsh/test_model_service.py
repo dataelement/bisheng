@@ -11,6 +11,7 @@ from bisheng.common.errcode.dsh import DshModelNotAllowedError, DshUpstreamError
 from bisheng.dsh.domain.schemas.chat import ChatCapabilities, DshChatRequest
 from bisheng.dsh.domain.services.access import DshPrincipal
 from bisheng.dsh.domain.services.model import DshModelService
+from test.dsh.pricing_fixtures import PRICED_CONFIG
 from test.dsh.test_quota_admission import quota as real_quota  # noqa: F401
 from test.dsh.test_quota_admission import running
 
@@ -84,7 +85,7 @@ def service_setup():
         monthly_token_limit=100,
     )
     model = SimpleNamespace(
-        id=42, name="Enterprise", model_name="provider", create_time=datetime(2026, 9, 9), config={}
+        id=42, name="Enterprise", model_name="provider", create_time=datetime(2026, 9, 9), config=dict(PRICED_CONFIG)
     )
     state = {"online": True}
 
@@ -173,7 +174,12 @@ async def test_catalog_and_admin_share_provider_model_name_and_route_id(
 
     service, llm, ledger, _policy, _state = service_setup
     model = SimpleNamespace(
-        id=42, tenant_id=2, name=alias, model_name=model_name, create_time=datetime(2026, 9, 9), config={}
+        id=42,
+        tenant_id=2,
+        name=alias,
+        model_name=model_name,
+        create_time=datetime(2026, 9, 9),
+        config=dict(PRICED_CONFIG),
     )
     server = SimpleNamespace(name=provider_name, type=provider_type)
 
@@ -330,9 +336,9 @@ async def test_real_redis_settlement_and_changed_model_keep_total(service_setup,
     policy.monthly_token_limit = 1000
 
     async def load_model(model_id):
-        return SimpleNamespace(id=model_id, name="Enterprise", model_name="test", config={}), SimpleNamespace(
-            type="openai"
-        )
+        return SimpleNamespace(
+            id=model_id, name="Enterprise", model_name="test", config=dict(PRICED_CONFIG)
+        ), SimpleNamespace(type="openai")
 
     service.model_loader = load_model
     usage = DshUsageService(real_quota)
@@ -376,6 +382,9 @@ async def test_context_length_refusal_preserves_client_error_without_freezing(se
         await service.complete(principal(), request())
     assert ledger.events[-1].total_tokens is None
     assert not ledger.frozen
+
+
+DEEPSEEK = {"currency": "CNY", "input": "9", "cache_read": "0.3", "output": "27", "source": "CATALOG"}
 
 
 @pytest.mark.parametrize("stream", [False, True])
@@ -437,15 +446,75 @@ async def test_sdk_context_overflow_is_preserved_in_public_response_and_ledger(s
     assert ledger.used == 90 and not ledger.frozen
 
 
-async def test_work_admission_snapshots_model_multiplier(service_setup):
+async def test_work_admission_snapshots_model_price_not_the_legacy_multiplier(service_setup):
     service, llm, ledger, policy, _state = service_setup
-    policy.rows[0].credit_rate = 125
+    policy.rows[0].credit_rate = 125  # F016: the removed multiplier must have no effect
+    model, _ = await service.model_loader(42)
+    model.config["pricing"] = dict(DEEPSEEK)
     llm.measured = lambda: {"input_tokens": 30, "output_tokens": 50, "total_tokens": 80}
     result = await service.complete(principal(), request())
     assert result["usage"]["total_tokens"] == 80
-    assert ledger.events[0].credit_rate == 125
-    assert ledger.events[-1].billed_tokens == 100
-    assert ledger.used == 190
+    assert ledger.events[0].credit_rate == 100
+    assert (ledger.events[0].pricing.input_micro, ledger.events[0].pricing.output_micro) == (9_000_000, 27_000_000)
+    # 30 x 9 + 50 x 27 = 1,620 micro-yuan, i.e. 0.162 credits at 0.01 yuan per credit
+    assert (ledger.events[-1].billed_tokens, ledger.events[-1].cost_micro) == (162_000, 1_620)
+    assert ledger.used == 90 + 162_000
+
+
+async def test_work_free_model_is_admitted_unmetered(service_setup):
+    service, llm, ledger, _policy, _state = service_setup
+    model, _ = await service.model_loader(42)
+    model.config["pricing"] = {**DEEPSEEK, "input": "0", "cache_read": "0", "output": "0", "source": "DEFAULT"}
+    modes = []
+    original = ledger.check_and_start
+
+    async def check_and_start(event, *, monthly_token_limit=None, mode=""):
+        modes.append(mode)
+        return await original(event, monthly_token_limit=monthly_token_limit)
+
+    ledger.check_and_start = check_and_start
+    llm.measured = lambda: {"input_tokens": 30, "output_tokens": 50, "total_tokens": 80}
+    await service.complete(principal(), request())
+    assert modes == ["unmetered"]
+    assert ledger.events[-1].billed_tokens == 0
+
+
+async def test_work_model_without_price_is_billed_as_free(service_setup):
+    service, llm, ledger, _policy, _state = service_setup
+    model, _ = await service.model_loader(42)
+    model.config.pop("pricing")
+    modes = []
+    original = ledger.check_and_start
+
+    async def check_and_start(event, *, monthly_token_limit=None, mode=""):
+        modes.append(mode)
+        return await original(event, monthly_token_limit=monthly_token_limit)
+
+    ledger.check_and_start = check_and_start
+    llm.measured = lambda: {"input_tokens": 30, "output_tokens": 50, "total_tokens": 80}
+    await service.complete(principal(), request())
+    # Upgrade backfill not run: the call goes through like a free model, at 0 credits.
+    assert modes == ["unmetered"]
+    assert ledger.events[-1].pricing.free
+    assert ledger.events[-1].billed_tokens == 0
+
+
+async def test_work_snapshot_uses_tenant_credit_settings(service_setup):
+    from unittest.mock import AsyncMock
+
+    from bisheng.dsh.domain.schemas.pricing import CreditSettingState
+
+    service, llm, ledger, _policy, _state = service_setup
+    model, _ = await service.model_loader(42)
+    model.config["pricing"] = dict(DEEPSEEK)
+    service.credit_setting_reader = AsyncMock(
+        return_value=CreditSettingState(currency="USD", credit_value_micro=1_389, usd_cny_rate_micro=7_200_000)
+    )
+    llm.measured = lambda: {"input_tokens": 30, "output_tokens": 50, "total_tokens": 80}
+    await service.complete(principal(), request())
+    snapshot = ledger.events[0].pricing
+    assert (snapshot.currency, snapshot.credit_value_micro, snapshot.usd_cny_rate_micro) == ("USD", 1_389, 7_200_000)
+    service.credit_setting_reader.assert_awaited_once()
 
 
 @pytest.mark.parametrize("outcome", ["known", "unknown", "unavailable"])

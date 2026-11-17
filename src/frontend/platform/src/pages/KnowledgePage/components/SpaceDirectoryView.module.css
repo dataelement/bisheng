@@ -1,0 +1,84 @@
+.rowViewport {
+  --file-scroll-thumb: rgba(100, 116, 139, 0.4);
+  --file-scroll-thumb-hover: rgba(100, 116, 139, 0.65);
+  --file-scroll-thumb-active: rgba(100, 116, 139, 0.8);
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  scrollbar-gutter: stable;
+  transition: scrollbar-color 0.3s ease;
+  container: file-rows / inline-size;
+}
+
+:global(.dark) .rowViewport {
+  --file-scroll-thumb: rgba(203, 213, 225, 0.25);
+  --file-scroll-thumb-hover: rgba(203, 213, 225, 0.45);
+  --file-scroll-thumb-active: rgba(203, 213, 225, 0.6);
+}
+
+.rowViewport::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.rowViewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.rowViewport::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  border-radius: 9999px;
+  transition: background-color 0.3s ease;
+}
+
+.rowViewport[data-scrolling="true"] {
+  scrollbar-color: var(--file-scroll-thumb) transparent;
+}
+
+.rowViewport[data-scrolling="true"]::-webkit-scrollbar-thumb {
+  background-color: var(--file-scroll-thumb);
+}
+
+.rowViewport[data-scrolling="true"]::-webkit-scrollbar-thumb:hover {
+  background-color: var(--file-scroll-thumb-hover);
+}
+
+.rowViewport[data-scrolling="true"]::-webkit-scrollbar-thumb:active {
+  background-color: var(--file-scroll-thumb-active);
+}
+
+/* Match the Client card grid at the width of the file area. */
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(var(--file-card-columns, 1), minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.cardGrid:not(:empty) {
+  padding: 0.25rem 0.5rem 0;
+}
+
+@container file-rows (min-width: 320px) {
+  .cardGrid { --file-card-columns: 2; }
+}
+
+@container file-rows (min-width: 480px) {
+  .cardGrid { --file-card-columns: 3; }
+}
+
+@container file-rows (min-width: 600px) {
+  .cardGrid { --file-card-columns: 4; }
+}
+
+@container file-rows (min-width: 768px) {
+  .cardGrid { --file-card-columns: 5; }
+}
+
+@container file-rows (min-width: 1024px) {
+  .cardGrid { --file-card-columns: 6; }
+}
+
+@container file-rows (min-width: 1296px) {
+  .cardGrid { --file-card-columns: 7; }
+}

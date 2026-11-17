@@ -1,11 +1,11 @@
 // @ts-strict-ignore
-import { decodeErrorEnvelope, isApiError, isErrorEnvelope, normalizeApiError, resolveErrorMessageTemplate } from '@bisheng/api-client';
+import { decodeErrorEnvelope, isApiError, isErrorEnvelope, normalizeApiError, resolveErrorMessageTemplate, hasIndependentScope } from '@bisheng/api-client';
 import type { ErrorEnvelope } from '@bisheng/api-client';
 import { notification } from '@bisheng/ui';
 
 import axios from "axios";
 import i18next from "i18next";
-import { managementRequestScope,requiresManagementScope,guardManagementResponse,ensureManagementScope,pauseManagementScope,acceptManagementScope } from './managementScope';
+import { managementRequestScope,requiresManagementScope,guardManagementResponse,readManagementScope,pauseManagementScopeForRequest,acceptManagementScope } from './managementScope';
 
 window.addEventListener('storage', event => {
     if (event.key === 'bs:management-scope' && event.oldValue !== event.newValue) window.location.reload();
@@ -70,14 +70,18 @@ function beginSessionKick(envelope: unknown): boolean {
 }
 
 export async function bootstrapManagementRequestScope() {
-    return ensureManagementScope(async () => await customAxios.post('/api/v1/admin/request-scope/bootstrap') as unknown as {scope_tenant_id: number; source?: string});
+    return readManagementScope(
+        async () => await customAxios.post('/api/v1/admin/request-scope/bootstrap') as unknown as {scope_tenant_id: number; source?: string},
+        async () => await customAxios.get('/api/v1/admin/request-scope') as unknown as {scope_tenant_id: number; source?: string},
+    );
 }
 
 customAxios.interceptors.request.use(async function (config) {
     Object.assign(config.headers, requestAuthHeaders(config.url || ''));
-    if (requiresManagementScope(config.method || 'get', config.url || '')) await bootstrapManagementRequestScope();
-    config.managementScopeSnapshot = managementRequestScope();
-    if (requiresManagementScope(config.method || 'get',config.url || '') && config.managementScopeSnapshot !== null) {
+    const scoped = config.managementContext !== 'independent' && !hasIndependentScope(config.headers) && requiresManagementScope(config.method || 'get', config.url || '', config.baseURL);
+    if (scoped) await bootstrapManagementRequestScope();
+    config.managementScopeSnapshot = scoped ? managementRequestScope() : null;
+    if (scoped && config.managementScopeSnapshot !== null) {
         config.headers['X-Management-Tenant'] = String(config.managementScopeSnapshot);
     }
     return config;
@@ -100,6 +104,16 @@ function rateLimitDiscoveryMessage(envelope: unknown): string {
 function decodeEnvelopeMessage(value: unknown) {
     const envelope = value && typeof value === 'object' ? value as Partial<ErrorEnvelope> : undefined;
     const statusCode = envelope?.status_code
+    if (statusCode === 422 && Array.isArray(envelope.status_message)) {
+        // Validation responses carry user-facing messages per field. Keep
+        // input values, contexts and arbitrary server diagnostics out of copy.
+        const messages = envelope.status_message.flatMap(issue => {
+            if (!issue || typeof issue !== 'object' || typeof issue.msg !== 'string'
+                || typeof issue.type !== 'string' || !Array.isArray(issue.loc)) return [];
+            return issue.msg.trim() ? [issue.msg.trim()] : [];
+        });
+        if (messages.length) return [...new Set(messages)].join('\n');
+    }
     const rateLimitMessage = rateLimitDiscoveryMessage(envelope);
     if (rateLimitMessage) return rateLimitMessage;
     const statusMessage = typeof envelope?.status_message === 'string' ? envelope.status_message : '';
@@ -193,7 +207,7 @@ async function responseError(cause, response?) {
 
 export async function handleRequestResponse(response) {
     try {
-        if (requiresManagementScope(response.config?.method || 'GET', response.config?.url || ''))
+        if (response.config?.managementScopeSnapshot != null)
             guardManagementResponse(response.headers,response.config?.managementScopeSnapshot);
     } catch {
         return Promise.reject(await responseError({status_code:19704,status_message:'management_scope_changed'},response));
@@ -210,9 +224,9 @@ export async function handleRequestResponse(response) {
     }
     if (envelope.status_code === 11010) return envelope;
     const error = await responseError(envelope, response);
-    if (response.config.silent) return Promise.reject(error);
     const statusCode = envelope.status_code;
-    if ([19703, 19704, 19705].includes(statusCode)) pauseManagementScope();
+    if ([19703, 19704, 19705].includes(statusCode)) pauseManagementScopeForRequest(response.config);
+    if (response.config.silent) return Promise.reject(error);
     if (statusCode === 11001) {
         if (shouldToastLicenseExpired()) {
             notification.open({ type: 'error', title: String(i18next.t('prompt')), description: error.message });
@@ -247,7 +261,7 @@ export async function handleRequestResponse(response) {
 
 export async function handleRequestError(cause) {
     const error = await responseError(cause);
-    if ([19703, 19704, 19705].includes(error.status_code)) pauseManagementScope();
+    if ([19703, 19704, 19705].includes(error.status_code)) pauseManagementScopeForRequest(cause?.config ?? cause?.response?.config);
     if (error.httpStatus === 401) {
         error.presentation = 'global';
         if (sessionKickInProgress) return Promise.reject(error);

@@ -1,10 +1,11 @@
 import { Button } from "@bisheng/ui";
 import { useContext, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { userContext } from "@/contexts/userContext";
-import { type KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
+import type { KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
 import { SpaceDetail, parseKnowledgeId } from "./detail";
+import { canCreateKnowledgeSpace } from "./knowledgeSpaceCreation";
 import { KnowledgeSpaceSidebar } from "./sidebar/KnowledgeSpaceSidebar";
 import { useInitialSpace } from "./sidebar/useInitialSpace";
 
@@ -22,6 +23,7 @@ export function KnowledgeSpaceWorkspace({
 }: KnowledgeSpaceWorkspaceProps) {
   const { t } = useTranslation("knowledge");
   const { user } = useContext(userContext);
+  const location = useLocation();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const spaceId = parseKnowledgeId(routeId);
@@ -44,9 +46,12 @@ export function KnowledgeSpaceWorkspace({
     );
   }, [initial.space, active, routeId, params, navigate]);
   const canCreate =
-    user?.is_global_super === true ||
-    user?.is_child_admin === true ||
-    user?.web_menu?.includes("create_knowledge") === true;
+    scope.view === "ordinary" && canCreateKnowledgeSpace(user);
+  const handleCreate = () => {
+    navigate("/filelib/create", {
+      state: { from: location.pathname + location.search + location.hash },
+    });
+  };
   const handleSelect = (
     id: number,
     folderId: number | null,
@@ -61,12 +66,13 @@ export function KnowledgeSpaceWorkspace({
   };
   if (!active) return null;
   return (
-    <div className="flex h-full min-h-0 min-w-0">
+    <div className="flex h-full min-h-0 min-w-0 bg-bg-page">
       <KnowledgeSpaceSidebar
         scope={scope}
         spaceId={invalid ? undefined : (spaceId ?? undefined)}
         parentId={invalid ? null : parentId}
-        canCopy={scope.view === "ordinary" && canCreate}
+        canCopy={canCreate}
+        onCreate={canCreate ? handleCreate : undefined}
         onSelect={(id, folderId) => handleSelect(id, folderId, true)}
         onDeleted={(id) => {
           if (id === spaceId)
@@ -77,11 +83,11 @@ export function KnowledgeSpaceWorkspace({
         }}
       />
       <main
-        className="min-w-0 flex-1 overflow-auto px-4"
+        className="min-w-0 flex-1 overflow-auto"
         aria-label={t("workspace.files")}
       >
         {invalid ? (
-          <p role="status">{t("f118.scope_unavailable")}</p>
+          <p role="status" className="p-4">{t("f118.scope_unavailable")}</p>
         ) : spaceId !== null ? (
           <SpaceDetail
             key={JSON.stringify([scope, spaceId, parentId])}
@@ -92,7 +98,7 @@ export function KnowledgeSpaceWorkspace({
             onOpenFolder={(id) => handleSelect(spaceId, id)}
           />
         ) : (
-          <div role="status" className="space-y-3 py-6">
+          <div role="status" className="space-y-3 px-4 py-6">
             <p>
               {t(
                 initial.error

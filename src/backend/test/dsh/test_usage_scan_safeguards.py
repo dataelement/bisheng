@@ -1,6 +1,5 @@
 """Operational bounds for DSH scans and the default Compose deployment."""
 
-import ast
 from pathlib import Path
 
 import yaml
@@ -8,27 +7,29 @@ import yaml
 ROOT = Path(__file__).resolve().parents[4]
 
 
-def test_usage_scan_cursor_continuations_are_throttled():
-    tree = ast.parse((ROOT / "src/backend/bisheng/worker/dsh/registry.py").read_text(encoding="utf-8"))
-    continuations = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
-            continue
-        owner = node.func.value
-        if (
-            node.func.attr == "apply_async"
-            and isinstance(owner, ast.Name)
-            and owner.id
-            in {
-                "scan_usage",
-                "inspect_usage",
-            }
-        ):
-            continuations.append(node)
-    assert len(continuations) == 2
-    for call in continuations:
-        countdown = next((item.value for item in call.keywords if item.arg == "countdown"), None)
-        assert isinstance(countdown, ast.Constant) and countdown.value == 1
+def test_dispatch_task_uses_projection_runtime_without_scanning_or_fanout(monkeypatch):
+    import asyncio
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from bisheng.dsh import operations_runtime
+    from bisheng.worker import _asyncio_utils
+    from bisheng.worker.dsh import registry
+    from test.dsh.test_task_request_context import ThreadLocalTaskApp
+
+    service = SimpleNamespace()
+    dispatcher = SimpleNamespace(dispatch=AsyncMock(return_value=7))
+
+    @asynccontextmanager
+    async def factory():
+        yield service
+
+    monkeypatch.setattr(operations_runtime, "projection_worker_runtime", factory)
+    monkeypatch.setattr(_asyncio_utils, "run_async_task", lambda factory: asyncio.run(factory()))
+    monkeypatch.setattr(registry, "UsageDispatcher", lambda actual: dispatcher if actual is service else None)
+    assert registry.register_dsh_tasks(ThreadLocalTaskApp())["dispatch"].run() == 7
+    dispatcher.dispatch.assert_awaited_once()
 
 
 def test_default_backend_containers_have_hard_stdout_rotation():

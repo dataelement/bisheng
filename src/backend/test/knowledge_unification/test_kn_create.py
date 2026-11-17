@@ -15,6 +15,7 @@ from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeS
 from bisheng.permission.application.data_scope import DATA_SCOPE_PERSONAL
 from bisheng.permission.application.identity import reset_current_permission_actor, set_current_permission_actor
 from bisheng.permission.domain.services.permission_action_service import PermissionActor
+from bisheng.user.domain.models.user import UserDao
 
 
 @pytest.fixture
@@ -22,6 +23,7 @@ def listing(tenant_context, monkeypatch):
     from bisheng.knowledge.domain.services.knowledge_space_service import DepartmentKnowledgeSpaceDao
 
     monkeypatch.setattr(DepartmentKnowledgeSpaceDao, "aget_by_space_ids", AsyncMock(return_value=[]))
+    monkeypatch.setattr(UserDao, "aget_user_by_ids", AsyncMock(return_value=[]))
     tenant_context(101)
     repository = SimpleNamespace(
         alist_admin=AsyncMock(
@@ -51,6 +53,25 @@ async def test_only_actual_admins_list_all_selected_tenant_rows_without_visible_
     repository.alist_admin.assert_awaited_once_with(keyword="Not", page=2, page_size=10, has_abnormal=False)
     service._check_action.assert_not_awaited()
     assert service.login_user.tenant_id == 101
+
+
+async def test_admin_list_enriches_page_creators_in_one_lookup(listing):
+    service, repository = listing
+    service._permission_actor.return_value = PermissionActor(user_id=7, current_tenant_id=101, super_admin=True)
+    creators = UserDao.aget_user_by_ids
+    creators.return_value = [SimpleNamespace(user_id=99, user_name="Space creator")]
+    repository.alist_admin.return_value = (
+        [
+            Knowledge(id=3, tenant_id=101, user_id=99, name="First", type=3),
+            Knowledge(id=2, tenant_id=101, user_id=99, name="Second", type=3),
+            Knowledge(id=1, tenant_id=101, user_id=12, name="Former creator", type=3),
+        ],
+        17,
+    )
+    with management_tenant_scope(101):
+        result = await service.list_admin_spaces(page=2, page_size=3)
+    creators.assert_awaited_once_with([12, 99])
+    assert [row.user_name for row in result.data] == ["Space creator", "Space creator", ""]
 
 
 @pytest.mark.parametrize("claim", ["menu", "owner", "resource_manager", "department_admin", "other_tenant_admin"])

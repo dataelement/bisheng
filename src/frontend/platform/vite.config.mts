@@ -197,7 +197,11 @@ export default defineConfig(({ command, mode }) => {
 
   const proxyLog = env.VITE_PROXY_LOG === '1';
   const rewrite = (url: string) => app_env.BASE_URL && url.startsWith(app_env.BASE_URL) ? url.slice(app_env.BASE_URL.length) : url;
-  const apiProxyConfig = createFrontendProxy(target, { rewrite, verbose: proxyLog });
+  const apiProxyConfig = createFrontendProxy(target, {
+    rewrite,
+    verbose: proxyLog,
+    legacyAdminScope: env.VITE_DEV_LEGACY_ADMIN_SCOPE === 'true',
+  });
   const gatewayProxyConfig = createFrontendProxy(gatewayTarget, { rewrite, verbose: proxyLog });
   const fileServiceProxyConfig = createFrontendProxy(fileServiceTarget, { rewrite, verbose: proxyLog, minioEnvName: 'VITE_MINIO_PROXY_TARGET' });
   const proxyTargets: Record<string, ReturnType<typeof createFrontendProxy>> = {};

@@ -16,6 +16,7 @@
     "./markdown": "./src/viewers/MarkdownViewer.tsx",
     "./html-viewer": "./src/viewers/HtmlViewer.tsx",
     "./image": "./src/viewers/ImageViewer.tsx",
+    "./knowledge-artwork": "./src/KnowledgeFileArtwork.tsx",
     "./media": "./src/viewers/MediaViewer.tsx",
     "./media-player": "./src/viewers/MediaPlayer.tsx",
     "./transcript": "./src/viewers/MediaTranscriptTabs.tsx",

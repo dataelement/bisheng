@@ -30,23 +30,19 @@ class PolicySubject(BaseModel):
 class ModelVisibilityInput(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     version: int = Field(ge=0)
-    credit_multiplier: str = Field(default="1", pattern=r"^(0|[1-9][0-9]{0,3})(\.[0-9]{1,2})?$")
+    # F016: the per-model multiplier was removed; older admin pages still send it on every save,
+    # so it is accepted and ignored instead of being rejected by extra="forbid".
+    credit_multiplier: str | None = Field(default=None, max_length=16)
     everyone: bool = False
     subjects: list[PolicySubject] = Field(default_factory=list, max_length=10000)
 
     @model_validator(mode="after")
     def validate_scope(self):
-        if not 1 <= self.credit_rate <= 100000:
-            raise ValueError("Credit multiplier must be between 0.01 and 1000")
         if self.everyone and self.subjects:
             raise ValueError("Everyone visibility has an empty subject list")
         if len(set(self.subjects)) != len(self.subjects):
             raise ValueError("Visibility subjects must be unique")
         return self
-
-    @property
-    def credit_rate(self) -> int:
-        return int(Decimal(self.credit_multiplier) * 100)
 
     def permits(self, *, user_id: int, departments: set[int], roles: set[int]) -> bool:
         memberships = {"USER": {user_id}, "DEPARTMENT": departments, "ROLE": roles}

@@ -1,18 +1,10 @@
-// @ts-strict-ignore
-import { Button, Input } from '@bisheng/ui';
-
+import { addMetadata, deleteMetadataFields, updateMetadataFields } from "@/controllers/API";
+import { Button, Input, Modal } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
-import { KnowledgeHint,KnowledgeTooltip } from "./KnowledgeTooltip";
-
-
-import { Dialog,DialogContent,DialogDescription,DialogHeader,DialogPortal,DialogTitle } from "@/components/bs-ui/dialog";
-
-import { cname } from "@/components/bs-ui/utils";
-import { addMetadata,deleteMetadataFields,updateMetadataFields } from "@/controllers/API";
-import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Hash } from "lucide-react";
-import React,{ memo,useCallback,useEffect,useMemo,useRef,useState } from "react";
+import { Fragment, useEffect, useId, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { KnowledgeHint, KnowledgeTooltip } from "./KnowledgeTooltip";
 
 type MetadataType = "String" | "Number" | "Time"
 
@@ -51,39 +43,11 @@ const TYPE_ICONS = {
     Time: <Outlined.Time />,
 }
 
-const TypeSelector = memo(({
-    newType,
-    setNewType,
-    isSmallScreen
-}: {
-    newType: MetadataType;
-    setNewType: (type: MetadataType) => void;
-    isSmallScreen: boolean;
-}) => {
-    const { t } = useTranslation('knowledge')
-    return (
-        <div className="space-y-1.5">
-            <label className={cname("block font-medium", isSmallScreen ? "text-xs" : "")}>{t('type')}</label>
-            <div className="flex gap-1">
-                {(["String", "Number", "Time"] as MetadataType[]).map((type) => (
-                    <button
-                        key={type}
-                        onClick={() => setNewType(type)}
-                        className={cname(
-                            "flex-1 rounded font-medium transition-colors",
-                            newType === type
-                                ? "bg-blue-600 text-white"
-                                : "bg-gray-200 text-gray-700 hover:bg-gray-300",
-                            isSmallScreen ? "py-1.5 px-2 text-xs" : "py-2 px-4"
-                        )}
-                    >
-                        {type}
-                    </button>
-                ))}
-            </div>
-        </div>
-    )
-})
+type MetadataView =
+    | { kind: "list" }
+    | { kind: "create" }
+    | { kind: "rename"; field: Metadata }
+    | { kind: "delete"; field: Metadata };
 
 interface MetadataManagementDialogProps {
     open: boolean;
@@ -91,7 +55,8 @@ interface MetadataManagementDialogProps {
     onSave?: (metadata: Metadata[]) => void;
     hasManagePermission?: boolean;
     id: string;
-    presentation?: "page";
+    placeholder?: ReactNode;
+    children?: ReactNode;
     mutations?: {
         add: (name: string, type: string) => Promise<void>;
         rename: (name: string, next: string) => Promise<void>;
@@ -106,451 +71,338 @@ export function MetadataManagementDialog({
     onSave,
     hasManagePermission = true,
     id,
-    initialMetadata, presentation, mutations,
+    initialMetadata,
+    mutations,
+    placeholder,
+    children,
 }: MetadataManagementDialogProps) {
-    const { t } = useTranslation('knowledge')
-    const mainDialogRef = useRef<HTMLDivElement>(null)
-    const [sideDialogPosition, setSideDialogPosition] = useState({ top: 0, left: 0 })
-    const [metadataList, setMetadataList] = useState<Metadata[]>([])
-    const [sideDialog, setSideDialog] = useState<{ type: "create" | "rename"; open: boolean }>({
-        type: "create",
-        open: false
-    })
-    const [isLoading, setIsLoading] = useState(false)
-    const [selectedMetadata, setSelectedMetadata] = useState<Metadata | null>(null)
-    const [newName, setNewName] = useState("")
-    const [newType, setNewType] = useState<MetadataType>("String")
-    const [error, setError] = useState("")
-    const [screenWidth, setScreenWidth] = useState(window.innerWidth)
-    const isSmallScreen = screenWidth < 1366;
-    const sideDialogWidth = isSmallScreen ? 240 : 300;
-    const isSideDialogAtRisk = isSmallScreen && sideDialog.open;
-    const mainDialogMaxWidth = isSmallScreen ? 600 : 1200;
-
-    const [isSideDialogReady, setIsSideDialogReady] = useState(false);
+    const { t } = useTranslation("knowledge");
+    const [metadataList, setMetadataList] = useState<Metadata[]>([]);
+    const [view, setView] = useState<MetadataView>({ kind: "list" });
+    const [discarding, setDiscarding] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
+    const [newName, setNewName] = useState("");
+    const [newType, setNewType] = useState<MetadataType>("String");
+    const [error, setError] = useState("");
+    const fieldNameId = useId();
+    const returnFocusTo = useRef<HTMLButtonElement | null>(null);
+    const createButton = useRef<HTMLButtonElement | null>(null);
 
     useEffect(() => {
-        if (open && initialMetadata) {
-            const formattedMetadata = initialMetadata.map((item) => ({
-                id: `meta_${item.field_name}`,
-                name: item.field_name,
-                type: (item.field_type.charAt(0).toUpperCase() + item.field_type.slice(1)) as MetadataType,
-                createdAt: new Date(),
-                updatedAt: item.updated_at ? new Date(item.updated_at * 1000) : new Date(),
-            }));
-            setMetadataList(formattedMetadata);
-        } else if (open) {
-            setMetadataList([]);
-        }
+        if (!open) return;
+        setMetadataList((initialMetadata ?? []).map((item) => ({
+            id: `meta_${item.field_name}`,
+            name: item.field_name,
+            type: (item.field_type.charAt(0).toUpperCase() + item.field_type.slice(1)) as MetadataType,
+            createdAt: new Date(),
+            updatedAt: item.updated_at ? new Date(item.updated_at * 1000) : new Date(),
+        })));
     }, [open, initialMetadata]);
 
-    const updateSideDialogPosition = useCallback(() => {
-        if (mainDialogRef.current) {
-            const rect = mainDialogRef.current.getBoundingClientRect();
-            const gap = isSmallScreen ? 0 : 4;
-            let left = rect.right + gap;
-            if (left + sideDialogWidth > screenWidth) left = screenWidth - sideDialogWidth - 8;
-            if (sideDialogPosition.left !== left || sideDialogPosition.top !== rect.top) {
-                setSideDialogPosition({ top: rect.top, left });
-            }
-        }
-    }, [mainDialogRef, isSmallScreen, screenWidth, sideDialogPosition, sideDialogWidth]);
-
     useEffect(() => {
-        const handleResize = () => {
-            const newWidth = window.innerWidth;
-            setScreenWidth(newWidth);
-        };
-        window.addEventListener("resize", handleResize);
-        return () => window.removeEventListener("resize", handleResize);
-    }, []);
+        if (view.kind !== "list" || !returnFocusTo.current) return;
+        const target = returnFocusTo.current.isConnected ? returnFocusTo.current : createButton.current;
+        target?.focus({ preventScroll: true });
+        returnFocusTo.current = null;
+    }, [view.kind]);
 
-    useEffect(() => {
-        if (!open || !sideDialog.open) {
-            setIsSideDialogReady(false);
-            return;
-        }
-
-        // 使用多个阶段的延迟确保位置计算准确
-        const timer1 = setTimeout(() => {
-            updateSideDialogPosition();
-        }, 0);
-
-        const timer2 = setTimeout(() => {
-            updateSideDialogPosition();
-        }, 50);
-
-        const timer3 = setTimeout(() => {
-            updateSideDialogPosition();
-            setIsSideDialogReady(true);
-        }, 100);
-
-        return () => {
-            clearTimeout(timer1);
-            clearTimeout(timer2);
-            clearTimeout(timer3);
-            setIsSideDialogReady(false);
-        };
-    }, [open, sideDialog.open, updateSideDialogPosition]);
-
-    const validateName = useCallback((name: string): { valid: boolean; error?: string } => {
-        const isBuiltInName = BUILT_IN_METADATA.some(meta => meta.name === name);
-        if (isBuiltInName) return { valid: false, error: t('builtInNameError') };
-        if (!name || name.trim().length === 0) return { valid: false, error: t('nameRequired') };
-        if (name.length > 255) return { valid: false, error: t('nameTooLong') };
-        if (!/^[a-z][a-z0-9_]*$/.test(name)) return { valid: false, error: t('nameFormatError') };
-        const nameExists = metadataList.some((m) => m.name === name && m.id !== selectedMetadata?.id);
-        if (nameExists) return { valid: false, error: t('nameExists') };
-        return { valid: true };
-    }, [metadataList, selectedMetadata, t]);
-
-    const handleCreateClick = useCallback(() => {
-        setSideDialog({ type: "create", open: true });
+    const showAction = (event: MouseEvent<HTMLButtonElement>, nextView: MetadataView) => {
+        returnFocusTo.current = event.currentTarget;
+        setNewName(nextView.kind === "rename" ? nextView.field.name : "");
         setNewType("String");
-        setNewName("");
         setError("");
-        setIsSideDialogReady(false);
-    }, []);
+        setView(nextView);
+    };
 
-    const handleEditClick = useCallback((metadata: Metadata) => {
-        setSelectedMetadata(metadata);
-        setNewName(metadata.name);
-        setSideDialog({ type: "rename", open: true });
+    const returnToList = () => {
+        setDiscarding(false);
         setError("");
-        setIsSideDialogReady(false);
-    }, []);
+        setView({ kind: "list" });
+    };
 
-    const closeSideDialog = useCallback(() => {
-        setSideDialog(prev => ({ ...prev, open: false }));
-        setIsSideDialogReady(false);
-        setTimeout(() => {
-            setSelectedMetadata(null);
-            setNewName("");
-            setError("");
-        }, 300);
-    }, []);
-
-    const handleCreateSave = useCallback(async () => {
-        if (!id) { setError(t('knowledgeIdMissing')); return; }
-        const validation = validateName(newName);
-        if (!validation.valid) { setError(validation.error || t('inputInvalid')); return; }
-
-        setIsLoading(true);
-        try {
-            if (mutations) await mutations.add(newName, newType.toLowerCase());
-            else await addMetadata(id, [{ field_name: newName, field_type: newType.toLowerCase() }]);
-            if (!mutations) {
-                const newMetadata: Metadata = { id: `meta_${newName}`, name: newName, type: newType, createdAt: new Date(), updatedAt: new Date() };
-                setMetadataList((prev) => [newMetadata, ...prev]);
-            }
-            closeSideDialog();
-            if (onSave) onSave(metadataList);
-        } catch (err: any) {
-            setError(err.message || t('createFailed'));
-            console.error("Metadata creation failed:", err);
-        } finally {
-            setIsLoading(false);
+    const validateName = (name: string) => {
+        if (BUILT_IN_METADATA.some((field) => field.name === name)) return t("builtInNameError");
+        if (!name.trim()) return t("nameRequired");
+        if (name.length > 255) return t("nameTooLong");
+        if (!/^[a-z][a-z0-9_]*$/.test(name)) return t("nameFormatError");
+        const currentId = view.kind === "rename" ? view.field.id : undefined;
+        if (metadataList.some((field) => field.name === name && field.id !== currentId)) {
+            return t("nameExists");
         }
-    }, [newName, newType, id, closeSideDialog, validateName, metadataList, onSave, t, mutations]);
+        return "";
+    };
 
-    const handleRenameSave = useCallback(async () => {
-        if (!id || !selectedMetadata) { setError(t('operationFailed')); return; }
-        const validation = validateName(newName);
-        if (!validation.valid) { setError(validation.error || t('inputInvalid')); return; }
-        if (selectedMetadata.name === newName) { closeSideDialog(); return; }
-
-        setIsLoading(true);
-        try {
-            if (mutations) await mutations.rename(selectedMetadata.name, newName);
-            else await updateMetadataFields(id, [{ old_field_name: selectedMetadata.name, new_field_name: newName }]);
-            if (!mutations) setMetadataList((prev) => prev.map((m) => m.id === selectedMetadata.id ? { ...m, name: newName, updatedAt: new Date() } : m));
-            closeSideDialog();
-            if (onSave) onSave(metadataList);
-        } catch (err: any) {
-            setError(err.message || t('renameFailed'));
-            console.error("Metadata rename failed:", err);
-        } finally {
-            setIsLoading(false);
-        }
-    }, [newName, selectedMetadata, id, closeSideDialog, validateName, metadataList, onSave, t, mutations]);
-
-    const handleDelete = useCallback(async (metadata: Metadata) => {
+    const handleSave = async () => {
+        if (isLoading || !hasManagePermission || view.kind === "list") return;
         if (!id) {
-            setError(t('knowledgeIdMissing'));
+            setError(t("knowledgeIdMissing"));
+            return;
+        }
+        if (view.kind !== "delete") {
+            const validationError = validateName(newName);
+            if (validationError) {
+                setError(validationError);
+                return;
+            }
+        }
+        if (view.kind === "rename" && view.field.name === newName) {
+            returnToList();
             return;
         }
 
         setIsLoading(true);
+        setError("");
         try {
-            if (mutations) await mutations.remove(metadata.name);
-            else await deleteMetadataFields(id, [metadata.name]);
-            if (!mutations) setMetadataList((prev) => prev.filter((m) => m.id !== metadata.id));
-            if (onSave) onSave(metadataList);
-        } catch (err: any) {
-            setError(err.message || t('deleteFailed'));
-            console.error("Metadata deletion failed:", err);
+            if (view.kind === "create") {
+                const type = newType.toLowerCase();
+                if (mutations) {
+                    await mutations.add(newName, type);
+                } else {
+                    await addMetadata(id, [{ field_name: newName, field_type: type }]);
+                    const createdAt = new Date();
+                    setMetadataList((previous) => [
+                        { id: `meta_${newName}`, name: newName, type: newType, createdAt, updatedAt: createdAt },
+                        ...previous,
+                    ]);
+                }
+            } else if (view.kind === "rename") {
+                if (mutations) {
+                    await mutations.rename(view.field.name, newName);
+                } else {
+                    await updateMetadataFields(id, [{ old_field_name: view.field.name, new_field_name: newName }]);
+                    setMetadataList((previous) => previous.map((field) =>
+                        field.id === view.field.id ? { ...field, name: newName, updatedAt: new Date() } : field,
+                    ));
+                }
+            } else if (view.kind === "delete") {
+                if (mutations) {
+                    await mutations.remove(view.field.name);
+                } else {
+                    await deleteMetadataFields(id, [view.field.name]);
+                    setMetadataList((previous) => previous.filter((field) => field.id !== view.field.id));
+                }
+            }
+            returnToList();
+            onSave?.(metadataList);
+        } catch (err) {
+            const failureMessage = {
+                create: "createFailed",
+                rename: "renameFailed",
+                delete: "deleteFailed",
+            }[view.kind];
+            setError(err instanceof Error && err.message ? err.message : t(failureMessage));
         } finally {
             setIsLoading(false);
         }
-    }, [id, metadataList, onSave, t, mutations]);
+    };
+
+    const creating = view.kind === "create";
+    const editing = creating || view.kind === "rename";
+    const deleting = view.kind === "delete";
+    const draftChanged = creating
+        ? newName !== "" || newType !== "String"
+        : view.kind === "rename" && newName !== view.field.name;
+    const handleBeforeClose = () => {
+        if (view.kind === "list") return true;
+        if (discarding) setDiscarding(false);
+        else if (editing && draftChanged) setDiscarding(true);
+        else {
+            returnToList();
+            return creating;
+        }
+        return false;
+    };
 
     const sortedMetadata = [...metadataList].sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime());
-
-    const BubbleConfirm = ({
-        trigger,
-        onConfirm,
-        message = t('confirmDelete')
-    }) => {
-        const [isOpen, setIsOpen] = useState(false);
-        const triggerRef = useRef(null);
-
-        // 点击外部关闭气泡
-        useEffect(() => {
-            const handleClickOutside = (event) => {
-                if (triggerRef.current && !triggerRef.current.contains(event.target)) {
-                    setIsOpen(false);
-                }
-            };
-
-            if (isOpen) {
-                document.addEventListener('mousedown', handleClickOutside);
-                return () => document.removeEventListener('mousedown', handleClickOutside);
-            }
-        }, [isOpen]);
-
-        return (
-            <div ref={triggerRef} className="relative inline-block">
-                <button
-                    aria-label={t("delete")}
-                    onClick={() => setIsOpen(!isOpen)}
-                    className="p-1.5 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    disabled={trigger.props.disabled}
+    const errorMessage = error && <p role="alert" className="text-body-sm text-danger">{error}</p>;
+    const discardMessage = t("flow.unsavedChangesConfirmation", { ns: "bs" });
+    const editor = discarding ? (
+        <div className="space-y-4">
+            <p>{discardMessage}</p>
+            <div className="flex justify-end gap-3">
+                <Button type="button" variant="outlined" color="default" autoFocus onClick={() => setDiscarding(false)}>
+                    {t("cancel")}
+                </Button>
+                <Button
+                    type="button"
+                    color="primary"
+                    onClick={() => {
+                        returnToList();
+                        if (creating) onOpenChange(false);
+                    }}
                 >
-                    {trigger.props.children}
-                </button>
-
-                {isOpen && (
-                    <div className="absolute bottom-full left-1/2 mb-2 w-56 bg-white border rounded-lg shadow-lg p-3 z-50"
-                        style={{ transform: 'translateX(-84%)' }}>
-                        <div className="flex">
-                            <Outlined.Question size={14} className="text-red-500" />
-                            <div className="flex -mt-1 ml-1 font-medium text-sm">{t('tip')}</div>
-                        </div>
-                        <div className="flex gap-2 mb-3 mt-2">
-                            <p className="text-sm ml-10 text-gray-700 font-medium">{message}</p>
-                        </div>
-
-                        <div className="flex justify-end gap-2">
-                            <Button variant="outlined" size="small" onClick={() => setIsOpen(false)} className="px-2 py-1 h-7 min-h-7 text-xs" color="default">
-                                {t('cancel')}
-                            </Button>
-                            <Button size="small" onClick={() => {
-                                    onConfirm();
-                                    setIsOpen(false);
-                                }} className="px-2 py-1 h-7 min-h-7 text-xs">
-                                {t('confirm')}
-                            </Button>
-                        </div>
-                        <div className="absolute top-full right-7 -mt-2 w-4 h-4 bg-white border-r border-b transform rotate-45"></div>
-                    </div>
-                )}
+                    {t("confirm")}
+                </Button>
             </div>
-        );
-    };
-    const SideDialogContent = useMemo(() =>
-        React.forwardRef<React.ElementRef<typeof DialogPrimitive.Content>, React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>>(
-            ({ children, className, ...props }, ref) => (
-                <DialogPortal>
-                    <DialogPrimitive.Content
-                        ref={ref}
-                        {...props}
-                        className={cname(
-                            "fixed z-50 grid gap-4 border bg-background dark:bg-[#303134] shadow-lg sm:rounded-lg",
-                            `w-[${sideDialogWidth}px]`,
-                            isSmallScreen ? "p-3 text-sm" : "p-5",
-                            className
-                        )}
-                        style={{
-                            top: `${sideDialogPosition.top}px`,
-                            left: `${sideDialogPosition.left}px`,
-                            transform: "none",
-                            maxHeight: "80vh",
-                            // 只有在位置计算完成后才显示
-                            opacity: isSideDialogReady ? 1 : 0,
-                            transition: 'opacity 0.05s ease-in-out'
-                        }}
+        </div>
+    ) : (
+        <form
+            aria-label={t(creating ? "createMetadata" : "rename")}
+            className="space-y-4"
+            onSubmit={(event) => { event.preventDefault(); void handleSave(); }}
+        >
+            {creating && (
+                <div className="space-y-2">
+                    <span className="block font-medium">{t("type")}</span>
+                    <div className="flex gap-2" role="group" aria-label={t("type")}>
+                        {(["String", "Number", "Time"] as const).map((type) => (
+                            <Button
+                                key={type}
+                                type="button"
+                                className="min-w-0 flex-1"
+                                variant={newType === type ? "solid" : "outlined"}
+                                color={newType === type ? "primary" : "default"}
+                                aria-pressed={newType === type}
+                                disabled={isLoading}
+                                onClick={() => setNewType(type)}
+                            >
+                                {type}
+                            </Button>
+                        ))}
+                    </div>
+                </div>
+            )}
+            <div className="space-y-2">
+                <label className="block font-medium" htmlFor={fieldNameId}>
+                    {t("metadatainfor.name")}
+                </label>
+                <Input
+                    id={fieldNameId}
+                    value={newName}
+                    onChange={(event) => { setNewName(event.target.value); setError(""); }}
+                    placeholder={t("pleaseEnter")}
+                    autoComplete="off"
+                    autoFocus
+                    disabled={isLoading}
+                    status={error ? "error" : undefined}
+                />
+                {errorMessage}
+            </div>
+            <div className="flex justify-end gap-3">
+                <Button type="button" variant="outlined" color="default" disabled={isLoading} onClick={returnToList}>
+                    {t("cancel")}
+                </Button>
+                <Button type="submit" color="primary" loading={isLoading} disabled={!hasManagePermission}>
+                    {t("save")}
+                </Button>
+            </div>
+        </form>
+    );
+
+    return (
+        <Modal
+            open={open}
+            onOpenChange={onOpenChange}
+            size={deleting ? "small" : "medium"}
+            title={t(deleting ? "delete" : "metaData")}
+            description={deleting ? t("confirmDeleteMetadata") : undefined}
+            closeLabel={t("close", { ns: "bs" })}
+            closable={!discarding && !deleting}
+            submitting={isLoading}
+            beforeClose={handleBeforeClose}
+            footer={deleting && (
+                <>
+                    <Button
+                        type="button"
+                        variant="outlined"
+                        color="default"
+                        disabled={isLoading}
+                        onClick={returnToList}
+                        autoFocus
                     >
-                        {children}
-                        <DialogPrimitive.Close className="absolute right-3 top-3 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
-                            <Outlined.Close className={isSmallScreen ? "h-3 w-3" : "h-4 w-4"} />
-                            <span className="sr-only">{t('close', { ns: 'bs' })}</span>
-                        </DialogPrimitive.Close>
-                    </DialogPrimitive.Content>
-                </DialogPortal>
-            )
-        )
-        , [sideDialogWidth, isSmallScreen, sideDialogPosition, isSideDialogReady, t]);
-    SideDialogContent.displayName = "SideDialogContent";
-
-    const content = (
-                    <div className="meta-dialog space-y-6">
-                        <button
-                            onClick={handleCreateClick} disabled={!hasManagePermission || isLoading}
-                            className={cname("w-full flex items-center justify-center gap-2 rounded-lg bg-muted hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed transition-colors", isSmallScreen ? "py-2" : "py-3")}
-                        >
-                            <Outlined.Plus size={isSmallScreen ? 16 : 20} />
-                            <span>{t('createMetadata')}</span>
-                        </button>
-
-                        <div className="space-y-2">
-                            {sortedMetadata.map((metadata) => (
-                                <div
-                                    key={metadata.id}
-                                    className={cname("flex items-center justify-between rounded-lg bg-muted hover:bg-accent transition-colors", isSmallScreen ? "p-2 gap-2" : "p-3 gap-3")}
-                                >
-                                    <div className="flex items-center gap-2 flex-1">
-                                        <span className={isSmallScreen ? "text-base" : "text-lg"}>{TYPE_ICONS[metadata.type]}</span>
-                                        <span className={cname("text-gray-500", isSmallScreen ? "text-xs" : "text-sm")}>{metadata.type}</span>
-                                        <div className=" min-w-0 max-w-64">
-                                            <KnowledgeTooltip content={<><p>{metadata.name}</p></>}>
-<span
-                                                            className={cname(
-                                                                "font-medium truncate block",
-                                                                isSmallScreen ? "text-sm" : "",
-                                                                "max-w-full" // 确保它不会超出父容器
-                                                            )}
-                                                            style={{
-                                                                whiteSpace: 'nowrap',
-                                                                overflow: 'hidden',
-                                                                textOverflow: 'ellipsis',
-                                                                width: '100%'
-                                                            }}
-                                                        >
-                                                            {metadata.name}
-                                                        </span>
-</KnowledgeTooltip>
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-1">
-                                        <button
-                                            aria-label={t("rename")}
-                                            onClick={() => handleEditClick(metadata)} disabled={!hasManagePermission || isLoading}
-                                            className="p-1.5 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                        >
-                                            <Outlined.Edit size={isSmallScreen ? 16 : 18} />
-                                        </button>
-                                        <BubbleConfirm
-                                            trigger={
-                                                <button disabled={!hasManagePermission || isLoading}>
-                                                    <Outlined.Delete size={isSmallScreen ? 16 : 18} />
-                                                </button>
-                                            }
-                                            message={t('confirmDeleteMetadata')}
-                                            onConfirm={() => handleDelete(metadata)}
-                                        />
-                                    </div>
-                                </div>
-                            ))}
+                        {t("cancel")}
+                    </Button>
+                    <Button
+                        type="button"
+                        loading={isLoading}
+                        color="danger"
+                        onClick={() => { void handleSave(); }}
+                    >
+                        {t("confirm")}
+                    </Button>
+                </>
+            )}
+        >
+            <div hidden={deleting} className="space-y-6 pb-4">
+                {children}
+                {placeholder ?? (
+                    <div className="space-y-6">
+                        <div hidden={creating}>
+                            <Button
+                                ref={createButton}
+                                type="button"
+                                variant="filled"
+                                color="default"
+                                className="w-full"
+                                disabled={!hasManagePermission || isLoading || editing}
+                                onClick={(event) => showAction(event, { kind: "create" })}
+                            >
+                                <Outlined.Plus aria-hidden />
+                                {t("createMetadata")}
+                            </Button>
                         </div>
-
+                        {creating && editor}
+                        {sortedMetadata.length > 0 && (
+                            <div className="space-y-2">
+                                {sortedMetadata.map((field) => (
+                                    <Fragment key={field.id}>
+                                        <div className="flex min-w-0 items-center gap-3 rounded-lg bg-fill-1 p-3">
+                                            <span className="shrink-0 text-lg">{TYPE_ICONS[field.type]}</span>
+                                            <span className="shrink-0 text-text-3">{field.type}</span>
+                                            <div className="min-w-0 flex-1 font-medium">
+                                                <KnowledgeTooltip content={field.name}>
+                                                    <span className="block truncate">{field.name}</span>
+                                                </KnowledgeTooltip>
+                                            </div>
+                                            <Button
+                                                type="button"
+                                                variant="text"
+                                                size="small"
+                                                color="default"
+                                                iconOnly
+                                                aria-label={t("rename")}
+                                                disabled={!hasManagePermission || isLoading || editing}
+                                                onClick={(event) => showAction(event, { kind: "rename", field })}
+                                            >
+                                                <Outlined.Edit aria-hidden />
+                                            </Button>
+                                            <Button
+                                                type="button"
+                                                variant="text"
+                                                size="small"
+                                                color="default"
+                                                iconOnly
+                                                aria-label={t("delete")}
+                                                disabled={!hasManagePermission || isLoading || editing}
+                                                onClick={(event) => showAction(event, { kind: "delete", field })}
+                                            >
+                                                <Outlined.Delete aria-hidden />
+                                            </Button>
+                                        </div>
+                                        {view.kind === "rename" && view.field.id === field.id && editor}
+                                    </Fragment>
+                                ))}
+                            </div>
+                        )}
                         <div className="space-y-3">
                             <div className="flex items-center gap-2">
-                                <h3 className={cname("font-semibold", isSmallScreen ? "text-sm" : "")}>{t('builtInMetadata')}</h3>
-                                <div className="group relative">
-                                    <KnowledgeHint className="relative top-0.5 ml-1" content={t('builtInMetadataTooltip')}></KnowledgeHint>
-                                </div>
+                                <h3 className="font-medium">{t("builtInMetadata")}</h3>
+                                <KnowledgeHint content={t("builtInMetadataTooltip")} />
                             </div>
                             <div className="space-y-2">
-                                {BUILT_IN_METADATA.slice(0, 6).map((metadata) => (
-                                    <div
-                                        key={metadata.name}
-                                        className={cname("flex items-center bg-muted rounded-lg", isSmallScreen ? "p-2 gap-2" : "p-3 gap-3")}
-                                    >
-                                        <span className={isSmallScreen ? "text-base" : "text-lg"}>{TYPE_ICONS[metadata.type]}</span>
-                                        <span className={cname("text-gray-500", isSmallScreen ? "text-xs" : "text-sm")}>{metadata.type}</span>
-                                        <span className={cname("font-medium truncate", isSmallScreen ? "text-sm" : "")}>{metadata.name}</span>
+                                {BUILT_IN_METADATA.slice(0, 6).map((field) => (
+                                    <div key={field.name} className="flex min-w-0 items-center gap-3 rounded-lg bg-fill-1 p-3">
+                                        <span className="shrink-0 text-lg">{TYPE_ICONS[field.type]}</span>
+                                        <span className="shrink-0 text-text-3">{field.type}</span>
+                                        <span className="min-w-0 truncate font-medium">{field.name}</span>
                                     </div>
                                 ))}
                             </div>
                         </div>
                     </div>
+                )}
+            </div>
+            {deleting && errorMessage}
+        </Modal>
     );
-    return (
-        <>
-            <Dialog open={open} onOpenChange={onOpenChange}>
-                {presentation === "page" ? <section ref={mainDialogRef} className="space-y-6">
-                    <h2 className="text-heading-sm font-medium">{t('metaData')}</h2>{content}
-                </section> : <DialogContent
-                    ref={mainDialogRef}
-                    className={cname("max-h-[70vh] overflow-y-auto", typeof mainDialogMaxWidth === "string" ? "" : `w-[${mainDialogMaxWidth}px]`)}
-                    style={{
-                        width: mainDialogMaxWidth, maxWidth: "none",
-                        left: isSideDialogAtRisk ? "8px" : isSmallScreen ? "calc(50% - 300px)" : "calc(50% - 600px)",
-                        top: "50%", transform: "translateY(-50%)", minWidth: 580
-                    }}
-                >
-                    <DialogHeader>
-                        <DialogTitle className={isSmallScreen ? "text-base" : ""}>{t('metaData')}</DialogTitle>
-                    </DialogHeader>
-                    {content}
-                </DialogContent>}
-            </Dialog>
-
-            <Dialog key="metadata-side-dialog" open={sideDialog.open} onOpenChange={closeSideDialog}>
-                <SideDialogContent className="overflow-y-auto">
-                    {sideDialog.type === "create" && (
-                        <>
-                            <DialogHeader>
-                                <DialogTitle className={isSmallScreen ? "text-base" : ""}>{t('createMetadata')}</DialogTitle>
-                                <DialogDescription className={isSmallScreen ? "text-xs" : ""}>{t('createMetadataDescription')}</DialogDescription>
-                            </DialogHeader>
-                            <div className="space-y-3">
-                                <TypeSelector newType={newType} setNewType={setNewType} isSmallScreen={isSmallScreen} />
-                                <div className="space-y-1.5">
-                                    <label className={cname("block font-medium", isSmallScreen ? "text-xs" : "")}>{t('metadatainfor.name')}</label>
-                                    <Input id="create-metadata-name" value={newName} onChange={(e) => { setNewName(e.target.value); if (error) setError(""); }} placeholder={t('pleaseEnter')} autoComplete="off" autoFocus className={cname(error ? "border-red-500 border-2" : "", isSmallScreen ? "text-sm h-8" : "")} />
-                                    {error && (
-                                        <div className={cname("flex items-center gap-1.5 text-red-500", isSmallScreen ? "text-xs" : "text-sm")}>
-                                            <span>{error}</span>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className={cname("flex justify-end gap-2 pt-2", isSmallScreen ? "" : "pt-4 gap-3")}>
-                                    <Button variant="outlined" onClick={closeSideDialog} className={isSmallScreen ? "px-3 py-1 text-xs" : ""} color="default">{t('cancel')}</Button>
-                                    <Button onClick={handleCreateSave} disabled={isLoading} className={cname("bg-blue-600 hover:bg-blue-700", isSmallScreen ? "px-3 py-1 text-xs" : "")}>
-                                        {isLoading ? t('saving') : t('save')}
-                                    </Button>
-                                </div>
-                            </div>
-                        </>
-                    )}
-                    {sideDialog.type === "rename" && (
-                        <>
-                            <DialogHeader>
-                                <DialogTitle className={isSmallScreen ? "text-base" : ""}>{t('rename')}</DialogTitle>
-                                <DialogDescription className={isSmallScreen ? "text-xs" : ""}>{t('renameDescription')}</DialogDescription>
-                            </DialogHeader>
-                            <div className="space-y-3">
-                                <div className="space-y-1.5">
-                                    <label className={cname("block font-medium", isSmallScreen ? "text-xs" : "")}>{t('name')}</label>
-                                    <Input id="rename-metadata-name" value={newName} onChange={(e) => { setNewName(e.target.value); if (error) setError(""); }} placeholder={t('pleaseEnter')} autoComplete="off" autoFocus className={cname(error ? "border-red-500 border-2" : "", isSmallScreen ? "text-sm h-8" : "")} />
-                                    {error && (
-                                        <div className={cname("flex items-center gap-1.5 text-red-500", isSmallScreen ? "text-xs" : "text-sm")}>
-                                            <span>{error}</span>
-                                        </div>
-                                    )}
-                                </div>
-                                <div className={cname("flex justify-end gap-2 pt-2", isSmallScreen ? "" : "pt-4 gap-3")}>
-                                    <Button variant="outlined" onClick={closeSideDialog} className={isSmallScreen ? "px-3 py-1 text-xs" : ""} color="default">{t('cancel')}</Button>
-                                    <Button onClick={handleRenameSave} disabled={isLoading} className={cname("bg-blue-600 hover:bg-blue-700", isSmallScreen ? "px-3 py-1 text-xs" : "")}>
-                                        {isLoading ? t('saving') : t('save')}
-                                    </Button>
-                                </div>
-                            </div>
-                        </>
-                    )}
-                </SideDialogContent>
-            </Dialog>
-        </>
-    )
 }

@@ -20,7 +20,7 @@ vi.mock("@/controllers/request", () => ({
 }));
 // Advanced processing tools have their own entry tests; keep history reads isolated.
 vi.mock("@/pages/KnowledgePage/components/SpaceFileTools", () => ({
-  SpaceFileTools: () => null,
+  SpaceFileTools: ({ children }: { children?: (items: React.ReactNode) => React.ReactNode }) => children?.(null) ?? null,
 }));
 const scope: KnowledgeQueryScope = {
   identityKey: "user:7",

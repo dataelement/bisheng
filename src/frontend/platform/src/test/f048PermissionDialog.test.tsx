@@ -150,13 +150,13 @@ describe("F048 PermissionDialog", () => {
       await screen.findByTestId("legacy-permission-grant-layout"),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole("button", { name: "subject.user" }),
+      screen.getByRole("tab", { name: "subject.user" }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole("button", { name: "subject.department" }),
+      screen.getByRole("tab", { name: "subject.department" }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole("button", { name: "subject.userGroup" }),
+      screen.getByRole("tab", { name: "subject.userGroup" }),
     ).toBeInTheDocument()
   })
 

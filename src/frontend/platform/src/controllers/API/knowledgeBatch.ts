@@ -49,13 +49,13 @@ function body(command: BatchCommand) {
 export async function inspectBatch(
   command: BatchCommand,
 ): Promise<{ inspection: BatchInspection; tenant: string }> {
-  const inspection = await request.post<unknown, BatchInspection>(
-    `${path(command)}/inspect`,
-    body(command),
-  );
+  const inspection = await inspectBatchItems(command);
   const tenant = managementRequestScope();
   if (tenant === null) throw new Error("management_scope_unavailable");
   return { inspection, tenant: String(tenant) };
+}
+export function inspectBatchItems(command: BatchCommand): Promise<BatchInspection> {
+  return request.post<unknown, BatchInspection>(`${path(command)}/inspect`, body(command));
 }
 export function precheckBatch(command: BatchCommand, tenant: string): Promise<OperationPrecheck> {
   return request.post<unknown, OperationPrecheck>(`${path(command)}/precheck`, body(command), {

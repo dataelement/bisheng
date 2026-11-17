@@ -13,6 +13,7 @@ import {
   type KnowledgeQueryScope,
 } from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
+import { resolveKnowledgeParseFailure } from "../knowledgeParseFailureMessage";
 import useKnowledgeStore from "../useKnowledgeStore";
 import PreviewFile from "./PreviewFile";
 import PreviewParagraph from "./PreviewParagraph";
@@ -179,7 +180,10 @@ function PreviewPane({
         );
         if (signal?.aborted)
           throw new DOMException("Retired preview", "AbortError");
-        if (value.status === "error") throw new Error(t("previewFailed"));
+        if (value.status === "error")
+          throw new Error(
+            resolveKnowledgeParseFailure(value.data, t) ?? t("previewFailed"),
+          );
         if (value.status === "completed") return value;
         await wait(signal);
       }
@@ -212,8 +216,10 @@ function PreviewPane({
     if (query.error) showApiError(query.error);
   }, [query.error]);
   useEffect(() => {
-    onBusy(query.isFetching || query.isError || saving || Boolean(failed));
-  }, [query.isFetching, query.isError, saving, failed, onBusy]);
+    // Preview loading is scoped to the preview panel. Errors can be handled by retrying
+    // or by leaving the preview flow through direct upload.
+    onBusy(query.isFetching || saving || Boolean(failed));
+  }, [query.isFetching, saving, failed, onBusy]);
   useEffect(() => {
     if (value?.status === "completed")
       onPreview(file.id, { value, fingerprint });
@@ -252,7 +258,11 @@ function PreviewPane({
   if (query.isError)
     return (
       <div role="alert">
-        <p>{t("previewFailed")}</p>
+        <p>
+          {query.error instanceof Error && query.error.message
+            ? query.error.message
+            : t("previewFailed")}
+        </p>
         <Button
           onClick={() => {
             void query.refetch();
@@ -262,7 +272,7 @@ function PreviewPane({
         </Button>
       </div>
     );
-  if (!data || !value) return <p role="status">{t("loading")}</p>;
+  if (!data || !value) return <p role="status">{t("previewInProgress")}</p>;
   const previewFile = {
     ...file,
     id: file.id,

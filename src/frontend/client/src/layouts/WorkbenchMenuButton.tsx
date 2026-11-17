@@ -7,6 +7,8 @@ interface WorkbenchMenuButtonProps extends ButtonHTMLAttributes<HTMLButtonElemen
 
 /** Only the Web shell owns the global workbench drawer. Local navigation stays separate. */
 export function WorkbenchMenuButton(props: WorkbenchMenuButtonProps) {
-  const { channel } = useClientEnvironment();
-  return channel === "web" ? <button type="button" {...props} /> : null;
+  const { channel, capabilities } = useClientEnvironment();
+  const hostOwnsHeader = capabilities?.hasHostChatHeader === true;
+  if (channel !== "web" || hostOwnsHeader) return null;
+  return <button type="button" {...props} />;
 }

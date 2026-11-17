@@ -21,6 +21,13 @@ export function truncateSpaceText(value: string, limit: number): string {
   }
   return value.slice(0, end);
 }
+export function validSpaceText(name: string, description: string): boolean {
+  return (
+    Boolean(name.trim()) &&
+    getSpaceTextLength(name) <= SPACE_NAME_LIMIT &&
+    getSpaceTextLength(description) <= SPACE_DESCRIPTION_LIMIT
+  );
+}
 export interface SpaceSettingsDraft {
   name: string;
   description: string;
@@ -65,9 +72,7 @@ export function validSpaceSettings(
   tagsTouched: boolean,
 ): boolean {
   return (
-    Boolean(value.name.trim()) &&
-    getSpaceTextLength(value.name) <= SPACE_NAME_LIMIT &&
-    getSpaceTextLength(value.description) <= SPACE_DESCRIPTION_LIMIT &&
+    validSpaceText(value.name, value.description) &&
     (!tagsTouched ||
       !value.autoTag ||
       (value.tagMode === "custom"

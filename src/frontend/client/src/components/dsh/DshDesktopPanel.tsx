@@ -2,8 +2,9 @@ import { Button } from '@bisheng/ui';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { dshLaunchUrl } from '~/utils/dshLaunch';
-import { getDshUsageSummary } from '~/api/dsh';
+import { getDshCredits, getDshUsageSummary } from '~/api/dsh';
 import { useAuthContext, useLocalize } from '~/hooks';
+import { DshCreditsCard } from './DshCreditsCard';
 import { DshUsageCalendar } from './DshUsageCalendar';
 
 interface DshDesktopPanelProps {
@@ -25,6 +26,10 @@ export function DshDesktopPanel({ downloadUrl, launchUrl }: DshDesktopPanelProps
     queryKey: ['dsh-self-usage-summary', user?.id], enabled: Boolean(user?.id), retry: false, staleTime: 0,
     queryFn: ({ signal }) => getDshUsageSummary(signal),
   });
+  const credits = useQuery({
+    queryKey: ['dsh-self-credits', user?.id], enabled: Boolean(user?.id), retry: false, staleTime: 0,
+    queryFn: ({ signal }) => getDshCredits(signal),
+  });
   return <>
     <div className="flex flex-wrap gap-2">
       <Button onClick={handleOpenDesktop}>{t('dsh_open')}</Button>
@@ -33,6 +38,9 @@ export function DshDesktopPanel({ downloadUrl, launchUrl }: DshDesktopPanelProps
     {launchAttempted && <p role="status" className="text-body-sm text-text-2">
       {t(downloadUrl ? 'dsh.launchHelp' : 'dsh.launchHelpNoDownload')}
     </p>}
+    {/* Credits fail independently of the usage chart; a gap here never hides the chart. */}
+    {credits.isError ? <p role="alert">{t('dsh_load_error')} <Button variant="link" onClick={() => void credits.refetch()}>{t('dsh_retry')}</Button></p> :
+      credits.data && <DshCreditsCard credits={credits.data} />}
     {usage.isLoading ? <p role="status">{t('dsh_loading')}</p> : usage.isError ?
       <p role="alert">{t('dsh_load_error')} <Button variant="link" onClick={() => void usage.refetch()}>{t('dsh_retry')}</Button></p> :
       usage.data && <DshUsageCalendar summary={usage.data} />}

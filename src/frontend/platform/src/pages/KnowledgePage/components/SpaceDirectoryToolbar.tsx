@@ -20,7 +20,6 @@ interface SpaceDirectoryToolbarProps {
   onBatchRetry?: () => void;
   onBatchTag?: () => void;
   onMove?: () => void;
-  onMoveJobs?: () => void;
   selectedCount?: number;
   onDeleteSelected?: () => void;
   onReferences?: () => void;
@@ -41,7 +40,6 @@ export function SpaceDirectoryToolbar({
   onBatchRetry,
   onBatchTag,
   onMove,
-  onMoveJobs,
   selectedCount = 0,
   onDeleteSelected,
   onReferences,
@@ -61,7 +59,7 @@ export function SpaceDirectoryToolbar({
   };
   if (toolbarTarget !== undefined) {
     const controls = (
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-3">
         <Dropdown
           align="end"
           menu={
@@ -89,11 +87,6 @@ export function SpaceDirectoryToolbar({
                   {t("batch.retry")}
                 </DropdownItem>
               )}
-              {onMoveJobs && (
-                <DropdownItem onSelect={onMoveJobs}>
-                  {t("move.jobs")}
-                </DropdownItem>
-              )}
               {onReferences && (
                 <DropdownItem onSelect={onReferences}>
                   {t("deletion.references")}
@@ -111,9 +104,10 @@ export function SpaceDirectoryToolbar({
             </>
           }
         >
-          <Button variant="outlined" color="default" icon={<Outlined.Down />}>
+          <Button variant="outlined" color="default">
             {t("detail.batch")}
             {selectedCount > 0 ? ` (${selectedCount})` : ""}
+            <Outlined.Down />
           </Button>
         </Dropdown>
         {(canCreateFolder || canUpload) && (
@@ -141,7 +135,10 @@ export function SpaceDirectoryToolbar({
               </>
             }
           >
-            <Button icon={<Outlined.Plus />}>{t("detail.add")}</Button>
+            <Button variant="outlined" color="default" className="text-text-1">
+              {t("detail.add")}
+              <Outlined.Down />
+            </Button>
           </Dropdown>
         )}
       </div>
@@ -165,11 +162,6 @@ export function SpaceDirectoryToolbar({
             {t("batch.retry")}
           </Button>
         </>
-      )}
-      {onMoveJobs && (
-        <Button variant="outlined" onClick={onMoveJobs}>
-          {t("move.jobs")}
-        </Button>
       )}
       {selectedCount > 0 && (
         <Button color="danger" variant="outlined" onClick={onDeleteSelected}>

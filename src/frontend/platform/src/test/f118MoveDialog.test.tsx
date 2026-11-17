@@ -39,13 +39,14 @@ vi.mock("@/pages/KnowledgePage/components/MoveDestinationPicker", () => ({
       value: { spaceId: number; folderId: null },
       label: string,
     ) => void;
-  }) => (
+  }) => (<>
     <button
       onClick={() => onChange({ spaceId: 42, folderId: null }, "Target root")}
     >
       destination
     </button>
-  ),
+    <button onClick={() => onChange({ spaceId: 43, folderId: null }, "Target two")}>destination two</button>
+  </>),
 }));
 vi.mock("@/pages/KnowledgePage/components/SpaceProcessingProgress", () => ({
   SpaceProcessingProgress: ({
@@ -134,7 +135,7 @@ it("reviews full mixed selection and field losses, then retries the same immutab
     });
   setup();
   fireEvent.click(screen.getByText("destination"));
-  fireEvent.click(screen.getByText("f118.processing_review_action"));
+  expect(screen.queryByText("f118.processing_review_action")).toBeNull();
   await screen.findByText("move.removed_fields: confidentiality");
   expect(screen.getByText("move.destination: Target root")).toBeTruthy();
   expect(screen.getByText("move.retained_fields: date")).toBeTruthy();
@@ -164,4 +165,48 @@ it("reviews full mixed selection and field losses, then retries the same immutab
     Object.keys(vi.mocked(api.confirmMove).mock.calls[0][1]).sort(),
   ).toEqual(["confirmation_id", "idempotency_key", "plan_digest"]);
   expect(api.precheckMove).toHaveBeenCalledOnce();
+});
+
+it("checks the selected destination automatically and moves after one confirmation", async () => {
+  vi.mocked(api.precheckMove).mockResolvedValue({ ...plan, invalid_items: [], requires_skip_confirmation: false });
+  vi.mocked(api.confirmMove).mockResolvedValue({ moved: [{ id: 31, type: "file" }], invalid: [] });
+  setup();
+  expect(screen.queryByText("f118.processing_review_action")).toBeNull();
+  fireEvent.click(screen.getByText("destination"));
+  await waitFor(() => expect(screen.getByRole("button", { name: "confirm" })).toBeEnabled());
+  expect(api.confirmMove).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "confirm" }));
+  expect(await screen.findByText("move.completed")).toBeVisible();
+  expect(api.confirmMove).toHaveBeenCalledOnce();
+});
+
+it("ignores a retired destination check and only confirms the current plan", async () => {
+  let resolve!: (value: typeof plan) => void;
+  vi.mocked(api.precheckMove)
+    .mockReturnValueOnce(new Promise((yes) => { resolve = yes; }))
+    .mockResolvedValueOnce({ ...plan, confirmation_id: "current-plan", invalid_items: [], requires_skip_confirmation: false });
+  vi.mocked(api.confirmMove).mockResolvedValue({ moved: [], invalid: [] });
+  setup();
+  fireEvent.click(screen.getByText("destination"));
+  await waitFor(() => expect(api.precheckMove).toHaveBeenCalledOnce());
+  fireEvent.click(screen.getByText("destination two"));
+  await screen.findByText("move.destination: Target two");
+  resolve(plan);
+  fireEvent.click(screen.getByRole("button", { name: "confirm" }));
+  await waitFor(() => expect(api.confirmMove).toHaveBeenCalledWith(40, expect.objectContaining({ confirmation_id: "current-plan" }), 101));
+});
+
+it("automatically renews an expired plan and requires fresh skip consent", async () => {
+  vi.mocked(api.precheckMove).mockResolvedValueOnce(plan).mockResolvedValueOnce({ ...plan, confirmation_id: "renewed-plan" });
+  vi.mocked(api.confirmMove).mockRejectedValueOnce({ status_code: 18087 }).mockResolvedValueOnce({ moved: [], invalid: [] });
+  setup();
+  fireEvent.click(screen.getByText("destination"));
+  fireEvent.click(await screen.findByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: "confirm" }));
+  await waitFor(() => expect(api.precheckMove).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(screen.getByRole("checkbox")).not.toBeChecked());
+  expect(screen.getByRole("button", { name: "confirm" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: "confirm" }));
+  await waitFor(() => expect(api.confirmMove).toHaveBeenLastCalledWith(40, expect.objectContaining({ confirmation_id: "renewed-plan" }), 101));
 });

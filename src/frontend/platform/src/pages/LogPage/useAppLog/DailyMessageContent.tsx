@@ -4,9 +4,10 @@ import { Atom } from 'lucide-react';
 import { Outlined } from 'bisheng-icons';
 
 import { useTranslation } from 'react-i18next';
-import { useMemo, useState, type ComponentPropsWithoutRef } from 'react';
-import ReactMarkdown, { type Components } from 'react-markdown';
-import remarkGfm from 'remark-gfm'
+import { useMemo, useState, type ReactNode } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { PlatformChatMarkdown } from '@/components/bs-comp/appChat/PlatformChatMarkdown';
 import { renderGeneratedFileLink, type GeneratedFile } from './DailyGeneratedFiles';
 
 interface MessageContentProps {
@@ -16,36 +17,32 @@ interface MessageContentProps {
     files?: GeneratedFile[];
 }
 
+function withoutLegacyWebBlock(text: string): string {
+    return text.replace(/^:::web\s+([\s\S]*?)\s+:::\s*([\s\S]*)$/, '$2');
+}
+
+const thinkingPattern = /^:::thinking\s+([\s\S]*?)\s+:::\s*([\s\S]*)$/;
+
+/** Answer body the auditor sees: legacy web blocks dropped, thinking kept out of the citation text. */
+export function visibleAnswerText(text: string): string {
+    const stripped = withoutLegacyWebBlock(text);
+    return stripped.match(thinkingPattern)?.[2] ?? stripped;
+}
+
 export const MessageContent = ({ text, chatId, files }: MessageContentProps) => {
-    const components = useMemo<Components | undefined>(() => {
-        if (!chatId) return undefined;
-        return {
-            a: ({ href, title, children }: ComponentPropsWithoutRef<'a'>) =>
-                <>{renderGeneratedFileLink(chatId, files ?? [], href, children) ?? <a href={href} title={title}>{children}</a>}</>,
-        };
-    }, [chatId, files]);
-
-    const thinkingMatch = text.match(/^:::thinking\s+([\s\S]*?)\s+:::\s*([\s\S]*)$/);
-    text = text.replace(/^:::web\s+([\s\S]*?)\s+:::\s*([\s\S]*)$/, '$2').replace(/\[citation:\d+\]/g, '');
-
-    if (thinkingMatch) {
-        const thinkingContent = thinkingMatch[1];
-        const mainContent = thinkingMatch[2];
-
-        return (
-            <>
-                <ThinkingBlock content={thinkingContent} />
-                <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-                    {mainContent}
-                </ReactMarkdown>
-            </>
-        );
-    }
+    const stripped = withoutLegacyWebBlock(text);
+    const thinkingMatch = stripped.match(thinkingPattern);
+    const answer = thinkingMatch ? thinkingMatch[2] : stripped;
+    const renderLink = useMemo(
+        () => chatId ? (href: string, children: ReactNode) => renderGeneratedFileLink(chatId, files ?? [], href, children) : undefined,
+        [chatId, files],
+    );
 
     return (
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-            {text}
-        </ReactMarkdown>
+        <>
+            {thinkingMatch && <ThinkingBlock content={thinkingMatch[1]} />}
+            <PlatformChatMarkdown content={answer} renderLink={renderLink} />
+        </>
     );
 };
 

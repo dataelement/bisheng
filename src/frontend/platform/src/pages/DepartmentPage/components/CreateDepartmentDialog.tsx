@@ -16,19 +16,21 @@ import DepartmentUsersSelect, {
 } from "@/components/bs-comp/selectComponent/DepartmentUsersSelect"
 import { createDepartmentApi } from "@/controllers/API/department"
 import { showApiError } from "@/controllers/request"
-import { useCallback, useState } from "react"
+import { useCallback, useState, type ComponentProps } from "react"
 import { useTranslation } from "react-i18next"
 
 interface CreateDepartmentDialogProps {
   defaultParentId: number | null
   onCreated: () => void
   onClose: () => void
+  onCloseAutoFocus?: ComponentProps<typeof DialogContent>["onCloseAutoFocus"]
 }
 
 export function CreateDepartmentDialog({
   defaultParentId,
   onCreated,
   onClose,
+  onCloseAutoFocus,
 }: CreateDepartmentDialogProps) {
   const { t } = useTranslation()
   const [name, setName] = useState("")
@@ -60,7 +62,7 @@ export function CreateDepartmentDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
+      <DialogContent onCloseAutoFocus={onCloseAutoFocus}>
         <DialogHeader>
           <DialogTitle>{t("bs:department.create")}</DialogTitle>
         </DialogHeader>

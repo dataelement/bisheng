@@ -1,3 +1,4 @@
+import { useClientEnvironment } from "~/hooks/useClientEnvironment";
 import { WorkbenchMenuButton } from "~/layouts/WorkbenchMenuButton";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -116,6 +117,8 @@ function ChannelSquare({
   const loadMoreLockRef = useRef(false);
   const { showToast } = useToastContext();
   const localize = useLocalize();
+  const { capabilities } = useClientEnvironment();
+  const hostOwnsHeader = capabilities?.hasHostChatHeader === true;
   const [joiningId, setJoiningId] = useState<string | null>(null);
 
   const isAtLeast768 = useMediaQuery("(min-width: 768px)");
@@ -418,7 +421,7 @@ function ChannelSquare({
     <div className="h-full w-full flex flex-col bg-white overflow-hidden">
       {/* The narrow header hosts the menu trigger. Subscription/index owns the
           persistent channel/square switch; this header shares the banner tint. */}
-      {isH5 ? (
+      {isH5 && !hostOwnsHeader ? (
         <div className="shrink-0 bg-blue-500/[0.05] pt-[calc(env(safe-area-inset-top,0px)+8px)]">
           <div className="relative flex h-11 items-center px-4">
             {onOpenMobileNav ? (

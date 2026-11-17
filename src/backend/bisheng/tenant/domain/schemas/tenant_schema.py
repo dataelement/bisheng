@@ -63,6 +63,8 @@ class TenantListItem(BaseModel):
     storage_used_gb: Optional[float] = None
     storage_quota_gb: Optional[float] = None
     create_time: Optional[datetime] = None
+    # Child Admins as [{user_id, user_name}]; None = permission lookup failed.
+    admin_users: Optional[List[Dict]] = None
 
 
 class TenantDetail(TenantListItem):

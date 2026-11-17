@@ -7,6 +7,7 @@ local function last_id(stream)
   return ''
 end
 if ARGV[1]=='mark' then
+  redis.call('SADD',KEYS[4],ARGV[2])
   return redis.call('ZADD',KEYS[1],'NX',ms,ARGV[2])
 elseif ARGV[1]=='claim' then
   local users=redis.call('ZRANGEBYSCORE',KEYS[1],'-inf',ms,'LIMIT',0,1)

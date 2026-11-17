@@ -118,6 +118,7 @@ export default function MainLayout() {
     const location = useLocation();
     const hasInsetPanel = INSET_PAGE_PATHS.has(location.pathname.replace(/\/$/, "")) ||
         matchPath("/filelib/:id", location.pathname) !== null ||
+        matchPath("/filelib/:id/settings", location.pathname) !== null ||
         matchPath("/log/chatlog/*", location.pathname) !== null;
     const pendingNavClass =
         (menuKey: string) =>
