@@ -82,7 +82,7 @@ async def serialized(copying, monkeypatch):
     return copying, held, waiting
 
 
-async def test_confirm_and_worker_serialize_the_original_projection(serialized, monkeypatch):
+async def test_confirm_returns_before_workers_serialize_the_original_projection(serialized, monkeypatch):
     copying, held, waiting = serialized
     app, ctx = copying.app, copying.ctx
     plan = await app.aprecheck(40, name="Concurrent copy", identity=ctx.user)
@@ -102,7 +102,10 @@ async def test_confirm_and_worker_serialize_the_original_projection(serialized, 
     monkeypatch.setattr(copying.transport, "write_atomic", write)
     initialize = AsyncMock()
     monkeypatch.setattr(SpaceCopyOwner, "_initialize", initialize)
-    api = asyncio.create_task(app.aconfirm(40, command(plan), identity=ctx.user))
+    accepted = await asyncio.wait_for(app.aconfirm(40, command(plan), identity=ctx.user), 1)
+    assert accepted["knowledge"].state == 0 and not callers
+    job_id = accepted["processing_job"].job_id
+    api = asyncio.create_task(SpaceCopyOwner(app).aensure_logical(accepted["knowledge"].id, job_id))
     worker = None
     try:
         await asyncio.wait_for(staged.wait(), 5)
@@ -115,7 +118,7 @@ async def test_confirm_and_worker_serialize_the_original_projection(serialized, 
         assert callers == [api]
         release.set()
         result, lease = await asyncio.wait_for(asyncio.gather(api, worker), 10)
-        assert lease is not None and result["knowledge"].state == 2
+        assert lease is not None and result is None
         initialize.assert_awaited_once()
         async with ctx.sessions() as session:
             operations = (await session.execute(sa.select(PermissionProjectionOperation))).scalars().all()
@@ -188,6 +191,11 @@ async def test_failed_closed_after_commit_reuses_the_original_journal_and_releas
     target_permission.assert_not_awaited()
     assert retried.job_id == job_id and retried.state == "accepted"
     assert not held
+    async with ctx.sessions() as session:
+        assert (await session.get(Knowledge, target_id)).state == 0
+        assert (await session.get(PermissionProjectionOperation, original_id)).status == "FAILED_CLOSED"
+    current, _ = await owner.aread(job_id)
+    await owner.astart(job_id, current.revision)
     async with ctx.sessions() as session:
         operations = (await session.execute(sa.select(PermissionProjectionOperation))).scalars().all()
         assert len(operations) == 3 and all(row.status == "FINALIZED" for row in operations)
@@ -267,9 +275,12 @@ async def test_cancelled_executor_releases_sql_exclusion_and_resumes_the_origina
             await pause.wait()
         return result
 
+    accepted = await app.aconfirm(40, command(plan), identity=ctx.user)
     with monkeypatch.context() as patch:
         patch.setattr(copying.transport, "write_atomic", write)
-        api = asyncio.create_task(app.aconfirm(40, command(plan), identity=ctx.user))
+        api = asyncio.create_task(
+            SpaceCopyOwner(app).aensure_logical(accepted["knowledge"].id, accepted["processing_job"].job_id)
+        )
         try:
             await asyncio.wait_for(committed.wait(), 5)
         finally:

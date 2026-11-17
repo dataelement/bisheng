@@ -781,6 +781,13 @@
         "publish_hint": "开启后，该知识空间会展示在广场，他人可以搜索或查看"
     },
     "space_copy_ui": {
+    "phase_preparing": "正在准备复制",
+    "in_progress": "复制中",
+    "failed": "复制失败",
+    "phase_initializing": "正在初始化权限与索引",
+    "phase_copying": "正在复制文件（{{completed}}/{{total}}）",
+    "phase_failed": "复制失败，可查看原因并重试原任务",
+    "background_notice": "任务将在后台继续，可以关闭此窗口；稍后从空间列表查看进度。",
         "title": "复制知识空间",
         "tasks": "复制任务",
         "recovery_notice": "空间复制尚未完成，请查看任务进度；失败时可重试原任务。",

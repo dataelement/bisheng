@@ -781,6 +781,13 @@
         "publish_hint": "Show this space in the square so others can search for or view it"
     },
     "space_copy_ui": {
+    "phase_preparing": "Preparing the copy",
+    "in_progress": "Copying",
+    "failed": "Copy failed",
+    "phase_initializing": "Initializing permissions and indexes",
+    "phase_copying": "Copying files ({{completed}}/{{total}})",
+    "phase_failed": "Copy failed. View the error and retry this task.",
+    "background_notice": "The task will continue in the background. You can close this window and check progress from the space list.",
         "title": "Copy knowledge space",
         "tasks": "Copy tasks",
         "recovery_notice": "This space copy is not complete. Check its progress or retry the original task if it failed.",
