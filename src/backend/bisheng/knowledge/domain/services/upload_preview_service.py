@@ -8,6 +8,7 @@ from uuid import uuid4
 from loguru import logger
 
 from bisheng.api.v1.schemas import KnowledgeFileOne, KnowledgeFileProcess
+from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.knowledge import (
     KnowledgeOperationPlanChangedError,
     KnowledgeOperationPlanConflictError,
@@ -143,6 +144,17 @@ class UploadPreviewService:
                 "partitions": partitions,
             }
             status = "completed"
+        except BaseErrorCode as exc:
+            logger.exception("Upload preview parsing failed for upload={}", upload_id)
+            status = "error"
+            # A domain error already carries an actionable code and message
+            # (missing ASR model, no recognizable audio, ...). Discarding them
+            # for a generic 10952 leaves the user with "document parsing failed".
+            result = {
+                "code": exc.code,
+                "message": exc.message,
+                "data": {"exception": str(exc), **exc.kwargs},
+            }
         except Exception:
             logger.exception("Upload preview parsing failed for upload={}", upload_id)
             status, result = "error", {"code": 10952}

@@ -13,6 +13,7 @@ import {
   type KnowledgeQueryScope,
 } from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
+import { resolveKnowledgeParseFailure } from "../knowledgeParseFailureMessage";
 import useKnowledgeStore from "../useKnowledgeStore";
 import PreviewFile from "./PreviewFile";
 import PreviewParagraph from "./PreviewParagraph";
@@ -179,7 +180,10 @@ function PreviewPane({
         );
         if (signal?.aborted)
           throw new DOMException("Retired preview", "AbortError");
-        if (value.status === "error") throw new Error(t("previewFailed"));
+        if (value.status === "error")
+          throw new Error(
+            resolveKnowledgeParseFailure(value.data, t) ?? t("previewFailed"),
+          );
         if (value.status === "completed") return value;
         await wait(signal);
       }
@@ -254,7 +258,11 @@ function PreviewPane({
   if (query.isError)
     return (
       <div role="alert">
-        <p>{t("previewFailed")}</p>
+        <p>
+          {query.error instanceof Error && query.error.message
+            ? query.error.message
+            : t("previewFailed")}
+        </p>
         <Button
           onClick={() => {
             void query.refetch();

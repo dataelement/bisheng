@@ -27,7 +27,12 @@ const mocks = vi.hoisted(() => ({
   downloadPermissions: vi.fn(),
   error: vi.fn(),
   legacy: vi.fn(),
+  toast: vi.fn(),
 }));
+vi.mock("@bisheng/ui", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@bisheng/ui")>();
+  return { ...actual, toast: { ...actual.toast, show: mocks.toast } };
+});
 vi.mock("@/controllers/request", () => ({
   default: { get: mocks.get, post: mocks.post, put: mocks.put },
   showApiError: mocks.error,
@@ -284,6 +289,10 @@ it("uses target rename independently of root edit or delete", async () => {
   await waitFor(() =>
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
   );
+  expect(mocks.toast).toHaveBeenCalledExactlyOnceWith({
+    type: "success",
+    message: "renameSuccess",
+  });
   expect(mocks.children).toHaveBeenCalledTimes(2);
   expect(
     screen.queryByRole("menuitem", { name: "delete" }),
@@ -332,6 +341,12 @@ it.each([null, 9])(
     expect(mocks.permissions).toHaveBeenCalledWith(
       parentId === null ? "knowledge_space" : "folder",
       String(parentId ?? 7),
+    );
+    await waitFor(() =>
+      expect(mocks.toast).toHaveBeenCalledExactlyOnceWith({
+        type: "success",
+        message: "f118.folder_created",
+      }),
     );
     if (parentId !== null)
       expect(mocks.permissions).not.toHaveBeenCalledWith(
@@ -482,6 +497,7 @@ it("keeps failed rename open and reports the original API error", async () => {
   await rename();
   fireEvent.click(screen.getByRole("button", { name: "save" }));
   await waitFor(() => expect(mocks.error).toHaveBeenCalledWith(error));
+  expect(mocks.toast).not.toHaveBeenCalled();
   expect(screen.getByRole("dialog")).toBeInTheDocument();
   expect(screen.getByLabelText("name")).toHaveValue("report.pdf");
 });

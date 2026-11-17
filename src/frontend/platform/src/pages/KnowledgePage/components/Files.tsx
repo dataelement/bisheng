@@ -5,7 +5,7 @@ import { BatchOperationDialog } from "./BatchOperationDialog";
 import { BatchTagDraftDialog } from "./BatchTagDraftDialog";
 import { MoveDialog } from "./MoveDialog";
 import type { MoveSelection } from "@/controllers/API/knowledgeMove";
-import { Button, EmptyStateIllustration, StateView } from "@bisheng/ui";
+import { Button, EmptyStateIllustration, StateView, toast } from "@bisheng/ui";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -301,6 +301,12 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
         await knowledgeFilesApi.renameSpaceFolder(spaceId, token.item.id, body);
       else await knowledgeFilesApi.renameSpaceFile(spaceId, token.item.id, body);
       if (editToken.current !== token || !isCurrent(token)) return;
+      // Report the write as soon as it lands: the refreshed list may drop this
+      // row (current search/filter), which would otherwise end the flow silently.
+      toast.show({
+        type: "success",
+        message: t(token.item ? "renameSuccess" : "f118.folder_created"),
+      });
       await client.invalidateQueries({ queryKey: base });
       if (editToken.current === token && isCurrent(token)) closeEdit();
     } catch (error) {

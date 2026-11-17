@@ -1652,6 +1652,7 @@
     "tag_save_success": "Tag saved successfully",
     "tags_char_limit_exceeded": "Tag character limit exceeded",
     "tags_count_limit_exceeded": "Tags count limit exceeded",
+    "file_parse_failed_detail": "{{message}} (error code: {{code}})",
     "space_tags_limit_exceeded": "The number of tags in the current space has reached the limit of 50",
     "sensitive_violation_empty_hits": "No matched word details",
     "sensitive_violation_hits": "Matched words",

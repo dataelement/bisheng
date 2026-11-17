@@ -1577,6 +1577,7 @@
     "tag_save_success": "标签保存成功",
     "tags_char_limit_exceeded": "标签超过字符限制",
     "tags_count_limit_exceeded": "标签数超过限制",
+    "file_parse_failed_detail": "{{message}}（错误码：{{code}}）",
     "space_tags_limit_exceeded": "当前空间中标签已达50个上限",
     "sensitive_violation_empty_hits": "暂无命中词详情",
     "sensitive_violation_hits": "命中词",
