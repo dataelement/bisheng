@@ -33,7 +33,13 @@
     "copyFailed": "复制失败，请手动选中账号复制。"
   },
   "project_sync": {
-    "reason": { "not_owned": "当前账号在旧项目中没有对话，未导入", "cloud_membership_kept": "已保留云端归属", "conversation_unavailable": "对话已删除或不属于当前账号", "invalid_local_data": "本机记录损坏或格式无效", "unknown": "此项未导入" },
+    "reason": {
+      "not_owned": "当前账号在旧项目中没有对话，未导入",
+      "cloud_membership_kept": "已保留云端归属",
+      "conversation_unavailable": "对话已删除或不属于当前账号",
+      "invalid_local_data": "本机记录损坏或格式无效",
+      "unknown": "此项未导入"
+    },
     "loading": "正在加载…",
     "more": "加载更多",
     "save_failed": "项目未能保存，请重试。输入已保留。",
@@ -3084,13 +3090,10 @@
       "preference": "偏好",
       "experience": "经验"
     },
-    "recorded_at_value": "记录于 {{time}}",
     "updated_at": "最近更新",
-    "summary_label": "概要",
     "detail_label": "详情",
-    "no_detail": "暂无详情，可以让 AI 补充",
-    "event_time_value": "事件时间 {{time}}",
-    "back": "返回",
+    "no_detail": "还没有详情，可以在下方告诉 AI 补充",
+    "back": "全部记忆",
     "revise_label": "让 AI 修改这条记忆",
     "revise_placeholder": "告诉 AI 怎么改这条记忆，例如：出行改到 1 月了",
     "revise_send": "发送",
@@ -3156,6 +3159,15 @@
       "reason_12110": "记忆类型不对",
       "reason_12111": "内容为空",
       "reason_other": "操作没有成功"
+    },
+    "field": {
+      "type": "分类",
+      "source": "来源"
+    },
+    "group": {
+      "preference": "偏好",
+      "fact": "事实",
+      "experience": "经验"
     }
   }
 }

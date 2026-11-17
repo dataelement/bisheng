@@ -33,7 +33,13 @@
     "copyFailed": "コピーできませんでした。アカウントを選択してコピーしてください。"
   },
   "project_sync": {
-    "reason": { "not_owned": "このアカウントの会話が含まれないため取り込みませんでした", "cloud_membership_kept": "クラウドの所属を保持", "conversation_unavailable": "会話は削除済み、または別アカウントに所属", "invalid_local_data": "ローカル記録が無効です", "unknown": "取り込まれませんでした" },
+    "reason": {
+      "not_owned": "このアカウントの会話が含まれないため取り込みませんでした",
+      "cloud_membership_kept": "クラウドの所属を保持",
+      "conversation_unavailable": "会話は削除済み、または別アカウントに所属",
+      "invalid_local_data": "ローカル記録が無効です",
+      "unknown": "取り込まれませんでした"
+    },
     "loading": "読み込み中…",
     "more": "さらに読み込む",
     "save_failed": "保存できませんでした。入力を保持しています。再試行してください。",
@@ -3079,13 +3085,10 @@
       "preference": "好み",
       "experience": "経験"
     },
-    "recorded_at_value": "記録 {{time}}",
     "updated_at": "最終更新",
-    "summary_label": "概要",
     "detail_label": "詳細",
-    "no_detail": "詳細はまだありません。AI に追加してもらえます。",
-    "event_time_value": "イベント日付 {{time}}",
-    "back": "戻る",
+    "no_detail": "詳細はまだありません。下の入力欄で AI に追加を頼めます。",
+    "back": "すべてのメモリー",
     "revise_label": "AI にこの記憶を修正してもらう",
     "revise_placeholder": "この記憶をどう直すか AI に伝えてください（例：旅行は 1 月に変更）",
     "revise_send": "送信",
@@ -3151,6 +3154,15 @@
       "reason_12110": "メモリの種類が正しくありません",
       "reason_12111": "内容が空です",
       "reason_other": "操作が完了しませんでした"
+    },
+    "field": {
+      "type": "分類",
+      "source": "出典"
+    },
+    "group": {
+      "preference": "好み",
+      "fact": "事実",
+      "experience": "経験"
     }
   }
 }
