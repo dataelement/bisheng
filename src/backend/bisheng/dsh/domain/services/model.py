@@ -28,7 +28,7 @@ from bisheng.dsh.domain.schemas.usage import INT64_MAX, UsageEvent
 from bisheng.dsh.domain.services.access import DshPrincipal, principal_scope
 from bisheng.dsh.domain.services.model_display import model_display_name
 from bisheng.dsh.domain.services.model_metadata import model_metadata
-from bisheng.dsh.domain.services.pricing import build_snapshot, pricing_hint
+from bisheng.dsh.domain.services.pricing import billing_snapshot, pricing_hint
 from bisheng.dsh.infrastructure.chat_adapter import DshChatAdapter
 from bisheng.dsh.infrastructure.model_errors import is_context_length_error, model_failure_code
 from bisheng.dsh.infrastructure.quota_redis import QuotaRejected
@@ -165,7 +165,7 @@ class DshModelService:
                 raise DshModelNotAllowedError()
             # F016: the loaded model is read uncached, so its prices are current; freeze them now.
             setting = await self.credit_setting_reader() if self.credit_setting_reader else CreditSettingState()
-            pricing = build_snapshot((model.config or {}).get("pricing"), setting)
+            pricing = billing_snapshot((model.config or {}).get("pricing"), setting, model_id=model.id)
             try:
                 capabilities: ChatCapabilities | None = self.capabilities_for(model, server)
                 if isawaitable(capabilities):

@@ -13,6 +13,8 @@ from bisheng.llm.domain.models.llm_server import LLMModel, LLMServer
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts/backfill_model_pricing.py"
 MANUAL = {"currency": "CNY", "input": "6", "cache_read": "1", "output": "30", "source": "MANUAL", "revision": 2}
+# A damaged record: billing treats it as free, so the script must not count it as priced.
+BROKEN = {**MANUAL, "input": "-1"}
 
 
 @pytest.fixture(scope="module")
@@ -117,6 +119,43 @@ def test_gate_fails_until_prices_are_filled(script, engine):
     with Session(engine) as session, session.begin():
         script.apply(session)
     with Session(engine) as session:
+        assert script.check(session) == []
+
+
+@pytest.fixture
+def broken(engine):
+    with Session(engine) as session, session.begin():
+        session.add(
+            LLMModel(
+                id=13,
+                tenant_id=1,
+                server_id=1,
+                name="broken",
+                model_name="qwen-flash",
+                model_type="llm",
+                config={"max_tokens": 4, "pricing": BROKEN},
+                user_id=1,
+            )
+        )
+    return engine
+
+
+def test_an_invalid_price_is_shown_replaced_and_then_passes_the_gate(script, broken):
+    with Session(broken) as session:
+        line = next(line for line in script.plan(session) if line["model_id"] == 13)
+        problems = script.check(session)
+    assert (line["action"], line["result"]) == ("replace invalid", "catalog qwen/qwen-flash")
+    assert '"input": "-1"' in line["was"]
+    assert [p for p in problems if "id=13" in p] == [
+        "model with invalid price: tenant=1 server=百炼 model=qwen-flash id=13 "
+        "(billed as free; run --apply to replace it from the catalog, or set a price in the admin table)"
+    ]
+    with Session(broken) as session, session.begin():
+        assert script.apply(session) == 3
+    with Session(broken) as session:
+        config = session.get(LLMModel, 13).config
+        assert config["pricing"]["catalog_key"] == "qwen/qwen-flash" and config["max_tokens"] == 4
+        assert session.get(LLMModel, 11).config["pricing"] == MANUAL  # valid prices are never touched
         assert script.check(session) == []
 
 

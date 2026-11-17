@@ -4448,7 +4448,7 @@
       "price": "价格",
       "priceSummary": "输入 {{input}} / 输出 {{output}}（{{currency}}）",
       "missingTag": "价格缺失",
-      "missingHelp": "这个模型还没有价格，员工调用会被拒绝。请在模型配置里保存一次，或让运维运行升级补价脚本。",
+      "missingHelp": "这个模型还没有价格，员工调用暂按免费计（扣 0 积分）。请在这里设置价格，或让运维运行升级补价脚本按价格表补齐。",
       "defaultTag": "默认 0",
       "priceDialogTitle": "价格",
       "priceDialogHelp": "单位为每百万 token。保存后，之后开始的调用按新价格扣积分。",
