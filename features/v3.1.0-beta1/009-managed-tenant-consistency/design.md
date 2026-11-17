@@ -97,14 +97,14 @@
 
 ### 4.3 绑定生产者：同步校验/删除，移除三层恢复编排
 
-纳入本地人员创建/编辑、批量默认发放、SSO角色替换、成员退出、部门归档/移动/挂载、两种主属更改中**直接产生策略结果的步骤**。不重做组织同步、凭据或身份投影框架。
+纳入本地人员创建/编辑、批量默认发放、SSO角色替换、成员退出、部门归档/移动、两种主属更改中**直接产生策略结果的步骤**。不重做组织同步、凭据或身份投影框架。
 
 - 所有字段先预检：跨租户兼属提交角色变更，在姓名/组/成员提交前拒绝；候选可见不等于写入合法。前端提供只读原因，后端独立拒绝。
 - 新绑定显式写目标H。无作用域/global直接策略离开同H单部门时保留；作用域角色失去最后支持才删除；不引入部门授予来源。
-- 定义缩小、成员变化和拓扑变化以同数据库UoW调用user owner的“按最终事实删除非法普通绑定”方法；Role/Department Service不能直接接管UserRole ORM。Role定义及其失效绑定在同事务提交；部门移动要枚举受影响主属与兼属成员，不能只做sync_subtree_primary_users。
+- 定义缩小、显式成员变化和部门移动（不含标记子租户）以同数据库UoW调用user owner的“按最终事实删除非法普通绑定”方法；Role/Department Service不能直接接管UserRole ORM。Role定义及其失效绑定在同事务提交；部门移动要枚举受影响主属与兼属成员，不能只做sync_subtree_primary_users。
 - 同步事务成功才报告该SQL步骤完成，失败整体回滚；不异步删除一批再返回成功。锁采用既定角色ID→用户ID顺序，所有相关新增绑定入口在锁内重验资格。规模/耗时需要集中测试；超时失败回滚，不未经测量加批量状态机。
 - SSO保存变更前成员事实，只对真实新增的合法同H成员/新H激活发默认；不重发相同成员快照下人工撤销的角色。将角色发放放在权威H解析之后，不在Root+bypass先写角色。
-- H迁移终止旧普通绑定，不复制同名角色/旧global授予；平台身份独立。现有主属入口组织结果保留，不把“降为兼属”和“删除旧关系”顺手统一。
+- 真正调岗、部门移动及解绑派生的H迁移终止旧普通绑定，不复制同名角色/旧global授予；标记子租户及主属补同步保留原绑定且不发默认角色，按当前H和定义资格判定可用性；平台身份独立。现有主属入口组织结果保留，不把“降为兼属”和“删除旧关系”顺手统一。
 - 现有组织/身份后置同步失败必须明确报错，不称完整成功；E读取发现当前主属与权威主部门/挂载不一致则拒绝敏感政策决策。恢复仍依现有身份同步及受控重试，不承诺新父子操作账本/全系统效果屏障。此为原AC-13/AC-14的范围收窄。
 - 绑定终止记录走现有业务审计，包含actor、subject、当前H及增删ID/原因；旧/新H由既有迁移审计事件记录；不把审计表当任务队列。审计和跨系统效果的原子恰好一次保证延期，不改全站审计sink。
 
@@ -149,11 +149,11 @@ Knowledge新增 `copy_source_id: int | null`（目标记源）与 `copy_target_i
 - 旧 `/user/info` 使用LoginUser请求内E；旧建人UserService.create_user改async（API唯一调用方同步await），初始Root无主属账户先校验合法角色，再同步H/发放；旧role重置不写操作者M。
 - E sync及部门业务目录接受内部可选session，DSH同UoW读当前事实；普通模型调用不先加载全组织目录。无新缓存或全模型刷新。
 - 工具更新按父creator预算、T及子项净增量判断；角色delta与租户delta分别计算，合法零增量替换保留。新增子项继承父T及creator。
-- 发布线FlowService.create_workflow负责父/v0/F118绑定同事务，SQL提交后complete_creation投影/READY，保留PENDING故障定位；挂载创建沿tenant_creation coverage factory同事务终止绑定，历史migration_origin只豁免个人空间数量。
+- 发布线FlowService.create_workflow负责父/v0/F118绑定同事务，SQL提交后complete_creation投影/READY，保留PENDING故障定位；挂载创建沿tenant_creation coverage factory建立边界及覆盖证明，保持原角色绑定不变，历史migration_origin只豁免个人空间数量。
 - 工具/Flow内部CreationRepository负责精确load/READY CAS；permission business_action负责super/public前负向就绪门禁。Flow联合应用查询、simple读和版本查询同样覆盖；这些都不提供新的权限ALLOW。
 - 原权限创建恢复使用现有稳定key（包含原owner）、冻结checksum与store/model；PREPARED且owner SQL未准备时按同key重新prepare；原操作FINALIZED后核实mode.operation_id/version=1/CURRENT和CREATOR，再完成owner/assignee/visible镜像。FAILED_CLOSED不重放。
 - 复制可信header仅两条copy任务启用，body T需匹配可信ContextVar；领取前和发布前复核当前actor。Knowledge复制过的库仍可再作源，copy_source_id是其历史来源，copy_target_id才是当前占用；正常未发布草稿不视为复制目标。
-- role绑定审计显式operator，系统同步为-1；迁移在激活前终止所有历史H普通绑定，首次SSO账户显式默认角色可在首次H合法重建，同快照/回迁不恢复。scope扩大和新增成员支持前先清旧无效绑定，避免历史脏行获得新资格。
+- role绑定审计显式operator，系统同步为-1；显式组织变更在激活前终止所有历史H普通绑定，首次显式主部门激活可承接明确账户默认角色；挂载、登录及定时/手工主属补同步不改绑、不补默认，真正调岗回迁不恢复。scope扩大和新增成员支持前先清旧无效绑定，避免历史脏行获得新资格。
 - 人员表单E不可确定返回24006；政策混合请求在姓名/组写前验证H一致，跨租户兼属返回policy_editable=false、role_apply_status=NOT_APPLICABLE_CROSS_TENANT。同H为APPLICABLE；不新增UNAVAILABLE静默空政策。
 - SSO组织父路径变更同SQL更新后代路径，终止涉及主属+兼属的失效绑定；禁用挂载必须报政策不可确定，不能采纳旧resolver的Root回退。
 
@@ -287,3 +287,18 @@ config=/tmp/bisheng-managed-tenant-review-config.yaml PYTHONPATH=. PYTHONDONTWRI
 ## 首次拦截后继续聊天修复
 
 用户明确授权T131。已由公共持久化协议注入窄会话存储适配器，保持资源执行与消息归属分离、父/消息原子保存及合法已知会话历史/重连；最终数据流、边界及验证以[本轮交付](continuation-fix-delivery-20261116.md)和optional-gateway-compat.md最终实现段为准。首次记录不因继续而迁移，Java/表结构不变。旧架构依赖不在本轮扩大，现场仍待验。
+
+
+## 2026-11-17 子租户登录及挂载兼容修订
+
+依据本轮用户指令及 spec.md 同日修订。v3.0.0 已有 is_child_admin 前端管理放行和租户内资源权限，但其登录无角色检查也遗漏独立子租户管理员；本次补齐登录与管理端默认落点，不将身份转换为 AdminRole。
+
+LoginUser.is_home_tenant_admin 通过 permission.application 核验真实主属；不使用管理选择，不信任传入角色编号，Root及平台身份跳过子租户身份查询。管理入口只合并 admin/sys/system_config，原侧栏路由仍按 is_child_admin 放行租户业务功能；普通角色/额度及具体资源权限不变。权限服务错误传播，撤销后重新读取不放行。
+
+create_mounted_tenant_with_coverage 删除自动退役绑定步骤；UserTenantSyncService 仅在 DEPT_CHANGE、DEPT_MOVED、UNMOUNT_REDERIVE 显式组织变更时执行原角色终止及默认规则。MOUNT_BACKFILL、LOGIN、CELERY_RECONCILE、MANUAL 只同步主属与既有身份后置步骤，原绑定所有字段保持，目标部门有默认配置也不补授。这样挂载后首次补同步失败再经登录/Beat恢复，不会重新解释成角色授权操作。账号/SSO/显式角色写入入口不纳入此次角色语义改造。
+
+此选择保持 v3.0.0 的挂载角色存储行为及当前有效角色隔离；不新增持久字段或挂载请求协议。若将来要求行政划分自动承接策略，应另行明确映射、原子性和撤权重试规则，不能重新在通用主属同步中推导授权。
+
+已知坑：仅按 mount.backfill 跳过角色操作不足以覆盖后续 login/Celery 补同步；保留记录不表示跨租户生效。既有挂载提交后人员同步/初始管理员授予仍分步骤，此补丁不承诺整流程原子恢复。
+
+修订记录：2026-11-17，按用户指定的 v3.0.0 兼容语义修订挂载及管理员入口；本地证据及现场待验见 child-admin-mount-compat-delivery-20261117.md。

@@ -21,6 +21,7 @@ async def ordinary_policy(policy_db, monkeypatch):
     monkeypatch.setattr(module, "get_async_db_session", policy_db.sessions)
     monkeypatch.setattr(module, "get_sync_db_session", policy_db.sync_sessions)
     monkeypatch.setattr("bisheng.utils.http_middleware._check_is_global_super", AsyncMock(return_value=False))
+    monkeypatch.setattr("bisheng.permission.application.is_tenant_admin", AsyncMock(return_value=False))
     with bypass_tenant_filter():
         async with policy_db.sessions() as session:
             await session.exec(delete(UserRole).where(UserRole.user_id == 77, UserRole.role_id == 1))

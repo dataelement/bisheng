@@ -180,7 +180,7 @@ async def test_sso_subtree_move_updates_descendants_and_retires_secondary_suppor
             assert not (await session.exec(select(UserRole).where(UserRole.user_id == 77, UserRole.role_id == 9))).all()
 
 
-async def test_mounted_tenant_factory_retires_bindings_in_its_coverage_transaction(binding_db, monkeypatch):
+async def test_mounted_tenant_factory_preserves_original_bindings(binding_db, monkeypatch):
     from types import SimpleNamespace
     from unittest.mock import AsyncMock, Mock
 
@@ -215,5 +215,12 @@ async def test_mounted_tenant_factory_retires_bindings_in_its_coverage_transacti
         async with binding_db.sessions() as session:
             assert (await session.get(Department, 30)).mounted_tenant_id == tenant.id
             bindings = (await session.exec(select(UserRole).where(UserRole.user_id == 77))).all()
-            assert {(row.role_id, row.tenant_id) for row in bindings} == {(1, 1)}
+            assert {(row.role_id, row.tenant_id) for row in bindings} == {
+                (1, 1),
+                (2, 2),
+                (3, 2),
+                (4, 2),
+                (5, 2),
+                (2, 3),
+            }
     certify.assert_awaited_once()
