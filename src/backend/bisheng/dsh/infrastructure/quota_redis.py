@@ -452,7 +452,11 @@ class QuotaRedis:
         return {
             "used": used,
             "limit": limit,
-            "remaining": sum(max(allowed - models.get(model, 0), 0) for model, allowed in model_limits.items()),
+            "remaining": (
+                max(limit - used, 0)
+                if result[9] == "shared"
+                else sum(max(allowed - models.get(model, 0), 0) for model, allowed in model_limits.items())
+            ),
             "model_limits": model_limits,
             "source": "live",
             "as_of": datetime.fromtimestamp(int(result[4]) + int(result[5]) / 1000000, UTC),
