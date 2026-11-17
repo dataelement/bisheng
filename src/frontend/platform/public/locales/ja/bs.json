@@ -4474,6 +4474,7 @@
       "baseModel": "基準モデル",
       "baseModelHelp": "クレジット倍率が 1.00x になるモデルです。倍率の表示だけに影響し、消費量には影響しません。",
       "baseModelDefault": "日常チャットの既定モデル",
+      "baseModelOption": "{{model}}（{{provider}}）",
       "baseUnavailable": "基準モデルが利用できない（削除・オフライン・価格なし・無料）ため、クレジット倍率を表示していません。",
       "settings": "クレジット換算",
       "settingsHelp": "1 クレジットの金額を設定します。変更はその後に開始する呼び出しから適用されます。",
