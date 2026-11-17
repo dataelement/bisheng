@@ -140,6 +140,28 @@ _SUMMARIZER_ACTIVE: contextvars.ContextVar[bool] = contextvars.ContextVar(
 )
 _REGISTERED_PROVIDERS: set[str] = set()
 
+# The user's own messages that a compression cuts off, carried from
+# ``_partition_messages`` to ``_build_new_messages_with_path``. The framework
+# calls the two back to back in the same context (automatic compression and the
+# compact tool alike); a ContextVar keeps parallel subagent runs that share one
+# middleware instance apart.
+_PINNED_USER_TEXTS: contextvars.ContextVar[tuple[str, ...]] = contextvars.ContextVar(
+    "bisheng_linsight_pinned_user_texts", default=()
+)
+# additional_kwargs key on the summary message listing the pinned texts, so the
+# next compression forwards them instead of re-reading them from a summary.
+_PINNED_KEY = "bisheng_pinned_user_texts"
+
+
+def _pinned_section(texts: Sequence[str]) -> str:
+    body = "\n\n---\n\n".join(texts)
+    return (
+        "The user's own messages from the compressed part of this conversation follow verbatim. "
+        "They still define the task, its constraints and the expected output; the summary after "
+        "them records progress only and never replaces them.\n\n"
+        f"<user_messages>\n{body}\n</user_messages>\n\n"
+    )
+
 
 class BishengSummarizationMiddleware(SummarizationMiddleware):
     """deepagents' summarization with task-mode budgets.
@@ -150,6 +172,13 @@ class BishengSummarizationMiddleware(SummarizationMiddleware):
     exactly the framework defaults (spec AC-08). In both modes a failed summary
     is retried once and then fails the task instead of replacing the history
     with an error string (spec AC-17, AC-18).
+
+    The user's own messages that a compression cuts off go into the summary
+    message verbatim and are forwarded by every later compression. Before this,
+    the task instruction survived only as the summary model's paraphrase; on 106
+    (2026-11-16) the third chained compression of a run restated the task as
+    "review this prospectus for investment value" and the run wrote a report
+    instead of the requested JSON.
 
     Its ``name`` is the class name, not the framework's public alias, so the
     harness-profile exclusion of ``SummarizationMiddleware`` leaves it in place.
@@ -227,6 +256,34 @@ class BishengSummarizationMiddleware(SummarizationMiddleware):
             return super()._count_tokens(messages, system_message, tools)
         counted = [system_message, *messages] if system_message is not None else list(messages)
         return count_context_tokens(counted, tools)
+
+    def _partition_messages(self, conversation_messages: list, cutoff_index: int) -> tuple[list, list]:
+        to_summarize, preserved = super()._partition_messages(conversation_messages, cutoff_index)
+        texts: list[str] = []
+        for message in to_summarize:
+            if not isinstance(message, HumanMessage):
+                continue
+            if self._is_summary_message(message):
+                texts.extend(message.additional_kwargs.get(_PINNED_KEY) or ())
+            elif text := _content_text(message.content).strip():
+                texts.append(text)
+        _PINNED_USER_TEXTS.set(tuple(dict.fromkeys(texts)))
+        return to_summarize, preserved
+
+    def _build_new_messages_with_path(self, summary: str, file_path: str | None) -> list:
+        texts = _PINNED_USER_TEXTS.get()
+        _PINNED_USER_TEXTS.set(())
+        messages = super()._build_new_messages_with_path(summary, file_path)
+        if not texts:
+            return messages
+        head = messages[0]
+        return [
+            HumanMessage(
+                content=_pinned_section(texts) + _content_text(head.content),
+                additional_kwargs={**head.additional_kwargs, _PINNED_KEY: list(texts)},
+            ),
+            *messages[1:],
+        ]
 
     def _check_summary(self, summary: str, attempt: int) -> bool:
         if not summary.startswith(_SUMMARY_FAILURE_PREFIXES):

@@ -16,6 +16,7 @@ import { Outlined } from 'bisheng-icons';
 import { memo, useState, type FC } from 'react';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
+import { toolCallDisplayName } from '~/utils/toolCallName';
 import CollapsibleTimelineItem from './CollapsibleTimelineItem';
 import { ACCENT, BODY, MUTED } from './execTokens';
 import { detailTextCls, formatStepParams, stepTypeIcon } from './StepRow';
@@ -59,15 +60,16 @@ const INK_GLYPH = '[&>svg]:text-text-1';
 /** Resolve the running / finished verb-phrase title for a tool step. */
 function resolveTitle(step: MergedStep, localize: ReturnType<typeof useLocalize>): string {
     const key = (step.name || '').toLowerCase();
+    const name = toolCallDisplayName(step.name || localize('com_tools_generic_fallback'));
     const verb = TOOL_VERB_I18N[key];
     if (step.running) {
         // Mirror ToolCallDisplay inflight phrasing; verb maps are past-tense, so
-        // running steps use the generic "Calling X" form against the raw name.
-        return localize('com_tools_state_tool_running', { name: step.name || localize('com_tools_generic_fallback') });
+        // running steps use the generic "Calling X" form with the display name.
+        return localize('com_tools_state_tool_running', { name });
     }
     if (verb) return localize(verb);
     // Fallback: "Used {name}" (North Star generic-tool phrasing).
-    return localize('com_tools_state_tool_done', { name: step.name || localize('com_tools_generic_fallback') });
+    return localize('com_tools_state_tool_done', { name });
 }
 
 const ToolRowLiteBase: FC<ToolRowLiteProps> = ({ step, memorySearches }) => {

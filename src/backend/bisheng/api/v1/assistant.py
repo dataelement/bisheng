@@ -7,6 +7,7 @@ from loguru import logger
 
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.v1.schemas import AssistantCreateReq, AssistantUpdateReq, StreamData, resp_200
+from bisheng.chat_session.application.conversation_persistence import ConversationPersistence
 from bisheng.common.chat.manager import ChatManager
 from bisheng.common.chat.types import WorkType
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -274,6 +275,7 @@ async def chat(
             login_user,
             WorkType.GPTS,
             websocket,
+            conversation_persistence=ConversationPersistence(login_user.user_id, user=login_user),
             flow_lease_id=flow_lease_id,
             memory_register=memory_register,
         )

@@ -9,12 +9,13 @@ interface StreamDouble {
     options: StreamOptions;
     emit: (name: string, event?: unknown) => void;
 }
+type MockStreamListeners = Map<string, ((event: unknown) => void)[]>;
 const mockStreams: StreamDouble[] = [];
 const mockHandles: ChatStreamHandle[] = [];
 
 jest.mock('sse.js', () => ({ SSE: class {
     readyState = 1;
-    listeners = new Map<string, ((event: unknown) => void)[]>();
+    listeners: MockStreamListeners = new Map();
     options: StreamOptions;
     constructor(_url: string, options: StreamOptions) {
         this.options = options;
@@ -31,7 +32,7 @@ jest.mock('sse.js', () => ({ SSE: class {
     dispatchEvent(event: { type: string }) { this.emit(event.type, event); }
 } }));
 jest.mock('~/api/chatApi', () => ({ getSSEUrl: () => '/chat' }));
-jest.mock('~/api/request', () => ({ translateApiErrorMessage: () => '' }));
+jest.mock('~/api/request', () => ({ translateApiErrorMessage: () => '', prepareBrowserHeaders: jest.fn().mockResolvedValue({}) }));
 jest.mock('~/layouts/WorkbenchSidebar/projectChatCreation', () => ({
     captureProjectChatDraft: () => null,
     bindProjectChatCreation: () => ({}),

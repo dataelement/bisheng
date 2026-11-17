@@ -1,6 +1,8 @@
 // @ts-strict-ignore
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {
+  BrowserScopeSession,
+  needsBrowserScope,
   decodeErrorEnvelope,
   isApiError,
   isErrorEnvelope,
@@ -25,6 +27,65 @@ type ErrorOptions = {
 
 const customAxios = axios.create({
   baseURL: import.meta.env.BASE_URL,
+});
+
+/** Public, cheap endpoint served by the same backend (and gateway) as every API call. */
+const SERVICE_PROBE_PATH = "/api/v1/env";
+const SERVICE_PROBE_TIMEOUT_MS = 8000;
+let serviceProbe: Promise<void> | null = null;
+
+/**
+ * A 500 says one request failed, not that the service is down. Probe the
+ * service once; only when the probe fails too, raise the full-screen
+ * maintenance overlay. Concurrent 500s share one in-flight probe. The event
+ * name mirrors SERVICE_MAINTENANCE_EVENT in SystemMaintenanceOverlay.tsx.
+ */
+function reportServerFailure(): Promise<void> {
+  serviceProbe ??= customAxios
+    .get(SERVICE_PROBE_PATH, {
+      timeout: SERVICE_PROBE_TIMEOUT_MS,
+      skipMaintenance: true,
+      skip403Redirect: true,
+      showError: false,
+    } as AxiosRequestConfig)
+    .then(
+      () => false,
+      () => true,
+    )
+    .then((serviceDown) => {
+      if (serviceDown) window.dispatchEvent(new CustomEvent("bs:service-maintenance"));
+    })
+    .finally(() => {
+      serviceProbe = null;
+    });
+  return serviceProbe;
+}
+
+/** Test seam: resolves once the in-flight service probe (if any) has settled. */
+export function serviceProbeSettled(): Promise<void> {
+  return serviceProbe ?? Promise.resolve();
+}
+
+const browserScope = new BrowserScopeSession();
+const scopeSnapshots = new WeakMap<object, number>();
+window.addEventListener('storage', event => {
+  if (event.key === 'bs:management-scope' && event.oldValue !== event.newValue && browserScope.source !== 'credential') window.location.reload();
+});
+
+export async function prepareBrowserHeaders(method: string, url: string): Promise<Record<string, string>> {
+  if (!needsBrowserScope(method, url, window.location.origin)) return {};
+  await browserScope.ensure(async () => {
+    const response = await customAxios.post('/api/v1/admin/request-scope/bootstrap');
+    return response.data.data;
+  });
+  return browserScope.tenant === null ? {} : {'X-Management-Tenant': String(browserScope.tenant)};
+}
+
+customAxios.interceptors.request.use(async config => {
+  const headers = await prepareBrowserHeaders(config.method || 'GET', config.url || '');
+  for (const [name, value] of Object.entries(headers)) config.headers.set(name, value);
+  if (headers['X-Management-Tenant'] && browserScope.tenant !== null) scopeSnapshots.set(config, browserScope.tenant);
+  return config;
 });
 
 async function _get<T>(url: string, options?: AxiosRequestConfig & ErrorOptions): Promise<T> {
@@ -198,6 +259,12 @@ const responsePresentation = new WeakMap<object, ErrorPresentation>();
 
 customAxios.interceptors.response.use(
   async (response) => {
+    const snapshot = scopeSnapshots.get(response.config);
+    const confirmed = response.headers?.['x-management-tenant'];
+    if (snapshot !== undefined && (snapshot !== browserScope.tenant || (confirmed !== undefined && Number(confirmed) !== snapshot))) {
+      throw await normalizeRequestFailure({status_code: 19704, status_message: 'management_scope_changed'}, response);
+    }
+    if ((response.config.url || '').includes('/user/login')) browserScope.reset();
     const envelope = (await decodeErrorEnvelope(response.data)) ?? response.data;
     const url = response.config?.url || "";
     if (
@@ -234,14 +301,12 @@ customAxios.interceptors.response.use(
       return Promise.reject(err);
     }
 
-    // Backend service exception surfaced as HTTP 200 + business code 500:
-    // gateways often wrap upstream 5xx into a 200 envelope, so mirror the
-    // HTTP-500 branch below and raise the global maintenance overlay here too.
-    // Return early — the overlay covers the screen, no toast needed underneath.
+    // Business code 500 inside an HTTP 200: gateways wrap upstream 5xx this way,
+    // but the backend's resp_500 also uses it for ordinary endpoint errors. Only a
+    // failing service probe raises the overlay; the request itself keeps going
+    // through the normal business-error path so its caller can report it.
     if (envelope?.status_code === 500 && !response.config.skipMaintenance) {
-      responsePresentation.set(response, "global");
-      window.dispatchEvent(new CustomEvent("bs:service-maintenance"));
-      return response;
+      reportServerFailure();
     }
 
     // Legacy 403 default: redirect to /c/new?error=11403 unless the caller
@@ -283,11 +348,10 @@ customAxios.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // Gateway/backend service exception → surface the global maintenance overlay.
-    // Event name mirrors SERVICE_MAINTENANCE_EVENT in SystemMaintenanceOverlay.tsx.
+    // An HTTP 500 is first that one endpoint's failure: reject it to the caller,
+    // and let the service probe decide whether the whole service is down.
     if (error.response.status === 500 && !originalRequest?.skipMaintenance) {
-      responsePresentation.set(error.response, "global");
-      window.dispatchEvent(new CustomEvent("bs:service-maintenance"));
+      reportServerFailure();
     }
 
     if (originalRequest.url?.includes("/api/auth/2fa") === true) {
@@ -375,6 +439,7 @@ async function normalizeRequestFailure(cause, response?) {
     envelope,
     message: translateApiErrorMessage(envelope),
   });
+  if ([19703, 19704, 19705].includes(error.status_code ?? 0)) browserScope.pause();
   if (original && responsePresentation.has(original))
     error.presentation = responsePresentation.get(original)!;
   return error;

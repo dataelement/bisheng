@@ -3,8 +3,8 @@ import json
 from dataclasses import replace
 from hashlib import sha256
 from time import perf_counter
+from urllib.parse import urlsplit
 
-import yaml
 from fastapi import Request
 from langchain_core.tools import BaseTool
 from loguru import logger
@@ -15,6 +15,7 @@ from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.errcode.permission import PermissionEnumerationIncompleteError
 from bisheng.common.errcode.tool import (
+    ToolImageConfigError,
     ToolMcpSchemaError,
     ToolMcpStdioError,
     ToolSchemaDownloadError,
@@ -201,12 +202,19 @@ class ToolServices(BaseModel):
         for one in tool_list:
             tool_type_children[one.type].append(one)
 
+        # Include deleted children for identity: the visible-child query filters them out.
+        preset_ids = [one.id for one in res if one.is_preset == ToolPresetType.PRESET.value]
+        preset_child_keys = await GptsToolsDao.aget_preset_child_keys(preset_ids, current_tid)
         enrich_start = perf_counter()
         for one in res:
             one.children = tool_type_children.get(one.id, [])
 
             # Data desensitization
-            one.mask_sensitive_data()
+            keys = preset_child_keys.get(one.id, set())
+            one.mask_sensitive_data(
+                search_category=one.is_preset == ToolPresetType.PRESET.value and "web_search" in keys,
+                ambiguous=one.is_preset == ToolPresetType.PRESET.value and not keys,
+            )
         enrich_elapsed_ms = (perf_counter() - enrich_start) * 1000
 
         logger.info(
@@ -325,54 +333,66 @@ class ToolServices(BaseModel):
         json_masker = JsonFieldMasker()
 
         old_config = json.loads(tool_type.extra)
-        # special handle dall-e config update。 Wait until you unify this configuration with the configuration logic of other tools (the configuration parameters remain unchanged), and then delete this special processing logic
-        if tool_type.name == "Dalle3-	painting;":
-            # Instructions not toggledtab. Just changed the configuration
-            if ("azure_endpoint" in old_config and "azure_endpoint" in extra) or (
-                "azure_endpoint" not in old_config and "azure_endpoint" not in extra
-            ):
-                # Update the configuration of all tools under the Tools category
-                merge_extra = json_masker.update_json_with_masked(old_config, extra)
-                merge_extra = json.dumps(merge_extra, ensure_ascii=False)
-            elif not old_config:
-                # The description has not been configured before, it is now configured
-                merge_extra = json.dumps(extra, ensure_ascii=False)
-            else:
-                # Instructions switchedtab, you need to overwrite the previous configuration
-                merge_extra = json.dumps(extra, ensure_ascii=False)
+        child_keys = await GptsToolsDao.aget_preset_child_keys([tool_type_id], tool_type.tenant_id)
+        if child_keys.get(tool_type_id, set()) & {"image_generation", "dalle_image_generator"}:
+            from bisheng_langchain.gpts.tools.image_generation.tool import ImageGenerationError, normalize_image_config
+
+            if tool_type.is_delete or tool_type.tenant_id != get_current_tenant_id():
+                raise UnAuthorizedError()
+            try:
+                if extra.get("provider") not in (None, "", "openai") or extra.get("azure_endpoint"):
+                    raise ImageGenerationError("Unsupported image protocol")
+                old_azure = old_config.get("azure_endpoint") or old_config.get("provider") == "azure"
+                if old_azure and extra.get("provider") != "openai":
+                    raise ImageGenerationError("Reconfigure the image service")
+                merged = json_masker.update_json_with_masked(old_config, extra)
+                candidate = {
+                    key: merged[key]
+                    for key in ("openai_api_base", "openai_api_key", "openai_proxy", "model")
+                    if key in merged
+                }
+                normalized = normalize_image_config(candidate, legacy=bool(old_config) and not old_azure)
+                old_host = urlsplit(old_config.get("openai_api_base") or "https://api.openai.com/v1").hostname
+                new_host = urlsplit(normalized["openai_api_base"]).hostname
+                supplied_key = extra.get("openai_api_key")
+                if (old_azure or old_host != new_host) and (
+                    not supplied_key or json_masker.is_masked_value(supplied_key, "openai_api_key")
+                ):
+                    raise ImageGenerationError("Enter a key for the new image service")
+                merge_extra = json.dumps(normalized, ensure_ascii=False)
+            except (ImageGenerationError, ValueError, TypeError):
+                raise ToolImageConfigError() from None
         else:
-            # Update the configuration of all tools under the Tools category
-            merge_extra = json_masker.update_json_with_masked(old_config, extra)
-            merge_extra = json.dumps(merge_extra, ensure_ascii=False)
+            merge_extra = json.dumps(json_masker.update_json_with_masked(old_config, extra), ensure_ascii=False)
         await GptsToolsDao.update_tools_extra(tool_type_id, merge_extra)
         return True
 
     @staticmethod
-    async def parse_openapi_schema(download_url: str, file_content: str) -> GptsToolsTypeRead:
+    async def load_openapi_schema(download_url: str | None, file_content: str | None, *, download=None):
+        """Share content input and parsing while letting each caller select its download policy."""
         if download_url:
-            try:
+            if download is None:
                 from bisheng.api.utils import get_url_content
 
-                file_content = await get_url_content(download_url)
+                download = get_url_content
+            try:
+                file_content = await download(download_url)
             except Exception as exc:
                 # URLs and transport exceptions can contain query credentials.
                 logger.warning("Tool schema download failed ({})", type(exc).__name__)
                 raise ToolSchemaDownloadError() from None
         if not file_content:
             raise ToolSchemaEmptyError()
-        # Depending on the content of the document, is it possible to`{`At the beginning, what analytical method is used to determine
         try:
-            if file_content.startswith("{"):
-                res = json.loads(file_content)
-            else:
-                res = yaml.safe_load(file_content)
-        except Exception as e:
-            logger.exception(f"openapi schema parse error {e}")
-            raise ToolSchemaParseError(exception=e)
+            return OpenApiSchema.from_content(file_content), file_content
+        except Exception:
+            raise ToolSchemaParseError(exception=ValueError("Invalid OpenAPI document")) from None
 
+    @staticmethod
+    async def parse_openapi_schema(download_url: str, file_content: str) -> GptsToolsTypeRead:
+        schema, file_content = await ToolServices.load_openapi_schema(download_url, file_content)
         #  analyzingopenapi schemaConvert to Helper Tool Format
         try:
-            schema = OpenApiSchema(res)
             schema.parse_server()
             if not schema.default_server.startswith(("http", "https")):
                 raise ToolSchemaServerError(data={"url": schema.default_server})
@@ -552,6 +572,11 @@ class ToolServices(BaseModel):
         exist_tool_type = await GptsToolsDao.aget_one_tool_type(req.id)
         if not exist_tool_type:
             raise ToolTypeNotExistsError()
+        if exist_tool_type.is_preset == ToolPresetType.PRESET.value:
+            child_keys = await GptsToolsDao.aget_preset_child_keys([exist_tool_type.id], exist_tool_type.tenant_id)
+            keys = child_keys.get(exist_tool_type.id, set())
+            if not keys or "web_search" in keys:
+                raise ToolTypeIsPresetError()
         if req.name.__len__() > 1000 or req.name.__len__() == 0:
             raise ToolTypeNameError()
 

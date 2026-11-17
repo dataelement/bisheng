@@ -9,10 +9,18 @@ from sqlmodel import select
 from bisheng.app_governance.domain.models.runtime_audit import RuntimeAuditExport, RuntimeAuditQuerySnapshot
 from bisheng.common.errcode.app_governance import RuntimeAuditExportUnavailableError
 from bisheng.core.context.tenant import bypass_tenant_filter, tenant_execution_scope
-from bisheng.core.database import get_async_db_session
+from bisheng.core.database import get_async_db_session, get_sync_db_session
 
 
 class RuntimeAuditExportRepository:
+    @staticmethod
+    def tenant_for_message(job_id):
+        with bypass_tenant_filter():
+            with get_sync_db_session() as session:
+                return session.exec(
+                    select(RuntimeAuditExport.tenant_id).where(RuntimeAuditExport.id == job_id)
+                ).one_or_none()
+
     def __init__(self, factory=get_async_db_session):
         self.factory = factory
 

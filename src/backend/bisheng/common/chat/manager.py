@@ -20,6 +20,7 @@ from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTe
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.public_endpoints import PublicGuestAccessDisabledError
+from bisheng.common.interfaces.conversation import ConversationPersistencePort
 from bisheng.common.interfaces.resource_execution import WorkflowExecutionPort
 from bisheng.common.schemas.telemetry.event_data_schema import ApplicationAliveEventData
 from bisheng.common.services import telemetry_service
@@ -252,6 +253,7 @@ class ChatManager:
         message_admission: Callable[[], AbstractAsyncContextManager[ChatMessageExecution]] | None = None,
         workflow_execution_port: WorkflowExecutionPort | None = None,
         memory_register: Callable[[str], Any] | None = None,
+        conversation_persistence: ConversationPersistencePort | None = None,
     ):
         """``memory_register`` (F132) is passed only by logged-in endpoints; the
         client calls it whenever its chat_id is set or switched. Guest-link and
@@ -270,6 +272,7 @@ class ChatManager:
                 websocket,
                 graph_data=graph_data,
                 session_subject=session_subject,
+                conversation_persistence=conversation_persistence,
                 execution_snapshot=execution_snapshot,
                 flow_lease_id=flow_lease_id,
             )
@@ -285,6 +288,7 @@ class ChatManager:
                 work_type,
                 websocket,
                 session_subject=session_subject,
+                conversation_persistence=conversation_persistence,
                 execution_snapshot=execution_snapshot,
                 flow_lease_id=flow_lease_id,
                 workflow_execution_port=workflow_execution_port,

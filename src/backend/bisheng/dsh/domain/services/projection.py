@@ -197,7 +197,7 @@ class DshProjectionService:
         async with self.quota.topology.lock:
             await self.quota.topology.check()
             if not await self.quota.redis.set(base + ":projection_lease", owner, nx=True, px=30000):
-                return 0, False
+                return 0, True
         total, start = 0, monotonic()
         try:
             for _ in range(batches):
@@ -213,14 +213,21 @@ class DshProjectionService:
                     owner,
                 )
                 if not alive:
-                    return total, False
-            await self.cleanup_batch(tenant_id, user_id)
+                    return total, True
             async with self.quota.topology.lock:
                 await self.quota.topology.check()
-                groups = await self.quota.redis.xinfo_groups(base + ":events")
+                groups = (
+                    await self.quota.redis.xinfo_groups(base + ":events")
+                    if await self.quota.redis.exists(base + ":events")
+                    else []
+                )
                 group = next((row for row in groups if row["name"] == self.group), None)
                 # Fresh backlog can continue now. PEL owned by another process waits for normal reclaim age.
-                more = group is not None and group.get("lag") != 0
+                more = group is not None and bool(
+                    await self.quota.redis.xrange(
+                        base + ":events", min="(" + group["last-delivered-id"], max="+", count=1
+                    )
+                )
                 return total, more
         finally:
             await self.quota.redis.eval(

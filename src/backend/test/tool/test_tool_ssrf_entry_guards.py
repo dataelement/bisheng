@@ -87,7 +87,7 @@ async def test_super_admin_cannot_bypass_destination_policy(api, monkeypatch):
             "request_params": {},
         },
     )
-    assert response.json()["status_code"] == 15033
+    assert response.json()["status_code"] == 15037
     assert "SECRET" not in response.text
 
 

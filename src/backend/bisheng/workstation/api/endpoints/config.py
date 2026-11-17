@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Body, Depends, Request
+from typing import Literal
+
+from fastapi import APIRouter, Body, Depends, Query, Request
 
 from bisheng.api.v1.schemas import (
     KnowledgeSpaceConfig,
@@ -18,12 +20,17 @@ router = APIRouter()
 
 
 @router.get("/config", summary="Get workbench configuration", response_model=UnifiedResponseModel)
-async def get_config(request: Request, login_user=LoginUserDep):
+async def get_config(
+    request: Request,
+    login_user=LoginUserDep,
+    purpose: Literal["navigation"] | None = Query(default=None),
+):
+    if purpose == "navigation":
+        return resp_200(data=await WorkStationService.get_navigation_config())
     ret = await WorkStationService.get_daily_chat_config(for_picker=True)
-    from bisheng.dsh.domain.services.model_catalog import user_workbench_models
+    from bisheng.dsh.domain.services.model_catalog import workbench_models_for_display
 
-    # Every online chat model the user may see; the stored list only adds labels.
-    ret.models = await user_workbench_models(login_user.user_id)
+    ret.models = await workbench_models_for_display(login_user)
     linsight_config = await WorkStationService.get_linsight_config()
     # `enable_etl4lm` historically gated the frontend on `etl4lm.url` alone, but the
     # parse pipeline now supports mineru / paddle_ocr as alternative providers that

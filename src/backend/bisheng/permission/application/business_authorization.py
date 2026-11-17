@@ -44,6 +44,25 @@ async def _require_creation_ready(resource_type, resource_ids):
     await require_creation_ready(get_current_tenant_id(), resource_ids)
 
 
+async def _require_management_target(resource_type, resource_ids):
+    from bisheng.permission.application.request_boundary import request_business_target
+
+    expected = request_business_target()
+    if expected is None:
+        return
+    registry = await get_f048_resource_registry()
+    port = registry.port_for(resource_type)
+    loader = getattr(port, "load_permission_record", None)
+    if loader is None:
+        raise PermissionInvalidResourceError()
+    # This is a business boundary check, not a second authorization decision.
+    # Domain-owned shared-resource scopes deliberately clear the admin override.
+    for resource_id in resource_ids:
+        record = await loader(resource_id=str(resource_id))
+        if record is None or record.tenant_id != expected:
+            raise PermissionInvalidResourceError()
+
+
 @contextual_operation
 async def check_business_action(
     login_user: LoginPermissionIdentity,
@@ -55,6 +74,7 @@ async def check_business_action(
 ) -> bool:
     """Check one business-verified resource through the sole F048 facade."""
 
+    await _require_management_target(resource_type, [resource_id])
     await _require_creation_ready(resource_type, [resource_id])
     actor = actor or await resolve_permission_actor(login_user)
     action = normalize_legacy_action(action)
@@ -145,6 +165,7 @@ async def batch_check_business_actions(
     if not normalized_ids or not normalized_actions:
         return {}
 
+    await _require_management_target(resource_type, normalized_ids)
     await _require_creation_ready(resource_type, normalized_ids)
     actor = await resolve_permission_actor(login_user)
     if actor.super_admin and actor.data_scope == DATA_SCOPE_ALL:

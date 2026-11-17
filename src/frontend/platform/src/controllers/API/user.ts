@@ -124,6 +124,7 @@ export async function getRolesPageApi(params: {
 
 export async function createRoleV2Api(data: {
   role_name: string
+  role_type?: "tenant" | "global"
   department_id?: number | null
   quota_config?: Record<string, unknown>
   remark?: string

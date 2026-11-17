@@ -94,6 +94,11 @@ class ResourceAuthorizationRegistry:
             or target.resource_id != normalized_id
         ):
             raise PermissionInvalidResourceError()
+        from bisheng.permission.application.request_boundary import request_business_target
+
+        expected = request_business_target()
+        if expected is not None and target.tenant_id != expected:
+            raise PermissionInvalidResourceError()
         return target
 
     async def confirm_absent(

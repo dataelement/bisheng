@@ -22,7 +22,7 @@ def test_no_private_exception_configuration_exists():
 
 @pytest.mark.parametrize(
     "error_type,code",
-    [(DestinationDenied, 15033), (RequestFailed, 15034), (ResponseTooLarge, 15035), (RequestTimeout, 15036)],
+    [(DestinationDenied, 15037), (RequestFailed, 15038), (ResponseTooLarge, 15039), (RequestTimeout, 15040)],
 )
 def test_safe_errors_map_to_stable_business_codes_without_exception_details(error_type, code):
     error = error_type()
@@ -43,5 +43,5 @@ def test_business_errors_have_all_three_source_translations():
     root = Path(__file__).resolve().parents[3]
     for language in ("en", "ja", "zh-Hans"):
         translations = json.loads((root / "frontend/packages/locales/src/api_errors" / f"{language}.json").read_text())
-        for code in range(15033, 15037):
+        for code in range(15037, 15041):
             assert translations.get(str(code)), f"Missing {language} translation for {code}"

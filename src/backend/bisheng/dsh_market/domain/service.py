@@ -93,6 +93,13 @@ class MarketService:
         if hashlib.sha256(data).hexdigest() != version["digest"]:
             raise BundleError("Artifact digest mismatch")
         current = self.repository.get(tenant, plugin_id)
-        if current is None or current["disabled"] or current["current_version_id"] != version_id:
+        current_version = next((v for v in current["versions"] if v["id"] == version_id), None) if current else None
+        if (
+            current is None
+            or current["disabled"]
+            or current["current_version_id"] != version_id
+            or current_version is None
+            or current_version["digest"] != version["digest"]
+        ):
             raise ConflictError("Plugin state changed; refresh and retry")
         return data, version["digest"]

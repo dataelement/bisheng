@@ -1,5 +1,6 @@
 import json
 from datetime import datetime
+from urllib.parse import urlsplit
 
 from pydantic import model_validator
 from sqlalchemy import Boolean, Column, DateTime, Integer, String, UniqueConstraint, false, func, text
@@ -13,6 +14,52 @@ from bisheng.utils import generate_uuid, md5_hash
 from bisheng.utils.mask_data import JsonFieldMasker
 
 from ..const import AuthType, ToolPresetType
+
+
+def _search_list_extra(value):
+    """Return only known search configuration fields in generic responses."""
+    try:
+        data = json.loads(value) if isinstance(value, str) else value
+    except (ValueError, TypeError):
+        return "{}"
+    if not isinstance(data, dict):
+        return "{}"
+    result = {
+        key: data[key]
+        for key, kind in (("enabled", bool), ("type", str), ("prompt", str))
+        if type(data.get(key)) is kind
+    }
+    if isinstance(data.get("config"), dict):
+        providers = {}
+        for name in ("bing", "bocha", "jina", "serp", "tavily", "cloudsway", "searXNG", "deepseek"):
+            provider = data["config"].get(name)
+            if not isinstance(provider, dict):
+                continue
+            safe = {}
+            for key in ("base_url", "server_url"):
+                value = provider.get(key)
+                if not isinstance(value, str):
+                    continue
+                if key in ("base_url", "server_url") and value:
+                    try:
+                        url = urlsplit(value)
+                        if (
+                            url.scheme not in ("http", "https")
+                            or not url.hostname
+                            or url.username
+                            or url.password
+                            or url.query
+                            or url.fragment
+                        ):
+                            continue
+                    except ValueError:
+                        continue
+                safe[key] = value
+            if isinstance(provider.get("api_key"), str):
+                safe["api_key"] = JsonFieldMasker().mask_api_key(provider["api_key"])
+            providers[name] = safe
+        result["config"] = providers
+    return json.dumps(result, ensure_ascii=False)
 
 
 class GptsToolsBase(SQLModelSerializable):
@@ -114,6 +161,23 @@ class GptsToolsType(GptsToolsTypeBase, table=True):
     )
 
 
+class WebSearchSecret(SQLModelSerializable, table=True):
+    __tablename__ = "t_web_search_secret"
+    __table_args__ = (UniqueConstraint("tenant_id", "category_id", "provider", name="uk_web_search_secret_owner"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    tenant_id: int = Field(sa_column=Column(Integer, nullable=False, index=True))
+    category_id: int = Field(sa_column=Column(Integer, nullable=False, index=True))
+    provider: str = Field(default="custom", sa_column=Column(String(32), nullable=False))
+    key_id: str = Field(sa_column=Column(String(128), nullable=False))
+    ciphertext: str = Field(sa_column=Column(Text, nullable=False))
+    version: int = Field(default=1, sa_column=Column(Integer, nullable=False))
+    updated_by: int = Field(sa_column=Column(Integer, nullable=False))
+    updated_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+    )
+
+
 class GptsToolsTypeRead(GptsToolsTypeBase):
     openapi_schema: str | None = Field(
         default="", description="of the tool categoryschemaContent, complies withopenapiSpecified Data"
@@ -128,17 +192,52 @@ class GptsToolsTypeRead(GptsToolsTypeBase):
     def validate(self):
         # Needs to be populated when echoingapi_locationAndparameter_nameData field
         if self.extra and not self.api_location:
-            result = json.loads(self.extra)
-            self.api_location = result.get("api_location")
-            self.parameter_name = result.get("parameter_name")
+            try:
+                result = json.loads(self.extra)
+            except (ValueError, TypeError):
+                if self.is_preset != ToolPresetType.PRESET.value:
+                    raise
+                result = {}
+            if isinstance(result, dict):
+                self.api_location = result.get("api_location")
+                self.parameter_name = result.get("parameter_name")
 
-    def mask_sensitive_data(self):
+    def mask_sensitive_data(self, *, search_category=False, ambiguous=False):
+        if search_category or ambiguous:
+            self.extra = _search_list_extra(self.extra) if search_category else "{}"
+            self.api_location = None
+            self.parameter_name = None
+            self.children = [child.model_copy(deep=True) for child in self.children or []]
+            for child in self.children:
+                if child.tool_key == "web_search" and child.extra:
+                    child.extra = _search_list_extra(child.extra)
+            return self
         json_masker = JsonFieldMasker()
         # The provisioning tool needs to be desensitizedextraData field
         if self.extra and self.is_preset == ToolPresetType.PRESET.value:
             extra_json = json.loads(self.extra)
             extra_json = json_masker.mask_json(extra_json)
             self.extra = json.dumps(extra_json, ensure_ascii=False)
+        # Historical child overrides can also contain the same configuration.
+        self.children = [child.model_copy(deep=True) for child in self.children or []]
+        for child in self.children:
+            if child.tool_key in ("image_generation", "dalle_image_generator") and child.extra:
+                try:
+                    child.extra = json.dumps(json_masker.mask_json(json.loads(child.extra)), ensure_ascii=False)
+                except (ValueError, TypeError):
+                    child.extra = None
+            if child.tool_key == "web_search" and child.extra:
+                try:
+                    child_extra = json.loads(child.extra)
+                    if not isinstance(child_extra, dict):
+                        child.extra = None
+                        continue
+                    child_extra.pop("custom", None)
+                    if isinstance(child_extra.get("config"), dict):
+                        child_extra["config"].pop("custom", None)
+                    child.extra = json.dumps(json_masker.mask_json(child_extra), ensure_ascii=False)
+                except (ValueError, TypeError):
+                    child.extra = None
         return self
 
 
@@ -268,6 +367,20 @@ class GptsToolsDao(GptsToolsBase):
         async with get_async_db_session() as session:
             result = await session.exec(statement)
             return result.all()
+
+    @classmethod
+    async def aget_preset_child_keys(cls, tool_type_ids: list[int], tenant_id: int) -> dict[int, set[str]]:
+        if not tool_type_ids:
+            return {}
+        statement = select(GptsTools.type, GptsTools.tool_key).where(
+            GptsTools.type.in_(tool_type_ids), GptsTools.tenant_id == tenant_id
+        )
+        async with get_async_db_session() as session:
+            rows = (await session.exec(statement)).all()
+        keys = {}
+        for category_id, tool_key in rows:
+            keys.setdefault(category_id, set()).add(tool_key)
+        return keys
 
     @classmethod
     def get_all_tool_type(cls, tool_type_ids: list[int]) -> list[GptsToolsType]:
@@ -593,9 +706,32 @@ class GptsToolsDao(GptsToolsBase):
     @classmethod
     async def update_tools_extra(cls, tool_type_id: int, extra: str) -> bool:
         async with get_async_db_session() as session:
+            category = (await session.exec(select(GptsToolsType).where(GptsToolsType.id == tool_type_id))).first()
+            if category and category.is_preset == ToolPresetType.PRESET.value:
+                # Include deleted children: their keys still identify the preset category.
+                keys = (
+                    await session.exec(
+                        select(GptsTools.tool_key).where(
+                            GptsTools.type == tool_type_id, GptsTools.tenant_id == category.tenant_id
+                        )
+                    )
+                ).all()
+                if not keys or "web_search" in keys:
+                    from fastapi import HTTPException
+
+                    raise HTTPException(status_code=409, detail="Use web-search/settings with a revision")
+            image_category = (
+                category
+                and category.is_preset == ToolPresetType.PRESET.value
+                and set(keys) & {"image_generation", "dalle_image_generator"}
+            )
             statement = update(GptsToolsType).where(col(GptsToolsType.id) == tool_type_id).values(extra=extra)
+            if image_category:
+                statement = statement.where(GptsToolsType.tenant_id == category.tenant_id)
             await session.exec(statement)
             statement = update(GptsTools).where(col(GptsTools.type) == tool_type_id).values(extra=text("NULL"))
+            if image_category:
+                statement = statement.where(GptsTools.tenant_id == category.tenant_id)
             await session.exec(statement)
             await session.commit()
             return True

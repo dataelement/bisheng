@@ -24,7 +24,6 @@ from loguru import logger
 from pydantic import Field
 
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.core.context.tenant import DEFAULT_TENANT_ID
 from bisheng.tool.domain.langchain.knowledge import KnowledgeRagTool, KnowledgeRetrieverTool
 from bisheng.user.domain.models.user import UserDao
 
@@ -42,9 +41,10 @@ async def abuild_scoped_login_user(user_id: int | None, tenant_id: int | None) -
     Unlike ``resolve_operator`` (F030), this NEVER calls ``set_current_tenant_id``:
     the workflow node / assistant is mid-execution in the flow's tenant, and
     switching to the author's active tenant would pollute subsequent
-    tenant-scoped queries in the same node (design gotcha 5.10). The author is
-    resolved within the current (flow) tenant, which is correct because the
-    selected knowledge spaces live in that tenant.
+    tenant-scoped queries in the same node (design gotcha 5.10). The identity
+    keeps its authoritative Home. ``tenant_id`` is the resource execution scope,
+    never an assertion about the author's Home. Retrieval still checks the
+    resource scope and the selected identity's current action permissions.
 
     Returns ``None`` when ``user_id`` is falsy or the user no longer exists — the
     caller treats a ``None`` identity as "no visible files" (empty retrieval).
@@ -57,7 +57,7 @@ async def abuild_scoped_login_user(user_id: int | None, tenant_id: int | None) -
     return await UserPayload.init_login_user(
         user_id=user.user_id,
         user_name=user.user_name,
-        tenant_id=tenant_id if tenant_id is not None else DEFAULT_TENANT_ID,
+        require_current_super=True,
     )
 
 

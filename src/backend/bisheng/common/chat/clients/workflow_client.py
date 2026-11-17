@@ -1,6 +1,7 @@
 import asyncio
 import inspect
 import json
+from contextlib import nullcontext
 
 from fastapi import Request, WebSocket
 from loguru import logger
@@ -93,6 +94,12 @@ class WorkflowClient(BaseClient):
             logger.warning("not support action: %s", message.get("action"))
 
     async def init_history(self):
+        port = self.kwargs.get("conversation_persistence")
+        scope = port.scope(self.chat_id, self.client_id, self.user_id) if port and self.chat_id else nullcontext()
+        with scope:
+            await self._init_history_in_scope()
+
+    async def _init_history_in_scope(self):
         if not self.chat_id:
             return
         self.latest_history = await ChatMessageDao.aget_latest_message_by_chatid(self.chat_id)

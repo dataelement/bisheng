@@ -1,7 +1,9 @@
+import { requiresManagementScope, managementRequestScope, guardManagementResponse } from "./managementScope";
 import request, {
   handleRequestError,
   handleRequestResponse,
   requestAuthHeaders,
+  bootstrapManagementRequestScope,
 } from "./request";
 
 export async function requestStream(
@@ -13,7 +15,10 @@ export async function requestStream(
     url.replace(/^\//, ""),
     new URL(sharedBase, location.origin),
   );
-  const config = { url, method: "post" };
+  const scoped = requiresManagementScope("POST", url);
+  if (scoped) await bootstrapManagementRequestScope();
+  const snapshot = scoped ? managementRequestScope() : null;
+  const config = { url, method: "post", managementScopeSnapshot: snapshot };
   let response: Response;
   try {
     response = await fetch(target, {
@@ -22,6 +27,7 @@ export async function requestStream(
       signal,
       headers: {
         ...requestAuthHeaders(url),
+        ...(snapshot === null ? {} : {"X-Management-Tenant": String(snapshot)}),
         "Content-Type": "application/json",
         Accept: "application/x-ndjson",
       },
@@ -37,6 +43,16 @@ export async function requestStream(
     response.headers.get("content-type")?.startsWith("application/x-ndjson") &&
     response.body
   ) {
+    try {
+      if (scoped) guardManagementResponse(
+        {"x-management-tenant": response.headers.get("x-management-tenant") ?? undefined},
+        snapshot,
+      );
+    } catch (error) {
+      await response.body.cancel();
+      await handleRequestError({ config, status_code: 19704 });
+      throw error;
+    }
     return response.body;
   }
   const reader = response.body?.getReader();

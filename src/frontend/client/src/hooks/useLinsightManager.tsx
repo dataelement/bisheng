@@ -1,3 +1,4 @@
+import { prepareBrowserHeaders } from "~/api/request";
 // @ts-strict-ignore
 // src/hooks/useLinsightManager.ts
 import { resolveLinsightSubmitFailure, type PendingSubmitFailure } from './linsightSubmitFailure';
@@ -354,10 +355,12 @@ export const useLinsightSubmit = (versionId, setVersionId, setVersions, ensureFl
                     session_id: linsightSubmission.sessionId || null,
                 }
 
+                const scopeHeaders = await prepareBrowserHeaders('POST', `${__APP_ENV__.BASE_URL}/api/v1/linsight/workbench/submit`);
                 const sse = new SSE(`${__APP_ENV__.BASE_URL}/api/v1/linsight/workbench/submit`, {
                     payload: JSON.stringify(payload),
                     headers: {
                         'Content-Type': 'application/json',
+                        ...scopeHeaders,
                         ...(presence?.leaseId ? { 'X-Flow-Lease-Id': presence.leaseId } : {}),
                     },
                 });
@@ -476,7 +479,11 @@ export const useLinsightSubmit = (versionId, setVersionId, setVersions, ensureFl
                 sse.stream();
         }
         resetAfterSubmit()
-        void run()
+        void run().catch(() => {
+            setLoading(false);
+            setError(true);
+            showToast({message: localize('api_errors.fallback'), status: 'warning'});
+        })
     }, [linsightSubmission, ensureFlowLeaseId])
 
     return [loading, error, failureOwnerPath.current === window.location.pathname ? pendingSubmitFailure : undefined] as const

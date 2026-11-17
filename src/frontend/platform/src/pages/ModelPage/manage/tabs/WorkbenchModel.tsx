@@ -26,6 +26,7 @@ import { useModel } from "..";
 import { UserSelectableModels } from "../UserSelectableModels";
 import { updateModelMetadata } from "../userModelMetadata";
 import { hasValidWorkbenchEmbeddingModelId } from "./workbenchModelValidation";
+import { SharedToolSettings } from "./SharedToolSettings";
 
 export const ModelSelect = ({
   required = false,
@@ -372,6 +373,7 @@ export default function WorkbenchModel({ data, onBack }) {
             options={llmOptions}
             onChange={(val) => setForm({ ...form, memoryLlmId: val })}
           />
+          <SharedToolSettings disabled={saveload || !linsightConfig} />
         </div>
       </details>
       <div className="mt-6 flex justify-end gap-4">

@@ -1,0 +1,95 @@
+{
+  "date": "2026-11-14",
+  "scope": "local_source_validation_before_commit",
+  "baseline": "740900516d45c4c5c44a3a86d1aba551ac1070af",
+  "gateway_base": "62399806",
+  "tests": {
+    "backend_passed": 230,
+    "platform_passed": 37,
+    "client_passed": 23,
+    "shared_api_client_passed": 22,
+    "gateway_passed": 25,
+    "dedicated_e2e_skipped": 12
+  },
+  "frontend_standard_quality_exit_codes": {
+    "platform": {
+      "lint": 0,
+      "typecheck": 0
+    },
+    "client": {
+      "lint": 0,
+      "typecheck": 0
+    }
+  },
+  "shared_api_client_tsc": "PASS",
+  "raw_tsc_comparison": {
+    "platform": {
+      "current": 627,
+      "baseline": 627
+    },
+    "client": {
+      "current": 474,
+      "baseline": 474,
+      "text_difference": "Two existing translation diagnostics changed union item print order; same source expressions and codes."
+    },
+    "new_source_errors": 0
+  },
+  "ruff_comparison": {
+    "current": 159,
+    "baseline": 173,
+    "new_diagnostics": [],
+    "files_with_current": {
+      "src/backend/bisheng/department/api/endpoints/department.py": 13,
+      "src/backend/bisheng/department/domain/services/department_service.py": 78,
+      "src/backend/bisheng/user/api/user.py": 63,
+      "src/backend/bisheng/user/domain/services/user.py": 5
+    }
+  },
+  "route_methods": {
+    "python": 963,
+    "python_by_scope": {
+      "public": 22,
+      "credential": 187,
+      "tenant": 644,
+      "identity": 30,
+      "platform": 38,
+      "personal": 42
+    },
+    "gateway": 80,
+    "gateway_by_scope": {
+      "platform": 4,
+      "tenant": 10,
+      "retired": 7,
+      "public": 59
+    }
+  },
+  "database_changes": {
+    "new_tables": 0,
+    "new_columns": 0,
+    "alembic_revisions": 0,
+    "historical_rows_modified": false
+  },
+  "architecture": {
+    "violations": 0,
+    "legacy_rule3_warning_files": [
+      "bisheng/api/v1/variable.py",
+      "bisheng/api/v1/workflow.py"
+    ]
+  },
+  "not_verified": [
+    "deployed_environment",
+    "MySQL",
+    "DM8",
+    "real_browser_end_to_end",
+    "external_OpenFGA_and_storage",
+    "real_historical_preflight",
+    "full_real_Celery_worker_round_trip",
+    "remote_CI"
+  ],
+  "delivery_state": {
+    "merged": false,
+    "pushed": false,
+    "deployed": false
+  },
+  "gateway_commit": "aa4f272b6e9fe6e073415034cb0ece5b1c3e34e3"
+}

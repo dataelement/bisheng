@@ -1246,8 +1246,8 @@ export async function GPUlistByFinetuneApi(): Promise<any> {
 export async function setWorkstationConfigApi(data): Promise<any> {
   return await axios.post(`api/v1/workstation/config`, data);
 }
-export async function getWorkstationConfigApi(): Promise<any> {
-  return await axios.get(`api/v1/workstation/config`);
+export async function getWorkstationConfigApi(purpose?: "navigation"): Promise<any> {
+  return await axios.get(`api/v1/workstation/config`, purpose ? { params: { purpose } } : undefined);
 }
 // 工作台日常配置
 export async function setDailyConfigApi(data): Promise<any> {

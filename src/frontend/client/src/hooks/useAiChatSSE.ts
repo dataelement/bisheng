@@ -22,7 +22,7 @@ import { SSE } from "sse.js";
 import type { AgentEvent, ChatMessage, ContentPart } from "~/api/chatApi";
 import { getSSEUrl } from "~/api/chatApi";
 import { parseMemorySignal, type MemoryFlags } from "~/api/memory";
-import { translateApiErrorMessage } from "~/api/request";
+import { prepareBrowserHeaders, translateApiErrorMessage } from "~/api/request";
 import { bindProjectChatCreation, captureProjectChatDraft, type ProjectChatDraft } from "~/layouts/WorkbenchSidebar/projectChatCreation";
 
 /**
@@ -511,7 +511,16 @@ export function openChatStream(
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
         handleOffline();
     } else {
-        sse.stream();
+        void prepareBrowserHeaders('POST', sseUrl).then(headers => {
+            if (endCalled || expectedClose) return;
+            sse.headers = {...sse.headers, ...headers};
+            sse.stream();
+        }).catch(() => {
+            if (endCalled || expectedClose) return;
+            failureReported = true;
+            onError(localize('api_errors.fallback'));
+            safeEnd();
+        });
     }
 
     return {

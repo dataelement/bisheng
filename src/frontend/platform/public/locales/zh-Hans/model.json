@@ -1,5 +1,11 @@
 {
   "model": {
+    "searchTool": "搜索工具",
+    "drawingTool": "绘图工具",
+    "configure": "配置",
+    "configureTool": "配置{{tool}}",
+    "sharedToolHint": "与平台工具配置共用，修改后同时影响平台；工具配置单独保存。",
+    "sharedToolUnavailable": "无法加载工具配置，请检查平台中的工具是否存在且配置有效。",
     "editPrompt": "编辑提示词",
     "docKnowledgeAbstractPrompt": "文档知识库摘要提示词",
     "docKnowledgeAbstractPromptTooltip": "文档知识库上传文件时，对文件进行摘要的提示词",

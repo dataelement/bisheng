@@ -4,6 +4,7 @@ from fastapi import APIRouter, Body, Query, Request
 from fastapi.params import Depends
 
 from bisheng.api.v1.schemas import AddChatMessages, resp_200
+from bisheng.chat_session.application.conversation_persistence import conversation_read_scope
 from bisheng.chat_session.domain.chat import ChatSessionService
 from bisheng.chat_session.domain.services.chat_message_service import ChatMessageService
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -53,7 +54,13 @@ async def get_chat_message(
     share_link: Union["ShareLink", None] = Depends(header_share_token_parser),
 ):
     with bypass_tenant_filter_if(share_link is not None):
-        history = await ChatSessionService.get_chat_history(chat_id, flow_id, id, page_size)
+        history = await ChatSessionService.get_chat_history(
+            chat_id,
+            flow_id,
+            id,
+            page_size,
+            read_scope=conversation_read_scope(login_user, chat_id, flow_id) if share_link is None else None,
+        )
 
     if history and login_user.user_id != history[0].user_id:
         if not share_link or share_link.resource_id != chat_id:
@@ -64,6 +71,7 @@ async def get_chat_message(
 @router.get("/chat/info")
 async def get_chat_info(
     chat_id: str = Query(..., description="Session Uniqueid, chat_id"),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
     share_link: Union["ShareLink", None] = Depends(header_share_token_parser),
 ):
     """Get session details by chat_id.
@@ -73,7 +81,9 @@ async def get_chat_info(
     conversation's real name.
     """
     with bypass_tenant_filter_if(share_link is not None):
-        res = await ChatSessionService.get_session_info(chat_id)
+        res = await ChatSessionService.get_session_info(
+            chat_id, read_scope=conversation_read_scope(login_user, chat_id) if share_link is None else None
+        )
     return resp_200(res)
 
 

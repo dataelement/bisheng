@@ -20,6 +20,7 @@ from bisheng.common.errcode.role import (
     RoleNotFoundError,
     RolePermissionDeniedError,
 )
+from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_admin_scope_tenant_id
 from bisheng.core.database import get_async_db_session
 from bisheng.database.constants import AdminRole
 from bisheng.database.models.role import Role, RoleDao
@@ -45,6 +46,24 @@ class RoleService:
 
     # ── Create ──
 
+    @staticmethod
+    def _is_platform_admin(login_user) -> bool:
+        # Consume the existing verified identity, including the legacy source;
+        # ordinary shared role bindings never create this platform identity.
+        return getattr(login_user, "is_global_super", False) is True or login_user.is_admin()
+
+    @classmethod
+    def _creation_owner(cls, req: RoleCreateRequest, login_user) -> int:
+        if req.role_type == "global":
+            if not cls._is_platform_admin(login_user):
+                raise RolePermissionDeniedError()
+            return DEFAULT_TENANT_ID
+        return (
+            int(get_admin_scope_tenant_id() or login_user.tenant_id)
+            if cls._is_platform_admin(login_user)
+            else int(login_user.tenant_id)
+        )
+
     @classmethod
     async def create_role(
         cls,
@@ -53,7 +72,8 @@ class RoleService:
     ) -> Role:
         """Create a new role (AC-01, AC-02).
 
-        System admin creates global role; tenant admin creates tenant role.
+        Shared definitions require an explicit type; local definitions use
+        the admitted management target without changing the operator's Home.
         """
         await cls._check_role_permission(login_user)
 
@@ -61,12 +81,12 @@ class RoleService:
         if req.quota_config:
             QuotaService.validate_quota_config(req.quota_config)
 
-        # Determine role_type
-        role_type = "global" if login_user.is_admin() else "tenant"
+        role_type = req.role_type
+        owner_tenant_id = cls._creation_owner(req, login_user)
 
         # Check duplicate name (AC-09)
         existing = await RoleDao.aget_role_by_name(
-            tenant_id=login_user.tenant_id,
+            tenant_id=owner_tenant_id,
             role_type=role_type,
             role_name=req.role_name,
             department_id=req.department_id,
@@ -76,7 +96,7 @@ class RoleService:
 
         # Validate department_id if provided
         if req.department_id is not None:
-            await cls._validate_department(req.department_id, login_user.tenant_id if role_type != "global" else None)
+            await cls._validate_department(req.department_id, owner_tenant_id if role_type != "global" else None)
 
         await cls._ensure_create_scope(login_user, req.department_id)
 
@@ -87,12 +107,7 @@ class RoleService:
             quota_config=req.quota_config,
             remark=req.remark,
             create_user=login_user.user_id,
-            # Explicitly bind to caller's tenant: ``Role.tenant_id`` defaults to 1
-            # at the model level, which prevents the ``before_flush`` auto-fill
-            # from overriding it (it only fills when the value is None/0). Without
-            # this, child-tenant admins would create roles owned by Root and the
-            # tenant-scoped list query couldn't see them.
-            tenant_id=login_user.tenant_id,
+            tenant_id=owner_tenant_id,
         )
         try:
             return await RoleDefinitionRepository.create(role)
@@ -112,9 +127,10 @@ class RoleService:
         if req.quota_config:
             QuotaService.validate_quota_config(req.quota_config)
 
-        role_type = "global" if login_user.is_admin() else "tenant"
+        role_type = req.role_type
+        owner_tenant_id = cls._creation_owner(req, login_user)
         existing = await RoleDao.aget_role_by_name(
-            tenant_id=login_user.tenant_id,
+            tenant_id=owner_tenant_id,
             role_type=role_type,
             role_name=req.role_name,
             department_id=req.department_id,
@@ -123,7 +139,7 @@ class RoleService:
             raise RoleNameDuplicateError()
 
         if req.department_id is not None:
-            await cls._validate_department(req.department_id, login_user.tenant_id if role_type != "global" else None)
+            await cls._validate_department(req.department_id, owner_tenant_id if role_type != "global" else None)
 
         await cls._ensure_create_scope(login_user, req.department_id)
 
@@ -135,9 +151,7 @@ class RoleService:
             quota_config=req.quota_config,
             remark=req.remark,
             create_user=login_user.user_id,
-            # See comment in ``create_role``: must override the model default of 1
-            # so child-tenant admins don't end up creating Root-owned roles.
-            tenant_id=login_user.tenant_id,
+            tenant_id=owner_tenant_id,
         )
 
         return await RoleDefinitionRepository.create(role, menu_ids)
@@ -162,7 +176,7 @@ class RoleService:
         dept_subtree_ids: set[int] | None = None
         tenant_custom_roles_only = False
 
-        if not login_user.is_admin():
+        if not cls._is_platform_admin(login_user):
             from bisheng.database.models.department import DepartmentDao
 
             try:
@@ -267,6 +281,7 @@ class RoleService:
                     id=role.id,
                     role_name=role.role_name,
                     role_type=role.role_type,
+                    tenant_id=role.tenant_id,
                     department_id=role.department_id,
                     department_name=dept_names.get(role.department_id),
                     department_scope_path=scope_paths.get(role.department_id) if role.department_id else None,
@@ -325,6 +340,7 @@ class RoleService:
             id=role.id,
             role_name=role.role_name,
             role_type=role.role_type,
+            tenant_id=role.tenant_id,
             department_id=role.department_id,
             department_name=dept_names.get(role.department_id),
             department_scope_path=scope_paths.get(role.department_id) if role.department_id else None,
@@ -352,7 +368,7 @@ class RoleService:
             raise RoleNotFoundError()
 
         # AC-06: tenant admin cannot update global role
-        if not login_user.is_admin() and role.role_type == "global":
+        if not cls._is_platform_admin(login_user) and role.role_type == "global":
             raise RolePermissionDeniedError(msg="Cannot modify global role")
 
         await cls._check_role_permission(login_user)
@@ -384,7 +400,7 @@ class RoleService:
         if not role:
             raise RoleNotFoundError()
 
-        if not login_user.is_admin() and role.role_type == "global":
+        if not cls._is_platform_admin(login_user) and role.role_type == "global":
             raise RolePermissionDeniedError(msg="Cannot modify global role")
 
         await cls._check_role_permission(login_user)
@@ -420,7 +436,7 @@ class RoleService:
             raise RoleNotFoundError()
 
         # Permission check (AC-06 equivalent)
-        if not login_user.is_admin() and role.role_type == "global":
+        if not cls._is_platform_admin(login_user) and role.role_type == "global":
             raise RolePermissionDeniedError(msg="Cannot delete global role")
 
         await cls._check_role_permission(login_user)
@@ -439,7 +455,9 @@ class RoleService:
         """Keep legacy group administration within its definition tenant and outside global roles."""
         if role.id in BUILTIN_ROLE_IDS:
             raise RoleBuiltinProtectedError()
-        if (not login_user.is_admin() and (role.role_type == "global" or role.tenant_id != login_user.tenant_id)):
+        if not cls._is_platform_admin(login_user) and (
+            role.role_type == "global" or role.tenant_id != login_user.tenant_id
+        ):
             raise RolePermissionDeniedError()
         if not role.group_id or not login_user.check_group_admin(role.group_id):
             raise RolePermissionDeniedError()
@@ -459,7 +477,7 @@ class RoleService:
         if not role:
             raise RoleNotFoundError()
 
-        if not login_user.is_admin() and role.role_type == "global":
+        if not cls._is_platform_admin(login_user) and role.role_type == "global":
             raise RolePermissionDeniedError(msg="Cannot modify global role menu")
 
         await cls._check_role_permission(login_user)
@@ -502,7 +520,7 @@ class RoleService:
         Checking tenant administration first would expose editable tenant-wide
         roles to an operator whose role management is limited to a department subtree.
         """
-        if login_user.is_admin():
+        if cls._is_platform_admin(login_user):
             return "admin"
 
         dept_ids = await cls._get_user_admin_dept_ids(login_user)
@@ -569,7 +587,7 @@ class RoleService:
     ) -> bool:
         if permission_level == "regular":
             return False
-        if role.role_type == "global" and not login_user.is_admin():
+        if role.role_type == "global" and not cls._is_platform_admin(login_user):
             return False
         # The creator-only restriction below is intentionally scoped to dept_admin;
         # system admin bypasses it.
