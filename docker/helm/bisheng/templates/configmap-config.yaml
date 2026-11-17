@@ -10,7 +10,24 @@
 {{- $fg = mergeOverwrite $fg (default (dict) (get $settings "openfga")) -}}
 {{- $_ := set $fg "force_write_model" false -}}
 {{- $_ := set $settings "openfga" $fg -}}
-{{- $_ := set $settings "dsh" (mergeOverwrite (dict "enabled" .Values.dsh.enabled "platform_public_url" .Values.publicUrl) (default (dict) (get $settings "dsh"))) -}}
+{{- $client := dict "enabled" true -}}
+{{- if ne .Values.bs_client nil -}}
+{{- $client = mergeOverwrite $client .Values.bs_client -}}
+{{- else if hasKey .Values "dsh" -}}
+{{- $client = mergeOverwrite $client .Values.dsh -}}
+{{- end -}}
+{{- if hasKey $settings "bs_client" -}}
+{{- $client = deepCopy (get $settings "bs_client") -}}
+{{- else if hasKey $settings "dsh" -}}
+{{- $client = deepCopy (get $settings "dsh") -}}
+{{- end -}}
+{{- if not (hasKey $client "trusted_proxy_hosts") -}}
+{{- $proxies := list (printf "%s.%s.svc.%s" (include "bisheng.component" (list . "frontend-peers")) .Release.Namespace .Values.global.clusterDomain) -}}
+{{- if .Values.gateway.enabled }}{{ $proxies = append $proxies (printf "%s.%s.svc.%s" (include "bisheng.component" (list . "gateway-peers")) .Release.Namespace .Values.global.clusterDomain) }}{{ end -}}
+{{- $_ := set $client "trusted_proxy_hosts" $proxies -}}
+{{- end -}}
+{{- $_ := unset $settings "dsh" -}}
+{{- $_ := set $settings "bs_client" $client -}}
 {{- $_ := set $settings "open_platform" (mergeOverwrite (dict "enabled" .Values.openPlatform.enabled) (default (dict) (get $settings "open_platform"))) -}}
 {{- $minioHost := printf "%s:%d" (include "bisheng.host" (list . "minio")) (int .Values.minio.external.port) -}}
 {{- $share := .Values.minio.external.sharepoint -}}

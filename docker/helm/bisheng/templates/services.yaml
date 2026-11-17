@@ -61,3 +61,19 @@ spec:
                 values: [{{ include "runtime.name" (list . "runtime-manager") }}, {{ include "runtime.name" (list . "app-proxy") }}, {{ include "runtime.name" (list . "egress-proxy") }}, {{ include "runtime.name" (list . "runtime-admission") }}]
       ports: [{protocol: TCP, port: {{ .Values.global.internalPlatformPort }}}]
 {{- end }}
+
+{{- /* Headless records resolve proxy pod IPs, not a ClusterIP that never appears as a peer. */}}
+{{- range $component := list "frontend" "gateway" }}
+{{- if or (eq $component "frontend") $.Values.gateway.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: {{ include "bisheng.component" (list $ (printf "%s-peers" $component)) }}}
+spec:
+  clusterIP: None
+  selector:
+    {{- include "bisheng.selectorLabels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $component }}
+  ports: [{name: http, port: {{ if eq $component "frontend" }}{{ $.Values.frontend.service.port }}{{ else }}{{ $.Values.gateway.service.port }}{{ end }}, targetPort: http}]
+{{- end }}
+{{- end }}

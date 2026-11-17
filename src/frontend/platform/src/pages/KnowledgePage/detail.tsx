@@ -6,13 +6,8 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   knowledgeSpaceApi,
-  type KnowledgeSpaceInfo,
   type KnowledgeSpaceChild,
 } from "@/controllers/API/knowledgeSpace";
-import {
-  knowledgeFilesApi,
-  type SpaceFolderParent,
-} from "@/controllers/API/knowledgeFiles";
 import {
   knowledgeQueryKeys,
   type KnowledgeQueryScope,
@@ -25,6 +20,7 @@ import { SpaceFileDetail } from "./components/SpaceFileDetail";
 import { SpaceProcessingPanel } from "./components/SpaceProcessingDialog";
 import { useSpaceCopyTasks } from "./useSpaceCopyTasks";
 import { SpaceCopyStatus } from "./components/SpaceCopyStatus";
+import { useSpaceFolderPath } from "./hooks/useSpaceFolderPath";
 
 export const parseKnowledgeId = (value: string | null | undefined): number | null => {
   if (!value || !/^\d+$/.test(value)) return null;
@@ -53,32 +49,31 @@ export function SpaceDetail({
   const [searchParams, setSearchParams] = useSearchParams();
   const fileParams = searchParams.getAll("file_id");
   const fileId = fileParams.length === 1 ? parseKnowledgeId(fileParams[0]) : null;
-  const [openedFile, setOpenedFile] = useState<KnowledgeSpaceChild | undefined>();
+  const [openedFile, setOpenedFile] = useState<{ parentId: number | null; item: KnowledgeSpaceChild }>();
   const fileStatus =
     searchParams.get("fileStatus") === "abnormal" ? "abnormal" : "all";
   const instance = useId();
   const copyTasks = useSpaceCopyTasks(scope);
   const copyTask = copyTasks.data?.find((task) => task.id === spaceId);
   const watchedCopy = useRef<number | null>(null);
-  const facts = useQuery<KnowledgeSpaceInfo | SpaceFolderParent[]>({
-    queryKey: [
-      ...knowledgeQueryKeys.space(scope, spaceId),
-      "directory-header",
-      instance,
-      parentId,
-    ],
-    queryFn: () =>
-      parentId === null
-        ? knowledgeSpaceApi.getSpaceInfo(spaceId)
-        : knowledgeFilesApi.listSpaceFolderParents(spaceId, parentId),
-    enabled: fileParams.length === 0 && !copyTasks.isInitialLoading && !copyTask,
+  const spaceInfo = useQuery({
+    queryKey: [...knowledgeQueryKeys.info(scope, spaceId), "directory-root", instance],
+    queryFn: () => knowledgeSpaceApi.getSpaceInfo(spaceId),
+    enabled: parentId === null && fileParams.length === 0 && !copyTasks.isInitialLoading && !copyTask,
     keepPreviousData: false,
     cacheTime: 0,
   });
+  // The sidebar reads the same path, including when the URL opens a file directly.
+  const folderPath = useSpaceFolderPath(scope, spaceId, parentId);
+  const facts = parentId === null ? spaceInfo : folderPath;
+  const { error } = facts;
   useEffect(() => {
-    if (facts.error) showApiError(facts.error);
-  }, [facts.error]);
-  const info = !Array.isArray(facts.data) ? facts.data : undefined;
+    if (error) showApiError(error);
+  }, [error]);
+  useEffect(() => {
+    setOpenedFile(undefined);
+  }, [parentId]);
+  const info = spaceInfo.isError ? undefined : spaceInfo.data;
   useEffect(() => {
     if (copyTask) watchedCopy.current = spaceId;
     else if (copyTasks.isSuccess && info?.state === 1 && watchedCopy.current === spaceId) {
@@ -86,7 +81,7 @@ export function SpaceDetail({
       toast.show({ type: "success", message: t("space_copy_ui.created", { name: info.name }) });
     }
   }, [copyTask, copyTasks.isSuccess, info, spaceId, t]);
-  const parents = Array.isArray(facts.data) ? facts.data : [];
+  const parents = folderPath.data ?? [];
   const showCopyRecovery = parentId === null && (
     info?.state === 0 || info?.state === 2 ||
     (isErrorEnvelope(facts.error) && facts.error.status_code === 25008)
@@ -153,7 +148,7 @@ export function SpaceDetail({
         presentation={presentation}
         toolbarTarget={toolbarTarget}
         onOpenFile={presentation === "workspace" ? (item) => {
-          setOpenedFile(item);
+          setOpenedFile({ parentId, item });
           const next = new URLSearchParams(searchParams);
           next.set("file_id", String(item.id));
           setSearchParams(next);
@@ -169,8 +164,8 @@ export function SpaceDetail({
   if (presentation === "workspace" && fileId !== null) return (
     <div className="h-full min-h-0 px-4">
       <SpaceFileDetail
-        key={JSON.stringify([scope, spaceId, fileId])} scope={scope} spaceId={spaceId} fileId={fileId}
-        initialFile={openedFile?.id === fileId ? openedFile : undefined}
+        key={JSON.stringify([scope, spaceId, parentId, fileId])} scope={scope} spaceId={spaceId} fileId={fileId}
+        initialFile={openedFile?.parentId === parentId && openedFile.item.id === fileId ? openedFile.item : undefined}
         onBack={() => { const next = new URLSearchParams(searchParams); next.delete("file_id"); setSearchParams(next); }}
       />
     </div>
@@ -181,7 +176,7 @@ export function SpaceDetail({
       spaceId={spaceId}
       parentId={parentId}
       title={title}
-      description={info?.description ?? undefined}
+      spaceInfo={info}
       folderPath={parentId === null ? undefined : { parents, onOpenFolder }}
     >
       {(toolbarTarget) => directory(toolbarTarget)}

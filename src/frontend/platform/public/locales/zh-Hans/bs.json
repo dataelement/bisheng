@@ -4474,6 +4474,7 @@
       "baseModel": "基准模型",
       "baseModelHelp": "积分倍率为 1.00x 的模型，只影响倍率显示，不影响扣费。",
       "baseModelDefault": "日常对话默认模型",
+      "baseModelOption": "{{model}}（{{provider}}）",
       "baseUnavailable": "基准模型不可用（已删除、已下线、没有价格或免费），暂不显示积分倍率。",
       "settings": "积分换算",
       "settingsHelp": "设置 1 积分对应多少钱。修改只影响之后开始的调用。",

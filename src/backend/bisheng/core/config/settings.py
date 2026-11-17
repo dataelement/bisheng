@@ -1011,9 +1011,9 @@ class Settings(BaseModel):
     environment: Union[dict, str] = "dev"
     # ↑↑↑ before config for langchain flow, will be deprecated
     debug: bool = False
-    dsh: DshSettings = Field(
+    bs_client: DshSettings = Field(
         default_factory=DshSettings,
-        description="DSH Desktop access, gateway trust, verified model capabilities and quota infrastructure configuration.",
+        description="BS Client deployment settings, native Desktop access and quota/audit bounds.",
     )
     database_url: str | None = None
     redis_url: Union[str, dict] | None = None
@@ -1112,9 +1112,24 @@ class Settings(BaseModel):
     @classmethod
     def validate_lists(cls, values):
         for key, value in values.items():
-            if key not in {"dev", "dsh"} and not value:
+            if key not in {"dev", "dsh", "bs_client"} and not value:
                 values[key] = []
         return values
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_client_settings(cls, values):
+        if isinstance(values, dict) and "dsh" in values:
+            values = dict(values)
+            legacy = values.pop("dsh")
+            if "bs_client" not in values:
+                values["bs_client"] = legacy
+        return values
+
+    @property
+    def dsh(self) -> DshSettings:
+        """Compatibility for existing internal consumers; one canonical configuration."""
+        return self.bs_client
 
     def get_minio_conf(self) -> MinioConf:
         return self.object_storage.minio
