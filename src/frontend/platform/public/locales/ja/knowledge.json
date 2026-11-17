@@ -556,6 +556,7 @@
         "folder_upload_empty": "アップロードできる対応ファイルがありません。"
     },
     "deletion": {
+        "source_tasks_block_delete": "未完了の移動またはコピータスクがこのスペースを使用しています。失敗したタスクも元ファイルを必要とするため、削除できません。移動先またはコピー先の「処理タスク」で失敗原因を確認して対処し、削除条件を再確認してください。アクセスできない場合は、タスクの実行者または管理者に連絡してください。",
         "references": "参照元",
         "clear": "スペースを空にする",
         "delete_space": "スペースを削除",
@@ -812,5 +813,19 @@
         "typeString": "文字列",
         "typeNumber": "数値",
         "typeTime": "日時"
+    },
+    "similarReview": {
+        "currentFile": "現在のファイル",
+        "primaryVersion": "主バージョン V{{version}}",
+        "recommendCount": "類似文書の候補 {{count}} 件",
+        "recommendHint": "既存文書を選択し、現在のファイルを新しいバージョンとして関連付けます。",
+        "searchTitle": "既存文書を検索",
+        "searchHint": "適切な候補がない場合は、このスペースの他の文書を検索してください。",
+        "noSearchResults": "一致する文書はありません",
+        "keepTitle": "独立した文書として保持",
+        "confirmLink": "現在のファイル「{{name}}」は「{{target}}」の新しいバージョンになります。",
+        "pendingCount": "未処理ファイル（{{count}}）",
+        "similarity": "類似度",
+        "empty": "確認待ちの類似文書はありません"
     }
 }

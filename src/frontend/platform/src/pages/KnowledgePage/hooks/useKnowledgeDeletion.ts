@@ -24,6 +24,7 @@ export type KnowledgeDeletionView = {
   page?: ReferencePage;
   error?: string;
   code?: number;
+  reason?: string;
   stale?: boolean;
   status?: DeletionStatus;
 };
@@ -89,6 +90,8 @@ export function useKnowledgeDeletion(scopeKey: string) {
           typeof error.status_code === "number"
         ? error.status_code
         : undefined;
+    const data = isApiError(error) ? error.data : error && typeof error === "object" && "data" in error ? error.data : undefined;
+    const reason = data && typeof data === "object" && "reason" in data && typeof data.reason === "string" ? data.reason : undefined;
     const stale = code === 18087 || code === 18088 || code === 10996;
     if (code === 18087 || code === 18088 || (code === 10996 && !entry.dispatched)) {
       entry.result = undefined;
@@ -102,6 +105,7 @@ export function useKnowledgeDeletion(scopeKey: string) {
           busy: false,
           error: error instanceof Error ? error.message : undefined,
           code,
+          reason,
           stale,
           dispatched: entry.dispatched,
           ...(entry.result ? {} : { result: undefined }),
