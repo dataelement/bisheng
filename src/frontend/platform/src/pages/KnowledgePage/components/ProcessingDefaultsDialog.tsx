@@ -1,26 +1,15 @@
 import { Button, toast } from "@bisheng/ui";
-import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Dialog } from "@/components/bs-ui/dialog";
 import { SpacePanelFrame } from "./SpacePanelFrame";
-import {
-  knowledgeSpaceApi,
-  type KnowledgeSpaceApi,
-  type ProcessingSettingsRead,
+import type {
+  KnowledgeSpaceApi,
+  ProcessingSettingsRead,
 } from "@/controllers/API/knowledgeSpace";
-import {
-  knowledgeQueryKeys,
-  useKnowledgeProcessingSettings,
-  type KnowledgeQueryScope,
-} from "@/controllers/hooks/knowledge";
+import type { KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
-import {
-  ProcessingDefaultsEditor,
-  processingDefaultsToDraft,
-  validateProcessingDefaultsDraft,
-  type ProcessingDefaultsDraft,
-} from "./ProcessingDefaultsEditor";
+import { ProcessingDefaultsEditor } from "./ProcessingDefaultsEditor";
+import { useProcessingDefaultsDraft } from "./useProcessingDefaultsDraft";
 
 interface ProcessingDefaultsDialogProps {
   scope: KnowledgeQueryScope;
@@ -30,20 +19,21 @@ interface ProcessingDefaultsDialogProps {
   onSaved?: (settings: ProcessingSettingsRead) => void;
   api?: KnowledgeSpaceApi;
 }
-type ContentProps = Omit<ProcessingDefaultsDialogProps, "open"> & {
-  presentation?: "page";
-};
+interface ProcessingDefaultsPanelProps extends Omit<
+  ProcessingDefaultsDialogProps,
+  "open" | "onOpenChange"
+> {
+  presentation?: "page" | "inline";
+}
+interface ContentProps extends ProcessingDefaultsPanelProps {
+  onOpenChange?: ProcessingDefaultsDialogProps["onOpenChange"];
+}
 
-export function ProcessingDefaultsPanel(
-  props: Omit<ProcessingDefaultsDialogProps, "open" | "onOpenChange">,
-) {
-  return (
-    <ProcessingDefaultsContent
-      {...props}
-      presentation="page"
-      onOpenChange={() => undefined}
-    />
-  );
+export function ProcessingDefaultsPanel({
+  presentation = "page",
+  ...props
+}: ProcessingDefaultsPanelProps) {
+  return <ProcessingDefaultsContent {...props} presentation={presentation} />;
 }
 
 export function ProcessingDefaultsDialog(props: ProcessingDefaultsDialogProps) {
@@ -53,142 +43,90 @@ export function ProcessingDefaultsDialog(props: ProcessingDefaultsDialogProps) {
     </Dialog>
   );
 }
+
+interface ProcessingDefaultsFieldsProps {
+  form: Pick<
+    ReturnType<typeof useProcessingDefaultsDraft>,
+    "draft" | "error" | "pending" | "load" | "setDraft"
+  >;
+  compact?: boolean;
+  disabled?: boolean;
+}
+
+export function ProcessingDefaultsFields({
+  form,
+  compact = false,
+  disabled = false,
+}: ProcessingDefaultsFieldsProps) {
+  const { t } = useTranslation("knowledge");
+  return (
+    <>
+      <p className={compact ? "text-body text-text-3" : "text-sm text-text-2"}>
+        {t("f118.future_uploads_only")}
+      </p>
+      {form.draft ? (
+        <ProcessingDefaultsEditor
+          value={form.draft}
+          disabled={disabled || form.pending}
+          onChange={form.setDraft}
+          compact={compact}
+        />
+      ) : form.error ? (
+        <div role="alert">
+          <p>{t("f118.load_failed")}</p>
+          <Button disabled={disabled} onClick={() => void form.load()}>
+            {t("retry")}
+          </Button>
+        </div>
+      ) : (
+        <p role="status">{t("f118.loading_defaults")}</p>
+      )}
+    </>
+  );
+}
+
 function ProcessingDefaultsContent({
   scope,
   spaceId,
   onOpenChange,
   onSaved,
-  api = knowledgeSpaceApi,
+  api,
   presentation,
 }: ContentProps) {
   const { t } = useTranslation("knowledge");
-  const client = useQueryClient();
-  const query = useKnowledgeProcessingSettings(scope, spaceId, api);
-  const { identityKey, tenantId, managementTenantId, view } = scope;
-  const queryKey = useMemo(
-    () =>
-      knowledgeQueryKeys.settings(
-        { identityKey, tenantId, managementTenantId, view },
-        spaceId,
-      ),
-    [identityKey, tenantId, managementTenantId, view, spaceId],
-  );
-  const epoch = useMemo(() => ({ queryKey, api }), [queryKey, api]);
-  const current = useRef<typeof epoch | null>(epoch);
-  current.current = epoch;
-  const [loaded, setLoaded] = useState<{
-    epoch: typeof epoch;
-    version: number;
-    draft: ProcessingDefaultsDraft;
-  } | null>(null);
-  const [saving, setSaving] = useState<typeof epoch | null>(null);
-  const refetch = query.refetch;
-  // Manual refresh must preserve the existing query hook's enabled boundary.
-  const canLoad =
-    Boolean(scope.identityKey) &&
-    Number.isSafeInteger(scope.tenantId) &&
-    scope.tenantId > 0 &&
-    Number.isSafeInteger(spaceId) &&
-    spaceId > 0;
-  const handleLoad = async () => {
-    if (!canLoad || current.current !== epoch) return;
-    try {
-      const result = await refetch({ cancelRefetch: false });
-      if (current.current === epoch && result.isSuccess && result.data) {
-        setLoaded({
-          epoch,
-          version: result.data.config_version,
-          draft: processingDefaultsToDraft(result.data.effective_defaults),
-        });
-      }
-    } catch (error) {
-      if (current.current === epoch) showApiError(error);
-    }
-  };
-  useEffect(() => {
-    current.current = epoch;
-    setLoaded(null);
-    if (canLoad)
-      void refetch({ cancelRefetch: false })
-        .then((result) => {
-          if (current.current === epoch && result.isSuccess && result.data) {
-            setLoaded({
-              epoch,
-              version: result.data.config_version,
-              draft: processingDefaultsToDraft(result.data.effective_defaults),
-            });
-          }
-        })
-        .catch((error) => {
-          if (current.current === epoch) showApiError(error);
-        });
-    return () => {
-      if (current.current === epoch) current.current = null;
-      // Retire an unobserved read so reopening cannot join its old promise.
-      // Another active reader still owns the shared request and its cache.
-      const retired = client
-        .getQueryCache()
-        .find({ queryKey: epoch.queryKey, exact: true });
-      if (retired?.getObserversCount() === 0) {
-        void client.cancelQueries({ queryKey: epoch.queryKey, exact: true });
-      }
-    };
-  }, [epoch, refetch, canLoad, client]);
-  const active = loaded?.epoch === epoch ? loaded : null;
-  const pending = saving === epoch;
-  const validation = active
-    ? validateProcessingDefaultsDraft(active.draft)
-    : null;
+  const form = useProcessingDefaultsDraft(scope, spaceId, api);
   const handleSave = async () => {
-    if (!active || pending || !validation?.ok || current.current !== epoch)
-      return;
-    setSaving(epoch);
+    if (form.pending || !form.valid) return;
     try {
-      const result = await api.updateProcessingSettings(spaceId, {
-        expected_config_version: active.version,
-        defaults: validation.value,
-      });
-      if (current.current !== epoch) return;
-      await client.invalidateQueries({
-        queryKey: knowledgeQueryKeys.settings(scope, spaceId),
-      });
-      if (current.current !== epoch) return;
+      const result = await form.save();
+      if (!result || !form.isCurrent()) return;
       onSaved?.(result);
-      if (current.current === epoch) {
-        if (presentation === "page") {
-          setLoaded({
-            epoch,
-            version: result.config_version,
-            draft: processingDefaultsToDraft(result.effective_defaults),
-          });
-          toast.show({ type: "success", message: t("detail.saved") });
-        } else onOpenChange(false);
-      }
+      if (!form.isCurrent()) return;
+      if (presentation) toast.show({ type: "success", message: t("detail.saved") });
+      else onOpenChange?.(false);
     } catch (error) {
-      if (current.current === epoch) showApiError(error);
-    } finally {
-      if (current.current === epoch) setSaving(null);
+      if (form.isCurrent()) showApiError(error);
     }
   };
   return (
     <SpacePanelFrame
       title={t("f118.defaults_title")}
       presentation={presentation}
-      busy={pending}
+      busy={form.pending}
       footer={
         <>
-          {presentation !== "page" && (
+          {!presentation && (
             <Button
               variant="outlined"
               color="default"
-              disabled={pending}
-              onClick={() => onOpenChange(false)}
+              disabled={form.pending}
+              onClick={() => onOpenChange?.(false)}
             >
               {t("cancel")}
             </Button>
           )}
           <Button
-            disabled={pending || !validation?.ok}
+            disabled={form.pending || !form.valid}
             onClick={() => {
               void handleSave();
             }}
@@ -198,27 +136,7 @@ function ProcessingDefaultsContent({
         </>
       }
     >
-      <p className="text-sm text-text-2">{t("f118.future_uploads_only")}</p>
-      {active ? (
-        <ProcessingDefaultsEditor
-          value={active.draft}
-          disabled={pending}
-          onChange={(draft) => setLoaded({ ...active, draft })}
-        />
-      ) : query.isError ? (
-        <div role="alert">
-          <p>{t("f118.load_failed")}</p>
-          <Button
-            onClick={() => {
-              void handleLoad();
-            }}
-          >
-            {t("retry")}
-          </Button>
-        </div>
-      ) : (
-        <p role="status">{t("f118.loading_defaults")}</p>
-      )}
+      <ProcessingDefaultsFields form={form} compact={presentation === "inline"} />
     </SpacePanelFrame>
   );
 }

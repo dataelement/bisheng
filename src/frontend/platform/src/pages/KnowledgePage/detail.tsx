@@ -79,25 +79,23 @@ export function SpaceDetail({
 
   const directory = (toolbarTarget?: HTMLDivElement | null) => (
     <>
-      {parentId !== null && parents.length > 0 && (
-        <div className={presentation === "workspace" ? "shrink-0 px-4 py-2" : undefined}>
-          <Breadcrumb
-            ariaLabel={t("f118.current_folder")}
-            expandLabel={(count) => t("f118.expand_folders", { count })}
-            items={[
-              {
-                key: "space",
-                title: t("f118.spaces"),
-                onClick: () => onOpenFolder(null),
-              },
-              ...parents.map((folder) => ({
-                key: String(folder.id),
-                title: String(folder.file_name),
-                onClick: () => onOpenFolder(folder.id),
-              })),
-            ]}
-          />
-        </div>
+      {presentation !== "workspace" && parentId !== null && parents.length > 0 && (
+        <Breadcrumb
+          ariaLabel={t("f118.current_folder")}
+          expandLabel={(count) => t("f118.expand_folders", { count })}
+          items={[
+            {
+              key: "space",
+              title: t("f118.spaces"),
+              onClick: () => onOpenFolder(null),
+            },
+            ...parents.map((folder) => ({
+              key: String(folder.id),
+              title: String(folder.file_name),
+              onClick: () => onOpenFolder(folder.id),
+            })),
+          ]}
+        />
       )}
       {facts.isInitialLoading && (
         <div role="status" className={presentation === "workspace" ? "px-4" : undefined}>{t("f118.loading_directory")}</div>
@@ -141,7 +139,14 @@ export function SpaceDetail({
     </div>
   );
   if (presentation === "workspace") return (
-    <SpaceManagementView scope={scope} spaceId={spaceId} parentId={parentId} title={title} description={parentId === null ? info?.description ?? "" : ""}>
+    <SpaceManagementView
+      scope={scope}
+      spaceId={spaceId}
+      parentId={parentId}
+      title={title}
+      description={info?.description ?? undefined}
+      folderPath={parentId === null ? undefined : { parents, onOpenFolder }}
+    >
       {(toolbarTarget) => directory(toolbarTarget)}
     </SpaceManagementView>
   );

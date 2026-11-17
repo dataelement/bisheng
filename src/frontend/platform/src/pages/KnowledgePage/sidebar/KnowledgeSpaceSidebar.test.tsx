@@ -6,7 +6,7 @@ import { KnowledgeSpaceSidebar, type KnowledgeSpaceSidebarProps } from "./Knowle
 const mocks = vi.hoisted(() => ({
   get: vi.fn(), post: vi.fn(), children: vi.fn(), parents: vi.fn(), error: vi.fn(),
 }));
-vi.mock("./useSidebarSpaceActions", () => ({ useSidebarSpaceActions: () => ({ load: vi.fn(), render: () => null, dialogs: null }) }));
+vi.mock("../hooks/useSpaceActions", () => ({ useSpaceActions: () => ({ load: vi.fn(), render: () => null, dialogs: null }) }));
 vi.mock("@/controllers/request", () => ({ default: { get: mocks.get, post: mocks.post }, showApiError: mocks.error }));
 vi.mock("@/controllers/API/knowledgeSpace", () => ({ knowledgeSpaceApi: { listChildren: mocks.children, listAdminSpaces: (query: object) => mocks.get("/api/v1/knowledge/space/admin/list", { params: query }), listVisibleSpaces: (query: object) => mocks.get("/api/v1/knowledge/space/list", { params: query }) } }));
 vi.mock("@/controllers/API/knowledgeFiles", () => ({ knowledgeFilesApi: { listSpaceFolderParents: mocks.parents } }));

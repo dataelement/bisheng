@@ -89,7 +89,7 @@ export function KnowledgeSidebarPane({ children }: KnowledgeSidebarPaneProps) {
       <aside
         id={paneId}
         ref={paneRef}
-        className="flex h-full min-w-0 shrink-0 flex-col border-r-[0.5px] border-border-base bg-[#FBFBFB] pt-2 font-sans dark:bg-bg-page"
+        className="flex h-full min-w-0 shrink-0 flex-col border-r-[0.5px] border-border-base font-sans"
         style={{ width }}
         aria-label={t("f118.spaces")}
       >

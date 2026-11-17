@@ -1,5 +1,4 @@
 import { Button, notification, toast } from "@bisheng/ui";
-import { SpaceSettingsEditor } from "./SpaceSettingsEditor";
 import {
   useQuery,
   useQueryClient,
@@ -286,7 +285,7 @@ export function CreateSpaceForm({
       onDescriptionChange={setDescription}
       disabled={busy}
       compact={page}
-      creating
+      mode="create"
     />
   );
   const advancedFields = ready && (
@@ -502,21 +501,6 @@ function EditSpaceForm({
         <p role="status">{t("f118.loading_space")}</p>
       )}
     </FormFrame>
-  );
-}
-
-interface KnowledgeSpaceSettingsPanelProps {
-  scope: KnowledgeQueryScope;
-  spaceId: number;
-  onSaved: () => void | Promise<void>;
-}
-export function KnowledgeSpaceSettingsPanel({
-  scope,
-  spaceId,
-  onSaved,
-}: KnowledgeSpaceSettingsPanelProps) {
-  return (
-    <SpaceSettingsEditor scope={scope} spaceId={spaceId} onSaved={onSaved} />
   );
 }
 

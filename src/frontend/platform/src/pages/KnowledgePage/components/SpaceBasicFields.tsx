@@ -25,7 +25,7 @@ interface SpaceBasicFieldsProps {
   onDescriptionChange: (value: string) => void;
   disabled: boolean;
   compact?: boolean;
-  creating?: boolean;
+  mode?: "create" | "settings";
 }
 
 export function SpaceBasicFields({
@@ -35,12 +35,14 @@ export function SpaceBasicFields({
   onDescriptionChange,
   disabled,
   compact = false,
-  creating = false,
+  mode,
 }: SpaceBasicFieldsProps) {
   const { t } = useTranslation("knowledge");
   const id = useId();
   const nameComposing = useRef(false);
   const descriptionComposing = useRef(false);
+  const nameLength = getSpaceTextLength(name);
+  const nameTooLong = mode === "settings" && nameLength > SPACE_NAME_LIMIT;
   const fieldClassName = compact ? "space-y-2" : undefined;
   const labelClassName = compact
     ? "block text-body font-medium text-text-1"
@@ -55,17 +57,18 @@ export function SpaceBasicFields({
         <Input
           id={`${id}-name`}
           value={name}
-          placeholder={compact ? t("f118.space_name_placeholder") : undefined}
+          placeholder={compact && mode === "create" ? t("f118.space_name_placeholder") : undefined}
           disabled={disabled}
           required={compact}
-          aria-describedby={creating ? `${id}-name-count` : undefined}
+          status={nameTooLong ? "error" : undefined}
+          aria-describedby={mode ? `${id}-name-count` : undefined}
           suffix={
-            creating ? (
+            mode ? (
               <span
                 id={`${id}-name-count`}
-                className="text-body-sm text-text-3"
+                className={`text-body-sm ${nameTooLong ? "text-danger" : "text-text-3"}`}
               >
-                {Math.ceil(getSpaceTextLength(name))}/{SPACE_NAME_LIMIT}
+                {Math.ceil(nameLength)}/{SPACE_NAME_LIMIT}
               </span>
             ) : undefined
           }
@@ -74,7 +77,7 @@ export function SpaceBasicFields({
           }}
           onCompositionEnd={(event) => {
             nameComposing.current = false;
-            if (creating) {
+            if (mode) {
               onNameChange(
                 truncateSpaceText(event.currentTarget.value, SPACE_NAME_LIMIT),
               );
@@ -83,7 +86,7 @@ export function SpaceBasicFields({
           onChange={(event) => {
             const value = event.target.value;
             onNameChange(
-              creating && !nameComposing.current
+              mode && !nameComposing.current
                 ? truncateSpaceText(value, SPACE_NAME_LIMIT)
                 : value,
             );
@@ -98,7 +101,7 @@ export function SpaceBasicFields({
           id={`${id}-description`}
           value={description}
           placeholder={
-            compact ? t("f118.space_description_placeholder") : undefined
+            compact && mode === "create" ? t("f118.space_description_placeholder") : undefined
           }
           disabled={disabled}
           onCompositionStart={() => {
@@ -106,7 +109,7 @@ export function SpaceBasicFields({
           }}
           onCompositionEnd={(event) => {
             descriptionComposing.current = false;
-            if (creating) {
+            if (mode) {
               onDescriptionChange(
                 truncateSpaceText(event.currentTarget.value, SPACE_DESCRIPTION_LIMIT),
               );
@@ -115,7 +118,7 @@ export function SpaceBasicFields({
           onChange={(event) => {
             const value = event.target.value;
             onDescriptionChange(
-              creating && !descriptionComposing.current
+              mode && !descriptionComposing.current
                 ? truncateSpaceText(value, SPACE_DESCRIPTION_LIMIT)
                 : value,
             );

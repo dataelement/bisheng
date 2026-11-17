@@ -15,7 +15,7 @@ import { showApiError } from "@/controllers/request";
 import { KnowledgeFolderTree, knowledgeTreeNodeKey, type KnowledgeTreeExpansion } from "./KnowledgeFolderTree";
 import { KnowledgeSidebarPane } from "./KnowledgeSidebarPane";
 import { useSpaceCatalog } from "./useSpaceCatalog";
-import { useSidebarSpaceActions } from "./useSidebarSpaceActions";
+import { useSpaceActions } from "../hooks/useSpaceActions";
 
 export interface KnowledgeSpaceSidebarProps {
   scope: KnowledgeQueryScope;
@@ -216,7 +216,7 @@ function ScopedKnowledgeSpaceSidebar(props: KnowledgeSpaceSidebarProps) {
       return next;
     });
   }, []);
-  const actions = useSidebarSpaceActions(scope, props.canCopy, props.onDeleted);
+  const actions = useSpaceActions(scope, { canCopy: props.canCopy, onDeleted: props.onDeleted });
   const client = useQueryClient();
   const { identityKey, tenantId, managementTenantId, view } = scope;
   const prefix = useMemo(() => knowledgeQueryKeys.scope({ identityKey, tenantId, managementTenantId, view }), [identityKey, tenantId, managementTenantId, view]);
@@ -256,12 +256,12 @@ function ScopedKnowledgeSpaceSidebar(props: KnowledgeSpaceSidebarProps) {
   };
   return (
     <>
-      <div className="shrink-0 px-2 pb-2">
-        <SearchInput size="small" className="w-full" aria-label={t("sidebar.search")}
+      <div className="flex min-h-16 shrink-0 items-center px-2">
+        <SearchInput size="medium" className="w-full" aria-label={t("sidebar.search")}
           placeholder={t("sidebar.search")} value={search} onChange={(event) => setSearch(event.target.value)}
           onSearch={(value) => setKeyword(value.trim())} />
       </div>
-      <TreeNavigation showLine={false} className="min-h-0 flex-1 pb-5 [--tree-surface:#FBFBFB] dark:[--tree-surface:rgb(var(--bg-page))]" aria-label={t("sidebar.navigation")}>
+      <TreeNavigation showLine={false} className="min-h-0 flex-1 pb-5" aria-label={t("sidebar.navigation")}>
         {sections.map((section) => (
           <SpaceSectionList key={section} {...props} section={section} path={path} onSelect={handleSelect}
             keyword={keyword} catalog={catalog} departmentIds={departmentIds} createdIds={createdIds} userId={user?.user_id}

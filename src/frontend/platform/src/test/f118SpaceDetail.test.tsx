@@ -279,33 +279,53 @@ it("direct child admission uses current folder facts without a root info or visi
     expect.objectContaining({ parent_id: 9 }),
   );
   expect(mocks.permissions).toHaveBeenCalledWith("folder", "9");
+  const breadcrumb = await screen.findByRole("navigation", {
+    name: "f118.current_folder",
+  });
+  expect(within(breadcrumb).getByText("f118.spaces")).toBeVisible();
   expect(screen.queryByRole("tab", { name: "detail.settings" })).toBeNull();
   expect(mocks.info).not.toHaveBeenCalled();
   expect(mocks.containerEdit).not.toHaveBeenCalled();
 });
-it("updates only parent_id for folder and breadcrumb navigation and keeps the old status filter", async () => {
-  mount("/filelib/7?fileStatus=abnormal");
+it("keeps the breadcrumb in the header and preserves filters through folder navigation", async () => {
+  mocks.permissions.mockImplementation(async (resourceType: string) =>
+    permission(resourceType === "knowledge_space" ? ["visible"] : []),
+  );
+  const root = "/filelib/7?fileStatus=abnormal&keep=1";
+  mount(root);
   fireEvent.click(await screen.findByRole("button", { name: "Folder" }));
   await waitFor(() =>
-    expect(screen.getByTestId("location")).toHaveTextContent(
-      "fileStatus=abnormal&parent_id=9",
-    ),
+    expect(screen.getByTestId("location").textContent).toBe(`${root}&parent_id=9`),
   );
   const nav = await screen.findByRole("navigation", {
     name: "f118.current_folder",
   });
-  fireEvent.click(within(nav).getByRole("button", { name: "Parent" }));
-  await waitFor(() => expect(mocks.parents).toHaveBeenCalledWith(7, 8));
-  fireEvent.click(
-    within(
-      await screen.findByRole("navigation", { name: "f118.current_folder" }),
-    ).getByRole("button", { name: "f118.spaces" }),
-  );
+  const header = nav.closest("header");
+  expect(header).not.toBeNull();
+  expect(await within(nav).findByRole("button", { name: "Server 7" })).toBeVisible();
+  expect(within(nav).getByText("Child 9")).toHaveAttribute("aria-current", "page");
+
+  fireEvent.click(within(header!).getByRole("button", { name: "back" }));
   await waitFor(() =>
-    expect(screen.getByTestId("location")).toHaveTextContent(
-      "/filelib/7?fileStatus=abnormal",
-    ),
+    expect(screen.getByTestId("location").textContent).toBe(`${root}&parent_id=8`),
   );
+  fireEvent.click(await screen.findByRole("button", { name: "Folder" }));
+  const childPath = await screen.findByRole("navigation", {
+    name: "f118.current_folder",
+  });
+  fireEvent.click(within(childPath).getByRole("button", { name: "Parent" }));
+  await waitFor(() =>
+    expect(screen.getByTestId("location").textContent).toBe(`${root}&parent_id=8`),
+  );
+
+  const parentPath = await screen.findByRole("navigation", {
+    name: "f118.current_folder",
+  });
+  fireEvent.click(await within(parentPath).findByRole("button", { name: "Server 7" }));
+  await waitFor(() =>
+    expect(screen.getByTestId("location").textContent).toBe(root),
+  );
+  expect(screen.queryByRole("navigation", { name: "f118.current_folder" })).toBeNull();
   expect(
     mocks.children.mock.calls.every(
       ([, query]) => query.file_status?.join() === "3,6,7",
@@ -486,9 +506,9 @@ it.each(["file_id=0", "file_id=11&file_id=12"])("rejects invalid file targets be
   expect(mocks.get).not.toHaveBeenCalled();
 });
 
-it.each(["ordinary", "admin"])("opens the chunk editor in the %s view and returns to the same directory with its original filters", async (view) => {
-  user = { ...user, is_child_admin: view === "admin" };
-  const current = mount(`/filelib/7?parent_id=9&fileStatus=abnormal&keep=1${view === "admin" ? "&view=admin" : ""}`);
+it.each([false, true])("opens the chunk editor in the ordinary view and preserves directory filters for admin=%s", async (isAdmin) => {
+  user = { ...user, is_child_admin: isAdmin };
+  const current = mount("/filelib/7?parent_id=9&fileStatus=abnormal&keep=1");
   fireEvent.click(await screen.findByRole("button", { name: "report.pdf" }));
   await waitFor(() => expect(screen.getByTestId("detail-chunks")).toBeInTheDocument());
   expect(screen.getByTestId("location")).toHaveTextContent("file_id=11");
@@ -497,9 +517,9 @@ it.each(["ordinary", "admin"])("opens the chunk editor in the %s view and return
   expect(screen.getByTestId("location")).toHaveTextContent("parent_id=9&fileStatus=abnormal&keep=1");
   expect(screen.getByTestId("location")).not.toHaveTextContent("file_id=");
   const views = current.client.getQueryCache().getAll().map((query) => query.queryKey[4]);
-  expect(views).toContain(view);
-  expect(views).not.toContain(view === "admin" ? "ordinary" : "admin");
-  expect(screen.getByRole("tab", { name: view === "admin" ? "f118.manage_spaces" : "f118.spaces" })).toHaveAttribute("data-state", "active");
+  expect(views).toContain("ordinary");
+  expect(views).not.toContain("admin");
+  expect(screen.getByRole("tab", { name: "f118.spaces" })).toHaveAttribute("data-state", "active");
 });
 
 it("does not turn a forged management URL into an admin scope for an ordinary user", async () => {

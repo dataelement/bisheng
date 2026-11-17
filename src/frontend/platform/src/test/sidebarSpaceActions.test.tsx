@@ -8,7 +8,7 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { KnowledgeSpaceInfo } from "@/controllers/API/knowledgeSpace";
-import { useSidebarSpaceActions } from "@/pages/KnowledgePage/sidebar/useSidebarSpaceActions";
+import { useSpaceActions } from "@/pages/KnowledgePage/hooks/useSpaceActions";
 import type { ReactNode } from "react";
 vi.mock("@bisheng/ui", async (original) => ({
   ...(await original<typeof import("@bisheng/ui")>()),
@@ -75,7 +75,7 @@ function setup(canCreate = true, onDeleted = vi.fn()) {
   });
   clients.push(client);
   function Example() {
-    const menu = useSidebarSpaceActions(scope, canCreate, onDeleted);
+    const menu = useSpaceActions(scope, { canCopy: canCreate, onDeleted });
     return (
       <>
         <button onClick={() => menu.load(row, true)}>open</button>

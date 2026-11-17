@@ -743,6 +743,7 @@
     "detail": {
         "space_info": "Space information",
         "save_failed": "Changes could not be saved. Please retry.",
+        "processing_saved_settings_failed": "Splitting rules were saved. Please retry saving the remaining changes.",
         "file_title": "File {{id}}",
         "file_editor": "File chunks",
         "files": "Files",
