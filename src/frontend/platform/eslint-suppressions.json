@@ -1325,9 +1325,6 @@
     }
   },
   "src/pages/BuildPage/flow/FlowNode/component/ModelItem.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
     "react-hooks/exhaustive-deps": {
       "count": 2
     }

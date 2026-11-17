@@ -806,5 +806,17 @@
         "independent": "The copy has independent resources, indexes and tasks. It is not published to the square, and subscriptions, pins and chats are not copied.",
         "create": "Create copy",
         "created": "Copy created: {{name}}"
+    },
+    "fileMetadata": {
+        "searchFields": "Search metadata fields",
+        "noAvailableFields": "No available fields",
+        "schemaScopeHint": "The new field belongs to this knowledge space. Set its value for this file after the creation task completes.",
+        "fieldType": "Field type",
+        "confirmCreate": "Confirm field creation",
+        "schemaPending": "Creating the field. Values can be set when the task completes.",
+        "uncertain": "The result is unconfirmed. Retry this same operation or close and check processing tasks. Do not create it again.",
+        "typeString": "String",
+        "typeNumber": "Number",
+        "typeTime": "Time"
     }
 }

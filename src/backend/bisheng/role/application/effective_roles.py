@@ -29,12 +29,16 @@ def _binding_ids(subject) -> set[int]:
     }
 
 
+def eligible_role_definition(role, home_tenant_id: int) -> bool:
+    return role.role_type == "global" or (role.role_type in ("tenant", "", None) and role.tenant_id == home_tenant_id)
+
+
 def eligible_role(role, home_tenant_id: int, supported_department_ids: set[int]) -> bool:
     """Shared by reads and synchronous binding producers; no grant-source fiction."""
-    definition_allowed = role.role_type == "global" or (
-        role.role_type in ("tenant", "", None) and role.tenant_id == home_tenant_id
+    return bool(
+        eligible_role_definition(role, home_tenant_id)
+        and (role.department_id is None or role.department_id in supported_department_ids)
     )
-    return bool(definition_allowed and (role.department_id is None or role.department_id in supported_department_ids))
 
 
 async def assignable_role_catalog(department_facts) -> dict[int, list]:
@@ -51,17 +55,23 @@ async def assignable_role_catalog(department_facts) -> dict[int, list]:
     }
 
 
-def _resolve(subject, definitions, member_facts, expected_home):
+def supported_policy_departments(subject, member_facts, expected_home=None) -> set[int]:
+    """Shared topology checks for admission and read-only binding display."""
     home = subject.home_tenant_id
     if expected_home is not None and home != expected_home:
         raise RolePolicyUnavailableError()
     primaries = [facts.business_tenant_id for member, facts in member_facts if member.is_primary]
     if len(primaries) > 1 or (primaries[0] if primaries else 1) != home:
         raise RolePolicyUnavailableError()
+    return {did for _, facts in member_facts if facts.business_tenant_id == home for did in facts.ancestor_ids}
+
+
+def _resolve(subject, definitions, member_facts, expected_home):
+    supported = supported_policy_departments(subject, member_facts, expected_home)
+    home = subject.home_tenant_id
     bound = _binding_ids(subject)
     if bound - {int(row.id) for row in definitions}:
         raise RolePolicyUnavailableError()
-    supported = {did for _, facts in member_facts if facts.business_tenant_id == home for did in facts.ancestor_ids}
     return tuple(sorted((row for row in definitions if eligible_role(row, home, supported)), key=lambda row: row.id))
 
 

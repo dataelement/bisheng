@@ -38,6 +38,7 @@ from bisheng.common.errcode.department import (
 from bisheng.common.errcode.permission import PermissionInvalidResourceError
 from bisheng.common.services.config_service import settings
 from bisheng.common.subject_search import normalize_keyword
+from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.department import (
     Department,
@@ -2269,7 +2270,7 @@ class DepartmentService:
         # Batch enrich: user_groups and roles
         user_ids = {r.user_id for r in rows}
         user_groups_map: dict = {}
-        roles_map: dict = {}
+        role_display: dict = {}
 
         if user_ids:
             with directory_business_data_scope():
@@ -2324,23 +2325,14 @@ class DepartmentService:
                             {"id": gid, "group_name": gname},
                         )
 
-                    # Roles
-                    from bisheng.database.models.role import Role
-                    from bisheng.user.domain.models.user_role import UserRole
+            from bisheng.role.application.member_role_display import read_member_role_display
 
-                    role_result = await session.exec(
-                        select(
-                            UserRole.user_id,
-                            Role.id,
-                            Role.role_name,
-                        )
-                        .join(Role, UserRole.role_id == Role.id)
-                        .where(UserRole.user_id.in_(user_ids))
-                    )
-                    for uid, rid, rname in role_result.all():
-                        roles_map.setdefault(uid, []).append(
-                            {"id": rid, "role_name": rname},
-                        )
+            with directory_business_data_scope():
+                role_display = await read_member_role_display(
+                    user_ids,
+                    tenant_id=get_current_tenant_id(),
+                    include_issues=_is_admin(login_user),
+                )
         department_ids = sorted({r.department_id for r in rows})
         admin_user_ids = await asyncio.gather(
             *(cls._aget_department_admin_user_ids(department_id) for department_id in department_ids)
@@ -2376,7 +2368,7 @@ class DepartmentService:
                 "enabled": r.user_deleted == 0,
                 "disable_source": getattr(r, "user_disable_source", None),
                 "user_groups": user_groups_map.get(r.user_id, []),
-                "roles": roles_map.get(r.user_id, []),
+                **role_display.get(r.user_id, {"roles": []}),
                 "is_department_admin": r.user_id in admins_by_department[r.department_id],
                 **(
                     {

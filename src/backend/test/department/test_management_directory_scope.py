@@ -362,3 +362,40 @@ async def test_projected_department_subjects_use_business_home_and_stop_at_mount
     assert "department:20#subtree_member" in subjects
     assert "department:10#subtree_member" not in subjects
     assert "department:40#member" not in subjects
+
+
+@pytest.mark.parametrize("global_super", [True, False])
+async def test_member_page_uses_business_roles_and_limits_diagnostics(
+    directory_db, selected, monkeypatch, global_super
+):
+    from bisheng.database.models.group import Group
+    from bisheng.database.models.user_group import UserGroup
+    from bisheng.department.domain.repositories import department_member_repository
+    from bisheng.user_group.domain.services import user_group_service
+
+    await directory_db.create(Group, UserGroup)
+    monkeypatch.setattr(department_member_repository, "get_async_db_session", directory_db.sessions, raising=False)
+    monkeypatch.setattr(user_group_service, "_can_view_all_groups", AsyncMock(return_value=True))
+    monkeypatch.setattr(service.DepartmentService, "_aget_department_admin_user_ids", AsyncMock(return_value=[]))
+    operator = (
+        actor() if global_super else SimpleNamespace(user_id=191, tenant_id=2, user_role=[], is_global_super=False)
+    )
+
+    # Permission admission is independent; verify the exact admitted page's enrichment.
+    async def authorized_department(session, *args):
+        return await session.get(Department, 30)
+
+    monkeypatch.setattr(service, "_get_dept_and_check_permission", authorized_department)
+    token = selected(2)
+    try:
+        with tenant_execution_scope(2):
+            async with organization_directory_scope():
+                result = await service.DepartmentService.aget_members("a-leaf", 1, 20, "", operator)
+                assert get_current_tenant_id() == 1
+        member = next(row for row in result["data"] if row["user_id"] == 77)
+        assert {role["id"] for role in member["roles"]} == {2, 3}
+        assert ("role_binding_issues" in member) is global_super
+        if global_super:
+            assert {issue["reason"] for issue in member["role_binding_issues"]} >= {"binding_tenant_mismatch"}
+    finally:
+        admitted_request_scope.reset(token)

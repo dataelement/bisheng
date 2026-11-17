@@ -2,7 +2,7 @@
 import { Label } from "@/components/bs-ui/label";
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { filterModelOption, toGroupedModelOptions, toModelSelectValue } from "@/components/bs-comp/formFields/modelOptions";
-import { Select } from "@bisheng/ui";
+import { Button, Select } from "@bisheng/ui";
 import { showApiError } from "@/controllers/request";
 import { getLlmDefaultModel } from "@/controllers/API/finetune";
 import { useModel } from "@/pages/ModelPage/manage";
@@ -12,7 +12,7 @@ import { useTranslation } from "react-i18next";
 export default function ModelItem({ agent = false, data, onChange, onValidate, i18nPrefix }) {
     const { t } = useTranslation('flow');
 
-    const { llmOptions, isLoading } = useModel(agent ? 'assistant' : 'llm');
+    const { llmOptions, error: loadError, refetch } = useModel(agent ? 'assistant' : 'llm');
     const latestValue = useRef(data.value);
     latestValue.current = data.value;
     const [modelId, setModelId] = useState(null); // set initial state as null
@@ -65,8 +65,10 @@ export default function ModelItem({ agent = false, data, onChange, onValidate, i
                 {data.required && <span className="text-red-500">*</span>}
                 {t(`${i18nPrefix}label`)}
             </Label>
+            {loadError && <div role="alert">{t("modelLoadFailed")} <Button variant="text" onClick={() => { void refetch(); }}>{t("retryModelLoad")}</Button></div>}
             <Select
                 {...selectLabels}
+                disabled={Boolean(loadError)}
                 className="nodrag w-full"
                 status={error ? 'error' : 'default'}
                 options={options}

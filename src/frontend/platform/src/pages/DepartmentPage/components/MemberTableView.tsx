@@ -26,6 +26,7 @@ import { ColumnResizeHandle } from "@/components/bs-ui/table/useResizableColumns
 import { cname } from "@/components/bs-ui/utils";
 import UserPwdModal from "@/pages/LoginPage/UserPwdModal";
 import type { DepartmentMember } from "@/types/api/department";
+import { MemberRoleSummary } from "./MemberRoleSummary";
 import { CreateLocalMemberDialog } from "./CreateLocalMemberDialog";
 import type { useMemberTableController } from "./MemberTable";
 import { OrganizationMemberEditDialog } from "./OrganizationMemberEditDialog";
@@ -279,21 +280,7 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
                       )}
                     </TableCell>
                     <TableCell {...mrc.getTdProps(3)}>
-                      {(() => {
-                        const roleNames: string[] = [];
-                        if (m.is_department_admin) {
-                          roleNames.push(t("bs:department.deptAdminRoleName"));
-                        }
-                        roleNames.push(...m.roles.map((r) => r.role_name));
-                        const text = roleNames.join(", ") || "-";
-                        return (
-                          <SharedTooltip content={text}>
-                            <div className="cursor-default truncate">
-                              {text}
-                            </div>
-                          </SharedTooltip>
-                        );
-                      })()}
+                      <MemberRoleSummary member={m} />
                     </TableCell>
                     <TableCell {...mrc.getTdProps(4)}>
                       {(() => {

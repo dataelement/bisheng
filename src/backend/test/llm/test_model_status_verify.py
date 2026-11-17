@@ -35,7 +35,7 @@ def original_probe_unit_composition(monkeypatch):
 
 
 def _model(model_type=LLMModelType.LLM.value):
-    return LLMModel(id=7, server_id=1, model_name="gpt-x", model_type=model_type)
+    return LLMModel(id=7, server_id=1, tenant_id=1, model_name="gpt-x", model_type=model_type)
 
 
 def _login_user():
@@ -110,6 +110,17 @@ class TestVerifyDefeatsTheInfoCache:
     name and reported `model_not_found`; it only started working once the entry
     aged out. Verify evicts the entry first.
     """
+
+    @pytest.fixture(autouse=True)
+    def writable_provider_scope(self, monkeypatch):
+        from bisheng.llm.domain.models.llm_server import LLMServer
+
+        monkeypatch.setattr("bisheng.llm.domain.services.llm.get_current_tenant_id", lambda: 1)
+        monkeypatch.setattr(
+            LLMService,
+            "acollect_visible_servers",
+            AsyncMock(return_value=[LLMServer(id=1, name="provider", type="openai", config={}, tenant_id=1)]),
+        )
 
     async def test_verify_evicts_the_cached_model_and_server(self):
         from bisheng.llm.domain.const import LLM_CACHE
