@@ -26,8 +26,9 @@ def runtime_permission_scope(monkeypatch):
     monkeypatch.setattr("bisheng.utils.http_middleware._check_is_global_super", AsyncMock(return_value=False))
     allowed = {"enabled": True}
 
+    # Grant whichever actions the caller checks; the catalog now asks for "visible".
     async def decisions(user, *, resource_type, resource_ids, actions):
-        return {str(i): {"use"} for i in resource_ids} if allowed["enabled"] else {}
+        return {str(i): set(actions) for i in resource_ids} if allowed["enabled"] else {}
 
     monkeypatch.setattr("bisheng.permission.application.business_authorization.batch_check_business_actions", decisions)
     token = set_current_tenant_id(1)
@@ -90,3 +91,34 @@ def test_runtime_requires_login(client):
     client.app.dependency_overrides[UserPayload.get_login_user] = logged_out
     assert client.get(BASE + "/runtime/catalog").status_code == 401
     assert client.get(BASE + "/runtime/1/bundle", params={"version": "0" * 64}).status_code == 401
+
+
+def test_runtime_catalog_tells_personal_uploads_from_tenant_skills(client):
+    from bisheng.linsight.domain.models.linsight_skill import LinsightSkill
+    from test.linsight.test_skill_service import FakeSkillDao
+
+    client.post(BASE, files={"file": ("demo.md", _md_bytes(), "text/markdown")})
+    tenant = next(iter(FakeSkillDao.rows.values()))
+    # The signed-in end user (MockEndUser.user_id) uploaded this one for themselves.
+    personal = LinsightSkill(**{**tenant.model_dump(), "id": tenant.id + 1, "name": "my-notes", "owner_user_id": 99})
+    FakeSkillDao.rows[personal.name] = personal
+    rows = {row["name"]: row["source"] for row in client.get(BASE + "/runtime/catalog").json()["data"]}
+    assert rows == {tenant.name: "platform", "my-notes": "personal"}
+
+
+@pytest.mark.parametrize(
+    ("source", "owner_user_id", "provider"),
+    [("manual", 0, "platform"), ("builtin", 0, "platform"), ("manual", 7, "personal"), ("personal", 0, "personal")],
+)
+def test_skill_provider_matches_the_dsh_skill_list_rule(source, owner_user_id, provider):
+    from bisheng.linsight.domain.models.linsight_skill import LinsightSkill
+    from bisheng.linsight.domain.schemas.skill_schema import skill_provider
+
+    assert (
+        skill_provider(
+            LinsightSkill(
+                name="demo", object_path="x", content_hash="a" * 64, source=source, owner_user_id=owner_user_id
+            )
+        )
+        == provider
+    )
