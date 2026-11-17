@@ -16,6 +16,7 @@ import { showApiError } from "@/controllers/request";
 import { useKnowledgeDeletion } from "../hooks/useKnowledgeDeletion";
 import { KnowledgeDeletionDialog } from "./KnowledgeDeletionDialog";
 import { SpaceMetadataPanel } from "./SpaceMetadataPanel";
+import { SpaceTaskRecordsButton } from "./SpaceTaskRecordsButton";
 
 interface SpaceFolderBreadcrumbProps {
   items: BreadcrumbItem[];
@@ -256,6 +257,14 @@ export function SpaceManagementView({
             <div className="flex min-w-0 items-center gap-1">
               <h1 className="min-w-0 truncate text-h4 text-text-1">{spaceTitle}</h1>
               {spaceInfoButton}
+              {children && parentId === null && rootInfo && (
+                <SpaceTaskRecordsButton
+                  key={deletionScope}
+                  scope={scope}
+                  spaceId={spaceId}
+                  canReadProcessing={canEdit}
+                />
+              )}
             </div>
           )}
         </div>

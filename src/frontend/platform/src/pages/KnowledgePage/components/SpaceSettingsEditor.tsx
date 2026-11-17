@@ -321,21 +321,6 @@ function SettingsEditor({
                 <SpacePanelFrame title={t("f118.defaults_title")} presentation="inline">
                   <ProcessingDefaultsFields form={processing} compact disabled={busy} />
                 </SpacePanelFrame>
-                <SpaceProcessingPanel
-                  scope={scope}
-                  spaceId={spaceId}
-                  mode="jobs"
-                  jobKind="embedding_rebuild"
-                  presentation="inline"
-                />
-                <SpaceProcessingPanel
-                  scope={scope}
-                  spaceId={spaceId}
-                  mode="jobs"
-                  jobKind="move_index"
-                  presentation="inline"
-                  onSaved={() => { void onSaved(); }}
-                />
               </>
             )}
             {draft && feature.isError && (

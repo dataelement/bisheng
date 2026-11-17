@@ -199,6 +199,7 @@ beforeEach(() => {
       if (parents) return mocks.parents(Number(parents[1]), Number(parents[2]));
       if (url.endsWith("/children"))
         return mocks.children(url, options?.params);
+      if (url.endsWith("/processing-jobs")) return { data: [], total: 0 };
       if (url.endsWith("/preview")) return mocks.preview(url);
       if (url.includes("/file/info/")) return { id: 11, file_name: "report.pdf", knowledge_id: 7, user_metadata: {} };
       if (url.endsWith("/chunk")) return { data: [], total: 0 };
