@@ -26,6 +26,10 @@ export function KnowledgeDeletionDialog({ operation }: KnowledgeDeletionDialogPr
   const danger = consent.plan === plan && consent.danger;
   const impact = view.result?.impact ?? view.inspection;
   const complete = view.result?.check_complete ?? view.inspection?.check_complete;
+  const visibleCounts = (counts: Record<string, number>) =>
+    Object.entries(counts).filter(([kind]) =>
+      view.readonly || view.command.kind !== "delete" || !["knowledge", "model_default"].includes(kind),
+    );
   const locked = view.busy || view.dispatched;
   const needsSkip = !!view.result?.requires_skip_confirmation;
   const executable =
@@ -149,7 +153,7 @@ export function KnowledgeDeletionDialog({ operation }: KnowledgeDeletionDialogPr
             <>
               <div>
                 <p>{tr("source_counts")}</p>
-                {Object.entries(impact.source_counts).map(([kind, count]) => (
+                {visibleCounts(impact.source_counts).map(([kind, count]) => (
                   <p key={kind}>
                     {kindLabel(kind)}: {count}
                   </p>
@@ -157,7 +161,7 @@ export function KnowledgeDeletionDialog({ operation }: KnowledgeDeletionDialogPr
               </div>
               <div>
                 <p>{tr("restricted")}</p>
-                {Object.entries(impact.restricted_counts).map(([kind, count]) => (
+                {visibleCounts(impact.restricted_counts).map(([kind, count]) => (
                   <p key={kind}>
                     {kindLabel(kind)}: {count}
                   </p>

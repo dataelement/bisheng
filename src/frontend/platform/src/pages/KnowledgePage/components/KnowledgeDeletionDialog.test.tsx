@@ -69,6 +69,18 @@ describe("knowledge deletion consent", () => {
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
     expect(screen.queryByText("deletion.slot_counts")).not.toBeInTheDocument();
   });
+  it("hides knowledge and default model counts only for space deletion", () => {
+    const impact = { ...base.result!.impact, source_counts: { knowledge: 4, model_default: 3, assistant: 1 }, restricted_counts: { knowledge: 2, model_default: 1, workflow_version: 5 } };
+    const view = { ...base, command: { spaceId: 3, kind: "delete" as const }, result: { ...base.result!, impact } };
+    const { rerender } = render(<KnowledgeDeletionDialog operation={operation(view)} />);
+    expect(screen.queryByText(/deletion.source_knowledge/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/deletion.source_model_default/)).not.toBeInTheDocument();
+    expect(screen.getByText("deletion.source_assistant: 1")).toBeInTheDocument();
+    expect(screen.getByText("deletion.source_workflow_version: 5")).toBeInTheDocument();
+    rerender(<KnowledgeDeletionDialog operation={operation({ ...view, command: base.command })} />);
+    expect(screen.getByText("deletion.source_knowledge: 4")).toBeInTheDocument();
+    expect(screen.getByText("deletion.source_model_default: 3")).toBeInTheDocument();
+  });
   it("requires explicit skip acknowledgement and retires it for a new plan", () => {
     const op = operation(base);
     const { rerender } = render(<KnowledgeDeletionDialog operation={op} />);
