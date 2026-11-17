@@ -14,7 +14,9 @@ it('keeps an auxiliary business 404 inspectable without replacing the page', asy
 });
 async function setup(envelope: unknown) {
   const module = await import('./request');
-  module.default.defaults.adapter = async config => ({ config, status: 200, statusText: 'OK', headers: {}, data: envelope });
+  module.default.defaults.adapter = async config => ({ config, status: 200, statusText: 'OK', headers: {},
+    data: config.url?.startsWith('/api/v1/admin/request-scope')
+      ? {status_code: 200, data: {scope_tenant_id: 60, source: 'selected'}} : envelope });
   return module;
 }
 it('keeps password-expiration evidence for the login interaction without a generic notice', async () => {
