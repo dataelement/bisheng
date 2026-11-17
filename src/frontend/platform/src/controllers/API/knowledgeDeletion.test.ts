@@ -43,9 +43,9 @@ it("pins all new reads and writes with the current server-learned management sco
     ["POST", "deletion/confirm"],
   ])
     expect(requiresManagementScope(method, `/api/v1/knowledge/space/3/${suffix}`)).toBe(true);
-  expect(requiresManagementScope("GET", "/api/v1/knowledge/space/3/children")).toBe(false);
+  expect(requiresManagementScope("GET", "/api/v1/knowledge/space/3/children")).toBe(true);
   expect(
     requiresManagementScope("POST", "/api/v1/knowledge/space/3/deletion/confirm?purpose=approval"),
-  ).toBe(false);
+  ).toBe(true);
   acceptManagementScope(null);
 });

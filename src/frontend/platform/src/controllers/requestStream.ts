@@ -15,7 +15,7 @@ export async function requestStream(
     url.replace(/^\//, ""),
     new URL(sharedBase, location.origin),
   );
-  const scoped = requiresManagementScope("POST", url);
+  const scoped = requiresManagementScope("POST", url, request.defaults.baseURL);
   if (scoped) await bootstrapManagementRequestScope();
   const snapshot = scoped ? managementRequestScope() : null;
   const config = { url, method: "post", managementScopeSnapshot: snapshot };
