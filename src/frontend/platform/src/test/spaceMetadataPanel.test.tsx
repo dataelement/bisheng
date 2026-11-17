@@ -4,11 +4,16 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { SpaceMetadataPanel } from "@/pages/KnowledgePage/components/SpaceMetadataPanel";
-import { knowledgeSpaceApi } from "@/controllers/API/knowledgeSpace";
+import {
+  knowledgeSpaceApi,
+  type ProcessingJobRead,
+} from "@/controllers/API/knowledgeSpace";
+import { createPlatformQueryClient } from "@/queryClient";
 const mocks = vi.hoisted(() => ({
   read: vi.fn(),
   error: vi.fn(),
@@ -33,7 +38,9 @@ vi.mock("@/pages/KnowledgePage/components/KnowledgeTooltip", () => ({
   KnowledgeHint: () => null,
 }));
 vi.mock("@/pages/KnowledgePage/components/SpaceProcessingProgress", () => ({
-  SpaceProcessingProgress: () => <p>updating-metadata</p>,
+  SpaceProcessingProgress: ({ jobId }: { jobId: string }) => (
+    <p data-job-id={jobId}>updating-metadata</p>
+  ),
 }));
 const scope = {
   identityKey: "user:7",
@@ -53,21 +60,41 @@ const plan = {
   impact: {},
   requires_skip_confirmation: false,
 };
-function mount() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  clients.push(client);
-  return render(
+const processingJob: ProcessingJobRead = {
+  id: "job",
+  space_id: 7,
+  kind: "metadata_schema_change",
+  state: "running",
+  revision: 2,
+  accepted_at: "2026-11-17T07:00:00Z",
+  started_at: "2026-11-17T07:00:01Z",
+  finished_at: null,
+  total_count: 20,
+  succeeded_count: 6,
+  failed_count: 0,
+  pending_count: 14,
+  hidden_item_count: 0,
+  retryable: false,
+  obsolete_reason: null,
+  error_code: null,
+};
+function mount(client = createPlatformQueryClient()) {
+  if (!clients.includes(client)) clients.push(client);
+  const view = render(
     <QueryClientProvider client={client}>
-      <SpaceMetadataPanel scope={scope} spaceId={7} />
+      <SpaceMetadataPanel scope={scope} spaceId={7} onClose={vi.fn()} />
     </QueryClientProvider>,
   );
+  return { ...view, client };
 }
 beforeEach(() => {
   vi.restoreAllMocks();
   vi.clearAllMocks();
   mocks.read.mockResolvedValue({ revision: 5, fields: [] });
+  vi.spyOn(knowledgeSpaceApi, "listProcessingJobs").mockResolvedValue({
+    data: [],
+    total: 0,
+  });
 });
 afterEach(() => {
   cleanup();
@@ -87,8 +114,52 @@ it("shows the old built-in rows read-only and no separate precheck button", asyn
     expect(screen.getByText(key)).toBeVisible();
   expect(screen.queryByRole("button", { name: "rename" })).toBeNull();
   expect(screen.queryByText("f118.processing_review_action")).toBeNull();
+  expect(screen.queryByText("updating-metadata")).toBeNull();
 });
-it("performs the existing native checks and confirmation internally on create", async () => {
+
+it("shows the create form above the visible lists and restores focus on cancel", async () => {
+  mocks.read.mockResolvedValue({
+    revision: 5,
+    fields: [{ field_name: "category", field_type: "string" }],
+  });
+  mount();
+  const create = await screen.findByRole("button", { name: "createMetadata" });
+  const dialog = screen.getByRole("dialog", { name: "metaData" });
+  const customField = within(dialog).getByText("category");
+  const builtInField = within(dialog).getByText("document_id");
+  fireEvent.click(create);
+
+  expect(screen.getByRole("dialog", { name: "metaData" })).toBe(dialog);
+  expect(screen.getAllByRole("dialog", { hidden: true })).toEqual([dialog]);
+  const form = within(dialog).getByRole("form", { name: "createMetadata" });
+  const name = within(form).getByRole("textbox", { name: "metadatainfor.name" });
+  expect(customField).toBeVisible();
+  expect(builtInField).toBeVisible();
+  expect(
+    form.compareDocumentPosition(customField) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  await waitFor(() => expect(name).toHaveFocus());
+
+  fireEvent.click(within(form).getByRole("button", { name: "cancel" }));
+
+  expect(screen.getByRole("dialog", { name: "metaData" })).toBe(dialog);
+  expect(form).not.toBeVisible();
+  await waitFor(() =>
+    expect(within(dialog).getByRole("button", { name: "createMetadata" })).toHaveFocus(),
+  );
+});
+
+it("explains invalid uppercase metadata names before calling the backend", async () => {
+  const precheck = vi.spyOn(knowledgeSpaceApi, "precheckProcessing");
+  mount();
+  fireEvent.click(await screen.findByRole("button", { name: "createMetadata" }));
+  fireEvent.change(await screen.findByPlaceholderText("pleaseEnter"), { target: { value: "AAA" } });
+  fireEvent.click(screen.getByRole("button", { name: "save" }));
+  await waitFor(() => expect(screen.getByText("nameFormatError")).toBeVisible());
+  expect(precheck).not.toHaveBeenCalled();
+});
+
+it("resumes a submitted metadata job on reopen until it is complete", async () => {
   const precheck = vi
     .spyOn(knowledgeSpaceApi, "precheckProcessing")
     .mockResolvedValue(plan);
@@ -106,7 +177,7 @@ it("performs the existing native checks and confirmation internally on create", 
         reused: false,
       };
     });
-  mount();
+  const first = mount();
   fireEvent.click(
     await screen.findByRole("button", { name: "createMetadata" }),
   );
@@ -135,6 +206,88 @@ it("performs the existing native checks and confirmation internally on create", 
   expect(mocks.legacy).not.toHaveBeenCalled();
   expect(await screen.findByText("updating-metadata")).toBeVisible();
   await waitFor(() => expect(screen.getAllByText("category")).toHaveLength(1));
+
+  first.unmount();
+  vi.mocked(knowledgeSpaceApi.listProcessingJobs).mockResolvedValue({
+    data: [processingJob],
+    total: 1,
+  });
+  const reopened = mount(first.client);
+  expect(await screen.findByText("updating-metadata")).toHaveAttribute(
+    "data-job-id",
+    "job",
+  );
+  expect(knowledgeSpaceApi.listProcessingJobs).toHaveBeenLastCalledWith(7, {
+    page: 1,
+    page_size: 1,
+    kind: "metadata_schema_change",
+  });
+  expect(screen.getByRole("button", { name: "createMetadata" })).toBeDisabled();
+
+  reopened.unmount();
+  vi.mocked(knowledgeSpaceApi.listProcessingJobs).mockResolvedValue({
+    data: [
+      {
+        ...processingJob,
+        state: "succeeded",
+        finished_at: "2026-11-17T07:00:03Z",
+        succeeded_count: processingJob.total_count,
+        pending_count: 0,
+      },
+    ],
+    total: 1,
+  });
+  mount(first.client);
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "createMetadata" })).toBeEnabled(),
+  );
+  expect(screen.getByText("category")).toBeVisible();
+  expect(screen.queryByText("updating-metadata")).toBeNull();
+  expect(create).toHaveBeenCalledTimes(1);
+});
+
+it("recovers a partial failure and follows a new job after another edit", async () => {
+  vi.mocked(knowledgeSpaceApi.listProcessingJobs).mockResolvedValue({
+    data: [
+      {
+        ...processingJob,
+        id: "failed-job",
+        state: "partial_failed",
+        finished_at: "2026-11-17T07:00:03Z",
+        succeeded_count: 19,
+        failed_count: 1,
+        pending_count: 0,
+        retryable: true,
+      },
+    ],
+    total: 1,
+  });
+  vi.spyOn(knowledgeSpaceApi, "precheckProcessing").mockResolvedValue(plan);
+  const create = vi.spyOn(knowledgeSpaceApi, "createProcessingJob").mockResolvedValue({
+    job_id: "next-job",
+    accepted: true,
+    state: "accepted",
+    reused: false,
+  });
+  mount();
+  expect(await screen.findByText("updating-metadata")).toHaveAttribute(
+    "data-job-id",
+    "failed-job",
+  );
+  const add = await screen.findByRole("button", { name: "createMetadata" });
+  expect(add).toBeEnabled();
+  fireEvent.click(add);
+  fireEvent.change(await screen.findByPlaceholderText("pleaseEnter"), {
+    target: { value: "next_category" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "save" }));
+  await waitFor(() =>
+    expect(screen.getByText("updating-metadata")).toHaveAttribute(
+      "data-job-id",
+      "next-job",
+    ),
+  );
+  expect(create).toHaveBeenCalledTimes(1);
 });
 it("does not confirm incomplete or blocked prechecks", async () => {
   vi.spyOn(knowledgeSpaceApi, "precheckProcessing").mockResolvedValue({
@@ -211,7 +364,7 @@ it("does not mutate reserved names or accept a stale result after unmount", asyn
   expect(create).not.toHaveBeenCalled();
 });
 
-it("renames an existing field through the restored row action", async () => {
+it("edits a field name in the metadata dialog and submits only on save", async () => {
   mocks.read.mockResolvedValue({
     revision: 5,
     fields: [{ field_name: "category", field_type: "string" }],
@@ -219,18 +372,56 @@ it("renames an existing field through the restored row action", async () => {
   const precheck = vi
     .spyOn(knowledgeSpaceApi, "precheckProcessing")
     .mockResolvedValue(plan);
-  vi.spyOn(knowledgeSpaceApi, "createProcessingJob").mockResolvedValue({
-    job_id: "job",
-    accepted: true,
-    state: "accepted",
-    reused: false,
-  });
+  const create = vi
+    .spyOn(knowledgeSpaceApi, "createProcessingJob")
+    .mockImplementation(async () => {
+      mocks.read.mockResolvedValue({
+        revision: 6,
+        fields: [{ field_name: "topic", field_type: "string" }],
+      });
+      return {
+        job_id: "job",
+        accepted: true,
+        state: "accepted",
+        reused: false,
+      };
+    });
   mount();
-  fireEvent.click(await screen.findByRole("button", { name: "rename" }));
-  fireEvent.change(await screen.findByDisplayValue("category"), {
+  const dialog = screen.getByRole("dialog", { name: "metaData" });
+  fireEvent.click(await within(dialog).findByRole("button", { name: "rename" }));
+  const form = within(dialog).getByRole("form", { name: "rename" });
+  const name = within(form).getByRole("textbox", { name: "metadatainfor.name" });
+  expect(name).toHaveValue("category");
+  expect(screen.getByRole("dialog", { name: "metaData" })).toBe(dialog);
+  expect(screen.getAllByRole("dialog", { hidden: true })).toEqual([dialog]);
+  expect(within(dialog).getByText("document_id")).toBeVisible();
+  expect(
+    within(dialog).getByText("category").compareDocumentPosition(form) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  await waitFor(() => expect(name).toHaveFocus());
+
+  fireEvent.change(name, { target: { value: "discarded_topic" } });
+  fireEvent.keyDown(name, { key: "Escape" });
+  expect(within(dialog).getByRole("button", { name: "confirm" })).toBeVisible();
+  expect(screen.getByRole("dialog", { name: "metaData" })).toBe(dialog);
+  fireEvent.click(within(dialog).getByRole("button", { name: "cancel" }));
+
+  const continued = within(dialog).getByRole("form", { name: "rename" });
+  expect(within(continued).getByRole("textbox")).toHaveValue("discarded_topic");
+  fireEvent.click(within(continued).getByRole("button", { name: "cancel" }));
+  expect(within(dialog).queryByRole("textbox")).toBeNull();
+  expect(within(dialog).getByText("category")).toBeVisible();
+  expect(precheck).not.toHaveBeenCalled();
+  expect(create).not.toHaveBeenCalled();
+
+  fireEvent.click(within(dialog).getByRole("button", { name: "rename" }));
+  const reopenedName = within(dialog).getByRole("textbox");
+  expect(reopenedName).toHaveValue("category");
+  fireEvent.change(reopenedName, {
     target: { value: "topic" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "save" }));
+  fireEvent.click(within(dialog).getByRole("button", { name: "save" }));
   await waitFor(() =>
     expect(precheck).toHaveBeenCalledWith(7, {
       kind: "metadata_schema_change",
@@ -246,6 +437,11 @@ it("renames an existing field through the restored row action", async () => {
       },
     }),
   );
+  expect(await within(dialog).findByText("topic")).toBeVisible();
+  expect(screen.getByRole("dialog", { name: "metaData" })).toBe(dialog);
+  expect(within(dialog).queryByRole("textbox")).toBeNull();
+  expect(within(dialog).queryByText("category")).toBeNull();
+  expect(create).toHaveBeenCalledOnce();
 });
 it("requires the existing delete confirmation and then submits the correct field", async () => {
   mocks.read.mockResolvedValue({

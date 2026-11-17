@@ -66,7 +66,7 @@ export function KnowledgeSpaceWorkspace({
   };
   if (!active) return null;
   return (
-    <div className="flex h-full min-h-0 min-w-0">
+    <div className="flex h-full min-h-0 min-w-0 bg-bg-page">
       <KnowledgeSpaceSidebar
         scope={scope}
         spaceId={invalid ? undefined : (spaceId ?? undefined)}
@@ -83,7 +83,7 @@ export function KnowledgeSpaceWorkspace({
         }}
       />
       <main
-        className="min-w-0 flex-1 overflow-auto bg-bg-page"
+        className="min-w-0 flex-1 overflow-auto"
         aria-label={t("workspace.files")}
       >
         {invalid ? (

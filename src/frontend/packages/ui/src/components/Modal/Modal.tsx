@@ -152,6 +152,7 @@ export function Modal({
           <DialogPrimitive.Overlay className={cn(OVERLAY_CLASS, OVERLAY_PHONE_CLASS, overlayClassName)} />
         )}
         <DialogPrimitive.Content
+          {...(!description ? { 'aria-describedby': undefined } : {})}
           className={cn(
             CONTENT_BASE,
             CONTENT_PHONE,

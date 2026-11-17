@@ -11,21 +11,31 @@ import {
   knowledgeQueryKeys,
   type KnowledgeQueryScope,
 } from "@/controllers/hooks/knowledge";
-import { useKnowledgeDeletion } from "../hooks/useKnowledgeDeletion";
+import { useKnowledgeDeletion } from "./useKnowledgeDeletion";
 import { KnowledgeDeletionDialog } from "../components/KnowledgeDeletionDialog";
 import { SpaceCopyDialog } from "../components/SpaceCopyDialog";
 
 const MENU_ACTIONS = ["delete", "manage_permission", "upload_file"];
+const ADMIN_MENU_ACTIONS = ["delete", "manage_permission", "edit"];
 type DialogTarget = { row: KnowledgeSpaceInfo; scopeKey: string };
-export function useSidebarSpaceActions(
+interface SpaceActionsOptions {
+  canCopy?: boolean;
+  onDeleted?: (id: number) => void;
+  onEdit?: (id: number) => void;
+  onMetadata?: (id: number) => void;
+}
+
+export function useSpaceActions(
   scope: KnowledgeQueryScope,
-  canCreate: boolean,
-  onDeleted?: (id: number) => void,
+  { canCopy: allowCopy, onDeleted, onEdit, onMetadata }: SpaceActionsOptions,
 ) {
   const { t } = useTranslation("knowledge");
   const { user } = useContext(userContext);
   const client = useQueryClient();
-  const menus = useLazyResourceActions("knowledge_space", MENU_ACTIONS);
+  const menus = useLazyResourceActions(
+    "knowledge_space",
+    onEdit ? ADMIN_MENU_ACTIONS : MENU_ACTIONS,
+  );
   const [permission, setPermission] = useState<DialogTarget | null>(null);
   const [copy, setCopy] = useState<DialogTarget | null>(null);
   const scopeKey = JSON.stringify([scope, user?.user_id]);
@@ -53,15 +63,34 @@ export function useSidebarSpaceActions(
   const render = (row: KnowledgeSpaceInfo) => {
     const actions = menus.actions[String(row.id)] ?? [];
     const canCopy =
-      canCreate &&
+      allowCopy &&
       Number.isSafeInteger(user?.user_id) &&
       user.user_id === row.user_id &&
       actions.includes("upload_file");
+    const canEdit = onEdit && actions.includes("edit");
+    const canManage = actions.includes("manage_permission");
+    const canDelete = actions.includes("delete");
+    const loading = menus.loading[String(row.id)];
     return (
       <>
-        {menus.loading[String(row.id)] && (
+        {loading && (
           <DropdownItem disabled>
             {t("knowledgeRowActions.loading", { ns: "permission" })}
+          </DropdownItem>
+        )}
+        {onEdit && !loading && !canEdit && !canManage && !canDelete && (
+          <DropdownItem disabled>
+            {t("knowledgeRowActions.empty", { ns: "permission" })}
+          </DropdownItem>
+        )}
+        {canEdit && onMetadata && (
+          <DropdownItem icon={<Outlined.File aria-hidden />} onSelect={() => onMetadata(row.id)}>
+            {t("detail.metadata")}
+          </DropdownItem>
+        )}
+        {canEdit && (
+          <DropdownItem icon={<Outlined.Edit aria-hidden />} onSelect={() => onEdit(row.id)}>
+            {t("detail.settings")}
           </DropdownItem>
         )}
         {canCopy && (
@@ -72,7 +101,7 @@ export function useSidebarSpaceActions(
             {t("f118.processing_title_copy")}
           </DropdownItem>
         )}
-        {actions.includes("manage_permission") && (
+        {canManage && (
           <DropdownItem
             icon={<Outlined.PeopleSafe />}
             onSelect={() => setPermission({ row, scopeKey })}
@@ -80,9 +109,9 @@ export function useSidebarSpaceActions(
             {t("managePermission", { ns: "permission" })}
           </DropdownItem>
         )}
-        {actions.includes("delete") && (
+        {canDelete && (
           <>
-            <DropdownSeparator />
+            {(!onEdit || canEdit || canManage) && <DropdownSeparator />}
             <DropdownItem
               icon={<Outlined.Delete />}
               danger

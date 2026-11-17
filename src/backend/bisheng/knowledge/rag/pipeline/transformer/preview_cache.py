@@ -21,15 +21,25 @@ class PreviewCacheTransformer(BaseDocumentTransformer):
         if self.preview_cache_key and self.preview_cache_key.startswith(FROZEN_PREFIX) and not all_chunk_info:
             raise KnowledgePreviewError()
         required = bool(self.preview_cache_key and self.preview_cache_key.startswith(FROZEN_PREFIX))
-        if required and any(
-            not str(key).isdigit()
-            or not isinstance(value, dict)
-            or not isinstance(value.get("text"), str)
-            or not isinstance(value.get("metadata"), dict)
-            or value["metadata"].get("chunk_index") != int(key)
-            for key, value in all_chunk_info.items()
-        ):
-            raise KnowledgePreviewError()
+        if required:
+            normalized = {}
+            for key, value in all_chunk_info.items():
+                try:
+                    index = key.decode("ascii") if isinstance(key, bytes) else str(key)
+                except UnicodeDecodeError as exc:
+                    raise KnowledgePreviewError() from exc
+                if (
+                    not index.isascii()
+                    or not index.isdigit()
+                    or not isinstance(value, dict)
+                    or not isinstance(value.get("text"), str)
+                    or not isinstance(value.get("metadata"), dict)
+                    or value["metadata"].get("chunk_index") != int(index)
+                    or int(index) in normalized
+                ):
+                    raise KnowledgePreviewError()
+                normalized[int(index)] = value
+            all_chunk_info = normalized
         knowledge_metadata_fields = {one.field_name for one in KNOWLEDGE_RAG_METADATA_SCHEMA}
         if all_chunk_info:
             logger.info("get file chunk from preview cache")

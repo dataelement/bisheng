@@ -212,8 +212,10 @@ function PreviewPane({
     if (query.error) showApiError(query.error);
   }, [query.error]);
   useEffect(() => {
-    onBusy(query.isFetching || query.isError || saving || Boolean(failed));
-  }, [query.isFetching, query.isError, saving, failed, onBusy]);
+    // Preview loading is scoped to the preview panel. Errors can be handled by retrying
+    // or by leaving the preview flow through direct upload.
+    onBusy(query.isFetching || saving || Boolean(failed));
+  }, [query.isFetching, saving, failed, onBusy]);
   useEffect(() => {
     if (value?.status === "completed")
       onPreview(file.id, { value, fingerprint });
@@ -262,7 +264,7 @@ function PreviewPane({
         </Button>
       </div>
     );
-  if (!data || !value) return <p role="status">{t("loading")}</p>;
+  if (!data || !value) return <p role="status">{t("previewInProgress")}</p>;
   const previewFile = {
     ...file,
     id: file.id,

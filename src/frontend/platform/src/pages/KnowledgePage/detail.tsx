@@ -1,7 +1,7 @@
-import { Breadcrumb, Button } from "@bisheng/ui";
+import { Breadcrumb, Button, toast } from "@bisheng/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { isErrorEnvelope } from "@bisheng/api-client";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -23,6 +23,8 @@ import Header from "./components/Header";
 import { SpaceManagementView } from "./components/SpaceManagementView";
 import { SpaceFileDetail } from "./components/SpaceFileDetail";
 import { SpaceProcessingPanel } from "./components/SpaceProcessingDialog";
+import { useSpaceCopyTasks } from "./useSpaceCopyTasks";
+import { SpaceCopyStatus } from "./components/SpaceCopyStatus";
 
 export const parseKnowledgeId = (value: string | null | undefined): number | null => {
   if (!value || !/^\d+$/.test(value)) return null;
@@ -55,6 +57,9 @@ export function SpaceDetail({
   const fileStatus =
     searchParams.get("fileStatus") === "abnormal" ? "abnormal" : "all";
   const instance = useId();
+  const copyTasks = useSpaceCopyTasks(scope);
+  const copyTask = copyTasks.data?.find((task) => task.id === spaceId);
+  const watchedCopy = useRef<number | null>(null);
   const facts = useQuery<KnowledgeSpaceInfo | SpaceFolderParent[]>({
     queryKey: [
       ...knowledgeQueryKeys.space(scope, spaceId),
@@ -66,7 +71,7 @@ export function SpaceDetail({
       parentId === null
         ? knowledgeSpaceApi.getSpaceInfo(spaceId)
         : knowledgeFilesApi.listSpaceFolderParents(spaceId, parentId),
-    enabled: fileParams.length === 0,
+    enabled: fileParams.length === 0 && !copyTasks.isInitialLoading && !copyTask,
     keepPreviousData: false,
     cacheTime: 0,
   });
@@ -74,6 +79,13 @@ export function SpaceDetail({
     if (facts.error) showApiError(facts.error);
   }, [facts.error]);
   const info = !Array.isArray(facts.data) ? facts.data : undefined;
+  useEffect(() => {
+    if (copyTask) watchedCopy.current = spaceId;
+    else if (copyTasks.isSuccess && info?.state === 1 && watchedCopy.current === spaceId) {
+      watchedCopy.current = null;
+      toast.show({ type: "success", message: t("space_copy_ui.created", { name: info.name }) });
+    }
+  }, [copyTask, copyTasks.isSuccess, info, spaceId, t]);
   const parents = Array.isArray(facts.data) ? facts.data : [];
   const showCopyRecovery = parentId === null && (
     info?.state === 0 || info?.state === 2 ||
@@ -86,25 +98,23 @@ export function SpaceDetail({
 
   const directory = (toolbarTarget?: HTMLDivElement | null) => (
     <>
-      {parentId !== null && parents.length > 0 && (
-        <div className={presentation === "workspace" ? "shrink-0 px-4 py-2" : undefined}>
-          <Breadcrumb
-            ariaLabel={t("f118.current_folder")}
-            expandLabel={(count) => t("f118.expand_folders", { count })}
-            items={[
-              {
-                key: "space",
-                title: t("f118.spaces"),
-                onClick: () => onOpenFolder(null),
-              },
-              ...parents.map((folder) => ({
-                key: String(folder.id),
-                title: String(folder.file_name),
-                onClick: () => onOpenFolder(folder.id),
-              })),
-            ]}
-          />
-        </div>
+      {presentation !== "workspace" && parentId !== null && parents.length > 0 && (
+        <Breadcrumb
+          ariaLabel={t("f118.current_folder")}
+          expandLabel={(count) => t("f118.expand_folders", { count })}
+          items={[
+            {
+              key: "space",
+              title: t("f118.spaces"),
+              onClick: () => onOpenFolder(null),
+            },
+            ...parents.map((folder) => ({
+              key: String(folder.id),
+              title: String(folder.file_name),
+              onClick: () => onOpenFolder(folder.id),
+            })),
+          ]}
+        />
       )}
       {facts.isInitialLoading && (
         <div role="status" className={presentation === "workspace" ? "px-4" : undefined}>{t("f118.loading_directory")}</div>
@@ -151,6 +161,10 @@ export function SpaceDetail({
       />
     </>
   );
+  if (copyTask) return <SpaceCopyStatus key={copyTask.job_id} scope={scope} task={copyTask} onCompleted={() => {
+    void client.invalidateQueries({ queryKey: knowledgeQueryKeys.scope(scope) });
+  }} />;
+  if (copyTasks.isInitialLoading) return <p role="status">{t("f118.loading_directory")}</p>;
   if (fileParams.length > 0 && fileId === null) return <p role="status">{t("f118.scope_unavailable")}</p>;
   if (presentation === "workspace" && fileId !== null) return (
     <div className="h-full min-h-0 px-4">
@@ -162,7 +176,14 @@ export function SpaceDetail({
     </div>
   );
   if (presentation === "workspace") return (
-    <SpaceManagementView scope={scope} spaceId={spaceId} parentId={parentId} title={title} description={parentId === null ? info?.description ?? "" : ""}>
+    <SpaceManagementView
+      scope={scope}
+      spaceId={spaceId}
+      parentId={parentId}
+      title={title}
+      description={info?.description ?? undefined}
+      folderPath={parentId === null ? undefined : { parents, onOpenFolder }}
+    >
       {(toolbarTarget) => directory(toolbarTarget)}
     </SpaceManagementView>
   );

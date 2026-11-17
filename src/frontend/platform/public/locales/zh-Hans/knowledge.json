@@ -277,6 +277,8 @@
     "nextStep": "下一步",
     "addSuccess": "添加成功",
     "uploadDirectly": "直接上传",
+    "uploadDirectlyDefaults": "使用空间默认规则直接上传",
+    "previewInProgress": "预览仍在解析，请等待完成后继续，或选择直接上传（使用空间默认规则）。",
     "defaultStrategy": "文档文件",
     "customStrategy": "表格文件",
     "splitLength": "预期切分长度",
@@ -651,6 +653,7 @@
         "select_first": "请先选择文件或文件夹"
     },
     "move": {
+    "checking": "正在检查移动条件…",
         "title": "移动",
         "jobs": "移动任务",
         "current_space": "当前空间",
@@ -743,6 +746,7 @@
     "detail": {
         "space_info": "空间信息",
         "save_failed": "修改尚未保存，请重试",
+        "processing_saved_settings_failed": "切分策略已保存，其余修改保存失败，请重试。",
         "file_title": "文件 {{id}}",
         "file_editor": "文件分块详情",
         "files": "文件管理",
@@ -779,6 +783,13 @@
         "publish_hint": "开启后，该知识空间会展示在广场，他人可以搜索或查看"
     },
     "space_copy_ui": {
+    "phase_preparing": "正在准备复制",
+    "in_progress": "复制中",
+    "failed": "复制失败",
+    "phase_initializing": "正在初始化权限与索引",
+    "phase_copying": "正在复制文件（{{completed}}/{{total}}）",
+    "phase_failed": "复制失败，可查看原因并重试原任务",
+    "background_notice": "任务将在后台继续，可以关闭此窗口；稍后从空间列表查看进度。",
         "title": "复制知识空间",
         "tasks": "复制任务",
         "recovery_notice": "空间复制尚未完成，请查看任务进度；失败时可重试原任务。",

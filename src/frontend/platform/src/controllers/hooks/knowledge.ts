@@ -260,20 +260,26 @@ export function useKnowledgeProcessingSettings(
   scope: KnowledgeQueryScope,
   spaceId: number,
   api: KnowledgeSpaceApi = knowledgeSpaceApi,
+  enabled = true,
 ) {
   useKnowledgeScope(scope);
   return useQuery({
     queryKey: knowledgeQueryKeys.settings(scope, spaceId),
     queryFn: () => api.getProcessingSettings(spaceId),
-    enabled: canQuery(scope, spaceId),
+    enabled: enabled && canQuery(scope, spaceId),
     keepPreviousData: false,
   });
 }
+interface ProcessingQueryOptions {
+  refetchOnMount?: boolean | "always";
+}
+
 export function useKnowledgeProcessingJobs(
   scope: KnowledgeQueryScope,
   spaceId: number,
   query: ProcessingJobsQuery,
   api: KnowledgeSpaceApi = knowledgeSpaceApi,
+  options: ProcessingQueryOptions = {},
 ) {
   useKnowledgeScope(scope);
   return useQuery({
@@ -281,6 +287,7 @@ export function useKnowledgeProcessingJobs(
     queryFn: () => api.listProcessingJobs(spaceId, query),
     enabled: canQuery(scope, spaceId),
     keepPreviousData: false,
+    ...options,
   });
 }
 export function useKnowledgeProcessingJob(
@@ -288,6 +295,7 @@ export function useKnowledgeProcessingJob(
   spaceId: number,
   jobId: string,
   api: KnowledgeSpaceApi = knowledgeSpaceApi,
+  options: ProcessingQueryOptions = {},
 ) {
   useKnowledgeScope(scope);
   return useQuery({
@@ -295,6 +303,7 @@ export function useKnowledgeProcessingJob(
     queryFn: () => api.getProcessingJob(spaceId, jobId),
     enabled: canQuery(scope, spaceId) && Boolean(jobId),
     keepPreviousData: false,
+    ...options,
   });
 }
 export function useKnowledgeProcessingItems(
@@ -303,13 +312,15 @@ export function useKnowledgeProcessingItems(
   jobId: string,
   query: ProcessingItemsQuery,
   api: KnowledgeSpaceApi = knowledgeSpaceApi,
+  { enabled = true, ...options }: ProcessingQueryOptions & { enabled?: boolean } = {},
 ) {
   useKnowledgeScope(scope);
   return useQuery({
     queryKey: knowledgeQueryKeys.items(scope, spaceId, jobId, query),
     queryFn: () => api.listProcessingItems(spaceId, jobId, query),
-    enabled: canQuery(scope, spaceId) && Boolean(jobId),
+    enabled: enabled && canQuery(scope, spaceId) && Boolean(jobId),
     keepPreviousData: false,
+    ...options,
   });
 }
 

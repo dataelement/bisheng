@@ -74,6 +74,19 @@ it.each(commands)("shows existing dependencies inside the deletion flow and bloc
   expect(api.confirmDeletion).not.toHaveBeenCalled();
 });
 
+it("hides knowledge and default model counts in both sections for space deletion", async () => {
+  const result = plan();
+  result.impact.source_counts = { knowledge: 4, model_default: 3, assistant: 1 };
+  result.impact.restricted_counts = { knowledge: 2, model_default: 1, workflow_version: 5 };
+  jest.mocked(api.precheckDeletion).mockResolvedValue(result);
+  render(<Harness command={commands[0]} />);
+  fireEvent.click(screen.getByText("Delete target"));
+  expect(await screen.findByText("com_knowledge.deletion.source_assistant: 1")).toBeVisible();
+  expect(screen.getByText("com_knowledge.deletion.source_workflow_version: 5")).toBeVisible();
+  expect(screen.queryByText(/com_knowledge.deletion.source_knowledge/)).toBeNull();
+  expect(screen.queryByText(/com_knowledge.deletion.source_model_default/)).toBeNull();
+});
+
 it("shows restricted counts without inventing a source name, and keeps incomplete checks blocked", async () => {
   const restricted = plan();
   restricted.can_execute = false;

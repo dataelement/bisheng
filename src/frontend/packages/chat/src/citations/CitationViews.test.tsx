@@ -14,6 +14,21 @@ it('renders original media alongside its transcript and downloads the original w
  fireEvent.click(view.getByText('download'));expect(api.download).toHaveBeenCalledWith('/movie.mp4','test.mp4');
  expect(api.getCitationDetail).not.toHaveBeenCalled();
 });
+it('places the media preview above the reference overlay and returns to the list on close',async()=>{
+ const api=services();
+ const view=render(<CitationReferences content="knowledgeSearch_doc:a" citations={[detail]} services={api} renderFile={renderFile} allowRemoteResolve={false}/>);
+ fireEvent.click(view.container.querySelector('[data-citation-references-trigger]')!);
+ const list=await view.findByRole('complementary',{name:'shared:citations.com_message.source_panel_label'});
+ expect(list.className).toContain('z-[130]');
+ fireEvent.click(await view.findByRole('button',{name:/test.*\.mp4/}));
+ const drawer=await view.findByRole('complementary',{name:'shared:citations.com_citation.document_preview'});
+ expect(drawer.parentElement).toBe(document.body);
+ expect(drawer.className).toContain('z-[140]');
+ await waitFor(()=>expect(view.getByTestId('viewer').textContent).toContain('/movie.mp4|/transcript.md'));
+ fireEvent.click(view.getByRole('button',{name:'shared:citations.com_citation.close_document_preview'}));
+ expect(view.queryByRole('complementary',{name:'shared:citations.com_citation.document_preview'})).toBeNull();
+ expect(view.getByRole('complementary',{name:'shared:citations.com_message.source_panel_label'})).toBeTruthy();
+});
 it('shows an unavailable state after a resource failure without mounting a successful viewer',async()=>{
  const api=services();vi.mocked(api.resolveDocumentUrls).mockRejectedValue(new Error('403'));
  const view=render(<CitationDocumentPreview preview={{detail}} services={api} renderFile={renderFile}/>);

@@ -157,6 +157,7 @@ export function SpaceCopyDialog({
                 name: result.knowledge.name,
               })}
             </p>
+            {!completed && <p role="status">{t("space_copy_ui.background_notice")}</p>}
             {result.processing_job && !completed && (
               <SpaceProcessingProgress
                 scope={scope}

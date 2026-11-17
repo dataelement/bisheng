@@ -48,7 +48,7 @@ interface SpaceProcessingDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved?: () => void;
-  presentation?: "page";
+  presentation?: "page" | "inline";
 }
 export function SpaceProcessingDialog(props: SpaceProcessingDialogProps) {
   return (
@@ -62,15 +62,16 @@ export function SpaceProcessingDialog(props: SpaceProcessingDialogProps) {
     </Dialog>
   );
 }
-export function SpaceProcessingPanel(
-  props: Omit<SpaceProcessingDialogProps, "open" | "onOpenChange" | "presentation">,
-) {
+export function SpaceProcessingPanel({
+  presentation = "page",
+  ...props
+}: Omit<SpaceProcessingDialogProps, "open" | "onOpenChange">) {
   return (
     <Content
       key={JSON.stringify([props.scope, props.spaceId, props.mode])}
       {...props}
       open
-      presentation="page"
+      presentation={presentation}
       onOpenChange={() => undefined}
     />
   );
@@ -89,6 +90,7 @@ function Content({
   presentation,
 }: SpaceProcessingDialogProps) {
   const { t, i18n } = useTranslation("knowledge");
+  const inlineEmbedding = presentation === "inline" && mode === "embedding";
   const invalidReason = (reason: string) =>
     i18n.exists(`knowledge:batch.reason_${reason}`)
       ? t(`batch.reason_${reason}`)
@@ -230,6 +232,7 @@ function Content({
       if (alive.current) setBusy(false);
     }
   };
+  const showReview = !job && !completed && mode !== "jobs";
   return (
     <SpacePanelFrame
       title={t(
@@ -240,31 +243,34 @@ function Content({
             : `f118.processing_title_${mode}`,
       )}
       presentation={presentation}
+      hideTitle={inlineEmbedding}
       busy={busy}
       className="max-h-[85vh] max-w-3xl overflow-y-auto"
       footer={
-        <SpaceProcessingActions
-          busy={busy}
-          showReview={!job && !completed && mode !== "jobs"}
-          reviewDisabled={
-            busy ||
-            (mode === "embedding" && !configured.isSuccess) ||
-            (mode === "file" && !validation?.ok)
-          }
-          hasPlan={Boolean(plan)}
-          canExecute={Boolean(plan?.result.can_execute && plan.result.check_complete)}
-          onClose={presentation !== "page" ? () => onOpenChange(false) : undefined}
-          onReview={() => {
-            void handleReview();
-          }}
-          onConfirm={() => {
-            void handleConfirm();
-          }}
-          onReviewAgain={() => setPlan(null)}
-        />
+        (showReview || presentation !== "inline") && (
+          <SpaceProcessingActions
+            busy={busy}
+            showReview={showReview}
+            reviewDisabled={
+              busy ||
+              (mode === "embedding" && !configured.isSuccess) ||
+              (mode === "file" && !validation?.ok)
+            }
+            hasPlan={Boolean(plan)}
+            canExecute={Boolean(plan?.result.can_execute && plan.result.check_complete)}
+            onClose={presentation ? undefined : () => onOpenChange(false)}
+            onReview={() => {
+              void handleReview();
+            }}
+            onConfirm={() => {
+              void handleConfirm();
+            }}
+            onReviewAgain={() => setPlan(null)}
+          />
+        )
       }
     >
-      {!job && !completed && mode !== "jobs" && (
+      {showReview && !inlineEmbedding && (
         <p>
           {t(
             mode === "file"
@@ -330,7 +336,14 @@ function Content({
         </>
       ) : (
         <>
-          <fieldset disabled={busy || Boolean(plan)} className="space-y-4">
+          <fieldset
+            disabled={busy || Boolean(plan)}
+            className={
+              inlineEmbedding
+                ? "min-w-0 space-y-4 [&_.bisheng-label]:mb-2 [&_.bisheng-label]:text-body [&_.bisheng-label]:text-text-1"
+                : "space-y-4"
+            }
+          >
             {mode === "embedding" && (
               <>
                 <ModelSelect
@@ -343,6 +356,11 @@ function Content({
                     setModel(value);
                   }}
                 />
+                {inlineEmbedding && (
+                  <p className="text-body text-text-3">
+                    {t("f118.processing_rebuild_notice")}
+                  </p>
+                )}
                 {configured.isInitialLoading && <p role="status">{t("f118.loading_space")}</p>}
                 {configured.isError && (
                   <div role="alert">

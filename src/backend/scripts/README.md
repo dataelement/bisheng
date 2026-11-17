@@ -2,6 +2,16 @@
 
 This directory contains manual maintenance and migration scripts for the backend.
 
+## Single-version document path recovery
+
+Run `python scripts/repair_knowledge_document_path.py --tenant-id T --space-id S --file-id F`
+to preview a legacy logical-document/physical-file path mismatch. This command only accepts
+one primary version, an idle space/file, a valid folder chain and a CURRENT permission parent
+that already agrees with the physical file. It never moves files, rewrites indexes or grants access.
+Apply the inspected plan using `--apply --expected-digest HASH --backup /private/new-backup.json`.
+The backup must be new and is saved with mode 0600 before writing; changed facts reject the apply.
+Multi-version, ambiguous or permission-inconsistent data requires a separate recovery plan.
+
 ## Redis usage and Linsight processing indexes
 
 `backfill_redis_processing_indexes.py` is the explicit upgrade step for old DSH

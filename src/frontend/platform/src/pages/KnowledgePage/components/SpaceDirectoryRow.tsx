@@ -109,23 +109,33 @@ export function SpaceDirectoryRow({
           onOpenChange={onMenu}
           menu={
             <>
-              {loading && <DropdownItem disabled>{t("loading")}</DropdownItem>}
+              {loading && (
+                <DropdownItem
+                  disabled
+                  icon={<Outlined.Loading aria-hidden className="animate-spin motion-reduce:animate-pulse" />}
+                >
+                  {t("loading")}
+                </DropdownItem>
+              )}
               {error && (
                 <DropdownItem
+                  icon={<Outlined.Refresh aria-hidden />}
                   onSelect={() => queueMicrotask(() => onMenu(true))}
                 >
                   {t("retry")}
                 </DropdownItem>
               )}
               {!loading && !error && actions.includes("rename") && (
-                <DropdownItem onSelect={onRename}>{t("rename")}</DropdownItem>
+                <DropdownItem icon={<Outlined.Edit aria-hidden />} onSelect={onRename}>
+                  {t("rename")}
+                </DropdownItem>
               )}
               {!loading && !error && actions.includes("delete") && (
                 <>
-                  <DropdownItem onSelect={onReferences}>
+                  <DropdownItem icon={<Outlined.FileSearch aria-hidden />} onSelect={onReferences}>
                     {t("deletion.references")}
                   </DropdownItem>
-                  <DropdownItem danger onSelect={onDelete}>
+                  <DropdownItem danger icon={<Outlined.Delete aria-hidden />} onSelect={onDelete}>
                     {t("delete")}
                   </DropdownItem>
                 </>
@@ -134,7 +144,7 @@ export function SpaceDirectoryRow({
                 !loading &&
                 !error &&
                 actions.includes("visible") && (
-                  <DropdownItem onSelect={() => setHistory(epoch)}>
+                  <DropdownItem icon={<Outlined.History aria-hidden />} onSelect={() => setHistory(epoch)}>
                     {t("f118.version_history")}
                   </DropdownItem>
                 )}

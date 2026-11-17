@@ -20,7 +20,7 @@ import {
   type KnowledgeQueryScope,
 } from "@/controllers/hooks/knowledge";
 import { managementRequestScope } from "@/controllers/managementScope";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { showApiError } from "@/controllers/request";
 import { createDshOperationId as createOperationId } from "@/util/dshOperationId";
 import { MoveDestinationPicker } from "./MoveDestinationPicker";
@@ -70,11 +70,8 @@ function Content({
     spaceId,
     folderId: parentId,
   });
-  const [plan, setPlan] = useState<{
-    value: OperationPrecheck;
-    key: string;
-    destinationLabel: string;
-  } | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const [destinationSelected, setDestinationSelected] = useState(false);
   const [destinationLabel, setDestinationLabel] = useState(
     t(parentId === null ? "move.current_space" : "move.current_folder"),
   );
@@ -83,6 +80,25 @@ function Content({
   const [dispatched, setDispatched] = useState(false),
     [completed, setCompleted] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
+  const tenant = scope.managementTenantId ?? scope.tenantId;
+  const review = useQuery({
+    queryKey: [...knowledgeQueryKeys.scope(scope), "move-review", spaceId, parentId, items, destination, attempt],
+    queryFn: async (): Promise<{ value: OperationPrecheck; key: string; destinationLabel: string }> => ({
+      value: await precheckMove(spaceId, items, destination, tenant),
+      key: createOperationId(),
+      destinationLabel,
+    }),
+    enabled: items.length > 0 && destinationSelected && !dispatched && !completed,
+    staleTime: Infinity,
+    cacheTime: 0,
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+  const plan = review.data;
+  useEffect(() => {
+    if (review.error) showApiError(review.error);
+  }, [review.error]);
   closeGuard.current = () => !busy && (!dispatched || !!jobId || completed);
   const alive = useRef(true);
   useEffect(() => {
@@ -91,7 +107,6 @@ function Content({
       alive.current = false;
     };
   }, []);
-  const tenant = scope.managementTenantId ?? scope.tenantId;
   const current = () =>
     alive.current &&
     (managementRequestScope() === null || managementRequestScope() === tenant);
@@ -100,24 +115,11 @@ function Content({
       queryKey: knowledgeQueryKeys.scope(scope),
     });
   };
-  const handleReview = async () => {
-    if (busy || dispatched || !current()) return;
-    setBusy(true);
-    try {
-      const value = await precheckMove(spaceId, items, destination, tenant);
-      if (current()) {
-        setPlan({ value, key: createOperationId(), destinationLabel });
-        setSkip(false);
-      }
-    } catch (error) {
-      if (current()) showApiError(error);
-    } finally {
-      if (alive.current) setBusy(false);
-    }
-  };
   const handleConfirm = async () => {
     if (
       busy ||
+      review.isFetching ||
+      review.isError ||
       !current() ||
       !plan?.value.can_execute ||
       !plan.value.check_complete ||
@@ -148,7 +150,8 @@ function Content({
           ? error.status_code
           : undefined;
       if (code === 18087 || code === 18088) {
-        setPlan(null);
+        setAttempt((value) => value + 1);
+        setSkip(false);
         setDispatched(false);
       }
     } finally {
@@ -185,8 +188,7 @@ function Content({
         <p role="status">{t("move.completed")}</p>
       ) : (
         <>
-          {!plan && (
-            <fieldset className="min-w-0" disabled={busy}>
+            <fieldset className="min-w-0" disabled={busy || dispatched}>
               <MoveDestinationPicker
                 scope={scope}
                 sourceId={spaceId}
@@ -194,10 +196,12 @@ function Content({
                 onChange={(next, label) => {
                   setDestination(next);
                   setDestinationLabel(label);
+                  setDestinationSelected(true);
+                  setSkip(false);
                 }}
               />
             </fieldset>
-          )}
+          {review.isFetching && <p role="status">{t("move.checking")}</p>}
           {plan && (
             <section className="space-y-3">
               <p>
@@ -256,43 +260,25 @@ function Content({
         </Button>
         {!jobId &&
           !completed &&
-          (plan ? (
-            <>
-              {!dispatched && (
-                <Button
-                  variant="outlined"
-                  disabled={busy}
-                  onClick={() => setPlan(null)}
-                >
-                  {t("f118.processing_review_again")}
-                </Button>
-              )}
+          (
               <Button
                 disabled={
                   busy ||
-                  !plan.value.can_execute ||
+                  review.isFetching ||
+                  (!review.isError && (!plan?.value.can_execute ||
                   !plan.value.check_complete ||
-                  (plan.value.invalid_items.length > 0 && !skip)
+                  (plan.value.invalid_items.length > 0 && !skip)))
                 }
                 onClick={() => {
-                  void handleConfirm();
+                  if (review.isError) void review.refetch();
+                  else void handleConfirm();
                 }}
               >
-                {t(dispatched ? "retry" : "confirm", {
-                  ns: dispatched ? "knowledge" : "bs",
+                {t(dispatched || review.isError ? "retry" : "confirm", {
+                  ns: dispatched || review.isError ? "knowledge" : "bs",
                 })}
               </Button>
-            </>
-          ) : (
-            <Button
-              disabled={busy || !items.length}
-              onClick={() => {
-                void handleReview();
-              }}
-            >
-              {t("f118.processing_review_action")}
-            </Button>
-          ))}
+          )}
       </DialogFooter>
     </DialogContent>
   );

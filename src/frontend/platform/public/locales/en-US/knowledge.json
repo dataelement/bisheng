@@ -228,6 +228,8 @@
     "textComparison": "Original text comparison",
     "segmentStrategy": "Segmentation Strategy",
     "uploadDirectly": "Upload Directly",
+    "uploadDirectlyDefaults": "Upload directly with space defaults",
+    "previewInProgress": "Preview is still processing. Wait for it to finish, or upload directly using the space defaults.",
     "status": "Status",
     "all": "All",
     "parsing": "Parsing",
@@ -651,6 +653,7 @@
         "select_first": "Select files or folders first"
     },
     "move": {
+    "checking": "Checking move conditions…",
         "title": "Move",
         "jobs": "Move tasks",
         "current_space": "Current space",
@@ -743,6 +746,7 @@
     "detail": {
         "space_info": "Space information",
         "save_failed": "Changes could not be saved. Please retry.",
+        "processing_saved_settings_failed": "Splitting rules were saved. Please retry saving the remaining changes.",
         "file_title": "File {{id}}",
         "file_editor": "File chunks",
         "files": "Files",
@@ -779,6 +783,13 @@
         "publish_hint": "Show this space in the square so others can search for or view it"
     },
     "space_copy_ui": {
+    "phase_preparing": "Preparing the copy",
+    "in_progress": "Copying",
+    "failed": "Copy failed",
+    "phase_initializing": "Initializing permissions and indexes",
+    "phase_copying": "Copying files ({{completed}}/{{total}})",
+    "phase_failed": "Copy failed. View the error and retry this task.",
+    "background_notice": "The task will continue in the background. You can close this window and check progress from the space list.",
         "title": "Copy knowledge space",
         "tasks": "Copy tasks",
         "recovery_notice": "This space copy is not complete. Check its progress or retry the original task if it failed.",

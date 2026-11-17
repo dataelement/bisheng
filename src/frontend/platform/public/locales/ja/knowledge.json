@@ -263,6 +263,8 @@
     "nextStep": "次へ",
     "addSuccess": "追加成功",
     "uploadDirectly": "直接アップロード",
+    "uploadDirectlyDefaults": "スペースの既定ルールで直接アップロード",
+    "previewInProgress": "プレビューを解析中です。完了を待つか、スペースの既定ルールで直接アップロードしてください。",
     "defaultStrategy": "文書ファイル",
     "customStrategy": "表計算ファイル",
     "splitLength": "期待分割長",
@@ -645,6 +647,7 @@
         "select_first": "ファイルまたはフォルダーを選択してください"
     },
     "move": {
+    "checking": "移動条件を確認しています…",
         "title": "移動",
         "jobs": "移動タスク",
         "current_space": "現在のスペース",
@@ -737,6 +740,7 @@
     "detail": {
         "space_info": "スペース情報",
         "save_failed": "変更を保存できませんでした。再試行してください。",
+        "processing_saved_settings_failed": "分割ルールを保存しました。残りの変更の保存を再試行してください。",
         "file_title": "ファイル {{id}}",
         "file_editor": "ファイルのチャンク",
         "files": "ファイル管理",
@@ -773,6 +777,13 @@
         "publish_hint": "広場に表示し、他のユーザーが検索・閲覧できるようにします"
     },
     "space_copy_ui": {
+    "phase_preparing": "コピーを準備しています",
+    "in_progress": "コピー中",
+    "failed": "コピー失敗",
+    "phase_initializing": "権限とインデックスを初期化しています",
+    "phase_copying": "ファイルをコピー中（{{completed}}/{{total}}）",
+    "phase_failed": "コピーに失敗しました。原因を確認し、同じタスクを再試行できます。",
+    "background_notice": "タスクはバックグラウンドで続行します。このウィンドウを閉じ、スペース一覧から進捗を確認できます。",
         "title": "知識スペースを複製",
         "tasks": "複製タスク",
         "recovery_notice": "スペースの複製はまだ完了していません。進行状況を確認し、失敗した場合は元のタスクを再試行してください。",

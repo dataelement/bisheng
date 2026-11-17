@@ -219,8 +219,10 @@ async def test_real_copy_accepts_independent_history_model_and_original_permissi
     plan = await app.aprecheck(40, name="Independent", identity=ctx.user)
     result = await app.aconfirm(40, command(plan), identity=ctx.user)
     root = result["knowledge"]
-    assert root.id != 40 and root.state == 2 and root.model == "11" and not root.is_released
+    assert root.id != 40 and root.state == 0 and root.model == "11" and not root.is_released
     assert result["processing_job"].accepted and not result["completed"]
+    assert not copying.transport.calls
+    await SpaceCopyOwner(app).aensure_logical(root.id, result["processing_job"].job_id)
     async with ctx.sessions() as session:
         source = await session.get(Knowledge, 40)
         job = await session.get(Job, result["processing_job"].job_id)
@@ -272,11 +274,12 @@ async def test_actual_copy_lease_file_and_item_ack_preserve_source_and_finalize(
         assert (await session.get(Knowledge, accepted["knowledge"].id)).state == 1
 
 
-async def test_empty_copy_completes_real_r2_permission_and_has_no_async_source_lease(copying):
+async def test_empty_copy_is_accepted_retried_and_completed_by_worker(copying, actual_processing_task):
     from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
     from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
     from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
     from bisheng.knowledge.domain.repositories.source_move_input_repository import SourceMoveInputRepository
+    from bisheng.knowledge.domain.schemas.processing_job import ProcessingRetryRequest
 
     async with copying.ctx.sessions() as session, session.begin():
         await session.execute(sa.delete(KnowledgeDocumentVersion).where(KnowledgeDocumentVersion.document_id == 80))
@@ -286,11 +289,25 @@ async def test_empty_copy_completes_real_r2_permission_and_has_no_async_source_l
         )
     plan = await copying.app.aprecheck(40, name="Empty copy", identity=copying.ctx.user)
     result = await copying.app.aconfirm(40, command(plan), identity=copying.ctx.user)
-    assert result["completed"] and result["processing_job"] is None and result["knowledge"].state == 1
+    assert not result["completed"] and result["processing_job"] is not None and result["knowledge"].state == 0
     again = await copying.app.aconfirm(40, command(plan), identity=copying.ctx.user)
-    assert again["completed"] and again["knowledge"].id == result["knowledge"].id
+    assert not again["completed"] and again["knowledge"].id == result["knowledge"].id
+    owner = SpaceCopyOwner(copying.app)
+    failed = await owner.afail(result["processing_job"].job_id, 0, error_code=10998)
+    assert failed.state == "failed" and failed.total_count == 0
+    retried = await owner.aretry(
+        failed.id,
+        ProcessingRetryRequest(idempotency_key="retry-empty-copy", expected_job_revision=failed.revision),
+        identity=copying.ctx.user,
+    )
+    assert retried.job_id == failed.id and retried.state == "accepted"
+    current, _ = await owner.aread(failed.id)
+    lease = await owner.astart(failed.id, current.revision)
+    assert lease is not None and await owner.aclaim(lease) is None
+    assert (await owner.afinalize(lease)).state == "succeeded"
     async with copying.ctx.sessions() as session:
-        assert (await session.execute(sa.select(sa.func.count()).select_from(Job))).scalar_one() == 0
+        assert (await session.execute(sa.select(sa.func.count()).select_from(Job))).scalar_one() == 1
+        assert (await session.get(Knowledge, result["knowledge"].id)).state == 1
         await SourceMoveInputRepository().arequire_released(session, space_id=40)
 
 
@@ -354,6 +371,8 @@ async def test_copy_access_clips_actual_item_page_and_generic_read_cannot_bypass
 
     monkeypatch.setattr(move_processing_access, "batch_check_business_actions", actions)
     access = SpaceCopyAccess(SpaceCopyOwner(app))
+    assert (await access.alist_items(sid, jid, identity=ctx.user)).data == []
+    await SpaceCopyOwner(app).aensure_logical(sid, jid)
     page = await access.alist_items(sid, jid, identity=ctx.user, page=1, page_size=1)
     assert page.total == 1 and [row.file_id for row in page.data] == [visible_id]
     assert (await access.aget(sid, jid, identity=ctx.user)).hidden_item_count == 1

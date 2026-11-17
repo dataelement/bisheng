@@ -104,6 +104,16 @@ function rateLimitDiscoveryMessage(envelope: unknown): string {
 function decodeEnvelopeMessage(value: unknown) {
     const envelope = value && typeof value === 'object' ? value as Partial<ErrorEnvelope> : undefined;
     const statusCode = envelope?.status_code
+    if (statusCode === 422 && Array.isArray(envelope.status_message)) {
+        // Validation responses carry user-facing messages per field. Keep
+        // input values, contexts and arbitrary server diagnostics out of copy.
+        const messages = envelope.status_message.flatMap(issue => {
+            if (!issue || typeof issue !== 'object' || typeof issue.msg !== 'string'
+                || typeof issue.type !== 'string' || !Array.isArray(issue.loc)) return [];
+            return issue.msg.trim() ? [issue.msg.trim()] : [];
+        });
+        if (messages.length) return [...new Set(messages)].join('\n');
+    }
     const rateLimitMessage = rateLimitDiscoveryMessage(envelope);
     if (rateLimitMessage) return rateLimitMessage;
     const statusMessage = typeof envelope?.status_message === 'string' ? envelope.status_message : '';
