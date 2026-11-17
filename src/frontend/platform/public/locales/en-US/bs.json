@@ -4515,6 +4515,7 @@
       "baseModel": "Base model",
       "baseModelHelp": "The model whose credit ratio is 1.00x. It only affects the ratio shown, not what is charged.",
       "baseModelDefault": "Daily chat default model",
+      "baseModelOption": "{{model}} ({{provider}})",
       "baseUnavailable": "The base model is unavailable (deleted, offline, unpriced or free), so credit ratios are hidden.",
       "settings": "Credit conversion",
       "settingsHelp": "Set how much one credit is worth. Changes apply to calls that start afterwards.",
