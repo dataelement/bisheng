@@ -143,7 +143,7 @@ it("restores a deep-linked folder through paginated ancestors", async () => {
   expect(selected).toHaveAttribute("aria-current", "page");
   expect(screen.getByRole("button", { name: "sidebar.expand Selected folder" })).toHaveAttribute("aria-expanded", "false");
   expect(mocks.children).toHaveBeenCalledWith(7, { parent_id: null, file_type: 0, page_size: 100, cursor: "later" });
-  expect(mocks.parents).toHaveBeenCalledWith(7, 12);
+  expect(mocks.parents).toHaveBeenCalledWith(7, 12, expect.any(AbortSignal));
 });
 
 it("sorts only the selected group and pins through the existing API contract", async () => {

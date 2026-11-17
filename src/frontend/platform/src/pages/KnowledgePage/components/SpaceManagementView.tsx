@@ -7,7 +7,7 @@ import { Navigate, useLocation, useNavigate, useSearchParams } from "react-route
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
 import type { SpaceFolderParent } from "@/controllers/API/knowledgeFiles";
 import { getMyResourcePermissionsApi } from "@/controllers/API/permission";
-import { knowledgeSpaceApi } from "@/controllers/API/knowledgeSpace";
+import { knowledgeSpaceApi, type KnowledgeSpaceInfo } from "@/controllers/API/knowledgeSpace";
 import {
   knowledgeQueryKeys,
   type KnowledgeQueryScope,
@@ -58,6 +58,7 @@ interface SpaceManagementViewProps {
   spaceId: number;
   title?: string;
   description?: string;
+  spaceInfo?: Pick<KnowledgeSpaceInfo, "name" | "description">;
   parentId?: number | null;
   folderPath?: {
     parents: readonly SpaceFolderParent[];
@@ -71,6 +72,7 @@ export function SpaceManagementView({
   spaceId,
   title = "",
   description,
+  spaceInfo,
   parentId,
   folderPath,
   children,
@@ -117,18 +119,21 @@ export function SpaceManagementView({
     permission.data?.actions.includes("manage_permission") === true;
   const canDelete = permission.data?.actions.includes("delete") === true;
   const overviewPath = scope.view === "admin" ? "/filelib?view=admin" : "/filelib";
+  const canReadRoot = children ? parentId != null && (canEdit || canSeeSpace) : canEdit;
   const root = useQuery({
     queryKey: knowledgeQueryKeys.info(scope, spaceId),
     queryFn: () => knowledgeSpaceApi.getSpaceInfo(spaceId),
-    enabled: (canEdit && (parentId != null || !children)) || (Boolean(folderPath) && canSeeSpace),
+    enabled: !spaceInfo && canReadRoot,
     cacheTime: 0,
     retry: false,
   });
   useEffect(() => {
     if (root.error) showApiError(root.error);
   }, [root.error]);
-  const spaceTitle = root.data?.name ?? title;
-  const spaceDescription = root.data?.description ?? description;
+  const rootInfo = spaceInfo ?? (canReadRoot && !root.isError ? root.data : undefined);
+  const rootName = rootInfo?.name;
+  const spaceTitle = rootName ?? title;
+  const spaceDescription = rootInfo ? rootInfo.description : description;
   const handleSaved = async () => {
     await client.invalidateQueries({
       queryKey: knowledgeQueryKeys.scope(scope),
@@ -190,7 +195,7 @@ export function SpaceManagementView({
   };
   if (canEdit && legacySettingsTab) return <Navigate to={settingsLocation} replace />;
 
-  const spaceInfo = (children || spaceTitle) && (
+  const spaceInfoButton = (children || spaceTitle) && (
     <Tooltip
       content={
         <span className="whitespace-pre-wrap [overflow-wrap:anywhere]">
@@ -215,7 +220,7 @@ export function SpaceManagementView({
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col">
       <header className="flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4 py-2.5">
-        <div className={`flex min-w-0 flex-1 items-center ${folderPath ? "basis-[min(100%,20rem)] gap-1" : "gap-2"}`}>
+        <div className={`flex min-w-0 flex-1 items-center ${folderPath ? "-ml-2 basis-[min(100%,20rem)] gap-1" : "gap-2"}`}>
           {(parentId != null || !children) && (
             <Tooltip content={t("back")}>
               <Button
@@ -236,7 +241,7 @@ export function SpaceManagementView({
               items={[
                 {
                   key: "space",
-                  title: root.data?.name ?? t("f118.spaces"),
+                  title: rootName ?? t("f118.spaces"),
                   onClick: () => folderPath.onOpenFolder(null),
                 },
                 ...folderPath.parents.map((folder) => ({
@@ -245,12 +250,12 @@ export function SpaceManagementView({
                   onClick: () => folderPath.onOpenFolder(folder.id),
                 })),
               ]}
-              spaceInfo={spaceInfo}
+              spaceInfo={spaceInfoButton}
             />
           ) : (
             <div className="flex min-w-0 items-center gap-1">
               <h1 className="min-w-0 truncate text-h4 text-text-1">{spaceTitle}</h1>
-              {spaceInfo}
+              {spaceInfoButton}
             </div>
           )}
         </div>

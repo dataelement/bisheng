@@ -90,7 +90,7 @@ export function KnowledgeSpaceWorkspace({
           <p role="status" className="p-4">{t("f118.scope_unavailable")}</p>
         ) : spaceId !== null ? (
           <SpaceDetail
-            key={JSON.stringify([scope, spaceId, parentId])}
+            key={JSON.stringify([scope, spaceId])}
             scope={scope}
             spaceId={spaceId}
             parentId={parentId}

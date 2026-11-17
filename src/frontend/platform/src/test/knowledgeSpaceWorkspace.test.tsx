@@ -108,6 +108,9 @@ it("opens deep folder links while preserving the independent QA and management t
   expect(await screen.findByTestId("files")).toHaveTextContent('"parent":9');
   const tree = screen.getByRole("complementary");
   expect(await within(tree).findByRole("button", { name: "Finance" })).toHaveAttribute("aria-current", "page");
+  const path = await screen.findByRole("navigation", { name: "f118.current_folder" });
+  expect(within(path).getByText("Finance")).toHaveAttribute("aria-current", "page");
+  expect(mock.get.mock.calls.filter(([url]) => url.endsWith("/space/7/folders/9/parent"))).toHaveLength(1);
   fireEvent.mouseDown(screen.getByRole("tab", { name: "lib.qaData" }), { button: 0, ctrlKey: false });
   expect(await screen.findByText("qa-list")).toBeVisible();
   fireEvent.mouseDown(screen.getByRole("tab", { name: "f118.manage_spaces" }), { button: 0, ctrlKey: false });

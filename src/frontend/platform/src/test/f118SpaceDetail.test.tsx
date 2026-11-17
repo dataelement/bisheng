@@ -412,6 +412,61 @@ it("keeps the breadcrumb in the header and preserves filters through folder navi
     ),
   ).toBe(true);
 });
+
+it("keeps the space header and permissions while loading another folder", async () => {
+  const nextDirectory = deferred<ReturnType<typeof page>>();
+  const nextFolderPermissions = deferred<ReturnType<typeof permission>>();
+  mocks.children.mockImplementation(async (_url: string, query: { parent_id: number }) =>
+    query.parent_id === 42
+      ? nextDirectory.promise
+      : page([child(11, "previous.pdf"), child(42, "Nested folder", 0)]),
+  );
+  mocks.permissions.mockImplementation(async (type: string, id: string) => {
+    if (type === "knowledge_space") return permission(["edit", "visible"]);
+    if (type === "folder" && id === "9") return permission(["create_folder"]);
+    if (type === "folder" && id === "42") return nextFolderPermissions.promise;
+    return permission();
+  });
+
+  mount("/filelib/7?parent_id=9&fileStatus=abnormal&keep=1");
+  const more = await screen.findByRole("button", { name: "more" });
+  const header = more.closest("header")!;
+  const navigation = await within(header).findByRole("navigation", {
+    name: "f118.current_folder",
+  });
+  expect(await within(navigation).findByRole("button", { name: "Server 7" })).toBeVisible();
+  expect(await within(header).findByRole("button", { name: "detail.add" })).toBeVisible();
+  expect(await screen.findByRole("button", { name: "previous.pdf" })).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Nested folder" }));
+
+  await waitFor(() =>
+    expect(mocks.children).toHaveBeenCalledWith(
+      "/api/v1/knowledge/space/7/children",
+      expect.objectContaining({ parent_id: 42, file_status: [3, 6, 7] }),
+    ),
+  );
+  expect(screen.getByTestId("location").textContent).toBe(
+    "/filelib/7?parent_id=42&fileStatus=abnormal&keep=1",
+  );
+  expect(screen.getByRole("button", { name: "more" })).toBe(more);
+  expect(more.closest("header")).toBe(header);
+  expect(screen.queryByRole("button", { name: "previous.pdf" })).toBeNull();
+  expect(within(header).queryByRole("button", { name: "detail.add" })).toBeNull();
+  expect(mocks.permissions).toHaveBeenCalledWith("folder", "9");
+  expect(mocks.permissions).toHaveBeenCalledWith("folder", "42");
+
+  await act(async () => {
+    nextFolderPermissions.resolve(permission());
+    nextDirectory.resolve(page([child(12, "current.pdf")]));
+  });
+  expect(await screen.findByRole("button", { name: "current.pdf" })).toBeVisible();
+  expect(within(header).queryByRole("button", { name: "detail.add" })).toBeNull();
+  expect(mocks.info).toHaveBeenCalledExactlyOnceWith(7);
+  expect(mocks.permissions.mock.calls.filter(([type]) => type === "knowledge_space")).toEqual([
+    ["knowledge_space", "7"],
+  ]);
+});
+
 it.each([
   "/filelib/0",
   "/filelib/nope",
