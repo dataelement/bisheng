@@ -4,12 +4,29 @@ from typing import List, Optional
 
 from bisheng.common.repositories.interfaces.base_repository import BaseRepository
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
+from bisheng.knowledge.domain.schemas.knowledge_version_schema import CanonicalVersionLinkResult
 
 
 class KnowledgeDocumentVersionRepository(
     BaseRepository[KnowledgeDocumentVersion, int], ABC
 ):
     """Repository for version rows inside a logical document."""
+
+    @abstractmethod
+    async def link_independent_managers(
+        self,
+        *,
+        tenant_id: int,
+        space_id: int,
+        current_file_id: int,
+        source_document_id: int,
+        target_document_id: int,
+        source_version_id: int,
+        target_version_id: int,
+        source_generation: int,
+        target_generation: int,
+    ) -> CanonicalVersionLinkResult:
+        """锁定并迁移独立管理入口, 仅flush, 由生命周期服务统一提交。"""
 
     @abstractmethod
     async def find_by_document_id(self, document_id: int) -> List[KnowledgeDocumentVersion]:

@@ -130,6 +130,8 @@ export function DimensionFilter({ component, isDark }: DimensionFilterProps) {
         setOptions(current => ({ ...current, [fieldId]: nextOptions }))
       }
       return nextOptions
+    } catch {
+      return []
     } finally {
       const pendingCount = Math.max(
         0,

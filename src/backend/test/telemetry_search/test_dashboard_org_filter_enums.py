@@ -198,3 +198,62 @@ async def test_unrelated_field_still_uses_es_aggregation(monkeypatch):
 
     assert result["options"] == [{"value": "标准文档", "label": "标准文档"}]
     department_mock.assert_not_awaited()
+
+
+async def test_unknown_dimension_is_not_an_authorization_error(monkeypatch):
+    """A filter field missing from the dataset schema must not raise 403.
+
+    The platform GET interceptor treats business code 403 as "no access" and
+    replaces the dashboard page.
+    """
+    import pytest
+
+    from bisheng.common.errcode.telemetry import QueryDimensionNotFoundError
+    from bisheng.telemetry_search.domain.services import dashboard as module
+
+    dataset = SimpleNamespace(
+        es_index_name="mid_user_increment",
+        schema_config={"dimensions": [{"field": "primary_department_id", "field_type": "string"}]},
+    )
+    repository = SimpleNamespace(find_one=AsyncMock(return_value=dataset))
+    monkeypatch.setattr(module, "get_async_db_session", _FakeDbSession)
+    monkeypatch.setattr(module, "DashboardDatasetRepositoryImpl", lambda _session: repository)
+    service = module.DashboardService.model_construct()
+
+    with pytest.raises(QueryDimensionNotFoundError) as caught:
+        await service.get_dataset_field_enums(
+            dataset_code="mid_user_increment",
+            field="department_source",
+        )
+
+    assert caught.value.code == 17014
+
+
+async def test_unknown_label_field_is_not_an_authorization_error(monkeypatch):
+    """A label field missing from the schema is the same config error, not 403."""
+    import pytest
+
+    from bisheng.common.errcode.telemetry import QueryDimensionNotFoundError
+    from bisheng.telemetry_search.domain.services import dashboard as module
+
+    dataset = SimpleNamespace(
+        es_index_name="mid_user_increment",
+        schema_config={
+            "dimensions": [
+                {"field": "primary_department_id", "field_type": "string"},
+            ]
+        },
+    )
+    repository = SimpleNamespace(find_one=AsyncMock(return_value=dataset))
+    monkeypatch.setattr(module, "get_async_db_session", _FakeDbSession)
+    monkeypatch.setattr(module, "DashboardDatasetRepositoryImpl", lambda _session: repository)
+    service = module.DashboardService.model_construct()
+
+    with pytest.raises(QueryDimensionNotFoundError) as caught:
+        await service.get_dataset_field_enums(
+            dataset_code="mid_user_increment",
+            field="primary_department_id",
+            label_field="primary_department_name",
+        )
+
+    assert caught.value.code == 17014

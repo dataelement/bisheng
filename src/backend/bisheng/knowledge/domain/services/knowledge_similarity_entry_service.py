@@ -148,6 +148,44 @@ class KnowledgeSimilarityEntryService:
         except KnowledgeDocumentEntryResolutionError:
             return False
 
+    async def _is_single_version_ordinary(self, context: KnowledgeSimilarityContext) -> bool:
+        if not context.can_associate:
+            return False
+        if context.document is None:
+            return True
+        entries = await self.files.find_distribution_entries_by_document_id(int(context.document.id))
+        if entries:
+            return False
+        chain = await self.owner.version_repo.find_by_document_id(int(context.document.id))
+        return len(chain) <= 1
+
+    async def _has_only_manager_entry(self, context: KnowledgeSimilarityContext) -> bool:
+        if context.entry.entry_type != "manager" or context.document is None:
+            return False
+        entries = await self.files.find_distribution_entries_by_document_id(int(context.document.id))
+        return len(entries) == 1 and int(entries[0].id) == int(context.entry.id)
+
+    async def _can_associate_pair(
+        self, source: KnowledgeSimilarityContext, target: KnowledgeSimilarityContext
+    ) -> bool:
+        # publish 入口不允许直接版本关联
+        if source.entry.entry_type == "publish" or target.entry.entry_type == "publish":
+            return False
+        if source.can_associate and target.can_associate:
+            return True
+        if source.can_associate and target.entry.entry_type == "manager":
+            return await self._is_single_version_ordinary(source)
+        if target.can_associate and source.entry.entry_type == "manager":
+            return await self._is_single_version_ordinary(target)
+        if source.entry.entry_type == "manager" and target.entry.entry_type == "manager":
+            if source.document is None or target.document is None:
+                return False
+            source_chain = await self.owner.version_repo.find_by_document_id(int(source.document.id))
+            if len(source_chain) != 1:
+                return False
+            return await self._has_only_manager_entry(source) and await self._has_only_manager_entry(target)
+        return False
+
     async def cached(
         self, file_id: int, rows: list[KnowledgeFileSimilarityCandidate], *, limit: int, check_permissions: bool = True
     ) -> list[SimilarCandidateEntry]:
@@ -173,7 +211,9 @@ class KnowledgeSimilarityEntryService:
                 continue
             if check_permissions and not await self.can_view(target):
                 continue
-            out.append(self.response(source, target, row.similarity, row.refined_similarity))
+            entry = self.response(source, target, row.similarity, row.refined_similarity)
+            entry.can_associate = await self._can_associate_pair(source, target)
+            out.append(entry)
             if len(out) >= limit:
                 break
         return out

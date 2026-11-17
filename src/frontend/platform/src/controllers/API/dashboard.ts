@@ -608,6 +608,8 @@ export async function getFieldEnums({ dataset_code, field, labelField, exactValu
             page,
             size: pageSize,
             keyword
-        }
-    });
+        },
+        // A missing dimension must not trip the global GET 403/404 page redirect.
+        silent: true,
+    } as any);
 }

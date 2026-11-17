@@ -25,10 +25,16 @@ class KnowledgeSimilarityContext:
             return False
         if entry.entry_type is not None and entry.reference_document_id is None:
             return False
-        if entry.entry_type is not None and (
+        if entry.entry_type == "publish" and (
             entry.entry_status != "active"
             or entry.projection_status != "ready"
             or entry.applied_content_generation != entry.desired_content_generation
+            or entry.applied_entry_generation != entry.desired_entry_generation
+        ):
+            return False
+        if entry.entry_type == "manager" and (
+            entry.entry_status != "active"
+            or entry.projection_status not in {"ready", "pending", "processing"}
             or entry.applied_entry_generation != entry.desired_entry_generation
         ):
             return False
@@ -51,7 +57,15 @@ class KnowledgeSimilarityContext:
             and content.knowledge_id == document.knowledge_id
             and (entry.reference_document_id == document.id or entry.id == content.id)
             and (entry.entry_type is not None or entry.id == content.id)
-            and (entry.entry_type is None or document.content_generation == entry.applied_content_generation)
+            and (
+                entry.entry_type is None
+                or (
+                    entry.entry_type == "manager"
+                    and entry.id == content.id
+                    and document.content_generation == entry.desired_content_generation
+                )
+                or document.content_generation == entry.applied_content_generation
+            )
         )
 
     def cached_with(self, target: "KnowledgeSimilarityContext") -> bool:

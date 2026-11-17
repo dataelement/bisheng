@@ -429,13 +429,15 @@ async def _finalize_deleting_entry(entry: KnowledgeFile) -> None:
             document_id,
             for_update=True,
         )
-        if len(remaining) == 1:
+        # 墓碑已经删除, 仅在没有其他入口时清理失效的空文档。
+        if not remaining:
             document_repository = KnowledgeDocumentRepositoryImpl(session)
             document = await document_repository.find_by_id_for_update(document_id)
             if (
                 document is not None
                 and document.lifecycle_status
                 == KnowledgeDocumentLifecycleStatus.INVALID.value
+                and not await KnowledgeDocumentVersionRepositoryImpl(session).find_by_document_id(document_id)
             ):
                 await session.execute(
                     delete(KnowledgeDocument).where(

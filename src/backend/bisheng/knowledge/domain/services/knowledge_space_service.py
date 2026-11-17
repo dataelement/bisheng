@@ -18408,6 +18408,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     tenant_id=int(updated_file.tenant_id),
                     entry_ids=affected_file_ids,
                 )
+            pending_candidate_ids = await self._refresh_similarity_candidates_after_encoding_change(
+                affected_file_ids
+            )
+            if file_id in pending_candidate_ids and getattr(updated_file, "similar_status", None) != 2:
+                # 同步内存对象状态，便于批量接口直接透出存在潜在关联候选的文件
+                updated_file.similar_status = 1
         return updated_file
 
     async def _plan_cascade_version_links_on_delete(
@@ -18586,6 +18592,66 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 deduped_ids,
                 exc,
             )
+
+    async def _refresh_similarity_candidates_after_encoding_change(
+        self,
+        file_ids: list[int],
+    ) -> set[int]:
+        """修改分类或业务域后，清理过期相似候选并重新计算关联提示状态（不自动建立版本关联）。"""
+        deduped_ids = sorted({int(file_id) for file_id in file_ids if file_id is not None})
+        if not deduped_ids:
+            return set()
+        pending_candidate_ids: set[int] = set()
+        try:
+            from bisheng.knowledge.domain.repositories.implementations.knowledge_document_repository_impl import (
+                KnowledgeDocumentRepositoryImpl,
+            )
+            from bisheng.knowledge.domain.repositories.implementations.knowledge_document_version_repository_impl import (
+                KnowledgeDocumentVersionRepositoryImpl,
+            )
+            from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
+                KnowledgeFileRepositoryImpl,
+            )
+            from bisheng.knowledge.domain.repositories.implementations.knowledge_file_similarity_candidate_repository_impl import (
+                KnowledgeFileSimilarityCandidateRepositoryImpl,
+            )
+            from bisheng.knowledge.domain.models.knowledge_file_similarity_candidate import (
+                KnowledgeFileSimilarityCandidate,
+            )
+            from bisheng.knowledge.domain.services.knowledge_version_service import (
+                KnowledgeVersionService,
+            )
+
+            async with get_async_db_session() as session:
+                file_repo = KnowledgeFileRepositoryImpl(session)
+                candidate_repo = KnowledgeFileSimilarityCandidateRepositoryImpl(session)
+                impacted_stmt = select(KnowledgeFileSimilarityCandidate.source_file_id).where(
+                    col(KnowledgeFileSimilarityCandidate.candidate_file_id).in_(deduped_ids)
+                )
+                impacted_source_ids = [
+                    int(sid) for sid in (await session.exec(impacted_stmt)).all() if sid is not None
+                ]
+                refresh_ids = sorted(set(deduped_ids) | set(impacted_source_ids))
+                await candidate_repo.delete_by_file_ids(deduped_ids)
+                version_service = KnowledgeVersionService(
+                    request=None,
+                    login_user=None,
+                    doc_repo=KnowledgeDocumentRepositoryImpl(session),
+                    version_repo=KnowledgeDocumentVersionRepositoryImpl(session),
+                    knowledge_file_repo=file_repo,
+                    similar_candidate_repo=candidate_repo,
+                )
+                for fid in refresh_ids:
+                    candidate_count = await version_service.refresh_similar_candidates_for_file(fid)
+                    if candidate_count > 0:
+                        pending_candidate_ids.add(fid)
+        except Exception as exc:
+            logger.warning(
+                "similarity candidate refresh after encoding change failed file_ids={}: {}",
+                deduped_ids,
+                exc,
+            )
+        return pending_candidate_ids
 
     async def _delete_file_rows_with_department_grants(
         self,
@@ -19490,7 +19556,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         batch; they come back in ``skipped`` with a reason.
         """
         await self._require_read_permission(space_id)
-        result: dict[str, list] = {"updated_file_ids": [], "skipped": []}
+        result: dict[str, list] = {
+            "updated_file_ids": [],
+            "skipped": [],
+            "similar_candidate_file_ids": [],
+        }
         if not file_ids:
             return result
         if file_category_code is None and file_subcategory_code is None and business_domain_code is None:
@@ -19521,8 +19591,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             new_category = normalized_category if file_category_code is not None else current_category
             new_domain = normalized_domain if business_domain_code is not None else current_domain
             new_encoding = self._compose_shougang_file_encoding(prefix, new_category, new_domain, year_month, seq)
-            await self.update_file_encoding(int(file_record.id), new_encoding, file_subcategory_code)
+            updated_file = await self.update_file_encoding(int(file_record.id), new_encoding, file_subcategory_code)
             result["updated_file_ids"].append(int(file_record.id))
+            if getattr(updated_file, "similar_status", None) == 1:
+                result["similar_candidate_file_ids"].append(int(file_record.id))
 
         return result
 
