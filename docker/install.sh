@@ -99,7 +99,13 @@ volume=$(cd "$volume" && pwd)
 if [[ $PREPARE_ONLY = true && -z $BUNDLE ]]; then
   rest_tls=$(env_get "$ENV_FILE" BISHENG_ES_REST_TLS); rest_tls=${rest_tls:-false}
   skip_transport_tls=$(env_get "$ENV_FILE" BISHENG_ES_SKIP_TRANSPORT_TLS); skip_transport_tls=${skip_transport_tls:-yes}
-  BISHENG_CREDENTIALS_DIR="$(credential_store_path)/pending" \
+  pending="$(credential_store_path)/pending"
+  mkdir -p "$pending" || die '无法准备 Compose 结构检查目录'
+  # Compose stats env_file during config. This placeholder is not a credential.
+  if [[ ! -f $pending/openfga.env ]]; then
+    printf 'OPENFGA_DATASTORE_ENGINE=mysql\nOPENFGA_DATASTORE_URI=mysql://placeholder\n' > "$pending/openfga.env"
+  fi
+  BISHENG_CREDENTIALS_DIR="$pending" \
   BISHENG_SECRET_KEYS_FILE="$(credential_store_path)/pending-keys.json" \
   BISHENG_CREDENTIAL_REVISION=00000000000000000000000000000000 \
   BISHENG_SECRET_FILE_GID="$(id -g)" \

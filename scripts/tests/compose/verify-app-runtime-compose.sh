@@ -144,9 +144,18 @@ fi
 
 head_ "═══ 应用工场运行时层 compose 校验 ═══"
 # Structural rendering only: no credentials are generated and no container starts.
-# Fresh .env intentionally leaves these installer-managed paths empty.
-export BISHENG_CREDENTIALS_DIR="${BISHENG_CREDENTIALS_DIR:-/tmp/bisheng-static-only/credentials}"
-export BISHENG_SECRET_KEYS_FILE="${BISHENG_SECRET_KEYS_FILE:-/tmp/bisheng-static-only/keys.json}"
+# Compose stats env_file paths while rendering. openfga.env is created here as an
+# empty-of-secrets placeholder so `docker compose config` can resolve the chart.
+if [[ -z ${BISHENG_CREDENTIALS_DIR:-} ]]; then
+  BISHENG_CREDENTIALS_DIR="$(mktemp -d "${TMPDIR:-/tmp}/bisheng-compose-contract.XXXXXX")"
+  trap 'rm -rf -- "$BISHENG_CREDENTIALS_DIR"' EXIT
+fi
+mkdir -p "$BISHENG_CREDENTIALS_DIR"
+if [[ ! -f "$BISHENG_CREDENTIALS_DIR/openfga.env" ]]; then
+  printf 'OPENFGA_DATASTORE_ENGINE=mysql\nOPENFGA_DATASTORE_URI=mysql://contract-placeholder\n' > "$BISHENG_CREDENTIALS_DIR/openfga.env"
+fi
+export BISHENG_CREDENTIALS_DIR
+export BISHENG_SECRET_KEYS_FILE="${BISHENG_SECRET_KEYS_FILE:-$BISHENG_CREDENTIALS_DIR/keys.json}"
 export BISHENG_CREDENTIAL_REVISION="${BISHENG_CREDENTIAL_REVISION:-00000000000000000000000000000000}"
 export BISHENG_SECRET_FILE_GID="${BISHENG_SECRET_FILE_GID:-0}"
 export BISHENG_ES_REST_TLS="${BISHENG_ES_REST_TLS:-false}"
