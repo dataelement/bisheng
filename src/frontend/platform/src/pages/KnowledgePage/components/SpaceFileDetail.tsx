@@ -34,6 +34,10 @@ export function SpaceFileDetail({ scope, spaceId, fileId, initialFile, onBack }:
   const [metadataOpen, setMetadataOpen] = useState(false);
   const [processingOpen, setProcessingOpen] = useState(false);
   const raw = model.info.data ?? initialFile;
+  // Waiting (5), processing (1) and rebuilding (4) files reject a reprocess plan
+  // on the backend (10999), so the entry explains that instead of letting the
+  // user configure a strategy and hit the conflict at review time.
+  const fileProcessing = raw?.status === 1 || raw?.status === 4 || raw?.status === 5;
   const name = model.preview.isSuccess ? (raw?.file_name ?? t("detail.file_title", { id: fileId })) : "";
   const file = useMemo(
     () => ({
@@ -97,9 +101,17 @@ export function SpaceFileDetail({ scope, spaceId, fileId, initialFile, onBack }:
               >
                 {t("metadialog.title")}
               </Button>
-              <Button disabled={model.busy || model.failed} onClick={() => setProcessingOpen(true)}>
-                {t("segment.adjustStrategy")}
-              </Button>
+              <Tooltip
+                content={t("f118.processing_conflict_file_busy")}
+                disabled={!fileProcessing}
+              >
+                <Button
+                  disabled={fileProcessing || model.busy || model.failed}
+                  onClick={() => setProcessingOpen(true)}
+                >
+                  {t("segment.adjustStrategy")}
+                </Button>
+              </Tooltip>
             </>
           )}
         </div>

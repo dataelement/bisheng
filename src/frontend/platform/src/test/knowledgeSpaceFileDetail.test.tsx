@@ -192,6 +192,16 @@ it("searches chunks at the first page and preserves the file target for deletion
   expect(await screen.findByRole("dialog")).toHaveTextContent("process-89");
 });
 
+it("blocks the strategy entry while the file is still being processed", async () => {
+  mock.info.mockResolvedValue({ ...info, status: 1 });
+  const f = setup();
+  render(f.draw());
+  const entry = await screen.findByRole("button", { name: "segment.adjustStrategy" });
+  await waitFor(() => expect(entry).toBeDisabled());
+  fireEvent.click(entry);
+  expect(screen.queryByRole("dialog")).toBeNull();
+});
+
 it("edits metadata for the same physical file and saves through the existing endpoint", async () => {
   const f = setup();
   render(f.draw());
