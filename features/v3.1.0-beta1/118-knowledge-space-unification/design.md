@@ -11,6 +11,8 @@
 
 把旧文档库 `type=0` 收敛为知识空间 `type=3`，前后台共用资源、文件、版本、权限和处理结果。后台承担高级处理配置与任务管理；旧调用经兼容适配进入同一业务服务，3.x 不维持第二份数据或第二套授权。
 
+聊天输入菜单只提供“选择知识空间”。旧“选择知识库”菜单及其专用弹窗已退役，不能把兼容列表再作为独立资源入口。历史调用仍可请求 `/api/v1/knowledge?type=0`：`LegacyDocumentsApplication` 经 `KnowledgeCompatibilityRepository` 查询实际 `type=3` 空间，仅在旧响应 DTO 中映射为 `type=0`，不读取第二份文档库，也不改写持久化类型。QA 继续独立。只有产品重新确认独立资源语义时才重新评审第二入口。
+
 本模块包含统一资源与入口、文件/版本与批量操作、权限与检索、高级处理与恢复、维护窗口迁移及兼容、模型删除引用保护。另纳入用户于 2026-11-03 追加确认的**全平台所有权限模型移除 use 动作**，由 F048 及各资源业务 Owner 协同实施；不能只修改知识空间。模型删除保护来自 PRD §1.8，仍单独跟踪验收。
 
 遵循 [constitution.md](../../../docs/constitution.md) C1–C8。QA 数据和入口保持独立，但 QA 权限模型也移除 use；退役的 `type=2` 不恢复；不引入新解析算法、通用任务平台、全平台依赖图或双写系统。本轮不扩展文件 edit 的适用范围；不处理 Worker 在途异步写入与用户后续修改的竞态，不新增 attempt 隔离或外部索引写入围栏作为本次门槛。正常重建冲突限制、任务幂等和配置/索引过期检查继续保留。本文不是 tasks，不执行开发、数据转换、权限投影或部署。
@@ -1098,3 +1100,7 @@ Mode编译只迁移原before已存在的技术标记，permission_enabled/custom
 ### 2026-11-16 用户端下载入口补齐
 
 用户端 `/workspace/knowledge` 也使用批量下载 inspect，文件和目录分别按 file/folder 检查，保留目录 ZIP 行为。文件管理器保留实际响应页的 ID 边界，第一页重载递增读取轮次；分页异步检查不进入列表 loading 或选择逻辑，菜单摘要不再写下载集合。下载查询按用户、租户、角色、空间、目录、读取轮次隔离，已移除或退休的页不采用迟到结果。卡片/H5 里已经确认可下载的项可在其他菜单权限加载时使用。验证见 `useKnowledgeFilePermissions.downloads.test.tsx` 与 `useFileManager.downloadPages.test.tsx`，以及下载修复 review 的本轮基线对照。
+
+### 2026-11-17 聊天重复知识入口退役
+
+移除 `ChatResourceMenu` 的“选择知识库”入口、`KnowledgeBaseDialog` 与三语言专用文案；`KnowledgePickerDialog` 仅服务空间选择，继续保留空间访问复核和确认前草稿。旧接口仍供历史调用使用；把旧响应中的类型标签当成未迁移存量会误判数据来源。`ChatResourceMenu.test.tsx` 验证仅有空间入口且可打开选择器，`KnowledgeSpaceDialog.test.tsx` 覆盖选择和访问校验。
