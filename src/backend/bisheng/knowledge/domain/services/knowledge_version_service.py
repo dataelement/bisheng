@@ -487,6 +487,75 @@ class KnowledgeVersionService:
         )
         return response
 
+    async def _link_ordinary_file_into_manager_document(
+        self,
+        *,
+        ordinary_file: KnowledgeFile,
+        target_document_id: int,
+        target_manager_file: KnowledgeFile,
+        before_version_no: int,
+        action_code: str = FAVORITE_SOURCE_VERSION_LINKED,
+        audit_file_name: str | None = None,
+    ) -> LinkResponse:
+        from bisheng.common.errcode.knowledge_space import KnowledgeDocumentStateConflictError
+        from bisheng.knowledge.domain.schemas.knowledge_version_schema import LinkResponse
+        from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import (
+            KnowledgeAuditTelemetryService,
+        )
+        from bisheng.knowledge.domain.services.knowledge_document_distribution_service import (
+            KnowledgeDocumentDistributionError,
+        )
+
+        await self._require_document_content_manager(target_manager_file)
+        if self.document_distribution_service is None:
+            raise KnowledgeDocumentStateConflictError(msg="文档分发生命周期服务不可用")
+        try:
+            result = await self.document_distribution_service.link_ordinary_file_into_manager_document(
+                tenant_id=int(self.login_user.tenant_id),
+                source_file_id=int(ordinary_file.id),
+                target_document_id=int(target_document_id),
+                target_manager_file_id=int(target_manager_file.id),
+            )
+        except KnowledgeDocumentDistributionError as exc:
+            if "duplicate content" in str(exc):
+                raise HTTPException(status_code=409, detail="duplicate content already in target chain") from exc
+            if "different space" in str(exc):
+                raise HTTPException(status_code=409, detail="target document belongs to a different space") from exc
+            raise KnowledgeDocumentStateConflictError() from exc
+
+        response = LinkResponse(document_id=result.document_id, new_version_no=result.new_version_no)
+        if result.idempotent:
+            return response
+
+        affected_file_ids = [int(ordinary_file.id), int(result.previous_manager_file_id)]
+        await self._delete_similarity_candidate_cache_by_file_ids(affected_file_ids)
+        KnowledgeAuditTelemetryService.audit_link_file_version(
+            self.login_user,
+            self.request,
+            ordinary_file.knowledge_id,
+            audit_file_name or ordinary_file.file_name,
+            result.new_version_no,
+        )
+        await self._notify_favorite_version_changed(
+            [
+                (int(ordinary_file.id), ordinary_file.file_name or "", int(ordinary_file.knowledge_id)),
+                (
+                    int(target_manager_file.id),
+                    target_manager_file.file_name or "",
+                    int(target_manager_file.knowledge_id),
+                ),
+            ],
+            action_code=action_code,
+            before_value=f"V{before_version_no}",
+            after_value=f"V{result.new_version_no}",
+        )
+        await KnowledgeSpaceContentStat.enqueue_file_stat_async(affected_file_ids)
+        await self._enqueue_document_distribution_projection(
+            tenant_id=int(self.login_user.tenant_id),
+            entry_ids=None,
+        )
+        return response
+
     async def link_file_to_document(self, knowledge_file_id: int, target_document_id: int):
         """Associate a parsed file into a target document's chain.
 
@@ -555,14 +624,22 @@ class KnowledgeVersionService:
         target_primary_kf = await self.knowledge_file_repo.find_by_id(target_primary_v.knowledge_file_id)
         if target_primary_kf is None or target_primary_kf.status != KnowledgeFileStatus.SUCCESS.value:
             raise VersionLinkTargetUnavailableError()
+        if target_doc.knowledge_id != current_kf.knowledge_id:
+            raise HTTPException(status_code=409, detail="target document belongs to a different space")
+
+        if target_primary_kf.entry_type == "manager":
+            return await self._link_ordinary_file_into_manager_document(
+                ordinary_file=current_kf,
+                target_document_id=int(target_document_id),
+                target_manager_file=target_primary_kf,
+                before_version_no=int(target_primary_v.version_no),
+            )
+
         target_entries = await self.knowledge_file_repo.find_distribution_entries_by_document_id(
             int(target_document_id)
         )
         if target_entries:
             raise KnowledgeDocumentEntryConflictError()
-
-        if target_doc.knowledge_id != current_kf.knowledge_id:
-            raise HTTPException(status_code=409, detail="target document belongs to a different space")
 
         # Duplicate-content check: does any existing version in the target chain share md5?
         existing = await self.version_repo.find_by_document_id(target_document_id)
@@ -1125,7 +1202,8 @@ class KnowledgeVersionService:
                     if context and context.version
                     else (v.version_no if v else 1),
                     primary_uploader_name=kf.user_name,
-                    can_associate=context.can_associate if context else False,
+                    can_associate=bool(context and context.can_associate)
+                    or any(c.can_associate for c in candidates),
                 )
             )
         return out
@@ -1822,6 +1900,19 @@ class KnowledgeVersionService:
         if source_kf.entry_type == "manager":
             return await self._link_manager_to_document(
                 source_kf, int(target_doc_id), action_code=FAVORITE_SOURCE_VERSION_ADDED,
+            )
+        if source_kf.reference_document_id is not None or source_kf.entry_type is not None:
+            from bisheng.common.errcode.knowledge_space import KnowledgeDocumentEntryConflictError
+
+            raise KnowledgeDocumentEntryConflictError()
+        if current_kf.entry_type == "manager":
+            return await self._link_ordinary_file_into_manager_document(
+                ordinary_file=source_kf,
+                target_document_id=int(target_doc_id),
+                target_manager_file=current_kf,
+                before_version_no=int(current_v.version_no),
+                action_code=FAVORITE_SOURCE_VERSION_ADDED,
+                audit_file_name=source_kf.file_name,
             )
         if current_kf.reference_document_id is not None or current_kf.entry_type is not None:
             from bisheng.common.errcode.knowledge_space import KnowledgeDocumentEntryConflictError

@@ -431,3 +431,250 @@ async def test_broker_failure_leaves_durable_projection_work(enable_switch, asyn
         file for file in await rows(async_db_session, KnowledgeFile) if file.entry_type == "projection_tombstone"
     )
     assert set(due) == {101, tombstone.id}
+
+
+async def test_ordinary_file_can_link_into_distributed_manager_document(enable_switch, async_db_session, monkeypatch):
+    seeded = await seed_managers(async_db_session)
+    # 给目标 manager 文档挂一个 share 分发入口，并将 201 设为普通单版本独立文件
+    async_db_session.add(
+        KnowledgeFile(
+            id=200,
+            tenant_id=1,
+            knowledge_id=2,
+            file_name="target.doc",
+            status=2,
+            md5="target",
+            reference_document_id=seeded.target,
+            entry_type="share",
+            entry_status="active",
+            projection_status="ready",
+            desired_content_generation=1,
+            applied_content_generation=1,
+        )
+    )
+    ordinary_doc = KnowledgeDocument(tenant_id=1, knowledge_id=1, lifecycle_status="active")
+    async_db_session.add(ordinary_doc)
+    await async_db_session.flush()
+    ordinary_file = KnowledgeFile(
+        id=201,
+        tenant_id=1,
+        knowledge_id=1,
+        file_name="ordinary_v2.doc",
+        status=2,
+        md5="ordinary-md5",
+        similar_status=1,
+    )
+    async_db_session.add(ordinary_file)
+    await async_db_session.flush()
+    ordinary_ver = KnowledgeDocumentVersion(
+        document_id=ordinary_doc.id,
+        knowledge_file_id=201,
+        version_no=1,
+        is_primary=True,
+    )
+    async_db_session.add(ordinary_ver)
+    await async_db_session.flush()
+    ordinary_doc.primary_version_id = ordinary_ver.id
+    async_db_session.add(ordinary_doc)
+    await async_db_session.commit()
+
+    svc = service(async_db_session, monkeypatch)
+    result = await svc.link_file_to_document(201, seeded.target)
+    assert result.document_id == seeded.target
+    assert result.new_version_no == 2
+
+    target_doc = await svc.doc_repo.find_by_id(seeded.target)
+    assert target_doc is not None and target_doc.content_generation == 2
+    assert await svc.doc_repo.find_by_id(ordinary_doc.id) is None
+
+    new_manager = await svc.knowledge_file_repo.find_by_id(201)
+    old_manager = await svc.knowledge_file_repo.find_by_id(100)
+    share_entry = await svc.knowledge_file_repo.find_by_id(200)
+    assert new_manager is not None and new_manager.entry_type == "manager"
+    assert new_manager.reference_document_id == seeded.target
+    assert old_manager is not None and old_manager.entry_type is None and old_manager.reference_document_id is None
+    assert share_entry is not None and share_entry.file_name == "ordinary_v2.doc"
+    assert share_entry.desired_content_generation == 2
+
+
+async def test_distributed_manager_can_merge_ordinary_source_document(enable_switch, async_db_session, monkeypatch):
+    seeded = await seed_managers(async_db_session)
+    async_db_session.add(
+        KnowledgeFile(
+            id=200,
+            tenant_id=1,
+            knowledge_id=2,
+            file_name="target.doc",
+            status=2,
+            md5="target",
+            reference_document_id=seeded.target,
+            entry_type="share",
+            entry_status="active",
+            projection_status="ready",
+            desired_content_generation=1,
+            applied_content_generation=1,
+        )
+    )
+    ordinary_doc = KnowledgeDocument(tenant_id=1, knowledge_id=1, lifecycle_status="active")
+    async_db_session.add(ordinary_doc)
+    await async_db_session.flush()
+    async_db_session.add(
+        KnowledgeFile(
+            id=202,
+            tenant_id=1,
+            knowledge_id=1,
+            file_name="ordinary_merge.doc",
+            status=2,
+            md5="ordinary-merge-md5",
+        )
+    )
+    await async_db_session.flush()
+    ordinary_ver = KnowledgeDocumentVersion(
+        document_id=ordinary_doc.id,
+        knowledge_file_id=202,
+        version_no=1,
+        is_primary=True,
+    )
+    async_db_session.add(ordinary_ver)
+    await async_db_session.flush()
+    ordinary_doc.primary_version_id = ordinary_ver.id
+    async_db_session.add(ordinary_doc)
+    await async_db_session.commit()
+
+    svc = service(async_db_session, monkeypatch)
+    result = await svc.merge_source_document_into_current(100, ordinary_doc.id, force=True)
+    assert result.document_id == seeded.target
+    assert result.new_version_no == 2
+
+    new_manager = await svc.knowledge_file_repo.find_by_id(202)
+    old_manager = await svc.knowledge_file_repo.find_by_id(100)
+    assert new_manager is not None and new_manager.entry_type == "manager"
+    assert old_manager is not None and old_manager.entry_type is None
+
+
+async def test_ordinary_link_into_manager_requires_edit_permission(enable_switch, async_db_session, monkeypatch):
+    from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
+
+    seeded = await seed_managers(async_db_session)
+    async_db_session.add(
+        KnowledgeFile(id=203, tenant_id=1, knowledge_id=1, file_name="ordinary_no_perm.doc", status=2, md5="np")
+    )
+    await async_db_session.commit()
+
+    svc = service(async_db_session, monkeypatch, denied_file=100)
+    with pytest.raises(SpacePermissionDeniedError):
+        await svc.link_file_to_document(203, seeded.target)
+
+
+async def test_share_entry_cannot_link_into_manager_document(enable_switch, async_db_session, monkeypatch):
+    seeded = await seed_managers(async_db_session)
+    async_db_session.add(
+        KnowledgeFile(
+            id=204,
+            tenant_id=1,
+            knowledge_id=1,
+            file_name="shared_ref.doc",
+            status=2,
+            md5="shared-ref",
+            reference_document_id=999,
+            entry_type="share",
+            entry_status="active",
+        )
+    )
+    await async_db_session.commit()
+
+    svc = service(async_db_session, monkeypatch)
+    with pytest.raises(KnowledgeDocumentEntryConflictError):
+        await svc.link_file_to_document(204, seeded.target)
+
+
+async def test_single_version_manager_pair_can_associate_without_publish_entries(async_db_session, monkeypatch):
+    from bisheng.knowledge.domain.models.knowledge_file_similarity_candidate import KnowledgeFileSimilarityCandidate
+    from bisheng.knowledge.domain.services.knowledge_similarity_entry_service import KnowledgeSimilarityEntryService
+
+    seeded = await seed_managers(async_db_session)
+    svc = service(async_db_session, monkeypatch)
+    entry_svc = KnowledgeSimilarityEntryService(svc)
+    source_ctx = await entry_svc.resolve(await svc.knowledge_file_repo.find_by_id(101))
+    target_ctx = await entry_svc.resolve(await svc.knowledge_file_repo.find_by_id(100))
+    assert source_ctx is not None and target_ctx is not None
+
+    source_file = await svc.knowledge_file_repo.find_by_id(101)
+    source_file.user_metadata = {
+        "_similarity_snapshot": {
+            "source": list(source_ctx.signature),
+            "targets": {"100": list(target_ctx.signature)},
+        }
+    }
+    async_db_session.add(source_file)
+    await async_db_session.commit()
+
+    row = KnowledgeFileSimilarityCandidate(
+        tenant_id=1,
+        knowledge_id=1,
+        source_file_id=101,
+        candidate_file_id=100,
+        candidate_document_id=seeded.target,
+        similarity=0.95,
+        refined_similarity=0.85,
+        sort_order=0,
+    )
+    entries = await entry_svc.cached(101, [row], limit=3, check_permissions=False)
+    assert len(entries) == 1
+    assert entries[0].can_associate is True
+
+
+async def test_manager_pair_with_publish_entry_cannot_associate(async_db_session, monkeypatch):
+    from bisheng.knowledge.domain.models.knowledge_file_similarity_candidate import KnowledgeFileSimilarityCandidate
+    from bisheng.knowledge.domain.services.knowledge_similarity_entry_service import KnowledgeSimilarityEntryService
+
+    seeded = await seed_managers(async_db_session)
+    async_db_session.add(
+        KnowledgeFile(
+            id=205,
+            tenant_id=1,
+            knowledge_id=2,
+            file_name="published_copy.doc",
+            status=2,
+            md5="pub-copy",
+            reference_document_id=seeded.source,
+            entry_type="publish",
+            entry_status="active",
+            projection_status="ready",
+            desired_content_generation=14,
+            applied_content_generation=14,
+            desired_entry_generation=1,
+            applied_entry_generation=1,
+        )
+    )
+    await async_db_session.commit()
+
+    svc = service(async_db_session, monkeypatch)
+    entry_svc = KnowledgeSimilarityEntryService(svc)
+    source_ctx = await entry_svc.resolve(await svc.knowledge_file_repo.find_by_id(101))
+    target_ctx = await entry_svc.resolve(await svc.knowledge_file_repo.find_by_id(100))
+    assert source_ctx is not None and target_ctx is not None
+
+    source_file = await svc.knowledge_file_repo.find_by_id(101)
+    source_file.user_metadata = {
+        "_similarity_snapshot": {
+            "source": list(source_ctx.signature),
+            "targets": {"100": list(target_ctx.signature)},
+        }
+    }
+    async_db_session.add(source_file)
+    await async_db_session.commit()
+
+    row = KnowledgeFileSimilarityCandidate(
+        tenant_id=1,
+        knowledge_id=1,
+        source_file_id=101,
+        candidate_file_id=100,
+        candidate_document_id=seeded.target,
+        similarity=0.95,
+        refined_similarity=0.85,
+        sort_order=0,
+    )
+    entries = await entry_svc.cached(101, [row], limit=3, check_permissions=False)
+    assert len(entries) == 1
+    assert entries[0].can_associate is False
