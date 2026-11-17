@@ -5,9 +5,8 @@
  * list below and every action on it stay available while it is off (AC-90).
  * Every call acts on the signed-in user in the current tenant only.
  */
-import { Button, Modal, Switch, Tag } from "@bisheng/ui";
+import { Button, Modal, Switch } from "@bisheng/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Outlined } from "bisheng-icons";
 import { useRef, useState } from "react";
 import {
   addMemoryItemApi,
@@ -21,7 +20,7 @@ import {
   type MemoryItemInput,
   type MemorySetting,
 } from "~/api/memory";
-import { memoryMetaParts, memoryTypeLabel } from "~/components/Memory/memoryLabels";
+import { groupMemoryItems, memoryDate, memoryGroupLabel } from "~/components/Memory/memoryLabels";
 import { useLocalize } from "~/hooks";
 import { MemoryDetailView } from "./MemoryDetailView";
 import { MemoryItemEditor } from "./MemoryItemEditor";
@@ -184,50 +183,37 @@ export function MemoryPane() {
         ) : itemsQuery.isLoading ? null : items.length === 0 ? (
           <p className="py-8 text-center text-body-sm text-text-3">{localize("memory.empty")}</p>
         ) : (
-          <ul className="flex flex-col divide-y divide-border-base rounded-xl border border-border-base">
-            {items.map((item) => (
-              <li
-                key={item.id}
-                data-memory-item
-                className="group flex items-start gap-3 px-4 py-3 transition-colors hover:bg-fill-1"
-              >
-                {/* The whole text block opens the memory; the icons on the right stay shortcuts. */}
-                <button
-                  type="button"
-                  className="min-w-0 flex-1 cursor-pointer text-left"
-                  onClick={() => {
-                    setActionError("");
-                    setOpenedId(item.id);
-                  }}
-                >
-                  {/* Spans only: a button holds phrasing content. */}
-                  <span className="block whitespace-pre-wrap break-words text-body text-text-1">{item.content}</span>
-                  <span className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-text-3">
-                    <Tag size="small">{memoryTypeLabel(item.type, localize)}</Tag>
-                    {memoryMetaParts(item, localize).map((part) => (
-                      <span key={part}>{part}</span>
-                    ))}
-                  </span>
-                </button>
-                <div className="flex shrink-0 items-center gap-1">
-                  <Button
-                    size="small"
-                    variant="text"
-                    color="default"
-                    iconOnly
-                    aria-label={localize("memory.delete")}
-                    title={localize("memory.delete")}
-                    onClick={() => {
-                      setActionError("");
-                      deleteMutation.mutate(item.id);
-                    }}
-                  >
-                    <Outlined.Delete />
-                  </Button>
-                </div>
-              </li>
+          // Grouped by type, like Claude's memory page: a quiet heading per group, then one
+          // row per memory with its summary and the date it was last saved. Delete lives on
+          // the memory's own page.
+          <div className="flex flex-col gap-6">
+            {groupMemoryItems(items).map((group) => (
+              <section key={group.type} aria-labelledby={`memory-group-${group.type}`}>
+                <h4 id={`memory-group-${group.type}`} className="mb-1 px-3 text-body-sm font-medium text-text-2">
+                  {memoryGroupLabel(group.type, localize)}
+                </h4>
+                <ul className="flex flex-col divide-y divide-border-base border-y border-border-base">
+                  {group.items.map((item) => (
+                    <li key={item.id} data-memory-item>
+                      <button
+                        type="button"
+                        className="flex w-full cursor-pointer items-baseline gap-4 rounded-md px-3 py-3 text-left transition-colors hover:bg-fill-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-blue-500"
+                        onClick={() => {
+                          setActionError("");
+                          setOpenedId(item.id);
+                        }}
+                      >
+                        <span className="min-w-0 flex-1 truncate text-body text-text-1">{item.content}</span>
+                        <span className="shrink-0 text-caption tabular-nums text-text-3">
+                          {memoryDate(item.recorded_at)}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
             ))}
-          </ul>
+          </div>
         )}
       </section>
 
