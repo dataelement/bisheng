@@ -201,7 +201,9 @@ function UploadWizard({
           ]}
         />
       </header>
-      <div className="flex min-h-0 flex-1 flex-col overflow-auto">
+      <div
+        className={`flex min-h-0 flex-1 flex-col ${step === 3 ? "overflow-hidden" : "overflow-auto"}`}
+      >
         {step === 1 && (
           <div className="mx-auto w-full max-w-[1450px] space-y-4 py-4">
             <DropZone onDrop={queue.handleDrop} />

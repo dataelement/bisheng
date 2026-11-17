@@ -329,7 +329,7 @@ function PreviewPane({
             }
           />
         )}
-        <div className="min-h-0 min-w-0 flex-1">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <PreviewParagraph
             key={`${value.preview_id}:${value.revision}`}
             fileId={file.id}
@@ -337,7 +337,7 @@ function PreviewPane({
             previewCount={chunks.length}
             chunks={chunks}
             immediateSave
-            className="h-full min-h-0"
+            className="min-h-0 flex-1 overscroll-contain"
             loading={query.isFetching || saving}
             edit={editable && !saving && !failed}
             canDelete={editable && !saving && !failed}
