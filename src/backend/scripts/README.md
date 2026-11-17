@@ -210,6 +210,8 @@ does not know (for example Volcengine Ark endpoint IDs); they stay free until an
 
 Skipping the step does not stop conversations: a model without a price is billed as free (0 credits,
 with a warning log) and shows "price missing" in the admin table until it is backfilled or priced.
+An invalid stored price (fails the price schema) is treated the same way: the dry run lists it as
+`replace invalid` with its old value, `apply` replaces it, and `check` fails until it is fixed.
 
 ### `migrate_model_token_configs.py`
 

@@ -44,7 +44,7 @@ docker compose run --rm --no-deps backend python scripts/backfill_model_pricing.
 docker compose run --rm --no-deps backend python scripts/backfill_model_pricing.py --apply
 ```
 
-只给 `model_type == "llm"` 且没有 `pricing` 的模型写入；可重复执行。清单中「默认 0」的收费云模型（如火山方舟接入点、中转站新模型名）需要管理员开服后在后台改价，否则一直免费。
+只给 `model_type == "llm"` 且没有 `pricing`、或 `pricing` 通不过价格格式校验（损坏）的模型写入，损坏的会在预检里显示原值；有效价格不动，可重复执行。清单中「默认 0」的收费云模型（如火山方舟接入点、中转站新模型名）需要管理员开服后在后台改价，否则一直免费。
 
 ## 5. 门禁
 
