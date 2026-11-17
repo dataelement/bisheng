@@ -1,27 +1,28 @@
 # ruff: noqa: RUF001 - Chinese prompt text, full-width punctuation is intended
-"""Swap deepagents' English base prompt for task mode's Chinese one, main graph only.
+"""Task mode's Chinese base prompt, appended to the main graph's system prompt.
 
-``create_deep_agent`` appends ``BASE_AGENT_PROMPT`` right after BiSheng's own
-system prompt. Parts of it contradict task mode: its "Clarifying Requests" rules
-compete with step 0 of the main prompt (and invite questions in unattended runs,
-where step 0 forbids them), "your first attempt is rarely correct — iterate"
-adds self-check rounds to runs already dominated by long thinking, and the
-monitoring/alerting guidance does not apply. The one useful rule — stop and
-analyze a repeated failure instead of retrying it — was in English and ignored
-when the model read a wrong path three times on 2026-10-23 (svid 4c85fb69…).
+Through deepagents 0.6 ``create_deep_agent`` appended its own English
+``BASE_AGENT_PROMPT`` after BiSheng's system prompt, and a middleware here
+swapped that text for the Chinese one below. Parts of the English text
+contradicted task mode: its "Clarifying Requests" rules competed with step 0 of
+the main prompt (and invited questions in unattended runs, where step 0 forbids
+them), "your first attempt is rarely correct — iterate" added self-check rounds
+to runs already dominated by long thinking, and the monitoring/alerting guidance
+did not apply. The one useful rule — stop and analyze a repeated failure instead
+of retrying it — was in English and ignored when the model read a wrong path
+three times on 2026-10-23 (svid 4c85fb69…).
+
+deepagents 0.7 no longer appends a base prompt at all (``BASE`` is empty unless a
+``HarnessProfile`` defines one), so there is nothing left to swap: the factory
+appends the Chinese text itself, at the position the English one used to hold.
 
 ``HarnessProfile.base_system_prompt`` is NOT used: deepagents applies it to every
 graph it builds, replacing declarative subagents' ``system_prompt`` outright,
-which would erase the researcher's prompt. This middleware edits only the main
-graph's request, so the researcher keeps its own.
+which would erase the researcher's prompt. ``with_base_prompt`` is applied to the
+main graph's prompt only, so the researcher keeps its own.
 """
 
 from __future__ import annotations
-
-from deepagents.graph import BASE_AGENT_PROMPT
-from langchain.agents.middleware.types import AgentMiddleware
-from langchain_core.messages import SystemMessage
-from loguru import logger
 
 LINSIGHT_BASE_PROMPT_ZH = (
     "# 基本要求\n\n"
@@ -36,42 +37,6 @@ LINSIGHT_BASE_PROMPT_ZH = (
 )
 
 
-class LinsightBasePromptMiddleware(AgentMiddleware):
-    """Replace ``BASE_AGENT_PROMPT`` in the system message with ``LINSIGHT_BASE_PROMPT_ZH``."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.tools = []
-        self._warned = False
-
-    @property
-    def name(self) -> str:
-        return "LinsightBasePrompt"
-
-    def _replace(self, request):
-        system_message = request.system_message
-        if system_message is None:
-            return request
-        blocks = []
-        replaced = False
-        for block in system_message.content_blocks:
-            text = block.get("text") if isinstance(block, dict) else None
-            if isinstance(text, str) and BASE_AGENT_PROMPT in text:
-                blocks.append({**block, "text": text.replace(BASE_AGENT_PROMPT, LINSIGHT_BASE_PROMPT_ZH)})
-                replaced = True
-            else:
-                blocks.append(block)
-        if not replaced:
-            # Only a deepagents upgrade that reworded the base prompt gets here; the
-            # run continues on the English text, so say so once instead of per turn.
-            if not self._warned:
-                logger.warning("[linsight-base-prompt] BASE_AGENT_PROMPT not found in the system message; left as is")
-                self._warned = True
-            return request
-        return request.override(system_message=SystemMessage(content_blocks=blocks))
-
-    def wrap_model_call(self, request, handler):
-        return handler(self._replace(request))
-
-    async def awrap_model_call(self, request, handler):
-        return await handler(self._replace(request))
+def with_base_prompt(system_prompt: str) -> str:
+    """``system_prompt`` followed by the Chinese base prompt."""
+    return f"{system_prompt}\n\n{LINSIGHT_BASE_PROMPT_ZH}"

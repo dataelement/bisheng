@@ -26,6 +26,7 @@ from collections.abc import Sequence
 from typing import Annotated, Any
 
 from json_repair import json_repair
+from langchain.agents.middleware import TodoListMiddleware
 from langchain.agents.middleware.types import AgentMiddleware
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import SystemMessage, ToolMessage
@@ -38,7 +39,7 @@ from pydantic import Field as PydanticField
 from pydantic import SkipValidation
 
 from bisheng.common.services.config_service import settings
-from bisheng.linsight.domain.services.base_prompt import LinsightBasePromptMiddleware
+from bisheng.linsight.domain.services.base_prompt import with_base_prompt
 from bisheng.linsight.domain.services.binary_content_guard import (
     CODE_INTERPRETER_TOOL,
     build_binary_guards,
@@ -1635,8 +1636,12 @@ async def create_linsight_agent(
         # and a context overflow it re-raises is compressed and retried here.
         *_summarization(model, backend, context_window),
         build_resilience_middleware(linsight_conf, is_subagent=False, budget_sink=turn_budget_sink),
-        # Main graph only: the researcher keeps its own prompt (see base_prompt.py).
-        LinsightBasePromptMiddleware(),
+        # deepagents 0.7 made planning opt-in: without this the graph has neither the
+        # ``write_todos`` tool nor the ``todos`` channel the task panel is built from
+        # (test_deepagents_07_compat). It only adds a tool and a prompt section, so
+        # it sits behind summarization and resilience, which must stay outermost.
+        TodoListMiddleware(),
+        _workspace_file_tools(backend),
         # F087: a `task` call whose subagent stayed over the context window after
         # compression comes back as a tool result instead of failing the task.
         SubagentContextOverflowMiddleware(subagent_resilience, context_window),
@@ -1799,23 +1804,26 @@ async def create_linsight_agent(
         return create_deep_agent(
             model=model,
             tools=[*tools, *hitl_tools, *export_tools],
-            system_prompt=_with_caller_instructions(
-                _with_citation_rules(
-                    _build_linsight_system_prompt(
-                        has_kb,
-                        skills_present=skills_advertised,
-                        # Gates the hard "no export_docx/export_pdf" rule: only meaningful
-                        # when the skill's script route can actually run in this session.
-                        has_code_interpreter=has_code_interpreter,
-                        has_web_search=has_web,
-                        citation_handles=citation_handles,
-                        unattended=unattended,
-                        has_data_analyst=data_analyst is not None,
+            # Main graph only: subagents keep their own prompt (see base_prompt.py).
+            system_prompt=with_base_prompt(
+                _with_caller_instructions(
+                    _with_citation_rules(
+                        _build_linsight_system_prompt(
+                            has_kb,
+                            skills_present=skills_advertised,
+                            # Gates the hard "no export_docx/export_pdf" rule: only meaningful
+                            # when the skill's script route can actually run in this session.
+                            has_code_interpreter=has_code_interpreter,
+                            has_web_search=has_web,
+                            citation_handles=citation_handles,
+                            unattended=unattended,
+                            has_data_analyst=data_analyst is not None,
+                        ),
+                        has_kb or has_web,
+                        handles=citation_handles,
                     ),
-                    has_kb or has_web,
-                    handles=citation_handles,
+                    caller_instructions(session_model),
                 ),
-                caller_instructions(session_model),
             ),
             middleware=middlewares,
             subagents=subagents,
@@ -1831,6 +1839,25 @@ async def create_linsight_agent(
             checkpointer=checkpointer,
             store=None,
         )
+
+
+# The file tools the workspace implements. deepagents 0.7 added ``delete``, which
+# ``WorkspaceBackend`` does not override: the inherited ``FilesystemBackend.delete``
+# removes paths on the worker's own disk and never touches the object store that
+# ``ls`` / ``read_file`` answer from.
+_WORKSPACE_FILE_TOOLS = ["ls", "read_file", "write_file", "edit_file", "glob", "grep"]
+
+
+def _workspace_file_tools(backend):
+    """The framework's file middleware limited to ``_WORKSPACE_FILE_TOOLS``.
+
+    ``create_deep_agent`` swaps a middleware passed in ``middleware=`` for the
+    framework's own one of the same name, in place — on the main graph and on each
+    subagent — so this adds no second set of file tools.
+    """
+    from deepagents.middleware.filesystem import FilesystemMiddleware
+
+    return FilesystemMiddleware(backend=backend, tools=list(_WORKSPACE_FILE_TOOLS))
 
 
 def _summarization(model, backend, context_window: dict) -> list:
@@ -1876,6 +1903,10 @@ def _subagent_middleware(
     return [
         *_summarization(model, backend, context_window),
         resilience,
+        # Explicit since deepagents 0.7 (planning is opt-in). Kept on subagents so
+        # the upgrade changes no behavior: 0.6 gave every subagent ``write_todos``.
+        TodoListMiddleware(),
+        _workspace_file_tools(backend),
         build_tool_loop_breaker_middleware(linsight_conf, is_subagent=True),
         *build_binary_guards(has_code_interpreter, supports_vision=supports_vision),
         *_result_budget(backend, context_window),

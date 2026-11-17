@@ -106,6 +106,9 @@ class _TodoProjection:
     task_id: str
     content: str
     status: str
+    # Wording this row had before the update that produced this projection
+    # rewrote it. Set only on that one update; None otherwise.
+    previous_content: str | None = None
 
 
 @dataclass
@@ -334,44 +337,53 @@ class StreamEventMapper:
         ]
 
     def _diff_todos(self, new_todos: list[dict[str, Any]]) -> list[BaseEvent]:
-        """3-level diff alignment of write_todos snapshots (design §3.3.1)."""
+        """Two-pass diff alignment of write_todos snapshots (design §3.3.1; F004 决策 6).
+
+        Pass 1 gives every new item whose wording is unchanged its old row back.
+        Pass 2 lets the remaining new items inherit, by position, an old row that
+        pass 1 left unclaimed (the model reworded it). Whatever is still unmatched
+        is a new row. Doing both in ONE loop was wrong once users could edit the
+        plan mid-run: an item inserted in the middle took the next row's id by
+        position before that row had the chance to match by content, and every
+        untouched row after it changed id.
+        """
         old = self.ctx.todos
         used_old_idx: set[int] = set()
+        items = [(str(item.get("content", "")), str(item.get("status", "pending"))) for item in new_todos]
+        matched_old: list[_TodoProjection | None] = [None] * len(items)
+
+        # Pass 1: exact content match
+        for pos, (content, _status) in enumerate(items):
+            for i, o in enumerate(old):
+                if i not in used_old_idx and o.content == content:
+                    matched_old[pos] = o
+                    used_old_idx.add(i)
+                    break
+        # Pass 2: positional alignment (content rewritten)
+        for pos in range(len(items)):
+            if matched_old[pos] is None and pos < len(old) and pos not in used_old_idx:
+                matched_old[pos] = old[pos]
+                used_old_idx.add(pos)
+
         new_projection: list[_TodoProjection] = []
         newly_generated: list[_TodoProjection] = []
         renamed: list[_TodoProjection] = []
         status_events: list[BaseEvent] = []
 
-        for pos, item in enumerate(new_todos):
-            content = str(item.get("content", ""))
-            status = str(item.get("status", "pending"))
-
-            matched: _TodoProjection | None = None
-            # Level 1: exact content match
-            for i, o in enumerate(old):
-                if i in used_old_idx:
-                    continue
-                if o.content == content:
-                    matched = o
-                    used_old_idx.add(i)
-                    break
-            # Level 2: positional alignment (content rewritten)
-            if matched is None and pos < len(old) and pos not in used_old_idx:
-                matched = old[pos]
-                used_old_idx.add(pos)
-
+        for (content, status), matched in zip(items, matched_old, strict=True):
             if matched is not None:
                 proj = _TodoProjection(task_id=matched.task_id, content=content, status=status)
                 new_projection.append(proj)
                 if matched.content != content:
-                    # Level-2 alignment reused an existing row id while the model
+                    # Positional alignment reused an existing row id while the model
                     # REWROTE the wording. Re-announce it so the DB row's task_data
                     # (and therefore the panel after a refresh) follows the current
-                    # plan instead of keeping the very first draft's title.
+                    # plan instead of keeping the very first draft's title. The old
+                    # wording rides along so the panel can show what was replaced.
+                    proj.previous_content = matched.content
                     renamed.append(proj)
                 status_events.extend(self._status_transition(matched.status, status, proj))
             else:
-                # Level 3: brand new
                 proj = _TodoProjection(
                     task_id=_stable_task_id(self.ctx.svid, content),
                     content=content,
@@ -417,6 +429,7 @@ class StreamEventMapper:
                             "task_id": p.task_id,
                             "name": p.content,
                             "status": p.status,
+                            **({"previous_name": p.previous_content} if p.previous_content else {}),
                         }
                         for p in (*newly_generated, *renamed)
                     ],

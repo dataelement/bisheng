@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-11-18 用户确认，51 条 AC |
 | design.md | ✅ 已评审 | 2026-11-18 用户确认，决策 1 至决策 12；接手时的第一入口 |
 | tasks.md | ✅ 已拆解 | 2026-11-18 `/sdd-review tasks` 自审通过；任务编号 T001 至 T063，T063 排在 T044 之后 |
-| 实现 | 🔲 未开始 | 0 / 63 完成。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🔨 进行中 | 9 / 63 完成（Wave 0 全部完成，2026-11-18，未提交）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
 
 ---
 
@@ -33,55 +33,55 @@
 
 ### Wave 0（P0）：前置验证、依赖升级、计划对齐修正
 
-- [ ] **T001**: 核实私有化部署的最低 Redis 版本
+- [x] **T001**: 核实私有化部署的最低 Redis 版本
   **文件**: `features/v3.1.0-beta2/004-unified-agent-runtime/design.md`（回写 K8）
   **逻辑**: 查 `docker/` 下各部署形态的 Redis 镜像版本与部署文档写明的最低版本；确认 Stream（`XADD`/`XREAD`/`XTRIM`）可用。把结论和出处写进 design K8。若存在低于 5.0 的受支持环境，停下并按 design 决策 4 的“何时重新考虑”与用户确认。
   **依赖**: 无
 
-- [ ] **T002**: 取升级前的回归基线
+- [x] **T002**: 取升级前的回归基线
   **文件**: `features/v3.1.0-beta2/004-unified-agent-runtime/baseline-before-upgrade.txt`
   **逻辑**: 在升级依赖之前，于 `src/backend/` 运行 `.venv/bin/python -m pytest test/linsight test/workstation test/open_api -q -p no:cacheprovider`，把每个用例的通过或失败结果保存到该文件，供 T004 做差分。
   **依赖**: 无
 
-- [ ] **T003**: 升级 deepagents、langchain、langchain-core
+- [x] **T003**: 升级 deepagents、langchain、langchain-core
   **文件**: `pyproject.toml`、`uv.lock`
   **逻辑**: 把约束改为 `deepagents>=0.7.39,<0.8`、`langchain>=1.5,<2.0`、`langchain-core>=1.8.1,<2.0`。逐个包用 `uv lock --upgrade-package "pkg==ver"` 升级，不做整体升级。检查 `git diff --stat uv.lock`，把被连带移动的包列进提交说明。新引入的传递依赖先查许可证。
   **依赖**: T002
 
-- [ ] **T004**: 0.7 行为差异的回归测试
+- [x] **T004**: 0.7 行为差异的回归测试
   **文件**: `test/linsight/test_deepagents_07_compat.py`
   **逻辑**: 用脚本化模型断言：① `planned` 构图后绑定的工具含 `write_todos`，且 `write_todos` 之后 `updates` 流里出现 `todos` 增量，结构为 `[{content, status}]`；② 解析 `read_file` 与空目录 `ls` 输出的现有代码在新格式（`@@ lines a-b of n @@`、`No files found`）下行为正确。再运行 T002 的同一选择集，与基线逐用例对比，新增失败必须在本任务或 T005 内解决。
   **测试**: `test_planned_graph_has_write_todos`、`test_todos_delta_shape`、`test_read_file_format_consumers`、`test_empty_ls_consumers`
   **覆盖 AC**: AC-07
   **依赖**: T003
 
-- [ ] **T005**: 适配 0.7：显式挂载计划能力与输出格式
+- [x] **T005**: 适配 0.7：显式挂载计划能力与输出格式
   **文件**: `bisheng/linsight/domain/services/agent_factory.py`、`bisheng/linsight/domain/services/context_budget.py`
   **逻辑**: 从 `langchain.agents.middleware` 导入 `TodoListMiddleware`，在主图与子代理的中间件列表里显式传入（保持今天的行为）。全仓搜索依赖 `read_file` 行号格式与 `ls` 返回 `[]` 的代码和提示词示例并修正。替换已废弃的 `BASE_AGENT_PROMPT` 引用。
   **测试**: T004 全部通过；与 T002 基线差分无新增失败
   **覆盖 AC**: AC-07
   **依赖**: T004
 
-- [ ] **T006**: `_diff_todos` 对齐的单元测试
+- [x] **T006**: `_diff_todos` 对齐的单元测试
   **文件**: `test/linsight/test_stream_event_mapper.py`（追加）
   **逻辑**: 以三条计划为基准，分别做改写一条、末尾追加、中间插入、删除中间一条，断言未改动条目的 task id 不变、状态不变；被删除的条目产生 `terminated` 的结束事件；被改写的条目带上改写前的文字。
   **测试**: `test_diff_reword_keeps_ids`、`test_diff_append_keeps_ids`、`test_diff_insert_in_middle_keeps_ids`、`test_diff_delete_marks_terminated`、`test_diff_reword_carries_previous_content`
   **覆盖 AC**: AC-09, AC-10
   **依赖**: 无
 
-- [ ] **T007**: `_diff_todos` 改为两趟匹配
+- [x] **T007**: `_diff_todos` 改为两趟匹配
   **文件**: `bisheng/linsight/domain/services/stream_event_mapper.py`
   **逻辑**: 第一趟对全部新条目做精确内容匹配；第二趟对剩余新条目按位置匹配尚未被占用的旧条目；其余为新增。改写分支在投影里记录 `previous_content`。
   **测试**: T006 全部通过；`scripts/spike_unified_runtime/s3b_diff_todos_alignment.py` 四项均为 `aligned: true`
   **覆盖 AC**: AC-09, AC-10
   **依赖**: T006
 
-- [ ] **T008**: 核实两项未验证的假设
+- [x] **T008**: 核实两项未验证的假设
   **文件**: `features/v3.1.0-beta2/004-unified-agent-runtime/design.md`（回写 §4.4 与 §7）
   **逻辑**: ① 读代码确认服务端对 `task_mode=true` 是否已校验 `linsight_task_mode` 权限，记录文件与行号；② 对比日常对话的读图组件（`common/image_view`）与深度研究的读图处理，判断能否以中间件形式接入统一工厂，给出结论。两项结论回写 design。
   **依赖**: 无
 
-- [ ] **T009**: 真实模型的插话改计划成功率
+- [x] **T009**: 真实模型的插话改计划成功率
   **文件**: `scripts/spike_unified_runtime/s3c_steer_real_model.py`、`scripts/spike_unified_runtime/README.md`
   **逻辑**: 在 114 上用后端虚拟环境运行（模型由 `LLMService` 按模型 id 取得，不在脚本里写密钥）。对工作台模型列表里的 3 个模型各跑 5 次：先让 agent 写出计划，再经收件箱注入“第 3 步改成做 PPT”，记录模型是否调用 `write_todos` 改写第 3 条。把成功次数表写进 README 和 design 决策 6。任一模型成功率低于 4/5 时停下，与用户确认是否按 design 决策 6 的备选处理。
   **依赖**: T005, T007
@@ -489,4 +489,9 @@
 
 > 只留一行指针，论证在 design.md。推翻已 ★ 确认的决策时，先停下与用户重新确认。
 
-（暂无）
+- **T003**：除任务写明的 3 个包，锁文件还连带移动 15 个包并新增 4 个包，全部是被强制的最低版本。见 design K3。
+- **T005**：任务只写了“显式挂载计划能力与输出格式”。实际还要处理 4 处任务没有预见的行为变化：新增的 `delete` 工具、基础提示词不再追加、摘要失败与卸载的签名变化、超窗恢复不再无条件重试。`read_file` 与空 `ls` 的新格式没有任何代码需要修改。`BASE_AGENT_PROMPT` 的引用随中间件一起删除。见 design §5 坑 13 至坑 16。
+- **T004**：测试断言了任务没写的一条：`delete` 不在绑定的工具里。
+- **T007**：改写前的文字放在 `GenerateSubTask.subtask[].previous_name`（事件里），写进 `task_data` 留给 T041 一组。
+- **T009**：114 的工作台只配了 2 个模型，实际跑了 2 个模型各 5 次（10/10 成功），不是 3 个模型。脚本在 114 的 deepagents 0.6.12 上运行。限制见 design 决策 6。
+- **T008**：结论是工作台两个入口都没有校验深度研究权限。发送入口的实现任务要新加校验，这比原先“再校验一次”的表述多一项工作。

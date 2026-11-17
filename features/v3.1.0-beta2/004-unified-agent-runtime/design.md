@@ -29,12 +29,12 @@
 |---|---|---|
 | K1 | 直接回答的首字符时间不能比今天慢（AC-34）。今天它在 API 进程内执行，不排队。114 上不带附件的请求，准备阶段（收到请求到发出模型请求）中位数 0.16 秒、p90 1.34 秒；模型自身的首 token 中位数 1.40 秒。所以统一内核能增加的准备时间只有约 0.1 秒的余量。 | spec；【读码】`workstation/domain/services/chat_service.py:1863`；【实测】S5 |
 | K2 | 开放 API 深度研究接口的契约不变（AC-39）。它按 `session_version_id` 查任务，与工作台共用 `submit_task_turn` 和同一个 worker。 | 【读码】`open_api/domain/services/task_mode_service.py:341` |
-| K3 | deepagents 0.7.39 要求 `langchain>=1.5.0`、`langchain-core>=1.8.1`。仓库现锁 1.3.11 / 1.4.8。 | 【实测】S2 |
+| K3 | deepagents 0.7.39 要求 `langchain>=1.5.0`、`langchain-core>=1.8.1`。升级连带移动 18 个包、新增 4 个包（`httpx2`、`httpcore2`、`httpx2-jsfetch`、`truststore`，许可证为 BSD-3-Clause 与 MIT）。每个被移动的包都取了被强制的最低版本，其中 `anthropic` 0.106→0.120、`pydantic` 2.12.4→2.12.5、`certifi`→2026.10.19、`miniopy-async`→1.23.6。 | 【实测】T003：逐个把包钉回原版本，求解器都报冲突 |
 | K4 | DM8 上不能在高频路径整行重写大 JSON。高频状态放 Redis，按节流落库。 | 【读码】`src/backend/AGENTS.md` Known Pitfalls |
 | K5 | 多节点：API 节点与 worker 节点不共享本地磁盘（C8）。本地 `file_dir` 只是缓存，MinIO `workspace/` 才是真源。 | 【读码】`linsight/AGENTS.md` |
 | K6 | checkpointer 是自研 `PlainRedisCheckpointer`，TTL 7 天，从不裁剪。超过 7 天的会话没有 checkpoint。 | 【读码】`linsight/domain/services/checkpointer.py:58` |
 | K7 | `langgraph-api` 的许可证是 Elastic-2.0。 | 【实测】S4 |
-| K8 | 私有化客户的 Redis 版本不统一。新用到的 Redis 命令必须是 5.0 即有的核心命令，不能依赖模块。 | 【未验证】最低 Redis 版本需在 tasks 阶段对照部署文档确认 |
+| K8 | 新用到的 Redis 命令必须是 5.0 即有的核心命令，不能依赖模块。随产品交付的 Redis 是 7.0.4。客户自带的 Redis（代码支持 Cluster 与 Sentinel）没有文档写明最低版本。同一会话的全部键必须带同一个 hash tag（`{会话 id}`），否则 Lua 脚本在 Cluster 上跨槽报错。 | 已核实（T001，2026-11-18）：`docker/.env.example:23` 与 `docs/architecture/08-deployment.md:12` 写明 `redis:7.0.4`；compose 用 `redis-users.acl` 挂 ACL 文件（`docker/docker-compose.yml`），ACL 文件要求 Redis ≥ 6.0；DSH 额度模块已在生产路径使用 Stream 与 hash tag（`dsh/infrastructure/lua/admit.lua:63` 的 `XADD`、`dsh/domain/services/projection.py:71` 的 `XREADGROUP`、`dsh/infrastructure/quota_redis.py:79`）。【未验证】客户自带 Redis 的实际版本；P1 上线说明需写明“Redis ≥ 5.0” |
 
 ---
 
@@ -61,7 +61,7 @@
   - 仓库用到的 57 个框架符号在 0.7.39 全部存在。【实测】S2
   - 0.7 默认系统提示词从 7588 字符降到 1421 字符，按需挂载正好对应两个档位。【实测】S1
   - 代价是 K3 的连带升级，以及两处输出格式变化（空目录 `ls`、`read_file` 的行号格式）。【实测】S2
-- **何时该重新考虑**：在 langchain 1.5 下跑 `test/linsight/` 全量出现无法在一个波次内修完的回归。这项回归【未验证】。
+- **何时该重新考虑**：在 langchain 1.5 下跑 `test/linsight/` 全量出现无法在一个波次内修完的回归。【实测】T004/T005（2026-11-18）：`test/linsight test/workstation test/open_api` 升级前 3322 通过、117 失败、10 错误；升级并适配后 3325 通过、117 失败、10 错误，逐用例对比没有新增失败，也没有原先失败的用例变成通过（通过数多 3 个 = 新增 7 个测试 − 删除 4 个旧测试）。适配涉及四处行为变化，见 §5 坑 13 至坑 16。
 
 ### 决策 3：直接回答在 API 进程内后台执行，深度研究进 worker
 
@@ -116,7 +116,7 @@
 - **必须同时修的既有缺陷**：`_diff_todos` 把“精确匹配”和“按位置匹配”放在同一趟循环里。在中间插入一条时，新条目按位置占用下一条的 id，其后未改动的条目全部换 id，违反 AC-09。改写、追加、删除三种情况是对齐的。改法是先对全部条目做精确匹配，再对剩余条目按位置匹配。【实测】S3b
 - **改写前的文字与已取消的条目（AC-10、AC-11）**：今天 `_diff_todos` 的改写分支让数据库行的 `task_data` 跟随新文案，旧文案被覆盖（`stream_event_mapper.py:366-371`）。改为在 `task_data` 这个已有的 JSON 字段里增加 `previous_name`，只保留最近一次改写前的文字；`plan` 事件同时带上它。被模型从计划里去掉的条目，今天已经落成 `TERMINATED` 状态并保留行（同文件的 `terminated_events`），界面把它显示为“已取消”。两者都不需要改表结构。
 - **提示词改动**：现有提示词要求“只翻转 status，不改写已有文案”（`agent_factory.py:208`、`:243`）。要改成“只有用户要求时才改写文案”。
-- **未验证的部分**：真实模型收到插话后是否稳定地调用 `write_todos`。【未验证】需要用 3 个模型各跑 5 次。若某个模型的成功率低，按根 `AGENTS.md` §7 的“surface model misbehaviour, don't fall back”原则处理：把现象暴露出来，不加静默兜底。
+- **真实模型的表现**：【实测】S3c（T009，2026-11-18，114，deepagents 0.6.12）。deepseek-v4.1-flash 与 qwen3.8-max 各跑 5 次，10 次都在读到插话后的下一次模型调用里用 `write_todos` 把第 3 条改成做 PPT，前两条的 task id 都没变。这个结果有四个限制。① 114 的工作台只配了 2 个模型，计划里的“3 个模型”没有做到。② 插话都发生在计划刚写出、还没开始执行的时候，没有测执行到一半的插话。③ 脚本的系统提示词明确写了“用户要求调整计划时调用 `write_todos`，只改用户要求改的条目”，现行深度研究提示词写的是“只翻转 status，不改写已有文案”（`agent_factory.py:243`），P2 必须改这句，改完要重测。④ qwen3.8-max 有 1 次第一版计划的三条文字全是空字符串，第二版才有文字；这次按位置对齐，结果正确，但空文字计划本身是模型输出缺陷，P2 要在事件映射处暴露出来。若以后某个模型的成功率低，按根 `AGENTS.md` §7 的“surface model misbehaviour, don't fall back”原则处理：把现象暴露出来，不加静默兜底。
 - **何时该重新考虑**：多个主力模型都不能稳定改写计划。那时转向 B。
 
 ### 决策 7：会话线程从“每轮一个”改成“每个会话一个”
@@ -257,7 +257,7 @@
 
 | AC | 承接方式 | 证据等级 |
 |---|---|---|
-| AC-06 | 开关显示沿用前端按 `linsight_task_mode` 权限判断；发送入口在服务端对 `task_mode=true` 再校验一次同一权限 | 现有服务端是否已校验【未验证】 |
+| AC-06 | 开关显示沿用前端按 `linsight_task_mode` 权限判断；发送入口在服务端对 `task_mode=true` 再校验一次同一权限 | 已核实（T008）：工作台入口与 `/linsight/workbench/*` 都没有校验。`workstation/api/endpoints/chat.py:98` 只有登录依赖；`chat_service.py:2929` 到 `task_submit_service.py:36` 只查项目和邀请码；`linsight.py:184`、`:294`、`:368`、`:436` 只有 `get_login_user`。只有开放 API 代用户调用时校验（`open_api/.../task_mode_service.py:145`，调用 `auth.py:891` 的 `assert_effective_web_menu_contains`）。发送入口实现（T030 一组）要新加这次校验，并补“无权限用户发 `task_mode=true` 被拒绝”的测试 |
 | AC-22 | `planned` 运行等待回答时协程结束、租约释放（今天的 park-and-release）；`direct` 运行等待回答时同样结束协程。部门并发沿用 `DepartmentFlowService.ensure_lease`，只在运行中持有 | 【读码】`task_exec.py:1927` |
 | AC-23 | 开放 API 的无人值守运行不挂 `ask_user`，也不挂收件箱中间件 | 【读码】`unattended_run.py:20` |
 | AC-27 | 交付文件写在主桶 `workspace/` 下，主桶没有生命周期规则；下载链接按需签名，不保存长期链接 | 【读码】F016 的转正逻辑 |
@@ -265,7 +265,7 @@
 | AC-32 | `run_failed` 事件的 `reason`、`reference_id` | 沿用 61f9ef5e99 的报错卡 |
 | AC-38 | 发送入口在消息进收件箱之前执行输入检测（`evaluate_workbench_user_text`），所以插话与普通消息走同一检测；输出检测放在事件映射之后、写入事件流之前 | 【读码】`chat_service.py:1890` |
 | AC-43 | 知识库检索工具由统一工厂装配，权限范围由工具实例闭包携带，与今天两条链路相同 | 【读码】`linsight/AGENTS.md` Prompt / tool wiring |
-| AC-49 | 把日常对话的读图组件（`VisionToolBindWrapper`、`KbImageStage`）接入统一工厂 | 【未验证】两套读图实现能否合并 |
+| AC-49 | 把日常对话的读图组件（`VisionToolBindWrapper`、`KbImageStage`）接入统一工厂 | 已核实（T008）：部分能。日常对话的读图不是外层循环，是“callable model 包装器 + `view_image` 工具”（`common/image_view/vision_llm.py:465`、`chat_service.py:2376`），每个请求新建 `ImageRegistry`（`chat_service.py:1951`），看图模型是独立配置 `workbench.image_read_model`（`image_view/loop.py:398`）。深度研究靠主模型的 `visual` 标志（`agent_factory.py:1957`），`read_file` 直接返回图片块（`workspace_backend.py:460`），由 `binary_content_guard.py:245`、`:319` 两个中间件拦截与挪位。接入方式：把包装器改写成一个 `awrap_model_call` 中间件并自带 `view_image` 工具，`ImageRegistry`、`annotate`、`fetch`、`tool`、`loop.py` 的判定函数直接复用。四个阻碍点见 §5 坑 12 |
 | AC-50 | 记忆的存储不动，只把两处接线合并为一处 | 【读码】 |
 
 ### 4.5 关键模块职责（目标）
@@ -310,6 +310,12 @@
 | 11 | 后端日志已经为每次模型调用记录 `BS_METRIC domain=model_invoke ... ttft_ms=`，每个请求有跟踪号 | 为了测首字符时间去给服务打点、重启，或者去伪造登录 | `scripts/spike_unified_runtime/s5_first_char_timing_from_logs.py` 直接读日志 |
 | 9 | 直接回答今天每次模型调用都查一次 DSH 额度，深度研究每轮只查一次 | 统一后额度口径不一致（AC-37）；直接回答多轮工具调用时每轮多一次查询 | 统一为每次运行开始时查一次（`admit_round`） |
 | 10 | 代码执行器的产物先写到本地 `file_dir`，再同步到 MinIO | `direct` 运行在 API 节点执行、恢复时落到另一个节点，本地文件不在 | 复用 `_sync_workspace_originals`；不依赖本地目录跨运行存在 |
+| 12 | 日常对话的读图组件有四处与统一工厂不兼容：① 它为了补注入 `view_image` 调用，要先缓冲并静音模型输出（`vision_llm.py:338`、`:404`）；② `ImageRegistry` 与已看图片队列是进程内状态，不进 checkpoint；③ 深度研究的检索工具不登记 `⟦img#N⟧`；④ 它和 `ModelContentGuardMiddleware` 都会把图片挪到用户消息，视觉开关也是两套（独立看图模型与主模型 `visual`） | 直接把包装器套在工厂的模型外面：流式正文被缓冲，首字符变慢；等待回答后恢复或换节点时图片编号全部失效；同一张图被挪两次 | T059 改写为 `awrap_model_call` 中间件。`ImageRegistry` 的内容按运行写进图状态。只保留一处挪位。挂载条件统一为“主模型 `visual` 为真，或配置了看图模型”。预计新增约 400 行与配套测试【估算，未实测】 |
+| 13 | deepagents 0.7 新增 `delete` 文件工具。`WorkspaceBackend` 没有重写它，继承来的 `FilesystemBackend.delete` 删的是 worker 本机磁盘上的路径，不动对象存储 | 模型调用 `delete` 后 `ls` 仍能看到文件；路径写错时删到工作区以外 | `agent_factory._workspace_file_tools` 把文件工具限定为工作区实现的 6 个，主图和子代理都替换。`test_deepagents_07_compat.py::test_planned_graph_has_write_todos` 守护。统一工厂（T020）要沿用 |
+| 14 | deepagents 0.7 不再追加英文基础提示词。原来“把英文基础提示词替换成中文”的中间件找不到替换目标，只打一条警告就放行 | 升级后深度研究悄悄丢掉中文基础要求（出错时先分析、不重复重试等） | 删掉该中间件，由 `base_prompt.with_base_prompt` 直接拼在主图系统提示词末尾，位置与原来相同。`test_base_prompt_zh.py` 用真实图断言模型恰好收到一次 |
+| 15 | langchain 1.5 的摘要生成失败改为抛异常，并给摘要模型套了 3 次重试；1.3 是返回 `Error generating summary` 字符串。deepagents 0.7 的 `_offload_to_backend` 多了 `session_id` 参数，历史文件名从线程 id 改为生成的会话 id；`_intercept_large_tool_result` 少了 `runtime` 参数 | F087 的“摘要失败重试一次”失效：失败不再被识别，或一次失败最多打 6 次模型调用；工具结果卸载直接报 `TypeError` | `context_budget.py`：把摘要模型换回不带重试的原模型，重试仍由 BiSheng 的两次循环负责，异常与“too long to summarize”都算失败；两个签名按新版调整 |
+| 16 | deepagents 0.7 遇到超窗时先裁剪尾部，裁剪后没有变短就直接抛 `ContextOverflowError`，不再重试一次 | 历史很短的子代理超窗时只调用 1 次模型就结束，测试剧本里多出来的回复被主图吃掉 | 行为可接受（子代理仍以“未完成”说明返回主任务）。`test_context_overflow_flow.py` 的子代理剧本补了 3 次读页，让压缩有内容可裁 |
+| 17 | `create_linsight_agent` 按模型的 provider 名在进程内注册一个全局 profile（去掉框架自带的摘要中间件）。测试里不同文件的脚本化模型类同名时 provider 名相同 | 新测试先跑，之后别的文件直接调用 `create_deep_agent` 就报“assembled outside bisheng_summarization” ；单独跑能过，合起来才失败 | 每个用 `create_linsight_agent` 的测试模型都通过 `_get_ls_params` 给自己起独立的 `ls_provider` |
 
 ---
 
@@ -354,11 +360,11 @@
 | 项 | 影响什么 | 状态 |
 |---|---|---|
 | 直接回答首字符时间的分段计时 | AC-34、AC-35 的阈值；决策 3、决策 10、决策 12 | 已做（S5，基于 114 的历史日志，48 个请求）。两处不足：没有“不勾选任何工具”的样本；带附件的样本集中在一天。统一内核自身增加多少准备时间要等 P1 有了可运行的实现再测 |
-| 真实模型收到插话后改写计划的成功率 | 决策 6 | 未做。需要可直连的模型地址与密钥 |
-| langchain 1.5 下 `test/linsight/` 全量回归 | 决策 2 | 未做。属于 P0 |
-| 私有化客户的最低 Redis 版本 | 决策 4 | 未做 |
+| 真实模型收到插话后改写计划的成功率 | 决策 6 | 已做（S3c，T009）。2 个模型各 5 次，10 次成功。未覆盖：第 3 个模型、执行到一半的插话、现行深度研究提示词。P2 改完提示词后重测 |
+| langchain 1.5 下 `test/linsight/` 全量回归 | 决策 2 | 已做（T004/T005）。逐用例对比无新增失败。本地没有中间件，依赖数据库与对象存储的用例在升级前后都失败，这部分要靠 CI 的集成测试覆盖 |
+| 私有化客户的最低 Redis 版本 | 决策 4 | 已做（T001）。随产品交付的是 7.0.4，仓库内没有低于 5.0 的受支持环境，决策 4 不变。客户自带 Redis 的版本仓库里查不到，靠 P1 上线说明约束 |
 | 跨多轮的 checkpoint 体积增长 | 决策 7 | 未做 |
-| 服务端是否已校验深度研究权限；两套读图实现能否合并 | AC-06、AC-49 | 未做 |
+| 服务端是否已校验深度研究权限；两套读图实现能否合并 | AC-06、AC-49 | 已做（T008）。权限：工作台两个入口都没校验，需新加。读图：部分能合并，结论与阻碍点见 §4.4 的 AC-49 行与 §5 坑 12 |
 
 ---
 

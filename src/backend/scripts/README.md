@@ -1738,9 +1738,10 @@ Milvus 原生内部消息 Base64 凭据为用户确认的明确例外，部署�
 
 ## 统一 agent 内核技术验证（F004 前置，v3.1.0-beta2）
 
-`spike_unified_runtime/` 下是只读的框架行为验证脚本，不连接任何中间件，不读写业务数据。结论与运行方法见 [spike_unified_runtime/README.md](spike_unified_runtime/README.md)。
+`spike_unified_runtime/` 下是只读的框架行为验证脚本，不读写业务数据。`s3c_steer_real_model.py` 需要连数据库读模型配置并调用真实模型，其余脚本不连接任何中间件。结论与运行方法见 [spike_unified_runtime/README.md](spike_unified_runtime/README.md)。
 
 ```bash
 .venv/bin/python scripts/spike_unified_runtime/s1_todo_and_tool_output.py
 .venv/bin/python scripts/spike_unified_runtime/s3b_diff_todos_alignment.py
+.venv/bin/python scripts/spike_unified_runtime/s3c_steer_real_model.py --list
 ```
