@@ -2120,10 +2120,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         abnormal = await self.space_listing_repository.aexists_abnormal_files(space_ids=[row.id for row in rows])
         bindings = await DepartmentKnowledgeSpaceDao.aget_by_space_ids([row.id for row in rows]) if rows else []
         department_ids = {binding.space_id for binding in bindings}
+        creator_ids = sorted({row.user_id for row in rows if row.user_id is not None})
+        creators = await UserDao.aget_user_by_ids(creator_ids) if creator_ids else []
+        creator_names = {user.user_id: user.user_name for user in (creators or [])}
         return PageData[KnowledgeSpaceAdminListItemResp](
             data=[
                 KnowledgeSpaceAdminListItemResp.model_validate(row).model_copy(
                     update={
+                        "user_name": creator_names.get(row.user_id, ""),
                         "has_abnormal_files": row.id in abnormal,
                         "space_kind": "department" if row.id in department_ids else "normal",
                     }
@@ -4366,7 +4370,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         with self._upload_execution_scope(db_knowledge):
             return await self._upload_folder_items_in_execution_scope(
-                db_knowledge, items, parent_id, processing_overrides=processing_overrides,
+                db_knowledge,
+                items,
+                parent_id,
+                processing_overrides=processing_overrides,
                 **({"_upload_entries": _upload_entries} if _upload_entries is not None else {}),
             )
 

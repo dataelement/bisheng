@@ -31,6 +31,7 @@ from bisheng.permission.application.control_state import PermissionResourceSnaps
 from bisheng.permission.application.data_scope import DATA_SCOPE_PERSONAL
 from bisheng.permission.application.identity import reset_current_permission_actor, set_current_permission_actor
 from bisheng.permission.domain.services.permission_action_service import F048PermissionService, PermissionActor
+from bisheng.user.domain.models.user import UserDao
 
 
 @pytest.fixture
@@ -43,6 +44,7 @@ async def catalog(concrete_tenant, monkeypatch):
     from bisheng.knowledge.domain.services.knowledge_space_service import DepartmentKnowledgeSpaceDao
 
     monkeypatch.setattr(DepartmentKnowledgeSpaceDao, "aget_by_space_ids", AsyncMock(return_value=[]))
+    monkeypatch.setattr(UserDao, "aget_user_by_ids", AsyncMock(return_value=[]))
     register_tenant_filter_events()
     # Other native-SQL fixtures narrow discovery during the first global
     # registration; pin this fixture's real model even in a combined selection.
