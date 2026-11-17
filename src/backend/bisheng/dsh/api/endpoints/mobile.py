@@ -1,7 +1,10 @@
 """Mobile routes return the bare shapes required by the desktop and phone clients."""
 
+import asyncio
+
 from fastapi import APIRouter, Depends, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
+from loguru import logger
 from starlette.websockets import WebSocket
 
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -10,13 +13,38 @@ from bisheng.common.errcode.dsh import DshInvalidRequestError
 from bisheng.common.schemas.api import resp_200
 from bisheng.dsh.api.dependencies import desktop_principal
 from bisheng.dsh.domain.services.access import DshPrincipal
-from bisheng.dsh.domain.services.mobile_access import MobileAccessService, MobileResult
+from bisheng.dsh.domain.services.mobile_access import MobileAccessService, MobileResult, MobileStream
 from bisheng.dsh.domain.services.mobile_session import MobileSessionService, build_mobile_session_service
 from bisheng.dsh.infrastructure.mobile_access import MobileAccessStore
 
 router = APIRouter()
 _service: MobileAccessService | None = None
+_blocking_redis = None
 _sessions: MobileSessionService | None = None
+
+
+class MobileStreamingResponse(StreamingResponse):
+    """Relays one desktop stream and always runs its cleanup.
+
+    A phone that walks away cancels this response, which cancels the body
+    generator. The shield keeps the cancel frame and the slot release going
+    through anyway; otherwise the desktop keeps its Harness follow open.
+    """
+
+    def __init__(self, stream: MobileStream):
+        self._stream = stream
+        super().__init__(
+            stream.body,
+            status_code=stream.status,
+            media_type=stream.media_type,
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    async def __call__(self, scope, receive, send):
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            await asyncio.shield(self._stream.close())
 
 
 async def mobile_sessions(request: Request) -> MobileSessionService:
@@ -30,13 +58,39 @@ async def mobile_sessions(request: Request) -> MobileSessionService:
 
 
 async def mobile_service() -> MobileAccessService:
-    global _service
+    global _service, _blocking_redis
     if _service is None:
+        from bisheng.common.services.config_service import settings
+        from bisheng.core.cache.redis_conn import RedisClient
         from bisheng.core.cache.redis_manager import get_redis_client
 
-        redis = (await get_redis_client()).async_connection
-        _service = MobileAccessService(MobileAccessStore(redis))
+        shared = (await get_redis_client()).async_connection
+        # Construction connects a cluster immediately, so it stays off the event loop.
+        # RedisClient already branches for a single node, cluster, and sentinel.
+        _blocking_redis = await asyncio.to_thread(RedisClient, settings.redis_url, max_connections=64)
+        _service = MobileAccessService(MobileAccessStore(shared, _blocking_redis.async_connection))
     return _service
+
+
+async def close_mobile_service() -> None:
+    """Releases the stream-only Redis client at shutdown.
+
+    ``aclose`` only closes the async side; the constructor also opened a sync
+    connection, which leaks a client per process without ``close``. Never
+    raises: shutdown continues with the rest of the teardown.
+    """
+    global _service, _blocking_redis
+    client, _blocking_redis, _service = _blocking_redis, None, None
+    if client is None:
+        return
+    try:
+        await client.aclose()
+    except Exception:
+        logger.warning("mobile stream redis async close failed")
+    try:
+        await asyncio.to_thread(client.close)
+    except Exception:
+        logger.warning("mobile stream redis close failed")
 
 
 @router.post("/dsh/mobile/bind")
@@ -122,6 +176,26 @@ async def rpc(
     if body is None:
         return _invalid()
     return _respond(await service.rpc(user, desktop_id, body))
+
+
+@router.get("/dsh/mobile/desktops/{desktop_id}/session/stream")
+async def session_stream(
+    desktop_id: str,
+    request: Request,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    service: MobileAccessService = Depends(mobile_service),
+):
+    opened = await service.open_session_stream(
+        user,
+        desktop_id,
+        request.query_params.get("sessionId"),
+        request.query_params.get("view"),
+    )
+    if isinstance(opened, MobileResult):
+        return _respond(opened)
+    if not isinstance(opened, MobileStream):
+        return JSONResponse(status_code=503, content={"error": "unavailable"})
+    return MobileStreamingResponse(opened)
 
 
 @router.websocket("/dsh/mobile/attach")

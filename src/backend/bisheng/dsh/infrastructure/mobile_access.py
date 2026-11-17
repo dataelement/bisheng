@@ -83,8 +83,11 @@ class MobileRegistration:
 
 
 class MobileAccessStore:
-    def __init__(self, redis):
+    def __init__(self, redis, blocking=None):
         self.redis = redis
+        # Stream reads block for up to an hour. They use a separate client so a
+        # single-node pool of 100 shared connections cannot be exhausted.
+        self.blocking = redis if blocking is None else blocking
 
     @staticmethod
     def registration_key(desktop_id: str) -> str:
@@ -185,8 +188,14 @@ class MobileAccessStore:
         await self.redis.rpush(key, json.dumps(message, separators=(",", ":")))
         await self.redis.expire(key, 60)
 
-    async def pop_response(self, desktop_id: str, request_id: str, timeout: float) -> dict | None:
-        return await self._pop(self.response_key(desktop_id, request_id), timeout)
+    async def pop_response(
+        self, desktop_id: str, request_id: str, timeout: float, *, stream: bool = False
+    ) -> dict | None:
+        client = self.blocking if stream else self.redis
+        return await self._pop_from(client, self.response_key(desktop_id, request_id), timeout)
+
+    async def delete_response(self, desktop_id: str, request_id: str) -> None:
+        await self.redis.delete(self.response_key(desktop_id, request_id))
 
     async def failure_count(self, client_ip: str, desktop_id: str) -> int:
         value = await self.redis.get(self.rate_key(client_ip, desktop_id))
@@ -197,7 +206,10 @@ class MobileAccessStore:
         return int(result or 0)
 
     async def _pop(self, key: str, timeout: float) -> dict | None:
-        popped = await self.redis.blpop(key, timeout=max(timeout, 0.01))
+        return await self._pop_from(self.redis, key, timeout)
+
+    async def _pop_from(self, client, key: str, timeout: float) -> dict | None:
+        popped = await client.blpop(key, timeout=max(timeout, 0.01))
         if not popped:
             return None
         raw = popped[1]

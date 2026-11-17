@@ -5,6 +5,8 @@ import hashlib
 import hmac
 import json
 import time
+from collections.abc import AsyncIterator
+from urllib.parse import quote
 from uuid import uuid4
 
 from loguru import logger
@@ -29,8 +31,27 @@ class MobileResult:
 class MobileAccessRuntime:
     def __init__(self):
         self.attachments = 0
+        self.streams = 0
         self.pending: dict[str, dict[str, float]] = {}
         self.lock = asyncio.Lock()
+
+
+class MobileStream:
+    """One relayed desktop stream.
+
+    ``close`` deletes the response key, tells the desktop to stop its follow,
+    and frees the per-process stream slot. The body generator does not do it:
+    a phone that leaves mid-stream cancels the generator, and an unshielded
+    cleanup inside it would be cancelled with it, leaving the desktop follow
+    open for the whole stream deadline. The caller runs ``close`` under
+    ``asyncio.shield`` instead.
+    """
+
+    def __init__(self, status: int, media_type: str, body: AsyncIterator[str], close):
+        self.status = status
+        self.media_type = media_type
+        self.body = body
+        self.close = close
 
 
 class MobileAccessService:
@@ -44,6 +65,9 @@ class MobileAccessService:
         online_ttl: int = 60,
         max_attach: int = 32,
         max_pending: int = 128,
+        stream_timeout: float = 3600,
+        keepalive_interval: float = 15,
+        max_streams: int = 64,
     ):
         self.store = store
         self.runtime = runtime or MobileAccessRuntime()
@@ -52,6 +76,9 @@ class MobileAccessService:
         self.online_ttl = online_ttl
         self.max_attach = max_attach
         self.max_pending = max_pending
+        self.stream_timeout = stream_timeout
+        self.keepalive_interval = keepalive_interval
+        self.max_streams = max_streams
 
     async def bind(self, user, body: dict) -> MobileResult:
         parsed = parse_bind(body)
@@ -154,6 +181,145 @@ class MobileAccessService:
             return _unavailable()
         return MobileResult(503, {"error": "offline"})
 
+    async def open_session_stream(self, user, desktop_id: str, session_id: str | None, view: str | None):
+        checked = _session_id(session_id)
+        if (
+            checked is None
+            or (view is not None and view != "transcript")
+            or DESKTOP_ID_PATTERN.fullmatch(desktop_id or "") is None
+        ):
+            return _invalid()
+        tenant_id, user_id = _decimal(user.tenant_id), _decimal(user.user_id)
+        try:
+            record = await self.store.read(desktop_id)
+            if record is None or record.tenant_id != tenant_id or record.user_id != user_id:
+                return MobileResult(404, {"error": "not_found"})
+            connection_id = await self.store.current_connection(desktop_id)
+            if not connection_id:
+                return MobileResult(503, {"error": "offline"})
+            if not await self._acquire_stream():
+                return MobileResult(503, {"error": "busy"})
+        except RedisError:
+            logger.exception("mobile stream open failed desktop={}", desktop_id)
+            return _unavailable()
+        request_id = str(uuid4())
+        path = f"/api/v1/session/stream?sessionId={quote(checked, safe='')}"
+        if view == "transcript":
+            path += "&view=transcript"
+        try:
+            await self.store.push_request(
+                desktop_id,
+                connection_id,
+                {
+                    "kind": "stream",
+                    "id": request_id,
+                    "deadline": time.time() + self.stream_timeout,
+                    "method": "GET",
+                    "path": path,
+                    "userId": user_id,
+                    "tenantId": tenant_id,
+                },
+            )
+            first = await self._first_stream_frame(desktop_id, request_id, connection_id)
+        except RedisError:
+            logger.exception("mobile stream dispatch failed desktop={}", desktop_id)
+            await self._finish_stream(desktop_id, connection_id, request_id)
+            return _unavailable()
+        if first is None:
+            await self._finish_stream(desktop_id, connection_id, request_id)
+            return MobileResult(503, {"error": "offline"})
+        if first.get("type") == "response":
+            await self._finish_stream(desktop_id, connection_id, request_id)
+            return _relayed(first)
+        status = first.get("status")
+        if type(status) is not int or not 100 <= status <= 599:
+            status = 200
+        media_type = first.get("contentType") if isinstance(first.get("contentType"), str) else "text/event-stream"
+        finished = False
+
+        async def close() -> None:
+            nonlocal finished
+            if finished:
+                return
+            finished = True
+            await self._finish_stream(desktop_id, connection_id, request_id)
+
+        return MobileStream(
+            status,
+            media_type,
+            self._follow_stream(desktop_id, connection_id, request_id),
+            close,
+        )
+
+    async def _first_stream_frame(self, desktop_id: str, request_id: str, connection_id: str) -> dict | None:
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            remaining = deadline - time.time()
+            message = await self.store.pop_response(
+                desktop_id, request_id, min(self.blpop_timeout, remaining), stream=True
+            )
+            if message:
+                return message
+            if await self.store.current_connection(desktop_id) != connection_id:
+                return None
+        return None
+
+    async def _follow_stream(self, desktop_id: str, connection_id: str, request_id: str) -> AsyncIterator[str]:
+        yield ": keep-alive\n\n"
+        deadline = time.time() + self.stream_timeout
+        # A desktop chunk boundary is not an SSE event boundary: one event can
+        # arrive in two chunks. Writing a comment between them would make the
+        # phone read it as part of that event's data and drop the increment.
+        at_boundary = True
+        while time.time() < deadline:
+            remaining = deadline - time.time()
+            try:
+                message = await self.store.pop_response(
+                    desktop_id, request_id, min(self.keepalive_interval, remaining), stream=True
+                )
+            except RedisError:
+                # A cluster failover outlives the client's own retries. End the
+                # stream with a readable event so the phone reconnects with
+                # backoff instead of waiting on a stream that never resumes.
+                logger.exception("mobile stream read failed desktop={}", desktop_id)
+                yield 'event: error\ndata: {"error":"unavailable"}\n\n'
+                return
+            if message is None:
+                if await self.store.current_connection(desktop_id) != connection_id:
+                    yield 'event: error\ndata: {"error":"offline"}\n\n'
+                    return
+                if at_boundary:
+                    yield ": keep-alive\n\n"
+                continue
+            frame_type = message.get("type")
+            if frame_type == "response-chunk" and isinstance(message.get("data"), str):
+                data = message["data"]
+                if data:
+                    at_boundary = data.endswith("\n\n")
+                    yield data
+                continue
+            if frame_type in {"response-end", "response"}:
+                return
+
+    async def _finish_stream(self, desktop_id: str, connection_id: str, request_id: str) -> None:
+        try:
+            await self.store.delete_response(desktop_id, request_id)
+            await self.store.push_request(desktop_id, connection_id, {"kind": "cancel", "id": request_id})
+        except RedisError:
+            logger.warning("mobile stream cleanup failed desktop={}", desktop_id)
+        await self._release_stream()
+
+    async def _acquire_stream(self) -> bool:
+        async with self.runtime.lock:
+            if self.runtime.streams >= self.max_streams:
+                return False
+            self.runtime.streams += 1
+            return True
+
+    async def _release_stream(self) -> None:
+        async with self.runtime.lock:
+            self.runtime.streams = max(0, self.runtime.streams - 1)
+
     async def attach(self, socket, client_ip: str) -> None:
         await socket.accept()
         acquired = False
@@ -231,11 +397,14 @@ class MobileAccessService:
                 frame = await socket.receive_json()
                 if not isinstance(frame, dict):
                     continue
-                if frame.get("type") == "ping":
+                frame_type = frame.get("type")
+                if frame_type == "ping":
                     if not await self.store.refresh(desktop_id, connection_id, self.online_ttl):
                         return
-                elif frame.get("type") == "response":
+                elif frame_type == "response":
                     await self._accept_response(socket, desktop_id, connection_id, frame)
+                elif frame_type in {"response-start", "response-chunk", "response-end"}:
+                    await self._accept_stream_frame(desktop_id, connection_id, frame)
         except (WebSocketDisconnect, RuntimeError, TypeError, ValueError):
             logger.info("mobile attach receive ended desktop={}", desktop_id)
 
@@ -253,9 +422,16 @@ class MobileAccessService:
                     if await self.store.current_connection(desktop_id) != connection_id:
                         return
                     continue
-                if message.get("kind") == "disconnect":
+                kind = message.get("kind")
+                if kind == "disconnect":
                     return
-                if message.get("kind") != "rpc":
+                if kind == "cancel":
+                    request_id = message.get("id")
+                    if isinstance(request_id, str):
+                        pending.pop(request_id, None)
+                        await socket.send_json({"type": "cancel", "id": request_id})
+                    continue
+                if kind not in {"rpc", "stream"}:
                     continue
                 deadline = message.get("deadline")
                 request_id = message.get("id")
@@ -271,28 +447,39 @@ class MobileAccessService:
                     if pending_deadline <= now:
                         pending.pop(pending_id, None)
                 if len(pending) >= self.max_pending:
+                    # "response" marks this as the whole reply. Without it the
+                    # stream opener would take a busy frame for a first chunk
+                    # and hand the phone a 503 body that never ends.
                     await self.store.push_response(
                         desktop_id,
                         request_id,
-                        {"status": 503, "body": '{"error":"busy"}', "contentType": "application/json"},
+                        {
+                            "type": "response",
+                            "status": 503,
+                            "body": '{"error":"busy"}',
+                            "contentType": "application/json",
+                        },
                     )
                     continue
                 pending[request_id] = deadline
-                await socket.send_json(
-                    {
-                        "type": "request",
-                        "id": request_id,
-                        "method": "POST",
-                        "path": "/api/v1/rpc",
-                        "body": message.get("body") if isinstance(message.get("body"), str) else "",
-                        "headers": {
-                            "x-dsh-user-id": message.get("userId") if isinstance(message.get("userId"), str) else "",
-                            "x-dsh-tenant-id": message.get("tenantId")
-                            if isinstance(message.get("tenantId"), str)
-                            else "",
-                        },
-                    }
-                )
+                request = {
+                    "type": "request",
+                    "id": request_id,
+                    "headers": {
+                        "x-dsh-user-id": message.get("userId") if isinstance(message.get("userId"), str) else "",
+                        "x-dsh-tenant-id": message.get("tenantId") if isinstance(message.get("tenantId"), str) else "",
+                    },
+                }
+                if kind == "stream":
+                    request["method"] = message.get("method") if isinstance(message.get("method"), str) else "GET"
+                    request["path"] = message.get("path") if isinstance(message.get("path"), str) else ""
+                    # No body key at all: the desktop passes any string it gets
+                    # to fetch, and fetch rejects a GET carrying a body, even "".
+                else:
+                    request["method"] = "POST"
+                    request["path"] = "/api/v1/rpc"
+                    request["body"] = message.get("body") if isinstance(message.get("body"), str) else ""
+                await socket.send_json(request)
         except (WebSocketDisconnect, RuntimeError):
             logger.info("mobile attach dispatch ended desktop={}", desktop_id)
 
@@ -313,8 +500,35 @@ class MobileAccessService:
             content_type = "application/json"
         body = frame.get("body") if isinstance(frame.get("body"), str) else ""
         await self.store.push_response(
-            desktop_id, request_id, {"status": status, "body": body, "contentType": content_type}
+            desktop_id,
+            request_id,
+            {"type": "response", "status": status, "body": body, "contentType": content_type},
         )
+
+    async def _accept_stream_frame(self, desktop_id: str, connection_id: str, frame: dict) -> None:
+        request_id = frame.get("id")
+        pending = self.runtime.pending.get(connection_id, {})
+        if not isinstance(request_id, str):
+            return
+        deadline = pending.get(request_id)
+        if deadline is None or deadline <= time.time():
+            logger.info("ignore mobile stream frame desktop={}", desktop_id)
+            return
+        frame_type = frame.get("type")
+        message: dict = {"type": frame_type}
+        if frame_type == "response-start":
+            status = frame.get("status")
+            message["status"] = status if type(status) is int else 200
+            headers = frame.get("headers") if isinstance(frame.get("headers"), dict) else {}
+            content_type = headers.get("content-type") or headers.get("Content-Type") or "text/event-stream"
+            message["contentType"] = content_type if isinstance(content_type, str) else "text/event-stream"
+        elif frame_type == "response-chunk":
+            message["data"] = frame.get("data") if isinstance(frame.get("data"), str) else ""
+        elif frame_type == "response-end":
+            pending.pop(request_id, None)
+        else:
+            return
+        await self.store.push_response(desktop_id, request_id, message)
 
     async def _first_frame(self, socket) -> dict | None:
         try:
@@ -378,6 +592,14 @@ def _decimal(value) -> str:
     if type(value) is not int:
         return ""
     return str(value)
+
+
+def _session_id(value) -> str | None:
+    if not isinstance(value, str) or not 1 <= len(value) <= 512:
+        return None
+    if any(char in value for char in "\r\n\t ?#&/\\"):
+        return None
+    return value
 
 
 def _invalid() -> MobileResult:
