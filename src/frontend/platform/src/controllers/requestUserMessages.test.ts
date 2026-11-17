@@ -66,3 +66,24 @@ it('keeps a readable fallback before translations have initialized', () => {
  vi.spyOn(i18next, 't').mockReturnValue(undefined as never);
  expect(showApiError(new Error('PRIVATE')).message).toBe('Request failed. Please try again.');
 });
+
+it.each([200, 422])('displays structured validation messages for HTTP %s without dumping rejected values', async status => {
+ const msg = "String should match pattern '^[a-z][a-z0-9_]*$'";
+ const envelope = { status_code: 422, status_message: [{ type: 'string_pattern_mismatch', loc: ['body', 'changes', 0, 'field_name'], msg, input: 'PRIVATE', ctx: { pattern: 'PRIVATE' } }] };
+ request.defaults.adapter = async config => {
+  const response = { config, status, statusText: 'Validation', headers: {}, data: envelope };
+  if (status === 422) throw { response, config };
+  return response;
+ };
+ const error = await request.post('/test', {}).catch(cause => cause);
+ expect(error.message).toBe(msg);
+ expect(error.status_message).toEqual(envelope.status_message);
+ expect(notices).toHaveBeenCalledWith(expect.objectContaining({ description: msg }));
+ expect(error.message).not.toContain('PRIVATE');
+});
+
+it('does not render malformed validation arrays or arbitrary server errors', () => {
+ for (const [cause, expected] of [[{ status_code: 422, status_message: [{ msg: 'PRIVATE' }] }, messages.fallback], [{ status_code: 500, status_message: [{ type: 'exception', loc: [], msg: 'PRIVATE' }] }, messages['500']]] as const) {
+  expect(showApiError(cause).message).toBe(expected);
+ }
+});

@@ -653,6 +653,7 @@
         "select_first": "Select files or folders first"
     },
     "move": {
+    "checking": "Checking move conditions…",
         "title": "Move",
         "jobs": "Move tasks",
         "current_space": "Current space",

@@ -149,6 +149,16 @@ it("shows the create form above the visible lists and restores focus on cancel",
   );
 });
 
+it("explains invalid uppercase metadata names before calling the backend", async () => {
+  const precheck = vi.spyOn(knowledgeSpaceApi, "precheckProcessing");
+  mount();
+  fireEvent.click(await screen.findByRole("button", { name: "createMetadata" }));
+  fireEvent.change(await screen.findByPlaceholderText("pleaseEnter"), { target: { value: "AAA" } });
+  fireEvent.click(screen.getByRole("button", { name: "save" }));
+  await waitFor(() => expect(screen.getByText("nameFormatError")).toBeVisible());
+  expect(precheck).not.toHaveBeenCalled();
+});
+
 it("resumes a submitted metadata job on reopen until it is complete", async () => {
   const precheck = vi
     .spyOn(knowledgeSpaceApi, "precheckProcessing")

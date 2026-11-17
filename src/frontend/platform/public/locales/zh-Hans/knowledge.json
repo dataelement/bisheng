@@ -653,6 +653,7 @@
         "select_first": "请先选择文件或文件夹"
     },
     "move": {
+    "checking": "正在检查移动条件…",
         "title": "移动",
         "jobs": "移动任务",
         "current_space": "当前空间",
