@@ -12,11 +12,12 @@ message, never an identity -- two users uploading "1.png" must not collide.
 """
 
 import os
-from urllib.parse import unquote, urlparse
+from urllib.parse import unquote
 from uuid import uuid4
 
 from loguru import logger
 
+from bisheng.core.storage.browser_object_path import parse_browser_object_reference
 from bisheng.core.storage.minio.minio_manager import get_minio_storage, get_minio_storage_sync
 
 CHAT_OBJECT_PREFIX = "chat/"
@@ -66,12 +67,14 @@ def temp_object_name_from_url(file_url: str, tmp_bucket: str) -> str | None:
     """
     if not file_url:
         return None
-    path = urlparse(file_url).path
-    marker = f"/{tmp_bucket}/"
-    idx = path.find(marker)
-    if idx == -1:
+    parsed = parse_browser_object_reference(file_url, "", tmp_bucket)
+    if parsed is None:
         return None
-    return unquote(path[idx + len(marker) :]) or None
+    _bucket, key = parsed
+    name = unquote(key)
+    while name != unquote(name):
+        name = unquote(name)
+    return name or None
 
 
 def _plan_promotions(files: list[dict], user_id: int | str, tmp_bucket: str) -> list[tuple[dict, str, str]]:

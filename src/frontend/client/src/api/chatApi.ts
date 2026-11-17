@@ -7,6 +7,7 @@ import { hydrateStreamChatCitations } from './hydrateStreamChatCitations';
  */
 import { isApiError, normalizeApiError } from "@bisheng/api-client";
 import { readCitationFailure } from "~/api/citationFailure";
+import type { MemoryFlags } from "~/api/memory";
 import http from "~/api/request";
 import { normalizeHistoryMediaFiles } from "~/utils/mediaAttachmentUtils";
 import { getShareTokenFromPath } from "~/utils/shareToken";
@@ -155,6 +156,8 @@ export interface ChatMessage {
      * legacy fields in `mapAgentResponseItem`.
      */
     events?: AgentEvent[];
+    /** F132: memory notice / attribution flags of this answer (owner only). */
+    memory?: MemoryFlags;
 }
 
 export interface ContentPart {

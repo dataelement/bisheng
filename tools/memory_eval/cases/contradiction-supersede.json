@@ -1,0 +1,34 @@
+{
+  "id": "contradiction-supersede",
+  "acs": [
+    "AC-48",
+    "AC-65"
+  ],
+  "turns": [
+    {
+      "user": "记住我住在广州",
+      "new_session": false,
+      "expect_write": true
+    },
+    {
+      "user": "我上个月搬到深圳了",
+      "new_session": false,
+      "expect_write": null
+    }
+  ],
+  "question": {
+    "user": "我现在住在哪个城市？",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "must_contain_any": [
+      "深圳"
+    ],
+    "must_not_contain": [
+      "广州"
+    ]
+  },
+  "notes": "",
+  "requires_consolidation": true
+}

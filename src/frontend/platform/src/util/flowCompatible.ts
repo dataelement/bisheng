@@ -1,4 +1,5 @@
 import { generateUUID } from "@/components/bs-ui/utils";
+import { ensureMemoryStartGroup } from "@/util/workflowMemory";
 
 // 历史版本工作流转换脚本
 export const flowVersionCompatible = (flow) => {
@@ -147,6 +148,8 @@ const comptibleStart = (node) => {
         })
         node.v = 3
     }
+    // F132: start nodes saved before the workflow memory switch existed get it, off (AC-70)
+    ensureMemoryStartGroup(node)
 }
 
 

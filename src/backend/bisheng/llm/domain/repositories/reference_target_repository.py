@@ -257,7 +257,7 @@ class ModelReferenceTargetRepository:
                 raw_ids.extend((config.linsight_default_model_id, config.chat_default_model_id))
                 raw_ids.extend(
                     getattr(config, name).id
-                    for name in ("embedding_model", "asr_model", "tts_model", "chat_title_llm", "image_read_model")
+                    for name in ("embedding_model", "asr_model", "tts_model", "chat_title_llm", "memory_llm", "image_read_model")
                     if getattr(config, name) is not None
                 )
         return frozenset(

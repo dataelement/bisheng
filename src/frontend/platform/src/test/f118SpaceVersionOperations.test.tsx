@@ -452,7 +452,7 @@ it("registers once in the real parent, waits for actual processing success, then
     file_name: "new.md",
     status: 5,
   };
-  mocks.upload.mockResolvedValue({ file_path: "staged/new.md" });
+  mocks.upload.mockResolvedValue({ file_path: "staged/new.md", preview_upload_ref: "ref-new" });
   mocks.register.mockResolvedValue([row]);
   let resolve!: (value: unknown) => void;
   mocks.children.mockImplementation(
@@ -478,7 +478,7 @@ it("registers once in the real parent, waits for actual processing success, then
   await waitFor(() =>
     expect(mocks.register).toHaveBeenCalledExactlyOnceWith(
       7,
-      { file_path: ["staged/new.md"], parent_id: 9 },
+      { file_path: ["staged/new.md"], preview_upload_refs: ["ref-new"], parent_id: 9 },
       expect.any(AbortSignal),
     ),
   );
@@ -505,7 +505,7 @@ it("registers once in the real parent, waits for actual processing success, then
 
 it("retains the uploaded standalone file on registration ACK loss without automatic registration or linking", async () => {
   const ports = api();
-  mocks.upload.mockResolvedValue({ file_path: "staged/new.md" });
+  mocks.upload.mockResolvedValue({ file_path: "staged/new.md", preview_upload_ref: "ref-new" });
   mocks.register.mockRejectedValue(new Error("ACK unknown"));
   mount(
     <SpaceVersionUploadPanel

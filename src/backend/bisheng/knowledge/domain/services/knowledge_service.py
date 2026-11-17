@@ -145,6 +145,9 @@ class PreparedUpload:
     file_size: int
     split_rule: str = field(repr=False)
     file_info: KnowledgeFileOne = field(repr=False)
+    # False when the body came from a server-resolved PreviewSource: the
+    # client-supplied file_path is then never used to delete objects.
+    cleanup_source: bool = True
 
 
 class KnowledgeService(KnowledgeUtils):
@@ -1289,13 +1292,28 @@ class KnowledgeService(KnowledgeUtils):
             knowledge_id=knowledge.id,
         )
 
-        return await cls.parse_staged_file(login_user, req_data)
+        from bisheng.knowledge.domain.services.preview_source_service import PreviewSourceService
+
+        # Public preview entry: the client-supplied path must resolve through a
+        # server-issued upload reference or an authorized existing file.
+        if len(req_data.file_list) != 1:
+            raise NotFoundError.http_exception()
+        source = await PreviewSourceService.resolve(
+            item=req_data.file_list[0], login_user=login_user, knowledge_id=req_data.knowledge_id
+        )
+        return await cls.parse_staged_file(login_user, req_data, source=source)
 
     @classmethod
-    async def parse_staged_file(cls, login_user, req_data: KnowledgeFileProcess, *, cache_key: str | None = None):
-        """Parse only after the calling entry has verified its own business target."""
+    async def parse_staged_file(
+        cls, login_user, req_data: KnowledgeFileProcess, *, cache_key: str | None = None, source=None
+    ):
+        """Parse only after the calling entry has verified its own business target.
+
+        ``source`` is the PreviewSource resolved by the public preview entry; staged
+        SPACE uploads pass none because their receipt already owns the server path.
+        """
         legacy_cache = cache_key is None
-        file_path = req_data.file_list[0].file_path
+        file_path = source.cache_path if source is not None else req_data.file_list[0].file_path
         excel_rule = req_data.file_list[0].excel_rule
         file_rule = FileProcessBase(
             knowledge_id=req_data.knowledge_id,
@@ -1339,9 +1357,24 @@ class KnowledgeService(KnowledgeUtils):
                     res.append(FileChunk(text=val["text"], metadata=val["metadata"]))
                 return parse_type, file_share_url, res, partitions
 
-        filepath, file_name = await async_file_download(file_path)
+        if source is not None:
+            from bisheng.core.cache.utils import save_download_file
+
+            def download_source():
+                minio = get_minio_storage_sync()
+                response = minio.download_object_sync(source.bucket, source.object_name)
+                try:
+                    return save_download_file(response, "bisheng", os.path.basename(source.object_name))
+                finally:
+                    response.close()
+                    response.release_conn()
+
+            filepath = await run_in_threadpool(download_source)
+            file_name = source.file_name
+        else:
+            filepath, file_name = await async_file_download(file_path)
+            file_name = cls.get_upload_file_original_name(file_name)
         file_ext = file_name.split(".")[-1].lower()
-        file_name = cls.get_upload_file_original_name(file_name)
 
         # Split text using PreviewFilePipeline
         from bisheng.knowledge.rag.preview_file_pipeline import PreviewFilePipeline
@@ -1381,7 +1414,7 @@ class KnowledgeService(KnowledgeUtils):
 
         from bisheng.knowledge.domain.upload_file_size import MEDIA_FILE_EXTENSIONS
 
-        file_share_url = minio_client.clear_minio_share_host(file_path)
+        file_share_url = minio_client.clear_minio_share_host(source.share_url if source is not None else file_path)
         preview_exts = {
             "doc",
             "docx",
@@ -1419,6 +1452,7 @@ class KnowledgeService(KnowledgeUtils):
             knowledge_id=knowledge.id,
         )
 
+        await cls._authorize_preview_cache_identity(login_user, req_data.knowledge_id, req_data.file_path)
         cache_key = await cls.async_resolve_preview_cache_key(req_data.knowledge_id, req_data.file_path)
         chunk_info = await cls.async_get_preview_cache(cache_key, req_data.chunk_index)
         if not chunk_info:
@@ -1428,19 +1462,28 @@ class KnowledgeService(KnowledgeUtils):
         await cls.async_save_preview_cache(cache_key, chunk_index=req_data.chunk_index, value=chunk_info)
 
     @classmethod
-    def delete_preview_file_chunk(cls, request: Request, login_user: UserPayload, req_data: UpdatePreviewFileChunk):
-        knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
-        try:
-            cls.permission_service.ensure_knowledge_write_sync(
-                login_user=login_user,
-                owner_user_id=knowledge.user_id,
-                knowledge_id=knowledge.id,
-            )
-        except UnAuthorizedError:
-            raise UnAuthorizedError.http_exception()
+    async def _authorize_preview_cache_identity(cls, login_user, knowledge_id: int, file_path: str):
+        if not file_path.startswith("knowledge-preview-file:"):
+            return
+        from bisheng.knowledge.domain.services.preview_source_service import PreviewSourceService
 
-        cache_key = cls.resolve_preview_cache_key_sync(req_data.knowledge_id, req_data.file_path)
-        cls.delete_preview_cache(cache_key, chunk_index=req_data.chunk_index)
+        parts = file_path.split(":")
+        if len(parts) != 3 or not parts[1].isdigit() or parts[2] not in {"original", "converted"}:
+            raise NotFoundError.http_exception()
+        item = KnowledgeFileOne(file_path=file_path, preview_file_id=int(parts[1]), preview_source=parts[2])
+        await PreviewSourceService.resolve(item=item, login_user=login_user, knowledge_id=knowledge_id)
+
+    @classmethod
+    async def delete_preview_file_chunk(
+        cls, request: Request, login_user: UserPayload, req_data: UpdatePreviewFileChunk
+    ):
+        knowledge = await KnowledgeDao.aquery_by_id(req_data.knowledge_id)
+        await cls.permission_service.ensure_knowledge_write_async(
+            login_user=login_user, owner_user_id=knowledge.user_id, knowledge_id=knowledge.id
+        )
+        await cls._authorize_preview_cache_identity(login_user, req_data.knowledge_id, req_data.file_path)
+        cache_key = await cls.async_resolve_preview_cache_key(req_data.knowledge_id, req_data.file_path)
+        await run_in_threadpool(cls.delete_preview_cache, cache_key, chunk_index=req_data.chunk_index)
 
     @classmethod
     def save_knowledge_file(
@@ -1526,12 +1569,28 @@ class KnowledgeService(KnowledgeUtils):
         return knowledge, failed_files, process_files, preview_cache_keys
 
     @classmethod
+    async def _resolve_trusted_uploads(cls, login_user: UserPayload, req_data: KnowledgeFileProcess) -> list:
+        """Resolve every item to a server-issued upload before any file is read."""
+        from bisheng.knowledge.domain.services.preview_source_service import PreviewSourceService
+
+        sources = []
+        for item in req_data.file_list:
+            # Processing accepts uploads only, not references to existing files.
+            if not item.preview_upload_ref or item.preview_file_id:
+                raise NotFoundError.http_exception()
+            sources.append(
+                await PreviewSourceService.resolve(item=item, login_user=login_user, knowledge_id=req_data.knowledge_id)
+            )
+        return sources
+
+    @classmethod
     async def asave_knowledge_file(
         cls,
         login_user: UserPayload,
         req_data: KnowledgeFileProcess,
         *,
         upload_limit_bytes: int | None = None,
+        trusted_uploads_only: bool = False,
     ):
         """Async upload path for request-driven file ingestion."""
         knowledge = await KnowledgeDao.aquery_by_id(req_data.knowledge_id)
@@ -1540,8 +1599,9 @@ class KnowledgeService(KnowledgeUtils):
         if knowledge.type == KnowledgeTypeEnum.SPACE.value:
             from bisheng.knowledge.application.legacy_files import LegacyFilesApplication
 
+            sources = await cls._resolve_trusted_uploads(login_user, req_data) if trusted_uploads_only else None
             owner = LegacyFilesApplication(request=None, identity=login_user)
-            return await owner.astage(req_data)
+            return await owner.astage(req_data, trusted_sources=sources)
         try:
             await cls.permission_service.ensure_knowledge_write_async(
                 login_user=login_user,
@@ -1552,6 +1612,8 @@ class KnowledgeService(KnowledgeUtils):
             raise UnAuthorizedError.http_exception()
         cls.ensure_knowledge_upload_tenant_consistency(login_user, knowledge)
 
+        sources = await cls._resolve_trusted_uploads(login_user, req_data) if trusted_uploads_only else None
+
         failed_files = []
         process_files = []
         created_file_ids = []
@@ -1560,9 +1622,15 @@ class KnowledgeService(KnowledgeUtils):
         limit_bytes = upload_limit_bytes
         current_total_file_size = int(await KnowledgeFileDao.aget_user_upload_total_file_size(login_user.user_id))
         try:
-            for one in req_data.file_list:
+            for index, one in enumerate(req_data.file_list):
                 db_file = await run_in_threadpool(
-                    cls.process_one_file, login_user, knowledge, one, split_rule_dict, processing_rule_request=req_data
+                    cls.process_one_file,
+                    login_user,
+                    knowledge,
+                    one,
+                    split_rule_dict,
+                    processing_rule_request=req_data,
+                    **({"trusted_source": sources[index]} if sources is not None else {}),
                 )
                 if db_file.status != KnowledgeFileStatus.FAILED.value:
                     if getattr(db_file, "id", None):
@@ -1687,17 +1755,21 @@ class KnowledgeService(KnowledgeUtils):
         req_data: KnowledgeFileProcess,
         *,
         upload_limit_bytes: int | None = None,
+        trusted_uploads_only: bool = False,
     ) -> list[KnowledgeFile]:
 
         knowledge = await KnowledgeDao.aquery_by_id(req_data.knowledge_id)
         if knowledge is not None and knowledge.type == KnowledgeTypeEnum.SPACE.value:
             from bisheng.knowledge.application.legacy_files import LegacyFilesApplication
 
+            # SPACE rows are registered by the native owner; the request-driven
+            # entry still accepts only server-issued upload references.
+            sources = await cls._resolve_trusted_uploads(login_user, req_data) if trusted_uploads_only else None
             owner = LegacyFilesApplication(request=request, identity=login_user)
-            return await owner.aprocess(req_data)
+            return await owner.aprocess(req_data, **({"trusted_sources": sources} if sources is not None else {}))
 
         knowledge, failed_files, process_files, preview_cache_keys = await cls.asave_knowledge_file(
-            login_user, req_data, upload_limit_bytes=upload_limit_bytes
+            login_user, req_data, upload_limit_bytes=upload_limit_bytes, trusted_uploads_only=trusted_uploads_only
         )
 
         from bisheng.worker.knowledge import scheduler as file_scheduler
@@ -1875,6 +1947,7 @@ class KnowledgeService(KnowledgeUtils):
         processing_rule_request: FileProcessBase | None = None,
         *,
         ordinary_overrides_only: bool = False,
+        trusted_source=None,
     ) -> PreparedUpload:
         """Stage the original local file and resolve its actual saved rules.
 
@@ -1882,7 +1955,19 @@ class KnowledgeService(KnowledgeUtils):
         effects. The existing writer consumes exactly this prepared snapshot.
         """
         # download original file
-        filepath, file_name = file_download(file_info.file_path)
+        if trusted_source is None:
+            filepath, file_name = file_download(file_info.file_path)
+        else:
+            # Only the server-resolved object is read; the client path is never fetched.
+            from bisheng.core.cache.utils import save_download_file
+
+            response = get_minio_storage_sync().download_object_sync(trusted_source.bucket, trusted_source.object_name)
+            try:
+                filepath = save_download_file(response, "bisheng", os.path.basename(trusted_source.object_name))
+            finally:
+                response.close()
+                response.release_conn()
+            file_name = os.path.basename(trusted_source.object_name)
         md5_ = os.path.splitext(os.path.basename(filepath))[0].split("_")[0]
 
         # Get file size inbytes）
@@ -1929,7 +2014,14 @@ class KnowledgeService(KnowledgeUtils):
         if actual_snapshot is not None:
             split_rule["_effective_processing"] = actual_snapshot.model_dump(mode="json")
         return PreparedUpload(
-            filepath, file_name, original_file_name, md5_, file_size, json.dumps(split_rule), file_info
+            filepath,
+            file_name,
+            original_file_name,
+            md5_,
+            file_size,
+            json.dumps(split_rule),
+            file_info,
+            cleanup_source=trusted_source is None,
         )
 
     @classmethod
@@ -1950,7 +2042,8 @@ class KnowledgeService(KnowledgeUtils):
         db_file.remark = json.dumps({"new_name": prepared.original_file_name, "old_name": old_name}, ensure_ascii=False)
         # Keep the old row unchanged in SQL; the client still chooses overwrite.
         minio_client.put_object_tmp_sync(db_file.object_name, prepared.local_path)
-        cls.remove_unused_file(prepared.file_info.file_path)
+        if prepared.cleanup_source:
+            cls.remove_unused_file(prepared.file_info.file_path)
         db_file.status = KnowledgeFileStatus.FAILED.value
         db_file.split_rule = prepared.split_rule
         db_file.file_size = prepared.file_size
@@ -1966,6 +2059,7 @@ class KnowledgeService(KnowledgeUtils):
         file_kwargs: dict = None,
         skip_dedup: bool = False,
         processing_rule_request: FileProcessBase | None = None,
+        trusted_source=None,
     ) -> KnowledgeFile:
         """Process uploaded files"""
         prepared = cls.prepare_one_file(
@@ -1975,6 +2069,7 @@ class KnowledgeService(KnowledgeUtils):
             split_rule,
             file_kwargs=file_kwargs,
             processing_rule_request=processing_rule_request,
+            trusted_source=trusted_source,
         )
         filepath = prepared.local_path
         original_file_name, md5_, file_size = prepared.original_file_name, prepared.md5, prepared.file_size
@@ -2028,7 +2123,8 @@ class KnowledgeService(KnowledgeUtils):
             minio_client.put_object_sync(
                 bucket_name=minio_client.bucket, object_name=db_file.object_name, file=filepath
             )
-            cls.remove_unused_file(file_info.file_path)
+            if trusted_source is None:
+                cls.remove_unused_file(file_info.file_path)
 
             logger.info("upload_original_file path={}", db_file.object_name)
             KnowledgeFileDao.update(db_file)

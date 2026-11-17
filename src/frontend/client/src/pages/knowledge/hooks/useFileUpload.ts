@@ -156,6 +156,9 @@ export async function uploadFilesSequential(
     const file = files[i];
     try {
       const res = await uploadFileToServerApi(spaceId, file, filenameOf?.(file));
+      if (typeof res.preview_upload_ref !== 'string' || !res.preview_upload_ref.trim()) {
+        throw new Error('Upload response is missing the preview reference');
+      }
       onSuccess(res, file);
     } catch (err) {
       if (isApiError(err) && (err.kind === "canceled" || err.presentation === "global")) throw err;
@@ -357,16 +360,16 @@ export function useFileUpload({
 
       try {
         // Upload each file to server (sequential, with quota early-stop).
-        const uploadedPaths: string[] = [];
+        const uploaded: UploadFileResponse[] = [];
         const { failures, earlyStop } = await uploadFilesSequential(activeSpace.id, fileArray, (res) =>
-          uploadedPaths.push(res.file_path),
+          uploaded.push(res),
         );
         const failureMessage = buildUploadFailureMessage(failures, earlyStop, localize);
         if (failureMessage) {
           showToast({ message: failureMessage, severity: NotificationSeverity.WARNING });
         }
 
-        if (uploadedPaths.length === 0) return;
+        if (uploaded.length === 0) return;
 
         // Register all uploaded files and check for duplicates from response.
         // Upload succeeded; register the files. Retry the registration
@@ -376,7 +379,8 @@ export function useFileUpload({
         // retry is caught by the duplicate detection below.
         const registerUploaded = () =>
           addFilesApi(activeSpace.id, {
-            file_path: uploadedPaths,
+            file_path: uploaded.map((item) => item.file_path),
+            preview_upload_refs: uploaded.map((item) => item.preview_upload_ref!),
             parent_id: currentFolderId ? Number(currentFolderId) : null,
           });
         let registeredFiles: Awaited<ReturnType<typeof addFilesApi>>;
@@ -600,6 +604,7 @@ export function useFileUpload({
           (res, file) =>
             uploadedItems.push({
               file_path: res.file_path,
+              preview_upload_ref: res.preview_upload_ref!,
               relative_path: file.webkitRelativePath || file.name,
               size: file.size,
             }),

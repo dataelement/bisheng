@@ -9,6 +9,7 @@ import pandas as pd
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.encoders import jsonable_encoder
 from loguru import logger
+from starlette.concurrency import run_in_threadpool
 
 from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge_imp import add_qa
@@ -36,7 +37,7 @@ from bisheng.common.schemas.api import UnifiedResponseModel, resp_200, resp_500
 from bisheng.common.services import telemetry_service
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.cache.utils import save_uploaded_file
-from bisheng.core.context.tenant import strict_tenant_filter, tenant_execution_scope
+from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter, tenant_execution_scope
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.role_access import WebMenuResource
 from bisheng.knowledge.api.dependencies import get_knowledge_file_service, get_knowledge_service
@@ -68,6 +69,7 @@ from bisheng.knowledge.domain.schemas.processing_job import ProcessingCreateRequ
 from bisheng.knowledge.domain.services.knowledge_creation_policy import KnowledgeCreationPolicy
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.upload_file_size import validate_knowledge_upload_file_size
+from bisheng.permission.application.business_authorization import require_business_action
 from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService, require_quota
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import calc_data_sha256, generate_uuid
@@ -121,6 +123,18 @@ async def upload_knowledge_file(
     """Knowledge base upload file"""
 
     try:
+        from bisheng.knowledge.domain.services.preview_source_service import PreviewSourceService
+
+        knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
+        if not knowledge:
+            raise NotFoundError.http_exception()
+        is_space = knowledge.type == KnowledgeTypeEnum.SPACE.value
+        # Space upload is staging only; add_file authorizes the actual folder or
+        # space target, which this endpoint does not receive.
+        if not is_space:
+            await KnowledgeService.permission_service.ensure_knowledge_write_async(
+                login_user=login_user, owner_user_id=knowledge.user_id, knowledge_id=knowledge.id
+            )
         file_name = file.filename
         validate_knowledge_upload_file_size(file_name, file.size)
 
@@ -141,7 +155,14 @@ async def upload_knowledge_file(
             knowledge_id=knowledge_id, file_name=file_name, md5_=file_md5
         )
 
-        ret = UploadFileResponse(file_path=file_path, file_name=file_name)
+        preview_upload_ref = await PreviewSourceService.issue(
+            user_id=login_user.user_id,
+            knowledge_id=knowledge_id,
+            object_name=uuid_file_name,
+            file_path=file_path,
+            file_name=file_name,
+        )
+        ret = UploadFileResponse(file_path=file_path, file_name=file_name, preview_upload_ref=preview_upload_ref)
         if repeat_file:
             ret.repeat = True
             ret.repeat_update_time = repeat_file.update_time
@@ -149,7 +170,7 @@ async def upload_knowledge_file(
 
         return resp_200(ret)
 
-    except BaseErrorCode:
+    except (BaseErrorCode, HTTPException):
         raise
     except Exception as e:
         raise ServerError(msg=f"File upload failed: {e}")
@@ -168,6 +189,9 @@ async def preview_file_chunk(
 ):
     """Get a chunked preview of a file"""
 
+    tenant_id = get_current_tenant_id()
+    if tenant_id is None:
+        raise NotFoundError.http_exception()
     preview_file_id = generate_uuid()
     redis_key = f"preview_file:{preview_file_id}"
     redis_client = await get_redis_client()
@@ -175,9 +199,10 @@ async def preview_file_chunk(
 
     async def exec_task():
         try:
-            parse_type, file_share_url, res, partitions = await KnowledgeService.get_preview_file_chunk(
-                request, login_user, req_data
-            )
+            with tenant_execution_scope(tenant_id):
+                parse_type, file_share_url, res, partitions = await KnowledgeService.get_preview_file_chunk(
+                    request, login_user, req_data
+                )
             await redis_client.aset(
                 redis_key,
                 {
@@ -249,12 +274,12 @@ async def update_preview_file_chunk(
 
 
 @router.delete("/preview")
-def delete_preview_file_chunk(
+async def delete_preview_file_chunk(
     *, request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user), req_data: UpdatePreviewFileChunk
 ):
     """Delete a chunked preview of a file"""
 
-    res = KnowledgeService.delete_preview_file_chunk(request, login_user, req_data)
+    res = await KnowledgeService.delete_preview_file_chunk(request, login_user, req_data)
     return resp_200(res)
 
 
@@ -275,6 +300,7 @@ async def process_knowledge_file(
         background_tasks,
         req_data,
         upload_limit_bytes=upload_limit_bytes,
+        trusted_uploads_only=True,
     )
     return resp_200(res)
 
@@ -700,12 +726,26 @@ async def get_file_share_url(
 
 
 @router.get("/file_bbox")
-def get_file_bbox(
+async def get_file_bbox(
     request: Request,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     file_id: int = Query(description="File UniqueID"),
 ):
-    res = KnowledgeService.get_file_bbox(request, login_user, file_id)
+    """Serve layout data only to callers allowed to download that file.
+
+    The sibling ``file_share`` route already enforces a knowledge_file
+    download check; this one read the MinIO object by id without any.
+    """
+    file = await KnowledgeFileDao.query_by_id(file_id)
+    if not file:
+        raise NotFoundError()
+    await require_business_action(
+        login_user,
+        resource_type="knowledge_file",
+        resource_id=file_id,
+        action="download",
+    )
+    res = await run_in_threadpool(KnowledgeService.get_file_bbox, request, login_user, file_id)
     return resp_200(data=res)
 
 

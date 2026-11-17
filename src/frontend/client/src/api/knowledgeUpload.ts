@@ -32,5 +32,8 @@ export async function uploadFileToServerApi(
     throw normalizeApiError(response, { message: response.status_message || 'Upload failed' });
   }
   if (!response?.data?.file_path) throw new Error('Upload response is missing the file path');
+  if (typeof response.data.preview_upload_ref !== 'string' || !response.data.preview_upload_ref.trim()) {
+    throw new Error('Upload response is missing the preview reference');
+  }
   return response.data;
 }

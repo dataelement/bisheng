@@ -101,3 +101,23 @@ class ToolMcpRequestError(BaseErrorCode):
 class ToolImageConfigError(BaseErrorCode):
     Code: int = 15033
     Msg: str = "Invalid image generation settings. Check the API address, API key and model; Azure is not supported."
+
+
+class ToolDestinationDeniedError(BaseErrorCode):
+    Code: int = 15037
+    Msg: str = "Tool request destination is not permitted. Contact an administrator."
+
+
+class ToolRequestFailedError(BaseErrorCode):
+    Code: int = 15038
+    Msg: str = "Tool request failed. Check the service status and configuration."
+
+
+class ToolResponseTooLargeError(BaseErrorCode):
+    Code: int = 15039
+    Msg: str = "Tool response exceeds the size limit. Reduce the response and try again."
+
+
+class ToolRequestTimeoutError(BaseErrorCode):
+    Code: int = 15040
+    Msg: str = "Tool request timed out. Try again later."

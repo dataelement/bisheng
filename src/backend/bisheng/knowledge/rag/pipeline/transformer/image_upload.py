@@ -5,6 +5,7 @@ from typing import Any
 from langchain_core.documents import BaseDocumentTransformer, Document
 from loguru import logger
 
+from bisheng.core.storage.browser_object_path import browser_object_path
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.knowledge.rag.pipeline.loader.base import BaseBishengLoader
@@ -104,7 +105,7 @@ class ImageUploadTransformer(BaseDocumentTransformer):
 
         if not self.loader.image_object_dir:
             # Fallback branch: loader embedded local absolute paths; rewrite.
-            url_prefix = f"/{minio.bucket}/{target_dir}"
+            url_prefix = browser_object_path(minio.bucket, target_dir)
             for doc in documents:
                 doc.page_content = doc.page_content.replace(local_dir, url_prefix)
 

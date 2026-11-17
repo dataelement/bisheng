@@ -21,6 +21,7 @@ import { AppType,AppTypeToNum } from "@/types/app";
 import { forwardRef,useContext,useEffect,useImperativeHandle,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
+import { applyNewWorkflowMemorySwitch } from "@/util/workflowMemory";
 import { assistantRoleExample } from "./assistant/editAssistant/roleExample";
 import { instantiateAssistantTemplate, type AssistantTemplateDraft } from './assistantTemplate';
 
@@ -228,6 +229,7 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
                             )
                         }
                     })
+                    applyNewWorkflowMemorySwitch(template.data.nodes);
                     const res = await createWorkflowApi(formData.name, formData.desc, formData.url, template);
                     if (res && request === generation.current) navigate('/flow/' + res.id);
                 }

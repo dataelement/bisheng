@@ -107,11 +107,17 @@ export function SpaceVersionUploadPanel({
         controller.signal,
       );
       if (controller.signal.aborted) return;
+      if (!staged.preview_upload_ref)
+        throw new Error(t("versions.upload_unconfirmed"));
       // Registration is attempted once. A lost ACK must never create another file.
       registered.current = true;
       const rows = await knowledgeUploadsApi.registerSpaceFiles(
         spaceId,
-        { file_path: [staged.file_path], parent_id: parentId },
+        {
+          file_path: [staged.file_path],
+          preview_upload_refs: [staged.preview_upload_ref],
+          parent_id: parentId,
+        },
         controller.signal,
       );
       if (controller.signal.aborted) return;

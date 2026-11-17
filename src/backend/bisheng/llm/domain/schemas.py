@@ -98,6 +98,8 @@ class WorkbenchModelConfig(BaseModel):
     asr_model: WSModel | None = Field(default=None, description="Speech-to-text model")
     tts_model: WSModel | None = Field(default=None, description="Text-to-speech model")
     chat_title_llm: WSModel | None = Field(default=None, description="Chat Title Generation Model")
+    # F132: model that consolidates long-term memory in the background. Empty -> first daily-chat model.
+    memory_llm: WSModel | None = Field(default=None, description="Memory consolidation model")
     # Model that reads document images for knowledge Q&A, channel Q&A, and daily chat.
     image_read_model: WSModel | None = Field(default=None, description="Image reading model")
 

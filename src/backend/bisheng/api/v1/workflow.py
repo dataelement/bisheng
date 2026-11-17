@@ -27,6 +27,7 @@ from bisheng.core.session_activity import business_activity
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import FlowCreate, FlowDao, FlowStatus, FlowType, FlowUpdate
+from bisheng.memory.domain.services.gate import MemoryGate
 from bisheng.permission.application.business_authorization import (
     check_business_action,
     require_business_action,
@@ -401,7 +402,14 @@ async def workflow_ws(
                 resource_id=workflow_id,
                 action="use",
             )
-            # The connection retains this target through dispatch and cleanup.
+
+            async def _memory_register(session_chat_id: str) -> None:
+                # F132: only logged-in connections register their sessions for memory
+                await MemoryGate.open(session_chat_id, execution_user)
+
+            # ``flow_lease_id`` is the page lease opened by the session page; without
+            # it the connection takes its own execution lease. The connection retains
+            # this target through dispatch and cleanup.
             await chat_manager.dispatch_client(
                 websocket,
                 workflow_id,
@@ -412,6 +420,7 @@ async def workflow_ws(
                 conversation_persistence=ConversationPersistence(execution_user.user_id, user=execution_user),
                 flow_lease_id=flow_lease_id,
                 workflow_execution_port=BoundWorkflowExecutionPort(workflow_id, execution_user),
+                memory_register=_memory_register,
             )
     except UnAuthorizedError:
         await websocket.close(

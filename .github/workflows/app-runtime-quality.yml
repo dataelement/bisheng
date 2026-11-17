@@ -54,8 +54,14 @@ jobs:
         run: |
           bash docker/install.sh --prepare-only
           printf '%s\n' 'ci-configuration-check-only' > "$RUNNER_TEMP/gateway-license.txt"
+          set +e
           bash docker/install.sh --prepare-only --gateway \
-            --license-file "$RUNNER_TEMP/gateway-license.txt" --public-url https://example.invalid
+            --license-file "$RUNNER_TEMP/gateway-license.txt" --public-url https://example.invalid \
+            >"$RUNNER_TEMP/gateway.out" 2>"$RUNNER_TEMP/gateway.err"
+          status=$?
+          set -e
+          [[ "$status" -ne 0 ]]
+          grep -F '尚未完成Gateway' "$RUNNER_TEMP/gateway.err"
 
   compose-contract:
     name: Compose ↔ config.py contract
@@ -70,9 +76,6 @@ jobs:
         run: cp docker/.env.example docker/.env
 
       - name: Verify the app-runtime compose wiring
-        env:
-          MINIO_ROOT_USER: ci-minio-user
-          MINIO_ROOT_PASSWORD: ci-minio-password
         run: bash scripts/tests/compose/verify-app-runtime-compose.sh
 
   unit:

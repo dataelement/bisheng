@@ -1,0 +1,51 @@
+⚠️  [arch-guard] RULE-1 VIOLATION: base.py — common/core 禁止导入 api 层
+⚠️  [arch-guard] RULE-1 VIOLATION: client.py — common/core 禁止导入 api 层
+⚠️  [arch-guard] RULE-1 VIOLATION: client.py — common/core 禁止导入领域模块
+⚠️  [arch-guard] RULE-1 VIOLATION: init_data.py — common/core 禁止导入领域模块
+⚠️  [arch-guard] RULE-1 VIOLATION: knowledge.py — common/core 禁止导入领域模块
+⚠️  [arch-guard] RULE-1 VIOLATION: manager.py — common/core 禁止导入 api 层
+⚠️  [arch-guard] RULE-1 VIOLATION: manager.py — common/core 禁止导入领域模块
+⚠️  [arch-guard] RULE-1 VIOLATION: space_channel_member.py — common/core 禁止导入领域模块
+⚠️  [arch-guard] RULE-1 VIOLATION: space_channel_member_repository_impl.py — common/core 禁止导入领域模块
+⚠️  [arch-guard] RULE-1 VIOLATION: telemetry_service.py — common/core 禁止导入领域模块
+⚠️  [arch-guard] RULE-1 VIOLATION: user_deps.py — common/core 禁止导入领域模块
+⚠️  [arch-guard] RULE-1 VIOLATION: utils.py — common/core 禁止导入领域模块
+⚠️  [arch-guard] RULE-1 VIOLATION: workflow_client.py — common/core 禁止导入 api 层
+⚠️  [arch-guard] RULE-1 VIOLATION: workflow_client.py — common/core 禁止导入领域模块
+⚠️  [arch-guard] RULE-3 WARNING: apps.py — Endpoint 直接导入 database/models（应通过 Domain 层）
+⚠️  [arch-guard] RULE-3 WARNING: assistant.py — Endpoint 直接导入 database/models（应通过 Domain 层）
+⚠️  [arch-guard] RULE-3 WARNING: callback.py — Endpoint 直接导入 database/models（应通过 Domain 层）
+⚠️  [arch-guard] RULE-3 WARNING: channel_chat.py — Endpoint 直接导入 database/models（应通过 Domain 层）
+⚠️  [arch-guard] RULE-3 WARNING: chat.py — Endpoint 直接导入 database/models（应通过 Domain 层）
+⚠️  [arch-guard] RULE-3 WARNING: chat.py — Endpoint 直接导入 database/models（应通过 Domain 层）
+⚠️  [arch-guard] RULE-3 WARNING: chat_schema.py — Endpoint 直接导入 database/models（应通过 Domain 层）
+⚠️  [arch-guard] RULE-3 WARNING: dataset.py — Endpoint 直接导入 database/models（应通过 Domain 层）
+⚠️  [arch-guard] RULE-3 WARNING: department_limit.py — Endpoint 直接导入 database/models（应通过 Domain 层）
+⚠️  [arch-guard] RULE-3 WARNING: flows.py — Endpoint 直接导入 database/models（应通过 Domain 层）
+⚠️  [arch-guard] RULE-3 WARNING: knowledge.py — Endpoint 直接导入 database/models（应通过 Domain 层）
+⚠️  [arch-guard] RULE-3 WARNING: knowledge.py — Endpoint 直接导入 database/models（应通过 Domain 层）
+⚠️  [arch-guard] RULE-3 WARNING: linsight.py — Endpoint 直接导入 database/models（应通过 Domain 层）
+⚠️  [arch-guard] RULE-3 WARNING: mark_task.py — Endpoint 直接导入 database/models（应通过 Domain 层）
+⚠️  [arch-guard] RULE-3 WARNING: qa.py — Endpoint 直接导入 database/models（应通过 Domain 层）
+⚠️  [arch-guard] RULE-3 WARNING: report.py — Endpoint 直接导入 database/models（应通过 Domain 层）
+⚠️  [arch-guard] RULE-3 WARNING: schemas.py — Endpoint 直接导入 database/models（应通过 Domain 层）
+⚠️  [arch-guard] RULE-3 WARNING: session.py — Endpoint 直接导入 database/models（应通过 Domain 层）
+⚠️  [arch-guard] RULE-3 WARNING: tag.py — Endpoint 直接导入 database/models（应通过 Domain 层）
+⚠️  [arch-guard] RULE-3 WARNING: tenant_crud.py — Endpoint 直接导入 database/models（应通过 Domain 层）
+⚠️  [arch-guard] RULE-3 WARNING: usergroup.py — Endpoint 直接导入 database/models（应通过 Domain 层）
+⚠️  [arch-guard] RULE-3 WARNING: variable.py — Endpoint 直接导入 database/models（应通过 Domain 层）
+⚠️  [arch-guard] RULE-3 WARNING: workflow.py — Endpoint 直接导入 database/models（应通过 Domain 层）
+⚠️  [arch-guard] RULE-5 VIOLATION: chat.py — 禁止跨模块 API 层互相导入
+⚠️  [arch-guard] RULE-5 VIOLATION: chat.py — 禁止跨模块 API 层互相导入
+⚠️  [arch-guard] RULE-5 VIOLATION: citation.py — 禁止跨模块 API 层互相导入
+⚠️  [arch-guard] RULE-5 VIOLATION: conversation_export.py — 禁止跨模块 API 层互相导入
+⚠️  [arch-guard] RULE-5 VIOLATION: filelib.py — 禁止跨模块 API 层互相导入
+⚠️  [arch-guard] RULE-5 VIOLATION: knowledge.py — 禁止跨模块 API 层互相导入
+⚠️  [arch-guard] RULE-5 VIOLATION: linsight.py — 禁止跨模块 API 层互相导入
+⚠️  [arch-guard] RULE-5 VIOLATION: service_account.py — 禁止跨模块 API 层互相导入
+⚠️  [arch-guard] RULE-5 VIOLATION: workstation.py — 禁止跨模块 API 层互相导入
+⚠️  [arch-guard] RULE-6 WARNING: dashboardStore.tsx — store 疑似直接调用 HTTP 方法（应通过 API 封装层）
+⚠️  [arch-guard] RULE-6 WARNING: language.ts — store 疑似直接调用 HTTP 方法（应通过 API 封装层）
+⚠️  [arch-guard] RULE-6 WARNING: linsight.test.ts — store 疑似直接调用 HTTP 方法（应通过 API 封装层）
+⚠️  [arch-guard] RULE-7 WARNING: Tianyancha.tsx — 疑似硬编码敏感信息
+⚠️  [arch-guard] RULE-7 WARNING: settings.py — 疑似硬编码敏感信息

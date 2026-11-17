@@ -377,8 +377,10 @@ class ToolServices(BaseModel):
                 download = get_url_content
             try:
                 file_content = await download(download_url)
-            except Exception:
-                raise ToolSchemaDownloadError(exception=ValueError("OpenAPI download failed")) from None
+            except Exception as exc:
+                # URLs and transport exceptions can contain query credentials.
+                logger.warning("Tool schema download failed ({})", type(exc).__name__)
+                raise ToolSchemaDownloadError() from None
         if not file_content:
             raise ToolSchemaEmptyError()
         try:

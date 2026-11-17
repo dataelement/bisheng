@@ -1,0 +1,25 @@
+{
+  "id": "explicit-remember-preference",
+  "acs": [
+    "AC-29"
+  ],
+  "turns": [
+    {
+      "user": "记住：以后给我写周报都用三段式，先结论后细节",
+      "new_session": false,
+      "expect_write": true
+    }
+  ],
+  "question": {
+    "user": "帮我起草这周的周报，主题是知识库上线",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "must_contain_any": [
+      "结论"
+    ]
+  },
+  "notes": "",
+  "requires_consolidation": false
+}

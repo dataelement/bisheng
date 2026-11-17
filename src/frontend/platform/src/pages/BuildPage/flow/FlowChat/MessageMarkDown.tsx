@@ -72,7 +72,7 @@ const MessageMarkDown = React.memo(function MessageMarkDown({ message, version, 
         const normalizedMessage = filterMermaidBlocks(String(message || ""))
             // .replaceAll(/(\n\s{4,})/g, '\n   ') // 禁止4空格转代码
             .replaceAll(/(^\n\s{4,})/g, '\n   ') // ^只处理开头情况，否则影响代码无法缩进
-            .replaceAll('(bisheng/', '(/bisheng/') // TODO 临时处理方案,以后需要改为markdown插件方式处理
+            .replaceAll('(object/', '(/object/')
             .replace(/\\[\[\]]/g, '$$$$') // 处理`\[...\]`包裹的公式（四个$会被解释为两个$$）
         const { transformedContent, citationMap } = transformPrivateCitations(normalizedMessage);
         return {

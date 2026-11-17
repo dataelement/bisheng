@@ -148,10 +148,10 @@
       "count": 1
     },
     "no-console": {
-      "count": 4
+      "count": 3
     },
     "no-restricted-syntax": {
-      "count": 4
+      "count": 3
     },
     "react-hooks/exhaustive-deps": {
       "count": 1
