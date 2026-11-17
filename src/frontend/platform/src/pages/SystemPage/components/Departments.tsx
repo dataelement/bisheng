@@ -89,12 +89,12 @@ export default function Departments() {
 
   const handleLocateMemberFromGlobal = useCallback(
     async ({ primaryDeptDeptId, userId }: { primaryDeptDeptId: string; userId: number }) => {
-      setMemberHighlightUserId(userId)
       const detail = await captureAndAlertRequestErrorHoc(getDepartmentApi(primaryDeptDeptId))
       if (!detail) return
       await tree.reveal(detail.id)
-      const node = tree.getNode(detail.id)
-      if (node) selectNode(node)
+      // Preserve a valid detail snapshot even if the lazy branch fails to load.
+      selectNode({ ...detail, children: [] })
+      setMemberHighlightUserId(userId)
       window.setTimeout(() => {
         rowRefs.current.get(primaryDeptDeptId)?.scrollIntoView({ block: "nearest", behavior: "smooth" })
       }, 80)

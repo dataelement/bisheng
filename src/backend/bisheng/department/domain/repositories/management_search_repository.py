@@ -1,6 +1,6 @@
 """Organization-management search queries; caller supplies authorized scope."""
 
-from sqlalchemy import func, or_
+from sqlalchemy import case, func, or_
 from sqlmodel import col, select
 
 from bisheng.common.subject_search import normalize_keyword
@@ -10,6 +10,49 @@ from bisheng.database.models.department import Department, UserDepartment
 
 
 class ManagementSearchRepository:
+    @classmethod
+    async def department_members(
+        cls, session, department_id, keyword, page, limit, is_primary=None, focus_user_id=None
+    ):
+        """Search an authorized department using the shared name/person-ID rules."""
+        from bisheng.user.domain.models.user import User
+
+        base = (
+            select(
+                UserDepartment.user_id,
+                User.user_name,
+                User.external_id.label("user_external_id"),
+                UserDepartment.department_id,
+                UserDepartment.is_primary,
+                UserDepartment.source,
+                UserDepartment.create_time.label("member_join_time"),
+                User.create_time.label("user_create_time"),
+                User.update_time.label("user_update_time"),
+                User.delete.label("user_deleted"),
+                User.disable_source.label("user_disable_source"),
+            )
+            .join(User, User.user_id == UserDepartment.user_id)
+            .where(UserDepartment.department_id == department_id)
+        )
+        if keyword:
+            base = base.where(
+                subject_match_condition(User.user_id, User.user_name, User.external_id, keyword, name_prefix=False)
+            )
+        if is_primary is not None:
+            base = base.where(UserDepartment.is_primary == is_primary)
+
+        total = (await session.exec(select(func.count()).select_from(base.subquery()))).one()
+        # Locating changes ordering only, never the authorized/filter-matched set.
+        if focus_user_id is not None:
+            base = base.order_by(case((User.user_id == focus_user_id, 0), else_=1))
+        # Exact person IDs stay on the first page even when names/prefixes also match.
+        if keyword:
+            base = base.order_by(exact_id_priority(User.external_id, keyword), User.user_id)
+        else:
+            base = base.order_by(User.user_id)
+        rows = (await session.exec(base.offset((page - 1) * limit).limit(limit))).all()
+        return rows, total
+
     @classmethod
     async def global_members(cls, keyword, page, limit, admin_paths=None, requested_root_path=None):
         kw = normalize_keyword(keyword or "")

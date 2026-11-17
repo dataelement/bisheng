@@ -34,15 +34,7 @@ export interface DepartmentAdmin {
   user_name: string
 }
 
-export interface DepartmentDetail {
-  id: number
-  dept_id: string
-  name: string
-  parent_id: number | null
-  path: string
-  sort_order: number
-  source: string
-  status: string
+export interface DepartmentDetail extends Omit<DepartmentTreeNode, "children"> {
   default_role_ids: number[] | null
   member_count: number
 }
