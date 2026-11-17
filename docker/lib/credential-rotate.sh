@@ -390,7 +390,9 @@ credential_rotation_run() {
   credential_rotation_tool validate-policy --bundle "$BUNDLE" --key-file "$KEY_FILE" --env-file "$ENV_FILE" >/dev/null || credential_rotation_fail '最终部署策略验证失败'
   local ready attempt
   ready=false
-  for attempt in {1..60}; do
+  # Backend health interval is 90s and startup can still be initializing after
+  # two minutes. Match credential_wait_apps: 120 * 3s.
+  for attempt in {1..120}; do
     ready=true
     while IFS= read -r name; do
       [[ -z $name ]] && continue
@@ -398,7 +400,7 @@ credential_rotation_run() {
       case "$phase" in healthy|running) ;; unhealthy|exited|dead) credential_rotation_fail '应用未通过启动检查' ;; *) ready=false ;; esac
     done < "$credential_rotation_session/consumers"
     [[ $ready != true ]] || break
-    sleep 2
+    sleep 3
   done
   [[ $ready = true ]] || credential_rotation_fail '应用就绪等待超时'
   credential_rotation_state mark --phase SERVICES_READY || credential_rotation_fail '应用状态保存失败'
