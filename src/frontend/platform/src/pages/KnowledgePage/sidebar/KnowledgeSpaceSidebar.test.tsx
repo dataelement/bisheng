@@ -4,9 +4,10 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { KnowledgeSpaceSidebar, type KnowledgeSpaceSidebarProps } from "./KnowledgeSpaceSidebar";
 
 const mocks = vi.hoisted(() => ({
-  get: vi.fn(), post: vi.fn(), children: vi.fn(), parents: vi.fn(), error: vi.fn(),
+  get: vi.fn(), post: vi.fn(), children: vi.fn(), parents: vi.fn(), error: vi.fn(), copies: vi.fn(),
 }));
 vi.mock("../hooks/useSpaceActions", () => ({ useSpaceActions: () => ({ load: vi.fn(), render: () => null, dialogs: null }) }));
+vi.mock("@/controllers/API/knowledgeCopy", () => ({ listOwnedSpaceCopies: mocks.copies }));
 vi.mock("@/controllers/request", () => ({ default: { get: mocks.get, post: mocks.post }, showApiError: mocks.error }));
 vi.mock("@/controllers/API/knowledgeSpace", () => ({ knowledgeSpaceApi: { listChildren: mocks.children, listAdminSpaces: (query: object) => mocks.get("/api/v1/knowledge/space/admin/list", { params: query }), listVisibleSpaces: (query: object) => mocks.get("/api/v1/knowledge/space/list", { params: query }) } }));
 vi.mock("@/controllers/API/knowledgeFiles", () => ({ knowledgeFilesApi: { listSpaceFolderParents: mocks.parents } }));
@@ -31,12 +32,27 @@ function setup(extra: Partial<KnowledgeSpaceSidebarProps> = {}) {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  mocks.copies.mockResolvedValue([]);
   mocks.get.mockImplementation((url: string) => Promise.resolve(url.endsWith("/mine") ? [{ id: 7, name: "My space", is_pinned: false }] : []));
   mocks.post.mockResolvedValue(true);
   mocks.children.mockResolvedValue(page([]));
   mocks.parents.mockResolvedValue([]);
 });
 afterEach(() => { cleanup(); clients.splice(0).forEach((client) => client.clear()); });
+
+it("discovers unfinished copies after refresh and keeps their contents closed", async () => {
+  mocks.copies.mockResolvedValue([{ id: 88, name: "New copy", user_id: 2, state: 0, job_id: "copy-job", job_state: "accepted", phase: "initializing", total_count: 10, succeeded_count: 0, failed_count: 0 }]);
+  const f = setup();
+  render(f.draw());
+  fireEvent.click(await screen.findByRole("button", { name: /New copy/ }));
+  expect(f.props.onSelect).toHaveBeenCalledWith(88, null);
+  expect(screen.getAllByRole("status").some((node) => node.textContent === "space_copy_ui.in_progress")).toBe(true);
+  expect(screen.queryByRole("button", { name: "sidebar.expand New copy" })).toBeNull();
+  expect(mocks.children).not.toHaveBeenCalled();
+  mocks.copies.mockResolvedValue([{ id: 88, name: "New copy", user_id: 2, state: 0, job_id: "copy-job", job_state: "failed", phase: "failed", total_count: 10, succeeded_count: 0, failed_count: 10 }]);
+  await act(() => f.client.invalidateQueries({ queryKey: ["f118-knowledge", "user:2", 60, 60, "ordinary", "copy-tasks"] }));
+  await waitFor(() => expect(screen.getAllByRole("status").some((node) => node.textContent === "space_copy_ui.failed")).toBe(true));
+});
 
 it("preserves the three groups and only loads folders when their space is expanded", async () => {
   mocks.children.mockResolvedValueOnce(page([folder(9, "Root folder"), { ...folder(10, "Not a folder"), file_type: 1 }]));

@@ -16,6 +16,8 @@ import { KnowledgeFolderTree, knowledgeTreeNodeKey, type KnowledgeTreeExpansion 
 import { KnowledgeSidebarPane } from "./KnowledgeSidebarPane";
 import { useSpaceCatalog } from "./useSpaceCatalog";
 import { useSpaceActions } from "../hooks/useSpaceActions";
+import { useSpaceCopyTasks } from "../useSpaceCopyTasks";
+import type { SpaceCopyTask } from "@/controllers/API/knowledgeCopy";
 
 export interface KnowledgeSpaceSidebarProps {
   scope: KnowledgeQueryScope;
@@ -37,7 +39,7 @@ interface SpaceMenuProps {
   onMenuOpen: (item: KnowledgeSpaceInfo, open: boolean) => void;
 }
 interface SpaceItemProps extends KnowledgeSpaceSidebarProps, SpaceMenuProps, KnowledgeTreeExpansion {
-  item: KnowledgeSpaceInfo;
+  item: KnowledgeSpaceInfo & { copyTask?: SpaceCopyTask };
   section: SidebarSection;
   path: readonly number[];
 }
@@ -65,14 +67,14 @@ function SpaceItem({ item, section, path, ...props }: SpaceItemProps) {
       name={item.name}
       current={selected && "page"}
       icon={section === "department" ? <Outlined.City /> : <Outlined.Notebook />}
-      marker={item.is_pinned && <Outlined.Pin aria-hidden />}
+      marker={<>{(item.copyTask || item.state === 2) && <span role="status" className="text-caption text-text-3">{t(item.copyTask?.phase === "failed" ? "space_copy_ui.failed" : "space_copy_ui.in_progress")}</span>}{item.is_pinned && <Outlined.Pin aria-hidden />}</>}
       onSelect={() => props.onSelect(item.id, null)}
-      disclosure={knownEmpty ? undefined : {
+      disclosure={item.copyTask || knownEmpty ? undefined : {
         expanded,
         label: `${t(expanded ? "sidebar.collapse" : "sidebar.expand")} ${item.name}`,
         onToggle: () => props.onExpansionChange(key, !expanded),
       }}
-      actions={(
+      actions={!item.copyTask && (
         <TreeNavigationMenu
           label={`${t("more", { ns: "bs" })} ${item.name}`}
           onOpenChange={(open) => props.onMenuOpen(item, open)}
@@ -87,7 +89,7 @@ function SpaceItem({ item, section, path, ...props }: SpaceItemProps) {
         />
       )}
     >
-      {expanded && (
+      {expanded && !item.copyTask && (
         <KnowledgeFolderTree
           scope={props.scope} spaceId={item.id} parentId={null}
           selectedId={active ? props.parentId ?? null : null} path={active ? path : []}
@@ -111,6 +113,8 @@ interface SectionProps extends KnowledgeSpaceSidebarProps, SpaceMenuProps, Knowl
 
 function SpaceSectionList({ section, path, keyword, catalog, departmentIds, createdIds, userId, onCreate, ...props }: SectionProps) {
   const { t } = useTranslation("knowledge");
+  const copies = useSpaceCopyTasks(props.scope);
+  const copyById = new Map(copies.data?.map((task) => [task.id, task]));
   const [collapsed, setCollapsed] = useState(false);
   const [sort, setSort] = useState<SpaceSort>("update_time");
   const query = useQuery({
@@ -133,10 +137,13 @@ function SpaceSectionList({ section, path, keyword, catalog, departmentIds, crea
     return !department && (section === "created" ? created : !created);
   }) : query.data ?? [];
   const navigation = new Map(query.data?.map((row) => [row.id, row]));
-  const rows = [...new Map(source
+  const pending = section === "created" || section === "personal"
+    ? (copies.data ?? []).filter((task) => task.name.toLocaleLowerCase().includes(keyword.toLocaleLowerCase()))
+    : [];
+  const rows = [...new Map([...source, ...pending]
     .filter((item) => Number.isSafeInteger(item.id) && item.id > 0 && (item.tenant_id == null || item.tenant_id === props.scope.tenantId))
-    .map((item) => [item.id, props.scope.view === "ordinary" && keyword ? { ...item, is_pinned: navigation.get(item.id)?.is_pinned ?? item.is_pinned } : item])).values()];
-  if (catalogMode) rows.sort((a, b) => {
+    .map((item) => [item.id, { ...navigation.get(item.id), ...item, copyTask: copyById.get(item.id), ...(props.scope.view === "ordinary" && keyword ? { is_pinned: navigation.get(item.id)?.is_pinned ?? item.is_pinned } : {}) }])).values()];
+  if (catalogMode || pending.length > 0) rows.sort((a, b) => {
     const pinned = props.scope.view === "ordinary" ? Number(b.is_pinned === true) - Number(a.is_pinned === true) : 0;
     return pinned || (sort === "name" ? a.name.localeCompare(b.name) : String(b[sort] ?? "").localeCompare(String(a[sort] ?? ""))) || b.id - a.id;
   });

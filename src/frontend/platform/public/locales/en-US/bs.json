@@ -4503,7 +4503,7 @@
       "price": "Price",
       "priceSummary": "Input {{input}} / output {{output}} ({{currency}})",
       "missingTag": "No price",
-      "missingHelp": "This model has no price yet, so employees cannot use it. Save it once in model settings, or ask the operator to run the upgrade pricing script.",
+      "missingHelp": "This model has no price yet, so calls are billed as free (0 credits). Set a price here, or ask operations to run the upgrade price backfill to apply catalog prices.",
       "defaultTag": "Default 0",
       "priceDialogTitle": "Price",
       "priceDialogHelp": "Prices are per million tokens. Calls that start after you save are charged at the new price.",

@@ -21,6 +21,7 @@ import { userContext } from "@/contexts/userContext";
 import type { User } from "@/types/api/user";
 import KnowledgePage from "@/pages/KnowledgePage";
 import Header from "@/pages/KnowledgePage/components/Header";
+import { ApiError } from "@bisheng/api-client";
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
@@ -34,7 +35,9 @@ const mocks = vi.hoisted(() => ({
   management: vi.fn(),
   error: vi.fn(),
   preview: vi.fn(),
+  copies: vi.fn(),
 }));
+vi.mock("@/controllers/API/knowledgeCopy", () => ({ listOwnedSpaceCopies: mocks.copies }));
 vi.mock("@/controllers/request", () => ({
   default: { get: mocks.get, post: mocks.post },
   showApiError: mocks.error,
@@ -145,6 +148,7 @@ function mount(path = "/filelib/7") {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.copies.mockResolvedValue([]);
   mocks.post.mockResolvedValue({
     check_complete: true, can_execute: false, valid_items: [], invalid_items: [], requires_skip_confirmation: false, impact: {},
   });
@@ -257,6 +261,7 @@ it("mounts visible-only child content when root info fails and never enters lega
   mocks.info.mockRejectedValue(error);
   mocks.containerEdit.mockResolvedValue({ allowed: false });
   mount();
+  expect(screen.queryByText("space_copy_ui.recovery_notice")).toBeNull();
   fireEvent.click(await screen.findByRole("button", { name: "report.pdf" }));
   expect(await screen.findByTestId("original-preview")).toBeInTheDocument();
   await waitFor(() => expect(mocks.error).toHaveBeenCalledWith(error));
@@ -265,6 +270,81 @@ it("mounts visible-only child content when root info fails and never enters lega
   ).toBe(true);
   expect(screen.queryByTestId("legacy-chunks")).not.toBeInTheDocument();
   expect(mocks.containerEdit).not.toHaveBeenCalled();
+});
+
+it("shows an initializing copy after a fresh page load without reading its files", async () => {
+  mocks.copies.mockResolvedValue([{ id: 7, name: "Background copy", user_id: 7, state: 0, job_id: "original-copy", job_state: "running", phase: "initializing", total_count: 10, succeeded_count: 0, failed_count: 0 }]);
+  mount();
+  expect(await screen.findByRole("heading", { name: "Background copy" })).toBeVisible();
+  expect(screen.getByText("space_copy_ui.phase_initializing")).toBeVisible();
+  expect(screen.getByText("space_copy_ui.background_notice")).toBeVisible();
+  expect(mocks.info).not.toHaveBeenCalled();
+  expect(mocks.children).not.toHaveBeenCalled();
+});
+
+it("opens a failed copy directly and retries the same job before returning to its files", async () => {
+  mocks.copies.mockResolvedValue([{ id: 7, name: "Background copy", user_id: 7, state: 0, job_id: "original-copy", job_state: "failed", phase: "failed", total_count: 10, succeeded_count: 0, failed_count: 10 }]);
+  const read = mocks.get.getMockImplementation()!;
+  const job = { id: "original-copy", space_id: 7, kind: "space_copy", state: "failed", revision: 1, total_count: 10, succeeded_count: 0, failed_count: 10, pending_count: 0, hidden_item_count: 10, retryable: true };
+  mocks.get.mockImplementation((url: string, options?: { params?: unknown }) => {
+    if (url.endsWith("/processing-jobs/original-copy/items")) return { data: [], total: 0 };
+    if (url.endsWith("/processing-jobs/original-copy")) return job;
+    return read(url, options);
+  });
+  const post = mocks.post.getMockImplementation()!;
+  mocks.post.mockImplementation(async (url: string, ...args: unknown[]) => {
+    if (!url.endsWith("/processing-jobs/original-copy/retry")) return post(url, ...args);
+    job.state = "succeeded";
+    mocks.copies.mockResolvedValue([]);
+    return { job_id: job.id, state: "accepted", accepted: true, reused: false };
+  });
+  mount();
+  await screen.findByText("space_copy_ui.phase_failed");
+  expect(mocks.children).not.toHaveBeenCalled();
+  fireEvent.click(await screen.findByRole("button", { name: "retry" }));
+  await waitFor(() => expect(mocks.post).toHaveBeenCalledWith(
+    "/api/v1/knowledge/space/7/processing-jobs/original-copy/retry",
+    { expected_job_revision: 1, idempotency_key: expect.any(String) },
+    { params: { kind: "space_copy" } },
+  ));
+  expect(await screen.findByRole("button", { name: "report.pdf" })).toBeVisible();
+});
+
+it("recovers the original copy from a detail page whose target permissions are not initialized", async () => {
+  mocks.info.mockRejectedValue(new ApiError({ status_code: 25008 }, { message: "Projection not ready" }));
+  const read = mocks.get.getMockImplementation()!;
+  const job = {
+    id: "original-copy", space_id: 7, kind: "space_copy", state: "failed", revision: 1,
+    accepted_at: "2026-11-16", started_at: null, finished_at: null,
+    total_count: 10, succeeded_count: 0, failed_count: 10, pending_count: 0,
+    hidden_item_count: 10, retryable: true, error_code: 25009, obsolete_reason: null,
+  };
+  mocks.get.mockImplementation((url: string, options?: { params?: unknown }) => {
+    if (url.endsWith("/processing-jobs")) return { data: [job], total: 1 };
+    if (url.endsWith("/processing-jobs/original-copy/items")) return { data: [], total: 0 };
+    if (url.endsWith("/processing-jobs/original-copy")) return job;
+    return read(url, options);
+  });
+  const post = mocks.post.getMockImplementation()!;
+  mocks.post.mockImplementation(async (url: string, ...args: unknown[]) => {
+    if (!url.endsWith("/processing-jobs/original-copy/retry")) return post(url, ...args);
+    mocks.info.mockResolvedValue({ id: 7, name: "Recovered copy", state: 1 });
+    return { job_id: job.id, state: "accepted", accepted: true, reused: false };
+  });
+  mount();
+  const heading = await screen.findByRole("heading", { name: "space_copy_ui.tasks" });
+  expect(screen.getByText("space_copy_ui.recovery_notice")).toBeVisible();
+  const recovery = within(heading.closest("section")!);
+  fireEvent.click(await recovery.findByRole("button", { name: "f118.processing_kind_space_copy · f118.processing_state_failed" }));
+  await recovery.findByText("f118.processing_counts");
+  fireEvent.click(await recovery.findByRole("button", { name: "retry" }));
+  await waitFor(() => expect(mocks.post).toHaveBeenCalledWith(
+    "/api/v1/knowledge/space/7/processing-jobs/original-copy/retry",
+    { expected_job_revision: 1, idempotency_key: expect.any(String) },
+    { params: { kind: "space_copy" } },
+  ));
+  expect(await screen.findByText("Recovered copy")).toBeVisible();
+  await waitFor(() => expect(screen.queryByText("space_copy_ui.recovery_notice")).toBeNull());
 });
 it("direct child admission uses current folder facts without a root info or visible precondition", async () => {
   mocks.containerEdit.mockResolvedValue({ allowed: false });

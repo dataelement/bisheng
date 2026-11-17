@@ -141,7 +141,11 @@ function UploadWizard({
     const chosen = direct
       ? initialWizardStrategy(settings.data.effective_defaults, spaceId, files)
       : strategy;
-    if (!chosen || previewBusy.current) return;
+    if (!chosen) return;
+    if (!direct && previewBusy.current) {
+      toast.show({ type: "warning", message: t("previewInProgress") });
+      return;
+    }
     try {
       const rules = Object.fromEntries(
         files.map((file) => [
@@ -259,6 +263,7 @@ function UploadWizard({
             persistState={strategy}
             onPersistStateChange={handleStrategy}
             onPrev={() => setStep(1)}
+            onDirectUpload={() => handleCommit(true)}
             onNext={() => {
               try {
                 files.forEach((file) =>
@@ -336,6 +341,9 @@ function UploadWizard({
                 onClick={() => setStep(2)}
               >
                 {t("previousStep")}
+              </Button>
+              <Button variant="outlined" onClick={() => handleCommit(true)}>
+                {t("uploadDirectlyDefaults")}
               </Button>
               <Button
                 disabled={

@@ -76,6 +76,7 @@ beforeEach(() => {
   mock.scope.mockReturnValue({ scopes: { ordinary: scope, admin: { ...scope, view: "admin" } }, canManage: true, isLoading: false, retry: vi.fn() });
   mock.get.mockImplementation(async (url: string, options?: { params?: { file_type?: number; parent_id?: number | null } }) => {
     if (url.endsWith("/admin/list")) return { data: [{ id: 7, name: "Reports", tenant_id: 60, space_kind: "normal" }], total: 1 };
+    if (url.endsWith("/copy/tasks")) return { data: [], total: 0 };
     if (url.endsWith("/mine")) return [{ id: 7, name: "Reports", tenant_id: 60 }];
     if (url.endsWith("/joined") || url.endsWith("/department")) return [];
     if (url.endsWith("/children") && options?.params?.file_type === 0) return { data: options.params.parent_id == null ? [{ id: 9, file_name: "Finance", file_type: 0 }] : [], has_more: false, next_cursor: null };
@@ -311,8 +312,12 @@ it("waits for earlier navigation groups before selecting the first space", async
 });
 
 it("shows an empty workspace when no navigation or child-only space exists", async () => {
-  mock.get.mockResolvedValue([]);
-  mock.get.mockImplementation(async (url: string) => url.endsWith("/list") ? { data: [], has_more: false, next_cursor: null } : []);
+  const fallback = mock.get.getMockImplementation()!;
+  mock.get.mockImplementation(async (url: string) => {
+    if (url.endsWith("/mine")) return [];
+    if (url.endsWith("/space/list")) return { data: [], has_more: false, next_cursor: null };
+    return fallback(url);
+  });
   mount();
   await waitFor(() => expect(mock.get).toHaveBeenCalledWith("/api/v1/knowledge/space/list", { params: { page_size: 1 } }));
   expect(screen.queryByTestId("files")).toBeNull();

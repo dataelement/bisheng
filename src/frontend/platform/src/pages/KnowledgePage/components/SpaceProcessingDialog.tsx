@@ -236,9 +236,11 @@ function Content({
   return (
     <SpacePanelFrame
       title={t(
-        mode === "jobs" && jobKind === "move_index"
-          ? "move.jobs"
-          : `f118.processing_title_${mode}`,
+        mode === "jobs" && jobKind === "space_copy"
+          ? "space_copy_ui.tasks"
+          : mode === "jobs" && jobKind === "move_index"
+            ? "move.jobs"
+            : `f118.processing_title_${mode}`,
       )}
       presentation={presentation}
       hideTitle={inlineEmbedding}
@@ -324,7 +326,8 @@ function Content({
                     })
                   }
                 >
-                  {t(row.kind === "move_index" ? "move.jobs" : `f118.processing_kind_${row.kind}`)} ·{" "}
+                  {t(row.kind === "move_index" ? "move.jobs" : `f118.processing_kind_${row.kind}`)}{" "}
+                  ·{" "}
                   {t(`f118.processing_state_${row.state}`)}
                 </Button>
               </li>

@@ -366,7 +366,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
   });
   const batch = useKnowledgeBatch(JSON.stringify([...base, parentId, selectedKeys]));
   const [batchTagsOpen, setBatchTagsOpen] = useState(false);
-  const [move, setMove] = useState<{ mode: "move" | "jobs"; items: MoveSelection[] } | null>(null);
+  const [move, setMove] = useState<MoveSelection[] | null>(null);
   const [webLinkOpen, setWebLinkOpen] = useState(false);
   const runBatch = async (
     operation: "download" | "tag" | "retry",
@@ -486,7 +486,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
   );
   return (
     <div className={workspace ? "relative flex min-h-0 min-w-0 flex-1 flex-col" : "relative space-y-4"}>
-      {move && <MoveDialog scope={scope} spaceId={spaceId} parentId={parentId} items={move.items} mode={move.mode} onClose={() => setMove(null)} />}
+      {move && <MoveDialog scope={scope} spaceId={spaceId} parentId={parentId} items={move} onClose={() => setMove(null)} />}
       {selectionError === epoch && <p role="alert">{t("deletion.reason_no_permission")}</p>}
       <SpaceDirectoryToolbar
         toolbarTarget={toolbarTarget}
@@ -509,8 +509,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
           void runBatch("retry");
         }}
         onBatchTag={() => setBatchTagsOpen(true)}
-        onMove={() => setMove({ mode: "move", items: selectedRows.map(item => ({ id: item.id, type: item.file_type === 0 ? "folder" : "file" })) })}
-        onMoveJobs={() => setMove({ mode: "jobs", items: [] })}
+        onMove={() => setMove(selectedRows.map(item => ({ id: item.id, type: item.file_type === 0 ? "folder" : "file" })))}
         selectedCount={selectedRows.length}
         onDeleteSelected={() => {
           void remove(selectedRows);

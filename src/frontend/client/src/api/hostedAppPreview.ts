@@ -74,10 +74,12 @@ function unwrap<T>(response: ApiResponse<T> | T): T {
 
 const base = (appId: string, versionId: string) =>
   `/api/v1/apps/${encodeURIComponent(appId)}/versions/${encodeURIComponent(versionId)}/preview`;
+// The backend authenticates the approver and derives scope from the approval.
+const approvalContext = { managementContext: 'independent' } as const;
 
 /** This approver's own instance, if there is one, plus whether one is possible. */
 export async function getPreviewStatusApi(appId: string, versionId: string): Promise<PreviewStatus> {
-  return unwrap(await request.get<ApiResponse<PreviewStatus>>((base(appId, versionId) + "?purpose=approval")));
+  return unwrap(await request.get<ApiResponse<PreviewStatus>>(base(appId, versionId) + "?purpose=approval", approvalContext));
 }
 
 /** Raise one. An instance that is already running comes back unchanged. */
@@ -85,10 +87,10 @@ export async function startPreviewApi(appId: string, versionId: string): Promise
   // `request.post` is untyped (it returns `response.data` as `any`), so the
   // envelope type is asserted here rather than at the call — the alternative is
   // an `any` leaking into every caller of this module.
-  return unwrap((await request.post(base(appId, versionId) + "?purpose=approval", {})) as ApiResponse<PreviewStatus>);
+  return unwrap((await request.post(base(appId, versionId) + "?purpose=approval", {}, approvalContext)) as ApiResponse<PreviewStatus>);
 }
 
-/** 「手动回收」. Only one's own instance; the backend refuses anybody else's. */
+/** Reclaim only the approver's own instance; the backend refuses anybody else's. */
 export async function reclaimPreviewApi(
   appId: string,
   versionId: string,
@@ -97,6 +99,7 @@ export async function reclaimPreviewApi(
   return unwrap(
     await request.delete<ApiResponse<PreviewStatus>>(
       `${base(appId, versionId)}/${encodeURIComponent(sessionId)}?purpose=approval`,
+      approvalContext,
     ),
   );
 }

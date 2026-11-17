@@ -380,7 +380,11 @@ class ProcessingJobRepository:
         statement = select(KnowledgeProcessingJob).where(KnowledgeProcessingJob.id == job_id)
         if not include_manifest:
             cached = session.identity_map.get(inspect(KnowledgeProcessingJob).identity_key_from_primary_key((job_id,)))
-            if cached is not None and inspect(cached).dict.get("kind") in {"metadata_schema_change", "move_index", "space_copy"}:
+            if cached is not None and inspect(cached).dict.get("kind") in {
+                "metadata_schema_change",
+                "move_index",
+                "space_copy",
+            }:
                 # A prior query may have loaded the manifest in this Session.
                 # Expire only that immutable execution-irrelevant attribute so
                 # the explicit raiseload option cannot reuse its cached JSON.
@@ -634,7 +638,7 @@ class ProcessingJobRepository:
         if (
             type(space_config_version) is not int
             or space_config_version < 0
-            or (not items and kind != "metadata_schema_change")
+            or (not items and kind not in {"metadata_schema_change", "space_copy"})
         ):
             raise ValueError("a nonempty frozen scope and non-negative settings version are required")
         if not items:
@@ -671,7 +675,7 @@ class ProcessingJobRepository:
             if existing.tenant_id != tenant_id or existing.request_hash != request_hash:
                 raise KnowledgeIdempotencyConflictError()
             return JobRequestResult(existing, True)
-        if not manifest:
+        if not manifest and kind == "metadata_schema_change":
             await _consume_metadata_completion(
                 session,
                 metadata_acceptance,
@@ -721,10 +725,10 @@ class ProcessingJobRepository:
             next_dispatch_at=now,
             create_time=now,
             update_time=now,
-            state="accepted" if manifest else "succeeded",
-            pending_dispatch=bool(manifest),
-            started_at=None if manifest else now,
-            finished_at=None if manifest else now,
+            state="accepted" if manifest or kind == "space_copy" else "succeeded",
+            pending_dispatch=bool(manifest) or kind == "space_copy",
+            started_at=None if manifest or kind == "space_copy" else now,
+            finished_at=None if manifest or kind == "space_copy" else now,
         )
         session.add(job)
         for value in manifest:
@@ -793,6 +797,9 @@ class ProcessingJobRepository:
         job.finished_at = job.update_time = self._now()
         job.revision += 1
 
+    async def _claim_execution_job(self, session, job_id, *, _move=False):
+        return await self._execution_job(session, job_id, _move=_move)
+
     async def aclaim(
         self,
         session: AsyncSession,
@@ -807,7 +814,7 @@ class ProcessingJobRepository:
             raise ValueError("lease_seconds must be positive")
         if expected_job_revision is not None and (type(expected_job_revision) is not int or expected_job_revision < 0):
             raise ValueError("expected_job_revision must be a non-negative integer")
-        job, current = await self._execution_job(session, job_id, _move=_move)
+        job, current = await self._claim_execution_job(session, job_id, _move=_move)
         if expected_job_revision is not None and job.revision != expected_job_revision:
             return None
         now = self._now()
@@ -1017,7 +1024,9 @@ class ProcessingJobRepository:
         counts = await self._state_counts(session, job.id)
         total = sum(counts.values())
         expected_count = (
-            job.total_count if job.kind in {"metadata_schema_change", "move_index", "space_copy"} else len(job.scope_manifest)
+            job.total_count
+            if job.kind in {"metadata_schema_change", "move_index", "space_copy"}
+            else len(job.scope_manifest)
         )
         if total != expected_count:
             raise KnowledgeProcessingConflictError(reason="processing_scope_incomplete")
@@ -1083,6 +1092,8 @@ class ProcessingJobRepository:
             and counts.get("succeeded", 0) == expected_count
         )
         retryable = terminal_failure and (bool(counts.get("failed", 0) + counts.get("pending", 0)) or finalize_only)
+        if job.kind == "space_copy" and expected_count == 0 and terminal_failure and job.error_code is not None:
+            retryable = finalize_only = True
         if job.kind == "move_index":
             if logical_pending:
                 finalize_only = False
@@ -1333,6 +1344,9 @@ class ProcessingJobRepository:
         await session.flush()
         return job
 
+    async def _retry_execution_job(self, session, job_id, *, _move=False):
+        return await self._execution_job(session, job_id, _move=_move)
+
     async def aretry_failed(
         self,
         session: AsyncSession,
@@ -1345,7 +1359,7 @@ class ProcessingJobRepository:
         configuration: ProcessingConfiguration,
         _move: bool = False,
     ) -> JobRequestResult:
-        job, current = await self._execution_job(session, job_id, _move=_move)
+        job, current = await self._retry_execution_job(session, job_id, _move=_move)
         key = self._key(idempotency_key)
         actor = self._actor(actor_user_id, actor_reference)
         if type(expected_job_revision) is not int or expected_job_revision < 0:

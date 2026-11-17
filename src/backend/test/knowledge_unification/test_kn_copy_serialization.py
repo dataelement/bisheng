@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock
 import pytest
 import sqlalchemy as sa
 
-from bisheng.common.errcode.permission import PermissionProjectionFailedError
+from bisheng.common.errcode.permission import PermissionProjectionFailedError, PermissionPublishNotReadyError
 from bisheng.knowledge.application.space_copy_owner import SpaceCopyOwner
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob as Job
@@ -82,7 +82,7 @@ async def serialized(copying, monkeypatch):
     return copying, held, waiting
 
 
-async def test_confirm_and_worker_serialize_the_original_projection(serialized, monkeypatch):
+async def test_confirm_returns_before_workers_serialize_the_original_projection(serialized, monkeypatch):
     copying, held, waiting = serialized
     app, ctx = copying.app, copying.ctx
     plan = await app.aprecheck(40, name="Concurrent copy", identity=ctx.user)
@@ -102,7 +102,10 @@ async def test_confirm_and_worker_serialize_the_original_projection(serialized, 
     monkeypatch.setattr(copying.transport, "write_atomic", write)
     initialize = AsyncMock()
     monkeypatch.setattr(SpaceCopyOwner, "_initialize", initialize)
-    api = asyncio.create_task(app.aconfirm(40, command(plan), identity=ctx.user))
+    accepted = await asyncio.wait_for(app.aconfirm(40, command(plan), identity=ctx.user), 1)
+    assert accepted["knowledge"].state == 0 and not callers
+    job_id = accepted["processing_job"].job_id
+    api = asyncio.create_task(SpaceCopyOwner(app).aensure_logical(accepted["knowledge"].id, job_id))
     worker = None
     try:
         await asyncio.wait_for(staged.wait(), 5)
@@ -115,7 +118,7 @@ async def test_confirm_and_worker_serialize_the_original_projection(serialized, 
         assert callers == [api]
         release.set()
         result, lease = await asyncio.wait_for(asyncio.gather(api, worker), 10)
-        assert lease is not None and result["knowledge"].state == 2
+        assert lease is not None and result is None
         initialize.assert_awaited_once()
         async with ctx.sessions() as session:
             operations = (await session.execute(sa.select(PermissionProjectionOperation))).scalars().all()
@@ -166,18 +169,96 @@ async def test_failed_closed_after_commit_reuses_the_original_journal_and_releas
     owner = SpaceCopyOwner(app)
     failed = await owner.afail(job_id, 0, error_code=PermissionProjectionFailedError.Code)
     assert failed.state == "failed" and failed.failed_count == failed.total_count
-    retried = await owner.aretry(
+    from bisheng.knowledge.application import move_processing_access, space_copy_access
+    from bisheng.knowledge.application.space_copy_access import SpaceCopyAccess
+
+    # The target mirror does not exist yet. Recovery must authenticate the
+    # original copy/source rather than require target edit permission first.
+    target_permission = AsyncMock(side_effect=PermissionPublishNotReadyError())
+    monkeypatch.setattr(space_copy_access, "require_business_action", target_permission)
+    monkeypatch.setattr(move_processing_access, "batch_check_business_actions", AsyncMock(return_value={}))
+    access = SpaceCopyAccess(owner)
+    page = await access.alist(target_id, identity=ctx.user, page=1, page_size=20)
+    assert page.total == 1 and page.data[0].id == job_id
+    assert page.data[0].retryable and page.data[0].hidden_item_count == failed.total_count
+    assert (await access.aget(target_id, job_id, identity=ctx.user)).error_code == 25009
+    retried = await access.aretry(
+        target_id,
         job_id,
         ProcessingRetryRequest(idempotency_key="recover-original", expected_job_revision=failed.revision),
         identity=ctx.user,
     )
+    target_permission.assert_not_awaited()
     assert retried.job_id == job_id and retried.state == "accepted"
     assert not held
+    async with ctx.sessions() as session:
+        assert (await session.get(Knowledge, target_id)).state == 0
+        assert (await session.get(PermissionProjectionOperation, original_id)).status == "FAILED_CLOSED"
+    current, _ = await owner.aread(job_id)
+    await owner.astart(job_id, current.revision)
     async with ctx.sessions() as session:
         operations = (await session.execute(sa.select(PermissionProjectionOperation))).scalars().all()
         assert len(operations) == 3 and all(row.status == "FINALIZED" for row in operations)
         assert original_id in {row.id for row in operations}
         assert (await session.get(Knowledge, target_id)).state == 2
+
+
+async def test_uninitialized_copy_task_access_requires_creator_and_current_source_authority(copying, monkeypatch):
+    from bisheng.common.errcode.permission import PermissionDeniedError
+    from bisheng.knowledge.application import space_copy as admission
+    from bisheng.knowledge.application import space_copy_access
+    from bisheng.knowledge.application.space_copy_access import SpaceCopyAccess
+    from bisheng.permission.application.identity import PermissionActor
+
+    app, ctx = copying.app, copying.ctx
+    plan = await app.aprecheck(40, name="Uninitialized copy", identity=ctx.user)
+    with monkeypatch.context() as patch:
+        patch.setattr(SpaceCopyOwner, "aensure_logical", AsyncMock())
+        accepted = await app.aconfirm(40, command(plan), identity=ctx.user)
+    target_id, job_id = accepted["knowledge"].id, accepted["processing_job"].job_id
+    access = SpaceCopyAccess(SpaceCopyOwner(app))
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            space_copy_access,
+            "resolve_permission_actor",
+            AsyncMock(return_value=PermissionActor(user_id=8, tenant_id=101)),
+        )
+        with pytest.raises(PermissionDeniedError):
+            await access.alist(target_id, identity=ctx.user, page=1, page_size=20)
+    with monkeypatch.context() as patch:
+        patch.setattr(admission, "require_business_action", AsyncMock(side_effect=PermissionDeniedError()))
+        with pytest.raises(PermissionDeniedError):
+            await access.aget(target_id, job_id, identity=ctx.user)
+
+
+async def test_uninitialized_copy_can_report_changed_inputs_without_replaying_them(copying, monkeypatch):
+    from bisheng.common.errcode.knowledge import KnowledgeOperationPlanChangedError
+    from bisheng.knowledge.application import move_processing_access
+    from bisheng.knowledge.application.space_copy_access import SpaceCopyAccess
+
+    app, ctx = copying.app, copying.ctx
+    plan = await app.aprecheck(40, name="Changed source", identity=ctx.user)
+    with monkeypatch.context() as patch:
+        patch.setattr(SpaceCopyOwner, "aensure_logical", AsyncMock())
+        accepted = await app.aconfirm(40, command(plan), identity=ctx.user)
+    target_id, job_id = accepted["knowledge"].id, accepted["processing_job"].job_id
+    async with ctx.sessions() as session, session.begin():
+        source = await session.get(Knowledge, 40)
+        source.metadata_schema_revision += 1
+    monkeypatch.setattr(move_processing_access, "batch_check_business_actions", AsyncMock(return_value={}))
+    access = SpaceCopyAccess(SpaceCopyOwner(app))
+    assert (await access.aget(target_id, job_id, identity=ctx.user)).id == job_id
+    with pytest.raises(KnowledgeOperationPlanChangedError):
+        await access.aretry(
+            target_id,
+            job_id,
+            ProcessingRetryRequest(idempotency_key="do-not-replay", expected_job_revision=0),
+            identity=ctx.user,
+        )
+    async with ctx.sessions() as session:
+        operations = (await session.execute(sa.select(PermissionProjectionOperation))).scalars().all()
+        assert not operations
+        assert (await session.get(Knowledge, target_id)).state == 0
 
 
 async def test_cancelled_executor_releases_sql_exclusion_and_resumes_the_original_commit(serialized, monkeypatch):
@@ -194,9 +275,12 @@ async def test_cancelled_executor_releases_sql_exclusion_and_resumes_the_origina
             await pause.wait()
         return result
 
+    accepted = await app.aconfirm(40, command(plan), identity=ctx.user)
     with monkeypatch.context() as patch:
         patch.setattr(copying.transport, "write_atomic", write)
-        api = asyncio.create_task(app.aconfirm(40, command(plan), identity=ctx.user))
+        api = asyncio.create_task(
+            SpaceCopyOwner(app).aensure_logical(accepted["knowledge"].id, accepted["processing_job"].job_id)
+        )
         try:
             await asyncio.wait_for(committed.wait(), 5)
         finally:

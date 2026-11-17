@@ -16,7 +16,7 @@
 
 ## 2. 关键约束
 
-遵循 `docs/constitution.md` C1–C8（分层、双库、多租户、权限、错误码、密钥、前端调用、多进程）。Constitution Check：新表登记租户感知清单（C3）；新接口鉴权沿用所在模块现有的管理员依赖（与现有 `/api/v1/llm`、`/api/v1/dsh/admin/*` 一致），不新增资源级授权（C4）；错误码 26176、10813 已登记（C5）；缺价时报错而不是静默按免费（C8 的「fail loudly」）。本功能特有的约束：
+遵循 `docs/constitution.md` C1–C8（分层、双库、多租户、权限、错误码、密钥、前端调用、多进程）。Constitution Check：新表登记租户感知清单（C3）；新接口鉴权沿用所在模块现有的管理员依赖（与现有 `/api/v1/llm`、`/api/v1/dsh/admin/*` 一致），不新增资源级授权（C4）；错误码 26176、10813 已登记（C5）；缺价时按免费计费但记警告日志、后台显示「价格缺失」（2026-11-17 改定，见决策 6）。本功能特有的约束：
 
 - **账本是 int64 整数**：Lua 只做整数比较和累加，不能引入浮点；账本单位保持「微积分」（1 积分 = 10⁶，`TOKENS_PER_CREDIT`）。
 - **事件可回放、不可变**：`UsageEvent` 进入 Redis 和 SQL 投影，自动恢复与对账从事件重算；同一事件任何时候重算结果必须一致。`DshContract` 为 `extra="forbid", strict=True`。
@@ -69,12 +69,12 @@
 - **原因**：产品决定不留开关。升级当月同时存在无快照的旧记录，对账恢复要用它们重算，必须保留旧公式；新事件一律带快照，`credit_rate` 固定 100。数据库 `credit_rate` 列保留到下个版本。
 - **何时重新考虑**：升级满一个账期、旧事件被清理后，可删除旧公式与列。
 
-### 决策 6：「没有价格记录」与「价格为 0」分开 ★AC-22 待产品确认
+### 决策 6：「没有价格记录」按免费计费、不拦截（2026-11-17 改定）
 
 - **备选**：A. 缺失 pricing = 未迁移，计费范围内的调用拒绝（错误码 26176）；四价全 0 = 免费，走 unmetered；B. 缺失按 0（v2.0 方案）。
-- **选定**：A
-- **原因**：B 会在漏跑升级回填或任何异常写入路径下静默免费（技术评审阻塞项 1）。升级门禁要求缺失数为 0 才开服，正常情况下不会出现。
-- **何时重新考虑**：产品拒绝 AC-22 时，退回「缺失按 0 + 告警」，门禁仍保留。
+- **选定**：B 的变体：计费入口（`chat_credits.start`、`DshModelService`）用 `billing_snapshot()`，缺失或损坏的价格按四价全 0 冻结、走 unmetered、记警告；不回写 `config.pricing`，所以后台仍显示「价格缺失」，补价脚本仍会按价格表补齐；补价脚本用同一个价格格式校验判断，损坏的价格在预检里列出原值、`--apply` 替换、`--check` 不通过，避免「计费按免费、检查却通过」。`build_snapshot()` 本身仍对缺失报 26176，倍率提示据此显示为无倍率。
+- **原因**：原选 A（拒绝，26176）。2026-11-17 Callum 改定：开源部署的用户不一定会运行补价脚本，漏跑时 A 会让所有已有模型不可用；B 的代价是漏跑期间这些模型免费，由后台「价格缺失」标记和补价脚本兜底。
+- **何时重新考虑**：若出现非升级原因导致的大面积缺价（异常写入路径），再评估是否需要告警或改回拦截。
 
 ### 决策 7：积分设置单独建表、单独读取，不进策略快照
 
@@ -184,7 +184,7 @@
 
 1. **入口 A（网页）**：`BishengLLM._generate/_agenerate/_stream/_astream` → `@account_*`（`dsh/domain/services/chat_credits.py`）→ `governed()`：dsh 开启且 `app_type ∈ {daily_chat, linsight, knowledge_space}`。
 2. **入口 B（桌面 Work）**：`POST /api/v1/dsh/chat/completions`、`/responses` → `DshModelService.complete()`（`dsh/domain/services/model.py`）。
-3. **取价**：两个入口在调用开始时调用 `read_model_pricing(model_id)`、`read_credit_setting(tenant_id)`（`dsh/runtime.py`，按主键直读，不经缓存）→ `build_snapshot()`（`dsh/domain/services/pricing.py`）：缺失 → 26176；全 0 → `mode="unmetered"`。
+3. **取价**：两个入口在调用开始时调用 `read_model_pricing(model_id)`、`read_credit_setting(tenant_id)`（`dsh/runtime.py`，按主键直读，不经缓存）→ `billing_snapshot()`（`dsh/domain/services/pricing.py`）：缺失或损坏 → 按全 0（免费）冻结并记警告；全 0 → `mode="unmetered"`。
 4. **准入**：`QuotaRedis.check_and_start(event, mode)` → `lua/admit.lua`（不变）。
 5. **用量归一**：`chat_adapter.normalize_usage` / `responses_adapter.normalize_responses_usage` → `usage_contract`（统一口径，§4.4）。
 6. **结算**：`settle_usage()` → `UsageEvent.billed_tokens`（有快照按 §4.3，无快照按旧公式）→ `lua/settle.lua`（不变）。

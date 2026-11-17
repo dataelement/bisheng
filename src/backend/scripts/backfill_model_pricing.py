@@ -8,13 +8,16 @@ Run from src/backend/ after `alembic upgrade head`, while the service is still s
     python scripts/backfill_model_pricing.py --check    # gate: exit 0 only when nothing is missing
 
 Models are priced with the same rule as saving a model in the admin UI: the built-in catalog
-price when the provider type and model name match, otherwise 0 (free). Existing prices are
-never touched, so the script is safe to rerun.
+price when the provider type and model name match, otherwise 0 (free). Valid prices are never
+touched, so the script is safe to rerun. An invalid stored price (it does not pass the price
+schema) is replaced like a missing one: billing already treats both as free and the admin table
+shows both as "price missing"; the dry run prints the invalid value first.
 
 Exit codes: 0 success / gate passed, 2 gate failed, 1 unexpected error.
 """
 
 import argparse
+import json
 import os
 import sys
 
@@ -22,12 +25,14 @@ _BACKEND_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if _BACKEND_ROOT not in sys.path:
     sys.path.insert(0, _BACKEND_ROOT)
 
+from pydantic import ValidationError  # noqa: E402
 from sqlalchemy import inspect  # noqa: E402
 from sqlmodel import Session, select  # noqa: E402
 
 from bisheng.core.context.tenant import bypass_tenant_filter  # noqa: E402
 from bisheng.llm.domain.const import LLMModelType  # noqa: E402
 from bisheng.llm.domain.models.llm_server import LLMModel, LLMServer  # noqa: E402
+from bisheng.llm.domain.pricing.schemas import ModelPricing  # noqa: E402
 from bisheng.llm.domain.pricing.service import default_pricing  # noqa: E402
 
 GATE_FAILED = 2
@@ -46,8 +51,16 @@ def _llm_models(session: Session) -> list[tuple[LLMModel, LLMServer]]:
     return list(rows)
 
 
-def _has_price(model: LLMModel) -> bool:
-    return isinstance((model.config or {}).get("pricing"), dict)
+def _price_state(model: LLMModel) -> str:
+    """Price state: ok, missing or invalid, judged with the same schema billing uses."""
+    raw = (model.config or {}).get("pricing")
+    if raw is None:
+        return "missing"
+    try:
+        ModelPricing.model_validate(raw)
+    except ValidationError:
+        return "invalid"
+    return "ok"
 
 
 def plan(session: Session) -> list[dict]:
@@ -61,22 +74,25 @@ def plan(session: Session) -> list[dict]:
             "model_id": model.id,
             "model_name": model.model_name,
         }
-        if _has_price(model):
+        state = _price_state(model)
+        if state == "ok":
             line["action"] = "keep"
             line["result"] = (model.config["pricing"].get("source") or "").lower() or "priced"
         else:
             pricing = default_pricing(server.type, model.model_name)
-            line["action"] = "fill"
+            line["action"] = "fill" if state == "missing" else "replace invalid"
             line["result"] = f"catalog {pricing.catalog_key}" if pricing.source == "CATALOG" else "default 0 (free)"
+            if state == "invalid":
+                line["was"] = json.dumps(model.config["pricing"], ensure_ascii=False, default=str)[:200]
         lines.append(line)
     return lines
 
 
 def apply(session: Session) -> int:
-    """Write prices for LLM models that have none. Returns how many models were filled."""
+    """Write prices for LLM models whose price is missing or invalid. Returns how many were written."""
     filled = 0
     for model, server in _llm_models(session):
-        if _has_price(model):
+        if _price_state(model) == "ok":
             continue
         config = dict(model.config or {})
         config["pricing"] = default_pricing(server.type, model.model_name).model_dump()
@@ -99,9 +115,14 @@ def check(session: Session) -> list[str]:
         present = {column["name"] for column in inspector.get_columns(table)} if inspector.has_table(table) else set()
         problems.extend(f"missing column {table}.{name}" for name in sorted(columns - present))
     for model, server in _llm_models(session):
-        if not _has_price(model):
+        state = _price_state(model)
+        where = f"tenant={model.tenant_id} server={server.name} model={model.model_name} id={model.id}"
+        if state == "missing":
+            problems.append(f"model without price: {where}")
+        elif state == "invalid":
             problems.append(
-                f"model without price: tenant={model.tenant_id} server={server.name} model={model.model_name} id={model.id}"
+                f"model with invalid price: {where} "
+                "(billed as free; run --apply to replace it from the catalog, or set a price in the admin table)"
             )
     return problems
 
@@ -111,10 +132,14 @@ def _print_plan(lines: list[dict]) -> None:
         print(
             "tenant={tenant_id}\tserver={server}\ttype={server_type}\tmodel={model_name}\tid={model_id}\t"
             "{action}: {result}".format(**line)
+            + (f"\twas: {line['was']}" if "was" in line else "")
         )
-    fill = [line for line in lines if line["action"] == "fill"]
+    fill = [line for line in lines if line["action"] != "keep"]
     free = [line for line in fill if line["result"].startswith("default")]
-    print(f"LLM models: {len(lines)}; to fill: {len(fill)} (catalog {len(fill) - len(free)}, default 0: {len(free)})")
+    print(
+        f"LLM models: {len(lines)}; to fill or replace: {len(fill)} "
+        f"(catalog {len(fill) - len(free)}, default 0: {len(free)})"
+    )
     if free:
         print("Check the 'default 0' models: paid cloud models listed there stay free until an admin sets a price.")
 
@@ -122,7 +147,7 @@ def _print_plan(lines: list[dict]) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="F016: fill missing LLM model prices and gate the upgrade.")
     mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--apply", action="store_true", help="write prices for models that have none")
+    mode.add_argument("--apply", action="store_true", help="write prices for models whose price is missing or invalid")
     mode.add_argument("--check", action="store_true", help="exit 2 when any upgrade step is incomplete")
     args = parser.parse_args(argv)
 

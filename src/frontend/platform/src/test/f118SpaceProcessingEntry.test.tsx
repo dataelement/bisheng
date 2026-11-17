@@ -264,6 +264,8 @@ it("fetches and retries move tasks using their job kind", async () => {
   await waitFor(() => expect(api.retryProcessing).toHaveBeenCalledWith(
     40, job.id, { expected_job_revision: 3, idempotency_key: expect.any(String) }, "move_index",
   ));
+  fireEvent.click(screen.getByRole("button", { name: "detail.back_to_jobs" }));
+  expect(await screen.findByRole("button", { name: "move.jobs · f118.processing_state_failed" })).toBeVisible();
 });
 
 it("loads only Embedding rebuild jobs for the embedded model history", async () => {

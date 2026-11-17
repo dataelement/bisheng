@@ -7,7 +7,6 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlmodel import Session, create_engine
 
-from bisheng.common.errcode.dsh import DshModelPricingMissingError
 from bisheng.dsh.domain.schemas.contracts import DshTokenUsage
 from bisheng.dsh.domain.schemas.pricing import CreditSettingState, PricingSnapshot
 from bisheng.dsh.domain.schemas.usage import UsageEvent
@@ -102,11 +101,13 @@ async def test_round_probe_for_a_paid_model_still_checks_the_allowance(chat_env)
     assert chat_env.admission.await_args.kwargs["mode"] == "probe"
 
 
-async def test_model_without_price_is_refused_before_admission(chat_env):
-    chat_env.prices["value"] = None
-    with pytest.raises(DshModelPricingMissingError):
-        await chat_credits.start(chat_model(stale_pricing=DEEPSEEK))
-    chat_env.admission.assert_not_awaited()
+@pytest.mark.parametrize("stored", [None, {**DEEPSEEK, "input": "-1"}])
+async def test_model_without_a_usable_price_is_billed_as_free_not_refused(chat_env, stored):
+    # Upgrade backfill not run (or a damaged record): conversations keep working at 0 credits.
+    chat_env.prices["value"] = stored
+    _, event, _ = await chat_credits.start(chat_model(stale_pricing=DEEPSEEK))
+    assert event.pricing.free
+    assert chat_env.admission.await_args.kwargs["mode"] == "unmetered"
 
 
 # --- settlement on the shared service ---------------------------------------------------------

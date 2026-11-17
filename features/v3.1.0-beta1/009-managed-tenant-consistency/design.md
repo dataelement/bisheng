@@ -271,7 +271,7 @@ config=/tmp/bisheng-managed-tenant-review-config.yaml PYTHONPATH=. PYTHONDONTWRI
 
 用户批准继续统一上下文第二、三阶段，并确认组织仅管理所选租户挂载子树。最终技术决策、数据流、字段及兼容边界见[第二、三阶段设计](phase23-design.md)，此处作为原设计的增量入口。
 
-- **数据流**：唯一端点声明 → 最终选路准入 → 冻结请求事实 → 原业务权限/SQL；流和连接发送完毕再释放。两套前端从同源生成资料得知哪些请求需要显式目标。Java自有控制器通过后端窄证明，不改变网关执行归属。
+- **数据流**：唯一端点声明 → 最终选路准入 → 冻结请求事实 → 原业务权限/SQL；流和连接发送完毕再释放。2026-11-17修订：两套前端按浏览器业务默认携带目标，不再根据生成接口清单运行选路；生成资料仅用于检查，暂停恢复规则见phase23-design.md。Java自有控制器通过后端窄证明，不改变网关执行归属。
 - **接口/字段**：GET /api/v1/admin/request-scope（严格确认）、POST .../bootstrap（仅首次默认选择）、POST .../resources（网关部门/资源证明）。X-Management-Tenant由页面确认的scope_tenant_id产生；响应带固定目标、来源及私有禁缓存。home_tenant_id独立保留。没有新业务表、列、迁移或新令牌格式。
 - **模块**：common/request_scope仅登记；admin/application/request_admission负责ASGI生命周期；部门DirectoryRepository/组织依赖负责挂载与存储翻译；user负责账号和主属；permission维持动作判断并做独立目标负向边界；worker复核持久目标。不是用LoginUser替换字段来传播管理目标。
 - **已知坑**：组织存Root不代表业务属Root；组、角色及审计不能继承组织临时存储上下文。Celery信号异常不保证中断执行，关键任务执行体必须再次证明。旧自举响应可能晚于新选择，按当前Promise身份拒绝旧响应。详见增量设计。

@@ -11,6 +11,7 @@ import { knowledgePathWithTab } from '../../knowledgeListNavigation';
 import { KnowledgeSpaceCategoryIcon } from '../../KnowledgeSpaceCategoryIcon';
 import { homeTimestamp, type HomeSpace } from './homeSpaces';
 import { KnowledgeHomeCardMenu } from './KnowledgeHomeCardMenu';
+import { useSpaceExitStatus } from '../../hooks/useSpaceExitStatus';
 import { useKnowledgeHomeCardCreator } from './useKnowledgeHomeCardCreator';
 import styles from './KnowledgeHomeCard.module.css';
 
@@ -28,7 +29,7 @@ interface KnowledgeHomeCardProps {
   permissionsLoading: boolean;
   onMenuOpen: () => void;
   onSelect: (space: KnowledgeSpace) => void;
-  onAction: (action: 'pin' | 'delete') => void;
+  onAction: (action: 'pin' | 'delete' | 'leave') => void;
   onEdit: () => void;
 }
 
@@ -42,6 +43,11 @@ export function KnowledgeHomeCard({
   const { space, source } = item;
   const { cardRef, creator } = useKnowledgeHomeCardCreator(space);
   const demo = isDemoId(space.id);
+  const exitStatus = useSpaceExitStatus(space.id, false);
+  const handleMenuOpen = () => {
+    onMenuOpen();
+    void exitStatus.refresh();
+  };
   const disabled = pending || demo;
   const description = space.description?.trim();
   const updatedTimestamp = homeTimestamp(space.updatedAt);
@@ -90,8 +96,9 @@ export function KnowledgeHomeCard({
         </span>
       </button>
       <KnowledgeHomeCardMenu disabled={disabled} permissions={permissions}
-        permissionsLoading={permissionsLoading} onOpen={onMenuOpen} onEdit={onEdit}
-        onDelete={() => onAction('delete')} />
+        permissionsLoading={permissionsLoading || exitStatus.loading} onOpen={handleMenuOpen} onEdit={onEdit}
+        onDelete={() => onAction('delete')} allowDelete={source !== 'joined'} canLeave={exitStatus.canExit}
+        onLeave={() => onAction('leave')} />
     </>
   );
 

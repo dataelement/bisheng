@@ -1,4 +1,4 @@
-import { getSpaceDetailMembershipAction } from "../sidebar/spaceMembershipAction";
+import { useSpaceExitStatus } from "../hooks/useSpaceExitStatus";
 import type { UseKnowledgeSpaceHeaderOptions } from "./knowledgeSpaceTypes";
 import { useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -29,18 +29,17 @@ export function useKnowledgeSpaceHeader({
     space.id,
     "share",
   );
-  const membershipAction = getSpaceDetailMembershipAction(
-    space, hasKnowledgeSpaceAction(spaceActions, space.id, "delete"),
-  );
-  const canDeleteSpace = membershipAction === "delete";
+  const { canExit } = useSpaceExitStatus(space.id);
+  const canDeleteSpace = !canExit &&
+    (space.role === SpaceRole.CREATOR || space.spaceKind === "department") &&
+    hasKnowledgeSpaceAction(spaceActions, space.id, "delete");
   const canManageMembers = hasKnowledgeSpaceAction(
     spaceActions,
     space.id,
     "manage_permission",
   );
   const canEditSpace = hasKnowledgeSpaceAction(spaceActions, space.id, "edit");
-  // Membership intent takes precedence over elevated deletion permissions.
-  const canLeaveSpace = membershipAction === "leave";
+  const canLeaveSpace = canExit;
   // ─── Version Management ──────────────────────────────────────────────
   const versionManagementEnabled = useVersionManagementEnabled();
   const queryClient = useQueryClient();
