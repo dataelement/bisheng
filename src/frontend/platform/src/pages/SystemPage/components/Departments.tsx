@@ -1,4 +1,5 @@
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button, Checkbox, Tooltip, toast } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { useTranslation } from "react-i18next";
@@ -27,6 +28,29 @@ import { OrganizationSearchPanel } from "@/pages/DepartmentPage/components/Organ
 import type { DepartmentTreeNode } from "@/types/api/department";
 
 export default function Departments() {
+  const queryClient = useQueryClient();
+  const [directoryRevision, setDirectoryRevision] = useState(0);
+  const handleTenantMounted = () => {
+    // Mounting changes the business boundary. Drop both browse caches and all
+    // local selection/search state before loading the directory in its new scope.
+    queryClient.removeQueries(["dept:false"]);
+    queryClient.removeQueries(["dept:true"]);
+    setDirectoryRevision((revision) => revision + 1);
+  };
+
+  return (
+    <DepartmentDirectory
+      key={directoryRevision}
+      onTenantMounted={handleTenantMounted}
+    />
+  );
+}
+
+interface DepartmentDirectoryProps {
+  onTenantMounted: () => void;
+}
+
+function DepartmentDirectory({ onTenantMounted }: DepartmentDirectoryProps) {
   const { t } = useTranslation();
   const createDepartmentLabel = t("bs:department.create");
   const createChildDepartmentLabel = t("bs:organization.createChildDepartment");
@@ -370,10 +394,7 @@ export default function Departments() {
           deptId={mountTarget.id}
           deptName={mountTarget.name}
           onClose={() => setMountTarget(null)}
-          onMounted={() => {
-            setMountTarget(null);
-            void handleTreeChange().catch(showApiError);
-          }}
+          onMounted={onTenantMounted}
         />
       )}
     </div>
