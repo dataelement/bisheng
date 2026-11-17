@@ -39,6 +39,7 @@ from bisheng.linsight.domain.schemas.skill_schema import (
     SkillFileEntry,
     SkillRuntimeEntry,
     SkillSelectable,
+    skill_provider,
 )
 from bisheng.linsight.domain.services.github_skill_fetcher import (
     GithubTarget,
@@ -186,6 +187,7 @@ class SkillService:
                 description=skill.description,
                 default_checked=bool(skill.default_checked),
                 content_hash=skill.content_hash,
+                source=skill_provider(skill),
             )
             for skill in skills
         ]

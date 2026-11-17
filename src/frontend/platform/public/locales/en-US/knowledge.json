@@ -476,7 +476,9 @@
         "separator_pattern": "Separator rule {{index}}",
         "separator_position": "Split position for rule {{index}}",
         "space_description": "Space description",
+        "space_description_placeholder": "Please enter a description",
         "space_name": "Space name",
+        "space_name_placeholder": "Please enter the knowledge space name",
         "spaces": "Knowledge spaces",
         "tables": "Tables",
         "create_folder": "New folder",
@@ -739,6 +741,7 @@
         "select_all": "Select all"
     },
     "detail": {
+        "space_info": "Space information",
         "save_failed": "Changes could not be saved. Please retry.",
         "file_title": "File {{id}}",
         "file_editor": "File chunks",

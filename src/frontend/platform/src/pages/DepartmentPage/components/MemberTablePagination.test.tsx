@@ -101,7 +101,7 @@ it("keeps the located page while replacing a small department with a larger depa
   await act(async () => finish({ data: [member], total: 35 }));
   await waitFor(() =>
     expect(container.querySelector('[data-member-row="25"]')).toHaveClass(
-      "bg-primary/10"
+      "[&>td]:!bg-blue-50"
     )
   );
   expect(

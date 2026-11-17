@@ -154,14 +154,29 @@ export function SpaceManagementView({
               </Button>
             </Tooltip>
           )}
-          <div className="min-w-0">
-            <h1 className="truncate text-h4 text-text-1">
+          <div className="flex min-w-0 items-center gap-1">
+            <h1 className="min-w-0 truncate text-h4 text-text-1">
               {spaceTitle}
             </h1>
-            <p className="truncate text-caption text-text-3" title={spaceDescription}>
-              ID: {spaceId}
-              {spaceDescription ? ` · ${spaceDescription}` : ""}
-            </p>
+            <Tooltip
+              content={
+                <span className="whitespace-pre-wrap [overflow-wrap:anywhere]">
+                  {`ID: ${spaceId}\n${t("f118.space_description")}: ${spaceDescription?.trim() || "-"}`}
+                </span>
+              }
+            >
+              <Button
+                type="button"
+                variant="text"
+                color="default"
+                size="small"
+                iconOnly
+                aria-label={t("detail.space_info")}
+                className="shrink-0 text-text-3 hover:text-blue-500 [&_svg]:size-4"
+              >
+                <Outlined.Info aria-hidden="true" />
+              </Button>
+            </Tooltip>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">

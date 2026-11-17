@@ -236,7 +236,7 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
                     className={cname(
                       !isArchivedMember(m) && m.enabled && user?.user_id !== m.user_id && !m.roles.some(role => role.id === 1) ? 'cursor-pointer' : '',
                       highlightUserId === m.user_id && (m.department_id ?? departmentId) === departmentId
-                        ? "bg-primary/10"
+                        ? "[&>td]:!bg-blue-50"
                         : ""
                     )}
                   >

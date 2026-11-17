@@ -1,10 +1,14 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ComponentProps } from "react";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import KnowledgePage from "@/pages/KnowledgePage";
+import { KnowledgeSpaceCreatePage } from "@/pages/KnowledgePage/KnowledgeSpaceCreatePage";
 import { userContext } from "@/contexts/userContext";
 import type { FilesProps } from "@/pages/KnowledgePage/components/Files";
+import type { CreateSpaceForm } from "@/pages/KnowledgePage/components/KnowledgeLibraryDialog";
+import type { User } from "@/types/api/user";
 
 const mock = vi.hoisted(() => ({ get: vi.fn(), scope: vi.fn() }));
 vi.mock("@/contexts/userContext", async () => ({ userContext: (await import("react")).createContext({ user: {} }) }));
@@ -12,7 +16,15 @@ vi.mock("@/hooks/useKnowledgePageScope", () => ({ useKnowledgePageScope: mock.sc
 vi.mock("@/controllers/API/permission", () => ({ getMyResourcePermissionsApi: async () => ({ actions: [] }) }));
 vi.mock("@/controllers/request", () => ({ default: { get: mock.get }, showApiError: vi.fn() }));
 vi.mock("@/pages/KnowledgePage/KnowledgeQa", () => ({ default: () => <p>qa-list</p> }));
-vi.mock("@/pages/KnowledgePage/components/KnowledgeLibraryDialog", () => ({ KnowledgeLibraryDialog: () => null }));
+vi.mock("@/pages/KnowledgePage/components/KnowledgeLibraryDialog", () => ({
+  CreateSpaceForm: ({ presentation, scope: formScope, onCancel }: ComponentProps<typeof CreateSpaceForm>) => (
+    <section role={presentation === "page" ? undefined : "dialog"}>
+      <h1>f118.create_space</h1>
+      <output data-testid="creation-scope">{JSON.stringify(formScope)}</output>
+      <button type="button" onClick={onCancel}>cancel</button>
+    </section>
+  ),
+}));
 vi.mock("@/pages/KnowledgePage/components/Files", () => ({ default: (props: FilesProps) => <output data-testid="files">{JSON.stringify({ id: props.spaceId, parent: props.parentId, presentation: props.presentation, view: props.scope?.view })}</output> }));
 
 const scope = { identityKey: "user:5", tenantId: 60, managementTenantId: 60, view: "ordinary" } as const;
@@ -22,10 +34,23 @@ function Location() {
   const navigate = useNavigate();
   return <><output data-testid="location">{location.pathname}{location.search}</output><button onClick={() => navigate(-1)}>history-back</button><button onClick={() => navigate(1)}>history-forward</button></>;
 }
-function mount(path = "/filelib") {
+function mount(path = "/filelib", user: Partial<User> = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   clients.push(client);
-  return render(<QueryClientProvider client={client}><userContext.Provider value={{ user: { user_id: 5 }, setUser: vi.fn(), savedComponents: [], addSavedComponent: async () => undefined, checkComponentsName: () => false, delComponent: vi.fn() }}><MemoryRouter initialEntries={[path]}><Location /><Routes><Route path="/filelib" element={<KnowledgePage />} /><Route path="/filelib/:id" element={<KnowledgePage />} /></Routes></MemoryRouter></userContext.Provider></QueryClientProvider>);
+  return render(
+    <QueryClientProvider client={client}>
+      <userContext.Provider value={{ user: { user_id: 5, ...user }, setUser: vi.fn(), savedComponents: [], addSavedComponent: async () => undefined, checkComponentsName: () => false, delComponent: vi.fn() }}>
+        <MemoryRouter initialEntries={[path]}>
+          <Location />
+          <Routes>
+            <Route path="/filelib" element={<KnowledgePage />} />
+            <Route path="/filelib/create" element={<KnowledgeSpaceCreatePage />} />
+            <Route path="/filelib/:id" element={<KnowledgePage />} />
+          </Routes>
+        </MemoryRouter>
+      </userContext.Provider>
+    </QueryClientProvider>,
+  );
 }
 beforeEach(() => {
   vi.clearAllMocks();
@@ -93,8 +118,76 @@ it("automatically opens the first sidebar space instead of rendering the ordinar
   expect(screen.queryByText("ordinary-list")).toBeNull();
 });
 
+it.each<Partial<User>>([
+  { is_global_super: true },
+  { is_child_admin: true },
+  { web_menu: ["create_knowledge"] },
+])("opens the dedicated creation page from the created group for a permitted user %j", async (user) => {
+  mount("/filelib/7", user);
+  const created = await screen.findByRole("region", { name: "sidebar.created" });
+  const create = within(created).getByRole("button", { name: "f118.create_space" });
+  expect(create).toBe(screen.getByRole("button", { name: "f118.create_space" }));
+  fireEvent.click(create);
+  expect(await screen.findByRole("heading", { name: "f118.create_space" })).toBeVisible();
+  expect(screen.getByTestId("location")).toHaveTextContent(/^\/filelib\/create$/);
+  expect(screen.getByTestId("creation-scope")).toHaveTextContent(JSON.stringify(scope));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(screen.queryByRole("region", { name: "sidebar.created" })).toBeNull();
+});
+
+it("does not show ordinary space creation for a user without creation access", async () => {
+  mount("/filelib/7");
+  expect(await screen.findByTestId("files")).toHaveTextContent('"view":"ordinary"');
+  expect(screen.getByRole("region", { name: "sidebar.created" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "f118.create_space" })).toBeNull();
+});
+
+it("opens the creation page from an empty workspace and cancels back to it", async () => {
+  const fallback = mock.get.getMockImplementation()!;
+  mock.get.mockImplementation((url: string, options?: unknown) => {
+    if (url.endsWith("/mine")) return Promise.resolve([]);
+    if (url.endsWith("/space/list")) return Promise.resolve({ data: [], has_more: false });
+    return fallback(url, options);
+  });
+  mount("/filelib", { web_menu: ["create_knowledge"] });
+  await within(screen.getByRole("main")).findByText("sidebar.empty");
+  fireEvent.click(screen.getByRole("button", { name: "f118.create_space" }));
+  expect(await screen.findByRole("heading", { name: "f118.create_space" })).toBeVisible();
+  expect(screen.getByTestId("location")).toHaveTextContent(/^\/filelib\/create$/);
+
+  fireEvent.click(screen.getByRole("button", { name: "cancel" }));
+  await within(screen.getByRole("main")).findByText("sidebar.empty");
+  expect(screen.getByTestId("location")).toHaveTextContent(/^\/filelib$/);
+});
+
+it("cancels creation back to the original folder and filters", async () => {
+  const folder = "/filelib/7?parent_id=9&fileStatus=abnormal";
+  mount(folder, { is_child_admin: true });
+  expect(await screen.findByTestId("files")).toHaveTextContent('"parent":9');
+  fireEvent.click(screen.getByRole("button", { name: "f118.create_space" }));
+  expect(await screen.findByRole("heading", { name: "f118.create_space" })).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "cancel" }));
+  expect(await screen.findByTestId("files")).toHaveTextContent('"parent":9');
+  expect(screen.getByTestId("location")).toHaveTextContent(folder);
+});
+
+it("redirects a user without creation access away from the dedicated route", async () => {
+  mount("/filelib/create");
+  expect(await screen.findByTestId("files")).toHaveTextContent('"view":"ordinary"');
+  expect(screen.getByTestId("location")).toHaveTextContent(/^\/filelib\/7$/);
+  expect(screen.queryByRole("heading", { name: "f118.create_space" })).toBeNull();
+});
+
+it("cancels a direct creation link back to the ordinary workspace", async () => {
+  mount("/filelib/create", { is_child_admin: true });
+  expect(await screen.findByRole("heading", { name: "f118.create_space" })).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "cancel" }));
+  expect(await screen.findByTestId("files")).toHaveTextContent('"view":"ordinary"');
+  expect(screen.getByTestId("location")).toHaveTextContent(/^\/filelib\/7$/);
+});
+
 it("opens management defaults with two groups and never loads ordinary navigation", async () => {
-  mount("/filelib?view=admin");
+  mount("/filelib?view=admin", { is_child_admin: true });
   expect(await screen.findByTestId("files")).toHaveTextContent('"view":"admin"');
   expect(screen.getByTestId("location")).toHaveTextContent("/filelib/7?view=admin");
   const tree = screen.getByRole("complementary");

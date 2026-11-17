@@ -1,5 +1,5 @@
 import { ApiError } from '@bisheng/api-client';
-import request, { serviceProbeSettled, showApiError, translateApiErrorMessage } from './request';
+import request, { prepareBrowserHeaders, serviceProbeSettled, showApiError, translateApiErrorMessage } from './request';
 
 jest.mock('axios', () => {
   const actual = jest.requireActual('axios');
@@ -12,7 +12,13 @@ jest.mock('i18next', () => ({ __esModule: true, default: { exists: () => false, 
 const transport = (jest.requireMock('axios') as typeof import('axios')).default.create();
 const adapter = transport.defaults.adapter;
 const toast = jest.fn();
-beforeEach(() => { window.showToast = toast; });
+beforeEach(async () => {
+  window.showToast = toast;
+  transport.defaults.adapter = async config => ({config, status: 200, statusText: 'OK', headers: {},
+    data: {status_code: 200, data: {scope_tenant_id: 60, source: 'own'}}});
+  await request.post('/api/v1/user/login', {});
+  await prepareBrowserHeaders('GET', '/api/v1/test-contract');
+});
 afterEach(() => { transport.defaults.adapter = adapter; toast.mockClear(); });
 
 it.each([{}, { skip403Redirect: true, showError: false }])('rejects business failures without displaying silent requests: %p', async options => {

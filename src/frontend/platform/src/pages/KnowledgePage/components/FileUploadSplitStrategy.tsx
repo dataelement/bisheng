@@ -2,6 +2,7 @@ import { Button, Input } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 
 import { generateUUID } from "@/components/bs-ui/utils";
+import { cn } from "@/utils";
 import { useState } from "react";
 import {
   DragDropContext,
@@ -44,6 +45,7 @@ interface FileUploadSplitStrategyProps {
   onPendingChange?: (value: string) => void;
   pendingPosition?: SplitStrategy["position"];
   onPositionChange?: (value: SplitStrategy["position"]) => void;
+  compact?: boolean;
 }
 
 const DragHandleIcon = () => (
@@ -62,6 +64,7 @@ const FileUploadSplitStrategy = ({
   onPendingChange,
   pendingPosition,
   onPositionChange,
+  compact = false,
 }: FileUploadSplitStrategyProps) => {
   const { t } = useTranslation("knowledge");
   const [customRegex, setCustomRegex] = useState("");
@@ -113,7 +116,10 @@ const FileUploadSplitStrategy = ({
   };
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.96fr)]">
+    <div className={cn(
+      "grid gap-6",
+      compact ? "grid-cols-1" : "xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.96fr)]",
+    )}>
       <div className="flex min-w-0 flex-col gap-5">
         <div className="space-y-3">
           <h3 className="text-sm font-medium text-[#374151]">
@@ -145,7 +151,7 @@ const FileUploadSplitStrategy = ({
             {t("addCustomRule")}
           </h3>
           <div className="flex items-center gap-3">
-            <div className="flex min-w-0 flex-1 items-center gap-2">
+            <div className={cn("flex min-w-0 flex-1 items-center gap-2", compact && "flex-wrap")}>
               <span className="shrink-0 text-sm text-[#0f172a]">{t("in")}</span>
               <Input
                 aria-label={t("addCustomRule")}
@@ -157,14 +163,17 @@ const FileUploadSplitStrategy = ({
                     : onPendingChange?.(e.target.value)
                 }
                 placeholder={t("enterRegex")}
-                className={[
-                  "min-w-0 flex-1",
-                  "h-8 min-w-0 w-full border-[#ebecf0] bg-white",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
+                className={cn(
+                  "h-8 w-full border-[#ebecf0] bg-white",
+                  compact ? "min-w-[min(100%,8rem)] flex-[1_1_8rem]" : "min-w-0 flex-1",
+                )}
               />
-              <div className="inline-flex h-8 shrink-0 items-center rounded-[6px] bg-[#f8f8f8] p-[3px]">
+              <div
+                className={cn(
+                  "inline-flex h-8 shrink-0 items-center rounded-[6px] bg-[#f8f8f8] p-[3px]",
+                  compact && "h-auto min-h-8 max-w-full flex-wrap",
+                )}
+              >
                 {(["before", "after"] as const).map((item) => (
                   <button
                     key={item}
@@ -231,7 +240,10 @@ const FileUploadSplitStrategy = ({
                             <DragHandleIcon />
                           </div>
                           <div className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
-                            <span className="shrink-0 text-sm leading-5 text-[#0f172a]">
+                            <span
+                              className={cn("text-sm leading-5 text-[#0f172a]", compact ? "min-w-0 truncate" : "shrink-0")}
+                              title={compact ? strategy.regex : undefined}
+                            >
                               {strategy.position === "before"
                                 ? `✂️${strategy.regex.replace(/\n/g, "\\n")}`
                                 : `${strategy.regex.replace(/\n/g, "\\n")}✂️`}

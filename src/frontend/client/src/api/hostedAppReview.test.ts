@@ -91,8 +91,9 @@ describe('F114 personal preview purpose',()=>{
     const api=request as unknown as {get:jest.Mock;post:jest.Mock;delete:jest.Mock};
     api.get.mockResolvedValue({state:'absent'});api.post.mockResolvedValue({state:'running'});api.delete.mockResolvedValue({state:'reclaimed'});
     await getPreviewStatusApi('app','version');await startPreviewApi('app','version');await reclaimPreviewApi('app','version','session');
-    expect(api.get).toHaveBeenCalledWith(expect.stringContaining('purpose=approval'));
-    expect(api.post).toHaveBeenCalledWith(expect.stringContaining('purpose=approval'),{});
-    expect(api.delete).toHaveBeenCalledWith(expect.stringMatching(/session\?purpose=approval$/));
+    const context = {managementContext: 'independent'};
+    expect(api.get).toHaveBeenCalledWith(expect.stringContaining('purpose=approval'),context);
+    expect(api.post).toHaveBeenCalledWith(expect.stringContaining('purpose=approval'),{},context);
+    expect(api.delete).toHaveBeenCalledWith(expect.stringMatching(/session\?purpose=approval$/),context);
   });
 });

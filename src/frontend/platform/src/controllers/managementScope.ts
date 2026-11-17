@@ -1,4 +1,4 @@
-import { BrowserScopeSession, needsBrowserScope } from "@bisheng/api-client";
+import { BrowserScopeSession, needsBrowserScope, isScopeReconfirmationChange } from "@bisheng/api-client";
 const session = new BrowserScopeSession();
 /** Request snapshots are learned from server responses, never restored as authority from storage. */
 const STORAGE_KEY = "bs:management-scope";
@@ -27,22 +27,40 @@ export function announceManagementScope(tenantId: number) {
   }
 }
 
-export function requiresManagementScope(method: string, raw: string): boolean {
-  return needsBrowserScope(method, raw, window.location.origin);
+export function requiresManagementScope(method: string, raw: string, baseURL?: string): boolean {
+  return needsBrowserScope(method, raw, window.location.origin, baseURL);
 }
 
 export function pauseManagementScope() {
   session.pause();
 }
 
-export function ensureManagementScope(loader: () => Promise<{scope_tenant_id: number; source?: string}>) {
-  return session.ensure(loader);
+export function beginManagementScopeSwitch() {
+  return session.beginSwitch();
+}
+
+export async function readManagementScope(
+  bootstrap: () => Promise<{scope_tenant_id: number; source?: string}>,
+  confirm: () => Promise<{scope_tenant_id: number; source?: string}>,
+) {
+  if (!session.isPaused) return session.ensure(bootstrap);
+  try {
+    return await session.reconfirm(confirm);
+  } catch (error) {
+    if (isScopeReconfirmationChange(error)) window.dispatchEvent(new Event("bisheng:management-scope-changed"));
+    throw error;
+  }
+}
+
+export function pauseManagementScopeForRequest(config?: {url?: string; method?: string; managementScopeSnapshot?: number | null}) {
+  if (config?.managementScopeSnapshot != null && config.managementScopeSnapshot === session.tenant) session.pause();
 }
 
 export function guardManagementResponse(
   headers: Record<string, unknown>,
   snapshot: number | null | undefined,
 ) {
+  if (snapshot != null && snapshot !== session.tenant) throw new Error("management_scope_stale");
   const raw = headers?.["x-management-tenant"];
   if (raw === undefined) return;
   const tenantId = Number(raw);

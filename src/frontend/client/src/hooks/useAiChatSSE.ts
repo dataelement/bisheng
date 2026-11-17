@@ -501,7 +501,7 @@ export function openChatStream(
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
         handleOffline();
     } else {
-        void prepareBrowserHeaders('POST', sseUrl).then(headers => {
+        void prepareBrowserHeaders('POST', sseUrl, sse.headers).then(headers => {
             if (endCalled || expectedClose) return;
             sse.headers = {...sse.headers, ...headers};
             sse.stream();
