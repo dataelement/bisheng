@@ -46,11 +46,15 @@ jest.mock("~/hooks", () => ({
   useScrollRevealRef: () => noop,
 }));
 jest.mock("~/utils/clientEnvironment", () => {
+  // useSyncExternalStore requires a stable snapshot until the environment changes.
+  const environments = {
+    web: { channel: "web", capabilities: { hasHostChatHeader: false } },
+    mobileApp: { channel: "web", capabilities: { hasHostChatHeader: true } },
+    desktop: { channel: "desktop", capabilities: { hasHostChatHeader: false } },
+  };
   return {
-    getClientEnvironment: () => ({
-      channel: mockEmbedded ? "desktop" : "web",
-      capabilities: { hasHostChatHeader: mockHostHeader },
-    }),
+    getClientEnvironment: () =>
+      environments[mockEmbedded ? "desktop" : mockHostHeader ? "mobileApp" : "web"],
     subscribeClientEnvironment: () => noop,
   };
 });
