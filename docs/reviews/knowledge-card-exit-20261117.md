@@ -40,3 +40,9 @@ All resource-intensive commands ran serially after the user's global serial-exec
 - test_role_unlimited_returns_unlimited
 
 These failures concern existing quota contracts and reproduce with the same environment against the unmodified branch. They are outside the approved exit-policy change.
+
+## Follow-up: real request-factory wiring
+
+The production factory constructs the space service without its optional legacy `f048_permission_adapter`. The exit helper incorrectly called that legacy injection-only resolver, raising `RuntimeError` before eligibility could be read; the client correctly hid Exit for the failed request. The original tests mocked away the resolver and therefore missed the real assembly failure.
+
+The helper now obtains the canonical registered `knowledge_space` adapter from the initialized permission runtime and resolves the verified target through it. Tests construct the real default service and additionally execute the actual request factory, covering both eligibility and unsubscribe. Before the fix, these tests produced nine failures and five passes; after the fix, all 43 qualification, transport and permission-policy cases passed. Ruff, architecture guard and independent read-only review passed. No user grants or deployment state were changed during diagnosis.
