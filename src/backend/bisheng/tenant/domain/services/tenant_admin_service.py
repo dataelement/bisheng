@@ -6,6 +6,7 @@ Public surface:
 - grant_tenant_admin(tenant_id, user_id) — grant Child Admin
 - revoke_tenant_admin(tenant_id, user_id) — revoke Child Admin
 - list_tenant_admins(tenant_id) — list directly assigned Child Admins
+- list_tenant_admin_users(tenant_ids) — admin {user_id, user_name} per tenant
 
 Root tenant guard (INV-T3, AC-13): all mutating methods refuse the Root
 tenant. Root authority is managed by the global super-admin permission. The
@@ -101,6 +102,54 @@ class TenantAdminService:
         except Exception:
             return []
         return [int(user_id) for user_id in user_ids if user_id.isdigit()]
+
+    @classmethod
+    async def list_tenant_admin_users(
+        cls, tenant_ids: list[int],
+    ) -> dict[int, list[dict] | None]:
+        """Return ``{tenant_id: [{user_id, user_name}, ...]}`` for display.
+
+        Root maps to ``[]`` (no Child Admin tuples by design). A tenant whose
+        permission lookup fails maps to ``None`` so the UI can tell
+        "lookup failed" apart from "no admin assigned".
+        """
+        import asyncio
+
+        from bisheng.user.domain.models.user import UserDao
+
+        async def _ids(tenant_id: int) -> list[int] | None:
+            if tenant_id == ROOT_TENANT_ID:
+                return []
+            try:
+                permissions = await get_permission_relation_api()
+                raw = await permissions.list_subject_ids(
+                    resource=PermissionObject("tenant", str(tenant_id)),
+                    relation="admin",
+                    subject_type="user",
+                )
+            except Exception as exc:
+                logger.warning("List tenant admins failed: tenant={} err={}", tenant_id, exc)
+                return None
+            return [int(uid) for uid in raw if str(uid).isdigit()]
+
+        id_lists = await asyncio.gather(*(_ids(tid) for tid in tenant_ids))
+        all_ids = sorted({uid for ids in id_lists if ids for uid in ids})
+        names: dict[int, str] = {}
+        if all_ids:
+            users = await UserDao.aget_user_by_ids(all_ids) or []
+            names = {u.user_id: u.user_name for u in users}
+
+        result: dict[int, list[dict] | None] = {}
+        for tid, ids in zip(tenant_ids, id_lists, strict=True):
+            if ids is None:
+                result[tid] = None
+                continue
+            # Drop tuples whose user row is gone (deleted user): granting
+            # flows never clean FGA, and a bare id is meaningless on screen.
+            result[tid] = [
+                {"user_id": uid, "user_name": names[uid]} for uid in ids if uid in names
+            ]
+        return result
 
     # ── Internal helpers ────────────────────────────────────────
 
