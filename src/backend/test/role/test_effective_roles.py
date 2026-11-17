@@ -81,16 +81,16 @@ async def policy_db(managed_db, monkeypatch):
     return managed_db
 
 
-async def test_home_policy_deduplicates_and_excludes_foreign_memberships(policy_db):
-    """AC-04/07/15/16: foreign memberships and M cannot add roles."""
+async def test_original_person_bindings_survive_storage_tenant_and_definition_scope(policy_db):
+    """Existing v3.0.0 grants survive Home changes; M cannot add roles."""
     from bisheng.role.application.effective_roles import load_effective_roles, load_effective_roles_sync
 
     with management_scope(home=2, target=3):
         result = await load_effective_roles(77, expected_home_tenant_id=2)
         assert result.home_tenant_id == 2
-        assert result.role_ids == (2, 3)
+        assert result.role_ids == (2, 3, 4, 5)
         assert result.is_identity_admin
-        assert result.web_menu == frozenset({"tool", "knowledge"})
+        assert result.web_menu == frozenset({"tool", "knowledge", "wrong-owner"})
         other = load_effective_roles_sync(77, expected_home_tenant_id=2)
         assert other.role_ids == result.role_ids and other.web_menu == result.web_menu
 
@@ -131,4 +131,4 @@ async def test_disabled_foreign_affiliation_does_not_change_home_policy(policy_d
         async with policy_db.sessions() as session:
             (await session.get(Tenant, 3)).status = "disabled"
             await session.commit()
-    assert (await load_effective_roles(77)).role_ids == (2, 3)
+    assert (await load_effective_roles(77)).role_ids == (2, 3, 4, 5)

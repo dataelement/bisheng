@@ -1,4 +1,4 @@
-"""One current ordinary policy for trusted identity / budget / menu consumers."""
+"""Original person-bound policy for trusted identity / budget / menu consumers."""
 
 from dataclasses import dataclass
 
@@ -22,15 +22,13 @@ class EffectiveRoles:
 
 
 def _binding_ids(subject) -> set[int]:
-    return {
-        int(row.role_id)
-        for row in subject.bindings
-        if row.role_id != AdminRole and row.tenant_id == subject.home_tenant_id
-    }
+    # v3.0.0 grants are attached to the person. Their storage tenant does not
+    # disappear when a department becomes a child tenant.
+    return {int(row.role_id) for row in subject.bindings if row.role_id != AdminRole}
 
 
 def eligible_role(role, home_tenant_id: int, supported_department_ids: set[int]) -> bool:
-    """Shared by reads and synchronous binding producers; no grant-source fiction."""
+    """Assignment/scope-maintenance eligibility, not a filter on existing reads."""
     definition_allowed = role.role_type == "global" or (
         role.role_type in ("tenant", "", None) and role.tenant_id == home_tenant_id
     )
@@ -61,8 +59,9 @@ def _resolve(subject, definitions, member_facts, expected_home):
     bound = _binding_ids(subject)
     if bound - {int(row.id) for row in definitions}:
         raise RolePolicyUnavailableError()
-    supported = {did for _, facts in member_facts if facts.business_tenant_id == home for did in facts.ancestor_ids}
-    return tuple(sorted((row for row in definitions if eligible_role(row, home, supported)), key=lambda row: row.id))
+    # Definition type and department restrict new assignments; v3.0.0 did not
+    # re-interpret an existing grant through the person's new home or scope.
+    return tuple(sorted(definitions, key=lambda row: row.id))
 
 
 async def load_effective_roles(user_id: int, *, expected_home_tenant_id: int | None = None) -> EffectiveRoles:

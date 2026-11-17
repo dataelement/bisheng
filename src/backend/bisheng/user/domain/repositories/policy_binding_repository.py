@@ -182,13 +182,17 @@ class PolicyBindingRepository:
                 home, supported = await cls._supported(subject, session)
                 if home != expected_home:
                     raise RolePolicyUnavailableError()
+                existing = {row.role_id for row in subject.bindings}
                 legal = {role.id for role in definitions if eligible_role(role, home, supported)}
-                if not set(picked).issubset(legal):
+                if not set(picked).issubset({role.id for role in definitions}) or not (set(picked) - existing).issubset(
+                    legal
+                ):
                     raise RolePolicyUnavailableError()
-                existing = {row.role_id for row in subject.bindings if row.tenant_id == home}
                 removed = set()
                 for row in subject.bindings:
-                    if row.tenant_id == home and row.role_id in replace_ids and row.role_id not in picked:
+                    # Reads retain historical bindings across storage tenants;
+                    # explicit revocation must remove those same grants too.
+                    if row.role_id in replace_ids and row.role_id not in picked:
                         removed.add(row.role_id)
                         await session.delete(row)
                 added = set(picked) - existing

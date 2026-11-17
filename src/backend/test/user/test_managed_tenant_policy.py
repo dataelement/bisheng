@@ -33,21 +33,21 @@ async def test_login_does_not_trust_foreign_or_supplied_roles(ordinary_policy):
     """AC-15/16: supplied role IDs cannot forge identity or bypass E."""
     with management_scope(home=2, target=3):
         user = await LoginUser.init_login_user(77, "policy", tenant_id=2, role_ids=[1, 4])
-        assert user.user_role == [2, 3] and user.tenant_id == 2 and not user.is_admin()
+        assert user.user_role == [2, 3, 4, 5] and user.tenant_id == 2 and not user.is_admin()
         sync_user = LoginUser.init_login_user_sync(77, "policy", tenant_id=2)
-        assert sync_user.user_role == [2, 3] and not sync_user.is_admin()
+        assert sync_user.user_role == [2, 3, 4, 5] and not sync_user.is_admin()
 
 
-async def test_menu_uses_definition_owner_and_personal_home(ordinary_policy, monkeypatch):
-    """AC-16/19: WEB_MENU from O plus H personal grant, no M or resource grant."""
+async def test_menu_uses_original_role_ids_and_personal_home(ordinary_policy, monkeypatch):
+    """v3.0.0 role menus plus H personal grants, no resource grants."""
     from bisheng.approval.domain.services.user_menu_access_service import UserMenuAccessService
 
     grants = AsyncMock(return_value=["admin"])
     monkeypatch.setattr(UserMenuAccessService, "list_effective_menu_grants", grants)
     with management_scope(home=2, target=3):
         roles, menu = await LoginUser.get_roles_web_menu(SimpleNamespace(user_id=77), role_ids=[4])
-    assert roles == [2, 3]
-    assert set(menu) == {"admin", "tool", "knowledge"}
+    assert roles == [2, 3, 4, 5]
+    assert set(menu) == {"admin", "tool", "knowledge", "wrong-owner"}
     grants.assert_awaited_once_with(2, 77)
 
 

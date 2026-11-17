@@ -1,4 +1,4 @@
-"""Mount and deferred reconciliation preserve grants while reads enforce Home."""
+"""Mount preserves original effective grants while execution identity follows Home."""
 
 from unittest.mock import AsyncMock
 
@@ -85,7 +85,8 @@ async def test_mount_and_deferred_sync_preserve_all_binding_fields(mount_db, has
     assert (await UserTenantSyncService.sync_user(77, trigger=trigger)).id == 2
     assert await binding_snapshot(mount_db) == before
     policy = await load_effective_roles(77)
-    assert policy.home_tenant_id == 2 and policy.role_ids == () and not policy.web_menu
+    assert policy.home_tenant_id == 2 and policy.role_ids == (2, 9)
+    assert policy.web_menu == frozenset({"tool", "wrong-owner"})
     await UserTenantSyncService.sync_user(77, trigger=UserTenantSyncTrigger.LOGIN)
     assert await binding_snapshot(mount_db) == before
 

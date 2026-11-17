@@ -156,8 +156,46 @@ class LoginSyncService:
                 from bisheng.user.application.policy_bindings import policy_membership_ids
 
                 previous_department_ids = await policy_membership_ids(user.user_id)
+                previous_primary = await UserDepartmentDao.aget_user_primary_department(user.user_id)
+                primary_id = previous_primary.department_id if previous_primary is not None else None
+                wanted_secondaries = {dept.id for dept in secondary_depts}
+                removed_secondary_candidates = previous_department_ids - {primary_id} - wanted_secondaries
+                sso_secondaries = set()
+                if (
+                    primary_dept is not None
+                    and "secondary_dept_external_ids" in payload.model_fields_set
+                    and removed_secondary_candidates
+                ):
+                    # Removal ownership follows Department.source, as in the
+                    # existing secondary reconciliation, not membership.source.
+                    departments = await DepartmentDao.aget_by_ids(list(removed_secondary_candidates))
+                    sso_secondaries = {
+                        dept.id
+                        for dept in departments
+                        if dept.id in removed_secondary_candidates and dept.source == row_source
+                    }
+                desired_primary = primary_dept.id if primary_dept is not None else None
+                desired_department_ids = wanted_secondaries | (
+                    {desired_primary} if desired_primary is not None else set()
+                )
+                override_changes_membership = full_department_override and (
+                    primary_id != desired_primary or previous_department_ids != desired_department_ids
+                )
+                membership_change_requested = override_changes_membership or (
+                    primary_dept is not None
+                    and (
+                        primary_id != primary_dept.id
+                        or bool(wanted_secondaries - previous_department_ids)
+                        or (
+                            "secondary_dept_external_ids" in payload.model_fields_set
+                            and bool(sso_secondaries - wanted_secondaries)
+                        )
+                    )
+                )
                 from bisheng.user.application.policy_bindings import retire_current_policy_bindings
-                await retire_current_policy_bindings(user.user_id)
+
+                if membership_change_requested:
+                    await retire_current_policy_bindings(user.user_id)
                 if full_department_override:
                     await cls._replace_departments_full(
                         user.user_id,
@@ -185,7 +223,8 @@ class LoginSyncService:
                     row_source=row_source,
                 )
 
-                await retire_current_policy_bindings(user.user_id)
+                if membership_change_requested:
+                    await retire_current_policy_bindings(user.user_id)
 
                 # WeCom-style disable: keep department rows for org-tree placeholder (PRD 8b).
                 if payload.account_disabled is True:
@@ -227,8 +266,9 @@ class LoginSyncService:
                     seed_policy_defaults,
                 )
 
-                await retire_current_policy_bindings(user.user_id)
                 current_department_ids = await policy_membership_ids(user.user_id)
+                if membership_change_requested or current_department_ids != previous_department_ids:
+                    await retire_current_policy_bindings(user.user_id)
                 await seed_policy_defaults(user.user_id, current_department_ids - previous_department_ids)
 
                 guard = await UserService._reject_login_if_user_has_no_usable_access(user)

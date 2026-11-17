@@ -42,11 +42,15 @@ async def test_binding_uses_subject_home_not_management_target(binding_db):
 
 
 async def test_foreign_role_cannot_be_granted_even_with_secondary_membership(binding_db):
+    with bypass_tenant_filter():
+        async with binding_db.sessions() as session:
+            session.add(Role(id=11, role_name="unassigned foreign role", role_type="tenant", tenant_id=3))
+            await session.commit()
     with management_scope(home=1, target=3), pytest.raises(RolePolicyUnavailableError):
-        await grant_policy_bindings(77, 2, {4})
+        await grant_policy_bindings(77, 2, {11})
 
 
-async def test_scope_loss_deletes_binding_and_expansion_does_not_revive(binding_db):
+async def test_scope_edits_keep_original_person_grants_and_expansion_does_not_restore_revocation(binding_db):
     with bypass_tenant_filter():
         async with binding_db.sessions() as session:
             session.add(
@@ -55,6 +59,13 @@ async def test_scope_loss_deletes_binding_and_expansion_does_not_revive(binding_
             await session.commit()
             role = await session.get(Role, 3)
     role = await RoleDefinitionRepository.update(role, {"department_id": 31})
+    from bisheng.role.application.effective_roles import load_effective_roles
+    from bisheng.user.application.policy_bindings import replace_policy_bindings
+
+    assert 3 in (await load_effective_roles(77)).role_ids
+    await replace_policy_bindings(77, 2, {3}, set())
+    with pytest.raises(RolePolicyUnavailableError):
+        await grant_policy_bindings(77, 2, {3})
     await RoleDefinitionRepository.update(role, {"department_id": None})
     with bypass_tenant_filter():
         async with binding_db.sessions() as session:
@@ -118,14 +129,14 @@ async def test_global_role_delete_removes_all_home_copies(binding_db):
             assert not (await session.exec(select(UserRole).where(UserRole.role_id == 9))).all()
 
 
-async def test_expanding_legacy_invalid_scope_does_not_activate_old_binding(binding_db):
+async def test_definition_scope_edit_does_not_delete_original_binding(binding_db):
     with bypass_tenant_filter():
         async with binding_db.sessions() as session:
             role = await session.get(Role, 5)  # B-scoped definition, old grant in H=A.
     await RoleDefinitionRepository.update(role, {"department_id": None})
     with bypass_tenant_filter():
         async with binding_db.sessions() as session:
-            assert not (
+            assert (
                 await session.exec(
                     select(UserRole).where(UserRole.user_id == 77, UserRole.role_id == 5, UserRole.tenant_id == 2)
                 )

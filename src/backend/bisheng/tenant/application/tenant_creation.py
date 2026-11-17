@@ -39,7 +39,8 @@ async def create_mounted_tenant_with_coverage(*, tenant, department_id, departme
             session, tenant=tenant, department_id=department_id, department_tenant_id=department_tenant_id
         )
         # Mounting changes the business boundary, not existing role grants.
-        # Effective-role reads exclude bindings outside the person's new home.
+        # Original role grants stay effective; resources use the new Home and
+        # their independent authorization boundary.
         try:
             await _certify_created_tenant(
                 session,
