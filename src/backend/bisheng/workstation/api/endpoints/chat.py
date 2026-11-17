@@ -1,7 +1,7 @@
 import asyncio
 from typing import Union
 
-from fastapi import APIRouter, Body, Request
+from fastapi import APIRouter, Body, Header, Request
 
 from bisheng.api.v1.schemas import resp_200
 from bisheng.common.errcode.http_error import UnAuthorizedError
@@ -19,6 +19,7 @@ from bisheng.workstation.domain.services.chat_helpers import (
     _is_new_format,
 )
 
+from ...domain.services import run_send
 from ...domain.services.chat_service import stream_chat_completion
 from ..dependencies import LoginUserDep, ShareLink, ShareLinkDep
 
@@ -110,3 +111,21 @@ async def chat_completions(
         await MemoryGate.open(chat_id, login_user)
 
     return await stream_chat_completion(request, data, login_user, memory_register=memory_register)
+
+
+@router.get("/conversations/{conversation_id}/events")
+async def conversation_events(
+    conversation_id: str,
+    last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
+    login_user=LoginUserDep,
+):
+    """F004: SSE of the conversation's run events (design 决策 4, §4.3).
+
+    Owner only. ``Last-Event-ID`` continues after that event; without it the
+    events of the current run are sent from its start. The stream ends when the
+    conversation has no run in progress.
+    """
+    if not await run_send.owns_conversation(conversation_id, login_user):
+        # Same answer for "not yours" and "does not exist".
+        return UnAuthorizedError.return_resp()
+    return await run_send.subscribe_response(conversation_id, last_event_id)

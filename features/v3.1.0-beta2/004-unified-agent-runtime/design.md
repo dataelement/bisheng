@@ -353,7 +353,26 @@
 - **回归**：P0 在升级前后对 `test/linsight/` 取同一选择集做差分，不看绝对失败数。
 - **端到端**：按 SDD 流程在 design 确认后生成 `test-cases.md`，实现后跑 `/e2e-test`。多节点行为（AC-33）在两节点环境上验证，单机 compose 不算。
 - **手动验证**（在 `src/backend/` 下执行；脚本不连接任何环境，不需要账号）：`.venv/bin/python scripts/spike_unified_runtime/s1_todo_and_tool_output.py`、`s3_inbox_middleware.py`、`s3b_diff_todos_alignment.py`；交互对照 `prototype/index.html`。
-- **观测**：每次运行记录首字符时间、排队时间、插话从入箱到被读取的时间、checkpoint 体积。
+- **观测**：每次统一运行时的执行在结束时输出一行 `BS_METRIC domain=agent_run`（`linsight/domain/services/run_metrics.py`，T038）。字段：`profile`（direct / planned）、`status`（finished / failed / stopped / waiting / lease_lost / unknown）、`resume`、`prep_ms`（发送入口接受消息到第一次模型请求，含 `queue_ms`）、`queue_ms`（接受消息到执行开始）、`steer_wait_ms`（本次执行内插话从入箱到被读取的最长等待）、`steer_count`、`checkpoint_bytes`（线程最新 root checkpoint 的序列化字节数，不是线程在 Redis 的总占用）、`total_ms`。开关关闭的旧路径不输出这一行。
+
+### P1 实现后的待定事项（T027–T038 留下，按是否需要产品决定分组）
+
+需要用户决定的：
+
+1. **`planned` 接力运行不能执行。** 用户在运行中发的消息在运行结束时仍未读，且要以深度研究档接力时，没有代码从收件箱消息创建 `linsight_session_version`。worker 现在写 `run_failed`（`relay_not_supported`）并丢弃未读消息。P2 的收件箱中间件会在运行中读走消息，这个分支只在“运行结束瞬间才到达的消息”上触发。
+2. **用户停止的回答行标记。** 现在沿用今天的做法，写成错误行（`stream interrupted`）。是否给“用户停止”单独的标记。
+3. **未改造前端的三种情形**（开关打开但前端仍用旧协议）：运行中再发消息只收到结束帧、没有回答；`direct` 运行遇到 ask_user 时旧帧里没有对应帧，用户看不到问题；敏感词拦截在新协议下仍返回旧 SSE。P4 前端切换后前两项不再出现。
+4. **开关开启后，开放 API 或 `/workbench/start-execute` 在同一会话已有运行时再提交，会以“会话被占用”失败。** 今天两次运行互不影响。是否改为排队。
+5. **旧终止接口不动会话租约。** 运行挂起时用旧接口终止，会话停在 waiting，之后的消息被当成回答。P2 的停止接入（T050）要同时调 `RunLeaseService.request_stop`。
+
+技术上已知、由后续任务处理的：
+
+- 知识库工具名不一致（`search_knowledge_bases` 与 `_KB_TOOL_NAME`），`direct` 运行选了知识库时提示词不介绍该工具：T059。
+- `direct` 运行没有引用角标、长期记忆、读图、技能、输出侧内容安全替换、部门并发名额：T053、T059。在这些接入之前，开关不能对真实用户打开。
+- worker 执行的 `direct` 接力运行没有落库投影器；`direct` 运行租约过期时没有失败的回答行：T043。
+- 工具结果在事件里截断到 8000 字符，回答行存的工具结果比今天短；旧帧的工具显示名用工具名兜底：T055。
+- `EventWriter` 合并 thinking 时丢掉 `call_id` 与 `namespace`：T047 前修。
+- `direct` 运行的本地缓存目录运行后不清理：T053。
 
 ### 尚未完成的验证
 

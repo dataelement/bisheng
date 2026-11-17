@@ -70,8 +70,10 @@ from bisheng.workstation.domain.services.run_lease import LEASE_SECONDS, STATE_T
 INBOX_KEY_PREFIX = "bisheng:run:inbox:"
 # Same lifetime as the state hash: an inbox must not outlive or die before it.
 INBOX_TTL_SECONDS = STATE_TTL_SECONDS
-# Lease of a run that sits in the worker queue before a worker renews it.
-QUEUED_LEASE_SECONDS = 10 * 60
+# Lease of a run that sits in the worker queue before a worker renews it. Same
+# bound as the 4-hour run lock it replaces: a deep-research run may wait behind
+# other runs for a long time, and its queue item is not lost while it waits.
+QUEUED_LEASE_SECONDS = 4 * 60 * 60
 
 INBOX_FIELDS = (
     "message_id",

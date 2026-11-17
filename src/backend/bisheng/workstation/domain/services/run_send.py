@@ -1,0 +1,868 @@
+"""F004 T032: the send entry and the event subscription of the unified runtime.
+
+Design: features/v3.1.0-beta2/004-unified-agent-runtime/design.md, 决策 3, 4, 9 and
+§4.3 / §4.4. ``chat_service.stream_chat_completion`` calls ``unified_send`` only
+when the tenant switch is on; with the switch off nothing in this module runs.
+
+Send (``POST /chat/completions``)
+---------------------------------
+
+1. Permission (AC-06): ``task_mode=true`` needs the ``linsight_task_mode`` menu.
+2. Input safety (AC-38): a blocked text is answered like today and never reaches
+   ``run_dispatch``, so it cannot join the inbox.
+3. ``RunDispatchService.submit`` decides atomically (决策 9):
+
+   * ``started`` / ``direct``  -> question row, then ``start_direct_run`` in this
+     API process. The persistence projector is attached through ``on_event``.
+   * ``started`` / ``planned`` -> the existing task submit core
+     (``submit_task_turn``) creates the version and enqueues it. The worker finds
+     the run through ``RunLeaseService.get_state(conversation_id).run_id``: the
+     run state of record is the Redis state hash, nothing is passed in memory.
+   * the message answers a parked ask_user -> the parked run is resumed
+     (``direct`` here, ``planned`` through a resume item at the queue head).
+   * ``queued`` -> the message is in the inbox; nothing else happens here.
+
+4. Response: with ``X-BS-Run-Protocol: 2`` a JSON body
+   ``{run_id, disposition, message_id, conversation_id}``; without it the
+   response is today's SSE stream. For a ``direct`` run this module follows the
+   run's event stream and translates it to today's frames; for a ``planned`` run
+   it is today's hand-off frame.
+
+Subscribe (``GET /conversations/{id}/events``)
+----------------------------------------------
+
+``follow_run_events`` wraps ``RunEventStream.read`` with the two things a
+client connection needs: it waits when the run exists but has not written its
+first event yet (the run state says "running"), and it ends when the
+conversation is idle. A lapsed lease found on the way is reported through
+``RunDispatchService.recover_expired`` (决策 3).
+
+Nothing about a run is kept in this process (C8); the generators below only hold
+the cursor of one HTTP response.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import time
+from collections.abc import AsyncIterator
+from dataclasses import dataclass
+from typing import Any
+from uuid import uuid4
+
+from fastapi import Request
+from fastapi.responses import StreamingResponse
+from loguru import logger
+
+from bisheng.api.v1.schemas import resp_200
+from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
+from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.errcode.http_error import ServerError
+from bisheng.common.errcode.workstation import ConversationNotFoundError, DepartmentDailyChatConcurrentLimitError
+from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData
+from bisheng.common.services import telemetry_service
+from bisheng.common.services.failure_context import FailureContextAdapter
+from bisheng.core.context.tenant import DEFAULT_TENANT_ID
+from bisheng.core.logger import trace_id_var
+from bisheng.core.storage.chat_attachment import promote_chat_attachments
+from bisheng.database.models.flow import FlowType
+from bisheng.database.models.message import ChatMessage, ChatMessageDao
+from bisheng.database.models.role_access import WebMenuResource
+from bisheng.database.models.session import MessageSession, MessageSessionDao, SensitiveStatus
+from bisheng.department.domain.services.department_flow_service import (
+    DepartmentFlowService,
+    SlotOutcome,
+    lease_id_from_headers,
+)
+from bisheng.linsight.domain.schemas import run_events
+from bisheng.linsight.domain.services.run_event_stream import HEARTBEAT_TYPE, RunEventStream
+from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import SensitiveWordPolicyService
+from bisheng.workstation.domain.schemas.chat import APIChatCompletion
+from bisheng.workstation.domain.services import chat_service
+from bisheng.workstation.domain.services.chat_helpers import _sse_resp, gen_title, user_message
+from bisheng.workstation.domain.services.content_safety import workbench_tenant_id
+from bisheng.workstation.domain.services.daily_memory import (
+    MemoryRegister,
+    redact_args,
+    redact_error,
+    redact_results,
+    register_session,
+)
+from bisheng.workstation.domain.services.direct_run import DirectRunContext, start_direct_run
+from bisheng.workstation.domain.services.run_dispatch import (
+    KIND_ANSWER,
+    KIND_NEW_RUN,
+    PROFILE_PLANNED,
+    RunDispatchService,
+    SubmitResult,
+)
+from bisheng.workstation.domain.services.run_lease import STATUS_IDLE, STATUS_RUNNING, RunLeaseService
+from bisheng.workstation.domain.services.run_projector_direct import DirectRunProjector
+
+RUN_PROTOCOL_HEADER = "X-BS-Run-Protocol"
+RUN_PROTOCOL_V2 = "2"
+TASK_MODE_MENU = WebMenuResource.LINSIGHT_TASK_MODE.value
+
+# How long one blocking read waits before the run state is checked again.
+FOLLOW_BLOCK_MS = 1000
+# Pause between two looks when the run has not written its first event yet.
+FIRST_EVENT_POLL_SECONDS = 0.05
+# SSE comment interval of the subscribe endpoint.
+HEARTBEAT_SECONDS = 15.0
+# How long the legacy stream waits for the projector to save the answer row.
+PERSIST_WAIT_SECONDS = 15.0
+
+_SSE = "text/event-stream"
+
+
+# --------------------------------------------------------------------------- #
+# Services
+# --------------------------------------------------------------------------- #
+
+
+@dataclass
+class RunServices:
+    stream: RunEventStream
+    lease: RunLeaseService
+    dispatch: RunDispatchService
+
+
+async def _redis() -> Any:
+    from bisheng.core.cache.redis_manager import get_redis_client
+
+    return (await get_redis_client()).async_connection
+
+
+def _dispatch_wiring() -> dict[str, Any]:
+    """Relay queue, expiry handler and queue-position probe of this deployment."""
+    from bisheng.workstation.domain.services.direct_run import production_dispatch_wiring
+
+    return production_dispatch_wiring()
+
+
+async def run_services() -> RunServices:
+    redis = await _redis()
+    return RunServices(
+        stream=RunEventStream(redis),
+        lease=RunLeaseService(redis),
+        dispatch=RunDispatchService(redis, **_dispatch_wiring()),
+    )
+
+
+def wants_run_protocol(request: Any) -> bool:
+    headers = getattr(request, "headers", None)
+    if not hasattr(headers, "get"):
+        return False
+    return str(headers.get(RUN_PROTOCOL_HEADER) or "").strip() == RUN_PROTOCOL_V2
+
+
+# --------------------------------------------------------------------------- #
+# Subscribe
+# --------------------------------------------------------------------------- #
+
+
+async def _run_active(svc: RunServices, conversation_id: str) -> bool:
+    """Whether more events can still arrive for this conversation.
+
+    A run whose lease lapsed is reported here (决策 3): the dispatcher appends
+    ``run_failed`` and frees the conversation, and the caller reads once more to
+    deliver that event.
+    """
+    state = await svc.lease.get_state(conversation_id)
+    if state.status == STATUS_IDLE:
+        return False
+    if state.status == STATUS_RUNNING and state.lease_until_ms <= int(time.time() * 1000):
+        try:
+            await svc.dispatch.recover_expired(conversation_id)
+        except Exception:
+            # The relay run could not be queued. The dead run was already reported
+            # (run_failed is on the stream); the next access retries the relay.
+            logger.exception("could not recover the lapsed run of conversation={}", conversation_id)
+            return False
+    return True
+
+
+async def follow_run_events(svc: RunServices, conversation_id: str, cursor: str | None = None) -> AsyncIterator[dict]:
+    """Yield the events after ``cursor`` until the conversation is idle.
+
+    Yields ``{"type": "heartbeat"}`` while it waits. A relay run that takes the
+    conversation right after a run ended is followed too.
+    """
+    cur = cursor
+    while True:
+        async for event in svc.stream.read(conversation_id, cur, follow=True, block_ms=FOLLOW_BLOCK_MS, heartbeat=True):
+            if event.get("type") == HEARTBEAT_TYPE:
+                if not await _run_active(svc, conversation_id):
+                    return
+                yield event
+                continue
+            cur = event["id"]
+            yield event
+        # The reader stopped: a run ended, or the Stream does not exist (yet).
+        if not await _run_active(svc, conversation_id):
+            # Events appended between the last read and the state check.
+            async for event in svc.stream.read(conversation_id, cur):
+                yield event
+            return
+        yield {"type": HEARTBEAT_TYPE}
+        await asyncio.sleep(FIRST_EVENT_POLL_SECONDS)
+
+
+def event_frame(event: dict) -> str:
+    """One unified event as an SSE frame; ``id`` is the cursor for ``Last-Event-ID``."""
+    return f"id: {event['id']}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+
+async def _get_session(conversation_id: str) -> Any:
+    return await MessageSessionDao.async_get_one(conversation_id)
+
+
+async def owns_conversation(conversation_id: str, login_user: UserPayload) -> bool:
+    session = await _get_session(conversation_id)
+    return session is not None and session.user_id == login_user.user_id
+
+
+async def subscribe_response(conversation_id: str, last_event_id: str | None) -> StreamingResponse:
+    """SSE of the conversation's run events. The caller has checked ownership."""
+    svc = await run_services()
+
+    async def body():
+        last_beat = time.monotonic()
+        async for event in follow_run_events(svc, conversation_id, last_event_id or None):
+            if event.get("type") == HEARTBEAT_TYPE:
+                if time.monotonic() - last_beat >= HEARTBEAT_SECONDS:
+                    last_beat = time.monotonic()
+                    yield ": heartbeat\n\n"
+                continue
+            last_beat = time.monotonic()
+            yield event_frame(event)
+
+    return StreamingResponse(body(), media_type=_SSE, headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+# --------------------------------------------------------------------------- #
+# Send: database helpers (the test suite replaces exactly these)
+# --------------------------------------------------------------------------- #
+
+
+async def _open_conversation(data: APIChatCompletion, login_user: UserPayload) -> tuple[Any, bool]:
+    """Fetch the conversation, or create it for a first message. Owner only.
+
+    The conversation must exist before ``run_dispatch.submit``: its id is the key
+    of the run state.
+    """
+    conversation_id = data.conversationId
+    is_new = not conversation_id
+    if is_new:
+        conversation_id = uuid4().hex
+        new_session = MessageSession(
+            chat_id=conversation_id,
+            name="New Chat",
+            flow_type=FlowType.WORKSTATION.value,
+            user_id=login_user.user_id,
+        )
+        if data.project_id is not None:
+            from bisheng.chat_session.domain.chat import ChatSessionService
+
+            await ChatSessionService.create_owned_project_session(new_session, login_user, data.project_id)
+        else:
+            await MessageSessionDao.async_insert_one(new_session)
+        await telemetry_service.log_event(
+            user_id=login_user.user_id,
+            event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
+            trace_id=trace_id_var.get(),
+            event_data=NewMessageSessionEventData(
+                session_id=conversation_id,
+                app_id=ApplicationTypeEnum.DAILY_CHAT.value,
+                source="platform",
+                app_name=ApplicationTypeEnum.DAILY_CHAT.value,
+                app_type=ApplicationTypeEnum.DAILY_CHAT,
+            ),
+        )
+    conversation = await MessageSessionDao.async_get_one(conversation_id)
+    if conversation is None or conversation.user_id != login_user.user_id:
+        raise ConversationNotFoundError()
+    if not is_new:
+        await MessageSessionDao.touch_session(conversation_id)
+    return conversation, is_new
+
+
+async def _insert_question_row(
+    data: APIChatCompletion, login_user: UserPayload, conversation_id: str, memory_register: MemoryRegister | None
+) -> Any:
+    """The question row daily chat writes today (``_agent_initialize_chat``), same order of steps."""
+    # F132: registration precedes this turn's question row (AC-40 of F132).
+    await register_session(memory_register, conversation_id)
+    await promote_chat_attachments(data.files, login_user.user_id)
+    return await ChatMessageDao.ainsert_one(
+        ChatMessage(
+            user_id=login_user.user_id,
+            chat_id=conversation_id,
+            flow_id="",
+            type="over",
+            is_bot=False,
+            sender="User",
+            files=json.dumps(data.files) if data.files else None,
+            extra="{}",
+            message=json.dumps({"query": data.text or "", "files": data.files or []}, ensure_ascii=False),
+            category="question",
+            source=0,
+            sensitive_status=SensitiveStatus.PASS.value,
+        )
+    )
+
+
+async def _model_display_name(data: APIChatCompletion, login_user: UserPayload) -> str:
+    """Validate the picked model like today's entry and return the answer row's ``sender``."""
+    from bisheng.dsh.domain.services.model_catalog import user_workbench_models
+
+    models = await user_workbench_models(login_user.user_id)
+    model_info = next((m for m in models if m.id == data.model), None)
+    if not model_info:
+        raise ValueError(f"Model with id '{data.model}' not found.")
+    return model_info.displayName
+
+
+def _spawn_title(request: Any, data: APIChatCompletion, login_user: UserPayload, conversation: Any) -> None:
+    """Name a still-unnamed conversation from the question, in the background (as task mode does)."""
+    if getattr(conversation, "name", None) not in (None, "", "New Chat"):
+        return
+
+    async def name_it() -> None:
+        from bisheng.llm.domain import LLMService
+
+        llm = await LLMService.get_bisheng_llm(
+            model_id=data.model,
+            app_id=ApplicationTypeEnum.DAILY_CHAT.value,
+            app_name=ApplicationTypeEnum.DAILY_CHAT.value,
+            app_type=ApplicationTypeEnum.DAILY_CHAT,
+            user_id=login_user.user_id,
+        )
+        await gen_title(data.text or "", llm, conversation.chat_id, login_user, request)
+
+    _background(name_it(), f"title:{conversation.chat_id}")
+
+
+async def _submit_task_turn(data: APIChatCompletion, login_user: UserPayload, **kwargs: Any) -> tuple[Any, Any]:
+    from bisheng.workstation.domain.services.task_submit_service import submit_task_turn
+
+    return await submit_task_turn(data, login_user, **kwargs)
+
+
+async def _enqueue_planned_resume(conversation_id: str, answer: str, tenant_id: int) -> Any:
+    """Wake the parked deep-research run of this conversation with the user's answer.
+
+    Same queue item as ``/linsight/workbench/user-input``; the worker resumes
+    from the item alone.
+    """
+    from bisheng.linsight.domain.models.linsight_session_version import LinsightSessionVersionDao
+    from bisheng.linsight.worker import LinsightQueue, encode_queue_item
+
+    versions = await LinsightSessionVersionDao.get_session_versions_by_session_id(conversation_id)
+    if not versions:
+        raise RuntimeError(f"conversation {conversation_id} waits for an answer but has no deep-research run")
+    version = versions[0]
+    from bisheng.core.cache.redis_manager import get_redis_client
+
+    queue = LinsightQueue("queue", namespace="linsight", redis=await get_redis_client())
+    await queue.put_head(encode_queue_item(version.id, resume=True, user_input=answer, tenant_id=tenant_id))
+    return version
+
+
+async def _blocked_response(
+    data: APIChatCompletion, login_user: UserPayload, blocked: Any, memory_register: MemoryRegister | None
+) -> StreamingResponse:
+    """Today's answer to a blocked input: the turn is recorded with the auto-reply, no run starts."""
+    try:
+        _cfg, conversation, message, _llm, model_info, _new = await chat_service._agent_initialize_chat(
+            data, login_user, skip_llm=True, memory_register=None if data.task_mode else memory_register
+        )
+    except (BaseErrorCode, ValueError) as exc:
+        error = exc if isinstance(exc, BaseErrorCode) else ServerError()
+        return _error_stream(error, exc)
+    return chat_service._respond_blocked_workbench(conversation, message, model_info, data, blocked.auto_reply or "")
+
+
+# --------------------------------------------------------------------------- #
+# Send
+# --------------------------------------------------------------------------- #
+
+_TASKS: set[asyncio.Task] = set()
+
+
+def _background(coro: Any, name: str) -> None:
+    """Run a coroutine that must outlive the request; a failure is logged, never lost."""
+    task = asyncio.create_task(coro, name=name)
+    _TASKS.add(task)
+
+    def done(finished: asyncio.Task) -> None:
+        _TASKS.discard(finished)
+        if not finished.cancelled() and finished.exception() is not None:
+            logger.opt(exception=finished.exception()).error("background task {} failed", finished.get_name())
+
+    task.add_done_callback(done)
+
+
+def _error_stream(error: Any, cause: BaseException | None = None) -> StreamingResponse:
+    return StreamingResponse(iter([FailureContextAdapter.public_sse_text(error, cause=cause)]), media_type=_SSE)
+
+
+def _json(result: SubmitResult, conversation_id: str) -> Any:
+    return resp_200(data={**result.as_response(), "conversation_id": conversation_id})
+
+
+def _closing_frames(conversation_id: str, answer_message_id: Any = None) -> list[str]:
+    final: dict[str, Any] = {"final": True, "conversation": {"conversationId": conversation_id}}
+    if answer_message_id is not None:
+        final["responseMessage"] = {"messageId": answer_message_id, "conversationId": conversation_id}
+    return [
+        _sse_resp("processing", "close", "", conversation_id),
+        f"data: {json.dumps(final, ensure_ascii=False)}\n\n",
+    ]
+
+
+def _handoff_stream(session_version: Any) -> StreamingResponse:
+    payload = {
+        "event": "linsight_task_handoff",
+        "data": {"session_version_id": session_version.id, "chat_id": session_version.session_id},
+    }
+    return StreamingResponse(iter([f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"]), media_type=_SSE)
+
+
+async def _abandon_run(svc: RunServices, conversation_id: str, run_id: str) -> None:
+    """A run that was granted but could not be started gives the conversation back."""
+    try:
+        await svc.dispatch.on_run_finished(conversation_id, run_id)
+    except Exception:
+        logger.exception(
+            "could not release conversation={} after run={} failed to start; its lease will lapse",
+            conversation_id,
+            run_id,
+        )
+
+
+async def unified_send(
+    request: Request,
+    data: APIChatCompletion,
+    login_user: UserPayload,
+    *,
+    memory_register: MemoryRegister | None = None,
+):
+    """``POST /chat/completions`` of a tenant on the unified runtime."""
+    negotiated = wants_run_protocol(request)
+
+    # 1. AC-06: deep research needs its menu permission; a rejected request
+    #    creates no conversation, no run and no inbox entry.
+    if data.task_mode:
+        await UserPayload.assert_effective_web_menu_contains(login_user.user_id, TASK_MODE_MENU)
+
+    # 2. AC-38: input safety runs before the message can reach the inbox.
+    tenant_id = workbench_tenant_id(login_user)
+    blocked = SensitiveWordPolicyService.evaluate_workbench_user_text(tenant_id, data.text or "")
+    if blocked:
+        logger.warning(
+            "workbench content safety hit tenant_id={} mode=input chat_id={}", tenant_id, data.conversationId or ""
+        )
+        return await _blocked_response(data, login_user, blocked, memory_register)
+
+    try:
+        if data.task_mode:
+            return await _send_planned(request, data, login_user, negotiated, memory_register)
+        return await _send(request, data, login_user, negotiated, memory_register)
+    except DepartmentDailyChatConcurrentLimitError:
+        if negotiated:
+            raise
+        return chat_service._department_limit_stream_response()
+    except BaseErrorCode as exc:
+        if negotiated:
+            raise
+        return _error_stream(exc)
+    except ValueError as exc:
+        # Today's entry answers an unknown model id like this.
+        logger.warning("unified send rejected: {}", exc)
+        if negotiated:
+            raise ServerError(exception=exc) from exc
+        return _error_stream(ServerError(), exc)
+
+
+async def _send_planned(request, data, login_user, negotiated, memory_register):
+    """Deep research holds the department execution slot for the submit, as today."""
+    page_lease_id = lease_id_from_headers(getattr(request, "headers", None))
+    if page_lease_id is not None:
+        outcome, _ = await DepartmentFlowService.ensure_lease(login_user, page_lease_id)
+        if outcome is SlotOutcome.REJECTED:
+            raise DepartmentDailyChatConcurrentLimitError()
+        return await _send(request, data, login_user, negotiated, memory_register)
+    async with DepartmentFlowService.hold_execution_lease(login_user) as (outcome, _lease):
+        if outcome is SlotOutcome.REJECTED:
+            raise DepartmentDailyChatConcurrentLimitError()
+        return await _send(request, data, login_user, negotiated, memory_register)
+
+
+async def _send(request, data: APIChatCompletion, login_user: UserPayload, negotiated: bool, memory_register):
+    tenant_id = int(workbench_tenant_id(login_user) or DEFAULT_TENANT_ID)
+    task_mode = data.task_mode is True
+    sender = "" if task_mode else await _model_display_name(data, login_user)
+    conversation, _is_new = await _open_conversation(data, login_user)
+    conversation_id = conversation.chat_id
+    # ``knowledge`` of a direct message is the resolved list the tool assembly
+    # takes; a deep-research message keeps the raw selection for the task core.
+    if task_mode:
+        knowledge: Any = data.use_knowledge_base.model_dump(mode="json") if data.use_knowledge_base else []
+    else:
+        knowledge = await chat_service._resolve_user_kb_selection(data)
+    tools = [tool.model_dump() for tool in (data.tools or [])]
+
+    svc = await run_services()
+    result = await svc.dispatch.submit(
+        conversation_id,
+        {
+            "text": data.text or "",
+            "task_mode": task_mode,
+            "tools": tools,
+            "skills": list(data.skills or []) if task_mode else [],
+            "knowledge": knowledge,
+            "files": data.files or [],
+            "user_id": login_user.user_id,
+            "tenant_id": tenant_id,
+        },
+    )
+
+    if result.kind not in (KIND_NEW_RUN, KIND_ANSWER):
+        # The message is in the inbox; the running (or relay) run reads it.
+        if negotiated:
+            return _json(result, conversation_id)
+        return StreamingResponse(iter(_closing_frames(conversation_id)), media_type=_SSE)
+
+    try:
+        if result.profile == PROFILE_PLANNED:
+            return await _start_planned(
+                request, data, login_user, conversation, result, negotiated, memory_register, tenant_id
+            )
+        return await _start_direct(
+            svc,
+            request,
+            data,
+            login_user,
+            conversation,
+            result,
+            negotiated,
+            memory_register,
+            tenant_id=tenant_id,
+            tools=tools,
+            knowledge=knowledge if isinstance(knowledge, list) else [],
+            sender=sender,
+        )
+    except BaseException:
+        if result.kind == KIND_ANSWER:
+            # The answer did not reach the run: it waits for the user again.
+            await svc.lease.park(conversation_id, result.run_id)
+        else:
+            await _abandon_run(svc, conversation_id, result.run_id)
+        raise
+
+
+async def _start_planned(request, data, login_user, conversation, result, negotiated, memory_register, tenant_id):
+    conversation_id = conversation.chat_id
+    if result.kind == KIND_ANSWER:
+        version = await _enqueue_planned_resume(conversation_id, data.text or "", tenant_id)
+    else:
+
+        async def register(session, _version):
+            await register_session(memory_register, session.chat_id)
+
+        # The conversation already exists, so the task core continues it.
+        turn = data.model_copy(update={"conversationId": conversation_id, "project_id": None})
+        _session, version = await _submit_task_turn(
+            turn, login_user, on_session_created=register if memory_register is not None else None
+        )
+        _spawn_title(request, data, login_user, conversation)
+    logger.info(
+        "unified send: planned run={} conversation={} version={} kind={}",
+        result.run_id,
+        conversation_id,
+        version.id,
+        result.kind,
+    )
+    return _json(result, conversation_id) if negotiated else _handoff_stream(version)
+
+
+async def _start_direct(
+    svc: RunServices,
+    request,
+    data: APIChatCompletion,
+    login_user: UserPayload,
+    conversation,
+    result: SubmitResult,
+    negotiated: bool,
+    memory_register,
+    *,
+    tenant_id: int,
+    tools: list,
+    knowledge: list,
+    sender: str,
+):
+    conversation_id = conversation.chat_id
+    is_resume = result.kind == KIND_ANSWER
+    question = await _insert_question_row(data, login_user, conversation_id, memory_register)
+
+    persisted = asyncio.Event()
+
+    async def on_persisted(_row: Any) -> None:
+        persisted.set()
+
+    projector = DirectRunProjector(
+        run_id=result.run_id,
+        conversation_id=conversation_id,
+        user_id=conversation.user_id,
+        sender=sender,
+        on_persisted=on_persisted,
+    )
+    if is_resume:
+        # The hooks of this execution do not see what the run wrote before it
+        # parked; the accumulated text of the run is in the Redis snapshot.
+        earlier = ((await svc.stream.snapshot(conversation_id)) or {}).get("text") or ""
+        if earlier:
+            projector.final_msg = earlier
+            projector.events.append({"type": "text", "content": earlier})
+
+    ctx = DirectRunContext(
+        conversation_id=conversation_id,
+        run_id=result.run_id,
+        tenant_id=tenant_id,
+        user_id=login_user.user_id,
+        message_id=result.message_id,
+        text=data.text or "",
+        model_id=data.model,
+        tools=tools,
+        knowledge=knowledge,
+        files=data.files or [],
+        is_resume=is_resume,
+        answer=(data.text or "") if is_resume else None,
+        initial_events=list(result.events),
+    )
+    start_direct_run(ctx, on_event=[projector.on_event])
+    logger.info(
+        "unified send: direct run={} conversation={} resume={} negotiated={}",
+        result.run_id,
+        conversation_id,
+        is_resume,
+        negotiated,
+    )
+    if not is_resume:
+        _spawn_title(request, data, login_user, conversation)
+    if negotiated:
+        return _json(result, conversation_id)
+    return StreamingResponse(_legacy_direct_stream(svc, ctx, question.id, data, projector, persisted), media_type=_SSE)
+
+
+# --------------------------------------------------------------------------- #
+# Unified events -> today's daily-chat SSE frames
+# --------------------------------------------------------------------------- #
+
+
+class LegacyFrameTranslator:
+    """Translate the unified events of ONE direct run to today's SSE frames.
+
+    Only bookkeeping of one HTTP response lives here (open thinking segment,
+    start frames of running tools); it is rebuilt from the stream on demand.
+    """
+
+    def __init__(self, conversation_id: str):
+        self.cid = conversation_id
+        self._thinking_call: Any = None
+        self._thinking_started: int | None = None
+        self._tools: dict[str, dict] = {}
+        self._sent_text = 0
+
+    def feed(self, event: dict) -> list[str]:
+        kind, data = event.get("type"), event.get("data") or {}
+        now_ms = int(event.get("ts") or time.time() * 1000)
+        if kind == run_events.THINKING:
+            return self._thinking(data, now_ms)
+        if kind == run_events.TEXT:
+            text = str(data.get("text") or "")
+            if not text:
+                return []
+            self._sent_text += len(text)
+            return [*self._close_thinking(now_ms), _sse_resp("agent_answer", "stream", {"msg": text}, self.cid)]
+        if kind == run_events.TOOL_CALL:
+            return self._tool_call(data, now_ms)
+        if kind == run_events.RESYNC:
+            # This reader fell behind the Stream's MAXLEN: send the text it missed.
+            text = str(data.get("text") or "")[self._sent_text :]
+            self._sent_text += len(text)
+            return [_sse_resp("agent_answer", "stream", {"msg": text}, self.cid)] if text else []
+        if kind in run_events.TERMINAL_EVENT_TYPES or kind == run_events.ASK_USER:
+            return self._close_thinking(now_ms)
+        # plan / file / queued / steer_* have no frame in today's daily stream.
+        return []
+
+    def _thinking(self, data: dict, now_ms: int) -> list[str]:
+        if data.get("namespace"):
+            return []
+        frames: list[str] = []
+        if self._thinking_started is not None and data.get("call_id") != self._thinking_call:
+            frames += self._close_thinking(now_ms)
+        if self._thinking_started is None:
+            self._thinking_started = now_ms
+            self._thinking_call = data.get("call_id")
+        frames.append(_sse_resp("agent_thinking", "stream", {"content": str(data.get("text") or "")}, self.cid))
+        return frames
+
+    def _close_thinking(self, now_ms: int) -> list[str]:
+        if self._thinking_started is None:
+            return []
+        duration = max(0, now_ms - self._thinking_started)
+        self._thinking_started = None
+        self._thinking_call = None
+        return [_sse_resp("agent_thinking", "end", {"duration_ms": duration}, self.cid)]
+
+    def _tool_call(self, data: dict, now_ms: int) -> list[str]:
+        extra_info = data.get("extra_info") or {}
+        if extra_info.get("namespace"):
+            return []
+        call_id, name = str(data.get("call_id") or ""), str(data.get("name") or "")
+        frames = self._close_thinking(now_ms)
+        if data.get("status") != "end":
+            start = {
+                "tool_call_id": call_id,
+                "tool_name": name,
+                "display_name": name,
+                "tool_type": "tool",
+                "args": redact_args(name, data.get("params") or {}),
+                "started_at": now_ms,
+            }
+            self._tools[call_id] = start
+            return [*frames, _sse_resp("agent_tool_call", "start", start, self.cid)]
+
+        start = self._tools.pop(call_id, None)
+        if start is None:
+            start = {
+                "tool_call_id": call_id,
+                "tool_name": name,
+                "display_name": name,
+                "tool_type": "tool",
+                "args": {},
+                "started_at": now_ms,
+            }
+            if extra_info.get("init_failed"):
+                # Today a tool that failed to initialise shows as start + end.
+                frames.append(
+                    _sse_resp(
+                        "agent_tool_call", "start", {k: v for k, v in start.items() if k != "started_at"}, self.cid
+                    )
+                )
+        output = data.get("output")
+        results = redact_results(name, output, chat_service._parse_tool_results)
+        payload = {
+            **start,
+            "results": results,
+            "error": redact_error(name, chat_service._extract_tool_error(output)),
+            "ended_at": now_ms,
+            "duration_ms": max(0, now_ms - start["started_at"]),
+        }
+        info = extra_info.get("failure_info") or FailureContextAdapter.from_payload(results)
+        if info:
+            payload["failure_info"] = info
+        return [*frames, _sse_resp("agent_tool_call", "end", payload, self.cid)]
+
+
+def _failure_frame(data: dict) -> str:
+    """``run_failed`` as today's ``event: error`` frame (same envelope keys)."""
+    payload = {
+        key: value
+        for key, value in {
+            "error_code": data.get("code"),
+            "error_type": data.get("reason"),
+            "detail": data.get("detail"),
+            "reference_id": data.get("reference_id"),
+            "failure_info": data.get("failure_info"),
+        }.items()
+        if value is not None
+    }
+    envelope = {
+        "status_code": data.get("code") or ServerError.Code,
+        "status_message": data.get("detail") or ServerError.Msg,
+        "data": payload,
+    }
+    return f"event: error\ndata: {json.dumps(envelope, ensure_ascii=False)}\n\n"
+
+
+async def _legacy_direct_stream(
+    svc: RunServices,
+    ctx: DirectRunContext,
+    question_id: Any,
+    data: APIChatCompletion,
+    projector: DirectRunProjector,
+    persisted: asyncio.Event,
+) -> AsyncIterator[str]:
+    """Today's daily-chat stream, produced from the event stream of the run.
+
+    Closing this response stops the run, as closing today's stream does: the
+    unmodified client has no other way to stop a direct answer.
+    """
+    cid = ctx.conversation_id
+    translator = LegacyFrameTranslator(cid)
+    terminal: dict | None = None
+    done = False
+    try:
+        yield user_message(question_id, cid, "User", data.text or "")
+        yield _sse_resp("processing", "begin", "", cid)
+        yield _sse_resp(
+            "question",
+            "over",
+            {"query": data.text or "", "files": data.files or []},
+            cid,
+            message_id=question_id,
+            is_bot=False,
+        )
+        async for event in follow_run_events(svc, cid):
+            if event.get("type") == HEARTBEAT_TYPE or event.get("run_id") != ctx.run_id:
+                # Heartbeats, and what is left on the Stream of the run before this one.
+                continue
+            for frame in translator.feed(event):
+                yield frame
+            if event["type"] in run_events.TERMINAL_EVENT_TYPES:
+                terminal = event
+                break
+            if event["type"] == run_events.ASK_USER:
+                # The run is parked; the next message of the user is its answer.
+                done = True
+                break
+
+        if terminal is None:
+            if not done:
+                logger.warning(
+                    "direct run={} conversation={}: the event stream ended without a result", ctx.run_id, cid
+                )
+            done = True
+            for frame in _closing_frames(cid):
+                yield frame
+            return
+
+        done = True
+        row = None
+        try:
+            await asyncio.wait_for(persisted.wait(), PERSIST_WAIT_SECONDS)
+            row = projector.answer_row
+        except TimeoutError:
+            logger.error("direct run={} conversation={}: the answer row was not saved in time", ctx.run_id, cid)
+        if row is None:
+            yield FailureContextAdapter.public_sse_text(ServerError())
+            for frame in _closing_frames(cid):
+                yield frame
+            return
+        if terminal["type"] == run_events.RUN_FAILED:
+            yield _failure_frame(terminal.get("data") or {})
+        content = json.loads(row.message)
+        files = json.loads(row.files) if getattr(row, "files", None) else []
+        yield _sse_resp("agent_answer", "end", {**content, "files": files}, cid, message_id=row.id, citations=[])
+        for frame in _closing_frames(cid, row.id):
+            yield frame
+    finally:
+        if not done:
+            logger.warning("direct run={} conversation={}: the client closed the stream; stopping", ctx.run_id, cid)
+            _background(svc.lease.request_stop(ctx.run_id, cid), f"stop:{ctx.run_id}")

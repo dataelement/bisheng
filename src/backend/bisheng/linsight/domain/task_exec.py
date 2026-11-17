@@ -2,6 +2,7 @@ import asyncio
 import os
 import re
 import shutil
+import time
 import traceback
 from collections.abc import Callable
 from contextlib import asynccontextmanager
@@ -40,12 +41,14 @@ from bisheng.linsight.domain.services.agent_factory import _resolve_model, creat
 from bisheng.linsight.domain.services.memory_turns import LinsightMemoryRound, redact_exec_step
 from bisheng.linsight.domain.services.binary_content_guard import CODE_INTERPRETER_TOOL
 from bisheng.linsight.domain.services.resilience_middleware import _MAX_STATE_ONLY_REFUNDS
+from bisheng.linsight.domain.services import run_metrics
+from bisheng.linsight.domain.services.run_event_stream import EventWriter, RunEventStream
 from bisheng.linsight.domain.services.state_message_manager import (
     LinsightStateMessageManager,
     MessageData,
     MessageEventType,
 )
-from bisheng.linsight.domain.services.stream_event_mapper import StreamEventMapper
+from bisheng.linsight.domain.services.stream_event_mapper import StreamEventMapper, UnifiedEventOutput
 from bisheng.linsight.domain.services.tool_loop_middleware import LinsightToolLoopError
 from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
 from bisheng.linsight.domain.services.workspace_backend import (
@@ -177,6 +180,200 @@ async def _unified_runtime_enabled(tenant_id: int | None) -> bool:
     return await is_unified_runtime_enabled(tenant_id)
 
 
+# ==================== Unified channel of a planned run (F004 T034) ====================
+
+PLANNED_PROFILE = "planned"
+# Key inside ``api_meta`` holding the run id the send entry gave a planned run,
+# when that id is not the session version id. Like the thread id, it sits next
+# to the Open API keys; ``is_unattended_run`` only looks at ``channel``.
+RUN_ID_META_KEY = "run_id"
+# LinsightTaskExecutionError: the umbrella code of "the task failed with an
+# internal error". Used for a run whose executor stopped renewing its lease.
+EXECUTOR_GONE_ERROR_CODE = 11091
+EXECUTOR_GONE_ERROR_TYPE = ErrorType.TASK_ABORTED.value
+EXECUTOR_GONE_MESSAGE = "The run stopped renewing its lease; the process that executed it is gone."
+# How often a running planned run looks at its stop flag (design 决策 3).
+UNIFIED_STOP_POLL_SECONDS = 1
+
+
+async def _run_redis():
+    """The asyncio Redis connection that holds the run state (lease, inbox, event stream)."""
+    from bisheng.core.cache.redis_manager import get_redis_client
+
+    return (await get_redis_client()).async_connection
+
+
+async def _find_run_record(conversation_id: str, run_id: str) -> LinsightSessionVersion | None:
+    """The run record of a planned run: its id is the run id, or it stores the run id."""
+    version = await LinsightSessionVersionDao.get_by_id(run_id)
+    if version is not None and version.session_id == conversation_id:
+        return version
+    for candidate in await LinsightSessionVersionDao.get_session_versions_by_session_id(conversation_id):
+        meta = candidate.api_meta if isinstance(candidate.api_meta, dict) else {}
+        if meta.get(RUN_ID_META_KEY) == run_id:
+            return candidate
+    return None
+
+
+async def mark_run_expired(conversation_id: str, run_id: str) -> None:
+    """``on_run_expired`` of ``RunDispatchService``: a run stopped renewing its lease.
+
+    Writes ``run_failed`` to the conversation's event stream and, when the run
+    has a run record (a planned run), marks that record failed and tells the
+    legacy WebSocket subscribers. A direct run has no run record.
+    """
+    await RunEventStream(await _run_redis()).append(
+        conversation_id,
+        {
+            "type": "run_failed",
+            "run_id": run_id,
+            "data": {
+                "code": EXECUTOR_GONE_ERROR_CODE,
+                "reason": "lease_expired",
+                "detail": EXECUTOR_GONE_MESSAGE,
+                "reference_id": run_id,
+            },
+        },
+    )
+    # The caller may be an API request of the conversation's tenant or a worker
+    # without tenant context; the record is addressed by id either way.
+    with bypass_tenant_filter():
+        version = await _find_run_record(conversation_id, run_id)
+        if version is None:
+            return
+        if version.status not in (SessionVersionStatusEnum.NOT_STARTED, SessionVersionStatusEnum.IN_PROGRESS):
+            logger.info(
+                "expired run={} of conversation={}: record {} is already {}; left as it is",
+                run_id,
+                conversation_id,
+                version.id,
+                version.status,
+            )
+            return
+        version.status = SessionVersionStatusEnum.FAILED
+        version.output_result = {
+            **(version.output_result or {}),
+            "error_message": EXECUTOR_GONE_MESSAGE,
+            "error_code": EXECUTOR_GONE_ERROR_CODE,
+            "error_type": EXECUTOR_GONE_ERROR_TYPE,
+            "detail": EXECUTOR_GONE_MESSAGE,
+        }
+        await LinsightSessionVersionDao.insert_one(version)
+        await LinsightExecuteTaskDao.batch_update_status_by_session_version_id(
+            session_version_ids=[version.id],
+            status=ExecuteTaskStatusEnum.FAILED,
+            where=(
+                LinsightExecuteTask.status != ExecuteTaskStatusEnum.SUCCESS,
+                LinsightExecuteTask.status != ExecuteTaskStatusEnum.FAILED,
+            ),
+        )
+        await linsight_execute_utils.announce_stranded_session_failure(version.id)
+    logger.warning("expired run={} of conversation={}: record {} marked failed", run_id, conversation_id, version.id)
+
+
+async def build_run_dispatch(redis=None, clock: Callable[[], float] | None = None):
+    """``RunDispatchService`` with its production wiring.
+
+    Relay runs go to the Linsight worker queue, an expired run is reported by
+    ``mark_run_expired``, the queue position of a new planned run is read from
+    the worker queue. Imported lazily: the workstation package imports linsight.
+    """
+    from bisheng.linsight.worker import enqueue_relay_run, planned_queue_position
+    from bisheng.workstation.domain.services.run_dispatch import RunDispatchService
+
+    return RunDispatchService(
+        redis if redis is not None else await _run_redis(),
+        clock=clock or time.time,
+        enqueue_relay=enqueue_relay_run,
+        on_run_expired=mark_run_expired,
+        queue_position=planned_queue_position,
+    )
+
+
+class _UnifiedRun:
+    """One execution of a planned run on the unified channel.
+
+    Holds only handles and translation bookkeeping of this execution in this
+    process. The run state itself (lease, stop flag, events, accumulated state)
+    is in Redis.
+    """
+
+    def __init__(
+        self,
+        *,
+        conversation_id: str,
+        run_id: str,
+        session_version_id: str,
+        redis,
+        lease,
+        dispatch,
+        stream: RunEventStream,
+    ):
+        self.conversation_id = conversation_id
+        self.run_id = run_id
+        self.session_version_id = session_version_id
+        self.redis = redis
+        self.lease = lease
+        self.dispatch = dispatch
+        self.stream = stream
+        self.lock_key = f"{LINSIGHT_RUN_LOCK_KEY_PREFIX}{session_version_id}"
+        self.writer = EventWriter(stream, conversation_id, run_id)
+        self.output = UnifiedEventOutput(StreamEventMapper(svid=session_version_id), self.emit, run_id=run_id)
+        # A terminal event was written (or must not be written any more).
+        self.terminal = False
+        # T038: which terminal event was written; whether the run parked on ask_user.
+        self.terminal_kind: str | None = None
+        self.parked = False
+        self.stop_requested = False
+        self.lease_lost = False
+        self.cancelled = False
+
+    async def emit(self, event: dict) -> None:
+        # A run that lost the conversation must not write into its successor's stream.
+        if self.lease_lost:
+            return
+        await self.writer.emit(event)
+
+    async def claim(self) -> None:
+        """Take the conversation for this run, or raise.
+
+        The send entry already reserved the conversation when the run came
+        through ``run_dispatch.submit`` (queued lease, or the "answer" branch):
+        ``renew`` then turns that reservation into the normal short lease. A run
+        queued by an entry that does not reserve (Open API, ``/workbench/*``)
+        acquires here.
+        """
+        if await self.lease.renew(self.conversation_id, self.run_id):
+            return
+        result = await self.lease.acquire(self.conversation_id, self.run_id, PLANNED_PROFILE)
+        if not result.acquired:
+            raise TaskExecutionError(
+                f"Conversation {self.conversation_id} is held by run {result.run_id} ({result.status}); "
+                f"run {self.run_id} was not started"
+            )
+        if result.expired_run_id and result.expired_run_id != self.run_id:
+            await mark_run_expired(self.conversation_id, result.expired_run_id)
+
+    async def open(self, *, resume: bool, answer=None) -> None:
+        """First event of this execution: ``run_started``, or ``ask_user_answered`` on a resume."""
+        snapshot = await self.stream.snapshot(self.conversation_id) if resume else None
+        if snapshot is not None and snapshot.get("run_id") == self.run_id and not snapshot.get("ended"):
+            self.output.seed_plan(snapshot.get("plan") or [])
+            # seed_plan also seeds the mapper's todos. The planned executor must
+            # keep emitting what it emits today on a resume (the replayed plan is
+            # announced again and saved idempotently), so the mapper starts empty;
+            # the output keeps the row ids, cancelled rows and previous wordings.
+            self.output.mapper.ctx.todos = []
+            pending = snapshot.get("pending_question") or {}
+            await self.output.ask_user_answered(call_id=pending.get("call_id"), answer=answer)
+            return
+        # run_started clears the stream: it holds the events of the current run only.
+        await self.output.run_started({"profile": PLANNED_PROFILE, "session_version_id": self.session_version_id})
+        if resume:
+            # The stream of the parked run is gone (expired); the answer still shows.
+            await self.output.ask_user_answered(answer=answer)
+
+
 def _resolve_recursion_limit(linsight_conf) -> int:
     """LangGraph ``recursion_limit`` for one task run — always above the turn budget.
 
@@ -216,6 +413,10 @@ class LinsightWorkflowTask:
     # stop request is detected promptly: at 2s a task that finishes within the
     # window escapes the cancel entirely (terminate-vs-complete race, 2026-06-18).
     USER_TERMINATION_CHECK_INTERVAL = 1
+
+    # F004: clock and sleep of the lease watcher, replaceable in tests.
+    _unified_clock = staticmethod(time.time)
+    _unified_sleep = staticmethod(asyncio.sleep)
 
     def __init__(self):
         self._state_manager: LinsightStateMessageManager | None = None
@@ -264,11 +465,289 @@ class LinsightWorkflowTask:
         # F132: long-term memory state of this run's round (begin at round start,
         # end once in the entry's finally; a no-op for unregistered / unattended runs).
         self._memory = LinsightMemoryRound()
+        # F004: set while this execution runs on the unified channel (tenant switch on).
+        self._unified: _UnifiedRun | None = None
+        # Run id the send entry gave this run (queue item ``run_id``); None = not given.
+        self._run_id_hint: str | None = None
+        # This execution answers a parked ask_user (async_resume) with ``_unified_answer``.
+        self._unified_resume: bool = False
+        self._unified_answer = None
 
     # ==================== Resource Management ====================
 
     @asynccontextmanager
     async def _acquire_session_run_lock(self):
+        """Hold the right to drive this run for the duration of the block.
+
+        Tenant on the unified runtime (F004): the conversation-level lease, see
+        ``_unified_run_scope``. Otherwise the legacy lock, unchanged.
+        """
+        run = await self._open_unified_run()
+        if run is None:
+            async with self._legacy_session_run_lock():
+                yield
+            return
+        async with self._unified_run_scope(run):
+            yield
+
+    # ==================== Unified channel (F004 T034) ====================
+
+    async def _open_unified_run(self) -> "_UnifiedRun | None":
+        """The unified-channel handles of this execution, or None on the legacy path."""
+        if not await _unified_runtime_enabled(current_tenant_id.get()):
+            return None
+        session_model = await self._get_session_model(self.session_version_id)
+        conversation_id = getattr(session_model, "session_id", None)
+        if not conversation_id:
+            return None
+        from bisheng.workstation.domain.services.run_lease import RunLeaseService
+
+        meta = session_model.api_meta if isinstance(session_model.api_meta, dict) else {}
+        hint = getattr(self, "_run_id_hint", None)
+        run_id = str(hint or meta.get(RUN_ID_META_KEY) or session_model.id)
+        if hint and meta.get(RUN_ID_META_KEY) != run_id and run_id != session_model.id:
+            # A later execution of this run (resume through an entry that passes no
+            # run id) and mark_run_expired find the run by this.
+            session_model.api_meta = {**meta, RUN_ID_META_KEY: run_id}
+            await LinsightSessionVersionDao.insert_one(session_model)
+        redis = await _run_redis()
+        clock = self._unified_clock
+        return _UnifiedRun(
+            conversation_id=conversation_id,
+            run_id=run_id,
+            session_version_id=session_model.id,
+            redis=redis,
+            lease=RunLeaseService(redis, clock=clock),
+            dispatch=await build_run_dispatch(redis, clock),
+            stream=RunEventStream(redis, wall_clock=clock),
+        )
+
+    @asynccontextmanager
+    async def _unified_run_scope(self, run: "_UnifiedRun"):
+        """Drive one execution of a planned run under the conversation lease (design 决策 3, 9).
+
+        Replaces the fixed 4-hour run lock:
+
+        * the conversation is held through ``run_lease`` and renewed every 10 s;
+        * ``linsight:run_lock:{svid}`` stays as the guard against two workers
+          driving the SAME run (a duplicate queue item), but as a 30 s key renewed
+          with the lease, so a dead worker frees it within the lease time;
+        * the stop flag of the run is polled every second;
+        * every exit ends in ``on_run_finished`` (idle or relay), except a run
+          parked on ask_user (``park``) and a cancelled worker (the lease lapses).
+        """
+        from bisheng.workstation.domain.services.run_lease import LEASE_SECONDS
+
+        # T038: the acceptance time must be read before ``claim`` renews the lease.
+        metrics = run_metrics.RunMetrics(
+            PLANNED_PROFILE, clock=self._unified_clock, resume=bool(getattr(self, "_unified_resume", False))
+        )
+        metrics.submitted_at = await run_metrics.read_submitted_at(run.redis, run.conversation_id, run.run_id)
+        if not await run.redis.set(run.lock_key, run.run_id, nx=True, ex=LEASE_SECONDS):
+            raise TaskAlreadyInProgressError("Task already in progress")
+        try:
+            await run.claim()
+        except BaseException:
+            await self._drop_driver_lock(run)
+            raise
+
+        self._unified = run
+        metrics_token = run_metrics.activate(metrics)
+        watch = asyncio.create_task(self._unified_watch(run))
+        try:
+            await run.open(
+                resume=bool(getattr(self, "_unified_resume", False)), answer=getattr(self, "_unified_answer", None)
+            )
+            yield
+        except (UserTerminationError, TaskAlreadyInProgressError):
+            raise
+        except asyncio.CancelledError:
+            # The worker is going down. No terminal event and no release: the lease
+            # lapses and the next access to the conversation reports the run as failed.
+            run.cancelled = True
+            logger.warning("planned run={} conversation={} was cancelled", run.run_id, run.conversation_id)
+            raise
+        except Exception as exc:
+            # The entry point records the failure on the run record after this
+            # block. The event must be in the stream BEFORE the conversation is
+            # released, or it would land in the stream of a relay run.
+            await self._emit_unified_terminal("failed", exc)
+            raise
+        finally:
+            watch.cancel()
+            await asyncio.gather(watch, return_exceptions=True)
+            self._unified = None
+            run_metrics.deactivate(metrics_token)
+            if not run.cancelled:
+                await asyncio.shield(self._close_unified_run(run))
+                await self._emit_unified_metric(run, metrics)
+
+    @staticmethod
+    async def _emit_unified_metric(run: "_UnifiedRun", metrics: "run_metrics.RunMetrics") -> None:
+        """T038: the ``agent_run`` metric line of this execution. Never raises."""
+        if run.lease_lost:
+            status = "lease_lost"
+        elif run.parked:
+            status = "waiting"
+        else:
+            status = run.terminal_kind or "unknown"
+        checkpoint_bytes = None
+        if metrics.thread_id:
+            from bisheng.linsight.domain.services.checkpointer import make_checkpointer
+
+            checkpoint_bytes = await run_metrics.checkpoint_size(make_checkpointer(), metrics.thread_id)
+        run_metrics.emit_run_metric(metrics, status, checkpoint_bytes)
+
+    async def _unified_watch(self, run: "_UnifiedRun") -> None:
+        """Poll the stop flag every second and renew the lease every 10 s."""
+        from bisheng.workstation.domain.services.run_lease import LEASE_SECONDS, RENEW_INTERVAL_SECONDS
+
+        clock, sleep = self._unified_clock, self._unified_sleep
+        next_renew = clock() + RENEW_INTERVAL_SECONDS
+        while True:
+            await sleep(UNIFIED_STOP_POLL_SECONDS)
+            try:
+                if await run.lease.should_stop(run.run_id):
+                    logger.info("planned run={} conversation={}: stop requested", run.run_id, run.conversation_id)
+                    run.stop_requested = True
+                    # The existing termination monitor turns this into a user stop.
+                    self._is_terminated = True
+                    return
+                if clock() < next_renew:
+                    continue
+                next_renew = clock() + RENEW_INTERVAL_SECONDS
+                if not await run.lease.renew(run.conversation_id, run.run_id):
+                    logger.warning(
+                        "planned run={} lost conversation={}; the run is stopped", run.run_id, run.conversation_id
+                    )
+                    run.lease_lost = True
+                    self._is_terminated = True
+                    return
+                await run.redis.expire(run.lock_key, LEASE_SECONDS)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                # One failed poll (Redis hiccup) must not end the run; if renewals
+                # keep failing the lease lapses and the run is reported as failed.
+                logger.exception(
+                    "planned run={} conversation={}: stop/lease poll failed", run.run_id, run.conversation_id
+                )
+
+    async def _close_unified_run(self, run: "_UnifiedRun") -> None:
+        """Park the run or hand the conversation on. Never raises."""
+        from bisheng.workstation.domain.services.run_lease import stop_key
+
+        try:
+            await run.writer.aclose()
+        except Exception:
+            logger.exception("planned run={}: could not flush the event writer", run.run_id)
+        parked = bool(getattr(self, "_waiting_for_input", False)) and not run.terminal and not run.lease_lost
+        run.parked = parked
+        try:
+            if parked:
+                # Waiting for the user's answer: the lease is dropped, the state
+                # keeps the run id so the answer resumes this run (AC-22).
+                if not await run.lease.park(run.conversation_id, run.run_id):
+                    logger.warning(
+                        "planned run={} asked the user but no longer holds conversation={}",
+                        run.run_id,
+                        run.conversation_id,
+                    )
+            else:
+                await run.dispatch.on_run_finished(run.conversation_id, run.run_id)
+        except Exception:
+            # The inbox is kept; the lease lapses and the next access to the
+            # conversation recovers it (run_dispatch contract).
+            logger.exception(
+                "planned run={} conversation={}: releasing the conversation failed", run.run_id, run.conversation_id
+            )
+        if not parked:
+            try:
+                # The flag is per run id, and a later round of the same session
+                # version reuses the id: a consumed stop must not stop that round.
+                await run.redis.delete(stop_key(run.run_id))
+            except Exception:
+                logger.exception("planned run={}: could not clear the stop flag", run.run_id)
+        await self._drop_driver_lock(run)
+
+    @staticmethod
+    async def _drop_driver_lock(run: "_UnifiedRun") -> None:
+        try:
+            await run.redis.delete(run.lock_key)
+        except Exception as e:
+            # It expires on its own within the lease time.
+            logger.warning("planned run={}: driver lock release failed: {}", run.run_id, e)
+
+    async def _emit_unified_terminal(self, kind: str, error: BaseException | str | None = None) -> None:
+        """Write the terminal event of this run to the unified channel. No-op on the legacy path.
+
+        The run record is the authority on the outcome and is written by the
+        caller; a failure to write the event is logged and does not change it.
+        """
+        run = getattr(self, "_unified", None)
+        if run is None or run.terminal or run.lease_lost:
+            return
+        try:
+            if kind == "finished":
+                await run.output.run_finished()
+            elif kind == "stopped":
+                await run.output.run_stopped("user")
+            else:
+                await run.output.run_failed(error if error is not None else "Task execution failed.")
+            await run.writer.flush()
+            run.terminal = True
+            run.terminal_kind = kind
+        except Exception:
+            logger.exception("planned run={}: could not write the {} event", run.run_id, kind)
+
+    async def _finish_unified_run(self, session_model: LinsightSessionVersion) -> None:
+        """The run completed: announce its deliverables, then ``run_finished``."""
+        run = getattr(self, "_unified", None)
+        if run is None or run.terminal or run.lease_lost:
+            return
+        try:
+            for info in (session_model.output_result or {}).get("final_files") or []:
+                if not isinstance(info, dict) or not info.get("file_id"):
+                    continue
+                await run.output.file(
+                    file_id=str(info["file_id"]),
+                    name=str(info.get("file_name") or ""),
+                    path=str(info.get("file_url") or ""),
+                    source="final_result",
+                )
+        except Exception:
+            logger.exception("planned run={}: could not write the file events", run.run_id)
+        await self._emit_unified_terminal("finished")
+
+    async def _emit_unified_steps(self, steps: list[BaseEvent]) -> None:
+        """Mirror steps the executor itself produces (not the model stream) to the unified channel."""
+        run = getattr(self, "_unified", None)
+        if run is None or run.terminal or run.lease_lost:
+            return
+        for event in run.output.convert(steps):
+            await run.emit(event)
+
+    def _stream_mapper(self, session_model: LinsightSessionVersion) -> StreamEventMapper:
+        """The mapper of this execution's model stream."""
+        run = getattr(self, "_unified", None)
+        if run is not None:
+            return run.output.mapper
+        return StreamEventMapper(svid=session_model.id)
+
+    async def _normalize_chunk(self, mapper: StreamEventMapper, mode, raw, namespace) -> list[BaseEvent]:
+        """Translate one stream chunk into the legacy events.
+
+        On the unified channel the same translation also publishes the unified
+        events of the chunk (``UnifiedEventOutput.feed``); the returned list is
+        what ``mapper.normalize`` returns either way.
+        """
+        run = getattr(self, "_unified", None)
+        if run is None or run.output.mapper is not mapper:
+            return mapper.normalize(mode, raw, namespace=namespace)
+        return await run.output.feed(mode, raw, namespace)
+
+    @asynccontextmanager
+    async def _legacy_session_run_lock(self):
         """Hold an exclusive driver lock for ``session_version_id``.
 
         Uses a single Redis ``SET key NX EX ttl``. SET returning False means
@@ -384,10 +863,12 @@ class LinsightWorkflowTask:
         self,
         session_version_id: str,
         tenant_id: int | None = None,
+        run_id: str | None = None,
     ) -> None:
         """Asynchronous Task Execution Entry"""
 
         self.session_version_id = session_version_id
+        self._run_id_hint = run_id
         trace_id_var.set(self.session_version_id)
         logger.info(f"Start the task: session_version_id={self.session_version_id}")
         tenant_context_token: Token | None = None
@@ -466,6 +947,7 @@ class LinsightWorkflowTask:
         session_version_id: str,
         user_input=None,
         tenant_id: int | None = None,
+        run_id: str | None = None,
     ) -> None:
         """Resume a parked (WAITING_FOR_USER_INPUT) task after the user answered.
 
@@ -478,6 +960,9 @@ class LinsightWorkflowTask:
         checkpointer let resume run in any worker process at any time.
         """
         self.session_version_id = session_version_id
+        self._run_id_hint = run_id
+        self._unified_resume = True
+        self._unified_answer = user_input
         trace_id_var.set(self.session_version_id)
         logger.info(f"Resume the task: session_version_id={self.session_version_id}")
         tenant_context_token: Token | None = None
@@ -609,11 +1094,15 @@ class LinsightWorkflowTask:
         from langgraph.types import Command
 
         linsight_conf = settings.get_linsight_conf()
-        mapper = StreamEventMapper(svid=session_model.id)
-        config = {
-            "configurable": {"thread_id": self._thread_id(session_model)},
-            "recursion_limit": _resolve_recursion_limit(linsight_conf),
-        }
+        mapper = self._stream_mapper(session_model)
+        # T038: on the unified channel the config also marks the first model request.
+        config = run_metrics.with_metric_callback(
+            {
+                "configurable": {"thread_id": self._thread_id(session_model)},
+                "recursion_limit": _resolve_recursion_limit(linsight_conf),
+            },
+            run_metrics.current(),
+        )
         try:
             async for chunk in agent.astream(
                 Command(resume=user_input),
@@ -624,7 +1113,7 @@ class LinsightWorkflowTask:
                 mode, raw, namespace = self._unpack_stream_chunk(chunk)
                 if mode == "values" and not namespace and isinstance(raw, dict):
                     self._capture_values_snapshot(raw)
-                for event in mapper.normalize(mode, raw, namespace=namespace):
+                for event in await self._normalize_chunk(mapper, mode, raw, namespace):
                     await self._handle_event(agent, event, session_model)
         except (LinsightToolLoopError, GraphRecursionError) as e:
             # L3/L4 on the resume path: stash the salvage; the caller's
@@ -638,6 +1127,7 @@ class LinsightWorkflowTask:
         session_version_id: str,
         question: str,
         tenant_id: int | None = None,
+        run_id: str | None = None,
     ) -> None:
         """Continue a finished conversation with a new user turn (F035 multi-turn).
 
@@ -651,6 +1141,7 @@ class LinsightWorkflowTask:
         "new version per submit" model is bypassed for follow-ups).
         """
         self.session_version_id = session_version_id
+        self._run_id_hint = run_id
         trace_id_var.set(self.session_version_id)
         logger.info(f"Continue the conversation: session_version_id={self.session_version_id}")
         tenant_context_token: Token | None = None
@@ -720,11 +1211,15 @@ class LinsightWorkflowTask:
         history and the agent answers with full prior context.
         """
         linsight_conf = settings.get_linsight_conf()
-        mapper = StreamEventMapper(svid=session_model.id)
-        config = {
-            "configurable": {"thread_id": self._thread_id(session_model)},
-            "recursion_limit": _resolve_recursion_limit(linsight_conf),
-        }
+        mapper = self._stream_mapper(session_model)
+        # T038: on the unified channel the config also marks the first model request.
+        config = run_metrics.with_metric_callback(
+            {
+                "configurable": {"thread_id": self._thread_id(session_model)},
+                "recursion_limit": _resolve_recursion_limit(linsight_conf),
+            },
+            run_metrics.current(),
+        )
         # Prepend the current-time block (same rationale as _build_agent_input):
         # per-task time awareness without busting the static system-prompt cache.
         agent_input = {
@@ -740,7 +1235,7 @@ class LinsightWorkflowTask:
                 mode, raw, namespace = self._unpack_stream_chunk(chunk)
                 if mode == "values" and not namespace and isinstance(raw, dict):
                     self._capture_values_snapshot(raw)
-                for event in mapper.normalize(mode, raw, namespace=namespace):
+                for event in await self._normalize_chunk(mapper, mode, raw, namespace):
                     await self._handle_event(agent, event, session_model)
         except (LinsightToolLoopError, GraphRecursionError) as e:
             # L3/L4 on the continue path: stash the salvage; the caller's
@@ -947,6 +1442,7 @@ class LinsightWorkflowTask:
             await self._state_manager.push_message(
                 MessageData(event_type=MessageEventType.TASK_EXECUTE_STEP, data=step.model_dump())
             )
+            await self._emit_unified_steps([step])
         except Exception as e:
             # Progress rendering is not worth failing an ingest over.
             logger.warning(f"Failed to push ingest progress step for {svid}: {e}")
@@ -1422,6 +1918,7 @@ class LinsightWorkflowTask:
             await self._state_manager.push_message(
                 MessageData(event_type=MessageEventType.TASK_EXECUTE_STEP, data=step.model_dump())
             )
+            await self._emit_unified_steps([step])
         except Exception as e:
             logger.warning(f"Failed to push skill-load-failure step for {svid}: {e}")
 
@@ -1670,7 +2167,7 @@ class LinsightWorkflowTask:
         ``_handle_event`` (design §3.2 / §3.4).
         """
         linsight_conf = settings.get_linsight_conf()
-        mapper = StreamEventMapper(svid=session_model.id)
+        mapper = self._stream_mapper(session_model)
 
         async def agent_execution():
             """Agent performs a task via astream + mapper."""
@@ -1689,11 +2186,15 @@ class LinsightWorkflowTask:
             knowledge_block = await self._resolve_knowledge_block(session_model)
             # First-message input: prior context + question + sop + file pointer block.
             task_input = self._build_agent_input(session_model, file_list, history_summary, knowledge_block)
-            config = {
-                "configurable": {"thread_id": self._thread_id(session_model)},
-                # max_steps -> recursion_limit (design §2.5)
-                "recursion_limit": _resolve_recursion_limit(linsight_conf),
-            }
+            config = run_metrics.with_metric_callback(
+                {
+                    "configurable": {"thread_id": self._thread_id(session_model)},
+                    # max_steps -> recursion_limit (design §2.5)
+                    "recursion_limit": _resolve_recursion_limit(linsight_conf),
+                },
+                # T038: only on the unified channel (None on the legacy path).
+                run_metrics.current(),
+            )
             # subgraphs=True so subagent (子图) events冒泡父流 with a namespace
             # prefix the mapper uses to归并 nested step cards (design §3.1/§3.7).
             # LIVE (design #1, 2026-06-17): the `task` subagent tool is RE-ENABLED —
@@ -1714,7 +2215,7 @@ class LinsightWorkflowTask:
                 # left tool calls pending (drives the abort classification).
                 if mode == "values" and not namespace and isinstance(raw, dict):
                     self._capture_values_snapshot(raw)
-                for event in mapper.normalize(mode, raw, namespace=namespace):
+                for event in await self._normalize_chunk(mapper, mode, raw, namespace):
                     await self._handle_event(agent, event, session_model)
             return True
 
@@ -2194,6 +2695,17 @@ class LinsightWorkflowTask:
         """Handling user unsolicited termination"""
         logger.info(f"Handling User Termination {session_model.id}")
 
+        run = getattr(self, "_unified", None)
+        if run is not None and run.lease_lost:
+            # Not a user stop: the conversation was taken from this run (its lease
+            # lapsed, or the state was reset). Whoever took it over reports the run
+            # as failed (mark_run_expired); record the failure here only when that
+            # has not happened, so the record never stays "in progress".
+            current = await self._state_manager.get_session_version_info()
+            if current is None or current.status != SessionVersionStatusEnum.FAILED:
+                await self._handle_task_failure(session_model, EXECUTOR_GONE_MESSAGE)
+            return
+
         session_model.status = SessionVersionStatusEnum.TERMINATED
         session_model.output_result = {"answer": "Task has been actively stopped by the user"}
 
@@ -2213,6 +2725,7 @@ class LinsightWorkflowTask:
                 },
             )
         )
+        await self._emit_unified_terminal("stopped")
 
     # ==================== Task Completion Processing ====================
 
@@ -2342,6 +2855,7 @@ class LinsightWorkflowTask:
         await self._state_manager.push_message(
             MessageData(event_type=MessageEventType.FINAL_RESULT, data=session_model.model_dump())
         )
+        await self._finish_unified_run(session_model)
         logger.info(f"Task completed via direct-answer fallback ({len(final_files)} report files)")
 
     def _flag_phantom_deliverables(self, session_model, answer: str, final_files: list[dict]) -> None:
@@ -2638,6 +3152,7 @@ class LinsightWorkflowTask:
         await self._state_manager.push_message(
             MessageData(event_type=MessageEventType.FINAL_RESULT, data=session_model.model_dump())
         )
+        await self._finish_unified_run(session_model)
         logger.info(f"Task completed via partial-result salvage ({len(final_files)} files)")
 
     async def _handle_task_success(self, session_model: LinsightSessionVersion):
@@ -2694,6 +3209,7 @@ class LinsightWorkflowTask:
             await self._state_manager.push_message(
                 MessageData(event_type=MessageEventType.FINAL_RESULT, data=session_model.model_dump())
             )
+            await self._finish_unified_run(session_model)
 
             logger.info(f"Task completed successfully, processed {len(final_result_files)} files")
 
@@ -2804,6 +3320,11 @@ class LinsightWorkflowTask:
                 | message_detail,
             )
         )
+        # F004. Looked up on the instance: a test runs this handler with a stand-in
+        # ``self`` and its own globals, so only attribute access is safe here.
+        emit_terminal = getattr(self, "_emit_unified_terminal", None)
+        if emit_terminal is not None:
+            await emit_terminal("failed", exc if exc is not None else error_msg)
         system_config = await settings.aget_all_config()
         # DapatkanLinsight_invitation_code
         linsight_invitation_code = system_config.get("linsight_invitation_code", False)

@@ -931,6 +931,27 @@ class UnifiedEventOutput:
         self._cancelled: dict[str, tuple[int, run_events.PlanItem]] = {}
         self._plan_ids: list[str] = []
 
+    def seed_plan(self, items: list[Any] | None) -> None:
+        """Take over the plan of a run that continues with a new mapper.
+
+        A run that resumes after ``ask_user`` gets a fresh mapper and a fresh
+        output. ``items`` is the plan of the Redis snapshot (the last ``plan``
+        event). Seeding keeps row ids stable across the pause and keeps the
+        cancelled rows and the ``previous_content`` of reworded rows.
+        """
+        todos: list[_TodoProjection] = []
+        self._plan_ids = []
+        for position, raw in enumerate(items or []):
+            item = raw if isinstance(raw, run_events.PlanItem) else run_events.PlanItem.model_validate(raw)
+            self._plan_ids.append(item.id)
+            if item.previous_content:
+                self._previous_content[item.id] = item.previous_content
+            if item.status == run_events.PLAN_CANCELLED:
+                self._cancelled[item.id] = (position, item)
+            else:
+                todos.append(_TodoProjection(task_id=item.id, content=item.content, status=item.status))
+        self.mapper.ctx.todos = todos
+
     # -- stream ------------------------------------------------------------
 
     async def feed(self, mode: str, chunk: Any, namespace: tuple[str, ...] | None = None) -> list[BaseEvent]:

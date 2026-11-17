@@ -585,6 +585,40 @@ def _log_generated_files(chat_id: str, files: list[dict]) -> None:
     )
 
 
+def build_daily_answer_row(
+    *,
+    user_id: int,
+    chat_id: str,
+    sender: str,
+    db_content: dict,
+    files: list[dict] | None = None,
+    error: dict | None = None,
+) -> ChatMessage:
+    """The answer row of one daily-chat turn.
+
+    One builder for the SSE path and the F004 run projector, so both write the
+    same row. ``error`` holds ``error_msg`` plus the public failure metadata of a
+    turn that failed or was interrupted; None for a clean turn.
+    """
+    return ChatMessage(
+        files=json.dumps(files, ensure_ascii=False) if files else None,
+        user_id=user_id,
+        chat_id=chat_id,
+        flow_id="",
+        type="end",
+        is_bot=True,
+        # `default` is a last-resort net: tool results are already
+        # sanitised by _parse_tool_results, but a serialisation crash
+        # here would abort the stream and lose the whole turn, so never
+        # let an unexpected object type get that far.
+        message=json.dumps(db_content, ensure_ascii=False, default=str),
+        category="agent_answer",
+        sender=sender,
+        extra=json.dumps({"error": True, **error}) if error is not None else "{}",
+        source=0,
+    )
+
+
 def _wrap_daily_chat_citation_tool(
     tool: BaseTool,
     citation_collector: CitationRegistryCollector,
@@ -1993,22 +2027,13 @@ async def _agent_stream_chat_completion(
             return _sse_resp("agent_answer", "stream", {"msg": text}, conversation_id)
 
         def build_answer_row(db_content: dict, files: list[dict] | None = None) -> ChatMessage:
-            return ChatMessage(
-                files=json.dumps(files, ensure_ascii=False) if files else None,
+            return build_daily_answer_row(
                 user_id=conversation.user_id,
                 chat_id=conversation_id,
-                flow_id="",
-                type="end",
-                is_bot=True,
-                # `default` is a last-resort net: tool results are already
-                # sanitised by _parse_tool_results, but a serialisation crash
-                # here would abort the stream and lose the whole turn, so never
-                # let an unexpected object type get that far.
-                message=json.dumps(db_content, ensure_ascii=False, default=str),
-                category="agent_answer",
                 sender=model_info.displayName,
-                extra=json.dumps({"error": True, "error_msg": error_msg, **error_metadata}) if error_flag else "{}",
-                source=0,
+                db_content=db_content,
+                files=files,
+                error={"error_msg": error_msg, **error_metadata} if error_flag else None,
             )
 
         async def persist_safety_replacement(auto_reply: str):
@@ -2808,6 +2833,19 @@ def _department_limit_stream_response() -> StreamingResponse:
     )
 
 
+async def _unified_runtime_on(login_user: UserPayload, session_subject: SessionSubject | None) -> bool:
+    """Whether this request goes through the unified runtime (F004).
+
+    The Open API entry (it passes ``session_subject``) keeps today's path: its
+    contract is unchanged by F004 P1.
+    """
+    if session_subject is not None:
+        return False
+    from .workstation_service import is_unified_runtime_enabled
+
+    return await is_unified_runtime_enabled(workbench_tenant_id(login_user))
+
+
 async def stream_chat_completion(
     request: Request,
     data: APIChatCompletion,
@@ -2828,7 +2866,14 @@ async def stream_chat_completion(
     ``memory_register`` (F132) is passed only by the login-state endpoint; the
     open-API entry calls this function without it, so its turns never use
     long-term memory (AC-10).
+
+    F004: a tenant whose unified-runtime switch is on is served by
+    ``run_send.unified_send``. With the switch off everything below is unchanged.
     """
+    if await _unified_runtime_on(login_user, session_subject):
+        from . import run_send
+
+        return await run_send.unified_send(request, data, login_user, memory_register=memory_register)
     if data.task_mode:
         # The submit core inside ``_task_mode_stream_completion`` finishes before
         # it returns the handoff stream, so the execution lease covers exactly

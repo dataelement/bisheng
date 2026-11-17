@@ -613,6 +613,7 @@ class WorkspaceBackend(FilesystemBackend):
         citation_scope=None,
         *,
         workspace_prefix: str | None = None,
+        create_cache_dir: bool = True,
     ) -> None:
         if not _DEEPAGENTS_AVAILABLE:
             # TODO(Wave2): align with deepagents FilesystemBackend once the
@@ -648,7 +649,10 @@ class WorkspaceBackend(FilesystemBackend):
         # or delete during the run is visible. ``skill_row_enabled`` is a test seam.
         self.skill_snapshot: list[dict] | None = None
         self.skill_row_enabled = None
-        os.makedirs(self.file_dir, exist_ok=True)
+        # F004 决策 10: a ``direct`` run passes False so a run that touches no file
+        # creates no local directory. ``_cache_write`` creates parents on demand.
+        if create_cache_dir:
+            os.makedirs(self.file_dir, exist_ok=True)
 
     # -- key / cache helpers ------------------------------------------------
     def _ws_rel(self, path: str) -> str:

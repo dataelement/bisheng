@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-11-18 用户确认，51 条 AC |
 | design.md | ✅ 已评审 | 2026-11-18 用户确认，决策 1 至决策 12；接手时的第一入口 |
 | tasks.md | ✅ 已拆解 | 2026-11-18 `/sdd-review tasks` 自审通过；任务编号 T001 至 T063，T063 排在 T044 之后 |
-| 实现 | 🔨 进行中 | 9 / 63 完成（Wave 0 全部完成，2026-11-18，未提交）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🔨 进行中 | 38 / 63 完成（Wave 0 与 Wave 1 的 T010–T038 已提交；T039 的界面步骤待人工执行，见 verification-p1.md）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
 
 ---
 
@@ -88,201 +88,201 @@
 
 ### Wave 1（P1）：统一内核、会话线程、事件通道、发送入口（用户不可见）
 
-- [ ] **T010**: 新旧通道切换开关
+- [x] **T010**: 新旧通道切换开关
   **文件**: `bisheng/core/config/settings.py`（或工作台配置所在文件，以现有 `daily_chat` 配置的位置为准）、`bisheng/workstation/domain/services/workstation_service.py`
   **逻辑**: 增加按租户生效的布尔项 `unified_runtime_enabled`，缺省 `false`。提供 `is_unified_runtime_enabled(tenant_id)` 读取函数。未知键在旧镜像上被忽略，不影响启动。
   **依赖**: 无
 
-- [ ] **T011**: 事件流读写的单元测试
+- [x] **T011**: 事件流读写的单元测试
   **文件**: `test/linsight/test_run_event_stream.py`
   **逻辑**: 断言：写入返回递增的条目 id；从某个游标读只得到其后的事件；超过 `MAXLEN` 后最早的条目被裁掉；游标早于现存最早条目时读取端先得到一个 `resync` 事件，内容等于累计状态；逐字事件在 50 毫秒窗口内被合并成一条；运行结束后流在 1 小时后过期。
   **测试**: `test_append_and_read_from_cursor`、`test_maxlen_trims`、`test_stale_cursor_gets_resync`、`test_text_coalescing`、`test_stream_expires_after_run`
   **覆盖 AC**: AC-31
   **依赖**: T001
 
-- [ ] **T012**: 事件流读写实现
+- [x] **T012**: 事件流读写实现
   **文件**: `bisheng/linsight/domain/services/run_event_stream.py`
   **逻辑**: 提供 `append(conversation_id, event)`、`read(conversation_id, cursor)`（异步迭代）、`snapshot(conversation_id)`、`update_snapshot(...)`。键：`bisheng:run:events:{conversation_id}`（Stream）与 `bisheng:run:snapshot:{conversation_id}`（累计状态）。事件外形与类型见 design §4.3。
   **测试**: T011 全部通过
   **覆盖 AC**: AC-31
   **依赖**: T011
 
-- [ ] **T013**: 运行租约与停止标记的单元测试
+- [x] **T013**: 运行租约与停止标记的单元测试
   **文件**: `test/workstation/test_run_lease.py`
   **逻辑**: 断言：占用租约后同一会话再次占用失败；续租延长过期时间；不续租则 30 秒后租约消失；设置停止标记后 `should_stop(run_id)` 在 1 秒内返回真；运行进入“等待用户回答”时租约释放且状态变为 `waiting`。
   **测试**: `test_acquire_is_exclusive`、`test_renew_extends`、`test_expires_without_renew`、`test_stop_flag_visible`、`test_park_releases_lease`
   **覆盖 AC**: AC-22, AC-29, AC-33
   **依赖**: 无
 
-- [ ] **T014**: 运行租约与停止标记实现
+- [x] **T014**: 运行租约与停止标记实现
   **文件**: `bisheng/workstation/domain/services/run_lease.py`
   **逻辑**: 会话状态键 `bisheng:run:state:{conversation_id}`（字段：`status` 取 `idle`/`running`/`waiting`，`run_id`，`profile`，`lease_until`）。提供 `acquire`、`renew`、`release`、`park`、`request_stop`、`should_stop`。所有状态只存 Redis，不存进程内存。
   **测试**: T013 全部通过
   **覆盖 AC**: AC-22, AC-29, AC-33
   **依赖**: T013
 
-- [ ] **T015**: 发送入口原子判断的单元测试
+- [x] **T015**: 发送入口原子判断的单元测试
   **文件**: `test/workstation/test_run_dispatch.py`
   **逻辑**: 断言四个分支：空闲时返回 `started` 并占用租约；运行中且租约有效时消息进收件箱并返回 `queued`；等待回答时消息作为回答、返回 `started`、不新建运行；运行中但租约过期时旧运行被标失败并发 `run_failed`，随后按空闲处理。并发断言：同一会话并发提交 20 条，恰好 1 条得到 `started`，其余 19 条进收件箱且顺序与提交顺序一致。结束断言：运行结束时收件箱非空则产生一次接力运行，档位取收件箱第一条消息携带的设置，接力运行被投进 worker 队列；收件箱为空则状态回到空闲。排队断言：`planned` 档没有空闲名额时返回的事件里有 `queued` 与位置。
   **测试**: `test_idle_starts_run`、`test_running_enqueues`、`test_waiting_treated_as_answer`、`test_expired_lease_fails_old_run`、`test_concurrent_send_single_run`、`test_finish_with_inbox_starts_relay`、`test_finish_empty_goes_idle`、`test_planned_queue_position`
   **覆盖 AC**: AC-16, AC-17, AC-20, AC-21, AC-33, AC-36
   **依赖**: T014
 
-- [ ] **T016**: 发送入口原子判断实现
+- [x] **T016**: 发送入口原子判断实现
   **文件**: `bisheng/workstation/domain/services/run_dispatch.py`、`bisheng/workstation/domain/services/run_dispatch.lua`
   **逻辑**: 两段 Lua：`dispatch`（四分支）与 `finish`（置空闲并检查收件箱）。收件箱键 `bisheng:run:inbox:{conversation_id}`，每条是 JSON：`{message_id, text, task_mode, tools, skills, knowledge, files, user_id, tenant_id, ts}`。`submit(conversation_id, message) -> {run_id, disposition, message_id}`；`on_run_finished(conversation_id)` 负责接力。接力运行的队列项带 `tenant_id`。
   **测试**: T015 全部通过
   **覆盖 AC**: AC-16, AC-17, AC-20, AC-21, AC-33, AC-36
   **依赖**: T015
 
-- [ ] **T017**: 统一事件映射的单元测试
+- [x] **T017**: 统一事件映射的单元测试
   **文件**: `test/linsight/test_unified_event_mapping.py`
   **逻辑**: 用脚本化模型跑一次 `planned` 运行，断言映射器产出的事件序列包含 `run_started`、`plan`（完整条目列表，含 `id`/`content`/`status`，改写后带 `previous_content`，被去掉的条目状态为 `cancelled`）、`tool_call`、`text`、`run_finished`；`plan` 事件能算出“已完成条数 / 总条数”；模型调用抛错时产出 `run_failed`，`data` 含 `code`、`reason`、`detail`、`reference_id`；`interrupt` 产出 `ask_user`。
   **测试**: `test_planned_event_sequence`、`test_plan_event_full_snapshot`、`test_plan_progress_counts`、`test_cancelled_item_status`、`test_run_failed_fields`、`test_interrupt_maps_to_ask_user`
   **覆盖 AC**: AC-08, AC-10, AC-20, AC-32, AC-35
   **依赖**: T007
 
-- [ ] **T018**: 统一事件映射实现
+- [x] **T018**: 统一事件映射实现
   **文件**: `bisheng/linsight/domain/services/stream_event_mapper.py`、`bisheng/linsight/domain/schemas/run_events.py`
   **逻辑**: 新增事件 schema（design §4.3 的类型与 `data` 字段）。映射器增加一个输出口，把现有内部事件转成统一事件并交给 `run_event_stream.append`；现有输出口保留，供旧通道使用。
   **测试**: T017 全部通过
   **覆盖 AC**: AC-08, AC-10, AC-20, AC-32, AC-35
   **依赖**: T012, T017
 
-- [ ] **T019**: 统一内核工厂两个档位的单元测试
+- [x] **T019**: 统一内核工厂两个档位的单元测试
   **文件**: `test/linsight/test_agent_factory_profiles.py`
   **逻辑**: 断言：`direct` 档绑定的工具不含 `write_todos`，系统提示词不含计划指令；`planned` 档含 `write_todos`；两个档位在传入相同的工具、知识库、联网搜索、技能、代码执行、记忆设置时，绑定的业务工具集合相同；两个档位都绑定 `ask_user`；无人值守渠道下两个档位都不绑定 `ask_user`。
   **测试**: `test_direct_has_no_todos`、`test_planned_has_todos`、`test_same_business_tools_in_both_profiles`、`test_ask_user_in_both_profiles`、`test_unattended_has_no_ask_user`
   **覆盖 AC**: AC-02, AC-03, AC-05, AC-23, AC-43, AC-44, AC-45, AC-46, AC-47, AC-48
   **依赖**: T005
 
-- [ ] **T020**: 统一内核工厂实现
+- [x] **T020**: 统一内核工厂实现
   **文件**: `bisheng/linsight/domain/services/agent_factory.py`、`bisheng/linsight/domain/services/base_prompt.py`
   **逻辑**: `create_linsight_agent` 增加 `profile: Literal["direct", "planned"]` 参数。`direct`：不传 `TodoListMiddleware`，使用精简提示词，状态定义保留 `todos` 通道。`planned`：现有行为。提示词由实际装配的工具列表生成（prompt 与 tool 保持一致）。
   **测试**: T019 全部通过
   **覆盖 AC**: AC-02, AC-03, AC-05, AC-23, AC-43, AC-44, AC-45, AC-46, AC-47, AC-48
   **依赖**: T019
 
-- [ ] **T021**: 工具装配合并的单元测试
+- [x] **T021**: 工具装配合并的单元测试
   **文件**: `test/workstation/test_unified_tool_assembly.py`
   **逻辑**: 给定同一组请求参数（勾选的工具、知识库选择、联网开关、技能、记忆开关），断言统一装配函数返回的工具列表覆盖今天日常对话 `_prepare_tools` 与深度研究 `init_linsight_config_tools` 各自能返回的工具；知识库工具的可检索范围只含该用户有权限的知识库；单个工具初始化失败不影响其余工具，并产出一条可见的失败事件。
   **测试**: `test_assembly_superset_of_both_paths`、`test_kb_scope_limited_to_permitted`、`test_single_tool_failure_isolated`
   **覆盖 AC**: AC-05, AC-43, AC-44, AC-45
   **依赖**: 无
 
-- [ ] **T022**: 工具装配合并实现
+- [x] **T022**: 工具装配合并实现
   **文件**: `bisheng/linsight/domain/services/tool_assembly.py`、`bisheng/workstation/domain/services/chat_service.py`、`bisheng/linsight/domain/services/workbench_impl.py`
   **逻辑**: 抽出一个装配函数供两个档位调用；`chat_service._prepare_tools` 与 `workbench_impl.init_linsight_config_tools` 改为调用它（两处都只是把函数体换成一次调用）。互不依赖的工具并行初始化。引用包装（`DailyChatCitationToolWrapper`）与读图包装保留在装配函数里。
   **测试**: T021 全部通过；`test/workstation/test_agent_tool_error_handling.py` 仍通过
   **覆盖 AC**: AC-05, AC-43, AC-44, AC-45
   **依赖**: T021
 
-- [ ] **T023**: 工作区前缀泛化的单元测试
+- [x] **T023**: 工作区前缀泛化的单元测试
   **文件**: `test/linsight/test_workspace_prefix.py`
   **逻辑**: 断言：`WorkspaceBackend` 以任意前缀构造后，`ls`/`read`/`write` 都落在该前缀下；前缀到前缀的拷贝函数把 `output/` 与 `uploads/` 拷到目标前缀；以 `workspace/{svid}` 前缀构造时行为与今天一致。
   **测试**: `test_backend_scoped_to_prefix`、`test_copy_prefix_to_prefix`、`test_svid_prefix_backward_compatible`
   **覆盖 AC**: AC-26, AC-40
   **依赖**: 无
 
-- [ ] **T024**: 工作区前缀泛化实现
+- [x] **T024**: 工作区前缀泛化实现
   **文件**: `bisheng/linsight/domain/services/workspace_backend.py`、`bisheng/linsight/domain/task_exec.py`
   **逻辑**: `WorkspaceBackend` 的 `svid` 参数改为 `workspace_prefix`（保留 `svid` 关键字作为兼容入口）；`_seed_workspace_from_previous` 改为接受源前缀与目标前缀。`final_result/{svid}/` 交付快照的路径不变。
   **测试**: T023 全部通过；`test/linsight/test_workspace_original_sync.py` 仍通过
   **覆盖 AC**: AC-26, AC-40
   **依赖**: T023
 
-- [ ] **T025**: 会话线程的单元测试
+- [x] **T025**: 会话线程的单元测试
   **文件**: `test/linsight/test_conversation_thread.py`
   **逻辑**: 用内存 checkpointer 与脚本化模型断言：同一会话依次跑 `planned`、`direct`、`planned`，后一次运行的模型输入包含前面运行的消息；线程没有 checkpoint 时，运行从 `ChatMessage` 历史重建消息并从最近一个版本的工作区接入文件；旧运行记录没有保存线程 id 时，恢复使用 `session_version_id` 作为线程 id；运行被停止或失败后，下一次运行仍能读到此前的消息。
   **测试**: `test_profiles_alternate_on_one_thread`、`test_rebuild_when_no_checkpoint`、`test_legacy_run_resumes_on_svid_thread`、`test_next_run_after_stop_sees_history`
   **覆盖 AC**: AC-01, AC-04, AC-21, AC-26, AC-30, AC-40
   **依赖**: T020, T024
 
-- [ ] **T026**: 会话线程实现
+- [x] **T026**: 会话线程实现
   **文件**: `bisheng/linsight/domain/task_exec.py`、`bisheng/linsight/domain/models/linsight_session_version.py`
   **逻辑**: 新通道下 `thread_id` 取会话 id，工作区前缀取 `workspace/{conversation_id}`。运行记录在已有的 JSON 字段里保存本次使用的线程 id（不改表结构）；读取时缺省为 `session_version_id`。无 checkpoint 时调用历史重建与工作区接入。
   **测试**: T025 全部通过
   **覆盖 AC**: AC-01, AC-04, AC-21, AC-26, AC-30, AC-40
   **依赖**: T025
 
-- [ ] **T027**: `direct` 运行执行器的单元测试
+- [x] **T027**: `direct` 运行执行器的单元测试
   **文件**: `test/workstation/test_direct_run.py`
   **逻辑**: 用脚本化模型断言：执行器在后台协程里跑完一次 `direct` 运行，事件写入事件流；运行期间按间隔续租；检测到停止标记后在 5 秒内结束并发 `run_stopped`，已输出的文字保留在累计状态里；`interrupt` 时发 `ask_user`、释放租约、状态变 `waiting`；收到回答后用 `Command(resume=...)` 继续；一次运行只做一次额度准入；发出模型请求之前不创建工作区本地目录；运行结束调用 `on_run_finished`。
   **测试**: `test_run_writes_events`、`test_heartbeat_renews`、`test_stop_within_5s_keeps_output`、`test_interrupt_parks`、`test_resume_continues`、`test_single_admission_per_run`、`test_no_workspace_dir_before_model_call`、`test_finish_triggers_dispatch`
   **覆盖 AC**: AC-21, AC-22, AC-29, AC-34, AC-37
   **依赖**: T016, T018, T020, T026
 
-- [ ] **T028**: `direct` 运行执行器实现
+- [x] **T028**: `direct` 运行执行器实现
   **文件**: `bisheng/workstation/domain/services/direct_run.py`
   **逻辑**: `start_direct_run(run_ctx)` 用 `asyncio.create_task` 启动与请求无关的协程，并持有任务引用防止被回收。协程内：准入（`admit_round`）→ 构建 `direct` 档 agent → `astream` → 映射 → 事件流；并行一个续租与停止检查循环。异常路径发 `run_failed` 并调用 `on_run_finished`。同一函数也供 worker 执行接力运行时调用。
   **测试**: T027 全部通过
   **覆盖 AC**: AC-21, AC-22, AC-29, AC-34, AC-37
   **依赖**: T027
 
-- [ ] **T029**: 两个落库投影器的单元测试
+- [x] **T029**: 两个落库投影器的单元测试
   **文件**: `test/workstation/test_run_projectors.py`
   **逻辑**: `direct` 投影器：运行结束后写出的回答行，`category`、`type`、`message` JSON 的 `{msg, events}` 结构、`files` 字段、引用记录与今天 `build_answer_row` 的结果一致；中途停止时保存已生成的部分；回答行 `extra` 里有运行 id。`planned` 投影器：计划条目写入 `linsight_execute_task`，改写后的行 `task_data` 含 `previous_name`，被去掉的条目为 `TERMINATED`；高频事件按节流落库（N 个事件触发的写库次数有上限）；重读数据库得到的计划与事件流最后一个 `plan` 事件一致。
   **测试**: `test_direct_answer_row_shape_unchanged`、`test_direct_partial_saved_on_stop`、`test_planned_previous_name_persisted`、`test_planned_cancelled_persisted`、`test_planned_write_throttled`、`test_plan_reload_matches_stream`
   **覆盖 AC**: AC-10, AC-11, AC-40, AC-41, AC-42
   **依赖**: T018
 
-- [ ] **T030**: 两个落库投影器实现
+- [x] **T030**: 两个落库投影器实现
   **文件**: `bisheng/workstation/domain/services/run_projector_direct.py`、`bisheng/linsight/domain/services/run_projector_planned.py`
   **逻辑**: 各自消费统一事件。`direct` 复用 `build_answer_row`、`save_message_citations`、`_promote_generated_files`。`planned` 复用 `task_exec._save_task_info` 的写法，改用 `update_fields_by_id`，不整行回读大字段。
   **测试**: T029 全部通过；`test/workstation/test_daily_generated_files.py` 仍通过
   **覆盖 AC**: AC-10, AC-11, AC-40, AC-41, AC-42
   **依赖**: T029
 
-- [ ] **T031**: 订阅与发送接口的集成测试
+- [x] **T031**: 订阅与发送接口的集成测试
   **文件**: `test/workstation/test_unified_run_api.py`
   **逻辑**: 订阅接口：会话本人得到 SSE 流；带 `Last-Event-ID` 时只收到其后的事件；非本人访问被拒绝。发送接口：带 `X-BS-Run-Protocol: 2` 时返回 JSON `{run_id, disposition, message_id}`；不带该头时返回与今天相同格式的流式响应；`task_mode=true` 且用户没有深度研究权限时被拒绝、不产生运行；同一请求体在开关关闭的租户上走旧链路；输入命中敏感词时被拦截且不进收件箱。
   **测试**: `test_subscribe_owner_only`、`test_subscribe_resume_from_cursor`、`test_send_negotiated_json`、`test_send_legacy_stream_shape`、`test_task_mode_requires_permission`、`test_flag_off_uses_legacy_path`、`test_sensitive_input_blocked_before_inbox`
   **覆盖 AC**: AC-01, AC-06, AC-28, AC-31, AC-38
   **依赖**: T016, T028
 
-- [ ] **T032**: 订阅接口与发送接口改造
+- [x] **T032**: 订阅接口与发送接口改造
   **文件**: `bisheng/workstation/api/endpoints/chat.py`、`bisheng/workstation/domain/services/chat_service.py`
   **逻辑**: 新增 `GET /api/v1/workstation/conversations/{conversation_id}/events`（SSE，按会话归属校验）。`POST /chat/completions`：开关开启时先做输入检测与权限校验，再调用 `run_dispatch.submit`；按协商头返回 JSON，或订阅事件流并转成旧 SSE 格式返回。路径不含 `config`。
   **测试**: T031 全部通过；`test/api/test_route_path_naming.py` 仍通过
   **覆盖 AC**: AC-01, AC-06, AC-28, AC-31, AC-38
   **依赖**: T031
 
-- [ ] **T033**: `planned` 运行接入新通道的单元测试
+- [x] **T033**: `planned` 运行接入新通道的单元测试
   **文件**: `test/linsight/test_planned_run_unified.py`
   **逻辑**: 断言：开关开启时 worker 执行的 `planned` 运行把统一事件写入事件流、按间隔续租、响应停止标记、结束时调用 `on_run_finished`；旧 WebSocket 的订阅者仍收到与今天相同类型的事件（由事件流转译）；worker 从队列取到 `direct` 档的接力项时调用 `direct_run`；队列项里的租户信息在执行前被恢复。
   **测试**: `test_planned_writes_unified_events`、`test_planned_renews_and_stops`、`test_legacy_ws_still_receives`、`test_worker_runs_direct_relay`、`test_queue_item_restores_tenant`
   **覆盖 AC**: AC-03, AC-29, AC-33, AC-39
   **依赖**: T018, T028
 
-- [ ] **T034**: `planned` 运行接入新通道实现
+- [x] **T034**: `planned` 运行接入新通道实现
   **文件**: `bisheng/linsight/domain/task_exec.py`、`bisheng/linsight/worker.py`
   **逻辑**: `task_exec` 在开关开启时使用会话级租约（取代 4 小时固定锁）、统一事件输出口、停止标记。`worker.process_one_item` 增加 `direct_relay` 队列项类型。旧 WebSocket 广播改为从事件流读取后按旧类型转译。
   **测试**: T033 全部通过
   **覆盖 AC**: AC-03, AC-29, AC-33, AC-39
   **依赖**: T033
 
-- [ ] **T035**: 开放 API 契约的回归测试
+- [x] **T035**: 开放 API 契约的回归测试
   **文件**: `test/open_api/test_task_mode_contract_unchanged.py`
   **逻辑**: 在开关开启的租户上调用开放 API 的提交、查询、文件、终止四个接口，断言响应字段集合与状态取值和开关关闭时一致；无人值守运行里没有 `ask_user` 事件，也不读取收件箱。
   **测试**: `test_submit_response_shape`、`test_task_status_values`、`test_files_response_shape`、`test_terminate`、`test_unattended_never_asks`
   **覆盖 AC**: AC-23, AC-39
   **依赖**: T034
 
-- [ ] **T036**: 附件读取进度事件的单元测试
+- [x] **T036**: 附件读取进度事件的单元测试
   **文件**: `test/workstation/test_attachment_progress_event.py`
   **逻辑**: 断言：带附件的 `direct` 运行在开始解析附件之前就发出一条“正在读取附件”的 `tool_call` 类事件（距 `run_started` 不超过 2 秒，用假时钟），解析完成后发对应的结束事件；不带附件时不发。
   **测试**: `test_progress_event_before_parsing`、`test_no_event_without_attachment`
   **覆盖 AC**: AC-51
   **依赖**: T028
 
-- [ ] **T037**: 附件读取进度事件实现
+- [x] **T037**: 附件读取进度事件实现
   **文件**: `bisheng/workstation/domain/services/direct_run.py`
   **逻辑**: 在调用 `_process_agent_files` 前后各发一个事件。只加事件，不改解析方式（解析方式在 T055 调整）。
   **测试**: T036 全部通过
   **覆盖 AC**: AC-51
   **依赖**: T036
 
-- [ ] **T038**: 运行观测指标
+- [x] **T038**: 运行观测指标
   **文件**: `bisheng/workstation/domain/services/direct_run.py`、`bisheng/linsight/domain/task_exec.py`
   **逻辑**: 每次运行用现有 `BS_METRIC` 日志格式记录：`prep_ms`（收到请求到发出第一次模型请求）、`queue_ms`、`steer_wait_ms`（插话入箱到被读取）、`checkpoint_bytes`。字段名写进 design §7。
   **测试**: 在 T027 的测试文件里追加 `test_metric_line_emitted`，断言日志行包含四个字段
@@ -495,3 +495,20 @@
 - **T007**：改写前的文字放在 `GenerateSubTask.subtask[].previous_name`（事件里），写进 `task_data` 留给 T041 一组。
 - **T009**：114 的工作台只配了 2 个模型，实际跑了 2 个模型各 5 次（10/10 成功），不是 3 个模型。脚本在 114 的 deepagents 0.6.12 上运行。限制见 design 决策 6。
 - **T008**：结论是工作台两个入口都没有校验深度研究权限。发送入口的实现任务要新加校验，这比原先“再校验一次”的表述多一项工作。
+- **T010**：开关放在按租户保存的工作台配置（`WorkstationConfig.unified_runtime_enabled`，`api/v1/schemas.py`），不在 `settings.py`，因为 `settings.py` 里的 `daily_chat` 是全局配置。保存工作台配置页时保留已存的开关值。没有管理界面开关，开启方式是调用 `POST /api/v1/workstation/config/daily`。
+- **T012**：`MAXLEN` 用精确裁剪，默认 2000 条；运行中的流有 24 小时保底过期。`run_started` 会清空上一次运行的流。新增 `EventWriter` 承担 50 毫秒合并。
+- **T014**：租约是状态里的 `lease_until` 字段，和调用方时钟比较，不是 Redis 键过期；多节点正确性依赖节点时钟同步。停止标记的键按运行 id 加 hash tag。状态键 7 天过期，与“等待回答保留 7 天”一致。
+- **T016**：等待回答分支会把运行从 `waiting` 改回 `running`，避免连发两条都被当成回答。排进 worker 队列的运行使用更长的排队租约。空闲但收件箱非空时，新消息排在未读消息之后并启动一次接力运行。
+- **T018**：统一输出是独立类 `UnifiedEventOutput`，包住 `StreamEventMapper`，旧输出逐字节不变。`text` 事件直接取自主图 AI 消息正文。
+- **T020**：deepagents 0.7.39 的 `DeepAgentState` 不含 `todos` 通道，`direct` 档用它的子类补上该通道。`direct` 档保留 `task` 工具与子代理。
+- **T022**：两条旧入口各保留一个行为完全一致的函数，共用装配模块的内部函数；统一函数是第三个入口。`test_agent_tool_error_handling.py` 有 3 个用例在改动前就失败。
+- **T024**：新增 `copy_workspace_prefix`；`seed_workspace_from_previous` 保留为按 svid 的包装。
+- **T026**：线程 id 存在 `api_meta["thread_id"]`（`output_result` 会被整体覆盖，存不住）。无 checkpoint 时复用深度研究现有的“前情回顾”文本重建历史。
+- **T028**：一次执行准入一次，ask_user 恢复是同一运行的第二次执行，会再准入一次（与深度研究一致）。准入与工具组装、agent 构建并行。摘要模型的输出实测不进入回答文字，没有加过滤。新增 `UnifiedEventOutput.seed_plan`，恢复时从快照还原行 id、已取消行、改写前文字。`WorkspaceBackend` 新增 `create_cache_dir` 参数。
+- **T030**：`chat_service.build_daily_answer_row` 从闭包提到模块级，旧 SSE 的回答行不变。`planned` 投影器把行位置存进 `task_data["plan_index"]`。用户停止沿用今天的标记（`extra.error=true`，`error_msg="stream interrupted"`）。
+- **T032**：发送与订阅逻辑放在新模块 `run_send.py`，`chat_service.py` 只加入口分支。带 `X-BS-Run-Protocol: 2` 时返回 JSON（多带 `conversation_id`），不带时返回由事件流转译的旧 SSE 帧。统一链路对已有会话新增归属校验。深度研究权限校验只加在统一链路。开放 API 入口在开关开启时仍走旧链路。
+- **T034（部分偏离）**：旧 WebSocket 没有改成“读事件流再转译”，改为同一份映射器输出双写。原因：事件流里的数据不足以还原旧载荷（`tool_call` 无 `task_id`、任务行整行 dump 等）。`linsight:run_lock` 变成 30 秒可续期的驱动锁。`QUEUED_LEASE_SECONDS` 改为 4 小时。`planned` 接力项目前显式失败（见 design §7 待定事项 1）。
+- **T037**：`direct` 执行器原本不读附件，本任务新增可注入的附件读取步骤（默认原样调用 `_process_agent_files`），并把结果并入模型输入。解析与准入、构建并行。
+- **T038**：新增模块 `run_metrics.py`；指标行 domain 为 `agent_run`，字段定义见 design §7。`prep_ms` 的起点是发送入口接受消息的时刻。
+- **T035**：15 个用例，开关开与关的开放 API 应答逐字段相同，没有改生产代码。
+- **Wave 1 集成修正**：`run_send` 与 `DirectRunner` 的派发服务改用 `direct_run.production_dispatch_wiring()`，API 进程不再依赖启动钩子注册接力入队函数。

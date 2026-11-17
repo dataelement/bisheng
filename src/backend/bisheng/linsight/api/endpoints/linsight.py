@@ -50,6 +50,7 @@ from bisheng.linsight.domain.models.linsight_execute_task import ExecuteTaskStat
 from bisheng.linsight.domain.models.linsight_session_version import (
     LinsightSessionVersionDao,
     SessionVersionStatusEnum,
+    get_run_thread_id,
 )
 from bisheng.linsight.domain.models.linsight_sop import LinsightSOPDao
 from bisheng.linsight.domain.schemas.linsight_schema import (
@@ -880,7 +881,9 @@ async def download_md_to_pdf_or_docx(
             deliverable = find_deliverable(version, file_key, minio_client.bucket)
             source_path = deliverable_workspace_path(version, deliverable) if deliverable else None
             if source_path:
-                md_str, _ = await inline_local_images(md_str, source_path, workspace_fetcher(version.id))
+                md_str, _ = await inline_local_images(
+                    md_str, source_path, workspace_fetcher(get_run_thread_id(version))
+                )
 
         # Filename Removal Extension
         file_name = os.path.splitext(file_name)[0]
@@ -940,7 +943,7 @@ async def download_md_bundle(
         md_str = await bake_citations_for_export(file_bytes.decode("utf-8"), login_user)
         source_path = deliverable_workspace_path(version, deliverable)
         bundle = (
-            await build_markdown_bundle(md_str, file_name, source_path, workspace_fetcher(version.id))
+            await build_markdown_bundle(md_str, file_name, source_path, workspace_fetcher(get_run_thread_id(version)))
             if source_path
             else None
         )
