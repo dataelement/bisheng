@@ -22,6 +22,12 @@ def test_guide_is_anonymous_markdown_with_real_protocol(path, heading, client_fa
     assert "cloud_workbench" in response.text
     assert "next_cursor" in response.text
     assert "RealtimeStore" in response.text
+    if path.endswith("workbench-guide.md"):
+        assert "在当前会话继续开发、验证与发布" in response.text
+        assert "请用户把返回的准确目录作为开发会话工作区打开" not in response.text
+    else:
+        assert "without switching workspaces or opening another conversation" in response.text
+        assert "stop and ask to open its exact directory" not in response.text
     route = next(route for route in client.app.routes if getattr(route, "path", None) == path)
     assert route.dependant.dependencies == []
 

@@ -16,12 +16,13 @@
 
 业务查询、填写记录、改变已有配置优先调用业务 API。只有用户明确请求修改样式、布局或应用功能时才获取源码；不能因为用户打开应用而自动下载工程。源代码包含业务逻辑，按企业授权范围使用；不要请求/保存主 Token、服务账号 Key、网页登录 Cookie 或业务数据库。
 
-先调用 `cloud_workbench` 的 `guide` 操作获取当前企业服务器的 guideUrl，访问这个网址阅读协议，无需获取本机登录 Token；后续操作也通过该工具执行。底层已认证的本机 Harness 通道为 `POST /api/desktop-workbenches/cloud`，请求体为 JSON：
+先调用 `cloud_workbench` 的 `guide` 操作，阅读全文返回的 guideMarkdown，以 guideUrl 和 guideSha256 记录实际来源及内容标识。客户端通过当前企业账号读取协议，支持内网地址；成功返回正文后直接使用该正文。后续开发与发布操作通过该工具执行。以下为工具操作的 JSON 参数；页面的 `POST /api/desktop-workbenches/cloud` 通道仅提供 guide、list、limits 和 progress 查询。
 
 - `{"operation":"list"}`：本人能使用的上线应用，按 next_cursor 分页。
 - `{"operation":"list","managed":true}`：本人可编辑的应用。
-- `{"operation":"create"}`：分配全新的独立开发目录，返回 projectId 与 path。先明确业务需求，再在该目录写源码和 bisheng-app.yaml；不要执行下载来源不明的安装脚本。
+- `{"operation":"create"}`：在当前会话已授权工作区内分配全新的独立开发目录，返回 projectId 与 path。先明确业务需求，再在该目录写源码和 bisheng-app.yaml；不要执行下载来源不明的安装脚本。
 - `{"operation":"checkout","appId":"实际应用ID","versionId":"指定正式版本ID"}`：服务端验证源码编辑权限，校验归档身份与 SHA-256 后安全解包，返回 projectId/path/baseVersionId。仅在返回的目录开发，不覆盖用户已有目录。
+- `{"operation":"resume","projectId":"已有工程ID"}`：将已有本机工程准备到当前授权工作区，返回 projectId/path，保留应用与版本基线。继续使用返回的 projectId，原工程保留。
 - `{"operation":"publish","projectId":"上述真实ID","releaseNotes":"更新说明"}`：打包受管目录并以本人身份提交原发布流水线。首次发布不要求外部仓库；不打包数据、密钥、node_modules、符号链接。更新使用 checkout 的基线；冲突时先比较/合并，不能绕过基线覆盖。不要自动确认破坏性数据库变更。
 - `{"operation":"progress","appId":"实际ID","deploymentId":"回执真实ID"}`：查询扫描、预检、审批和上线。上传成功仅表示收到提交，不能报告上线完成。
 
@@ -55,7 +56,7 @@ create/checkout 返回当前企业的 toolkit 地址，保留反向代理子路�
 
 1. 复用上下文完成部署需求分析，用业务语言说明本地、云端或混合方案的理由，确认最小范围。
 2. 开发并验证后，向用户展示本次变更、拟发布目标、数据结构影响和建议的团队可见范围。已有明确发布授权时继续执行；没有授权时在对话里确认，不能把同意开发当成同意上线或扩大权限。
-3. 使用 `cloud_workbench` 工具的 create/checkout、publish、progress 操作和真实 projectId、版本基线、发布回执。create/checkout 后检查返回的 developmentWorkspace 状态。ready 为 false 时停止写入，请用户把返回的准确目录作为开发会话工作区打开，携带已确认需求和 projectId 继续。仅改变 working_directory 不会改变可写工作区；不能为此查阅 Desktop 内部实现或扩大 sandbox 权限。
+3. 使用 `cloud_workbench` 工具的 create/checkout、publish、progress 操作和真实 projectId、版本基线、发布回执。create/checkout 在当前会话实际授权的工作区内创建独立工程子目录，项目身份记录由客户端单独保存。保留已确认需求和返回的 projectId，在当前会话继续开发、验证与发布，无需切换工作区或另开对话。若旧版本工程位于当前授权工作区之外，调用 `resume` 并传入原 projectId，把已有源码准备到当前工作区，保留返回的新 projectId；原工程会保留，应用与版本基线保持关联。 读取返回的 developmentWorkspace 状态；若 ready 为 false，保留工程并报告具体目录授权问题，核对当前有效权限后处理。云端托管本身不要求切换会话；改变 working_directory 也不会增加文件权限。
 4. Agent 提交现有扫描、预检和审批流程并查询进度；区分“已提交”“等待审批”“已上线”，不替用户或管理员自动审批。失败保留源码、回执和修复说明；版本冲突先比较合并。
 5. 确认正式入口可访问后告诉用户如何在工作台列表打开，并继续引导 owner 设置团队可见范围；未获授权不改变成员权限。
 
