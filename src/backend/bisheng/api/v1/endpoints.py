@@ -118,6 +118,9 @@ def get_env():
             knowledge.policy_revision,
             knowledge.connection_id,
         )
+        platform_llm_enabled = bool(
+            workflow_conf.platform_llm.enabled and workflow_conf.platform_llm.resource_base_url.strip()
+        )
     except Exception as exc:
         logger.warning(f"Failed to load workflow config, using disabled: {exc}")
         workflow_auto_rerun_on_open = False
@@ -125,6 +128,7 @@ def get_env():
         platform_agent_mode = "disabled"
         platform_agent_revision = ""
         knowledge_mode, knowledge_revision, knowledge_connection = "disabled", "", ""
+        platform_llm_enabled = False
     env["workflow"] = {
         "auto_rerun_on_open": workflow_auto_rerun_on_open,
         "code_node_enabled": workflow_code_node_enabled,
@@ -135,6 +139,7 @@ def get_env():
         "platform_agent_enabled": platform_agent_mode == "mock",
         "platform_agent_mode": platform_agent_mode,
         "platform_agent_policy_revision": platform_agent_revision,
+        "platform_llm_enabled": platform_llm_enabled,
     }
 
     # Expose knowledge-space version management flag so the client can toggle UI affordances.

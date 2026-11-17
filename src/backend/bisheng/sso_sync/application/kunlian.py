@@ -259,3 +259,69 @@ class KunlianManagementApplication:
             return await self.service.management_request_sync(actor=actor)
 
         return await self._dispatch(user, run)
+
+
+@dataclass(frozen=True)
+class KunlianTokenExchangeMaterial:
+    """服务端兑换昆联资源令牌所需的最小凭据材料，禁止序列化输出。"""
+
+    subject_token: object
+    client_id: str
+    client_secret: object
+    oidc_token_url: str
+    approved_test_origins: tuple[str, ...] = ()
+
+
+async def resolve_kunlian_token_exchange_material(
+    user_id: int,
+    *,
+    session_reference: str | None = None,
+    oidc_token_url: str = "",
+) -> KunlianTokenExchangeMaterial:
+    """读取当前用户有效昆联 SSO Access Token 及客户端凭据，用于 Token Exchange。"""
+    import hashlib
+
+    from cryptography.fernet import Fernet
+
+    from bisheng.common.errcode.sso_sync import KunlianDependencyUnavailableError, KunlianSessionExpiredError
+    from bisheng.common.services.config_service import settings
+    from bisheng.core.context.tenant import tenant_execution_scope
+    from bisheng.sso_sync.application.runtime import resolve_environment_secret
+    from bisheng.sso_sync.domain.repositories.kunlian import KunlianDirectoryRepository
+
+    config = settings.sso_sync.kunlian
+    if not config.login_enabled or not config.client_id:
+        raise KunlianDependencyUnavailableError()
+    token_url = oidc_token_url.strip() or (config.issuer.rstrip("/") + "/oidc/token" if config.issuer else "")
+    if not token_url:
+        raise KunlianDependencyUnavailableError()
+    try:
+        client_secret = resolve_environment_secret(config.client_secret_reference)
+        cipher_secret = resolve_environment_secret(config.encryption_secret_reference)
+    except (LookupError, ValueError):
+        raise KunlianDependencyUnavailableError() from None
+    try:
+        cipher = Fernet(cipher_secret.get_secret_value().encode("ascii"))
+    except (ValueError, UnicodeError):
+        raise KunlianDependencyUnavailableError() from None
+    version = "f118-" + hashlib.sha256(cipher_secret.get_secret_value().encode()).hexdigest()[:24]
+
+    def decrypt(value: str) -> str:
+        return cipher.decrypt(value.encode()).decode()
+
+    repository = KunlianDirectoryRepository(decrypt_value=decrypt, key_version=version)
+    with tenant_execution_scope(1):
+        subject_token = await repository.load_active_access_token(
+            user_id,
+            session_reference=session_reference,
+            connection_id=config.connection_id or None,
+        )
+    if not subject_token.get_secret_value():
+        raise KunlianSessionExpiredError()
+    return KunlianTokenExchangeMaterial(
+        subject_token=subject_token,
+        client_id=config.client_id,
+        client_secret=client_secret,
+        oidc_token_url=token_url,
+        approved_test_origins=tuple(config.approved_test_origins or ()),
+    )

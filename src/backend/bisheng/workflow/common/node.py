@@ -14,6 +14,7 @@ class NodeType(Enum):
     AGENT = "agent"
     PLATFORM_AGENT = "platform_agent"
     PLATFORM_KNOWLEDGE_RETRIEVER = "platform_knowledge_retriever"
+    PLATFORM_LLM = "platform_llm"
     CODE = "code"
     CONDITION = "condition"
     LLM = "llm"

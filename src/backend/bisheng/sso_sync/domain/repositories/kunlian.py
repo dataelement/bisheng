@@ -1177,6 +1177,63 @@ class KunlianDirectoryRepository:
             raise error
         return result
 
+    async def load_active_access_token(
+        self,
+        user_id: int,
+        *,
+        session_reference: SecretStr | str | None = None,
+        connection_id: str | None = None,
+    ) -> SecretStr:
+        """读取指定本地用户当前有效的昆联 SSO Access Token，仅用于服务端 Token Exchange。"""
+        if type(user_id) is not int or user_id <= 0:
+            raise KunlianSessionExpiredError()
+        now = self.clock()
+        async with self._session() as session:
+            if session_reference is not None:
+                web = await session.get(KunlianWebSession, self._reference_hash(session_reference))
+                if web is None:
+                    raise KunlianSessionExpiredError()
+                binding = await session.get(KunlianIdentityBinding, web.binding_id)
+                if binding is None or binding.local_user_id != user_id:
+                    raise KunlianSessionExpiredError()
+            else:
+                stmt = select(KunlianIdentityBinding).where(KunlianIdentityBinding.local_user_id == user_id)
+                if connection_id:
+                    stmt = stmt.where(KunlianIdentityBinding.connection_id == connection_id)
+                binding = (await session.exec(stmt.limit(1))).first()
+                if binding is None:
+                    raise KunlianSessionExpiredError()
+                web = (
+                    await session.exec(
+                        select(KunlianWebSession)
+                        .where(
+                            KunlianWebSession.binding_id == binding.identity_key,
+                            KunlianWebSession.state == "ACTIVE",
+                            KunlianWebSession.hard_expires_at > now,
+                            KunlianWebSession.access_token_expires_at > now,
+                        )
+                        .order_by(KunlianWebSession.issued_at.desc())
+                        .limit(1)
+                    )
+                ).first()
+                if web is None:
+                    raise KunlianSessionExpiredError()
+            if (
+                (connection_id and binding.connection_id != connection_id)
+                or binding.admission_status != "ACTIVE"
+                or binding.local_override
+                or web.state != "ACTIVE"
+                or web.hard_expires_at <= now
+                or web.access_token_expires_at <= now
+                or web.auth_epoch_at_issue != binding.auth_epoch
+                or not web.access_token_ciphertext
+            ):
+                raise KunlianSessionExpiredError()
+            connection = await session.get(KunlianConnectionState, binding.connection_id)
+            if connection is None or not connection.enabled:
+                raise KunlianDependencyUnavailableError()
+            return self._open(web.access_token_ciphertext, web.token_key_version)
+
     async def revoke_session(self, reference: SecretStr | str, reason: str) -> None:
         if reason not in {"LOGOUT", "INTROSPECTION_INACTIVE", "IDENTITY_CHANGED", "DISABLED"}:
             raise KunlianTrustRejectedError()

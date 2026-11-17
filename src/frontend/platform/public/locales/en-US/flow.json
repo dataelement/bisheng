@@ -666,6 +666,36 @@
         "label": "Request ID"
       }
     },
+    "platform_llm": {
+      "name": "Kunlian LLM",
+      "description": "Invoke an authorized model on Kunlian platform",
+      "模型设置": "Model Settings",
+      "提示词": "Prompt Settings",
+      "输出": "Output",
+      "model_ref": {
+        "label": "Kunlian Model",
+        "placeholder": "Select an authorized model"
+      },
+      "temperature": {
+        "label": "Temperature"
+      },
+      "system_prompt": {
+        "label": "System Prompt",
+        "placeholder": "Enter system prompt"
+      },
+      "user_prompt": {
+        "label": "User Prompt",
+        "placeholder": "Enter user prompt"
+      },
+      "output_user": {
+        "label": "Show Output in Chat",
+        "help": "When enabled, model output is displayed in the chat window"
+      },
+      "output": {
+        "label": "Output Variable",
+        "help": "Generated text content from the model"
+      }
+    },
     "platform_agent": {
       "name": "Platform Agent",
       "description": "Call a fixed version of a platform Agent",
@@ -745,5 +775,14 @@
     "invalidKnowledge": "Select an available knowledge base",
     "choose": "Select a knowledge base",
     "empty": "No knowledge bases available"
+  },
+  "platformLlm": {
+    "choose": "Select Kunlian Model",
+    "searchPlaceholder": "Search by model name",
+    "pinnedVersion": "Pinned version",
+    "empty": "No models available",
+    "invalidModel": "Select an available Kunlian model",
+    "tokenInvalid": "Kunlian session or resource token expired. Please sign in again.",
+    "permissionDenied": "You do not have permission to access Kunlian model catalog."
   }
 }

@@ -4,6 +4,7 @@ import { useParams } from 'react-router-dom';
 import { useReducer } from 'react';
 import { PlatformKnowledgeQueryItem } from "./component/PlatformKnowledgeQueryItem";
 import { PlatformKnowledgeSelectItem } from "./component/PlatformKnowledgeSelectItem";
+import { PlatformModelSelectItem } from "./component/PlatformModelSelectItem";
 import { PlatformAgentItem } from './component/PlatformAgentItem';
 import useFlowStore from '../flowStore';
 import CodeInputItem from "./component/CodeInputItem";
@@ -90,6 +91,9 @@ export default function Parameter({
         case 'platform_knowledge_select':
             return <PlatformKnowledgeSelectItem workflowId={workflowId || ''} reference={item.value}
                 onChange={handleOnNewValue} onValidate={bindValidate} />;
+        case 'platform_model_select':
+            return <PlatformModelSelectItem workflowId={workflowId || ''} reference={item.value}
+                required={item.required} onChange={handleOnNewValue} onValidate={bindValidate} />;
         case 'platform_agent':
             return <PlatformAgentItem workflowId={workflowId || ''} nodeId={nodeId} reference={item.value}
                 workflowGraph={workflowGraph}

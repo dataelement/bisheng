@@ -666,6 +666,36 @@
         "label": "リクエスト ID"
       }
     },
+    "platform_llm": {
+      "name": "昆聯 LLM",
+      "description": "昆聯プラットフォームで認可された大規模モデルを呼び出します",
+      "模型设置": "モデル設定",
+      "提示词": "プロンプト",
+      "输出": "出力",
+      "model_ref": {
+        "label": "昆聯モデル",
+        "placeholder": "認可されたモデルを選択してください"
+      },
+      "temperature": {
+        "label": "温度"
+      },
+      "system_prompt": {
+        "label": "システムプロンプト",
+        "placeholder": "システムプロンプトを入力"
+      },
+      "user_prompt": {
+        "label": "ユーザープロンプト",
+        "placeholder": "ユーザープロンプトを入力"
+      },
+      "output_user": {
+        "label": "出力結果を会話に表示",
+        "help": "有効にすると、モデルの生成結果が会話画面に表示されます"
+      },
+      "output": {
+        "label": "出力変数",
+        "help": "モデルが生成したテキスト"
+      }
+    },
     "platform_agent": {
       "name": "プラットフォーム Agent",
       "description": "固定バージョンの Agent を呼び出す",
@@ -745,5 +775,14 @@
     "invalidKnowledge": "利用可能なナレッジベースを選択してください",
     "choose": "ナレッジベースを選択",
     "empty": "利用可能なナレッジベースがありません"
+  },
+  "platformLlm": {
+    "choose": "昆聯モデルを選択",
+    "searchPlaceholder": "モデル名で検索",
+    "pinnedVersion": "固定バージョン",
+    "empty": "利用可能なモデルがありません",
+    "invalidModel": "利用可能な昆聯モデルを選択してください",
+    "tokenInvalid": "昆聯のセッションまたはトークンが無効です。再ログインしてください。",
+    "permissionDenied": "昆聯モデル一覧へのアクセス権限がありません。"
   }
 }

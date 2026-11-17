@@ -4,6 +4,7 @@ import type { PlatformAgentPage, PlatformAgentVersion, PlatformAgentCapabilities
 import { createMemoryStartGroup } from "@/util/workflowMemory";
 import axios from "../request";
 import { platformKnowledgeTemplate } from "./platformKnowledge";
+import { platformLlmTemplate } from "./platformModel";
 import { WORKFLOW_MANAGEMENT_SCOPE } from "@/utils/workflowManagement";
 
 export async function getPlatformAgentCapabilities(): Promise<PlatformAgentCapabilities> {
@@ -37,7 +38,7 @@ const platformAgentTemplate = {
  */
 export const getWorkflowNodeTemplate = async (): Promise<any[]> => {
     return new Promise(res => setTimeout(() => {
-        res([...workflowTemplate, platformAgentTemplate, platformKnowledgeTemplate])
+        res([...workflowTemplate, platformAgentTemplate, platformKnowledgeTemplate, platformLlmTemplate])
     }, 100));
 }
 

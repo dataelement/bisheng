@@ -1278,7 +1278,7 @@ class WorkFlowService(BaseService):
                     and one["type"] != "variable"
                 ):
                     continue
-                if node_data.type == NodeType.LLM.value and one["type"] != "variable":
+                if node_data.type in (NodeType.LLM.value, NodeType.PLATFORM_LLM.value) and one["type"] != "variable":
                     continue
                 if node_data.type == NodeType.AGENT.value and one["type"] not in ["tool", "variable"]:
                     continue

@@ -666,6 +666,36 @@
         "label": "调用标识"
       }
     },
+    "platform_llm": {
+      "name": "昆联大模型",
+      "description": "调用昆联平台授权的大模型",
+      "模型设置": "模型设置",
+      "提示词": "提示词",
+      "输出": "输出",
+      "model_ref": {
+        "label": "昆联大模型",
+        "placeholder": "请选择授权大模型"
+      },
+      "temperature": {
+        "label": "温度"
+      },
+      "system_prompt": {
+        "label": "系统提示词",
+        "placeholder": "输入系统提示词"
+      },
+      "user_prompt": {
+        "label": "用户提示词",
+        "placeholder": "输入用户提示词"
+      },
+      "output_user": {
+        "label": "将输出结果展示在会话中",
+        "help": "开启时，大模型生成的内容将在会话窗口实时展示"
+      },
+      "output": {
+        "label": "输出变量",
+        "help": "大模型生成文本内容"
+      }
+    },
     "platform_agent": {
       "name": "平台 Agent",
       "description": "调用平台上固定版本的 Agent",
@@ -745,5 +775,14 @@
     "invalidKnowledge": "请选择可用的知识库",
     "choose": "选择知识库",
     "empty": "暂无可用知识库"
+  },
+  "platformLlm": {
+    "choose": "选择昆联大模型",
+    "searchPlaceholder": "按模型名称搜索",
+    "pinnedVersion": "固定版本",
+    "empty": "暂无可用大模型",
+    "invalidModel": "请选择可用的昆联大模型",
+    "tokenInvalid": "昆联登录态或资源令牌已失效，请重新登录。",
+    "permissionDenied": "当前账号无权访问昆联模型目录。"
   }
 }

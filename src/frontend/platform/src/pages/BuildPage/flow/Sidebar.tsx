@@ -1,4 +1,5 @@
 import { getKnowledgeCapabilities } from "@/controllers/API/platformKnowledge";
+import { getPlatformModelCapabilities } from "@/controllers/API/platformModel";
 // @ts-strict-ignore
 import { Button } from '@bisheng/ui';
 import { Accordion,AccordionContent,AccordionItem,AccordionTrigger } from "@/components/bs-ui/accordion";
@@ -71,6 +72,7 @@ export default function Sidebar({ dropdown = false, disabledNodes = [], onInitSt
     const { t } = useTranslation('flow')
     const { data: platformAgent } = useQuery({ queryKey: ['platform-agent-capabilities'], queryFn: getPlatformAgentCapabilities, cacheTime: 0 });
     const { data: platformKnowledge } = useQuery({ queryKey: ["platform-knowledge-capabilities"], queryFn: getKnowledgeCapabilities, cacheTime: 0 });
+    const { data: platformLlm } = useQuery({ queryKey: ['platform-llm-capabilities'], queryFn: getPlatformModelCapabilities, cacheTime: 0 });
     const { data: tempData, refetch } = useQuery({
         queryKey: ["QueryWorkFlowTempKey"],
         queryFn: () => getWorkflowNodeTemplate(),
@@ -109,13 +111,14 @@ export default function Sidebar({ dropdown = false, disabledNodes = [], onInitSt
             if (disabledNodes.includes(temp.type)) return list
             if (temp.type === 'platform_agent' && !platformAgent?.platform_agent_enabled) return list
             if (temp.type === 'platform_knowledge_retriever' && !platformKnowledge?.platform_knowledge_enabled) return list
+            if (temp.type === 'platform_llm' && !platformLlm?.platform_llm_enabled) return list
             const newNode = getNodeDataByTemp(temp)
             if (temp.type === 'platform_knowledge_retriever' && platformKnowledge?.platform_knowledge_mode === 'mock') newNode.name += ' (' + t('platformAgent.mock') + ')'
             if (temp.type === 'platform_agent' && platformAgent?.platform_agent_mode === 'mock') newNode.name += ` (${t('platformAgent.mock')})`
             temp.type === 'start' ? onInitStartNode(cloneDeep(temp)) : list.push(newNode)
             return list
         }, [])
-    }, [tempData, disabledNodes, platformAgent, platformKnowledge, t, getNodeDataByTemp, onInitStartNode])
+    }, [tempData, disabledNodes, platformAgent, platformKnowledge, platformLlm, t, getNodeDataByTemp, onInitStartNode])
 
 
     // tool
@@ -168,7 +171,7 @@ export default function Sidebar({ dropdown = false, disabledNodes = [], onInitSt
                     </Button>}
                 </div>
                 {/* base */}
-                {activeTab === 'base' && <div>
+                {activeTab === 'base' && <div className={dropdown ? 'nowheel overflow-y-auto max-h-96' : 'nowheel overflow-y-auto h-[calc(100vh-10rem)]'}>
                     <>{
                             nodeTemps.map((item, index) =>
                                 <SharedTooltip key={item.type} side="right" content={<><div className="max-w-96 text-left break-all whitespace-normal">{item.desc}</div></>}><span tabIndex={0} className="block w-full"><div key={item.type}

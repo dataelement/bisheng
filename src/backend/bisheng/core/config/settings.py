@@ -183,6 +183,21 @@ class PlatformKnowledgeConf(BaseModel):
     max_payload_bytes: int = Field(default=1048576, strict=True, ge=1024, le=16777216)
 
 
+class PlatformLLMConf(BaseModel):
+    """昆联平台大模型配置，仅支持真实资源与推理网关对接。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    resource_base_url: str = ""
+    oidc_token_url: str = ""
+    resource_audience: str = Field(default="moduvela-platform-resources", min_length=1, max_length=256)
+    list_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
+    invoke_timeout_seconds: float = Field(default=60.0, gt=0, le=300)
+    max_list_payload_bytes: int = Field(default=2 * 1024 * 1024, strict=True, ge=1024, le=16777216)
+    max_invoke_payload_bytes: int = Field(default=4 * 1024 * 1024, strict=True, ge=1024, le=33554432)
+
+
 class WorkflowRegistrationConf(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -214,6 +229,7 @@ class WorkflowConf(BaseModel):
     kunlian_api: KunlianApiConf = Field(default_factory=KunlianApiConf)
     platform_agent: PlatformAgentConf = Field(default_factory=PlatformAgentConf)
     platform_knowledge: PlatformKnowledgeConf = Field(default_factory=PlatformKnowledgeConf)
+    platform_llm: PlatformLLMConf = Field(default_factory=PlatformLLMConf)
     timeout: int = Field(default=720, description="Node timeout (min)")
     auto_rerun_on_open: bool = Field(
         default=False,

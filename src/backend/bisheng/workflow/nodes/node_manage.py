@@ -14,6 +14,7 @@ from bisheng.workflow.nodes.platform_agent.platform_agent import PlatformAgentNo
 from bisheng.workflow.nodes.platform_knowledge_retriever.platform_knowledge_retriever import (
     PlatformKnowledgeRetrieverNode,
 )
+from bisheng.workflow.nodes.platform_llm.platform_llm import PlatformLLMNode
 from bisheng.workflow.nodes.qa_retriever.qa_retriever import QARetrieverNode
 from bisheng.workflow.nodes.rag.rag import RagNode
 from bisheng.workflow.nodes.report.report import ReportNode
@@ -37,6 +38,7 @@ NODE_CLASS_MAP = {
     NodeType.AGENT.value: AgentNode,
     NodeType.PLATFORM_AGENT.value: PlatformAgentNode,
     NodeType.PLATFORM_KNOWLEDGE_RETRIEVER.value: PlatformKnowledgeRetrieverNode,
+    NodeType.PLATFORM_LLM.value: PlatformLLMNode,
     NodeType.CODE.value: CodeNode,
     NodeType.LLM.value: LLMNode,
     NodeType.KNOWLEDGE_RETRIEVER.value: KnowledgeRetriever,

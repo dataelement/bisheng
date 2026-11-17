@@ -260,3 +260,49 @@ class WorkflowRegistrationUnavailable(WorkflowRegistrationError):
     Code: int = 10575
     Msg: str = "Workflow registration is unavailable"
     http_status = 503
+
+
+class PlatformLLMError(BaseErrorCode):
+    """昆联平台大模型公开错误。底层异常由调用方转换。"""
+
+
+class PlatformLLMConfigurationError(PlatformLLMError):
+    Code: int = 10580
+    Msg: str = "Invalid platform model configuration or parameters"
+    http_status = 400
+
+
+class PlatformLLMTokenError(PlatformLLMError):
+    Code: int = 10581
+    Msg: str = "Kunlian session or resource token is invalid or expired"
+    http_status = 401
+
+
+class PlatformLLMPermissionError(PlatformLLMError):
+    Code: int = 10582
+    Msg: str = "Platform model access is denied"
+    http_status = 403
+
+
+class PlatformLLMRateLimitError(PlatformLLMError):
+    Code: int = 10583
+    Msg: str = "Platform model rate limit exceeded"
+    http_status = 429
+
+
+class PlatformLLMNotReadyError(PlatformLLMError):
+    Code: int = 10584
+    Msg: str = "Kunlian platform model service is unavailable"
+    http_status = 503
+
+
+class PlatformLLMUpstreamError(PlatformLLMError):
+    Code: int = 10585
+    Msg: str = "The platform model service returned an invalid response"
+    http_status = 502
+
+
+class PlatformLLMTimeoutError(PlatformLLMError):
+    Code: int = 10586
+    Msg: str = "Platform model request timed out"
+    http_status = 504
