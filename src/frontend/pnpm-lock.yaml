@@ -928,6 +928,9 @@ importers:
 
   platform:
     dependencies:
+      'jszip':
+        specifier: 3.10.1
+        version: 3.10.1
       '@bisheng/api-client':
         specifier: workspace:*
         version: link:../packages/api-client

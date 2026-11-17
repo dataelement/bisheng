@@ -1,0 +1,120 @@
+import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Button } from '@bisheng/ui';
+import { Checkbox } from '@bisheng/ui';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/bs-ui/dialog';
+import { Input } from '@bisheng/ui';
+import { Label } from '@/components/bs-ui/label';
+import { RadioGroup, Radio as RadioGroupItem } from '@bisheng/ui';
+import { DatasetConnection, DatasetImportRequest, importTrainingDataset } from '@/controllers/API/finetuneDatasets';
+import { TrainingDataType, TrainingFile, uploadTrainingFile } from '@/controllers/API/finetuneV2';
+
+interface Props {
+    dataType: TrainingDataType; onClose: () => void;
+    onImported: (file: TrainingFile, localFile?: File) => void; onBusyChange?: (busy: boolean) => void;
+}
+type Source = 'local' | 'ftp' | 's3';
+const connectionFields: Record<'ftp' | 's3', (keyof DatasetConnection)[]> = {
+    ftp: ['username', 'password'], s3: ['bucket', 'access_key', 'secret_key', 'session_token', 'region'],
+};
+const secretFields = new Set(['password', 'access_key', 'secret_key', 'session_token']);
+
+export function validDatasetEndpoint(endpoint: string, source: 'ftp' | 's3') {
+    try {
+        const url = new URL(endpoint);
+        return (source === 'ftp' ? ['ftp:', 'ftps:'] : ['http:', 'https:']).includes(url.protocol)
+            && Boolean(url.hostname) && !url.username && !url.password && !url.search && !url.hash && ['', '/'].includes(url.pathname);
+    } catch { return false; }
+}
+export function safeDatasetImportError(failure: unknown, connection: DatasetConnection, fallback: string) {
+    let message = typeof failure === 'string' ? failure : failure instanceof Error ? failure.message : '';
+    if (!message) return fallback;
+    for (const key of ['password', 'access_key', 'secret_key', 'session_token'] as const) {
+        const secret = connection[key];
+        if (secret) message = message.split(secret).join('••••');
+    }
+    return `${fallback} ${message.slice(0, 500)}`;
+}
+export function DatasetImportDialog({ dataType, onClose, onImported, onBusyChange }: Props) {
+    const { t } = useTranslation('model');
+    const [source, setSource] = useState<Source>('local');
+    const [name, setName] = useState('');
+    const [connection, setConnection] = useState<DatasetConnection>({ endpoint: '' });
+    const [manifestSource, setManifestSource] = useState('remote');
+    const [manifestPath, setManifestPath] = useState('');
+    const [mediaRoot, setMediaRoot] = useState('');
+    const [file, setFile] = useState<File>();
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState('');
+    const active = useRef(true);
+    useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
+    const handleSourceChange = (value: Source) => {
+        setSource(value); setConnection({ endpoint: '' }); setManifestPath(''); setMediaRoot(''); setFile(undefined); setError('');
+    };
+    const handleImport = async () => {
+        setError('');
+        if (source === 'local' && !file) { setError(t('finetune.datasetChooseFile')); return; }
+        if (file && file.size > 20 * 1024 * 1024) { setError(t('finetune.uploadSizeLimit')); return; }
+        if (source !== 'local') {
+            if (!name.trim() || !validDatasetEndpoint(connection.endpoint, source) || (source === 's3' && !connection.bucket?.trim())) {
+                setError(t('finetune.datasetConnectionRequired')); return;
+            }
+            if (manifestSource === 'remote' ? !manifestPath.trim() : !file || !/\.jsonl?$/i.test(file.name)) {
+                setError(t('finetune.datasetManifestRequired')); return;
+            }
+        }
+        setBusy(true); onBusyChange?.(true);
+        try {
+            let imported: TrainingFile;
+            if (source === 'local' && file) imported = await uploadTrainingFile(file);
+            else {
+                const request: DatasetImportRequest = { name: name.trim(), data_type: dataType, source: source as 'ftp' | 's3', connection, media_root: mediaRoot.trim(),
+                    ...(manifestSource === 'local' && file ? { manifest_text: await file.text(), manifest_filename: file.name }
+                        : { manifest_path: manifestPath.trim() }) };
+                imported = await importTrainingDataset(request);
+            }
+            if (!active.current) return;
+            if (imported.dataset_report.data_type !== dataType) { setError(t('finetune.datasetTypeMismatch')); return; }
+            if (!imported.dataset_report.validated) { setError(t('finetune.uploadFailed')); return; }
+            onImported(imported, source === 'local' ? file : undefined);
+            setConnection({ endpoint: '' }); onClose();
+        } catch (failure) {
+            if (active.current) setError(safeDatasetImportError(failure, connection, t('finetune.datasetImportFailed')));
+        } finally { if (active.current) setBusy(false); onBusyChange?.(false); }
+    };
+    const close = () => { if (!busy) { setConnection({ endpoint: '' }); onClose(); } };
+    return <Dialog open onOpenChange={open => { if (!open) close(); }}>
+        <DialogContent className="max-w-[600px] max-h-[calc(100vh-64px)] flex flex-col" onEscapeKeyDown={event => { if (busy) event.preventDefault(); }} onInteractOutside={event => event.preventDefault()}>
+            <DialogHeader><DialogTitle>{t('finetune.datasetImport')}</DialogTitle><DialogDescription>{t('finetune.datasetImportHint')}</DialogDescription></DialogHeader>
+            <form onSubmit={event => { event.preventDefault(); void handleImport(); }} className="flex flex-col min-h-0 gap-4">
+                <fieldset disabled={busy} className="space-y-4 overflow-y-auto px-1">
+                    <RadioGroup value={source} onValueChange={handleSourceChange} className="flex gap-5">
+                        {(['local', 'ftp', 's3'] as Source[]).map(value => <div className="flex items-center gap-2" key={value}><RadioGroupItem value={value} id={`dataset-source-${value}`} /><Label htmlFor={`dataset-source-${value}`}>{t(`finetune.datasetSource_${value}`)}</Label></div>)}
+                    </RadioGroup>
+                    {source === 'local' ? <div key="local-file" className="space-y-2">
+                        <Label htmlFor="dataset-upload">{t('finetune.uploadDataset')}</Label>
+                        <Input id="dataset-upload" type="file" accept={dataType === 'text' ? '.json,.jsonl,.zip' : '.zip'} onChange={event => setFile(event.target.files?.[0])} />
+                        <p className="text-sm text-muted-foreground">{t(`finetune.${dataType === 'text' ? 'textPackageHint' : dataType === 'image_text' ? 'imagePackageHint' : 'videoPackageHint'}`)}</p>
+                    </div> : <>
+                        <div key="remote-name" className="space-y-1"><Label htmlFor="dataset-name">{t('finetune.datasetImportName')}</Label><Input id="dataset-name" value={name} onChange={event => setName(event.target.value)} placeholder="support-examples" /></div>
+                        <div className="space-y-1"><Label htmlFor="dataset-endpoint">{t('finetune.datasetEndpoint')}</Label><Input id="dataset-endpoint" value={connection.endpoint} autoComplete="off" onChange={event => setConnection(old => ({ ...old, endpoint: event.target.value }))} placeholder={source === 'ftp' ? 'ftp://files.example.com:21' : 'https://s3.example.com'} /><p className="text-xs text-muted-foreground">{t('finetune.datasetEndpointHint')}</p></div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{connectionFields[source].map(key => <div className="space-y-1" key={key}>
+                            <Label htmlFor={`dataset-${key}`}>{t(`finetune.datasetConnection_${key}`)}</Label><Input id={`dataset-${key}`} value={String(connection[key] ?? '')} type={secretFields.has(key) ? 'password' : 'text'} autoComplete="off" onChange={event => setConnection(old => ({ ...old, [key]: event.target.value }))} />
+                        </div>)}</div>
+                        {source === 'ftp' && <div className="flex gap-2 items-center"><Checkbox id="dataset-tls" checked={connection.tls ?? false} onCheckedChange={value => setConnection(old => ({ ...old, tls: value === true }))} /><Label htmlFor="dataset-tls">{t('finetune.datasetTLS')}</Label></div>}
+                        <p className="text-xs text-muted-foreground">{t('finetune.datasetCredentialsHint')}</p>
+                        <RadioGroup value={manifestSource} onValueChange={value => { setManifestSource(value); setFile(undefined); }} className="flex flex-wrap gap-4">
+                            {['remote', 'local'].map(value => <div className="flex items-center gap-2" key={value}><RadioGroupItem value={value} id={`manifest-source-${value}`} /><Label htmlFor={`manifest-source-${value}`}>{t(`finetune.datasetManifest_${value}`)}</Label></div>)}
+                        </RadioGroup>
+                        {manifestSource === 'remote' ? <div key="remote-manifest" className="space-y-1"><Label htmlFor="dataset-manifest">{t('finetune.datasetManifestPath')}</Label><Input id="dataset-manifest" value={manifestPath} onChange={event => setManifestPath(event.target.value)} placeholder="datasets/train.json" /></div>
+                            : <div key="local-manifest" className="space-y-1"><Label htmlFor="dataset-local-manifest">{t('finetune.datasetLocalManifest')}</Label><Input id="dataset-local-manifest" type="file" accept=".json,.jsonl" onChange={event => setFile(event.target.files?.[0])} /></div>}
+                        <div className="space-y-1"><Label htmlFor="dataset-media-root">{t('finetune.datasetMediaRoot')}</Label><Input id="dataset-media-root" value={mediaRoot} onChange={event => setMediaRoot(event.target.value)} placeholder="datasets/" /><p className="text-xs text-muted-foreground">{t('finetune.datasetRelativePathHint')}</p></div>
+                    </>}
+                </fieldset>
+                {busy && <p role="status" className="text-sm">{t('finetune.datasetImportChecking')}</p>}
+                {error && <p role="alert" className="text-sm text-red-500 break-words">{error}</p>}
+                <DialogFooter><Button type="button" variant="outlined" disabled={busy} onClick={close}>{t('bs:cancel')}</Button><Button type="submit" disabled={busy}>{t('finetune.datasetImportAndCheck')}</Button></DialogFooter>
+            </form>
+        </DialogContent>
+    </Dialog>;
+}

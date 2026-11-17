@@ -1,33 +1,34 @@
 from datetime import datetime
-from typing import Optional
 
-from sqlalchemy import Column, DateTime, Integer, text, delete
-from sqlmodel import Field, select, col
+from pydantic import BaseModel, ConfigDict, field_validator
+from sqlalchemy import Column, DateTime, Integer, delete, text
+from sqlmodel import Field, col, select
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.database import get_async_db_session
-
-
+from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
+from bisheng.finetune.domain.repositories.session import get_finetune_session as get_async_db_session
+
 
 class ServerBase(SQLModelSerializable):
     endpoint: str = Field(index=False)
-    sft_endpoint: str = Field(default='', index=False, description='FinetuneService Address')
+    sft_endpoint: str = Field(default="", index=False, description="FinetuneService Address")
     server: str = Field(index=True)
-    remark: Optional[str] = Field(default=None, index=False)
-    tenant_id: Optional[int] = Field(
+    remark: str | None = Field(default=None, index=False)
+    tenant_id: int | None = Field(
         default=None,
-        sa_column=Column(Integer, nullable=False, server_default=text('1'),
-                         index=True, comment='Tenant ID'),
+        sa_column=Column(Integer, nullable=False, server_default=text("1"), index=True, comment="Tenant ID"),
     )
-    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
+    create_time: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=False, index=True, server_default=text("CURRENT_TIMESTAMP"))
+    )
+    update_time: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT)
+    )
 
 
 class Server(ServerBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
 
 
 # Package business operations
@@ -54,20 +55,31 @@ class ServerDao(ServerBase):
 
     @classmethod
     async def delete(cls, server_id: int) -> None:
-        statement = delete(Server).where(col(Server.id) == server_id)
+        statement = delete(Server).where(col(Server.id) == server_id, col(Server.tenant_id) == get_current_tenant_id())
         async with get_async_db_session() as session:
             await session.exec(statement)
             await session.commit()
 
 
 class ServerRead(ServerBase):
-    id: Optional[int] = None
+    id: int | None = None
 
 
 class ServerQuery(ServerBase):
-    id: Optional[int] = None
-    server: Optional[str] = None
+    id: int | None = None
+    server: str | None = None
 
 
-class ServerCreate(ServerBase):
-    pass
+class ServerCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    server: str = Field(min_length=1, max_length=255)
+    endpoint: str = ""
+    sft_endpoint: str = ""
+    remark: str | None = None
+
+    @field_validator("sft_endpoint")
+    @classmethod
+    def validate_ft_endpoint(cls, value):
+        from bisheng.finetune.utils import parse_server_host
+
+        return parse_server_host(value) if value else value

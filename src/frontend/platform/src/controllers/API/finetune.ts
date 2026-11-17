@@ -2,6 +2,28 @@
 import { FileDB, FileItem, TaskDB } from "../../types/api/finetune";
 import axios from "../request";
 
+export type FinetuneDataType = 'text' | 'image_text' | 'video_text';
+
+export interface FinetuneCapability {
+    capability_id: string;
+    model_name: string;
+    input_types: string[];
+    training_methods: string[];
+    template: string;
+    validation_status: 'gpu_smoke_passed' | 'legacy' | 'unverified' | 'blocked';
+    validation_evidence?: Record<string, unknown>;
+    blocked_reason?: string;
+    parameter_schema: Record<string, unknown>;
+    base_model_id?: number;
+    registered: boolean;
+}
+
+export interface FinetunePreflightResult {
+    passed: boolean;
+    checks: Array<{ name: string; passed: boolean; detail?: unknown }>;
+    capability?: FinetuneCapability;
+}
+
 interface Tasks_query {
     /**
      * 每页条数
@@ -41,14 +63,43 @@ export const createTaskApi = async (data: any): Promise<TaskDB> => {
                 id: el.id,
                 num: el.sampleSize,
                 url: el.dataSource,
-                name: el.name
+                name: el.name,
+                dataset_report: el.datasetReport
             }
             return el.checked ? [...res, item] : res
         }, []) || []
     }
     const train_data = filterData(data.train_data)
     const preset_data = filterData(data.preset_data)
-    return await axios.post(`/api/v1/finetune/job`, { ...data, train_data, preset_data });
+    const dataset_report = {
+        files: [...train_data, ...preset_data]
+            .map(item => item.dataset_report)
+            .filter(Boolean)
+    };
+    return await axios.post(`/api/v1/finetune/job`, { ...data, train_data, preset_data, dataset_report });
+};
+
+export const getFinetuneCapabilitiesApi = async (serverId: string | number): Promise<{ contract_version: number; models: FinetuneCapability[] }> => {
+    return await axios.get('/api/v1/finetune/capabilities', { params: { server_id: serverId } });
+};
+
+export const preflightFinetuneApi = async (data: {
+    server: number;
+    base_model: number;
+    capability_id: string;
+    data_type: string;
+    method: string;
+    parameters: Record<string, unknown>;
+}): Promise<FinetunePreflightResult> => {
+    return await axios.post('/api/v1/finetune/preflight', data);
+};
+
+export const validateFinetuneApi = async (jobId: string, data: {
+    prompt: string;
+    media_url?: string;
+    generation?: Record<string, unknown>;
+}): Promise<Record<string, unknown>> => {
+    return await axios.post(`/api/v1/finetune/job/${jobId}/validate`, data);
 };
 
 // 删除任务
@@ -88,13 +139,14 @@ export const updataTaskNameApi = async (taskId: string, name: string) => {
 export const uploadTaskFileApi = async (data, config): Promise<FileItem> => {
     return await axios.post(`/api/v1/finetune/job/file`, data, config).then((res: any) => {
         if (!res.length) return null
-        const { id, url, name } = res[0]
+        const { id, url, name, dataset_report } = res[0]
         return {
             id,
             name,
             checked: true,
             sampleSize: 1000,
-            dataSource: url
+            dataSource: url,
+            datasetReport: dataset_report
         }
     });
 };

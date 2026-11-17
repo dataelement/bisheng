@@ -1,35 +1,34 @@
 from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import Column, DateTime, Integer, delete, text, update
-from sqlmodel import Field, select, col
+from sqlmodel import Field, col, select
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.database import get_async_db_session
-
 
 # Available for trainingmodelVertical
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
+from bisheng.finetune.domain.repositories.session import get_finetune_session as get_async_db_session
+
 
 class SftModelBase(SQLModelSerializable):
-    id: int = Field(default=None, nullable=False, primary_key=True, description='Uniqueness quantificationID')
-    tenant_id: Optional[int] = Field(
+    id: int = Field(default=None, nullable=False, primary_key=True, description="Uniqueness quantificationID")
+    tenant_id: int | None = Field(
         default=None,
-        sa_column=Column(Integer, nullable=False, server_default=text('1'),
-                         index=True, comment='Tenant ID'),
+        sa_column=Column(Integer, nullable=False, server_default=text("1"), index=True, comment="Tenant ID"),
     )
-    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
+    create_time: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=False, index=True, server_default=text("CURRENT_TIMESTAMP"))
+    )
+    update_time: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT)
+    )
 
 
 class SftModel(SftModelBase, table=True):
-    model_name: str = Field(index=True, description='Model name that can be used for fine-tuning training')
+    model_name: str = Field(index=True, description="Model name that can be used for fine-tuning training")
 
 
 class SftModelDao(SftModel):
-
     @classmethod
     async def get_sft_model(cls, model_name: str) -> SftModel | None:
         async with get_async_db_session() as session:
@@ -62,8 +61,9 @@ class SftModelDao(SftModel):
     @classmethod
     async def change_sft_model(cls, old_model_name, model_name) -> bool:
         async with get_async_db_session() as session:
-            update_statement = update(SftModel).where(SftModel.model_name == old_model_name).values(
-                model_name=model_name)
+            update_statement = (
+                update(SftModel).where(SftModel.model_name == old_model_name).values(model_name=model_name)
+            )
             update_ret = await session.exec(update_statement)
             await session.commit()
             return update_ret.rowcount != 0

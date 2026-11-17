@@ -76,7 +76,8 @@
     "xlsx-populate": "^1.21.0",
     "zustand": "^4.5.2",
     "@bisheng/chat": "workspace:*",
-    "@bisheng/api-client": "workspace:*"
+    "@bisheng/api-client": "workspace:*",
+    "jszip": "3.10.1"
   },
   "scripts": {
     "gen:locales": "pnpm --filter @bisheng/locales build",

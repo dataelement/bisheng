@@ -1,20 +1,23 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from pydantic import field_validator, BaseModel, model_validator
+from pydantic import BaseModel, field_validator, model_validator
 from sqlalchemy import Integer, Select
-from bisheng.core.database.dialect_helpers import JsonType, LargeText, UPDATE_TIME_SERVER_DEFAULT
-from sqlmodel import Column, DateTime, Field, func, select, text, update, col
+from sqlmodel import Column, DateTime, Field, col, func, select, text, update
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.database import get_async_db_session
+from bisheng.core.context.tenant import get_current_tenant_id
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType, LargeText
+from bisheng.finetune.domain.repositories.session import get_finetune_session as get_async_db_session
 from bisheng.utils import generate_uuid
 
+
 class TrainMethod(Enum):
-    FULL = 'full'
-    FREEZE = 'freeze'
-    LORA = 'lora'
+    FULL = "full"
+    FREEZE = "freeze"
+    LORA = "lora"
+
 
 class FinetuneStatus(Enum):
     # Training
@@ -28,36 +31,60 @@ class FinetuneStatus(Enum):
     # Publication complete
     PUBLISHED = 5
 
+
 class FinetuneBase(SQLModelSerializable):
-    id: str = Field(default=None, nullable=False, primary_key=True, description='Uniqueness quantificationID')
-    server: int = Field(default=0, index=True, description='RelatedRTSERVICESID')
-    server_name: str = Field(default='', index=True, description='RTService name')
-    rt_endpoint: str = Field(default='', description='RTService Address')
-    sft_endpoint: str = Field(default='', description='FTService Address')
-    base_model: int = Field(default=0, index=True, description='Foundation ModelID')
-    base_model_name: str = Field(max_length=50, description='Base Model Name')
-    root_model_name: str = Field(default='', description='Root underlying model name, which is the initial model name')
-    model_id: int = Field(default=0, index=True, description='Published Training ModelsID')
-    model_name: str = Field(index=True, max_length=50, description='Name of the training model')
-    method: str = Field(default=TrainMethod.FULL.value, nullable=False, max_length=20, description='Training Methods')
-    extra_params: Dict = Field(sa_column=Column(JsonType), description='Additional parameters required for training tasks')
-    train_data: Optional[List[Dict]] = Field(default=None, sa_column=Column(JsonType), description='Personal Training Dataset Information')
-    preset_data: Optional[List[Dict]] = Field(default=None, sa_column=Column(JsonType), description='Preset training dataset information')
-    status: int = Field(default=FinetuneStatus.TRAINING.value, index=True, description='Status of the training task')
-    reason: Optional[str] = Field(default='', sa_column=Column(LargeText), description='Task Failure Reason')
-    log_path: Optional[str] = Field(default='', max_length=512, description='Training log inminioPath on')
-    report: Optional[Dict] = Field(default=None, sa_column=Column(JsonType), description='Assessment report data for training tasks')
-    user_id: int = Field(default=None, index=True, description='creatorID')
-    user_name: str = Field(default=None, description='creatorName')
-    tenant_id: Optional[int] = Field(
-        default=None,
-        sa_column=Column(Integer, nullable=False, server_default=text('1'),
-                         index=True, comment='Tenant ID'),
+    id: str = Field(default=None, nullable=False, primary_key=True, description="Uniqueness quantificationID")
+    server: int = Field(default=0, index=True, description="RelatedRTSERVICESID")
+    server_name: str = Field(default="", index=True, description="RTService name")
+    rt_endpoint: str = Field(default="", description="RTService Address")
+    sft_endpoint: str = Field(default="", description="FTService Address")
+    base_model: int = Field(default=0, index=True, description="Foundation ModelID")
+    base_model_name: str = Field(max_length=50, description="Base Model Name")
+    root_model_name: str = Field(default="", description="Root underlying model name, which is the initial model name")
+    model_id: int = Field(default=0, index=True, description="Published Training ModelsID")
+    model_name: str = Field(index=True, max_length=50, description="Name of the training model")
+    method: str = Field(default=TrainMethod.FULL.value, nullable=False, max_length=20, description="Training Methods")
+    data_type: str | None = Field(default=None, max_length=32, description="Training data modality; NULL means legacy")
+    stage: str | None = Field(default=None, max_length=32, description="Detailed execution stage")
+    capability_snapshot: dict | None = Field(
+        default=None, sa_column=Column(JsonType), description="Frozen model capability"
     )
-    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
+    dataset_report: dict | None = Field(
+        default=None, sa_column=Column(JsonType), description="Dataset validation report"
+    )
+    artifact_report: dict | None = Field(
+        default=None, sa_column=Column(JsonType), description="Training artifact report"
+    )
+    inference_validation: dict | None = Field(
+        default=None, sa_column=Column(JsonType), description="Clean-process inference result"
+    )
+    extra_params: dict = Field(
+        sa_column=Column(JsonType), description="Additional parameters required for training tasks"
+    )
+    train_data: list[dict] | None = Field(
+        default=None, sa_column=Column(JsonType), description="Personal Training Dataset Information"
+    )
+    preset_data: list[dict] | None = Field(
+        default=None, sa_column=Column(JsonType), description="Preset training dataset information"
+    )
+    status: int = Field(default=FinetuneStatus.TRAINING.value, index=True, description="Status of the training task")
+    reason: str | None = Field(default="", sa_column=Column(LargeText), description="Task Failure Reason")
+    log_path: str | None = Field(default="", max_length=512, description="Training log inminioPath on")
+    report: dict | None = Field(
+        default=None, sa_column=Column(JsonType), description="Assessment report data for training tasks"
+    )
+    user_id: int = Field(default=None, index=True, description="creatorID")
+    user_name: str = Field(default=None, description="creatorName")
+    tenant_id: int | None = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text("1"), index=True, comment="Tenant ID"),
+    )
+    create_time: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=False, index=True, server_default=text("CURRENT_TIMESTAMP"))
+    )
+    update_time: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT)
+    )
 
     # Check training set data format
     @classmethod
@@ -65,37 +92,39 @@ class FinetuneBase(SQLModelSerializable):
         if v is None:
             return v
         if v is None or not isinstance(v, list):
-            raise ValueError('Finetune.train_data must be a list')
+            raise ValueError("Finetune.train_data must be a list")
         for one in v:
-            if not (one.get('name', None) and one.get('url', None)):
+            if not (one.get("name", None) and one.get("url", None)):
                 raise ValueError('Finetune.train_data each item must be {name:"",url:"",num:0}')
         return v
 
-    @model_validator(mode='before')
+    @model_validator(mode="before")
     @classmethod
-    def validate_all(cls, values: Dict[str, Any]) -> Dict[str, Any]:
-        extra_params = values.get('extra_params', None)
+    def validate_all(cls, values: dict[str, Any]) -> dict[str, Any]:
+        extra_params = values.get("extra_params", None)
         if extra_params is None or not isinstance(extra_params, dict):
-            raise ValueError('Finetune.extra_params must be a valid json')
+            raise ValueError("Finetune.extra_params must be a valid json")
 
-        train_data = values.get('train_data', None)
+        train_data = values.get("train_data", None)
         cls.validate_train(train_data)
 
-        preset_data = values.get('preset_data', None)
+        preset_data = values.get("preset_data", None)
         cls.validate_train(preset_data)
         return values
+
 
 class Finetune(FinetuneBase, table=True):
     id: str = Field(default_factory=generate_uuid, primary_key=True, unique=True)
 
+
 class FinetuneList(BaseModel):
-    server: Optional[int] = Field(None, description='RelatedRTSERVICESID')
-    server_name: Optional[str] = Field(None, description='RelatedRTService name')
-    status: Optional[List[int]] = Field(None, description='Status list of training tasks')
-    model_name: Optional[str] = Field(None, description='Model Name, Fuzzy search')
-    page: Optional[int] = Field(default=1, description='Page')
-    limit: Optional[int] = Field(default=10, description='Listings Per Page')
-    user_id: Optional[int] = Field(None, description='UsersID')
+    server: int | None = Field(None, description="RelatedRTSERVICESID")
+    server_name: str | None = Field(None, description="RelatedRTService name")
+    status: list[int] | None = Field(None, description="Status list of training tasks")
+    model_name: str | None = Field(None, description="Model Name, Fuzzy search")
+    page: int | None = Field(default=1, description="Page")
+    limit: int | None = Field(default=10, description="Listings Per Page")
+    user_id: int | None = Field(None, description="UsersID")
 
     def get_select_statement(self) -> (Select, Select):
         """Generate the select and count statements based on the filters."""
@@ -111,62 +140,68 @@ class FinetuneList(BaseModel):
             statement = statement.where(col(Finetune.status).in_(self.status))
             count_statement = count_statement.where(col(Finetune.status).in_(self.status))
         if self.model_name:
-            statement = statement.where(col(Finetune.model_name).like(f'%{self.model_name}%'))
-            count_statement = count_statement.where(col(Finetune.model_name).like(f'%{self.model_name}%'))
+            statement = statement.where(col(Finetune.model_name).like(f"%{self.model_name}%"))
+            count_statement = count_statement.where(col(Finetune.model_name).like(f"%{self.model_name}%"))
         if self.user_id:
             statement = statement.where(Finetune.user_id == self.user_id)
             count_statement = count_statement.where(Finetune.user_id == self.user_id)
         if self.page and self.limit:
             offset = (self.page - 1) * self.limit
-            statement = statement.offset(offset).limit(self.limit).order_by(col(Finetune.create_time).desc())
+            statement = (
+                statement.offset(offset)
+                .limit(self.limit)
+                .order_by(col(Finetune.create_time).desc(), col(Finetune.id).desc())
+            )
         return statement, count_statement
 
+
 class FinetuneChangeModelName(BaseModel):
-    id: str = Field(description='Training Mission UniqueID')
+    id: str = Field(description="Training Mission UniqueID")
     model_name: str
 
-class FinetuneExtraParams(BaseModel):
-    gpus: str = Field(..., description='Needs to be usedGPUCard #')
-    val_ratio: float = Field(0.1, ge=0, le=1, description='Proportion of validation sets')
-    per_device_train_batch_size: int = Field(1, description='Batch size')
-    learning_rate: float = Field(0.00005, ge=0, le=1, description='Learning rate <g x=1 id="1364"/>')
-    num_train_epochs: int = Field(3, gt=0, description='Iteration rounds')
-    max_seq_len: int = Field(8192, gt=0, description='Maximum List Length')
-    cpu_load: str = Field('false', description='Y/NcpuLoad')
 
-    @field_validator('per_device_train_batch_size', mode='before')
+class FinetuneExtraParams(BaseModel):
+    gpus: str = Field(..., description="Needs to be usedGPUCard #")
+    val_ratio: float = Field(0.1, ge=0, le=1, description="Proportion of validation sets")
+    per_device_train_batch_size: int = Field(1, description="Batch size")
+    learning_rate: float = Field(0.00005, ge=0, le=1, description='Learning rate <g x=1 id="1364"/>')
+    num_train_epochs: int = Field(3, gt=0, description="Iteration rounds")
+    max_seq_len: int = Field(8192, gt=0, description="Maximum List Length")
+    cpu_load: str = Field("false", description="Y/NcpuLoad")
+
+    @field_validator("per_device_train_batch_size", mode="before")
     @classmethod
     def validate_batch_size(cls, v: str):
         try:
             batch_size = int(v)
             if batch_size != 1:
                 if batch_size % 2 != 0:
-                    raise ValueError('per_device_train_batch_size must be 1 or even number')
+                    raise ValueError("per_device_train_batch_size must be 1 or even number")
             return batch_size
         except Exception as e:
-            raise ValueError(f'per_device_train_batch_size must be an integer {e}')
+            raise ValueError(f"per_device_train_batch_size must be an integer {e}")
 
-    @field_validator('gpus', mode='before')
+    @field_validator("gpus", mode="before")
     @classmethod
     def validate_gpus(cls, v: str):
         try:
-            gpu_list = v.split(',')
-            gpus = ''
+            gpu_list = v.split(",")
+            gpus = ""
             for one in gpu_list:
                 if not one:
                     continue
                 if not one.isdigit():
-                    raise ValueError('gpus number must be integer')
-                gpus += one + ','
+                    raise ValueError("gpus number must be integer")
+                gpus += one + ","
             gpus = gpus[:-1]
             if not gpus:
-                raise ValueError('gpus must not be empty')
+                raise ValueError("gpus must not be empty")
             return gpus
         except Exception as e:
-            raise ValueError(f'gpus must be an str {e}')
+            raise ValueError(f"gpus must be an str {e}")
+
 
 class FinetuneDao(FinetuneBase):
-
     @classmethod
     async def insert_one(cls, data: Finetune) -> Finetune:
         async with get_async_db_session() as session:
@@ -178,7 +213,7 @@ class FinetuneDao(FinetuneBase):
     @classmethod
     async def update_job(cls, finetune: Finetune) -> Finetune:
         if not finetune.id:
-            raise ValueError('Finetune.id must not be empty when update')
+            raise ValueError("Finetune.id must not be empty when update")
         async with get_async_db_session() as session:
             session.add(finetune)
             await session.commit()
@@ -205,8 +240,15 @@ class FinetuneDao(FinetuneBase):
 
     @classmethod
     async def change_status(cls, job_id: str, old_status: int, status: int) -> bool:
-        update_statement = update(Finetune).where(col(Finetune.id) == job_id,
-                                                  col(Finetune.status) == old_status).values(status=status)
+        update_statement = (
+            update(Finetune)
+            .where(
+                col(Finetune.id) == job_id,
+                col(Finetune.status) == old_status,
+                col(Finetune.tenant_id) == get_current_tenant_id(),
+            )
+            .values(status=status)
+        )
         async with get_async_db_session() as session:
             update_ret = await session.exec(update_statement)
             await session.commit()
@@ -215,20 +257,20 @@ class FinetuneDao(FinetuneBase):
     @classmethod
     async def delete_job(cls, job: Finetune) -> bool:
         if not job or not job.id:
-            raise ValueError('Finetune job to delete must not be None, and id must not be empty')
+            raise ValueError("Finetune job to delete must not be None, and id must not be empty")
         async with get_async_db_session() as session:
             await session.delete(job)
             await session.commit()
             return True
 
     @classmethod
-    async def find_jobs(cls, finetune_list: FinetuneList) -> (List[Finetune], int):
+    async def find_jobs(cls, finetune_list: FinetuneList) -> (list[Finetune], int):
         select_statement, count_statement = finetune_list.get_select_statement()
         async with get_async_db_session() as session:
             return (await session.exec(select_statement)).all(), await session.scalar(count_statement)
 
     @classmethod
-    async def get_server_filters(cls) -> List[str]:
+    async def get_server_filters(cls) -> list[str]:
         async with get_async_db_session() as session:
             statement = select(Finetune.server_name).distinct()
             return (await session.exec(statement)).all()

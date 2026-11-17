@@ -1,121 +1,160 @@
 import asyncio
 import io
 import json
-from typing import Dict, List, Any
+from typing import Any
 
+from aiohttp import ClientError
 from loguru import logger
 from pydantic import ValidationError
 
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.finetune import (CancelJobError, ChangeModelNameError, CreateFinetuneError,
-                                             DeleteJobError, ExportJobError, InvalidExtraParamsError, JobStatusError,
-                                             ModelNameExistsError, NotFoundJobError,
-                                             TrainDataNoneError, UnExportJobError, GetModelError)
+from bisheng.common.errcode.finetune import (
+    CancelJobError,
+    ChangeModelNameError,
+    DeleteJobError,
+    ExportJobError,
+    FinetunePreflightError,
+    GetModelError,
+    InvalidDatasetPackageError,
+    InvalidExtraParamsError,
+    JobStatusError,
+    ModelNameExistsError,
+    NotFoundJobError,
+    TrainDataNoneError,
+    UnExportJobError,
+    UnsupportedFinetuneCapabilityError,
+)
 from bisheng.common.errcode.model_deploy import NotFoundModelError
 from bisheng.common.errcode.server import NoSftServerError
 from bisheng.common.schemas.api import UnifiedResponseModel
-from bisheng.core.cache import InMemoryCache
-from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync, get_minio_storage
-from ..models.finetune import (Finetune, FinetuneChangeModelName, FinetuneDao,
-                               FinetuneExtraParams, FinetuneList, FinetuneStatus)
+from bisheng.core.storage.minio.minio_manager import get_minio_storage, get_minio_storage_sync
+
+from ...utils import parse_gpus, parse_server_host
+from ..models.finetune import (
+    Finetune,
+    FinetuneChangeModelName,
+    FinetuneDao,
+    FinetuneExtraParams,
+    FinetuneList,
+    FinetuneStatus,
+)
 from ..models.model_deploy import ModelDeploy, ModelDeployDao, ModelDeployInfo
 from ..models.server import Server, ServerDao
 from ..models.sft_model import SftModelDao
 from ..sft_backend import SFTBackend
-from ...utils import parse_gpus, parse_server_host
+from .multimodal import MultimodalFinetuneService
 
 
-class FinetuneService:
-    ServerCache: InMemoryCache = InMemoryCache()
-
+class FinetuneService(MultimodalFinetuneService):
     @classmethod
     def validate_params(cls, finetune: Finetune) -> UnifiedResponseModel | None:
-        """ Check request parameters, returningNoneIndicates check passed """
+        """Check request parameters, returningNoneIndicates check passed"""
         # Individual Training Sets and Preset Training Sets Use at least one
         if not finetune.train_data and not finetune.preset_data:
             raise TrainDataNoneError()
+        if finetune.extra_params.get("contract_version") == 2:
+            reports = (finetune.dataset_report or {}).get("files", [])
+            if (
+                finetune.preset_data
+                or not reports
+                or any(report.get("data_type") != finetune.data_type for report in reports)
+            ):
+                raise InvalidDatasetPackageError()
+            return None
         try:
             # Check Extra Parameter Values
             FinetuneExtraParams(**finetune.extra_params.copy())
         except ValidationError as e:
-            logger.error(f'Finetune extra_params is invalid {e}')
+            logger.error(f"Finetune extra_params is invalid {e}")
             raise InvalidExtraParamsError()
         return None
 
     @classmethod
-    def parse_command_params(cls, finetune: Finetune, base_model: ModelDeploy) -> Dict:
-        """ Parse the request parameters and combine them into a training instructioncommandParameters """
+    def parse_command_params(cls, finetune: Finetune, base_model: ModelDeploy) -> dict:
+        """Parse the request parameters and combine them into a training instructioncommandParameters"""
         params = finetune.extra_params.copy()
         # Needs to be inSFT-backendThe service willmodel_nameAbsolute path to the model
-        params['model_name_or_path'] = base_model.model
-        params['model_template'] = finetune.root_model_name
-        params['finetuning_type'] = finetune.method
+        params["model_name_or_path"] = base_model.model
+        params["model_template"] = finetune.root_model_name
+        params["finetuning_type"] = finetune.method
+        if finetune.extra_params.get("contract_version") == 2:
+            params["data_type"] = finetune.data_type
 
         # Special treatedcpu_loadformat, because the transmission method is different --cpu_load means isTrue, no additional parameter values are required
-        if params.get('cpu_load') == 'false':
-            del params['cpu_load']
-        elif params.get('cpu_load') == 'true':
-            params['cpu_load'] = ''
+        if params.get("cpu_load") == "false":
+            del params["cpu_load"]
+        elif params.get("cpu_load") == "true":
+            params["cpu_load"] = ""
 
         # Stitching training set parameters
-        params['dataset'] = []
-        params['each_max_samples'] = []
+        params["dataset"] = []
+        params["each_max_samples"] = []
         cls.parse_command_train_file(finetune.train_data, params)
         cls.parse_command_train_file(finetune.preset_data, params)
-        params['dataset'] = ','.join(params['dataset'])
-        params['each_max_samples'] = ','.join(params['each_max_samples'])
+        params["dataset"] = ",".join(params["dataset"])
+        params["each_max_samples"] = ",".join(params["each_max_samples"])
+        if finetune.extra_params.get("contract_version") == 2:
+            params.pop("model_template", None)
+            params.pop("each_max_samples", None)
         return params
 
     @classmethod
-    def parse_command_train_file(cls, train_data: List[Dict], params: Dict):
-        """ DapatkanminioA public link to the file onSFT-BackendDownload training files """
+    def parse_command_train_file(cls, train_data: list[dict], params: dict):
+        """DapatkanminioA public link to the file onSFT-BackendDownload training files"""
         if train_data is None:
             return
         minio_client = get_minio_storage_sync()
         for i in train_data:
-            params['dataset'].append(minio_client.get_share_link_sync(i['url'], clear_host=False))
-            params['each_max_samples'].append(str(i.get('num', 0)))
+            params["dataset"].append(minio_client.get_share_link_sync(i["url"], clear_host=False))
+            params["each_max_samples"].append(str(i.get("num", 0)))
 
     @classmethod
     def validate_status(cls, finetune: Finetune, new_status: int) -> None:
-        """ Verify that the state change is logical ReturnNoneIndicates success"""
+        """Verify that the state change is logical ReturnNoneIndicates success"""
         # Training can only To Training Success, Training Failure, Task Abort
         if finetune.status == FinetuneStatus.TRAINING.value:
-            if new_status not in [FinetuneStatus.SUCCESS.value, FinetuneStatus.FAILED.value,
-                                  FinetuneStatus.CANCEL.value]:
-                raise JobStatusError.http_exception(msg='In training, it can only be changed to training success, training failure, task abort')
+            if new_status not in [
+                FinetuneStatus.SUCCESS.value,
+                FinetuneStatus.FAILED.value,
+                FinetuneStatus.CANCEL.value,
+            ]:
+                raise JobStatusError.http_exception(
+                    msg="In training, it can only be changed to training success, training failure, task abort"
+                )
         # Training failed can only Becoming in training
         elif finetune.status == FinetuneStatus.FAILED.value:
             if new_status != FinetuneStatus.TRAINING.value:
-                raise JobStatusError.http_exception(msg='A training failure can only turn into a training')
+                raise JobStatusError.http_exception(msg="A training failure can only turn into a training")
         # Task Aborted can only Becoming in training
         elif finetune.status == FinetuneStatus.CANCEL.value:
             if new_status != FinetuneStatus.TRAINING.value:
-                raise JobStatusError.http_exception(msg='Task abort can only become in training')
+                raise JobStatusError.http_exception(msg="Task abort can only become in training")
         # Training Successful can only Change to Publish Complete
         elif finetune.status == FinetuneStatus.SUCCESS.value:
             if new_status != FinetuneStatus.PUBLISHED.value:
-                raise JobStatusError.http_exception(msg='Training success can only change to release completion')
+                raise JobStatusError.http_exception(msg="Training success can only change to release completion")
         # Publication complete can only Become Training Successful
         elif finetune.status == FinetuneStatus.PUBLISHED.value:
             if new_status != FinetuneStatus.SUCCESS.value:
-                raise JobStatusError.http_exception(msg='Release completion can only be converted into training success')
+                raise JobStatusError.http_exception(
+                    msg="Release completion can only be converted into training success"
+                )
         return None
 
     @classmethod
     async def get_sft_server(cls, server_id: int) -> Server | None:
         server = await cls.get_server_by_cache(server_id)
         if not server:
-            logger.warning('not found rt server data by id: %s', server_id)
+            logger.warning("not found rt server data by id: {}", server_id)
             return None
         if not server.sft_endpoint:
-            logger.warning('not found sft endpoint by id: %s', server_id)
+            logger.warning("not found sft endpoint by id: {}", server_id)
             return None
         return server
 
     @classmethod
     async def verify_job_model_name(cls, model_name: str) -> bool:
-        """ Correctionmodel_name Already exists? """
+        """Correctionmodel_name Already exists?"""
         if await ModelDeployDao.find_model_by_name(model_name):
             raise ModelNameExistsError()
         if await FinetuneDao.find_job_by_model_name(model_name):
@@ -124,7 +163,7 @@ class FinetuneService:
 
     @classmethod
     async def create_job(cls, finetune: Finetune) -> Finetune:
-        # Verify Extra Parameters
+        await cls.validate_uploaded_datasets(finetune)
         _ = cls.validate_params(finetune)
 
         # CariSFTWhether the service exists
@@ -137,7 +176,7 @@ class FinetuneService:
 
         # Find out if the underlying model exists
         base_model = await ModelDeployDao.find_model(finetune.base_model)
-        if not base_model:
+        if not base_model or str(base_model.server) != str(finetune.server):
             raise NotFoundModelError()
         root_model_name = base_model.model
         # Can find instructions for retraining based on trained and completed models
@@ -150,18 +189,55 @@ class FinetuneService:
         finetune.base_model_name = base_model.model
         finetune.root_model_name = root_model_name
 
+        capability_id = finetune.extra_params.pop("capability_id", None)
+        contract_version = finetune.extra_params.pop("contract_version", 1)
+        if contract_version == 2:
+            if not capability_id or not finetune.data_type:
+                raise UnsupportedFinetuneCapabilityError()
+            from bisheng.finetune.schemas import FinetunePreflightReq
+
+            from ..models.finetune import TrainMethod
+
+            preflight = await cls.preflight(
+                FinetunePreflightReq(
+                    server=finetune.server,
+                    base_model=finetune.base_model,
+                    capability_id=capability_id,
+                    data_type=finetune.data_type,
+                    method=TrainMethod(finetune.method),
+                    parameters=finetune.extra_params,
+                )
+            )
+            if not preflight.get("passed"):
+                raise FinetunePreflightError()
+            finetune.capability_snapshot = preflight.get("capability")
+            finetune.stage = "preparing"
+            finetune.extra_params["contract_version"] = 2
+            finetune.extra_params["capability_id"] = capability_id
+
         # RecallSFT-backendright of privacyAPIAdd New
-        logger.info(f'start create sft job: {finetune.id}')
+        logger.info(f"start create sft job: {finetune.id}")
         # Required for stitching instructionscommandParameters
         command_params = cls.parse_command_params(finetune, base_model)
-        sft_ret = await SFTBackend.create_job(host=parse_server_host(finetune.sft_endpoint),
-                                              job_id=finetune.id, params=command_params)
-        if not sft_ret[0]:
-            logger.error(f'create sft job error: job_id: {finetune.id}, err: {sft_ret[1]}')
-            raise CreateFinetuneError()
-        # Insert into Database
+        # Persist the stable ID first, so a transport timeout never loses a running remote job.
         finetune = await FinetuneDao.insert_one(finetune)
-        logger.info('create sft job success')
+        try:
+            sft_ret = await SFTBackend.create_job(
+                host=parse_server_host(finetune.sft_endpoint), job_id=finetune.id, params=command_params
+            )
+        except Exception:
+            logger.exception("FT submission outcome unknown for job {}", finetune.id)
+            finetune.stage = "unknown"
+            finetune.reason = "Submission connection interrupted; refresh this task to check its outcome"
+            await FinetuneDao.update_job(finetune)
+            return finetune
+        if not sft_ret[0]:
+            logger.error("create sft job rejected: job_id: {}, err: {}", finetune.id, sft_ret[1])
+            finetune.status = FinetuneStatus.FAILED.value
+            finetune.stage = "failed"
+            finetune.reason = str(sft_ret[1])[:4000]
+            await FinetuneDao.update_job(finetune)
+        logger.info("create sft job success")
         return finetune
 
     @classmethod
@@ -176,15 +252,39 @@ class FinetuneService:
         cls.validate_status(finetune, new_status)
 
         # RecallSFT-backendright of privacyAPICancel Task
-        logger.info(f'start cancel job_id: {job_id}, user: {user.user_name}')
+        logger.info(f"start cancel job_id: {job_id}, user: {user.user_name}")
         sft_ret = await SFTBackend.cancel_job(host=parse_server_host(finetune.sft_endpoint), job_id=job_id)
         if not sft_ret[0]:
-            logger.error(f'cancel sft job error: job_id: {job_id}, err: {sft_ret[1]}')
+            logger.error(f"cancel sft job error: job_id: {job_id}, err: {sft_ret[1]}")
             raise CancelJobError()
-        logger.info('change sft job status')
+        if finetune.extra_params.get("contract_version") == 2:
+            acknowledgement = sft_ret[1] if isinstance(sft_ret[1], dict) else {}
+            pending = acknowledgement.get("status") == "CANCELLING" or (
+                acknowledgement.get("status") == "RUNNING" and acknowledgement.get("cancel_requested")
+            )
+            if pending:
+                # Acceptance does not mean the training process has exited yet.
+                finetune.stage = "cancelling"
+                await FinetuneDao.update_job(finetune)
+                return finetune
+            success, state = await SFTBackend.get_job_status(parse_server_host(finetune.sft_endpoint), job_id)
+            if not success:
+                raise CancelJobError()
+            if state.get("status") == "CANCELLING" or (
+                state.get("status") == "RUNNING" and state.get("cancel_requested")
+            ):
+                finetune.stage = "cancelling"
+                await FinetuneDao.update_job(finetune)
+                return finetune
+            if state.get("status") != "CANCELLED":
+                raise CancelJobError()
+            finetune.stage = "cancelled"
+            finetune.log_path = ""  # Refresh the final FT log after cancellation is confirmed.
+        logger.info("change sft job status")
         await FinetuneDao.change_status(job_id, finetune.status, new_status)
         finetune.status = new_status
-        logger.info('cancel sft job success')
+        await FinetuneDao.update_job(finetune)
+        logger.info("cancel sft job success")
         return finetune
 
     @classmethod
@@ -197,31 +297,41 @@ class FinetuneService:
         model_name = await cls.delete_published_model(finetune)
 
         # Call the interface to delete the training task
-        logger.info(f'start delete sft job: {job_id}, user: {user.user_name}')
-        sft_ret = await SFTBackend.delete_job(host=parse_server_host(finetune.sft_endpoint), job_id=job_id,
-                                              model_name=model_name)
+        logger.info(f"start delete sft job: {job_id}, user: {user.user_name}")
+        sft_ret = await SFTBackend.delete_job(
+            host=parse_server_host(finetune.sft_endpoint), job_id=job_id, model_name=model_name
+        )
         if not sft_ret[0]:
-            logger.error(f'delete sft job error: job_id: {job_id}, err: {sft_ret[1]}')
-            raise DeleteJobError()
+            remote_missing = (
+                isinstance(sft_ret[1], dict)
+                and sft_ret[1].get("http_status") == 404
+                and finetune.status != FinetuneStatus.TRAINING.value
+            )
+            if not remote_missing:
+                logger.error("delete sft job error: job_id: {}, err: {}", job_id, sft_ret[1])
+                raise DeleteJobError()
+            logger.info("Removing non-running local job {} after FT confirmed HTTP 404", job_id)
         # Delete training task data
-        logger.info('delete sft job data')
+        logger.info("delete sft job data")
         # CleanedminioLog file on
         await FinetuneDao.delete_job(finetune)
-        logger.info(f'delete sft job success, data: {finetune.model_dump()}')
-        asyncio.create_task(cls.delete_job_log(finetune))
+        logger.info(f"delete sft job success, data: {finetune.model_dump()}")
+        cleanup_task = asyncio.create_task(cls.delete_job_log(finetune))
+        cleanup_task.add_done_callback(lambda task: task.exception() if not task.cancelled() else None)
         return finetune
 
     @classmethod
     async def delete_job_log(cls, finetune: Finetune):
         minio_client = await get_minio_storage()
-        await minio_client.remove_object(object_name=f'/finetune/log/{finetune.id}')
+        await minio_client.remove_object(object_name=f"/finetune/log/{finetune.id}")
 
     @classmethod
     async def upload_job_log(cls, finetune: Finetune, log_data: io.BytesIO, length: int) -> str:
         minio_client = await get_minio_storage()
-        log_path = f'finetune/log/{finetune.id}'
-        await minio_client.put_object(bucket_name=minio_client.bucket, object_name=log_path, file=log_data,
-                                      length=length)
+        log_path = f"finetune/log/{finetune.id}"
+        await minio_client.put_object(
+            bucket_name=minio_client.bucket, object_name=log_path, file=log_data, length=length
+        )
         return log_path
 
     @classmethod
@@ -230,13 +340,13 @@ class FinetuneService:
         resp = await minio_client.get_object(object_name=finetune.log_path)
         if resp is None:
             return None
-        return resp.decode('utf-8')
+        return resp.decode("utf-8")
 
     @classmethod
     async def delete_published_model(cls, finetune: Finetune) -> str | None:
         """
-         Offline the published model, delete the published model data, and return the published model name
-         param finetune: Training Tasks
+        Offline the published model, delete the published model data, and return the published model name
+        param finetune: Training Tasks
         """
         # Determine training task status
         if finetune.status != FinetuneStatus.PUBLISHED.value:
@@ -248,7 +358,7 @@ class FinetuneService:
 
         # Delete Published Model Data
         await ModelDeployDao.delete_model(published_model)
-        logger.info(f'delete published model: {published_model.model}, id: {published_model.id}')
+        logger.info(f"delete published model: {published_model.model}, id: {published_model.id}")
         return published_model.model
 
     @classmethod
@@ -261,33 +371,37 @@ class FinetuneService:
         cls.validate_status(finetune, new_status)
 
         # RecallSFT-backendright of privacyAPIInterfaces
-        logger.info(f'start export sft job: {job_id}, user: {user.user_name}')
-        sft_ret = await SFTBackend.publish_job(host=parse_server_host(finetune.sft_endpoint), job_id=job_id,
-                                               model_name=finetune.model_name)
+        logger.info(f"start export sft job: {job_id}, user: {user.user_name}")
+        sft_ret = await SFTBackend.publish_job(
+            host=parse_server_host(finetune.sft_endpoint), job_id=job_id, model_name=finetune.model_name
+        )
         if not sft_ret[0]:
-            logger.error(f'export sft job error: job_id: {job_id}, err: {sft_ret[1]}')
+            logger.error(f"export sft job error: job_id: {job_id}, err: {sft_ret[1]}")
             raise ExportJobError()
         # Create Published Model Data
-        logger.info('create published model')
-        published_model = ModelDeploy(model=finetune.model_name,
-                                      server=str(finetune.server),
-                                      endpoint=f'http://{finetune.rt_endpoint}/v2.1/models')
+        logger.info("create published model")
+        published_model = ModelDeploy(
+            model=finetune.model_name,
+            server=str(finetune.server),
+            endpoint=f"http://{finetune.rt_endpoint}/v2.1/models",
+        )
         try:
             published_model = await ModelDeployDao.insert_one(published_model)
         except Exception as e:
-            logger.error(f'create published model error: {str(e)}')
-            published_model = await ModelDeployDao.find_model_by_server_and_name(published_model.server,
-                                                                                 published_model.model)
+            logger.error(f"create published model error: {e!s}")
+            published_model = await ModelDeployDao.find_model_by_server_and_name(
+                published_model.server, published_model.model
+            )
 
         # Record the name of the model that can be used for training
         await SftModelDao.insert_sft_model(published_model.model)
 
         # Update training task status
-        logger.info('update sft job data')
+        logger.info("update sft job data")
         finetune.status = new_status
         finetune.model_id = published_model.id
         await FinetuneDao.update_job(finetune)
-        logger.info('export sft job success')
+        logger.info("export sft job success")
         return finetune
 
     @classmethod
@@ -302,51 +416,46 @@ class FinetuneService:
         await cls.delete_published_model(finetune)
 
         # RecallSFT-backendright of privacyAPIInterfaces
-        logger.info(f'start cancel export sft job: {job_id}, user: {user.user_name}')
-        sft_ret = await SFTBackend.cancel_publish_job(host=parse_server_host(finetune.sft_endpoint), job_id=job_id,
-                                                      model_name=finetune.model_name)
+        logger.info(f"start cancel export sft job: {job_id}, user: {user.user_name}")
+        sft_ret = await SFTBackend.cancel_publish_job(
+            host=parse_server_host(finetune.sft_endpoint), job_id=job_id, model_name=finetune.model_name
+        )
         if not sft_ret[0]:
-            logger.error(f'cancel export sft job error: job_id: {job_id}, err: {sft_ret[1]}')
+            logger.error(f"cancel export sft job error: job_id: {job_id}, err: {sft_ret[1]}")
             raise UnExportJobError()
         await SftModelDao.delete_sft_model(finetune.model_name)
         # Delete published model information
-        logger.info(f'delete published model: {finetune.model_id}')
+        logger.info(f"delete published model: {finetune.model_id}")
         await ModelDeployDao.delete_model_by_id(finetune.model_id)
-        logger.info('update finetune status')
+        logger.info("update finetune status")
         finetune.status = new_status
         finetune.model_id = 0
         await FinetuneDao.update_job(finetune)
-        logger.info('cancel export sft job success')
+        logger.info("cancel export sft job success")
         return finetune
 
     @classmethod
     async def get_server_by_cache(cls, server_id: int):
-        # Fetch from memory first
-        cache_server = cls.ServerCache.get(server_id)
-        if cache_server:
-            return cls.ServerCache.get(server_id)
-        # Retrieve from database
-        server = await ServerDao.find_server(server_id)
-        if server:
-            cls.ServerCache.set(server_id, server)
-        return server
+        # Server access must be re-evaluated in the current tenant on every request.
+        return await ServerDao.find_server(server_id)
 
     @classmethod
-    async def get_all_job(cls, req_data: FinetuneList) -> (List[Finetune], int):
+    async def get_all_job(cls, req_data: FinetuneList) -> (list[Finetune], int):
         job_list, total = await FinetuneDao.find_jobs(req_data)
         # Asynchronous thread update task status
-        asyncio.create_task(cls.sync_all_job_status(job_list))
+        sync_task = asyncio.create_task(cls.sync_all_job_status(job_list))
+        sync_task.add_done_callback(lambda task: task.exception() if not task.cancelled() else None)
         return job_list, total
 
     @classmethod
-    async def sync_all_job_status(cls, job_list: List[Finetune]) -> None:
+    async def sync_all_job_status(cls, job_list: list[Finetune]) -> None:
         # Asynchronous threads update the status of bulk tasks
         for finetune in job_list:
             await cls.sync_job_status(finetune, finetune.sft_endpoint)
 
     @classmethod
-    async def get_job_info(cls, job_id: str) -> Dict[str, Any]:
-        """ Get real-time information on tasks in training """
+    async def get_job_info(cls, job_id: str) -> dict[str, Any]:
+        """Get real-time information on tasks in training"""
         # ViewjobTask Information
         finetune = await FinetuneDao.find_job(job_id)
         if not finetune:
@@ -357,78 +466,110 @@ class FinetuneService:
 
         # Get log file
         log_data = None
-        res_data = list()
+        train_log = ""
+        res_data = []
         if finetune.log_path:
             log_data = await cls.get_job_log(finetune)
+            if log_data and log_data.startswith("{"):
+                try:
+                    stored_logs = json.loads(log_data)
+                    if "log_data" in stored_logs:
+                        log_data = stored_logs["log_data"]
+                        train_log = stored_logs.get("train_log", "")
+                except json.JSONDecodeError:
+                    logger.debug("Legacy training log contains multiple JSON lines")
             res_data = cls.parse_log_data(log_data)
 
         return {
-            'finetune': finetune,
-            'log': log_data if finetune.status != FinetuneStatus.FAILED.value else finetune.reason,
-            'loss_data': res_data,  # like [{"step": 10, "loss": 0.5}, {"step": 20, "loss": 0.3}]
-            'report': finetune.report if finetune.report else None,
+            "finetune": {**finetune.model_dump(), "contract_version": finetune.extra_params.get("contract_version", 1)},
+            "log": log_data if finetune.status != FinetuneStatus.FAILED.value else finetune.reason,
+            "train_log": train_log,
+            "config_snapshot": (finetune.report or {}).get("train_config"),
+            "loss_data": res_data,  # like [{"step": 10, "loss": 0.5}, {"step": 20, "loss": 0.3}]
+            "report": finetune.report if finetune.report else None,
         }
 
     @classmethod
-    def parse_log_data(cls, log_data: str) -> List[Dict[str, str]]:
+    def parse_log_data(cls, log_data: str) -> list[dict[str, str]]:
         if log_data is None:
             return []
         res_data = []
-        contents = log_data.split('\n')
+        contents = log_data.split("\n")
         for elem in contents:
-            if elem.strip() == '':
+            if elem.strip() == "":
                 continue
-            sub_data = {'step': None, 'loss': None}
+            sub_data = {"step": None, "loss": None}
             elem = elem.strip()
-            elem_data = json.loads(elem)
-            if elem_data.get('loss', None) is None:
+            try:
+                elem_data = json.loads(elem)
+            except json.JSONDecodeError:
                 continue
-            sub_data['step'] = elem_data['current_steps']
-            sub_data['loss'] = elem_data['loss']
+            if not isinstance(elem_data, dict):
+                continue
+            if elem_data.get("loss", None) is None:
+                continue
+            sub_data["step"] = elem_data.get("current_steps", elem_data.get("step"))
+            sub_data["loss"] = elem_data["loss"]
             res_data.append(sub_data)
         return res_data
 
     @classmethod
     async def sync_job_status(cls, finetune: Finetune, sft_endpoint: str) -> bool:
-        """ FROMSFT-backendService Synchronization Task Status """
-        if finetune.status != FinetuneStatus.TRAINING.value:
+        """FROMSFT-backendService Synchronization Task Status"""
+        if finetune.status != FinetuneStatus.TRAINING.value and finetune.log_path:
             return True
-        logger.info(f'start sync job status: {finetune.id}')
+        logger.info(f"start sync job status: {finetune.id}")
 
-        sft_ret = await SFTBackend.get_job_status(host=parse_server_host(sft_endpoint), job_id=finetune.id)
+        try:
+            sft_ret = await SFTBackend.get_job_status(host=parse_server_host(sft_endpoint), job_id=finetune.id)
+        except (ClientError, TimeoutError):
+            logger.exception("Could not refresh FT job {}; keeping its last known state", finetune.id)
+            return False
         if not sft_ret[0]:
-            logger.error(f'get sft job status error: job_id: {finetune.id}, err: {sft_ret[1]}')
+            logger.error(f"get sft job status error: job_id: {finetune.id}, err: {sft_ret[1]}")
             return False
-        if sft_ret[1]['status'] == SFTBackend.JOB_FINISHED:
+        remote = sft_ret[1]
+        finetune.reason = remote.get("reason", "")
+        finetune.stage = remote.get("stage", finetune.stage)
+        if remote.get("artifacts"):
+            finetune.artifact_report = remote["artifacts"]
+        if remote.get("dataset_report"):
+            finetune.dataset_report = {**(finetune.dataset_report or {}), "execution": remote["dataset_report"]}
+        if remote.get("config"):
+            finetune.report = {**(finetune.report or {}), "train_config": remote["config"]}
+        if remote["status"] == SFTBackend.JOB_FINISHED:
             finetune.status = FinetuneStatus.SUCCESS.value
-            await FinetuneDao.change_status(finetune.id, finetune.status, FinetuneStatus.SUCCESS.value)
-        elif sft_ret[1]['status'] == SFTBackend.JOB_FAILED:
+            if finetune.extra_params.get("contract_version") == 2 and not (
+                finetune.artifact_report and finetune.artifact_report.get("complete")
+            ):
+                finetune.status = FinetuneStatus.FAILED.value
+                finetune.stage = "failed"
+                finetune.reason = "Training exited successfully but required artifacts are incomplete"
+        elif remote["status"] == SFTBackend.JOB_FAILED:
             finetune.status = FinetuneStatus.FAILED.value
-            finetune.reason = sft_ret[1]['reason']
-            await FinetuneDao.update_job(finetune)
-
-        # Execution failed without querying logs and reports
-        if finetune.status == FinetuneStatus.FAILED.value:
-            logger.info('sft job status failed, no need exec log and report')
-            return False
+        elif remote["status"] == "CANCELLED":
+            finetune.status = FinetuneStatus.CANCEL.value
+            finetune.stage = "cancelled"
+            finetune.log_path = ""  # A failed final-log fetch must be retried on the next refresh.
 
         # Query task execution logs and reports
-        logger.info('start query sft job log and report')
+        logger.info("start query sft job log and report")
         sft_ret = await SFTBackend.get_job_log(host=parse_server_host(sft_endpoint), job_id=finetune.id)
         if not sft_ret[0]:
-            logger.error(f'get sft job log error: job_id: {finetune.id}, err: {sft_ret[1]}')
-        log_data = sft_ret[1]['log_data'].encode('utf-8')
-        # Upload log file tominioUpward
-        log_path = await cls.upload_job_log(finetune, io.BytesIO(log_data), len(log_data))
-        finetune.log_path = log_path
+            logger.error("get sft job log error: job_id: {}, err: {}", finetune.id, sft_ret[1])
+        else:
+            logs = sft_ret[1]
+            content = {"log_data": logs.get("log_data", ""), "train_log": logs.get("train_log", "")}
+            log_data = json.dumps(content).encode("utf-8")
+            finetune.log_path = await cls.upload_job_log(finetune, io.BytesIO(log_data), len(log_data))
 
         # Query Task Evaluation Report
-        logger.info('start query sft job report')
+        logger.info("start query sft job report")
         sft_ret = await SFTBackend.get_job_metrics(host=parse_server_host(sft_endpoint), job_id=finetune.id)
         if not sft_ret[0]:
-            logger.error(f'get sft job report error: job_id: {finetune.id}, err: {sft_ret[1]}')
+            logger.error(f"get sft job report error: job_id: {finetune.id}, err: {sft_ret[1]}")
         else:
-            finetune.report = sft_ret[1]['report']
+            finetune.report = {**(finetune.report or {}), **(sft_ret[1].get("report") or {})}
 
         # Changelog and Report Data
         await FinetuneDao.update_job(finetune)
@@ -436,7 +577,7 @@ class FinetuneService:
 
     @classmethod
     async def change_job_model_name(cls, req: FinetuneChangeModelName) -> Finetune:
-        """ Modify the model name of the training task """
+        """Modify the model name of the training task"""
         finetune = await FinetuneDao.find_job(req.id)
         if not finetune:
             raise NotFoundJobError()
@@ -456,20 +597,21 @@ class FinetuneService:
 
     @classmethod
     async def change_published_model_name(cls, finetune: Finetune, model_name: str) -> bool:
-        """ Modify the model name of the training task """
+        """Modify the model name of the training task"""
         # Unpublished training tasks do not require actionablemodel
         if finetune.status != FinetuneStatus.PUBLISHED.value:
             return True
         published_model = await ModelDeployDao.find_model(finetune.model_id)
         if not published_model:
-            logger.error(f'published model not found, job_id: {finetune.id}, model_id: {finetune.model_id}')
+            logger.error(f"published model not found, job_id: {finetune.id}, model_id: {finetune.model_id}")
             return False
 
         # Call the interface to modify the name of the published model
-        sft_ret = await SFTBackend.change_model_name(parse_server_host(finetune.sft_endpoint), finetune.id,
-                                                     published_model.model, model_name)
+        sft_ret = await SFTBackend.change_model_name(
+            parse_server_host(finetune.sft_endpoint), finetune.id, published_model.model, model_name
+        )
         if not sft_ret[0]:
-            logger.error(f'change model name error: job_id: {finetune.id}, err: {sft_ret[1]}')
+            logger.error(f"change model name error: job_id: {finetune.id}, err: {sft_ret[1]}")
             return False
 
         # Modify pre-trained model name
@@ -481,26 +623,28 @@ class FinetuneService:
         return True
 
     @classmethod
-    async def get_server_filters(cls) -> List[Dict[str, Any]]:
-        """ DapatkanftServer Filter Criteria """
+    async def get_server_filters(cls) -> list[dict[str, Any]]:
+        """DapatkanftServer Filter Criteria"""
         server_filters = await FinetuneDao.get_server_filters()
         res = []
         for one in server_filters:
-            res.append({
-                'id': one,
-                'server_name': one,
-            })
+            res.append(
+                {
+                    "id": one,
+                    "server_name": one,
+                }
+            )
         return res
 
     @classmethod
-    async def get_model_list(cls, server_id: int) -> List[ModelDeploy]:
-        """ DapatkanftList of all models under the service """
+    async def get_model_list(cls, server_id: int) -> list[ModelDeploy]:
+        """DapatkanftList of all models under the service"""
         server_info = await ServerDao.find_server(server_id)
         if not server_info:
             raise NoSftServerError()
         flag, model_name_list = await SFTBackend.get_all_model(parse_server_host(server_info.sft_endpoint))
         if not flag:
-            logger.error(f'get model list error: server_id: {server_id}, err: {model_name_list}')
+            logger.error(f"get model list error: server_id: {server_id}, err: {model_name_list}")
             raise GetModelError()
         ret = []
         db_model = await ModelDeployDao.find_model_by_server(str(server_id))
@@ -509,9 +653,11 @@ class FinetuneService:
                 ret.append(one)
                 model_name_list.remove(one.model)
         for one in model_name_list:
-            ret.append(await ModelDeployDao.insert_one(ModelDeploy(server=str(server_id),
-                                                                   model=one,
-                                                                   endpoint=f'http://{server_info.endpoint}/v2.1/models')))
+            ret.append(
+                await ModelDeployDao.insert_one(
+                    ModelDeploy(server=str(server_id), model=one, endpoint=f"http://{server_info.endpoint}/v2.1/models")
+                )
+            )
 
         res = []
         for one in ret:
@@ -519,8 +665,8 @@ class FinetuneService:
         return res
 
     @classmethod
-    async def get_gpu_info(cls) -> List[Dict]:
-        """ DapatkanGPUMessage """
+    async def get_gpu_info(cls) -> list[dict]:
+        """DapatkanGPUMessage"""
         all_server = await ServerDao.find_all_server()
         res = []
         for server in all_server:
@@ -528,10 +674,10 @@ class FinetuneService:
                 continue
             sft_ret = await SFTBackend.get_gpu_info(parse_server_host(server.sft_endpoint))
             if not sft_ret[0]:
-                logger.error(f'get gpu info error: server_id: {server.id}, err: {sft_ret[1]}')
+                logger.error(f"get gpu info error: server_id: {server.id}, err: {sft_ret[1]}")
                 continue
             gpu_info = parse_gpus(sft_ret[1])
             for one in gpu_info:
-                one['server'] = server.server
+                one["server"] = server.server
                 res.append(one)
         return res
