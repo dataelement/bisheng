@@ -233,9 +233,11 @@ function Content({
   return (
     <SpacePanelFrame
       title={t(
-        mode === "jobs" && jobKind === "move_index"
-          ? "move.jobs"
-          : `f118.processing_title_${mode}`,
+        mode === "jobs" && jobKind === "space_copy"
+          ? "space_copy_ui.tasks"
+          : mode === "jobs" && jobKind === "move_index"
+            ? "move.jobs"
+            : `f118.processing_title_${mode}`,
       )}
       presentation={presentation}
       busy={busy}

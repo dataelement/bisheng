@@ -780,6 +780,9 @@
     },
     "space_copy_ui": {
         "title": "Copy knowledge space",
+        "tasks": "Copy tasks",
+        "recovery_notice": "This space copy is not complete. Check its progress or retry the original task if it failed.",
+        "retry_notice": "This copy has not been confirmed complete. Retry to continue the same operation.",
         "name": "Copy name",
         "scope_label": "Included content",
         "scope": "Folders, files, all versions, tags, metadata and parsing settings",
