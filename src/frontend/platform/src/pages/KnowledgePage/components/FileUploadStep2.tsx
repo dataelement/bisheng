@@ -1,7 +1,6 @@
 // @ts-strict-ignore
 import { Button, notification } from '@bisheng/ui';
 
-import { Outlined } from "bisheng-icons";
 
 
 
@@ -43,6 +42,7 @@ interface IProps {
     isSubmitting: boolean;
     onNext: (step: number, config?: any) => void;
     onPrev: () => void;
+    onDirectUpload?: () => void;
     isAdjustMode?: boolean;
     kId?: string | number;
     // 新增1：接收父组件保存的状态
@@ -60,7 +60,7 @@ const enum DisplayModeType {
 
 
 const FileUploadStep2 = forwardRef(({
-    step, resultFiles, isSubmitting, onNext, onPrev, isAdjustMode, kId, previewRenderer,
+    step, resultFiles, isSubmitting, onNext, onPrev, onDirectUpload, isAdjustMode, kId, previewRenderer,
     persistState,
     onPersistStateChange
 }: IProps, ref) => {
@@ -159,6 +159,10 @@ const FileUploadStep2 = forwardRef(({
 
 
     const internalHandleNext = () => {
+        if (isSubmitting) {
+            notification.open({ type: 'warning', description: String(t('previewInProgress') ?? '') });
+            return;
+        }
         if (vildateCell()) return;
         const hasEmptyCustomRule = rules.splitMode !== 'auto' && (strategies || []).some(s => String(s?.regex ?? '') === '');
         if (hasEmptyCustomRule) {
@@ -308,12 +312,13 @@ const FileUploadStep2 = forwardRef(({
                     }} color="default">
                     {t('previousStep')}
                 </Button>
-                <Button disabled={previewFailed || isSubmitting || (rules.splitMode !== 'auto' && strategies.length === 0)} onClick={internalHandleNext}>
-                    {isSubmitting ? (
-                        <Outlined.Loading className="animate-spin h-12 w-12" />
-                    ) : (
-                        t('nextStep')
-                    )}
+                {onDirectUpload && (
+                    <Button variant="outlined" onClick={onDirectUpload} color="default">
+                        {t('uploadDirectlyDefaults')}
+                    </Button>
+                )}
+                <Button disabled={previewFailed || (isSubmitting && !onDirectUpload) || (rules.splitMode !== 'auto' && strategies.length === 0)} onClick={internalHandleNext}>
+                    {t('nextStep')}
                 </Button>
             </div>
         </div>

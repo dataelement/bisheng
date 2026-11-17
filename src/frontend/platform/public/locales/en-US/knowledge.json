@@ -228,6 +228,8 @@
     "textComparison": "Original text comparison",
     "segmentStrategy": "Segmentation Strategy",
     "uploadDirectly": "Upload Directly",
+    "uploadDirectlyDefaults": "Upload directly with space defaults",
+    "previewInProgress": "Preview is still processing. Wait for it to finish, or upload directly using the space defaults.",
     "status": "Status",
     "all": "All",
     "parsing": "Parsing",

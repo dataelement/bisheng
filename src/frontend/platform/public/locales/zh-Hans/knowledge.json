@@ -277,6 +277,8 @@
     "nextStep": "下一步",
     "addSuccess": "添加成功",
     "uploadDirectly": "直接上传",
+    "uploadDirectlyDefaults": "使用空间默认规则直接上传",
+    "previewInProgress": "预览仍在解析，请等待完成后继续，或选择直接上传（使用空间默认规则）。",
     "defaultStrategy": "文档文件",
     "customStrategy": "表格文件",
     "splitLength": "预期切分长度",

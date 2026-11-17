@@ -263,6 +263,8 @@
     "nextStep": "次へ",
     "addSuccess": "追加成功",
     "uploadDirectly": "直接アップロード",
+    "uploadDirectlyDefaults": "スペースの既定ルールで直接アップロード",
+    "previewInProgress": "プレビューを解析中です。完了を待つか、スペースの既定ルールで直接アップロードしてください。",
     "defaultStrategy": "文書ファイル",
     "customStrategy": "表計算ファイル",
     "splitLength": "期待分割長",
