@@ -73,6 +73,26 @@ if count == 1 then redis.call('EXPIRE', KEYS[1], 60) end
 return count
 """
 
+_PUSH_STREAM_RESPONSE = """
+if redis.call('GET', KEYS[2]) ~= 'open' then return 0 end
+local ttl = math.max(60000, redis.call('PTTL', KEYS[2]))
+if string.len(ARGV[1]) > tonumber(ARGV[2]) or redis.call('LLEN', KEYS[1]) >= tonumber(ARGV[3]) then
+    redis.call('SET', KEYS[2], 'closed', 'PX', ttl)
+    redis.call('DEL', KEYS[1])
+    redis.call('RPUSH', KEYS[1], '{"type":"response-error","error":"busy"}')
+    redis.call('PEXPIRE', KEYS[1], ttl)
+    return -1
+end
+redis.call('RPUSH', KEYS[1], ARGV[1])
+redis.call('PEXPIRE', KEYS[1], ttl)
+return 1
+"""
+
+_CLOSE_STREAM = """
+redis.call('SET', KEYS[2], 'closed', 'EX', 60)
+return redis.call('DEL', KEYS[1])
+"""
+
 
 class MobileRegistration:
     def __init__(self, tenant_id: str, user_id: str, display_name: str, secret_hash: str):
@@ -83,11 +103,15 @@ class MobileRegistration:
 
 
 class MobileAccessStore:
-    def __init__(self, redis, blocking=None):
+    def __init__(self, redis, blocking=None, *, max_stream_chunks: int = 16, max_stream_frame_bytes: int = 262144):
         self.redis = redis
         # Stream reads block for up to an hour. They use a separate client so a
         # single-node pool of 100 shared connections cannot be exhausted.
         self.blocking = redis if blocking is None else blocking
+        # Both limits apply atomically across workers: at most 4 MiB of
+        # serialized response frames per stream with the default settings.
+        self.max_stream_chunks = max_stream_chunks
+        self.max_stream_frame_bytes = max_stream_frame_bytes
 
     @staticmethod
     def registration_key(desktop_id: str) -> str:
@@ -104,6 +128,10 @@ class MobileAccessStore:
     @staticmethod
     def response_key(desktop_id: str, request_id: str) -> str:
         return f"dsh:mobile:{{{desktop_id}}}:response:{request_id}"
+
+    @staticmethod
+    def stream_key(desktop_id: str, request_id: str) -> str:
+        return f"dsh:mobile:{{{desktop_id}}}:stream:{request_id}"
 
     @staticmethod
     def index_key(tenant_id: str, user_id: str) -> str:
@@ -194,8 +222,28 @@ class MobileAccessStore:
         client = self.blocking if stream else self.redis
         return await self._pop_from(client, self.response_key(desktop_id, request_id), timeout)
 
-    async def delete_response(self, desktop_id: str, request_id: str) -> None:
-        await self.redis.delete(self.response_key(desktop_id, request_id))
+    async def open_stream(self, desktop_id: str, request_id: str, ttl_seconds: int) -> None:
+        await self.redis.set(self.stream_key(desktop_id, request_id), "open", ex=ttl_seconds)
+
+    async def push_stream_response(self, desktop_id: str, request_id: str, message: dict) -> int:
+        """Return 1 if queued, 0 if closed, -1 if this frame overflowed the queue."""
+        encoded = json.dumps(message, ensure_ascii=False, separators=(",", ":"))
+        return int(
+            await self._eval(
+                _PUSH_STREAM_RESPONSE,
+                [self.response_key(desktop_id, request_id), self.stream_key(desktop_id, request_id)],
+                [encoded, self.max_stream_frame_bytes, self.max_stream_chunks],
+            )
+        )
+
+    async def close_stream(self, desktop_id: str, request_id: str) -> None:
+        # A tombstone prevents an in-flight frame on another worker from
+        # recreating a response queue after its consumer has left.
+        await self._eval(
+            _CLOSE_STREAM,
+            [self.response_key(desktop_id, request_id), self.stream_key(desktop_id, request_id)],
+            [],
+        )
 
     async def failure_count(self, client_ip: str, desktop_id: str) -> int:
         value = await self.redis.get(self.rate_key(client_ip, desktop_id))

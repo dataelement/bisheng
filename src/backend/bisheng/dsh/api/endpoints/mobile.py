@@ -20,6 +20,7 @@ from bisheng.dsh.infrastructure.mobile_access import MobileAccessStore
 router = APIRouter()
 _service: MobileAccessService | None = None
 _blocking_redis = None
+_service_lock = asyncio.Lock()
 _sessions: MobileSessionService | None = None
 
 
@@ -59,7 +60,11 @@ async def mobile_sessions(request: Request) -> MobileSessionService:
 
 async def mobile_service() -> MobileAccessService:
     global _service, _blocking_redis
-    if _service is None:
+    if _service is not None:
+        return _service
+    async with _service_lock:
+        if _service is not None:
+            return _service
         from bisheng.common.services.config_service import settings
         from bisheng.core.cache.redis_conn import RedisClient
         from bisheng.core.cache.redis_manager import get_redis_client
@@ -67,8 +72,24 @@ async def mobile_service() -> MobileAccessService:
         shared = (await get_redis_client()).async_connection
         # Construction connects a cluster immediately, so it stays off the event loop.
         # RedisClient already branches for a single node, cluster, and sentinel.
-        _blocking_redis = await asyncio.to_thread(RedisClient, settings.redis_url, max_connections=64)
-        _service = MobileAccessService(MobileAccessStore(shared, _blocking_redis.async_connection))
+        creation = asyncio.create_task(asyncio.to_thread(RedisClient, settings.redis_url, max_connections=64))
+        try:
+            client = await asyncio.shield(creation)
+        except asyncio.CancelledError:
+            # Cancelling to_thread does not stop its constructor. Close the
+            # eventual unpublished client instead of leaking its connections.
+            async def close_unpublished():
+                try:
+                    unpublished = await creation
+                except Exception:
+                    logger.exception("mobile stream redis initialization failed after cancellation")
+                    return
+                await _close_mobile_redis(unpublished)
+
+            await asyncio.shield(close_unpublished())
+            raise
+        _blocking_redis = client
+        _service = MobileAccessService(MobileAccessStore(shared, client.async_connection))
     return _service
 
 
@@ -80,9 +101,14 @@ async def close_mobile_service() -> None:
     raises: shutdown continues with the rest of the teardown.
     """
     global _service, _blocking_redis
-    client, _blocking_redis, _service = _blocking_redis, None, None
+    async with _service_lock:
+        client, _blocking_redis, _service = _blocking_redis, None, None
     if client is None:
         return
+    await _close_mobile_redis(client)
+
+
+async def _close_mobile_redis(client) -> None:
     try:
         await client.aclose()
     except Exception:
