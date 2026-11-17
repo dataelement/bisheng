@@ -15,7 +15,27 @@ const API = {
     events: (conversationId: string) =>
         `/api/v1/workstation/conversations/${encodeURIComponent(conversationId)}/events`,
     stop: (conversationId: string) => `/api/v1/workstation/conversations/${encodeURIComponent(conversationId)}/stop`,
+    fileUrl: (conversationId: string, fileId: string) =>
+        `/api/v1/workstation/conversations/${encodeURIComponent(conversationId)}/files/${encodeURIComponent(fileId)}/url`,
 };
+
+/** Path of the endpoint that issues a link to one file of the conversation's run. */
+export function getRunFileUrlPath(conversationId: string, fileId: string): string {
+    return API.fileUrl(conversationId, fileId);
+}
+
+/**
+ * A fresh link to a file the current run announced with a `file` event.
+ * Resolves with undefined when the backend cannot issue one.
+ */
+export async function getRunFileUrl(conversationId: string, fileId: string): Promise<string | undefined> {
+    try {
+        const res: { data?: { url?: string } } = await http.get(API.fileUrl(conversationId, fileId));
+        return res?.data?.url || undefined;
+    } catch {
+        return undefined;
+    }
+}
 
 /** Absolute URL of the run event stream (SSE) of one conversation. */
 export function getRunEventsUrl(conversationId: string): string {

@@ -131,6 +131,20 @@ async def conversation_events(
     return await run_send.subscribe_response(conversation_id, last_event_id)
 
 
+@router.get("/conversations/{conversation_id}/files/{file_id}/url")
+async def conversation_file_url(conversation_id: str, file_id: str, login_user=LoginUserDep):
+    """F004 (AC-24, AC-28): fresh link to a file of the conversation. Owner only.
+
+    Covers a file the current run announced with a ``file`` event before any
+    message row carries it; other files are answered from the stored rows.
+    """
+    from ...domain.services import run_files
+
+    if not await run_send.owns_conversation(conversation_id, login_user):
+        return UnAuthorizedError.return_resp()
+    return resp_200(data={"url": await run_files.resolve_run_file_url(conversation_id, file_id, login_user)})
+
+
 @router.post("/conversations/{conversation_id}/stop")
 async def stop_conversation(conversation_id: str, login_user=LoginUserDep):
     """F004: stop the run that holds the conversation (AC-29). Owner only.

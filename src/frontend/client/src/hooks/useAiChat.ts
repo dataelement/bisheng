@@ -910,7 +910,12 @@ export default function useAiChat(
                 // assistant turn into a `task` row pointing at the linsight SV,
                 // seed the per-SV store, and kick off execution. The inline task
                 // bubble (TJ-7) hosts the WS and renders the live run from there.
-                onTaskHandoff: ({ session_version_id: svid, chat_id }) => {
+                // F004 (T061): legacy channel only. A tenant on the unified
+                // runtime returned above (`unifiedEnabled`), so this page never
+                // receives a handoff frame, seeds no linsight store entry and
+                // opens no task WebSocket there; its deep-research turn is a
+                // row fed by the run store (useUnifiedRun).
+                onTaskHandoff:({ session_version_id: svid, chat_id }) => {
                     // Consume is committed before this event. Reload the badge
                     // so the remaining count drops without a full page refresh.
                     if (taskMode) {

@@ -25,7 +25,7 @@ export interface ArtifactFile {
      * A conversation attachment kept permanently: open it through a freshly
      * issued link, since `directUrl` is the upload-time link and expires.
      */
-    attachment?: { conversationId: string; fileId: string };
+    attachment?: { conversationId: string; fileId: string; run?: boolean };
     file_id: string;
     file_name: string;
     file_url: string;

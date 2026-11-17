@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-11-18 用户确认，51 条 AC |
 | design.md | ✅ 已评审 | 2026-11-18 用户确认，决策 1 至决策 12；接手时的第一入口 |
 | tasks.md | ✅ 已拆解 | 2026-11-18 `/sdd-review tasks` 自审通过；任务编号 T001 至 T063，T063 排在 T044 之后 |
-| 实现 | 🔨 进行中 | 50 / 63 完成（Wave 0–2 的代码任务已提交；T039、T051 的界面步骤待人工执行，见 verification-p1.md、verification-p2.md）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🔨 进行中 | 60 / 63 完成（Wave 0–4 的代码任务已提交；T039、T051、T062 的界面、多节点、DM8 步骤待人工执行，见 verification-p1.md、verification-p2.md、verification-final.md）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
 
 ---
 
@@ -399,63 +399,63 @@
 
 ### Wave 3（P3）：直接回答能力补齐、文件实时可见、提速
 
-- [ ] **T052**: `direct` 档工作区与技能的单元测试
+- [x] **T052**: `direct` 档工作区与技能的单元测试
   **文件**: `test/workstation/test_direct_workspace_and_skills.py`
   **逻辑**: 断言：`direct` 运行里代码执行器的工作目录对应会话工作区，写到 `output/` 的文件进入 `workspace/{conversation_id}/output/`；勾选技能后技能被挂载且可被调用；不涉及文件操作的运行不创建本地缓存目录、不同步工作区；运行在另一节点恢复时（本地目录为空）先从对象存储取回 `output/` 与 `uploads/`。
   **测试**: `test_code_output_lands_in_conversation_workspace`、`test_skills_available_in_direct`、`test_lazy_workspace_creation`、`test_resume_on_other_node_restores_files`
   **覆盖 AC**: AC-25, AC-33, AC-45, AC-46
   **依赖**: T028
 
-- [ ] **T053**: `direct` 档挂工作区与技能
+- [x] **T053**: `direct` 档挂工作区与技能
   **文件**: `bisheng/workstation/domain/services/direct_run.py`、`bisheng/linsight/domain/services/tool_assembly.py`
   **逻辑**: `direct` 档使用 `WorkspaceBackend`；代码执行器按深度研究的方式绑定工作区前缀与本地缓存目录，目录在第一次文件工具调用时创建。去掉 `chat_service` 里对 `skills` 的强制清空（`:2907`）。跨节点恢复复用 `_sync_workspace_originals`。
   **测试**: T052 全部通过
   **覆盖 AC**: AC-25, AC-33, AC-45, AC-46
   **依赖**: T052
 
-- [ ] **T054**: 文件事件与访问控制的单元测试
+- [x] **T054**: 文件事件与访问控制的单元测试
   **文件**: `test/linsight/test_file_events.py`
   **逻辑**: 断言：`WorkspaceBackend` 写入 `output/` 成功后发一个 `file` 事件，`data` 含 `file_id`、`name`、`path`、`size`、`source`；代码执行器产物同步到工作区后同样发事件；同一路径重复写只更新、不新增条目；写到 `scratch/` 不发事件；运行结束时的目录对账补发漏掉的文件；文件存放在主桶；预览与下载地址由非会话本人请求时被拒绝，审计接口可访问。
   **测试**: `test_file_event_on_output_write`、`test_file_event_from_executor_sync`、`test_same_path_updates`、`test_scratch_is_silent`、`test_reconcile_at_run_end`、`test_stored_in_main_bucket`、`test_non_owner_denied`、`test_audit_allowed`
   **覆盖 AC**: AC-24, AC-25, AC-27, AC-28
   **依赖**: T018, T024
 
-- [ ] **T055**: 文件事件实现
+- [x] **T055**: 文件事件实现
   **文件**: `bisheng/linsight/domain/services/workspace_backend.py`、`bisheng/linsight/domain/services/run_projector_planned.py`
   **逻辑**: `WorkspaceBackend` 接受一个事件回调，在 `output/` 写入成功后调用。执行器同步路径（`sync_to_workspace`）复用同一回调。运行结束时用现有的目录扫描结果对账。运行结束时继续写回答行的 `files` 字段（F016）与 `output_result.final_files`。
   **测试**: T054 全部通过
   **覆盖 AC**: AC-24, AC-25, AC-27, AC-28
   **依赖**: T054
 
-- [ ] **T056**: 附件按需读取的单元测试
+- [x] **T056**: 附件按需读取的单元测试
   **文件**: `test/workstation/test_attachment_on_demand.py`
   **逻辑**: 断言：附件上传后进入会话工作区的 `uploads/`，解析在上传时开始；`direct` 运行开始时不等待解析完成即发出模型请求，模型输入里列出附件名与路径；字符数低于阈值且已解析完成的附件直接内联；agent 读取尚未解析完的附件时等待并发进度事件；二进制原件不以原扩展名暴露给 `read_file`。
   **测试**: `test_upload_starts_parsing`、`test_run_does_not_wait_for_parsing`、`test_small_parsed_file_inlined`、`test_read_waits_with_progress`、`test_binary_original_not_exposed`
   **覆盖 AC**: AC-26, AC-34, AC-51
   **依赖**: T053
 
-- [ ] **T057**: 附件按需读取实现
+- [x] **T057**: 附件按需读取实现
   **文件**: `bisheng/workstation/domain/services/direct_run.py`、`bisheng/workstation/domain/services/chat_service.py`
   **逻辑**: `direct` 档改用深度研究的上传与解析状态机制（`upload-file` 与 `file-parsing-status` 背后的服务）。内联阈值做成配置项，初始值由本任务用 114 的日常附件实测后确定，并把测量结果写进 design 决策 12。
   **测试**: T056 全部通过
   **覆盖 AC**: AC-26, AC-34, AC-51
   **依赖**: T056
 
-- [ ] **T058**: 引用、读图、记忆在统一工厂下的单元测试
+- [x] **T058**: 引用、读图、记忆在统一工厂下的单元测试
   **文件**: `test/linsight/test_unified_citation_image_memory.py`
   **逻辑**: 断言：同一会话里先 `direct` 后 `planned`，两次运行产生的引用角标编号不重复，且都能解析到来源；知识库检索结果含图片且模型标记为支持读图时，两个档位的模型输入都包含图片内容，图片块位于整批工具消息之后；长期记忆开启时两个档位都绑定记忆工具并注入常驻记忆，统一前写入的记忆可被检索到；记忆接线只有一处实现。
   **测试**: `test_citation_handles_unique_across_profiles`、`test_citation_resolves_to_source`、`test_images_visible_in_both_profiles`、`test_image_blocks_after_tool_batch`、`test_memory_tools_in_both_profiles`、`test_existing_memories_searchable`
   **覆盖 AC**: AC-41, AC-48, AC-49, AC-50
   **依赖**: T020, T008
 
-- [ ] **T059**: 引用、读图、记忆接入统一工厂
+- [x] **T059**: 引用、读图、记忆接入统一工厂
   **文件**: `bisheng/linsight/domain/services/agent_factory.py`、`bisheng/workstation/domain/services/daily_memory.py`
   **逻辑**: `direct` 档挂载引用中间件与共享编号表；按 T008 的结论接入读图组件；把 `daily_memory.py` 与 `linsight/.../memory_turns.py` 的接线合并为工厂里的一处，另一处改为调用它。
   **测试**: T058 全部通过；`test/memory/` 与 `test/citation/` 现有用例仍通过
   **覆盖 AC**: AC-41, AC-48, AC-49, AC-50
   **依赖**: T058
 
-- [ ] **T060**: 工作区面板实时文件与工具结果展开
+- [x] **T060**: 工作区面板实时文件与工具结果展开
   **文件**: `components/Linsight/Artifacts/WorkspacePanel.tsx`、`components/Chat/Messages/ToolCallDisplay.tsx`
   **逻辑**: 会话页的工作区面板合并 `runStore` 的文件与历史文件，文件一出现就可预览下载；没有任何文件时不显示工作区入口提示。直接回答的通用工具调用行增加“查看代码和输出”的展开。文案进三个语言文件。
   **覆盖 AC**: AC-24, AC-25
@@ -467,7 +467,7 @@
 
 ### Wave 4（P4）：前端收尾与整体验收
 
-- [ ] **T061**: 会话页移除旧通道
+- [x] **T061**: 会话页移除旧通道
   **文件**: `hooks/useAiChat.ts`、`components/Chat/AiMessageBubble.tsx`
   **逻辑**: 会话页不再处理 `linsight_task_handoff`，不再为会话页建立任务 WebSocket；深度研究的回合与直接回答的回合用同一套时间线组件渲染（数据来自 `runStore` 与历史接口）。`/linsight/:id` 独立页保持用旧 WebSocket 与 Recoil，只做历史回看，输入框不显示。
   **覆盖 AC**: AC-01, AC-40
@@ -521,3 +521,10 @@
 - **T049**：`PinnedTaskPanel` 新增 `conversationId`。store 无计划时回退旧数据源。失败运行沿用“任务已终止”。原型里的“等你回答后继续”头部、停止后的说明行、改写行闪动没有做。
 - **T050**：提问卡片挂在输入框上方，不在消息气泡内（原型在气泡内）。新卡片包住旧 `ClarifyCard`，保留“跳过”与关闭按钮。
 - **EventWriter**：合并只在 `type`、`call_id`、`namespace` 都相同时发生，合并后保留这两个字段。
+- **T053**：强制清空技能的代码在统一链路位于 `run_send.py`，已删除；`chat_service.py` 的旧链路不动。代码执行器用 `defer_workspace_preparation` 包住，首次执行前才建本地目录并从对象存储取回文件。技能加载失败发一条 `load_skills` 的 `tool_call` 事件。同组做了三件 P1 遗留：本地缓存清理、部门并发名额（拒绝码 12045）、输出侧内容安全（终止事件为带 `content_safety` 的 `run_finished`）。
+- **T055**：新增模块 `file_events.py`、`run_files.py` 与路由 `GET /api/v1/workstation/conversations/{id}/files/{file_id}/url`。`file_id` 改为由对象键派生的稳定 id。`planned` 侧的改动在 `task_exec.py`，`run_projector_planned.py` 没有改。`direct` 回答行的 `files` 直接指向工作区对象，不再复制到 `chat/{uid}/`（见 design §7 待定事项 11）。`resync` 新增 `ended` 与 `status`。工具的 `tool_type` 通过事件的 `extra_info` 传递。测试与实现同时写成，没有先看到测试失败。
+- **T057**：新增模块 `direct_attachments.py`；上传时启动解析的挂钩在 `workstation/api/endpoints/knowledge.py`，`chat_service.py` 没有改。`DirectRunner` 的 `read_attachments` 注入点删除，由 `attachment_source` 取代。附件读不了时运行继续并在结束帧带 `failed`（T037 的行为是运行失败）。内联阈值是两个配置项（单文件 4000 字符、总量 15000 字符），**默认值没有实测依据**，114 实测未做。
+- **T059**：新增模块 `kb_image_middleware.py`、`direct_run_turn.py`。知识库工具名靠 `agent_factory` 同时接受两个名字解决，`tool_assembly.py` 没有改。读图不复用 `VisionToolBindWrapper`，由模型自行决定调用 `view_image`；`planned` 档只在收件箱挂载时启用。记忆接线统一为 `agent_factory.wire_memory`。`direct` 运行不写 `log_citation_audit` 审计日志行。
+- **T060**：`WorkspacePanel.tsx` 没有改，合并逻辑在新文件 `liveWorkspaceFiles.ts`，由 `useTaskWorkspaceState.ts` 并入 `chatAttachments`。运行中的 `output/` 文件通过 T055 的新接口取链接（集成时补接）。“查看代码和输出”只在开关开启时显示，组件为新文件 `ToolCodeOutput.tsx`。`resync` 的 `ended` 由 `runStore.reduceResync` 直接采用（集成时补接），“两次空连接”的推断保留为兜底。
+- **T061**：`useAiChat.ts` 里的交接处理代码没有删除，开关关闭时仍需要它；开关开启时该分支不可达。新增 `UnifiedRuntimeContext`，`TaskTurnPanel` 新增 `liveChannel`。已结束的深度研究回合仍由 `TaskTurnPanel` 渲染。开关开启时会话页的旧任务回合不再有“重试”、排队“取消”、旧提问卡片（见 design §7 待定事项 15）。浏览器验证没有执行。
+- **Wave 3 集成修正**：`test_direct_answer_recovery.py` 的运行器补了对象存储替身（T053 起每次运行都构造工作区 backend）。

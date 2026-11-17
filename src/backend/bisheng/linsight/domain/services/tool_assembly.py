@@ -450,3 +450,59 @@ async def assemble_tools(request: ToolAssemblyRequest) -> ToolAssembly:
         assembly.tools.extend(tools)
         assembly.failures.extend(failures)
     return assembly
+
+
+class _DeferredWorkspaceExecutor:
+    """A code executor whose workspace is prepared right before its first run (F004 决策 10).
+
+    Every attribute other than ``run`` / ``arun`` is the wrapped executor's, so
+    code that reads or sets ``workspace_prefix``, ``local_sync_path`` or calls
+    ``close`` keeps working. Deep agents shallow-copy tools and share the
+    executor, so the preparation is attached here and not to the tool object.
+    """
+
+    def __init__(self, inner: Any, prepare: Any):
+        object.__setattr__(self, "_inner", inner)
+        object.__setattr__(self, "_prepare", prepare)
+
+    def __getattr__(self, name: str) -> Any:
+        # Only reached for names this object does not have. Dunder lookups on a
+        # half-built copy must fail here instead of recursing through ``_inner``.
+        if name in ("_inner", "_prepare") or (name.startswith("__") and name.endswith("__")):
+            raise AttributeError(name)
+        return getattr(self._inner, name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        setattr(self._inner, name, value)
+
+    async def arun(self, code: str) -> Any:
+        await self._prepare()
+        inner_arun = getattr(self._inner, "arun", None)
+        if inner_arun is None:
+            return await asyncio.to_thread(self._inner.run, code)
+        return await inner_arun(code)
+
+    def run(self, code: str) -> Any:
+        # The unified runtime drives tools with ``ainvoke``, which reaches ``arun``.
+        # A synchronous call cannot await the preparation: refuse it loudly, because
+        # running without the workspace would write the files to a temporary directory.
+        raise RuntimeError("the workspace-bound code interpreter of a direct run must be called asynchronously")
+
+
+def defer_workspace_preparation(tools: list[BaseTool], prepare: Any) -> int:
+    """Run ``await prepare()`` before the first execution of each code interpreter in ``tools``.
+
+    ``prepare`` must be idempotent: it is awaited before every execution. A run
+    that never executes code never calls it, so nothing local is created and the
+    workspace is not read (AC-34). Returns how many tools were wrapped.
+    """
+    wrapped = 0
+    for tool in tools:
+        executor = getattr(tool, "executor", None)
+        if getattr(tool, "name", None) != CODE_INTERPRETER_TOOL_KEY or executor is None:
+            continue
+        if isinstance(executor, _DeferredWorkspaceExecutor):
+            continue
+        tool.executor = _DeferredWorkspaceExecutor(executor, prepare)
+        wrapped += 1
+    return wrapped

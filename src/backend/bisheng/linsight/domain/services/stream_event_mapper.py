@@ -202,6 +202,11 @@ class StreamEventMapper:
 
     def __init__(self, svid: str):
         self.ctx = StreamContext(svid=svid)
+        # F004: call_id -> the complete output of a main-graph tool call whose
+        # event output was truncated. None (default) keeps nothing. A run driver
+        # that stores the complete result sets this to a dict and pops each entry
+        # when it has used it (``DirectRunner``); the emitted events do not change.
+        self.full_outputs: dict[str, str] | None = None
 
     # -- public entry ------------------------------------------------------
 
@@ -729,6 +734,8 @@ class StreamEventMapper:
 
     def _build_end_step(self, open_call: _OpenCall, payload: dict[str, Any]) -> ExecStep:
         output, truncated = _truncate(payload.get("output"))
+        if truncated and self.full_outputs is not None and not open_call.namespace:
+            self.full_outputs[open_call.call_id] = payload["output"]
         extra_info: dict[str, Any] = {"truncated": truncated}
         if info := FailureContextAdapter.from_payload(payload.get("output")):
             extra_info["failure_info"] = info

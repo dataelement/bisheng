@@ -7,6 +7,7 @@ import {
   collectConversationWorkspaceFiles,
   getWorkspaceLoadState,
 } from "~/components/Linsight/Artifacts/artifactUtils";
+import { useNewLiveArtifacts } from "~/components/Linsight/Artifacts/liveWorkspaceFiles";
 import { useLinsightManager } from "~/hooks/useLinsightManager";
 import { SopStatus } from "~/store/linsight";
 import {
@@ -40,6 +41,7 @@ export function useTaskWorkspaceState({
   closeCitationPanel,
   taskVersionIds,
   latestTaskVersionId,
+  unifiedRuntime = false,
 }: UseTaskWorkspaceStateOptions) {
   const { getLinsight, updateLinsight, linsightMap } = useLinsightManager();
   const taskArtifacts = useWorkspacePanel(latestTaskVersionId, conversationId);
@@ -196,6 +198,19 @@ export function useTaskWorkspaceState({
     },
     [],
   );
+  // F004 (T060): files of the current run show up before the history reload.
+  // They ride along with the attachments, which every workspace surface (entry
+  // button, docked / fullscreen / mobile panel) already lists. Empty when the
+  // tenant switch is off.
+  const knownWorkspaceFiles = useMemo(
+    () => [...chatAttachments, ...taskWorkspaceFiles],
+    [chatAttachments, taskWorkspaceFiles],
+  );
+  const liveWorkspaceFiles = useNewLiveArtifacts(knownWorkspaceFiles, conversationId);
+  const workspaceAttachments = useMemo(
+    () => (liveWorkspaceFiles.length ? [...chatAttachments, ...liveWorkspaceFiles] : chatAttachments),
+    [chatAttachments, liveWorkspaceFiles],
+  );
   const taskWorkspaceLoadState = useMemo(
     () => getWorkspaceLoadState(taskVersionIds, linsightMap, taskLoadFailedIds),
     [taskVersionIds, linsightMap, taskLoadFailedIds],
@@ -204,7 +219,12 @@ export function useTaskWorkspaceState({
   // F035: while the latest task round is in a non-terminal state (generating /
   // running / queued), the input stays editable but the send button is disabled
   // — the next round can only be submitted after the current one finishes.
+  // F004 (T061): on the unified runtime the run store says whether a run is in
+  // progress (it reaches the input through `isStreaming`). The stored status of
+  // a task turn is review data there and must not block sending or route the
+  // stop to the legacy terminate.
   const taskRunning = useMemo(() => {
+    if (unifiedRuntime) return false;
     const status = taskLinsight?.status;
     return (
       status === SopStatus.NotStarted ||
@@ -212,7 +232,7 @@ export function useTaskWorkspaceState({
       status === SopStatus.SopGenerated ||
       status === SopStatus.Running
     );
-  }, [taskLinsight]);
+  }, [taskLinsight, unifiedRuntime]);
 
   // A parked task (ask_user awaiting the user's reply) keeps status === Running —
   // park is not a distinct live status — so taskRunning stays true even though the
@@ -233,7 +253,7 @@ export function useTaskWorkspaceState({
   return {
     updateLinsight,
     taskArtifacts,
-    chatAttachments,
+    chatAttachments: workspaceAttachments,
     dockedCardRef,
     compareFreeze,
     fsMounted,

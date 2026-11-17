@@ -24,6 +24,7 @@ from __future__ import annotations
 import functools
 import json
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Annotated, Any, Literal, NotRequired
 
 from json_repair import json_repair
@@ -270,6 +271,18 @@ __PATH_NAMESPACE_LINE__# 风格
 # user's knowledge selection (init_linsight_tools drops it when the whitelist is
 # empty). The prompt advertisement must track it — see _build_*_prompt below.
 _KB_TOOL_NAME = "search_knowledge_base"
+# F004: the unified assembly binds the daily-chat knowledge tool, whose name
+# differs by one letter. Either one is "the knowledge tool" for the prompt, the
+# citation rules and the image reader; the prompt names the one that is bound.
+_DAILY_KB_TOOL_NAME = "search_knowledge_bases"
+_KB_TOOL_NAMES: tuple[str, ...] = (_KB_TOOL_NAME, _DAILY_KB_TOOL_NAME)
+
+
+def _kb_tool_name(names) -> str | None:
+    """Name of the knowledge tool among ``names`` (tool names or tools), or None."""
+    present = {n if isinstance(n, str) else str(getattr(n, "name", "") or "") for n in names}
+    return next((name for name in _KB_TOOL_NAMES if name in present), None)
+
 
 # Static Chinese language directive, appended to the ABSOLUTE TAIL of the system
 # message by _LanguageTailMiddleware (below).
@@ -758,7 +771,8 @@ def _build_direct_system_prompt(
     """
     has = tool_names.__contains__
     has_ask_user = has("ask_user") and not unattended
-    has_kb = has(_KB_TOOL_NAME)
+    kb_tool = _kb_tool_name(tool_names)
+    has_kb = kb_tool is not None
     has_code_interpreter = has(CODE_INTERPRETER_TOOL)
     has_task = has("task")
     has_files = has("write_file") and has("read_file")
@@ -808,8 +822,10 @@ def _build_direct_system_prompt(
                 "本次没有可用的代码执行工具，技能里需要执行脚本的做法无法落地。\n"
             )
     if has_kb:
-        parts.append("- 需要资料时用 search_knowledge_base 检索知识库/知识空间。\n")
-        if has_task:
+        parts.append(f"- 需要资料时用 {kb_tool} 检索知识库/知识空间。\n")
+        # The daily tool lists its knowledge bases in its own description, which the
+        # subagent reads too; only the deep-research tool needs the ids spelled out.
+        if has_task and kb_tool == _KB_TOOL_NAME:
             parts.append(
                 "- 用 task 委派需要检索知识库/知识空间的子任务时，必须在 description 中明确列出本次可检索的知识库"
                 "及其 knowledge_id（子代理看不到对话里的“可用知识库”清单，只能读到 description）。\n"
@@ -856,7 +872,7 @@ def _build_direct_system_prompt(
     if has_ask_user:
         parts.append("- ask_user(reason, questions)：向用户澄清；只在确有必要时调用（判断原则见上文「何时提问」）。\n")
     if has_kb:
-        parts.append("- search_knowledge_base：在授权的知识库/知识空间语义检索。\n")
+        parts.append(f"- {kb_tool}：在授权的知识库/知识空间语义检索。\n")
     if has_files:
         parts.append(
             "- write_file / read_file / edit_file / ls / glob / grep：工作区文件工具（工具回显的 /output/x 与 output/x "
@@ -906,7 +922,10 @@ def _build_direct_system_prompt(
 
 
 def _build_researcher_prompt(
-    has_knowledge_base: bool, has_web_search: bool = False, citation_handles: bool = False
+    has_knowledge_base: bool,
+    has_web_search: bool = False,
+    citation_handles: bool = False,
+    kb_tool_name: str = _KB_TOOL_NAME,
 ) -> str:
     """Resolve the researcher subagent prompt (same lockstep rule as the main one).
 
@@ -917,8 +936,7 @@ def _build_researcher_prompt(
     media_line = " 音视频附件的 path 为 ASR 转写文本（.md），name 为原始上传名，并非扩展名错误。"
     if has_knowledge_base:
         research_line = (
-            "- 优先使用 search_knowledge_base 检索知识库/知识空间，并用 read_file / ls 阅读工作区中已有的资料。"
-            f"{media_line}"
+            f"- 优先使用 {kb_tool_name} 检索知识库/知识空间，并用 read_file / ls 阅读工作区中已有的资料。{media_line}"
         )
     else:
         research_line = (
@@ -1323,7 +1341,7 @@ def _is_web_citation_tool(tool: object) -> bool:
     return is_web_citation_tool(tool)
 
 
-def _with_citation_rules(prompt: str, enabled: bool, handles: bool = False) -> str:
+def _with_citation_rules(prompt: str, enabled: bool, handles: bool = False, daily: bool = False) -> str:
     """Append the citation rules when the run actually has a citable tool.
 
     ``handles=False``: the shared citation.yaml backstop (real U+E200 markers,
@@ -1335,6 +1353,12 @@ def _with_citation_rules(prompt: str, enabled: bool, handles: bool = False) -> s
     """
     if not enabled or not prompt:
         return prompt
+    if handles and daily:
+        # F004: the direct profile answers in the chat, so it gets the daily-chat
+        # wording of the same [Sn] contract (F075); both share one section header.
+        from bisheng.citation.domain.services.daily_citation_handles import ensure_daily_handle_rules
+
+        return ensure_daily_handle_rules(prompt)
     if handles:
         from bisheng.citation.domain.services.citation_handle_service import ensure_handle_rules
 
@@ -1474,7 +1498,11 @@ async def _rewrite_web_results_with_handles(scope: Any, annotated: Any, items: l
 def _wrap_linsight_web_citation_tools(tools: Sequence, scope: Any = None) -> list:
     wrapped = []
     for tool_obj in tools:
-        if _is_web_citation_tool(tool_obj) and isinstance(tool_obj, BaseTool):
+        # F004: a tool from the unified assembly may already carry the daily-chat
+        # citation wrapper (it registers the hits and shows the handles itself).
+        # Wrapping it again would annotate an annotated result.
+        already_cited = getattr(tool_obj, "citation_collector", None) is not None
+        if _is_web_citation_tool(tool_obj) and isinstance(tool_obj, BaseTool) and not already_cited:
             wrapped.append(_LinsightWebCitationWrapper.wrap(tool_obj, scope=scope))
         else:
             wrapped.append(tool_obj)
@@ -1546,7 +1574,8 @@ def _build_researcher_subagent(tools: Sequence[BaseTool], citation_handles: bool
       subgraph) cannot recur because the subagent simply cannot interrupt.
     """
     sub_tools = _subagent_tools(tools)
-    has_kb = any(t.name == _KB_TOOL_NAME for t in sub_tools)
+    kb_tool = _kb_tool_name(sub_tools)
+    has_kb = kb_tool is not None
     has_web = any(_is_web_citation_tool(t) for t in sub_tools)
     return {
         "name": "general-purpose",
@@ -1556,7 +1585,12 @@ def _build_researcher_subagent(tools: Sequence[BaseTool], citation_handles: bool
             "它不能向用户提问，也不负责最终交付物的撰写与拼装。"
         ),
         "system_prompt": _with_citation_rules(
-            _build_researcher_prompt(has_kb, has_web_search=has_web, citation_handles=citation_handles),
+            _build_researcher_prompt(
+                has_kb,
+                has_web_search=has_web,
+                citation_handles=citation_handles,
+                kb_tool_name=kb_tool or _KB_TOOL_NAME,
+            ),
             has_kb or has_web,
             handles=citation_handles,
         ),
@@ -1798,6 +1832,60 @@ class SkillSelectionMiddleware(AgentMiddleware):
         return await handler(request)
 
 
+@dataclass
+class MemoryWiring:
+    """What long-term memory adds to one run: the two tools and the system-message text."""
+
+    tools: list
+    prompt: str | None = None
+
+
+def build_memory_prompt(resident_text: str = "", experience_text: str = "") -> str:
+    """Tool guidance, then the resident block, then the experience block (F132 AC-51, AC-55)."""
+    from bisheng.linsight.domain.services.memory_turns import MEMORY_PROMPT_HEADER, MEMORY_TOOLS_GUIDE
+
+    parts = [MEMORY_PROMPT_HEADER, MEMORY_TOOLS_GUIDE]
+    parts += [text for text in (resident_text, experience_text) if text]
+    return "\n\n".join(parts)
+
+
+def wire_memory(ctx, *, resident_text: str = "", experience_text: str = "", on_write=None) -> MemoryWiring:
+    """The ONE place that turns an enabled memory context into tools and prompt text (F004 T059).
+
+    ``ctx`` is the ``MemoryContext`` the gate resolved for this run. Deep research
+    (``LinsightMemoryRound``) and daily chat on the unified runtime
+    (``DailyMemoryTurn.wiring``) both call this; neither builds the tools or the
+    text itself. The memory store is not touched: the tools read and write the
+    user's memory by tenant and user, whichever profile runs them.
+    """
+    from bisheng.memory.domain.services.tools import build_memory_tools
+
+    return MemoryWiring(
+        tools=build_memory_tools(ctx, on_write=on_write),
+        prompt=build_memory_prompt(resident_text, experience_text),
+    )
+
+
+async def _resolve_vision_model(session_model):
+    """The workbench image-reading model, or None when it is not configured.
+
+    Asked only when the run's own model cannot read images. A failure disables
+    image reading for the run and is logged; it never fails the run.
+    """
+    from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
+    from bisheng.common.image_view.loop import resolve_image_view_llm
+
+    try:
+        return await resolve_image_view_llm(
+            getattr(session_model, "tenant_id", None),
+            user_id=getattr(session_model, "user_id", None),
+            app_type=ApplicationTypeEnum.LINSIGHT,
+        )
+    except Exception:
+        logger.opt(exception=True).warning("image-reading model lookup failed; this run reads no knowledge images")
+        return None
+
+
 async def create_linsight_agent(
     session_model,
     tools: Sequence[BaseTool],
@@ -1813,6 +1901,7 @@ async def create_linsight_agent(
     memory_prompt: str | None = None,
     profile: ProfileName = "planned",
     inbox: AgentMiddleware | None = None,
+    memory: MemoryWiring | None = None,
 ):
     """Build the deepagents-backed Linsight agent (design §2.1).
 
@@ -1848,6 +1937,10 @@ async def create_linsight_agent(
             the caller from the run's conversation, dispatch service and event
             sink. Mounted on the MAIN graph only, in both profiles, and never for
             an unattended run. None (legacy path, tenant switch off) mounts nothing.
+        memory: F004 T059. The run's ``MemoryWiring`` from ``wire_memory``: its
+            tools are bound on the main graph and its text is appended to the
+            system message. Deep research still passes the tools inside ``tools``
+            and the text as ``memory_prompt``; both come from ``wire_memory`` too.
 
     Returns:
         ``CompiledStateGraph`` to be driven by ``agent.astream(...)``.
@@ -1859,7 +1952,15 @@ async def create_linsight_agent(
         raise ValueError(f"unknown agent profile: {profile!r} (expected one of {_PROFILES})")
     planned = profile == "planned"
     svid = svid or session_model.id
-    tools = _bind_linsight_citation_scope(list(tools or []), citation_scope)
+    tools = list(tools or [])
+    if memory is not None:
+        from bisheng.memory.domain.services.redaction import split_reserved_tools
+
+        # ``memory_`` names are reserved while memory is on; the built-in tools win.
+        kept, _dropped = split_reserved_tools(tools)
+        tools = [*kept, *memory.tools]
+        memory_prompt = memory_prompt or memory.prompt
+    tools = _bind_linsight_citation_scope(tools, citation_scope)
     # F073: Open API runs are unattended — no ask_user, no clarify step.
     unattended = is_unattended_run(session_model)
     hitl_tools = [] if unattended else [ask_user]
@@ -1905,7 +2006,7 @@ async def create_linsight_agent(
     # model is never told to call a tool that isn't there (root cause of the
     # "knowledge_id: Field required" error when no KB is selected). Computed here
     # because the citation tail middleware below needs the same gate.
-    has_kb = any(t.name == _KB_TOOL_NAME for t in tools)
+    has_kb = _kb_tool_name(tools) is not None
     has_web = any(_is_web_citation_tool(t) for t in tools)
     # Built here (not with the rest of the subagent stacks below) because the
     # main graph's subagent-overflow handler draws from its degrade allowance.
@@ -1941,6 +2042,17 @@ async def create_linsight_agent(
     # has nobody sending messages (AC-23), same gate as ask_user.
     if inbox is not None and not unattended:
         middlewares.append(inbox)
+    # F004 T059 (AC-49): pictures in knowledge results. The direct profile exists
+    # only on the unified runtime; deep research gets it when the unified runtime
+    # is on (the inbox is the sign), so the legacy path is unchanged.
+    if has_kb and (not planned or inbox is not None):
+        vision_model = None if supports_vision else await _resolve_vision_model(session_model)
+        if supports_vision or vision_model is not None:
+            from bisheng.linsight.domain.services.kb_image_middleware import KbImageViewMiddleware
+
+            middlewares.append(
+                KbImageViewMiddleware(_KB_TOOL_NAMES, main_model_sees_images=supports_vision, vision_model=vision_model)
+            )
     # F069 P1: per-turn source table (+ one-shot "add the handles" nudge after a
     # handle-less output/*.md write). awrap_model_call only — never wrap_tool_call
     # (design decision 5). Gated like the rules: citable tool AND handle contract.
@@ -2047,7 +2159,7 @@ async def create_linsight_agent(
     # continue with the remaining steps (Layer B partial-result win).
     researcher = _build_researcher_subagent(tools, citation_handles=citation_handles)
     researcher_tools = researcher.get("tools") or []
-    researcher_citable = any(t.name == _KB_TOOL_NAME or _is_web_citation_tool(t) for t in researcher_tools)
+    researcher_citable = any(t.name in _KB_TOOL_NAMES or _is_web_citation_tool(t) for t in researcher_tools)
     researcher["middleware"] = _subagent_middleware(
         model=model,
         backend=backend,
@@ -2125,7 +2237,7 @@ async def create_linsight_agent(
             # Main graph only: subagents keep their own prompt (see base_prompt.py).
             system_prompt=with_base_prompt(
                 _with_caller_instructions(
-                    _with_citation_rules(main_prompt, has_kb or has_web, handles=citation_handles),
+                    _with_citation_rules(main_prompt, has_kb or has_web, handles=citation_handles, daily=not planned),
                     caller_instructions(session_model),
                 ),
                 profile=profile,

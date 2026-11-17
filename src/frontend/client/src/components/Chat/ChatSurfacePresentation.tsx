@@ -8,6 +8,7 @@ import { RunClarifyCard } from "~/components/Linsight/Execution/ClarifyCard";
 import { useRunAwaitingAnswer } from "./hooks/useTaskWorkspaceState";
 import { WorkspacePanel } from "~/components/Linsight/Artifacts/WorkspacePanel";
 import { TaskTurnLoadContext } from "~/components/Linsight/Execution/taskTurnLoad";
+import { UnifiedRuntimeContext } from "~/components/Chat/unifiedRuntimeContext";
 import { cn } from "~/utils";
 import Landing from "./Landing";
 import { DailyFeaturedApps } from "./DailyFeaturedApps";
@@ -94,11 +95,13 @@ export function ChatSurfacePresentation({
     taskRunning,
     awaitingUserInput,
     handleStop,
+    unifiedRuntime,
     shareToken,
   } = model;
   const runAwaitingAnswer = useRunAwaitingAnswer(shareToken ? "" : conversationId);
   return (
     <TaskTurnLoadContext.Provider value={reportTaskTurnLoadFailed}>
+      <UnifiedRuntimeContext.Provider value={unifiedRuntime === true}>
       <Presentation isLingsi={false}>
         {inviteQuotaDialog}
         <div className="dsh-chat-surface" data-testid="dsh-chat-surface">
@@ -608,6 +611,7 @@ export function ChatSurfacePresentation({
             )}
         </div>
       </Presentation>
+      </UnifiedRuntimeContext.Provider>
     </TaskTurnLoadContext.Provider>
   );
 }

@@ -3246,5 +3246,12 @@
       "fact": "Facts",
       "experience": "Experiences"
     }
+  },
+  "runTool": {
+    "viewCodeOutput": "View code and output",
+    "collapse": "Collapse",
+    "code": "Code",
+    "params": "Parameters",
+    "output": "Output"
   }
 }

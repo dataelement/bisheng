@@ -3170,5 +3170,12 @@
       "fact": "事実",
       "experience": "経験"
     }
+  },
+  "runTool": {
+    "viewCodeOutput": "コードと出力を表示",
+    "collapse": "折りたたむ",
+    "code": "コード",
+    "params": "パラメータ",
+    "output": "出力"
   }
 }

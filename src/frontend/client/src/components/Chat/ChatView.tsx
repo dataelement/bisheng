@@ -120,6 +120,7 @@ function useChatView(
     sendMessage,
     stopGenerating,
     regenerate,
+    unifiedRuntime,
   } = useAiChat(
     conversationId,
     false,
@@ -467,6 +468,7 @@ function useChatView(
     closeCitationPanel,
     taskVersionIds,
     latestTaskVersionId,
+    unifiedRuntime,
   });
 
   // Stop button handler. A task round runs via the linsight worker/WS, normally
@@ -571,6 +573,7 @@ function useChatView(
     taskRunning,
     awaitingUserInput,
     handleStop,
+    unifiedRuntime,
     id,
     shareToken,
     taskVersionIds,

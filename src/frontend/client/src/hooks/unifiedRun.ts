@@ -179,7 +179,71 @@ export function withLiveRun(messages: ChatMessage[], run: RunState | null | unde
     const index = messages.findIndex((m) => m.liveRunId === run.runId);
     if (index === -1) return messages;
     const next = messages.slice();
-    next[index] = { ...messages[index], ...liveFieldsOfRun(run) };
+    next[index] = { ...messages[index], ...liveFieldsOfRun(run), ...keepTaskCategory(messages[index]) };
+    return next;
+}
+
+// ---------------------------------------------------------------------------
+// Stored deep-research row of a run in progress (T061)
+// ---------------------------------------------------------------------------
+
+/**
+ * A deep-research turn is stored from its start as a `task` row that points at
+ * its run record (`linsightSessionVersionId`). The row keeps that category
+ * while it shows the run, so the page still knows which run record the turn
+ * belongs to (workspace panel, pinned plan).
+ */
+function keepTaskCategory(row: ChatMessage): Partial<ChatMessage> {
+    return row.category === 'task' && row.linsightSessionVersionId ? { category: 'task' } : {};
+}
+
+/** Statuses of a run record (`linsight_session_version.status`) that mean "not ended". */
+const VERSION_IN_PROGRESS_STATUSES: ReadonlySet<string> = new Set([
+    'not_started',
+    'in_progress',
+    'waiting_for_user_input',
+]);
+
+export function isVersionInProgress(status: unknown): boolean {
+    return typeof status === 'string' && VERSION_IN_PROGRESS_STATUSES.has(status);
+}
+
+export interface LiveTaskRowCandidate {
+    index: number;
+    versionId: string;
+}
+
+/**
+ * The stored deep-research row that may belong to the run in progress: the
+ * last answer row of the list, when it is a `task` row and only user rows
+ * follow it (messages sent into the run). Whether its run record is really the
+ * one still going is not in the list; the caller asks the run record.
+ * Returns null when the run already has a row, or a send is waiting for its run id.
+ */
+export function liveTaskRowCandidate(
+    messages: ChatMessage[],
+    run: RunState | null | undefined,
+): LiveTaskRowCandidate | null {
+    if (!run || !isRunActive(run)) return null;
+    if (messages.some((m) => m.liveRunId === run.runId || m.liveRunId === '')) return null;
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+        const row = messages[index];
+        if (row.isCreatedByUser) continue;
+        if (row.category !== 'task' || !row.linsightSessionVersionId || row.liveRunId !== undefined) return null;
+        return { index, versionId: row.linsightSessionVersionId };
+    }
+    return null;
+}
+
+/** Make the stored `task` row of `versionId` the live row of `runId`. */
+export function bindLiveTaskRow(messages: ChatMessage[], versionId: string, runId: string): ChatMessage[] {
+    if (!versionId || !runId || messages.some((m) => m.liveRunId === runId)) return messages;
+    const index = messages.findIndex(
+        (m) => !m.isCreatedByUser && m.category === 'task' && m.linsightSessionVersionId === versionId,
+    );
+    if (index === -1) return messages;
+    const next = messages.slice();
+    next[index] = { ...messages[index], liveRunId: runId };
     return next;
 }
 
@@ -220,7 +284,7 @@ export function freezeLiveRun(messages: ChatMessage[], run: RunState, errorText 
     const row = { ...messages[index] };
     delete row.liveRunId;
     const next = messages.slice();
-    next[index] = { ...row, ...liveFieldsOfRun(run), ...failureFieldsOfRun(run, errorText) };
+    next[index] = { ...row, ...liveFieldsOfRun(run), ...keepTaskCategory(row), ...failureFieldsOfRun(run, errorText) };
     return next;
 }
 

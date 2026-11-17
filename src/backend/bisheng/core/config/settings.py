@@ -625,6 +625,21 @@ class LinsightConf(BaseModel):
         description="L2 truncation guard: max times to retry a model call whose tool-call arguments were "
         "cut off by finish_reason=length (with a 'write in smaller parts' corrective nudge) before giving up.",
     )
+    direct_attachment_inline_chars: int = Field(
+        default=4000,
+        ge=0,
+        description="F004 决策 12: a parsed attachment of a direct answer whose text is at most this many "
+        "characters is put into the first model request; a longer one is listed with its workspace path and "
+        "read on demand. 0 = never inline. The default is NOT measured on real attachments: it is half of the "
+        "8000 characters a tool result keeps in an event. 系统配置 linsight.direct_attachment_inline_chars",
+    )
+    direct_attachment_inline_total_chars: int = Field(
+        default=15000,
+        ge=0,
+        description="F004 决策 12: cap on the attachment text inlined into one first request, all files "
+        "together. The default equals the legacy daily-chat cap (WorkstationConfig.maxTokens default). "
+        "系统配置 linsight.direct_attachment_inline_total_chars",
+    )
     skill_upload_max_size_mb: int = Field(
         default=200,
         ge=1,

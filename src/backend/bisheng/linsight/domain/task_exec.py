@@ -328,6 +328,9 @@ class _UnifiedRun:
         self.stop_requested = False
         self.lease_lost = False
         self.cancelled = False
+        # T055: writes the ``file`` events of this execution; created with the
+        # first workspace backend (``LinsightWorkflowTask._unified_file_relay``).
+        self.file_relay = None
 
     async def emit(self, event: dict) -> None:
         # A run that lost the conversation must not write into its successor's stream.
@@ -694,6 +697,13 @@ class LinsightWorkflowTask:
         run = getattr(self, "_unified", None)
         if run is None or run.terminal or run.lease_lost:
             return
+        if run.file_relay is not None:
+            try:
+                # T055: a file announced from an executor thread gets its event
+                # before the terminal event closes the stream of this run.
+                await run.file_relay.drain()
+            except Exception:
+                logger.exception("planned run={}: could not flush the file events", run.run_id)
         try:
             if kind == "finished":
                 await run.output.run_finished()
@@ -713,18 +723,48 @@ class LinsightWorkflowTask:
         if run is None or run.terminal or run.lease_lost:
             return
         try:
+            if run.file_relay is not None:
+                await run.file_relay.drain()
+            # T055: reconcile against the directory scan the run already made
+            # (``final_files``). A deliverable that was announced while the run
+            # wrote it keeps its ``file_id`` and now points at the stored result;
+            # one that was never announced is announced here.
             for info in (session_model.output_result or {}).get("final_files") or []:
                 if not isinstance(info, dict) or not info.get("file_id"):
                     continue
+                size = None
+                local_path = info.get("file_path")
+                if local_path and os.path.isfile(local_path):
+                    size = os.path.getsize(local_path)
                 await run.output.file(
-                    file_id=str(info["file_id"]),
+                    file_id=self._live_file_id(session_model, info),
                     name=str(info.get("file_name") or ""),
                     path=str(info.get("file_url") or ""),
+                    size=size,
                     source="final_result",
                 )
         except Exception:
             logger.exception("planned run={}: could not write the file events", run.run_id)
         await self._emit_unified_terminal("finished")
+
+    def _live_file_id(self, session_model: LinsightSessionVersion, info: dict) -> str:
+        """Id of a final file in the ``file`` events: the id its workspace path has.
+
+        A final file outside ``output/`` of the local cache (the synthesized
+        fallback report) was never a workspace file and keeps its own id.
+        """
+        from bisheng.linsight.domain.services import file_events
+
+        local_path = info.get("file_path")
+        file_dir = getattr(self, "file_dir", None)
+        if local_path and file_dir:
+            try:
+                rel = os.path.relpath(local_path, file_dir).replace(os.sep, "/")
+            except ValueError:
+                rel = ""
+            if file_events.is_deliverable_path(rel):
+                return file_events.workspace_file_id(self._workspace_prefix(session_model), rel)
+        return str(info["file_id"])
 
     async def _emit_unified_steps(self, steps: list[BaseEvent]) -> None:
         """Mirror steps the executor itself produces (not the model stream) to the unified channel."""
@@ -1676,6 +1716,7 @@ class LinsightWorkflowTask:
             session_version=session_model, llm=self.llm, need_upload=True, file_dir=self.file_dir
         )
         self._retarget_code_interpreter(tools, session_model)
+        self._attach_file_events(tools, session_model)
         # F132: memory_write / memory_search for this round (one place covers the
         # fresh, continue and resume paths); empty when memory is off.
         return [*tools, *self._memory_round().tools()]
@@ -1710,7 +1751,38 @@ class LinsightWorkflowTask:
             file_dir=self.file_dir,
             citation_scope=citation_scope,
             workspace_prefix=self._workspace_prefix(session_model),
+            # T055: None on the legacy path, so nothing changes there.
+            on_output_file=self._unified_file_relay(session_model),
         )
+
+    def _unified_file_relay(self, session_model):
+        """The writer of this execution's ``file`` events, or None on the legacy path (T055)."""
+        run = getattr(self, "_unified", None)
+        if run is None or run.terminal or run.lease_lost:
+            return None
+        if run.file_relay is None:
+            from bisheng.linsight.domain.services.file_events import FileEventRelay
+
+            try:
+                run.file_relay = FileEventRelay(
+                    run.emit, run_id=run.run_id, workspace_prefix=self._workspace_prefix(session_model)
+                )
+            except RuntimeError:
+                # Built outside the event loop of the run (a synchronous caller):
+                # no live file events; the files are still announced at the end.
+                logger.warning("planned run={}: file events are off, no running event loop", run.run_id)
+                return None
+        return run.file_relay
+
+    def _attach_file_events(self, tools: list, session_model) -> None:
+        """Have the code interpreter report the files it mirrored into the workspace (T055)."""
+        relay = self._unified_file_relay(session_model)
+        if relay is None:
+            return
+        for tool in tools:
+            executor = getattr(tool, "executor", None)
+            if getattr(tool, "name", None) == CODE_INTERPRETER_TOOL and getattr(executor, "workspace_prefix", None):
+                executor.on_workspace_file = relay.synced
 
     def _retarget_code_interpreter(self, tools: list, session_model) -> None:
         """Make the code interpreter mirror its files into the workspace the file tools read.

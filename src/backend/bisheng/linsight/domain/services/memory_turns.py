@@ -157,18 +157,19 @@ class LinsightMemoryRound:
         if self.ctx is None:
             return []
         if self._tools is None:
-            from bisheng.memory.domain.services.tools import build_memory_tools
+            # F004 T059: one wiring implementation, in the agent factory.
+            from bisheng.linsight.domain.services import agent_factory
 
-            self._tools = build_memory_tools(self.ctx, on_write=self._on_write)
+            self._tools = agent_factory.wire_memory(self.ctx, on_write=self._on_write).tools
         return list(self._tools)
 
     def prompt(self) -> str | None:
         """Tool guidance + resident block + experience block, built once per run (AC-51, AC-55)."""
         if self.ctx is None:
             return None
-        parts = [MEMORY_PROMPT_HEADER, MEMORY_TOOLS_GUIDE]
-        parts += [text for text in (self.resident_text, self.experience_text) if text]
-        return "\n\n".join(parts)
+        from bisheng.linsight.domain.services import agent_factory
+
+        return agent_factory.build_memory_prompt(self.resident_text, self.experience_text)
 
     def signal(self) -> dict | None:
         if self.ctx is None:

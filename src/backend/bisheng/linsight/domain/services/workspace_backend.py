@@ -65,6 +65,7 @@ from loguru import logger
 from minio.error import S3Error
 
 from bisheng.common.services.failure_context import FailureContextAdapter
+from bisheng.linsight.domain.services import file_events
 
 
 def _is_missing_key(exc: S3Error) -> bool:
@@ -614,6 +615,7 @@ class WorkspaceBackend(FilesystemBackend):
         *,
         workspace_prefix: str | None = None,
         create_cache_dir: bool = True,
+        on_output_file=None,
     ) -> None:
         if not _DEEPAGENTS_AVAILABLE:
             # TODO(Wave2): align with deepagents FilesystemBackend once the
@@ -649,6 +651,10 @@ class WorkspaceBackend(FilesystemBackend):
         # or delete during the run is visible. ``skill_row_enabled`` is a test seam.
         self.skill_snapshot: list[dict] | None = None
         self.skill_row_enabled = None
+        # F004 T055: called with the ``data`` of a ``file`` event after a file
+        # under ``output/`` was stored (``file_events.FileEventRelay``). It may be
+        # called from a worker thread and must return at once. None = no events.
+        self.on_output_file = on_output_file
         # F004 决策 10: a ``direct`` run passes False so a run that touches no file
         # creates no local directory. ``_cache_write`` creates parents on demand.
         if create_cache_dir:
@@ -665,6 +671,41 @@ class WorkspaceBackend(FilesystemBackend):
         if rel != (path or "").strip().lstrip("/"):
             logger.info("workspace path: folded executor host path {} -> {}", path, rel)
         return rel
+
+    # -- file events (F004 T055) ----------------------------------------------
+    def notify_output_file(self, rel_path: str, size: int | None, source: str) -> None:
+        """Report one stored file. Only ``output/`` is reported; never raises.
+
+        Called after the object store accepted the write, so a reader of the
+        event can fetch the file at once.
+        """
+        callback = self.on_output_file
+        if callback is None or not file_events.is_deliverable_path(rel_path):
+            return
+        try:
+            callback(file_events.file_event_data(self.workspace_prefix, rel_path, size, source))
+        except Exception:
+            # The file is stored. Losing its live notice must not fail the write;
+            # the reconcile at the end of the run reports it.
+            logger.exception("workspace file event failed prefix={} path={}", self.workspace_prefix, rel_path)
+
+    def output_listing(self) -> dict[str, tuple]:
+        """``output/`` as the object store has it: path -> ``(size, etag or last_modified)``.
+
+        Raises when the object store cannot be listed; the caller decides.
+        """
+        key_prefix = f"{self.workspace_prefix}/"
+        listing: dict[str, tuple] = {}
+        objects = self.minio.minio_client_sync.list_objects(
+            self._bucket(), prefix=key_prefix + file_events.OUTPUT_ZONE, recursive=True
+        )
+        for obj in objects:
+            name = obj.object_name
+            if getattr(obj, "is_dir", False) or not name.startswith(key_prefix):
+                continue
+            mark = getattr(obj, "etag", None) or getattr(obj, "last_modified", None)
+            listing[name[len(key_prefix) :]] = (int(getattr(obj, "size", 0) or 0), str(mark) if mark else None)
+        return listing
 
     def _object_key(self, rel_path: str) -> str:
         """Map a workspace-relative path to its MinIO object key."""
@@ -1008,6 +1049,7 @@ class WorkspaceBackend(FilesystemBackend):
         # cache first (fast local), then write-through to MinIO (truth).
         self._cache_write(rel, data)
         self._minio_put_sync(rel, data)
+        self.notify_output_file(rel, len(data), file_events.SOURCE_WRITE)
         return WriteResult(path="/" + rel)
 
     # -- read ---------------------------------------------------------------
@@ -1157,6 +1199,7 @@ class WorkspaceBackend(FilesystemBackend):
         new_data = self._canonicalize_citation_bytes(rel, new_text.encode("utf-8"))
         self._cache_write(rel, new_data)
         self._minio_put_sync(rel, new_data)
+        self.notify_output_file(rel, len(new_data), file_events.SOURCE_EDIT)
         return EditResult(path="/" + rel, occurrences=occurrences)
 
     # -- glob ---------------------------------------------------------------
@@ -1314,6 +1357,7 @@ class WorkspaceBackend(FilesystemBackend):
             object_name=self._object_key(rel),
             file=data,
         )
+        self.notify_output_file(rel, len(data), file_events.SOURCE_WRITE)
         return WriteResult(path="/" + rel)
 
     async def aread(self, file_path: str, offset: int = 0, limit: int = 2000) -> ReadResult:

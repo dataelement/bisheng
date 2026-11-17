@@ -149,6 +149,18 @@ describe('store/runStore', () => {
         expect(selectIsRunning(CID)(state())).toBe(true);
     });
 
+    it('resync of an ended run takes the status the backend reports', () => {
+        const base = { text: 'done', thinking: '', plan: [], files: [] };
+        state().applyResync(CID, 'r3', { ...base, ended: true, status: 'stopped' }, '2-1');
+        expect(selectRun(CID)(state())!.status).toBe('stopped');
+        expect(selectIsRunning(CID)(state())).toBe(false);
+        state().applyResync(CID, 'r4', { ...base, ended: true, pending_question: { call_id: 'q', questions: [] } }, '3-1');
+        expect(selectRun(CID)(state())!.status).toBe('finished');
+        expect(selectRun(CID)(state())!.pendingQuestion).toBeNull();
+        state().applyResync(CID, 'r5', { ...base, ended: false }, '4-1');
+        expect(selectRun(CID)(state())!.status).toBe('running');
+    });
+
     it('running flags', () => {
         expect(selectIsRunning(CID)(state())).toBe(false);
         apply({ type: 'run_started', run_id: 'r1', data: {} });

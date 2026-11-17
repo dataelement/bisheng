@@ -1,11 +1,14 @@
-"""F004 T036: the "reading attachments" progress event of a ``direct`` run (AC-51).
+"""F004 T036 / T057: the "reading attachments" progress event of a ``direct`` run (AC-51).
 
-A direct run with attachments emits one ``tool_call`` start frame before the
-attachments are parsed (within 2 s of ``run_started``, fake clock) and the
-matching end frame after parsing; without attachments it emits neither.
+A direct run with attachments emits one ``tool_call`` start frame before anything
+is parsed (within 2 s of ``run_started``, fake clock) and the matching end frame
+when the attachments are in the workspace; without attachments it emits neither.
 
-The real graph runs with a scripted model; Redis is fakeredis; the parser is a
-fake that moves the fake clock to stand for slow parsing.
+Since T057 (design 决策 12) the model request no longer waits for parsing: the
+frame stays open while the answer runs, and a read of the attachment waits for it.
+
+The real graph runs with a scripted model; Redis is fakeredis; the attachment
+source is a fake that moves with the fake clock to stand for slow parsing.
 """
 
 from __future__ import annotations
@@ -14,14 +17,16 @@ import asyncio
 from typing import Any
 
 import pytest
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, ToolMessage
 
 from bisheng.workstation.domain.services import direct_run
-from bisheng.workstation.domain.services.direct_run import AttachmentReading, DirectRunContext
-from test.workstation.test_direct_run import CID, TENANT, USER, _Env
+from bisheng.workstation.domain.services.direct_attachments import AttachmentView
+from bisheng.workstation.domain.services.direct_run import DirectRunContext
+from test.workstation.test_direct_run import CID, TENANT, USER, _call, _Env
 
 PARSE_SECONDS = 30.0
 FILES = [{"filepath": "chat/a.docx", "file_name": "a.docx"}, {"filepath": "chat/b.pdf", "file_name": "b.pdf"}]
+TEXT = "附件正文：合同金额 300 万"
 
 
 @pytest.fixture
@@ -36,22 +41,46 @@ def _progress_frames(events: list[dict]) -> list[dict]:
     return [e for e in events if e["type"] == "tool_call" and e["data"]["name"] == direct_run.ATTACHMENT_TOOL_NAME]
 
 
-class _FakeParser:
-    """Stands for ``_process_agent_files``: records what was on the Stream when it began."""
+class _SlowSource:
+    """Attachments whose parsing has not finished when the run starts."""
 
-    def __init__(self, env: Any):
+    inline_chars = 4000
+    inline_total_chars = 15000
+
+    def __init__(self, env: Any, error: BaseException | None = None):
         self.env = env
-        self.calls: list[DirectRunContext] = []
+        self.error = error
+        self.calls: list[str] = []
         self.types_at_start: list[str] = []
 
-    async def __call__(self, ctx: DirectRunContext) -> AttachmentReading:
-        self.calls.append(ctx)
+    async def ready(self, ctx: DirectRunContext, file: dict) -> bool:
+        return False
+
+    async def visual(self, ctx: DirectRunContext) -> bool:
+        return False
+
+    async def ingest(self, ctx: DirectRunContext, file: dict, used_names: set[str]) -> dict:
+        self.calls.append(file["file_name"])
         self.types_at_start = await self.env.types()
+        if self.error is not None:
+            raise self.error
         # Slow parsing: the watcher's ticks move the fake clock (and renew the lease).
         start = self.env.clock.now
         while self.env.clock.now < start + PARSE_SECONDS:
             await asyncio.sleep(0.001)
-        return AttachmentReading(file_context="附件正文：合同金额 300 万", files=list(ctx.files))
+        stem = file["file_name"].rsplit(".", 1)[0]
+        self.env.store.objects[f"workspace/{ctx.conversation_id}/uploads/{stem}.md"] = TEXT.encode()
+        return {
+            "file_id": stem,
+            "original_filename": file["file_name"],
+            "parsing_status": "completed",
+            "valid": True,
+            "workspace_path": f"/uploads/{stem}.md",
+            "line_count": 1,
+        }
+
+    async def text(self, ctx: DirectRunContext, entry: dict) -> str | None:
+        return TEXT
 
 
 async def _submit_with_files(env: Any, text: str, files: list[dict]) -> DirectRunContext:
@@ -61,15 +90,16 @@ async def _submit_with_files(env: Any, text: str, files: list[dict]) -> DirectRu
 
 
 async def test_progress_event_before_parsing(make_env):
-    env = make_env([AIMessage(content="合同金额是 300 万")])
-    parser = _FakeParser(env)
-    runner = env.make_runner(read_attachments=parser)
+    # T057: the model asks for the attachment; the read waits for the parse.
+    env = make_env([_call("read_file", {"file_path": "/uploads/a.md"}, "r1"), AIMessage(content="合同金额是 300 万")])
+    source = _SlowSource(env)
+    runner = env.make_runner(attachment_source=lambda ctx: source)
     ctx = await _submit_with_files(env, "合同金额是多少", FILES)
 
     outcome = await env.run(ctx, runner=runner)
 
     assert outcome.status == "finished"
-    assert len(parser.calls) == 1
+    assert sorted(source.calls) == ["a.docx", "b.pdf"]
     events = await env.events()
     started = next(e for e in events if e["type"] == "run_started")
     frames = _progress_frames(events)
@@ -78,14 +108,17 @@ async def test_progress_event_before_parsing(make_env):
     assert start["data"]["call_id"] == end["data"]["call_id"]
     assert start["run_id"] == ctx.run_id
     # The start frame was on the Stream before parsing began.
-    assert "tool_call" in parser.types_at_start
+    assert "tool_call" in source.types_at_start
     # Visible within 2 s of run_started; the end frame comes after the parsing time.
     assert int(start["ts"]) - int(started["ts"]) <= 2000
     assert int(end["ts"]) - int(start["ts"]) >= PARSE_SECONDS * 1000
     assert start["data"]["params"]["files"] == ["a.docx", "b.pdf"]
-    # The answer continues after reading: the model saw the parsed text.
+    # T057: the first request did not wait; it names the files and where they will be.
     first_user = next(m for m in env.model.inputs[0] if m.type == "human")
-    assert "合同金额 300 万" in str(first_user.content)
+    assert "a.docx" in str(first_user.content) and "/uploads/a.md" in str(first_user.content)
+    assert "合同金额 300 万" not in str(first_user.content)
+    # The answer continues after reading: the read returned the parsed text.
+    assert any(isinstance(m, ToolMessage) and "合同金额 300 万" in str(m.content) for m in env.model.inputs[-1])
     types = [e["type"] for e in events]
     assert types.index("tool_call") < types.index("text")
     assert types[-1] == "run_finished"
@@ -95,36 +128,35 @@ async def test_progress_event_before_parsing(make_env):
 
 async def test_no_event_without_attachment(make_env):
     env = make_env([AIMessage(content="你好")])
-    parser = _FakeParser(env)
-    runner = env.make_runner(read_attachments=parser)
+    source = _SlowSource(env)
+    runner = env.make_runner(attachment_source=lambda ctx: source)
     ctx = await env.submit("你好")
 
     outcome = await env.run(ctx, runner=runner)
 
     assert outcome.status == "finished"
-    assert parser.calls == []
+    assert source.calls == []
     assert _progress_frames(await env.events()) == []
 
 
-async def test_parse_failure_closes_frame_and_fails_run(make_env):
-    env = make_env([AIMessage(content="不应调用")])
-
-    async def broken(ctx: DirectRunContext) -> AttachmentReading:
-        raise RuntimeError("a.docx: 解析失败")
-
-    runner = env.make_runner(read_attachments=broken)
+async def test_parse_failure_closes_frame_and_run_continues(make_env):
+    # T057: an attachment that cannot be read no longer fails the run (deep
+    # research's rule); the frame says which file failed and the model is told.
+    env = make_env([AIMessage(content="这个附件读不了")])
+    source = _SlowSource(env, error=RuntimeError("a.docx: 解析失败"))
+    runner = env.make_runner(attachment_source=lambda ctx: source)
     ctx = await _submit_with_files(env, "看看附件", FILES[:1])
 
     outcome = await env.run(ctx, runner=runner)
 
-    assert outcome.status == "failed"
+    assert outcome.status == "finished"
     events = await env.events()
     frames = _progress_frames(events)
     assert [f["data"]["status"] for f in frames] == ["start", "end"]
-    assert "解析失败" in frames[1]["data"]["output"]
+    assert "a.docx" in frames[1]["data"]["output"]
     assert frames[1]["data"]["extra_info"]["error"]
-    assert events[-1]["type"] == "run_failed"
-    assert env.model.calls == 0
+    assert frames[1]["data"]["extra_info"]["failed"] == ["a.docx"]
+    assert events[-1]["type"] == "run_finished"
 
 
 def test_resume_does_not_read_attachments():
@@ -146,36 +178,14 @@ def test_resume_does_not_read_attachments():
     )
 
 
-async def test_default_reader_calls_legacy_parser(monkeypatch):
-    """The default reader is ``_process_agent_files`` itself, with the run's model and user."""
-    from types import SimpleNamespace
-    from unittest.mock import AsyncMock
-
-    from bisheng.common.dependencies.user_deps import UserPayload
-    from bisheng.workstation.domain.services import chat_service
-    from bisheng.workstation.domain.services.workstation_service import WorkStationService
-
-    ws_config = SimpleNamespace(models=[SimpleNamespace(id="m1", visual=True)], maxTokens=100)
-    login_user = SimpleNamespace(user_id=USER, tenant_id=TENANT)
-    parse = AsyncMock(return_value=("text", ["data:image/png;base64,xx"], FILES))
-    monkeypatch.setattr(WorkStationService, "aget_config", AsyncMock(return_value=ws_config))
-    monkeypatch.setattr(UserPayload, "init_login_user", AsyncMock(return_value=login_user))
-    monkeypatch.setattr(chat_service, "_process_agent_files", parse)
-    ctx = DirectRunContext(conversation_id=CID, run_id="r1", tenant_id=TENANT, user_id=USER, model_id="m1", files=FILES)
-
-    reading = await direct_run.DirectRunner()._default_read_attachments(ctx)
-
-    assert reading == AttachmentReading("text", ["data:image/png;base64,xx"], FILES)
-    data, model_info, user, config = parse.await_args.args
-    assert data.files == FILES and model_info.visual is True and user is login_user and config is ws_config
-    assert parse.await_args.kwargs == {"conversation_id": CID}
-
-
 def test_with_attachments_inlines_text_and_images():
     graph_input = {"messages": [{"role": "user", "content": "# 用户问题\n看图"}, {"role": "user", "content": "补充"}]}
-    out = direct_run._with_attachments(graph_input, AttachmentReading("正文", ["data:a"], []))
+    out = direct_run._with_attachments(
+        graph_input, AttachmentView("<uploaded_files>索引</uploaded_files>", "正文", ["data:a"])
+    )
     first = out["messages"][0]["content"]
     assert first[0]["type"] == "text" and "<uploaded_file_content>\n正文" in first[0]["text"]
+    assert first[0]["text"].index("<uploaded_files>索引") < first[0]["text"].index("<uploaded_file_content>")
     assert first[1] == {"type": "image_url", "image_url": {"url": "data:a"}}
     assert out["messages"][1] == graph_input["messages"][1]
     assert direct_run._with_attachments(graph_input, None) is graph_input

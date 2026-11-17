@@ -170,6 +170,11 @@ class ResyncData(BaseModel):
     plan: list[PlanItem] = Field(default_factory=list)
     files: list[FileData] = Field(default_factory=list)
     pending_question: AskUserData | None = None
+    # True when the run this state belongs to has ended: no more events follow.
+    ended: bool = False
+    # How it ended (``finished`` / ``failed`` / ``stopped``). Present only when
+    # ``ended`` is true and the terminal event was recorded.
+    status: Literal["finished", "failed", "stopped"] | None = None
 
 
 class RunEvent(BaseModel):

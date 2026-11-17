@@ -122,6 +122,14 @@ async def upload_file(
             "parsing_status": "completed",
         }
         timer.finish(filepath=file_path)
+        # F004 决策 12: with the unified runtime on for the tenant, parsing starts
+        # now instead of when the message is sent. A no-op with the switch off.
+        from bisheng.workstation.domain.services import direct_attachments
+        from bisheng.workstation.domain.services.content_safety import workbench_tenant_id
+
+        await direct_attachments.start_upload_parsing(
+            payload, user_id=login_user.user_id, tenant_id=workbench_tenant_id(login_user)
+        )
         return resp_200(data=payload)
     except Exception as exc:
         timer.fail(exc)

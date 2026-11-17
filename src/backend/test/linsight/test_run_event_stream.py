@@ -115,6 +115,8 @@ async def test_stale_cursor_gets_resync(redis):
             {"file_id": "f2", "name": "b.md", "path": "output/b.md", "size": 4, "source": "agent"},
         ],
         "pending_question": {"call_id": "c1", "questions": [{"question": "q?", "options": []}]},
+        # The run is still in progress (F004 T055).
+        "ended": False,
     }
     snap = await stream.snapshot(CID)
     assert {k: snap[k] for k in resync["data"]} == resync["data"]

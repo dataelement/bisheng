@@ -103,6 +103,10 @@ export interface RunResyncData {
     plan: RunPlanItem[];
     files: RunFileData[];
     pending_question?: RunAskUserData | null;
+    /** True when the run already wrote its terminal event. */
+    ended?: boolean;
+    /** With `ended`: how the run ended. */
+    status?: 'finished' | 'failed' | 'stopped' | null;
 }
 
 export interface RunEventDataMap {
@@ -335,10 +339,15 @@ function reduceIntoRun(run: RunState, event: RunEvent): RunState {
 
 /**
  * Replace the current run with the accumulated state of a `resync` event.
- * The resync payload carries no lifecycle flag: a pending question means the
- * run waits for the user, otherwise it is treated as running until a terminal
- * event (or the end of the subscription) says otherwise.
+ * `ended` says the run already wrote its terminal event, and `status` how. For
+ * a run that has not ended, a pending question means it waits for the user,
+ * otherwise it is running.
  */
+function resyncStatus(d: Partial<RunResyncData>): RunStatus {
+    if (d.ended) return d.status === 'failed' || d.status === 'stopped' ? d.status : 'finished';
+    return d.pending_question ? 'waiting' : 'running';
+}
+
 export function reduceResync(
     conv: ConversationRunState,
     runId: string,
@@ -348,12 +357,12 @@ export function reduceResync(
     const d = data ?? {};
     const run: RunState = {
         ...newRun(runId),
-        status: d.pending_question ? 'waiting' : 'running',
+        status: resyncStatus(d),
         text: d.text ?? '',
         thinking: d.thinking ? [{ key: 'resync', callId: null, namespace: null, text: d.thinking, order: 0 }] : [],
         plan: [...(d.plan ?? [])],
         files: dedupeFiles(d.files ?? []),
-        pendingQuestion: d.pending_question ?? null,
+        pendingQuestion: d.ended ? null : (d.pending_question ?? null),
     };
     const replaced = conv.run && conv.run.runId !== runId ? retire(conv, conv.run.runId) : conv.retiredRunIds;
     return {

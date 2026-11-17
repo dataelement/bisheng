@@ -8,7 +8,9 @@
  * 3 variants via `tool_type`:
  *   - "knowledge"   → 「已检索知识 (N 个结果)」, doc-style chips
  *   - "web"         → 「已联网搜索 (N 个结果)」, site-style chips (title + source)
- *   - "tool" (any)  → 「已调用 {display_name} 工具」, brief chips / result preview
+ *   - "tool" (any)  → 「已调用 {display_name} 工具」, brief chips / result preview;
+ *                     with the unified runtime on, "查看代码和输出" opens the
+ *                     call's parameters and output (ToolCodeOutput, F004 T060)
  */
 import { ChatErrorCard } from '~/components/ChatErrorCard';
 import { parseFailureInfo } from '~/utils/failureInfo';
@@ -22,6 +24,7 @@ import { describeMemoryStep, memoryStepLabel, mergeMemorySearchSteps } from "~/c
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 import { toolCallDisplayName } from "~/utils/toolCallName";
+import { ToolCodeOutput } from "./ToolCodeOutput";
 
 export interface ToolCallDisplayProps {
     toolCall: AgentToolCall;
@@ -387,6 +390,8 @@ const RegularToolCall: FC<ToolCallDisplayProps> = ({ toolCall, showConnector = f
                 )}
             </div>
             <div className="flex min-w-0 flex-1 flex-col pb-3">
+                {/* flex-wrap: the "view code and output" block takes its own line under the label. */}
+                <div className="flex min-w-0 flex-wrap items-center gap-x-2">
                 <button
                     type="button"
                     onClick={hasDetails && !toolCall.inflight ? () => setExpanded((v) => !v) : undefined}
@@ -416,6 +421,8 @@ const RegularToolCall: FC<ToolCallDisplayProps> = ({ toolCall, showConnector = f
                         />
                     )}
                 </button>
+                {variant === "tool" && <ToolCodeOutput toolCall={toolCall} />}
+                </div>
                 <div
                     className={cn("grid transition-all duration-300 ease-out", expanded && "mt-2")}
                     style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}

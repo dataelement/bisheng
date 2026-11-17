@@ -103,6 +103,11 @@ class _Env:
         async def sleep(seconds: float) -> None:
             await asyncio.sleep(0.002)
 
+        async def object_store():
+            # The runner builds the workspace backend for every run; these tests
+            # never touch files, so an inert stand-in is enough.
+            return SimpleNamespace(bucket="bisheng", minio_client_sync=None)
+
         return DirectRunner(
             redis=self.redis,
             clock=self.clock,
@@ -114,6 +119,7 @@ class _Env:
             admit=AsyncMock(),
             assemble=assemble,
             build_agent=build_agent,
+            object_store=object_store,
             file_dir_for=lambda ctx: str(self.tmp_path / "cache"),
             recursion_limit=20,
         )

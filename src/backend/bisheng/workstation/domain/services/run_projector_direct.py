@@ -22,6 +22,7 @@ Interface (the run driver attaches projectors through its sink list):
 from __future__ import annotations
 
 import json
+import mimetypes
 import time
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -32,6 +33,8 @@ from loguru import logger
 from bisheng.common.services.failure_context import FailureContextAdapter
 from bisheng.database.models.message import ChatMessage
 from bisheng.linsight.domain.schemas import run_events
+from bisheng.linsight.domain.services import file_events
+from bisheng.linsight.domain.services.workspace_backend import workspace_prefix_for
 from bisheng.workstation.domain.services import chat_service
 from bisheng.workstation.domain.services.daily_memory import redact_args, redact_error, redact_results
 
@@ -96,11 +99,26 @@ class DirectRunProjector:
         self.events: list[dict[str, Any]] = []
         self.final_msg = ""
         self.answer_row: ChatMessage | None = None
+        # T059: the sources bound to the saved row (the legacy end frame sends them),
+        # and the memory flags the ``on_persisted`` hook may leave for that frame.
+        self.citations: list = []
+        self.memory_signal: dict | None = None
         self._thinking_idx: int | None = None
         self._thinking_call_id: str | None = None
         self._inflight_tools: dict[str, int] = {}
         self._seen_event = False
         self._persisted = False
+        self._content_safety = False
+        # file_id -> ``data`` of the run's ``file`` events (T055); a file written
+        # again keeps its place and takes the newer data.
+        self._files: dict[str, dict[str, Any]] = {}
+
+    def seed_files(self, files: list | None) -> None:
+        """Files the run announced before this projector existed (a resumed or
+        recovered run): the ``files`` of the Redis snapshot."""
+        for data in files or []:
+            if isinstance(data, dict):
+                self._on_file(data)
 
     @property
     def message_id(self) -> int | None:
@@ -124,7 +142,13 @@ class DirectRunProjector:
             self._on_thinking(data, now_ms)
         elif event_type == run_events.TOOL_CALL:
             self._on_tool_call(data, now_ms)
+        elif event_type == run_events.FILE:
+            self._on_file(data)
         elif event_type == run_events.RUN_FINISHED:
+            if data.get("content_safety"):
+                # The output scanner hit: the stored answer is the replacement
+                # only, like ``chat_service.persist_safety_replacement``.
+                self._replace_with_safety_reply(str(data.get("auto_reply") or ""))
             await self._persist(now_ms, error=None)
         elif event_type == run_events.RUN_STOPPED:
             # Marked like today's interrupted turn, so the client treats a stopped
@@ -132,8 +156,8 @@ class DirectRunProjector:
             await self._persist(now_ms, error={"error_msg": INTERRUPTED_REASON})
         elif event_type == run_events.RUN_FAILED:
             await self._persist(now_ms, error=self._failure_extra(data))
-        # plan / file / ask_user / steer_* / queued / run_started carry nothing the
-        # answer row stores: files come from the tools' executors at the end.
+        # plan / ask_user / steer_* / queued / run_started carry nothing the answer
+        # row stores.
 
     async def aclose(self) -> None:
         """Save what exists if the run was torn down without a terminal event."""
@@ -147,6 +171,49 @@ class DirectRunProjector:
         await self._persist(self._clock_ms(), error={"error_msg": INTERRUPTED_REASON})
 
     # -- event accumulation (the shapes of chat_service's ``events`` log) ------
+
+    def _replace_with_safety_reply(self, auto_reply: str) -> None:
+        """Drop thinking, tool calls and the blocked text; keep only the auto reply."""
+        self._thinking_idx = None
+        self._thinking_call_id = None
+        self._inflight_tools.clear()
+        self.final_msg = auto_reply
+        self.events = list(chat_service.blocked_answer_payload(auto_reply)["events"])
+        self._content_safety = True
+
+    def _on_file(self, data: dict) -> None:
+        file_id = str(data.get("file_id") or "")
+        if not file_id or not file_events.is_deliverable_path(str(data.get("path") or "")):
+            # Only files of the conversation workspace's ``output/`` can be stored
+            # on the row: their object key is known without trusting the event.
+            return
+        self._files[file_id] = dict(data)
+
+    def _workspace_files(self) -> list[dict]:
+        """The run's ``file`` events as F016 attachment items of the answer row.
+
+        Same ``file_id`` as the event. ``object_name`` is the workspace object in
+        the main bucket, so the item needs no promotion and its link is signed on
+        demand by the existing attachment endpoints (owner, and audit for
+        ``source="code_interpreter"``).
+        """
+        prefix = workspace_prefix_for(self.conversation_id)
+        items = []
+        for data in list(self._files.values())[-chat_service.GENERATED_FILES_LIMIT :]:
+            path = file_events.normalize_rel(str(data["path"]))
+            name = str(data.get("name") or path.rsplit("/", 1)[-1])
+            items.append(
+                {
+                    "file_id": str(data["file_id"]),
+                    "file_name": name,
+                    "path": path,
+                    "type": mimetypes.guess_type(name)[0] or "",
+                    "size": data.get("size"),
+                    "source": chat_service.GENERATED_FILE_SOURCE,
+                    "object_name": file_events.workspace_object_key(prefix, path),
+                }
+            )
+        return items
 
     def _on_text(self, data: dict, now_ms: int) -> None:
         text = str(data.get("text") or "")
@@ -189,14 +256,15 @@ class DirectRunProjector:
         name = str(data.get("name") or "")
         if data.get("status") != "end":
             self._close_thinking(now_ms)
-            meta = self._tool_meta.get(name) or {"display_name": name, "tool_type": "tool"}
+            # The runner puts the tool's display data on the event (``extra_info``).
+            meta = self._tool_meta.get(name) or {}
             self.events.append(
                 {
                     "type": "tool_call",
                     "tool_call_id": call_id,
                     "tool_name": name,
-                    "display_name": meta["display_name"],
-                    "tool_type": meta["tool_type"],
+                    "display_name": extra_info.get("display_name") or meta.get("display_name") or name,
+                    "tool_type": extra_info.get("tool_type") or meta.get("tool_type") or "tool",
                     # F132: memory tool inputs are redacted before they are stored.
                     "args": redact_args(name, data.get("params") or {}),
                     "started_at": now_ms,
@@ -221,8 +289,8 @@ class DirectRunProjector:
                 "type": "tool_call",
                 "tool_call_id": call_id,
                 "tool_name": name,
-                "display_name": name,
-                "tool_type": "tool",
+                "display_name": extra_info.get("display_name") or name,
+                "tool_type": extra_info.get("tool_type") or "tool",
                 "args": {},
                 "results": results,
                 "error": error,
@@ -275,11 +343,21 @@ class DirectRunProjector:
         self._persisted = True
         self._finalise_dangling(now_ms, (error or {}).get("error_msg"))
 
+        # The text already carries citation markers (the runner converts ``[Sn]``
+        # before it writes a text event). Bind exactly the sources the text cites:
+        # from this execution's collector when there is one, else from the citation
+        # runtime cache (a relay run, a run closed by another process, a source of an
+        # earlier turn). A text without markers costs no lookup.
         collected = self._citation_items() if self._citation_items is not None else []
-        citation_items = await chat_service.select_cited_items(collected, self.final_msg) if collected else []
+        citation_items = await chat_service.select_cited_items(collected, self.final_msg)
+        self.citations = list(citation_items)
         files = await chat_service._promote_generated_files(
             self._tools, self.conversation_id, self._promote_user_id, self._storage_partition
         )
+        if not self._content_safety:
+            # T055: the files the run announced live. A blocked answer keeps none,
+            # like the legacy replacement row.
+            files = [*files, *self._workspace_files()]
         row = chat_service.build_daily_answer_row(
             user_id=self.user_id,
             chat_id=self.conversation_id,
@@ -288,7 +366,10 @@ class DirectRunProjector:
             files=files,
             error=error,
         )
-        row.extra = json.dumps({**json.loads(row.extra or "{}"), "run_id": self.run_id}, ensure_ascii=False)
+        extra = (
+            json.loads(chat_service.blocked_answer_extra()) if self._content_safety else json.loads(row.extra or "{}")
+        )
+        row.extra = json.dumps({**extra, "run_id": self.run_id}, ensure_ascii=False)
 
         saved = await chat_service.ChatMessageDao.ainsert_one(row)
         self.answer_row = saved

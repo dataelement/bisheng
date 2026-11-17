@@ -90,8 +90,8 @@ from bisheng.linsight.domain.schemas import run_events
 from bisheng.linsight.domain.services.run_event_stream import HEARTBEAT_TYPE, RunEventStream
 from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import SensitiveWordPolicyService
 from bisheng.workstation.domain.schemas.chat import APIChatCompletion
-from bisheng.workstation.domain.services import chat_service, run_message_persist
-from bisheng.workstation.domain.services.chat_helpers import _sse_resp, gen_title, user_message
+from bisheng.workstation.domain.services import chat_service, direct_run_turn, run_message_persist
+from bisheng.workstation.domain.services.chat_helpers import _memory_sse, _sse_resp, gen_title, user_message
 from bisheng.workstation.domain.services.content_safety import workbench_tenant_id
 from bisheng.workstation.domain.services.daily_memory import (
     MemoryRegister,
@@ -567,7 +567,8 @@ async def _send(request, data: APIChatCompletion, login_user: UserPayload, negot
             "text": data.text or "",
             "task_mode": task_mode,
             "tools": tools,
-            "skills": list(data.skills or []) if task_mode else [],
+            # T053: a direct run mounts the selected skills too (AC-45).
+            "skills": list(data.skills or []),
             "knowledge": knowledge,
             "files": data.files or [],
             "user_id": login_user.user_id,
@@ -657,23 +658,33 @@ async def _start_direct(
 
     persisted = asyncio.Event()
 
-    async def on_persisted(_row: Any) -> None:
-        persisted.set()
+    async def on_persisted(row: Any) -> None:
+        try:
+            # F132: bind this turn's memory records to the answer row and end the
+            # turn, as the legacy stream does right after it saves the row.
+            projector.memory_signal = await direct_run_turn.finish_memory_turn(result.run_id, row.id)
+        finally:
+            persisted.set()
 
     projector = DirectRunProjector(
         run_id=result.run_id,
         conversation_id=conversation_id,
         user_id=conversation.user_id,
         sender=sender,
+        # The sources this execution's tools registered (T059).
+        citation_items=lambda: direct_run_turn.collected_citations(result.run_id),
         on_persisted=on_persisted,
     )
     if is_resume:
         # The hooks of this execution do not see what the run wrote before it
         # parked; the accumulated text of the run is in the Redis snapshot.
-        earlier = ((await svc.stream.snapshot(conversation_id)) or {}).get("text") or ""
+        parked = (await svc.stream.snapshot(conversation_id)) or {}
+        earlier = parked.get("text") or ""
         if earlier:
             projector.final_msg = earlier
             projector.events.append({"type": "text", "content": earlier})
+        # T055: files written before the park belong to the same answer row.
+        projector.seed_files(parked.get("files"))
 
     ctx = DirectRunContext(
         conversation_id=conversation_id,
@@ -684,8 +695,14 @@ async def _start_direct(
         text=data.text or "",
         model_id=data.model,
         tools=tools,
+        skills=list(data.skills or []),
         knowledge=knowledge,
         files=data.files or [],
+        question_message_id=question.id,
+        # The department slot of the page, when the page holds one (AC-22).
+        page_lease_id=lease_id_from_headers(getattr(request, "headers", None)),
+        # Only a login-state endpoint passes ``memory_register`` (F132 AC-10).
+        memory_registered=memory_register is not None,
         is_resume=is_resume,
         answer=(data.text or "") if is_resume else None,
         initial_events=list(result.events),
@@ -792,8 +809,9 @@ class LegacyFrameTranslator:
             start = {
                 "tool_call_id": call_id,
                 "tool_name": name,
-                "display_name": name,
-                "tool_type": "tool",
+                # The runner puts the tool's display data on the event.
+                "display_name": extra_info.get("display_name") or name,
+                "tool_type": extra_info.get("tool_type") or "tool",
                 "args": redact_args(name, data.get("params") or {}),
                 "started_at": now_ms,
             }
@@ -805,8 +823,8 @@ class LegacyFrameTranslator:
             start = {
                 "tool_call_id": call_id,
                 "tool_name": name,
-                "display_name": name,
-                "tool_type": "tool",
+                "display_name": extra_info.get("display_name") or name,
+                "tool_type": extra_info.get("tool_type") or "tool",
                 "args": {},
                 "started_at": now_ms,
             }
@@ -921,7 +939,16 @@ async def _legacy_direct_stream(
             yield _failure_frame(terminal.get("data") or {})
         content = json.loads(row.message)
         files = json.loads(row.files) if getattr(row, "files", None) else []
-        yield _sse_resp("agent_answer", "end", {**content, "files": files}, cid, message_id=row.id, citations=[])
+        if projector.memory_signal:
+            yield _memory_sse(projector.memory_signal, cid, message_id=row.id)
+        yield _sse_resp(
+            "agent_answer",
+            "end",
+            {**content, "files": files},
+            cid,
+            message_id=row.id,
+            citations=projector.citations,
+        )
         for frame in _closing_frames(cid, row.id):
             yield frame
     finally:

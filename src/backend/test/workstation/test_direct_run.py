@@ -478,7 +478,11 @@ async def test_no_workspace_dir_before_model_call(make_env):
         seen["dir_at_first_model_call"] = os.path.exists(env.file_dir)
         return _call("write_file", {"file_path": "/output/note.md", "content": "内容"}, "w1")
 
-    env = make_env([first_reply, AIMessage(content="写好了")])
+    async def second_reply(messages):
+        seen["dir_after_file_operation"] = os.path.exists(env.file_dir)
+        return AIMessage(content="写好了")
+
+    env = make_env([first_reply, second_reply])
     ctx = await env.submit("写一个文件")
     assert not os.path.exists(env.file_dir)
 
@@ -487,7 +491,9 @@ async def test_no_workspace_dir_before_model_call(make_env):
     assert seen["dir_at_first_model_call"] is False
     # The workspace of the conversation appears with the first file operation.
     assert f"workspace/{CID}/output/note.md" in env.store.objects
-    assert os.path.exists(env.file_dir)
+    assert seen["dir_after_file_operation"] is True
+    # T053: the local cache is removed when the run ends; object storage keeps the file.
+    assert not os.path.exists(env.file_dir)
 
 
 async def test_no_workspace_dir_without_file_operation(make_env):

@@ -355,7 +355,7 @@
 - **手动验证**（在 `src/backend/` 下执行；脚本不连接任何环境，不需要账号）：`.venv/bin/python scripts/spike_unified_runtime/s1_todo_and_tool_output.py`、`s3_inbox_middleware.py`、`s3b_diff_todos_alignment.py`；交互对照 `prototype/index.html`。
 - **观测**：每次统一运行时的执行在结束时输出一行 `BS_METRIC domain=agent_run`（`linsight/domain/services/run_metrics.py`，T038）。字段：`profile`（direct / planned）、`status`（finished / failed / stopped / waiting / lease_lost / unknown）、`resume`、`prep_ms`（发送入口接受消息到第一次模型请求，含 `queue_ms`）、`queue_ms`（接受消息到执行开始）、`steer_wait_ms`（本次执行内插话从入箱到被读取的最长等待）、`steer_count`、`checkpoint_bytes`（线程最新 root checkpoint 的序列化字节数，不是线程在 Redis 的总占用）、`total_ms`。开关关闭的旧路径不输出这一行。
 
-### P1 实现后的待定事项（T027–T038 留下，按是否需要产品决定分组）
+### 实现后的待定事项（Wave 1–4 留下，按是否需要产品决定分组）
 
 需要用户决定的：
 
@@ -371,19 +371,27 @@
 9. **回答提问是否扣深度研究邀请额度**：开关打开时，回答会先过 `allowInviteSend()`。
 10. **排队文案的英文与日文**（"Sent. Waiting to be processed" / 「送信しました。処理待ちです」）待确认。
 
-技术上已知、由后续任务处理的：
+11. **直接回答的文件直接存在会话工作区**（T055）：回答行的 `files` 指向 `workspace/{会话}/output/...`，不再复制一份。之后的运行覆盖同一路径时，旧回答下载到的是新内容。是否在运行结束时为每个回答保留一份副本。
+12. **附件读不了时运行继续**（T057）：结束帧带 `failed`，模型输入写明哪些附件未能解析。P1 的行为是运行失败。
+13. **运行结束时仍在解析的附件在后台继续解析**（T057）：用户停止后解析仍占用资源；好处是之后的运行能读到文件。
+14. **附件内联阈值的默认值没有实测依据**（T057，决策 12）：单文件 4000 字符、总量 15000 字符，配置项 `linsight.direct_attachment_inline_chars`、`linsight.direct_attachment_inline_total_chars`。需在 114 实测后确定。
+15. **开关开启时会话页的旧任务回合少了三个动作**（T061）：“重试”、排队卡片的“取消”、旧提问卡片。这三个动作走旧通道，该页已不建 WebSocket。是否用新通道重做“重试”。
+16. **读图由模型自行决定**（T059）：统一运行时不再在问题需要看图时强制调用 `view_image`。真实模型是否会主动调用未验证。
+17. **`direct` 运行不写引用审计日志行**（`log_citation_audit`，T059）。是否补上。
+18. **视觉模型的图片附件不进入工作区 `uploads/`**（T057）：之后的运行只能从对话历史看到它，不能用 `read_file` 读取。
+19. **“查看代码和输出”对历史消息也显示**（T060）：开关开启后，历史里存有参数或结果的通用工具行都会出现这个展开。
+20. **已结束的深度研究回合与直接回答用不同的组件渲染**（T061）：历史接口对 task 行不返回事件序列，回看仍走 `TaskTurnPanel`。
 
-- `resync` 事件不带运行是否已结束；前端靠“两次空连接”推断结束：T055 一组补 `ended` 字段。
-- 重新打开一个深度研究仍在运行的会话时，该轮由旧气泡与旧 WebSocket 展示，不读 `runStore`：T061。
-- 旧气泡通过 `/linsight/workbench/user-input` 回答统一运行的提问后，会话租约是否离开 waiting 未验证：T061。
+技术上已知、尚未处理的：
+
 - 真实模型在新规划提示词下的插话改写成功率未重测（需 114 与真实模型）。
-
-- 知识库工具名不一致（`search_knowledge_bases` 与 `_KB_TOOL_NAME`），`direct` 运行选了知识库时提示词不介绍该工具：T059。
-- `direct` 运行没有引用角标、长期记忆、读图、技能、输出侧内容安全替换、部门并发名额：T053、T059。在这些接入之前，开关不能对真实用户打开。
-- worker 执行的 `direct` 接力运行没有落库投影器；`direct` 运行租约过期时没有失败的回答行：T043。
-- 工具结果在事件里截断到 8000 字符，回答行存的工具结果比今天短；旧帧的工具显示名用工具名兜底：T055。
-- `EventWriter` 合并 thinking 时丢掉 `call_id` 与 `namespace`：T047 前修。
-- `direct` 运行的本地缓存目录运行后不清理：T053。
+- `direct` 运行选中技能时，每次执行都重新拷贝全部候选技能包，没有跨执行的快照。
+- 知识库图片供代码沙箱使用的通道（`kb_image_stage`）没有接入 `direct` 运行。
+- 完整工具结果只给落库投影器；旧 SSE 帧里的工具结果仍截断到 8000 字符。
+- 附件读取等待只包住 backend 的异步方法；代码执行器的同步 `run()` 在延迟准备包装下直接抛错（统一运行时只走异步路径）。
+- 前端判断“已落库的 task 行是否就是当前运行”要多请求一次 `session-version-list`，因为事件里没有 `run_id` 与 `session_version_id` 的对应关系。
+- 重新打开会话时，`/linsight/:id` 独立页的只读状态本次没有再验证。
+- Wave 3、Wave 4 的全部能力只经过脚本化模型与内存替身的单元测试，没有连接真实的 MySQL、Redis、MinIO、代码执行器与模型，界面没有在浏览器里运行过。**在 T039、T051、T062 的人工步骤完成之前，开关不能对真实用户打开。**
 
 ### 尚未完成的验证
 

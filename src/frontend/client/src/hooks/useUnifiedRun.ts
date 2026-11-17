@@ -13,18 +13,22 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { ChatMessage } from '~/api/chatApi';
 import { getAgentMessages } from '~/api/chatApi';
+import { getLinsightSessionVersionList } from '~/api/linsight';
 import { getMemoryFlagsApi, mergeMemoryFlags } from '~/api/memory';
 import { translateApiErrorMessage } from '~/api/request';
 import { sendRunMessage, stopConversationRun } from '~/api/runApi';
 import { useRunEvents } from '~/hooks/useRunEvents';
 import {
     addLiveRow,
+    bindLiveTaskRow,
     classifySendResponse,
     dropSentMessages,
     freezeLiveRun,
     hasLiveRow,
     historyHasAnswer,
     isRunActive,
+    isVersionInProgress,
+    liveTaskRowCandidate,
     mergeHistoryWithQueued,
     needsLiveRow,
     reconcileSentMessages,
@@ -78,6 +82,24 @@ export interface UnifiedSendResult {
     answered: boolean;
 }
 
+/**
+ * Whether the run record `versionId` of a conversation has not ended. Asked
+ * once when a conversation is opened while a run is going and its last answer
+ * is a stored deep-research row. Any failure reads as "not in progress".
+ */
+async function isRunRecordInProgress(conversationId: string, versionId: string): Promise<boolean> {
+    try {
+        const versions: unknown = await getLinsightSessionVersionList(conversationId, '');
+        if (!Array.isArray(versions)) return false;
+        const record = versions.find((v) => String((v as { id?: unknown })?.id) === versionId) as
+            | { status?: unknown }
+            | undefined;
+        return isVersionInProgress(record?.status);
+    } catch {
+        return false;
+    }
+}
+
 const REJECTED: UnifiedSendResult = {
     accepted: false,
     conversationId: null,
@@ -121,8 +143,14 @@ export function useUnifiedRun(options: UseUnifiedRunOptions) {
             const current = state?.run ?? null;
             let rows = history;
             if (current && isRunActive(current)) {
-                decidedRunsRef.current.add(current.runId);
-                rows = addLiveRow(history, current, senderRef.current);
+                if (liveTaskRowCandidate(history, current)) {
+                    // The last answer is a stored deep-research row. Whether it
+                    // is this run is asked from its run record (effect below).
+                    decidedRunsRef.current.delete(current.runId);
+                } else {
+                    decidedRunsRef.current.add(current.runId);
+                    rows = addLiveRow(history, current, senderRef.current);
+                }
             }
             return mergeHistoryWithQueued(rows, prev, state?.queuedMessages);
         },
@@ -172,9 +200,27 @@ export function useUnifiedRun(options: UseUnifiedRunOptions) {
         // A send in flight decides for its own run when the answer arrives.
         if (messagesRef.current.some((m) => m.liveRunId === '')) return;
         decidedRunsRef.current.add(run.runId);
-        if (needsLiveRow(messagesRef.current, run)) {
-            setMessagesFor(cid, (prev) => addLiveRow(prev, run, senderRef.current));
+        const candidate = liveTaskRowCandidate(messagesRef.current, run);
+        if (!candidate) {
+            if (needsLiveRow(messagesRef.current, run)) {
+                setMessagesFor(cid, (prev) => addLiveRow(prev, run, senderRef.current));
+            }
+            return;
         }
+        // T061: a deep-research turn is stored from its start. When its run
+        // record has not ended, that stored row shows the run (from the run
+        // store, no task WebSocket). Otherwise the row is an earlier turn and
+        // the run gets a row of its own.
+        const liveRunId = run.runId;
+        void isRunRecordInProgress(cid, candidate.versionId).then((inProgress) => {
+            if (!mountedRef.current) return;
+            setMessagesFor(cid, (prev) => {
+                const current = useRunStore.getState().conversations[cid]?.run ?? null;
+                if (!current || current.runId !== liveRunId || !isRunActive(current)) return prev;
+                if (inProgress) return bindLiveTaskRow(prev, candidate.versionId, liveRunId);
+                return addLiveRow(prev, current, senderRef.current);
+            });
+        });
         // eslint-disable-next-line react-hooks/exhaustive-deps -- asked once per run, not on every delta
     }, [cid, bucketId, runId, active, isLoading, setMessagesFor]);
 

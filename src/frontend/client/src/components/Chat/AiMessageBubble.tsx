@@ -26,6 +26,7 @@ import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { useAuthContext, useLocalize } from "~/hooks";
 import { useMessageSelection } from "~/hooks/useMessageSelection";
 import { selectIsMessageQueued, useRunStore } from "~/store/runStore";
+import { useUnifiedRuntimePage } from "~/components/Chat/unifiedRuntimeContext";
 import {
     ExportSelectionButton,
     MessageCheckbox,
@@ -485,6 +486,17 @@ function AssistantBubble({
     const isLiveRun = message.liveRunId !== undefined;
     const isLatest = isLiveRun || isLatestProp;
     const isStreaming = isLiveRun || isStreamingProp;
+    // F004 (T061): on the unified runtime a stored deep-research turn is review
+    // only; the turn in progress is this same row fed by the run store.
+    const unifiedPage = useUnifiedRuntimePage();
+    const isLiveTaskRow = isLiveRun && message.category === "task";
+    // The run waits for the user's answer: nothing is being written, so the
+    // live row shows no typing cursor. Only a live row reads the store.
+    const liveRunWaiting = useRunStore((state) => {
+        if (!message.liveRunId || !message.conversationId) return false;
+        const run = state.conversations[message.conversationId]?.run;
+        return run?.runId === message.liveRunId && run.status === "waiting";
+    });
 
     // Prefer the backend's own classification; fall back to the status code so
     // pre-classification backends still split busy-vs-failed correctly, and land
@@ -503,9 +515,9 @@ function AssistantBubble({
     // loader), skip the legacy :::thinking:::/:::web::: regex parsing and let
     // the dedicated components own those sections.
     const isAgentNative = useMemo(() => {
-        if (message.category === "agent_answer") return true;
+        if (message.category === "agent_answer" || isLiveTaskRow) return true;
         return Array.isArray(message.events) && message.events.length > 0;
-    }, [message.category, message.events]);
+    }, [message.category, message.events, isLiveTaskRow]);
 
     // Parse :::thinking::: and :::web::: from the raw text (legacy path only).
     // Agent-native path still needs to strip the legacy envelope because the
@@ -584,7 +596,7 @@ function AssistantBubble({
     );
 
     const modelName = message.sender || "AI";
-    const showCursor = isLatest && isStreaming;
+    const showCursor = isLatest && isStreaming && !liveRunWaiting;
     const isWaitingFirstToken =
         isStreaming &&
         isLatest &&
@@ -612,7 +624,9 @@ function AssistantBubble({
     // F035 Track J (TJ-7): task turn — render the embedded linsight execution
     // panel by SV instead of the agent/legacy text rendering. The user question
     // bubble is the preceding (daily) user row; this row owns the rich panel.
-    if (message.category === "task") {
+    // F004 (T061): a `task` row that carries `liveRunId` is the run in progress
+    // and falls through to the shared timeline below.
+    if (message.category === "task" && !isLiveTaskRow) {
         return (
             <div className={cn("dsh-assistant-message flex justify-start py-3 items-start gap-2", knowledgeChatLayout ? "w-full px-0" : "px-4")}>
                 {showCheckbox && message.conversationId && (
@@ -630,6 +644,7 @@ function AssistantBubble({
                         conversationId={message.conversationId}
                         answer={message.text}
                         onPreviewFile={onPreviewFile}
+                        liveChannel={!unifiedPage}
                     />
                 </div>
             </div>

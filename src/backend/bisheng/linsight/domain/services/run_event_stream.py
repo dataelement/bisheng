@@ -10,8 +10,9 @@ event built from that hash, then the increments after it.
 Layout (both keys share the hash tag ``{conversation_id}``, design K8):
 
 * ``bisheng:run:events:{<cid>}``   Stream, entry fields ``run_id seq type data ts``
-* ``bisheng:run:snapshot:{<cid>}`` Hash, fields ``run_id seq last_id ended text
-  thinking plan files pending_question``
+* ``bisheng:run:snapshot:{<cid>}`` Hash, fields ``run_id seq last_id ended status
+  text thinking plan files pending_question`` (``status`` is the type of the
+  terminal event, set together with ``ended``)
 
 Rules this module owns:
 
@@ -50,6 +51,8 @@ COALESCE_WINDOW_SECONDS = 0.05
 
 COALESCED_TYPES = frozenset({"text", "thinking"})
 TERMINAL_TYPES = frozenset({"run_finished", "run_failed", "run_stopped"})
+# Terminal event type -> ``status`` of a ``resync`` event.
+TERMINAL_STATUS = {"run_finished": "finished", "run_failed": "failed", "run_stopped": "stopped"}
 RESYNC_TYPE = "resync"
 HEARTBEAT_TYPE = "heartbeat"
 # Field of ``data`` that carries the text delta of ``text`` / ``thinking``.
@@ -102,7 +105,7 @@ elseif op == 'clear_question' then
   redis.call('HDEL', snap, 'pending_question')
 end
 if ARGV[8] == '1' then
-  redis.call('HSET', snap, 'ended', '1')
+  redis.call('HSET', snap, 'ended', '1', 'status', typ)
 end
 local ttl = ARGV[6]
 if redis.call('HEXISTS', snap, 'ended') == 1 then
@@ -154,6 +157,16 @@ def _snapshot_op(event: dict) -> tuple[str, str]:
     if typ in ("ask_user_answered", "run_started") or typ in TERMINAL_TYPES:
         return _OP_CLEAR_QUESTION, ""
     return _OP_NONE, ""
+
+
+def _latest_files(files: list) -> list:
+    """One entry per ``file_id``: a file written again replaces its entry, in place."""
+    latest: dict[str, Any] = {}
+    for item in files:
+        if not isinstance(item, dict) or not item.get("file_id"):
+            continue
+        latest[str(item["file_id"])] = item
+    return list(latest.values())
 
 
 async def _default_redis() -> Any:
@@ -279,8 +292,12 @@ class RunEventStream:
             "text": h.get("text") or "",
             "thinking": h.get("thinking") or "",
             "plan": json.loads(h["plan"]) if h.get("plan") else [],
-            "files": json.loads(h["files"]) if h.get("files") else [],
+            "files": _latest_files(json.loads(h["files"]) if h.get("files") else []),
         }
+        if snap["ended"]:
+            # ``run_finished`` -> ``finished``. None for a snapshot written before
+            # the status was recorded.
+            snap["status"] = TERMINAL_STATUS.get(h.get("status") or "")
         if h.get("pending_question"):
             snap["pending_question"] = json.loads(h["pending_question"])
         return snap
@@ -307,7 +324,12 @@ class RunEventStream:
             "thinking": snap["thinking"],
             "plan": snap["plan"],
             "files": snap["files"],
+            # The run this state belongs to is over: the reader must not wait for
+            # more events of it. ``status`` says how it ended, when known.
+            "ended": bool(snap.get("ended")),
         }
+        if snap.get("ended") and snap.get("status"):
+            data["status"] = snap["status"]
         if "pending_question" in snap:
             data["pending_question"] = snap["pending_question"]
         return {
