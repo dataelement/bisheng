@@ -24,7 +24,7 @@ async def creation_budget(quota_db):
     await quota_db.create(Knowledge, DepartmentKnowledgeSpace)
     with bypass_tenant_filter():
         async with quota_db.sessions() as session:
-            for role_id in (2, 3):
+            for role_id in (2, 3, 4, 5):
                 (await session.get(Role, role_id)).quota_config = {"channel": 10, "knowledge_space": 10}
             (await session.get(Tenant, 2)).quota_config = {"channel": 8, "knowledge_space": 8}
             session.add_all(
@@ -59,7 +59,7 @@ async def test_channel_prospective_gate_uses_independent_budgets(creation_budget
     assert tenant_id == 2
     with bypass_tenant_filter():
         async with creation_budget.sessions() as session:
-            for role_id in (2, 3):
+            for role_id in (2, 3, 4, 5):
                 (await session.get(Role, role_id)).quota_config = {"channel": 0}
             await session.commit()
     with management_scope(home=2, target=2), pytest.raises(ChannelCreateLimitExceededError):
@@ -78,7 +78,7 @@ async def test_space_creation_gate_uses_independent_budgets(creation_budget, mon
         await service._assert_space_creation_quota()
     with bypass_tenant_filter():
         async with creation_budget.sessions() as session:
-            for role_id in (2, 3):
+            for role_id in (2, 3, 4, 5):
                 (await session.get(Role, role_id)).quota_config = {"knowledge_space": 0}
             await session.commit()
     with management_scope(home=2, target=2), pytest.raises(SpaceLimitError):

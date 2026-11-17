@@ -279,13 +279,13 @@ export function useKnowledgeProcessingJobs(
   spaceId: number,
   query: ProcessingJobsQuery,
   api: KnowledgeSpaceApi = knowledgeSpaceApi,
-  options: ProcessingQueryOptions = {},
+  { enabled = true, ...options }: ProcessingQueryOptions & { enabled?: boolean } = {},
 ) {
   useKnowledgeScope(scope);
   return useQuery({
     queryKey: knowledgeQueryKeys.jobs(scope, spaceId, query),
     queryFn: () => api.listProcessingJobs(spaceId, query),
-    enabled: canQuery(scope, spaceId),
+    enabled: enabled && canQuery(scope, spaceId),
     keepPreviousData: false,
     ...options,
   });

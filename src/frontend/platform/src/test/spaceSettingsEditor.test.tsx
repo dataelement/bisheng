@@ -45,7 +45,9 @@ vi.mock("@/components/bs-ui/alertDialog/useConfirm", () => ({
   bsConfirm: mocks.confirm,
 }));
 vi.mock("@/pages/KnowledgePage/components/SpaceProcessingDialog", () => ({
-  SpaceProcessingPanel: ({ jobKind }: { jobKind?: string }) => jobKind ? <div data-testid={`jobs-${jobKind}`} /> : null,
+  SpaceProcessingPanel: ({ mode, jobKind }: { mode: string; jobKind?: string }) => (
+    <div data-testid={jobKind ? `jobs-${jobKind}` : `processing-${mode}`} />
+  ),
 }));
 const scope = {
   identityKey: "user:7",
@@ -147,10 +149,12 @@ afterEach(() => {
   cleanup();
   clients.splice(0).forEach((client) => client.clear());
 });
-it("shows both index job histories in space settings", async () => {
+it("keeps model and split settings outside the task histories", async () => {
   mount();
-  expect(await screen.findByTestId("jobs-embedding_rebuild")).toBeVisible();
-  expect(screen.getByTestId("jobs-move_index")).toBeVisible();
+  expect(await screen.findByTestId("processing-embedding")).toBeVisible();
+  expect(await readyForDefaults()).toBeVisible();
+  expect(screen.queryByTestId("jobs-embedding_rebuild")).not.toBeInTheDocument();
+  expect(screen.queryByTestId("jobs-move_index")).not.toBeInTheDocument();
 });
 it("shows saved sharing options and saves custom automatic tags", async () => {
   mount();

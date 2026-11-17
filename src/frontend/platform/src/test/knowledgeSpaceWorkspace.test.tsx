@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ComponentProps } from "react";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
@@ -7,6 +8,7 @@ import KnowledgePage from "@/pages/KnowledgePage";
 import { KnowledgeSpaceCreatePage } from "@/pages/KnowledgePage/KnowledgeSpaceCreatePage";
 import { KnowledgeSpaceSettingsPage } from "@/pages/KnowledgePage/KnowledgeSpaceSettingsPage";
 import { userContext } from "@/contexts/userContext";
+import type { ProcessingJobRead } from "@/controllers/API/knowledgeSpace";
 import type { FilesProps } from "@/pages/KnowledgePage/components/Files";
 import type { CreateSpaceForm } from "@/pages/KnowledgePage/components/KnowledgeLibraryDialog";
 import type { SpaceSettingsEditor } from "@/pages/KnowledgePage/components/SpaceSettingsEditor";
@@ -45,6 +47,9 @@ vi.mock("@/pages/KnowledgePage/components/KnowledgeLibraryDialog", () => ({
 vi.mock("@/pages/KnowledgePage/components/Files", () => ({ default: (props: FilesProps) => <output data-testid="files">{JSON.stringify({ id: props.spaceId, parent: props.parentId, presentation: props.presentation, view: props.scope?.view })}</output> }));
 
 const scope = { identityKey: "user:5", tenantId: 60, managementTenantId: 60, view: "ordinary" } as const;
+const taskKinds = ["embedding_rebuild", "move_index"] as const;
+const jobsPath = "/api/v1/knowledge/space/7/processing-jobs";
+type TaskKind = (typeof taskKinds)[number];
 const clients: QueryClient[] = [];
 function Location() {
   const location = useLocation();
@@ -54,7 +59,7 @@ function Location() {
 function mount(path = "/filelib", user: Partial<User> = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   clients.push(client);
-  return render(
+  const view = render(
     <QueryClientProvider client={client}>
       <userContext.Provider value={{ user: { user_id: 5, ...user }, setUser: vi.fn(), savedComponents: [], addSavedComponent: async () => undefined, checkComponentsName: () => false, delComponent: vi.fn() }}>
         <MemoryRouter initialEntries={[path]}>
@@ -69,7 +74,40 @@ function mount(path = "/filelib", user: Partial<User> = {}) {
       </userContext.Provider>
     </QueryClientProvider>,
   );
+  return { ...view, client };
 }
+
+function mockTaskRecords(kinds: readonly TaskKind[]) {
+  const jobs: ProcessingJobRead[] = kinds.map((kind) => ({
+    id: `job-${kind}`,
+    space_id: 7,
+    kind,
+    state: "succeeded",
+    revision: 1,
+    accepted_at: "2026-11-17T09:00:00",
+    started_at: null,
+    finished_at: null,
+    total_count: 1,
+    succeeded_count: 1,
+    failed_count: 0,
+    pending_count: 0,
+    hidden_item_count: 0,
+    retryable: false,
+    error_code: null,
+    obsolete_reason: null,
+  }));
+  const read = mock.get.getMockImplementation()!;
+  mock.get.mockImplementation(async (url: string, options?: { params?: { kind?: string } }) => {
+    if (url === jobsPath) {
+      const data = jobs.filter(({ kind }) => kind === options?.params?.kind);
+      return { data, total: data.length };
+    }
+    if (url.startsWith(`${jobsPath}/`) && url.endsWith("/items")) return { data: [], total: 0 };
+    const job = jobs.find(({ id }) => url === `${jobsPath}/${id}`);
+    return job ?? read(url, options);
+  });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mock.permissions.mockResolvedValue({ actions: [] });
@@ -166,6 +204,74 @@ it("automatically opens the first sidebar space instead of rendering the ordinar
   expect(screen.queryByRole("button", { name: "back" })).not.toBeInTheDocument();
   expect(screen.getByTestId("location")).toHaveTextContent("/filelib/7");
   expect(screen.queryByText("ordinary-list")).toBeNull();
+});
+
+it("hides task records when both histories are empty", async () => {
+  mock.permissions.mockResolvedValue({ actions: ["edit"] });
+  const { client } = mount("/filelib/7");
+  await screen.findByRole("heading", { name: "Reports" });
+  await waitFor(() => {
+    for (const kind of taskKinds) {
+      expect(mock.get).toHaveBeenCalledWith(jobsPath, {
+        params: expect.objectContaining({ kind }),
+      });
+    }
+    expect(client.isFetching()).toBe(0);
+  });
+  expect(screen.queryByRole("button", { name: "detail.task_records" })).not.toBeInTheDocument();
+});
+
+it.each(taskKinds)("shows the root header entry when only %s has records and hides it in folders", async (kind) => {
+  mock.permissions.mockResolvedValue({ actions: ["edit"] });
+  mockTaskRecords([kind]);
+  mount("/filelib/7");
+  const title = await screen.findByRole("heading", { name: "Reports" });
+  const entry = await within(title.closest("header")!).findByRole("button", { name: "detail.task_records" });
+  expect(title.compareDocumentPosition(entry) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+  const sidebar = within(screen.getByRole("complementary"));
+  fireEvent.click(await sidebar.findByRole("button", { name: "Finance" }));
+  await screen.findByRole("navigation", { name: "f118.current_folder" });
+  expect(screen.queryByRole("button", { name: "detail.task_records" })).not.toBeInTheDocument();
+
+  fireEvent.click(await within(screen.getByRole("navigation", { name: "f118.current_folder" })).findByRole("button", { name: "Reports" }));
+  expect(await screen.findByRole("button", { name: "detail.task_records" })).toBeVisible();
+});
+
+it("opens both histories and their job details from a single dialog", async () => {
+  mock.permissions.mockResolvedValue({ actions: ["edit"] });
+  mockTaskRecords(taskKinds);
+  mount("/filelib/7");
+  const interaction = userEvent.setup();
+  const entry = await screen.findByRole("button", { name: "detail.task_records" });
+  await interaction.click(entry);
+  const dialog = within(await screen.findByRole("dialog", { name: "detail.task_records" }));
+  expect(dialog.getByRole("tab", { name: "f118.processing_title_jobs" })).toHaveAttribute("aria-selected", "true");
+  await interaction.click(await dialog.findByRole("button", { name: "f118.processing_kind_embedding_rebuild · f118.processing_state_succeeded" }));
+  expect(await dialog.findByText("f118.processing_counts")).toBeVisible();
+  expect(mock.get).toHaveBeenCalledWith(`${jobsPath}/job-embedding_rebuild`, expect.any(Object));
+  await interaction.click(dialog.getByRole("button", { name: "detail.back_to_jobs" }));
+
+  await interaction.click(dialog.getByRole("tab", { name: "move.jobs" }));
+  await interaction.click(await dialog.findByRole("button", { name: "move.jobs · f118.processing_state_succeeded" }));
+  expect(await dialog.findByText("f118.processing_counts")).toBeVisible();
+  expect(mock.get).toHaveBeenCalledWith(`${jobsPath}/job-move_index`, { params: { kind: "move_index" } });
+
+  await interaction.keyboard("{Escape}");
+  expect(screen.queryByRole("dialog", { name: "detail.task_records" })).not.toBeInTheDocument();
+  expect(screen.getByTestId("location")).toHaveTextContent(/^\/filelib\/7$/);
+});
+
+it("opens permitted move records without requesting processing history for a non-editor", async () => {
+  mock.permissions.mockResolvedValue({ actions: ["visible"] });
+  mockTaskRecords(["move_index"]);
+  mount("/filelib/7");
+  fireEvent.click(await screen.findByRole("button", { name: "detail.task_records" }));
+  const dialog = within(await screen.findByRole("dialog", { name: "detail.task_records" }));
+  expect(await dialog.findByRole("button", { name: "move.jobs · f118.processing_state_succeeded" })).toBeVisible();
+  expect(mock.get).not.toHaveBeenCalledWith(jobsPath, {
+    params: expect.objectContaining({ kind: "embedding_rebuild" }),
+  });
 });
 
 it.each<Partial<User>>([

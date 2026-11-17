@@ -1,6 +1,6 @@
 """Exact bound definition and WEB_MENU reads, separate from resource grants."""
 
-from sqlalchemy import and_, or_
+from sqlalchemy import or_
 from sqlmodel import select
 
 from bisheng.core.context.tenant import bypass_tenant_filter
@@ -12,7 +12,7 @@ from bisheng.database.models.role_access import AccessType, RoleAccess
 def _menu_statement(roles):
     return select(RoleAccess.third_id).where(
         RoleAccess.type == AccessType.WEB_MENU.value,
-        or_(*(and_(RoleAccess.role_id == role.id, RoleAccess.tenant_id == role.tenant_id) for role in roles)),
+        RoleAccess.role_id.in_([role.id for role in roles]),
     )
 
 

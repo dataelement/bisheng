@@ -45,6 +45,7 @@ interface SpaceProcessingDialogProps {
   fileId?: number;
   includeCopies?: boolean;
   jobKind?: ProcessingKind;
+  hideTitle?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved?: () => void;
@@ -68,7 +69,7 @@ export function SpaceProcessingPanel({
 }: Omit<SpaceProcessingDialogProps, "open" | "onOpenChange">) {
   return (
     <Content
-      key={JSON.stringify([props.scope, props.spaceId, props.mode])}
+      key={JSON.stringify([props.scope, props.spaceId, props.mode, props.jobKind])}
       {...props}
       open
       presentation={presentation}
@@ -85,6 +86,7 @@ function Content({
   fileId,
   includeCopies = false,
   jobKind,
+  hideTitle = false,
   onOpenChange,
   onSaved,
   presentation,
@@ -243,7 +245,7 @@ function Content({
             : `f118.processing_title_${mode}`,
       )}
       presentation={presentation}
-      hideTitle={inlineEmbedding}
+      hideTitle={hideTitle || inlineEmbedding}
       busy={busy}
       className="max-h-[85vh] max-w-3xl overflow-y-auto"
       footer={
@@ -309,7 +311,7 @@ function Content({
             </Button>
           )}
           {!jobs.isInitialLoading && !jobs.isError && !jobs.data?.total && !copies.data?.total && (
-            <p>{t("detail.no_jobs")}</p>
+            <p>{t(jobKind === "move_index" ? "move.no_jobs" : "detail.no_jobs")}</p>
           )}
           <ul>
             {[...(jobs.data?.data ?? []), ...(copies.data?.data ?? [])].map((row) => (

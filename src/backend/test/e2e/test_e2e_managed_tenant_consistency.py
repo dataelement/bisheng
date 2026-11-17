@@ -98,6 +98,22 @@ async def test_management_identity_is_not_granted_to_an_ordinary_user(dedicated)
     assert body["status_code"] == 19701
 
 
+async def test_original_roles_survive_upgrade_without_becoming_admin(dedicated):
+    """AC-15/16/17/37: compare a dedicated ordinary user with its saved v3.0.0 policy."""
+    client, _admin, user, facts = dedicated
+    expected_roles = facts.get("original_role_ids")
+    expected_menus = facts.get("original_menu_keys")
+    if not expected_roles or not expected_menus:
+        pytest.skip("A saved v3.0.0 role/menu baseline for the dedicated user is required")
+    assert all(type(role_id) is int and role_id > 1 for role_id in expected_roles)
+    identity = assert_resp_200(await client.get(f"{API_BASE}/user/info", headers=user))
+    assert identity["user_id"] == facts["user_id"]
+    assert identity["leaf_tenant_id"] == facts["home_tenant_id"]
+    assert not identity["is_global_super"]
+    assert set(json.loads(identity["role"])) == set(expected_roles)
+    assert set(expected_menus).issubset(identity["web_menu"])
+
+
 async def test_phase_one_navigation_is_metadata_and_identity_stays_home(dedicated):
     """AC-42/48: the selected tenant's navigation does not project personal policy."""
     client, admin, _, facts = dedicated
