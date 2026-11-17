@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
-import { Button, Checkbox, DropdownItem, Tooltip, TreeNavigationMenu, toast } from "@bisheng/ui";
+import { Button, Checkbox, Tooltip, toast } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { useTranslation } from "react-i18next";
 import { departmentDisplayName } from "@/components/bs-comp/department/departmentDisplayName";
@@ -29,6 +29,7 @@ import type { DepartmentTreeNode } from "@/types/api/department";
 export default function Departments() {
   const { t } = useTranslation();
   const createDepartmentLabel = t("bs:department.create");
+  const createChildDepartmentLabel = t("bs:organization.createChildDepartment");
   const { appConfig } = useContext(locationContext);
   const { user } = useContext(userContext);
   const [includeArchived, setIncludeArchived] = useState(false);
@@ -47,7 +48,7 @@ export default function Departments() {
     (selectedId == null ? null : tree.getNode(selectedId)) ?? selectedSnapshot;
   const [createOpen, setCreateOpen] = useState(false);
   const [createParentId, setCreateParentId] = useState<number | null>(null);
-  const pendingCreateParentId = useRef<number | null>(null);
+  const createTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [settingsTarget, setSettingsTarget] =
     useState<DepartmentTreeNode | null>(null);
   const [mountTarget, setMountTarget] = useState<{
@@ -77,7 +78,8 @@ export default function Departments() {
     }
   }, [tree, selectedId, selectNode]);
 
-  const handleCreateClick = (parentId: number | null = null) => {
+  const handleCreateClick = (trigger: HTMLButtonElement, parentId: number | null = null) => {
+    createTriggerRef.current = trigger;
     setCreateParentId(parentId);
     setCreateOpen(true);
   };
@@ -243,7 +245,7 @@ export default function Departments() {
               iconOnly
               icon={<Outlined.Plus aria-hidden />}
               aria-label={createDepartmentLabel}
-              onClick={() => handleCreateClick()}
+              onClick={(event) => handleCreateClick(event.currentTarget)}
             />
           </Tooltip>
         </div>
@@ -261,24 +263,22 @@ export default function Departments() {
             selectedDeptId={selectedDept?.dept_id}
             onSelect={selectNode}
             renderRowSuffix={(node) => node.status !== "archived" && (
-              <TreeNavigationMenu
-                label={t("bs:organization.departmentActions", {
-                  name: departmentDisplayName(node, t("bs:department.defaultOrganization")),
-                })}
-                onCloseAutoFocus={() => {
-                  if (pendingCreateParentId.current !== node.id) return;
-                  pendingCreateParentId.current = null;
-                  handleCreateClick(node.id);
-                }}
-                menu={(
-                  <DropdownItem
-                    icon={<Outlined.Plus aria-hidden />}
-                    onSelect={() => { pendingCreateParentId.current = node.id; }}
-                  >
-                    {t("bs:organization.createChildDepartment")}
-                  </DropdownItem>
-                )}
-              />
+              <Tooltip content={createChildDepartmentLabel}>
+                <Button
+                  type="button"
+                  size="small"
+                  color="default"
+                  variant="text"
+                  iconOnly
+                  icon={<Outlined.Plus aria-hidden />}
+                  className="size-[var(--tree-slot)] rounded-md [opacity:var(--tree-menu-visibility)] hover:bg-fill-3 [&_svg]:size-4"
+                  aria-label={t("bs:organization.createChildDepartmentFor", {
+                    name: departmentDisplayName(node, t("bs:department.defaultOrganization")),
+                  })}
+                  aria-haspopup="dialog"
+                  onClick={(event) => handleCreateClick(event.currentTarget, node.id)}
+                />
+              </Tooltip>
             )}
           />
         </OrganizationSearchPanel>
@@ -339,6 +339,10 @@ export default function Departments() {
         <CreateDepartmentDialog
           defaultParentId={createParentId}
           onClose={() => setCreateOpen(false)}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            createTriggerRef.current?.focus();
+          }}
           onCreated={() => {
             setCreateOpen(false);
             void tree.reloadLayer(createParentId).catch(showApiError);

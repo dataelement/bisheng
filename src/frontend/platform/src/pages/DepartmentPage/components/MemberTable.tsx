@@ -175,30 +175,27 @@ export function useMemberTableController({
     };
   }, [dept.id, deptId, isArchived, membersRefreshSignal]);
 
+  const hasHighlightedMember = !loading && highlightUserId != null && members.some(
+    (member) =>
+      member.user_id === highlightUserId &&
+      (member.department_id ?? dept.id) === dept.id
+  );
   useEffect(() => {
-    if (
-      loading ||
-      highlightUserId == null ||
-      !members.some(
-        (member) =>
-          member.user_id === highlightUserId &&
-          (member.department_id ?? dept.id) === dept.id
-      )
-    )
-      return;
+    if (!hasHighlightedMember) return;
+    let timer: number | undefined;
     const frame = window.requestAnimationFrame(() => {
       document
         .querySelector(
           `[data-member-row="${highlightUserId}"][data-member-department="${dept.id}"]`
         )
-        ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        ?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" });
+      timer = window.setTimeout(() => setHighlightUserId(null), 3000);
     });
-    const timer = window.setTimeout(() => setHighlightUserId(null), 5000);
     return () => {
       window.cancelAnimationFrame(frame);
       window.clearTimeout(timer);
     };
-  }, [dept.id, members, loading, highlightUserId]);
+  }, [dept.id, hasHighlightedMember, highlightUserId]);
 
   const handlePageChange = useCallback(
     (nextPage: number) => {
