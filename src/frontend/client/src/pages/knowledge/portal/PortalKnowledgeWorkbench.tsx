@@ -2214,13 +2214,12 @@ export default function PortalKnowledgeWorkbench() {
         [currentFolderId, searchMode, searchTagIds, searchText],
     );
 
-    const handleSelectSpace = useCallback(
-        (space: KnowledgeSpace) => {
-            setActiveSpace(space);
+    const updateSpaceSearchParams = useCallback(
+        (spaceId: string) => {
             setSearchParams(
                 (prev: URLSearchParams) => {
                     const next = new URLSearchParams(prev);
-                    next.set("spaceId", String(space.id));
+                    next.set("spaceId", spaceId);
                     next.delete("folderId");
                     next.delete("folderName");
                     next.delete("fileId");
@@ -2234,7 +2233,47 @@ export default function PortalKnowledgeWorkbench() {
                 { replace: true },
             );
         },
-        [setActiveSpace, setSearchParams],
+        [setSearchParams],
+    );
+
+    const handleSelectSpace = useCallback(
+        (space: KnowledgeSpace) => {
+            setActiveSpace(space);
+            updateSpaceSearchParams(String(space.id));
+        },
+        [setActiveSpace, updateSpaceSearchParams],
+    );
+
+    const handleGlobalSearchSelectSpace = useCallback(
+        (spaceId: number, spaceLevel: string) => {
+            const targetId = String(spaceId);
+            setSelectedFile(null);
+            setActivePanel(null);
+            setAiDrawerOpen(false);
+
+            // 团队库与科室库在侧栏均归入 "team" 分组。
+            const groupKey: SpaceGroupKey | null = spaceLevel === SpaceLevel.PUBLIC
+                ? "public"
+                : spaceLevel === SpaceLevel.DEPARTMENT
+                    ? "department"
+                    : spaceLevel === SpaceLevel.TEAM || spaceLevel === SpaceLevel.TEAM_KS
+                        ? "team"
+                        : spaceLevel === SpaceLevel.PERSONAL
+                            ? "personal"
+                            : null;
+            if (groupKey) {
+                setExpandedGroups((prev) => (prev[groupKey] ? prev : { ...prev, [groupKey]: true }));
+            }
+
+            const existingSpace = selectableSpaces.find((item) => String(item.id) === targetId);
+            if (existingSpace) {
+                handleSelectSpace(existingSpace);
+                return;
+            }
+            // 目标分组尚未加载时，通过 URL 参数触发 preferredSpaceQuery 自动拉取并激活该知识库。
+            updateSpaceSearchParams(targetId);
+        },
+        [handleSelectSpace, selectableSpaces, updateSpaceSearchParams],
     );
 
     const sourceSpaceFromActive = useMemo(() => {
@@ -2984,6 +3023,7 @@ export default function PortalKnowledgeWorkbench() {
                         }
                         onDeleteSpace={(space) => void handleDeleteSpace(space)}
                         onLeaveSpace={(space) => void handleLeaveSpace(space)}
+                        onGlobalSearchSelectSpace={handleGlobalSearchSelectSpace}
                         onGlobalSearchSelectFile={(spaceId, fileId, fileName) =>
                             handleOpenSourceFile(String(spaceId), String(fileId), fileName)
                         }
