@@ -345,64 +345,38 @@ class TenantMountService:
         # tuples here, only for this Child (already-mounted Children keep
         # their existing tuples untouched).
         #
-        # Gated by tenant.share_default_to_children to honour the
-        # "Root-only" intent: customers who turned the flag off in the
-        # admin UI expect new Children NOT to inherit Root LLMs.
-        try:
-            from sqlalchemy import text as sa_text
+        # Model sharing is governed only by each provider's durable explicit
+        # intent. Historical providers without an intent are never inferred on.
+        from bisheng.database.models.tenant import TenantDao
+        from bisheng.llm.application.model_mount_sharing import get_model_mount_sharing_application
 
-            from bisheng.core.database import get_async_db_session
-            from bisheng.database.models.tenant import TenantDao
-            from bisheng.llm.application.model_mount_sharing import get_model_mount_sharing_application
-
-            root_tenant = await TenantDao.aget_by_id(ROOT_TENANT_ID)
-            share_default = (
-                bool(
-                    getattr(
-                        root_tenant,
-                        "share_default_to_children",
-                        True,
+        if operator is None:
+            raise ValueError("LLM mount sharing requires the original operator")
+        application = await get_model_mount_sharing_application()
+        server_ids = await application.aenabled_server_ids(identity=operator)
+        if server_ids:
+            child = await TenantDao.aget_by_id(new_child_id)
+            if child is None:
+                raise TenantTreeMountConflictError()
+            failures = []
+            for server_id in server_ids:
+                try:
+                    await application.ashare(
+                        identity=operator,
+                        server_id=server_id,
+                        root_dept_id=child.root_dept_id,
+                        child_id=new_child_id,
+                        tenant_code=child.tenant_code,
+                        tenant_name=child.tenant_name,
+                        auto_distribute=auto_distribute,
                     )
-                )
-                if root_tenant
-                else True
-            )
-            if share_default:
-                async with get_async_db_session() as session:
-                    res = await session.exec(
-                        sa_text("SELECT id FROM llm_server WHERE tenant_id = :t").bindparams(t=ROOT_TENANT_ID)
-                    )
-                    server_ids = [r[0] for r in res.all()]
-                if server_ids:
-                    if operator is None:
-                        raise ValueError("LLM mount sharing requires the original operator")
-                    application = await get_model_mount_sharing_application()
-                    child = await TenantDao.aget_by_id(new_child_id)
-                    if child is None:
-                        raise TenantTreeMountConflictError()
-                    failures = []
-                    for server_id in server_ids:
-                        try:
-                            await application.ashare(
-                                identity=operator,
-                                server_id=server_id,
-                                root_dept_id=child.root_dept_id,
-                                child_id=new_child_id,
-                                tenant_code=child.tenant_code,
-                                tenant_name=child.tenant_name,
-                                auto_distribute=auto_distribute,
-                            )
-                        except Exception as error:
-                            logger.exception("[F029] Protected provider mount sharing failed for %s", server_id)
-                            failures.append(error)
-                    if failures:
-                        raise failures[0]
-        except Exception as e:  # pragma: no cover — compensator handles retry
-            logger.warning(
-                "[F029] llm_server fanout to child %s failed: %s",
-                new_child_id,
-                e,
-            )
+                except Exception as error:
+                    logger.exception("[F029] Protected provider mount sharing failed for %s", server_id)
+                    failures.append(error)
+            if failures:
+                # The mount exists; intent/actual coverage exposes the missing
+                # receivers and an explicit retry resumes the frozen plan.
+                raise failures[0]
 
         try:
             return await cls._list_root_shared_resources()

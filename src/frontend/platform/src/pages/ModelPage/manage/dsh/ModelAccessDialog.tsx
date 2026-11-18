@@ -73,9 +73,10 @@ export function ModelAccessDialog({ model, onClose }: ModelAccessDialogProps) {
             {!value ? <Button variant="outlined" onClick={() => setRevision(old => old + 1)}>
                 {t(error ? 'dsh.refresh' : 'dsh.loading')}
             </Button> : <>
+                <p className="text-xs text-muted-foreground">{t('model:model.visibilityTenantHelp')}</p>
                 <div className="flex shrink-0 items-center justify-between gap-4 rounded-lg border px-4 py-3">
                     <div className="min-w-0 space-y-1">
-                        <label htmlFor="model-visible-to-everyone" className="cursor-pointer text-sm font-medium">{t('dsh.unified.everyoneVisible')}</label>
+                        <label htmlFor="model-visible-to-everyone" className="cursor-pointer text-sm font-medium">{t('model:model.currentTenantEveryone')}</label>
                         <p id="model-visibility-description" className="text-xs text-muted-foreground">
                             {t(value.everyone ? 'dsh.unified.everyoneVisibleHelp' : 'dsh.unified.selectedVisibleHelp')}
                         </p>

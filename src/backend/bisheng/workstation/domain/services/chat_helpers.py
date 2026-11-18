@@ -128,7 +128,7 @@ async def resolve_title_llm(chat_llm: BaseChatModel, login_user: UserPayload) ->
 
     model_id = None
     try:
-        conf = await LLMService.get_workbench_llm()
+        conf = await LLMService.get_workbench_llm(slots=("chat_title_llm.id",))
         model_id = conf.chat_title_llm.id if conf and conf.chat_title_llm else None
         if not model_id:
             return chat_llm

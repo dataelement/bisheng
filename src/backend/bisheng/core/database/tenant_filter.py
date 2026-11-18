@@ -69,6 +69,7 @@ _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.llm.domain.models.llm_call_log",
     "bisheng.llm.domain.models.llm_token_log",
     "bisheng.llm.domain.models.tenant_system_model_config",
+    "bisheng.llm.domain.models.model_sharing_intent",
     "bisheng.workstation.domain.models.tenant_workstation_config",
     "bisheng.org_sync.domain.models.org_sync",
     "bisheng.approval.domain.models.approval_request",

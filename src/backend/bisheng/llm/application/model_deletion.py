@@ -342,6 +342,17 @@ class ModelDeletionApplication:
                 if prepared.inspection.targets
                 else ()
             )
+            if prepared_sharing is not None:
+                from bisheng.llm.domain.repositories.model_sharing_intent_repository import ModelSharingIntentRepository
+
+                await phase.call(
+                    ModelSharingIntentRepository().afreeze_initialization,
+                    phase.session,
+                    plan_id=row.id,
+                    server_id=command.server_id,
+                    child_ids=set(prepared_sharing.after) - set(prepared_sharing.before.subjects),
+                    retained_ids=command.retained,
+                )
             metadata = execution_frame(command.operation, force=command.force)
             metadata["reserved_target_revisions"] = {
                 f"model:{receipt.target.key.target_id}": receipt.target.target_revision for receipt in receipts
@@ -414,7 +425,7 @@ class ModelDeletionApplication:
                 info = LLMServerInfo(
                     **provider.model_dump(),
                     models=[LLMModelInfo(**model.model_dump()) for model in models],
-                    share_to_children=bool(prepared_sharing.after) if prepared_sharing is not None else False,
+                    share_to_children=command.server.share_to_children if prepared_sharing is not None else False,
                 )
                 if request.tenant_id == 1:
                     info.tenant_name = await phase.call(self.writer.aread_owner_name, phase.session)
@@ -426,6 +437,19 @@ class ModelDeletionApplication:
                 operation_type=command.operation,
                 actor=request.actor,
             )
+            if request.tenant_id == 1 and command.operation == "model_update_server":
+                from bisheng.llm.application.model_sharing_lifecycle import initialize_sharing_update
+
+                await phase.call(
+                    initialize_sharing_update,
+                    phase.session,
+                    request=request,
+                    server_id=command.server_id,
+                    plan_id=row.id,
+                    enabled=command.server.share_to_children,
+                    new_model_ids=new_models,
+                    prepared_sharing=prepared_sharing,
+                )
             final_metadata = deepcopy(metadata)
             final_metadata["ack"] = {
                 "operation_id": row.operation_id,

@@ -1910,22 +1910,13 @@ async def _apply_context_window(model: BaseChatModel, svid: str, sink: dict | No
 
 
 async def _resolve_model(session_model, model_id: str | None) -> tuple[BaseChatModel, bool]:
-    """Resolve the per-task model via LLMService (design §2.2 / §2.2.1).
+    """Keep a frozen task selection, or resolve the default for a new task.
 
-    Priority: per-task ``model_id`` -> tenant Linsight default model. Tenant
-    resolution + share fallback live inside ``get_bisheng_linsight_llm``
-    (INV-T18: tenant_id is threaded explicitly in the Worker subprocess).
-
-    Returns ``(model, supports_vision)``. ``supports_vision`` is the admin-declared
-    ``WSModel.visual`` flag — the 视觉 column in 系统模型设置 → 工作台模型, which
-    daily chat already gates image attachments on. Linsight picks its model from
-    that SAME list (``models[]``, the id ``linsight_default_model_id`` selects
-    from), so the lookup is always resolvable; a model id that is somehow absent
-    reads as False, matching the field's own default. Returned from here rather
-    than fetched separately because ``workbench_conf`` is already in hand —
-    ``get_workbench_llm`` re-validates model refs and is not free to call twice.
+    The current user's catalog and actual Root-provider sharing both remain
+    mandatory. Vision uses the same owner capability/local restriction service
+    as Chat and DSH, rather than trusting a stored workbench checkbox.
     """
-    workbench_conf = await LLMService.get_workbench_llm(tenant_id=session_model.tenant_id)
+    workbench_conf = await LLMService.get_workbench_llm_candidates(tenant_id=session_model.tenant_id)
     from bisheng.dsh.domain.services.model_catalog import project_workbench_config
 
     workbench_conf = await project_workbench_config(workbench_conf, session_model.user_id)
@@ -1942,9 +1933,13 @@ async def _resolve_model(session_model, model_id: str | None) -> tuple[BaseChatM
                 "linsight_default_model_id is not configured"
             )
 
-    supports_vision = any(
-        str(entry.id) == str(resolved_id) and bool(entry.visual) for entry in (workbench_conf.models or [])
-    )
+    allowed = {str(entry.id) for entry in workbench_conf.models or []}
+    if str(resolved_id) not in allowed:
+        raise ValueError("The selected task model is not currently available to this user")
+
+    from bisheng.dsh.domain.services.vision import read_vision
+
+    supports_vision = (await read_vision(int(resolved_id))).vision
 
     model = await LLMService.get_bisheng_linsight_llm(
         invoke_user_id=session_model.user_id,

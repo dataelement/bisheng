@@ -10,6 +10,7 @@ from bisheng.database.models.department import Department
 from bisheng.database.models.tenant import Tenant
 from bisheng.knowledge.domain.models.knowledge_operation_plan import KnowledgeOperationPlan
 from bisheng.llm.application.model_mount_sharing import ModelMountSharingApplication
+from bisheng.llm.domain.models.model_sharing_intent import ModelSharingIntent
 from bisheng.tenant.domain.services.tenant_mount_service import TenantMountService, default_tenant_code
 from test.knowledge_unification import test_model_delete_plan_application as actual
 from test.knowledge_unification import test_model_deletion_application as native_business
@@ -32,6 +33,11 @@ async def test_only_real_unfinished_original_mount_share_can_bypass_already_moun
     async with factory() as session:
         async with session.begin():
             await session.run_sync(lambda current: Department.__table__.create(current.connection(), checkfirst=True))
+            session.add(
+                ModelSharingIntent(
+                    server_id=2, tenant_id=1, enabled=True, plan_id="00000000-0000-0000-0000-000000000000"
+                )
+            )
             session.add(
                 Department(
                     id=98,

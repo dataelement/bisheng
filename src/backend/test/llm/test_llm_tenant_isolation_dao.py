@@ -115,11 +115,13 @@ async def test_root_llm_default_shared_writes_viewer_tuple():
 
 @pytest.mark.asyncio
 async def test_root_llm_share_off_skips_viewer_tuple():
-    """AC-02: share_to_children=False → enable_sharing NOT called."""
+    """Explicit off is recorded through the protected close command, without granting tuples."""
     session = _build_session(flushed_id=101)
     server = LLMServer(name="s2", type="openai", config={})
 
     enable_mock = AsyncMock()
+    disable_mock = AsyncMock(return_value=[])
+    operator = _mk_user()
     with (
         patch("bisheng.llm.domain.models.llm_server.get_async_db_session", _session_context(session)),
         patch("bisheng.llm.domain.models.llm_server.get_current_tenant_id", return_value=1),
@@ -130,16 +132,21 @@ async def test_root_llm_share_off_skips_viewer_tuple():
         patch(
             "bisheng.tenant.domain.services.resource_share_service.ResourceShareService.enable_sharing", new=enable_mock
         ),
+        patch(
+            "bisheng.tenant.domain.services.resource_share_service.ResourceShareService.disable_sharing",
+            new=disable_mock,
+        ),
         patch("bisheng.llm.domain.models.llm_server._check_is_global_super", new=AsyncMock(return_value=True)),
     ):
         await LLMDao.ainsert_server_with_models(
             server,
             models=[],
             share_to_children=False,
-            operator=_mk_user(),
+            operator=operator,
         )
 
     enable_mock.assert_not_awaited()
+    disable_mock.assert_awaited_once_with("llm_server", "101", operator=operator)
 
 
 @pytest.mark.asyncio

@@ -22,6 +22,7 @@ import { showApiError } from "@/controllers/request";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useQueryClient } from "@tanstack/react-query";
 import { defalutPrompt } from "./WorkbenchModel";
 import { FallbackBlockedBanner, InheritedBadge } from "../SystemConfigBanners";
 import { useSystemConfigEnvelope } from "../useSystemConfigEnvelope";
@@ -133,6 +134,7 @@ export const PromptDialog = ({ value, onChange, onSave, label, children }) => {
 export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }) {
     const { t } = useTranslation('model')
     const defaultAutoTagPrompt = t('model.defaultAutoTagPrompt')
+    const queryClient = useQueryClient()
 
     const [form, setForm] = useState({
         embeddingModelId: null,
@@ -153,7 +155,7 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
         asr_model_id: form.asrModelId,
     }, { llmOptions, embeddings, asrModels: asrModel }).unavailableFields, [form, llmOptions, embeddings, asrModel])
 
-    const { config, loading, inheritedFromRoot, fallbackBlocked, clearInherited } =
+    const { config, loading, inheritedFromRoot, fallbackBlocked, reload } =
         useSystemConfigEnvelope<any>(getKnowledgeModelEnvelope)
 
     useEffect(() => {
@@ -199,11 +201,8 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
         }
     }, [asrModel, config, defaultAutoTagPrompt, embeddings, llmOptions]);
 
-    // Clear inherited flag on first user edit — the in-memory form no
-    // longer reflects Root's value, so the Badge should disappear before
-    // the save round-trip flips it on the server side.
-    const setFormAndClearInherited = (next: typeof form) => {
-        clearInherited()
+    // Draft edits retain the saved configuration provenance until persistence.
+    const setFormDraft = (next: typeof form) => {
         setForm(next)
     }
 
@@ -248,6 +247,9 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
             await updateKnowledgeModelConfig(data);
             lastSaveFormDataRef.current = data;
             toast.show({ type: 'success', message: String(t('model.saveSuccess') ?? '') });
+            await queryClient.invalidateQueries({ queryKey: ['system-model-settings'] });
+            await queryClient.invalidateQueries({ queryKey: ['system-model-settings-impact'] });
+            await reload();
         } catch (error) {
             showApiError(error);
         } finally {
@@ -262,9 +264,12 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
         return updateKnowledgeModelConfig({
             ...lastSaveFormDataRef.current,
             ...patch,
-        }).then(res => {
+        }).then(async () => {
             lastSaveFormDataRef.current = { ...lastSaveFormDataRef.current, ...patch }
             toast.show({ type: 'success', message: String(t('model.promptSaved') ?? '') })
+            await queryClient.invalidateQueries({ queryKey: ['system-model-settings'] });
+            await queryClient.invalidateQueries({ queryKey: ['system-model-settings-impact'] });
+            await reload({ updateConfig: false });
         })
     }
 
@@ -288,11 +293,12 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
                 </div>
             )}
             <ModelSelect
+                close
                 required
                 label={t('model.defaultEmbeddingModel')}
                 value={form.embeddingModelId}
                 options={embeddings}
-                onChange={(val) => setFormAndClearInherited({ ...form, embeddingModelId: val })}
+                onChange={(val) => setFormDraft({ ...form, embeddingModelId: val })}
             />
             <ModelSelect
                 close
@@ -300,7 +306,7 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
                 tooltipText={t('model.sourceTracingModelTooltip')}
                 value={form.sourceModelId}
                 options={llmOptions}
-                onChange={(val) => setFormAndClearInherited({ ...form, sourceModelId: val })}
+                onChange={(val) => setFormDraft({ ...form, sourceModelId: val })}
             />
             <ModelSelect
                 close
@@ -308,7 +314,7 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
                 tooltipText={t('model.documentSummaryModelTooltip')}
                 value={form.extractModelId}
                 options={llmOptions}
-                onChange={(val) => setFormAndClearInherited({ ...form, extractModelId: val })}
+                onChange={(val) => setFormDraft({ ...form, extractModelId: val })}
             />
             <div className="rounded-md border p-4 space-y-4">
                 <div className="flex items-center justify-between gap-6">
@@ -317,9 +323,9 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
                         <PromptDialog
                             value={form.abstractPrompt}
                             label={t('model.docKnowledgeAbstractPrompt')}
-                            onChange={value => setFormAndClearInherited({ ...form, abstractPrompt: value })}
+                            onChange={value => setFormDraft({ ...form, abstractPrompt: value })}
                             onSave={(prompt) => handleSavePrompt({ abstract_prompt: prompt ?? form.abstractPrompt })}
-                            onRestore={() => setFormAndClearInherited({ ...form, abstractPrompt: lastSaveFormDataRef.current.abstract_prompt })}
+                            onRestore={() => setFormDraft({ ...form, abstractPrompt: lastSaveFormDataRef.current.abstract_prompt })}
                         >
                             <Tip content={t('model.docKnowledgeAbstractPromptTooltip')} side="top">
                                 <Button variant="link" size="small" className="h-auto px-0">
@@ -330,7 +336,7 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
                         </PromptDialog>
                         <Switch
                             checked={form.abstractEnabled}
-                            onCheckedChange={(val) => setFormAndClearInherited({ ...form, abstractEnabled: val })}
+                            onCheckedChange={(val) => setFormDraft({ ...form, abstractEnabled: val })}
                         />
                     </div>
                 </div>
@@ -340,9 +346,9 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
                         <PromptDialog
                             value={form.autoTagPrompt}
                             label={t('model.autoTagPrompt')}
-                            onChange={value => setFormAndClearInherited({ ...form, autoTagPrompt: value })}
+                            onChange={value => setFormDraft({ ...form, autoTagPrompt: value })}
                             onSave={(prompt) => handleSavePrompt({ auto_tag_prompt: prompt ?? form.autoTagPrompt })}
-                            onRestore={() => setFormAndClearInherited({ ...form, autoTagPrompt: lastSaveFormDataRef.current.auto_tag_prompt })}
+                            onRestore={() => setFormDraft({ ...form, autoTagPrompt: lastSaveFormDataRef.current.auto_tag_prompt })}
                         >
                             <Tip content={t('model.autoTagPromptTooltip')} side="top">
                                 <Button variant="link" size="small" className="h-auto px-0">
@@ -353,18 +359,19 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
                         </PromptDialog>
                         <Switch
                             checked={form.autoTagEnabled}
-                            onCheckedChange={(val) => setFormAndClearInherited({ ...form, autoTagEnabled: val })}
+                            onCheckedChange={(val) => setFormDraft({ ...form, autoTagEnabled: val })}
                         />
                     </div>
                 </div>
             </div>
             <ModelSelect
+                close
                 required
                 label={t('model.qaSimilarModel')}
                 tooltipText={t('model.qaSimilarModelTooltip')}
                 value={form.qaSimilarModelId}
                 options={llmOptions}
-                onChange={(val) => setFormAndClearInherited({ ...form, qaSimilarModelId: val })}
+                onChange={(val) => setFormDraft({ ...form, qaSimilarModelId: val })}
             />
             <ModelSelect
                 close
@@ -372,13 +379,14 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
                 tooltipText={t('model.knowledgeAsrModelTooltip')}
                 value={form.asrModelId}
                 options={asrModel}
-                onChange={(val) => setFormAndClearInherited({ ...form, asrModelId: val })}
+                onChange={(val) => setFormDraft({ ...form, asrModelId: val })}
             />
+            {inheritedFromRoot && <p className="mt-4 text-xs text-muted-foreground">{t('model.draftSourceHelp')}</p>}
             <div className="mt-10 text-center space-x-6">
                 <Button variant="outlined" onClick={onBack} color="default">{t('model.cancel')}</Button>
                 <Button disabled={saveload || !config} onClick={handleSave}>
                     {saveload && <Outlined.Loading className="animate-spin mr-2" />}
-                    {t('model.save')}
+                    {t(inheritedFromRoot ? 'model.saveLocalConfiguration' : 'model.save')}
                 </Button>
             </div>
         </div>

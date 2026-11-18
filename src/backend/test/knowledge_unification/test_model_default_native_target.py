@@ -145,16 +145,21 @@ def test_native_inherited_root_source_is_read_without_switching_current_tenant(n
     ctx = native_target
     with Session(ctx.engine) as session, session.begin():
         seed_default(session, tenant_id=1, payload={"model_id": 22})
+    ctx.relations.ids = ("2",)
     with Session(ctx.engine) as session:
         identity = ctx.identity_port.issue_identity()
         scope = ctx.verifier.issue_scope(session, SourceReadRequest("model_default", "evaluation_llm"), identity)
         result = ctx.runtime.require_source_valid(session, scope, identity)
         assert result.snapshot.source_key.tenant_id == 1 and result.target_states[0].is_valid
-        assert get_current_tenant_id() == 101 and not ctx.relations.calls and not session.identity_map
+        assert (
+            get_current_tenant_id() == 101
+            and ctx.relations.calls == [("tenant", "101", "shared_with", "llm_server")]
+            and not session.identity_map
+        )
 
 
 @pytest.mark.parametrize("inherited", [False, True])
-def test_native_child_uses_explicit_or_real_inherited_server_evidence(native_target, inherited):
+def test_native_child_requires_actual_shared_relation_despite_inherited_default(native_target, inherited):
     ctx = native_target
     with Session(ctx.engine) as session, session.begin():
         seed_default(session, payload={"model_id": 22})
@@ -162,7 +167,7 @@ def test_native_child_uses_explicit_or_real_inherited_server_evidence(native_tar
             session.add(TenantSystemModelConfig(tenant_id=1, key="assistant_llm", value='{"auto_llm":{"model_id":22}}'))
     ctx.relations.ids = () if inherited else ("2",)
     with Session(ctx.engine) as session:
-        assert inspect(ctx, session)[0].is_valid
+        assert inspect(ctx, session)[0].is_valid is (not inherited)
         assert ctx.relations.calls == [("tenant", "101", "shared_with", "llm_server")]
 
 

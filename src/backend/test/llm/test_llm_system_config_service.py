@@ -16,6 +16,7 @@ from bisheng.common.services.config_service import settings
 from bisheng.database.models.tenant import Tenant
 from bisheng.llm.application import model_default_read
 from bisheng.llm.application.model_default import current_model_default_tenant
+from bisheng.llm.domain.models.llm_server import LLMModel
 from bisheng.llm.domain.repositories.model_default_repository import ModelDefaultRepository
 from bisheng.llm.domain.schemas import AssistantLLMConfig, EvaluationLLMConfig, KnowledgeLLMConfig
 from bisheng.llm.domain.services.llm import LLMService
@@ -55,6 +56,7 @@ def test_missing_multitenant_context_refuses_instead_of_falling_back_to_root(mon
 async def test_aget_knowledge_llm_keeps_typed_values_after_full_source_admission(configured):
     with Session(configured.engine) as session, session.begin():
         native.seed_default(session, key="knowledge_llm", payload={"embedding_model_id": 11})
+        session.execute(update(LLMModel).where(LLMModel.id == 11).values(model_type="embedding"))
     cfg = await LLMService.aget_knowledge_llm(tenant_id=101)
     assert isinstance(cfg, KnowledgeLLMConfig) and cfg.embedding_model_id == 11
 
@@ -103,6 +105,8 @@ async def test_setters_preserve_schema_values_and_source_tenant_in_original_sess
     business, method, key, payload, field
 ):
     async with AsyncSession(business.engine) as session:
+        if key == "knowledge_llm":
+            await session.execute(update(LLMModel).where(LLMModel.id == 11).values(model_type="embedding"))
         result = await getattr(LLMService, method)(payload, tenant_id=101, login_user=business.user, session=session)
         stored = await ModelDefaultRepository().aget_own(session, key)
         index = await business.runtime.repository.aget_source_set(

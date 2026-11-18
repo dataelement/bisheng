@@ -14,6 +14,7 @@ import { changeLLmServerStatus, getAssistantModelList, getModelListApi, verifyLL
 import { useQuery } from "@tanstack/react-query"
 import { useKnowledgePageScope } from "@/hooks/useKnowledgePageScope"
 import { managementRequestScope } from "@/controllers/managementScope"
+import { showApiError } from '@/controllers/request'
 import { useNavigate, useSearchParams } from "react-router-dom"
 import ModelConfig from "./ModelConfig"
 import { canManageModelSettings } from "./permissions"
@@ -30,6 +31,14 @@ const PROBE_WINDOW_MS = 45000
 const STATUS_UNKNOWN = 2
 
 export default function Management() {
+    const { scopes } = useKnowledgePageScope();
+    const scope = scopes?.ordinary;
+    if (!scope) return null;
+    return <ManagementContent key={`${scope.identityKey}:${scope.tenantId}:${scope.managementTenantId}`} />;
+}
+
+function ManagementContent() {
+    const { scopes } = useKnowledgePageScope();
     const { t, i18n } = useTranslation();
     useEffect(() => {
         i18n.loadNamespaces('model');
@@ -54,7 +63,7 @@ export default function Management() {
         }
         // Wait for model list to load before opening SystemModelConfig — otherwise
         // AssisModel's ModelSelect sees empty options and nulls out existing model_ids.
-        if (tab && data.length > 0) {
+        if (tab) {
             setSystemModelTab(tab)
             setSystemModel(true)
             const next = new URLSearchParams(searchParams)
@@ -65,9 +74,14 @@ export default function Management() {
 
     const reload = async () => {
         setLoading(true)
-        setData(await getModelListApi())
-        setLoading(false)
-        refetch()
+        try {
+            setData(await getModelListApi())
+            await refetch()
+        } catch (error) {
+            showApiError(error)
+        } finally {
+            setLoading(false)
+        }
     }
     useEffect(() => { reload() }, [])
 
@@ -184,6 +198,7 @@ export default function Management() {
                         data.map(d => <ModelProviderRow
                             key={d.id}
                             canManage={canManage}
+                            showSharingCoverage={user?.is_global_super === true && scopes?.ordinary.tenantId === 1}
                             data={d}
                             probing={probeUntil > 0}
                             onToggle={(modelId, online) => handleCheck(d.id, modelId, online)}
