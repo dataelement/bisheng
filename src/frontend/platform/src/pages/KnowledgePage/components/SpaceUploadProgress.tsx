@@ -1,5 +1,6 @@
 import { Button, StateView } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { KnowledgeSpaceChild } from "@/controllers/API/knowledgeSpace";
 import type { Upload } from "./SpaceFileUploadPanel";
@@ -13,6 +14,26 @@ interface SpaceUploadProgressProps {
   onRetry: (job: Upload) => void;
   onRefresh?: () => void;
   onRemove?: (job: Upload) => void;
+  onOpenExisting?: (parentId: number | null) => void;
+  onOverwrite?: (row: KnowledgeSpaceChild) => Promise<void> | void;
+}
+export function duplicateHold(row: KnowledgeSpaceChild): { parentId: number | null | undefined; location: string } | null {
+  if (row.status !== 3) return null;
+  const text = row.remark?.trim() ?? "";
+  if (!text.startsWith("{")) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  const value = parsed as Record<string, unknown>;
+  if ("status_code" in value || typeof value.new_name !== "string" || typeof value.old_name !== "string") return null;
+  const parts = (row.file_level_path ?? "").split("/").filter(Boolean);
+  const numeric = parts.every((part) => /^[1-9][0-9]*$/.test(part) && Number.isSafeInteger(Number(part)));
+  const parentId = !parts.length ? null : numeric ? Number(parts[parts.length - 1]) : undefined;
+  return { parentId, location: row.old_file_level_path?.replace(/^\/+/, "") ?? "" };
 }
 const terminal = (status: number | null | undefined) =>
   status === 2 || status === 3 || status === 6 || status === 7;
@@ -34,10 +55,42 @@ export function SpaceUploadProgress({
   onRetry,
   onRefresh,
   onRemove,
+  onOpenExisting,
+  onOverwrite,
 }: SpaceUploadProgressProps) {
   const { t } = useTranslation("knowledge");
+  const [handled, setHandled] = useState<ReadonlySet<number>>(() => new Set());
+  const renderDuplicate = (row: KnowledgeSpaceChild) => {
+    const hold = duplicateHold(row);
+    if (!hold) return null;
+    const place = hold.location || t("f118.upload_duplicate_root");
+    return (
+      <div className="space-y-2">
+        <p className="text-caption text-text-2">{t("f118.upload_duplicate")}</p>
+        <p className="text-caption text-text-2">{t("f118.upload_duplicate_location", { path: place })}</p>
+        {!handled.has(row.id) && (
+          <div className="flex flex-wrap gap-2">
+            {onOpenExisting && hold.parentId !== undefined && (
+              <Button variant="outlined" onClick={() => onOpenExisting(hold.parentId ?? null)}>{t("f118.upload_open_existing")}</Button>
+            )}
+            {onOverwrite && (
+              <Button onClick={() => {
+                void Promise.resolve(onOverwrite(row))
+                  .then(() => setHandled((current) => new Set(current).add(row.id)))
+                  .catch(() => undefined);
+              }}>{t("override")}</Button>
+            )}
+            <Button variant="text" onClick={() => setHandled((current) => new Set(current).add(row.id))}>{t("keepOriginal")}</Button>
+          </div>
+        )}
+      </div>
+    );
+  };
+  const currentRow = (original: KnowledgeSpaceChild) =>
+    terminal(original.status) ? original : (observed.get(original.id) ?? original);
   const renderStatus = (original: KnowledgeSpaceChild) => {
-    const row = terminal(original.status) ? original : (observed.get(original.id) ?? original);
+    const row = currentRow(original);
+    if (duplicateHold(row)) return null;
     const unknown = !FILE_STATUSES[row.status ?? -1] ||
       (!terminal(original.status) && unavailable && !observed.has(original.id));
     return unknown ? (
@@ -81,7 +134,7 @@ export function SpaceUploadProgress({
                         {t(phaseLabels[job.phase])}
                       </p>
                     </div>
-                    {single && <div className="shrink-0">{renderStatus(job.rows![0])}</div>}
+                    {single && renderStatus(job.rows![0]) && <div className="shrink-0">{renderStatus(job.rows![0])}</div>}
                     {canCancel && (
                       <Button variant="text" color="default" onClick={() => onCancel(job)}>{t("cancel")}</Button>
                     )}
@@ -90,10 +143,16 @@ export function SpaceUploadProgress({
                     )}
                     {onRemove && !job.registrationStarted && !canCancel && <Button variant="text" onClick={() => onRemove(job)}>{t("delete")}</Button>}
                   </div>
+                  {single && duplicateHold(currentRow(job.rows![0])) && (
+                    <div className="ml-11">{renderDuplicate(currentRow(job.rows![0]))}</div>
+                  )}
                   {job.phase === "registered" && !single && job.rows?.map((original, index) => (
-                    <div key={`${original.id}:${index}`} className="ml-11 flex min-w-0 items-center justify-between gap-3 py-1">
-                      <span className="min-w-0 truncate text-body-sm text-text-2" title={original.file_name}>{original.file_name}</span>
-                      <div className="shrink-0">{renderStatus(original)}</div>
+                    <div key={`${original.id}:${index}`} className="ml-11 space-y-2 py-1">
+                      <div className="flex min-w-0 items-center justify-between gap-3">
+                        <span className="min-w-0 truncate text-body-sm text-text-2" title={original.file_name}>{original.file_name}</span>
+                        <div className="shrink-0">{renderStatus(original)}</div>
+                      </div>
+                      {renderDuplicate(currentRow(original))}
                     </div>
                   ))}
                 </li>

@@ -3,6 +3,8 @@ import { Outlined } from "bisheng-icons";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { retryKnowledgeFileApi } from "@/controllers/API";
 import DropZone from "@/components/bs-comp/knowledgeUploadComponent/DropZone";
 import StepProgress from "@/components/bs-ui/step";
 import { knowledgeUploadsApi } from "@/controllers/API/knowledgeUploads";
@@ -44,6 +46,8 @@ function UploadWizard({
   onBack,
 }: SpaceFileUploadPanelProps) {
   const { t } = useTranslation("knowledge");
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
   const instance = useId();
   const queue = useSpaceUploadQueue({ scope, spaceId, parentId });
   const [step, setStep] = useState(1);
@@ -110,6 +114,21 @@ function UploadWizard({
   );
   const invalidRules = () =>
     toast.show({ type: "warning", message: t("f118.invalid_defaults") });
+  const openExisting = (parentId: number | null) => {
+    const next = new URLSearchParams(params);
+    if (parentId === null) next.delete("parent_id");
+    else next.set("parent_id", String(parentId));
+    navigate({ pathname: `/filelib/${spaceId}`, search: next.toString() });
+  };
+  const overwriteExisting = async (row: { knowledge_id: number }) => {
+    try {
+      await retryKnowledgeFileApi({ knowledge_id: row.knowledge_id, file_objs: [row] });
+      toast.show({ type: "success", message: t("f118.upload_duplicate_overwritten") });
+    } catch (error) {
+      showApiError(error);
+      throw error;
+    }
+  };
   const handleNext = () => {
     if (!ready || !settings.data) return;
     setStrategy((previous) => {
@@ -258,6 +277,8 @@ function UploadWizard({
               onCancel={queue.handleCancel}
               onRetry={queue.retry}
               onRemove={queue.remove}
+              onOpenExisting={openExisting}
+              onOverwrite={overwriteExisting}
             />
           </div>
         )}
@@ -317,6 +338,8 @@ function UploadWizard({
             unavailable={queue.unavailable}
             onCancel={queue.handleCancel}
             onRetry={queue.retry}
+            onOpenExisting={openExisting}
+            onOverwrite={overwriteExisting}
           />
         )}
         {step === 4 && queue.unavailable && (

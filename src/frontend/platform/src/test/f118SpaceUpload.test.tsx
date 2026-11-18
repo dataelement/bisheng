@@ -322,6 +322,30 @@ it("uses registered IDs rather than names/order and follows a sparse progressing
     { parent_id: 9, file_ids: [81], page_size: 100, cursor: "opaque/+==" },
   ]);
 });
+it("points a same-name upload at the existing file instead of a parse failure in this folder", async () => {
+  mocks.post.mockImplementation(async (url: string) =>
+    url.endsWith("/files")
+      ? [{
+          ...row(81, 3, "report.md"),
+          remark: JSON.stringify({ new_name: "report.md", old_name: "report.md" }),
+          old_file_level_path: "/权限测试",
+          file_level_path: "/90",
+          object_name: "tmp/81.md",
+          split_rule: "{}",
+        }]
+      : { file_path: "tmp/a", upload_id: "a".repeat(32), repeat: false },
+  );
+  mount();
+  await select();
+  await screen.findByText("f118.upload_duplicate");
+  expect(screen.queryByText("parseFailed")).not.toBeInTheDocument();
+  expect(screen.getByText("f118.upload_duplicate_location")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "f118.upload_open_existing" }));
+  expect(screen.getByTestId("location")).toHaveTextContent("/filelib/7?");
+  const search = new URLSearchParams(screen.getByTestId("location").textContent!.split("?")[1]);
+  expect(search.get("parent_id")).toBe("90");
+  expect(search.get("keep")).toBe("1");
+});
 it("does not turn omitted status rows into a successful parse", async () => {
   mocks.children.mockResolvedValue(page([]));
   mount();
