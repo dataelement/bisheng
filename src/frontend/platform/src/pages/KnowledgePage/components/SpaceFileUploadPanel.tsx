@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Alert, Button, Tooltip, toast } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { useQuery } from "@tanstack/react-query";
@@ -262,7 +263,7 @@ function UploadWizard({
               </div>
             ) : (
               !settings.data && (
-                <p role="status">{t("f118.loading_defaults")}</p>
+                <LoadingState label={t("f118.loading_defaults")} className="min-h-32" />
               )
             )}
             <SpaceUploadProgress

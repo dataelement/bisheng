@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { KnowledgeDialogTable, MoveConfirmation, MoveToDialog } from "@bisheng/knowledge";
 import { toast } from "@bisheng/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -293,7 +294,7 @@ function Content({
             onCompleted={() => finish(plan?.value.valid_items.length ?? 0)}
           />
         ) : review.isFetching ? (
-          moveText("loading")
+          <LoadingState label={moveText("loading")} className="min-h-32" />
         ) : review.isError ? (
           moveText("load_failed")
         ) : (

@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { PlatformImagePreview } from '@/components/bs-comp/preview/DocumentPreview';
 import { usePreviewLocale } from '@bisheng/file-viewers/locale';
 import type { PdfScrollContext } from '@/components/bs-comp/preview/PlatformPdfPreview';
@@ -251,7 +252,7 @@ export default function PreviewFile({
       }
       return <div className="flex justify-center items-center h-full text-gray-400">{t('previewFailed')}</div>;
     }
-    if (!url) return <div className="flex justify-center items-center h-full text-gray-400"><Outlined.Loading  className="size-4 animate-spin"/></div>;
+    if (!url) return <div className="flex justify-center items-center h-full text-gray-400"><LoadingState label={t("loading")} className="h-full" /></div>;
     if (isRichKnowledgePreview(previewData)) {
       return <RichPreviewFile file={file} previewData={previewData} />;
     }

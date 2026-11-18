@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button, notification } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 import { KnowledgeTooltip } from "./KnowledgeTooltip";
@@ -313,7 +314,7 @@ export default function PreviewParagraph({
     return <div className={cn("relative flex min-h-0 w-full flex-1 flex-col", padded && "pt-3")}>
         {loading && (
             <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-                <Outlined.Loading  className="size-4 animate-spin"/>
+                <LoadingState label={t("loading")} className="h-full" />
             </div>
         )}
         <div ref={containerRef} className={`${className} overflow-y-auto`}

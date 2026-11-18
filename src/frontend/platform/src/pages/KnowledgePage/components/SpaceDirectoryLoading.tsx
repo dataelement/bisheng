@@ -1,6 +1,5 @@
-import { directoryLoadingStyles } from "@bisheng/knowledge";
 import { useTranslation } from "react-i18next";
-import { LoadingIcon } from "@/components/bs-icons/loading";
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 
 interface SpaceDirectoryLoadingProps {
   fill: boolean;
@@ -9,13 +8,10 @@ interface SpaceDirectoryLoadingProps {
 export function SpaceDirectoryLoading({ fill }: SpaceDirectoryLoadingProps) {
   const { t } = useTranslation("knowledge");
   return (
-    <div
-      role="status"
-      aria-busy="true"
-      className={`${directoryLoadingStyles.frame} ${fill ? "min-h-0 flex-1" : "py-6"}`}
-    >
-      <span aria-hidden="true"><LoadingIcon className={directoryLoadingStyles.icon} /></span>
-      <p>{t("f118.loading_directory")}</p>
-    </div>
+    <LoadingState
+      size="page"
+      label={t("f118.loading_directory")}
+      className={fill ? "min-h-0 flex-1" : "py-6"}
+    />
   );
 }

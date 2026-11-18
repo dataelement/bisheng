@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button, Select, Tabs, Textarea, toast } from "@bisheng/ui";
 import { useQuery } from "@tanstack/react-query";
 import { isEqual } from "lodash-es";
@@ -295,7 +296,7 @@ function SettingsEditor({
         </fieldset>
       ) : (
         <div role={infoFailed ? "alert" : "status"}>
-          <p>{t(infoFailed ? "f118.load_failed" : "f118.loading_space")}</p>
+          {infoFailed ? <p>{t("f118.load_failed")}</p> : <LoadingState label={t("f118.loading_space")} className="min-h-32" />}
           {infoFailed && (
             <Button onClick={() => { void info.refetch(); }}>
               {t("retry")}
@@ -563,7 +564,7 @@ function SettingsEditor({
             <Button onClick={() => { void permission.refetch(); }}>{t("retry")}</Button>
           </div>
         ) : (
-          <p role="status">{t(permission.isSuccess ? "noOperationPermission" : "f118.loading_space")}</p>
+          permission.isSuccess ? <p role="status">{t("noOperationPermission")}</p> : <LoadingState label={t("f118.loading_space")} className="min-h-32" />
         )}
       </SpacePanelFrame>
     );

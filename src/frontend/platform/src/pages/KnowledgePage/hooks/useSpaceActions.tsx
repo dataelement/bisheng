@@ -3,6 +3,7 @@ import { Outlined } from "bisheng-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { userContext } from "@/contexts/userContext";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
 import { useLazyResourceActions } from "@/components/bs-comp/permission/useResourceActions";
@@ -75,7 +76,7 @@ export function useSpaceActions(
       <>
         {loading && (
           <DropdownItem disabled>
-            {t("knowledgeRowActions.loading", { ns: "permission" })}
+            <LoadingState size="inline" label={t("knowledgeRowActions.loading", { ns: "permission" })} />
           </DropdownItem>
         )}
         {onEdit && !loading && !canEdit && !canManage && !canDelete && (

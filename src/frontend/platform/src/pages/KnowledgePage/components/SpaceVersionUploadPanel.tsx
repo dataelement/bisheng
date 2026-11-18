@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button } from "@bisheng/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useContext, useEffect, useId, useRef, useState } from "react";
@@ -243,7 +244,7 @@ export function SpaceVersionUploadPanel({
           if (file) void handleUpload(file);
         }}
       />
-      {busy && <p role="status">{t("loading")}</p>}
+      {busy && <LoadingState label={t("loading")} className="min-h-32" />}
       {uncertain && (
         <p role="alert" className="text-sm">
           {t("versions.uncertain")}

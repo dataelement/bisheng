@@ -4,6 +4,7 @@ import { useCallback, useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { userContext } from "@/contexts/userContext";
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import type { KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
 import { KnowledgeScopeUnavailable } from "./components/KnowledgeScopeUnavailable";
 import { SpaceDetail, parseKnowledgeId } from "./detail";
@@ -112,15 +113,15 @@ export function KnowledgeSpaceWorkspace({
             onOpenFolder={(id) => handleSelect(spaceId, id)}
             onDeleted={leaveDeletedSpace}
           />
+        ) : !initial.error && (initial.loading || initial.space) ? (
+          <LoadingState size="page" className="h-full" label={t("sidebar.loading")} />
         ) : (
           <div role="status" className="space-y-3 px-4 py-6">
             <p>
               {t(
                 initial.error
                   ? "sidebar.load_failed"
-                  : initial.loading || initial.space
-                    ? "sidebar.loading"
-                    : "sidebar.empty",
+                  : "sidebar.empty",
               )}
             </p>
             {initial.error && (

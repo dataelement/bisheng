@@ -39,7 +39,7 @@ it("keeps preview navigation actionable and allows direct upload during a pendin
   await waitFor(() => expect(screen.getByRole("button", { name: "nextStep" })).toBeEnabled());
   fireEvent.click(screen.getByRole("button", { name: "nextStep" }));
   fireEvent.click(await screen.findByRole("button", { name: "previewResults" }));
-  const loading = (await screen.findByText("f118.preview_loading")).closest('[role="status"]');
+  const loading = await screen.findByRole("status", { name: "f118.preview_loading" });
   expect(loading).toHaveAttribute("aria-busy", "true");
   expect(loading?.querySelector("img")).toHaveAttribute("src", "/assets/custom-preview-loading.svg");
   await waitFor(() => expect(mocks.get.mock.calls.some(([url]) => url.includes("/previews/"))).toBe(true));

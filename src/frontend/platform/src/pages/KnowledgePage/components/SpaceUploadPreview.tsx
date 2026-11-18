@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
-import { LoadingIcon } from "@/components/bs-icons/loading";
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import {
   knowledgeUploadPreviewApi,
@@ -279,14 +279,7 @@ function PreviewPane({
     );
   if (!data || !value)
     return (
-      <div
-        role="status"
-        aria-busy="true"
-        className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-4 py-6 text-center text-body text-text-3"
-      >
-        <span aria-hidden="true"><LoadingIcon className="size-10" /></span>
-        <p>{t("f118.preview_loading")}</p>
-      </div>
+      <LoadingState label={t("f118.preview_loading")} className="min-h-0 flex-1 px-4 py-6" />
     );
   const previewFile = {
     ...file,

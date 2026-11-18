@@ -302,7 +302,7 @@ it("shows the illustrated scope failure and retries before checking upload permi
   fireEvent.click(screen.getByRole("button", { name: "retry" }));
 
   expect(management.refresh).toHaveBeenCalledTimes(1);
-  expect(screen.getByText("f118.loading_directory")).toBeVisible();
+  expect(screen.getByRole("status", { name: "f118.loading_directory" })).toBeVisible();
   expect(mocks.permission).not.toHaveBeenCalled();
   await act(async () => {
     management.scope.scope_tenant_id = 202;

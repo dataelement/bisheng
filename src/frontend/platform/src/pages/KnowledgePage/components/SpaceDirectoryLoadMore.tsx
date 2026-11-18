@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button } from "@bisheng/ui";
 import type { UseInfiniteQueryResult } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -41,7 +42,7 @@ export function SpaceDirectoryLoadMore({ directory, isCurrent }: SpaceDirectoryL
   return (
     <div ref={sentinelRef} className="flex h-10 w-full shrink-0 items-center justify-center text-caption text-text-3">
       {isFetchingNextPage ? (
-        <span role="status">{t("f118.loading_directory")}</span>
+        <LoadingState size="inline" label={t("f118.loading_directory")} />
       ) : error ? (
         <Button
           type="button"

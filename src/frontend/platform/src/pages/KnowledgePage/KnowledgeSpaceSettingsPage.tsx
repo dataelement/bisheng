@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { knowledgeQueryKeys } from "@/controllers/hooks/knowledge";
 import { useKnowledgePageScope } from "@/hooks/useKnowledgePageScope";
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { KnowledgeScopeUnavailable } from "./components/KnowledgeScopeUnavailable";
 import { SpacePanelFrame } from "./components/SpacePanelFrame";
 import { SpaceSettingsEditor } from "./components/SpaceSettingsEditor";
@@ -50,7 +51,7 @@ export function KnowledgeSpaceSettingsPage() {
             </>
           }
         >
-          {isLoading ? <p role="status">{t("f118.loading_space")}</p> : <KnowledgeScopeUnavailable />}
+          {isLoading ? <LoadingState size="page" className="h-full" label={t("f118.loading_space")} /> : <KnowledgeScopeUnavailable />}
         </SpacePanelFrame>
       )}
     </main>

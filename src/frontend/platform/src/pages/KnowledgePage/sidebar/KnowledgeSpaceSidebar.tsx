@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import {
   Button,
   Dropdown,
@@ -354,8 +355,8 @@ function SpaceSectionList({
           />
         ))}
         {loading && (
-          <TreeNavigationStatus loading>
-            {t("sidebar.loading")}
+          <TreeNavigationStatus>
+            <LoadingState size="inline" label={t("sidebar.loading")} />
           </TreeNavigationStatus>
         )}
         {failed && (

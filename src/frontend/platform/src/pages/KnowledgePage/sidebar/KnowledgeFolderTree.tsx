@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button, TreeNavigationNode, TreeNavigationStatus } from "@bisheng/ui";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Outlined } from "bisheng-icons";
@@ -86,14 +87,14 @@ export function KnowledgeFolderTree(props: KnowledgeFolderTreeProps) {
   return (
     <>
       {rows.map((item) => <FolderNode key={item.id} {...nodeProps} scope={scope} spaceId={spaceId} path={path} depth={depth} item={item} />)}
-      {query.isInitialLoading && <TreeNavigationStatus depth={depth} loading>{t("sidebar.loading")}</TreeNavigationStatus>}
+      {query.isInitialLoading && <TreeNavigationStatus depth={depth}><LoadingState size="inline" label={t("sidebar.loading")} /></TreeNavigationStatus>}
       {isError && (
         <TreeNavigationStatus depth={depth}>
           <span>{t("sidebar.load_failed")}</span>
           <Button variant="text" onClick={() => { void (query.data && query.hasNextPage ? query.fetchNextPage() : query.refetch()).catch(showApiError); }}>{t("retry")}</Button>
         </TreeNavigationStatus>
       )}
-      {query.isFetchingNextPage && <TreeNavigationStatus depth={depth} loading>{t("sidebar.loading")}</TreeNavigationStatus>}
+      {query.isFetchingNextPage && <TreeNavigationStatus depth={depth}><LoadingState size="inline" label={t("sidebar.loading")} /></TreeNavigationStatus>}
       {query.hasNextPage && !isError && !query.isFetchingNextPage && (
         <TreeNavigationStatus depth={depth}>
           <Button variant="text" onClick={() => { void query.fetchNextPage().catch(showApiError); }}>{t("sidebar.more_folders")}</Button>

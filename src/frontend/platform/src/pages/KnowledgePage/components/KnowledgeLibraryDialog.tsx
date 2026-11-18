@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button, notification, toast } from "@bisheng/ui";
 import {
   useQuery,
@@ -384,7 +385,7 @@ export function CreateSpaceForm({
           </Button>
         </div>
       ) : (
-        <p role="status">{t("f118.loading_space")}</p>
+        <LoadingState label={t("f118.loading_space")} className="min-h-32" />
       )}
     </FormFrame>
   );
@@ -499,7 +500,7 @@ function EditSpaceForm({
           </Button>
         </div>
       ) : (
-        <p role="status">{t("f118.loading_space")}</p>
+        <LoadingState label={t("f118.loading_space")} className="min-h-32" />
       )}
     </FormFrame>
   );
