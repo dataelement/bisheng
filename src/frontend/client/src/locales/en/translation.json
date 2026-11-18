@@ -3185,6 +3185,7 @@
     "revise_label": "Ask the AI to change this memory",
     "revise_placeholder": "Tell the AI how to change this memory, e.g. the trip moved to January",
     "revise_send": "Send",
+    "revising": "The AI is updating this memory…",
     "revised": "Updated",
     "undo": "Undo",
     "revise_unchanged": "Nothing in this memory needed changing",

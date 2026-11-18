@@ -147,6 +147,11 @@ export function MemoryDetailView({ item, onBack, onDelete, onReplaced }: MemoryD
 
       {/* Tell the AI how to change this memory: pinned to the bottom of the pane. */}
       <div className="sticky bottom-0 mt-auto bg-white pb-2 pt-6">
+        {revise.isLoading && (
+          <p className="mb-2 text-body-sm text-text-3" role="status">
+            {localize("memory.revising")}
+          </p>
+        )}
         {notice && (
           <div className="mb-2 flex items-center gap-2 text-body-sm text-text-2" role="status">
             {notice.kind === "revised" ? (
@@ -182,19 +187,19 @@ export function MemoryDetailView({ item, onBack, onDelete, onReplaced }: MemoryD
             rows={2}
             maxLength={2000}
             placeholder={localize("memory.revise_placeholder")}
-            className="max-h-40 min-h-[48px] flex-1 resize-none bg-transparent text-body text-text-1 outline-none placeholder:text-text-3"
+            className="max-h-40 min-h-[48px] flex-1 resize-none bg-transparent text-body text-text-1 outline-none placeholder:text-text-3 disabled:text-text-3"
           />
           <Button
             size="small"
             iconOnly
             aria-label={localize("memory.revise_send")}
             title={localize("memory.revise_send")}
+            // The arrow goes in `icon`: the button swaps that slot for its spinner while loading.
+            icon={<Outlined.ArrowUp />}
             loading={revise.isLoading}
             disabled={!instruction.trim()}
             onClick={submit}
-          >
-            <Outlined.ArrowUp />
-          </Button>
+          />
         </div>
       </div>
     </div>
