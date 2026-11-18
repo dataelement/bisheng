@@ -309,6 +309,12 @@ def _parse_path_ids(path: str | None) -> list[int]:
     return ids
 
 
+def _layer_status_visible(status: str | None, include_archived: bool) -> bool:
+    if include_archived:
+        return status in {"active", "archived"}
+    return status == "active"
+
+
 def _path_in_scope(path: str | None, is_sys_admin: bool, admin_paths: set[str]) -> bool:
     """F038 visibility predicate, identical to ``aget_tree``'s
     ``d.path.startswith(p)``: system admin sees all; otherwise a node is visible
@@ -1278,6 +1284,9 @@ class DepartmentService:
             else:
                 topmost_ids = [ids[-1] for p in _topmost_paths(admin_paths) if (ids := _parse_path_ids(p))]
                 depts = await DepartmentDao.aget_by_ids(topmost_ids)
+                # The directory root is loaded by id, so it skips the child-layer
+                # status clause. An archived root would otherwise stay selectable.
+                depts = [dept for dept in depts if _layer_status_visible(dept.status, include_archived)]
                 depts = sorted(depts, key=lambda d: (d.sort_order, d.id))
         else:
             parent = await DepartmentDao.aget_by_id(parent_id)
@@ -1390,6 +1399,9 @@ class DepartmentService:
         for d in seeds:
             needed.update(_parse_path_ids(d.path))
         depts = await DepartmentDao.aget_by_ids(list(needed))
+        # Path ancestors are loaded by id. An archived ancestor must not become a
+        # selectable row when the caller asked for active departments only.
+        depts = [dept for dept in depts if _layer_status_visible(dept.status, include_archived)]
         # Clamp to scope: ancestors above the admin boundary are dropped (no leak).
         visible = [d for d in depts if _path_in_scope(d.path, is_sys_admin, admin_paths)]
         if not visible:

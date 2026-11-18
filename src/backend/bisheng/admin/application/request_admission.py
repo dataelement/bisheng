@@ -69,19 +69,17 @@ def bind_admitted_scope(admitted):
         if admitted.kind in {RequestScope.TENANT, RequestScope.PERSONAL}:
             if admitted.source == "credential":
                 yield
-            elif admitted.is_super:
-                with contexts.management_tenant_scope(admitted.tenant_id):
-                    yield
             else:
                 # A verified own-tenant target also pins management services;
                 # the marker grants no administrator or resource permission.
                 management = (
                     contexts.management_tenant_scope(admitted.tenant_id)
-                    if admitted.kind == RequestScope.TENANT
+                    if admitted.is_super or admitted.kind == RequestScope.TENANT
                     else nullcontext()
                 )
                 with management:
-                    # Existing Root sharing remains available to its domain gates.
+                    # Root rows stay on the same domain gate a tenant member
+                    # sees. A super admin pinned to that tenant reads the same set.
                     token = contexts.set_visible_tenant_ids(frozenset({admitted.tenant_id, contexts.DEFAULT_TENANT_ID}))
                     try:
                         yield
