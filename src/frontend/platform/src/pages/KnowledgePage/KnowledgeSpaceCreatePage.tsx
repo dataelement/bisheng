@@ -6,7 +6,9 @@ import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { userContext } from "@/contexts/userContext";
 import { knowledgeQueryKeys } from "@/controllers/hooks/knowledge";
 import { useKnowledgePageScope } from "@/hooks/useKnowledgePageScope";
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { CreateSpaceForm } from "./components/KnowledgeLibraryDialog";
+import { KnowledgeScopeUnavailable } from "./components/KnowledgeScopeUnavailable";
 import { SpacePanelFrame } from "./components/SpacePanelFrame";
 import { canCreateKnowledgeSpace } from "./knowledgeSpaceCreation";
 
@@ -47,6 +49,7 @@ export function KnowledgeSpaceCreatePage() {
         <SpacePanelFrame
           title={t("f118.create_space")}
           presentation="page"
+          contentClassName="h-full"
           back={{ label: t("back"), onClick: handleCancel }}
           footer={
             <>
@@ -55,7 +58,7 @@ export function KnowledgeSpaceCreatePage() {
             </>
           }
         >
-          <p role="status">{t(isLoading ? "f118.loading_space" : "f118.scope_unavailable")}</p>
+          {isLoading ? <LoadingState size="page" className="h-full" label={t("f118.loading_space")} /> : <KnowledgeScopeUnavailable />}
         </SpacePanelFrame>
       )}
     </main>

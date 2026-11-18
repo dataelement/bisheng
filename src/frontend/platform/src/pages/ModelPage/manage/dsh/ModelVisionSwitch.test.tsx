@@ -1,39 +1,43 @@
-import { fireEvent, render, screen, waitFor, cleanup } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import request from '@/controllers/request'
 import { ModelVisionSwitch } from './ModelVisionSwitch'
+import { saveModelVision } from '@/controllers/API/systemModelSettings'
+import type { ModelVisionRow } from '@/controllers/API/modelPricing'
+import { showApiError } from '@/controllers/request'
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
-vi.mock('@/controllers/request', () => ({ default: { get: vi.fn(), put: vi.fn() } }))
-beforeEach(() => vi.resetAllMocks())
+vi.mock('@/controllers/API/systemModelSettings', () => ({ saveModelVision: vi.fn() }))
+vi.mock('@/controllers/request', () => ({ showApiError: vi.fn() }))
+beforeEach(() => vi.clearAllMocks())
 afterEach(cleanup)
+const row: ModelVisionRow = {
+    model_id: 42, vision: false, effective: false, owner_tenant_id: 1, owner_vision: true,
+    source: 'local_restriction', can_edit: true, read_only: false, status: 'available', reason: null,
+}
 
-it('loads persisted capability and saves changes', async () => {
-    vi.mocked(request.get).mockResolvedValue({ vision: false })
-    vi.mocked(request.put).mockResolvedValue({ vision: true })
-    render(<ModelVisionSwitch modelId={42} />)
-    const control = screen.getByRole('switch')
-    await waitFor(() => expect(control).not.toBeDisabled())
-    fireEvent.click(control)
-    await waitFor(() => expect(control).toHaveAttribute('aria-checked', 'true'))
-    expect(request.put).toHaveBeenCalledWith('/api/v1/dsh/admin/models/42/vision', { vision: true }, { timeout: 15000 })
+it('saves an explicitly edited capability and refreshes the page batch', async () => {
+    vi.mocked(saveModelVision).mockResolvedValue({ ...row, vision: true, effective: true })
+    const refresh = vi.fn().mockResolvedValue(undefined)
+    render(<ModelVisionSwitch modelId={42} row={row} onSaved={refresh} />)
+    fireEvent.click(screen.getByRole('switch'))
+    await waitFor(() => expect(refresh).toHaveBeenCalledOnce())
+    expect(saveModelVision).toHaveBeenCalledWith(42, true)
 })
 
-it('retains the confirmed value when saving fails', async () => {
-    vi.mocked(request.get).mockResolvedValue({ vision: false })
-    vi.mocked(request.put).mockRejectedValue(new Error('failed'))
-    render(<ModelVisionSwitch modelId={42} />)
-    const control = screen.getByRole('switch')
-    await waitFor(() => expect(control).not.toBeDisabled())
-    fireEvent.click(control)
-    await screen.findByText('model.visionRetry')
-    expect(control).toHaveAttribute('aria-checked', 'false')
-    expect(control).not.toBeDisabled()
+it('retains the confirmed value and reports a save failure once', async () => {
+    const failure = new Error('offline')
+    vi.mocked(saveModelVision).mockRejectedValue(failure)
+    render(<ModelVisionSwitch modelId={42} row={row} onSaved={vi.fn()} />)
+    fireEvent.click(screen.getByRole('switch'))
+    await waitFor(() => expect(showApiError).toHaveBeenCalledWith(failure))
+    expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'false')
+    expect(screen.getByRole('switch')).not.toBeDisabled()
 })
 
-it('keeps the switch unavailable when capability could not be read', async () => {
-    vi.mocked(request.get).mockRejectedValue(new Error('failed'))
-    render(<ModelVisionSwitch modelId={42} />)
-    await screen.findByText('model.visionRetry')
+it('does not send requests while capability is unknown or not editable', () => {
+    const page = render(<ModelVisionSwitch modelId={42} onSaved={vi.fn()} />)
     expect(screen.getByRole('switch')).toBeDisabled()
+    page.rerender(<ModelVisionSwitch modelId={42} row={{ ...row, can_edit: false }} onSaved={vi.fn()} />)
+    fireEvent.click(screen.getByRole('switch'))
+    expect(saveModelVision).not.toHaveBeenCalled()
 })

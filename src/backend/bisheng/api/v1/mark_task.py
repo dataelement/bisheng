@@ -7,11 +7,13 @@ from bisheng.api.v1.schema.mark_schema import MarkData, MarkTaskCreate
 from bisheng.api.v1.schemas import resp_200, resp_500
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
+from bisheng.core.context.tenant import strict_tenant_filter
 from bisheng.database.models.mark_record import MarkRecord, MarkRecordDao
 from bisheng.database.models.mark_task import MarkTask, MarkTaskDao, MarkTaskRead, MarkTaskStatus
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.user_group import UserGroupDao
+from bisheng.permission.application.identity import is_current_tenant_administrator
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils.linked_list import DoubleLinkList
 
@@ -32,7 +34,7 @@ def _parse_process_user_ids(process_users: str, task_id: int) -> list[int]:
 
 
 @router.get("/list")
-def list(
+async def list(
     request: Request,
     status: int | None = None,
     page_size: int = 10,
@@ -43,10 +45,11 @@ def list(
     Nonadmin Can only see their own marked and unlabeled
     """
     groups = UserGroupDao.get_user_admin_group(login_user.user_id)
-    if login_user.is_admin():
-        task_list, count = MarkTaskDao.get_task_list(
-            page_size=page_size, page_num=page_num, status=status, create_id=None, user_id=None
-        )
+    if await is_current_tenant_administrator(login_user):
+        with strict_tenant_filter():
+            task_list, count = MarkTaskDao.get_task_list(
+                page_size=page_size, page_num=page_num, status=status, create_id=None, user_id=None
+            )
     else:
         task_list, count = MarkTaskDao.get_task_list(
             page_size=page_size,

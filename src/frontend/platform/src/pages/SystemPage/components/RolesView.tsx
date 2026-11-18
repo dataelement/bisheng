@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Pagination, Button, Input, SearchInput, Select } from '@bisheng/ui';
 import { Switch } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
@@ -307,7 +308,7 @@ export function RolesView({ controller }: RolesViewProps) {
             <div className="rounded-md border p-3">
               <Label>{t("system.menuPermissionSection")}</Label>
               <p className="mt-1 text-xs text-muted-foreground">{t("system.menuPermissionHint")}</p>
-              {isMenuLoading && <p className="mt-2 text-xs text-muted-foreground">{t("system.roleMenuLoading")}</p>}
+              {isMenuLoading && <LoadingState size="panel" label={t("system.roleMenuLoading")} className="mt-2 text-xs text-muted-foreground" />}
               {menuLoadFailed && activeRole && (
                 <div className="mt-2 flex items-center gap-3 text-xs text-destructive">
                   <span>{t("system.roleMenuLoadFailed")}</span>

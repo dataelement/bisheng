@@ -210,6 +210,8 @@ export interface GetKnowledgeBatchActionsOptions {
   canBatchMove: boolean;
   canBatchDelete: boolean;
   canBatchDownload: boolean;
+  canBatchTag: boolean;
+  canBatchRetry: boolean;
   handleBatchDownload: () => void;
   handleBatchTag: () => void;
   handleBatchMove: () => void;

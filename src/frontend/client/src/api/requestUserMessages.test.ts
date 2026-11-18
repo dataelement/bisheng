@@ -57,3 +57,11 @@ it('keeps a readable fallback before translations have initialized', () => {
  jest.spyOn(i18next, 't').mockReturnValue(undefined as never);
  expect(showApiError(new Error('PRIVATE')).message).toBe('Request failed. Please try again.');
 });
+
+
+it('explains the observed knowledge operation and keeps unknown diagnostics private', () => {
+ i18next.addResource('en', 'translation', 'knowledgeProcessing.conflict.file_queue', 'This file is queued. View Task history.');
+ const error = {status_code: 10999, data: {reason: 'processing_file_state_not_ready', blocking_operation: 'file_waiting', exception: 'PRIVATE'}};
+ expect(translateApiErrorMessage(error)).toBe('This file is queued. View Task history.');
+ expect(translateApiErrorMessage({status_code: 10999, data: {reason: 'PRIVATE', blocking_operation: '__proto__'}})).toBe(messages['10999']);
+});

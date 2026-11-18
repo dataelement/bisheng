@@ -158,3 +158,37 @@ async def test_frozen_response_target_replaces_legacy_headers_exactly_once(admit
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         result = await client.get("/legacy-header", headers={"X-Management-Tenant": "60"})
     assert result.headers.get_list("X-Management-Tenant") == ["60"]
+
+
+@pytest.mark.parametrize(
+    "kind,source,is_super,pin,visible",
+    [
+        (RequestScope.TENANT, "own", False, 60, frozenset({1, 60})),
+        (RequestScope.PERSONAL, "own", False, None, frozenset({1, 60})),
+        (RequestScope.TENANT, "credential", False, None, frozenset({60})),
+        (RequestScope.TENANT, "selected", True, 60, frozenset({1, 60})),
+    ],
+)
+def test_verified_tenant_binding_preserves_sharing_and_restores_context_on_failure(
+    kind, source, is_super, pin, visible
+):
+    from bisheng.core.context.tenant import (
+        get_admin_scope_tenant_id,
+        get_is_management_api,
+        get_visible_tenant_ids,
+        tenant_execution_scope,
+    )
+
+    admitted = request_admission.AdmittedRequest(7, 60, 60, kind, is_super, source)
+    with tenant_execution_scope(202):
+        with pytest.raises(RuntimeError, match="business failure"):
+            with request_admission.bind_admitted_scope(admitted):
+                assert get_current_tenant_id() == 60
+                assert get_admin_scope_tenant_id() == pin
+                assert get_is_management_api() is (pin is not None)
+                assert get_visible_tenant_ids() == visible
+                raise RuntimeError("business failure")
+        assert get_current_tenant_id() == 202
+        assert get_admin_scope_tenant_id() is None
+        assert not get_is_management_api()
+        assert get_visible_tenant_ids() == frozenset({202})

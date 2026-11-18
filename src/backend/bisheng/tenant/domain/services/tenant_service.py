@@ -315,6 +315,15 @@ class TenantService:
         else:
             await redis_client.adelete(key)
 
+        if data.status == "active" and getattr(tenant, "parent_tenant_id", None) == ROOT_TENANT_ID:
+            from bisheng.core.context.tenant import management_tenant_scope
+            from bisheng.llm.application.model_mount_sharing import get_model_mount_sharing_application
+
+            # Also handles a retry after the status committed but fanout failed.
+            with management_tenant_scope(ROOT_TENANT_ID):
+                application = await get_model_mount_sharing_application()
+                await application.areconcile_child(identity=login_user, child_id=tenant_id)
+
         if became_disabled:
             await cls._revoke_active_jwts_for_tenant(
                 tenant_id,

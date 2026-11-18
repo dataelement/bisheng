@@ -1,8 +1,8 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { useServiceAccountRequestScope } from "./useServiceAccountManagementScope";
 import { Button, SearchInput, Select, notification } from '@bisheng/ui';
 
 import { Checkbox } from "@bisheng/ui";
-import { Outlined } from "bisheng-icons";
 
 
 import {
@@ -346,10 +346,7 @@ export function ResourceGrantDialog({
               )
             })}
             {loadingResources ? (
-              <p className="flex items-center justify-center gap-2 p-6 text-sm text-muted-foreground">
-                <Outlined.Loading className="size-4 animate-spin" />
-                {t("openApiManagement.grants.loadingResources")}
-              </p>
+              <LoadingState label={t("openApiManagement.grants.loadingResources")} className="flex items-center justify-center gap-2 p-6 text-sm text-muted-foreground" />
             ) : null}
             {!loadingResources && !resources.length ? (
               <p className="p-6 text-center text-sm text-muted-foreground">
@@ -394,8 +391,8 @@ export function ResourceGrantDialog({
               !selectedResources.length ||
               !modelKey ||
               modelKey === editingGrant?.model_key
-            } onClick={handleGrant}>
-            {loading ? <Outlined.Loading className="mr-2 size-4 animate-spin" /> : null}
+            } onClick={handleGrant} loading={loading}>
+
             {t(
               editingGrant
                 ? "confirmButton"

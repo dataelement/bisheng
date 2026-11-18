@@ -2,13 +2,12 @@ import { Button, Tabs } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useKnowledgePageScope } from "@/hooks/useKnowledgePageScope";
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
+import { KnowledgeScopeUnavailable } from "./components/KnowledgeScopeUnavailable";
 import KnowledgeQa from "./KnowledgeQa";
-import { KnowledgeSpaceAdminList } from "./KnowledgeSpaceAdminList";
 import { KnowledgeSpaceWorkspace } from "./KnowledgeSpaceWorkspace";
-import { SpaceManagementView } from "./components/SpaceManagementView";
-import { parseKnowledgeId } from "./detail";
 
 const pageWindow = window as Window & { LibPage?: { type: string } };
 
@@ -42,18 +41,12 @@ export default function KnowledgePage() {
   useEffect(() => {
     delete pageWindow.LibPage;
   }, []);
-  const unavailable = (
-    <div role="status" className="space-y-3 p-4">
-      <p>{t(isLoading ? "f118.loading_space" : "f118.scope_unavailable")}</p>
-      <Button
-        disabled={isLoading}
-        onClick={() => {
-          void retry();
-        }}
-      >
-        {t("retry")}
-      </Button>
-    </div>
+  const unavailable = isLoading ? (
+    <LoadingState size="page" className="h-full" label={t("f118.loading_space")} />
+  ) : (
+    <KnowledgeScopeUnavailable
+      action={<Button onClick={() => { void retry(); }}>{t("retry")}</Button>}
+    />
   );
   const ordinary = scopes?.ordinary;
   const ordinaryContent = ordinary ? (
@@ -65,30 +58,14 @@ export default function KnowledgePage() {
     />
   ) : unavailable;
   const admin = scopes?.admin;
-  const spaceId = parseKnowledgeId(id);
-  const tab = params.get("tab");
-  const isConfigurationLink = spaceId !== null && !params.has("file_id") && (
-    tab === "settings" || tab === "metadata" || tab === "defaults" ||
-    tab === "embedding" || tab === "jobs"
-  );
-  let adminContent = unavailable;
-  if (activeKey === "admin" && admin) {
-    if (isConfigurationLink) {
-      adminContent = (
-        <SpaceManagementView
-          key={JSON.stringify([admin, spaceId])}
-          scope={admin}
-          spaceId={spaceId}
-        />
-      );
-    } else if (id !== undefined) {
-      adminContent = <Navigate to="/filelib?view=admin" replace />;
-    } else {
-      adminContent = (
-        <KnowledgeSpaceAdminList key={JSON.stringify(admin)} scope={admin} toolbarTarget={toolbarTarget} />
-      );
-    }
-  }
+  const adminContent = canManage && admin ? (
+    <KnowledgeSpaceWorkspace
+      key={JSON.stringify(admin)}
+      scope={admin}
+      routeId={id}
+      active={activeKey === "admin"}
+    />
+  ) : unavailable;
   return (
     <div className="relative h-full w-full px-2 pt-4">
       <Tabs
@@ -98,7 +75,7 @@ export default function KnowledgePage() {
           navigate(key === "file" ? "/filelib" : `/filelib?view=${key}`);
         }}
         extra={<div ref={setToolbarTarget} />}
-        className="flex h-full w-full flex-col [&>div:first-child]:mx-2 [&>div:first-child]:mb-2 [&>div:first-child]:shrink-0 [&>[role=tabpanel]]:min-h-0 [&>[role=tabpanel]]:flex-1"
+        className="flex h-full w-full flex-col [&>div:first-child]:mx-2 [&>div:first-child]:shrink-0 [&>[role=tabpanel]]:min-h-0 [&>[role=tabpanel]]:flex-1"
         items={[
           {
             key: "file",

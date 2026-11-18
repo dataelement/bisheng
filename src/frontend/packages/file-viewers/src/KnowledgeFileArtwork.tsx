@@ -1,8 +1,9 @@
 import cn from "@bisheng/ui/cn";
-import { Colored } from "bisheng-icons";
+import { Colored, Outlined } from "bisheng-icons";
 import { useState } from "react";
 import { FolderIcon } from "./FolderIcon";
 import { TxtIcon } from "./TxtIcon";
+import { getViewerType } from "./formats";
 
 export { FolderIcon, TxtIcon };
 
@@ -35,9 +36,9 @@ const backgrounds: Record<ArtworkKind, string> = {
 };
 
 const extensionKinds = new Map<string, ArtworkKind>([
-  ["doc", "doc"], ["docx", "doc"],
-  ["ppt", "ppt"], ["pptx", "ppt"],
-  ["xls", "xls"], ["xlsx", "xls"],
+  ["doc", "doc"], ["docx", "doc"], ["wps", "doc"],
+  ["ppt", "ppt"], ["pptx", "ppt"], ["dps", "ppt"],
+  ["xls", "xls"], ["xlsx", "xls"], ["et", "xls"],
   ["csv", "csv"], ["txt", "txt"], ["md", "md"], ["markdown", "md"], ["html", "html"], ["htm", "html"],
   ["mp3", "audio"], ["wav", "audio"], ["m4a", "audio"], ["aac", "audio"], ["flac", "audio"], ["ogg", "audio"],
   ["mp4", "video"], ["mov", "video"], ["avi", "video"], ["mkv", "video"], ["webm", "video"],
@@ -45,6 +46,26 @@ const extensionKinds = new Map<string, ArtworkKind>([
 
 const iconOnlyKinds = new Set<ArtworkKind>(["folder", "md", "txt", "csv", "html"]);
 const slotClass = "flex size-full items-center justify-center";
+const getExtension = (name: string) => name.split(".").pop()?.toLowerCase() ?? "";
+
+interface KnowledgeFileTypeIconProps {
+  name: string;
+  className?: string;
+}
+
+export function KnowledgeFileTypeIcon({ name, className }: KnowledgeFileTypeIconProps) {
+  const extension = getExtension(name);
+  const kind = extensionKinds.get(extension);
+  if (kind) {
+    const Icon = icons[kind];
+    return <Icon aria-hidden="true" className={className} />;
+  }
+
+  const Icon = extension === "pdf" ? Outlined.FilePdf
+    : getViewerType(extension) === "image" ? Outlined.FileImage
+    : Outlined.File;
+  return <Icon aria-hidden="true" className={cn("text-text-3", className)} />;
+}
 
 interface KnowledgeFileArtworkProps {
   name: string;
@@ -70,8 +91,7 @@ export function KnowledgeFileArtwork({
   transparentBg,
 }: KnowledgeFileArtworkProps) {
   const [failedThumbnail, setFailedThumbnail] = useState<string | null>(null);
-  const extension = name.split(".").pop()?.toLowerCase() ?? "";
-  const knownKind = isFolder ? "folder" : kind ?? extensionKinds.get(extension);
+  const knownKind = isFolder ? "folder" : kind ?? extensionKinds.get(getExtension(name));
 
   if (!isFolder && !parsed) {
     return (

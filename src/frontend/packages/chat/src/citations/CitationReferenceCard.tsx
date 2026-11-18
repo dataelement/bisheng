@@ -1,5 +1,5 @@
 import { Outlined } from 'bisheng-icons';
-import { Tag } from '@bisheng/ui';
+import { Tag, useLoadingIndicatorRenderer } from '@bisheng/ui';
 import cn from '@bisheng/ui/cn';
 import { createCitationUtilities } from './preview';
 import { CitationSourceIcon } from './CitationSourceIcon';
@@ -52,7 +52,7 @@ export function CitationReferenceCard({
   hasError: boolean;
   onOpenDocumentPreview: (item: CitationReferenceItem, detail: ChatCitation) => void;
 }) {
-
+  const renderIndicator = useLoadingIndicatorRenderer();
   const {buildCitationDocumentPreview,isFilePreviewCitation}=createCitationUtilities(localize);
   const preview = item.legacyPreview ?? buildCitationDocumentPreview(detail, item.data);
   const type = preview?.type || item.data.type;
@@ -118,9 +118,13 @@ export function CitationReferenceCard({
 
       {(isLoading || hasError) && <div className="min-h-[20px] text-[12px] leading-5 text-text-2">
         {isLoading ? (
-          <span className="inline-flex items-center gap-2 text-text-3">
-            <Outlined.Loading className="size-3.5 animate-spin" />
-            {localize('com_message.source_loading')}
+          <span className="inline-flex items-center gap-2 text-text-3"
+            role={renderIndicator ? 'status' : undefined}
+            aria-label={renderIndicator ? localize('com_message.source_loading') : undefined}>
+            {renderIndicator ? <span aria-hidden className="inline-flex">{renderIndicator({ className: 'size-4' })}</span> : <>
+              <Outlined.Loading className="size-3.5 animate-spin" />
+              {localize('com_message.source_loading')}
+            </>}
           </span>
         ) : hasError ? (
           <span className="text-text-3">{localize('com_message.source_load_failed')}</span>

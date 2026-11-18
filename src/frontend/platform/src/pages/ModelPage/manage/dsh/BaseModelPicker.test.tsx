@@ -5,7 +5,11 @@ import {
 } from '@/controllers/API/modelPricing'
 import { BaseModelPicker } from './BaseModelPicker'
 
-vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
+vi.mock('react-i18next', () => ({
+    useTranslation: () => ({
+        t: (key: string, args?: Record<string, string>) => key === 'dsh.pricing.baseModelOption' ? `${args?.model} (${args?.provider})` : key,
+    }),
+}))
 vi.mock('@/controllers/API/modelPricing', () => ({
     getCreditSettings: vi.fn(),
     saveCreditSettings: vi.fn(),
@@ -17,8 +21,9 @@ const SAVED: CreditSettings = {
 }
 const row = (model_id: number, hint: ModelPricingRow['hint'], missing = false): ModelPricingRow => ({
     model_id, pricing: null, effective: null, edited: false, missing, hint,
+    can_edit: true, read_only: false, source_tenant_id: 1, base_reason: null,
 })
-const models = [{ id: 46, label: 'Chat default' }, { id: 47, label: 'Local model' }]
+const models = [{ id: 46, label: 'Chat default', provider: 'DeepSeek' }, { id: 47, label: 'Local model', provider: 'Ollama' }]
 
 beforeEach(() => {
     vi.resetAllMocks()
@@ -31,7 +36,7 @@ it('saves the chosen base model with the loaded version', async () => {
     render(<BaseModelPicker models={models} rows={rows} />)
     await waitFor(() => expect(getCreditSettings).toHaveBeenCalled())
     expect(screen.queryByText('dsh.pricing.baseUnavailable')).toBeNull()
-    await selectOption('dsh.pricing.baseModel', 'Local model')
+    await selectOption('dsh.pricing.baseModel', 'Local model (Ollama)')
     await waitFor(() => expect(saveCreditSettings).toHaveBeenCalledWith(expect.objectContaining({ version: 3, base_model_id: 47 })))
     expect(await screen.findByLabelText('dsh.pricing.saved')).toBeInTheDocument()
 })
@@ -46,6 +51,17 @@ it('shows a conflict without changing the selection', async () => {
     vi.mocked(saveCreditSettings).mockRejectedValue({ status_code: 26130 })
     render(<BaseModelPicker models={models} rows={new Map()} />)
     await waitFor(() => expect(getCreditSettings).toHaveBeenCalled())
-    await selectOption('dsh.pricing.baseModel', 'Local model')
+    await selectOption('dsh.pricing.baseModel', 'Local model (Ollama)')
     expect(await screen.findByRole('alert')).toHaveTextContent('dsh.pricing.conflict')
+})
+
+it('tells same-named models apart by their provider', async () => {
+    const relays = [
+        { id: 935, label: 'deepseek-v4.1-flash', provider: 'Qwen' },
+        { id: 1143, label: 'deepseek-v4.1-flash', provider: 'Bailian relay' },
+    ]
+    render(<BaseModelPicker models={relays} rows={new Map()} />)
+    await waitFor(() => expect(getCreditSettings).toHaveBeenCalled())
+    await selectOption('dsh.pricing.baseModel', 'deepseek-v4.1-flash (Bailian relay)')
+    await waitFor(() => expect(saveCreditSettings).toHaveBeenCalledWith(expect.objectContaining({ base_model_id: 1143 })))
 })

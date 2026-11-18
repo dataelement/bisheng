@@ -282,7 +282,9 @@ class AssistantAgent(AssistantUtils):
 
     async def init_llm(self):
         # Get a list of configured helper models
-        assistant_llm = await LLMService.get_assistant_llm(login_user=self.login_user, session=self.reference_session)
+        assistant_llm, _, _ = await LLMService.aget_assistant_llm_with_meta(
+            login_user=self.login_user, session=self.reference_session
+        )
         if not assistant_llm.llm_list:
             raise AssistantModelEmptyError()
         default_llm = None
@@ -295,6 +297,12 @@ class AssistantAgent(AssistantUtils):
         if not default_llm:
             raise AssistantModelNotConfigError()
 
+        admitted = await LLMService.get_assistant_llm(
+            login_user=self.login_user,
+            session=self.reference_session,
+            slots=(f"llm_list.{default_llm.model_id}.model_id",),
+        )
+        default_llm = admitted.llm_list[0]
         self.llm_agent_executor = default_llm.agent_executor_type
         self.knowledge_retriever = {
             "max_content": default_llm.knowledge_max_content,
@@ -314,7 +322,9 @@ class AssistantAgent(AssistantUtils):
 
     async def init_auto_update_llm(self):
         """Initialize Automatic Optimization prompt and other information.llmInstances"""
-        assistant_llm = await LLMService.get_assistant_llm(login_user=self.login_user, session=self.reference_session)
+        assistant_llm = await LLMService.get_assistant_llm(
+            login_user=self.login_user, session=self.reference_session, slots=("auto_llm.model_id",)
+        )
         if not assistant_llm.auto_llm:
             raise AssistantAutoLLMError()
 

@@ -30,7 +30,18 @@ class MoveQueryRepository:
         ):
             raise KnowledgeOperationPlanConflictError(reason="move_query_native_context_required")
         table, job = Item.__table__, Job.__table__
-        names = ("id", "tenant_id", "file_id", "document_id", "version_id", "step", "state", "attempt", "error_code")
+        names = (
+            "id",
+            "tenant_id",
+            "file_id",
+            "document_id",
+            "version_id",
+            "step",
+            "state",
+            "attempt",
+            "error_code",
+            "error_message",
+        )
         query = (
             select(*(table.c[name] for name in names))
             .select_from(Knowledge)

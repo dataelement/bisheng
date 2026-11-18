@@ -1,8 +1,8 @@
 import { Button } from "@bisheng/ui";
 import { Input } from "@bisheng/ui";
-import { Switch } from "@bisheng/ui";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/bs-ui/table'
 import { useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { BaseModelPicker } from './dsh/BaseModelPicker'
 import { ModelAccessDialog, type DshAccessModel } from './dsh/ModelAccessDialog'
@@ -12,6 +12,8 @@ import { ModelVisionSwitch } from './dsh/ModelVisionSwitch'
 import { useCreditSettings, useModelPricingRows } from './dsh/useCreditPricing'
 import { ModelFieldHint } from './ModelFieldHint'
 import type { ConfiguredUserModel, ModelServer } from './userModelMetadata'
+import { getModelVisionRows, type ModelVisionRow } from '@/controllers/API/modelPricing'
+import { managementRequestScope } from '@/controllers/managementScope'
 
 interface UserSelectableModelsProps {
     data: ModelServer[]
@@ -33,6 +35,19 @@ export function UserSelectableModels({ data, configuredModels, enterpriseEnabled
             const config = configuredModels.find(row => String(row.id) === String(model.id))
             return { ...model, provider: server.name, providerType: server.type, config, label: config?.displayName?.trim() || model.model_name }
         })), [data, configuredModels])
+    const modelIds = useMemo(() => models.map(model => model.id), [models])
+    const vision = useQuery({
+        queryKey: ['model-vision-settings', managementRequestScope(), modelIds],
+        queryFn: async ({ signal }) => {
+            const rows: ModelVisionRow[] = []
+            for (let start = 0; start < modelIds.length; start += 100) {
+                rows.push(...await getModelVisionRows(modelIds.slice(start, start + 100), signal))
+            }
+            return new Map(rows.map(row => [row.model_id, row]))
+        },
+        enabled: modelIds.length > 0,
+        retry: false, cacheTime: 0, refetchOnWindowFocus: false,
+    })
 
     return <section className="space-y-4">
         <div>
@@ -41,6 +56,10 @@ export function UserSelectableModels({ data, configuredModels, enterpriseEnabled
             <p className="mt-1 text-xs text-muted-foreground">{t(enterpriseEnabled ? 'model.userSelectableModelsHelp' : 'model.userSelectableModelsHelpBasic')}</p>
         </div>
         {enterpriseEnabled && <BaseModelPicker models={models} rows={pricing.data} />}
+        {vision.isError && <p role="alert" className="text-sm">
+            {t('model.visionReadFailed')}
+            <Button variant="link" size="small" onClick={() => void vision.refetch()}>{t('model.retry')}</Button>
+        </p>}
         {enterpriseEnabled && pricing.isError && <p role="alert" className="flex items-center gap-2 text-sm">
             {t('dsh.pricing.unavailable', { ns: 'bs' })}
             <Button variant="link" size="small" className="h-auto px-0" onClick={() => void pricing.refetch()}>
@@ -73,9 +92,8 @@ export function UserSelectableModels({ data, configuredModels, enterpriseEnabled
                                 value={model.config?.displayName ?? ''} placeholder={model.model_name} disabled={disabled}
                                 onChange={event => onMetadataChange(model, { displayName: event.target.value })} />
                         </TableCell>
-                        <TableCell>{enterpriseEnabled ? <ModelVisionSwitch modelId={model.id} /> :
-                            <Switch aria-label={`${t('model.supportsImages')} · ${model.model_name}`} checked={!!model.config?.visual}
-                                disabled={disabled} onCheckedChange={visual => onMetadataChange(model, { visual })} />}</TableCell>
+                        <TableCell><ModelVisionSwitch modelId={model.id} row={vision.data?.get(model.id)}
+                            onSaved={() => vision.refetch()} /></TableCell>
                         {enterpriseEnabled && <TableCell><CreditRatioCell row={row} /></TableCell>}
                         {enterpriseEnabled && <TableCell>
                             <PriceSummaryCell row={row} modelName={model.label} onEdit={() => {

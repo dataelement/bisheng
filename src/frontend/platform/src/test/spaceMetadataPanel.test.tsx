@@ -206,6 +206,7 @@ it("resumes a submitted metadata job on reopen until it is complete", async () =
   expect(mocks.legacy).not.toHaveBeenCalled();
   expect(await screen.findByText("updating-metadata")).toBeVisible();
   await waitFor(() => expect(screen.getAllByText("category")).toHaveLength(1));
+  expect(mocks.read).toHaveBeenCalledTimes(2);
 
   first.unmount();
   vi.mocked(knowledgeSpaceApi.listProcessingJobs).mockResolvedValue({

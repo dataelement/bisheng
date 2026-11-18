@@ -1,3 +1,4 @@
+import { knowledgeProcessingConflictVariant } from '@bisheng/knowledge/processing-conflicts';
 // @ts-strict-ignore
 import { decodeErrorEnvelope, isApiError, isErrorEnvelope, normalizeApiError, resolveErrorMessageTemplate, hasIndependentScope } from '@bisheng/api-client';
 import type { ErrorEnvelope } from '@bisheng/api-client';
@@ -101,6 +102,21 @@ function rateLimitDiscoveryMessage(envelope: unknown): string {
     return typeof message === 'string' && message && message !== key ? message : '';
 }
 
+// A processing conflict (10999) only says "a conflicting operation is processing
+// this resource", which leaves the user with nothing to do. The backend names
+// the real blocker in data.reason; map it to actionable copy from the knowledge
+// namespace. An unmapped reason keeps the generic api_errors message, and an
+// unloaded namespace falls back the same way (the knowledge page has already
+// loaded it by the time one of these requests can run).
+function knowledgeProcessingConflictMessage(envelope: unknown): string {
+    const variant = knowledgeProcessingConflictVariant(envelope);
+    if (!variant) return '';
+    const key = `knowledge:f118.processing_conflict_${variant}`;
+    if (!i18next.exists(key)) return '';
+    const message = i18next.t(key);
+    return typeof message === 'string' && message && message !== key ? message : '';
+}
+
 function decodeEnvelopeMessage(value: unknown) {
     const envelope = value && typeof value === 'object' ? value as Partial<ErrorEnvelope> : undefined;
     const statusCode = envelope?.status_code
@@ -116,6 +132,8 @@ function decodeEnvelopeMessage(value: unknown) {
     }
     const rateLimitMessage = rateLimitDiscoveryMessage(envelope);
     if (rateLimitMessage) return rateLimitMessage;
+    const processingConflictMessage = knowledgeProcessingConflictMessage(envelope);
+    if (processingConflictMessage) return processingConflictMessage;
     const statusMessage = typeof envelope?.status_message === 'string' ? envelope.status_message : '';
     const codeKey = `api_errors:${statusCode}`;
     const i18Msg = i18next.exists(codeKey) ? i18next.t(codeKey) : '';

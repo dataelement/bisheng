@@ -33,10 +33,10 @@ PROFILE="app-runtime"
 COMPOSE_ENV_FILE="${COMPOSE_ENV_FILE:-${REPO_ROOT}/docker/.env}"
 [[ -f "$COMPOSE_ENV_FILE" ]] || COMPOSE_ENV_FILE="${REPO_ROOT}/docker/.env.example"
 
-# 不带 profile 的 service 数 / 带 profile 的 service 数。
-# 「整层不装」是产品明确支持的形态（GOV-10 / AC-59）：不带 --profile 起来时这两个
-# service 根本不创建，平台其余部分零变化。这个不等式一旦被破坏（比如有人顺手把
-# profiles 删了），默认装机就会多起两个容器并要求配密钥。
+# 显式清空默认 profile 后的 service 数 / 显式启用 runtime 的 service 数。
+# 「整层不装」仍是支持的形态（GOV-10 / AC-59）：显式清空 COMPOSE_PROFILES
+# 后运行时服务不创建；新安装的 .env 默认包含 app-runtime。这里检查 profile
+# 边界仍然存在，避免移除 profiles 后无法明确关闭运行时。
 # mysql-init is the explicit one-shot database initializer; health probes stay read-only.
 EXPECTED_SERVICES_WITHOUT_PROFILE=14
 EXPECTED_SERVICES_WITH_PROFILE=18
@@ -165,7 +165,7 @@ echo ""
 
 # ─── 1. compose 可解析（两种 profile 组合都要过）──────────────────────────────
 head_ "[1/5] compose 语法与插值"
-if err=$(docker compose --env-file "${COMPOSE_ENV_FILE}" -f "${COMPOSE_FILE}" config -q 2>&1); then
+if err=$(COMPOSE_PROFILES= docker compose --env-file "${COMPOSE_ENV_FILE}" -f "${COMPOSE_FILE}" config -q 2>&1); then
   pass "不带 profile 解析通过"
 else
   fail "不带 profile 解析失败：${err}"
@@ -178,12 +178,12 @@ fi
 
 # ─── 2. profile 表达仍然成立 ─────────────────────────────────────────────────
 head_ "[2/5] profile 计数（「整层不装」形态）"
-n_without=$(docker compose --env-file "${COMPOSE_ENV_FILE}" -f "${COMPOSE_FILE}" config --services 2>/dev/null | grep -c . || true)
+n_without=$(COMPOSE_PROFILES= docker compose --env-file "${COMPOSE_ENV_FILE}" -f "${COMPOSE_FILE}" config --services 2>/dev/null | grep -c . || true)
 n_with=$(docker compose --env-file "${COMPOSE_ENV_FILE}" -f "${COMPOSE_FILE}" --profile "${PROFILE}" config --services 2>/dev/null | grep -c . || true)
 if [ "${n_without}" = "${EXPECTED_SERVICES_WITHOUT_PROFILE}" ]; then
-  pass "默认（不带 profile）= ${n_without} 个 service"
+  pass "显式不装运行时（清空 profile）= ${n_without} 个 service"
 else
-  fail "默认 service 数 = ${n_without}，期望 ${EXPECTED_SERVICES_WITHOUT_PROFILE}（改了 service 数就同步改本脚本的期望值）"
+  fail "清空 profile 后 service 数 = ${n_without}，期望 ${EXPECTED_SERVICES_WITHOUT_PROFILE}（改了 service 数就同步改本脚本的期望值）"
 fi
 if [ "${n_with}" = "${EXPECTED_SERVICES_WITH_PROFILE}" ]; then
   pass "带 --profile ${PROFILE} = ${n_with} 个 service"

@@ -19,17 +19,23 @@ from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.context.background_execution import get_current_background_task
 from bisheng.core.database import get_sync_db_session
 from bisheng.core.logger import trace_id_var
+from bisheng.knowledge.application.model_availability import probe_embedding as _probe_embedding
 from bisheng.knowledge.application.model_reference import KnowledgeModelReferenceApplication
 from bisheng.knowledge.application.model_reference_read import get_knowledge_model_read_runtime_sync
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileDao, KnowledgeFileStatus
+from bisheng.knowledge.domain.repositories.processing_fence_repository import (
+    ProcessingCancelled,
+)
+from bisheng.knowledge.domain.services.processing_write_guard import ProcessingWriteGuard, guarded_processing
 from bisheng.llm.domain import LLMService
 from bisheng.resource_reference.application.contracts import canonical_target_id
 from bisheng.worker.main import bisheng_celery
 
 
 @bisheng_celery.task(acks_late=True)
+@guarded_processing(space_arg="knowledge_id", cancel_result="cancelled_by_deletion")
 def rebuild_knowledge_celery(
     knowledge_id: int,
     new_model_id: int | None,
@@ -42,6 +48,7 @@ def rebuild_knowledge_celery(
     """Rebuild the current business pending slot; the user ID is audit only."""
     trace_id_var.set(f"rebuild_knowledge_{knowledge_id}")
     logger.info(f"rebuild_knowledge_celery start knowledge_id={knowledge_id} new_model_id={new_model_id}")
+    activated, files = False, []
     try:
         command = {
             "operation_id": operation_id,
@@ -49,6 +56,20 @@ def rebuild_knowledge_celery(
             "expected_index_generation": expected_index_generation,
         }
         knowledge, selected_model_id = _require_current_rebuild(knowledge_id, new_model_id, **command)
+
+        _probe_embedding(knowledge, selected_model_id, invoke_user_id)
+        if knowledge.model_config_revision == expected_model_config_revision:
+            with get_sync_db_session() as session:
+                activation = KnowledgeModelReferenceApplication.prepare_pending_activation(
+                    session, knowledge_id, **command
+                )
+                KnowledgeModelReferenceApplication.apply_model_change(session, activation)
+                session.commit()
+            command["expected_model_config_revision"] += 1
+        else:
+            command["expected_model_config_revision"] = knowledge.model_config_revision
+        knowledge, selected_model_id = _require_current_rebuild(knowledge_id, new_model_id, **command)
+        activated = True
 
         # 1. according knowledge_id Found knowledgefile All in the tablestatus=2Andstatus=4File, put thestatusto4
         files = KnowledgeFileDao.get_files_by_multiple_status(
@@ -73,6 +94,7 @@ def rebuild_knowledge_celery(
             knowledge, files, selected_model_id, invoke_user_id, **command
         )
 
+        ProcessingWriteGuard(knowledge_id).checkpoint()
         # 4. Update file status
         KnowledgeFileDao.update_status_bulk(success_files, KnowledgeFileStatus.SUCCESS)
 
@@ -96,13 +118,23 @@ def rebuild_knowledge_celery(
             logger.info(f"knowledge_id={knowledge_id} rebuild completed successfully")
 
         _finalize_rebuild(knowledge_id, **command)
-
+        activated = False
+        if files and not success_files:
+            raise KnowledgeFileFailedError(reason="all_files_failed")
         return f"knowledge {knowledge_id} rebuild completed"
 
     except Exception as e:
         logger.exception(f"rebuild_knowledge_celery error: {e!s}")
-        # Global failures did not complete the operation. Keep its actual
-        # pending slot/revision and let Celery retain the failure diagnostic.
+        if activated and not isinstance(e, ProcessingCancelled):
+            try:
+                _require_current_rebuild(knowledge_id, new_model_id, **command)
+                for file in files:
+                    file.status = KnowledgeFileStatus.FAILED.value
+                    file.remark = KnowledgeFileFailedError().to_json_str()
+                    KnowledgeFileDao.update(file)
+                _finalize_rebuild(knowledge_id, **command)
+            except Exception:
+                logger.exception("Failed to finish legacy rebuild failure knowledge={}", knowledge_id)
         raise
 
 
@@ -133,6 +165,14 @@ def _require_current_rebuild(
         candidate = KnowledgeModelReferenceApplication.repository.get(session, knowledge_id)
         if candidate is not None and candidate.model_transition is None:
             raise KnowledgeOperationPlanConflictError(reason="knowledge_rebuild_operation_missing")
+        if (
+            candidate is not None
+            and candidate.model_transition is not None
+            and candidate.model_transition.get("operation_id") == operation_id
+            and str(candidate.model) == str(candidate.model_transition.get("pending_model_id"))
+            and candidate.model_config_revision == expected_model_config_revision + 1
+        ):
+            expected_model_config_revision = candidate.model_config_revision
         result = get_knowledge_model_read_runtime_sync().require(
             knowledge_id,
             session=session,
@@ -241,7 +281,7 @@ def _rebuild_embeddings(
         for file in files:
             try:
                 success = _process_single_file(file, es_client, index_name, vector_client)
-            except KnowledgeUnificationError:
+            except (KnowledgeUnificationError, ProcessingCancelled):
                 raise
             except Exception as e:
                 logger.exception(f"Failed to rebuild embeddings for file_id={file.id}: {e!s}")
@@ -277,6 +317,7 @@ def _process_single_file(file, es_client, index_name, vector_client):
 
 def _process_file_chunks(file, es_client, index_name, vector_client) -> ProcessingFileResult:
     """Processing of individual filesembeddingRebuild"""
+    ProcessingWriteGuard(file.knowledge_id, file.id).checkpoint()
     logger.info(f"Rebuilding embeddings for file_id={file.id}")
 
     # FROMESGet all of this file inchunks
@@ -348,15 +389,24 @@ def _require_processing_model(
     *,
     operation_id: str | None,
     expected_model_config_revision: int,
-    expected_index_generation: str,
+    expected_index_generation: str | None,
 ):
     if get_current_background_task() is None:
         raise ResourceReferenceInvalidError(reason="knowledge_rebuild_background_required")
+    # A published space keeps a null index generation until its first model
+    # switch. File reprocess freezes that current slot. A rebuild command still
+    # needs the generation it was accepted against.
     if (
         type(expected_model_config_revision) is not int
         or expected_model_config_revision < 0
-        or not isinstance(expected_index_generation, str)
-        or not expected_index_generation
+        or (
+            expected_index_generation is not None
+            and (
+                not isinstance(expected_index_generation, str)
+                or not expected_index_generation
+                or len(expected_index_generation) > 64
+            )
+        )
     ):
         raise KnowledgeOperationPlanConflictError(reason="knowledge_rebuild_command_expectations_required")
     with get_sync_db_session() as session:
@@ -364,7 +414,7 @@ def _require_processing_model(
         if candidate is None or candidate.type != 3:
             raise ResourceReferenceInvalidError(reason="knowledge_rebuild_space_required")
         slot = "model_transition.pending_model_id" if candidate.model_transition is not None else "model"
-        if slot != "model" and not operation_id:
+        if (operation_id or slot != "model") and not expected_index_generation:
             raise KnowledgeOperationPlanConflictError(reason="knowledge_rebuild_command_expectations_required")
         admitted = get_knowledge_model_read_runtime_sync().require(
             space_id,
@@ -384,9 +434,14 @@ def _require_processing_model(
     return knowledge, admitted, scope
 
 
+@guarded_processing()
 def reset_processing_target(*, space_id: int, invoke_user_id: int, **expectations) -> bool:
     """Reset the original physical target before any file succeeds in this job."""
-    knowledge, _, scope = _require_processing_model(space_id, **expectations)
+    knowledge, admitted, scope = _require_processing_model(space_id, **expectations)
+    # New SPACE commands already probed before activating this model. The
+    # reset itself must also work when a provider goes down after confirmation.
+    if str(knowledge.model) != str(admitted.model_id):
+        _probe_embedding(knowledge, admitted.model_id, invoke_user_id)
     vector = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
         invoke_user_id=invoke_user_id,
         knowledge=knowledge,
@@ -400,6 +455,7 @@ def reset_processing_target(*, space_id: int, invoke_user_id: int, **expectation
     return True
 
 
+@guarded_processing(file_arg="file_id")
 def rebuild_processing_file(
     file_id: int,
     *,
@@ -468,6 +524,7 @@ def rebuild_knowledge_file_chunk(file_id: int):
         )
 
 
+@guarded_processing(space_arg="db_file.knowledge_id", file_arg="db_file.id")
 def _rebuild_knowledge_file_chunk(db_file: KnowledgeFile):
     db_knowledge = KnowledgeDao.query_by_id(db_file.knowledge_id)
     milvus_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(db_file.user_id, knowledge=db_knowledge)

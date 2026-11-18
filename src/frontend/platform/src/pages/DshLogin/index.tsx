@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button, Input } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 
@@ -93,7 +94,7 @@ export function DshLogin() {
                 ) : failed ? (
                     <p role="alert">{t("dsh.unavailable")}</p>
                 ) : !config ? (
-                    <p role="status">{t("dsh.loading")}</p>
+                    <LoadingState size="panel" label={t("dsh.loading")} />
                 ) : !config.enabled ? (
                     <p role="status">{t("dsh.disabled")}</p>
                 ) : (

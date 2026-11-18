@@ -2,9 +2,10 @@
 
 from copy import deepcopy
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import and_, delete, or_, select, update
+from sqlalchemy.orm import defer
 
-from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
+from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, KnowledgeProcessingObsoleteError
 from bisheng.common.models.space_channel_member import BusinessTypeEnum, SpaceChannelMember
 from bisheng.core.context.tenant import get_current_tenant_id, is_tenant_filter_bypassed, strict_tenant_filter
 from bisheng.knowledge.domain.models.knowledge import Knowledge
@@ -12,10 +13,13 @@ from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.models.knowledge_operation_plan import KnowledgeOperationPlan
+from bisheng.knowledge.domain.models.knowledge_processing_item import KnowledgeProcessingItem
+from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob
 from bisheng.knowledge.domain.models.knowledge_space_delete_job import KnowledgeSpaceDeleteJob, deletion_now
 from bisheng.knowledge.domain.models.knowledge_space_tag_library import KnowledgeSpaceTagLibrary
 from bisheng.knowledge.domain.repositories.model_reference_repository import KnowledgeModelReferenceRepository
 from bisheng.knowledge.domain.repositories.operation_plan_repository import OperationPlanRepository
+from bisheng.knowledge.domain.repositories.processing_job_repository import ProcessingJobRepository
 from bisheng.knowledge.domain.repositories.reference_target_repository import revision
 from bisheng.resource_reference.application.contracts import TransactionIdentity
 
@@ -132,6 +136,105 @@ class KnowledgeDeletionExecutionRepository:
         await session.flush()
         self.current(session, context)
         return job
+
+    async def arequire_transfer_idle(self, session, *, space_id):
+        from bisheng.common.errcode.knowledge import KnowledgeProcessingConflictError
+
+        context = self.context(session)
+        found = (
+            await session.execute(
+                select(KnowledgeProcessingJob.id)
+                .where(
+                    KnowledgeProcessingJob.tenant_id == context[0],
+                    KnowledgeProcessingJob.space_id == space_id,
+                    KnowledgeProcessingJob.kind.in_(("move_index", "space_copy")),
+                    or_(
+                        and_(KnowledgeProcessingJob.kind == "move_index", KnowledgeProcessingJob.state != "succeeded"),
+                        and_(
+                            KnowledgeProcessingJob.kind == "space_copy",
+                            KnowledgeProcessingJob.state.in_(("accepted", "running")),
+                        ),
+                    ),
+                )
+                .limit(1)
+            )
+        ).first()
+        self.current(session, context)
+        if found is not None:
+            raise KnowledgeProcessingConflictError(reason="space_transfer_input_required")
+
+    async def acancel_processing(self, session, *, plan, scope):
+        """Invalidate durable task leases with the deletion marker transaction.
+
+        Move/copy jobs are explicitly excluded and checked by the existing
+        source-input guard. No expiring lease is considered physical quiescence.
+        """
+        context = self.context(session)
+        jobs = (
+            (
+                await session.execute(
+                    select(KnowledgeProcessingJob)
+                    .options(defer(KnowledgeProcessingJob.scope_manifest, raiseload=True))
+                    .where(
+                        KnowledgeProcessingJob.tenant_id == context[0],
+                        KnowledgeProcessingJob.space_id == plan.space_id,
+                        KnowledgeProcessingJob.kind.notin_(("move_index", "space_copy")),
+                        KnowledgeProcessingJob.state.in_(("accepted", "running")),
+                    )
+                    .order_by(KnowledgeProcessingJob.id)
+                    .with_for_update()
+                )
+            )
+            .scalars()
+            .all()
+        )
+        selected = {row.id for row in scope.resources}
+        owner = ProcessingJobRepository()
+        for job in jobs:
+            if plan.operation != "knowledge_file_delete":
+                owner._obsolete(job, "resource_deleted")
+            else:
+                items = []
+                ids = sorted(selected)
+                for start in range(0, len(ids), 200):
+                    items.extend(
+                        (
+                            await session.execute(
+                                select(KnowledgeProcessingItem)
+                                .where(
+                                    KnowledgeProcessingItem.tenant_id == context[0],
+                                    KnowledgeProcessingItem.job_id == job.id,
+                                    KnowledgeProcessingItem.file_id.in_(ids[start : start + 200]),
+                                    KnowledgeProcessingItem.state.in_(("pending", "running")),
+                                )
+                                .with_for_update()
+                            )
+                        ).scalars()
+                    )
+                if not items:
+                    continue
+                for item in items:
+                    item.state, item.step = "failed", "resource_deleted"
+                    item.error_code = KnowledgeProcessingObsoleteError.Code
+                    item.lease_token = item.lease_until = None
+                    item.finished_at = item.update_time = owner._now()
+                    session.add(item)
+                await session.flush()
+                counts = await owner._state_counts(session, job.id)
+                if sum(counts.values()) != job.total_count:
+                    raise KnowledgeOperationPlanConflictError(reason="knowledge_delete_processing_scope_changed")
+                job.succeeded_count = counts.get("succeeded", 0)
+                job.failed_count = counts.get("failed", 0)
+                job.pending_count = job.total_count - job.succeeded_count - job.failed_count
+                # Resume unaffected items through the durable dispatcher; the
+                # old worker loses its lease and cannot acknowledge more IO.
+                job.lease_until = owner._now()
+                job.pending_dispatch = True
+                job.revision += 1
+            session.add(job)
+        await session.flush()
+        self.current(session, context)
+        return bool(jobs)
 
     @staticmethod
     def validate_job(job, plan):

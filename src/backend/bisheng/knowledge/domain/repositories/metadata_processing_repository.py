@@ -21,6 +21,7 @@ from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile
 from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob
+from bisheng.knowledge.domain.schemas.processing_diagnostics import file_processing_conflict, space_processing_conflict
 from bisheng.knowledge.domain.schemas.processing_job import ResourceVersionTarget
 
 
@@ -49,6 +50,7 @@ class MetadataScope:
     index_generation: str | None
     schema_fields: tuple[dict, ...] = field(repr=False)
     items: tuple[MetadataScopeItem, ...]
+    schema_only: bool = False
 
 
 class MetadataProcessingRepository:
@@ -79,7 +81,7 @@ class MetadataProcessingRepository:
     def _locked(query, for_update):
         return query.with_for_update() if for_update else query
 
-    async def aload_scope(self, session, space_id, *, for_update=False) -> MetadataScope:
+    async def aload_scope(self, session, space_id, *, for_update=False, schema_only=False) -> MetadataScope:
         tenant = self._context(session, space_id)
         if type(for_update) is not bool:
             raise TypeError("for_update must be explicit")
@@ -107,21 +109,39 @@ class MetadataProcessingRepository:
                 not isinstance(schema, list) or any(not isinstance(value, dict) for value in schema)
             ):
                 raise KnowledgeOperationPlanConflictError(reason="metadata_schema_invalid")
-            if (
+            if not schema_only and (
                 root["state"] in {KnowledgeState.COPYING.value, KnowledgeState.REBUILDING.value}
                 or root["model_transition"]
             ):
-                raise KnowledgeProcessingConflictError(reason="metadata_space_processing")
+                raise space_processing_conflict(
+                    "metadata_space_processing", state=root["state"], has_transition=bool(root["model_transition"])
+                )
             active_query = (
-                select(KnowledgeProcessingJob.id)
+                select(KnowledgeProcessingJob.kind)
                 .where(
                     KnowledgeProcessingJob.space_id == space_id,
                     KnowledgeProcessingJob.state.in_(("accepted", "running")),
                 )
                 .limit(1)
             )
-            if (await session.exec(self._locked(active_query, for_update))).first() is not None:
-                raise KnowledgeProcessingConflictError(reason="metadata_processing_conflict")
+            if schema_only:
+                active_query = active_query.where(KnowledgeProcessingJob.kind == "metadata_schema_change")
+            active_kind = (await session.exec(self._locked(active_query, for_update))).first()
+            if active_kind is not None:
+                raise KnowledgeProcessingConflictError(
+                    reason="metadata_processing_conflict", blocking_operation=active_kind
+                )
+            if schema_only:
+                return MetadataScope(
+                    tenant,
+                    space_id,
+                    root["metadata_schema_revision"],
+                    root["model_config_revision"],
+                    root["index_generation"],
+                    tuple(deepcopy(schema or [])),
+                    (),
+                    True,
+                )
             physical, document, version = (
                 KnowledgeFile.__table__,
                 KnowledgeDocument.__table__,
@@ -171,7 +191,7 @@ class MetadataProcessingRepository:
             ):
                 raise KnowledgeOperationPlanConflictError(reason="metadata_version_scope_incomplete")
             if raw["status"] not in {2, 3, 6, 7}:
-                raise KnowledgeProcessingConflictError(reason="metadata_file_processing")
+                raise file_processing_conflict("metadata_file_processing", raw["status"])
             seen_files.add(raw["id"])
             seen_versions.add(ver["id"])
             primary = primaries.setdefault(doc["id"], [])
@@ -226,6 +246,30 @@ class MetadataProcessingRepository:
             tuple(deepcopy(root["metadata_fields"] or [])),
             tuple(items),
         )
+
+    async def ahas_field_residue(self, session, space_id, names):
+        """Bounded scalar reads; reused legacy keys require the cleanup path."""
+        self._context(session, space_id)
+        after = 0
+        while True:
+            with session.no_autoflush, strict_tenant_filter():
+                rows = (
+                    await session.execute(
+                        select(KnowledgeFile.id, KnowledgeFile.user_metadata)
+                        .where(
+                            KnowledgeFile.knowledge_id == space_id,
+                            KnowledgeFile.file_type == FileType.FILE.value,
+                            KnowledgeFile.id > after,
+                        )
+                        .order_by(KnowledgeFile.id)
+                        .limit(200)
+                    )
+                ).all()
+            if any(isinstance(values, dict) and names.intersection(values) for _, values in rows):
+                return True
+            if len(rows) < 200:
+                return False
+            after = rows[-1][0]
 
     async def _assert_no_pending_scope_changes(self, session, scope):
         native = session.sync_session
@@ -371,9 +415,14 @@ class MetadataProcessingRepository:
 
     async def areplace_schema(self, session, scope: MetadataScope, *, after_schema: tuple[dict, ...]) -> MetadataScope:
         self._context(session, scope.space_id)
-        current = await self.aload_scope(session, scope.space_id, for_update=True)
+        current = await self.aload_scope(session, scope.space_id, for_update=True, schema_only=scope.schema_only)
         await self._assert_no_pending_scope_changes(session, current)
-        if current != scope:
+        comparable = (
+            replace(current, model_config_revision=scope.model_config_revision, index_generation=scope.index_generation)
+            if scope.schema_only
+            else current
+        )
+        if comparable != scope:
             raise KnowledgeOperationPlanConflictError(reason="metadata_scope_changed")
         fields = deepcopy(list(after_schema))
         query = (
@@ -383,8 +432,14 @@ class MetadataProcessingRepository:
                 Knowledge.tenant_id == scope.tenant_id,
                 Knowledge.type == KnowledgeTypeEnum.SPACE.value,
                 Knowledge.metadata_schema_revision == scope.schema_revision,
-                Knowledge.model_config_revision == scope.model_config_revision,
-                Knowledge.index_generation == scope.index_generation,
+                *(
+                    ()
+                    if scope.schema_only
+                    else (
+                        Knowledge.model_config_revision == scope.model_config_revision,
+                        Knowledge.index_generation == scope.index_generation,
+                    )
+                ),
             )
             .values(metadata_fields=fields, metadata_schema_revision=scope.schema_revision + 1)
             .execution_options(synchronize_session=False)

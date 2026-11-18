@@ -1,4 +1,6 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button, Input } from "@bisheng/ui";
+import { versionDialogStyles as styles } from "@bisheng/knowledge";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -186,11 +188,11 @@ export function SpaceVersionRelationPanel({
   const renderCandidate = (candidate: VersionDocumentCandidate) => (
     <li
       key={candidate.document_id}
-      className="flex items-center justify-between gap-2 border-b py-2"
+      className={`${styles.candidateCard} flex-wrap sm:flex-nowrap`}
     >
-      <div className="min-w-0">
-        <p className="truncate">{candidate.title}</p>
-        <p className="text-xs text-muted-foreground">
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-body font-medium text-text-1">{candidate.title}</p>
+        <p className={styles.fieldLabel}>
           {candidate.doc_code} · V{candidate.current_primary_version_no}
         </p>
       </div>
@@ -205,8 +207,8 @@ export function SpaceVersionRelationPanel({
           </Button>
         )}
         <Button
-          size="small"
-          variant="outlined"
+          size="medium"
+          variant="solid"
           disabled={disabled || busy || submitted}
           onClick={() => handleRelate(candidate)}
         >
@@ -216,11 +218,11 @@ export function SpaceVersionRelationPanel({
     </li>
   );
   return (
-    <section className="space-y-3 rounded-md border p-3">
-      <h3 className="font-medium">
+    <section className="space-y-3 rounded-lg border border-border-base bg-bg-page p-4">
+      <h3 className="text-body font-medium text-text-1">
         {t(mode === "merge" ? "versions.merge" : "versions.as_version")}
       </h3>
-      <p className="text-sm text-muted-foreground">
+      <p className="text-caption text-text-3">
         {t(mode === "merge" ? "versions.merge_hint" : "versions.link_hint")}
       </p>
       {submitted && (
@@ -228,7 +230,7 @@ export function SpaceVersionRelationPanel({
           {t("versions.uncertain")}
         </p>
       )}
-      <h4 className="text-sm">{t("versions.recommendations")}</h4>
+      <h4 className="text-body font-medium text-text-1">{t("versions.recommendations")}</h4>
       {recommendations.isError ? (
         <Button
           variant="outlined"
@@ -237,34 +239,35 @@ export function SpaceVersionRelationPanel({
           {t("retry")}
         </Button>
       ) : recommendations.isInitialLoading ? (
-        <p role="status">{t("loading")}</p>
+        <LoadingState label={t("loading")} className="min-h-32" />
       ) : (
-        <ul>
+        <ul className={`${styles.candidateList} rounded-md border border-border-base bg-fill-1 p-2`}>
           {recommendations.data?.length ? (
             recommendations.data.map((row) =>
               renderCandidate({ ...row, document_id: row.target_document_id }),
             )
           ) : (
-            <li className="text-sm text-muted-foreground">
+            <li className="flex min-h-14 items-center justify-center text-body text-text-3">
               {t("versions.no_candidates")}
             </li>
           )}
         </ul>
       )}
       <form
-        className="flex gap-2"
+        className="flex gap-2 border-t border-border-base pt-4"
         onSubmit={(event) => {
           event.preventDefault();
           setSearch(keyword.trim());
         }}
       >
         <Input
+          className="min-w-0"
           value={keyword}
           onChange={(event) => setKeyword(event.target.value)}
           placeholder={t("versions.search_placeholder")}
           aria-label={t("versions.search_placeholder")}
         />
-        <Button type="submit" variant="outlined">
+        <Button type="submit" variant="outlined" className="shrink-0">
           {t("versions.search")}
         </Button>
       </form>
@@ -274,10 +277,10 @@ export function SpaceVersionRelationPanel({
             {t("retry")}
           </Button>
         ) : results.isInitialLoading ? (
-          <p role="status">{t("loading")}</p>
+          <LoadingState label={t("loading")} className="min-h-32" />
         ) : (
           <>
-            <ul>
+            <ul className={styles.candidateList}>
               {results.data?.pages
                 .flatMap((page) => page.data)
                 .map(renderCandidate)}
@@ -299,7 +302,7 @@ export function SpaceVersionRelationPanel({
           </>
         ))}
       {preview && (
-        <section className="space-y-2 border-t pt-3">
+        <section className="space-y-2 border-t border-border-base pt-3">
           <div className="flex justify-between">
             <h4>{preview.title}</h4>
             <Button
@@ -310,7 +313,7 @@ export function SpaceVersionRelationPanel({
               {t("close", { ns: "bs" })}
             </Button>
           </div>
-          <Suspense fallback={<p role="status">{t("loading")}</p>}>
+          <Suspense fallback={<LoadingState label={t("loading")} className="min-h-32" />}>
             <PreviewFile
               file={{ id: preview.id, fileName: preview.title, fileType: "" }}
               rawFiles={[]}

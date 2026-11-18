@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button, toast } from '@bisheng/ui';
 
 
@@ -37,10 +38,7 @@ function CatalogState({ loading, error, onRetry }: CatalogStateProps) {
 
   if (loading) {
     return (
-      <div className="flex min-h-56 items-center justify-center gap-2 text-sm text-muted-foreground">
-        <Outlined.Refresh aria-hidden="true" className="size-4 animate-spin" />
-        {t("catalog.loading")}
-      </div>
+      <LoadingState label={t("catalog.loading")} className="flex min-h-56 items-center justify-center gap-2 text-sm text-muted-foreground" />
     );
   }
   if (error) {

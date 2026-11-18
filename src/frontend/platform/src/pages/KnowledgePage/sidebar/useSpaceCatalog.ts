@@ -13,12 +13,14 @@ export function useSpaceCatalog(
   scope: KnowledgeQueryScope,
   keyword: string,
   enabled: boolean,
+  hasAbnormal = false,
 ) {
   return useInfiniteQuery({
     queryKey: [
       ...knowledgeQueryKeys.scope(scope),
       "navigation-catalog",
       keyword,
+      hasAbnormal,
     ],
     queryFn: async ({
       pageParam,
@@ -32,6 +34,7 @@ export function useSpaceCatalog(
           page,
           page_size: 200,
           ...(keyword ? { keyword } : {}),
+          ...(hasAbnormal ? { has_abnormal: true } : {}),
         });
         if (result.total > page * 200 && !result.data.length)
           throw new Error("Invalid management space page");

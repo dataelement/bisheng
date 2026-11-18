@@ -560,7 +560,7 @@ class OpenTaskModeService:
 
         await cls.check_task_mode_access(principal)
         config = await WorkStationService.get_open_api_daily_config(login_user)
-        workbench = await LLMService.get_workbench_llm()
+        workbench = await LLMService.get_workbench_llm_candidates()
         default_model_id = getattr(workbench, "linsight_default_model_id", None)
         models = await cls.usable_models(config)
         allowed_models = {str(item.get("id")) for item in models}

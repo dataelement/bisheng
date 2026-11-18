@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { Outlined } from "bisheng-icons";
 import { getFileDownloadApi, getFilePreviewApi } from "~/api/knowledge";
+import { getMyResourcePermissions } from "~/api/permission";
 import type { KnowledgeFilePreview } from "~/api/knowledge";
 import { FileAiDock } from "~/pages/Subscription/AiChat/FileAiDock";
 import FilePreview from "./index";
@@ -64,7 +65,24 @@ export default function FilePreviewPage() {
     const [previewData, setPreviewData] = useState<KnowledgeFilePreview | null>(null);
     const [loading, setLoading] = useState(true);
     const [conversionFailed, setConversionFailed] = useState(false);
-    const canDownload = Boolean(fileId && spaceId);
+    const [canDownload, setCanDownload] = useState(false);
+    useEffect(() => {
+        if (!fileId) {
+            setCanDownload(false);
+            return;
+        }
+        let cancelled = false;
+        getMyResourcePermissions("knowledge_file", fileId)
+            .then((summary) => {
+                if (!cancelled) setCanDownload(summary.actions.includes("download"));
+            })
+            .catch(() => {
+                if (!cancelled) setCanDownload(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [fileId]);
 
     useEffect(() => {
         if (!fileId || !spaceId) { setLoading(false); return; }

@@ -17,6 +17,12 @@ model_owner_tenant = models.model_owner_tenant
 @pytest.fixture
 async def removal_session():
     engine = await models.async_database()
+    from bisheng.dsh.domain.models.unified_policy import ModelVisibility, UnifiedPolicyAudit
+    from bisheng.llm.domain.models.model_sharing_intent import ModelSharingInitialization, ModelSharingIntent
+
+    async with engine.begin() as connection:
+        for model in (ModelSharingIntent, ModelSharingInitialization, ModelVisibility, UnifiedPolicyAudit):
+            await connection.run_sync(lambda active, model=model: model.__table__.create(active, checkfirst=True))
     async with AsyncSession(engine, expire_on_commit=False) as session:
         session.add(LLMServer(id=4, tenant_id=101, name="another-own", type="openai"))
         session.add(LLMModel(id=44, server_id=4, tenant_id=101, model_name="another", model_type="llm"))

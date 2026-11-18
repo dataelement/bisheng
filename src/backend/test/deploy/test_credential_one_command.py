@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import secrets
 import shutil
 import subprocess
@@ -295,9 +296,8 @@ def test_unverified_es_source_stops_before_any_native_change(install, tmp_path):
     root, env, run, calls, _ = install
     old_key = Fernet.generate_key()
     fernet = Fernet(old_key)
-    source = yaml.safe_load(
-        (root / "docker/bisheng/config/config.yaml").read_text().replace("!env ${BISHENG_GATEWAY_HMAC_SECRET}", '""')
-    )
+    # The legacy container's config holds plain values; blank every shipped !env binding.
+    source = yaml.safe_load(re.sub(r"!env \$\{\w+\}", '""', (root / "docker/bisheng/config/config.yaml").read_text()))
     source["database_url"] = (
         "mysql+pymysql://root:" + fernet.encrypt(b"actual-old-password").decode() + "@mysql:3306/bisheng"
     )

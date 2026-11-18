@@ -1,5 +1,6 @@
 // @ts-strict-ignore
 import { useSelectLabels } from '@/components/bs-comp/formFields/useSelectLabels';
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState"
 import { Alert, Button, Select } from '@bisheng/ui';
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 
@@ -16,7 +17,6 @@ import {
   type ResourcePermissionContext,
 } from "@/controllers/API/permission"
 import {
-  Loader2,
   LockKeyhole,
   Search,
   Trash2,
@@ -353,13 +353,7 @@ export function PermissionListTab({
 
   if (loading) {
     return (
-      <div
-        className="flex min-h-40 items-center justify-center gap-2 text-sm text-muted-foreground"
-        role="status"
-      >
-        <Loader2 aria-hidden="true" className="size-4 animate-spin" />
-        {t("roster.loading")}
-      </div>
+      <LoadingState className="min-h-40" label={t("roster.loading")} />
     )
   }
 
@@ -413,8 +407,8 @@ export function PermissionListTab({
           </p>
         )}
         {hasMore && (
-          <Button type="button" variant="outlined" className="mx-auto mt-3 flex min-h-9" disabled={loadingMore} onClick={() => void handleLoadMore()} color="default">
-            {loadingMore ? t("roster.loadingMore") : t("roster.loadMore")}
+          <Button type="button" variant="outlined" className="mx-auto mt-3 flex min-h-9" loading={loadingMore} onClick={() => void handleLoadMore()} color="default">
+            {t("roster.loadMore")}
           </Button>
         )}
       </div>

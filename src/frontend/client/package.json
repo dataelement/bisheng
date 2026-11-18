@@ -34,6 +34,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@bisheng/identity": "workspace:*",
+    "@bisheng/knowledge": "workspace:*",
     "@hello-pangea/dnd": "catalog:",
     "@ariakit/react": "^0.4.15",
     "@ariakit/react-core": "^0.4.15",

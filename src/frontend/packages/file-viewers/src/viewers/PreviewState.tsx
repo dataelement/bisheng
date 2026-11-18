@@ -1,11 +1,14 @@
 import { useEffect, useRef } from 'react';
 import type { PreviewViewerProps } from '../viewerTypes';
+import { usePreviewLoadingRenderer } from '../PreviewLoading';
 export function usePreviewFailure(error: unknown, onError?: (error: unknown) => void) {
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
   useEffect(() => { if (error !== undefined) onErrorRef.current?.(error); }, [error]);
 }
 export function PreviewState({ loading, locale }: Pick<PreviewViewerProps, 'locale'> & { loading: boolean }) {
+  const renderLoading = usePreviewLoadingRenderer();
+  if (loading && renderLoading) return <div className="flex min-h-0 flex-1 items-center justify-center px-4">{renderLoading({ size: 'page', label: locale.loading })}</div>;
   return <div role={loading ? 'status' : 'alert'} className="flex min-h-0 flex-1 items-center justify-center px-4 text-sm text-text-3">{loading ? locale.loading : locale.failed}</div>;
 }
 export async function readPreview(url: string, signal: AbortSignal): Promise<Response> {

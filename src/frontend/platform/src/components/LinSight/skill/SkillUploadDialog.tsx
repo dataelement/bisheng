@@ -22,7 +22,6 @@ import { showSkillError } from "./skillErrors";
 const Check = Outlined.Check,
     FileText = Outlined.File,
     FileUp = Outlined.Upload,
-    Loader2 = Outlined.Loading,
     X = Outlined.Close;
 
 const ACCEPTED_SUFFIXES = [".md", ".zip", ".skill"];
@@ -309,16 +308,15 @@ export function SkillUploadDialog({ open, onOpenChange, onUploaded }: SkillUploa
                         {t("skillManage.form.cancel")}
                     </Button>
                     {mode === "file" ? (
-                        <Button onClick={handleUpload} disabled={!file || uploading}>
-                            {uploading && <Loader2 className="size-4 mr-1.5 animate-spin" />}
+                        <Button onClick={handleUpload} disabled={!file || uploading} loading={uploading}>
                             {t("skillManage.uploadDialog.confirm")}
                         </Button>
                     ) : (
                         <Button
                             onClick={() => handleRemoteImport(mode)}
                             disabled={(mode === "github" ? !githubUrlValid : !giteeUrlValid) || importing}
+                            loading={importing}
                         >
-                            {importing && <Loader2 className="size-4 mr-1.5 animate-spin" />}
                             {t("skillManage.uploadDialog.confirm")}
                         </Button>
                     )}

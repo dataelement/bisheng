@@ -1,6 +1,6 @@
 import { Button,Tag,Tooltip,type TagColor } from '@bisheng/ui'
 import { Outlined } from 'bisheng-icons'
-import { useMemo } from 'react'
+import { useMemo, type ReactElement } from 'react'
 import { useTranslation } from 'react-i18next'
 import { resolveKnowledgeParseFailure } from '../knowledgeParseFailureMessage'
 
@@ -18,9 +18,27 @@ interface StatusIndicatorProps {
     status: number
     remark?: string
     workspace?: boolean
+    badge?: ReactElement
 }
 
-export function StatusIndicator({ status, remark, workspace = false }: StatusIndicatorProps) {
+type Translate = (key: string, options?: Record<string, unknown>) => string
+
+// A failed parse is often stored as {"code": 10953} with no status_message.
+// That used to miss status_code and fall through to the generic operation
+// fallback ("try again later"), which does not say parsing failed or what to do.
+// 500 / 10952 / 10953 are the same generic failure; keep a specific catalog line
+// when the worker recorded one. Never surface the raw exception text.
+function knowledgeFileParseHint(obj: Record<string, unknown>, media: string | undefined, t: Translate): string {
+    const numeric = Number(obj.status_code ?? obj.code)
+    const guidance = t('api_errors:10953', { defaultValue: t('fileParseError', { ns: 'knowledge' }) })
+    if (!Number.isFinite(numeric) || numeric === 500 || numeric === 10952 || numeric === 10953) return guidance
+    const operationFallback = t('api_errors:fallback')
+    const serverError = t('api_errors:500')
+    if (media && media !== operationFallback && media !== serverError) return media
+    return t(`api_errors:${numeric}`, { defaultValue: guidance })
+}
+
+export function StatusIndicator({ status, remark, workspace = false, badge }: StatusIndicatorProps) {
     const { t } = useTranslation()
     const config = FILE_STATUSES[status]
     const reason = useMemo(() => {
@@ -40,9 +58,10 @@ export function StatusIndicator({ status, remark, workspace = false }: StatusInd
                     : t('sensitiveViolationMessage', { ns: 'knowledge' })
             }
             const media = resolveKnowledgeParseFailure(obj, t)
+            if (status === 3) return knowledgeFileParseHint(obj, media, t)
             if (media) return media
             const data = obj.data && typeof obj.data === 'object' && !Array.isArray(obj.data) ? obj.data : {}
-            return t(`api_errors:${obj.status_code}`, { ...data, defaultValue: String(obj.status_message || t('api_errors:fallback')) })
+            return t(`api_errors:${obj.status_code ?? obj.code}`, { ...data, defaultValue: String(obj.status_message || t('api_errors:fallback')) })
         } catch {
             return text
         }
@@ -51,13 +70,19 @@ export function StatusIndicator({ status, remark, workspace = false }: StatusInd
     const color = workspace && (status === 1 || status === 4 || status === 5) ? 'default' : config.color
     const labelKey = workspace && status === 3 ? 'workspace.status_failed'
         : workspace && status === 4 ? 'processing' : config.labelKey
-    const label = <Tag size="small" dot color={color} className="shrink-0 whitespace-nowrap">
+    const label = badge ?? <Tag size="small" dot color={color} className="shrink-0 whitespace-nowrap">
         {t(labelKey, { ns: 'knowledge' })}
     </Tag>
+    // A failed attempt does not delete the previous successful content, it only
+    // removes it from retrieval. Without this line the badge reads as "no content".
+    const outcomeNote = status === 3 ? t('f118.parse_failed_retains_content', { ns: 'knowledge' }) : ''
+    const withOutcomeNote = (text: string) => outcomeNote
+        ? <span>{text}<br />{outcomeNote}</span>
+        : text
     if (workspace) {
         const hint = status === 6 ? reason || t('timeoutTip', { ns: 'knowledge' }) : reason
         return hint && status !== 5 ? (
-            <Tooltip content={hint} side="top">
+            <Tooltip content={withOutcomeNote(hint)} side="top">
                 <span tabIndex={0} className="inline-flex shrink-0">{label}</span>
             </Tooltip>
         ) : label
@@ -66,7 +91,7 @@ export function StatusIndicator({ status, remark, workspace = false }: StatusInd
     const hint = status === 6 ? t('timeoutTip', { ns: 'knowledge' }) : status === 3 ? reason : ''
     return <span className="inline-flex items-center gap-1 whitespace-nowrap">
         {label}
-        {hint && <Tooltip content={hint}>
+        {hint && <Tooltip content={withOutcomeNote(hint)}>
             <Button type="button" size="small" variant="ghost" iconOnly color="danger" aria-label={hint}>
                 <Outlined.Attention />
             </Button>

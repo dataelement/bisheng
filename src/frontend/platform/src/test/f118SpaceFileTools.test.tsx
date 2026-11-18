@@ -4,20 +4,18 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { Button, Dropdown, DropdownItem } from "@bisheng/ui";
 import { SpaceFileTools } from "@/pages/KnowledgePage/components/SpaceFileTools";
-const mocks = vi.hoisted(() => ({ action: vi.fn(), summary: vi.fn() }));
+const mocks = vi.hoisted(() => ({ action: vi.fn(), summary: vi.fn(), navigate: vi.fn() }));
+vi.mock("react-router-dom", () => ({ useSearchParams: () => [new URLSearchParams("parent_id=9"), mocks.navigate] }));
 vi.mock("@/controllers/API/permission", () => ({
   checkResourceActionApi: mocks.action,
   getMyResourcePermissionsApi: mocks.summary,
 }));
 vi.mock("@/controllers/request", () => ({ showApiError: vi.fn() }));
-vi.mock("@/pages/KnowledgePage/components/SpaceProcessingDialog", () => ({
-  SpaceProcessingDialog: ({ open }: { open: boolean }) => (open ? <p>processing-open</p> : null),
-}));
 vi.mock("@/pages/KnowledgePage/components/SpaceIndexEditDialog", () => ({
   SpaceIndexEditDialog: () => null,
 }));
 const clients: QueryClient[] = [];
-function mount(status = 2, enabled = true) {
+function mount(status = 2, enabled = true, historyTrigger = false) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   clients.push(client);
   const element = (tenantId: number) => (
@@ -29,7 +27,7 @@ function mount(status = 2, enabled = true) {
         status={status}
         enabled={enabled}
       >
-        {(items) => <Dropdown menu={<><DropdownItem>rename</DropdownItem>{items}</>}>
+        {historyTrigger ? undefined : (items) => <Dropdown menu={<><DropdownItem>rename</DropdownItem>{items}</>}>
           <Button>more</Button>
         </Dropdown>}
       </SpaceFileTools>
@@ -89,12 +87,14 @@ it("does not revive an old edit response through tenant A-B-A", async () => {
   expect(screen.queryByRole("menuitem", { name: "f118.processing_title_file" })).not.toBeInTheDocument();
 });
 
-it("keeps the processing dialog open after its menu item closes the dropdown", async () => {
-  mount();
-  await waitFor(() => expect(mocks.action).toHaveBeenCalledOnce());
-  fireEvent.keyDown(screen.getByRole("button", { name: "more" }), { key: "ArrowDown" });
+it("opens the processing page and preserves the current folder when its menu closes", async () => {
+  mount(2, true, true);
+  const trigger = await screen.findByRole("button", { name: "f118.processing_title_file" });
+  fireEvent.keyDown(trigger, { key: "ArrowDown" });
   fireEvent.click(await screen.findByRole("menuitem", { name: "f118.processing_title_file" }));
-  await screen.findByText("processing-open");
+  expect(mocks.navigate).toHaveBeenCalledOnce();
+  expect(mocks.navigate.mock.calls[0][0].get("process_file_id")).toBe("81");
+  expect(mocks.navigate.mock.calls[0][0].get("parent_id")).toBe("9");
   expect(screen.queryByRole("menu")).not.toBeInTheDocument();
 });
 it.each([1, 4, 5])("retains disabled processing actions for file status %s", async status => {

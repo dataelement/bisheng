@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button } from "@bisheng/ui";
 import { Checkbox } from "@bisheng/ui";
 import {
@@ -19,7 +20,7 @@ import {
   ModelType,
   discoverModels,
 } from "@/controllers/API/modelDiscovery";
-import { Loader2, Plus, RefreshCw } from "lucide-react";
+import { Plus, RefreshCw } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -404,24 +405,17 @@ export function ModelDiscovery({
                   variant="text"
                   color="default"
                   disabled={loading}
+                  loading={loading}
+                  icon={<RefreshCw className="mr-1 size-3.5" />}
                   onClick={() => void handleFetch()}
                 >
-                  <RefreshCw
-                    className={`mr-1 size-3.5 ${loading ? "animate-spin" : ""}`}
-                  />
                   {t("model.refreshModels")}
                 </Button>
               </div>
             </div>
             <div className="min-h-40 max-h-[50vh] overflow-y-auto overscroll-contain rounded-md border divide-y">
               {loading && (
-                <div
-                  role="status"
-                  className="flex items-center justify-center gap-2 py-14 text-sm text-muted-foreground"
-                >
-                  <Loader2 className="size-4 animate-spin" />
-                  {t("model.fetchingModels")}
-                </div>
+                <LoadingState label={t("model.fetchingModels")} className="py-14" />
               )}
               {error && (
                 <div role="alert" className="p-6 text-sm text-destructive">

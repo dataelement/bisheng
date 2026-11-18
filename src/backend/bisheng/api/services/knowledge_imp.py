@@ -1,6 +1,7 @@
 import json
 import os
 import re
+from contextlib import nullcontext
 from typing import Any
 
 import aiofiles
@@ -38,9 +39,11 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     QAKnowledgeUpsert,
     QAStatus,
 )
+from bisheng.knowledge.domain.repositories.processing_fence_repository import ProcessingCancelled
 from bisheng.knowledge.domain.schemas.knowledge_rag_schema import QAKnowledgeMetadata
 from bisheng.knowledge.domain.services.knowledge_space_auto_tag_service import KnowledgeSpaceAutoTagService
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
+from bisheng.knowledge.domain.services.processing_write_guard import ProcessingWriteGuard
 from bisheng.knowledge.rag.knowledge_chunks_pipeline import KnowledgeChunksPipeline
 from bisheng.knowledge.rag.knowledge_file_pipeline import KnowledgeFilePipeline
 from bisheng.llm.domain.services import LLMService
@@ -95,17 +98,49 @@ def process_file_task(
             preview_cache_keys=preview_cache_keys,
             enable_auto_tags=enable_auto_tags,
         )
+    except ProcessingCancelled:
+        raise
     except Exception as e:
         logger.exception("process_file_task error")
         new_files = KnowledgeFileDao.select_list([file.id for file in db_files])
         new_files_map = {file.id: file for file in new_files}
         for file in db_files:
-            if new_files_map[file.id].status == KnowledgeFileStatus.PROCESSING.value:
+            current = new_files_map.get(file.id)
+            if current is not None and current.status == KnowledgeFileStatus.PROCESSING.value:
                 file.status = KnowledgeFileStatus.FAILED.value
                 file.remark = KnowledgeFileFailedError(exception=e).to_json_str()
-                KnowledgeFileDao.update(file)
+                if knowledge.type == KnowledgeTypeEnum.SPACE.value:
+                    ProcessingWriteGuard(knowledge.id, file.id).repository.persist_file(file)
+                else:
+                    KnowledgeFileDao.update(file)
         logger.info("update files failed status over")
         raise e
+
+
+def _save_violation_display(pipeline: KnowledgeFilePipeline, file_id: int, documents) -> None:
+    """Segment a rejected file for the detail page and keep it out of the index."""
+    try:
+        chunks = pipeline.segment_for_display(documents)
+        KnowledgeUtils.save_violation_display_chunks(file_id, chunks)
+    except Exception:
+        logger.opt(exception=True).warning("violation display segments unavailable file={}", file_id)
+        KnowledgeUtils.save_violation_display_chunks(file_id, [])
+
+
+def ensure_violation_display_chunks(db_file: KnowledgeFile) -> None:
+    """Build detail segments for a violation file that was rejected before this fix."""
+    if KnowledgeUtils.load_violation_display_chunks(db_file.id) is not None:
+        return
+    try:
+        pipeline = KnowledgeFilePipeline(
+            invoke_user_id=db_file.user_id or db_file.updater_id or 0,
+            db_file=db_file,
+            no_summary=True,
+        )
+        KnowledgeUtils.save_violation_display_chunks(db_file.id, pipeline.load_and_segment_for_display())
+    except Exception:
+        logger.opt(exception=True).warning("violation display segments unavailable file={}", db_file.id)
+        KnowledgeUtils.save_violation_display_chunks(db_file.id, [])
 
 
 def delete_vector_files(file_ids: list[int], knowledge: Knowledge) -> bool:
@@ -129,6 +164,7 @@ def delete_vector_files(file_ids: list[int], knowledge: Knowledge) -> bool:
         )
         logger.info(f"act=delete_es file_ids={file_ids} res={res}")
 
+    KnowledgeUtils.delete_violation_display_chunks(file_ids)
     return True
 
 
@@ -186,19 +222,21 @@ def addEmbedding(
     """Adding Files to Vector SumsesCunene"""
 
     knowledge_info = KnowledgeDao.query_by_id(knowledge_id)
-    logger.info("start init Milvus")
-    vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
-        knowledge_files[0].updater_id, knowledge=knowledge_info, metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA
-    )
-    vector_client = KnowledgeUtils.ensure_milvus_schema_ready(
-        invoke_user_id=knowledge_files[0].updater_id,
-        knowledge=knowledge_info,
-        vector_client=vector_client,
-    )
-    logger.info("start init ES")
-    es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(
-        knowledge=knowledge_info, metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA
-    )
+    space_guard = ProcessingWriteGuard(knowledge_id) if knowledge_info.type == KnowledgeTypeEnum.SPACE.value else None
+    with space_guard.write() if space_guard else nullcontext():
+        logger.info("start init Milvus")
+        vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
+            knowledge_files[0].updater_id, knowledge=knowledge_info, metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA
+        )
+        vector_client = KnowledgeUtils.ensure_milvus_schema_ready(
+            invoke_user_id=knowledge_files[0].updater_id,
+            knowledge=knowledge_info,
+            vector_client=vector_client,
+        )
+        logger.info("start init ES")
+        es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(
+            knowledge=knowledge_info, metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA
+        )
     for index, db_file in enumerate(knowledge_files):
         # Try to get chunks of a file from the cache
         db_file.parse_type = ParseType.UN_ETL4LM.value
@@ -206,7 +244,10 @@ def addEmbedding(
         if preview_cache_keys:
             preview_cache_key = preview_cache_keys[index] if index < len(preview_cache_keys) else None
         status = "failed"
+        guard = ProcessingWriteGuard(knowledge_id, db_file.id) if space_guard else None
         try:
+            if guard:
+                guard.checkpoint()
             logger.info(f"process_file_begin file_id={db_file.id} file_name={db_file.file_name}")
             knowledge_file_pipeline = KnowledgeFilePipeline(
                 invoke_user_id=db_file.user_id,
@@ -214,6 +255,7 @@ def addEmbedding(
                 preview_cache_key=preview_cache_key,
                 need_thumbnail=knowledge_info.type == KnowledgeTypeEnum.SPACE.value,
                 vector_store=[vector_client, es_client],
+                processing_guard=guard,
             )
             pipeline_result = knowledge_file_pipeline.run()
             # A parse that produced nothing is a FAILED parse, not a successful
@@ -226,6 +268,7 @@ def addEmbedding(
             if not pipeline_result.documents:
                 raise KnowledgeFileEmptyError()
             db_file.status = KnowledgeFileStatus.SUCCESS.value
+            KnowledgeUtils.delete_violation_display_chunks([db_file.id])
 
             # TODO[plan-3-async]: trigger SimHash similar-scan after successful parse.
             # addEmbedding runs in a sync Celery worker; async scan is deferred to a
@@ -285,12 +328,16 @@ def addEmbedding(
                 logger.opt(exception=True).warning("similar scan (sync) failed")
 
             if enable_auto_tags:
-                KnowledgeSpaceAutoTagService.apply_after_upload_parse(
-                    knowledge=knowledge_info,
-                    db_file=db_file,
-                    documents=pipeline_result.documents,
-                )
+                with guard.write() if guard else nullcontext():
+                    KnowledgeSpaceAutoTagService.apply_after_upload_parse(
+                        knowledge=knowledge_info,
+                        db_file=db_file,
+                        documents=pipeline_result.documents,
+                    )
             status = "success"
+        except ProcessingCancelled:
+            logger.info("File processing cancelled by deletion file={}", db_file.id)
+            raise
         except EtlException as e:
             logger.exception(f"process_file_fail file_id={db_file.id} file_name={db_file.file_name}")
             db_file.parse_type = ParseType.ETL4LM.value
@@ -302,6 +349,7 @@ def addEmbedding(
             status = "parse_failed"
         except ContentSafetyViolation as e:
             logger.warning(f"process_file_sensitive_violation file_id={db_file.id} file_name={db_file.file_name}")
+            _save_violation_display(knowledge_file_pipeline, db_file.id, e.documents)
             db_file.status = KnowledgeFileStatus.VIOLATION.value
             db_file.remark = json.dumps(e.to_remark(), ensure_ascii=False)
             status = "failed"
@@ -316,7 +364,12 @@ def addEmbedding(
             status = "failed"
         finally:
             logger.info(f"process_file_end file_id={db_file.id} file_name={db_file.file_name}")
-            KnowledgeFileDao.update(db_file)
+            if guard:
+                # Update the existing row only; a stale detached model must
+                # never be merged back into a row removed by deletion.
+                guard.repository.persist_file(db_file)
+            else:
+                KnowledgeFileDao.update(db_file)
             telemetry_service.log_event_sync(
                 user_id=db_file.user_id,
                 event_type=BaseTelemetryTypeEnum.FILE_PARSE,

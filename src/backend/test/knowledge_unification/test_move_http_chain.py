@@ -290,6 +290,31 @@ async def test_existing_beat_recovers_move_broker_failure_and_preserves_real_tas
         assert job.pending_dispatch and job.dispatch_attempts == 2
 
 
+async def test_another_editor_sees_the_source_move_that_still_locks_reparse(application, monkeypatch):
+    from bisheng.knowledge.application import processing_identity
+    from bisheng.permission.application.identity import PermissionActor
+
+    app = application
+    other = base.user(ident=8)
+    module = importlib.import_module("bisheng.knowledge.application.move_processing_access")
+    access = module.MoveProcessingAccess(app.owner)
+
+    async def resolve(reference):
+        assert reference["user_id"] == 8
+        return other
+
+    async def visible(identity, **kwargs):
+        return {str(value): ("visible",) for value in kwargs["resource_ids"]}
+
+    monkeypatch.setattr(processing_identity, "resolve_web_runtime_identity", resolve)
+    monkeypatch.setattr(module, "batch_check_business_actions", visible)
+    with request_context(PermissionActor(user_id=8, tenant_id=101)):
+        source = await access.alist(10, identity=other)
+        destination = await access.alist(11, identity=other)
+    assert source.total == 1 and source.data[0].id == app.built.job_id
+    assert destination.total == 0 and destination.data == []
+
+
 async def test_current_upload_denial_hides_candidate_and_invisible_details_are_trimmed(application, monkeypatch):
     from bisheng.common.errcode.permission import PermissionDeniedError
     from bisheng.knowledge.application import move_processing_admission as admission

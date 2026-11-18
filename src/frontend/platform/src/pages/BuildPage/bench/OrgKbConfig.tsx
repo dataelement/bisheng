@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Alert, Button, SearchInput } from '@bisheng/ui';
 import { isApiError } from '@bisheng/api-client';
 
@@ -211,7 +212,7 @@ export default function OrgKbConfig({ orgKbs, onChange }: Props) {
                         actions={[{ label: t('build.retry'), onClick: candidates.retry }]} />}
                     <div className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-2" style={{ maxHeight: 360 }}>
                         {loading && (
-                            <div className="py-8 text-center text-sm text-muted-foreground">{t("bench.loading")}</div>
+                            <LoadingState size="panel" label={t("bench.loading")} className="py-8 text-center text-sm text-muted-foreground" />
                         )}
                         {!loading && !loadError && filteredList.length === 0 && (
                             <div className="py-8 text-center text-sm text-muted-foreground">

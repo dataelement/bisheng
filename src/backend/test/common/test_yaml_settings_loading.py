@@ -118,3 +118,45 @@ def test_invalid_yaml_still_blocks_startup(tmp_path, loader):
 
     with pytest.raises(CredentialConfigurationError, match="invalid or unreadable YAML"):
         service.load_settings_from_yaml(path)
+
+
+@pytest.mark.parametrize(
+    "document,enabled",
+    [
+        ("bs_client: {}", True),
+        ("dsh: {enabled: false}", False),
+        ("bs_client: {}\ndsh: {enabled: false, obsolete: true}", True),
+    ],
+)
+def test_client_keys_survive_yaml_filter(tmp_path, loader, document, enabled):
+    """覆盖 AC: AC-06, AC-08."""
+    service, logger = loader
+    loaded = service.load_settings_from_yaml(_config(tmp_path, document + "\n"))
+    assert loaded.bs_client.enabled is enabled
+    logger.warning.assert_not_called()
+
+
+def test_shipped_compose_settings_connect_runtime_and_client(tmp_path, monkeypatch, loader):
+    """覆盖 AC: AC-01, AC-04 — load the actual shipped YAML and its env bindings."""
+    import re
+
+    service, _ = loader
+    path = Path(__file__).resolve().parents[4] / "docker/bisheng/config/config.yaml"
+    root = Path(__file__).resolve().parents[4]
+    environment = yaml.safe_load((root / "docker/docker-compose.yml").read_text())["services"]["backend"]["environment"]
+    for variable in re.findall(r"!env \$\{([^}]+)\}", path.read_text()):
+        raw = str(environment.get(variable, "test-deployment-value"))
+        monkeypatch.setenv(variable, "test-deployment-value" if "${" in raw else raw)
+    # The installer renders object_storage credentials from the credential bundle;
+    # the shipped template leaves them empty on purpose. This test covers only the
+    # runtime and client bindings, so drop that top-level block from a copy.
+    text = re.sub(r"(?ms)^object_storage:\n.*?(?=^\S)", "", path.read_text())
+    rendered = tmp_path / "config.yaml"
+    rendered.write_text(text)
+    loaded = service.load_settings_from_yaml(str(rendered))
+    assert loaded.bs_client.enabled and loaded.bs_client.platform_public_url is None
+    assert loaded.app_runtime.enabled
+    assert loaded.app_runtime.manager_base_url == "http://runtime-manager:8091"
+    assert loaded.app_runtime.manager_hmac_secret == "test-deployment-value"
+    assert loaded.app_runtime.proxy_hmac_secret == "test-deployment-value"
+    assert loaded.app_runtime.obo_secret == "test-deployment-value"

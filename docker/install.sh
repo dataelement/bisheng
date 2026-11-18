@@ -87,6 +87,19 @@ if [[ -n "$FT_CHOICE" ]]; then
   profiles="$(env_get "$ENV_FILE" COMPOSE_PROFILES)"
   env_set "$ENV_FILE" COMPOSE_PROFILES "$(set_optional_profile "$profiles" "$FT_CHOICE" ft)"
 fi
+# Runtime identities are installation-specific and stable across retries/upgrades.
+case ",$(env_get "$ENV_FILE" COMPOSE_PROFILES)," in
+  *,app-runtime,*)
+    for key in BISHENG_RUNTIME_MANAGER_SECRET BISHENG_RUNTIME_CONTROL_SECRET BISHENG_RUNTIME_ENTRY_SECRET BISHENG_RUNTIME_EGRESS_SECRET BISHENG_APP_PROXY_HMAC_SECRET BISHENG_APP_OBO_SECRET BISHENG_RUNTIME_HOST_ISOLATION_SECRET; do
+      if [[ -z "$(env_get "$ENV_FILE" "$key")" ]]; then
+        env_set "$ENV_FILE" "$key" "$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
+      fi
+    done
+    if [[ -z "$(env_get "$ENV_FILE" BISHENG_RUNTIME_PAYLOAD_KEY)" ]]; then
+      env_set "$ENV_FILE" BISHENG_RUNTIME_PAYLOAD_KEY "$(head -c 32 /dev/urandom | base64 | tr '+/' '-_' | tr -d '\r\n')"
+    fi
+    ;;
+esac
 # Existing advanced path options stay compatible; normal deployment needs none.
 BUNDLE=${BUNDLE:-$(env_get "$ENV_FILE" BISHENG_CREDENTIALS_DIR)}
 KEY_FILE=${KEY_FILE:-$(env_get "$ENV_FILE" BISHENG_SECRET_KEYS_FILE)}

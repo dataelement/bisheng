@@ -195,6 +195,66 @@ async def test_original_knowledge_auth_filter_still_excludes_unauthorized_target
     module.MilvusFactory.init_vectorstore.assert_not_called()
 
 
+async def test_stored_chunk_index_opens_when_saved_model_is_legacy_missing(rag):
+    from bisheng.resource_reference.application.contracts import LegacyEvidence
+    from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
+
+    context, stale = rag
+    runtime = module.get_knowledge_model_read_runtime_sync()
+
+    class Evidence:
+        def resolve(self, session, scope, key, *, run_id, evidence_key, identity):
+            return LegacyEvidence(run_id, "a" * 64, evidence_key)
+
+        async def aresolve(self, session, scope, key, *, run_id, evidence_key, identity):
+            return self.resolve(session, scope, key, run_id=run_id, evidence_key=evidence_key, identity=identity)
+
+    runtime.core.target_owners["model"].legacy_evidence = Evidence()
+    async with context.sessions() as session, session.begin():
+        updated = await session.execute(
+            sa.update(BusinessResourceReference)
+            .where(
+                BusinessResourceReference.source_type == "knowledge",
+                BusinessResourceReference.source_id == "40",
+                BusinessResourceReference.slot_key == "model",
+            )
+            .values(
+                target_tenant_id=None,
+                legacy_invalid_reason="target_missing",
+                legacy_run_id="r",
+                legacy_evidence_key="proof",
+            )
+        )
+        assert updated.rowcount == 1
+        await session.execute(sa.delete(LLMModel).where(LLMModel.id == 11, LLMModel.tenant_id == 101))
+    with pytest.raises(ResourceReferenceInvalidError):
+        await asyncio.to_thread(
+            KnowledgeRag.init_knowledge_es_vectorstore_sync, knowledge=stale, login_user=context.user
+        )
+    _store, index_name = await asyncio.to_thread(
+        KnowledgeRag.open_stored_chunk_index_sync, stale, login_user=context.user
+    )
+    assert index_name == "actual_index"
+    assert module.ElasticsearchFactory.init_vectorstore_sync.call_args.args[0] == "actual_index"
+    module.ElasticsearchFactory.init_vectorstore.assert_not_called()
+
+
+async def test_stored_chunk_index_uses_collection_name_when_legacy_index_name_is_empty(rag):
+    context, stale = rag
+    async with context.sessions() as session, session.begin():
+        await session.execute(
+            sa.update(Knowledge)
+            .where(Knowledge.id == 40, Knowledge.tenant_id == 101)
+            .values(index_name=None, collection_name="legacy_collection")
+        )
+    _store, index_name = await asyncio.to_thread(
+        KnowledgeRag.open_stored_chunk_index_sync, stale, login_user=context.user
+    )
+    assert index_name == "legacy_collection"
+    assert module.ElasticsearchFactory.init_vectorstore_sync.call_args.args[0] == "legacy_collection"
+    module.ElasticsearchFactory.init_vectorstore.assert_not_called()
+
+
 @pytest.mark.parametrize("native", [False, True])
 async def test_keyword_only_current_retrieval_cannot_bypass_invalid_pending_model(rag, native):
     context, stale = rag

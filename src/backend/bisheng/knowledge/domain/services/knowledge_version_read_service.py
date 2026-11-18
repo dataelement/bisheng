@@ -227,6 +227,86 @@ class KnowledgeVersionReadService:
             for score, fact in scored
         ]
 
+    async def list_pending_similar(self, knowledge_id: int, *, threshold: float, limit: int = 3) -> list:
+        """Count each pending file's top matches from one candidate read.
+
+        Multi-version documents are omitted. A pending file the caller cannot
+        see rejects the whole list, matching the per-file anchor check.
+        """
+
+        from types import SimpleNamespace
+
+        from bisheng.common.utils.simhash_utils import similarity
+        from bisheng.knowledge.domain.schemas.knowledge_version_schema import PendingSimilarFileEntry
+
+        if type(limit) is not int or limit < 1:
+            return []
+        context = await self._context()
+        tenant_id = context[1]
+        pending = await self.repository.alist_pending_similar_files(tenant_id=tenant_id, space_id=knowledge_id)
+        if not pending:
+            return []
+        chains = await self.repository.alist_version_chains(
+            tenant_id=tenant_id, space_id=knowledge_id, file_ids=[row.id for row in pending]
+        )
+        kept = []
+        for row in pending:
+            versions = chains.get(row.id, ())
+            if len(versions) != 1:
+                raise SpaceFileNotFoundError()
+            if versions[0].chain_length >= 2:
+                continue
+            kept.append((row, versions[0]))
+        if not kept:
+            return []
+        space = await self.repository.aget_space(tenant_id=tenant_id, space_id=knowledge_id)
+        if space is None:
+            raise SpaceFileNotFoundError()
+        facts = []
+        if any(row.simhash for row, _ in kept):
+            after = None
+            while True:
+                batch = await self.repository.alist_candidates(
+                    tenant_id=tenant_id, space_id=knowledge_id, after_document_id=after, limit=100
+                )
+                facts.extend(batch.data)
+                if not batch.has_more:
+                    break
+                after = batch.next_after
+        eligible = [
+            fact for fact in facts if fact.file.status == KnowledgeFileStatus.SUCCESS.value and fact.file.simhash
+        ]
+        by_id = {row.id: row for row, _ in kept}
+        for fact in eligible:
+            by_id.setdefault(fact.file.id, fact.file)
+        visible = await self._visible(SimpleNamespace(space=space), list(by_id.values()), context)
+        pool = [fact for fact in eligible if fact.file.id in visible]
+        entries = []
+        for row, chain in kept:
+            if row.id not in visible:
+                raise PermissionDeniedError()
+            scored = []
+            if row.simhash:
+                for fact in pool:
+                    if fact.document.id == chain.document_id:
+                        continue
+                    score = similarity(row.simhash, fact.file.simhash)
+                    if score >= threshold:
+                        scored.append((score, fact.file.id))
+                scored.sort(key=lambda item: (-item[0], item[1]))
+                del scored[limit:]
+            entries.append(
+                PendingSimilarFileEntry(
+                    knowledge_file_id=row.id,
+                    file_name=row.file_name,
+                    file_code=row.file_encoding,
+                    candidate_count=len(scored),
+                    current_primary_version_no=chain.version_no,
+                    primary_uploader_name=row.user_name,
+                )
+            )
+        return entries
+
     async def _search(self, knowledge_id, keyword, current_file_id, *, source_only=False, page_size=None, cursor=None):
         if page_size is not None and (type(page_size) is not int or not 1 <= page_size <= 200):
             raise ValueError("candidate page sizes contain 1..200 rows")

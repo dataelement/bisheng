@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { useContext, useState } from 'react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { format, subDays } from 'date-fns'
@@ -40,7 +41,7 @@ export function CandidateFilter({ kind, dimension, filters, scopeKey, value, onC
   const empty = query.isError ? t('f115.audit.candidatesFailed')
     : dimension === 'visitor' ? t('f115.audit.noVisitors') : t('f115.audit.noCandidates')
   return <div><Select {...labels} allowClear showSearch onSearch={setSearch} loading={query.isInitialLoading} loadingMore={query.isFetchingNextPage} onLoadMore={() => { if (query.hasNextPage && !query.isFetchingNextPage) void query.fetchNextPage() }}
-    emptyText={empty} noMatchText={query.isError ? empty : t('f115.audit.noMatches')} loadingText={t('f115.audit.loading')}
+    emptyText={empty} noMatchText={query.isError ? empty : t('f115.audit.noMatches')}
     placeholder={t(`log.runtime.${dimension}`)} aria-label={t(`log.runtime.${dimension}`)} value={value ?? null}
     options={(query.data?.pages.flatMap(page => page.items) ?? []).filter(item => item.id != null && item.id !== '').map(item => ({ value: item.id, label: item.label }))}
     onChange={next => onChange(next == null ? undefined : String(next))} />{query.isError && <div role="alert">{t('f115.audit.candidatesFailed')} <Button size="small" onClick={() => void query.refetch()}>{t('f115.audit.retry')}</Button></div>}</div>
@@ -160,7 +161,7 @@ function RuntimeAuditRecords({ kind, tenantId, scopeKey, onResetTenant }: Record
         </div>
       </div>
       {query.isError ? <div role="alert">{t('log.runtime.loadFailed')} <Button onClick={() => void query.refetch()}>{t('log.runtime.refresh')}</Button></div>
-        : query.isInitialLoading ? <p role="status">{t('log.runtime.loading')}</p>
+        : query.isInitialLoading ? <LoadingState size="panel" label={t('log.runtime.loading')} />
           : <>
             <Table containerClassName={query.data?.items.length ? 'min-h-0 flex-1' : 'shrink-0'}>
               <TableHeader className="sticky top-0 z-10 bg-background-main">
@@ -209,7 +210,7 @@ export function RuntimeAuditPanel({ kind }: RuntimeAuditPanelProps) {
   const tenants = useQuery({ queryKey: ['runtime-audit-tenants'], queryFn: () => getTenantsApi({ page: 1, page_size: 100 }), enabled: superAdmin && !!appConfig.multiTenantEnabled, retry: false })
   const effectiveTenant = scope.scope_tenant_id ?? tenantId
   const scopeKey = JSON.stringify([user?.user_id, scope.scope_tenant_id, effectiveTenant])
-  if (loading) return <p role="status">{t('log.runtime.loading')}</p>
+  if (loading) return <LoadingState size="panel" label={t('log.runtime.loading')} />
   return <div className="flex h-full min-h-0 flex-1 flex-col gap-4 px-2 pt-2">
     {superAdmin && appConfig.multiTenantEnabled && scope.scope_tenant_id == null && <div className={`${styles.tenantFilter} shrink-0`}>
       <Select {...labels} allowClear placeholder={t('log.runtime.allTenants')} aria-label={t('log.runtime.tenant')} value={tenantId ?? null} options={(tenants.data?.data ?? []).filter(item => item.id != null).map(item => ({ value: item.id, label: item.tenant_name }))} onChange={value => setTenantId(value == null ? undefined : Number(value))} />

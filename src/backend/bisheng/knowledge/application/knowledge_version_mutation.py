@@ -1,8 +1,4 @@
-"""One short transaction for the original link, merge and primary use cases.
-
-The existing login/feature/business qualification is preserved. This adds no
-permission action and performs no object, provider, queue or audit I/O.
-"""
+"""Authorize version mutations before taking their short SQL write locks."""
 
 from contextlib import asynccontextmanager
 from weakref import WeakSet
@@ -31,6 +27,7 @@ from bisheng.knowledge.domain.repositories.knowledge_version_mutation_repository
 )
 from bisheng.knowledge.domain.services.knowledge_processing_guard import require_space_processing_idle
 from bisheng.open_api.domain.context import get_current_open_api_principal
+from bisheng.permission.application.business_authorization import require_business_action
 from bisheng.permission.application.identity import get_current_permission_actor
 
 
@@ -79,7 +76,7 @@ class KnowledgeVersionMutationApplication:
             _blocked("identity_scope_changed")
 
     @asynccontextmanager
-    async def _transaction(self):
+    async def _transaction(self, *, read_only=False):
         original = None
         try:
             async with self.sessions() as session:
@@ -90,6 +87,8 @@ class KnowledgeVersionMutationApplication:
                     async with session.begin():
                         try:
                             yield session
+                            if read_only:
+                                await session.rollback()
                         except BaseException as error:
                             original = error
                             raise
@@ -111,6 +110,18 @@ class KnowledgeVersionMutationApplication:
         identity = _identity(user)
         await self.enabled()  # The original feature/config I/O precedes SQL locks.
         self._current(user, identity)
+        async with self._transaction(read_only=True) as session:
+            space = await self.repository.aread_authorization_space(session, operation=operation, inputs=inputs)
+            self._current(user, identity)
+        self._current(user, identity)
+        if space is None:
+            if operation == "primary":
+                raise HTTPException(status_code=404, detail="version not found")
+            raise VersionLinkSourceFileMissingError()
+        # The read transaction is closed before the unified permission runtime
+        # performs external I/O. No caller-supplied space ID grants admission.
+        await require_business_action(user, resource_type="knowledge_space", resource_id=space.id, action="edit")
+        self._current(user, identity)
         async with self._transaction() as session:
             self._current(user, identity)
             if operation == "link":
@@ -123,6 +134,8 @@ class KnowledgeVersionMutationApplication:
                 state = await self.repository.alock_primary_state(session, **inputs)
                 self._primary(state)
             self._current(user, identity)
+            if state.space is None or (state.space.id, state.space.tenant_id) != (space.id, space.tenant_id):
+                _blocked("authorized_space_changed")
             require_space_processing_idle(
                 state.space,
                 operation={"link": "link_version", "merge": "merge_versions", "primary": "set_primary_version"}[

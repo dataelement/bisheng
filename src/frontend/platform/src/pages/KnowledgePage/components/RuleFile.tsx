@@ -308,7 +308,11 @@ export default function RuleFile({
                                     </div>
                                 </div>
                                 <div className="pt-2">
-                                    <FileUploadSplitStrategy data={strategies} onChange={handleStrategiesChange} />
+                                    <FileUploadSplitStrategy
+                                        data={strategies}
+                                        onChange={handleStrategiesChange}
+                                        compact={showPreview}
+                                    />
                                 </div>
                             </div>
                         )}

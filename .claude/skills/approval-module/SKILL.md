@@ -99,7 +99,7 @@ ApprovalCenterService.decide_task()
 
 ---
 
-**申请人角色条件（F009）**：`_get_user_role_labels` 的 `role_{id}` 来自 `role/application/effective_roles.py`，按申请人真实H和有效部门作用域过滤；跨租户兼属与管理M不授予普通角色。平台超管、租户管理员、部门管理员身份标签独立读取；必要政策/身份查询失败会拒绝路由匹配，不回退普通用户免审。验证：`test/approval/test_managed_tenant_labels.py`。
+**申请人角色条件（F009）**：`_get_user_role_labels` 的 `role_{id}` 来自 `role/application/effective_roles.py`，按用户仍存在的原普通绑定读取，与v3.0.0一致，不以绑定存储租户、定义类型/归属或部门范围作既有角色过滤；真实H仍校验并决定执行租户，跨租户兼属与管理M不新授予普通角色。平台超管、租户管理员、部门管理员身份标签独立读取；必要政策/身份查询失败会拒绝路由匹配，不回退普通用户免审。验证：`test/approval/test_managed_tenant_labels.py`。
 
 ## 3. 代码锚点
 

@@ -1,4 +1,6 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { useState } from "react";
+import { KnowledgeDeletionItems, KnowledgeReferenceTables } from "@bisheng/knowledge";
 import { Button, Checkbox } from "@bisheng/ui";
 import {
   Dialog,
@@ -26,10 +28,6 @@ export function KnowledgeDeletionDialog({ operation }: KnowledgeDeletionDialogPr
   const danger = consent.plan === plan && consent.danger;
   const impact = view.result?.impact ?? view.inspection;
   const complete = view.result?.check_complete ?? view.inspection?.check_complete;
-  const visibleCounts = (counts: Record<string, number>) =>
-    Object.entries(counts).filter(([kind]) =>
-      view.readonly || view.command.kind !== "delete" || !["knowledge", "model_default"].includes(kind),
-    );
   const locked = view.busy || view.dispatched;
   const needsSkip = !!view.result?.requires_skip_confirmation;
   const executable =
@@ -38,21 +36,6 @@ export function KnowledgeDeletionDialog({ operation }: KnowledgeDeletionDialogPr
     !view.stale &&
     (!needsSkip || skip) &&
     (!view.force || danger);
-  const sourceKinds = new Set([
-    "workflow_version",
-    "assistant",
-    "hosted_app_version",
-    "channel_sync",
-    "knowledge",
-    "model_default",
-  ]);
-  const kindLabel = (kind: string) => tr(sourceKinds.has(kind) ? `source_${kind}` : "source_other");
-  const reasonLabel = (reason: string) =>
-    tr(
-      ["not_found", "type_mismatch", "referenced", "processing", "no_permission"].includes(reason)
-        ? `reason_${reason}`
-        : "reason_other",
-    );
   return (
     <Dialog
       open
@@ -61,7 +44,7 @@ export function KnowledgeDeletionDialog({ operation }: KnowledgeDeletionDialogPr
       }}
     >
       <DialogContent
-        className="max-w-2xl"
+        className="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-2xl grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)_auto] px-4 sm:px-5"
         aria-describedby={undefined}
         onPointerDownOutside={(event) => {
           if (locked) event.preventDefault();
@@ -83,11 +66,13 @@ export function KnowledgeDeletionDialog({ operation }: KnowledgeDeletionDialogPr
             )}
           </DialogTitle>
         </DialogHeader>
-        <div className="max-h-[60vh] overflow-y-auto space-y-4 text-body-sm">
-          {view.busy && <p role="status">{tr("checking")}</p>}
+        <div className="min-h-0 min-w-0 max-h-[60vh] overflow-y-auto space-y-4 text-body-sm">
+          {view.busy && <LoadingState label={tr("checking")} className="min-h-32" />}
           {(view.error || view.code) && (
             <p role="alert">
-              {view.code === 10994
+              {view.code === 10999 && view.reason === "source_space_move_input_required"
+                ? tr("source_tasks_block_delete")
+                : view.code === 10994
                 ? tr("unavailable")
                 : view.stale
                   ? tr("changed")
@@ -101,29 +86,11 @@ export function KnowledgeDeletionDialog({ operation }: KnowledgeDeletionDialogPr
               <p>
                 {tr("item_count")} {view.result.impact.file_count}
               </p>
-              {!!view.result.valid_items.length && (
-                <div>
-                  <p>{tr("valid_items")}</p>
-                  <ul>
-                    {view.result.valid_items.map((item, index) => (
-                      <li key={index}>{item.name || tr("unnamed")}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {!!view.result.invalid_items.length && (
-                <div>
-                  <p>{tr("invalid_items")}</p>
-                  <ul>
-                    {view.result.invalid_items.map((item, index) => (
-                      <li key={index}>
-                        {item.name ? `${item.name}: ` : ""}
-                        {reasonLabel(item.reason)}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              <KnowledgeDeletionItems
+                validItems={view.result.valid_items}
+                invalidItems={view.result.invalid_items}
+                translate={tr}
+              />
               {needsSkip && (
                 <Checkbox
                   disabled={locked}
@@ -149,71 +116,14 @@ export function KnowledgeDeletionDialog({ operation }: KnowledgeDeletionDialogPr
               )}
             </>
           )}
-          {impact && (
-            <>
-              <div>
-                <p>{tr("source_counts")}</p>
-                {visibleCounts(impact.source_counts).map(([kind, count]) => (
-                  <p key={kind}>
-                    {kindLabel(kind)}: {count}
-                  </p>
-                ))}
-              </div>
-              <div>
-                <p>{tr("restricted")}</p>
-                {visibleCounts(impact.restricted_counts).map(([kind, count]) => (
-                  <p key={kind}>
-                    {kindLabel(kind)}: {count}
-                  </p>
-                ))}
-              </div>
-              {view.readonly && view.inspection && (
-                <div>
-                  <p>{tr("slot_counts")}</p>
-                  {Object.entries(view.inspection.slot_counts).map(([kind, count]) => (
-                    <p key={kind}>
-                      {kindLabel(kind)}: {count}
-                    </p>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-          {!!view.page?.data.length && (
-            <ul className="space-y-2">
-              {view.page.data.map((row, index) => {
-                const { disclosure } = row;
-                const entry = disclosure.entry;
-                const safe =
-                  entry &&
-                  (/^https?:\/\//i.test(entry) ||
-                    (entry.startsWith("/") && !entry.startsWith("//")));
-                return (
-                  <li key={index}>
-                    <p>
-                      {kindLabel(disclosure.source.source_type)}:{" "}
-                      {safe ? (
-                        <a
-                          href={entry}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary underline"
-                        >
-                          {disclosure.name || tr("unnamed")}
-                        </a>
-                      ) : (
-                        disclosure.name || tr("unnamed")
-                      )}
-                    </p>
-                    {disclosure.version_label && <p>{disclosure.version_label}</p>}
-                    <p>
-                      {tr("matched_slots")} {row.matched_slot_count}
-                    </p>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+          <KnowledgeReferenceTables
+            impact={impact}
+            slotCounts={view.readonly ? view.inspection?.slot_counts : undefined}
+            page={view.page}
+            readonly={view.readonly}
+            deletingSpace={view.command.kind === "delete"}
+            translate={tr}
+          />
           {view.page?.has_more && (
             <Button
               variant="text"
@@ -256,10 +166,12 @@ export function KnowledgeDeletionDialog({ operation }: KnowledgeDeletionDialogPr
             </div>
           )}
         </div>
-        <DialogFooter>
-          <Button variant="outlined" disabled={locked} onClick={() => operation.cancel()}>
-            {tr("close")}
-          </Button>
+        <DialogFooter className="gap-2 sm:gap-0">
+          {!view.readonly && (
+            <Button color="default" variant="outlined" disabled={locked} onClick={() => operation.cancel()}>
+              {tr("close")}
+            </Button>
+          )}
           {!view.dispatched && (
             <Button variant="outlined" disabled={view.busy} onClick={operation.refresh}>
               {tr("review")}

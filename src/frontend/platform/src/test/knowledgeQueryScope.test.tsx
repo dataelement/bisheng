@@ -438,6 +438,47 @@ describe("processing actions retain their issuing scope", () => {
     expect(host.client.getQueryState(otherKey)?.isInvalidated).toBe(false);
   });
 
+  it("refreshes only metadata definitions and metadata jobs when accepting a schema change", async () => {
+    const api = apiPort();
+    const host = queryHost();
+    const schemaKey = knowledgeQueryKeys.metadataSchema(scope, 7);
+    const metadataJobs = knowledgeQueryKeys.jobs(scope, 7, { kind: "metadata_schema_change", page: 1, page_size: 1 });
+    const untouched = [
+      knowledgeQueryKeys.info(scope, 7),
+      knowledgeQueryKeys.children(scope, 7),
+      [...knowledgeQueryKeys.space(scope, 7), "download-permissions"],
+      knowledgeQueryKeys.jobs(scope, 7, { kind: "embedding_rebuild", page: 1, page_size: 1 }),
+      knowledgeQueryKeys.jobs(scope, 7, { kind: "move_index", page: 1, page_size: 1 }),
+      knowledgeQueryKeys.metadataSchema(scope, 8),
+      knowledgeQueryKeys.metadataSchema({ ...scope, tenantId: 202 }, 7),
+      knowledgeQueryKeys.visible(scope),
+    ];
+    for (const key of [schemaKey, metadataJobs, ...untouched]) host.client.setQueryData(key, { marker: true });
+    const { result } = renderHook(() => useKnowledgeProcessingActions(scope, 7, api), host);
+    const checked = await result.current.precheck({ kind: "metadata_schema_change", parameters: { expected_schema_revision: 5, changes: [{ operation: "add", field_name: "category", field_type: "string" }] } });
+    await result.current.createJob({ confirmation_id: checked.confirmation_id, plan_digest: checked.plan_digest, idempotency_key: "metadata-1" });
+    expect(host.client.getQueryState(schemaKey)?.isInvalidated).toBe(true);
+    expect(host.client.getQueryState(metadataJobs)?.isInvalidated).toBe(true);
+    for (const key of untouched) expect(host.client.getQueryState(key)?.isInvalidated).toBe(false);
+  });
+
+  it("refreshes only metadata and the retried job when retrying a metadata failure", async () => {
+    const host = queryHost();
+    const affected = [
+      knowledgeQueryKeys.metadataSchema(scope, 7),
+      knowledgeQueryKeys.jobs(scope, 7, { page: 1, page_size: 20 }),
+      knowledgeQueryKeys.job(scope, 7, "job-1"),
+      knowledgeQueryKeys.items(scope, 7, "job-1", { page: 1, page_size: 20 }),
+    ];
+    const untouched = [knowledgeQueryKeys.info(scope, 7), knowledgeQueryKeys.job(scope, 7, "other-job")];
+    for (const key of [...affected, ...untouched]) host.client.setQueryData(key, {});
+    const api = apiPort();
+    const { result } = renderHook(() => useKnowledgeProcessingActions(scope, 7, api), host);
+    await result.current.retryJob("job-1", { idempotency_key: "retry-meta", expected_job_revision: 4 }, "metadata_schema_change");
+    for (const key of affected) expect(host.client.getQueryState(key)?.isInvalidated).toBe(true);
+    for (const key of untouched) expect(host.client.getQueryState(key)?.isInvalidated).toBe(false);
+  });
+
   it("rejects a late mutation without touching the new scope's cache", async () => {
     const response = deferred<ProcessingSettingsRead>();
     const api = apiPort();

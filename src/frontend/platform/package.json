@@ -4,6 +4,7 @@
   "private": true,
   "dependencies": {
     "@bisheng/identity": "workspace:*",
+    "@bisheng/knowledge": "workspace:*",
     "@hello-pangea/dnd": "catalog:",
     "@bisheng/ui": "workspace:*",
     "@bisheng/diagram-runtime": "workspace:*",

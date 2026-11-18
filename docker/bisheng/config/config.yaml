@@ -24,16 +24,16 @@ database_pool:
 # 代码默认值为 ""；保持省略时使用数据库中自动生成的密钥。
 # jwt_secret: "replace-with-a-long-random-string"
 
-# DSH Desktop 部署默认值（默认关闭）。启用前填写 platform_public_url，
-# 例如 https://work.example.com 或 http://192.0.2.15:18081。
-# 以下配置块须配合支持 DSH 的后端镜像使用；业务接入另在管理页启用。
-# dsh:
+# BS Client 默认开启，地址留空即可按当前请求使用；需要固定公开地址时再覆盖。
+# 配合包含本配置兼容变更的 beta1 后端镜像使用；旧顶层 dsh 仍可读取。
+bs_client:
 #   access_ttl_seconds: 300  # 访问令牌有效期（秒）
 #   session_ttl_seconds: 2592000  # 桌面会话绝对有效期（秒，30 天）
-#   enabled: false  # 只控制管理模块入口；业务接入另在管理页启用
+  enabled: true
 #   client_id: "dsh-desktop"  # 固定协议值
 #   contract_version: "0.5.0"  # 固定协议值
-#   platform_public_url: null  # 公共 HTTP(S) origin；启用 DSH 前必须填写，不带路径
+  platform_public_url: null  # 可选固定 HTTP(S) origin，不带路径
+  trusted_proxy_hosts: [frontend, gateway]  # 只信任本部署代理的公开协议
 #   web_session_cookie_name: "access_token_cookie"  # 桌面浏览器登录 Cookie 名
 #   gateway_internal_url: null  # 已弃用；原生会话不再访问此地址
 #   billing_timezone: "Asia/Shanghai"  # 月度配额结算时区
@@ -251,11 +251,16 @@ logger_conf:
 #   public_base_url: ""  # 代码默认空；例如 https://kb.example.com
 
 # ── 工场运行时层（F054）─────────────────────────────────────────────────
-# 这一层可以整层不装：enabled 保持 false 时，平台其余部分零变化，
+# 全新 Compose 默认启用；设 enabled: false 并取消 app-runtime profile 可整层不装，
 # /apps/{slug} 会落到"本环境未启用应用工场"引导页，CLI 部署被 16207 明确拒绝。
-# compose 形态下这两个服务挂在 `app-runtime` profile 后面，不带
-# `--profile app-runtime` 启动就根本不创建（scripts/deploy.sh 已自动处理）。
-# app_runtime:
+# Compose 新 .env 默认选择 app-runtime；已有 .env 的 profile 选择保持不变。
+# below !env bindings are supplied to both backend and worker by Compose.
+app_runtime:
+  enabled: true
+  manager_base_url: "http://runtime-manager:8091"
+  manager_hmac_secret: !env ${BISHENG_RUNTIME_CONTROL_SECRET}
+  proxy_hmac_secret: !env ${BISHENG_APP_PROXY_HMAC_SECRET}
+  obo_secret: !env ${BISHENG_APP_OBO_SECRET}
 #   # 以下是运行时 v2 默认值；注释值为环境变量未设置时的回退值。
 #   # 显式填写 YAML 会优先于这些 BISHENG_RUNTIME_* 环境变量的默认工厂。
 #   runtime_service_keys: {}  # 未填写时读取 BISHENG_RUNTIME_SERVICE_KEYS（JSON）

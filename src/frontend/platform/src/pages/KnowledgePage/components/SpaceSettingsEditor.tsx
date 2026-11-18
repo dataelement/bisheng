@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button, Select, Tabs, Textarea, toast } from "@bisheng/ui";
 import { useQuery } from "@tanstack/react-query";
 import { isEqual } from "lodash-es";
@@ -199,8 +200,9 @@ function SettingsEditor({
       bsConfirm({
         desc: t("settings_ext.private_notice"),
         signal,
-        onOk: () => {
+        onOk: (next) => {
           if (active.current && !signal?.aborted) update("auth", "private");
+          next();
         },
       });
     } else if (value === "shared" && draft.auth === "private")
@@ -294,7 +296,7 @@ function SettingsEditor({
         </fieldset>
       ) : (
         <div role={infoFailed ? "alert" : "status"}>
-          <p>{t(infoFailed ? "f118.load_failed" : "f118.loading_space")}</p>
+          {infoFailed ? <p>{t("f118.load_failed")}</p> : <LoadingState label={t("f118.loading_space")} className="min-h-32" />}
           {infoFailed && (
             <Button onClick={() => { void info.refetch(); }}>
               {t("retry")}
@@ -321,21 +323,6 @@ function SettingsEditor({
                 <SpacePanelFrame title={t("f118.defaults_title")} presentation="inline">
                   <ProcessingDefaultsFields form={processing} compact disabled={busy} />
                 </SpacePanelFrame>
-                <SpaceProcessingPanel
-                  scope={scope}
-                  spaceId={spaceId}
-                  mode="jobs"
-                  jobKind="embedding_rebuild"
-                  presentation="inline"
-                />
-                <SpaceProcessingPanel
-                  scope={scope}
-                  spaceId={spaceId}
-                  mode="jobs"
-                  jobKind="move_index"
-                  presentation="inline"
-                  onSaved={() => { void onSaved(); }}
-                />
               </>
             )}
             {draft && feature.isError && (
@@ -577,7 +564,7 @@ function SettingsEditor({
             <Button onClick={() => { void permission.refetch(); }}>{t("retry")}</Button>
           </div>
         ) : (
-          <p role="status">{t(permission.isSuccess ? "noOperationPermission" : "f118.loading_space")}</p>
+          permission.isSuccess ? <p role="status">{t("noOperationPermission")}</p> : <LoadingState label={t("f118.loading_space")} className="min-h-32" />
         )}
       </SpacePanelFrame>
     );

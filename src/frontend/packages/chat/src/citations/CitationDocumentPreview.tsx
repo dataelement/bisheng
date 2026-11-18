@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import { useLoadingIndicatorRenderer } from '@bisheng/ui';
 import cn from '@bisheng/ui/cn';
 import { useCitationPreview } from './useCitationPreview';
 import { useCitedPassageLocate } from './useCitedPassageLocate';
@@ -7,6 +8,7 @@ import type { CitationViewProps } from './viewTypes';
 interface CitationDocumentPreviewProps extends CitationViewProps {preview:CitationDocumentPreviewState|null;compactMode?:boolean;className?:string}
 interface CitationPreviewBodyProps extends CitationViewProps {state:ReturnType<typeof useCitationPreview>;compactMode?:boolean;className?:string}
 export function CitationPreviewBody({state,renderFile,services,compactMode=false,className}:CitationPreviewBodyProps) {
+  const renderIndicator=useLoadingIndicatorRenderer();
   const root=useRef<HTMLDivElement>(null);
   const locate=useCitedPassageLocate(root,state.fileUrl ? state.fileType : '',state.chunks);
   const localize=(key:string)=>services.localize('shared:citations.'+key);
@@ -17,7 +19,13 @@ export function CitationPreviewBody({state,renderFile,services,compactMode=false
     </div>}
     <div ref={root} className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {state.fileUrl ? renderFile({fileName:state.fileName,fileType:state.fileType,fileUrl:state.fileUrl,transcriptUrl:state.transcriptUrl,highlightBboxes:state.bboxes,targetBBox:state.targetBBox,compactMode,allowDownload:!!state.originalUrl,onDownloadFile:()=>{void state.download().catch(()=>undefined);}})
-        : <div className="flex h-full items-center justify-center text-[14px] text-text-3">{localize(state.status==='loading'?'com_citation.preview_loading':'com_citation.preview_unavailable')}</div>}
+        : <div className="flex h-full items-center justify-center text-[14px] text-text-3"
+          role={state.status==='loading'&&renderIndicator?'status':undefined}
+          aria-label={state.status==='loading'&&renderIndicator?localize('com_citation.preview_loading'):undefined}>
+          {state.status==='loading'&&renderIndicator
+            ? <span aria-hidden className="inline-flex">{renderIndicator({className:'size-10'})}</span>
+            : localize(state.status==='loading'?'com_citation.preview_loading':'com_citation.preview_unavailable')}
+        </div>}
     </div>
   </div>;
 }

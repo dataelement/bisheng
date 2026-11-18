@@ -1,6 +1,7 @@
 import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
 import { Button, Dropdown, DropdownItem, SearchInput } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
+import { FolderPlus, Link2 } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -47,6 +48,7 @@ export function SpaceDirectoryToolbar({
   const { t } = useTranslation("knowledge");
   const navigate = useNavigate();
   const [params] = useSearchParams();
+  const hasBatchActions = Boolean(onMove || onBatchDownload || onBatchTag || onBatchRetry || onReferences || onDeleteSelected);
   const handleUpload = () => {
     if (!canUpload) return;
     const next = new URLSearchParams(params);
@@ -60,75 +62,63 @@ export function SpaceDirectoryToolbar({
   if (toolbarTarget !== undefined) {
     const controls = (
       <div className="flex flex-wrap items-center gap-3">
-        <Dropdown
-          align="end"
-          menu={
-            <>
-              {onMove && (
-                <DropdownItem disabled={!selectedCount} onSelect={onMove}>
-                  {t("move.title")}
-                </DropdownItem>
-              )}
-              {onBatchDownload && (
-                <DropdownItem
-                  disabled={!selectedCount}
-                  onSelect={onBatchDownload}
-                >
-                  {t("batch.download")}
-                </DropdownItem>
-              )}
-              {onBatchTag && (
-                <DropdownItem disabled={!selectedCount} onSelect={onBatchTag}>
-                  {t("batch.tag")}
-                </DropdownItem>
-              )}
-              {onBatchRetry && (
-                <DropdownItem disabled={!selectedCount} onSelect={onBatchRetry}>
-                  {t("batch.retry")}
-                </DropdownItem>
-              )}
-              {onReferences && (
-                <DropdownItem onSelect={onReferences}>
-                  {t("deletion.references")}
-                </DropdownItem>
-              )}
-              {onDeleteSelected && (
-                <DropdownItem
-                  danger
-                  disabled={!selectedCount}
-                  onSelect={onDeleteSelected}
-                >
-                  {t("deletion.selected")}
-                </DropdownItem>
-              )}
-            </>
-          }
-        >
-          <Button variant="outlined" color="default">
-            {t("detail.batch")}
-            {selectedCount > 0 ? ` (${selectedCount})` : ""}
-            <Outlined.Down />
-          </Button>
-        </Dropdown>
+        {selectedCount > 0 && hasBatchActions && (
+          <Dropdown
+            align="end"
+            menu={
+              <>
+                {onMove && (
+                  <DropdownItem onSelect={onMove}>{t("move.title")}</DropdownItem>
+                )}
+                {onBatchDownload && (
+                  <DropdownItem onSelect={onBatchDownload}>
+                    {t("batch.download")}
+                  </DropdownItem>
+                )}
+                {onBatchTag && (
+                  <DropdownItem onSelect={onBatchTag}>{t("batch.tag")}</DropdownItem>
+                )}
+                {onBatchRetry && (
+                  <DropdownItem onSelect={onBatchRetry}>{t("batch.retry")}</DropdownItem>
+                )}
+                {onReferences && (
+                  <DropdownItem onSelect={onReferences}>
+                    {t("deletion.references")}
+                  </DropdownItem>
+                )}
+                {onDeleteSelected && (
+                  <DropdownItem danger onSelect={onDeleteSelected}>
+                    {t("deletion.selected")}
+                  </DropdownItem>
+                )}
+              </>
+            }
+          >
+            <Button variant="outlined" color="default">
+              {t("detail.batch")}
+              <Outlined.Down />
+            </Button>
+          </Dropdown>
+        )}
         {(canCreateFolder || canUpload) && (
           <Dropdown
             align="end"
             menu={
               <>
                 {canCreateFolder && (
-                  <DropdownItem onSelect={onCreateFolder}>
+                  <DropdownItem icon={<FolderPlus />} onSelect={onCreateFolder}>
                     {t("f118.create_folder")}
                   </DropdownItem>
                 )}
                 {canUpload && (
-                  <DropdownItem onSelect={handleUpload}>
+                  <DropdownItem icon={<Outlined.Upload />} onSelect={handleUpload}>
                     {t("uploadFile")}
                   </DropdownItem>
                 )}
                 {canUpload &&
                   knowledgeUploadCapabilities.webLink &&
                   onWebLink && (
-                    <DropdownItem onSelect={onWebLink}>
+                    <DropdownItem icon={<Link2 />} onSelect={onWebLink}>
                       {t("webLink")}
                     </DropdownItem>
                   )}
@@ -149,21 +139,21 @@ export function SpaceDirectoryToolbar({
     <div className="flex flex-wrap items-center justify-end gap-3">
       {selectedCount > 0 && (
         <>
-          <Button variant="outlined" onClick={onMove}>
+          {onMove && <Button variant="outlined" onClick={onMove}>
             {t("move.title")}
-          </Button>
-          <Button variant="outlined" onClick={onBatchDownload}>
+          </Button>}
+          {onBatchDownload && <Button variant="outlined" onClick={onBatchDownload}>
             {t("batch.download")}
-          </Button>
-          <Button variant="outlined" onClick={onBatchTag}>
+          </Button>}
+          {onBatchTag && <Button variant="outlined" onClick={onBatchTag}>
             {t("batch.tag")}
-          </Button>
-          <Button variant="outlined" onClick={onBatchRetry}>
+          </Button>}
+          {onBatchRetry && <Button variant="outlined" onClick={onBatchRetry}>
             {t("batch.retry")}
-          </Button>
+          </Button>}
         </>
       )}
-      {selectedCount > 0 && (
+      {selectedCount > 0 && onDeleteSelected && (
         <Button color="danger" variant="outlined" onClick={onDeleteSelected}>
           {t("deletion.selected")} ({selectedCount})
         </Button>

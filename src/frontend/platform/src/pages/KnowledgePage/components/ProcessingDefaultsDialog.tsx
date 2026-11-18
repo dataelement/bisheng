@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button, toast } from "@bisheng/ui";
 import { useTranslation } from "react-i18next";
 import { Dialog } from "@/components/bs-ui/dialog";
@@ -79,7 +80,7 @@ export function ProcessingDefaultsFields({
           </Button>
         </div>
       ) : (
-        <p role="status">{t("f118.loading_defaults")}</p>
+        <LoadingState label={t("f118.loading_defaults")} className="min-h-32" />
       )}
     </>
   );

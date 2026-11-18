@@ -54,12 +54,30 @@ class SpaceCopyJobRepository(ProcessingJobRepository):
             raise KnowledgeProcessingJobNotFoundError()
         return SimpleNamespace(**row._mapping)
 
+    async def aretry_items(self, session, job_id):
+        from bisheng.knowledge.domain.models.knowledge_processing_item import KnowledgeProcessingItem
+
+        with strict_tenant_filter():
+            return tuple(
+                (
+                    await session.execute(
+                        select(KnowledgeProcessingItem)
+                        .where(
+                            KnowledgeProcessingItem.job_id == job_id,
+                            KnowledgeProcessingItem.state.in_(("failed", "pending")),
+                        )
+                        .order_by(KnowledgeProcessingItem.id)
+                        .with_for_update()
+                    )
+                ).scalars()
+            )
+
     async def _execution_job(self, session, job_id, *, _move=False):
         header = await self.aread_transport(session, job_id)
         if header.kind != "space_copy" or _move:
             raise KnowledgeProcessingJobNotFoundError()
         root = await SpaceCopyRepository().aroot(session, header.space_id, lock=True)
-        if root.state != 2:
+        if root.state not in {1, 2}:
             raise KnowledgeProcessingConflictError(reason="copy_permission_not_ready")
         return await self._job(session, job_id, lock=True, include_manifest=False), None
 
@@ -110,7 +128,7 @@ class SpaceCopyJobRepository(ProcessingJobRepository):
             Job.actor_user_id == user_id,
             Knowledge.user_id == user_id,
             Knowledge.type == 3,
-            Knowledge.state.in_((0, 2)),
+            Job.state != "succeeded",
             Knowledge.creation_request_id.is_not(None),
         ]
         if space_id is not None:

@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState"
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 import {
   Dialog,
@@ -186,7 +187,7 @@ export function InviteCodeTab() {
       <p className="mb-3 text-caption text-text-3">{t("system.inviteCode.hint")}</p>
       <div className="min-h-0 flex-1 overflow-auto">
         {loading && rows.length === 0 ? (
-          <p className="py-8 text-center text-caption text-text-3">{t("system.inviteCode.loading")}</p>
+          <LoadingState size="panel" label={t("system.inviteCode.loading")} className="py-8 text-center text-caption text-text-3" />
         ) : rows.length === 0 ? (
           <p className="py-8 text-center text-caption text-text-3">{t("system.inviteCode.empty")}</p>
         ) : (

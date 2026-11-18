@@ -563,6 +563,17 @@ class KnowledgeFileDao(KnowledgeFileBase):
             return session.exec(select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids))).all()
 
     @classmethod
+    def list_document_ids(cls, knowledge_id: int) -> list[int]:
+        """Return non-directory file ids stored in one knowledge container."""
+        statement = select(KnowledgeFile.id).where(
+            KnowledgeFile.knowledge_id == knowledge_id,
+            KnowledgeFile.file_type != FileType.DIR.value,
+        )
+        with get_sync_db_session() as session:
+            rows = session.exec(statement).all()
+        return [int(row if isinstance(row, int) else row[0]) for row in rows]
+
+    @classmethod
     async def aget_file_by_ids(cls, file_ids: list[int]) -> list[KnowledgeFile]:
         if not file_ids:
             return []

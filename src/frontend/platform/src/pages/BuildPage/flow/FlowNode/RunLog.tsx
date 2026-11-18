@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button, Select } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 
@@ -134,7 +135,7 @@ export default function RunLog({ node, children }) {
 
     if (state === Status.loading) return (
         <div className='bisheng-node-top flex items-center'>
-            <Outlined.Loading size={16} className="animate-spin text-primary mr-2" />
+            <LoadingState size="inline" className="mr-2" />
             <span className='text-sm text-primary'>{t('running')}</span>
         </div>
     );

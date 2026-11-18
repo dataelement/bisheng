@@ -73,6 +73,45 @@ def _compute_ext_rank_case_when():
     return case(*whens, else_=_EXT_RANK_FALLBACK)
 
 
+def space_child_cursor_key(item: KnowledgeFile, order_field: str) -> list:
+    # Preserve the existing file-type cursor and the timestamp/ID already
+    # present in the old update-time cursor.
+    if order_field in ("file_type", "update_time"):
+        return [item.file_type, _compute_ext_rank_python(item.file_name), item.update_time, item.id]
+    return [order_field, getattr(item, order_field), item.update_time, item.id]
+
+
+def _normalize_order_sort(order_field: str, order_sort: str) -> str:
+    direction = (order_sort or "").upper()
+    if order_field not in _ORDER_FIELDS or direction not in _ORDER_SORTS:
+        raise ValueError(f"unsupported order_field/order_sort: {order_field!r}/{order_sort!r}")
+    return direction
+
+
+def _child_keyset_order(order_field: str, order_sort: str, cursor: Sequence | None):
+    descending = _normalize_order_sort(order_field, order_sort) == "DESC"
+    updated_and_id = (KnowledgeFile.update_time, KnowledgeFile.id)
+    tail = cursor[2:] if cursor is not None else None
+
+    if order_field == "file_type":
+        columns = (KnowledgeFile.file_type, _compute_ext_rank_case_when(), *updated_and_id)
+        return columns, (descending, descending, True, True), cursor
+    if order_field == "update_time":
+        return updated_and_id, (descending, True), tail
+    if order_field == "file_size":
+        size = KnowledgeFile.file_size
+        # Explicitly keep NULL sizes before known sizes in ASC and after in
+        # DESC. Rank distinguishes a missing size from an actual zero-byte file.
+        columns = (case((size.is_(None), 0), else_=1), func.coalesce(size, 0), *updated_and_id)
+        values = None
+        if cursor is not None:
+            value = cursor[1]
+            values = (int(value is not None), value if value is not None else 0, *cursor[2:])
+        return columns, (descending, descending, True, True), values
+    columns = (getattr(KnowledgeFile, order_field), *updated_and_id)
+    return columns, (descending, True, True), cursor[1:] if cursor is not None else None
+
+
 class SpaceFileDao(KnowledgeFileDao):
     """DAO for space folder and file operations in the knowledge_file table"""
 
@@ -159,7 +198,7 @@ class SpaceFileDao(KnowledgeFileDao):
         file_ids: list[int] | None = None,
         order_field: str = "file_type",
         order_sort: str = "desc",
-        file_status: list[int] = None,
+        file_status: list[int] | None = None,
         page: int = 1,
         page_size: int = 20,
         file_type: int | None = None,
@@ -170,10 +209,8 @@ class SpaceFileDao(KnowledgeFileDao):
         Async: List direct children (folders first, then files) under a given parent.
         When parent_id is None, returns root-level items (file_level_path == '').
 
-        F027: when ``cursor`` is provided (4-tuple ``(file_type, ext_rank,
-        update_time, id)``), keyset WHERE is injected and the offset path is
-        skipped. ``order_field`` must be ``"file_type"`` in cursor mode
-        (other order_fields keep using OFFSET).
+        F027: ``page=0`` selects bounded keyset pagination in the chosen
+        order. Positive page numbers keep the legacy offset behavior.
         """
         if parent_id is None:
             exact_path = ""
@@ -222,29 +259,20 @@ class SpaceFileDao(KnowledgeFileDao):
         # F027: page=0 identifies the cursor scan, including its first page
         # where no cursor key exists yet. Keep that first fetch bounded and use
         # exactly the same stable order as subsequent keyset batches.
-        if page == 0 and order_field == "file_type":
+        if page == 0:
             from bisheng.database.utils.keyset import build_keyset_where
 
-            order_dir_asc = (order_sort or "asc").lower() == "asc"
-            sort_cols = (
-                KnowledgeFile.file_type,
-                _compute_ext_rank_case_when(),
-                KnowledgeFile.update_time,
-                KnowledgeFile.id,
-            )
-            # Mixed direction: file_type + ext_rank follow ``order_sort``;
-            # update_time + id are always DESC (newest first within same ext).
-            descending = (
-                not order_dir_asc,
-                not order_dir_asc,
-                True,
-                True,
-            )
-            if cursor is not None:
-                statement = statement.where(build_keyset_where(sort_cols, tuple(cursor), descending=descending))
+            sort_cols, descending, values = _child_keyset_order(order_field, order_sort, cursor)
+            if values is not None:
+                statement = statement.where(build_keyset_where(sort_cols, values, descending=descending))
             if page_size:
                 statement = statement.limit(page_size)
-            statement = statement.order_by(text(f"{cls.order_field_text(order_field, order_sort)}, id desc"))
+            statement = statement.order_by(
+                *(
+                    column.desc() if reverse else column.asc()
+                    for column, reverse in zip(sort_cols, descending, strict=True)
+                )
+            )
         else:
             if page and page_size:
                 statement = statement.offset((page - 1) * page_size).limit(page_size)
@@ -257,9 +285,7 @@ class SpaceFileDao(KnowledgeFileDao):
 
     @staticmethod
     def order_field_text(order_field: str, order_sort: str) -> str:
-        if order_field not in _ORDER_FIELDS or (order_sort or "").upper() not in _ORDER_SORTS:
-            raise ValueError(f"unsupported order_field/order_sort: {order_field!r}/{order_sort!r}")
-        order_sort = order_sort.upper()
+        order_sort = _normalize_order_sort(order_field, order_sort)
         order_text = ""
 
         if order_field == "file_type":
@@ -306,7 +332,7 @@ class SpaceFileDao(KnowledgeFileDao):
         knowledge_id: int,
         parent_id: int | None,
         file_ids: list[int] | None = None,
-        file_status: list[int] = None,
+        file_status: list[int] | None = None,
     ) -> int:
         """
         Async: Count direct children under a given parent.

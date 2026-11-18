@@ -1,9 +1,11 @@
 """§129 actual scalar read stream, history coverage and deep-page equivalence."""
 
+from contextlib import asynccontextmanager
+
 import pytest
 import sqlalchemy as sa
 
-from bisheng.common.errcode.permission import PermissionDeniedError
+from bisheng.common.errcode.permission import PermissionDeniedError, PermissionInvalidResourceError
 from bisheng.knowledge.application import move_processing_access as module
 from bisheng.knowledge.application import move_processing_admission as admission
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion as Version
@@ -170,3 +172,38 @@ async def test_off_page_candidates_do_not_expand_scope_or_read_all_item_payloads
         result = await access.alist(10, identity=app.current, page=3, page_size=1)
     assert result.total == 3 and len(result.data) == 1
     assert reads == [result.data[0].id]
+
+
+async def test_list_omits_a_move_whose_destination_is_no_longer_a_permission_target(application, monkeypatch):
+    app = application
+    await stages.reset_to_before(app)
+    with request_context(app.actor):
+        plan = await app.owner.aprecheck(
+            10,
+            FileMoveReq(items=[{"id": 81, "type": "file"}], target_space_id=11),
+            identity=app.current,
+            entry_kind="web",
+        )
+        await app.owner.aaccept(
+            10,
+            ProcessingCreateRequest(
+                confirmation_id=plan.confirmation_id,
+                plan_digest=plan.plan_digest,
+                idempotency_key="deleted-destination",
+            ),
+            identity=app.current,
+            entry_kind="web",
+        )
+    access = module.MoveProcessingAccess(app.owner)
+    seen = []
+
+    @asynccontextmanager
+    async def missing(space_id, job_id, identity):
+        seen.append(job_id)
+        raise PermissionInvalidResourceError()
+        yield
+
+    monkeypatch.setattr(access, "_authorized", missing)
+    with request_context(app.actor):
+        result = await access.alist(10, identity=app.current)
+    assert seen and result.total == 0 and result.data == []

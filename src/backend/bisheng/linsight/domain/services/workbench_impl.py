@@ -1704,7 +1704,7 @@ class LinsightWorkbenchImpl:
     @classmethod
     async def _get_workbench_config(cls, user_id: int):
         """Get and validate the workbench configuration"""
-        workbench_conf = await LLMService.get_workbench_llm()
+        workbench_conf = await LLMService.get_workbench_llm_candidates()
         from bisheng.dsh.domain.services.model_catalog import project_workbench_config
 
         workbench_conf = await project_workbench_config(workbench_conf, user_id)

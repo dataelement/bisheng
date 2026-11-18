@@ -130,18 +130,23 @@ async def test_http_recovers_uninitialized_copy_without_target_permission_or_dup
     await owner.astart(jid, current.revision)
     async with ctx.sessions() as session:
         assert (await session.execute(sa.select(sa.func.count()).select_from(Job))).scalar_one() == 1
-        assert (await session.get(Knowledge, sid)).state == 2
+        assert (await session.get(Knowledge, sid)).state == 1
         operations = (await session.execute(sa.select(PermissionProjectionOperation))).scalars().all()
         assert len(operations) == 3 and all(row.status == "FINALIZED" for row in operations)
 
 
-async def test_confirm_http_accepts_without_running_initialization(copying, monkeypatch):
+async def test_confirm_http_returns_once_the_copy_job_is_accepted(copying, monkeypatch):
     app, ctx = copying.app, copying.ctx
     plan = await app.aprecheck(40, name="Background copy", identity=ctx.user)
     monkeypatch.setattr(copy_endpoints, "SpaceCopyApplication", lambda: app)
     monkeypatch.setattr(copy_endpoints, "_write_scope", AsyncMock())
-    initialize = AsyncMock(side_effect=AssertionError("initialization must run in worker"))
-    monkeypatch.setattr(SpaceCopyOwner, "aensure_logical", initialize)
+    original = SpaceCopyOwner.aensure_logical
+    initialize = AsyncMock(side_effect=original)
+
+    async def initialize_bound(self, *args, **kwargs):
+        await initialize(self, *args, **kwargs)
+
+    monkeypatch.setattr(SpaceCopyOwner, "aensure_logical", initialize_bound)
     web = FastAPI()
     web.include_router(copy_endpoints.router, prefix="/api/v1/knowledge/space")
     web.dependency_overrides[UserPayload.get_login_user] = lambda: ctx.user
@@ -152,7 +157,8 @@ async def test_confirm_http_accepts_without_running_initialization(copying, monk
         assert result["processing_job"]["accepted"] and not result["completed"]
         repeated = (await http.post("/api/v1/knowledge/space/40/copy/confirm", json=command(plan).model_dump())).json()
         assert repeated["data"]["knowledge"]["id"] == result["knowledge"]["id"]
-    initialize.assert_not_awaited()
+    assert initialize.await_count == 0
+    assert result["knowledge"]["state"] == 0
     async with ctx.sessions() as session:
         job = (await session.execute(sa.select(Job))).scalars().one()
         assert job.pending_dispatch and job.state == "accepted"
@@ -208,9 +214,10 @@ async def test_initialization_claim_is_exclusive_and_failure_uses_original_lease
     copying, monkeypatch, actual_processing_task
 ):
     app, ctx = copying.app, copying.ctx
-    result = await app.aconfirm(
-        40, command(await app.aprecheck(40, name="Claim first", identity=ctx.user)), identity=ctx.user
-    )
+    plan = await app.aprecheck(40, name="Claim first", identity=ctx.user)
+    with monkeypatch.context() as patch:
+        patch.setattr(SpaceCopyOwner, "aensure_logical", AsyncMock())
+        result = await app.aconfirm(40, command(plan), identity=ctx.user)
     jid = result["processing_job"].job_id
     owner = SpaceCopyOwner(app)
     access = SpaceCopyAccess(owner)
@@ -230,6 +237,7 @@ async def test_initialization_claim_is_exclusive_and_failure_uses_original_lease
         await owner.astart(jid, 0)
     failed, _ = await owner.aread(jid)
     assert failed.state == "failed" and failed.lease_token is None
+    assert failed.error_code == 10996 and failed.error_message == "copy_initialization_failed"
     assert (await access.alist_owned(identity=ctx.user)).data[0]["phase"] == "failed"
     from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
 
@@ -238,3 +246,74 @@ async def test_initialization_claim_is_exclusive_and_failure_uses_original_lease
         assert (await access.alist_owned(identity=ctx.user)).data == []
     finally:
         current_tenant_id.reset(token)
+
+
+@pytest.fixture
+def schema_utils(monkeypatch):
+    import importlib.util
+    from pathlib import Path
+
+    from bisheng.knowledge.application import space_copy_owner
+
+    # Root conftest replaces KnowledgeUtils with a placeholder. Execute its
+    # original implementation under a private name, isolating transports only.
+    path = Path(__file__).resolve().parents[2] / "bisheng/knowledge/domain/services/knowledge_utils.py"
+    spec = importlib.util.spec_from_file_location("_copy_schema_utils", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(space_copy_owner, "KnowledgeUtils", module.KnowledgeUtils)
+    return module
+
+
+async def test_new_copy_bootstraps_lazy_milvus_collection_before_load(monkeypatch, schema_utils):
+    knowledge_utils = schema_utils
+
+    events = []
+    collection = SimpleNamespace(load=Mock(side_effect=lambda: events.append("load")))
+    vector = SimpleNamespace(col=None)
+
+    def seed(*, texts, metadatas):
+        assert texts == ["init_schema"] and metadatas[0]["knowledge_id"] == 50
+        assert metadatas[0]["document_id"] == 0
+        events.append("seed")
+        vector.col = collection
+        return ["schema-seed"]
+
+    vector.add_texts = Mock(side_effect=seed)
+    vector.delete = Mock(side_effect=lambda **kw: events.append(("delete", kw["ids"])))
+    redis = SimpleNamespace(get=Mock(return_value=None), setNx=Mock(return_value=True), set=Mock(), delete=Mock())
+    monkeypatch.setattr(knowledge_utils, "get_redis_client_sync", lambda: redis)
+    milvus = AsyncMock(return_value=vector)
+    es = SimpleNamespace(
+        _store=SimpleNamespace(_create_index_if_not_exists=Mock(side_effect=lambda: events.append("es"))),
+        client=SimpleNamespace(close=AsyncMock()),
+    )
+    elastic = AsyncMock(return_value=es)
+    monkeypatch.setattr(KnowledgeRag, "init_knowledge_milvus_vectorstore", milvus)
+    monkeypatch.setattr(KnowledgeRag, "init_knowledge_es_vectorstore", elastic)
+    root = Knowledge(id=50, tenant_id=101, name="New copy", type=3, collection_name="new-copy", index_name="new-copy")
+    session = object()
+    await initialize_indexes(root, 7, session=session)
+    assert events == ["seed", ("delete", ["schema-seed"]), "load", "es"]
+    assert milvus.call_args.kwargs["reference_session"] is session
+    assert elastic.call_args.kwargs["reference_session"] is session
+    es.client.close.assert_awaited_once()
+
+
+async def test_copy_schema_bootstrap_failure_does_not_advance_to_es(monkeypatch, schema_utils):
+    knowledge_utils = schema_utils
+
+    def fail(**kwargs):
+        raise RuntimeError("embedding bootstrap failed")
+
+    vector = SimpleNamespace(col=None, add_texts=Mock(side_effect=fail))
+    redis = SimpleNamespace(get=Mock(return_value=None), setNx=Mock(return_value=True), delete=Mock())
+    monkeypatch.setattr(knowledge_utils, "get_redis_client_sync", lambda: redis)
+    monkeypatch.setattr(KnowledgeRag, "init_knowledge_milvus_vectorstore", AsyncMock(return_value=vector))
+    elastic = AsyncMock()
+    monkeypatch.setattr(KnowledgeRag, "init_knowledge_es_vectorstore", elastic)
+    root = Knowledge(id=50, tenant_id=101, name="New copy", type=3, collection_name="new-copy", index_name="new-copy")
+    with pytest.raises(RuntimeError, match="embedding bootstrap failed"):
+        await initialize_indexes(root, 7, session=object())
+    elastic.assert_not_awaited()
+    redis.delete.assert_called_once()

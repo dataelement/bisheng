@@ -19,8 +19,11 @@ class DashboardDao:
     async def insert(cls, data: Dashboard) -> Dashboard:
         async with get_async_db_session() as session:
             session.add(data)
-            await session.commit()
+            # A tenant-filtered refresh must succeed before the row is durable.
+            # Otherwise a failed insert response leaves an unprojected dashboard.
+            await session.flush()
             await session.refresh(data)
+            await session.commit()
             return data
 
     @classmethod

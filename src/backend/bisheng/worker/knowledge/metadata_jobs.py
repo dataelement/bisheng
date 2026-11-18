@@ -10,7 +10,9 @@ from bisheng.common.errcode.knowledge import KnowledgeFileFailedError, Knowledge
 from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.application.model_reference_read import get_knowledge_model_read_runtime
 from bisheng.knowledge.domain.models.knowledge import Knowledge
+from bisheng.knowledge.domain.repositories.processing_fence_repository import ProcessingFenceRepository
 from bisheng.knowledge.domain.repositories.processing_job_repository import ProcessingConfiguration
+from bisheng.knowledge.domain.schemas.processing_diagnostics import failure_reason_from_error
 from bisheng.open_api.domain.context import OpenApiPrincipal
 from bisheng.worker.knowledge.metadata_worker import apply_metadata_index_item
 
@@ -88,6 +90,7 @@ async def execute_metadata_job(job_id, expected_dispatch_revision, *, owner, pro
                 await guarded(session, identity)
                 await session.commit()
 
+    failure_reason = None
     try:
         async with _actor(reference, proof.tenant_id, space_id) as identity:
             async with get_async_db_session() as session:
@@ -119,14 +122,17 @@ async def execute_metadata_job(job_id, expected_dispatch_revision, *, owner, pro
                     job, item, snapshot, knowledge, _ = await guarded(session, identity)
                     await session.commit()
             try:
-                outcome = await apply_metadata_index_item(
-                    knowledge=knowledge,
-                    invoke_user_id=reference["actor_user_id"],
-                    file_id=snapshot.target.file_id,
-                    affected_fields=snapshot.affected_fields,
-                    after_values=snapshot.after_values,
-                    guard=guard,
-                )
+                async with ProcessingFenceRepository(async_sessions=get_async_db_session).awriter(
+                    space_id, item.file_id
+                ):
+                    outcome = await apply_metadata_index_item(
+                        knowledge=knowledge,
+                        invoke_user_id=reference["actor_user_id"],
+                        file_id=snapshot.target.file_id,
+                        affected_fields=snapshot.affected_fields,
+                        after_values=snapshot.after_values,
+                        guard=guard,
+                    )
             except KnowledgeFileFailedError as error:
                 logger.opt(exception=True).warning("Metadata index item failed job={} file={}", job_id, item.file_id)
                 async with _actor(reference, proof.tenant_id, space_id) as identity:
@@ -162,6 +168,7 @@ async def execute_metadata_job(job_id, expected_dispatch_revision, *, owner, pro
     except BaseErrorCode as error:
         logger.opt(exception=True).warning("Metadata processing rejected job={} code={}", job_id, error.Code)
         error_code = error.Code
+        failure_reason = failure_reason_from_error(error)
     except Exception:
         logger.exception("Metadata processing failed job={}", job_id)
         error_code = KnowledgeFileFailedError.Code
@@ -169,7 +176,12 @@ async def execute_metadata_job(job_id, expected_dispatch_revision, *, owner, pro
     # now-revoked actor. The repository locks the actual root and current lease.
     async with get_async_db_session() as session:
         failed = await jobs.afail_attempt(
-            session, job_id, expected_job_revision=revision, lease=lease, error_code=error_code
+            session,
+            job_id,
+            expected_job_revision=revision,
+            lease=lease,
+            error_code=error_code,
+            failure_reason=failure_reason,
         )
         result = _summary(failed if failed is not None else await jobs.aget_execution(session, job_id))
         await session.commit()

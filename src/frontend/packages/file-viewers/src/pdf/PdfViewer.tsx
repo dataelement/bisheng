@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PdfPage } from './PdfPage';
 import { pageIndexFromMetadata } from './coordinates';
 import type * as pdfjsLib from "pdfjs-dist";
+import { usePreviewLoadingRenderer } from '../PreviewLoading';
 
 import type { PreviewPdfBBox as CitationPdfBBox } from '../types';
 
@@ -26,6 +27,7 @@ export function PdfViewer({
     targetBBox = null,
     onCurrentPageChange,
 }: PdfViewerProps) {
+    const renderLoading = usePreviewLoadingRenderer();
     const reportedDocumentRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
     const currentDocumentRef = useRef(pdfDoc);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -169,7 +171,7 @@ export function PdfViewer({
     if (!pdfDoc) {
         return (
             <div className="flex-1 flex items-center justify-center text-text-3">
-                {loadingText}</div>
+                {renderLoading ? renderLoading({ size: 'page', label: loadingText }) : loadingText}</div>
         );
     }
 

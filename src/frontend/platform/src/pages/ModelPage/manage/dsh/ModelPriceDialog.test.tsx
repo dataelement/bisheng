@@ -23,6 +23,7 @@ vi.mock('@/controllers/API/modelPricing', () => ({
 const SETTINGS = { version: 1, currency: 'CNY' as const, credit_value: '0.01', usd_cny_rate: '7.2', base_model_id: null }
 const row = (changes: Partial<ModelPricingRow> = {}): ModelPricingRow => ({
     model_id: 42,
+    can_edit: true, read_only: false, source_tenant_id: 1, base_reason: null,
     pricing: { currency: 'USD', input: '1.25', cache_read: '0.125', cache_write: null, output: '3.75', source: 'MANUAL', revision: 3 },
     effective: { currency: 'CNY', input: '9', cache_read: '0.9', cache_write: '9', output: '27' },
     edited: true,

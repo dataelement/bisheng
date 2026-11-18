@@ -24,6 +24,8 @@ deletion_tenant, db = native.deletion_tenant, native.db
         ("succeeded", "succeeded", "move_target_verified", 101, 1, True, False),
         ("succeeded", "succeeded", "move_source_cleaned", 202, 1, True, False),
         ("succeeded", "succeeded", "move_source_cleaned", 101, 1, True, True),
+        ("failed", "failed", "copy_input_ready", 101, 1, False, False),
+        ("failed", "failed", "copy_input_ready", 202, 1, False, False),
         ("accepted", "pending", "pending", 101, 0, False, False),
         ("succeeded", "succeeded", "move_source_cleaned", 101, 0, True, True),
     ],
@@ -83,11 +85,37 @@ async def test_actual_persisted_source_plan_job_and_item_ack_are_required(
                     step="copy_completed" if operation == "space_copy" and step == "move_source_cleaned" else step,
                 )
             )
+    if (
+        operation == "space_copy"
+        and count
+        and item_tenant == 101
+        and step in {"move_source_cleaned", "copy_input_ready"}
+    ):
+        allowed = True  # Independent copy input no longer needs the source index.
     async with db.sessions() as session, session.begin():
         if allowed:
             await SourceMoveInputRepository().arequire_released(session, space_id=1)
+            assert await SourceMoveInputRepository().ablocking_job_ids(session, space_id=1) == ()
         else:
             with pytest.raises(KnowledgeProcessingConflictError):
                 await SourceMoveInputRepository().arequire_released(session, space_id=1)
+            assert await SourceMoveInputRepository().ablocking_job_ids(session, space_id=1) == (job_id,)
         # Being the destination is not the source-index dependency.
         await SourceMoveInputRepository().arequire_released(session, space_id=2)
+        assert await SourceMoveInputRepository().ablocking_job_ids(session, space_id=2) == ()
+
+
+async def test_deleted_failed_copy_target_releases_source_but_active_copy_still_protects_input(db):
+    import sqlalchemy as sa
+
+    from bisheng.knowledge.domain.models.knowledge import Knowledge
+
+    await test_actual_persisted_source_plan_job_and_item_ack_are_required(
+        db, "failed", "failed", "pending", 101, 1, False, False, "space_copy"
+    )
+    async with db.sessions() as session, session.begin():
+        await session.execute(sa.delete(Knowledge).where(Knowledge.id == 2, Knowledge.tenant_id == 101))
+        await SourceMoveInputRepository().arequire_released(session, space_id=1)
+        await session.execute(sa.update(Job).where(Job.space_id == 2, Job.tenant_id == 101).values(state="running"))
+        with pytest.raises(KnowledgeProcessingConflictError):
+            await SourceMoveInputRepository().arequire_released(session, space_id=1)

@@ -568,7 +568,7 @@ class ChatClient:
             return
         self.new_session.name = "New Chat"
 
-        llm_conf = await LLMService.get_workbench_llm()
+        llm_conf = await LLMService.get_workbench_llm(slots=("chat_title_llm.id",))
         if not llm_conf or not llm_conf.chat_title_llm or not llm_conf.chat_title_llm.id:
             return
         llm = await LLMService.get_bisheng_llm(

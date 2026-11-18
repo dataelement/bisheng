@@ -148,6 +148,8 @@ export interface FileListRowProps {
   onOpenVersionHistory?: (file: KnowledgeFile) => void;
   /** Whether the current user can manage members (gates the "similar" pill). */
   canManageMembers?: boolean;
+  /** Space edit permission. Version mutations require it. */
+  canManageVersions?: boolean;
   /** Shougang: file encoding is appended to the meta line instead of its own column. */
   shougangEnabled?: boolean;
   canEditEncoding?: boolean;
@@ -168,7 +170,6 @@ export interface FileListRowProps {
 export function FileListRow({
   file,
   index,
-  isAdmin,
   onEnsureFilePermissions,
   permissionsLoading = false,
   isSelected,
@@ -192,6 +193,7 @@ export function FileListRow({
   onOpenVersionManagement,
   onOpenVersionHistory,
   canManageMembers = false,
+  canManageVersions = false,
   shougangEnabled = false,
   canEditEncoding = false,
   onEditEncoding,
@@ -258,33 +260,36 @@ export function FileListRow({
   });
 
   const hasRetryOption = isKnowledgeItemRetryable(file);
-  const showMoveItem = Boolean(onMove) && !isCreating;
+  const showMoveItem = Boolean(onMove) && canMove && !isCreating;
   const showVersionManagement =
     versionManagementEnabled &&
     !isFolder &&
     file.status === FileStatus.SUCCESS &&
-    isAdmin &&
+    canManageVersions &&
     Boolean(onOpenVersionManagement);
   const showVersionHistory =
     versionManagementEnabled && !isFolder && Boolean(file.is_multi_version) && Boolean(onOpenVersionHistory);
-  // Placeholders have only a temp id (no backend identity) — suppress all row actions.
+  const hasMenuActions =
+    canDownload ||
+    canRename ||
+    canDelete ||
+    Boolean(onManagePermission) ||
+    showMoveItem ||
+    showVersionManagement ||
+    showVersionHistory;
+  // A real file keeps the menu so its effective actions can be resolved on open.
+  // Placeholders have only a temp id and no backend identity.
   const showMoreMenu =
     !isUploadingFolderPlaceholder &&
-    (canDownload ||
-      isAdmin ||
-      canRename ||
-      canDelete ||
-      Boolean(onManagePermission) ||
-      showMoveItem ||
-      showVersionManagement ||
-      showVersionHistory);
+    !isCreating &&
+    /^[1-9][0-9]*$/.test(String(file.id));
 
   // The danger row gets its own group only when something sits above it.
   const hasItemsAboveDelete =
-    (isAdmin && !isFolder) ||
+    (canRename && !isFolder) ||
     canRename ||
     showMoveItem ||
-    (isAdmin && hasRetryOption) ||
+    (canRename && hasRetryOption) ||
     Boolean(onManagePermission) ||
     showVersionManagement ||
     showVersionHistory;
@@ -293,9 +298,11 @@ export function FileListRow({
     <DropdownItem disabled icon={<Outlined.Loading className="animate-spin motion-reduce:animate-pulse" />}>
       {localize("com_list_loading")}
     </DropdownItem>
+  ) : !hasMenuActions ? (
+    <DropdownItem disabled>{localize("com_knowledge.home_next.no_actions")}</DropdownItem>
   ) : (
     <>
-      {isAdmin && !isFolder && (
+      {canRename && !isFolder && (
         <DropdownItem onSelect={() => onEditTags()} icon={<Outlined.Tag />}>
           {localize("com_knowledge.edit_tags")}
         </DropdownItem>
@@ -307,14 +314,14 @@ export function FileListRow({
       )}
       {showMoveItem && (
         <DropdownItem
-          disabled={!canMove || isUploading}
+          disabled={isUploading}
           onSelect={() => onMove?.()}
           icon={<Outlined.MoveToFolder />}
         >
           {localize("com_knowledge.move")}
         </DropdownItem>
       )}
-      {isAdmin && hasRetryOption && (
+      {canRename && hasRetryOption && (
         <DropdownItem onSelect={() => onRetry?.()} icon={<Outlined.Refresh />}>
           {localize("com_knowledge.retry")}
         </DropdownItem>
@@ -442,9 +449,9 @@ export function FileListRow({
                 file.is_multi_version &&
                 file.version_no != null &&
                 file.version_no >= 1 && (
-                  <span className="flex h-5 shrink-0 items-center justify-center rounded bg-blue-50 px-1.5 text-xs font-medium text-blue-500">
+                  <Tag size="small" color="brand" className="shrink-0">
                     {`V${file.version_no}`}
-                  </span>
+                  </Tag>
                 )}
               <span
                 className={cn(
@@ -496,7 +503,7 @@ export function FileListRow({
                     variant="text-list"
                     highlightedTagIds={highlightedTagIds}
                     actionButton={
-                      isAdmin ? (
+                      canRename ? (
                         <button
                           type="button"
                           title={localize("com_knowledge.edit_tags")}

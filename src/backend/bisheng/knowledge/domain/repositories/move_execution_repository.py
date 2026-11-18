@@ -253,7 +253,7 @@ class MoveExecutionRepository(MoveRowRepository):
             ):
                 if actual != expected.get(side + "_" + key):
                     return "move_" + side + "_" + key + "_changed"
-            if root["state"] in (2, 3) or root["model_transition"] is not None:
+            if root["state"] != 1 or root["model_transition"] is not None:
                 return "move_" + side + "_space_processing"
         return None
 

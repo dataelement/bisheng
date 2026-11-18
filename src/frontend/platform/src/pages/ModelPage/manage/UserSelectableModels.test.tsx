@@ -11,6 +11,7 @@ vi.mock('./dsh/BaseModelPicker', () => ({ BaseModelPicker: () => <span>base-pick
 vi.mock('./dsh/ModelAccessDialog', () => ({ ModelAccessDialog: ({ model }: { model: { name: string } | null }) => model ? <p role="dialog">{model.name}</p> : null }))
 vi.mock('@/controllers/API/modelPricing', () => ({
     getModelPricingRows: vi.fn(),
+    getModelVisionRows: vi.fn(async () => []),
     getCreditSettings: vi.fn(async () => ({ version: 2, currency: 'CNY', credit_value: '0.01', usd_cny_rate: '7.2', base_model_id: null })),
     saveCreditSettings: vi.fn(),
     saveModelPricing: vi.fn(),
@@ -24,6 +25,7 @@ const priced = (model_id: number, changes: Partial<ModelPricingRow> = {}): Model
     edited: false,
     missing: false,
     hint: { ratio: '3.00', base: false, free: false },
+    can_edit: true, read_only: false, source_tenant_id: 1, base_reason: null,
     ...changes,
 })
 
@@ -114,7 +116,7 @@ it('offers visibility without the desktop module but no credit multiplier', () =
     expect(screen.getAllByRole('columnheader')).toHaveLength(5)
     expect(screen.getByRole('columnheader', { name: 'model.visibilityScope' })).toBeVisible()
     expect(screen.queryByText('rate-control')).toBeNull()
-    expect(screen.queryByText('vision-control')).toBeNull()
+    expect(screen.getByText('vision-control')).toBeVisible()
     // No display name or vision edit is needed for the model to be configurable.
     fireEvent.click(screen.getByRole('button', { name: 'model.configureVisibility' }))
     expect(screen.getByRole('dialog')).toHaveTextContent('vendor-model')

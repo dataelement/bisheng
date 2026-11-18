@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 /**
  * Approval / release status card of the publish tab (AC-32 / AC-33 / AC-34 / AC-61).
  *
@@ -35,7 +36,7 @@ import {
   type HostedAppDetail,
   type HostedAppPublishStatus,
 } from "@/controllers/API/hostedApp"
-import { AlertTriangle, Loader2 } from "lucide-react"
+import { AlertTriangle } from "lucide-react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
@@ -125,8 +126,8 @@ export function ApprovalStatusCard({
           size="sm"
           disabled={withdrawing}
           onClick={handleWithdraw}
-        >
-          {withdrawing && <Loader2 className="mr-1 size-3.5 animate-spin" />}
+         loading={withdrawing}>
+
           {t("hostedApp.publishStatus.withdraw")}
         </Button>
       )}
@@ -140,9 +141,7 @@ export function ApprovalStatusCard({
       actions={actions}
     >
       {loading && (
-        <p className="text-sm text-muted-foreground">
-          {t("hostedApp.publishStatus.loading")}
-        </p>
+        <LoadingState size="panel" label={t("hostedApp.publishStatus.loading")} className="text-sm text-muted-foreground" />
       )}
 
       {!loading && forbidden && (

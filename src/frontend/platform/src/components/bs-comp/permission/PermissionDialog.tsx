@@ -1,4 +1,5 @@
 import { Alert, Button } from "@bisheng/ui";
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 
 import { Checkbox } from "@bisheng/ui";
 import {
@@ -16,7 +17,6 @@ import {
   type PermissionGrantAssignee,
   type ResourcePermissionContext,
 } from "@/controllers/API/permission";
-import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { permissionDialogClassName, PermissionSubjectTabs } from "./PermissionSubjectLayout";
@@ -136,13 +136,7 @@ export function PermissionDialog({
           </DialogHeader>
 
           {loading && (
-            <div
-              className="flex min-h-56 flex-1 items-center justify-center gap-2 text-sm text-muted-foreground"
-              role="status"
-            >
-              <Loader2 aria-hidden="true" className="size-4 animate-spin" />
-              {t("dialog.loading")}
-            </div>
+            <LoadingState className="min-h-56 flex-1" label={t("dialog.loading")} />
           )}
 
           {failed && !loading && (

@@ -13,6 +13,7 @@ from bisheng.common.errcode.knowledge import (
 from bisheng.core.context.tenant import bypass_tenant_filter, is_tenant_filter_bypassed, strict_tenant_filter
 from bisheng.core.database.tenant_filter import _resolve_tenant_id
 from bisheng.database.models.tenant import ROOT_TENANT_ID, Tenant
+from bisheng.llm.domain.models.llm_server import LLMModel
 from bisheng.llm.domain.models.tenant_system_model_config import TenantSystemModelConfig
 from bisheng.llm.domain.services.default_reference_extractor import MODEL_DEFAULT_SCHEMAS
 from bisheng.resource_reference.application.contracts import SourceKey, SourceType
@@ -247,3 +248,31 @@ class ModelDefaultRepository:
         own = await self.aget_own(session, key, for_update=True)
         if own is not None:
             await session.execute(delete(TenantSystemModelConfig).where(*self._where(tenant_id, key, own.id)))
+
+    @staticmethod
+    def _slot_model_statement(ids):
+        return (
+            select(LLMModel.id, LLMModel.online, LLMModel.model_type).where(LLMModel.id.in_(ids)).order_by(LLMModel.id)
+        )
+
+    def read_slot_models(self, session, ids):
+        # IDs were admitted and locked by the source target owner in this transaction.
+        ordered = sorted(set(ids))
+        result = {}
+        with session.no_autoflush, bypass_tenant_filter():
+            for start in range(0, len(ordered), 200):
+                result.update(
+                    (row.id, row) for row in session.execute(self._slot_model_statement(ordered[start : start + 200]))
+                )
+        return result
+
+    async def aread_slot_models(self, session, ids):
+        ordered = sorted(set(ids))
+        result = {}
+        with session.no_autoflush, bypass_tenant_filter():
+            for start in range(0, len(ordered), 200):
+                result.update(
+                    (row.id, row)
+                    for row in await session.execute(self._slot_model_statement(ordered[start : start + 200]))
+                )
+        return result
