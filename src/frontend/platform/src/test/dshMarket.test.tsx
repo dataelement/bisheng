@@ -98,6 +98,29 @@ describe("DSH market administration", () => {
         expect(screen.getByTestId("dsh-management")).toBeInTheDocument();
         expect(screen.queryByRole("radiogroup", { name: "marketSections" })).not.toBeInTheDocument();
     });
+    it("only displays both lists when the server marks the selected tenant read only", async () => {
+        vi.mocked(listMarketPlugins).mockResolvedValue({ data: [plugin], total: 1, read_only: true });
+        vi.mocked(listMarketWorkbenches).mockResolvedValue({
+            data: [{
+                id: "other", display_name: "Other workbench", description: "",
+                current_version: { version: "1.0.0" }, workbench_key: "other", legacy_id: null,
+                updated_at: "2026-11-18T00:00:00",
+            }], total: 1, read_only: true,
+        });
+
+        render(view());
+        await screen.findByText(plugin.display_name);
+        for (const name of ["import", "delete", "details"])
+            expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+        expect(getMarketInstallPolicy).not.toHaveBeenCalled();
+        expect(listMarketImports).not.toHaveBeenCalled();
+
+        await userEvent.setup().click(screen.getByRole("radio", { name: "workbenchSection" }));
+        await screen.findByText("Other workbench");
+        for (const name of ["workbenchImport", "delete", "details"])
+            expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+        expect(listWorkbenchImports).not.toHaveBeenCalled();
+    });
     it("saves each installation setting for the current tenant", async () => {
         render(view());
         const plugins = await screen.findByRole("switch", { name: "allow_third_party_plugins" });
