@@ -156,7 +156,23 @@ async def test_original_principal_denial_is_not_replaced_by_root_shared_flag(sou
         with pytest.raises(UnAuthorizedError):
             await owner.aresolve_source(session, SourceReadRequest("assistant", "root"), user)
         assert not session.identity_map
-        check.assert_awaited_once_with(user, resource_type="assistant", resource_id="root", action="visible")
+        assert [call.kwargs["action"] for call in check.await_args_list] == ["visible", "edit"]
+        assert all(call.kwargs["resource_id"] == "root" for call in check.await_args_list)
+
+
+async def test_edit_decision_opens_assistant_when_visible_grant_is_absent(source_db):
+    engine, owner, user, check = source_db
+
+    async def decide(*_args, **kwargs):
+        if kwargs.get("action") == "visible":
+            raise UnAuthorizedError()
+        return None
+
+    check.side_effect = decide
+    async with AsyncSession(engine) as session, session.begin():
+        snapshot = await owner.aresolve_source(session, SourceReadRequest("assistant", "owned"), user)
+        assert snapshot.source_key.source_id == "owned"
+        assert [call.kwargs["action"] for call in check.await_args_list] == ["visible", "edit"]
 
 
 async def test_real_chat_token_binds_visible_source_without_trusting_metadata_or_tenant_equality(source_db):
