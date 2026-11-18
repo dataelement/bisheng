@@ -307,6 +307,8 @@ async def test_source_table_is_for_deep_research_only(monkeypatch: pytest.Monkey
     ):
         assert "[Sn]" not in text
     assert "来源表" not in agent_factory._DIRECT_CITATION_TAIL_HANDLES_ZH
+    # The daily rules only cover the reply; the tail is what asks for handles in a file.
+    assert "交付物" in agent_factory._DIRECT_CITATION_TAIL_HANDLES_ZH
 
 
 async def test_ask_user_in_both_profiles(monkeypatch: pytest.MonkeyPatch, tmp_path):

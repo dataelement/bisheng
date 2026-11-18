@@ -369,10 +369,12 @@ _LINSIGHT_CITATION_TAIL_HANDLES_ZH = """# 来源编号（与上文「来源编�
 写交付物正文和最终回复时，每条依据检索资料的句子末尾写编号，例如 [S3]，多条写 [S3][S7]；编号取自检索结果或本轮来源表。"""
 
 # The direct profile gets no source table (F075: the daily chat never had one), so
-# its tail must not point at one.
+# its tail must not point at one. It must still name the deliverable: the daily
+# rules only say "回答中", and with a tail that said the same a direct answer wrote
+# an HTML report with no handle at all (114, 2026-11-18; 201 with the old tail).
 _DIRECT_CITATION_TAIL_HANDLES_ZH = """# 来源编号（与上文「来源编号」同一要求，不改变其它任何要求）
 
-回答中每条依据检索资料的句子末尾写编号，例如 [S3]，多条写 [S3][S7]；编号取自检索结果或之前的回答。"""
+写交付物正文和最终回复时，每条依据检索资料的句子末尾写编号，例如 [S3]，多条写 [S3][S7]；编号取自检索结果或之前的回答。"""
 
 
 class _CitationTailMiddleware(_LanguageTailMiddleware):
