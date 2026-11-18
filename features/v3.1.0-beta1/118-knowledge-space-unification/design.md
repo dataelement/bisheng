@@ -195,12 +195,18 @@ flowchart LR
 | 高级指定文件重新处理 / 切分 | 所属知识库 / 空间 edit | [KnowledgeService.rebuild_knowledge_file](../../../src/backend/bisheng/knowledge/domain/services/knowledge_service.py) → ensure_knowledge_write_async |
 | Chunk 编辑 / 删除 | 所属知识库 / 空间 edit | KnowledgeService.update_knowledge_chunk / delete_knowledge_chunk |
 | 文件元数据值修改 | 所属知识库 / 空间 edit | [KnowledgeFileService.modify_file_user_metadata](../../../src/backend/bisheng/knowledge/domain/services/knowledge_file_service.py) |
+| 版本关联 / 合并 / 设为主版本 | 实际所属 knowledge_space.edit；不新增文件 edit | KnowledgeVersionMutationApplication：只读解析实际空间 → 关闭读事务 → F048 准入 → 写锁内重验空间归属 |
 | 现有空间文件重试、标签 / 编码等文件维护 | 保留相应既有文件 rename 映射 | KnowledgeSpaceService.retry_space_files / update_file_tags / update_file_encoding；不借此扩为 edit |
 | 删除 / 下载 / 移动 | 原目标 delete / download / move；移动另查目标容器 upload_file | KnowledgeSpaceService 对应已有用例 |
 
 这里的容器 edit 是既有高级用例的授权目标，不是给所有文件动作额外叠加的检查。网页后台入口/API scope、原读取入口资格、租户、文件归属、版本及任务状态仍按原合同处理；不因权限模式另写 INHERIT/CUSTOM 准入分支。空间默认、模型和元数据结构继续检查空间相应动作。
 
 **前稿纠正**：当前 Catalog 的 edit 适用范围没有 knowledge_file。此前“统一改为目标文件 edit”的接线要求撤回；本轮不修改该适用范围。文件标签、文件重试等当前使用 rename，不据其函数名自行改成 edit。
+
+2026-11-18 版本写入口修复：此前版本关联、合并、设主版本只有登录/租户/业务校验，遗漏资源动作准入。
+现由实际文件或版本→文档所属空间解析目标，不采纳请求中的空间提示；调用统一 F048 `knowledge_space.edit`。
+鉴权 I/O 在独立只读事务回滚关闭后执行，原版本写事务仍只提交一次；加锁后重验空间 ID/租户与准入时一致，
+期间发生跨空间移动或身份/租户范围变化即拒绝。沿用原业务状态、同空间限制、版本链一致性及未知提交结果处理。
 
 ### 4.3 拟议持久结构
 
