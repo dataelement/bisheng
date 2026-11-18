@@ -34,6 +34,7 @@ const run = (patch: Partial<RunState> = {}): RunState => ({
     pendingQuestion: null,
     queuePosition: null,
     error: null,
+    answerFiles: null,
     ...patch,
 });
 

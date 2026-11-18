@@ -14,3 +14,15 @@ import { createContext, useContext } from 'react';
 export const UnifiedRuntimeContext = createContext(false);
 
 export const useUnifiedRuntimePage = (): boolean => useContext(UnifiedRuntimeContext);
+
+/**
+ * Retry of a failed deep-research turn on such a page: sends the turn's
+ * question again as a new deep-research message through the page's send entry.
+ * Resolves with `false` when the message was not sent.
+ */
+export type RetryTaskTurn = (question: string) => Promise<boolean | void>;
+
+/** Null (the default) on every carrier that cannot send: no retry is offered there. */
+export const TaskTurnRetryContext = createContext<RetryTaskTurn | null>(null);
+
+export const useTaskTurnRetry = (): RetryTaskTurn | null => useContext(TaskTurnRetryContext);

@@ -1307,6 +1307,10 @@ export default function useAiChat(
 
     // --- Stop generating ---
     const unifiedStopRun = unified.stopRun;
+    // Read through a ref: `localize` has a new identity on every render and
+    // must not make `stopGenerating` change with it.
+    const notifyStopFailedRef = useRef<() => void>(() => undefined);
+    notifyStopFailedRef.current = () => showToast({ message: localize("runComposer.stopFailed"), status: "error" });
     const stopGenerating = useCallback(() => {
         // Only the conversation being read. A turn generating in another one is
         // none of this button's business.
@@ -1316,8 +1320,11 @@ export default function useAiChat(
         setIsParsingMedia(false);
         // F004: a run of the unified runtime lives on the server; ask it to
         // stop. The `run_stopped` event ends it on screen. No-op otherwise.
-        unifiedStopRun().catch(() => {
-            /* the run keeps going and the stop button stays available */
+        unifiedStopRun().catch((err: { presentation?: string } | null) => {
+            // The run keeps going and the stop button stays available. Say so,
+            // unless the request layer already showed this failure.
+            if (err?.presentation === "toast" || err?.presentation === "global") return;
+            notifyStopFailedRef.current();
         });
     }, [cancelIngestPoll, conversationId, activeBucketId, endStream, setIsParsingMedia, setIsStreaming, unifiedStopRun]);
 

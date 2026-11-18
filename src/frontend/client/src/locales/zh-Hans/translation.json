@@ -3061,7 +3061,18 @@
   },
   "runPlan": {
     "cancelled": "已取消",
-    "stopped": "已停止"
+    "stopped": "已停止",
+    "awaitingAnswer": "等你回答后继续",
+    "stoppedNote": "已停止，做完的步骤和文件都保留着。"
+  },
+  "runMessage": {
+    "toolStopped": "{{name}}已停止"
+  },
+  "runComposer": {
+    "stoppedPlaceholder": "已停止。说一句话就能接着做",
+    "stopFailed": "没能停下来，请再试一次",
+    "uploadLocked": "当前回答结束后才能上传文件",
+    "modelLocked": "当前回答结束后才能切换模型"
   },
   "appChat": {
     "unknownApp": "未知应用",

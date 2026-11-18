@@ -25,6 +25,7 @@ from fastapi.responses import ORJSONResponse
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import UnAuthorizedError
+from bisheng.database.models.message import ChatMessage
 from bisheng.linsight.domain.models.linsight_session_version import SessionVersionStatusEnum
 from bisheng.linsight.domain.services.run_event_stream import RunEventStream
 from bisheng.linsight.domain.task_exec import LINSIGHT_RUN_LOCK_KEY_PREFIX
@@ -152,14 +153,14 @@ async def test_stop_is_for_the_owner_only(world: _World, client: httpx.AsyncClie
 
 
 async def test_stop_without_a_run_does_nothing(world: _World, client: httpx.AsyncClient):
-    assert await _stop(client) == {"run_id": None, "status": "idle"}
+    assert await _stop(client) == {"run_id": None, "status": "idle", "unread_messages": []}
     assert await world.events() == []
 
 
 async def test_stop_of_a_running_direct_run_sets_its_flag(world: _World, client: httpx.AsyncClient):
     run_id = await world.start()
 
-    assert await _stop(client) == {"run_id": run_id, "status": "stopping"}
+    assert await _stop(client) == {"run_id": run_id, "status": "stopping", "unread_messages": []}
 
     # The run itself writes run_stopped and releases the conversation (AC-29).
     assert await world.lease.should_stop(run_id)
@@ -171,15 +172,16 @@ async def test_stop_ends_a_parked_direct_run(world: _World, client: httpx.AsyncC
     run_id = await world.start()
     await world.park(run_id)
 
-    assert await _stop(client) == {"run_id": run_id, "status": "stopped"}
+    assert await _stop(client) == {"run_id": run_id, "status": "stopped", "unread_messages": []}
 
     assert (await world.state()).status == rl.STATUS_IDLE
     assert [e["type"] for e in await world.events()][-1] == "run_stopped"
-    # What the run had written is saved, marked like a stopped turn.
+    # What the run had written is saved with the "stopped" mark, not as an error row (design §7 item 2).
     (answer,) = world.table.answers()
     assert json.loads(answer.message)["msg"] == "先问一句"
-    extra = world.table.extra(answer)
-    assert extra["run_id"] == run_id and extra["error"] is True and extra["error_msg"] == "stream interrupted"
+    assert world.table.extra(answer) == {"status": "stopped", "run_id": run_id}
+    stopped = (await world.events())[-1]
+    assert stopped["data"] == {"reason": "user", "status": "stopped", "unread_messages": []}
     assert answer.sender == "模型一"
     # The flag of a run nobody executes is not left behind.
     assert not await world.lease.should_stop(run_id)
@@ -193,7 +195,7 @@ async def test_second_stop_of_a_parked_run_writes_nothing_more(world: _World, cl
     await world.park(run_id)
 
     await _stop(client)
-    assert await _stop(client) == {"run_id": None, "status": "idle"}
+    assert await _stop(client) == {"run_id": None, "status": "idle", "unread_messages": []}
 
     assert len(world.table.answers()) == 1
     assert [e["type"] for e in await world.events()].count("run_stopped") == 1
@@ -204,7 +206,7 @@ async def test_stop_ends_a_parked_planned_run(world: _World, client: httpx.Async
     await world.park(run_id)
     world.record = SimpleNamespace(id="svid-1", status=SessionVersionStatusEnum.WAITING_FOR_USER_INPUT)
 
-    assert await _stop(client) == {"run_id": run_id, "status": "stopped"}
+    assert await _stop(client) == {"run_id": run_id, "status": "stopped", "unread_messages": []}
 
     assert (await world.state()).status == rl.STATUS_IDLE
     assert world.terminated == [world.record]
@@ -218,7 +220,7 @@ async def test_stop_takes_a_queued_planned_run_out(world: _World, client: httpx.
     run_id = await world.start(task_mode=True)
     world.record = SimpleNamespace(id="svid-1", status=SessionVersionStatusEnum.NOT_STARTED)
 
-    assert await _stop(client) == {"run_id": run_id, "status": "stopped"}
+    assert await _stop(client) == {"run_id": run_id, "status": "stopped", "unread_messages": []}
 
     assert world.terminated == [world.record]
     assert (await world.state()).status == rl.STATUS_IDLE
@@ -232,7 +234,7 @@ async def test_stop_of_an_executing_planned_run_leaves_the_release_to_the_worker
     world.record = SimpleNamespace(id="svid-1", status=SessionVersionStatusEnum.IN_PROGRESS)
     await world.redis.set(f"{LINSIGHT_RUN_LOCK_KEY_PREFIX}svid-1", run_id, ex=30)
 
-    assert await _stop(client) == {"run_id": run_id, "status": "stopping"}
+    assert await _stop(client) == {"run_id": run_id, "status": "stopping", "unread_messages": []}
 
     assert await world.lease.should_stop(run_id)
     assert (await world.state()).status == rl.STATUS_RUNNING
@@ -244,7 +246,7 @@ async def test_stop_of_a_dead_run_reports_it(world: _World, client: httpx.AsyncC
     run_id = await world.start()
     await world.redis.hset(rl.state_key(CID), rl.FIELD_LEASE_UNTIL, "1")
 
-    assert await _stop(client) == {"run_id": run_id, "status": "expired"}
+    assert await _stop(client) == {"run_id": run_id, "status": "expired", "unread_messages": []}
 
     assert (await world.state()).status == rl.STATUS_IDLE
     last = (await world.events())[-1]
@@ -322,3 +324,141 @@ async def test_legacy_terminate_survives_a_failing_unified_stop(
     monkeypatch.setattr(run_send, "stop_conversation_run", AsyncMock(side_effect=RuntimeError("redis down")))
 
     await linsight_endpoint._request_unified_stop(_version())
+
+
+# ------------------------------- design §7 items 2 and 6: stopped mark, unread messages
+
+
+async def _queue_message(world: _World, text: str, task_mode: bool = False) -> tuple[str, int]:
+    """A message sent while the run holds the conversation, with its question row bound."""
+    queued = await world.dispatch.submit(CID, world.message(text, task_mode))
+    assert queued.disposition == "queued"
+    row = await world.table.ainsert_one(
+        ChatMessage(
+            chat_id=CID,
+            user_id=OWNER,
+            category="question",
+            is_bot=False,
+            message=json.dumps({"query": text, "files": []}, ensure_ascii=False),
+            extra=json.dumps(run_message_persist.steer_extra(queued.run_id, queued.message_id, queued=True)),
+        )
+    )
+    await run_message_persist.bind_steer_row(world.redis, CID, queued.message_id, row.id, queued.run_id)
+    return queued.message_id, row.id
+
+
+async def test_stop_of_a_parked_run_returns_the_unread_messages(world: _World, client: httpx.AsyncClient):
+    run_id = await world.start()
+    first_id, first_row = await _queue_message(world, "补充一句")
+    second_id, second_row = await _queue_message(world, "再补一句")
+    await world.park(run_id)
+
+    data = await _stop(client)
+
+    unread = [
+        {"message_id": first_id, "text": "补充一句", "files": []},
+        {"message_id": second_id, "text": "再补一句", "files": []},
+    ]
+    # The request ended the run, so its response carries the messages ...
+    assert data == {"run_id": run_id, "status": "stopped", "unread_messages": unread}
+    # ... and so does the terminal event, for a client that only follows the stream.
+    stopped = (await world.events())[-1]
+    assert stopped["type"] == "run_stopped"
+    assert stopped["data"] == {"reason": "user", "status": "stopped", "unread_messages": unread}
+    # No relay run: the inbox is empty, nothing was queued, the conversation is idle.
+    assert await world.dispatch.inbox_length(CID) == 0
+    world.dispatch._enqueue_relay.assert_not_awaited()
+    assert (await world.state()).status == rl.STATUS_IDLE
+    # Their question rows are gone (the text goes back to the input box); the answer stays.
+    assert world.table.deleted == [first_row, second_row]
+    assert world.table.questions() == []
+    assert len(world.table.answers()) == 1
+    assert not await world.redis.exists(run_message_persist.steer_key(CID))
+    # The next message starts a normal new run, not a relay.
+    after = await world.dispatch.submit(CID, world.message("新的问题"))
+    assert after.kind == "new_run"
+
+
+async def test_stop_of_a_queued_planned_run_returns_the_unread_messages(world: _World, client: httpx.AsyncClient):
+    run_id = await world.start(task_mode=True)
+    message_id, row_id = await _queue_message(world, "排队时又发了一条", task_mode=True)
+    world.record = SimpleNamespace(id="svid-1", status=SessionVersionStatusEnum.NOT_STARTED)
+
+    data = await _stop(client)
+
+    assert data == {
+        "run_id": run_id,
+        "status": "stopped",
+        "unread_messages": [{"message_id": message_id, "text": "排队时又发了一条", "files": []}],
+    }
+    world.dispatch._enqueue_relay.assert_not_awaited()
+    assert (await world.state()).status == rl.STATUS_IDLE
+    assert world.table.deleted == [row_id]
+
+
+async def test_stop_of_a_running_run_leaves_the_inbox_to_the_run(world: _World, client: httpx.AsyncClient):
+    """A live run takes its unread messages back itself, in whichever process it executes."""
+    run_id = await world.start()
+    await _queue_message(world, "补充一句")
+
+    data = await _stop(client)
+
+    assert data == {"run_id": run_id, "status": "stopping", "unread_messages": []}
+    assert await world.dispatch.inbox_length(CID) == 1
+    assert world.table.deleted == []
+
+
+async def test_row_bound_after_the_stop_is_deleted(world: _World):
+    """The stop can run between the inbox push and the row's bind (two requests, maybe two nodes)."""
+    run_id = await world.start()
+    queued = await world.dispatch.submit(CID, world.message("补充一句"))
+
+    unread = await run_message_persist.discard_unread(world.dispatch, CID, redis=world.redis)
+    row = await world.table.ainsert_one(ChatMessage(chat_id=CID, category="question", message="{}", extra="{}"))
+    still_queued = await run_message_persist.bind_steer_row(world.redis, CID, queued.message_id, row.id, run_id)
+
+    assert unread == [{"message_id": queued.message_id, "text": "补充一句", "files": []}]
+    assert still_queued is False
+    assert world.table.rows == [] and world.table.deleted == [row.id]
+    assert not await world.redis.exists(run_message_persist.steer_key(CID))
+
+
+async def test_legacy_terminate_returns_nothing_to_relay(world: _World, linsight_endpoint):
+    """Item 5 with item 6: the legacy terminate frees the lease and leaves no unread message behind."""
+    run_id = await world.start(task_mode=True)
+    await _queue_message(world, "补充一句", task_mode=True)
+    await world.park(run_id)
+    world.record = _version()
+
+    await linsight_endpoint._request_unified_stop(world.record)
+
+    assert (await world.state()).status == rl.STATUS_IDLE
+    assert await world.dispatch.inbox_length(CID) == 0
+    world.dispatch._enqueue_relay.assert_not_awaited()
+    after = await world.dispatch.submit(CID, world.message("新的问题"))
+    assert after.kind == "new_run"
+
+
+async def test_stop_of_a_parked_run_starts_a_run_that_waited(world: _World, monkeypatch: pytest.MonkeyPatch):
+    """Item 4: the parked-run release skips the finish script, so the stop promotes the waiting run."""
+    queued_items: list[dict] = []
+
+    async def enqueue_item(item: dict) -> None:
+        queued_items.append(item)
+
+    monkeypatch.setattr(
+        run_send,
+        "_dispatch_wiring",
+        lambda: {"enqueue_relay": world.dispatch._enqueue_relay, "enqueue_item": enqueue_item},
+    )
+    run_id = await world.start()
+    await world.park(run_id)
+    waiting = await world.dispatch.claim_or_wait(CID, "run-api", "planned", {"session_version_id": "sv-api"})
+    assert waiting.held is False
+
+    data = await run_send.stop_conversation_run(CID)
+
+    assert data["status"] == "stopped"
+    assert queued_items == [{"session_version_id": "sv-api", "run_id": "run-api"}]
+    state = await world.state()
+    assert (state.status, state.run_id) == (rl.STATUS_RUNNING, "run-api")

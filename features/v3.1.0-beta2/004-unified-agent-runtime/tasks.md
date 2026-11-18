@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-11-18 用户确认，51 条 AC |
 | design.md | ✅ 已评审 | 2026-11-18 用户确认，决策 1 至决策 12；接手时的第一入口 |
 | tasks.md | ✅ 已拆解 | 2026-11-18 `/sdd-review tasks` 自审通过；任务编号 T001 至 T063，T063 排在 T044 之后 |
-| 实现 | 🔨 进行中 | 60 / 63 完成（Wave 0–4 的代码任务已提交；T039、T051、T062 的界面、多节点、DM8 步骤待人工执行，见 verification-p1.md、verification-p2.md、verification-final.md）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🔨 进行中 | 73 / 76 完成（Wave 0–5 的代码任务已提交；T039、T051、T062 的界面、多节点、DM8 步骤待人工执行，见 verification-p1.md、verification-p2.md、verification-final.md）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
 
 ---
 
@@ -485,6 +485,22 @@
 
 ---
 
+### Wave 5：待定事项的决定落地（2026-11-18，design §7 决定表）
+
+- [x] **T064**: 运行结束瞬间到达的消息以深度研究档接力（决定 1）。`worker._start_planned_relay`、`run_send.start_planned_relay`。
+- [x] **T065**: “用户停止”单独标记（决定 2）。回答行 `extra.status == "stopped"`；前端显示“已停止”。
+- [x] **T066**: 敏感词拦截走新协议（决定 3）。发送应答 `disposition: "blocked"`。
+- [x] **T067**: 同会话已有运行时的提交改为排队（决定 4）。`run_dispatch` 的 `claim_or_wait`、`promote_pending`、`sweep_pending`。
+- [x] **T068**: 停止后不接力，未读消息退回输入框（决定 6）。`run_stopped.data.unread_messages`、停止应答、`resync`。
+- [x] **T069**: 运行中禁用上传与切换模型（决定 7）。
+- [x] **T070**: 补“等你回答后继续”、停止后的占位文案与说明行、停止失败提示（决定 8）。
+- [x] **T071**: 回答提问不过邀请额度检查（决定 9）。
+- [x] **T072**: 每个回答保留文件副本（决定 11）。对象键 `chat/{partition}/answers/{run_id}/...`；终止事件带 `answer_files`。
+- [x] **T073**: 用新通道重做“重试”（决定 15）。
+- [x] **T074**: `direct` 运行写引用审计日志行（决定 17）。
+- [x] **T075**: 视觉模型的图片附件写入工作区 `uploads/`（决定 18）。
+- [x] **T076**: 英文排队文案改为 "Sent — queued"（决定 10）。
+
 ## 实际偏差记录
 
 > 只留一行指针，论证在 design.md。推翻已 ★ 确认的决策时，先停下与用户重新确认。
@@ -528,3 +544,4 @@
 - **T060**：`WorkspacePanel.tsx` 没有改，合并逻辑在新文件 `liveWorkspaceFiles.ts`，由 `useTaskWorkspaceState.ts` 并入 `chatAttachments`。运行中的 `output/` 文件通过 T055 的新接口取链接（集成时补接）。“查看代码和输出”只在开关开启时显示，组件为新文件 `ToolCodeOutput.tsx`。`resync` 的 `ended` 由 `runStore.reduceResync` 直接采用（集成时补接），“两次空连接”的推断保留为兜底。
 - **T061**：`useAiChat.ts` 里的交接处理代码没有删除，开关关闭时仍需要它；开关开启时该分支不可达。新增 `UnifiedRuntimeContext`，`TaskTurnPanel` 新增 `liveChannel`。已结束的深度研究回合仍由 `TaskTurnPanel` 渲染。开关开启时会话页的旧任务回合不再有“重试”、排队“取消”、旧提问卡片（见 design §7 待定事项 15）。浏览器验证没有执行。
 - **Wave 3 集成修正**：`test_direct_answer_recovery.py` 的运行器补了对象存储替身（T053 起每次运行都构造工作区 backend）。
+- **Wave 5（T064–T076）**：决定 5 在 T050 已实现，没有新任务。实现中修复一个原测试没有暴露的缺陷：开关开启时网页端深度研究发送的 run id 没有传到 worker，worker 被发送入口自己的预留挡住；`submit_task_turn` 与 `enqueue_session_for_execution` 新增可选 `run_id`。`submit_task_turn` 新增 `persist_user_turn`（接力时不重复写提问行）。排队状态在 Redis（`bisheng:run:pending:{cid}`、`bisheng:run:pending_index`）。被退回的未读消息的提问行从 `chat_message` 删除。前端拆分 `runStore.ts`（事件类型移到 `runEventTypes.ts`，计划进度移到 `runPlanProgress.ts`），发送逻辑从 `ChatView.tsx` 抽到 `useChatSendActions.ts`。集成时补了两处：终止事件带 `answer_files`，`resync` 带 `unread_messages`。新出现的待定事项见 design §7 第 21–26 条。

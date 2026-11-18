@@ -449,6 +449,17 @@ class ChatMessageDao(MessageBase):
             await session.commit()
 
     @classmethod
+    async def adelete_by_id_in_chat(cls, message_id: int, chat_id: str) -> None:
+        """Delete one row of one conversation with a single DELETE.
+
+        A bulk DELETE gets no tenant filter, so the row is addressed by its id
+        AND its conversation id (a uuid that belongs to one tenant).
+        """
+        async with get_async_db_session() as session:
+            await session.exec(delete(ChatMessage).where(ChatMessage.id == message_id, ChatMessage.chat_id == chat_id))
+            await session.commit()
+
+    @classmethod
     def update_message_copied(cls, message_id: int, copied: int):
         with get_sync_db_session() as session:
             statement = update(ChatMessage).where(ChatMessage.id == message_id).values(copied=copied)

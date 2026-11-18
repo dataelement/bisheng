@@ -107,6 +107,11 @@ class _MemoryObjectStore:
     def get_object_sync(self, bucket_name: str = None, object_name: str = None) -> bytes:
         return self.objects[object_name]
 
+    async def copy_object(
+        self, source_bucket: str = None, source_object: str = None, dest_bucket: str = None, dest_object: str = None
+    ) -> None:
+        self.objects[dest_object] = self.objects[source_object]
+
     def list_objects(self, bucket: str, prefix: str = "", recursive: bool = False):
         return [
             SimpleNamespace(object_name=name, size=len(data), is_dir=False)
@@ -659,3 +664,111 @@ async def test_metric_line_emitted(make_env):
     assert int(fields["checkpoint_bytes"]) > 0
     # No ids in the line: the trace id of the log line carries the run id.
     assert ctx.run_id not in metric_lines[0]
+
+
+async def test_stop_returns_unread_messages_and_starts_no_relay(make_env):
+    """Design §7 items 2 and 6: ``run_stopped`` carries the unread inbox; no relay run starts."""
+    sent: dict[str, str] = {}
+
+    async def stopped_mid_answer(messages):
+        # Sent while this model call is in flight: the inbox middleware never reads it.
+        queued = await env.dispatch.submit(CID, env.message("顺便再查一下乙"))
+        sent["message_id"] = queued.message_id
+        await env.lease.request_stop(ctx.run_id, CID)
+        await asyncio.sleep(30)
+        raise AssertionError("the stopped run was not cancelled")
+
+    env = make_env([_call("echo", {"text": "x"}, "c1", content="已经写出的部分回答"), stopped_mid_answer], tools=[echo])
+    ctx = await env.submit("写一篇长文")
+
+    outcome = await env.run(ctx)
+
+    assert outcome.status == "stopped"
+    stopped = (await env.events())[-1]
+    assert stopped["type"] == "run_stopped"
+    assert stopped["data"] == {
+        "reason": "user",
+        "status": "stopped",
+        "unread_messages": [{"message_id": sent["message_id"], "text": "顺便再查一下乙", "files": []}],
+    }
+    # The hooks (the answer-row projector) get the same event.
+    assert env.hook_events[-1]["data"] == stopped["data"]
+    # No relay run was queued and the conversation is idle with an empty inbox.
+    assert env.relays == []
+    assert await env.dispatch.inbox_length(CID) == 0
+    assert (await env.state()).status == rl.STATUS_IDLE
+    # What was written before the stop is kept (AC-29).
+    assert (await env.stream.snapshot(CID))["text"] == "已经写出的部分回答"
+
+
+async def test_finished_run_still_relays_its_unread_messages(make_env):
+    """Only a user stop takes the messages back; a run that ends normally relays as before."""
+
+    async def answer_after_a_late_message(messages):
+        await env.dispatch.submit(CID, env.message("顺便再查一下乙"))
+        return AIMessage("回答完毕")
+
+    env = make_env([answer_after_a_late_message])
+    ctx = await env.submit("写一篇长文")
+
+    outcome = await env.run(ctx)
+
+    assert outcome.status == "finished"
+    assert len(env.relays) == 1 and env.relays[0]["relay"] is True
+    assert await env.dispatch.inbox_length(CID) == 1
+
+
+# ---------------------------------------------- fields added to the terminal event
+
+
+class _TerminalFields:
+    """Owner of a hook that adds fields to the terminal event (the projector's protocol)."""
+
+    def __init__(self, extra: Any = None, error: BaseException | None = None) -> None:
+        self.extra = extra
+        self.error = error
+        self.asked: list[str] = []
+        self.seen: list[dict] = []
+
+    async def before_terminal(self, event: dict) -> Any:
+        self.asked.append(event["type"])
+        if self.error is not None:
+            raise self.error
+        return self.extra
+
+    async def on_event(self, event: dict) -> None:
+        self.seen.append(event)
+
+
+async def test_terminal_event_carries_the_fields_of_the_hook_owner(make_env):
+    env = make_env([AIMessage(content="你好")])
+    files = [{"file_id": "copy-1", "workspace_file_id": "live-1", "path": "output/a.md"}]
+    owner = _TerminalFields({"answer_files": files, "status": "must not replace an existing field"})
+    ctx = await env.submit("你好")
+
+    outcome = await asyncio.wait_for(
+        direct_run.execute_direct_run(ctx, runner=env.runner, on_event=[owner.on_event, env.hook]), timeout=20
+    )
+
+    assert outcome.status == "finished"
+    # Asked once, for the terminal event only, before it reached the stream.
+    assert owner.asked == ["run_finished"]
+    terminal = (await env.events())[-1]
+    assert terminal["type"] == "run_finished"
+    assert terminal["data"]["answer_files"] == files
+    assert owner.seen[-1]["data"]["answer_files"] == files
+
+
+async def test_terminal_event_is_written_when_the_hook_owner_fails(make_env):
+    env = make_env([AIMessage(content="你好")])
+    owner = _TerminalFields(error=RuntimeError("object storage down"))
+    ctx = await env.submit("你好")
+
+    outcome = await asyncio.wait_for(
+        direct_run.execute_direct_run(ctx, runner=env.runner, on_event=[owner.on_event]), timeout=20
+    )
+
+    assert outcome.status == "finished"
+    terminal = (await env.events())[-1]
+    assert terminal["type"] == "run_finished" and "answer_files" not in terminal["data"]
+    assert owner.seen[-1]["type"] == "run_finished"

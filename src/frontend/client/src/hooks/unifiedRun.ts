@@ -25,7 +25,19 @@ export type SendOutcome =
      * for (a blocked input is recorded as a normal turn, no run starts).
      */
     | { kind: 'legacy'; conversationId: string | null; error: { code?: number; message?: string } | null }
+    /** The input was blocked by content safety: the turn is stored, no run starts (design §7 item 3). */
+    | { kind: 'blocked'; blocked: BlockedSend }
     | { kind: 'invalid' };
+
+/** Answer of a send whose input content safety blocked (`disposition: "blocked"`). */
+export interface BlockedSend {
+    conversationId: string;
+    /** The reply the backend stored as the answer of the turn. */
+    autoReply: string;
+    /** Row ids of the stored question and answer; '' when the backend named none. */
+    questionMessageId: string;
+    answerMessageId: string;
+}
 
 function asRecord(value: unknown): Record<string, unknown> | null {
     return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
@@ -74,6 +86,18 @@ export function classifySendResponse(raw: unknown): SendOutcome {
     }
     const envelope = asRecord(raw);
     const data = asRecord(envelope?.data) ?? envelope;
+    if (data?.disposition === 'blocked') {
+        if (typeof data.conversation_id !== 'string' || !data.conversation_id) return { kind: 'invalid' };
+        return {
+            kind: 'blocked',
+            blocked: {
+                conversationId: data.conversation_id,
+                autoReply: typeof data.auto_reply === 'string' ? data.auto_reply : '',
+                questionMessageId: data.question_message_id == null ? '' : String(data.question_message_id),
+                answerMessageId: data.answer_message_id == null ? '' : String(data.answer_message_id),
+            },
+        };
+    }
     if (!data || typeof data.run_id !== 'string' || typeof data.disposition !== 'string') return { kind: 'invalid' };
     const result: RunSendResult = {
         run_id: data.run_id,
@@ -91,6 +115,15 @@ export function classifySendResponse(raw: unknown): SendOutcome {
 /** True when a `started` answer continues the run that was waiting for the user. */
 export function isAnswerToPendingQuestion(run: RunState | null | undefined, result: RunSendResult): boolean {
     return !!run && run.status === 'waiting' && run.runId === result.run_id && result.disposition === 'started';
+}
+
+/**
+ * True while the run waits for the user's answer to a question. The next
+ * message of the conversation is then the answer: it continues the same run
+ * and is not a new deep-research request.
+ */
+export function isRunAwaitingAnswer(run: RunState | null | undefined): boolean {
+    return run?.status === 'waiting' && !!run.pendingQuestion;
 }
 
 // ---------------------------------------------------------------------------
@@ -158,6 +191,44 @@ export function failureFieldsOfRun(run: RunState, errorText: string): Partial<Ch
         ...(error?.detail ? { errorDetail: error.detail } : {}),
         ...(error?.reference_id ? { referenceId: error.reference_id } : {}),
     };
+}
+
+/**
+ * What the stored row of a stopped run keeps for a tool call that was still
+ * running (backend `run_projector_direct.STOPPED_TOOL_NOTE`). Not a failure.
+ */
+export const STOPPED_TOOL_NOTE = 'stopped by user';
+
+/**
+ * Fields of the answer row of a run the user stopped: the content so far, the
+ * neutral "stopped" mark, and tool calls that were running shown as stopped.
+ */
+export function stoppedFieldsOfRun(run: RunState): Partial<ChatMessage> {
+    if (run.status !== 'stopped') return {};
+    const events = agentEventsOfRun(run).map((event) =>
+        event.type === 'tool_call' && event.inflight ? { ...event, inflight: false, error: STOPPED_TOOL_NOTE } : event,
+    );
+    return { stopped: true, ...(events.length ? { events } : {}) };
+}
+
+/**
+ * Marks the unified runtime stores in a history row's `extra`: a stopped
+ * answer (`status: "stopped"`, no `error`) and the inbox id of a message sent
+ * into a run (`steer_message_id`).
+ */
+export function runRowMarks(extra: unknown): Partial<ChatMessage> {
+    const record = asRecord(extra);
+    if (!record) return {};
+    const steerId = record.steer_message_id;
+    return {
+        ...(record.status === 'stopped' && !record.error ? { stopped: true } : {}),
+        ...(typeof steerId === 'string' && steerId ? { steerMessageId: steerId } : {}),
+    };
+}
+
+/** Id the run store knows a user row by: its inbox id when it was sent into a run. */
+export function queueIdOf(row: Pick<ChatMessage, 'messageId' | 'steerMessageId'>): string {
+    return row.steerMessageId || String(row.messageId);
 }
 
 function newLiveRow(runId: string, parent: ChatMessage | undefined, sender: string): ChatMessage {
@@ -275,6 +346,16 @@ export function hasLiveRow(messages: ChatMessage[], runId: string): boolean {
 }
 
 /**
+ * Files of the stored answer of an ended run, with the row's ids (design §7
+ * item 11): the file cards of a finished answer fetch the answer's own copy,
+ * not the workspace file a later run may overwrite. Empty when the terminal
+ * event named none; the history reload then brings the row's files.
+ */
+export function answerFileFieldsOfRun(run: RunState): Partial<ChatMessage> {
+    return run.answerFiles?.length ? { files: run.answerFiles } : {};
+}
+
+/**
  * Turn the live row of an ended run into a plain row holding the final state.
  * It stays on screen until the history endpoint returns the persisted turn.
  */
@@ -284,8 +365,28 @@ export function freezeLiveRun(messages: ChatMessage[], run: RunState, errorText 
     const row = { ...messages[index] };
     delete row.liveRunId;
     const next = messages.slice();
-    next[index] = { ...row, ...liveFieldsOfRun(run), ...keepTaskCategory(row), ...failureFieldsOfRun(run, errorText) };
+    next[index] = {
+        ...row,
+        ...liveFieldsOfRun(run),
+        ...keepTaskCategory(row),
+        ...failureFieldsOfRun(run, errorText),
+        ...stoppedFieldsOfRun(run),
+        ...answerFileFieldsOfRun(run),
+    };
     return next;
+}
+
+/**
+ * Give an ended run that never had a row its final row. Used when a relay run
+ * fails before the page saw it running: its start and its failure arrive
+ * together, so no live row was created to carry the failure.
+ */
+export function addEndedRunRow(messages: ChatMessage[], run: RunState, sender: string, errorText = ''): ChatMessage[] {
+    if (isRunActive(run) || messages.some((m) => m.liveRunId === run.runId || m.messageId === `run:${run.runId}`)) {
+        return messages;
+    }
+    const row = newLiveRow(run.runId, messages[messages.length - 1], sender);
+    return freezeLiveRun([...messages, row], run, errorText);
 }
 
 // ---------------------------------------------------------------------------
@@ -352,6 +453,37 @@ export function reconcileSentMessages(
     return [...next.slice(0, userIndex + 1), row, ...next.slice(userIndex + 1)];
 }
 
+/**
+ * Apply a blocked send to the optimistic rows: the user row takes the stored
+ * question id and the turn gets a plain answer row with the auto-reply, the
+ * same shape the history returns for it. No run mirrors this row.
+ */
+export function applyBlockedSend(messages: ChatMessage[], blocked: BlockedSend, refs: SentMessageRefs): ChatMessage[] {
+    const questionId = blocked.questionMessageId || refs.userMessageId;
+    const next = messages
+        .filter((m) => m.liveRunId !== '')
+        .map((m) => {
+            if (m.messageId === refs.userMessageId) {
+                return { ...m, messageId: questionId, conversationId: blocked.conversationId };
+            }
+            return m.parentMessageId === refs.userMessageId ? { ...m, parentMessageId: questionId } : m;
+        });
+    const userIndex = next.findIndex((m) => m.messageId === questionId);
+    if (userIndex === -1) return next;
+    const answer: ChatMessage = {
+        text: blocked.autoReply,
+        sender: refs.sender,
+        isCreatedByUser: false,
+        parentMessageId: questionId,
+        conversationId: blocked.conversationId,
+        messageId: blocked.answerMessageId || `${questionId}_`,
+        error: false,
+        category: 'agent_answer',
+        events: [{ type: 'text', content: blocked.autoReply }],
+    };
+    return [...next.slice(0, userIndex + 1), answer, ...next.slice(userIndex + 1)];
+}
+
 /** Drop the optimistic rows of a send that was rejected. */
 export function dropSentMessages(messages: ChatMessage[], userMessageId: string): ChatMessage[] {
     return messages.filter((m) => m.messageId !== userMessageId && m.liveRunId !== '');
@@ -378,9 +510,29 @@ export function mergeHistoryWithQueued(
     queuedMessageIds: Record<string, unknown> | null | undefined,
 ): ChatMessage[] {
     const queued = queuedMessageIds ?? {};
-    const known = new Set(history.map((m) => String(m.messageId)));
-    const waiting = local.filter(
-        (m) => m.isCreatedByUser && !!queued[String(m.messageId)] && !known.has(String(m.messageId)),
-    );
+    // A message sent into a run is stored at once; its row carries the inbox id.
+    const known = new Set(history.flatMap((m) => [String(m.messageId), queueIdOf(m)]));
+    const waiting = local.filter((m) => m.isCreatedByUser && !!queued[queueIdOf(m)] && !known.has(queueIdOf(m)));
     return waiting.length ? [...history, ...waiting] : history;
+}
+
+// ---------------------------------------------------------------------------
+// Unread messages given back (design §7 items 1, 6)
+// ---------------------------------------------------------------------------
+
+/** Ids, among `ids`, of returned messages whose user row is in the list. */
+export function shownReturnedIds(messages: ChatMessage[], ids: Iterable<string>): Set<string> {
+    const wanted = new Set(ids);
+    const shown = new Set<string>();
+    for (const m of messages) {
+        if (m.isCreatedByUser && wanted.has(queueIdOf(m))) shown.add(queueIdOf(m));
+    }
+    return shown;
+}
+
+/** Remove the user rows of returned messages; their text goes back to the input box. */
+export function removeReturnedMessages(messages: ChatMessage[], ids: ReadonlySet<string>): ChatMessage[] {
+    if (ids.size === 0) return messages;
+    const next = messages.filter((m) => !(m.isCreatedByUser && ids.has(queueIdOf(m))));
+    return next.length === messages.length ? messages : next;
 }

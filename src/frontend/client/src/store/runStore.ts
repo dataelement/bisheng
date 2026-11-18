@@ -18,141 +18,30 @@
  * changes the current run.
  */
 import { create } from 'zustand';
+import type {
+    RunAskUserData,
+    RunEvent,
+    RunEventType,
+    RunFailedData,
+    RunFileData,
+    RunPlanItem,
+    RunResyncData,
+    RunSendResult,
+    RunSteerData,
+    RunTextData,
+} from './runEventTypes';
+import { answerFilesOf, type RunAnswerFile } from './runAnswerFiles';
+import { planProgressOf, type PlanProgress } from './runPlanProgress';
+import {
+    reduceClearDraftReturn,
+    reduceResolveReturned,
+    reduceUnreadMessages,
+    unreadMessagesOf,
+    type RunUnreadMessage,
+} from './runUnread';
 
-// ---------------------------------------------------------------------------
-// Event types (mirror run_events.py)
-// ---------------------------------------------------------------------------
-
-export type PlanItemStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
-
-export interface RunPlanItem {
-    /** Stays the same when the row is reworded. */
-    id: string;
-    content: string;
-    /** Wording before the most recent rewrite (AC-10). */
-    previous_content?: string | null;
-    status: PlanItemStatus;
-}
-
-export interface RunTextData {
-    text: string;
-    /** `thinking` only: id of the contiguous thinking segment. */
-    call_id?: string | null;
-    /** `thinking` only: subagent namespace. */
-    namespace?: string | null;
-}
-
-export interface RunToolCallData {
-    call_id: string;
-    name: string;
-    status: 'start' | 'end';
-    /** `tool` / `knowledge` / `subagent`. */
-    step_type?: string;
-    call_reason?: string;
-    params?: unknown;
-    /** End frame only. */
-    output?: string | null;
-    extra_info?: Record<string, unknown>;
-}
-
-export interface RunAskUserQuestion {
-    question: string;
-    options?: string[];
-    multiple?: boolean;
-    id?: string | null;
-}
-
-export interface RunAskUserData {
-    call_id: string;
-    reason?: string;
-    questions: RunAskUserQuestion[];
-}
-
-export interface RunAskUserAnsweredData {
-    call_id?: string | null;
-    answer?: unknown;
-}
-
-export interface RunSteerData {
-    message_id: string;
-}
-
-export interface RunFileData {
-    file_id: string;
-    name: string;
-    path: string;
-    size?: number | null;
-    source?: string | null;
-}
-
-export interface RunQueuedData {
-    position: number;
-}
-
-export interface RunFailedData {
-    code: number;
-    reason: string;
-    detail: string;
-    reference_id?: string | null;
-    failure_info?: Record<string, unknown> | null;
-}
-
-export interface RunResyncData {
-    text: string;
-    thinking: string;
-    plan: RunPlanItem[];
-    files: RunFileData[];
-    pending_question?: RunAskUserData | null;
-    /** True when the run already wrote its terminal event. */
-    ended?: boolean;
-    /** With `ended`: how the run ended. */
-    status?: 'finished' | 'failed' | 'stopped' | null;
-}
-
-export interface RunEventDataMap {
-    run_started: Record<string, unknown>;
-    run_finished: Record<string, unknown>;
-    run_failed: RunFailedData;
-    run_stopped: Record<string, unknown>;
-    queued: RunQueuedData;
-    text: RunTextData;
-    thinking: RunTextData;
-    tool_call: RunToolCallData;
-    plan: { items: RunPlanItem[] };
-    steer_accepted: RunSteerData;
-    steer_read: RunSteerData;
-    ask_user: RunAskUserData;
-    ask_user_answered: RunAskUserAnsweredData;
-    file: RunFileData;
-    resync: RunResyncData;
-}
-
-export type RunEventType = keyof RunEventDataMap;
-
-/** One event as the SSE `data:` line carries it. */
-export type RunEvent = {
-    [K in RunEventType]: {
-        type: K;
-        data: RunEventDataMap[K];
-        /** Empty string when the writer did not pass one. */
-        run_id?: string | null;
-        /** Stream entry id; the SSE `id:` line carries the same value. */
-        id?: string | null;
-        seq?: number | null;
-        ts?: number | null;
-    };
-}[RunEventType];
-
-/** `data` of the send response when the request carries `X-BS-Run-Protocol: 2`. */
-export interface RunSendResult {
-    run_id: string;
-    /** `started` (new run or an answer to a pending question) or `queued`. */
-    disposition: 'started' | 'queued' | string;
-    message_id: string;
-    conversation_id?: string;
-}
-
-export const TERMINAL_RUN_EVENT_TYPES: ReadonlySet<string> = new Set(['run_finished', 'run_failed', 'run_stopped']);
+export * from './runEventTypes';
+export { planProgressOf, type PlanProgress, type RunAnswerFile, type RunUnreadMessage };
 
 // ---------------------------------------------------------------------------
 // State
@@ -194,6 +83,12 @@ export interface RunState {
     /** Position in the deep-research worker queue (AC-36); null once work starts. */
     queuePosition: number | null;
     error: RunFailedData | null;
+    /**
+     * Files of the stored answer row (`answer_files` of the terminal event),
+     * with the row's ids. Null until the run ended, and when the terminal
+     * event named none (the history then supplies the row's files).
+     */
+    answerFiles: RunAnswerFile[] | null;
 }
 
 export interface ConversationRunState {
@@ -204,12 +99,26 @@ export interface ConversationRunState {
     queuedMessages: Record<string, true>;
     /** Cursor for `Last-Event-ID` on reconnect. */
     lastEventId: string | null;
+    /** Unread messages the backend gave back, until the page removed their rows. */
+    returnedMessages: RunUnreadMessage[];
+    /** `message_id`s already taken from `unread_messages` (event and stop response both deliver). */
+    returnedIds: string[];
+    /** Returned text on its way into the input box. */
+    draftReturn: string | null;
 }
 
 const MAX_RETIRED_RUN_IDS = 20;
 
 export function emptyConversationRunState(): ConversationRunState {
-    return { run: null, retiredRunIds: [], queuedMessages: {}, lastEventId: null };
+    return {
+        run: null,
+        retiredRunIds: [],
+        queuedMessages: {},
+        lastEventId: null,
+        returnedMessages: [],
+        returnedIds: [],
+        draftReturn: null,
+    };
 }
 
 function newRun(runId: string): RunState {
@@ -224,6 +133,7 @@ function newRun(runId: string): RunState {
         pendingQuestion: null,
         queuePosition: null,
         error: null,
+        answerFiles: null,
     };
 }
 
@@ -327,11 +237,23 @@ function reduceIntoRun(run: RunState, event: RunEvent): RunState {
         case 'queued':
             return { ...run, queuePosition: typeof event.data?.position === 'number' ? event.data.position : null };
         case 'run_finished':
-            return { ...run, status: 'finished', pendingQuestion: null, queuePosition: null };
         case 'run_stopped':
-            return { ...run, status: 'stopped', pendingQuestion: null, queuePosition: null };
+            return {
+                ...run,
+                status: event.type === 'run_finished' ? 'finished' : 'stopped',
+                pendingQuestion: null,
+                queuePosition: null,
+                answerFiles: answerFilesOf(event.data),
+            };
         case 'run_failed':
-            return { ...run, status: 'failed', pendingQuestion: null, queuePosition: null, error: event.data ?? null };
+            return {
+                ...run,
+                status: 'failed',
+                pendingQuestion: null,
+                queuePosition: null,
+                error: event.data ?? null,
+                answerFiles: answerFilesOf(event.data),
+            };
         default:
             return run;
     }
@@ -364,9 +286,18 @@ export function reduceResync(
         files: dedupeFiles(d.files ?? []),
         pendingQuestion: d.ended ? null : (d.pending_question ?? null),
     };
+    // The terminal event this reader missed gave messages back (a stop, or a
+    // relay run that could not be created): take them as the event would have
+    // delivered them, once per `message_id`.
+    const returned = d.ended ? unreadMessagesOf(d) : [];
+    if (returned.length && run.status === 'failed') {
+        // The page tells a failed relay from other failures by this field.
+        run.error = { unread_messages: returned } as RunFailedData;
+    }
+    const base = returned.length ? reduceUnreadMessages(conv, returned) : conv;
     const replaced = conv.run && conv.run.runId !== runId ? retire(conv, conv.run.runId) : conv.retiredRunIds;
     return {
-        ...conv,
+        ...base,
         run,
         retiredRunIds: replaced.filter((id) => id !== runId),
         lastEventId: entryId ?? conv.lastEventId,
@@ -408,7 +339,11 @@ export function reduceRunEvent(
     ) {
         return conv;
     }
-    const advanced: ConversationRunState = cursor ? { ...conv, lastEventId: cursor } : conv;
+    // Messages given back by a stop or a failed relay belong to the conversation,
+    // not to a run: taken whatever run the terminal event names.
+    const returned = ev.type === 'run_stopped' || ev.type === 'run_failed' ? unreadMessagesOf(ev.data) : [];
+    const base = returned.length ? reduceUnreadMessages(conv, returned) : conv;
+    const advanced: ConversationRunState = cursor ? { ...base, lastEventId: cursor } : base;
 
     if (ev.type === 'resync') {
         return reduceResync(conv, runId, ev.data as RunResyncData, cursor);
@@ -504,6 +439,11 @@ export interface RunStoreState {
         entryId?: string | null,
     ) => void;
     applySendResult: (conversationId: string, result: RunSendResult) => void;
+    /** `unread_messages` of a stop response (the `run_stopped` event may carry the same ones). */
+    applyUnreadMessages: (conversationId: string, messages: RunUnreadMessage[]) => void;
+    /** The page removed the rows of the returned messages; `shownIds` had a row on screen. */
+    resolveReturnedMessages: (conversationId: string, shownIds: ReadonlySet<string>) => void;
+    clearDraftReturn: (conversationId: string) => void;
     resetConversation: (conversationId: string) => void;
 }
 
@@ -526,6 +466,11 @@ export const useRunStore = create<RunStoreState>()((set) => ({
         set((s) => update(s, conversationId, (c) => reduceResync(c, runId, data, entryId))),
     applySendResult: (conversationId, result) =>
         set((s) => update(s, conversationId, (c) => reduceSendResult(c, result))),
+    applyUnreadMessages: (conversationId, messages) =>
+        set((s) => update(s, conversationId, (c) => reduceUnreadMessages(c, messages))),
+    resolveReturnedMessages: (conversationId, shownIds) =>
+        set((s) => update(s, conversationId, (c) => reduceResolveReturned(c, shownIds))),
+    clearDraftReturn: (conversationId) => set((s) => update(s, conversationId, reduceClearDraftReturn)),
     resetConversation: (conversationId) =>
         set((s) => {
             if (!(conversationId in s.conversations)) return s;
@@ -538,29 +483,6 @@ export const useRunStore = create<RunStoreState>()((set) => ({
 // ---------------------------------------------------------------------------
 // Selectors
 // ---------------------------------------------------------------------------
-
-export interface PlanProgress {
-    done: number;
-    total: number;
-}
-
-const EMPTY_PROGRESS: PlanProgress = Object.freeze({ done: 0, total: 0 }) as PlanProgress;
-// Small identity cache so a selector returns the same object while the plan
-// array is unchanged (each `plan` event replaces the array).
-const PROGRESS_CACHE_SIZE = 16;
-const progressCache: Array<{ items: RunPlanItem[]; progress: PlanProgress }> = [];
-
-/** Completed rows / rows (AC-08). Cancelled rows count in neither number. */
-export function planProgressOf(items: RunPlanItem[] | null | undefined): PlanProgress {
-    if (!items || items.length === 0) return EMPTY_PROGRESS;
-    const cached = progressCache.find((entry) => entry.items === items);
-    if (cached) return cached.progress;
-    const live = items.filter((i) => i.status !== 'cancelled');
-    const progress = { done: live.filter((i) => i.status === 'completed').length, total: live.length };
-    progressCache.push({ items, progress });
-    if (progressCache.length > PROGRESS_CACHE_SIZE) progressCache.shift();
-    return progress;
-}
 
 export const selectConversationRun =
     (conversationId: string) =>

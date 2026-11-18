@@ -54,6 +54,8 @@ interface Props {
   showKnowledgeSelection?: boolean;
   showFileUpload?: boolean;
   fileUploadDisabled?: boolean;
+  /** Why uploading is off right now; replaces the upload rows' description while they are disabled. */
+  fileUploadDisabledReason?: string;
   value: KnowledgeItem[];
   onChange: (value: KnowledgeItem[]) => void;
   onFileUploadClick?: () => void;
@@ -62,10 +64,11 @@ interface Props {
 
 /** Chat context sources: local files and authorized knowledge spaces. */
 export function ChatResourceMenu({ disabled, showKnowledgeSelection, showFileUpload,
-  fileUploadDisabled, value, onChange, onFileUploadClick, onFolderUploadClick,
+  fileUploadDisabled, fileUploadDisabledReason, value, onChange, onFileUploadClick, onFolderUploadClick,
   availableTools = EMPTY_TOOLS, showTools, showWebSearch, webSearchActive, onWebSearchChange,
   showResearch, researchActive, onResearchChange, children }: Props) {
   const localize = useLocalize();
+  const uploadLockReason = fileUploadDisabled ? fileUploadDisabledReason : undefined;
   const { isChecked, toggle } = useAgentToolSelection(showTools ? availableTools : undefined);
   const trigger = useRef<HTMLButtonElement>(null);
   const pointerOpened = useRef(false);
@@ -122,10 +125,11 @@ export function ChatResourceMenu({ disabled, showKnowledgeSelection, showFileUpl
         {!page && <>
         {showFileUpload && <DropdownMenuItem aria-label={localize('com_ui_upload_files')} disabled={fileUploadDisabled} onSelect={onFileUploadClick} className="gap-2">
           <Outlined.Attachment size={16} /><span className="dsh-command-name">{localize('com_ui_upload_files')}</span>
-          <span className="dsh-command-description">{localize('dshChat.uploadDescription')}</span>
+          <span className="dsh-command-description">{uploadLockReason || localize('dshChat.uploadDescription')}</span>
         </DropdownMenuItem>}
         {showFileUpload && onFolderUploadClick && <DropdownMenuItem disabled={fileUploadDisabled} onSelect={onFolderUploadClick} className="gap-2">
           <Outlined.FolderClose size={16} /><span className="dsh-command-name">{localize('com_ui_upload_folder')}</span>
+          {uploadLockReason && <span className="dsh-command-description">{uploadLockReason}</span>}
         </DropdownMenuItem>}
         {showKnowledgeSelection && <DropdownMenuItem aria-label={localize('dshChat.selectKnowledge')} onSelect={() => { setOpen(false); setSelecting(true); }} className="gap-2">
           <Outlined.FolderClose size={16} /><span className="dsh-command-name">{localize('dshChat.selectKnowledge')}</span>

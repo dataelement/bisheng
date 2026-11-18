@@ -28,7 +28,16 @@ Redis contract (same hash tag ``{<cid>}`` as every key of the conversation)
     ``{"id": <row id>, "run_id": ...}``  the row is written and still queued;
     ``read``                             the run read the message before the row
                                          was bound.
+    ``discarded``                        the user stopped the run before it read
+                                         the message, and the row was not bound
+                                         yet (``discard_unread``).
     A field is removed once the row is settled.
+
+``bisheng:run:relay_read:{<cid>}`` -- STRING, JSON ``{"run_id", "message_ids"}``.
+    The inbox messages a planned relay run took as its input. The worker that
+    created the run record writes it; the worker that executes the run (maybe
+    another node) takes it right after ``run_started`` and emits ``steer_read``
+    for each message, which clears the "queued" mark of its row.
 
 ``bisheng:run:direct:{<cid>}`` -- HASH of the conversation's latest direct run:
     ``run_id user_id tenant_id sender model_id``, plus ``answer_saved`` once a
@@ -47,9 +56,11 @@ from bisheng.linsight.domain.schemas import run_events
 from bisheng.workstation.domain.services.run_lease import STATE_TTL_SECONDS
 
 STEER_KEY_PREFIX = "bisheng:run:steer:"
+RELAY_READ_KEY_PREFIX = "bisheng:run:relay_read:"
 DIRECT_RUN_KEY_PREFIX = "bisheng:run:direct:"
 KEY_TTL_SECONDS = STATE_TTL_SECONDS
 READ_MARK = "read"
+DISCARD_MARK = "discarded"
 # How many of the newest rows are checked for an answer row of the same run.
 RECENT_ROWS = 50
 
@@ -58,6 +69,10 @@ EventHook = Callable[[dict], Awaitable[None]]
 
 def steer_key(conversation_id: str) -> str:
     return f"{STEER_KEY_PREFIX}{{{conversation_id}}}"
+
+
+def relay_read_key(conversation_id: str) -> str:
+    return f"{RELAY_READ_KEY_PREFIX}{{{conversation_id}}}"
 
 
 def direct_run_key(conversation_id: str) -> str:
@@ -111,10 +126,70 @@ async def bind_steer_row(redis: Any, conversation_id: str, message_id: str, row_
     if await redis.hsetnx(key, message_id, value):
         await redis.expire(key, KEY_TTL_SECONDS)
         return True
+    mark = _s(await redis.hget(key, message_id))
+    await redis.hdel(key, message_id)
+    if mark == DISCARD_MARK:
+        # The run was stopped before it read the message: the text went back to
+        # the client, so the row written a moment ago must not stay in the history.
+        from bisheng.database.models.message import ChatMessageDao
+
+        await ChatMessageDao.adelete_by_id_in_chat(row_id, conversation_id)
+        return False
     # ``mark_steer_read`` came first and left its mark.
     await _clear_queued(row_id, run_id, message_id)
-    await redis.hdel(key, message_id)
     return False
+
+
+async def discard_unread(dispatch: Any, conversation_id: str, *, redis: Any = None) -> list[dict]:
+    """The user stopped the run: take the unread inbox messages back (design §7 item 6).
+
+    The messages leave the inbox (no relay run answers them) and their question
+    rows are deleted, because the client puts the text back into the input box
+    and the user sends it again or drops it. Returns the ``unread_messages``
+    list of the ``run_stopped`` event and of the stop response:
+    ``[{message_id, text, files}]``.
+
+    Deleting a row is best effort: the messages are already out of the inbox, so
+    a failure is logged and the list is still returned (the row then stays in
+    the history with its "queued" mark).
+    """
+    messages = await dispatch.discard_inbox(conversation_id)
+    if not messages:
+        return []
+    return await forget_steer_rows(conversation_id, messages, redis=redis)
+
+
+async def forget_steer_rows(conversation_id: str, messages: list[dict], *, redis: Any = None) -> list[dict]:
+    """Delete the question rows of inbox messages no run will answer; return them as ``unread_messages``.
+
+    ``messages`` were already taken out of the inbox by the caller.
+    """
+    from bisheng.workstation.domain.services.run_dispatch import unread_view
+
+    redis = redis if redis is not None else await _redis()
+    key = steer_key(conversation_id)
+    for message in messages:
+        message_id = str(message.get("message_id") or "")
+        if not message_id:
+            continue
+        try:
+            if await redis.hsetnx(key, message_id, DISCARD_MARK):
+                # The row is not bound yet; ``bind_steer_row`` finds this mark and deletes it.
+                await redis.expire(key, KEY_TTL_SECONDS)
+                continue
+            value = _s(await redis.hget(key, message_id))
+            await redis.hdel(key, message_id)
+            if value and value not in (READ_MARK, DISCARD_MARK):
+                from bisheng.database.models.message import ChatMessageDao
+
+                await ChatMessageDao.adelete_by_id_in_chat(int(json.loads(value)["id"]), conversation_id)
+        except Exception:
+            logger.exception(
+                "could not delete the question row of discarded message {} in conversation={}",
+                message_id,
+                conversation_id,
+            )
+    return unread_view(messages)
 
 
 async def mark_steer_read(conversation_id: str, message_id: str, *, redis: Any = None) -> bool:
@@ -162,6 +237,33 @@ async def on_run_event(conversation_id: str, event: dict, *, redis: Any = None) 
         logger.exception(
             "could not clear the queued mark of steer message {} in conversation={}", message_id, conversation_id
         )
+
+
+# --------------------------------------------------------------------------- #
+# Planned relay run: the inbox messages it answers
+# --------------------------------------------------------------------------- #
+
+
+async def remember_relay_messages(redis: Any, conversation_id: str, run_id: str, message_ids: list[str]) -> None:
+    await redis.set(
+        relay_read_key(conversation_id),
+        json.dumps({"run_id": run_id, "message_ids": [m for m in message_ids if m]}),
+        ex=KEY_TTL_SECONDS,
+    )
+
+
+async def take_relay_messages(redis: Any, conversation_id: str, run_id: str) -> list[str]:
+    """The message ids ``remember_relay_messages`` stored for ``run_id``, taken once."""
+    key = relay_read_key(conversation_id)
+    raw = _s(await redis.get(key))
+    if not raw:
+        return []
+    stored = json.loads(raw)
+    if stored.get("run_id") != run_id:
+        # Left by a relay run that never executed; a newer value replaces it.
+        return []
+    await redis.delete(key)
+    return [str(m) for m in stored.get("message_ids") or []]
 
 
 # --------------------------------------------------------------------------- #
@@ -342,12 +444,12 @@ async def persist_expired_direct_answer(
 async def persist_stopped_direct_answer(
     conversation_id: str, run_id: str, text: str, *, redis: Any = None
 ) -> Any | None:
-    """A direct run parked on a question was stopped: save what it had written (marked like a stopped turn)."""
+    """A direct run parked on a question was stopped: save what it had written, marked ``stopped``."""
     redis = redis if redis is not None else await _redis()
     return await _persist_from_snapshot(
         redis,
         conversation_id,
         run_id,
         text,
-        {"type": run_events.RUN_STOPPED, "run_id": run_id, "data": {"reason": "user"}},
+        {"type": run_events.RUN_STOPPED, "run_id": run_id, "data": run_events.stopped_data()},
     )

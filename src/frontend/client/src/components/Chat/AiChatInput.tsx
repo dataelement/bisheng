@@ -212,6 +212,10 @@ const AiChatInput = memo(
         const unifiedRuntime = bsConfig?.unified_runtime_enabled === true && !isLingsi && !!composerIdentity;
         const blockedByRun = isStreaming && !unifiedRuntime;
         const sendBlocked = sendDisabled && !unifiedRuntime;
+        // F004: a message sent while a run is in progress carries text only, and
+        // the run keeps its model. Uploading and the model selector wait for the
+        // run to end; typing and sending stay available.
+        const runLocked = unifiedRuntime && isStreaming;
 
         // Collapse toolbar labels to icons when the toolbar's own width (not the
         // viewport's) runs short — e.g. once the sidebar opens on a mid-size screen.
@@ -368,17 +372,23 @@ const AiChatInput = memo(
         // conversation keeps the picker: a tool removed from the composer can be
         // added back, and a later turn can use a tool the first one did not.
         const showToolPicker = tools && (agentMode || (!!onSearchTypeChange && !!bsConfig?.webSearch?.enabled));
-        const filesDisabled = !!disabled;
+        const filesDisabled = !!disabled || runLocked;
 
         const navigate = useNavigate();
 
         // Drag & paste file support (only when not disabled by exclusion)
         const { isDragging, handlePaste } = useFileDropAndPaste({
-            enabled: showUpload && !disabled && !filesDisabled,
+            // Stays on while a run locks uploads: the drop or paste is taken and
+            // answered with the reason, instead of the browser opening the file.
+            enabled: showUpload && !disabled,
             // Task mode only: a dropped directory is expanded with its tree
             // preserved. Daily chat has no workspace to rebuild a tree in.
             allowFolders: taskMode,
             onFilesReceived: (files: FileList | File[]) => {
+                if (runLocked) {
+                    showToast?.({ message: localize('runComposer.uploadLocked'), status: 'warning' });
+                    return;
+                }
                 inputFilesRef.current?.upload(files);
             },
         });
@@ -547,7 +557,7 @@ const AiChatInput = memo(
                     <p role="status" className="mb-2 text-body-sm text-text-3">{knowledgeAccessMessage}</p>
                 )}
                 {/* Drag-drop overlay */}
-                {isDragging && <DragDropOverlay />}
+                {isDragging && !runLocked && <DragDropOverlay />}
 
                 {/* Scroll to bottom button — above input */}
                 {hasMessages && <div className="absolute -top-10 w-full">
@@ -735,6 +745,7 @@ const AiChatInput = memo(
                                     }}
                                     showFileUpload={showUpload}
                                     fileUploadDisabled={filesDisabled}
+                                    fileUploadDisabledReason={runLocked ? localize('runComposer.uploadLocked') : undefined}
                                     onFileUploadClick={() => inputFilesRef.current?.openPicker?.()}
                                     // Folder upload is task-mode only: daily chat has no agent
                                     // workspace to rebuild the directory tree in.
@@ -769,7 +780,8 @@ const AiChatInput = memo(
                             {/* Model select */}
                             {modelSelect && modelOptions && !isLingsi && (
                                 <AiModelSelect
-                                    disabled={!!disabled}
+                                    disabled={!!disabled || runLocked}
+                                    disabledReason={runLocked ? localize('runComposer.modelLocked') : undefined}
                                     value={modelValue}
                                     options={modelOptions}
                                     onChange={onModelChange!}

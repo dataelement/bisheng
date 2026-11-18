@@ -7,7 +7,18 @@ files. The row is built by ``chat_service.build_daily_answer_row`` and its
 citations and files go through ``save_message_citations`` and
 ``_promote_generated_files``, the helpers of the SSE path, so history, export,
 audit and F016 downloads read it without knowing which path wrote it. The only
-addition is ``run_id`` in ``extra``.
+addition is ``run_id`` in ``extra``. A run the user stopped stores
+``extra = {"status": "stopped", "run_id": ...}`` with the content generated so
+far: no ``error`` key, so it is not a failed row.
+
+Files (design §7 item 11): the ``file`` events of the run point at
+``workspace/{conversation}/output/...``, which a later run may overwrite. When the
+row is written, each of those objects is copied to
+``chat/{partition}/answers/{run_id}/`` and the row's ``files`` point at the
+copies (``chat_attachment.copy_answer_files``), so an old answer keeps its
+content. The copy's ``file_id`` differs from the event's; the item keeps the
+event's id in ``workspace_file_id``. A file whose copy fails stays on the row
+with the workspace object and the event's id.
 
 The projector is a pure function of the event sequence: the ``events`` list it
 keeps is translation bookkeeping of ONE run in ONE process (like
@@ -16,7 +27,10 @@ Redis event stream; feeding that stream's events to a new projector rebuilds the
 same row.
 
 Interface (the run driver attaches projectors through its sink list):
-``async on_event(event)`` and ``async aclose()``.
+``async on_event(event)`` and ``async aclose()``. ``async before_terminal(event)``
+is asked by the driver before it writes the terminal event: it makes the answer's
+file copies and returns ``{"answer_files": [...]}`` for the event's ``data``, so
+the client learns the row's file ids with the event (``run_events.ANSWER_FILES_FIELD``).
 """
 
 from __future__ import annotations
@@ -31,17 +45,20 @@ from langchain_core.tools import BaseTool
 from loguru import logger
 
 from bisheng.common.services.failure_context import FailureContextAdapter
+from bisheng.core.storage.chat_attachment import WORKSPACE_FILE_ID_KEY, copy_answer_files
 from bisheng.database.models.message import ChatMessage
 from bisheng.linsight.domain.schemas import run_events
 from bisheng.linsight.domain.services import file_events
 from bisheng.linsight.domain.services.workspace_backend import workspace_prefix_for
-from bisheng.workstation.domain.services import chat_service
+from bisheng.workstation.domain.services import chat_service, direct_run_turn
 from bisheng.workstation.domain.services.daily_memory import redact_args, redact_error, redact_results
 
 # What today's daily chat stores when a turn is torn down before it finished
 # (``persist_interrupted_turn("stream interrupted")``).
 INTERRUPTED_REASON = "stream interrupted"
 _TOOL_FAILED = "Tool execution failed."
+# ``error`` of a tool call that was still running when the user stopped the run.
+STOPPED_TOOL_NOTE = "stopped by user"
 
 
 def _now_ms() -> int:
@@ -67,6 +84,8 @@ class DirectRunProjector:
     :param tool_meta: tool name -> ``{"display_name", "tool_type"}``, the map the
         SSE path builds with ``_build_tool_meta``.
     :param on_persisted: awaited with the saved row (memory binding, title, ...).
+    :param object_store: ``await object_store()`` returns the object storage the
+        per-answer file copies are made in; defaults to the MinIO storage.
     """
 
     def __init__(
@@ -82,6 +101,7 @@ class DirectRunProjector:
         citation_items: Callable[[], list] | None = None,
         tool_meta: dict[str, dict[str, Any]] | None = None,
         on_persisted: Callable[[ChatMessage], Awaitable[None]] | None = None,
+        object_store: Callable[[], Awaitable[Any]] | None = None,
         clock_ms: Callable[[], int] = _now_ms,
     ):
         self.run_id = run_id
@@ -94,6 +114,7 @@ class DirectRunProjector:
         self._citation_items = citation_items
         self._tool_meta = tool_meta or {}
         self._on_persisted = on_persisted
+        self._object_store = object_store
         self._clock_ms = clock_ms
 
         self.events: list[dict[str, Any]] = []
@@ -112,6 +133,9 @@ class DirectRunProjector:
         # file_id -> ``data`` of the run's ``file`` events (T055); a file written
         # again keeps its place and takes the newer data.
         self._files: dict[str, dict[str, Any]] = {}
+        # The answer's file items once ``before_terminal`` made the copies; None
+        # until then (``_persist`` makes them itself).
+        self._answer_file_items: list[dict] | None = None
 
     def seed_files(self, files: list | None) -> None:
         """Files the run announced before this projector existed (a resumed or
@@ -151,13 +175,32 @@ class DirectRunProjector:
                 self._replace_with_safety_reply(str(data.get("auto_reply") or ""))
             await self._persist(now_ms, error=None)
         elif event_type == run_events.RUN_STOPPED:
-            # Marked like today's interrupted turn, so the client treats a stopped
-            # answer the way it already does.
-            await self._persist(now_ms, error={"error_msg": INTERRUPTED_REASON})
+            # The user stopped the run: its own mark, not an error row (design §7
+            # item 2). What was generated so far is kept.
+            await self._persist(now_ms, error=None, stopped=True)
         elif event_type == run_events.RUN_FAILED:
             await self._persist(now_ms, error=self._failure_extra(data))
         # plan / ask_user / steer_* / queued / run_started carry nothing the answer
         # row stores.
+
+    async def before_terminal(self, event: dict) -> dict[str, Any] | None:
+        """Fields to add to the ``data`` of the terminal event about to be written.
+
+        Makes the per-answer file copies now (instead of in ``_persist``) and
+        returns them as ``answer_files``: the same items the answer row stores.
+        None when the row keeps no generated file (no file event, or the answer
+        is replaced by the content-safety reply).
+        """
+        if self._persisted or self._answer_file_items is not None:
+            return None
+        if event.get("type") not in run_events.TERMINAL_EVENT_TYPES:
+            return None
+        if event.get("type") == run_events.RUN_FINISHED and (event.get("data") or {}).get("content_safety"):
+            return None
+        self._answer_file_items = await self._answer_files()
+        if not self._answer_file_items:
+            return None
+        return {run_events.ANSWER_FILES_FIELD: [dict(item) for item in self._answer_file_items]}
 
     async def aclose(self) -> None:
         """Save what exists if the run was torn down without a terminal event."""
@@ -190,12 +233,10 @@ class DirectRunProjector:
         self._files[file_id] = dict(data)
 
     def _workspace_files(self) -> list[dict]:
-        """The run's ``file`` events as F016 attachment items of the answer row.
+        """The run's ``file`` events as F016 attachment items, pointing at the workspace.
 
-        Same ``file_id`` as the event. ``object_name`` is the workspace object in
-        the main bucket, so the item needs no promotion and its link is signed on
-        demand by the existing attachment endpoints (owner, and audit for
-        ``source="code_interpreter"``).
+        Same ``file_id`` as the event; ``object_name`` is the workspace object in
+        the main bucket. ``_answer_files`` repoints them at the answer's copies.
         """
         prefix = workspace_prefix_for(self.conversation_id)
         items = []
@@ -212,6 +253,43 @@ class DirectRunProjector:
                     "source": chat_service.GENERATED_FILE_SOURCE,
                     "object_name": file_events.workspace_object_key(prefix, path),
                 }
+            )
+        return items
+
+    async def _answer_files(self) -> list[dict]:
+        """The files of this run as the answer row stores them: one copy per answer.
+
+        The workspace object stays where it is (live ``file`` events and the
+        workspace panel read it). An item whose copy failed keeps the workspace
+        object and the event's ``file_id``; ``copy_answer_files`` logged why.
+        """
+        items = self._workspace_files()
+        if not items:
+            return items
+        partition = self._storage_partition or str(self._promote_user_id)
+        client = None
+        if self._object_store is not None:
+            try:
+                client = await self._object_store()
+            except Exception:
+                logger.exception(
+                    "direct run answer run_id={} chat_id={}: object storage unavailable; "
+                    "{} generated file(s) stay on the workspace objects",
+                    self.run_id,
+                    self.conversation_id,
+                    len(items),
+                )
+                return items
+        await copy_answer_files(items, partition, self.run_id, minio_client=client)
+        kept = sum(1 for item in items if WORKSPACE_FILE_ID_KEY not in item)
+        if kept:
+            logger.error(
+                "direct run answer run_id={} chat_id={}: {} of {} generated file(s) have no copy; "
+                "the row points at the workspace object, which a later run may overwrite",
+                self.run_id,
+                self.conversation_id,
+                kept,
+                len(items),
             )
         return items
 
@@ -336,12 +414,12 @@ class DirectRunProjector:
 
     # -- persistence -----------------------------------------------------------
 
-    async def _persist(self, now_ms: int, *, error: dict[str, Any] | None) -> None:
+    async def _persist(self, now_ms: int, *, error: dict[str, Any] | None, stopped: bool = False) -> None:
         # Set first: a second terminal event or ``aclose`` must not write twice.
         # A failure below propagates to the run driver; nothing is retried here,
         # because a retry after a half-finished write could double the row.
         self._persisted = True
-        self._finalise_dangling(now_ms, (error or {}).get("error_msg"))
+        self._finalise_dangling(now_ms, STOPPED_TOOL_NOTE if stopped else (error or {}).get("error_msg"))
 
         # The text already carries citation markers (the runner converts ``[Sn]``
         # before it writes a text event). Bind exactly the sources the text cites:
@@ -351,13 +429,22 @@ class DirectRunProjector:
         collected = self._citation_items() if self._citation_items is not None else []
         citation_items = await chat_service.select_cited_items(collected, self.final_msg)
         self.citations = list(citation_items)
+        if not self._content_safety:
+            # Design §7 item 17: the audit line of the legacy daily chat, at the same
+            # point (after the cited sources are selected, before the row is saved).
+            # A blocked answer writes none, as the legacy stream returns before it.
+            direct_run_turn.log_citation_audit(self.run_id, citation_items)
         files = await chat_service._promote_generated_files(
             self._tools, self.conversation_id, self._promote_user_id, self._storage_partition
         )
         if not self._content_safety:
-            # T055: the files the run announced live. A blocked answer keeps none,
-            # like the legacy replacement row.
-            files = [*files, *self._workspace_files()]
+            # T055: the files the run announced live, each as this answer's own copy
+            # (design §7 item 11). A blocked answer keeps none, like the legacy
+            # replacement row.
+            answer_files = self._answer_file_items
+            if answer_files is None:
+                answer_files = await self._answer_files()
+            files = [*files, *answer_files]
         row = chat_service.build_daily_answer_row(
             user_id=self.user_id,
             chat_id=self.conversation_id,
@@ -369,6 +456,10 @@ class DirectRunProjector:
         extra = (
             json.loads(chat_service.blocked_answer_extra()) if self._content_safety else json.loads(row.extra or "{}")
         )
+        if stopped:
+            # ``extra.status == "stopped"`` and no ``error`` key: the history shows
+            # "stopped", not a failure.
+            extra = {**extra, "status": run_events.STATUS_STOPPED}
         row.extra = json.dumps({**extra, "run_id": self.run_id}, ensure_ascii=False)
 
         saved = await chat_service.ChatMessageDao.ainsert_one(row)

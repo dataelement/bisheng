@@ -178,3 +178,56 @@ async def test_invite_switch_rejects_a_submit_with_no_remaining_uses(io, monkeyp
         await task_submit_service.submit_task_turn(_request(), _user())
 
     assert io["versions"] == []
+
+
+async def test_run_id_travels_in_the_queue_item_only_when_given(io, monkeypatch):
+    """F004: the worker claims the conversation under the id the send entry reserved it with."""
+    monkeypatch.setattr(linsight_execute_utils, "persist_task_turn_message", AsyncMock())
+    enqueue = AsyncMock()
+    monkeypatch.setattr(linsight_execute_utils, "enqueue_session_for_execution", enqueue)
+
+    _session, version = await task_submit_service.submit_task_turn(_request(), _user(), run_id="run-reserved")
+    enqueue.assert_awaited_once_with(version, run_id="run-reserved")
+
+    # Every other caller (Open API, legacy send) enqueues exactly as before.
+    enqueue.reset_mock()
+    _session, version = await task_submit_service.submit_task_turn(_request(), _user())
+    enqueue.assert_awaited_once_with(version)
+
+
+async def test_queue_item_of_a_reserved_run_carries_the_run_id(monkeypatch):
+    import bisheng.linsight.worker as worker_mod
+
+    put = AsyncMock()
+
+    class _Queue:
+        def __init__(self, *args, **kwargs):
+            self.put = put
+
+    monkeypatch.setattr(worker_mod, "LinsightQueue", _Queue)
+    monkeypatch.setattr(linsight_execute_utils, "get_redis_client", AsyncMock(return_value=object()))
+    version = MagicMock()
+    version.id, version.tenant_id = "sv-1", 3
+
+    await linsight_execute_utils.enqueue_session_for_execution(version, run_id="run-reserved")
+    await linsight_execute_utils.enqueue_session_for_execution(version)
+
+    reserved, legacy = (call.kwargs["data"] for call in put.await_args_list)
+    assert reserved == worker_mod.encode_queue_item("sv-1", tenant_id=3, run_id="run-reserved")
+    assert reserved["run_id"] == "run-reserved"
+    assert "run_id" not in legacy
+
+
+async def test_relay_turn_writes_no_second_question_row(io, monkeypatch):
+    """F004 relay run: the question rows exist since the messages joined the inbox."""
+    monkeypatch.setattr(linsight_execute_utils, "persist_task_turn_message", AsyncMock())
+    monkeypatch.setattr(linsight_execute_utils, "enqueue_session_for_execution", AsyncMock())
+    user_turn = AsyncMock()
+    monkeypatch.setattr(linsight_execute_utils, "persist_task_user_turn", user_turn)
+
+    await task_submit_service.submit_task_turn(_request(), _user(), persist_user_turn=False)
+    user_turn.assert_not_awaited()
+    assert len(io["versions"]) == 1
+
+    await task_submit_service.submit_task_turn(_request(), _user())
+    user_turn.assert_awaited_once()

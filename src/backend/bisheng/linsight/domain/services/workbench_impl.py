@@ -276,6 +276,7 @@ class LinsightWorkbenchImpl:
         telemetry_source: str = "platform",
         session_name: str = "New Chat",
         project_intent: dict | None = None,
+        persist_user_turn: bool = True,
     ) -> tuple[MessageSession, LinsightSessionVersion]:
         """
         Submit user issue and create session
@@ -304,6 +305,8 @@ class LinsightWorkbenchImpl:
             telemetry_source: ``source`` on the NEW_MESSAGE_SESSION event
                 ("api" for Open API submissions).
             session_name: Initial conversation name.
+            persist_user_turn: False for an F004 relay run, whose question rows
+                were written when the messages joined the inbox.
 
         Returns:
             tuple: (Message Session Model, Inspiration Conversation Version Model)
@@ -412,6 +415,8 @@ class LinsightWorkbenchImpl:
             # F035 Track J: land the user question in the unified conversation
             # stream so the round reads as one Q→A pair regardless of task mode.
             # (The bot answer turn is written at completion in task_exec.)
+            if not persist_user_turn:
+                return message_session, linsight_session_version
             await linsight_execute_utils.persist_task_user_turn(
                 chat_id=chat_id,
                 user_id=login_user.user_id,

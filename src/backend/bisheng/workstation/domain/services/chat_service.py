@@ -1802,24 +1802,34 @@ async def _persist_question_file_attachments(message: ChatMessage, query: str, f
     await ChatMessageDao.aupdate_message_model(message)
 
 
+async def persist_blocked_workbench_answer(conversation, model_info, auto_reply: str) -> ChatMessage:
+    """Record the auto-reply of a blocked input and mark the conversation.
+
+    Shared by the SSE answer below and the F004 run-protocol answer
+    (``run_send._blocked_response``), so both store the same rows.
+    """
+    row = build_blocked_answer_row(
+        user_id=conversation.user_id,
+        conversation_id=conversation.chat_id,
+        sender=getattr(model_info, "displayName", "") or "",
+        auto_reply=auto_reply,
+    )
+    resp = await ChatMessageDao.ainsert_one(row)
+    mark_session_content_violation(conversation.chat_id)
+    # F132: a blocked turn is never consolidated into long-term memory; move the
+    # watermark past it (no-op for chats not registered for memory).
+    try:
+        await MemoryActivity.end_turn(conversation.chat_id, resp.id, False)
+    except Exception:
+        logger.exception("memory: ending a blocked turn failed chat_id={}", conversation.chat_id)
+    return resp
+
+
 def _respond_blocked_workbench(conversation, message, model_info, data: APIChatCompletion, auto_reply: str):
     """Short SSE: user row already persisted; write auto-reply and close the turn."""
 
     async def event_stream():
-        row = build_blocked_answer_row(
-            user_id=conversation.user_id,
-            conversation_id=conversation.chat_id,
-            sender=getattr(model_info, "displayName", "") or "",
-            auto_reply=auto_reply,
-        )
-        resp = await ChatMessageDao.ainsert_one(row)
-        mark_session_content_violation(conversation.chat_id)
-        # F132: a blocked turn is never consolidated into long-term memory; move the
-        # watermark past it (no-op for chats not registered for memory).
-        try:
-            await MemoryActivity.end_turn(conversation.chat_id, resp.id, False)
-        except Exception:
-            logger.exception("memory: ending a blocked turn failed chat_id={}", conversation.chat_id)
+        resp = await persist_blocked_workbench_answer(conversation, model_info, auto_reply)
         for chunk in iter_blocked_sse(
             conversation_id=conversation.chat_id,
             user_message_id=message.id,

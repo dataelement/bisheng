@@ -25,7 +25,9 @@ import { likeChatApi, disLikeCommentApi } from "~/api/apps";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { useAuthContext, useLocalize } from "~/hooks";
 import { useMessageSelection } from "~/hooks/useMessageSelection";
+import { queueIdOf } from "~/hooks/unifiedRun";
 import { selectIsMessageQueued, useRunStore } from "~/store/runStore";
+import { MessageQueuedNote, RunStoppedNote } from "./RunMessageNotes";
 import { useUnifiedRuntimePage } from "~/components/Chat/unifiedRuntimeContext";
 import {
     ExportSelectionButton,
@@ -346,10 +348,9 @@ function UserBubble({
     onPreviewFile?: (file: ArtifactFile) => void;
 }) {
     const { user } = useAuthContext();
-    const localize = useLocalize();
     // F004 AC-13/AC-14: sent while a run was busy and not read by the agent yet.
     // The store only holds entries on the unified runtime.
-    const queued = useRunStore(selectIsMessageQueued(message.conversationId ?? "", message.messageId));
+    const queued = useRunStore(selectIsMessageQueued(message.conversationId ?? "", queueIdOf(message)));
 
     // F028: render selection checkbox at the left margin when selection mode
     // is active for this conversation. ``mr-auto`` keeps the user bubble
@@ -428,12 +429,7 @@ function UserBubble({
                         </div>
                     </div>
                 </div>
-                {queued && (
-                    <div role="status" data-testid="message-queued" className="mt-1 flex items-center gap-1.5 text-caption text-text-3">
-                        <span aria-hidden className="size-1.5 rounded-full bg-current opacity-60 animate-pulse" />
-                        {localize("dshChat.messageQueued")}
-                    </div>
-                )}
+                {queued && <MessageQueuedNote />}
                 {/* Action buttons */}
                 <div className="dsh-message-actions flex items-center justify-end gap-1 mt-1.5">
                     <MessageTime message={message} />
@@ -708,7 +704,7 @@ function AssistantBubble({
                     answer body streamed in: a stream that fails *after* emitting text
                     must keep its markdown + citation rendering instead of degrading to
                     raw text (which also leaks the private-use citation markers). */}
-                {!showWaiting && (hasAnswerBody || !message.error) && (
+                {!showWaiting && (hasAnswerBody || !message.error) && !(message.stopped && !regularContent) && (
                     <div
                         className={cn(
                             "bs-mkdown message-content overflow-hidden break-words [word-break:break-all]",
@@ -791,6 +787,9 @@ function AssistantBubble({
                         />
                     )
                 )}
+
+                {/* F004: the user stopped the run. Neutral mark, never the error style. */}
+                {!showWaiting && message.stopped && !message.error && <RunStoppedNote />}
 
                 {/* Action buttons (only show when not streaming). Suppressed on the
                     transient busy notice — copy/feedback on a "try again" status is

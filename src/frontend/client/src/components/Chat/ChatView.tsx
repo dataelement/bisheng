@@ -41,6 +41,8 @@ import { NotificationSeverity } from "~/common";
 import { type AddToKnowledgeSelection } from "~/pages/Subscription/Article/AddToKnowledgeModal";
 import { useChatSurfaceLayout } from "./hooks/useChatSurfaceLayout";
 import { useTaskWorkspaceState } from "./hooks/useTaskWorkspaceState";
+import { useReturnedDraft } from "./hooks/runComposerState";
+import { useChatSendActions } from "./hooks/useChatSendActions";
 import { ChatSurfacePresentation } from "./ChatSurfacePresentation";
 import { readNewChatKey } from './newChatDraft';
 
@@ -279,20 +281,11 @@ function useChatView(
     allowSend: allowInviteSend,
   } = useTaskInviteQuota(inviteOn);
 
-  const handleSend = useCallback(
-    async (text: string, files?: any[] | null) => {
-      const isTaskTurn = taskMode && canUseTaskMode;
-      if (isTaskTurn && !allowInviteSend()) return false;
-      // Capture the turn's resources before resetting its composer draft. A
-      // `false` result (e.g. the department is full) keeps the draft so the
-      // user can send again once a slot frees up.
-      const sendingIdentity = composerIdentity;
-      const accepted = await sendMessage(text, files, { taskMode: isTaskTurn });
-      if (accepted && composerIdentityRef.current === sendingIdentity) setInputText("");
-      return accepted;
-    },
-    [taskMode, canUseTaskMode, sendMessage, allowInviteSend, composerIdentity],
-  );
+  const { handleSend, handleRetryTaskTurn } = useChatSendActions({
+    taskMode, canUseTaskMode, unifiedRuntime: unifiedRuntime === true, conversationId: activeConvoId,
+    sendMessage, allowInviteSend, composerIdentity, composerIdentityRef, setInputText,
+  });
+  useReturnedDraft(activeConvoId, setInputText);
 
   const isNew = conversationId === "new";
   const hasMessages = messages.length > 0;
@@ -573,6 +566,7 @@ function useChatView(
     taskRunning,
     awaitingUserInput,
     handleStop,
+    handleRetryTaskTurn,
     unifiedRuntime,
     id,
     shareToken,

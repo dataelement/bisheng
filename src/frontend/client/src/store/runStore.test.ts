@@ -161,6 +161,43 @@ describe('store/runStore', () => {
         expect(selectRun(CID)(state())!.status).toBe('running');
     });
 
+    it('resync of an ended run takes the unread messages its terminal event gave back', () => {
+        const base = { text: '', thinking: '', plan: [], files: [] };
+        const unread = [{ message_id: 'm1', text: 'one', files: [] }];
+        state().applySendResult(CID, { run_id: 'r1', disposition: 'queued', message_id: 'm1' });
+        state().applyResync(CID, 'r1', { ...base, ended: true, status: 'stopped', unread_messages: unread }, '2-1');
+        expect(state().conversations[CID].returnedMessages).toEqual(unread);
+        expect(state().conversations[CID].queuedMessages).toEqual({});
+        // The same message again (a second resync, or the stop response) is not taken twice.
+        state().applyResync(CID, 'r1', { ...base, ended: true, status: 'stopped', unread_messages: unread }, '2-1');
+        expect(state().conversations[CID].returnedMessages).toHaveLength(1);
+        // A failed relay is recognised by the messages on the run's error.
+        state().applyResync(
+            CID,
+            'r2',
+            { ...base, ended: true, status: 'failed', unread_messages: [{ message_id: 'm2', text: 'two' }] },
+            '3-1',
+        );
+        expect(selectRun(CID)(state())!.error?.unread_messages).toEqual([{ message_id: 'm2', text: 'two' }]);
+        // A run that has not ended gives nothing back.
+        state().applyResync(CID, 'r3', { ...base, ended: false, unread_messages: [{ message_id: 'm3', text: 'x' }] }, '4-1');
+        expect(state().conversations[CID].returnedIds).toEqual(['m1', 'm2']);
+    });
+
+    it('a terminal event keeps the files of the stored answer row', () => {
+        const files = [{ file_id: 'copy-1', workspace_file_id: 'live-1', path: 'output/a.md', object_name: 'chat/7/answers/r1/live-1.md' }];
+        apply({ type: 'run_started', run_id: 'r1', data: {} });
+        apply({ type: 'file', run_id: 'r1', data: { file_id: 'live-1', name: 'a.md', path: 'output/a.md' } });
+        expect(selectRun(CID)(state())!.answerFiles).toBeNull();
+        apply({ type: 'run_finished', run_id: 'r1', data: { answer_files: [...files, { path: 'no-id' }] } });
+        expect(selectRun(CID)(state())!.answerFiles).toEqual(files);
+        // The live files (workspace panel) keep the event ids.
+        expect(selectRun(CID)(state())!.files.map((f) => f.file_id)).toEqual(['live-1']);
+        apply({ type: 'run_started', run_id: 'r2', data: {} });
+        apply({ type: 'run_stopped', run_id: 'r2', data: { status: 'stopped' } });
+        expect(selectRun(CID)(state())!.answerFiles).toBeNull();
+    });
+
     it('running flags', () => {
         expect(selectIsRunning(CID)(state())).toBe(false);
         apply({ type: 'run_started', run_id: 'r1', data: {} });

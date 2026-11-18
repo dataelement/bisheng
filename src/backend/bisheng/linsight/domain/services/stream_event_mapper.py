@@ -1007,8 +1007,11 @@ class UnifiedEventOutput:
     async def run_finished(self, data: dict[str, Any] | None = None) -> None:
         await self._emit_terminal(self._event(run_events.RUN_FINISHED, data))
 
-    async def run_stopped(self, reason: str | None = None) -> None:
-        await self._emit_terminal(self._event(run_events.RUN_STOPPED, {"reason": reason} if reason else None))
+    async def run_stopped(self, reason: str | None = None, unread_messages: list[dict[str, Any]] | None = None) -> None:
+        """``run_stopped`` with ``{reason, status: "stopped", unread_messages}`` (design §7 items 2, 6)."""
+        await self._emit_terminal(
+            self._event(run_events.RUN_STOPPED, run_events.stopped_data(unread_messages, reason=reason or "user"))
+        )
 
     async def run_failed(self, error: BaseException | str) -> None:
         """Publish ``run_failed`` with deep research's error-card fields.

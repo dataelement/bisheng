@@ -11,6 +11,7 @@ import { UnifiedRuntimeContext } from "./unifiedRuntimeContext";
 
 const mockTaskPanels: Array<{ versionId: string; liveChannel?: boolean }> = [];
 const mockMarkdown: Array<{ content: string; showCursor?: boolean }> = [];
+const mockErrorCards: unknown[] = [];
 
 jest.mock("~/components/Linsight/Execution/TaskTurnPanel", () => ({
   TaskTurnPanel: (props: { versionId: string; liveChannel?: boolean }) => {
@@ -32,7 +33,13 @@ jest.mock("~/components/Chat/Messages/Content/CitationReferencesDrawer", () => (
 jest.mock("~/components/Chat/Messages/Content/SearchWebUrls", () => ({ __esModule: true, default: () => null }));
 jest.mock("~/components/ui/Avatar", () => ({ Avatar: () => null, AvatarImage: () => null, AvatarName: () => null }));
 jest.mock("~/components/Voice/TextToSpeechButton", () => ({ TextToSpeechButton: () => null }));
-jest.mock("~/components/ChatErrorCard", () => ({ ChatErrorCard: () => null, isTransientErrorType: () => false }));
+jest.mock("~/components/ChatErrorCard", () => ({
+  ChatErrorCard: (props: unknown) => {
+    mockErrorCards.push(props);
+    return null;
+  },
+  isTransientErrorType: () => false,
+}));
 jest.mock("~/components/Chat/MessageFeedbackButtons", () => ({ MessageFeedbackButtons: () => null }));
 jest.mock("~/components/Chat/MemoryNotice", () => ({ MemoryNotice: () => null }));
 jest.mock("~/api/apps", () => ({ likeChatApi: jest.fn(), disLikeCommentApi: jest.fn() }));
@@ -48,6 +55,10 @@ jest.mock("~/components/Chat/attachments/GeneratedFileLink", () => ({ renderGene
 jest.mock("~/components/ui/icon/File/FileIcon", () => ({ isImageFileName: () => false }));
 jest.mock("~/components/Chat/Messages/Content/MessageImage", () => ({ MessageImage: () => null }));
 jest.mock("~/components/ServiceBusyNotice", () => ({ ServiceBusyNotice: () => null }));
+jest.mock("./RunMessageNotes", () => ({
+  MessageQueuedNote: () => <div data-testid="message-queued" />,
+  RunStoppedNote: () => <div data-testid="message-stopped" />,
+}));
 jest.mock("lucide-react", () => ({ BotIcon: () => null, ChevronLeftIcon: () => null, ChevronRightIcon: () => null }));
 
 const taskRow = (extra: Partial<ChatMessage> = {}): ChatMessage => ({
@@ -75,6 +86,7 @@ const emit = (event: Record<string, unknown>, id: string) =>
 beforeEach(() => {
   mockTaskPanels.length = 0;
   mockMarkdown.length = 0;
+  mockErrorCards.length = 0;
   act(() => useRunStore.setState({ conversations: {} }));
 });
 
@@ -107,5 +119,60 @@ describe("tenant switch on", () => {
     expect(mockMarkdown[mockMarkdown.length - 1].showCursor).toBe(false);
     emit({ type: "ask_user_answered", data: { call_id: "k1" } }, "1-3");
     expect(mockMarkdown[mockMarkdown.length - 1].showCursor).toBe(true);
+  });
+});
+
+describe("stopped answer (design §7 item 2)", () => {
+  const answer = (extra: Partial<ChatMessage> = {}): ChatMessage =>
+    taskRow({ category: "agent_answer", linsightSessionVersionId: undefined, messageId: "a1", ...extra });
+  const text = (content: string) => ({ events: [{ type: "text" as const, content }], text: content });
+
+  it("shows the content written so far with the neutral stopped note, not the error style", () => {
+    const view = renderBubble(answer({ ...text("so far"), stopped: true }), true);
+    expect(mockMarkdown[mockMarkdown.length - 1].content).toBe("so far");
+    expect(view.queryByTestId("message-stopped")).not.toBeNull();
+    expect(mockErrorCards).toHaveLength(0);
+  });
+
+  it("shows only the note when the run was stopped before it wrote anything", () => {
+    const view = renderBubble(answer({ stopped: true, events: [] }), true);
+    expect(view.queryByTestId("message-stopped")).not.toBeNull();
+    expect(mockMarkdown).toHaveLength(0);
+    expect(mockErrorCards).toHaveLength(0);
+  });
+
+  it("keeps the error style for a run torn down without a terminal event", () => {
+    const view = renderBubble(answer({ error: true, errorText: "stream interrupted", events: [] }), true);
+    expect(view.queryByTestId("message-stopped")).toBeNull();
+    expect(mockErrorCards).toHaveLength(1);
+  });
+
+  it("shows no note on an ordinary answer", () => {
+    const view = renderBubble(answer(text("done")), true);
+    expect(view.queryByTestId("message-stopped")).toBeNull();
+  });
+});
+
+describe("queued mark of a user message", () => {
+  const question = (extra: Partial<ChatMessage> = {}): ChatMessage =>
+    taskRow({ category: "question", isCreatedByUser: true, sender: "User", messageId: "m1", text: "more", linsightSessionVersionId: undefined, ...extra });
+
+  it("clears when the relay run reads the message", () => {
+    emit({ type: "run_started" }, "2-1");
+    emit({ type: "steer_accepted", data: { message_id: "m1" } }, "2-2");
+    emit({ type: "run_finished" }, "2-3");
+    const view = renderBubble(question(), true);
+    expect(view.queryByTestId("message-queued")).not.toBeNull();
+    emit({ type: "run_started", run_id: "r2", data: { relay: true } }, "2-4");
+    expect(view.queryByTestId("message-queued")).not.toBeNull();
+    emit({ type: "steer_read", run_id: "r2", data: { message_id: "m1" } }, "2-5");
+    expect(view.queryByTestId("message-queued")).toBeNull();
+  });
+
+  it("is found by the inbox id on a row loaded from the history", () => {
+    emit({ type: "run_started" }, "2-1");
+    emit({ type: "steer_accepted", data: { message_id: "m1" } }, "2-2");
+    const view = renderBubble(question({ messageId: "8801", steerMessageId: "m1" }), true);
+    expect(view.queryByTestId("message-queued")).not.toBeNull();
   });
 });

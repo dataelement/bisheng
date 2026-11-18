@@ -51,6 +51,32 @@ whose profile comes from the FIRST inbox message. The relay item goes to the
 worker queue through the injected ``enqueue_relay`` and carries ``tenant_id``.
 The inbox is left intact: the relay run reads it (``drain_inbox`` or the inbox
 middleware), so a lost queue item loses no message.
+
+Waiting runs (design §7 item 4)
+-------------------------------
+
+``bisheng:run:pending:{<cid>}`` -- LIST of worker-queue items (JSON, each with
+``run_id``), oldest first. A deep-research run submitted through an entry that
+does not go through ``submit`` (Open API task mode, ``/workbench/start-execute``)
+reaches the worker while another run holds the conversation: ``claim_or_wait``
+either gives it the conversation or appends its queue item here, in one script.
+The finish script hands the conversation to the first waiting item when the
+inbox is empty (outcome ``pending``) and the item returns to the worker queue
+through ``enqueue_item``. Paths that free a conversation without the finish
+script call ``promote_pending``.
+
+``bisheng:run:pending_index`` -- SET of conversation ids that have (or had)
+waiting items. Not hash-tagged and never used inside a script. The worker's
+``sweep_pending`` walks it, so a waiting run whose holder died is still started
+after the holder's lease lapsed, without anyone opening the conversation.
+
+Stop (design §7 item 6)
+-----------------------
+
+A run that ends because the user stopped it does not relay: the runner calls
+``discard_inbox`` before it writes ``run_stopped`` and puts the removed
+messages into that event. A message that arrives after that call was sent
+after the stop and starts a relay run as usual.
 """
 
 from __future__ import annotations
@@ -68,6 +94,8 @@ from loguru import logger
 from bisheng.workstation.domain.services.run_lease import LEASE_SECONDS, STATE_TTL_SECONDS, state_key
 
 INBOX_KEY_PREFIX = "bisheng:run:inbox:"
+PENDING_KEY_PREFIX = "bisheng:run:pending:"
+PENDING_INDEX_KEY = "bisheng:run:pending_index"
 # Same lifetime as the state hash: an inbox must not outlive or die before it.
 INBOX_TTL_SECONDS = STATE_TTL_SECONDS
 # Lease of a run that sits in the worker queue before a worker renews it. Same
@@ -102,11 +130,14 @@ KIND_RELAY = "relay"
 OUTCOME_IDLE = "idle"
 OUTCOME_RELAY = "relay"
 OUTCOME_STALE = "stale"
+OUTCOME_PENDING = "pending"
 
 # ``reason`` of the run_failed event emitted for a run whose lease lapsed.
 EXPIRED_REASON = "lease_expired"
 
 EnqueueRelay = Callable[[dict], Awaitable[None]]
+# Puts the queue item of a run that waited for the conversation back into the worker queue.
+EnqueueItem = Callable[[dict], Awaitable[None]]
 OnRunExpired = Callable[[str, str], Awaitable[None]]
 QueuePosition = Callable[[str, str, dict], Awaitable[int | None]]
 # ``on_queued(result, message)``: persist the question row of a message that joined the inbox.
@@ -115,6 +146,22 @@ OnQueued = Callable[["SubmitResult", dict], Awaitable[None]]
 
 def inbox_key(conversation_id: str) -> str:
     return f"{INBOX_KEY_PREFIX}{{{conversation_id}}}"
+
+
+def pending_key(conversation_id: str) -> str:
+    return f"{PENDING_KEY_PREFIX}{{{conversation_id}}}"
+
+
+def unread_view(messages: list[dict]) -> list[dict]:
+    """Inbox messages as the client gets them back after a stop (``unread_messages``)."""
+    return [
+        {
+            "message_id": str(message.get("message_id") or ""),
+            "text": message.get("text") or "",
+            "files": message.get("files") or [],
+        }
+        for message in messages
+    ]
 
 
 def profile_of(message: dict) -> str:
@@ -137,6 +184,8 @@ def _load_scripts() -> dict[str, str]:
 _SCRIPTS = _load_scripts()
 _DISPATCH_LUA = _SCRIPTS["dispatch"]
 _FINISH_LUA = _SCRIPTS["finish"]
+_CLAIM_LUA = _SCRIPTS["claim"]
+_PROMOTE_LUA = _SCRIPTS["promote"]
 
 
 def _s(value: Any) -> str:
@@ -179,6 +228,18 @@ class FinishResult:
     relay: dict | None = None
     # Set only by ``recover_expired``.
     expired_run_id: str | None = None
+    # Queue item of the waiting run that took the conversation (outcome "pending").
+    item: dict | None = None
+
+
+@dataclass(frozen=True)
+class ClaimResult:
+    # True: the run holds the conversation. False: its queue item waits in the pending list.
+    held: bool
+    # Holder seen before the call.
+    holder_run_id: str | None = None
+    # Run whose lapsed lease this call took over; the caller reports it as failed.
+    expired_run_id: str | None = None
 
 
 class RunDispatchService:
@@ -193,6 +254,8 @@ class RunDispatchService:
     emits ``run_failed``; the default only emits the event.
     ``queue_position(conversation_id, run_id, message)`` returns the queue
     position of a new planned run, or None when a slot is free.
+    ``enqueue_item(item)`` puts the queue item of a run that waited for the
+    conversation back into the worker queue.
     """
 
     def __init__(
@@ -203,6 +266,7 @@ class RunDispatchService:
         enqueue_relay: EnqueueRelay | None = None,
         on_run_expired: OnRunExpired | None = None,
         queue_position: QueuePosition | None = None,
+        enqueue_item: EnqueueItem | None = None,
         run_id_factory: Callable[[], str] = lambda: uuid.uuid4().hex,
     ):
         self._redis = redis
@@ -210,6 +274,7 @@ class RunDispatchService:
         self._enqueue_relay = enqueue_relay
         self._on_run_expired = on_run_expired
         self._queue_position = queue_position
+        self._enqueue_item = enqueue_item
         self._new_run_id = run_id_factory
 
     @classmethod
@@ -394,9 +459,10 @@ class RunDispatchService:
         """
         res = await self._redis.eval(
             _FINISH_LUA,
-            2,
+            3,
             state_key(conversation_id),
             inbox_key(conversation_id),
+            pending_key(conversation_id),
             run_id or "",
             self._new_run_id(),
             self._now_ms(),
@@ -405,7 +471,23 @@ class RunDispatchService:
         )
         outcome = _s(res[0])
         if outcome == OUTCOME_IDLE:
+            if _s(res[4]):
+                logger.error(
+                    "conversation={}: a waiting queue item without a run id was dropped: {!r}",
+                    conversation_id,
+                    _s(res[4]),
+                )
             return FinishResult(outcome=OUTCOME_IDLE)
+        if outcome == OUTCOME_PENDING:
+            waiting_run_id = _s(res[1])
+            logger.info(
+                "run={} finished on conversation={}; waiting run={} takes the conversation",
+                run_id,
+                conversation_id,
+                waiting_run_id,
+            )
+            item = await self._enqueue_waiting(conversation_id, waiting_run_id, _s(res[4]))
+            return FinishResult(outcome=OUTCOME_PENDING, run_id=waiting_run_id, profile=PROFILE_PLANNED, item=item)
         if outcome == OUTCOME_STALE:
             logger.warning(
                 "run={} finished on conversation={} but run={} holds it now; state left untouched",
@@ -446,6 +528,15 @@ class RunDispatchService:
         if expired:
             await self._handle_expired(conversation_id, expired)
         if branch == "idle":
+            promoted = await self.promote_pending(conversation_id)
+            if promoted is not None:
+                return FinishResult(
+                    outcome=OUTCOME_PENDING,
+                    run_id=promoted.run_id,
+                    profile=promoted.profile,
+                    item=promoted.item,
+                    expired_run_id=expired,
+                )
             return FinishResult(outcome=OUTCOME_IDLE, expired_run_id=expired)
         if branch == "relay":
             run_id, profile = _s(res[1]), _s(res[2])
@@ -455,6 +546,137 @@ class RunDispatchService:
                 outcome=OUTCOME_RELAY, run_id=run_id, profile=profile, relay=item, expired_run_id=expired
             )
         raise RuntimeError(f"run_dispatch.lua recover returned an unknown branch: {branch!r}")
+
+    # ------------------------------------------------------------ waiting runs
+
+    async def claim_or_wait(self, conversation_id: str, run_id: str, profile: str, item: dict) -> ClaimResult:
+        """Take the conversation for a run the worker dequeued, or make the run wait for it.
+
+        ``item`` is the worker-queue item that starts this run again; it is
+        stored with ``run_id`` so the conversation can be reserved for it. The
+        run holds the conversation when it is idle, reserved for this ``run_id``,
+        parked on this ``run_id``, or held by a run whose lease lapsed.
+        """
+        waiting_item = {**item, "run_id": run_id}
+        res = await self._redis.eval(
+            _CLAIM_LUA,
+            2,
+            state_key(conversation_id),
+            pending_key(conversation_id),
+            run_id,
+            profile,
+            self._now_ms(),
+            LEASE_SECONDS * 1000,
+            STATE_TTL_SECONDS,
+            json.dumps(waiting_item, ensure_ascii=False),
+            INBOX_TTL_SECONDS,
+        )
+        held = _s(res[0]) == "held"
+        holder, expired = _s(res[1]) or None, _s(res[2]) or None
+        if not held:
+            # After the push: an index entry without a list is removed by the sweep.
+            await self._redis.sadd(PENDING_INDEX_KEY, conversation_id)
+            logger.info(
+                "run={} waits for conversation={} held by run={}; {} run(s) waiting",
+                run_id,
+                conversation_id,
+                holder,
+                int(res[3]),
+            )
+        elif expired:
+            logger.warning(
+                "run lease of run={} on conversation={} had lapsed; taken over by run={}",
+                expired,
+                conversation_id,
+                run_id,
+            )
+        return ClaimResult(held=held, holder_run_id=holder, expired_run_id=expired)
+
+    async def promote_pending(self, conversation_id: str) -> FinishResult | None:
+        """Give an idle conversation with an empty inbox to its first waiting run.
+
+        Returns None when nothing was started. Call it after a path that frees
+        the conversation without ``on_run_finished``.
+        """
+        res = await self._redis.eval(
+            _PROMOTE_LUA,
+            3,
+            state_key(conversation_id),
+            inbox_key(conversation_id),
+            pending_key(conversation_id),
+            self._now_ms(),
+            QUEUED_LEASE_SECONDS * 1000,
+            STATE_TTL_SECONDS,
+        )
+        outcome = _s(res[0])
+        if outcome == "dropped":
+            logger.error(
+                "conversation={}: a waiting queue item without a run id was dropped: {!r}", conversation_id, _s(res[2])
+            )
+            return None
+        if outcome != OUTCOME_PENDING:
+            return None
+        run_id = _s(res[1])
+        item = await self._enqueue_waiting(conversation_id, run_id, _s(res[2]))
+        return FinishResult(outcome=OUTCOME_PENDING, run_id=run_id, profile=PROFILE_PLANNED, item=item)
+
+    async def pending_length(self, conversation_id: str) -> int:
+        return int(await self._redis.llen(pending_key(conversation_id)))
+
+    async def sweep_pending(self) -> int:
+        """Start waiting runs whose conversation was freed without the finish script.
+
+        Walks ``PENDING_INDEX_KEY``: a lapsed lease is reported
+        (``recover_expired``), then an idle conversation goes to its first
+        waiting run. Returns how many runs were started. One conversation that
+        fails does not stop the sweep.
+        """
+        started = 0
+        for raw in await self._redis.smembers(PENDING_INDEX_KEY):
+            conversation_id = _s(raw)
+            try:
+                if await self._redis.llen(pending_key(conversation_id)) == 0:
+                    await self._redis.srem(PENDING_INDEX_KEY, conversation_id)
+                    # A run may have started waiting between the two commands.
+                    if await self._redis.llen(pending_key(conversation_id)) > 0:
+                        await self._redis.sadd(PENDING_INDEX_KEY, conversation_id)
+                    continue
+                recovered = await self.recover_expired(conversation_id)
+                if recovered is not None and recovered.outcome == OUTCOME_PENDING:
+                    started += 1
+                    continue
+                if await self.promote_pending(conversation_id) is not None:
+                    started += 1
+            except Exception:
+                logger.exception("pending sweep failed for conversation={}", conversation_id)
+        return started
+
+    async def _enqueue_waiting(self, conversation_id: str, run_id: str, item_json: str) -> dict:
+        """Put the queue item of the run that now holds the conversation into the worker queue.
+
+        When that fails the item goes back to the head of the pending list and
+        the conversation is freed, so the sweep starts the run later; the error
+        is raised.
+        """
+        item = json.loads(item_json)
+        try:
+            if self._enqueue_item is None:
+                raise RuntimeError("RunDispatchService was built without enqueue_item")
+            await self._enqueue_item(item)
+        except Exception:
+            logger.exception(
+                "could not enqueue waiting run={} of conversation={}; it stays in the pending list",
+                run_id,
+                conversation_id,
+            )
+            from bisheng.workstation.domain.services.run_lease import RunLeaseService
+
+            await self._redis.lpush(pending_key(conversation_id), item_json)
+            await self._redis.expire(pending_key(conversation_id), INBOX_TTL_SECONDS)
+            await self._redis.sadd(PENDING_INDEX_KEY, conversation_id)
+            await RunLeaseService(self._redis, clock=self._clock).release(conversation_id, run_id)
+            raise
+        return item
 
     # ------------------------------------------------------------------- inbox
 
@@ -466,6 +688,22 @@ class RunDispatchService:
             pipe.delete(key)
             raw, _ = await pipe.execute()
         return [json.loads(_s(item)) for item in raw]
+
+    async def discard_inbox(self, conversation_id: str) -> list[dict]:
+        """Take the unread messages of a run the user stopped (design §7 item 6).
+
+        Same atomic take as ``drain_inbox``; the caller returns the messages to
+        the client instead of giving them to a run.
+        """
+        messages = await self.drain_inbox(conversation_id)
+        if messages:
+            logger.info(
+                "conversation={}: {} unread message(s) removed from the inbox on stop: {}",
+                conversation_id,
+                len(messages),
+                [message.get("message_id") for message in messages],
+            )
+        return messages
 
     async def inbox_length(self, conversation_id: str) -> int:
         return int(await self._redis.llen(inbox_key(conversation_id)))

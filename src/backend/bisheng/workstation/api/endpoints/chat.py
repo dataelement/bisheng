@@ -150,9 +150,16 @@ async def stop_conversation(conversation_id: str, login_user=LoginUserDep):
     """F004: stop the run that holds the conversation (AC-29). Owner only.
 
     Works for a direct answer and for deep research, on any node. Returns
-    ``{run_id, status}``: ``stopping`` (the run ends within about a second and
-    writes ``run_stopped``), ``stopped`` (it was waiting for an answer or still
-    queued and is ended now), ``expired`` or ``idle`` (nothing to stop).
+    ``{run_id, status, unread_messages}``: ``stopping`` (the run ends within
+    about a second and writes ``run_stopped``), ``stopped`` (it was waiting for
+    an answer or still queued and is ended now), ``expired`` or ``idle``
+    (nothing to stop).
+
+    A stopped run starts no relay run. ``unread_messages`` (``[{message_id,
+    text, files}]``) are the messages sent during the run that it never read;
+    the client puts their text back into the input box. For ``stopped`` they are
+    in this response and in the ``run_stopped`` event; for ``stopping`` the list
+    here is empty and the run's ``run_stopped`` event carries them.
     """
     if not await run_send.owns_conversation(conversation_id, login_user):
         return UnAuthorizedError.return_resp()

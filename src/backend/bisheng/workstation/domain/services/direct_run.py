@@ -74,6 +74,10 @@ are awaited one by one, in order, after the event was accepted by the writer.
 The terminal event reaches the hooks BEFORE ``on_run_finished`` runs. A hook
 that raises is logged and does not stop the run.
 
+Before a terminal event is written, the owner of a hook (the object a bound
+method hook belongs to) may add fields to its ``data`` through
+``async before_terminal(event) -> dict | None``; see ``_add_terminal_fields``.
+
 Pass hooks per run (``on_event=[...]``) or register a factory once with
 ``register_event_hook_factory(factory)``; ``factory(ctx)`` returns the hook of
 one execution.
@@ -312,6 +316,40 @@ _DEFAULT_ENQUEUE_RELAY: Callable[[dict], Awaitable[None]] | None = None
 _TASKS: set[asyncio.Task] = set()
 
 
+async def _add_terminal_fields(ctx: DirectRunContext, event: dict, hooks: list) -> None:
+    """Let the hooks' owners add fields to a terminal event before it is written.
+
+    A hook that is a bound method of an object with ``async before_terminal(event)``
+    (the persistence projector) may return a dict; it is merged into ``data``
+    without replacing a field the event already has. Today that is
+    ``answer_files``: the files of the answer row, with the row's ids. A failure
+    is logged and the event is written without the fields; the client then takes
+    the files from the history.
+    """
+    for hook in hooks:
+        prepare = getattr(getattr(hook, "__self__", None), "before_terminal", None)
+        if prepare is None:
+            continue
+        try:
+            extra = await prepare(event)
+        except Exception:
+            logger.exception(
+                "direct run={} conversation={}: could not prepare the {} event",
+                ctx.run_id,
+                ctx.conversation_id,
+                event.get("type"),
+            )
+            continue
+        if not extra:
+            continue
+        data = event.get("data")
+        if not isinstance(data, dict):
+            data = {}
+            event["data"] = data
+        for key, value in extra.items():
+            data.setdefault(key, value)
+
+
 def register_event_hook_factory(factory: EventHookFactory) -> None:
     """Attach a hook to every direct run of this process (idempotent)."""
     if factory not in _HOOK_FACTORIES:
@@ -334,12 +372,14 @@ def production_dispatch_wiring(enqueue_relay: Callable[[dict], Awaitable[None]] 
     imports this package.
     """
     from bisheng.linsight.domain.task_exec import mark_run_expired
-    from bisheng.linsight.worker import enqueue_relay_run, planned_queue_position
+    from bisheng.linsight.worker import enqueue_relay_run, enqueue_waiting_item, planned_queue_position
 
     return {
         "enqueue_relay": enqueue_relay or _DEFAULT_ENQUEUE_RELAY or enqueue_relay_run,
         "on_run_expired": mark_run_expired,
         "queue_position": planned_queue_position,
+        # A run that waited for the conversation goes back to the worker queue.
+        "enqueue_item": enqueue_waiting_item,
     }
 
 
@@ -477,6 +517,8 @@ class DirectRunner:
         gate = _SafetyGate(self._safety_scanner(ctx))
         # T059: citations and memory of this execution (see ``direct_run_turn``).
         turn = direct_run_turn.open_turn(ctx.conversation_id, ctx.run_id)
+        # The citation audit line names the model (design §7 item 17).
+        turn.model = ctx.model_id
 
         mapper = StreamEventMapper(svid=ctx.run_id)
         # The stream carries tool output cut at 8000 characters; the hooks (the
@@ -491,6 +533,8 @@ class DirectRunner:
                 await write(event)
 
         async def write(event: dict) -> None:
+            if event.get("type") in run_events.TERMINAL_EVENT_TYPES:
+                await _add_terminal_fields(ctx, event, hooks)
             for_hooks = extras.dress(event)
             await writer.emit(event)
             # Like the legacy stream: the text is sent, then scanned. ``_work``
@@ -621,7 +665,10 @@ class DirectRunner:
             if reason == STATUS_STOPPED:
                 await self._settle_files(ctx, sink)
                 # Text already written stays in the accumulated state (AC-29).
-                await output.run_stopped("user")
+                # Messages the run never read go back to the client inside the
+                # event; ``on_run_finished`` then finds an empty inbox and starts
+                # no relay run (design §7 item 6).
+                await output.run_stopped("user", await self._discard_unread(ctx))
                 await self._cleanup_local(ctx)
             # A lost lease: another execution of this conversation may already
             # use the directory, so it is left alone.
@@ -631,6 +678,27 @@ class DirectRunner:
                 if not task.done():
                     task.cancel()
             await asyncio.gather(work, watch, return_exceptions=True)
+
+    async def _discard_unread(self, ctx: DirectRunContext) -> list[dict]:
+        """The unread inbox of a run the user stopped, removed from the inbox.
+
+        When the removal fails the stop still completes: the error is logged, the
+        event carries no messages, and the messages that stayed in the inbox are
+        answered by a relay run instead of being lost.
+        """
+        from bisheng.workstation.domain.services import run_message_persist
+
+        try:
+            return await run_message_persist.discard_unread(
+                self.dispatch, ctx.conversation_id, redis=self._redis_of_lease()
+            )
+        except Exception:
+            logger.exception(
+                "direct run={} conversation={}: could not take back the unread messages on stop",
+                ctx.run_id,
+                ctx.conversation_id,
+            )
+            return []
 
     async def _finish_blocked(self, ctx: DirectRunContext, output: Any, gate: _SafetyGate) -> None:
         """End a run whose answer hit the output scanner (legacy ``persist_safety_replacement``)."""

@@ -524,7 +524,7 @@ async def test_sensitive_input_blocked_before_inbox(world: _World, client: httpx
     )
     blocked_calls: list[Any] = []
 
-    async def blocked_response(data, login_user, blocked, memory_register):
+    async def blocked_response(data, login_user, blocked, memory_register, negotiated=False):
         blocked_calls.append(blocked)
         return StreamingResponse(iter(['data: {"blocked": true}\n\n']), media_type="text/event-stream")
 
@@ -539,3 +539,91 @@ async def test_sensitive_input_blocked_before_inbox(world: _World, client: httpx
     state = await world.state()
     assert (state.status, state.run_id) == ("running", held.run_id)
     assert world.started == [] and world.task_turns == [] and world.question_rows == []
+
+
+# ------------------------------------- design §7 item 3: blocked input on the run protocol
+
+
+def _block_input(world: _World, monkeypatch, auto_reply: str = "内容不合规") -> dict[str, Any]:
+    """Input content safety hits; the blocked turn is recorded through today's helpers."""
+    seen: dict[str, Any] = {"init": [], "answers": [], "legacy": []}
+    hit = SimpleNamespace(auto_reply=auto_reply)
+    monkeypatch.setattr(
+        chat_service.SensitiveWordPolicyService, "evaluate_workbench_user_text", staticmethod(lambda *_a, **_k: hit)
+    )
+
+    async def initialize(data, login_user, session_subject=None, *, skip_llm=False, memory_register=None):
+        seen["init"].append({"text": data.text, "skip_llm": skip_llm})
+        conversation = world.sessions[data.conversationId]
+        return None, conversation, SimpleNamespace(id=901), None, SimpleNamespace(displayName="模型一"), False
+
+    async def persist_answer(conversation, model_info, reply):
+        seen["answers"].append((conversation.chat_id, model_info.displayName, reply))
+        return SimpleNamespace(id=902)
+
+    def legacy_frames(conversation, message, model_info, data, reply):
+        seen["legacy"].append(reply)
+        return StreamingResponse(iter(['data: {"blocked": true}\n\n']), media_type="text/event-stream")
+
+    monkeypatch.setattr(chat_service, "_agent_initialize_chat", initialize)
+    monkeypatch.setattr(chat_service, "persist_blocked_workbench_answer", persist_answer)
+    monkeypatch.setattr(chat_service, "_respond_blocked_workbench", legacy_frames)
+    return seen
+
+
+async def test_blocked_input_answers_in_the_run_protocol(world: _World, client: httpx.AsyncClient, monkeypatch):
+    seen = _block_input(world, monkeypatch)
+
+    resp = await client.post(f"{PREFIX}/chat/completions", json=_body(text="敏感词"), headers=V2)
+
+    assert resp.headers["content-type"].startswith("application/json")
+    body = resp.json()
+    assert body["status_code"] == 200
+    assert body["data"] == {
+        "run_id": None,
+        "disposition": "blocked",
+        "message_id": None,
+        "conversation_id": CID,
+        "content_safety": True,
+        "auto_reply": "内容不合规",
+        "question_message_id": 901,
+        "answer_message_id": 902,
+    }
+    # The turn is recorded exactly once, with the auto-reply, and no model is built.
+    assert seen["init"] == [{"text": "敏感词", "skip_llm": True}]
+    assert seen["answers"] == [(CID, "模型一", "内容不合规")]
+    assert seen["legacy"] == []
+    # No run, nothing in the inbox, nothing on the event stream.
+    assert world.started == [] and world.task_turns == []
+    assert (await world.state()).status == "idle"
+    assert await world.inbox() == 0
+    assert [event async for event in world.stream.read(CID)] == []
+
+
+async def test_blocked_input_during_a_run_does_not_touch_the_run(world: _World, client: httpx.AsyncClient, monkeypatch):
+    held = await world.dispatch.submit(CID, {"text": "先问一句", "user_id": OWNER, "tenant_id": TENANT})
+    await world.stream.append(CID, {"type": "run_started", "run_id": held.run_id, "data": {}})
+    _block_input(world, monkeypatch)
+
+    for body in (_body(text="敏感词"), _body(text="敏感词", task_mode=True)):
+        resp = await client.post(f"{PREFIX}/chat/completions", json=body, headers=V2)
+        assert resp.json()["data"]["disposition"] == "blocked"
+
+    # The blocked text never joined the inbox, and the stream of the live run is untouched.
+    assert await world.inbox() == 0
+    state = await world.state()
+    assert (state.status, state.run_id) == ("running", held.run_id)
+    assert [event["type"] async for event in world.stream.read(CID)] == ["run_started"]
+
+
+async def test_blocked_input_without_the_header_keeps_the_old_frames(
+    world: _World, client: httpx.AsyncClient, monkeypatch
+):
+    seen = _block_input(world, monkeypatch)
+
+    resp = await client.post(f"{PREFIX}/chat/completions", json=_body(text="敏感词"))
+
+    assert _frames(resp.text) == [{"data": {"blocked": True}}]
+    assert seen["legacy"] == ["内容不合规"]
+    # The SSE helper writes the answer row itself.
+    assert seen["answers"] == []

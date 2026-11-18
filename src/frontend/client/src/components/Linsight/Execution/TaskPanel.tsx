@@ -25,6 +25,7 @@ export function TaskPanel({
     terminated = false,
     running = false,
     stopped = false,
+    awaitingAnswer = false,
 }: {
     tasks: ExecTask[];
     completed: boolean;
@@ -34,6 +35,8 @@ export function TaskPanel({
     running?: boolean;
     /** F004: the run was stopped by the user — the header reads "已停止". Pass it together with `terminated`. */
     stopped?: boolean;
+    /** F004: the run waits for the user's answer to a question — nothing is executing, the header says so. */
+    awaitingAnswer?: boolean;
 }) {
     const localize = useLocalize();
     // Default collapsed: the panel opens collapsed on every conversation switch
@@ -72,7 +75,9 @@ export function TaskPanel({
     // below already shows every task, so the header omits the inline name.
     // A terminated run is no longer "running", so it shows neither the spinner
     // nor the shimmering task name.
-    const runningTask = terminated ? undefined : visible.find((t) => isTaskRunning(t.status));
+    // A run that waits for the user's answer is not executing either.
+    const paused = terminated || awaitingAnswer;
+    const runningTask = paused ? undefined : visible.find((t) => isTaskRunning(t.status));
     const runningName = runningTask?.name || runningTask?.task_data?.name || '';
     const showRunningInline = !open && !allDone && !!runningName;
 
@@ -92,7 +97,7 @@ export function TaskPanel({
                       activity cue of its own and the header must supply it
                     - in progress + expanded → the task (list) glyph
                     - in progress + collapsed → Accent spinner (live activity cue) */}
-                {terminated ? (
+                {paused ? (
                     <Outlined.ListSuccess size={16} className="shrink-0" style={{ color: INK }} />
                 ) : allDone ? (
                     <Outlined.DoubleCheck size={16} className="shrink-0" style={{ color: INK }} />
@@ -106,6 +111,8 @@ export function TaskPanel({
                         ? localize('runPlan.stopped')
                         : terminated
                         ? localize('com_linsight_task_terminated')
+                        : awaitingAnswer
+                        ? localize('runPlan.awaitingAnswer')
                         : allDone
                             ? localize('com_linsight_task_panel_done')
                             : wrappingUp
@@ -177,7 +184,7 @@ export function TaskPanel({
                                     >
                                         {done ? (
                                             <Outlined.CheckCircle size={16} style={{ color: MUTED }} />
-                                        ) : running ? (
+                                        ) : running && !awaitingAnswer ? (
                                             <Outlined.Loading size={16} className="animate-spin" style={{ color: ACCENT }} />
                                         ) : (
                                             <Outlined.Round size={16} style={{ color: FAINT }} />
@@ -210,6 +217,10 @@ export function TaskPanel({
                     </ul>
                 </div>
             </div>
+            {/* F004: shown collapsed and expanded, so a stop never reads as lost work. */}
+            {stopped && (
+                <p className="px-4 pb-3 text-caption text-text-3">{localize('runPlan.stoppedNote')}</p>
+            )}
         </div>
     );
 }

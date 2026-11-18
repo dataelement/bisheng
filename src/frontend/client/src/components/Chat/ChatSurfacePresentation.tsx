@@ -6,9 +6,10 @@ import AiChatMessages from "~/components/Chat/AiChatMessages";
 import { PinnedTaskPanel } from "~/components/Linsight/Execution/PinnedTaskPanel";
 import { RunClarifyCard } from "~/components/Linsight/Execution/ClarifyCard";
 import { useRunAwaitingAnswer } from "./hooks/useTaskWorkspaceState";
+import { composerPlaceholder, useRunStopped } from "./hooks/runComposerState";
 import { WorkspacePanel } from "~/components/Linsight/Artifacts/WorkspacePanel";
 import { TaskTurnLoadContext } from "~/components/Linsight/Execution/taskTurnLoad";
-import { UnifiedRuntimeContext } from "~/components/Chat/unifiedRuntimeContext";
+import { TaskTurnRetryContext, UnifiedRuntimeContext } from "~/components/Chat/unifiedRuntimeContext";
 import { cn } from "~/utils";
 import Landing from "./Landing";
 import { DailyFeaturedApps } from "./DailyFeaturedApps";
@@ -95,13 +96,16 @@ export function ChatSurfacePresentation({
     taskRunning,
     awaitingUserInput,
     handleStop,
+    handleRetryTaskTurn,
     unifiedRuntime,
     shareToken,
   } = model;
   const runAwaitingAnswer = useRunAwaitingAnswer(shareToken ? "" : conversationId);
+  const runStopped = useRunStopped(shareToken ? "" : conversationId);
   return (
     <TaskTurnLoadContext.Provider value={reportTaskTurnLoadFailed}>
       <UnifiedRuntimeContext.Provider value={unifiedRuntime === true}>
+      <TaskTurnRetryContext.Provider value={unifiedRuntime === true && !shareToken ? handleRetryTaskTurn : null}>
       <Presentation isLingsi={false}>
         {inviteQuotaDialog}
         <div className="dsh-chat-surface" data-testid="dsh-chat-surface">
@@ -285,22 +289,11 @@ export function ChatSurfacePresentation({
                                     (taskMode || taskRunning) && canUseTaskMode,
                                 }}
                                 onToggleTaskMode={handleToggleTaskMode}
-                                placeholder={
-                                  runAwaitingAnswer && !awaitingUserInput
-                                    ? t("com_linsight_answer_placeholder")
-                                    : awaitingUserInput
-                                    ? t("com_linsight_awaiting_reply")
-                                    : taskMode
-                                      ? (
-                                          bsConfig as {
-                                            linsightConfig?: {
-                                              input_placeholder?: string;
-                                            };
-                                          }
-                                        )?.linsightConfig?.input_placeholder ||
-                                        t("com_linsight_input_placeholder")
-                                      : undefined
-                                }
+                                placeholder={composerPlaceholder(t, {
+                                  runAwaitingAnswer, awaitingUserInput, runStopped, taskMode,
+                                  taskPlaceholder: (bsConfig as { linsightConfig?: { input_placeholder?: string } } | undefined)
+                                    ?.linsightConfig?.input_placeholder,
+                                })}
                                 onScrollToBottom={() => {}}
                                 modelOptions={bsConfig?.models}
                                 modelValue={chatModel.id}
@@ -611,6 +604,7 @@ export function ChatSurfacePresentation({
             )}
         </div>
       </Presentation>
+      </TaskTurnRetryContext.Provider>
       </UnifiedRuntimeContext.Provider>
     </TaskTurnLoadContext.Provider>
   );

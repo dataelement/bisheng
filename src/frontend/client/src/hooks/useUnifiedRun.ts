@@ -19,7 +19,9 @@ import { translateApiErrorMessage } from '~/api/request';
 import { sendRunMessage, stopConversationRun } from '~/api/runApi';
 import { useRunEvents } from '~/hooks/useRunEvents';
 import {
+    addEndedRunRow,
     addLiveRow,
+    applyBlockedSend,
     bindLiveTaskRow,
     classifySendResponse,
     dropSentMessages,
@@ -32,9 +34,12 @@ import {
     mergeHistoryWithQueued,
     needsLiveRow,
     reconcileSentMessages,
+    removeReturnedMessages,
+    shownReturnedIds,
     withLiveRun,
 } from '~/hooks/unifiedRun';
 import { selectConversationRun, useRunStore } from '~/store/runStore';
+import { unreadMessagesOf } from '~/store/runUnread';
 
 type MessagesUpdater = ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[]);
 
@@ -76,7 +81,7 @@ export interface UnifiedSendArgs {
 export interface UnifiedSendResult {
     accepted: boolean;
     conversationId: string | null;
-    disposition: 'started' | 'queued' | 'legacy' | null;
+    disposition: 'started' | 'queued' | 'legacy' | 'blocked' | null;
     runId: string | null;
     /** The message answered the question the run was waiting on. */
     answered: boolean;
@@ -233,9 +238,41 @@ export function useUnifiedRun(options: UseUnifiedRunOptions) {
         const errorText =
             run.status === 'failed' ? translateApiErrorMessage({ status_code: run.error?.code ?? undefined }) : '';
         setMessagesFor(cid, (prev) => freezeLiveRun(prev, run, errorText));
+        // A relay run that could not be created stored nothing and its questions
+        // were deleted: the history would replace the failure row with the
+        // previous turn, so the failure stays on screen as it is.
+        if (run.status === 'failed' && unreadMessagesOf(run.error).length > 0) return;
         reloadHistory(cid, run.runId);
         // eslint-disable-next-line react-hooks/exhaustive-deps -- reacts to the end of the run only
     }, [cid, bucketId, runId, active, liveRowPresent, setMessagesFor, reloadHistory]);
+
+    // Unread messages given back (the user stopped the run, or a relay run
+    // could not be created): their rows leave the list and their text goes to
+    // the input box. A returned message without a row here was handled in an
+    // earlier visit (the stream replays an ended run) and is dropped.
+    const returnedCount = conv?.returnedMessages.length ?? 0;
+    useEffect(() => {
+        if (!cid || returnedCount === 0 || isLoading || bucketId !== cid) return;
+        const store = useRunStore.getState();
+        const returned = store.conversations[cid]?.returnedMessages ?? [];
+        const shown = shownReturnedIds(
+            messagesRef.current,
+            returned.map((m) => m.message_id),
+        );
+        if (shown.size > 0) {
+            const ended = store.conversations[cid]?.run ?? null;
+            // A relay run that failed before it was seen running has no row yet.
+            const failedRelay = ended?.status === 'failed' && unreadMessagesOf(ended.error).length > 0 ? ended : null;
+            if (failedRelay) settledRunsRef.current.add(failedRelay.runId);
+            setMessagesFor(cid, (prev) => {
+                const rows = removeReturnedMessages(prev, shown);
+                if (!failedRelay) return rows;
+                const errorText = translateApiErrorMessage({ status_code: failedRelay.error?.code ?? undefined });
+                return addEndedRunRow(rows, failedRelay, senderRef.current, errorText);
+            });
+        }
+        store.resolveReturnedMessages(cid, shown);
+    }, [cid, bucketId, returnedCount, isLoading, setMessagesFor]);
 
     const liveMessages = useMemo(
         () => (cid && bucketId === cid ? withLiveRun(messages, run) : messages),
@@ -279,6 +316,24 @@ export function useUnifiedRun(options: UseUnifiedRunOptions) {
                 return { accepted: true, conversationId: legacyCid, disposition: 'legacy', runId: null, answered: false };
             }
 
+            if (outcome.kind === 'blocked') {
+                // Content safety blocked the input: the turn is stored with the
+                // auto-reply, no run starts and no event is written, so the
+                // event stream is not followed and the conversation stays idle.
+                const { blocked } = outcome;
+                args.onConversation(blocked.conversationId);
+                args.setMessages((prev) =>
+                    applyBlockedSend(prev, blocked, { userMessageId: args.userMessageId, sender: senderRef.current }),
+                );
+                return {
+                    accepted: true,
+                    conversationId: blocked.conversationId,
+                    disposition: 'blocked',
+                    runId: null,
+                    answered: false,
+                };
+            }
+
             const { result } = outcome;
             const targetCid = result.conversation_id || (args.conversationId !== 'new' ? args.conversationId : '');
             if (!targetCid) return reject(translateApiErrorMessage(null));
@@ -315,7 +370,11 @@ export function useUnifiedRun(options: UseUnifiedRunOptions) {
         if (!cid) return;
         const current = useRunStore.getState().conversations[cid]?.run ?? null;
         if (!isRunActive(current)) return;
-        await stopConversationRun(cid, current?.runId);
+        const result = await stopConversationRun(cid, current?.runId);
+        // A run without a live execution was ended by the request itself; the
+        // `run_stopped` event may carry the same messages (taken once by id).
+        const unread = unreadMessagesOf(result);
+        if (unread.length > 0) useRunStore.getState().applyUnreadMessages(cid, unread);
     }, [cid]);
 
     /** True when the run store already shows a run in progress for `targetCid`. */

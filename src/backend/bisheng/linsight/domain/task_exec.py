@@ -89,6 +89,15 @@ LINSIGHT_RUN_LOCK_KEY_PREFIX = "linsight:run_lock:"
 LINSIGHT_RUN_LOCK_TTL_SECONDS = 4 * 60 * 60
 
 
+class ConversationBusyError(TaskAlreadyInProgressError):
+    """Another run holds the conversation; this run's queue item now waits for it (F004).
+
+    Not a failure: the run record stays as it is and the run starts when the
+    holder ends (``RunDispatchService.claim_or_wait``). A subclass of
+    ``TaskAlreadyInProgressError`` so every entry point leaves the record alone.
+    """
+
+
 async def ensure_linsight_permission_runtime(manager=None) -> dict:
     """Initialize and verify Linsight's single F048 runtime pin."""
 
@@ -279,7 +288,7 @@ async def build_run_dispatch(redis=None, clock: Callable[[], float] | None = Non
     ``mark_run_expired``, the queue position of a new planned run is read from
     the worker queue. Imported lazily: the workstation package imports linsight.
     """
-    from bisheng.linsight.worker import enqueue_relay_run, planned_queue_position
+    from bisheng.linsight.worker import enqueue_relay_run, enqueue_waiting_item, planned_queue_position
     from bisheng.workstation.domain.services.run_dispatch import RunDispatchService
 
     return RunDispatchService(
@@ -288,6 +297,7 @@ async def build_run_dispatch(redis=None, clock: Callable[[], float] | None = Non
         enqueue_relay=enqueue_relay_run,
         on_run_expired=mark_run_expired,
         queue_position=planned_queue_position,
+        enqueue_item=enqueue_waiting_item,
     )
 
 
@@ -344,22 +354,24 @@ class _UnifiedRun:
 
             await run_message_persist.on_run_event(self.conversation_id, event, redis=self.redis)
 
-    async def claim(self) -> None:
-        """Take the conversation for this run, or raise.
+    async def claim(self, queue_item: dict) -> None:
+        """Take the conversation for this run, or make the run wait for it.
 
         The send entry already reserved the conversation when the run came
-        through ``run_dispatch.submit`` (queued lease, or the "answer" branch):
-        ``renew`` then turns that reservation into the normal short lease. A run
-        queued by an entry that does not reserve (Open API, ``/workbench/*``)
-        acquires here.
+        through ``run_dispatch.submit`` (queued lease, or the "answer" branch);
+        the reservation becomes the normal short lease here. A run queued by an
+        entry that does not reserve (Open API, ``/workbench/*``) takes an idle
+        conversation here. When another run holds the conversation, ``queue_item``
+        (the worker-queue item that starts this execution again) is stored in the
+        conversation's pending list and ``ConversationBusyError`` is raised: the
+        run starts when the holder ends (design §7 item 4). Taking and waiting
+        are one Redis script, so the hand-over cannot be missed.
         """
-        if await self.lease.renew(self.conversation_id, self.run_id):
-            return
-        result = await self.lease.acquire(self.conversation_id, self.run_id, PLANNED_PROFILE)
-        if not result.acquired:
-            raise TaskExecutionError(
-                f"Conversation {self.conversation_id} is held by run {result.run_id} ({result.status}); "
-                f"run {self.run_id} was not started"
+        result = await self.dispatch.claim_or_wait(self.conversation_id, self.run_id, PLANNED_PROFILE, queue_item)
+        if not result.held:
+            raise ConversationBusyError(
+                f"Conversation {self.conversation_id} is held by run {result.holder_run_id}; "
+                f"run {self.run_id} waits for it"
             )
         if result.expired_run_id and result.expired_run_id != self.run_id:
             await mark_run_expired(self.conversation_id, result.expired_run_id)
@@ -377,8 +389,28 @@ class _UnifiedRun:
             pending = snapshot.get("pending_question") or {}
             await self.output.ask_user_answered(call_id=pending.get("call_id"), answer=answer)
             return
+        # A relay run answers messages that were sent during the previous run
+        # (design §7 item 1); the worker that created this run's record left their ids.
+        from bisheng.linsight.domain.schemas import run_events
+        from bisheng.workstation.domain.services import run_message_persist
+
+        relay_ids = (
+            []
+            if resume
+            else await run_message_persist.take_relay_messages(self.redis, self.conversation_id, self.run_id)
+        )
+        started = {"profile": PLANNED_PROFILE, "session_version_id": self.session_version_id}
+        if relay_ids:
+            started["relay"] = True
         # run_started clears the stream: it holds the events of the current run only.
-        await self.output.run_started({"profile": PLANNED_PROFILE, "session_version_id": self.session_version_id})
+        await self.output.run_started(started)
+        for message_id in relay_ids:
+            # Same event a message read mid-run gets: its "queued" mark is cleared (AC-14).
+            await self.emit(
+                run_events.make_event(
+                    run_events.STEER_READ, run_events.SteerData(message_id=message_id), run_id=self.run_id
+                )
+            )
         if resume:
             # The stream of the parked run is gone (expired); the answer still shows.
             await self.output.ask_user_answered(answer=answer)
@@ -482,6 +514,15 @@ class LinsightWorkflowTask:
         # This execution answers a parked ask_user (async_resume) with ``_unified_answer``.
         self._unified_resume: bool = False
         self._unified_answer = None
+        # The worker-queue item of this execution (set by the three entry points).
+        # Stored in the conversation's pending list when another run holds the
+        # conversation, so the same execution starts when it is free.
+        self._queue_item: dict | None = None
+
+    def _encode_own_queue_item(self, **fields) -> dict:
+        from bisheng.linsight.worker import encode_queue_item
+
+        return encode_queue_item(self.session_version_id, **fields)
 
     # ==================== Resource Management ====================
 
@@ -556,7 +597,7 @@ class LinsightWorkflowTask:
         if not await run.redis.set(run.lock_key, run.run_id, nx=True, ex=LEASE_SECONDS):
             raise TaskAlreadyInProgressError("Task already in progress")
         try:
-            await run.claim()
+            await run.claim(self._waiting_queue_item(run))
         except BaseException:
             await self._drop_driver_lock(run)
             raise
@@ -591,6 +632,36 @@ class LinsightWorkflowTask:
             if not run.cancelled:
                 await asyncio.shield(self._close_unified_run(run))
                 await self._emit_unified_metric(run, metrics)
+
+    def _waiting_queue_item(self, run: "_UnifiedRun") -> dict:
+        """The worker-queue item that starts this execution again once the conversation is free."""
+        from bisheng.linsight.worker import encode_queue_item
+
+        item = dict(getattr(self, "_queue_item", None) or encode_queue_item(run.session_version_id))
+        if item.get("tenant_id") is None:
+            # The worker must not run the item without a tenant.
+            item["tenant_id"] = current_tenant_id.get()
+        item["run_id"] = run.run_id
+        return item
+
+    @staticmethod
+    async def _discard_unread_on_stop(run: "_UnifiedRun") -> list[dict]:
+        """The unread inbox of a run the user stopped, removed from the inbox (design §7 item 6).
+
+        When the removal fails the stop still completes: the error is logged and
+        the messages that stayed in the inbox are answered by a relay run.
+        """
+        from bisheng.workstation.domain.services import run_message_persist
+
+        try:
+            return await run_message_persist.discard_unread(run.dispatch, run.conversation_id, redis=run.redis)
+        except Exception:
+            logger.exception(
+                "planned run={} conversation={}: could not take back the unread messages on stop",
+                run.run_id,
+                run.conversation_id,
+            )
+            return []
 
     @staticmethod
     async def _emit_unified_metric(run: "_UnifiedRun", metrics: "run_metrics.RunMetrics") -> None:
@@ -653,6 +724,18 @@ class LinsightWorkflowTask:
             logger.exception("planned run={}: could not flush the event writer", run.run_id)
         parked = bool(getattr(self, "_waiting_for_input", False)) and not run.terminal and not run.lease_lost
         run.parked = parked
+        if run.stop_requested and not parked and not run.terminal and not run.lease_lost:
+            # The stop was seen before the run reached the point that writes its
+            # terminal event (e.g. while attachments were ingested). The client
+            # still gets ``run_stopped`` with the unread messages, and no relay
+            # run starts for them.
+            try:
+                await run.output.run_stopped("user", await self._discard_unread_on_stop(run))
+                await run.writer.flush()
+                run.terminal = True
+                run.terminal_kind = "stopped"
+            except Exception:
+                logger.exception("planned run={}: could not write the stopped event", run.run_id)
         try:
             if parked:
                 # Waiting for the user's answer: the lease is dropped, the state
@@ -708,7 +791,7 @@ class LinsightWorkflowTask:
             if kind == "finished":
                 await run.output.run_finished()
             elif kind == "stopped":
-                await run.output.run_stopped("user")
+                await run.output.run_stopped("user", await self._discard_unread_on_stop(run))
             else:
                 await run.output.run_failed(error if error is not None else "Task execution failed.")
             await run.writer.flush()
@@ -916,6 +999,7 @@ class LinsightWorkflowTask:
 
         self.session_version_id = session_version_id
         self._run_id_hint = run_id
+        self._queue_item = self._encode_own_queue_item(tenant_id=tenant_id)
         trace_id_var.set(self.session_version_id)
         logger.info(f"Start the task: session_version_id={self.session_version_id}")
         tenant_context_token: Token | None = None
@@ -1010,6 +1094,7 @@ class LinsightWorkflowTask:
         self._run_id_hint = run_id
         self._unified_resume = True
         self._unified_answer = user_input
+        self._queue_item = self._encode_own_queue_item(tenant_id=tenant_id, resume=True, user_input=user_input)
         trace_id_var.set(self.session_version_id)
         logger.info(f"Resume the task: session_version_id={self.session_version_id}")
         tenant_context_token: Token | None = None
@@ -1189,6 +1274,7 @@ class LinsightWorkflowTask:
         """
         self.session_version_id = session_version_id
         self._run_id_hint = run_id
+        self._queue_item = self._encode_own_queue_item(tenant_id=tenant_id, continue_question=question)
         trace_id_var.set(self.session_version_id)
         logger.info(f"Continue the conversation: session_version_id={self.session_version_id}")
         tenant_context_token: Token | None = None

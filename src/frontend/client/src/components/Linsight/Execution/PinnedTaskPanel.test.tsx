@@ -125,6 +125,33 @@ describe('PinnedTaskPanel on the unified runtime', () => {
         expect(screen.getByText('1/2')).toBeTruthy();
     });
 
+    it('shows the kept-work note only after a stop', () => {
+        apply({ type: 'run_started', data: {} });
+        plan([item('1', 'completed'), item('2', 'in_progress')]);
+        render(<PinnedTaskPanel conversationId={CID} />);
+        expect(screen.queryByText('runPlan.stoppedNote')).toBeNull();
+        apply({ type: 'run_stopped', data: {} });
+        // Visible without expanding the panel.
+        expect(screen.getByText('runPlan.stoppedNote')).toBeTruthy();
+    });
+
+    it('says the run continues after the answer while a question is pending', () => {
+        apply({ type: 'run_started', data: {} });
+        plan([item('1', 'completed'), item('2', 'in_progress')]);
+        render(<PinnedTaskPanel conversationId={CID} />);
+        expect(screen.queryByText('runPlan.awaitingAnswer')).toBeNull();
+        // Collapsed header names the row in progress.
+        expect(screen.getAllByText('step 2')).toHaveLength(2);
+        apply({ type: 'ask_user', data: { call_id: 'q1', questions: [{ question: 'Which one?' }] } });
+        expect(screen.getByText('runPlan.awaitingAnswer')).toBeTruthy();
+        // Nothing is executing: the header no longer names a running row.
+        expect(screen.getAllByText('step 2')).toHaveLength(1);
+        expect(screen.getByText('1/2')).toBeTruthy();
+        apply({ type: 'ask_user_answered', data: { call_id: 'q1' } });
+        expect(screen.queryByText('runPlan.awaitingAnswer')).toBeNull();
+        expect(screen.getAllByText('step 2')).toHaveLength(2);
+    });
+
     it('is filled by a resync snapshot, as after a page refresh', () => {
         apply({
             type: 'resync',

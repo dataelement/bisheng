@@ -25,6 +25,7 @@ from langchain_core.messages import AIMessage
 from bisheng.chat_session.domain import chat as chat_domain
 from bisheng.chat_session.domain.chat import ChatSessionService
 from bisheng.common.errcode.http_error import UnAuthorizedError
+from bisheng.core.storage.chat_attachment import answer_file_id
 from bisheng.linsight.domain.schemas import run_events
 from bisheng.linsight.domain.services import file_events
 from bisheng.linsight.domain.services.file_events import FileEventRelay, workspace_file_id
@@ -77,6 +78,11 @@ class _Store:
 
     async def object_exists(self, bucket_name: str = None, object_name: str = None) -> bool:
         return object_name in self.objects
+
+    async def copy_object(
+        self, source_bucket: str = None, source_object: str = None, dest_bucket: str = None, dest_object: str = None
+    ) -> None:
+        self.put_object_sync(dest_bucket, dest_object, self.objects[source_object])
 
     async def get_share_link(self, object_name: str, *args: Any, **kwargs: Any) -> str:
         self.signed.append(object_name)
@@ -303,7 +309,9 @@ async def test_direct_run_reconciles_code_output_into_stream_and_row(make_env, m
     env.store.objects[f"workspace/{CID}/output/earlier.csv"] = b"a,b\n"
     ctx = await env.submit("画一张图")
     ctx.tools = [CODE_PAYLOAD]
-    projector = DirectRunProjector(run_id=ctx.run_id, conversation_id=CID, user_id=USER, sender="model")
+    projector = DirectRunProjector(
+        run_id=ctx.run_id, conversation_id=CID, user_id=USER, sender="model", object_store=env._object_store
+    )
     env.hook = projector.on_event
 
     assert (await env.run(ctx, runner)).status == "finished"
@@ -317,19 +325,23 @@ async def test_direct_run_reconciles_code_output_into_stream_and_row(make_env, m
     ]
     # Announced before the terminal event, which is the last event of the run.
     assert [e["type"] for e in events][-2:] == ["file", "run_finished"]
-    # The answer row carries the same file with the same id (F016).
+    # The answer row carries the same file (F016) as this answer's own copy
+    # (design §7 item 11); the id of the event is kept beside the copy's id.
     (row,) = table.answers()
+    copy_key = f"chat/{USER}/answers/{ctx.run_id}/{file_id}.txt"
     assert json.loads(row.files) == [
         {
-            "file_id": file_id,
+            "file_id": answer_file_id(copy_key),
             "file_name": "chart.txt",
             "path": "output/chart.txt",
             "type": "text/plain",
             "size": 5,
             "source": "code_interpreter",
-            "object_name": f"workspace/{CID}/output/chart.txt",
+            "object_name": copy_key,
+            "workspace_file_id": file_id,
         }
     ]
+    assert env.store.objects[copy_key] == env.store.objects[f"workspace/{CID}/output/chart.txt"]
     # The local cache is gone; the reconcile read object storage (C8).
     assert not os.path.exists(env.file_dir)
 
@@ -478,7 +490,7 @@ async def test_non_owner_denied(live, monkeypatch):
     file_id = await _live_file(live.redis, live.store)
     fallbacks: list[tuple] = []
 
-    async def stored_rows(chat_id, fid, login_user):
+    async def stored_rows(chat_id, fid, login_user, **_):
         fallbacks.append((chat_id, fid))
         raise chat_domain.NotFoundError.http_exception()
 
@@ -529,7 +541,13 @@ async def test_audit_allowed(live, monkeypatch):
     prefix = f"workspace/{CID}"
     data = file_events.file_event_data(prefix, "output/report.xlsx", 5, "write_file")
     live.store.objects[f"{prefix}/output/report.xlsx"] = b"sheet"
-    projector = DirectRunProjector(run_id=RUN, conversation_id=CID, user_id=USER, sender="model")
+
+    async def object_store():
+        return live.store
+
+    projector = DirectRunProjector(
+        run_id=RUN, conversation_id=CID, user_id=USER, sender="model", object_store=object_store
+    )
     await projector.on_event(run_events.make_event(run_events.FILE, data, run_id=RUN))
     await projector.on_event(run_events.make_event(run_events.TEXT, {"text": "做好了"}, run_id=RUN))
     await projector.on_event(run_events.make_event(run_events.RUN_FINISHED, {}, run_id=RUN))
@@ -549,9 +567,12 @@ async def test_audit_allowed(live, monkeypatch):
     monkeypatch.setattr(chat_domain, "get_minio_storage", minio)
 
     # The auditor is not the owner; the endpoint checked the audit scope before this call.
-    url = await ChatSessionService.resolve_audit_attachment_url(CID, data["file_id"])
+    # The row's file is the answer's own copy (design §7 item 11).
+    stored = json.loads(row.files)[0]
+    url = await ChatSessionService.resolve_audit_attachment_url(CID, stored["file_id"])
 
-    assert url == f"/signed/{prefix}/output/report.xlsx"
+    assert url == f"/signed/chat/{USER}/answers/{RUN}/{data['file_id']}.xlsx"
+    assert stored["workspace_file_id"] == data["file_id"]
     assert json.loads(row.files)[0]["source"] == "code_interpreter"
     # A user upload of the same conversation stays out of the auditor's reach.
     table.rows[0].files = json.dumps([{"file_id": "u1", "object_name": "chat/7/u1.pdf", "source": "upload"}])

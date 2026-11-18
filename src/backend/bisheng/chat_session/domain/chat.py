@@ -215,7 +215,9 @@ class ChatSessionService:
             logger.exception("failed to clean up attachments of chat {}", chat_id)
 
     @staticmethod
-    async def resolve_attachment_url(chat_id: str, file_id: str, login_user: UserPayload) -> str:
+    async def resolve_attachment_url(
+        chat_id: str, file_id: str, login_user: UserPayload, *, alias_key: str | None = None
+    ) -> str:
         """Issue a fresh link for one attachment of one conversation.
 
         The link handed out at upload time expires, so the client comes back
@@ -223,9 +225,14 @@ class ChatSessionService:
         conversation's messages and never taken from the caller -- signing a
         caller-supplied name would open the whole bucket to anyone with an
         account.
+
+        ``alias_key`` (F004): when no stored attachment has this ``file_id``, the
+        newest one whose ``alias_key`` field equals it is signed instead. The
+        unified runtime passes ``workspace_file_id``: the id a generated file had
+        in the live events of its run, kept on the answer's copy.
         """
         owner = await ChatSessionService._own_conversation_or_raise(chat_id, login_user)
-        return await ChatSessionService._sign_attachment(chat_id, file_id, owner)
+        return await ChatSessionService._sign_attachment(chat_id, file_id, owner, alias_key=alias_key)
 
     @staticmethod
     async def resolve_audit_attachment_url(chat_id: str, file_id: str) -> str:
@@ -240,9 +247,12 @@ class ChatSessionService:
         return await ChatSessionService._sign_attachment(chat_id, file_id, owner, only_source="code_interpreter")
 
     @staticmethod
-    async def _sign_attachment(chat_id: str, file_id: str, owner, *, only_source: str | None = None) -> str:
+    async def _sign_attachment(
+        chat_id: str, file_id: str, owner, *, only_source: str | None = None, alias_key: str | None = None
+    ) -> str:
         messages = await WorkflowFileRepository.attachment_messages(chat_id)
-        for attachment in ChatSessionService._attachment_objects(messages, owner):
+        attachments = ChatSessionService._attachment_objects(messages, owner)
+        for attachment in attachments:
             if str(attachment.get("file_id")) != str(file_id):
                 continue
             if only_source is not None and attachment.get("source") != only_source:
@@ -256,6 +266,19 @@ class ChatSessionService:
                 break
             minio_client = await get_minio_storage()
             return await minio_client.get_share_link(object_name)
+        else:
+            if alias_key:
+                # No attachment has this id. Rows are in insertion order, so the
+                # last match is the newest answer that kept a copy of that file.
+                for attachment in reversed(attachments):
+                    if str(attachment.get(alias_key) or "") != str(file_id) or attachment.get("_workflow_image"):
+                        continue
+                    if only_source is not None and attachment.get("source") != only_source:
+                        continue
+                    if not attachment.get("object_name"):
+                        continue
+                    minio_client = await get_minio_storage()
+                    return await minio_client.get_share_link(attachment["object_name"])
 
         raise NotFoundError.http_exception()
 

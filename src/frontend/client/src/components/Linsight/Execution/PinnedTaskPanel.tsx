@@ -70,6 +70,7 @@ export function PinnedTaskPanel({ versionId = '', conversationId = '' }: PinnedT
                     completed={run.status === 'finished'}
                     terminated={stopped || run.status === 'failed'}
                     stopped={stopped}
+                    awaitingAnswer={run.status === 'waiting' && !!run.pendingQuestion}
                     running={run.status === 'running' || run.status === 'waiting'}
                 />
             </div>

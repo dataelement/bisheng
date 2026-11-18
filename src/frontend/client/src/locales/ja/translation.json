@@ -3056,7 +3056,18 @@
   },
   "runPlan": {
     "cancelled": "キャンセル済み",
-    "stopped": "停止しました"
+    "stopped": "停止しました",
+    "awaitingAnswer": "回答をお待ちしています",
+    "stoppedNote": "停止しました。完了したステップとファイルは残っています。"
+  },
+  "runMessage": {
+    "toolStopped": "{{name}}を停止しました"
+  },
+  "runComposer": {
+    "stoppedPlaceholder": "停止しました。メッセージを送ると続きから再開できます",
+    "stopFailed": "停止できませんでした。もう一度お試しください",
+    "uploadLocked": "現在の回答が終わるとファイルをアップロードできます",
+    "modelLocked": "現在の回答が終わるとモデルを切り替えられます"
   },
   "appChat": {
     "unknownApp": "不明なアプリ",

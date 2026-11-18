@@ -3132,7 +3132,18 @@
   },
   "runPlan": {
     "cancelled": "Cancelled",
-    "stopped": "Stopped"
+    "stopped": "Stopped",
+    "awaitingAnswer": "Waiting for your answer",
+    "stoppedNote": "Stopped. The finished steps and files are kept."
+  },
+  "runMessage": {
+    "toolStopped": "{{name}} stopped"
+  },
+  "runComposer": {
+    "stoppedPlaceholder": "Stopped. Send a message to pick up where it left off",
+    "stopFailed": "Couldn't stop. Please try again",
+    "uploadLocked": "You can upload files after the current answer finishes",
+    "modelLocked": "You can switch models after the current answer finishes"
   },
   "appChat": {
     "unknownApp": "Unknown app",

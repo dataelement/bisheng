@@ -8,8 +8,13 @@ Send (``POST /chat/completions``)
 ---------------------------------
 
 1. Permission (AC-06): ``task_mode=true`` needs the ``linsight_task_mode`` menu.
-2. Input safety (AC-38): a blocked text is answered like today and never reaches
-   ``run_dispatch``, so it cannot join the inbox.
+2. Input safety (AC-38): a blocked text never reaches ``run_dispatch``, so it
+   cannot join the inbox. The turn is recorded with the auto-reply as today.
+   Under ``X-BS-Run-Protocol: 2`` the answer is the JSON body
+   ``{run_id: null, disposition: "blocked", message_id: null, conversation_id,
+   content_safety: true, auto_reply, question_message_id, answer_message_id}``;
+   no run exists and nothing is written to the event stream. Without the header
+   it is today's SSE frames.
 3. ``RunDispatchService.submit`` decides atomically (决策 9):
 
    * ``started`` / ``direct``  -> question row, then ``start_direct_run`` in this
@@ -31,6 +36,14 @@ Stop (``POST /conversations/{id}/stop``)
 ``stop_conversation_run`` asks the run that holds the conversation to stop, in
 whichever process it executes. A run without a live coroutine (parked on a
 question, or still waiting in the worker queue) is ended here.
+
+A stopped run starts no relay run (design §7 item 6). The messages it never
+read leave the inbox, their question rows are deleted, and the client gets them
+back as ``unread_messages`` (``[{message_id, text, files}]``): in the ``data``
+of the ``run_stopped`` event, written by whichever process ends the run, and in
+the response of the stop request when the run was ended by that request. The
+event stream keeps the list in the run snapshot, so a reader that receives a
+``resync`` of the ended run instead of the event gets it in ``resync.data``.
 
 4. Response: with ``X-BS-Run-Protocol: 2`` a JSON body
    ``{run_id, disposition, message_id, conversation_id}``; without it the
@@ -119,6 +132,8 @@ from bisheng.workstation.domain.services.run_projector_direct import DirectRunPr
 
 RUN_PROTOCOL_HEADER = "X-BS-Run-Protocol"
 RUN_PROTOCOL_V2 = "2"
+# ``disposition`` of the send response when input content safety blocked the message.
+DISPOSITION_BLOCKED = "blocked"
 TASK_MODE_MENU = WebMenuResource.LINSIGHT_TASK_MODE.value
 
 # How long one blocking read waits before the run state is checked again.
@@ -390,6 +405,70 @@ async def _submit_task_turn(data: APIChatCompletion, login_user: UserPayload, **
     return await submit_task_turn(data, login_user, **kwargs)
 
 
+async def _relay_model(conversation_id: str, redis: Any) -> str:
+    """The model a planned relay run answers with.
+
+    An inbox message carries no model (switching models is disabled while a run
+    is in progress), so the relay run uses the model of the conversation's last
+    deep-research run, else of its last direct run. Empty = the tenant's
+    deep-research default, as for a send without a model.
+    """
+    from bisheng.linsight.domain.models.linsight_session_version import LinsightSessionVersionDao
+
+    versions = await LinsightSessionVersionDao.get_session_versions_by_session_id(conversation_id)
+    if versions and versions[0].model:
+        return str(versions[0].model)
+    previous = await run_message_persist.direct_run_info(redis, conversation_id) or {}
+    return str(previous.get("model_id") or "")
+
+
+async def start_planned_relay(item: dict, messages: list[dict], *, redis: Any = None) -> Any:
+    """Create and queue the deep-research run that answers unread inbox messages (design §7 item 1).
+
+    Called by the Linsight worker for a ``planned_relay`` queue item, after it
+    took ``messages`` out of the inbox. The run record is created and queued by
+    ``submit_task_turn``, the code of a normal deep-research send; only these
+    differ:
+
+    * the question is the text of all unread messages, oldest first, and the
+      settings (tools, skills, knowledge) are those of the first one;
+    * no question row is written: every message got its row when it joined the
+      inbox, and ``steer_read`` clears that row's "queued" mark when the run starts;
+    * the queue item carries ``item["run_id"]``, the id the conversation is
+      already reserved for.
+
+    Returns the new session version. Raises what ``submit_task_turn`` raises.
+    """
+    from bisheng.workstation.domain.schemas.chat import ToolPayload, UseKnowledgeBaseParam
+
+    redis = redis if redis is not None else await _redis()
+    conversation_id, run_id = item["conversation_id"], item["run_id"]
+    head = messages[0]
+    texts = [str(message.get("text") or "") for message in messages if message.get("text")]
+    files = [f for message in messages for f in (message.get("files") or [])]
+    knowledge = head.get("knowledge")
+    data = APIChatCompletion(
+        clientTimestamp=str(int(time.time() * 1000)),
+        conversationId=conversation_id,
+        model=await _relay_model(conversation_id, redis),
+        text="\n\n".join(texts),
+        tools=[ToolPayload(**tool) for tool in (head.get("tools") or []) if isinstance(tool, dict)] or None,
+        task_mode=True,
+        skills=list(head.get("skills") or []) or None,
+        use_knowledge_base=UseKnowledgeBaseParam(**knowledge) if isinstance(knowledge, dict) and knowledge else None,
+        files=files or None,
+    )
+    login_user = await UserPayload.init_login_user(
+        user_id=int(item["user_id"]), user_name="", tenant_id=int(item["tenant_id"])
+    )
+    # Before the run is queued: the worker that executes it reads this at ``run_started``.
+    await run_message_persist.remember_relay_messages(
+        redis, conversation_id, run_id, [str(message.get("message_id") or "") for message in messages]
+    )
+    _session, version = await _submit_task_turn(data, login_user, run_id=run_id, persist_user_turn=False)
+    return version
+
+
 async def _enqueue_planned_resume(conversation_id: str, answer: str, tenant_id: int) -> Any:
     """Wake the parked deep-research run of this conversation with the user's answer.
 
@@ -411,17 +490,44 @@ async def _enqueue_planned_resume(conversation_id: str, answer: str, tenant_id: 
 
 
 async def _blocked_response(
-    data: APIChatCompletion, login_user: UserPayload, blocked: Any, memory_register: MemoryRegister | None
-) -> StreamingResponse:
-    """Today's answer to a blocked input: the turn is recorded with the auto-reply, no run starts."""
+    data: APIChatCompletion,
+    login_user: UserPayload,
+    blocked: Any,
+    memory_register: MemoryRegister | None,
+    negotiated: bool = False,
+) -> Any:
+    """Answer to a blocked input: the turn is recorded with the auto-reply, no run starts.
+
+    ``negotiated`` (``X-BS-Run-Protocol: 2``): a JSON body with
+    ``disposition="blocked"`` (see the module docstring). Otherwise today's SSE frames.
+    """
     try:
         _cfg, conversation, message, _llm, model_info, _new = await chat_service._agent_initialize_chat(
             data, login_user, skip_llm=True, memory_register=None if data.task_mode else memory_register
         )
     except (BaseErrorCode, ValueError) as exc:
+        if negotiated:
+            if isinstance(exc, BaseErrorCode):
+                raise
+            raise ServerError(exception=exc) from exc
         error = exc if isinstance(exc, BaseErrorCode) else ServerError()
         return _error_stream(error, exc)
-    return chat_service._respond_blocked_workbench(conversation, message, model_info, data, blocked.auto_reply or "")
+    auto_reply = blocked.auto_reply or ""
+    if not negotiated:
+        return chat_service._respond_blocked_workbench(conversation, message, model_info, data, auto_reply)
+    answer = await chat_service.persist_blocked_workbench_answer(conversation, model_info, auto_reply)
+    return resp_200(
+        data={
+            "run_id": None,
+            "disposition": DISPOSITION_BLOCKED,
+            "message_id": None,
+            "conversation_id": conversation.chat_id,
+            "content_safety": True,
+            "auto_reply": auto_reply,
+            "question_message_id": message.id,
+            "answer_message_id": answer.id,
+        }
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -504,7 +610,7 @@ async def unified_send(
         logger.warning(
             "workbench content safety hit tenant_id={} mode=input chat_id={}", tenant_id, data.conversationId or ""
         )
-        return await _blocked_response(data, login_user, blocked, memory_register)
+        return await _blocked_response(data, login_user, blocked, memory_register, negotiated)
 
     try:
         if data.task_mode:
@@ -624,7 +730,11 @@ async def _start_planned(request, data, login_user, conversation, result, negoti
         # The conversation already exists, so the task core continues it.
         turn = data.model_copy(update={"conversationId": conversation_id, "project_id": None})
         _session, version = await _submit_task_turn(
-            turn, login_user, on_session_created=register if memory_register is not None else None
+            turn,
+            login_user,
+            on_session_created=register if memory_register is not None else None,
+            # The worker claims the conversation under the id it was reserved with.
+            run_id=result.run_id,
         )
         _spawn_title(request, data, login_user, conversation)
     logger.info(
@@ -1012,14 +1122,26 @@ async def _planned_run_is_driven(svc: RunServices, record: Any) -> bool:
     return bool(await svc.redis.exists(f"{LINSIGHT_RUN_LOCK_KEY_PREFIX}{record.id}"))
 
 
-async def _append_run_stopped(svc: RunServices, conversation_id: str, run_id: str) -> None:
+async def _append_run_stopped(
+    svc: RunServices, conversation_id: str, run_id: str, unread: list[dict] | None = None
+) -> None:
     """``run_stopped`` for a run without a coroutine, unless its stream is gone or already closed."""
     snapshot = await svc.stream.snapshot(conversation_id)
     if snapshot is None or snapshot.get("run_id") != run_id or snapshot.get("ended"):
         return
     await svc.stream.append(
-        conversation_id, run_events.make_event(run_events.RUN_STOPPED, {"reason": "user"}, run_id=run_id)
+        conversation_id,
+        run_events.make_event(run_events.RUN_STOPPED, run_events.stopped_data(unread), run_id=run_id),
     )
+
+
+async def _promote_waiting_run(svc: RunServices, conversation_id: str) -> None:
+    """After a release that skipped the finish script: start a run that waits for the conversation."""
+    try:
+        await svc.dispatch.promote_pending(conversation_id)
+    except Exception:
+        # The run stays in the pending list; the worker's sweep starts it.
+        logger.exception("stop: could not start the waiting run of conversation={}", conversation_id)
 
 
 async def stop_conversation_run(
@@ -1029,7 +1151,11 @@ async def stop_conversation_run(
     terminate_record: bool = True,
     svc: RunServices | None = None,
 ) -> dict:
-    """Stop the run that holds the conversation (AC-29). Returns ``{run_id, status}``.
+    """Stop the run that holds the conversation (AC-29).
+
+    Returns ``{run_id, status, unread_messages}``. ``unread_messages`` are the
+    inbox messages this call took back (design §7 item 6); for ``"stopping"``
+    the list is empty here and arrives in the run's ``run_stopped`` event.
 
     * a running run sees the stop flag within a second, in whichever process it
       executes, writes ``run_stopped`` and releases the conversation itself
@@ -1049,7 +1175,7 @@ async def stop_conversation_run(
     state = await svc.lease.get_state(conversation_id)
     run_id = state.run_id
     if state.status == STATUS_IDLE or not run_id:
-        return {"run_id": None, "status": STOP_NO_RUN}
+        return {"run_id": None, "status": STOP_NO_RUN, "unread_messages": []}
 
     planned = state.profile == PROFILE_PLANNED
     record = None
@@ -1057,14 +1183,14 @@ async def stop_conversation_run(
         record = await _planned_run_record(conversation_id, run_id)
         if session_version_id is not None and (record is None or record.id != session_version_id):
             # The conversation is held by another run than the one being terminated.
-            return {"run_id": None, "status": STOP_NO_RUN}
+            return {"run_id": None, "status": STOP_NO_RUN, "unread_messages": []}
     elif session_version_id is not None:
-        return {"run_id": None, "status": STOP_NO_RUN}
+        return {"run_id": None, "status": STOP_NO_RUN, "unread_messages": []}
 
     if state.status == STATUS_RUNNING and state.lease_until_ms <= int(time.time() * 1000):
         # Nothing is executing it any more: report it instead of flagging a dead run.
         await svc.dispatch.recover_expired(conversation_id)
-        return {"run_id": run_id, "status": STOP_EXPIRED}
+        return {"run_id": run_id, "status": STOP_EXPIRED, "unread_messages": []}
 
     # Read before the conversation is released: afterwards a new run may clear it.
     parked_text = ""
@@ -1072,6 +1198,20 @@ async def stop_conversation_run(
         snapshot = await svc.stream.snapshot(conversation_id)
         if snapshot is not None and snapshot.get("run_id") == run_id:
             parked_text = snapshot.get("text") or ""
+
+    # A run with no live coroutine is ended by this call, so this call takes its
+    # unread messages back (design §7 item 6). Before the conversation is
+    # released: afterwards a new send would start a relay run for them. A
+    # running run takes them back itself when it sees the stop flag.
+    queued_planned = (
+        state.status == STATUS_RUNNING
+        and planned
+        and record is not None
+        and not await _planned_run_is_driven(svc, record)
+    )
+    unread: list[dict] = []
+    if state.status == STATUS_WAITING or queued_planned:
+        unread = await run_message_persist.discard_unread(svc.dispatch, conversation_id, redis=svc.redis)
 
     result = await svc.lease.request_stop(run_id, conversation_id)
     status = STOP_REQUESTED
@@ -1085,8 +1225,9 @@ async def stop_conversation_run(
             await run_message_persist.persist_stopped_direct_answer(
                 conversation_id, run_id, parked_text, redis=svc.redis
             )
-        await _append_run_stopped(svc, conversation_id, run_id)
-    elif planned and record is not None and not await _planned_run_is_driven(svc, record):
+        await _append_run_stopped(svc, conversation_id, run_id, unread)
+        await _promote_waiting_run(svc, conversation_id)
+    elif queued_planned:
         # Still in the worker queue: no worker will see the flag.
         status = STOP_ENDED
         if terminate_record:
@@ -1094,10 +1235,17 @@ async def stop_conversation_run(
         await svc.redis.delete(stop_key(run_id))
         await svc.dispatch.on_run_finished(conversation_id, run_id)
         logger.info("stop: queued planned run={} conversation={} left the queue", run_id, conversation_id)
-        return {"run_id": run_id, "status": status}
+        return {"run_id": run_id, "status": status, "unread_messages": unread}
 
     if planned and record is not None and terminate_record:
         # A running deep-research run also stops through its record, as today.
         await _terminate_planned_record(record)
-    logger.info("stop: run={} conversation={} profile={} status={}", run_id, conversation_id, state.profile, status)
-    return {"run_id": run_id, "status": status}
+    logger.info(
+        "stop: run={} conversation={} profile={} status={} unread_returned={}",
+        run_id,
+        conversation_id,
+        state.profile,
+        status,
+        len(unread),
+    )
+    return {"run_id": run_id, "status": status, "unread_messages": unread}

@@ -20,15 +20,24 @@ class MessageTable:
     def __init__(self) -> None:
         self.rows: list[ChatMessage] = []
         self.updates: list[tuple[int, dict]] = []
+        self.deleted: list[int] = []
+        self._next_id = 1000
 
     def install(self, monkeypatch: pytest.MonkeyPatch) -> MessageTable:
         monkeypatch.setattr(ChatMessageDao, "ainsert_one", self.ainsert_one)
         monkeypatch.setattr(ChatMessageDao, "update_fields_by_id", self.update_fields_by_id)
         monkeypatch.setattr(ChatMessageDao, "aget_messages_by_chat_id", self.aget_messages_by_chat_id)
+        monkeypatch.setattr(ChatMessageDao, "adelete_by_id_in_chat", self.adelete_by_id_in_chat)
         return self
 
+    async def adelete_by_id_in_chat(self, message_id: int, chat_id: str) -> None:
+        self.deleted.append(message_id)
+        self.rows = [r for r in self.rows if not (r.id == message_id and r.chat_id == chat_id)]
+
     async def ainsert_one(self, row: ChatMessage) -> ChatMessage:
-        row.id = 1000 + len(self.rows)
+        # Ids are never reused, also after a delete.
+        row.id = self._next_id
+        self._next_id += 1
         if row.create_time is None:
             row.create_time = datetime(2026, 11, 18, 10, 0, 0)
         self.rows.append(row)

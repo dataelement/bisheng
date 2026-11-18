@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import json
 import pickle
 from types import SimpleNamespace
 from typing import Any
@@ -43,10 +44,10 @@ from bisheng.linsight.domain.models.linsight_session_version import (
 from bisheng.linsight.domain.services import agent_factory
 from bisheng.linsight.domain.services.run_event_stream import RunEventStream
 from bisheng.linsight.domain.services.workspace_backend import WorkspaceBackend
-from bisheng.linsight.domain.task_exec import LinsightWorkflowTask, TaskAlreadyInProgressError
+from bisheng.linsight.domain.task_exec import ConversationBusyError, LinsightWorkflowTask, TaskAlreadyInProgressError
 from bisheng.linsight.worker import LinsightQueue, ScheduleCenterProcess, encode_queue_item
-from bisheng.workstation.domain.services import run_lease
-from bisheng.workstation.domain.services.run_dispatch import RunDispatchService, inbox_key
+from bisheng.workstation.domain.services import run_lease, run_message_persist, run_send
+from bisheng.workstation.domain.services.run_dispatch import RunDispatchService, inbox_key, pending_key
 from bisheng.workstation.domain.services.run_lease import RunLeaseService
 
 CHAT = "chat-9001"
@@ -188,6 +189,8 @@ class _Env:
         self.lease = RunLeaseService(self.redis, clock=self.clock)
         self.stream = RunEventStream(self.redis, wall_clock=self.clock)
         self.relays: list[dict] = []
+        # Queue items of runs that waited for the conversation and were handed it.
+        self.waiting: list[dict] = []
         self.finished: list[tuple[str, str | None]] = []
         self.expired: list[tuple[str, str]] = []
         self.ticks = 0
@@ -237,7 +240,11 @@ class _Env:
 
     async def _build_dispatch(self, redis: Any = None, clock: Any = None) -> RunDispatchService:
         dispatch = RunDispatchService(
-            self.redis, clock=self.clock, enqueue_relay=self._enqueue, on_run_expired=self._on_expired
+            self.redis,
+            clock=self.clock,
+            enqueue_relay=self._enqueue,
+            on_run_expired=self._on_expired,
+            enqueue_item=self._enqueue_waiting,
         )
         real_finish = dispatch.on_run_finished
 
@@ -250,6 +257,9 @@ class _Env:
 
     async def _enqueue(self, item: dict) -> None:
         self.relays.append(item)
+
+    async def _enqueue_waiting(self, item: dict) -> None:
+        self.waiting.append(item)
 
     async def _on_expired(self, conversation_id: str, run_id: str) -> None:
         self.expired.append((conversation_id, run_id))
@@ -390,14 +400,13 @@ async def test_planned_renews_and_stops(monkeypatch: pytest.MonkeyPatch, tmp_pat
     assert lease_seen["valid"] is True
     # The driver lock is a short lease as well, not the fixed 4-hour lock.
     assert 0 < lease_seen["lock_ttl"] <= run_lease.LEASE_SECONDS
-    # One renewal when the run claims the conversation, then one every 10 s.
-    assert len(renewals) >= 3
-    assert all(
-        later - earlier >= run_lease.RENEW_INTERVAL_SECONDS for earlier, later in zip(renewals[1:], renewals[2:])
-    )
+    # The claim is one script of its own (``claim_or_wait``); then one renewal every 10 s.
+    assert len(renewals) >= 2
+    assert all(later - earlier >= run_lease.RENEW_INTERVAL_SECONDS for earlier, later in zip(renewals, renewals[1:]))
 
     events = await env.events()
-    assert events[-1]["type"] == "run_stopped" and events[-1]["data"] == {"reason": "user"}
+    assert events[-1]["type"] == "run_stopped"
+    assert events[-1]["data"] == {"reason": "user", "status": "stopped", "unread_messages": []}
     assert env.finished == [(CHAT, SVID)]
     assert (await env.lease.get_state(CHAT)).status == run_lease.STATUS_IDLE
     # The run record and the legacy channel see the stop exactly as today.
@@ -729,17 +738,238 @@ async def test_relay_run_that_cannot_start_gives_the_conversation_back(monkeypat
     assert worker.semaphore._value == worker.max_concurrency
 
 
-async def test_planned_relay_is_failed_visibly(monkeypatch: pytest.MonkeyPatch, fake_redis):
-    redis = fakeredis.aioredis.FakeRedis()
-    fake_redis.async_connection = redis
-    monkeypatch.setattr(task_exec, "_run_redis", AsyncMock(return_value=redis))
-    dispatch = RunDispatchService(redis, enqueue_relay=worker_mod.enqueue_relay_run)
-    message = {"text": "先问一句", "task_mode": False, "user_id": 1, "tenant_id": TENANT}
-    first = await dispatch.submit(CHAT, message)
-    await dispatch.submit(CHAT, {**message, "text": "改成深度研究", "task_mode": True})
-    # The direct run ends with one unread deep-research message: a planned relay run is queued.
-    finished = await dispatch.on_run_finished(CHAT, first.run_id)
-    assert finished.profile == "planned"
+# ---------------------------------------------------------------------------
+# Design §7 item 4: a run that finds the conversation held waits for it
+# ---------------------------------------------------------------------------
+
+SVID_API = "sv-9002"
+
+
+def _api_task(env: _Env, *, run_id: str | None = None) -> LinsightWorkflowTask:
+    """A second deep-research run of the same conversation, as the Open API submits it."""
+    version = LinsightSessionVersion(
+        id=SVID_API,
+        session_id=CHAT,
+        user_id=1,
+        tenant_id=TENANT,
+        question="第二个任务",
+        api_meta={"channel": "open_api_v2"},
+    )
+    task = env.task(run_id)
+    task.session_version_id = SVID_API
+    task._get_session_model = AsyncMock(return_value=version)
+    task._queue_item = encode_queue_item(SVID_API, tenant_id=TENANT)
+    return task
+
+
+async def test_run_waits_for_a_held_conversation_instead_of_failing(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    env = _Env(monkeypatch, tmp_path)
+    first = env.task()
+    async with first._acquire_session_run_lock():
+        # The worker dequeued the second run while the first one executes.
+        with pytest.raises(ConversationBusyError):
+            async with _api_task(env)._acquire_session_run_lock():
+                raise AssertionError("two runs executed in one conversation")
+
+        # Not a failure: no terminal event of the second run, the holder is untouched,
+        # and the second run's queue item waits in Redis under its run id.
+        assert [event["type"] for event in await env.events()] == ["run_started"]
+        assert (await env.lease.get_state(CHAT)).run_id == SVID
+        assert await env.redis.llen(pending_key(CHAT)) == 1
+        assert env.waiting == []
+        # Its driver lock is gone, so the run can start later.
+        assert not await env.redis.exists(f"{task_exec.LINSIGHT_RUN_LOCK_KEY_PREFIX}{SVID_API}")
+        await first._finish_unified_run(env.version)
+
+    # The first run ended: the conversation is reserved for the waiting run and its
+    # item is back in the worker queue, carrying tenant and run id.
+    assert env.waiting == [
+        {
+            "session_version_id": SVID_API,
+            "resume": False,
+            "user_input": None,
+            "continue_question": None,
+            "tenant_id": TENANT,
+            "run_id": SVID_API,
+        }
+    ]
+    state = await env.lease.get_state(CHAT)
+    assert (state.status, state.run_id, state.profile) == (run_lease.STATUS_RUNNING, SVID_API, "planned")
+
+    # The worker takes that item: the run executes under the reservation and ends normally.
+    second = _api_task(env, run_id=env.waiting[0]["run_id"])
+    async with second._acquire_session_run_lock():
+        await second._finish_unified_run(second._get_session_model.return_value)
+    events = await env.events()
+    assert [event["type"] for event in events] == ["run_started", "run_finished"]
+    assert {event["run_id"] for event in events} == {SVID_API}
+    assert (await env.lease.get_state(CHAT)).status == run_lease.STATUS_IDLE
+
+
+def test_a_waiting_run_is_not_recorded_as_a_failure():
+    # Every entry point (async_run / async_resume / async_continue) leaves the run
+    # record alone for TaskAlreadyInProgressError; the waiting run relies on that.
+    assert issubclass(ConversationBusyError, TaskAlreadyInProgressError)
+    assert not issubclass(ConversationBusyError, task_exec.TaskExecutionError)
+
+
+async def test_entry_points_remember_their_queue_item(monkeypatch: pytest.MonkeyPatch):
+    seen: dict[str, Any] = {}
+
+    async def stop_here(self, *args: Any, **kwargs: Any):
+        seen["item"] = dict(self._queue_item)
+        raise TaskAlreadyInProgressError("stop")
+
+    monkeypatch.setattr(LinsightWorkflowTask, "_restore_tenant_context", stop_here)
+    monkeypatch.setattr(LinsightWorkflowTask, "_end_memory_round", AsyncMock())
+
+    await LinsightWorkflowTask().async_run(SVID, tenant_id=TENANT, run_id="run-1")
+    assert seen["item"] == encode_queue_item(SVID, tenant_id=TENANT)
+    await LinsightWorkflowTask().async_resume(SVID, user_input={"q_0": "蓝色"}, tenant_id=TENANT)
+    assert seen["item"] == encode_queue_item(SVID, resume=True, user_input={"q_0": "蓝色"}, tenant_id=TENANT)
+    await LinsightWorkflowTask().async_continue(SVID, question="接着做", tenant_id=TENANT)
+    assert seen["item"] == encode_queue_item(SVID, continue_question="接着做", tenant_id=TENANT)
+
+
+async def test_waiting_item_goes_to_the_head_of_the_worker_queue(monkeypatch: pytest.MonkeyPatch):
+    pushed: list[tuple[str, Any]] = []
+
+    class _Client:
+        async def arpush(self, key, value, expiration=3600):
+            pushed.append(("tail", value))
+
+        async def alpush(self, key, value, expiration=3600):
+            pushed.append(("head", pickle.loads(value)))
+
+    monkeypatch.setattr(worker_mod, "get_redis_client", AsyncMock(return_value=_Client()))
+    item = encode_queue_item(SVID_API, tenant_id=TENANT, run_id="run-waiting")
+
+    await worker_mod.enqueue_waiting_item(item)
+
+    assert pushed == [("head", item)]
+    with pytest.raises(ValueError):
+        await worker_mod.enqueue_waiting_item({"conversation_id": CHAT})
+
+
+# ---------------------------------------------------------------------------
+# Design §7 item 6: a stopped run returns its unread messages and does not relay
+# ---------------------------------------------------------------------------
+
+
+async def test_stopped_planned_run_returns_unread_messages_and_starts_no_relay(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+):
+    env = _Env(monkeypatch, tmp_path)
+    dispatch = await env._build_dispatch()
+    queued: dict[str, Any] = {}
+
+    async def on_tick(tick: int) -> None:
+        if tick == 3:
+            # Sent while the model call is in flight: the run never reads it.
+            result = await dispatch.submit(
+                CHAT, {"text": "顺便加一节风险", "task_mode": True, "user_id": 1, "tenant_id": TENANT}
+            )
+            queued["message_id"] = result.message_id
+            assert result.disposition == "queued"
+            await env.lease.request_stop(SVID, CHAT)
+
+    env.on_tick = on_tick
+
+    _task, completed = await env.run([_call("write_todos", {"todos": TODOS}, "c1"), "hold"])
+
+    assert completed is False
+    stopped = (await env.events())[-1]
+    assert stopped["type"] == "run_stopped"
+    assert stopped["data"] == {
+        "reason": "user",
+        "status": "stopped",
+        "unread_messages": [{"message_id": queued["message_id"], "text": "顺便加一节风险", "files": []}],
+    }
+    # No relay run, an empty inbox, an idle conversation.
+    assert env.relays == []
+    assert await env.redis.llen(inbox_key(CHAT)) == 0
+    assert (await env.lease.get_state(CHAT)).status == run_lease.STATUS_IDLE
+
+
+async def test_stop_seen_before_the_workflow_starts_still_reports_and_does_not_relay(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+):
+    """The stop lands while the run is still preparing: the scope itself closes the run."""
+    env = _Env(monkeypatch, tmp_path)
+    dispatch = await env._build_dispatch()
+    task = env.task()
+    with pytest.raises(task_exec.UserTerminationError):
+        async with task._acquire_session_run_lock():
+            queued = await dispatch.submit(CHAT, {"text": "补一句", "user_id": 1, "tenant_id": TENANT})
+            await env.lease.request_stop(SVID, CHAT)
+            for _ in range(200):
+                if task._is_terminated:
+                    break
+                await asyncio.sleep(0.005)
+            raise task_exec.UserTerminationError("stopped while preparing")
+
+    stopped = (await env.events())[-1]
+    assert stopped["type"] == "run_stopped"
+    assert [m["message_id"] for m in stopped["data"]["unread_messages"]] == [queued.message_id]
+    assert env.relays == []
+    assert (await env.lease.get_state(CHAT)).status == run_lease.STATUS_IDLE
+
+
+# ---------------------------------------------------------------------------
+# Design §7 item 1: a planned relay run is created from the unread inbox
+# ---------------------------------------------------------------------------
+
+
+class _RelayWorld:
+    """A direct run that ended with one unread deep-research message in the inbox."""
+
+    def __init__(self, monkeypatch: pytest.MonkeyPatch, fake_redis: _FakeRedisList) -> None:
+        self.redis = fakeredis.aioredis.FakeRedis()
+        fake_redis.async_connection = self.redis
+        self.queue_client = fake_redis
+        monkeypatch.setattr(task_exec, "_run_redis", AsyncMock(return_value=self.redis))
+        self.dispatch = RunDispatchService(self.redis, enqueue_relay=worker_mod.enqueue_relay_run)
+        self.submitted: list[tuple[Any, Any, dict]] = []
+        self.submit_error: BaseException | None = None
+        self.login_user = SimpleNamespace(user_id=1, tenant_id=TENANT)
+        monkeypatch.setattr(run_send.UserPayload, "init_login_user", AsyncMock(return_value=self.login_user))
+        monkeypatch.setattr(run_send, "_relay_model", AsyncMock(return_value="model-7"))
+        monkeypatch.setattr(run_send, "_submit_task_turn", self._submit_task_turn)
+
+    async def _submit_task_turn(self, data: Any, login_user: Any, **kwargs: Any):
+        self.submitted.append((data, login_user, kwargs))
+        if self.submit_error is not None:
+            raise self.submit_error
+        return SimpleNamespace(chat_id=CHAT), SimpleNamespace(id="sv-relay", session_id=CHAT)
+
+    async def end_direct_run_with_unread(self, *texts: str) -> tuple[Any, list[str]]:
+        message = {"text": "先问一句", "task_mode": False, "user_id": 1, "tenant_id": TENANT}
+        first = await self.dispatch.submit(CHAT, message)
+        ids = []
+        for text in texts:
+            queued = await self.dispatch.submit(
+                CHAT,
+                {
+                    **message,
+                    "text": text,
+                    "task_mode": True,
+                    "tools": [{"id": 5, "tool_key": "web_search", "type": "tool"}],
+                    "skills": ["html-report"],
+                    "knowledge": {"personal_knowledge_enabled": True, "knowledge_space_ids": [9]},
+                },
+            )
+            ids.append(queued.message_id)
+        finished = await self.dispatch.on_run_finished(CHAT, first.run_id)
+        assert finished.profile == "planned"
+        return finished, ids
+
+    async def events(self) -> list[dict]:
+        return [event async for event in RunEventStream(self.redis).read(CHAT)]
+
+
+async def test_planned_relay_creates_a_run_from_the_unread_messages(monkeypatch: pytest.MonkeyPatch, fake_redis):
+    world = _RelayWorld(monkeypatch, fake_redis)
+    finished, ids = await world.end_direct_run_with_unread("改成深度研究", "再加一节竞品")
     worker = _make_worker(fake_redis)
     planned = AsyncMock()
     monkeypatch.setattr(worker_mod.LinsightWorkflowTask, "async_run", planned)
@@ -748,10 +978,135 @@ async def test_planned_relay_is_failed_visibly(monkeypatch: pytest.MonkeyPatch, 
     assert await worker.process_one_item() is True
     await _drain(worker)
 
+    # The run record is created by the send path's own code, from the unread messages.
+    assert len(world.submitted) == 1
+    data, login_user, kwargs = world.submitted[0]
+    assert login_user is world.login_user
+    assert data.conversationId == CHAT and data.task_mode is True and data.model == "model-7"
+    assert data.text == "改成深度研究\n\n再加一节竞品"
+    # Settings of the first unread message.
+    assert [(tool.id, tool.tool_key) for tool in data.tools] == [(5, "web_search")]
+    assert data.skills == ["html-report"]
+    assert data.use_knowledge_base.personal_knowledge_enabled is True
+    assert data.use_knowledge_base.knowledge_space_ids == [9]
+    # Queued under the run id the conversation is reserved for; no second question row.
+    assert kwargs == {"run_id": finished.run_id, "persist_user_turn": False}
+
+    # The messages were taken (no second relay), the conversation stays reserved for the run.
+    assert await world.redis.llen(inbox_key(CHAT)) == 0
+    state = await RunLeaseService(world.redis).get_state(CHAT)
+    assert (state.status, state.run_id, state.profile) == (run_lease.STATUS_RUNNING, finished.run_id, "planned")
+    # Nothing failed, and the executor that picks the run up finds the message ids.
+    assert {event["type"] for event in await world.events()} == {"steer_accepted"}
+    assert await run_message_persist.take_relay_messages(world.redis, CHAT, finished.run_id) == ids
     planned.assert_not_called()
-    events = [event async for event in RunEventStream(redis).read(CHAT)]
+    assert worker.semaphore._value == worker.max_concurrency
+
+
+async def test_planned_relay_that_cannot_be_created_returns_the_messages(monkeypatch: pytest.MonkeyPatch, fake_redis):
+    from test.workstation.run_persist_support import MessageTable
+
+    world = _RelayWorld(monkeypatch, fake_redis)
+    table = MessageTable().install(monkeypatch)
+    monkeypatch.setattr(run_message_persist, "_redis", AsyncMock(return_value=world.redis))
+    finished, ids = await world.end_direct_run_with_unread("改成深度研究")
+    # The message's question row was written when it joined the inbox.
+    from bisheng.database.models.message import ChatMessage
+
+    row = await table.ainsert_one(ChatMessage(chat_id=CHAT, category="question", message="{}", extra="{}"))
+    await run_message_persist.bind_steer_row(world.redis, CHAT, ids[0], row.id, "run-first")
+    from bisheng.common.errcode.linsight import LinsightUseUpError
+
+    world.submit_error = LinsightUseUpError()
+    worker = _make_worker(fake_redis)
+
+    await worker.semaphore.acquire()
+    assert await worker.process_one_item() is True
+    await _drain(worker)
+
+    events = await world.events()
     assert [event["type"] for event in events] == ["run_started", "run_failed"]
-    assert events[-1]["data"]["reason"] == "relay_not_supported" and events[-1]["run_id"] == finished.run_id
-    # The conversation is free again and does not start the same relay run on the next send.
-    assert (await RunLeaseService(redis).get_state(CHAT)).status == run_lease.STATUS_IDLE
-    assert await redis.llen(inbox_key(CHAT)) == 0
+    failed = events[-1]
+    assert failed["run_id"] == finished.run_id
+    assert set(failed["data"]) >= {"code", "reason", "detail", "reference_id", "unread_messages"}
+    # The messages are not lost: the client gets their text back, and the rows that
+    # would otherwise stay "queued" forever are gone.
+    assert failed["data"]["unread_messages"] == [{"message_id": ids[0], "text": "改成深度研究", "files": []}]
+    assert table.rows == []
+    # The conversation is free and the next send does not start the same relay run again.
+    assert (await RunLeaseService(world.redis).get_state(CHAT)).status == run_lease.STATUS_IDLE
+    assert await world.redis.llen(inbox_key(CHAT)) == 0
+
+
+async def test_planned_relay_run_marks_its_messages_read_when_it_starts(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    from bisheng.database.models.message import ChatMessage
+    from test.workstation.run_persist_support import MessageTable
+
+    env = _Env(monkeypatch, tmp_path)
+    # MessageTable also replaces aget_messages_by_chat_id, which _Env stubbed; both are in-memory.
+    table = MessageTable().install(monkeypatch)
+    monkeypatch.setattr(run_message_persist, "_redis", AsyncMock(return_value=env.redis))
+    dispatch = await env._build_dispatch()
+    message = {"text": "先问一句", "task_mode": False, "user_id": 1, "tenant_id": TENANT}
+    first = await dispatch.submit(CHAT, message)
+    queued = await dispatch.submit(CHAT, {**message, "text": "改成深度研究", "task_mode": True})
+    row = await table.ainsert_one(
+        ChatMessage(
+            chat_id=CHAT,
+            category="question",
+            message="{}",
+            extra=json.dumps(run_message_persist.steer_extra(first.run_id, queued.message_id, queued=True)),
+        )
+    )
+    await run_message_persist.bind_steer_row(env.redis, CHAT, queued.message_id, row.id, first.run_id)
+    relay = await dispatch.on_run_finished(CHAT, first.run_id)
+    # What the worker does for the planned_relay item (the version is created by the send path).
+    await dispatch.drain_inbox(CHAT)
+    await run_message_persist.remember_relay_messages(env.redis, CHAT, relay.run_id, [queued.message_id])
+    env.finished.clear()
+
+    await env.run(SCRIPT, run_id=relay.run_id)
+
+    events = await env.events()
+    assert events[0]["type"] == "run_started" and events[0]["data"]["relay"] is True
+    assert events[1]["type"] == "steer_read" and events[1]["data"] == {"message_id": queued.message_id}
+    assert events[-1]["type"] == "run_finished"
+    assert {event["run_id"] for event in events} == {relay.run_id}
+    # The "queued" mark of the message's question row is cleared (AC-14).
+    assert "queued" not in table.extra(table.rows[0])
+    assert env.finished == [(CHAT, relay.run_id)]
+    assert (await env.lease.get_state(CHAT)).status == run_lease.STATUS_IDLE
+
+
+async def test_start_planned_relay_goes_through_the_send_path(monkeypatch: pytest.MonkeyPatch):
+    """``run_send.start_planned_relay`` with the real ``submit_task_turn``: run id in the queue item, no question row."""
+    from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
+    from bisheng.workstation.domain.services import task_submit_service
+
+    redis = fakeredis.aioredis.FakeRedis()
+    version = SimpleNamespace(id="sv-relay", session_id=CHAT, tenant_id=TENANT)
+    submit_calls: list[dict] = []
+
+    async def submit_user_question(submit_obj, login_user, **kwargs):
+        submit_calls.append({"question": submit_obj.question, "session_id": submit_obj.session_id, **kwargs})
+        return SimpleNamespace(chat_id=CHAT), version
+
+    enqueued = AsyncMock()
+    monkeypatch.setattr(LinsightWorkbenchImpl, "submit_user_question", submit_user_question)
+    monkeypatch.setattr(task_submit_service, "_consume_task_invite", AsyncMock(return_value=False))
+    monkeypatch.setattr(linsight_utils, "persist_task_turn_message", AsyncMock())
+    monkeypatch.setattr(linsight_utils, "enqueue_session_for_execution", enqueued)
+    monkeypatch.setattr(run_send.UserPayload, "init_login_user", AsyncMock(return_value=SimpleNamespace(user_id=1)))
+    monkeypatch.setattr(run_send, "_relay_model", AsyncMock(return_value=""))
+    item = {"conversation_id": CHAT, "run_id": "run-relay", "tenant_id": TENANT, "user_id": 1}
+    messages = [{"message_id": "m-1", "text": "改成深度研究", "task_mode": True, "tools": [], "knowledge": []}]
+
+    created = await run_send.start_planned_relay(item, messages, redis=redis)
+
+    assert created is version
+    assert submit_calls[0]["question"] == "改成深度研究" and submit_calls[0]["session_id"] == CHAT
+    assert submit_calls[0]["persist_user_turn"] is False
+    enqueued.assert_awaited_once_with(version, run_id="run-relay")
+    assert await run_message_persist.take_relay_messages(redis, CHAT, "run-relay") == ["m-1"]
+    # Taken once; another run id never sees it.
+    assert await run_message_persist.take_relay_messages(redis, CHAT, "run-relay") == []

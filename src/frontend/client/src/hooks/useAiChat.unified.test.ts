@@ -229,6 +229,46 @@ describe("tenant switch on", () => {
     expect(result.current.isStreaming).toBe(false);
   });
 
+  it("tells the user when the stop request fails, and leaves the run on screen", async () => {
+    mockGetAgentMessages.mockResolvedValue([row("101", true, "first")]);
+    mockStopConversationRun.mockRejectedValue(new Error("network"));
+    const { result } = renderChat("c9");
+    await waitFor(() => expect(result.current.messages).toHaveLength(1));
+    emit("c9", { type: "run_started" });
+    mockShowToast.mockClear();
+    await act(async () => {
+      result.current.stopGenerating();
+    });
+    expect(mockShowToast).toHaveBeenCalledTimes(1);
+    expect(mockShowToast).toHaveBeenCalledWith({ message: "runComposer.stopFailed", status: "error" });
+    expect(result.current.isStreaming).toBe(true);
+  });
+
+  it("does not repeat a stop failure the request layer already showed", async () => {
+    mockGetAgentMessages.mockResolvedValue([row("101", true, "first")]);
+    mockStopConversationRun.mockRejectedValue(Object.assign(new Error("denied"), { presentation: "toast" }));
+    const { result } = renderChat("c9");
+    await waitFor(() => expect(result.current.messages).toHaveLength(1));
+    emit("c9", { type: "run_started" });
+    mockShowToast.mockClear();
+    await act(async () => {
+      result.current.stopGenerating();
+    });
+    expect(mockShowToast).not.toHaveBeenCalled();
+  });
+
+  it("shows no stop failure when the stop request succeeds", async () => {
+    mockGetAgentMessages.mockResolvedValue([row("101", true, "first")]);
+    const { result } = renderChat("c9");
+    await waitFor(() => expect(result.current.messages).toHaveLength(1));
+    emit("c9", { type: "run_started" });
+    mockShowToast.mockClear();
+    await act(async () => {
+      result.current.stopGenerating();
+    });
+    expect(mockShowToast).not.toHaveBeenCalled();
+  });
+
   it("does not show a second answer for a turn the history already holds", async () => {
     mockGetAgentMessages.mockResolvedValue([row("101", true, "q"), row("102", false, "stored task row")]);
     const { result } = renderChat("c9");

@@ -15,6 +15,18 @@ Rules:
 * a file that is no longer in the snapshot (the run ended and the snapshot
   expired, or a newer run replaced it) is answered from the message rows by the
   F016 resolver. An auditor uses the F016 audit endpoint, which reads the rows.
+
+Two ids exist for a generated file (design §7 item 11):
+
+* the id of its ``file`` events = the id of the workspace object. It is signed
+  from the snapshot and gives the file as the workspace has it NOW;
+* the ``file_id`` on the answer row = the id of that answer's own copy
+  (``chat/{partition}/answers/{run_id}/...``). It is signed from the rows and
+  gives the file as it was when that answer was written.
+
+A client that still holds the event id after the snapshot is gone gets the copy
+of the newest answer that produced the file (the row item keeps the event id in
+``workspace_file_id``).
 """
 
 from __future__ import annotations
@@ -24,6 +36,7 @@ from typing import Any
 from loguru import logger
 
 from bisheng.common.errcode.http_error import NotFoundError
+from bisheng.core.storage.chat_attachment import WORKSPACE_FILE_ID_KEY
 from bisheng.linsight.domain.services import file_events
 from bisheng.linsight.domain.services.run_event_stream import RunEventStream
 from bisheng.linsight.domain.services.workspace_backend import workspace_prefix_for
@@ -64,7 +77,9 @@ async def resolve_run_file_url(
         from bisheng.chat_session.domain.chat import ChatSessionService
 
         # Not a file of the current run: the stored rows decide (and re-check the owner).
-        return await ChatSessionService.resolve_attachment_url(conversation_id, file_id, login_user)
+        return await ChatSessionService.resolve_attachment_url(
+            conversation_id, file_id, login_user, alias_key=WORKSPACE_FILE_ID_KEY
+        )
     client = minio if minio is not None else await _default_minio()
     if not await client.object_exists(object_name=key):
         logger.warning("run file {} of conversation {} is announced but not stored: {}", file_id, conversation_id, key)

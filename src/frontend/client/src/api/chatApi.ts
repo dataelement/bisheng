@@ -9,6 +9,7 @@ import { isApiError, normalizeApiError } from "@bisheng/api-client";
 import { readCitationFailure } from "~/api/citationFailure";
 import type { MemoryFlags } from "~/api/memory";
 import http from "~/api/request";
+import { runRowMarks } from "~/hooks/unifiedRun";
 import { normalizeHistoryMediaFiles } from "~/utils/mediaAttachmentUtils";
 import { getShareTokenFromPath } from "~/utils/shareToken";
 
@@ -171,6 +172,10 @@ export interface ChatMessage {
      * on a row loaded from history.
      */
     liveRunId?: string;
+    /** F004: the user stopped the run of this answer; shown as "stopped", not as a failure. */
+    stopped?: boolean;
+    /** F004: inbox id of a user message sent into a run (key of its "queued" mark). */
+    steerMessageId?: string;
 }
 
 export interface ContentPart {
@@ -306,6 +311,7 @@ function mapAgentResponseItem(row: any): ChatMessage {
         base.errorText = failureExtra.error_msg;
         Object.assign(base, dailyFailureMetadata(failureExtra));
     }
+    Object.assign(base, runRowMarks(failureExtra));
     if (category === "question" && raw && typeof raw === "object") {
         base.text = raw.query ?? "";
         if (!base.files?.length && Array.isArray(raw.files)) {
@@ -328,10 +334,7 @@ function mapAgentResponseItem(row: any): ChatMessage {
     // answer fallback shown if the panel can't hydrate.
     if (category === "task") {
         base.text = typeof raw === "string" ? raw : (raw?.msg ?? raw?.answer ?? "");
-        let extra: any = row.extra;
-        if (typeof extra === "string") {
-            try { extra = JSON.parse(extra); } catch { extra = null; }
-        }
+        const extra = failureExtra;
         base.linsightSessionVersionId =
             row.linsightSessionVersionId
             ?? row.linsight_session_version_id

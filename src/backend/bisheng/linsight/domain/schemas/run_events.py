@@ -55,6 +55,15 @@ RunEventType = Literal[
 
 TERMINAL_EVENT_TYPES = frozenset({RUN_FINISHED, RUN_FAILED, RUN_STOPPED})
 
+# Optional field of a terminal event's ``data`` (a ``direct`` run): the ``files``
+# of the answer row this run stores, as the history returns them. Each item's
+# ``file_id`` is the answer's own copy and ``workspace_file_id`` the id the live
+# ``file`` events used (absent when the copy failed; ``file_id`` is then the
+# live id). Lets the client show the finished answer's files with the row's ids
+# before it reloads the history (design §7 item 11). Absent when the run stored
+# no generated file.
+ANSWER_FILES_FIELD = "answer_files"
+
 PlanItemStatus = Literal["pending", "in_progress", "completed", "cancelled"]
 PLAN_PENDING: PlanItemStatus = "pending"
 PLAN_IN_PROGRESS: PlanItemStatus = "in_progress"
@@ -164,6 +173,47 @@ class RunFailedData(BaseModel):
     failure_info: dict[str, Any] | None = None
 
 
+class UnreadMessage(BaseModel):
+    """A message that was still in the inbox when the user stopped the run."""
+
+    message_id: str
+    text: str = ""
+    files: list[Any] = Field(default_factory=list)
+
+
+class RunStoppedData(BaseModel):
+    """``run_stopped``: the user stopped the run. Not a failure.
+
+    ``status`` is always ``"stopped"``; the answer row of the run stores the same
+    value in ``extra.status``. ``unread_messages`` are the messages sent during
+    the run that it never read: they were removed from the inbox, their question
+    rows were deleted, and no run will answer them. The client puts their text
+    back into the input box. Always present, empty when there were none.
+    """
+
+    reason: str = "user"
+    status: Literal["stopped"] = "stopped"
+    unread_messages: list[UnreadMessage] = Field(default_factory=list)
+
+
+STATUS_STOPPED = "stopped"
+
+
+def stopped_data(unread_messages: list[dict[str, Any]] | None = None, *, reason: str = "user") -> dict[str, Any]:
+    """``data`` of a ``run_stopped`` event."""
+    return RunStoppedData(
+        reason=reason,
+        unread_messages=[
+            UnreadMessage(
+                message_id=str(message.get("message_id") or ""),
+                text=message.get("text") or "",
+                files=message.get("files") or [],
+            )
+            for message in unread_messages or []
+        ],
+    ).model_dump()
+
+
 class ResyncData(BaseModel):
     text: str = ""
     thinking: str = ""
@@ -175,6 +225,10 @@ class ResyncData(BaseModel):
     # How it ended (``finished`` / ``failed`` / ``stopped``). Present only when
     # ``ended`` is true and the terminal event was recorded.
     status: Literal["finished", "failed", "stopped"] | None = None
+    # With ``ended``: the messages the terminal event gave back (``run_stopped``,
+    # or a ``run_failed`` of a relay run that could not be created). Absent when
+    # there were none.
+    unread_messages: list[UnreadMessage] | None = None
 
 
 class RunEvent(BaseModel):

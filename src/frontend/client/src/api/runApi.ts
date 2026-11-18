@@ -53,8 +53,10 @@ export interface SendRunMessageOptions {
  *
  * Resolves with the raw response body: normally the JSON envelope
  * `{status_code, status_message, data: {run_id, disposition, message_id, conversation_id}}`.
- * A blocked input is still answered with today's SSE text, so the body can be
- * a string; `classifySendResponse` (hooks/unifiedRun.ts) tells the cases apart.
+ * A blocked input answers `disposition: "blocked"` with the auto-reply and the
+ * two stored row ids, and writes no events. An older backend answers it with
+ * SSE text, so the body can be a string; `classifySendResponse`
+ * (hooks/unifiedRun.ts) tells the cases apart.
  * A business error rejects through the shared response interceptors.
  */
 export async function sendRunMessage(
@@ -70,10 +72,28 @@ export async function sendRunMessage(
     });
 }
 
+/** Answer of the stop request. `unread_messages` is filled when this request ended the run itself. */
+export interface StopRunResult {
+    run_id: string | null;
+    /** `stopping` (the `run_stopped` event follows), `stopped`, `idle` or `expired`. */
+    status: string;
+    unread_messages: unknown[];
+}
+
 /**
  * Ask the backend to stop the run of a conversation. The run reports the stop
- * through a `run_stopped` event; nothing is changed locally here.
+ * through a `run_stopped` event. The messages it never read come back in that
+ * event, or here when the run had no live execution (design §7 item 6).
  */
-export async function stopConversationRun(conversationId: string, runId?: string | null): Promise<void> {
-    await http.post(API.stop(conversationId), runId ? { run_id: runId } : {});
+export async function stopConversationRun(conversationId: string, runId?: string | null): Promise<StopRunResult> {
+    const res: { data?: Partial<StopRunResult> } | null = await http.post(
+        API.stop(conversationId),
+        runId ? { run_id: runId } : {},
+    );
+    const data = res?.data;
+    return {
+        run_id: data?.run_id ?? null,
+        status: typeof data?.status === 'string' ? data.status : '',
+        unread_messages: Array.isArray(data?.unread_messages) ? data.unread_messages : [],
+    };
 }

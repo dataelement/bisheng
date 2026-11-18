@@ -43,6 +43,8 @@ async def submit_task_turn(
     session_name: str = "New Chat",
     strict_enqueue: bool = False,
     on_session_created: Callable[[MessageSession, LinsightSessionVersion], Awaitable[None]] | None = None,
+    run_id: str | None = None,
+    persist_user_turn: bool = True,
 ) -> tuple[MessageSession, LinsightSessionVersion]:
     """Create the task turn and hand it to the linsight queue.
 
@@ -55,6 +57,14 @@ async def submit_task_turn(
     ``on_session_created`` (F132): awaited once the conversation exists and
     before the run is queued. Only the logged-in daily task-mode entry passes
     it (long-term memory registration); the Open API never does.
+
+    ``run_id`` (F004): the run id the unified send entry reserved the
+    conversation with; it travels in the queue item so the worker claims the
+    conversation under the same id. None everywhere else.
+
+    ``persist_user_turn=False`` (F004 relay run): the question rows of the
+    messages already exist (they were written when the messages joined the
+    inbox), so no second question row is written.
     """
     # Local imports avoid a module-level workstation->linsight cycle.
     from bisheng.linsight.domain import utils as linsight_execute_utils
@@ -83,6 +93,7 @@ async def submit_task_turn(
             telemetry_source=telemetry_source,
             session_name=session_name,
             **({"project_intent": project_intent} if project_intent else {}),
+            **({} if persist_user_turn else {"persist_user_turn": False}),
         )
     except Exception:
         if consumed:
@@ -111,7 +122,9 @@ async def submit_task_turn(
     # start-execute remains a late retry and is safe to arrive after this — the
     # executor rejects re-entry on an already-running session.
     try:
-        await linsight_execute_utils.enqueue_session_for_execution(session_version)
+        await linsight_execute_utils.enqueue_session_for_execution(
+            session_version, **({"run_id": run_id} if run_id is not None else {})
+        )
     except Exception as exc:
         if not strict_enqueue:
             logger.exception(

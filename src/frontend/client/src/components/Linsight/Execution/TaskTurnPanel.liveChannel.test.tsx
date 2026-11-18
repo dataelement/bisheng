@@ -6,14 +6,17 @@
  */
 import { act, render } from '@testing-library/react';
 import { useRunStore, type RunEvent } from '~/store/runStore';
+import { TaskTurnRetryContext } from '~/components/Chat/unifiedRuntimeContext';
 import { TaskTurnPanel } from './TaskTurnPanel';
 
 const mockGetLinsight = jest.fn();
+const mockLegacyRetry = jest.fn();
 const mockReconcile = jest.fn();
 const mockSocketVersions: string[] = [];
 const mockSendInput = jest.fn();
 let mockClarifySubmit: ((taskId: string, answer: string) => void) | undefined;
-let mockOnRetry: (() => void) | undefined;
+let mockOnRetry: (() => void | Promise<void>) | undefined;
+let mockTransient = true;
 let mockQueueCards = 0;
 const mockQueuePolling = jest.fn();
 
@@ -21,7 +24,7 @@ jest.mock('~/api/linsight', () => ({ getLinsightSessionVersionList: jest.fn(), g
 jest.mock('~/hooks', () => ({ useLocalize: () => (key: string) => key }));
 jest.mock('~/hooks/useAutoScroll', () => ({ useAutoScroll: jest.fn() }));
 jest.mock('~/hooks/useLinsightManager', () => ({ useLinsightManager: () => ({
-    retryConversation: jest.fn(),
+    retryConversation: mockLegacyRetry,
     getLinsight: mockGetLinsight,
     switchAndUpdateLinsight: jest.fn(),
     updateLinsight: jest.fn(),
@@ -40,7 +43,7 @@ jest.mock('~/store/linsight', () => ({
 }));
 jest.mock('lucide-react', () => ({ OctagonX: () => null }));
 jest.mock('~/components/ChatErrorCard', () => ({
-    isTransientErrorType: () => true,
+    isTransientErrorType: () => mockTransient,
     ChatErrorCard: ({ onRetry }: { onRetry?: () => void }) => { mockOnRetry = onRetry; return null; },
 }));
 jest.mock('~/components/Linsight/Artifacts/ResultSection', () => ({ ResultSection: () => null }));
@@ -75,6 +78,7 @@ beforeEach(() => {
     mockSocketVersions.length = 0;
     mockClarifySubmit = undefined;
     mockOnRetry = undefined;
+    mockTransient = true;
     mockQueueCards = 0;
     mockReconcile.mockResolvedValue(false);
     act(() => useRunStore.setState({ conversations: {} }));
@@ -119,6 +123,73 @@ describe('without the live channel (conversation page on the unified runtime)', 
         render(<TaskTurnPanel versionId="sv1" conversationId="c1" liveChannel={false} />);
         expect(mockOnRetry).toBeUndefined();
         expect(mockSendInput).not.toHaveBeenCalled();
+    });
+
+    describe('retry of a failed turn (design §7 item 15)', () => {
+        const renderWithRetry = (retry: jest.Mock | null, turn: unknown = failed) => {
+            mockGetLinsight.mockReturnValue(turn);
+            return render(
+                <TaskTurnRetryContext.Provider value={retry}>
+                    <TaskTurnPanel versionId="sv1" conversationId="c1" liveChannel={false} />
+                </TaskTurnRetryContext.Provider>,
+            );
+        };
+
+        it('sends the question of the turn again through the page send entry, not the task channel', async () => {
+            const retry = jest.fn().mockResolvedValue(true);
+            renderWithRetry(retry);
+            expect(mockOnRetry).toBeDefined();
+            await act(async () => { await mockOnRetry?.(); });
+            expect(retry).toHaveBeenCalledTimes(1);
+            expect(retry).toHaveBeenCalledWith('q');
+            expect(mockLegacyRetry).not.toHaveBeenCalled();
+            expect(mockSocketVersions.every((id) => id === '')).toBe(true);
+        });
+
+        it('ignores a second click while the first retry is being sent', async () => {
+            let finish: ((accepted: boolean) => void) | undefined;
+            const retry = jest.fn(() => new Promise<boolean>((resolve) => { finish = resolve; }));
+            renderWithRetry(retry);
+            let first: void | Promise<void>;
+            act(() => { first = mockOnRetry?.(); });
+            await act(async () => { await mockOnRetry?.(); });
+            expect(retry).toHaveBeenCalledTimes(1);
+            await act(async () => { finish?.(true); await first; });
+        });
+
+        it('is not offered while the conversation has a run in progress', () => {
+            act(() => {
+                useRunStore.getState().applyEvent('c1', { type: 'run_started', run_id: 'r1', data: {} } as RunEvent, '1-1');
+            });
+            renderWithRetry(jest.fn());
+            expect(mockOnRetry).toBeUndefined();
+            act(() => {
+                useRunStore.getState().applyEvent('c1', { type: 'run_stopped', run_id: 'r1', data: {} } as RunEvent, '1-2');
+            });
+            expect(mockOnRetry).toBeDefined();
+        });
+
+        it('is not offered for an error that a retry cannot fix, or for a turn without a question', () => {
+            mockTransient = false;
+            renderWithRetry(jest.fn()).unmount();
+            expect(mockOnRetry).toBeUndefined();
+            mockTransient = true;
+            renderWithRetry(jest.fn(), { ...failed, question: '' });
+            expect(mockOnRetry).toBeUndefined();
+        });
+
+        it('keeps the legacy retry on a page with the live channel, even inside a retry provider', async () => {
+            const retry = jest.fn();
+            mockGetLinsight.mockReturnValue(failed);
+            render(
+                <TaskTurnRetryContext.Provider value={retry}>
+                    <TaskTurnPanel versionId="sv1" conversationId="c1" />
+                </TaskTurnRetryContext.Provider>,
+            );
+            await act(async () => { await mockOnRetry?.(); });
+            expect(mockLegacyRetry).toHaveBeenCalledWith('sv1', 'q');
+            expect(retry).not.toHaveBeenCalled();
+        });
     });
 
     it('asks the server for the final state of a turn stored as running once no run is in progress', async () => {

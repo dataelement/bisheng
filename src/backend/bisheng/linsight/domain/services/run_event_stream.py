@@ -11,8 +11,10 @@ Layout (both keys share the hash tag ``{conversation_id}``, design K8):
 
 * ``bisheng:run:events:{<cid>}``   Stream, entry fields ``run_id seq type data ts``
 * ``bisheng:run:snapshot:{<cid>}`` Hash, fields ``run_id seq last_id ended status
-  text thinking plan files pending_question`` (``status`` is the type of the
-  terminal event, set together with ``ended``)
+  text thinking plan files pending_question unread_messages`` (``status`` is the
+  type of the terminal event, set together with ``ended``; ``unread_messages``
+  is the JSON list a terminal event gave back, kept so that a reader who gets a
+  ``resync`` instead of that event still receives the messages)
 
 Rules this module owns:
 
@@ -57,6 +59,9 @@ RESYNC_TYPE = "resync"
 HEARTBEAT_TYPE = "heartbeat"
 # Field of ``data`` that carries the text delta of ``text`` / ``thinking``.
 TEXT_FIELD = "text"
+# Field of a terminal event's ``data`` (and of an ended ``resync``) that carries
+# the inbox messages given back to the client.
+UNREAD_FIELD = "unread_messages"
 
 # Fields of ``data`` that identify a segment of ``text`` / ``thinking`` deltas
 # (see ``run_events.TextData``). Deltas merge only when these are all equal, and
@@ -73,7 +78,8 @@ _OP_CLEAR_QUESTION = "clear_question"
 
 # KEYS[1] stream, KEYS[2] snapshot
 # ARGV: 1 maxlen, 2 type, 3 run_id, 4 data json, 5 ts, 6 live ttl, 7 ended ttl,
-#       8 is_terminal ('1'/'0'), 9 snapshot op, 10 op arg
+#       8 is_terminal ('1'/'0'), 9 snapshot op, 10 op arg,
+#       11 unread_messages json of a terminal event ('' when it has none)
 _APPEND_LUA = """
 local stream, snap = KEYS[1], KEYS[2]
 local typ = ARGV[2]
@@ -106,6 +112,9 @@ elseif op == 'clear_question' then
 end
 if ARGV[8] == '1' then
   redis.call('HSET', snap, 'ended', '1', 'status', typ)
+  if ARGV[11] and ARGV[11] ~= '' then
+    redis.call('HSET', snap, 'unread_messages', ARGV[11])
+  end
 end
 local ttl = ARGV[6]
 if redis.call('HEXISTS', snap, 'ended') == 1 then
@@ -157,6 +166,21 @@ def _snapshot_op(event: dict) -> tuple[str, str]:
     if typ in ("ask_user_answered", "run_started") or typ in TERMINAL_TYPES:
         return _OP_CLEAR_QUESTION, ""
     return _OP_NONE, ""
+
+
+def _terminal_unread(typ: str, data: Any) -> str:
+    """JSON of the ``unread_messages`` a terminal event gives back, '' when none.
+
+    ``run_stopped`` (the user stopped the run) and ``run_failed`` (a relay run
+    that could not be created) carry them. The snapshot keeps the list, so a
+    ``resync`` of the ended run delivers it to a reader that missed the event.
+    """
+    if typ not in TERMINAL_TYPES or not isinstance(data, dict):
+        return ""
+    unread = data.get(UNREAD_FIELD)
+    if not isinstance(unread, list) or not unread:
+        return ""
+    return json.dumps(unread, ensure_ascii=False)
 
 
 def _latest_files(files: list) -> list:
@@ -241,6 +265,7 @@ class RunEventStream:
             "1" if typ in TERMINAL_TYPES else "0",
             op,
             arg,
+            _terminal_unread(typ, data),
         )
         return _s(entry_id)
 
@@ -298,6 +323,8 @@ class RunEventStream:
             # ``run_finished`` -> ``finished``. None for a snapshot written before
             # the status was recorded.
             snap["status"] = TERMINAL_STATUS.get(h.get("status") or "")
+            if h.get(UNREAD_FIELD):
+                snap[UNREAD_FIELD] = json.loads(h[UNREAD_FIELD])
         if h.get("pending_question"):
             snap["pending_question"] = json.loads(h["pending_question"])
         return snap
@@ -330,6 +357,10 @@ class RunEventStream:
         }
         if snap.get("ended") and snap.get("status"):
             data["status"] = snap["status"]
+        if snap.get("ended") and snap.get(UNREAD_FIELD):
+            # The terminal event gave these messages back; a reader that only
+            # gets this resync must receive them too (same shape as the event).
+            data[UNREAD_FIELD] = snap[UNREAD_FIELD]
         if "pending_question" in snap:
             data["pending_question"] = snap["pending_question"]
         return {

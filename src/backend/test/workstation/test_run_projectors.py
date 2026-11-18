@@ -203,9 +203,9 @@ async def test_direct_partial_saved_on_stop(store):
     # The tool call that never ended is closed, so it does not render as running.
     tool = content["events"][1]
     assert tool["ended_at"] == 1500 and tool["duration_ms"] == 300 and tool["results"] == []
-    assert tool["error"] == "stream interrupted"
-    # Same marking as today's interrupted daily turn, plus the run id.
-    assert json.loads(row.extra) == {"error": True, "error_msg": "stream interrupted", "run_id": RUN_ID}
+    assert tool["error"] == "stopped by user"
+    # A user stop has its own mark and is not an error row (design §7 item 2).
+    assert json.loads(row.extra) == {"status": "stopped", "run_id": RUN_ID}
     assert row.category == "agent_answer" and row.type == "end"
 
 
@@ -468,3 +468,31 @@ async def test_plan_reload_matches_stream(tasks):
 
 async def test_planned_default_dao_is_the_execute_task_dao():
     assert PlannedRunProjector(SVID)._dao is planned_module.LinsightExecuteTaskDao
+
+
+async def test_stopped_row_is_not_an_error_row_and_keeps_its_content(store):
+    """Design §7 item 2: a user stop has its own mark; a failure and a torn-down run keep theirs."""
+    stopped, failed, torn = _direct(), _direct(), _direct()
+    for projector in (stopped, failed, torn):
+        await projector.on_event(_ev(run_events.TEXT, {"text": "已经写出的部分"}))
+    await stopped.on_event(_ev(run_events.RUN_STOPPED, run_events.stopped_data()))
+    await failed.on_event(
+        _ev(run_events.RUN_FAILED, {"code": 11091, "reason": "chat_unknown", "detail": "boom", "reference_id": "r"})
+    )
+    await torn.aclose()
+
+    stopped_extra, failed_extra, torn_extra = (json.loads(row.extra) for row in store.rows)
+    assert stopped_extra == {"status": "stopped", "run_id": RUN_ID}
+    assert failed_extra["error"] is True and "status" not in failed_extra
+    # No terminal event at all is still an interrupted turn, as before.
+    assert torn_extra == {"error": True, "error_msg": "stream interrupted", "run_id": RUN_ID}
+    assert [json.loads(row.message)["msg"] for row in store.rows] == ["已经写出的部分"] * 3
+
+
+def test_run_stopped_data_shape():
+    assert run_events.stopped_data() == {"reason": "user", "status": "stopped", "unread_messages": []}
+    assert run_events.stopped_data([{"message_id": "m-1", "text": "补充", "files": [{"file_id": "f"}], "ts": 1}]) == {
+        "reason": "user",
+        "status": "stopped",
+        "unread_messages": [{"message_id": "m-1", "text": "补充", "files": [{"file_id": "f"}]}],
+    }

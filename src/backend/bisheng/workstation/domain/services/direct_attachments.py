@@ -14,6 +14,11 @@ Three parts:
     with its path, inlines small parsed files, and makes reads of ``uploads/``
     wait for files that are still being parsed.
 
+Images (design §7 item 18): a model that takes images gets the picture in its
+input, and the original is ALSO written to ``uploads/<name>`` in the background,
+so a later run can ``read_file`` it or open it in the code interpreter. The
+first model request does not wait for that write; its input names the path.
+
 State lives in Redis and object storage only (C8): the node that parses at
 upload and the node that runs need not be the same.
 """
@@ -161,8 +166,11 @@ class WorkspaceNames:
     seed: frozenset[str] = field(default_factory=frozenset)
 
 
-def plan_workspace_names(files: list[dict]) -> list[WorkspaceNames]:
+def plan_workspace_names(files: list[dict], originals: frozenset[int] | set[int] = frozenset()) -> list[WorkspaceNames]:
     """The names ``LinsightWorkbenchImpl._write_attachment_to_workspace`` will give, in message order.
+
+    ``originals``: indexes of the files stored as themselves whatever their type
+    (the images a visual model gets directly, see ``WorkspaceAttachmentSource.store_image``).
 
     A prediction: a file whose parse fails, or a workbook above the carry ceiling,
     ends up elsewhere. The listing tells the model to ``ls`` when a path is missing.
@@ -171,11 +179,11 @@ def plan_workspace_names(files: list[dict]) -> list[WorkspaceNames]:
 
     used: set[str] = set()
     plans: list[WorkspaceNames] = []
-    for item in files:
+    for index, item in enumerate(files):
         seed = frozenset(used)
         safe = impl._safe_basename(file_name_of(item))
         ext = os.path.splitext(safe)[1].lower().lstrip(".")
-        route = impl._ingest_route(safe)
+        route = "passthrough" if index in originals else impl._ingest_route(safe)
         if route == "passthrough":
             name = impl._dedupe_workspace_name(safe, used)
             plans.append(WorkspaceNames(f"/uploads/{name}", f"uploads/{name}", seed))
@@ -273,6 +281,33 @@ class WorkspaceAttachmentSource:
         local_path, name = await async_file_download(file["filepath"])
         return await read_image_as_data_url(filepath=local_path, filename=name)
 
+    async def store_image(self, ctx: Any, file: dict, used_names: set[str]) -> dict:
+        """Write the original of an image to ``workspace/{conversation_id}/uploads/<name>``.
+
+        For an image a visual model gets directly: no parse. Same naming and the
+        same objects as a passthrough attachment (``_finalize_passthrough``): the
+        formal object ``linsight/{conversation_id}/{file_id}.<ext>`` and the
+        workspace file, so ``read_file`` returns the picture and the code
+        interpreter opens ``uploads/<name>``. Returns deep research's entry.
+        """
+        from bisheng.linsight.domain.schemas.linsight_schema import SubmitFileSchema
+        from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
+
+        local_path, downloaded_name = await async_file_download(file["filepath"])
+        raw = await LinsightWorkbenchImpl._read_local_bytes(local_path)
+        if raw is None:
+            raise OSError(f"image bytes unavailable after download: {file_name_of(file)!r}")
+        name = file_name_of(file) or downloaded_name
+        submit = SubmitFileSchema(
+            file_id=file_id_of(file), file_name=name, parsing_status="completed", file_url=file.get("filepath")
+        )
+        entry = await LinsightWorkbenchImpl._finalize_passthrough(
+            submit, name, ctx.conversation_id, await self._object_store(), raw, used_names
+        )
+        # ``_finalize_passthrough`` counts text lines; an image has none.
+        entry["line_count"] = 0
+        return entry
+
     async def ingest(self, ctx: Any, file: dict, used_names: set[str]) -> dict:
         """Put one attachment into ``workspace/{conversation_id}/uploads/``; return deep research's entry.
 
@@ -343,6 +378,29 @@ def _has_text_view(entry: dict) -> bool:
     )
 
 
+def render_image_listing(
+    stored: list[tuple[str, WorkspaceNames]], failed: list[str], *, has_code_interpreter: bool
+) -> str:
+    """The workspace paths of the images a visual model got in its input.
+
+    ``stored``: (name, planned names) of the images written or being written to
+    ``uploads/``. ``failed``: names whose write already failed.
+    """
+    parts: list[str] = []
+    if stored:
+        note = "以下图片已随本条消息直接提供，同时保存在工作区，之后的对话可用 read_file 读取下面的 path"
+        if has_code_interpreter:
+            note += "，或在 bisheng_code_interpreter 中按 raw 的相对路径打开"
+        note += '；path 读不到时用 ls("/uploads") 查看实际文件名。'
+        lines = ["<uploaded_images>", note]
+        lines.extend(f"- path: {plan.path}\n  name: {name}\n  raw: {plan.raw}" for name, plan in stored)
+        lines.append("</uploaded_images>")
+        parts.append("\n".join(lines))
+    if failed:
+        parts.append("以下图片未能保存到工作区（之后的对话不能用 read_file 读取）：" + "、".join(failed))
+    return "\n".join(parts)
+
+
 async def render_listing(
     entries: list[dict], pending: list[tuple[str, WorkspaceNames]], *, has_code_interpreter: bool
 ) -> str:
@@ -409,6 +467,9 @@ class AttachmentIntake:
         self.plans = plan_workspace_names(self.files)
         self._tasks: dict[int, asyncio.Task] = {}
         self._image_tasks: dict[int, asyncio.Task] = {}
+        # index -> the background write of a directly-given image to ``uploads/``.
+        # Not part of the progress frame and never awaited by ``first_view``.
+        self._image_store_tasks: dict[int, asyncio.Task] = {}
         self._ready: list[int] = []
         self._frame_open = False
         self._frame_closing: asyncio.Task | None = None
@@ -429,11 +490,16 @@ class AttachmentIntake:
             i for i, f in enumerate(self.files) if file_name_of(f).rsplit(".", 1)[-1].lower() in VISUAL_MODEL_FILE_TYPES
         ]
         inline_images = bool(image_indexes) and await self.source.visual(self.ctx)
+        if inline_images:
+            # These images are stored under their own name, not as a parsed ``.md``.
+            self.plans = plan_workspace_names(self.files, frozenset(image_indexes))
         ready = await asyncio.gather(*(self.source.ready(self.ctx, f) for f in self.files), return_exceptions=True)
         for index, file in enumerate(self.files):
             if inline_images and index in image_indexes:
                 # A model that takes images gets the picture itself, as before.
                 self._image_tasks[index] = asyncio.create_task(self.source.image_data_url(self.ctx, file))
+                # Also into the workspace, in the background (design §7 item 18).
+                self._image_store_tasks[index] = asyncio.create_task(self._store_image(index, file))
                 continue
             if ready[index] is True:
                 self._ready.append(index)
@@ -451,6 +517,27 @@ class AttachmentIntake:
         except Exception as exc:
             logger.exception(
                 "direct run={} conversation={}: attachment {!r} could not be read",
+                self.ctx.run_id,
+                self.ctx.conversation_id,
+                file_name_of(file),
+            )
+            return {
+                "file_id": file_id_of(file),
+                "original_filename": file_name_of(file),
+                "parsing_status": "failed",
+                "valid": False,
+                "error_message": str(exc) or type(exc).__name__,
+            }
+
+    async def _store_image(self, index: int, file: dict) -> dict:
+        """The original of one directly-given image into ``uploads/``. A failure costs
+        only the workspace copy: the model already has the picture."""
+        try:
+            return await self.source.store_image(self.ctx, file, set(self.plans[index].seed))
+        except Exception as exc:
+            logger.exception(
+                "direct run={} conversation={}: image {!r} could not be written to the workspace uploads/; "
+                "later runs cannot read it as a file",
                 self.ctx.run_id,
                 self.ctx.conversation_id,
                 file_name_of(file),
@@ -496,11 +583,11 @@ class AttachmentIntake:
 
     @property
     def pending(self) -> bool:
-        return any(not task.done() for task in self._tasks.values())
+        return any(not task.done() for task in (*self._tasks.values(), *self._image_store_tasks.values()))
 
     async def wait(self) -> None:
         """Wait until every file is in the workspace; the progress frame closes before this returns."""
-        tasks = [task for task in self._tasks.values() if not task.done()]
+        tasks = [task for task in (*self._tasks.values(), *self._image_store_tasks.values()) if not task.done()]
         if tasks:
             logger.info(
                 "direct run={} conversation={}: waiting for {} attachment(s) still being parsed",
@@ -522,6 +609,15 @@ class AttachmentIntake:
         finally:
             for index, task in unfinished.items():
                 if self.keep_after_run and index in self._tasks:
+                    _BACKGROUND.add(task)
+                    task.add_done_callback(_BACKGROUND.discard)
+                else:
+                    task.cancel()
+            for task in self._image_store_tasks.values():
+                if task.done():
+                    continue
+                if self.keep_after_run:
+                    # The write goes on after the run, so later runs find the image.
                     _BACKGROUND.add(task)
                     task.add_done_callback(_BACKGROUND.discard)
                 else:
@@ -561,9 +657,22 @@ class AttachmentIntake:
             listing = "\n".join(
                 filter(None, [listing, "以下图片未能读取，请如实告诉用户：" + "、".join(failed_images)])
             )
-        if not self.pending:
+        listing = "\n".join(filter(None, [listing, self._image_listing()]))
+        if not any(not task.done() for task in self._tasks.values()):
             await self._finish_frame()
         return AttachmentView(listing=listing, file_context=await self._inline(entries), images=images)
+
+    def _image_listing(self) -> str:
+        """Where the directly-given images are (or will be) in the workspace. Does not wait."""
+        stored: list[tuple[str, WorkspaceNames]] = []
+        failed: list[str] = []
+        for index, task in self._image_store_tasks.items():
+            name = file_name_of(self.files[index])
+            if task.done() and not task.cancelled() and task.result().get("valid") is False:
+                failed.append(name)
+            else:
+                stored.append((name, self.plans[index]))
+        return render_image_listing(stored, failed, has_code_interpreter=self._has_code)
 
     async def _inline(self, entries: list[dict]) -> str:
         """Text of the small parsed files, within the per-file and the total limit."""

@@ -65,7 +65,7 @@
   },
   "src/api/chatApi.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 10
+      "count": 9
     }
   },
   "src/api/index.ts": {
@@ -246,7 +246,7 @@
   },
   "src/components/Chat/ChatView.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 6
+      "count": 5
     },
     "no-restricted-imports": {
       "count": 1
