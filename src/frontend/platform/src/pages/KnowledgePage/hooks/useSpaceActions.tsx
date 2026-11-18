@@ -120,10 +120,19 @@ export function useSpaceActions(
                 void deletion
                   .open({ spaceId: row.id, kind: "delete" })
                   .then(async (deleted) => {
-                    if (deleted && current.current === scopeKey) {
-                      await refresh();
-                      if (current.current === scopeKey) onDeleted?.(row.id);
-                    }
+                    if (!deleted || current.current !== scopeKey) return;
+                    // Leave before the catalog refresh. Refreshing first refetches
+                    // the page that is still open on the deleted space.
+                    onDeleted?.(row.id);
+                    if (current.current !== scopeKey) return;
+                    const viewKey = knowledgeQueryKeys.scope(scope);
+                    await client.invalidateQueries({
+                      queryKey: viewKey,
+                      predicate: ({ queryKey }) => {
+                        const [kind, id] = queryKey.slice(viewKey.length);
+                        return kind !== "space" || id !== row.id;
+                      },
+                    });
                   });
               }}
             >
