@@ -80,7 +80,7 @@ export function SkillSquarePane() {
         </div>
       </main>
       {/* Enterprise skills are read-only: the detail has nothing to toggle or update. */}
-      {selected && <SkillDetails skill={selected} onClose={() => handleSelect()} onToggle={noop} onUpdate={noop} />}
+      {selected && <SkillDetails skill={selected} onClose={() => handleSelect()} onUpdate={noop} />}
     </div>
   );
 }
