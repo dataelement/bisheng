@@ -31,9 +31,26 @@ it('restores only the current column after an explicit confirmation', async () =
     render(<SystemModelDiagnostics configKey="assistant_llm" scopeKey="user:1:69" onRestored={restored} />)
     fireEvent.click(await screen.findByRole('button', { name: 'model.restoreInheritance' }))
     expect(restoreModelInheritance).not.toHaveBeenCalled()
-    await confirm.mock.calls[0][0].onOk()
+    const next = vi.fn()
+    await confirm.mock.calls[0][0].onOk(next)
     expect(restoreModelInheritance).toHaveBeenCalledWith('assistant_llm')
     expect(restored).toHaveBeenCalledOnce()
+    expect(next).toHaveBeenCalledOnce()
+})
+
+it('leaves the confirmation open when restoring inheritance fails', async () => {
+    vi.mocked(getSystemModelSettings).mockResolvedValue({ tenant_id: 69, sections: [{
+        key: 'workflow_llm', inherited_from_root: false, fallback_blocked: false, references: [],
+    }] })
+    vi.mocked(restoreModelInheritance).mockRejectedValue(new Error('restore failed'))
+    const restored = vi.fn()
+    render(<SystemModelDiagnostics configKey="workflow_llm" scopeKey="user:1:69" onRestored={restored} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'model.restoreInheritance' }))
+    const next = vi.fn()
+    await expect(confirm.mock.calls[0][0].onOk(next)).rejects.toThrow('restore failed')
+    expect(restoreModelInheritance).toHaveBeenCalledWith('workflow_llm')
+    expect(next).not.toHaveBeenCalled()
+    expect(restored).not.toHaveBeenCalled()
 })
 
 it('does not accept a late response from a retired tenant', async () => {

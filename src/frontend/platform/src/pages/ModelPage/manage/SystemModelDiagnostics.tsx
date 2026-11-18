@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { bsConfirm } from '@/components/bs-ui/alertDialog/useConfirm'
 import { getSystemModelSettings, restoreModelInheritance, type SystemModelKey } from '@/controllers/API/systemModelSettings'
-import { showApiError } from '@/controllers/request'
 
 interface SystemModelDiagnosticsProps {
     configKey: SystemModelKey
@@ -38,20 +37,17 @@ export function SystemModelDiagnostics({ configKey, scopeKey, onRestored }: Syst
             title: t('model.restoreInheritance'),
             desc: t('model.restoreInheritanceConfirm'),
             okTxt: t('model.restoreInheritance'),
-            onOk: async () => {
+            onOk: (next) => {
                 setSaving(true)
-                try {
-                    await restoreModelInheritance(configKey)
-                    await client.invalidateQueries({ queryKey: ['system-model-settings', scopeKey] })
-                    await client.invalidateQueries({ queryKey: ['system-model-settings-impact'] })
-                    await client.invalidateQueries({ queryKey: ['linsightModelEnvelope'] })
-                    onRestored()
-                } catch (error) {
-                    showApiError(error)
-                    throw error
-                } finally {
-                    setSaving(false)
-                }
+                return restoreModelInheritance(configKey)
+                    .then(async () => {
+                        await client.invalidateQueries({ queryKey: ['system-model-settings', scopeKey] })
+                        await client.invalidateQueries({ queryKey: ['system-model-settings-impact'] })
+                        await client.invalidateQueries({ queryKey: ['linsightModelEnvelope'] })
+                        onRestored()
+                        next()
+                    })
+                    .finally(() => setSaving(false))
             },
         })
     }
