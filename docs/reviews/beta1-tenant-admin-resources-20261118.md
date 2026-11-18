@@ -29,6 +29,8 @@
 
 剩余四项都是 `test/approval/test_admin_instance_progress.py` 的既有失败：`test_tenant_admin_can_read_exception_without_approval_task`、`test_super_admin_selected_scope_controls_progress`、`test_management_api_checks_tenant_admin_before_returning_progress` 的旧 fixture 没有完整应用业务对象，当前 visibility 装饰读取拒绝；`test_global_list_never_supplies_an_implicit_write_tenant` 仍期待旧全租户标记行为，实际返回 Root。两版失败名称与原因相同，本轮没有修改审批源码或这些用例。比较中的新管理员 helper 用例在未新增该入口的基线上也按失败计入；不能将 11 项红绿差异解释为 11 个独立业务缺陷。
 
+交付前无冲突合入发布线 `79f8d7e51b`，保留并发的应用详情、模型操作恢复和微调租户隔离修复。`d8098a2fa9` 为本轮源码提交，集成树为 `ea6ca4ecc6`。合并后本轮 79 项加上 `test_flow_detail_access.py`、`test_as_source_owner.py`、`test_finetune_tenant_scope.py`、`test_model_operation_failure_recovery.py`，共 **115 项全部通过**。这些是独立于上述 98 项基线比较的集成选择；暂缓审批的四项既有失败没有被描述为已修复。
+
 ## 异常审批只读现场核对
 
 通过已登录浏览器页面只读核对，未执行指派、跳过、重试或修改数据：
