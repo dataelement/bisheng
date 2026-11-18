@@ -1,8 +1,10 @@
 """Native storage facts are not a sharing or deletion authorization API."""
 
 from copy import deepcopy
+from datetime import timedelta
 
 import pytest
+import sqlalchemy as sa
 
 from bisheng.common.errcode.knowledge import (
     KnowledgeOperationPlanChangedError,
@@ -117,3 +119,23 @@ async def test_root_shared_readonly_is_preserved_before_any_reservation(ready):
     session, _, plans = ready
     with pytest.raises(LLMModelSharedReadonlyError):
         await ModelProviderOperationRepository(plans).alock_provider(session, server_id=2)
+
+
+@pytest.mark.parametrize("microsecond", [1, 499999, 500000, 999999])
+async def test_share_confirmation_survives_mysql_datetime_rounding(ready, microsecond):
+    session, _, plans = ready
+    plans.clock = lambda: actual.NOW.replace(microsecond=microsecond)
+    repo = ModelProviderOperationRepository(plans)
+    row = await reserve(session, repo)
+    identifier = row.id
+    # MySQL DATETIME(0) rounds fractional seconds at the storage boundary.
+    stored = (row.expires_at + timedelta(microseconds=500000)).replace(microsecond=0)
+    await session.execute(sa.update(type(row)).where(type(row).id == identifier).values(expires_at=stored))
+    session.expire_all()
+    restored = await repo.aread_plan(session, confirmation_id=identifier)
+    repo.validate(restored)
+    assert restored.expires_at == actual.NOW
+    # Precision normalization must not accept a changed signed expiry.
+    restored.expires_at += timedelta(seconds=1)
+    with pytest.raises(KnowledgeOperationPlanChangedError):
+        repo.validate(restored)

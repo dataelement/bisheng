@@ -393,7 +393,7 @@ class TenantMountService:
                                 auto_distribute=auto_distribute,
                             )
                         except Exception as error:
-                            logger.exception("[F029] Protected provider mount sharing failed for {}", server_id)
+                            logger.exception("[F029] Protected provider mount sharing failed for %s", server_id)
                             failures.append(error)
                     if failures:
                         raise failures[0]
