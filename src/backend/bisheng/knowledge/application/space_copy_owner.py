@@ -187,12 +187,15 @@ class SpaceCopyOwner:
                 await self.app.projection.arequire_completed(session, pairs=pairs)
                 # A waiter must use the state read after acquiring the lock,
                 # rather than the pre-lock snapshot returned by _logical.
-                if actual_root.state == 0:
+                if actual_root.state in {0, 2}:
+                    # Historical copies stayed COPYING until every file was
+                    # indexed. Revalidate their independent logical readiness,
+                    # even when the file task has already failed.
                     await self._initialize(
                         actual_root.model_copy(deep=True), reference["actor_user_id"], session=session
                     )
                 assert_authority(authority)
-                if actual_root.state == 0:
+                if actual_root.state in {0, 2}:
                     actual_root.state = 1
                     await session.flush()
 
