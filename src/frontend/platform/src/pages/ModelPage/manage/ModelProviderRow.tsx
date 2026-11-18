@@ -89,9 +89,9 @@ function ModelRow({ model, canEdit, probing, onToggle, onVerify }: ModelRowProps
                 {model.status === 1 && model.remark && <Tooltip content={model.remark}>
                     <Button variant="ghost" size="icon" aria-label={model.remark}><Outlined.Question className="size-3.5 text-text-3" /></Button>
                 </Tooltip>}
-                <Button variant="link" size="small" loading={verifying} disabled={verifying} onClick={handleVerify}>
+                {canEdit && <Button variant="link" size="small" loading={verifying} disabled={verifying} onClick={handleVerify}>
                     {t('model.updateStatus')}
-                </Button>
+                </Button>}
             </div>
         </TableCell>
         <TableCell className="text-text-3">{model.status_update_time?.replace('T', ' ') || '—'}</TableCell>
@@ -120,9 +120,9 @@ export function ModelProviderRow({ data, canManage, probing, onModel, onToggle, 
                         {expanded ? <Outlined.Down className="size-4" /> : <Outlined.Right className="size-4" />}
                         {data.name}
                     </Button>
-                    {data.is_root_shared_readonly && <Tag size="small">
+                    {data.is_root_shared_readonly && <Tooltip content={t('model.sharedStatusRootOnly')}><span><Tag size="small">
                         {t('model.tenantSharedReadonly', { tenantName: data.tenant_name || 'Root' })}
-                    </Tag>}
+                    </Tag></span></Tooltip>}
                 </div>
                 <div className="bs-table-td h-full p-2 flex items-center justify-end first:rounded-l-md last:rounded-r-md">
                     <Button size="small" variant="link" disabled={!canEdit} onClick={() => onModel(data.id)}>{t('model.modelConfiguration')}</Button>

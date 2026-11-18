@@ -568,6 +568,7 @@
         "folder_upload_empty": "No supported files are available to upload."
     },
     "deletion": {
+        "source_tasks_block_delete": "Unfinished move or copy tasks still depend on this space. Failed tasks may also need its source files, so deletion is blocked. Open Processing tasks in the destination space, resolve the failure, then check deletion again. If you cannot access the destination, contact the task initiator or an administrator.",
         "references": "References",
         "clear": "Clear space",
         "delete_space": "Delete space",
@@ -812,5 +813,31 @@
         "independent": "The copy has independent resources, indexes and tasks. It is not published to the square, and subscriptions, pins and chats are not copied.",
         "create": "Create copy",
         "created": "Copy created: {{name}}"
+    },
+    "fileMetadata": {
+        "searchFields": "Search metadata fields",
+        "noAvailableFields": "No available fields",
+        "schemaScopeHint": "The new field belongs to this knowledge space. Set its value for this file after the creation task completes.",
+        "fieldType": "Field type",
+        "confirmCreate": "Confirm field creation",
+        "schemaPending": "Creating the field. Values can be set when the task completes.",
+        "uncertain": "The result is unconfirmed. Retry this same operation or close and check processing tasks. Do not create it again.",
+        "typeString": "String",
+        "typeNumber": "Number",
+        "typeTime": "Time"
+    },
+    "similarReview": {
+        "currentFile": "Current file",
+        "primaryVersion": "Primary version V{{version}}",
+        "recommendCount": "{{count}} similar documents recommended",
+        "recommendHint": "Choose an existing document and link the current file as its new version.",
+        "searchTitle": "Search existing documents",
+        "searchHint": "No suitable recommendation? Search other documents in this space.",
+        "noSearchResults": "No matching documents",
+        "keepTitle": "Keep as a separate document",
+        "confirmLink": "The current file “{{name}}” will become a new version of “{{target}}”.",
+        "pendingCount": "Pending files ({{count}})",
+        "similarity": "Similarity",
+        "empty": "No similar documents awaiting review"
     }
 }

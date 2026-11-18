@@ -525,3 +525,12 @@ it("retains the uploaded standalone file on registration ACK loss without automa
   expect(mocks.register).toHaveBeenCalledTimes(1);
   expect(ports.linkSpaceFileVersion).not.toHaveBeenCalled();
 });
+
+it("opens the client's two-column similar dialog directly rather than nesting it in version history", async () => {
+  const ports = api();
+  mocks.get.mockResolvedValue([{ knowledge_file_id: 12, file_name: "Current.pdf", candidate_count: 0 }]);
+  mount(<SpaceVersionHistorySheet scope={scope} spaceId={7} parentId={null} fileId={12} open hasSimilar initialPanel="similar" api={ports} onOpenChange={vi.fn()} />);
+  expect(await screen.findByText("similarReview.currentFile")).toBeVisible();
+  expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  expect(ports.getSpaceFileVersions).not.toHaveBeenCalled();
+});

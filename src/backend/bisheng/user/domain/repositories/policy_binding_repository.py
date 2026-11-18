@@ -75,6 +75,56 @@ class PolicyBindingRepository:
         return PolicySubjectFacts(user_id, home, tuple(bindings), tuple(members))
 
     @staticmethod
+    async def directory_subjects(user_ids: set[int]) -> dict[int, PolicySubjectFacts]:
+        """Read one already-authorized directory page; never an authorization API."""
+        if not user_ids:
+            return {}
+        if len(user_ids) > 100 or any(type(ident) is not int or ident <= 0 for ident in user_ids):
+            raise ValueError("An exact bounded directory page is required")
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                users = (await session.exec(select(User).where(User.user_id.in_(user_ids)))).all()
+                homes = (
+                    await session.exec(
+                        select(UserTenant).where(UserTenant.user_id.in_(user_ids), UserTenant.is_active == 1)
+                    )
+                ).all()
+                tenant_ids = {row.tenant_id for row in homes}
+                tenants = (
+                    (await session.exec(select(Tenant).where(Tenant.id.in_(tenant_ids)))).all() if tenant_ids else []
+                )
+                bindings = (await session.exec(select(UserRole).where(UserRole.user_id.in_(user_ids)))).all()
+                memberships = (
+                    await session.exec(
+                        select(UserDepartment)
+                        .join(Department, Department.id == UserDepartment.department_id)
+                        .where(
+                            UserDepartment.user_id.in_(user_ids),
+                            Department.status == "active",
+                            Department.is_deleted == 0,
+                        )
+                    )
+                ).all()
+        users_by_id = {row.user_id: row for row in users}
+        tenants_by_id = {row.id: row for row in tenants}
+        result = {}
+        for ident in user_ids:
+            user = users_by_id.get(ident)
+            if user is not None and user.delete:
+                # Disabled directory rows remain visible, but have no effective access.
+                continue
+            owned_homes = [row for row in homes if row.user_id == ident]
+            tenant = tenants_by_id.get(owned_homes[0].tenant_id) if owned_homes else None
+            home = _home(user, owned_homes, tenant)
+            result[ident] = PolicySubjectFacts(
+                ident,
+                home,
+                tuple(row for row in bindings if row.user_id == ident),
+                tuple(row for row in memberships if row.user_id == ident),
+            )
+        return result
+
+    @staticmethod
     def subject_sync(user_id: int, *, session=None) -> PolicySubjectFacts:
         if session is None:
             with get_sync_db_session() as owned_session:

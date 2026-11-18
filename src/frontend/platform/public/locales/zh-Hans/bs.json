@@ -1,4 +1,12 @@
 {
+  "memberRoleIssues": {
+    "inactive": "未生效",
+    "missingRole": "角色 {{id}}",
+    "binding_tenant_mismatch": "绑定所属租户与用户当前租户不一致",
+    "definition_out_of_scope": "角色未共享给用户当前租户",
+    "department_out_of_scope": "用户不在角色允许的部门范围内",
+    "definition_missing": "角色定义已不存在"
+  },
   "license": {
     "name": {
       "gateway": "Gateway 授权",
@@ -758,6 +766,7 @@
     "serviceProviderName": "服务提供商名称",
     "serviceProviderNameTooltip": "显示在模型列表里，用来区分服务商",
     "shareToChildren": "共享给子租户",
+    "sharedStatusRootOnly": "共享模型的状态请在 Root 管理视图中更新。",
     "tenantSharedReadonly": "{{tenantName}} 共享 · 只读",
     "silicon": "硅基流动",
     "timesPerDay": "次/天",

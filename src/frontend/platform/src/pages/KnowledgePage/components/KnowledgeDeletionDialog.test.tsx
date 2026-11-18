@@ -135,3 +135,11 @@ describe("knowledge deletion consent", () => {
     expect(screen.getByText("deletion.pending")).toBeInTheDocument();
   });
 });
+
+it("explains failed source tasks instead of displaying only a generic resource conflict", () => {
+  const view = { ...base, result: undefined, code: 10999, reason: "source_space_move_input_required", error: "Generic resource conflict" };
+  render(<KnowledgeDeletionDialog operation={operation(view)} />);
+  expect(screen.getByRole("alert")).toHaveTextContent("deletion.source_tasks_block_delete");
+  expect(screen.queryByText("Generic resource conflict")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "deletion.confirm" })).toBeDisabled();
+});

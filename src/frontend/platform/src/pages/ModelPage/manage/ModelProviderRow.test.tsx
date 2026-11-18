@@ -67,11 +67,12 @@ describe('model provider list interactions', () => {
         await waitFor(() => expect(actions[0]).not.toBeDisabled())
     })
 
-    it('keeps inherited providers read-only while allowing status inspection', () => {
+    it('keeps shared status visible without offering writes outside Root', () => {
         setup({ data: { ...provider, is_root_shared_readonly: true, tenant_name: 'Root' } })
         expect(screen.getByRole('button', { name: 'model.modelConfiguration' })).toBeDisabled()
         expect(screen.getAllByRole('switch').every(control => control.hasAttribute('disabled'))).toBe(true)
-        expect(screen.getAllByRole('button', { name: 'model.updateStatus' })[0]).not.toBeDisabled()
+        expect(screen.queryByRole('button', { name: 'model.updateStatus' })).not.toBeInTheDocument()
+        expect(screen.getByText('model.available')).toBeVisible()
         expect(screen.getByText('model.tenantSharedReadonly')).toBeVisible()
     })
 

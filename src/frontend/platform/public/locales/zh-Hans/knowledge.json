@@ -568,6 +568,7 @@
         "folder_upload_empty": "没有可上传的受支持文件。"
     },
     "deletion": {
+        "source_tasks_block_delete": "此空间仍被未完成的移动或复制任务占用。失败任务也可能需要源文件继续处理，因此暂时无法删除。请到复制或移动的目标空间查看“处理任务”，处理完成后重新检查。若无法访问目标空间，请联系任务发起人或管理员。",
         "references": "引用来源",
         "clear": "清空空间",
         "delete_space": "删除空间",
@@ -812,5 +813,31 @@
         "independent": "副本使用独立资源、索引和任务；不会发布到广场，也不复制订阅、置顶或聊天记录。",
         "create": "创建副本",
         "created": "副本已创建：{{name}}"
+    },
+    "fileMetadata": {
+        "searchFields": "搜索元数据字段",
+        "noAvailableFields": "暂无可添加的字段",
+        "schemaScopeHint": "新建字段属于当前知识空间。字段创建任务完成后，可为当前文件填写值。",
+        "fieldType": "字段类型",
+        "confirmCreate": "确认创建字段",
+        "schemaPending": "字段创建中，完成后可填写值。",
+        "uncertain": "操作结果尚未确认。请重试同一操作，或关闭后查看处理任务，不要重复创建。",
+        "typeString": "字符串",
+        "typeNumber": "数字",
+        "typeTime": "时间"
+    },
+    "similarReview": {
+        "currentFile": "当前文件",
+        "primaryVersion": "主版本 V{{version}}",
+        "recommendCount": "推荐 {{count}} 个相似文档",
+        "recommendHint": "选择已有文档，将当前文件关联为它的新版本。",
+        "searchTitle": "搜索已有文档",
+        "searchHint": "未找到合适的推荐？搜索当前空间内的其他文档。",
+        "noSearchResults": "没有匹配的文档",
+        "keepTitle": "保持为独立文档",
+        "confirmLink": "关联后，当前文件“{{name}}”将成为“{{target}}”的新版本。",
+        "pendingCount": "待处理文件（{{count}}）",
+        "similarity": "相似度",
+        "empty": "暂无待处理的相似文档"
     }
 }
