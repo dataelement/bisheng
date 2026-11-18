@@ -15,7 +15,7 @@ from bisheng.common.models.space_channel_member import (
     SpaceChannelMemberDao,
     UserRoleEnum,
 )
-from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter
+from bisheng.core.context.tenant import bypass_tenant_filter, get_current_tenant_id, strict_tenant_filter
 from bisheng.database.models.department import DepartmentDao
 from bisheng.department.application.directory import organization_directory_scope, require_directory_department
 from bisheng.department.domain.services.department_service import DepartmentService
@@ -67,8 +67,15 @@ class DepartmentKnowledgeSpaceService:
         async with organization_directory_scope():
             for department_id in deduped:
                 await require_directory_department(department_id)
-            rows = await DepartmentDao.aget_by_ids(deduped)
-        dept_map = {row.id: row for row in rows if getattr(row, "status", "active") == "active"}
+            # Authorization used the directory facts. Read the same rows without the
+            # business-tenant SQL filter, which hides departments stored on Root.
+            with bypass_tenant_filter():
+                rows = await DepartmentDao.aget_by_ids(deduped)
+        dept_map = {
+            row.id: row
+            for row in rows
+            if getattr(row, "status", "active") == "active" and not getattr(row, "is_deleted", 0)
+        }
         if len(dept_map) != len(deduped):
             raise DepartmentNotFoundError(msg="One or more departments do not exist or are archived")
         return dept_map

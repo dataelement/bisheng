@@ -86,6 +86,7 @@ export function SpaceProcessingProgress({
     queryOptions,
   );
   const jobData = !metadata || job.isFetchedAfterMount ? job.data : undefined;
+  const progressReadFailed = job.isError && !job.isFetching;
   const hasFailures = (jobData?.failed_count ?? 0) > 0;
   const items = useKnowledgeProcessingItems(
     scope,
@@ -218,7 +219,7 @@ export function SpaceProcessingProgress({
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3">
             <span>
-              {status ?? (job.isError ? t("detail.load_failed") : <LoadingState size="inline" label={t("detail.loading")} />)}
+              {status ?? (progressReadFailed ? t("detail.load_failed") : <LoadingState size="inline" label={t("detail.loading")} />)}
             </span>
             {percent !== undefined && (
               <span className="tabular-nums">{percent}%</span>
@@ -236,10 +237,13 @@ export function SpaceProcessingProgress({
       {!metadata && job.isInitialLoading ? (
         <SpaceProcessingLoading className={fill ? "min-h-0 flex-1" : undefined} />
       ) : !jobData ? (
-        job.isError ? (
-          <Button onClick={() => void job.refetch()}>{t("retry")}</Button>
+        progressReadFailed ? (
+          <>
+            {!metadata && <p role="alert">{t("detail.load_failed")}</p>}
+            <Button onClick={() => void job.refetch()}>{t("retry")}</Button>
+          </>
         ) : (
-          <LoadingState label={t("sidebar.loading")} />
+          !metadata && <LoadingState label={t("detail.loading")} />
         )
       ) : (
         <>

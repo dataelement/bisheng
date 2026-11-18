@@ -56,6 +56,8 @@ interface SheetContentProps
     VariantProps<typeof sheetVariants> {
     overlayClassName?: string
     closeClassName?: string
+    noOverlay?: boolean
+    noClose?: boolean
 }
 
 const SheetContent = React.forwardRef<
