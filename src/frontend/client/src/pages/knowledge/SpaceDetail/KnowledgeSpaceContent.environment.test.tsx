@@ -28,6 +28,7 @@ jest.mock("~/Providers", () => ({
 }));
 jest.mock("@tanstack/react-query", () => ({
   useQueryClient: () => mockQueryClient,
+  useQuery: () => ({ isSuccess: true, isFetching: false, data: { actions: ["upload_file"] } }),
   useQueries: () => [],
 }));
 jest.mock("~/api/permission", () => ({
