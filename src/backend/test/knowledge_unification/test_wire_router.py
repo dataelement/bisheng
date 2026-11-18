@@ -62,7 +62,7 @@ from bisheng.open_endpoints.api import dependencies as open_dependencies
 from bisheng.knowledge.api import dependencies as web_dependencies
 from bisheng.worker.main import bisheng_celery
 from bisheng.worker import config as worker_config
-from bisheng.worker.knowledge import processing_jobs, metadata_jobs, move_jobs, space_copy_jobs, space_delete
+from bisheng.worker.knowledge import processing_jobs, metadata_jobs, move_jobs, space_copy_jobs, space_delete, rebuild_cleanup
 
 def qualified(value):
     return value.__class__.__module__+"."+value.__class__.__qualname__
@@ -79,7 +79,7 @@ async def bridges():
     open_file=await open_dependencies.get_knowledge_file_service(repo,files)
     opened=await open_dependencies.get_knowledge_service(repo,files)
     return {"web_schema":qualified(metadata.space_writer),"v2_schema":qualified(opened.metadata_service.space_writer),"web_values":qualified(web_file.metadata_value_writer),"v2_values":qualified(open_file.metadata_value_writer),"normalizer":qualified(await get_permission_resource_normalizer())}
-task_names=(processing_jobs.EXECUTE_TASK,processing_jobs.SCAN_TASK,space_delete.PURGE_TASK,space_delete.SCAN_TASK)
+task_names=(processing_jobs.EXECUTE_TASK,processing_jobs.SCAN_TASK,space_delete.PURGE_TASK,space_delete.SCAN_TASK,rebuild_cleanup.CLEANUP_TASK)
 tasks={name:{"registered":name in bisheng_celery.tasks,"queue":bisheng_celery.amqp.router.route({},name).get("queue").name} for name in task_names}
 mcp=[{"name":tool.name,"route":tool.source_route,"method":tool.source_method,"handler":TOOL_HANDLERS[tool.name].__module__+"."+TOOL_HANDLERS[tool.name].__qualname__} for tool in TOOL_DEFINITIONS if tool.name.startswith("bisheng_knowledge")]
 result={"routes":routes,"shadows":shadows,"schema":schema,"warnings":[str(value.message) for value in recorded],"v1":router.prefix,"v2":router_rpc.prefix,"space":knowledge_space_router.prefix,"factories":factories,"bridges":asyncio.run(bridges()),"tasks":tasks,"beat":{key:worker_config.beat_schedule[key] for key in ("knowledge-space-delete-recovery","knowledge-processing-recovery")},"mcp":mcp,"worker_handlers":{"metadata":callable(metadata_jobs.execute_metadata_job),"move":callable(move_jobs.execute_move_job),"copy":callable(space_copy_jobs.execute_copy_job),"ordinary":sorted(processing_jobs.PROCESSING_HANDLERS)}}
@@ -254,7 +254,8 @@ def test_processing_kind_and_retry_schema_are_explicit_closed_wire_contracts(wir
     precheck = body(wire, SPACE + "/{space_id}/processing-jobs/precheck")
     assert set(precheck["properties"]["kind"]["enum"]) == allowed - {"move_index", "space_copy"}
     schema = body(wire, SPACE + "/{space_id}/processing-jobs/{job_id}/retry")
-    assert set(schema["properties"]) == {"idempotency_key", "expected_job_revision"}
+    assert set(schema["properties"]) == {"idempotency_key", "expected_job_revision", "refresh_source"}
+    assert schema["properties"]["refresh_source"]["default"] is False
     assert schema["additionalProperties"] is False
     for phase in ("inspect", "precheck", "confirm"):
         schema = parameters(wire, SPACE + "/{space_id}/files/batch/{operation}/" + phase, "post")["operation"]["schema"]
@@ -302,7 +303,7 @@ def test_actual_mcp_knowledge_allowlist_has_real_handlers_and_original_http_face
 
 
 def test_existing_celery_tasks_beat_and_all_native_handlers_are_registered(wire):
-    assert len(wire["tasks"]) == 4
+    assert len(wire["tasks"]) == 5
     assert all(task == {"registered": True, "queue": "knowledge_celery"} for task in wire["tasks"].values())
     for key in ("knowledge-space-delete-recovery", "knowledge-processing-recovery"):
         assert wire["beat"][key]["task"] in wire["tasks"]

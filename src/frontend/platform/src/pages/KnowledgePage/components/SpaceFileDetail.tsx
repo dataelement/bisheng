@@ -1,4 +1,4 @@
-import { Button, Pagination, SearchInput, Tooltip } from "@bisheng/ui";
+import { Button, Pagination, SearchInput, Tag, Tooltip } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -10,6 +10,7 @@ import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import PreviewFile from "./PreviewFile";
 import PreviewParagraph from "./PreviewParagraph";
 import { SpaceFileMetadataDialog } from "./SpaceFileMetadataDialog";
+import { SpaceProcessingDialog } from "./SpaceProcessingDialog";
 import { useSpaceFileDetail } from "./useSpaceFileDetail";
 interface SpaceFileDetailProps {
   scope: KnowledgeQueryScope;
@@ -32,11 +33,36 @@ export function SpaceFileDetail({ scope, spaceId, fileId, initialFile, onBack, o
   const locale = usePaginationLocale();
   const model = useSpaceFileDetail(scope, spaceId, fileId);
   const [metadataOpen, setMetadataOpen] = useState(false);
+  const [processingOpen, setProcessingOpen] = useState(false);
   const raw = model.info.data ?? initialFile;
   // Waiting (5), processing (1) and rebuilding (4) files reject a reprocess plan
   // on the backend (10999), so the entry explains that instead of letting the
   // user configure a strategy and hit the conflict at review time.
   const fileProcessing = raw?.status === 1 || raw?.status === 4 || raw?.status === 5;
+  // `status` answers "how did the latest attempt end"; the chunks below may still
+  // be the previous successful result. Say which of the two the user is looking
+  // at instead of letting the failed badge and the content contradict each other.
+  const violation = raw?.status === 7;
+  const failedAttempt = raw?.status === 3 || raw?.status === 6 || violation;
+  const retainedContent = (model.chunks.data?.total ?? 0) > 0;
+  // Do not claim "no retrievable content" while the chunk read is still in flight.
+  const contentKnown = !model.chunks.isInitialLoading && !model.chunks.isError;
+  const notRetrievable = model.info.data?.retrievable === false;
+  const notice = violation
+    ? contentKnown
+      ? retainedContent
+        ? t("f118.content_notice_violation")
+        : t("f118.content_notice_violation_empty")
+      : ""
+    : failedAttempt
+      ? contentKnown
+        ? retainedContent
+          ? t("f118.content_notice_failed_retained")
+          : t("f118.content_notice_failed_empty")
+        : ""
+      : notRetrievable
+        ? t("f118.content_notice_not_retrievable")
+        : "";
   const name = model.preview.isSuccess ? (raw?.file_name ?? t("detail.file_title", { id: fileId })) : "";
   const file = useMemo(
     () => ({
@@ -90,18 +116,20 @@ export function SpaceFileDetail({ scope, spaceId, fileId, initialFile, onBack, o
             value={model.keyword}
             onChange={(event) => model.setKeyword(event.target.value)}
           />
-          {model.canEdit && (
+          {model.canProcess && (
             <>
-              <Button
-                variant="outlined"
-                color="default"
-                disabled={!model.info.isSuccess || model.busy}
-                onClick={() => setMetadataOpen(true)}
-              >
-                {t("metadialog.title")}
-              </Button>
+              {model.canEdit && (
+                <Button
+                  variant="outlined"
+                  color="default"
+                  disabled={!model.info.isSuccess || model.busy}
+                  onClick={() => setMetadataOpen(true)}
+                >
+                  {t("metadialog.title")}
+                </Button>
+              )}
               <Tooltip
-                content={t("f118.processing_conflict_file_busy")}
+                content={t("f118.processing_conflict_file_parsing")}
                 disabled={!fileProcessing}
               >
                 <Button
@@ -115,6 +143,29 @@ export function SpaceFileDetail({ scope, spaceId, fileId, initialFile, onBack, o
           )}
         </div>
       </header>
+      {notice && (
+        <div
+          role="status"
+          className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-md border border-border-base bg-bg-page px-3 py-2 text-body text-text-2"
+        >
+          <span className="flex min-w-0 items-center gap-2">
+            {typeof model.info.data?.version_no === "number" && (
+              <Tag size="small" className="shrink-0">{`V${model.info.data.version_no}`}</Tag>
+            )}
+            <span className="min-w-0">{notice}</span>
+          </span>
+          {failedAttempt && model.canProcess && (
+            <Button
+              variant="outlined"
+              color="default"
+              disabled={!model.canProcess || model.busy}
+              onClick={() => setProcessingOpen(true)}
+            >
+              {t("f118.processing_kind_file_reprocess")}
+            </Button>
+          )}
+        </div>
+      )}
       {model.failed && (
         <div role="alert" className="flex items-center gap-2">
           <p>{t("detail.save_failed")}</p>
@@ -214,7 +265,17 @@ export function SpaceFileDetail({ scope, spaceId, fileId, initialFile, onBack, o
           onSaved={() => model.info.refetch()}
         />
       )}
-
+      <SpaceProcessingDialog
+        scope={scope}
+        spaceId={spaceId}
+        fileId={fileId}
+        mode="file"
+        open={processingOpen && model.canProcess}
+        onOpenChange={setProcessingOpen}
+        onSaved={() => {
+          void model.chunks.refetch();
+        }}
+      />
     </section>
   );
 }

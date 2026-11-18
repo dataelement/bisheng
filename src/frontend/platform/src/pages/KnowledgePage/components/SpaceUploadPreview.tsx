@@ -32,7 +32,7 @@ interface SpaceUploadPreviewProps {
   spaceId: number;
   strategy: WizardStrategy;
   book: PreviewBook;
-  onPreview: (id: string, record: PreviewBook[string]) => void;
+  onPreview: (id: string, record: PreviewBook[string], path?: string) => void;
   onBusy: (busy: boolean) => void;
   previewCount?: number;
   editable?: boolean;
@@ -165,10 +165,14 @@ function PreviewPane({
             ).preview_id;
       if (signal?.aborted)
         throw new DOMException("Retired preview", "AbortError");
-      onPreview(file.id, {
-        fingerprint,
-        value: { preview_id, revision: 0, status: "processing" },
-      });
+      onPreview(
+        file.id,
+        {
+          fingerprint,
+          value: { preview_id, revision: 0, status: "processing" },
+        },
+        file.filePath,
+      );
       const deadline = Date.now() + 10 * 60 * 1000;
       for (;;) {
         if (Date.now() > deadline) throw new Error(t("previewFailed"));
@@ -222,7 +226,7 @@ function PreviewPane({
   }, [query.isFetching, saving, failed, onBusy]);
   useEffect(() => {
     if (value?.status === "completed")
-      onPreview(file.id, { value, fingerprint });
+      onPreview(file.id, { value, fingerprint }, file.filePath);
   }, [value, file.id, fingerprint, onPreview]);
   const data = value?.data;
   const chunks = useMemo(

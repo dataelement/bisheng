@@ -222,3 +222,63 @@ async def test_unassembled_kind_and_bad_pagination_remain_explicit_errors(http):
     assert result["status_code"] == KnowledgeProcessingConflictError.Code
     assert (await call(http, "GET", "/processing-jobs?page_size=201"))["status_code"] == 422
     assert (await call(http, "GET", "/processing-jobs?state=made_up"))["status_code"] == 422
+
+
+@pytest.mark.parametrize("vector", [[], [float("nan")], [True], "invalid"])
+async def test_actual_model_probe_rejects_before_configuration_or_job_changes(http, application, vector):
+    from bisheng.knowledge.application.model_availability import LLMService
+    from test.knowledge_unification.test_kn_model_bindings import state
+
+    LLMService.get_bisheng_knowledge_embedding_sync.return_value.embed_query.return_value = vector
+    before = state(application.context)
+    result = await call(
+        http,
+        "POST",
+        "/processing-jobs/precheck",
+        payload={"kind": "embedding_rebuild", "parameters": {"embedding_model_id": 12}},
+        headers=HEADERS,
+    )
+    assert result["status_code"] == 10903
+    assert state(application.context) == before
+    async with application.context.sessions() as session:
+        assert not (await session.exec(select(KnowledgeProcessingJob))).all()
+
+
+async def test_confirmed_new_model_is_active_before_any_file_is_indexed(http, application):
+    from sqlmodel import Session
+
+    from bisheng.knowledge.application.model_availability import LLMService
+
+    def probe(_text):
+        with Session(application.context.sync) as session:
+            assert session.get(Knowledge, 40).model == "11"
+        return [0.1, 0.2]
+
+    LLMService.get_bisheng_knowledge_embedding_sync.return_value.embed_query.side_effect = probe
+    plan = await call(
+        http,
+        "POST",
+        "/processing-jobs/precheck",
+        payload={"kind": "embedding_rebuild", "parameters": {"embedding_model_id": 12}},
+        headers=HEADERS,
+    )
+    assert plan["status_code"] == 200
+    result = await call(
+        http,
+        "POST",
+        "/processing-jobs",
+        payload={
+            "confirmation_id": plan["data"]["confirmation_id"],
+            "plan_digest": plan["data"]["plan_digest"],
+            "idempotency_key": "model-first",
+        },
+        headers=HEADERS,
+    )
+    assert result["status_code"] == 200
+    async with application.context.sessions() as session:
+        root = await session.get(Knowledge, 40)
+        job = await session.get(KnowledgeProcessingJob, result["data"]["job_id"])
+        assert root.model == "12" and root.state == 3
+        assert root.model_transition["pending_model_id"] == "12"
+        assert root.collection_name.startswith("col") and root.collection_name != "col40"
+        assert job.state == "accepted" and job.succeeded_count == 0

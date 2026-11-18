@@ -62,14 +62,19 @@ it('shows the rate-limit copy when model discovery is throttled', async () => {
 });
 
 it('names the actual blocker behind a knowledge processing conflict', async () => {
+ i18next.addResource('en', 'knowledge', 'f118.processing_conflict_file_parsing', 'This file is still being parsed. Wait until this parse finishes.');
  i18next.addResource('en', 'knowledge', 'f118.processing_conflict_file_busy', 'This file is still being processed.');
  i18next.addResource('en', 'knowledge', 'f118.processing_conflict_space_busy', 'The knowledge space is still being rebuilt.');
+ request.defaults.adapter = async config => ({ config, status: 200, statusText: 'OK', headers: {}, data: { status_code: 10999, status_message: 'secret', data: { reason: 'file_parse_in_progress', exception: 'SECRET' } } });
+ const parsing = await request.post('/api/v1/knowledge/7/processing-jobs/precheck', {}).catch(cause => cause);
+ expect(parsing.status_code).toBe(10999);
+ expect(parsing.message).toBe('This file is still being parsed. Wait until this parse finishes.');
+ expect(parsing.message).not.toContain('SECRET');
+ expect(notices).toHaveBeenCalledWith(expect.objectContaining({ description: parsing.message }));
+ notices.mockClear();
  request.defaults.adapter = async config => ({ config, status: 200, statusText: 'OK', headers: {}, data: { status_code: 10999, status_message: 'secret', data: { reason: 'processing_file_state_not_ready', exception: 'SECRET' } } });
  const busy = await request.post('/api/v1/knowledge/7/processing-jobs/precheck', {}).catch(cause => cause);
- expect(busy.status_code).toBe(10999);
- expect(busy.message).toBe('This file is still being processed.');
- expect(busy.message).not.toContain('SECRET');
- expect(notices).toHaveBeenCalledWith(expect.objectContaining({ description: 'This file is still being processed.' }));
+ expect(busy.message).toBe('This file is still being parsed. Wait until this parse finishes.');
  notices.mockClear();
  // A scope-suffixed reason resolves through its base name.
  request.defaults.adapter = async config => ({ config, status: 200, statusText: 'OK', headers: {}, data: { status_code: 10999, status_message: 'secret', data: { reason: 'space_rebuilding:chunk_write' } } });

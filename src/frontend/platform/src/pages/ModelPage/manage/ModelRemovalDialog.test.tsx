@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { createInstance } from "i18next";
 import { I18nextProvider, initReactI18next } from "react-i18next";
 import { afterEach, expect, it, vi } from "vitest";
@@ -39,8 +39,11 @@ it.each([
           targets: [],
           blocked: true,
           check_complete: true,
-          source_counts: [["assistant", 4]],
-          slot_counts: [["assistant", 4]],
+          source_counts: [
+            ["assistant", 4],
+            ["model_default", 0],
+          ],
+          slot_counts: [["assistant", 6]],
           qualified_counts: [["assistant", 2]],
           restricted_counts: [["assistant", 2]],
           source_page: {
@@ -89,10 +92,11 @@ it.each([
           },
         ],
         page_size: 50,
-        has_more: false,
-        next_cursor: null,
+        has_more: true,
+        next_cursor: "next",
       },
     };
+    const onLoadMore = vi.fn();
     render(
       <I18nextProvider i18n={i18n}>
         <ModelRemovalDialog
@@ -101,19 +105,36 @@ it.each([
           onConfirm={vi.fn()}
           onForce={vi.fn()}
           onRefresh={vi.fn()}
-          onLoadMore={vi.fn()}
+          onLoadMore={onLoadMore}
         />
       </I18nextProvider>,
     );
+    const modelText = (key: string) => i18n.t(`model.${key}`, { ns: "model" });
+    const summary = within(
+      screen.getByRole("table", { name: modelText("removalReferenceSummary") }),
+    );
+    const assistantSummary = summary.getByRole("row", {
+      name: `${modelText("removalSourceTypes.assistant")} 4 2 6`,
+    });
     expect(
-      screen.getByRole("link", { name: "Visible assistant" }),
-    ).toHaveAttribute("href", "/assistant/qualified");
-    expect(screen.getByText("Visible without entry").closest("a")).toBeNull();
-    expect(
-      screen.getByText(
-        i18n.t("model.removalRestrictedCount", { ns: "model", count: 2 }),
-      ),
+      summary.getByRole("columnheader", {
+        name: modelText("removalRestrictedCount"),
+      }),
     ).toBeVisible();
+    expect(within(assistantSummary).getAllByRole("cell")).toHaveLength(3);
+    expect(summary.getAllByRole("row")).toHaveLength(2);
+    const details = within(
+      screen.getByRole("table", { name: modelText("removalReferenceDetails") }),
+    );
+    expect(
+      details.getByRole("link", { name: "Visible assistant" }),
+    ).toHaveAttribute("href", "/assistant/qualified");
+    expect(details.getByRole("cell", { name: "v1" })).toBeVisible();
+    expect(details.getByText("Visible without entry").closest("a")).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: modelText("removalLoadMore") }),
+    );
+    expect(onLoadMore).toHaveBeenCalledOnce();
     expect(document.body).not.toHaveTextContent("qualified-id-not-a-label");
     expect(document.body).not.toHaveTextContent("no-entry-id-not-a-label");
     expect(

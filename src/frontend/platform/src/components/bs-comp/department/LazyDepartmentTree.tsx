@@ -74,8 +74,7 @@ function Row({ node, depth, searchMode, props }: RowProps) {
 
   if (variant === "navigation") {
     const failed = !searchMode && controller.hasLayerError(node.id)
-    const canExpand = !searchMode && node.has_children &&
-      (controller.getChildIds(node.id)?.length !== 0 || failed || isLoading)
+    const canExpand = !searchMode && node.has_children
     return (
       <TreeNavigationNode
         name={label}

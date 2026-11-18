@@ -1,7 +1,10 @@
-import { Button, toast } from "@bisheng/ui";
+import { Button, Tooltip, toast } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { retryKnowledgeFileApi } from "@/controllers/API";
 import DropZone from "@/components/bs-comp/knowledgeUploadComponent/DropZone";
 import StepProgress from "@/components/bs-ui/step";
 import { knowledgeUploadsApi } from "@/controllers/API/knowledgeUploads";
@@ -43,6 +46,8 @@ function UploadWizard({
   onBack,
 }: SpaceFileUploadPanelProps) {
   const { t } = useTranslation("knowledge");
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
   const instance = useId();
   const queue = useSpaceUploadQueue({ scope, spaceId, parentId });
   const [step, setStep] = useState(1);
@@ -93,15 +98,26 @@ function UploadWizard({
     queue.jobs.every((job) => job.phase === "staged"),
   );
   const handlePreview = useCallback(
-    (id: string, record: PreviewBook[string]) => {
-      setBook((previous) =>
-        previous[id]?.value === record.value &&
-        previous[id]?.fingerprint === record.fingerprint
-          ? previous
-          : { ...previous, [id]: record },
-      );
+    (id: string, record: PreviewBook[string], path?: string) => {
+      setBook((previous) => {
+        const queued = files.find(
+          (item) => item.id === id || (path != null && item.file_path === path),
+        );
+        const keys = [...new Set([id, queued?.id, path].filter(Boolean))] as string[];
+        if (
+          keys.every(
+            (key) =>
+              previous[key]?.value === record.value &&
+              previous[key]?.fingerprint === record.fingerprint,
+          )
+        )
+          return previous;
+        const next = { ...previous };
+        for (const key of keys) next[key] = record;
+        return next;
+      });
     },
-    [],
+    [files],
   );
   const handleStrategy = useCallback(
     (value: Step2PersistState) => setStrategy(value as WizardStrategy),
@@ -109,6 +125,21 @@ function UploadWizard({
   );
   const invalidRules = () =>
     toast.show({ type: "warning", message: t("f118.invalid_defaults") });
+  const openExisting = (parentId: number | null) => {
+    const next = new URLSearchParams(params);
+    if (parentId === null) next.delete("parent_id");
+    else next.set("parent_id", String(parentId));
+    navigate({ pathname: `/filelib/${spaceId}`, search: next.toString() });
+  };
+  const overwriteExisting = async (row: { knowledge_id: number }) => {
+    try {
+      await retryKnowledgeFileApi({ knowledge_id: row.knowledge_id, file_objs: [row] });
+      toast.show({ type: "success", message: t("f118.upload_duplicate_overwritten") });
+    } catch (error) {
+      showApiError(error);
+      throw error;
+    }
+  };
   const handleNext = () => {
     if (!ready || !settings.data) return;
     setStrategy((previous) => {
@@ -185,9 +216,18 @@ function UploadWizard({
     >
       <header className="flex flex-wrap items-center gap-6">
         {onBack && (
-          <Button variant="text" onClick={onBack}>
-            {t("backToKnowledge")}
-          </Button>
+          <Tooltip content={t("backToKnowledge")}>
+            <Button
+              type="button"
+              variant="text"
+              color="default"
+              iconOnly
+              aria-label={t("backToKnowledge")}
+              onClick={onBack}
+            >
+              <Outlined.ArrowLeft aria-hidden />
+            </Button>
+          </Tooltip>
         )}
         <StepProgress
           currentStep={step}
@@ -248,6 +288,8 @@ function UploadWizard({
               onCancel={queue.handleCancel}
               onRetry={queue.retry}
               onRemove={queue.remove}
+              onOpenExisting={openExisting}
+              onOverwrite={overwriteExisting}
             />
           </div>
         )}
@@ -307,6 +349,8 @@ function UploadWizard({
             unavailable={queue.unavailable}
             onCancel={queue.handleCancel}
             onRetry={queue.retry}
+            onOpenExisting={openExisting}
+            onOverwrite={overwriteExisting}
           />
         )}
         {step === 4 && queue.unavailable && (
@@ -350,12 +394,15 @@ function UploadWizard({
               <Button
                 disabled={
                   busy ||
-                  book[files[0]?.id]?.value.status !== "completed" ||
-                  files.some(
-                    (file) =>
-                      book[file.id] &&
-                      book[file.id].value.status !== "completed",
-                  )
+                  !strategy.rules.fileList.length ||
+                  strategy.rules.fileList.some((file) => {
+                    const record = book[file.id] ?? book[file.filePath];
+                    return record?.value.status !== "completed";
+                  }) ||
+                  files.some((file) => {
+                    const record = book[file.id] ?? book[file.file_path];
+                    return record != null && record.value.status !== "completed";
+                  })
                 }
                 onClick={() => handleCommit(false)}
               >

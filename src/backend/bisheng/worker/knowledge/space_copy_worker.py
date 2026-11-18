@@ -7,11 +7,13 @@ from contextlib import aclosing
 from copy import deepcopy
 from dataclasses import dataclass
 from io import BytesIO
+from tempfile import SpooledTemporaryFile
 from urllib.parse import quote, unquote, urlsplit
 
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import Knowledge
+from bisheng.worker.knowledge.copy_input_store import describe, input_identity, input_pages, read_input, write_line
 from bisheng.worker.knowledge.move_worker import (
     _clear,
     _digest,
@@ -159,7 +161,87 @@ class CopyObjects:
         return self.rewrite(deepcopy(source.get("user_metadata")))
 
 
-async def apply_space_copy_item(*, operation_id, snapshot, file_ids, invoke_user_id, guard, object_map=None):
+async def prepare_copy_input(*, operation_id, snapshot, file_ids, guard, storage, object_map, record_input=None):
+    source, before, copied = Knowledge(**snapshot["source"]), snapshot["source_file"], snapshot["target_file"]
+    objects = CopyObjects(
+        storage,
+        source_id=source.id,
+        target_id=snapshot["destination"]["id"],
+        file_ids=file_ids,
+        object_map={
+            **(object_map or {}),
+            **{
+                before[key]: copied[key]
+                for key in ("object_name", "preview_file_object_name", "bbox_object_name", "thumbnails")
+                if before.get(key) and copied.get(key)
+            },
+        },
+    )
+    values = await asyncio.to_thread(objects.objects, before, copied)
+    await _guard(guard)
+    with SpooledTemporaryFile(max_size=8 * 1024 * 1024) as package:
+        write_line(package, {"identity": input_identity(operation_id, snapshot), "user_metadata": values})
+        count, seen = 0, set()
+        if before["status"] == 2:
+            old_es = await KnowledgeRag.init_knowledge_es_vectorstore(
+                knowledge=source,
+                expected_model_config_revision=source.model_config_revision,
+                expected_index_generation=source.index_generation,
+            )
+            try:
+                async with aclosing(_es_pages(old_es, source.index_name, before["id"], guard)) as pages:
+                    async for hits in pages:
+                        for hit in hits:
+                            ident, body = hit.get("_id"), hit.get("_source")
+                            if (
+                                not isinstance(ident, str)
+                                or not ident
+                                or ident in seen
+                                or not isinstance(body, dict)
+                                or not isinstance(body.get("text"), str)
+                                or not isinstance(body.get("metadata"), dict)
+                            ):
+                                raise ValueError("copy source chunk is incomplete")
+                            seen.add(ident)
+                            if (
+                                body["metadata"].get("document_id") != before["id"]
+                                or body["metadata"].get("knowledge_id") != source.id
+                            ):
+                                raise ValueError("copy source chunk belongs to another file")
+                            text = await asyncio.to_thread(objects.rewrite, body["text"])
+                            metadata = await asyncio.to_thread(objects.rewrite, deepcopy(body["metadata"]))
+                            metadata.pop("pk", None)
+                            metadata.update(document_id=copied["id"], knowledge_id=snapshot["destination"]["id"])
+                            if metadata.get("source") == before.get("object_name"):
+                                metadata["source"] = copied["object_name"]
+                            write_line(package, {"id": ident, "text": text, "metadata": metadata})
+                            count += 1
+                        await _guard(guard)
+            finally:
+                await old_es.client.close()
+        await _guard(guard)
+        value = describe(package, job_id=operation_id, snapshot=snapshot, count=count)
+        if record_input:
+            await record_input(value["key"])
+        await asyncio.to_thread(storage.put_object_sync, object_name=value["key"], file=package)
+        # Publish source independence only after the stored bytes verify.
+        with read_input(storage, value, job_id=operation_id, snapshot=snapshot):
+            pass
+    return value
+
+
+async def apply_space_copy_item(
+    *,
+    operation_id,
+    snapshot,
+    file_ids,
+    invoke_user_id,
+    guard,
+    object_map=None,
+    input_state=None,
+    input_ready=None,
+    record_input=None,
+):
     await _guard(guard)
     source, destination = Knowledge(**snapshot["source"]), Knowledge(**snapshot["destination"])
     before, copied = snapshot["source_file"], snapshot["target_file"]
@@ -167,75 +249,49 @@ async def apply_space_copy_item(*, operation_id, snapshot, file_ids, invoke_user
         source.id == destination.id
         or before["id"] == copied["id"]
         or file_ids.get(str(before["id"])) != copied["id"]
-        or source.model != destination.model
-        or before["knowledge_id"] != source.id
         or copied["knowledge_id"] != destination.id
     ):
-        raise ValueError("copy requires exact independent native source and target")
-    objects = CopyObjects(
-        get_minio_storage_sync(),
-        source_id=source.id,
-        target_id=destination.id,
-        file_ids=file_ids,
-        object_map=object_map
-        or {
-            before[key]: copied[key]
-            for key in ("object_name", "preview_file_object_name", "bbox_object_name", "thumbnails")
-            if before.get(key) and copied.get(key)
-        },
-    )
-    values = await asyncio.to_thread(objects.objects, before, copied)
+        raise ValueError("copy requires independent native source and target")
+    storage = get_minio_storage_sync()
+    if input_state is None:
+        input_state = await prepare_copy_input(
+            operation_id=operation_id,
+            snapshot=snapshot,
+            file_ids=file_ids,
+            guard=guard,
+            storage=storage,
+            object_map=object_map,
+            record_input=record_input,
+        )
+        if input_ready:
+            await input_ready(input_state)
     await _guard(guard)
-    stores = []
-    try:
-        for row in (source, destination):
-            stores.append(
-                await KnowledgeRag.init_knowledge_es_vectorstore(
-                    knowledge=row,
-                    expected_model_config_revision=row.model_config_revision,
-                    expected_index_generation=row.index_generation,
-                )
-            )
-        old_es, new_es = stores
-        vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(
-            invoke_user_id,
+    with read_input(storage, input_state, job_id=operation_id, snapshot=snapshot) as (header, cached):
+        new_es = await KnowledgeRag.init_knowledge_es_vectorstore(
             knowledge=destination,
             expected_model_config_revision=destination.model_config_revision,
             expected_index_generation=destination.index_generation,
         )
-        fields, dimension = _fields(vector.col), _dimension(vector.col)
-        await _clear(new_es, destination.index_name, vector.col, copied["id"], guard)
-        expected_mv, expected_es, source_rows, seen = _Multiset(), _Multiset(), _Multiset(), set()
-        async with aclosing(_es_pages(old_es, source.index_name, before["id"], guard)) as pages:
-            async for hits in pages:
+        try:
+            vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(
+                invoke_user_id,
+                knowledge=destination,
+                expected_model_config_revision=destination.model_config_revision,
+                expected_index_generation=destination.index_generation,
+            )
+            fields, dimension = _fields(vector.col), _dimension(vector.col)
+            await _clear(new_es, destination.index_name, vector.col, copied["id"], guard)
+            expected_mv, expected_es, count = _Multiset(), _Multiset(), 0
+            values = header["user_metadata"]
+            for page in input_pages(cached):
                 texts, metadatas, ids = [], [], []
-                for hit in hits:
-                    ident, body = hit.get("_id"), hit.get("_source")
-                    if (
-                        not isinstance(ident, str)
-                        or not ident
-                        or ident in seen
-                        or not isinstance(body, dict)
-                        or not isinstance(body.get("text"), str)
-                        or not isinstance(body.get("metadata"), dict)
-                    ):
-                        raise ValueError("copy source chunk is incomplete")
-                    seen.add(ident)
-                    if (
-                        body["metadata"].get("document_id") != before["id"]
-                        or body["metadata"].get("knowledge_id") != source.id
-                    ):
-                        raise ValueError("copy source chunk belongs to another file")
-                    source_rows.add([ident, body])
-                    text = await asyncio.to_thread(objects.rewrite, body["text"])
-                    metadata = await asyncio.to_thread(objects.rewrite, deepcopy(body["metadata"]))
-                    metadata.pop("pk", None)
-                    metadata.update(document_id=copied["id"], knowledge_id=destination.id)
-                    if metadata.get("source") == before.get("object_name"):
-                        metadata["source"] = copied["object_name"]
+                for row in page:
+                    text, metadata = row["text"], row["metadata"]
+                    if metadata.get("document_id") != copied["id"] or metadata.get("knowledge_id") != destination.id:
+                        raise ValueError("copy recovery chunk belongs to another target")
                     texts.append(text)
                     metadatas.append(metadata)
-                    ids.append(_digest([operation_id, copied["id"], snapshot["target_version"]["id"], ident]))
+                    ids.append(_digest([operation_id, copied["id"], snapshot["target_version"]["id"], row["id"]]))
                     expected_mv.add(
                         {
                             "text": text,
@@ -260,8 +316,7 @@ async def apply_space_copy_item(*, operation_id, snapshot, file_ids, invoke_user
                     }
                     for text, embedding, metadata in zip(texts, embeddings, metadatas, strict=True)
                 ]
-                inserted = vector.col.insert(rows)
-                if getattr(inserted, "insert_count", None) != len(rows):
+                if getattr(vector.col.insert(rows), "insert_count", None) != len(rows):
                     raise ValueError("copy Milvus insert is incomplete")
                 await _guard(guard)
                 if (
@@ -275,18 +330,19 @@ async def apply_space_copy_item(*, operation_id, snapshot, file_ids, invoke_user
                     != ids
                 ):
                     raise ValueError("copy ES write is incomplete")
-        await _guard(guard)
-        vector.col.flush()
-        mv, es, digest = await _verify(new_es, destination, vector.col, copied["id"], guard)
-        if (
-            mv.count != source_rows.count
-            or es.count != source_rows.count
-            or mv.digest() != expected_mv.digest()
-            or es.digest() != expected_es.digest()
-        ):
-            raise ValueError("copy complete target content differs from source")
-        await _guard(guard)
-        return SpaceCopyResult(copied["id"], source_rows.count, mv.count, es.count, digest, values)
-    finally:
-        for store in stores:
-            await store.client.close()
+                count += len(rows)
+            await _guard(guard)
+            vector.col.flush()
+            mv, es, digest = await _verify(new_es, destination, vector.col, copied["id"], guard)
+            if (
+                mv.count != count
+                or es.count != count
+                or count != input_state["count"]
+                or mv.digest() != expected_mv.digest()
+                or es.digest() != expected_es.digest()
+            ):
+                raise ValueError("copy complete target differs from its recovery input")
+            await _guard(guard)
+            return SpaceCopyResult(copied["id"], count, mv.count, es.count, digest, values)
+        finally:
+            await new_es.client.close()

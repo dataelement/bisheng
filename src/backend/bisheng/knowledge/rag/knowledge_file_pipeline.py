@@ -1,5 +1,7 @@
 import hashlib
 import json
+import tempfile
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from functools import cached_property
 
@@ -11,7 +13,7 @@ from bisheng.knowledge.domain.models.knowledge_file import FileSource, Knowledge
 from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
 from bisheng.knowledge.domain.schemas.processing_settings import EffectiveProcessingSnapshot
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
-from bisheng.knowledge.rag.base_file_pipeline import BaseFilePipeline
+from bisheng.knowledge.rag.base_file_pipeline import BaseFilePipeline, FileExtensionMap
 from bisheng.knowledge.rag.pipeline.transformer.abstract import AbstractTransformer
 from bisheng.knowledge.rag.pipeline.transformer.content_safety import ContentSafetyTransformer
 from bisheng.knowledge.rag.pipeline.transformer.direct_chunk import DirectChunkTransformer
@@ -283,3 +285,46 @@ class KnowledgeFilePipeline(BaseFilePipeline):
             )
         )
         return abstract_transformers
+
+    def segment_for_display(self, documents: Sequence[Document]) -> list[Document]:
+        """Split already-loaded documents for the detail view.
+
+        Content safety runs before the splitter and aborts the pipeline, so a
+        violating file never reaches the vector stores. The detail page still
+        needs those segments. This uses the same splitter and does not call an
+        embedding model or a vector store.
+        """
+        docs = [doc for doc in documents or [] if isinstance(doc, Document)]
+        if not docs:
+            return []
+        if self.file_extension in {"xlsx", "csv", "xls", "et"}:
+            for index, doc in enumerate(docs):
+                doc.metadata["chunk_index"] = doc.metadata.get("chunk_index", index)
+            return docs
+        if self.should_use_ppt_page_split():
+            transformer: BaseDocumentTransformer = DirectChunkTransformer()
+        elif self.should_use_hierarchical_split():
+            transformer = HierarchicalSplitterTransformer(
+                hierarchy_level=self.file_split_rule.hierarchy_level,
+                append_title=self.file_split_rule.append_title,
+                max_chunk_size=self.file_split_rule.max_chunk_size,
+                fallback_separator=self.file_split_rule.separator,
+                fallback_separator_rule=self.file_split_rule.separator_rule,
+                fallback_chunk_size=self.file_split_rule.chunk_size,
+                fallback_chunk_overlap=self.get_splitter_kwargs()["chunk_overlap"],
+            )
+        else:
+            transformer = SplitterTransformer(**self.get_splitter_kwargs())
+        return list(transformer.transform_documents(docs))
+
+    def load_and_segment_for_display(self) -> list[Document]:
+        """Load the original file and segment it without indexing it."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            self.tmp_dir = tmp_dir
+            self.prepare_local_file()
+            file_process_config = FileExtensionMap.get(self.file_extension)
+            if not file_process_config:
+                return []
+            loader = getattr(self, file_process_config["loader"])()
+            loaded = loader.load() or []
+            return self.segment_for_display(list(loaded))

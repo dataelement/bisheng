@@ -12,6 +12,7 @@ interface SpacePanelFrameProps {
   title: string;
   presentation?: "page" | "inline";
   hideTitle?: boolean;
+  centered?: boolean;
   busy?: boolean;
   children: ReactNode;
   footer?: ReactNode;
@@ -23,12 +24,29 @@ export function SpacePanelFrame({
   title,
   presentation,
   hideTitle = false,
+  centered = false,
   busy = false,
   children,
   footer,
   className,
   back,
 }: SpacePanelFrameProps) {
+  if (presentation === "page" && centered)
+    return (
+      <section className="flex h-full min-h-0 min-w-0 flex-col">
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-[1200px] space-y-6 px-6 py-4">
+            {!hideTitle && <h1 className="text-h4 text-text-1">{title}</h1>}
+            {children}
+          </div>
+        </div>
+        {footer && (
+          <footer className="flex min-h-16 shrink-0 flex-wrap items-center justify-center gap-3 border-t border-border-base px-6 py-2 max-[768px]:[&>button]:flex-1">
+            {footer}
+          </footer>
+        )}
+      </section>
+    );
   if (presentation === "inline")
     return (
       <section className="min-w-0 space-y-4">

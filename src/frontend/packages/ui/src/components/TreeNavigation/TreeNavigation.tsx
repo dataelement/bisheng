@@ -116,7 +116,7 @@ export function TreeNavigationNode({
             aria-expanded={expanded} aria-controls={id} onClick={disclosure.onToggle}>
             {expanded ? <Outlined.Down aria-hidden /> : <Outlined.Right aria-hidden />}
           </button>
-        ) : <span className={styles.disclosure} aria-hidden />}
+        ) : <span className={styles.disclosure} aria-hidden><Outlined.Right /></span>}
         {href && !disabled
           ? <a {...targetProps} href={href}>{targetContent}</a>
           : <button {...targetProps} type="button" disabled={disabled}>{targetContent}</button>}

@@ -11,8 +11,10 @@ from bisheng.permission.domain.services.projection_plan import projection_reques
 from bisheng.permission.domain.services.projection_service import restore_projection_plan
 
 
-def blocked():
-    raise PermissionPublishNotReadyError(msg="Copy projection no longer matches its original complete operation")
+def blocked(reason="copy_projection_unavailable"):
+    raise PermissionPublishNotReadyError(
+        reason=reason, msg="Copy projection no longer matches its original complete operation"
+    )
 
 
 class KnowledgeCopyProjectionApplication:
@@ -115,7 +117,18 @@ class KnowledgeCopyProjectionApplication:
         actual = await components.state.load_grants(target=target, models=models)
         expected = await components.state.load_grants(target=source, models=models) if mode == "CUSTOM" else ()
 
-        def signature(grant, row):
+        def signature(grant, row, *, copied=False):
+            if copied:
+                row = components.facade._sources.canonicalize_source(
+                    source_id=1,
+                    subject_type=row.subject_type,
+                    subject_id=row.subject_id,
+                    userset_relation=row.userset_relation,
+                    include_children=row.include_children,
+                    source_type=row.source_type,
+                    source_ref=row.source_ref,
+                    protected=False,
+                )
             return (
                 grant.model.model_key,
                 row.subject_type,
@@ -129,7 +142,7 @@ class KnowledgeCopyProjectionApplication:
             )
 
         wanted = {
-            signature(grant, row)
+            signature(grant, row, copied=True)
             for grant in expected
             for row in grant.sources
             if grant.active and row.active and not row.protected
@@ -149,7 +162,7 @@ class KnowledgeCopyProjectionApplication:
             or protected[0].source_type != "CREATOR"
             or protected[0].source_ref != f"{target.resource_type}:{target.resource_id}"
         ):
-            blocked()
+            blocked("copy_permission_sources_changed")
         grant_keys = {delta.key for delta in components.facade._sources.compile_existing_tuples(actual)}
         frozen_keys = {
             delta.key

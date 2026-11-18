@@ -1,5 +1,6 @@
 import { Button, Tag } from "@bisheng/ui";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { SimilarDocumentFile } from "@bisheng/knowledge";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -18,6 +19,7 @@ import {
   type KnowledgeQueryScope,
 } from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
+import { getMyResourcePermissionsApi } from "@/controllers/API/permission";
 import { locationContext } from "@/contexts/locationContext";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { SpaceVersionRelationPanel } from "./SpaceVersionRelationPanel";
@@ -31,6 +33,7 @@ interface SpaceVersionHistorySheetProps {
   spaceId: number;
   parentId: number | null;
   fileId: number | null;
+  file?: SimilarDocumentFile;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   hasSimilar?: boolean;
@@ -124,8 +127,47 @@ function HistoryContent({
     query.isError || query.data?.knowledge_id !== spaceId
       ? undefined
       : query.data;
+  const permissions = useQuery({
+    queryKey: [...knowledgeQueryKeys.space(scope, spaceId), "version-actions", openingId],
+    queryFn: () => getMyResourcePermissionsApi("knowledge_space", String(spaceId)),
+    enabled: enabled && appConfig.versionManagementEnabled === true,
+    retry: false,
+    cacheTime: 0,
+  });
+  const containerPermissions = useQuery({
+    queryKey: [...knowledgeQueryKeys.space(scope, spaceId), "version-upload-actions", parentId, openingId],
+    queryFn: () => getMyResourcePermissionsApi(parentId === null ? "knowledge_space" : "folder", String(parentId ?? spaceId)),
+    enabled: enabled && appConfig.versionManagementEnabled === true,
+    retry: false,
+    cacheTime: 0,
+  });
+  const permissionError = permissions.error || containerPermissions.error;
+  useEffect(() => {
+    if (permissionError) showApiError(permissionError);
+  }, [permissionError]);
   const operationsEnabled =
-    appConfig.versionManagementEnabled === true && enabled && !!data;
+    appConfig.versionManagementEnabled === true && enabled && !!data &&
+    permissions.isSuccess && !permissions.isFetching && permissions.data?.actions?.includes("edit") === true;
+  const canUploadVersion = operationsEnabled && containerPermissions.isSuccess &&
+    !containerPermissions.isFetching && containerPermissions.data?.actions?.includes("upload_file") === true;
+  const historicalVersions = data?.versions.filter(version => !version.is_primary) ?? [];
+  const deletePermissions = useQueries({
+    queries: historicalVersions.map(version => ({
+      queryKey: [...knowledgeQueryKeys.space(scope, spaceId), "version-delete-actions", version.knowledge_file_id, openingId],
+      queryFn: () => getMyResourcePermissionsApi("knowledge_file", String(version.knowledge_file_id)),
+      enabled: operationsEnabled,
+      retry: false,
+      cacheTime: 0,
+    })),
+  });
+  const deleteError = deletePermissions.find(permission => permission.isError)?.error;
+  useEffect(() => {
+    if (deleteError) showApiError(deleteError);
+  }, [deleteError]);
+  const canDeleteVersion = (versionId: number) => {
+    const permission = deletePermissions[historicalVersions.findIndex(version => version.version_id === versionId)];
+    return operationsEnabled && permission?.isSuccess && !permission.isFetching && permission.data?.actions?.includes("delete") === true;
+  };
   const handleChanged = async () => {
     if (lifetime.current?.signal.aborted) return;
     setPanel(null);
@@ -140,6 +182,7 @@ function HistoryContent({
     const controller = lifetime.current;
     if (
       !operationsEnabled ||
+      (operation === "delete" && !canDeleteVersion(versionId)) ||
       !controller ||
       controller.signal.aborted ||
       writing.current ||
@@ -230,7 +273,7 @@ function HistoryContent({
             {operationsEnabled && (
               <div className="mb-4 space-y-3">
                 <div className="flex flex-wrap gap-2">
-                  <Button
+                  {canUploadVersion && <Button
                     size="small"
                     variant="outlined"
                     disabled={busy || uncertain}
@@ -239,7 +282,7 @@ function HistoryContent({
                     }
                   >
                     {t("versions.new_version")}
-                  </Button>
+                  </Button>}
                   <Button
                     size="small"
                     variant="outlined"
@@ -266,7 +309,7 @@ function HistoryContent({
                     {t("versions.uncertain")}
                   </p>
                 )}
-                {panel === "upload" && (
+                {panel === "upload" && canUploadVersion && (
                   <SpaceVersionUploadPanel
                     scope={scope}
                     spaceId={spaceId}
@@ -368,7 +411,7 @@ function HistoryContent({
                             {t("versions.set_primary")}
                           </Button>
                         )}
-                        <Button
+                        {canDeleteVersion(version.version_id) && <Button
                           size="small"
                           color="danger"
                           variant="text"
@@ -378,7 +421,7 @@ function HistoryContent({
                           }
                         >
                           {t("versions.delete_history")}
-                        </Button>
+                        </Button>}
                       </div>
                     )}
                     <SpaceFileTools

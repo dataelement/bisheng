@@ -163,6 +163,10 @@ class KnowledgeSpaceDirectDeleteService:
         knowledge = Knowledge(**manifest["knowledge"])
         index_name = knowledge.index_name or knowledge.collection_name
         if step == "es":
+            if file_ids:
+                from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
+
+                KnowledgeUtils.delete_violation_display_chunks(file_ids)
             store = await asyncio.to_thread(
                 KnowledgeRag.init_knowledge_es_cleanup_sync, knowledge=knowledge, deletion_job=job
             )

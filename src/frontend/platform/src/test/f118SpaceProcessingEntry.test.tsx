@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -67,7 +68,7 @@ vi.mock("@/pages/KnowledgePage/components/KnowledgeTooltip", () => ({
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) => key,
-    i18n: { resolvedLanguage: "en" },
+    i18n: { resolvedLanguage: "en", exists: () => true },
   }),
 }));
 vi.mock("@/controllers/API/knowledgeProcessing", () => ({
@@ -167,33 +168,22 @@ function setup(mode: "file" | "embedding") {
 }
 
 it("echoes the saved Embedding model and reviews a subsequent manual choice", async () => {
-  vi.spyOn(knowledgeSpaceApi, "getSpaceInfo").mockResolvedValue({
-    id: 40,
-    name: "Space",
-    model: "19",
+  vi.spyOn(knowledgeSpaceApi, "getSpaceInfo").mockResolvedValue({ id: 40, name: "Space", model: "19" });
+  const precheck = vi.spyOn(knowledgeSpaceApi, "precheckProcessing").mockResolvedValue({
+    ...plan,
+    can_execute: false,
+    invalid_items: [{ name: "Preparing.txt", reason: "processing" }],
   });
-  const precheck = vi
-    .spyOn(knowledgeSpaceApi, "precheckProcessing")
-    .mockResolvedValue(plan);
   setup("embedding");
-  await waitFor(() =>
-    expect(
-      screen.getByRole("textbox", { name: "f118.embedding_model" }),
-    ).toHaveValue("19"),
-  );
-  fireEvent.change(
-    screen.getByRole("textbox", { name: "f118.embedding_model" }),
-    { target: { value: "25" } },
-  );
-  fireEvent.click(
-    screen.getByRole("button", { name: "f118.processing_review_action" }),
-  );
-  await waitFor(() =>
-    expect(precheck).toHaveBeenCalledWith(40, {
-      kind: "embedding_rebuild",
-      parameters: { embedding_model_id: 25 },
-    }),
-  );
+  await waitFor(() => expect(screen.getByRole("textbox", { name: "f118.embedding_model" })).toHaveValue("19"));
+  fireEvent.change(screen.getByRole("textbox", { name: "f118.embedding_model" }), { target: { value: "25" } });
+  fireEvent.click(screen.getByRole("button", { name: "f118.processing_review_action" }));
+  await waitFor(() => expect(precheck).toHaveBeenCalledWith(40, {
+    kind: "embedding_rebuild", parameters: { embedding_model_id: 25 },
+  }));
+  const unavailable = await screen.findByRole("table", { name: "batch.invalid" });
+  expect(within(unavailable).getByRole("rowheader", { name: "Preparing.txt" })).toBeVisible();
+  expect(within(unavailable).getByRole("cell", { name: "batch.reason_processing" })).toBeVisible();
 });
 
 it("does not overwrite a manual model choice when the initial read finishes late", async () => {
@@ -321,8 +311,12 @@ it("file processing resolves the selected physical history version and confirms 
       model_config_revision: 5,
     });
   setup("file");
-  await waitFor(() => expect(screen.getByText("nextStep")).not.toBeDisabled());
-  fireEvent.click(screen.getByText("nextStep"));
+  await waitFor(() =>
+    expect(
+      screen.getByText("f118.processing_preview_chunks"),
+    ).not.toBeDisabled(),
+  );
+  fireEvent.click(screen.getByText("f118.processing_preview_chunks"));
   await waitFor(() =>
     expect(precheck).toHaveBeenCalledWith(
       40,
@@ -332,9 +326,10 @@ it("file processing resolves the selected physical history version and confirms 
       }),
     ),
   );
-  expect(screen.getByText("nextStep")).toBeDisabled();
+  expect(screen.getByText("f118.processing_replace_chunks")).toBeDisabled();
   fireEvent.click(await screen.findByText("preview-complete"));
-  fireEvent.click(screen.getByText("nextStep"));
+  expect(screen.queryByText("f118.processing_review")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByText("f118.processing_replace_chunks"));
   await waitFor(() =>
     expect(create).toHaveBeenCalledWith(
       40,
@@ -392,29 +387,13 @@ it("fetches and retries move tasks using their job kind", async () => {
   );
 
   expect(screen.getByRole("heading", { name: "move.jobs" })).toBeVisible();
-  fireEvent.click(
-    await screen.findByRole("button", {
-      name: "move.jobs · f118.processing_state_failed",
-    }),
-  );
-  expect(list).toHaveBeenCalledWith(40, {
-    page: 1,
-    page_size: 20,
-    kind: "move_index",
-  });
-  await waitFor(() =>
-    expect(api.readProcessingJob).toHaveBeenCalledWith(
-      40,
-      job.id,
-      "move_index",
-    ),
-  );
-  expect(api.readProcessingItems).toHaveBeenCalledWith(
-    40,
-    job.id,
-    { page: 1, page_size: 20, state: undefined },
-    "move_index",
-  );
+  const tasks = await screen.findByRole("table", { name: "move.jobs" });
+  expect(within(tasks).getByRole("columnheader", { name: "status" })).toBeVisible();
+  expect(within(tasks).getByRole("cell", { name: "f118.processing_state_failed" })).toBeVisible();
+  fireEvent.click(within(tasks).getByRole("button", { name: "move.jobs · f118.processing_state_failed" }));
+  expect(list).toHaveBeenCalledWith(40, { page: 1, page_size: 20, kind: "move_index" });
+  await waitFor(() => expect(api.readProcessingJob).toHaveBeenCalledWith(40, job.id, "move_index"));
+  expect(api.readProcessingItems).toHaveBeenCalledWith(40, job.id, { page: 1, page_size: 20, state: undefined }, "move_index");
   fireEvent.click(await screen.findByRole("button", { name: "retry" }));
   await waitFor(() =>
     expect(api.retryProcessing).toHaveBeenCalledWith(
@@ -475,7 +454,9 @@ it.each(["xlsx", "html", "mp3", "mp4"])(
     });
     setup("file");
     await waitFor(() =>
-      expect(screen.getByText("nextStep")).not.toBeDisabled(),
+      expect(
+        screen.getByText("f118.processing_preview_chunks"),
+      ).not.toBeDisabled(),
     );
     expect(screen.queryByRole("tab")).not.toBeInTheDocument();
     expect(

@@ -100,21 +100,27 @@ def prepare_processing_file(
     detached.simhash = None
     detached.similar_status = 0
     documents, status, code = (), 2, None
+    pipeline = KnowledgeFilePipeline(
+        invoke_user_id=invoke_user_id,
+        db_file=detached,
+        effective_processing=effective,
+        need_thumbnail=True,
+        processing_guard=ProcessingWriteGuard(space_id, file_id),
+    )
     try:
-        result = KnowledgeFilePipeline(
-            invoke_user_id=invoke_user_id,
-            db_file=detached,
-            effective_processing=effective,
-            need_thumbnail=True,
-            processing_guard=ProcessingWriteGuard(space_id, file_id),
-        ).run(PipelineConfig(stop_at=PipelineStage.TRANSFORMER))
+        result = pipeline.run(PipelineConfig(stop_at=PipelineStage.TRANSFORMER))
         documents = tuple(result.documents or ())
         if not documents:
             raise KnowledgeFileEmptyError()
     except (KnowledgeUnificationError, ProcessingCancelled):
         raise
-    except ContentSafetyViolation:
+    except ContentSafetyViolation as error:
         logger.opt(exception=True).warning("Knowledge processing safety rejection file={}", file_id)
+        try:
+            documents = tuple(pipeline.segment_for_display(error.documents))
+        except Exception:
+            logger.opt(exception=True).warning("violation display segments unavailable file={}", file_id)
+            documents = ()
         status, code = 7, KnowledgeFileFailedError.Code
     except BaseErrorCode as error:
         logger.opt(exception=True).warning("Knowledge processing parse rejected file={} code={}", file_id, error.Code)
@@ -154,11 +160,13 @@ def write_processing_file(
     if physical_processing_source_digest(source) != prepared.physical_source_digest:
         raise KnowledgeOperationPlanConflictError(reason="processing_file_source_changed")
     if prepared.status != 2:
+        if prepared.status == KnowledgeFileStatus.VIOLATION.value:
+            KnowledgeUtils.save_violation_display_chunks(prepared.file_id, prepared.documents)
         return FileProcessingResult(
             prepared.file_id,
             prepared.source_revision,
             prepared.status,
-            0,
+            len(prepared.documents) if prepared.status == KnowledgeFileStatus.VIOLATION.value else 0,
             deepcopy(prepared.file_patch),
             prepared.error_code,
         )
@@ -201,6 +209,7 @@ def write_processing_file(
             deepcopy(prepared.file_patch),
             KnowledgeFileFailedError.Code,
         )
+    KnowledgeUtils.delete_violation_display_chunks([prepared.file_id])
     return FileProcessingResult(
         prepared.file_id, prepared.source_revision, 2, len(prepared.documents), deepcopy(prepared.file_patch)
     )

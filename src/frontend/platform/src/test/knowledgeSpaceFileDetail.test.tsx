@@ -43,6 +43,9 @@ vi.mock("@/components/bs-ui/alertDialog/useConfirm", () => ({
     return options.onOk();
   },
 }));
+vi.mock("@/pages/KnowledgePage/components/SpaceProcessingProgress", () => ({
+  SpaceProcessingProgress: () => null,
+}));
 vi.mock("@/pages/KnowledgePage/components/SpaceProcessingDialog", () => ({
   SpaceProcessingDialog: ({ open, fileId }: { open: boolean; fileId: number }) =>
     open ? <div role="dialog">process-{fileId}</div> : null,
@@ -150,6 +153,15 @@ afterEach(() => {
   clients.splice(0).forEach((client) => client.clear());
 });
 
+it("keeps failed-file content readable without showing reprocess to a visible-only user", async () => {
+  mock.info.mockResolvedValue({ ...info, status: 3, retrievable: false });
+  mock.permission.mockResolvedValue({ actions: ["visible"] });
+  render(setup().draw());
+  expect(await screen.findByText("f118.content_notice_failed_retained")).toBeVisible();
+  expect(screen.queryByRole("button", { name: "f118.processing_kind_file_reprocess" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "segment.adjustStrategy" })).not.toBeInTheDocument();
+});
+
 it("restores original preview and editable chunks using the physical file id, including index zero", async () => {
   const f = setup();
   render(f.draw());
@@ -202,6 +214,59 @@ it("blocks the strategy entry while the file is still being processed", async ()
   await waitFor(() => expect(entry).toBeDisabled());
   fireEvent.click(entry);
   expect(screen.queryByRole("dialog")).toBeNull();
+});
+
+it("labels retained content after a failed attempt and closes chunk editing", async () => {
+  mock.info.mockResolvedValue({
+    ...info,
+    status: 3,
+    remark: '{"code": 10953}',
+    retrievable: false,
+    version_no: 1,
+  });
+  const f = setup();
+  render(f.draw());
+  expect(await screen.findByText("f118.content_notice_failed_retained")).toBeVisible();
+  expect(await screen.findByText("Original chunk")).toBeVisible();
+  // The retained content is excluded from retrieval, so its editor stays closed.
+  expect(screen.queryByRole("textbox", { name: "chunk-0" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "metadialog.title" })).toBeNull();
+  // Reprocessing stays reachable; otherwise a failed file could never recover.
+  expect(screen.getByRole("button", { name: "segment.adjustStrategy" })).toBeEnabled();
+  fireEvent.click(screen.getByRole("button", { name: "f118.processing_kind_file_reprocess" }));
+  expect(await screen.findByRole("dialog")).toHaveTextContent("process-89");
+});
+
+it("shows violation parse segments and keeps them out of editing", async () => {
+  mock.info.mockResolvedValue({
+    ...info,
+    status: 7,
+    remark: '{"reason":"sensitive_check"}',
+    retrievable: false,
+  });
+  const f = setup();
+  render(f.draw());
+  expect(await screen.findByText("f118.content_notice_violation")).toBeVisible();
+  expect(await screen.findByText("Original chunk")).toBeVisible();
+  expect(screen.queryByRole("textbox", { name: "chunk-0" })).toBeNull();
+  expect(f.process).not.toHaveBeenCalled();
+});
+
+it("explains a violation file whose parse segments were not saved", async () => {
+  mock.info.mockResolvedValue({ ...info, status: 7, retrievable: false });
+  mock.chunks.mockResolvedValue({ data: [], total: 0 });
+  const f = setup();
+  render(f.draw());
+  expect(await screen.findByText("f118.content_notice_violation_empty")).toBeVisible();
+  expect(screen.queryByText("Original chunk")).toBeNull();
+});
+
+it("explains a file that is not retrievable without a failed attempt", async () => {
+  mock.info.mockResolvedValue({ ...info, status: 2, retrievable: false });
+  const f = setup();
+  render(f.draw());
+  expect(await screen.findByText("f118.content_notice_not_retrievable")).toBeVisible();
+  expect(screen.queryByRole("textbox", { name: "chunk-0" })).toBeNull();
 });
 
 it("edits metadata for the same physical file and saves through the existing endpoint", async () => {

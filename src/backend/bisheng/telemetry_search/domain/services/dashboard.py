@@ -11,6 +11,7 @@ from bisheng.api.services.audit_log import AuditLogService
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.errcode.telemetry import DashboardMaxError, DashBoardShareAuthError
+from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.database import get_async_db_session
 from bisheng.core.search.elasticsearch.manager import get_es_connection
 from bisheng.database.models.role_access import AccessType, WebMenuResource
@@ -182,7 +183,7 @@ class DashboardService(BaseModel):
 
         dashboard.dashboard_type = DashboardType.CUSTOM.value
         dashboard.user_id = self.login_user.user_id
-        dashboard.tenant_id = self.login_user.tenant_id
+        dashboard.tenant_id = get_current_tenant_id() or self.login_user.tenant_id
 
         dashboard = await DashboardDao.insert(dashboard)
         try:
@@ -340,7 +341,7 @@ class DashboardService(BaseModel):
         new_dashboard.title = new_title
         new_dashboard.dashboard_type = DashboardType.CUSTOM.value
         new_dashboard.user_id = self.login_user.user_id
-        new_dashboard.tenant_id = self.login_user.tenant_id
+        new_dashboard.tenant_id = get_current_tenant_id() or self.login_user.tenant_id
         new_dashboard.status = DashboardStatus.DRAFT.value
         new_dashboard.create_time = None
         new_dashboard.update_time = None

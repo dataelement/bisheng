@@ -31,7 +31,6 @@ export function DepartmentSettingsView({
     handleRestore,
     isArchived,
     t,
-    loading,
     isSynced,
     name,
     setName,
@@ -66,12 +65,6 @@ export function DepartmentSettingsView({
           className="mb-4"
           description={t("bs:department.archivedNotice")}
         />
-      )}
-
-      {loading && (
-        <p className="mb-4 text-sm text-muted-foreground">
-          {t("loading", { ns: "bs" })}
-        </p>
       )}
 
       <section className="space-y-4">
@@ -238,6 +231,7 @@ export function DepartmentSettingsView({
                 <Button
                   type="button"
                   onClick={handleUiRequest(() => handleGlobalSave())}
+                  loading={saving}
                   disabled={saving}
                 >
                   {t("save")}

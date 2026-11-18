@@ -113,7 +113,7 @@ export function DepartmentSettingsDialog({
       }}
     >
       <DialogContent
-        className="flex max-h-[85vh] flex-col gap-0 sm:max-w-[640px]"
+        className="flex max-h-[85vh] flex-col gap-0"
         onPointerDownOutside={(event) => event.preventDefault()}
       >
         <DialogHeader className="shrink-0 pb-4">
@@ -254,10 +254,11 @@ export function DepartmentSettingsDialog({
             </Button>
             {!isArchived && (
               <Button
+                loading={saving}
                 disabled={saving || settings.loading || traffic.loading}
                 onClick={() => void handleSave()}
               >
-                {t(saving ? "loading" : "save")}
+                {t("save")}
               </Button>
             )}
           </div>

@@ -2499,6 +2499,59 @@ class KnowledgeService(KnowledgeUtils):
         return db_knowledge
 
     @classmethod
+    def _violation_display_chunks(
+        cls,
+        knowledge_id: int,
+        file_ids: list[int],
+        keyword: str | None,
+        page: int | None,
+        limit: int | None,
+    ):
+        """Return detail-only segments for violation files that have no index rows.
+
+        None means the request is not a violation-file read, so the caller keeps
+        the empty index result. Retrieval never reads this store.
+        """
+        from bisheng.api.services.knowledge_imp import ensure_violation_display_chunks
+        from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
+
+        files = KnowledgeFileDao.get_file_by_ids(file_ids)
+        by_id = {one.id: one for one in files}
+        selected = [by_id.get(file_id) for file_id in file_ids]
+        if any(
+            one is None or one.knowledge_id != knowledge_id or one.status != KnowledgeFileStatus.VIOLATION.value
+            for one in selected
+        ):
+            return None
+        rows = []
+        for one in selected:
+            stored = KnowledgeUtils.load_violation_display_chunks(one.id)
+            if stored is None:
+                ensure_violation_display_chunks(one)
+                stored = KnowledgeUtils.load_violation_display_chunks(one.id) or []
+            for item in stored:
+                text = item.get("text") or ""
+                if keyword and keyword not in text:
+                    continue
+                rows.append(
+                    FileChunk(
+                        text=text,
+                        parse_type=one.parse_type,
+                        metadata=Metadata(
+                            document_id=one.id,
+                            document_name=one.file_name,
+                            knowledge_id=knowledge_id,
+                            chunk_index=item.get("chunk_index") or 0,
+                            bbox=item.get("bbox") or "",
+                            page=item.get("page") or 0,
+                        ),
+                    )
+                )
+        page_size = limit or 10
+        start = max((page or 1) - 1, 0) * page_size
+        return rows[start : start + page_size], len(rows)
+
+    @classmethod
     def get_knowledge_chunks(
         cls,
         request: Request,
@@ -2514,8 +2567,9 @@ class KnowledgeService(KnowledgeUtils):
             knowledge_id,
             "visible",
         )
+        requested_file_ids = [int(one) for one in (file_ids or [])]
 
-        es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(db_knowledge)
+        es_client, index_name = KnowledgeRag.open_stored_chunk_index_sync(db_knowledge, login_user=login_user)
 
         search_data = {
             "from": (page - 1) * limit,
@@ -2542,10 +2596,17 @@ class KnowledgeService(KnowledgeUtils):
         if keyword:
             search_data["query"] = {"match_phrase": {"text": keyword}}
         try:
-            res = es_client.client.search(index=db_knowledge.index_name, body=search_data)
+            res = es_client.client.search(index=index_name, body=search_data)
         except Exception as e:
             logger.warning(f"act=get_knowledge_chunks error={e!s}")
             raise KnowledgeChunkError.http_exception()
+
+        # A content-safety rejection never writes the retrieval index. Segments
+        # kept for the detail view live outside that index and are not searchable.
+        if requested_file_ids and res["hits"]["total"]["value"] == 0:
+            display = cls._violation_display_chunks(knowledge_id, requested_file_ids, keyword, page, limit)
+            if display is not None:
+                return display
 
         # Query the file information corresponding to the next block
         file_ids = set()

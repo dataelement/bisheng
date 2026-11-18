@@ -68,6 +68,7 @@ from bisheng.knowledge.domain.schemas.processing_job import ProcessingCreateRequ
 from bisheng.knowledge.domain.services.knowledge_creation_policy import KnowledgeCreationPolicy
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.upload_file_size import validate_knowledge_upload_file_size
+from bisheng.knowledge.domain.upload_policy import validate_knowledge_upload_file
 from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService, require_quota
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import calc_data_sha256, generate_uuid
@@ -84,6 +85,9 @@ FILE_DOWNLOAD_PERMISSION_ACTION = "download"
 async def upload_file(*, file: UploadFile = File(...)):
     try:
         file_name = file.filename
+        # Generic attachment staging (chat / workflow file inputs accept their own
+        # per-node formats): size only. Knowledge-space staging is the id-scoped
+        # route below, and registration re-applies both rules to the stored object.
         validate_knowledge_upload_file_size(file_name, file.size)
 
         uuid_file_name = await KnowledgeService.save_upload_file_original_name(file_name)
@@ -122,7 +126,7 @@ async def upload_knowledge_file(
 
     try:
         file_name = file.filename
-        validate_knowledge_upload_file_size(file_name, file.size)
+        validate_knowledge_upload_file(file_name, file.size)
 
         # Save the uploaded file
         uuid_file_name = await KnowledgeService.save_upload_file_original_name(file_name)

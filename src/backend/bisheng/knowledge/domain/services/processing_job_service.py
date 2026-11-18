@@ -23,9 +23,11 @@ from bisheng.knowledge.domain.repositories.operation_plan_repository import Oper
 from bisheng.knowledge.domain.repositories.processing_job_repository import NewProcessingItem, ProcessingConfiguration
 from bisheng.knowledge.domain.repositories.processing_owner_repository import ProcessingOwnerRepository
 from bisheng.knowledge.domain.repositories.processing_settings_repository import ProcessingSettingsRepository
+from bisheng.knowledge.domain.schemas.processing_diagnostics import safe_failure_reason
 from bisheng.knowledge.domain.schemas.processing_job import (
     JobAccepted,
     MetadataSchemaParameters,
+    OperationInvalidItem,
     OperationItem,
     ProcessingCreateRequest,
     ProcessingItemRead,
@@ -149,10 +151,20 @@ class ProcessingJobService:
                 },
                 expires_at=self.plans.clock() + timedelta(minutes=5),
             )
+            executable = bool(preview.items) and preview.executable
             return plan.model_copy(
                 update={
-                    "can_execute": bool(preview.items),
-                    "valid_items": [OperationItem(id=space_id, type="space")] if preview.items else [],
+                    "can_execute": executable,
+                    "valid_items": [OperationItem(id=space_id, type="space")] if executable else [],
+                    "invalid_items": []
+                    if preview.executable
+                    else [
+                        OperationInvalidItem(
+                            id=space_id,
+                            type="model",
+                            reason="embedding_model_invalid",
+                        )
+                    ],
                 }
             )
         preview = await self.owner.apreview(session, space_id, identity=identity, parameters=parameters)
@@ -390,6 +402,7 @@ class ProcessingJobService:
             retryable=retryable,
             obsolete_reason=job.obsolete_reason,
             error_code=job.error_code,
+            failure_reason=safe_failure_reason(job.obsolete_reason) or safe_failure_reason(job.error_message),
         )
 
     async def aget(self, session, space_id, job_id, *, identity):
@@ -420,6 +433,7 @@ class ProcessingJobService:
         result = await self.jobs.alist_items(
             session, job_id, page=page, page_size=page_size, state=state, visible_file_ids=tuple(visible)
         )
+        names = await self.jobs.afile_names(session, space_id=space_id, file_ids=[row.file_id for row in result.rows])
         return PageData[ProcessingItemRead](
             data=[
                 ProcessingItemRead(
@@ -431,6 +445,8 @@ class ProcessingJobService:
                     state=row.state,
                     attempt=row.attempt,
                     error_code=row.error_code,
+                    file_name=names.get(row.file_id),
+                    failure_reason=safe_failure_reason(row.error_message),
                     retryable=job.state in {"partial_failed", "failed"} and row.state == "failed",
                 )
                 for row in result.rows

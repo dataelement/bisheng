@@ -4752,6 +4752,7 @@
   "organization.departments": "Departments",
   "organization.secondarySuffix": " (Secondary department)",
   "organization.showArchived": "Show archived",
+  "organization.loadingSettings": "Loading department settings",
   "organization.expandDepartment": "Expand {{name}}",
   "organization.collapseDepartment": "Collapse {{name}}",
   "organization.createChildDepartmentFor": "Create a subdepartment under {{name}}",

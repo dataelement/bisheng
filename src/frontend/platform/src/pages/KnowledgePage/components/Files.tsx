@@ -15,10 +15,13 @@ import { knowledgeFilesApi, type SpaceFilePreview } from "@/controllers/API/know
 import { getMyResourcePermissionsApi } from "@/controllers/API/permission";
 import { knowledgeQueryKeys, type KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
+import { isErrorEnvelope } from "@bisheng/api-client";
 import { SpaceDirectoryOverlays } from "./SpaceDirectoryOverlays";
+import { SpaceDirectoryLoading } from "./SpaceDirectoryLoading";
 import { KnowledgeDeletionDialog } from "./KnowledgeDeletionDialog";
 import { useDirectoryDeletion } from "../hooks/useDirectoryDeletion";
 import { useDirectoryDownloadPermissions } from "../hooks/useDirectoryDownloadPermissions";
+import { useDirectorySelectionActions } from "../hooks/useDirectorySelectionActions";
 import { SpaceDirectoryRow } from "./SpaceDirectoryRow";
 import { SpaceDirectoryToolbar } from "./SpaceDirectoryToolbar";
 import { SpaceDirectoryView, type DirectorySortField, type DirectoryViewMode } from "./SpaceDirectoryView";
@@ -96,8 +99,8 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
   const [keyword, setKeyword] = useState("");
   const [page, setPage] = useState(1);
   const [viewMode, setViewMode] = useWorkspaceViewMode(scope, presentation === "workspace");
-  const [sortField, setSortField] = useState<DirectorySortField>("update_time");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [sortField, setSortField] = useState<DirectorySortField>("file_type");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [statuses, setStatuses] = useState<number[]>(() =>
     searchParams.get("fileStatus") === "abnormal" ? [3, 6, 7] : [],
   );
@@ -223,12 +226,13 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
   }, [active.error]);
   useEffect(() => {
     const type = parentId === null ? "knowledge_space" : "folder";
-    void getMyResourcePermissionsApi(type, String(parentId ?? spaceId))
+    void getMyResourcePermissionsApi(type, String(parentId ?? spaceId), { showError: false })
       .then((result) => {
         if (current.current === epoch) setContainer({ epoch, actions: result.actions });
       })
       .catch((error) => {
-        if (current.current === epoch) showApiError(error);
+        if (current.current === epoch && !(isErrorEnvelope(error) && error.status_code === 25022))
+          showApiError(error);
       });
   }, [epoch, parentId, spaceId]);
 
@@ -370,6 +374,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
     isCurrent: () => current.current === epoch,
     onDeleted: () => client.invalidateQueries({ queryKey: base }),
   });
+  const selectedActions = useDirectorySelectionActions({ prefix: epoch.prefix, rows: selectedRows });
   const batch = useKnowledgeBatch(JSON.stringify([...base, parentId, selectedKeys]));
   const [batchTagsOpen, setBatchTagsOpen] = useState(false);
   const [move, setMove] = useState<MoveSelection[] | null>(null);
@@ -451,7 +456,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
   const directoryEmpty = !active.isInitialLoading && !active.error && !rows.length && !hasMore;
   const directoryStatus = (
     <>
-      {active.isInitialLoading && <p role="status" className={workspace ? "px-4 py-6 text-center text-body text-text-3" : undefined}>{t("f118.loading_directory")}</p>}
+      {active.isInitialLoading && <SpaceDirectoryLoading fill={workspace} />}
       {directoryEmpty && (workspace ? (
         <StateView size="page" title={t("f118.directory_empty")} image={<EmptyStateIllustration />} />
       ) : <p>{t("f118.directory_empty")}</p>)}
@@ -512,19 +517,19 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
         onCreateFolder={() => handleEdit()}
         canUpload={containerActions.includes("upload_file")}
         onWebLink={() => setWebLinkOpen(true)}
-        onBatchDownload={() => {
+        onBatchDownload={selectedActions.canDownload ? () => {
           void runBatch("download");
-        }}
-        onBatchRetry={() => {
+        } : undefined}
+        onBatchRetry={selectedActions.canRetry ? () => {
           void runBatch("retry");
-        }}
-        onBatchTag={() => setBatchTagsOpen(true)}
-        onMove={() => setMove(selectedRows.map(item => ({ id: item.id, type: item.file_type === 0 ? "folder" : "file" })))}
+        } : undefined}
+        onBatchTag={selectedActions.canTag ? () => setBatchTagsOpen(true) : undefined}
+        onMove={selectedActions.canMove ? () => setMove(selectedRows.map(item => ({ id: item.id, type: item.file_type === 0 ? "folder" : "file" }))) : undefined}
         selectedCount={selectedRows.length}
-        onDeleteSelected={() => {
+        onDeleteSelected={selectedActions.canDelete ? () => {
           void remove(selectedRows);
-        }}
-        onReferences={selectedRows.length ? () => references(selectedRows) : undefined}
+        } : undefined}
+        onReferences={selectedActions.canDelete ? () => references(selectedRows) : undefined}
       />
       <SpaceDirectoryView
         workspace={workspace}
@@ -583,7 +588,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
       <BatchTagDraftDialog
         spaceId={spaceId}
         availableTags={selectedRows.flatMap((item) => item.tags ?? [])}
-        open={batchTagsOpen}
+        open={batchTagsOpen && selectedActions.canTag}
         onClose={() => setBatchTagsOpen(false)}
         onReview={(ids, names) => {
           void runBatch("tag", ids, names);

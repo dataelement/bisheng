@@ -36,10 +36,12 @@ from bisheng.common.errcode.knowledge_space import SpaceNotFoundError
 from bisheng.core.context.background_execution import get_current_background_task
 from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.models.knowledge_processing_item import KnowledgeProcessingItem
 from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob
 from bisheng.knowledge.domain.models.knowledge_processing_retry import KnowledgeProcessingRetryReceipt
 from bisheng.knowledge.domain.repositories.model_reference_repository import KnowledgeModelReferenceRepository
+from bisheng.knowledge.domain.schemas.processing_diagnostics import safe_failure_reason
 from bisheng.knowledge.domain.schemas.processing_job import ItemState, JobState, ProcessingKind
 from bisheng.knowledge.domain.schemas.processing_job_acceptance import (
     ItemLease as ItemLease,
@@ -509,6 +511,25 @@ class ProcessingJobRepository:
         if any(row.tenant_id != job.tenant_id for row in rows):
             raise KnowledgeProcessingJobNotFoundError()
         return ItemPage(tuple(rows), total)
+
+    async def afile_names(self, session, *, space_id, file_ids):
+        """Caller passes only already permission-filtered item IDs."""
+        ids = tuple(set(file_ids))
+        names = {}
+        for start in range(0, len(ids), 200):
+            with strict_tenant_filter():
+                names.update(
+                    (
+                        await session.execute(
+                            select(KnowledgeFile.id, KnowledgeFile.file_name).where(
+                                KnowledgeFile.tenant_id == self._tenant_id(),
+                                KnowledgeFile.knowledge_id == space_id,
+                                KnowledgeFile.id.in_(ids[start : start + 200]),
+                            )
+                        )
+                    ).all()
+                )
+        return names
 
     async def alatest_retry_actor(self, session: AsyncSession, job_id: str) -> dict:
         job = await self._job(session, job_id, lock=False, include_manifest=False)
@@ -1123,6 +1144,7 @@ class ProcessingJobRepository:
         succeeded: bool,
         result: Mapping[str, Any] | None = None,
         error_code: int | None = None,
+        failure_reason: str | None = None,
         _move: bool = False,
         move_projection_evidence=None,
     ) -> bool:
@@ -1141,6 +1163,7 @@ class ProcessingJobRepository:
         row.state = "succeeded" if succeeded else "failed"
         row.result = outcome
         row.error_code = None if succeeded else error_code
+        row.error_message = None if succeeded else safe_failure_reason(failure_reason)
         row.finished_at = row.update_time = self._now()
         row.lease_until = None
         await session.flush()
@@ -1240,6 +1263,7 @@ class ProcessingJobRepository:
         expected_job_revision: int,
         error_code: int,
         lease: JobLease | None = None,
+        failure_reason: str | None = None,
     ) -> KnowledgeProcessingJob | None:
         background = get_current_background_task()
         if background is None or background.tenant_id != self._tenant_id():
@@ -1309,12 +1333,14 @@ class ProcessingJobRepository:
                     raise KnowledgeProcessingJobNotFoundError()
                 item.state = "failed"
                 item.error_code = error_code
+                item.error_message = safe_failure_reason(failure_reason)
                 item.lease_token = item.lease_until = None
                 item.finished_at = item.update_time = self._now()
             await session.flush()
             await self._refresh_counts(session, job)
             job.state = "partial_failed" if job.succeeded_count and job.failed_count else "failed"
             job.error_code = error_code
+            job.error_message = safe_failure_reason(failure_reason)
         job.pending_dispatch = False
         job.lease_token = job.lease_until = None
         job.finished_at = job.update_time = self._now()
@@ -1358,6 +1384,7 @@ class ProcessingJobRepository:
         actor_reference: Mapping[str, Any],
         configuration: ProcessingConfiguration,
         _move: bool = False,
+        request_options: Mapping[str, Any] | None = None,
     ) -> JobRequestResult:
         job, current = await self._retry_execution_job(session, job_id, _move=_move)
         key = self._key(idempotency_key)
@@ -1372,15 +1399,16 @@ class ProcessingJobRepository:
             logical_pending = ready.retry_logical_pending(job, counts)
             move_subject = ready.retry_subject(job, actor_user_id=actor_user_id, actor_reference=actor)
             move_eligibility = self._retry_eligibility(job, counts, job.total_count, logical_pending=logical_pending)
-        request_hash = _digest(
-            {
-                "tenant_id": self._tenant_id(),
-                "job_id": job.id,
-                "expected_job_revision": expected_job_revision,
-                "actor_user_id": actor_user_id,
-                "actor_reference": actor,
-            }
-        )
+        request_payload = {
+            "tenant_id": self._tenant_id(),
+            "job_id": job.id,
+            "expected_job_revision": expected_job_revision,
+            "actor_user_id": actor_user_id,
+            "actor_reference": actor,
+        }
+        if request_options:
+            request_payload["options"] = dict(request_options)
+        request_hash = _digest(request_payload)
         with strict_tenant_filter():
             receipt = (
                 await session.exec(

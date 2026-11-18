@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { SpaceSimilarDocumentDialog } from "@/pages/KnowledgePage/components/SpaceSimilarDocumentDialog";
@@ -25,7 +25,7 @@ afterEach(() => { cleanup(); clients.splice(0).forEach(client => client.clear())
 it("shows the client's pending column and four sections with recommendation similarity", async () => {
   const { api } = setup();
   await screen.findByText("Recommended");
-  for (const label of ["similarReview.currentFile", "versions.recommendations", "similarReview.searchTitle", "similarReview.keepTitle"]) expect(screen.getByText(label)).toBeVisible();
+  for (const label of ["section_current_file", "section_recommendations", "section_search", "section_dismiss"]) expect(screen.getByText(label)).toBeVisible();
   expect(screen.getByText(/98%/)).toBeVisible();
   const second = screen.getByRole("button", { name: /Second.pdf/ });
   fireEvent.click(second);
@@ -34,15 +34,16 @@ it("shows the client's pending column and four sections with recommendation simi
 });
 it("links in the same direction, advances to the next file, then keeps it independent", async () => {
   const { api } = setup();
-  fireEvent.click(await screen.findByRole("button", { name: "versions.as_version" }));
+  fireEvent.click(await screen.findByRole("button", { name: "btn_link_as_new_version" }));
   expect(api.linkSpaceFileVersion).not.toHaveBeenCalled();
-  await act(async () => mock.confirm.mock.lastCall?.[0].onOk(vi.fn()));
+  mock.read.mockResolvedValueOnce([files[1]]).mockResolvedValue([]);
+  fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "confirm" }));
+  await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
   expect(api.linkSpaceFileVersion).toHaveBeenCalledExactlyOnceWith(11, 61, expect.any(AbortSignal));
   await waitFor(() => expect(screen.queryByRole("button", { name: /First.pdf/ })).toBeNull());
-  fireEvent.click(screen.getByRole("button", { name: "versions.keep_two" }));
-  await act(async () => mock.confirm.mock.lastCall?.[0].onOk(vi.fn()));
+  fireEvent.click(screen.getByRole("button", { name: "btn_dismiss" }));
   expect(api.dismissSpaceSimilarFile).toHaveBeenCalledExactlyOnceWith(12, expect.any(AbortSignal));
-  expect(await screen.findByText("similarReview.empty")).toBeVisible();
+  expect(await screen.findByText("similar_dialog_empty")).toBeVisible();
 });
 it("debounces keyword edits and clears search when switching pending files", async () => {
   const { api } = setup();
@@ -51,29 +52,30 @@ it("debounces keyword edits and clears search when switching pending files", asy
   await waitFor(() => expect(api.searchVersionDocuments).toHaveBeenCalledWith(7, 11, "manual", false, undefined, expect.any(AbortSignal)));
   fireEvent.click(screen.getByRole("button", { name: /Second.pdf/ }));
   expect(screen.getByRole("textbox")).toHaveValue("");
-  expect(screen.queryByText("similarReview.noSearchResults")).toBeNull();
+  expect(screen.queryByText("no_search_results")).toBeNull();
 });
 it("retires a confirmation when tenant changes before the user confirms", async () => {
   const mounted = setup();
-  fireEvent.click(await screen.findByRole("button", { name: "versions.as_version" }));
-  const confirmation = mock.confirm.mock.lastCall?.[0];
+  fireEvent.click(await screen.findByRole("button", { name: "btn_link_as_new_version" }));
+  expect(await screen.findByRole("alertdialog")).toBeVisible();
   mounted.rerender(mounted.draw({ ...scope, managementTenantId: 60 }));
-  await act(async () => confirmation.onOk(vi.fn()));
+  expect(screen.queryByRole("alertdialog")).toBeNull();
   expect(mounted.api.linkSpaceFileVersion).not.toHaveBeenCalled();
 });
 it("freezes writes and selection after an uncertain mutation while preserving the error", async () => {
   const { api } = setup();
   api.linkSpaceFileVersion.mockRejectedValueOnce(new Error("unknown result"));
-  fireEvent.click(await screen.findByRole("button", { name: "versions.as_version" }));
-  await act(async () => mock.confirm.mock.lastCall?.[0].onOk(vi.fn()));
-  expect(screen.getByRole("alert")).toHaveTextContent("versions.uncertain");
+  fireEvent.click(await screen.findByRole("button", { name: "btn_link_as_new_version" }));
+  fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "confirm" }));
+  await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+  expect(screen.getByRole("alert")).toHaveTextContent("uncertain");
   expect(screen.getByRole("button", { name: /Second.pdf/ })).toBeDisabled();
-  expect(screen.getByRole("button", { name: "versions.keep_two" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "btn_dismiss" })).toBeDisabled();
 });
 it("does not turn a failed pending-list read into an empty success state", async () => {
   mock.read.mockRejectedValue(new Error("failed"));
   setup();
   const error = await screen.findByRole("alert");
   expect(within(error).getByRole("button", { name: "retry" })).toBeVisible();
-  expect(screen.queryByText("similarReview.empty")).toBeNull();
+  expect(screen.queryByText("similar_dialog_empty")).toBeNull();
 });

@@ -143,6 +143,7 @@ from bisheng.knowledge.domain.services.web_link_import_service import (
     KnowledgeWebLinkImportService,
     is_web_link_non_dedup_markdown,
 )
+from bisheng.knowledge.domain.upload_policy import validate_knowledge_upload_file
 from bisheng.llm.domain import LLMService
 from bisheng.message.domain.services.notification_content import build_notify_content
 from bisheng.permission.application.access import (
@@ -4218,6 +4219,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
                 if self._upload_execution_guard is not None:
                     await self._upload_execution_guard()
+                # Authoritative per-file gate: the object just read is what will
+                # be registered, so neither the size the caller reported at
+                # staging nor a skipped staging step can widen it.
+                validate_knowledge_upload_file(prepared.original_file_name, prepared.file_size)
                 repeat_files = KnowledgeFileDao.get_file_by_condition(
                     knowledge_id=knowledge_id,
                     md5_=prepared.md5,

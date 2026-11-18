@@ -67,10 +67,15 @@ async def files(application, monkeypatch, tmp_path):
 
     real_base = source_module("_processing_real_base", backend / "bisheng/common/services/base.py")
     monkeypatch.setattr(base, "BaseService", real_base.BaseService)
-    real_utils = source_module(
+    real_utils_module = source_module(
         "_processing_real_utils", backend / "bisheng/knowledge/domain/services/knowledge_utils.py"
-    ).KnowledgeUtils
-    for dependent in (pipeline, abstract, image_upload, preview_cache):
+    )
+    from bisheng.knowledge.domain.services import knowledge_utils
+
+    real_utils = real_utils_module.KnowledgeUtils
+    monkeypatch.setattr(knowledge_utils, "KnowledgeUtils", real_utils)
+    monkeypatch.setattr(real_utils_module, "get_redis_client_sync", lambda: Mock())
+    for dependent in (pipeline, abstract, image_upload, preview_cache, module):
         monkeypatch.setattr(dependent, "KnowledgeUtils", real_utils)
     monkeypatch.setattr(real_utils, "get_knowledge_abstract_llm", lambda *args, **kwargs: (None, None))
     monkeypatch.setattr(

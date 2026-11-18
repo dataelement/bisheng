@@ -1,4 +1,4 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { toast } from "@bisheng/ui";
@@ -13,8 +13,11 @@ import { useKnowledgeMove } from "./useKnowledgeMove";
 const mockConfirm = jest.fn();
 const mockShowToast = jest.fn();
 jest.mock("~/Providers", () => ({
-  useConfirm: () => mockConfirm,
   useToastContext: () => ({ showToast: mockShowToast }),
+}));
+jest.mock("@bisheng/knowledge", () => ({
+  KnowledgeDialogTable: jest.requireActual<typeof import("@bisheng/knowledge")>("@bisheng/knowledge").KnowledgeDialogTable,
+  useMoveConfirmation: () => ({ confirm: mockConfirm, confirmationDialog: null }),
 }));
 jest.mock("~/hooks", () => ({ useLocalize: () => (key: string) => key }));
 jest.mock("~/hooks/AuthContext", () => ({
@@ -83,8 +86,17 @@ beforeEach(() => {
   mockConfirm.mockResolvedValue(true);
 });
 
-it("cancel after real precheck makes no confirmation or moved success", async () => {
+it("lists files and reasons with the cross-space impact and can cancel after review", async () => {
   mockConfirm.mockResolvedValue(false);
+  precheck.mockResolvedValue({
+    ...review,
+    precheck: {
+      ...review.precheck,
+      invalid_items: [
+        { name: "Existing folder", type: "folder", reason: "name_conflict", error_code: null },
+      ],
+    },
+  });
   const { result, onMoved } = setup();
   act(() => result.current.openMove(selected));
   await act(async () => {
@@ -95,6 +107,26 @@ it("cancel after real precheck makes no confirmation or moved success", async ()
   expect(precheck).toHaveBeenCalled();
   expect(execute).not.toHaveBeenCalled();
   expect(onMoved).not.toHaveBeenCalled();
+  render(mockConfirm.mock.calls[0][0].description);
+  const table = within(screen.getByRole("table", { name: "com_knowledge.batch.invalid" }));
+  const row = within(table.getByRole("row", { name: /Existing folder/ }));
+  expect(row.getByRole("cell", { name: "com_knowledge.move_reason_name_conflict_folder" })).toBeVisible();
+  expect(screen.getByText("com_knowledge.move_review_impact")).toBeVisible();
+});
+
+it("lists blocked and uploading files before opening the picker for the permitted files", async () => {
+  const denied = [{ id: "82", name: "Restricted file", type: "txt" }] as KnowledgeFile[];
+  const uploading = [{ id: "temp", name: "Uploading file", type: "txt" }] as KnowledgeFile[];
+  const { result } = setup();
+  await act(async () => {
+    await result.current.requestBatchMove(selected, denied, uploading);
+  });
+  render(mockConfirm.mock.calls[0][0].description);
+  const table = within(screen.getByRole("table", { name: "com_knowledge.batch.invalid" }));
+  expect(table.getByRole("row", { name: /Restricted file com_knowledge.move_reason_no_permission/ })).toBeVisible();
+  expect(table.getByRole("row", { name: /Uploading file com_knowledge.move_reason_uploading/ })).toBeVisible();
+  expect(result.current.moveDialogOpen).toBe(true);
+  expect(precheck).not.toHaveBeenCalled();
 });
 
 it("Accepted opens actual job progress and never reports already moved", async () => {

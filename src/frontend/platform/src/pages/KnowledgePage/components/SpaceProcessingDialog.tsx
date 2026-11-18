@@ -1,3 +1,5 @@
+import type { SpaceProcessingDialogProps } from "./processingDialogTypes";
+import { KnowledgeDialogTable } from "@bisheng/knowledge";
 import { Button, Pagination } from "@bisheng/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useRef, useState } from "react";
@@ -7,10 +9,8 @@ import { getModelListApi } from "@/controllers/API/finetune";
 import {
   knowledgeSpaceApi,
   type KnowledgeSpaceInfo,
-  type ProcessingKind,
   type OperationPrecheck,
   type ProcessingPrecheckRequest,
-  type ProcessingTargetInput,
 } from "@/controllers/API/knowledgeSpace";
 import { readProcessingTarget } from "@/controllers/API/knowledgeProcessing";
 import {
@@ -18,7 +18,6 @@ import {
   useKnowledgeProcessingJobs,
   useKnowledgeProcessingSettings,
   knowledgeQueryKeys,
-  type KnowledgeQueryScope,
 } from "@/controllers/hooks/knowledge";
 import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { createDshOperationId as createOperationId } from "@/util/dshOperationId";
@@ -43,21 +42,6 @@ import {
 } from "./fileProcessingRules";
 import { FileProcessingPreview } from "./FileProcessingPreview";
 
-interface SpaceProcessingDialogProps {
-  scope: KnowledgeQueryScope;
-  spaceId: number;
-  mode: "embedding" | "file" | "jobs";
-  target?: ProcessingTargetInput;
-  fileId?: number;
-  includeCopies?: boolean;
-  jobKind?: ProcessingKind;
-  hideTitle?: boolean;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSaved?: () => void;
-  onBack?: () => void;
-  presentation?: "page" | "inline";
-}
 export function SpaceProcessingDialog(props: SpaceProcessingDialogProps) {
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
@@ -302,16 +286,19 @@ function Content({
     }
   };
   const showReview = !job && !completed && mode !== "jobs";
+  const title = t(
+    mode === "jobs" && jobKind === "space_copy"
+      ? "space_copy_ui.tasks"
+      : mode === "jobs" && jobKind === "move_index"
+        ? "move.jobs"
+        : `f118.processing_title_${mode}`,
+  );
+  const jobRows = [...(jobs.data?.data ?? []), ...(copies.data?.data ?? [])];
   return (
     <SpacePanelFrame
-      title={t(
-        mode === "jobs" && jobKind === "space_copy"
-          ? "space_copy_ui.tasks"
-          : mode === "jobs" && jobKind === "move_index"
-            ? "move.jobs"
-            : `f118.processing_title_${mode}`,
-      )}
+      title={title}
       presentation={presentation}
+      centered={mode === "file"}
       hideTitle={hideTitle || inlineEmbedding}
       busy={busy}
       className="max-h-[85vh] sm:max-w-[960px] overflow-y-auto"
@@ -348,7 +335,11 @@ function Content({
                 void (plan ? handleConfirm() : handleReview());
               }}
             >
-              {t("nextStep")}
+              {t(
+                plan
+                  ? "f118.processing_replace_chunks"
+                  : "f118.processing_preview_chunks",
+              )}
             </Button>
           </>
         ) : (
@@ -380,6 +371,7 @@ function Content({
     >
       {mode === "file" && (
         <StepProgress
+          align="center"
           currentStep={job || completed ? 3 : plan ? 2 : 1}
           labels={[
             t("segmentStrategy"),
@@ -438,34 +430,43 @@ function Content({
                 )}
               </p>
             )}
-          <ul>
-            {[...(jobs.data?.data ?? []), ...(copies.data?.data ?? [])].map(
-              (row) => (
-                <li key={row.id}>
-                  <Button
-                    variant="link"
-                    onClick={() =>
-                      setJob({
-                        id: row.id,
-                        space: spaceId,
-                        ...(row.kind === "space_copy" ||
-                        row.kind === "move_index"
-                          ? { kind: row.kind }
-                          : {}),
-                      })
-                    }
-                  >
-                    {t(
-                      row.kind === "move_index"
-                        ? "move.jobs"
-                        : `f118.processing_kind_${row.kind}`,
-                    )}{" "}
-                    · {t(`f118.processing_state_${row.state}`)}
-                  </Button>
-                </li>
-              ),
-            )}
-          </ul>
+          {!!jobRows.length && (
+            <KnowledgeDialogTable
+              caption={title}
+              showCaption={false}
+              columns={[{ label: t("type") }, { label: t("status") }]}
+              rows={jobRows.map((row) => {
+                const label = t(
+                  row.kind === "move_index"
+                    ? "move.jobs"
+                    : `f118.processing_kind_${row.kind}`,
+                );
+                const status = t(`f118.processing_state_${row.state}`);
+                return {
+                  key: row.id,
+                  cells: [
+                    <Button
+                      variant="link"
+                      aria-label={`${label} · ${status}`}
+                      onClick={() =>
+                        setJob({
+                          id: row.id,
+                          space: spaceId,
+                          ...(row.kind === "space_copy" ||
+                          row.kind === "move_index"
+                            ? { kind: row.kind }
+                            : {}),
+                        })
+                      }
+                    >
+                      {label}
+                    </Button>,
+                    status,
+                  ],
+                };
+              })}
+            />
+          )}
         </>
       ) : (
         <>
@@ -553,19 +554,31 @@ function Content({
             )}
 
           {plan && (
-            <section>
-              <p>
-                {t("f118.processing_review", {
-                  valid: plan.result.valid_items.length,
-                  invalid: plan.result.invalid_items.length,
-                })}
-              </p>
-              {plan.result.invalid_items.map((item, index) => (
-                <p key={index}>
-                  {item.name ?? t("f118.processing_unavailable")}:{" "}
-                  {invalidReason(item.reason)}
+            <section className="space-y-3">
+              {mode !== "file" && (
+                <p>
+                  {t("f118.processing_review", {
+                    valid: plan.result.valid_items.length,
+                    invalid: plan.result.invalid_items.length,
+                  })}
                 </p>
-              ))}
+              )}
+              {!!plan.result.invalid_items.length && (
+                <KnowledgeDialogTable
+                  caption={t("batch.invalid")}
+                  columns={[
+                    { label: t("batch.column_name") },
+                    { label: t("batch.column_reason") },
+                  ]}
+                  rows={plan.result.invalid_items.map((item, index) => ({
+                    key: index,
+                    cells: [
+                      item.name ?? t("f118.processing_unavailable"),
+                      invalidReason(item.reason),
+                    ],
+                  }))}
+                />
+              )}
             </section>
           )}
         </>

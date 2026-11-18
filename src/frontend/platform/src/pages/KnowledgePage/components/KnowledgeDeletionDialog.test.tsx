@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { KnowledgeDeletionDialog } from "./KnowledgeDeletionDialog";
 import type { useKnowledgeDeletion, KnowledgeDeletionView } from "../hooks/useKnowledgeDeletion";
@@ -64,10 +64,41 @@ function operation(view: KnowledgeDeletionView): ReturnType<typeof useKnowledgeD
 describe("knowledge deletion consent", () => {
   it("shows disclosed names and restricted counts without source IDs or guessed links", () => {
     render(<KnowledgeDeletionDialog operation={operation(base)} />);
-    expect(screen.getByText(/Published assistant/)).toBeInTheDocument();
+    const details = screen.getByRole("table", { name: "deletion.source_details" });
+    const source = within(details).getByRole("row", { name: /Published assistant/ });
+    expect(within(source).getAllByRole("cell").map((cell) => cell.textContent)).toEqual([
+      "deletion.source_assistant", "v2", "3",
+    ]);
+    const invalid = screen.getByRole("table", { name: "deletion.invalid_items" });
+    expect(within(invalid).getByRole("row", { name: "used.txt deletion.reason_referenced" })).toBeVisible();
     expect(screen.queryByText("PRIVATE-SOURCE-ID")).not.toBeInTheDocument();
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
     expect(screen.queryByText("deletion.slot_counts")).not.toBeInTheDocument();
+  });
+  it("aligns reference counts in one row per type, including zero and slot-only counts", () => {
+    render(<KnowledgeDeletionDialog operation={operation({
+      ...base,
+      command: { spaceId: 3, kind: "delete" },
+      readonly: true,
+      result: undefined,
+      page: undefined,
+      inspection: {
+        check_complete: true,
+        blocked: false,
+        source_counts: { knowledge: 0, assistant: 4 },
+        restricted_counts: { assistant: 2 },
+        slot_counts: { assistant: 6, workflow_version: 5 },
+        source_page: page,
+      },
+    })} />);
+    const summary = screen.getByRole("table", { name: "deletion.references" });
+    expect(within(summary).getByRole("columnheader", { name: "deletion.slot_counts" })).toBeVisible();
+    expect(within(summary).getByRole("row", { name: "deletion.source_assistant 4 2 6" })).toBeVisible();
+    expect(within(summary).getByRole("row", { name: "deletion.source_workflow_version 0 0 5" })).toBeVisible();
+    expect(within(summary).getByRole("row", { name: "deletion.source_knowledge 0 0 0" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "deletion.close" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "deletion.review" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Close" })).toBeEnabled();
   });
   it("hides knowledge and default model counts only for space deletion", () => {
     const impact = { ...base.result!.impact, source_counts: { knowledge: 4, model_default: 3, assistant: 1 }, restricted_counts: { knowledge: 2, model_default: 1, workflow_version: 5 } };
@@ -75,11 +106,11 @@ describe("knowledge deletion consent", () => {
     const { rerender } = render(<KnowledgeDeletionDialog operation={operation(view)} />);
     expect(screen.queryByText(/deletion.source_knowledge/)).not.toBeInTheDocument();
     expect(screen.queryByText(/deletion.source_model_default/)).not.toBeInTheDocument();
-    expect(screen.getByText("deletion.source_assistant: 1")).toBeInTheDocument();
-    expect(screen.getByText("deletion.source_workflow_version: 5")).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: "deletion.source_assistant 1 0" })).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: "deletion.source_workflow_version 0 5" })).toBeInTheDocument();
     rerender(<KnowledgeDeletionDialog operation={operation({ ...view, command: base.command })} />);
-    expect(screen.getByText("deletion.source_knowledge: 4")).toBeInTheDocument();
-    expect(screen.getByText("deletion.source_model_default: 3")).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: "deletion.source_knowledge 4 2" })).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: "deletion.source_model_default 3 1" })).toBeInTheDocument();
   });
   it("requires explicit skip acknowledgement and retires it for a new plan", () => {
     const op = operation(base);
@@ -134,6 +165,46 @@ describe("knowledge deletion consent", () => {
     expect(screen.queryByRole("button", { name: "deletion.review" })).not.toBeInTheDocument();
     expect(screen.getByText("deletion.pending")).toBeInTheDocument();
   });
+});
+
+it("names an offline workflow and the setting that still references the space", () => {
+  const precheck = base.result;
+  if (!precheck) throw new Error("Expected a deletion precheck fixture");
+  const workflowPage = {
+    ...page,
+    data: [{
+      disclosure: {
+        source: {
+          tenant_id: 1,
+          source_type: "workflow_version",
+          source_id: "PRIVATE-FLOW",
+          source_version: "4776",
+        },
+        name: "Offline delete workflow",
+        version_label: "v0",
+        entry: "/flow/PRIVATE-FLOW/",
+      },
+      matched_slot_count: 1,
+      locations: ["workflow_knowledge_retriever"],
+    }],
+  };
+  render(<KnowledgeDeletionDialog operation={operation({
+    ...base,
+    page: workflowPage,
+    result: {
+      ...precheck,
+      impact: {
+        ...precheck.impact,
+        source_counts: { workflow_version: 1 },
+        source_page: workflowPage,
+      },
+    },
+  })} />);
+  expect(screen.getByRole("link", { name: "Offline delete workflow" })).toHaveAttribute("href", "/flow/PRIVATE-FLOW/");
+  expect(screen.getByText(/deletion\.workflow_unlink/)).toBeVisible();
+  expect(screen.getByText(/deletion\.location_workflow_knowledge_retriever/)).toBeVisible();
+  expect(screen.queryByText("PRIVATE-FLOW")).not.toBeInTheDocument();
+  expect(screen.queryByText("4776")).not.toBeInTheDocument();
 });
 
 it("explains failed source tasks instead of displaying only a generic resource conflict", () => {

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { KnowledgeDialogTable } from "@bisheng/knowledge";
 import { Button, Checkbox } from "@bisheng/ui";
 import {
   Dialog,
@@ -57,33 +58,31 @@ export function BatchOperationDialog({ operation }: BatchOperationDialogProps) {
         <div className="space-y-3 max-h-[60vh] overflow-y-auto text-body-sm">
           {view.busy && <p role="status">{tr("checking")}</p>}
           {view.error && <p role="alert">{view.stale ? tr("changed") : view.error}</p>}
-          {view.result && (
-            <>
-              <p>{tr("valid")}</p>
-              <ul>
-                {view.result.valid_items.map((item, index) => (
-                  <li key={index}>{item.name || tr("unnamed")}</li>
-                ))}
-              </ul>
-            </>
+          {!!view.result?.valid_items.length && (
+            <KnowledgeDialogTable
+              caption={tr("valid")}
+              columns={[{ label: tr("column_name") }]}
+              rows={view.result.valid_items.map((item) => ({
+                key: `${item.type}-${item.id}`,
+                cells: [item.name || tr("unnamed")],
+              }))}
+            />
           )}
           {(!!view.result?.invalid_items.length || view.localInvalid.length > 0) && (
-            <>
-              <p>{tr("invalid")}</p>
-              <ul>
-                {view.result?.invalid_items.map((item, index) => (
-                  <li key={index}>
-                    {item.name ? `${item.name}: ` : ""}
-                    {reason(item.reason)}
-                  </li>
-                ))}
-                {view.localInvalid.map((item, index) => (
-                  <li key={`local-${index}`}>
-                    {item.name || tr("unnamed")}: {reason("unsupported")}
-                  </li>
-                ))}
-              </ul>
-            </>
+            <KnowledgeDialogTable
+              caption={tr("invalid")}
+              columns={[{ label: tr("column_name") }, { label: tr("column_reason") }]}
+              rows={[
+                ...(view.result?.invalid_items ?? []).map((item, index) => ({
+                  key: index,
+                  cells: [item.name || tr("unnamed"), reason(item.reason)],
+                })),
+                ...view.localInvalid.map((item, index) => ({
+                  key: `local-${index}`,
+                  cells: [item.name || tr("unnamed"), reason("unsupported")],
+                })),
+              ]}
+            />
           )}
           {needsSkip && !view.outcome && (
             <Checkbox
@@ -95,14 +94,16 @@ export function BatchOperationDialog({ operation }: BatchOperationDialogProps) {
           )}
           {view.outcome && (
             <>
-              <p>{tr("results")}</p>
-              <ul>
-                {view.outcome.items.map((item, index) => (
-                  <li key={index}>
-                    {names.get(item.id) || tr("unnamed")}: {tr(`state_${item.state}`)}
-                  </li>
-                ))}
-              </ul>
+              {!!view.outcome.items.length && (
+                <KnowledgeDialogTable
+                  caption={tr("results")}
+                  columns={[{ label: tr("column_name") }, { label: tr("column_status") }]}
+                  rows={view.outcome.items.map((item) => ({
+                    key: `${item.type}-${item.id}`,
+                    cells: [names.get(item.id) || tr("unnamed"), tr(`state_${item.state}`)],
+                  }))}
+                />
+              )}
               {view.command.operation === "retry" && <p>{tr("retry_receipt")}</p>}
               {pending && <p role="status">{tr("unknown_ack")}</p>}
               {view.outcome.url && (
