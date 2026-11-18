@@ -1807,11 +1807,6 @@
       "count": 2
     }
   },
-  "src/pages/DepartmentPage/components/MountTenantDialog.tsx": {
-    "no-restricted-syntax": {
-      "count": 16
-    }
-  },
   "src/pages/EvaluationPage/EvaluationCreate.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1

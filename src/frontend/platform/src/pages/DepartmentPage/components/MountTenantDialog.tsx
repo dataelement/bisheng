@@ -1,4 +1,3 @@
-// @ts-strict-ignore
 import { Alert, Button, Input, notification } from '@bisheng/ui';
 
 import {
@@ -68,10 +67,9 @@ export function MountTenantDialog({
       }
 
       if (failed.length === 0) {
-        notification.open({ type: "success", title: String(t("bs:tenant.mountSuccess", { defaultValue: "挂载成功" }) ?? ''), description: "" })
+        notification.open({ type: "success", title: String(t("bs:tenant.mountSuccess") ?? ''), description: "" })
       } else {
-        notification.open({ type: "warning", title: String(t("bs:tenant.mountSuccess", { defaultValue: "挂载成功" }) ?? ''), description: String(t("bs:tenant.adminGrantPartial", {
-            defaultValue: "以下用户未能授予管理员，请在成员管理中重试: {{names}}",
+        notification.open({ type: "warning", title: String(t("bs:tenant.mountSuccess") ?? ''), description: String(t("bs:tenant.adminGrantPartial", {
             names: failed.join(", "),
           }) ?? '') })
       }
@@ -88,22 +86,20 @@ export function MountTenantDialog({
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
           <DialogTitle>
-            {t("bs:tenant.mountTitle", { defaultValue: "标记为子租户" })}
+            {t("bs:tenant.mountTitle")}
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
           <Alert
             type="warning"
-            description={t("bs:tenant.mountHint", {
-              defaultValue:
-                "将该部门及其子树标记为独立子租户。挂载后该子树下的资源、配额、权限独立于 Root，操作不可撤销（解绑可在租户管理中执行）。",
-            })}
+            className="[&_p]:line-clamp-none"
+            description={t("bs:tenant.mountHint")}
           />
 
           <div>
             <Label className="text-sm">
-              {t("bs:tenant.mountDeptLabel", { defaultValue: "目标部门" })}
+              {t("bs:tenant.mountDeptLabel")}
             </Label>
             <div className="mt-1 rounded border bg-muted px-3 py-2 text-sm">
               {deptName}
@@ -113,7 +109,7 @@ export function MountTenantDialog({
 
           <div>
             <Label htmlFor="tenant_name" className="text-sm">
-              {t("bs:tenant.name", { defaultValue: "租户名称" })}{" "}
+              {t("bs:tenant.name")}{" "}
               <span className="text-red-500">*</span>
             </Label>
             <Input id="tenant_name" value={tenantName} onChange={(e) => setTenantName(e.target.value)} maxLength={128} className={"mt-1"} showCount />
@@ -121,7 +117,7 @@ export function MountTenantDialog({
 
           <div>
             <Label className="text-sm">
-              {t("bs:tenant.initialAdmin", { defaultValue: "初始管理员" })}{" "}
+              {t("bs:tenant.initialAdmin")}{" "}
               <span className="text-red-500">*</span>
             </Label>
             <div className="mt-1">
@@ -130,28 +126,17 @@ export function MountTenantDialog({
                 value={selectedAdmins}
                 onChange={setSelectedAdmins}
                 rootDeptId={deptId}
-                placeholder={t("bs:tenant.initialAdminPlaceholder", {
-                  defaultValue: "搜索用户名添加",
-                })}
-                searchPlaceholder={t("bs:tenant.searchUser", {
-                  defaultValue: "搜索用户",
-                })}
-                emptyMessage={t("bs:tenant.initialAdminEmptySubtree", {
-                  defaultValue: "该部门子树暂无成员，请先把目标管理员加入此部门后再挂载",
-                })}
+                placeholder={t("bs:tenant.initialAdminPlaceholder")}
+                searchPlaceholder={t("bs:tenant.searchUser")}
+                emptyMessage={t("bs:tenant.initialAdminEmptySubtree")}
               />
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              {t("bs:tenant.initialAdminSubtreeHint", {
-                defaultValue:
-                  "管理员必须来自该部门子树，不能选取子树外用户。",
-              })}
+              {t("bs:tenant.initialAdminSubtreeHint")}
             </p>
             {selectedAdmins.length === 0 && (
               <p className="mt-1 text-xs text-muted-foreground">
-                {t("bs:tenant.initialAdminRequired", {
-                  defaultValue: "请至少指定一位初始管理员",
-                })}
+                {t("bs:tenant.initialAdminRequired")}
               </p>
             )}
           </div>
@@ -159,12 +144,12 @@ export function MountTenantDialog({
 
         <DialogFooter>
           <Button variant="outlined" onClick={onClose} disabled={loading} color="default">
-            {t("cancel", { defaultValue: "取消" })}
+            {t("cancel")}
           </Button>
           <Button onClick={handleSubmit} disabled={((String((tenantName) ?? '').length > 128)) || (!canSubmit)}>
             {loading
-              ? t("bs:tenant.mounting", { defaultValue: "挂载中..." })
-              : t("bs:tenant.mountConfirm", { defaultValue: "确认挂载" })}
+              ? t("bs:tenant.mounting")
+              : t("bs:tenant.mountConfirm")}
           </Button>
         </DialogFooter>
       </DialogContent>
