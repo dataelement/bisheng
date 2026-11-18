@@ -1,6 +1,7 @@
 import { Outlined } from 'bisheng-icons';
 import { forwardRef, useId, useRef, type ComponentProps, type ComponentPropsWithoutRef, type CSSProperties, type ReactNode } from 'react';
 import cn from '../../utils/cn';
+import { useLoadingIndicatorRenderer } from '../../providers/LoadingIndicatorProvider';
 import { Dropdown } from '../Dropdown';
 import styles from './TreeNavigation.module.css';
 import { useTreeViewport } from './useTreeViewport';
@@ -150,11 +151,17 @@ export interface TreeNavigationStatusProps {
 }
 
 export function TreeNavigationStatus({ children, depth = 0, loading }: TreeNavigationStatusProps) {
+  const renderIndicator = useLoadingIndicatorRenderer();
   return (
     <li className={styles.status} style={{ '--tree-depth': depth } as CSSProperties}>
       {loading ? <span role="status" className="flex items-center gap-1">
-        <Outlined.Loading aria-hidden className="size-4 shrink-0 animate-spin motion-reduce:animate-none" />
-        {children}
+        {renderIndicator ? <>
+          <span className="inline-flex shrink-0" aria-hidden>{renderIndicator({ className: 'size-4' })}</span>
+          <span className="sr-only">{children}</span>
+        </> : <>
+          <Outlined.Loading aria-hidden className="size-4 shrink-0 animate-spin motion-reduce:animate-none" />
+          {children}
+        </>}
       </span> : children}
     </li>
   );
