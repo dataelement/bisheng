@@ -262,7 +262,7 @@ async def test_native_async_explicit_server_share_uses_permission_application(mo
         await database.dispose()
 
 
-def test_prelock_includes_default_auxiliary_models_but_grants_no_share_or_binding_receipt(engine):
+def test_prelock_only_locks_used_targets_and_grants_no_share_or_binding_receipt(engine):
     class NoShareProof(FrozenSharing):
         def get_shared_server_ids(self, *args):
             raise AssertionError("pure prelock attempted sharing authorization")
@@ -289,7 +289,7 @@ def test_prelock_includes_default_auxiliary_models_but_grants_no_share_or_bindin
         event.listen(session, "do_orm_execute", observe)
         owner = ModelReferenceTargetOwner(sharing=NoShareProof())
         assert owner.prelock_targets(session, (TargetKey("model", "22"),), (SOURCE,)) is None
-        assert locks[:2] == [("server", [2]), ("model", [5, 22, 999])]
+        assert locks[:2] == [("server", [2]), ("model", [22])]
         with pytest.raises(AssertionError, match="sharing authorization"):
             verify(owner).verify_targets(session, SOURCE, (TargetKey("model", "22"),))
 
@@ -362,7 +362,7 @@ def test_prelocked_model_rejects_new_server_before_late_server_lock(engine):
         ("linsight_llm", {"chat_default_model_id": "22"}),
     ],
 )
-async def test_actual_inherited_defaults_allow_only_their_root_servers(monkeypatch, key, value):
+async def test_actual_inherited_defaults_never_authorize_their_root_servers(monkeypatch, key, value):
     monkeypatch.setattr(
         owner_module,
         "get_permission_relation_api",
@@ -374,8 +374,8 @@ async def test_actual_inherited_defaults_allow_only_their_root_servers(monkeypat
             session.add(TenantSystemModelConfig(tenant_id=1, key=key, value=json.dumps(value)))
             await session.flush()
             owner = ModelReferenceTargetOwner()
-            receipt = (await verify(owner).averify_targets(session, SOURCE, (TargetKey("model", "22"),)))[0]
-            assert receipt.target.target_tenant_id == 1
+            with pytest.raises(ResourceReferenceInvalidError):
+                await verify(owner).averify_targets(session, SOURCE, (TargetKey("model", "22"),))
             session.add(TenantSystemModelConfig(tenant_id=101, key=key, value="{}"))
             await session.flush()
             with pytest.raises(ResourceReferenceInvalidError):

@@ -3,6 +3,7 @@ import { ApiRequestFailure } from "~/components/ApiRequestFailure";
 import { createPortal } from "react-dom";
 import AiChatInput from "~/components/Chat/AiChatInput";
 import AiChatMessages from "~/components/Chat/AiChatMessages";
+import { ComposerConfigNotice } from "~/components/Chat/ComposerConfigNotice";
 import { PinnedTaskPanel } from "~/components/Linsight/Execution/PinnedTaskPanel";
 import { WorkspacePanel } from "~/components/Linsight/Artifacts/WorkspacePanel";
 import { TaskTurnLoadContext } from "~/components/Linsight/Execution/taskTurnLoad";
@@ -34,6 +35,9 @@ export function ChatSurfacePresentation({
     setInputText,
     taskMode,
     bsConfig,
+    configError,
+    configLoaded,
+    retryConfig,
     chatModel,
     searchType,
     setSearchType,
@@ -94,6 +98,16 @@ export function ChatSurfacePresentation({
     handleStop,
     shareToken,
   } = model;
+  // The composer is disabled without a model list; say why instead of leaving
+  // a dead input. A share view has no composer to explain.
+  const composerConfigNotice = shareToken ? null : (
+    <ComposerConfigNotice
+      error={configError}
+      loaded={configLoaded}
+      hasModels={Boolean(bsConfig?.models?.length)}
+      onRetry={retryConfig}
+    />
+  );
   return (
     <TaskTurnLoadContext.Provider value={reportTaskTurnLoadFailed}>
       <Presentation isLingsi={false}>
@@ -249,6 +263,7 @@ export function ChatSurfacePresentation({
                                 />
                               )}
                               {inviteQuotaBar}
+                              {composerConfigNotice}
                               <AiChatInput
                                 key={composerIdentity}
                                 composerIdentity={composerIdentity}
@@ -494,6 +509,7 @@ export function ChatSurfacePresentation({
                         {!shareToken && (
                           <div className="w-full">
                             {inviteQuotaBar}
+                            {composerConfigNotice}
                             <AiChatInput
                               key={composerIdentity}
                               composerIdentity={composerIdentity}

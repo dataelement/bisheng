@@ -82,7 +82,7 @@ async def serialized(copying, monkeypatch):
     return copying, held, waiting
 
 
-async def test_confirm_waits_for_usable_setup_and_worker_shares_original_projection_exclusion(serialized, monkeypatch):
+async def test_confirm_returns_when_the_job_is_accepted_and_the_worker_owns_setup(serialized, monkeypatch):
     copying, held, waiting = serialized
     app, ctx = copying.app, copying.ctx
     plan = await app.aprecheck(40, name="Concurrent copy", identity=ctx.user)
@@ -102,37 +102,41 @@ async def test_confirm_waits_for_usable_setup_and_worker_shares_original_project
     monkeypatch.setattr(copying.transport, "write_atomic", write)
     initialize = AsyncMock()
     monkeypatch.setattr(SpaceCopyOwner, "_initialize", initialize)
-    api = asyncio.create_task(app.aconfirm(40, command(plan), identity=ctx.user))
-    worker = None
+    result = await asyncio.wait_for(app.aconfirm(40, command(plan), identity=ctx.user), 5)
+    assert result["processing_job"] is not None and result["knowledge"].state == 0 and not result["completed"]
+    assert callers == [] and initialize.await_count == 0
+    async with ctx.sessions() as session:
+        job = (await session.execute(sa.select(Job))).scalars().one()
+        job_id = job.id
+        assert job.space_id == result["knowledge"].id and (await session.get(Knowledge, job.space_id)).state == 0
+    worker = asyncio.create_task(SpaceCopyOwner(app).astart(job_id, 0))
+    racing = None
     try:
         await asyncio.wait_for(staged.wait(), 5)
-        assert not api.done()
-        async with ctx.sessions() as session:
-            job = (await session.execute(sa.select(Job))).scalars().one()
-            job_id = job.id
-            assert (await session.get(Knowledge, job.space_id)).state == 0
+        assert not worker.done() and callers == [worker]
         waiting.clear()
-        worker = asyncio.create_task(SpaceCopyOwner(app).astart(job_id, 0))
+        racing = asyncio.create_task(SpaceCopyOwner(app).aensure_logical(result["knowledge"].id, job_id))
         await asyncio.wait_for(waiting.wait(), 5)
-        assert callers == [api]
+        assert callers == [worker]
         release.set()
-        result, lease = await asyncio.wait_for(asyncio.gather(api, worker), 10)
-        assert lease is not None and result["knowledge"].state == 1
+        lease, _ = await asyncio.wait_for(asyncio.gather(worker, racing), 10)
+        assert lease is not None
         initialize.assert_awaited_once()
         async with ctx.sessions() as session:
             operations = (await session.execute(sa.select(PermissionProjectionOperation))).scalars().all()
             assert len(operations) == 3 and all(row.status == "FINALIZED" for row in operations)
             job = await session.get(Job, job_id)
-            assert job.state == "running" and job.error_code is None
+            root = await session.get(Knowledge, job.space_id)
+            assert job.state == "running" and job.error_code is None and root.state == 1
     finally:
         release.set()
-        for task in (api, worker):
+        for task in (worker, racing):
             if task is not None and not task.done():
                 task.cancel()
-        results = await asyncio.gather(*(task for task in (api, worker) if task is not None), return_exceptions=True)
-        for result in results:
-            if isinstance(result, Exception):
-                raise result
+        results = await asyncio.gather(*(task for task in (worker, racing) if task is not None), return_exceptions=True)
+        for item in results:
+            if isinstance(item, Exception) and not isinstance(item, asyncio.CancelledError):
+                raise item
     assert not held
 
 

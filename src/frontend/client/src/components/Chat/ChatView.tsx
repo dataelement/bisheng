@@ -86,7 +86,12 @@ function useChatView(
   // which the re-activated ChatView reads immediately.
   const [taskMode, setTaskMode] = useRecoilState(taskModeState);
 
-  const { data: bsConfig } = useGetBsConfig();
+  const {
+    data: bsConfig,
+    error: configError,
+    isSuccess: configLoaded,
+    refetch: retryConfig,
+  } = useGetBsConfig();
   const { user } = useAuthContext();
   const [chatModel, setChatModel] = useRecoilState(store.chatModel);
   const [searchType, setSearchType] = useRecoilState(store.searchType);
@@ -510,6 +515,9 @@ function useChatView(
     setInputText,
     taskMode,
     bsConfig,
+    configError,
+    configLoaded,
+    retryConfig,
     chatModel,
     searchType,
     setSearchType,

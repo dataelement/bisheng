@@ -254,6 +254,20 @@ def test_real_safety_transformer_has_distinct_violation_outcome(files, monkeypat
     files.provider.assert_not_called()
 
 
+async def test_current_model_file_processing_allows_missing_index_generation(files):
+    async with files.context.sessions() as session:
+        row = await session.get(Knowledge, 40)
+        row.index_generation = None
+        await session.commit()
+    knowledge, admitted, scope = rebuild._require_processing_model(
+        40,
+        operation_id=None,
+        expected_model_config_revision=0,
+        expected_index_generation=None,
+    )
+    assert knowledge.id == 40 and admitted.index_generation is None and scope["model_slot"] == "model"
+
+
 def test_missing_worker_proof_rejects_before_actual_parse(files):
     workers.reset_tenant_context(sender=files.sender)
     with pytest.raises(ResourceReferenceInvalidError):

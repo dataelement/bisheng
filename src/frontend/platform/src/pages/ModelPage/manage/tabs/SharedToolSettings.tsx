@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/b
 import { userContext } from '@/contexts/userContext';
 import { getToolsApi, updateToolApi } from '@/controllers/API/tools';
 import { showApiError } from '@/controllers/request';
+import { managementRequestScope } from '@/controllers/managementScope';
 import ImageGeneration from '@/pages/BuildPage/tools/builtInTool/ImageGeneration';
 import WebSearchForm from '@/pages/BuildPage/tools/builtInTool/WebSearchFrom';
 
@@ -76,7 +77,7 @@ export function SharedToolSettings({ disabled = false }: SharedToolSettingsProps
         }
     };
 
-    if (!user?.is_global_super) return null;
+    if (!user?.is_global_super || (managementRequestScope() !== null && managementRequestScope() !== 1)) return null;
 
     return (
         <div className="space-y-4">

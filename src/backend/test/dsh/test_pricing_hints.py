@@ -73,7 +73,9 @@ def llm(monkeypatch):
     async def snapshot(model_id):
         if model_id not in models or model_id in offline:
             raise DshModelNotAllowedError()
-        return SimpleNamespace(id=model_id, config={"pricing": models[model_id]}), SimpleNamespace()
+        return SimpleNamespace(id=model_id, tenant_id=1, config={"pricing": models[model_id]}), SimpleNamespace(
+            tenant_id=1
+        )
 
     monkeypatch.setattr(LLMService, "get_dsh_model_snapshot", AsyncMock(side_effect=snapshot))
     monkeypatch.setattr(LLMService, "get_dsh_model_metadata_snapshot", AsyncMock(side_effect=snapshot))
@@ -81,6 +83,7 @@ def llm(monkeypatch):
     monkeypatch.setattr(
         LLMService, "get_workbench_llm", AsyncMock(return_value=SimpleNamespace(chat_default_model_id="7"))
     )
+    monkeypatch.setattr(service, "default_base_model_id", AsyncMock(return_value=7))
     monkeypatch.setattr(runtime, "read_credit_setting", AsyncMock(return_value=SETTING))
     monkeypatch.setattr(runtime, "read_model_pricing", AsyncMock(side_effect=lambda model_id: models.get(model_id)))
     return SimpleNamespace(models=models, offline=offline, runtime=runtime)
@@ -202,3 +205,57 @@ def test_routes_avoid_the_word_config():
     from bisheng.dsh.api.endpoints import credit_pricing
 
     assert all("config" not in route.path.lower() for route in credit_pricing.router.routes)
+
+
+async def test_price_metadata_is_read_only_for_shared_root_owner(llm):
+    from bisheng.core.context.tenant import get_current_tenant_id
+    from bisheng.dsh.domain.services.profile import profile_scope
+
+    with profile_scope(69):
+        rows = await service.admin_model_pricing()
+        assert get_current_tenant_id() == 69
+    assert all(row["read_only"] and not row["can_edit"] and row["source_tenant_id"] == 1 for row in rows)
+    with profile_scope(1):
+        assert all(row["can_edit"] and not row["read_only"] for row in await service.admin_model_pricing())
+
+
+async def test_unavailable_base_is_diagnostic_and_other_model_price_remains_usable(llm):
+    llm.runtime.read_credit_setting.return_value = CreditSettingState(base_model_id=8)
+    llm.offline.add(8)
+    context = await service.read_hint_context()
+    assert context.base_reason == "base_model_not_allowed"
+    rows = {row["model_id"]: row for row in await service.admin_model_pricing()}
+    assert rows[7]["pricing"] is not None
+    assert rows[7]["hint"]["ratio"] is None
+    assert rows[7]["base_reason"] == "base_model_not_allowed"
+    assert build_snapshot(DEEPSEEK, SETTING).input_micro > 0
+
+
+async def test_base_metadata_ignores_unconsumed_invalid_voice_slots(monkeypatch):
+    from bisheng.llm.application import model_default_read
+    from bisheng.llm.domain.services.llm import LLMService
+
+    getter = AsyncMock(return_value=SimpleNamespace(payload_json='{"chat_default_model_id":"7","asr_model":"999"}'))
+    monkeypatch.setattr(
+        model_default_read, "get_model_default_read_runtime", lambda: SimpleNamespace(aget_default=getter)
+    )
+    whole = AsyncMock(side_effect=AssertionError("must not execute whole-default admission for price metadata"))
+    monkeypatch.setattr(LLMService, "get_workbench_llm", whole)
+    assert await service.default_base_model_id() == 7
+    getter.assert_awaited_once_with("linsight_llm")
+    whole.assert_not_awaited()
+
+
+@pytest.mark.parametrize("model_id", [9, 10])
+async def test_base_save_requires_positive_input_output_price(llm, monkeypatch, model_id):
+    from bisheng.common.errcode.dsh import DshInvalidRequestError
+    from bisheng.dsh.domain.schemas.pricing import CreditSettingInput
+
+    transaction = AsyncMock()
+    monkeypatch.setattr(service, "credit_setting_transaction", transaction)
+    value = CreditSettingInput(
+        version=0, currency="CNY", credit_value="0.01", usd_cny_rate="7.2", base_model_id=model_id
+    )
+    with pytest.raises(DshInvalidRequestError):
+        await service.save_credit_settings(90, value)
+    transaction.assert_not_awaited()

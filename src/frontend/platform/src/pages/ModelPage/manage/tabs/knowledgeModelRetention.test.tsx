@@ -1,11 +1,11 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@/test/test-utils';
 import type { ReactNode } from 'react';
 import { expect, it, vi } from 'vitest';
 import { KnowledgeModel } from './KnowledgeModel';
 import { updateKnowledgeModelConfig } from '@/controllers/API/finetune';
 
 vi.mock('@/controllers/API/finetune', () => ({ getKnowledgeModelEnvelope: vi.fn(), updateKnowledgeModelConfig: vi.fn().mockResolvedValue({}) }));
-vi.mock('../useSystemConfigEnvelope', () => ({ useSystemConfigEnvelope: () => ({ config: saved, loading: false, clearInherited: vi.fn() }) }));
+vi.mock('../useSystemConfigEnvelope', () => ({ useSystemConfigEnvelope: () => ({ config: saved, loading: false, reload: vi.fn().mockResolvedValue(null) }) }));
 vi.mock('./WorkbenchModel', () => ({ defalutPrompt: 'original default' }));
 vi.mock('../ModelFieldHint', () => ({ ModelFieldHint: () => null }));
 vi.mock('bisheng-icons', () => ({ Outlined: { Setting: () => null, Loading: () => null } }));

@@ -9,6 +9,8 @@ export function getKnowledgeBatchActions({
   canBatchMove,
   canBatchDelete,
   canBatchDownload,
+  canBatchTag,
+  canBatchRetry,
   handleBatchDownload,
   handleBatchTag,
   handleBatchMove,
@@ -37,13 +39,13 @@ export function getKnowledgeBatchActions({
           ? handleSingleDownload(Array.from(selectedFiles)[0])
           : handleBatchDownload(),
     },
-    selectedFiles.size > 0 && {
+    canBatchTag && {
       key: "tag",
       label: localize("com_knowledge.batch_add_tags"),
       Icon: Outlined.Tag,
       onClick: handleBatchTag,
     },
-    selectedFiles.size > 0 && {
+    canBatchRetry && {
       key: "retry",
       label: localize("com_knowledge.retry"),
       Icon: Outlined.Refresh,

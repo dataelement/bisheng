@@ -2994,6 +2994,8 @@
     "files": "会话文件",
     "resizePreview": "调整文件预览宽度",
     "loadingConversation": "正在加载会话…",
+    "configLoadFailed": "工作台配置加载失败，暂时不能发送消息。请重试，仍然失败请联系管理员。",
+    "noModelsConfigured": "管理员还没有配置可用的模型，暂时不能发送消息。请联系管理员添加模型。",
     "recommendedApps": "推荐应用",
     "scrollToBottom": "回到底部",
     "preview": "预览",

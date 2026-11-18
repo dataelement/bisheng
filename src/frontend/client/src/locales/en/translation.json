@@ -3065,6 +3065,8 @@
     "files": "Conversation files",
     "resizePreview": "Resize file preview",
     "loadingConversation": "Loading conversation…",
+    "configLoadFailed": "The workspace settings failed to load, so you can't send messages yet. Try again, or contact your administrator if it keeps failing.",
+    "noModelsConfigured": "No model is available yet, so you can't send messages. Ask your administrator to add one.",
     "recommendedApps": "Recommended apps",
     "scrollToBottom": "Scroll to bottom",
     "preview": "Preview",

@@ -389,15 +389,24 @@ def _require_processing_model(
     *,
     operation_id: str | None,
     expected_model_config_revision: int,
-    expected_index_generation: str,
+    expected_index_generation: str | None,
 ):
     if get_current_background_task() is None:
         raise ResourceReferenceInvalidError(reason="knowledge_rebuild_background_required")
+    # A published space keeps a null index generation until its first model
+    # switch. File reprocess freezes that current slot. A rebuild command still
+    # needs the generation it was accepted against.
     if (
         type(expected_model_config_revision) is not int
         or expected_model_config_revision < 0
-        or not isinstance(expected_index_generation, str)
-        or not expected_index_generation
+        or (
+            expected_index_generation is not None
+            and (
+                not isinstance(expected_index_generation, str)
+                or not expected_index_generation
+                or len(expected_index_generation) > 64
+            )
+        )
     ):
         raise KnowledgeOperationPlanConflictError(reason="knowledge_rebuild_command_expectations_required")
     with get_sync_db_session() as session:
@@ -405,7 +414,7 @@ def _require_processing_model(
         if candidate is None or candidate.type != 3:
             raise ResourceReferenceInvalidError(reason="knowledge_rebuild_space_required")
         slot = "model_transition.pending_model_id" if candidate.model_transition is not None else "model"
-        if slot != "model" and not operation_id:
+        if (operation_id or slot != "model") and not expected_index_generation:
             raise KnowledgeOperationPlanConflictError(reason="knowledge_rebuild_command_expectations_required")
         admitted = get_knowledge_model_read_runtime_sync().require(
             space_id,

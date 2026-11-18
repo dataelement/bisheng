@@ -60,7 +60,7 @@ async def test_physical_prelock_cannot_itself_authorize_root_sharing(mixed_model
             )
 
 
-async def test_each_model_default_root_auxiliary_plan_is_union_locked_before_first_model(mixed_models):
+async def test_model_default_roots_do_not_lock_unrelated_inherited_model_slots(mixed_models):
     evaluation = SourceKey(101, "model_default", "evaluation_llm", "current")
     workflow = SourceKey(101, "model_default", "workflow_llm", "current")
     async with AsyncSession(mixed_models) as session, session.begin():
@@ -72,8 +72,8 @@ async def test_each_model_default_root_auxiliary_plan_is_union_locked_before_fir
                 LLMModel(id=66, tenant_id=1, server_id=5, model_name="aux-evaluation", model_type="llm"),
                 TenantSystemModelConfig(tenant_id=1, key="evaluation_llm", value='{"model_id":66}'),
                 TenantSystemModelConfig(tenant_id=1, key="workflow_llm", value='{"model_id":44}'),
-                # The two written keys stop contributing fallback eligibility;
-                # this unchanged third key still requires both auxiliary IDs.
+                # Inherited configuration grants no sharing and therefore
+                # contributes no auxiliary target locks to these sources.
                 TenantSystemModelConfig(
                     tenant_id=1, key="assistant_llm", value='{"llm_list":[{"model_id":44},{"model_id":66}]}'
                 ),
@@ -94,9 +94,7 @@ async def test_each_model_default_root_auxiliary_plan_is_union_locked_before_fir
             session, ((evaluation, (TargetKey("model", "22"),)), (workflow, (TargetKey("model", "22"),)))
         )
         assert len(result) == 2 and locks[0][0] == "server" and locks[1][0] == "model"
-        assert {22, 44, 66} <= next(
-            set(value) for value in locks[1][1].values() if isinstance(value, list) and 22 in value
-        )
+        assert {22} == next(set(value) for value in locks[1][1].values() if isinstance(value, list) and 22 in value)
 
 
 async def test_legacy_original_from_space_is_not_borrowed_by_default_root(mixed_models):
@@ -176,7 +174,7 @@ async def test_mixed_prelock_mapping_drift_rejects_without_appending_new_target_
 
 
 @pytest.mark.parametrize("other_inherited_key", [False, True])
-async def test_all_mixed_sources_exclude_defaults_being_overridden_from_prospective_sharing(
+async def test_all_mixed_sources_require_actual_sharing_even_for_inherited_defaults(
     mixed_models, monkeypatch, other_inherited_key
 ):
     from types import SimpleNamespace
@@ -211,18 +209,18 @@ async def test_all_mixed_sources_exclude_defaults_being_overridden_from_prospect
     )
     owner = ModelReferenceTargetOwner()
     async with AsyncSession(mixed_models) as session, session.begin():
-        # Unchanged single-source semantics may still consume the current Root default.
+        # The original exact reference is retained, but inheritance never authorizes a new binding.
         original = (
             await ReferenceTargetVerifier({"model": owner}).averify_targets(session, SPACE, (TargetKey("model", "22"),))
         )[0]
-        assert original.target.new_binding_allowed
+        assert not original.target.new_binding_allowed
     async with AsyncSession(mixed_models) as session, session.begin():
         receipts = await ReferenceTargetVerifier({"model": owner}).averify_mixed_source_targets(
             session,
             ((SPACE, (TargetKey("model", "22"), TargetKey("model", "11"))), (DEFAULT, (TargetKey("model", "11"),))),
         )
         old = next(receipt.target for receipt in receipts[SPACE] if receipt.target.key.target_id == "22")
-        assert old.state == "valid" and old.new_binding_allowed is other_inherited_key
+        assert old.state == "valid" and not old.new_binding_allowed
         assert all(receipt.target.new_binding_allowed for receipt in receipts[DEFAULT])
 
 

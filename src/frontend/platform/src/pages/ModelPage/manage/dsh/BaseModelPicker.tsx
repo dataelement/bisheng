@@ -8,6 +8,11 @@ import { creditPricingErrorKey, useCreditSettings } from './useCreditPricing'
 
 // Shared Select items must not use an empty value; this stands for "no explicit base model".
 const DEFAULT_BASE = 'default'
+const baseReasonKeys: Record<string, string> = {
+    base_model_not_allowed: 'model:model.baseModelNotAllowed',
+    base_price_missing: 'model:model.basePriceMissing',
+    base_price_not_positive: 'model:model.basePriceNotPositive',
+}
 
 interface BaseModelPickerProps {
     models: { id: number; label: string; provider: string }[]
@@ -62,6 +67,8 @@ export function BaseModelPicker({ models, rows }: BaseModelPickerProps) {
         </div>
         <p className="text-xs text-muted-foreground">{t('dsh.pricing.baseModelHelp')}</p>
         {unavailable && <p role="status" className="text-xs text-amber-600">{t('dsh.pricing.baseUnavailable')}</p>}
+        {value?.base_reason && baseReasonKeys[value.base_reason] &&
+            <p className="text-xs text-muted-foreground">{t(baseReasonKeys[value.base_reason])}</p>}
         {error && <p role="alert" className="text-xs text-destructive">{t(error)}</p>}
     </div>
 }

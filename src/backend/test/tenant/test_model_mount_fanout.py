@@ -1,12 +1,10 @@
 """One provider failure must retain its traceback and not skip later providers."""
 
-from contextlib import asynccontextmanager
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
-from bisheng.core import database
 from bisheng.database.models.tenant import TenantDao
 from bisheng.llm.application import model_mount_sharing
 from bisheng.tenant.domain.services.resource_share_service import ResourceShareService
@@ -19,21 +17,17 @@ async def test_mount_fanout_continues_after_provider_failure(monkeypatch, caplog
     monkeypatch.setattr(
         TenantDao,
         "aget_by_id",
-        AsyncMock(side_effect=lambda tid: SimpleNamespace(share_default_to_children=True) if tid == 1 else child),
+        AsyncMock(side_effect=lambda tid: SimpleNamespace(share_default_to_children=False) if tid == 1 else child),
     )
     monkeypatch.setattr(ResourceShareService, "distribute_to_child", AsyncMock())
     monkeypatch.setattr(TenantMountService, "_list_root_shared_resources", AsyncMock(return_value=[]))
-    result = MagicMock()
-    result.all.return_value = [(12,), (335,), (358,)]
-
-    @asynccontextmanager
-    async def sessions():
-        yield SimpleNamespace(exec=AsyncMock(return_value=result))
-
-    monkeypatch.setattr(database, "get_async_db_session", sessions)
-    sharing = SimpleNamespace(ashare=AsyncMock(side_effect=[RuntimeError("original sharing failure"), None, None]))
+    sharing = SimpleNamespace(
+        aenabled_server_ids=AsyncMock(return_value=[12, 335, 358]),
+        ashare=AsyncMock(side_effect=[RuntimeError("original sharing failure"), None, None]),
+    )
     monkeypatch.setattr(model_mount_sharing, "get_model_mount_sharing_application", AsyncMock(return_value=sharing))
-    await TenantMountService._on_child_mounted(69, auto_distribute=True, operator=operator)
+    with pytest.raises(RuntimeError, match="original sharing failure"):
+        await TenantMountService._on_child_mounted(69, auto_distribute=True, operator=operator)
     assert [call.kwargs["server_id"] for call in sharing.ashare.await_args_list] == [12, 335, 358]
     assert all(
         call.kwargs["identity"] is operator and call.kwargs["child_id"] == 69 for call in sharing.ashare.await_args_list
@@ -44,9 +38,10 @@ async def test_mount_fanout_continues_after_provider_failure(monkeypatch, caplog
 
 
 @pytest.mark.parametrize(("auto_distribute", "root_shared"), [(False, True), (True, False)])
-async def test_explicitly_disabled_mount_does_not_distribute_models(monkeypatch, auto_distribute, root_shared):
+async def test_disabled_mount_or_no_explicit_on_does_not_distribute_models(monkeypatch, auto_distribute, root_shared):
     distribute = AsyncMock()
-    application = AsyncMock()
+    sharing = SimpleNamespace(aenabled_server_ids=AsyncMock(return_value=[]), ashare=AsyncMock())
+    application = AsyncMock(return_value=sharing)
     monkeypatch.setattr(ResourceShareService, "distribute_to_child", distribute)
     monkeypatch.setattr(model_mount_sharing, "get_model_mount_sharing_application", application)
     monkeypatch.setattr(
@@ -55,4 +50,5 @@ async def test_explicitly_disabled_mount_does_not_distribute_models(monkeypatch,
     monkeypatch.setattr(TenantMountService, "_list_root_shared_resources", AsyncMock(return_value=[]))
     assert await TenantMountService._on_child_mounted(69, auto_distribute=auto_distribute, operator=object()) == []
     assert distribute.await_count == int(auto_distribute)
-    application.assert_not_called()
+    assert application.await_count == int(auto_distribute)
+    sharing.ashare.assert_not_called()

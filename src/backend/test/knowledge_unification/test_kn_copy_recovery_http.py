@@ -135,7 +135,7 @@ async def test_http_recovers_uninitialized_copy_without_target_permission_or_dup
         assert len(operations) == 3 and all(row.status == "FINALIZED" for row in operations)
 
 
-async def test_confirm_http_initializes_permissions_and_indexes_before_exposing_usable_space(copying, monkeypatch):
+async def test_confirm_http_returns_once_the_copy_job_is_accepted(copying, monkeypatch):
     app, ctx = copying.app, copying.ctx
     plan = await app.aprecheck(40, name="Background copy", identity=ctx.user)
     monkeypatch.setattr(copy_endpoints, "SpaceCopyApplication", lambda: app)
@@ -157,8 +157,8 @@ async def test_confirm_http_initializes_permissions_and_indexes_before_exposing_
         assert result["processing_job"]["accepted"] and not result["completed"]
         repeated = (await http.post("/api/v1/knowledge/space/40/copy/confirm", json=command(plan).model_dump())).json()
         assert repeated["data"]["knowledge"]["id"] == result["knowledge"]["id"]
-    assert initialize.await_count == 2
-    assert result["knowledge"]["state"] == 1
+    assert initialize.await_count == 0
+    assert result["knowledge"]["state"] == 0
     async with ctx.sessions() as session:
         job = (await session.execute(sa.select(Job))).scalars().one()
         assert job.pending_dispatch and job.state == "accepted"
@@ -237,6 +237,7 @@ async def test_initialization_claim_is_exclusive_and_failure_uses_original_lease
         await owner.astart(jid, 0)
     failed, _ = await owner.aread(jid)
     assert failed.state == "failed" and failed.lease_token is None
+    assert failed.error_code == 10996 and failed.error_message == "copy_initialization_failed"
     assert (await access.alist_owned(identity=ctx.user)).data[0]["phase"] == "failed"
     from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
 

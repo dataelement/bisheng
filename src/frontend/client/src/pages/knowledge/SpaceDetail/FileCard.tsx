@@ -78,6 +78,8 @@ interface FileCardProps {
   onOpenVersionHistory?: (file: KnowledgeFile) => void;
   /** Whether the current user can manage members (gates the "similar" pill). */
   canManageMembers?: boolean;
+  /** Space edit permission. Version mutations require it. */
+  canManageVersions?: boolean;
   disableClickNavigate?: boolean;
   hideSelectionCheckbox?: boolean;
   /** H5: render as list-row (not card tile). */
@@ -123,6 +125,7 @@ export function FileCard({
   onOpenVersionManagement,
   onOpenVersionHistory,
   canManageMembers = false,
+  canManageVersions = false,
   disableClickNavigate = false,
   hideSelectionCheckbox = false,
   mobileListMode = false,
@@ -373,11 +376,11 @@ export function FileCard({
     versionManagementEnabled &&
     !isFolder &&
     file.status === FileStatus.SUCCESS &&
-    isAdmin &&
+    canManageVersions &&
     Boolean(onOpenVersionManagement);
   const showVersionHistory =
     versionManagementEnabled && !isFolder && Boolean(file.is_multi_version) && Boolean(onOpenVersionHistory);
-  const showMoveItem = Boolean(onMove) && !isCreating;
+  const showMoveItem = Boolean(onMove) && canMove && !isCreating;
   const showMenuDownloadItem = canDownload && !hideDownloadActions;
   // Card view puts EVERY action behind the ⋮ menu, even a lone one, so a card
   // never sprouts a second floating control over its thumbnail.
@@ -389,8 +392,12 @@ export function FileCard({
     showMoveItem ||
     showVersionManagement ||
     showVersionHistory;
-  // Placeholder has only a temp id (no backend identity) — suppress all row actions.
-  const showMoreMenu = !isUploadingFolderPlaceholder && hasReviewedMenuItems;
+  // A real file keeps the menu so its effective actions can be resolved on open.
+  // Placeholders have only a temp id and no backend identity.
+  const showMoreMenu =
+    !isUploadingFolderPlaceholder &&
+    !isCreating &&
+    /^[1-9][0-9]*$/.test(String(file.id));
   const showCardActions = moreMenuOpen || hovered;
   const cardOpensPreviewOrFolder =
     !isCreating &&
@@ -413,6 +420,8 @@ export function FileCard({
     <DropdownItem disabled icon={<Outlined.Loading className="animate-spin motion-reduce:animate-pulse" />}>
       {localize("com_list_loading")}
     </DropdownItem>
+  ) : !hasReviewedMenuItems ? (
+    <DropdownItem disabled>{localize("com_knowledge.home_next.no_actions")}</DropdownItem>
   ) : (
     <>
       {showMenuDownloadItem && (
@@ -437,7 +446,7 @@ export function FileCard({
       )}
       {showMoveItem && (
         <DropdownItem
-          disabled={!canMove || isUploading}
+          disabled={isUploading}
           onSelect={() => onMove?.()}
           icon={<Outlined.MoveToFolder />}
         >

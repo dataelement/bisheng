@@ -21,6 +21,7 @@ const SAVED: CreditSettings = {
 }
 const row = (model_id: number, hint: ModelPricingRow['hint'], missing = false): ModelPricingRow => ({
     model_id, pricing: null, effective: null, edited: false, missing, hint,
+    can_edit: true, read_only: false, source_tenant_id: 1, base_reason: null,
 })
 const models = [{ id: 46, label: 'Chat default', provider: 'DeepSeek' }, { id: 47, label: 'Local model', provider: 'Ollama' }]
 
