@@ -201,7 +201,7 @@ async def test_index_model_validation_reuses_the_locked_session(copying, monkeyp
             "init_es_vectorstore",
             Mock(
                 return_value=SimpleNamespace(
-                    _store=SimpleNamespace(_create_index_if_not_exists=Mock()),
+                    _store=SimpleNamespace(_create_index_if_not_exists=AsyncMock()),
                     client=SimpleNamespace(close=AsyncMock()),
                 )
             ),
@@ -285,7 +285,7 @@ async def test_new_copy_bootstraps_lazy_milvus_collection_before_load(monkeypatc
     monkeypatch.setattr(knowledge_utils, "get_redis_client_sync", lambda: redis)
     milvus = AsyncMock(return_value=vector)
     es = SimpleNamespace(
-        _store=SimpleNamespace(_create_index_if_not_exists=Mock(side_effect=lambda: events.append("es"))),
+        _store=SimpleNamespace(_create_index_if_not_exists=AsyncMock(side_effect=lambda: events.append("es"))),
         client=SimpleNamespace(close=AsyncMock()),
     )
     elastic = AsyncMock(return_value=es)
@@ -297,6 +297,22 @@ async def test_new_copy_bootstraps_lazy_milvus_collection_before_load(monkeypatc
     assert events == ["seed", ("delete", ["schema-seed"]), "load", "es"]
     assert milvus.call_args.kwargs["reference_session"] is session
     assert elastic.call_args.kwargs["reference_session"] is session
+    es.client.close.assert_awaited_once()
+    es._store._create_index_if_not_exists.assert_awaited_once()
+
+
+async def test_copy_waits_for_es_initialization_and_propagates_failure(monkeypatch):
+    vector = SimpleNamespace(col=SimpleNamespace(load=Mock()))
+    es = SimpleNamespace(
+        _store=SimpleNamespace(_create_index_if_not_exists=AsyncMock(side_effect=RuntimeError("es unavailable"))),
+        client=SimpleNamespace(close=AsyncMock()),
+    )
+    monkeypatch.setattr(KnowledgeRag, "init_knowledge_milvus_vectorstore", AsyncMock(return_value=vector))
+    monkeypatch.setattr(KnowledgeRag, "init_knowledge_es_vectorstore", AsyncMock(return_value=es))
+    root = Knowledge(id=50, tenant_id=101, name="Copy", type=3, collection_name="copy", index_name="copy")
+    with pytest.raises(RuntimeError, match="es unavailable"):
+        await initialize_indexes(root, 7, session=object())
+    es._store._create_index_if_not_exists.assert_awaited_once()
     es.client.close.assert_awaited_once()
 
 
