@@ -18,23 +18,24 @@ export function useSpaceCopyTasks(scope: KnowledgeQueryScope) {
     cacheTime: 0,
     retry: false,
   });
-  const previous = useRef<string>();
-  const signature = query.data
-    ?.map(
-      (task) =>
-        `${task.id}:${task.phase}:${task.job_state}:${task.succeeded_count}:${task.failed_count}`,
-    )
-    .join("|");
+  const previous = useRef<{ scope: string; states: Map<number, string> }>();
+  const scopeIdentity = JSON.stringify(scopeKey);
   useEffect(() => {
-    if (signature === undefined) return;
-    if (previous.current !== undefined && previous.current !== signature) {
+    if (!query.data) return;
+    const states = new Map((query.data ?? []).map(task => [task.id, `${task.job_id}:${task.phase}:${task.job_state}`]));
+    const prior = previous.current?.scope === scopeIdentity ? previous.current.states : undefined;
+    const changed = new Set([...states.keys(), ...(prior?.keys() ?? [])].filter(id => states.get(id) !== prior?.get(id)));
+    if (prior && changed.size > 0) {
       void client.invalidateQueries({
         queryKey: scopeKey,
-        predicate: (cached) => !cached.queryKey.includes("copy-tasks"),
+        predicate: ({ queryKey }) => {
+          const [kind, spaceId] = queryKey.slice(scopeKey.length);
+          return kind === "space" ? changed.has(Number(spaceId)) : ["visible-list", "admin-list", "navigation-catalog", "navigation-sections"].includes(String(kind));
+        },
       });
     }
-    previous.current = signature;
-  }, [signature, client, scopeKey]);
+    previous.current = { scope: scopeIdentity, states };
+  }, [client, scopeKey, scopeIdentity, query.data]);
   useEffect(() => {
     if (query.error) showApiError(query.error);
   }, [query.error]);
