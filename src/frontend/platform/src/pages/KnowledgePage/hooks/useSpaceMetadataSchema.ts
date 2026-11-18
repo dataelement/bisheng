@@ -12,10 +12,9 @@ import { showApiError } from "@/controllers/request";
 interface SpaceMetadataSchemaOptions {
   scope: KnowledgeQueryScope;
   spaceId: number;
-  onSaved?: () => void;
   enabled?: boolean;
 }
-export function useSpaceMetadataSchema({ scope, spaceId, onSaved, enabled = true }: SpaceMetadataSchemaOptions) {
+export function useSpaceMetadataSchema({ scope, spaceId, enabled = true }: SpaceMetadataSchemaOptions) {
   const { t } = useTranslation("knowledge");
   const alive = useRef(true),
     locked = useRef(false);
@@ -43,7 +42,7 @@ export function useSpaceMetadataSchema({ scope, spaceId, onSaved, enabled = true
     : submittedJobId ? "accepted" : latestJob?.state;
   const processing = jobState === "accepted" || jobState === "running";
   const schema = useQuery({
-    queryKey: [...knowledgeQueryKeys.space(scope, spaceId), "metadata-schema"],
+    queryKey: knowledgeQueryKeys.metadataSchema(scope, spaceId),
     queryFn: () => readMetadataSchema(spaceId),
     retry: false,
     cacheTime: 0,
@@ -102,8 +101,6 @@ export function useSpaceMetadataSchema({ scope, spaceId, onSaved, enabled = true
         if (!alive.current)
           throw new DOMException("Retired metadata editor", "AbortError");
         if ("job_id" in accepted) setSubmittedJobId(accepted.job_id);
-        await refetch();
-        if (alive.current) onSaved?.();
       } catch (error) {
         if (
           isApiError(error) &&
@@ -120,7 +117,7 @@ export function useSpaceMetadataSchema({ scope, spaceId, onSaved, enabled = true
         locked.current = false;
       }
     },
-    [actions, canEdit, schemaData, refetch, onSaved, t],
+    [actions, canEdit, schemaData, t],
   );
   const mutations = useMemo(
     () => ({
@@ -142,8 +139,7 @@ export function useSpaceMetadataSchema({ scope, spaceId, onSaved, enabled = true
   const handleCompleted = useCallback(() => {
     if (!alive.current) return;
     void refetch();
-    onSaved?.();
     toast.show({ type: "success", message: t("detail.saved") });
-  }, [refetch, onSaved, t]);
+  }, [refetch, t]);
   return { uncertain, schema, recentJobs, canEdit, mutations, jobId, jobState, handleStateChange, handleCompleted, refetch };
 }

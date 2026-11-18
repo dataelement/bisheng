@@ -140,11 +140,6 @@ export function SpaceManagementView({
   const rootName = rootInfo?.name;
   const spaceTitle = rootName ?? title;
   const spaceDescription = rootInfo ? rootInfo.description : description;
-  const handleSaved = async () => {
-    await client.invalidateQueries({
-      queryKey: knowledgeQueryKeys.scope(scope),
-    });
-  };
   const tab = params.get("tab");
   const legacySettingsTab =
     tab === "settings" || tab === "defaults" || tab === "embedding" || tab === "jobs";
@@ -363,7 +358,6 @@ export function SpaceManagementView({
           scope={scope}
           spaceId={spaceId}
           onClose={handleCloseMetadata}
-          onSaved={() => { void handleSaved(); }}
         />
       )}
       {permissionOpen && canManageMembers && (
