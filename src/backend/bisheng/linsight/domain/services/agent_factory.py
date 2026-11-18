@@ -366,7 +366,13 @@ _LINSIGHT_CITATION_TAIL_ZH = """# 来源标注（与上文 Citation Rules 同一
 
 _LINSIGHT_CITATION_TAIL_HANDLES_ZH = """# 来源编号（与上文「来源编号」同一要求，不改变其它任何要求）
 
-写交付物正文和最终回复时，每条依据检索资料的句子末尾写编号 [Sn]，多条写 [S3][S7]；编号取自检索结果或本轮来源表。"""
+写交付物正文和最终回复时，每条依据检索资料的句子末尾写编号，例如 [S3]，多条写 [S3][S7]；编号取自检索结果或本轮来源表。"""
+
+# The direct profile gets no source table (F075: the daily chat never had one), so
+# its tail must not point at one.
+_DIRECT_CITATION_TAIL_HANDLES_ZH = """# 来源编号（与上文「来源编号」同一要求，不改变其它任何要求）
+
+回答中每条依据检索资料的句子末尾写编号，例如 [S3]，多条写 [S3][S7]；编号取自检索结果或之前的回答。"""
 
 
 class _CitationTailMiddleware(_LanguageTailMiddleware):
@@ -2056,7 +2062,11 @@ async def create_linsight_agent(
     # F069 P1: per-turn source table (+ one-shot "add the handles" nudge after a
     # handle-less output/*.md write). awrap_model_call only — never wrap_tool_call
     # (design decision 5). Gated like the rules: citable tool AND handle contract.
-    if citation_handles and (has_kb or has_web):
+    # Planned profile only: the table backs the "add the handles to output/*.md"
+    # repair of deep research. A direct answer cites from the tool results it has
+    # just read, as the daily chat always did (F075 §8), and a table appended as a
+    # user message on every call made the model talk about it to the user.
+    if planned and citation_handles and (has_kb or has_web):
         from bisheng.linsight.domain.services.citation_source_middleware import LinsightCitationSourceMiddleware
 
         middlewares.append(
@@ -2107,7 +2117,12 @@ async def create_linsight_agent(
 
     # F069: citation requirement restated right before the language tail, only
     # when a citable retrieval tool is bound (same gate as the rules themselves).
-    citation_tail_text = _LINSIGHT_CITATION_TAIL_HANDLES_ZH if citation_handles else _LINSIGHT_CITATION_TAIL_ZH
+    if not citation_handles:
+        citation_tail_text = _LINSIGHT_CITATION_TAIL_ZH
+    elif planned:
+        citation_tail_text = _LINSIGHT_CITATION_TAIL_HANDLES_ZH
+    else:
+        citation_tail_text = _DIRECT_CITATION_TAIL_HANDLES_ZH
     if has_kb or has_web:
         middlewares.append(_CitationTailMiddleware(citation_tail_text))
     # Language directive LAST in the stack so it appends AFTER every framework
@@ -2171,8 +2186,13 @@ async def create_linsight_agent(
         tools=researcher.get("tools"),
         # F069 P1: the researcher gets the source table (no nudge — it does not
         # write deliverables) and the citation tail, both gated on a citable tool.
+        # The table is planned-only, as on the main graph.
         citation=[
-            *(_researcher_source_middleware(citation_scope) if (citation_handles and researcher_citable) else []),
+            *(
+                _researcher_source_middleware(citation_scope)
+                if (planned and citation_handles and researcher_citable)
+                else []
+            ),
             *([_CitationTailMiddleware(citation_tail_text)] if researcher_citable else []),
         ],
     )

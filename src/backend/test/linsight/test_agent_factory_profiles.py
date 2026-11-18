@@ -156,6 +156,7 @@ async def _run(
     checkpointer=None,
     thread_id: str = "t-profiles",
     script: list[AIMessage] | None = None,
+    citation_scope=None,
 ) -> _ScriptedModel:
     """Build the real graph for ``profile`` and run one user turn."""
     from bisheng.core.config.settings import LinsightConf
@@ -180,6 +181,7 @@ async def _run(
         skills_present=skills,
         memory_prompt=memory_prompt,
         checkpointer=checkpointer,
+        citation_scope=citation_scope,
         **kwargs,
     )
     await agent.ainvoke(
@@ -270,6 +272,41 @@ async def test_same_business_tools_in_both_profiles(
     citable = search_knowledge_base in tools or web_search in tools
     for model in (direct, planned):
         assert (agent_factory._LINSIGHT_CITATION_TAIL_ZH in model.system_texts[0]) is citable
+
+
+async def test_source_table_is_for_deep_research_only(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    """A direct answer gets no source table and a tail that does not point at one.
+
+    The table is a user-role message appended to every model call; in a direct
+    answer the model repeated its wording to the user (114, 2026-11-18).
+    """
+    from bisheng.citation.domain.services.linsight_citation_scope import LinsightCitationScope
+    from bisheng.linsight.domain.services import citation_source_middleware as source_mod
+
+    monkeypatch.setattr(source_mod, "get_redis_client", AsyncMock(side_effect=ConnectionError("no redis")))
+
+    def _has_table(model: _ScriptedModel) -> bool:
+        return any(str(m.content).startswith(source_mod.SOURCE_TABLE_HEADER) for call in model.inputs for m in call)
+
+    seen: dict[str, _ScriptedModel] = {}
+    for profile in ("direct", "planned"):
+        scope = LinsightCitationScope(svid="sv-pf", session_id="chat-pf", enabled=True)
+        scope.register_handle("S1", "key-1", {"type": "web", "title": "网页标题", "loc": ""})
+        seen[profile] = await _run(
+            monkeypatch, tmp_path, profile=profile, tools=[web_search], citation_scope=scope, thread_id=f"t-{profile}"
+        )
+
+    assert _has_table(seen["planned"])
+    assert not _has_table(seen["direct"])
+    assert agent_factory._LINSIGHT_CITATION_TAIL_HANDLES_ZH in seen["planned"].system_texts[0]
+    assert agent_factory._DIRECT_CITATION_TAIL_HANDLES_ZH in seen["direct"].system_texts[0]
+    for text in (
+        source_mod.SOURCE_TABLE_HEADER,
+        source_mod.NUDGE_TEMPLATE,
+        *(m.system_texts[0] for m in seen.values()),
+    ):
+        assert "[Sn]" not in text
+    assert "来源表" not in agent_factory._DIRECT_CITATION_TAIL_HANDLES_ZH
 
 
 async def test_ask_user_in_both_profiles(monkeypatch: pytest.MonkeyPatch, tmp_path):

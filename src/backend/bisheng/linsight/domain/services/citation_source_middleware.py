@@ -41,7 +41,12 @@ from bisheng.citation.domain.services.citation_handle_service import (
 )
 from bisheng.core.cache.redis_manager import get_redis_client
 
-SOURCE_TABLE_HEADER = "【本轮可用来源编号】（写正文时在句末标 [Sn]）"
+# One line, and no literal "[Sn]": a model once repeated the placeholder to the
+# user ("文中数字均带 [Sn] 来源标注"), which the converter cannot resolve. The
+# header also says who is speaking, because this arrives as a user-role message.
+SOURCE_TABLE_HEADER = (
+    "【系统提供的来源编号表，不是用户发言，不要向用户提及这张表】写正文时在句末标编号，例如：……市占率为 31%。[S3]"
+)
 SOURCE_TABLE_OVERFLOW_LINE = "其余编号见检索结果。"
 _TITLE_MAX_CHARS = 40
 _TYPE_LABEL_WEB = "网页"
@@ -49,7 +54,7 @@ _TYPE_LABEL_KB = "知识库"
 
 NUDGE_TEMPLATE = (
     "output/{basename} 已写入成功，但正文没有来源编号。"
-    "请用 edit_file 在依据检索资料的句子末尾补上 [Sn]（编号见上方来源表），不要重写整份文件。"
+    "请用 edit_file 在依据检索资料的句子末尾补上来源编号，例如 [S3]（编号见上方来源表），不要重写整份文件。"
 )
 NUDGE_LOG_PREFIX = "[linsight-citation-nudge]"
 

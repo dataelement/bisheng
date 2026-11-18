@@ -222,7 +222,7 @@ async def test_nudge_emitted_for_uncited_output_md_and_logged(fake_redis, nudge_
     assert len(tail) == 2
     assert tail[0].startswith(SOURCE_TABLE_HEADER)
     assert tail[1].startswith("output/x.md 已写入成功，但正文没有来源编号。")
-    assert "edit_file" in tail[1] and "[Sn]" in tail[1]
+    assert "edit_file" in tail[1] and "[S3]" in tail[1] and "[Sn]" not in tail[1]
     # state untouched
     assert seen.state["messages"] == messages
     # dedupe recorded on the session handle table with the table's TTL

@@ -316,6 +316,7 @@
 | 15 | langchain 1.5 的摘要生成失败改为抛异常，并给摘要模型套了 3 次重试；1.3 是返回 `Error generating summary` 字符串。deepagents 0.7 的 `_offload_to_backend` 多了 `session_id` 参数，历史文件名从线程 id 改为生成的会话 id；`_intercept_large_tool_result` 少了 `runtime` 参数 | F087 的“摘要失败重试一次”失效：失败不再被识别，或一次失败最多打 6 次模型调用；工具结果卸载直接报 `TypeError` | `context_budget.py`：把摘要模型换回不带重试的原模型，重试仍由 BiSheng 的两次循环负责，异常与“too long to summarize”都算失败；两个签名按新版调整 |
 | 16 | deepagents 0.7 遇到超窗时先裁剪尾部，裁剪后没有变短就直接抛 `ContextOverflowError`，不再重试一次 | 历史很短的子代理超窗时只调用 1 次模型就结束，测试剧本里多出来的回复被主图吃掉 | 行为可接受（子代理仍以“未完成”说明返回主任务）。`test_context_overflow_flow.py` 的子代理剧本补了 3 次读页，让压缩有内容可裁 |
 | 17 | `create_linsight_agent` 按模型的 provider 名在进程内注册一个全局 profile（去掉框架自带的摘要中间件）。测试里不同文件的脚本化模型类同名时 provider 名相同 | 新测试先跑，之后别的文件直接调用 `create_deep_agent` 就报“assembled outside bisheng_summarization” ；单独跑能过，合起来才失败 | 每个用 `create_linsight_agent` 的测试模型都通过 `_get_ls_params` 给自己起独立的 `ls_provider` |
+| 18 | 来源表中间件（`LinsightCitationSourceMiddleware`）在每次模型调用的消息列表末尾追加一条 user 角色消息，原来的挂载条件只看“有检索工具且启用编号”。F075 明确日常对话不注入来源表，旧日常对话从未有过 | `direct` 档共用工厂后每次模型调用都多一条最多 150 行的 user 消息；114 上模型把表头里的 `[Sn]` 当作用户的话向用户复述，前端只转换带数字的编号，`[Sn]` 原样显示 | `agent_factory.py`：来源表只在 `planned` 档挂载（主图与 researcher 相同）；`direct` 档用不提来源表的尾部提示 `_DIRECT_CITATION_TAIL_HANDLES_ZH`；表头、补编号提醒、尾部提示都不再出现字面 `[Sn]`。回归：`test_agent_factory_profiles.py::test_source_table_is_for_deep_research_only`。改动对引用数量的影响尚未在 114 实测 |
 
 ---
 
@@ -481,3 +482,4 @@ Wave 1–4 留下、技术上已知、尚未处理的：
 | 2026-11-17 | 初版（未实施） | spec 确认后进入设计 |
 | 2026-11-18 | 回填首字符计时（S5）：K1 写入基线；新增决策 12（附件解析前移） | 用户要求先补计时 |
 | 2026-11-17 | 独立评审后修订：决策 9 增加“等待回答”和“租约过期”分支与接力运行；决策 3 改用短租约判活；决策 7 明确 `direct` 运行不建 `linsight_session_version`、在途任务与工作区键的处理；决策 4 增加 `resync`；补充事件字段与 AC 承接表；更正 3 处与代码不符的陈述 | `/sdd-review design` |
+| 2026-11-18 | §5 增 #18：`direct` 档不再注入来源表；提示词里去掉字面 `[Sn]` | 114 实测会话 9d256fd6 的回复向用户提到 `[Sn]` |
