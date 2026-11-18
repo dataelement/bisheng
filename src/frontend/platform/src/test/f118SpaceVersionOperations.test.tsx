@@ -188,8 +188,8 @@ it("checks upload on the current folder and delete on the historical physical fi
   const ports = api();
   mount(<SpaceVersionHistorySheet scope={scope} spaceId={7} parentId={9} fileId={12} open onOpenChange={vi.fn()} api={ports} />);
   expect(await screen.findByRole("button", { name: "versions.set_primary" })).toBeVisible();
-  await waitFor(() => expect(mocks.get).toHaveBeenCalledWith(expect.stringContaining("knowledge_file/11/my-permissions")));
-  expect(mocks.get).toHaveBeenCalledWith(expect.stringContaining("folder/9/my-permissions"));
+  await waitFor(() => expect(mocks.get).toHaveBeenCalledWith(expect.stringContaining("knowledge_file/11/my-permissions"), undefined));
+  expect(mocks.get).toHaveBeenCalledWith(expect.stringContaining("folder/9/my-permissions"), undefined);
   expect(screen.queryByRole("button", { name: "versions.new_version" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "versions.delete_history" })).not.toBeInTheDocument();
 });

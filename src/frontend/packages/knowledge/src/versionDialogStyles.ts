@@ -1,0 +1,18 @@
+export const versionDialogStyles = {
+  managementSize: 'w-full max-w-[min(720px,90vw)] max-h-[85vh]',
+  historySize: 'w-full max-w-[min(860px,90vw)] max-h-[80vh]',
+  historyFrame: 'flex flex-col gap-0 overflow-hidden rounded-xl border border-border-base bg-bg-page p-0 dark:bg-bg-page sm:rounded-lg',
+  historyHeader: 'relative shrink-0 px-6 pt-5 pb-3 pr-14 text-left',
+  historyTitle: 'm-0 truncate text-base font-semibold leading-none tracking-tight text-text-1',
+  close: 'absolute right-4 top-4 inline-flex size-8 items-center justify-center rounded-md text-text-2 transition-colors hover:bg-fill-2',
+  body: 'min-h-0 flex-1 overflow-y-auto px-6',
+  footer: 'flex shrink-0 flex-row justify-end gap-2 border-t border-border-base px-6 py-3',
+  summary: 'rounded-lg border border-border-base bg-fill-1 px-4 py-3',
+  fieldLabel: 'text-xs text-text-3',
+  summaryValue: 'text-sm font-medium text-text-1',
+  historyList: 'rounded-lg border border-border-base',
+  historyRow: 'border-b border-fill-2 even:bg-fill-1/60 last:border-b-0 hover:bg-fill-1',
+  historyAction: 'inline-flex size-7 shrink-0 items-center justify-center rounded border border-border-base bg-bg-page p-0 text-text-2 transition-colors hover:bg-fill-1 disabled:cursor-not-allowed disabled:opacity-40',
+  candidateList: 'scrollbar-on-scroll flex max-h-[220px] flex-col gap-2 overflow-y-auto',
+  candidateCard: 'flex items-center justify-between gap-3 rounded-lg border border-border-base bg-bg-page px-4 py-3 transition-colors hover:border-blue-500 hover:bg-blue-50',
+} as const;

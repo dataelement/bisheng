@@ -1,6 +1,15 @@
-import { Button, Tag } from "@bisheng/ui";
-import type { SimilarDocumentFile } from "@bisheng/knowledge";
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
+import { Button } from "@bisheng/ui";
+import {
+  VersionHistoryAction,
+  VersionHistoryStatusBadge,
+  VersionHistorySummary,
+  VersionHistoryTable,
+  versionDialogStyles as styles,
+  type SimilarDocumentFile,
+} from "@bisheng/knowledge";
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { CheckCircle, Trash2 } from "lucide-react";
 import { useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -80,6 +89,7 @@ function HistoryContent({
   onSimilar,
 }: SpaceVersionHistorySheetProps & { onSimilar: () => void }) {
   const { t } = useTranslation("knowledge");
+  const isManagement = initialPanel === "merge";
   const { appConfig } = useContext(locationContext);
   const api = { ...knowledgeVersionsApi, ...customApi };
   const client = useQueryClient();
@@ -231,14 +241,21 @@ function HistoryContent({
   return (
     <SheetContent
       aria-describedby={undefined}
-      className="flex w-full flex-col gap-0 sm:max-w-[400px]"
+      side="center"
+      overlayClassName="bg-black/40"
+      closeClassName={`${styles.close} opacity-100 data-[state=open]:bg-transparent`}
+      className={`${isManagement ? styles.managementSize : styles.historySize} ${styles.historyFrame}`}
     >
-      <SheetHeader className="h-[60px] shrink-0 justify-center border-b px-6 pr-12">
-        <SheetTitle className="m-0 truncate text-lg font-medium">
-          {data?.title ?? t("f118.version_history")}
+      <SheetHeader className={isManagement
+        ? "relative shrink-0 border-b border-border-base px-6 py-4 pr-14 text-left"
+        : styles.historyHeader}>
+        <SheetTitle className={isManagement ? "m-0 truncate text-base font-semibold text-text-1" : styles.historyTitle}>
+          {isManagement
+            ? data?.title ?? t("f118.version_history")
+            : t("knowledge.version.history.title", { ns: "shared" })}
         </SheetTitle>
       </SheetHeader>
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+      <div className={`${styles.body} ${isManagement ? "py-5" : "py-4"}`}>
         {!enabled ? (
           <KnowledgeScopeUnavailable size="panel" />
         ) : query.isError ? (
@@ -248,27 +265,33 @@ function HistoryContent({
         ) : query.data && !data ? (
           <KnowledgeScopeUnavailable size="panel" role="alert" />
         ) : !data ? (
-          <p className="text-sm text-muted-foreground" role="status">
-            {t("loading")}
-          </p>
+          <LoadingState label={t("loading")} className="min-h-32" />
         ) : (
           <>
-            <dl className="mb-4 space-y-2 text-sm">
-              <div>
-                <dt className="text-muted-foreground">
-                  {t("f118.document_code")}
-                </dt>
-                <dd>{data.doc_code ?? "--"}</dd>
-              </div>
-              {data.current_primary_version_no !== null && (
-                <div>
-                  <dt className="text-muted-foreground">
-                    {t("f118.primary_version")}
+            {isManagement ? (
+              <dl className={`mb-4 flex flex-wrap gap-x-6 gap-y-3 ${styles.summary}`}>
+                <div className="min-w-0 flex-1">
+                  <dt className={`mb-1 ${styles.fieldLabel}`}>
+                    {t("f118.document_code")}
                   </dt>
-                  <dd>{data.current_primary_version_no}</dd>
+                  <dd className={`break-words ${styles.summaryValue}`}>{data.doc_code ?? "--"}</dd>
                 </div>
-              )}
-            </dl>
+                {data.current_primary_version_no !== null && (
+                  <div className="min-w-0 flex-1">
+                    <dt className={`mb-1 ${styles.fieldLabel}`}>
+                      {t("f118.primary_version")}
+                    </dt>
+                    <dd className={styles.summaryValue}>{data.current_primary_version_no}</dd>
+                  </div>
+                )}
+              </dl>
+            ) : (
+              <VersionHistorySummary
+                documentTitle={data.title}
+                documentCode={data.doc_code}
+                primaryVersion={data.current_primary_version_no}
+              />
+            )}
             {operationsEnabled && (
               <div className="mb-4 space-y-3">
                 <div className="flex flex-wrap gap-2">
@@ -337,91 +360,45 @@ function HistoryContent({
                 {t("f118.no_visible_versions")}
               </p>
             ) : (
-              <ol className="divide-y">
-                {data.versions.map((version) => (
-                  <li
-                    key={version.version_id}
-                    className="space-y-3 py-4 first:pt-0"
-                  >
-                    <div className="flex items-center gap-2 text-sm font-medium">
-                      <span>
-                        {t("f118.version_no")} {version.version_no}
-                      </span>
-                      {version.is_primary && (
-                        <Tag size="small" color="brand">
-                          {t("f118.primary_version")}
-                        </Tag>
-                      )}
-                    </div>
-                    <dl className="space-y-2 text-sm">
-                      <div>
-                        <dt className="text-muted-foreground">
-                          {t("fileName")}
-                        </dt>
-                        <dd className="break-words">
-                          {version.original_file_name}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="text-muted-foreground">
-                          {t("f118.document_code")}
-                        </dt>
-                        <dd>{version.file_code ?? "--"}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-muted-foreground">
-                          {t("f118.version_uploader")}
-                        </dt>
-                        <dd>{version.uploader_name ?? "--"}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-muted-foreground">
-                          {t("f118.version_upload_time")}
-                        </dt>
-                        <dd>
-                          {version.upload_time?.replace("T", " ") ?? "--"}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="mb-1 text-muted-foreground">
-                          {t("status")}
-                        </dt>
-                        <dd>
-                          {version.status !== null &&
-                          FILE_STATUSES[version.status] ? (
-                            <StatusIndicator status={version.status} />
-                          ) : (
-                            "--"
-                          )}
-                        </dd>
-                      </div>
-                    </dl>
+              <VersionHistoryTable rows={data.versions.map((version) => ({
+                id: version.version_id,
+                versionNumber: version.version_no,
+                isPrimary: version.is_primary,
+                fileName: version.original_file_name,
+                fileCode: version.file_code,
+                uploader: version.uploader_name,
+                uploadedAt: version.upload_time,
+                status: version.status !== null && FILE_STATUSES[version.status] ? (
+                  <StatusIndicator
+                    status={version.status}
+                    badge={<VersionHistoryStatusBadge status={version.status} />}
+                  />
+                ) : null,
+                actions: (
+                  <>
                     {operationsEnabled && !version.is_primary && (
-                      <div className="flex flex-wrap gap-2">
+                      <>
                         {version.status === 2 && (
-                          <Button
-                            size="small"
-                            variant="outlined"
+                          <VersionHistoryAction
+                            label={t("versions.set_primary")}
+                            tone="primary"
                             disabled={busy || uncertain}
-                            onClick={() =>
-                              handleMutation(version.version_id, "primary")
-                            }
+                            onClick={() => handleMutation(version.version_id, "primary")}
                           >
-                            {t("versions.set_primary")}
-                          </Button>
+                            <CheckCircle className="size-4" aria-hidden />
+                          </VersionHistoryAction>
                         )}
-                        {canDeleteVersion(version.version_id) && <Button
-                          size="small"
-                          color="danger"
-                          variant="text"
-                          disabled={busy || uncertain}
-                          onClick={() =>
-                            handleMutation(version.version_id, "delete")
-                          }
-                        >
-                          {t("versions.delete_history")}
-                        </Button>}
-                      </div>
+                        {canDeleteVersion(version.version_id) && (
+                          <VersionHistoryAction
+                            label={t("versions.delete_history")}
+                            tone="danger"
+                            disabled={busy || uncertain}
+                            onClick={() => handleMutation(version.version_id, "delete")}
+                          >
+                            <Trash2 className="size-4" aria-hidden />
+                          </VersionHistoryAction>
+                        )}
+                      </>
                     )}
                     <SpaceFileTools
                       scope={scope}
@@ -429,14 +406,14 @@ function HistoryContent({
                       fileId={version.knowledge_file_id}
                       status={version.status}
                     />
-                  </li>
-                ))}
-              </ol>
+                  </>
+                ),
+              }))} />
             )}
           </>
         )}
       </div>
-      <SheetFooter className="h-[60px] shrink-0 items-center border-t px-6">
+      <SheetFooter className={styles.footer}>
         <Button variant="outline" onClick={() => onOpenChange(false)}>
           {t("close", { ns: "bs" })}
         </Button>

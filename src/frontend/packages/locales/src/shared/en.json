@@ -94,7 +94,32 @@
       "error": "Error",
       "retry": "Retry",
       "loading": "Loading",
-      "uncertain": "Completion was not confirmed. Close and refresh the list to check the result before submitting again. Uploaded standalone files are retained."
+      "uncertain": "Completion was not confirmed. Close and refresh the list to check the result before submitting again. Uploaded standalone files are retained.",
+      "history": {
+        "title": "Version history",
+        "document": "Logical document",
+        "document_code": "Document code",
+        "current_primary": "Current primary",
+        "primary_badge": "Primary",
+        "columns": {
+          "version": "Version",
+          "filename": "Original file name",
+          "file_code": "File encoding",
+          "uploader": "Uploader",
+          "upload_time": "Upload time",
+          "parse_status": "Parse status",
+          "actions": "Actions"
+        },
+        "status": {
+          "parsing": "Parsing",
+          "success": "Success",
+          "failed": "Failed",
+          "processing": "Processing",
+          "queueing": "Queueing",
+          "timeout": "Timeout",
+          "violation": "Violation"
+        }
+      }
     },
     "move": {
       "title": "Move to",

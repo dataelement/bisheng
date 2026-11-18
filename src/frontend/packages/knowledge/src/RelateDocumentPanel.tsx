@@ -6,6 +6,7 @@ import { RelationConfirmation } from './RelationConfirmation';
 import { serviceIdentity } from './serviceIdentity';
 import type { SearchableDocument, SimilarDocumentCandidate, SimilarDocumentEvents, SimilarDocumentFile, SimilarDocumentsServices } from './types';
 import { useSimilarDocuments } from './useSimilarDocuments';
+import { versionDialogStyles as styles } from './versionDialogStyles';
 
 interface CandidateCardProps {
   entry: SimilarDocumentCandidate;
@@ -18,7 +19,7 @@ function RecommendationCard({ entry, disabled, onLink }: CandidateCardProps) {
   const uploadTime = entry.primary_upload_time?.replace('T', ' ').slice(0, 16);
   const version = t('primary_version_label', { version: entry.current_primary_version_no ?? 1 });
   return (
-    <div className="group flex items-center justify-between gap-3 rounded-lg border border-border-base bg-bg-page px-4 py-3 transition-colors hover:border-blue-500 hover:bg-blue-50">
+    <div className={styles.candidateCard}>
       <div className="min-w-0 flex-1">
         <div className="mb-1 flex items-center gap-2">
           <Tooltip content={entry.title} side="top"><p className="min-w-0 cursor-default truncate text-body font-medium text-text-1">{entry.title}</p></Tooltip>
@@ -89,7 +90,7 @@ function RelateDocumentContent({ spaceId, file, services, mode = 'merge', classN
   const linking = mode === 'link';
   return (
     <div className={cn('flex h-full flex-col gap-5', className)}>
-      <section className="flex shrink-0 items-start justify-between rounded-lg border border-border-base bg-fill-1 px-4 py-3">
+      <section className={`flex shrink-0 items-start justify-between ${styles.summary}`}>
         <div className="min-w-0 flex-1 pr-4">
           <p className="mb-1 text-caption text-text-3">{t('section_current_file')}</p>
           <Tooltip content={file.name} side="top"><p className="mb-1 truncate text-h4 font-medium text-text-1">{file.name}</p></Tooltip>
@@ -108,7 +109,7 @@ function RelateDocumentContent({ spaceId, file, services, mode = 'merge', classN
           ) : state.candidates.length === 0 ? (
             <div className="flex h-[72px] items-center justify-center rounded-md border border-border-base bg-fill-1"><p className="text-body text-text-3">{t('no_recommendations')}</p></div>
           ) : (
-            <div className={cn('scrollbar-on-scroll flex max-h-[220px] flex-col gap-2 overflow-y-auto', !linking && 'rounded-md border border-border-base bg-fill-1 p-2')}>
+            <div className={cn(styles.candidateList, !linking && 'rounded-md border border-border-base bg-fill-1 p-2')}>
               {state.candidates.map((entry) => <RecommendationCard key={entry.target_document_id} entry={entry} disabled={locked} onLink={state.selectTarget} />)}
             </div>
           )}

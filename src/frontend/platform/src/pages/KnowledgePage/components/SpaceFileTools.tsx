@@ -1,5 +1,7 @@
-import { Button, Dropdown, DropdownItem } from "@bisheng/ui";
+import { versionDialogStyles } from "@bisheng/knowledge";
+import { Button, Dropdown, DropdownItem, Tooltip } from "@bisheng/ui";
 import { useQuery } from "@tanstack/react-query";
+import { Outlined } from "bisheng-icons";
 import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { checkResourceActionApi } from "@/controllers/API/permission";
@@ -57,10 +59,11 @@ export function SpaceFileTools(props: SpaceFileToolsProps) {
   }, [enabled, permissions.error]);
   const allowed = enabled && !permissions.isError && permissions.data?.allowed === true && (!permissions.isFetching || active !== null);
   const disabled = [1, 4, 5].includes(props.status ?? -1);
+  const processingLabel = t("f118.processing_title_file");
   const items = allowed ? (
     <>
       <DropdownItem disabled={disabled} onSelect={handleProcess}>
-        {t("f118.processing_title_file")}
+        {processingLabel}
       </DropdownItem>
       <DropdownItem disabled={disabled} onSelect={() => setActive("index")}>
         {t("f118.index_edit_title")}
@@ -70,9 +73,23 @@ export function SpaceFileTools(props: SpaceFileToolsProps) {
   return (
     <>
       {props.children ? props.children(items) : allowed && (
-        <Dropdown menu={items}>
-          <Button variant="text" disabled={disabled}>{t("f118.processing_title_file")}</Button>
-        </Dropdown>
+        <Tooltip content={processingLabel}>
+          <span className="inline-flex shrink-0">
+            <Dropdown menu={items}>
+              <Button
+                type="button"
+                color="default"
+                variant="outlined"
+                iconOnly
+                className={versionDialogStyles.historyAction}
+                aria-label={processingLabel}
+                disabled={disabled}
+              >
+                <Outlined.Setting aria-hidden />
+              </Button>
+            </Dropdown>
+          </span>
+        </Tooltip>
       )}
       {allowed && <SpaceIndexEditDialog
         scope={props.scope}
