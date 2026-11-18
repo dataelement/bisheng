@@ -486,6 +486,21 @@ it("offers version management and a direct similar-document entry for a parsed s
   ).not.toBeInTheDocument();
 });
 
+it("shows version management and history when the permission payload omits the visible relation", async () => {
+  actions = ["rename", "move", "manage_permission", "delete", "download"];
+  rootActions = ["edit", "manage_permission", "delete"];
+  rows = [file(11, { version_no: 2, is_multi_version: true, file_name: "versioned.md" })];
+  mount("workspace", true);
+  expect(await screen.findByText("V2")).toBeVisible();
+  const opened = await menu("versioned.md");
+  expect(
+    await within(opened).findByRole("menuitem", { name: "versions.manage" }),
+  ).toBeVisible();
+  expect(
+    within(opened).getByRole("menuitem", { name: "f118.version_history" }),
+  ).toBeVisible();
+});
+
 it("shows version numbers and history for multiple versions", async () => {
   rows = [file(11, { version_no: 3, is_multi_version: true })];
   mount("workspace", true);
