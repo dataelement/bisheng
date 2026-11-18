@@ -1,12 +1,13 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { getFileDownloadApi, getFilePreviewApi } from "~/api/knowledge";
+import { getMyResourcePermissions } from "~/api/permission";
 import { triggerUrlDownload } from "../knowledgeUtils";
 import type { FilePreviewProps } from "./index";
 import FilePreviewPage from "./FilePreviewPage";
 
+jest.mock("~/api/permission", () => ({ getMyResourcePermissions: jest.fn() }));
 jest.mock("~/api/knowledge", () => ({
-    ...jest.requireActual("~/api/knowledge"),
     getFilePreviewApi: jest.fn(),
     getFileDownloadApi: jest.fn(),
 }));
@@ -15,10 +16,10 @@ jest.mock("~/pages/Subscription/AiChat/FileAiDock", () => ({ FileAiDock: () => n
 jest.mock("./RichKnowledgePreview", () => ({ RichKnowledgePreview: () => null }));
 jest.mock("./index", () => ({
     __esModule: true,
-    default: ({ fileUrl, fileType, onDownloadFile, conversionFailed }: FilePreviewProps) => (
+    default: ({ fileUrl, fileType, onDownloadFile, conversionFailed, allowDownload }: FilePreviewProps) => (
         <div>
             <output data-testid="viewer" data-type={fileType} data-conversion-failed={conversionFailed}>{fileUrl}</output>
-            <button onClick={onDownloadFile}>Download</button>
+            {allowDownload && <button onClick={onDownloadFile}>Download</button>}
         </div>
     ),
 }));
@@ -29,6 +30,9 @@ const metadata = { file_source: "space_upload", source_url: "", final_url: "", w
 
 describe("knowledge preview resource contract", () => {
     beforeEach(() => {
+        jest.mocked(getMyResourcePermissions).mockResolvedValue({
+            actions: ["download"], sources: [], mode: "INHERIT", roster_complete: true,
+        } as never);
         __APP_ENV__.BASE_URL = "/workspace";
         window.matchMedia = jest.fn().mockReturnValue({
             matches: false, addEventListener: jest.fn(), removeEventListener: jest.fn(),
@@ -73,7 +77,18 @@ describe("knowledge preview resource contract", () => {
         fireEvent.click(await screen.findByRole("button", { name: "Download" }));
         await waitFor(() => expect(clicks).toEqual(["/bisheng/original/file.pptx?signature=download"]));
         expect(downloadApi).toHaveBeenCalledWith("6", "4");
+        expect(getMyResourcePermissions).toHaveBeenCalledWith("knowledge_file", "4");
         triggerUrlDownload("/bisheng/original/file.pdf?signature=list", "file.pdf");
         expect(clicks[1]).toBe("/bisheng/original/file.pdf?signature=list");
+    });
+
+    it("hides download when the file does not grant it", async () => {
+        jest.mocked(getMyResourcePermissions).mockResolvedValue({
+            actions: ["manage_permission"], sources: [], mode: "CUSTOM", roster_complete: true,
+        } as never);
+        previewApi.mockResolvedValue({ ...metadata, original_url: "/bisheng/original/file.docx", preview_url: "" });
+        openPreview("file.docx");
+        await waitFor(() => expect(screen.getByTestId("viewer")).toHaveTextContent("/bisheng/original/file.docx"));
+        expect(screen.queryByRole("button", { name: "Download" })).not.toBeInTheDocument();
     });
 });

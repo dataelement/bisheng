@@ -55,7 +55,11 @@ it("shows the desktop batch menu as soon as a file is selected and hides it afte
   const batchTrigger = screen.getByRole("button", batchMenu);
   expect(batchTrigger).toBeVisible();
   fireEvent.keyDown(batchTrigger, { key: "ArrowDown" });
-  fireEvent.click(await screen.findByRole("menuitem", { name: "com_knowledge.batch_download" }));
+  expect(await screen.findByRole("menuitem", { name: "com_knowledge.batch_download" })).toBeVisible();
+  expect(screen.queryByRole("menuitem", { name: "com_knowledge.batch_add_tags" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("menuitem", { name: "com_knowledge.move" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("menuitem", { name: "com_knowledge.batch_delete" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("menuitem", { name: "com_knowledge.batch_download" }));
   expect(onBatchDownload).toHaveBeenCalledTimes(1);
 
   rerender(header(2));

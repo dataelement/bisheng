@@ -4,7 +4,7 @@ import { Dropdown, DropdownItem, DropdownSeparator } from "@bisheng/ui";
 import { Tooltip as SharedTooltip } from "@bisheng/ui";
 import { CircleHelp, FolderPlus, FolderUp, Link2 } from "lucide-react";
 import { Outlined } from "bisheng-icons";
-import { KnowledgeSpace, SpaceRole, VisibilityType } from "~/api/knowledge";
+import { KnowledgeSpace, VisibilityType } from "~/api/knowledge";
 
 
 import { useLocation, useNavigate } from "react-router-dom";
@@ -43,6 +43,8 @@ interface KnowledgeSpaceHeaderProps {
   onClearSelection: () => void;
   onBatchDownload: () => void;
   canBatchDownload?: boolean;
+  canBatchTag?: boolean;
+  canBatchRetry?: boolean;
   onBatchTag: () => void;
   onBatchRetry: () => void;
   onBatchDelete: () => void;
@@ -85,11 +87,10 @@ export function KnowledgeSpaceHeader({
   onTriggerWebLink,
   canCreateFolder = false,
   canUploadFile = false,
-  selectedCount,
-  hasFoldersSelected,
-  hasFailedFiles,
   onBatchDownload,
   canBatchDownload = false,
+  canBatchTag = false,
+  canBatchRetry = false,
   onBatchTag,
   onBatchRetry,
   onBatchDelete,
@@ -113,7 +114,6 @@ export function KnowledgeSpaceHeader({
   const location = useLocation();
   const bishengConfig = useRecoilValue(bishengConfState);
 
-  const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
   const showShare = canShareSpace && space.visibility !== VisibilityType.PRIVATE;
   const spaceActions = {
     space,
@@ -129,24 +129,27 @@ export function KnowledgeSpaceHeader({
   // segment, and a second copy up here would read as the current folder's.
   // Also hidden when every row is permission-gated away — an empty menu.
   const showSpaceSettingsButton = currentPath.length === 0 && getSpaceActionFlags(spaceActions).hasAny;
-  const hasSelection = selectedCount > 0;
   const showAddMenu = canCreateFolder || canUploadFile;
-  // Filter / sort / search / view-toggle all moved into FileListToolbar.
-  const showToolbarActions = showAddMenu || isAdmin || hasSelection;
-
   const showProcessSimilar = Boolean(
     versionManagementEnabled && canManageMembers && hasSimilarSelected && onProcessSimilar,
   );
-  // The danger row gets its own group only when something sits above it.
-  const hasBatchActionsAboveDelete =
+  const showBatchMove = Boolean(onBatchMove) && canBatchMove;
+  const hasBatchMenu =
     showProcessSimilar ||
     canBatchDownload ||
-    (isAdmin && (!hasFoldersSelected || hasFailedFiles)) ||
-    Boolean(onBatchMove);
+    canBatchTag ||
+    canBatchRetry ||
+    showBatchMove ||
+    canBatchDelete;
+  // Filter / sort / search / view-toggle all moved into FileListToolbar.
+  const showToolbarActions = showAddMenu || hasBatchMenu;
+  // The danger row gets its own group only when something sits above it.
+  const hasBatchActionsAboveDelete =
+    showProcessSimilar || canBatchDownload || canBatchTag || canBatchRetry || showBatchMove;
 
   const batchAndAddActions = showToolbarActions && (
     <div className="flex shrink-0 items-center gap-2">
-      {hasSelection && (
+      {hasBatchMenu && (
         <Dropdown
           align="end"
           menu={
@@ -161,22 +164,18 @@ export function KnowledgeSpaceHeader({
                   {localize("com_knowledge.batch_download")}
                 </DropdownItem>
               )}
-              {isAdmin && !hasFoldersSelected && (
+              {canBatchTag && (
                 <DropdownItem onSelect={onBatchTag} icon={<Outlined.Tag />}>
                   {localize("com_knowledge.batch_add_tags")}
                 </DropdownItem>
               )}
-              {isAdmin && hasFailedFiles && (
+              {canBatchRetry && (
                 <DropdownItem onSelect={onBatchRetry} icon={<Outlined.Refresh />}>
                   {localize("com_knowledge.batch_retry")}
                 </DropdownItem>
               )}
-              {onBatchMove && (
-                <DropdownItem
-                  disabled={!canBatchMove}
-                  onSelect={onBatchMove}
-                  icon={<Outlined.MoveToFolder />}
-                >
+              {showBatchMove && (
+                <DropdownItem onSelect={onBatchMove} icon={<Outlined.MoveToFolder />}>
                   {localize("com_knowledge.move")}
                 </DropdownItem>
               )}
