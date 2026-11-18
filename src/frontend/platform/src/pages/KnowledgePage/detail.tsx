@@ -33,6 +33,7 @@ interface SpaceDetailProps {
   spaceId: number;
   parentId: number | null;
   onOpenFolder: (id: number | null) => void;
+  onDeleted?: (id: number) => void;
   presentation?: "workspace";
 }
 
@@ -41,6 +42,7 @@ export function SpaceDetail({
   spaceId,
   parentId,
   onOpenFolder,
+  onDeleted,
   presentation,
 }: SpaceDetailProps) {
   const { t } = useTranslation("knowledge");
@@ -60,7 +62,7 @@ export function SpaceDetail({
   const watchedCopy = useRef<number | null>(null);
   const spaceInfo = useQuery({
     queryKey: [...knowledgeQueryKeys.info(scope, spaceId), "directory-root", instance],
-    queryFn: () => knowledgeSpaceApi.getSpaceInfo(spaceId),
+    queryFn: () => knowledgeSpaceApi.getSpaceInfo(spaceId, { showError: false }),
     enabled: parentId === null && fileParams.length === 0 && processingParams.length === 0 && !copyTasks.isInitialLoading && !copyTask,
     keepPreviousData: false,
     cacheTime: 0,
@@ -69,9 +71,13 @@ export function SpaceDetail({
   const folderPath = useSpaceFolderPath(scope, spaceId, parentId);
   const facts = parentId === null ? spaceInfo : folderPath;
   const { error } = facts;
+  const spaceMissing = parentId === null && isErrorEnvelope(spaceInfo.error) && spaceInfo.error.status_code === 18000;
   useEffect(() => {
-    if (error) showApiError(error);
-  }, [error]);
+    if (spaceMissing) onDeleted?.(spaceId);
+  }, [spaceMissing, onDeleted, spaceId]);
+  useEffect(() => {
+    if (error && !spaceMissing) showApiError(error);
+  }, [error, spaceMissing]);
   useEffect(() => {
     setOpenedFile(undefined);
   }, [parentId]);
@@ -177,6 +183,7 @@ export function SpaceDetail({
       />
     </div>
   );
+  if (spaceMissing) return <p role="status" className="p-4">{t("sidebar.loading")}</p>;
   if (presentation === "workspace") return (
     <SpaceManagementView
       scope={scope}
@@ -185,6 +192,7 @@ export function SpaceDetail({
       title={title}
       spaceInfo={info}
       folderPath={parentId === null ? undefined : { parents, onOpenFolder }}
+      onDeleted={onDeleted}
     >
       {(toolbarTarget) => directory(toolbarTarget)}
     </SpaceManagementView>

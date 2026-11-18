@@ -475,8 +475,11 @@ export async function createSpace(
     body,
   );
 }
-export function getSpaceInfo(spaceId: number): Promise<KnowledgeSpaceInfo> {
-  return axios.get<unknown, KnowledgeSpaceInfo>(`${spacePath(spaceId)}/info`);
+export function getSpaceInfo(
+  spaceId: number,
+  config?: { showError?: boolean },
+): Promise<KnowledgeSpaceInfo> {
+  return axios.get<unknown, KnowledgeSpaceInfo>(`${spacePath(spaceId)}/info`, config);
 }
 export function updateSpaceBasicInfo(
   spaceId: number,

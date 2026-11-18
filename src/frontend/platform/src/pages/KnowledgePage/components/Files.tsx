@@ -15,6 +15,7 @@ import { knowledgeFilesApi, type SpaceFilePreview } from "@/controllers/API/know
 import { getMyResourcePermissionsApi } from "@/controllers/API/permission";
 import { knowledgeQueryKeys, type KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
+import { isErrorEnvelope } from "@bisheng/api-client";
 import { SpaceDirectoryOverlays } from "./SpaceDirectoryOverlays";
 import { SpaceDirectoryLoading } from "./SpaceDirectoryLoading";
 import { KnowledgeDeletionDialog } from "./KnowledgeDeletionDialog";
@@ -225,12 +226,13 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
   }, [active.error]);
   useEffect(() => {
     const type = parentId === null ? "knowledge_space" : "folder";
-    void getMyResourcePermissionsApi(type, String(parentId ?? spaceId))
+    void getMyResourcePermissionsApi(type, String(parentId ?? spaceId), { showError: false })
       .then((result) => {
         if (current.current === epoch) setContainer({ epoch, actions: result.actions });
       })
       .catch((error) => {
-        if (current.current === epoch) showApiError(error);
+        if (current.current === epoch && !(isErrorEnvelope(error) && error.status_code === 25022))
+          showApiError(error);
       });
   }, [epoch, parentId, spaceId]);
 

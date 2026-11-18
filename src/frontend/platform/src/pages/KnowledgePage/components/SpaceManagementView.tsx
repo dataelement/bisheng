@@ -13,6 +13,7 @@ import {
   type KnowledgeQueryScope,
 } from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
+import { isErrorEnvelope } from "@bisheng/api-client";
 import { useKnowledgeDeletion } from "../hooks/useKnowledgeDeletion";
 import { KnowledgeDeletionDialog } from "./KnowledgeDeletionDialog";
 import { SpaceMetadataPanel } from "./SpaceMetadataPanel";
@@ -65,6 +66,7 @@ interface SpaceManagementViewProps {
     parents: readonly SpaceFolderParent[];
     onOpenFolder: (id: number | null) => void;
   };
+  onDeleted?: (id: number) => void;
   children?: (toolbarTarget: HTMLDivElement | null) => ReactNode;
 }
 
@@ -76,6 +78,7 @@ export function SpaceManagementView({
   spaceInfo,
   parentId,
   folderPath,
+  onDeleted,
   children,
 }: SpaceManagementViewProps) {
   const { t } = useTranslation("knowledge");
@@ -102,7 +105,7 @@ export function SpaceManagementView({
   const permission = useQuery({
     queryKey: [...knowledgeQueryKeys.space(scope, spaceId), "detail-actions"],
     queryFn: () =>
-      getMyResourcePermissionsApi("knowledge_space", String(spaceId)),
+      getMyResourcePermissionsApi("knowledge_space", String(spaceId), { showError: false }),
     enabled:
       Boolean(scope.identityKey) &&
       Number.isSafeInteger(spaceId) &&
@@ -112,7 +115,8 @@ export function SpaceManagementView({
     keepPreviousData: false,
   });
   useEffect(() => {
-    if (permission.error) showApiError(permission.error);
+    if (permission.error && !(isErrorEnvelope(permission.error) && permission.error.status_code === 25022))
+      showApiError(permission.error);
   }, [permission.error]);
   const canEdit = permission.data?.actions.includes("edit") === true;
   const canSeeSpace = permission.data?.actions.includes("visible") === true;
@@ -123,13 +127,14 @@ export function SpaceManagementView({
   const canReadRoot = children ? parentId != null && (canEdit || canSeeSpace) : canEdit;
   const root = useQuery({
     queryKey: knowledgeQueryKeys.info(scope, spaceId),
-    queryFn: () => knowledgeSpaceApi.getSpaceInfo(spaceId),
+    queryFn: () => knowledgeSpaceApi.getSpaceInfo(spaceId, { showError: false }),
     enabled: !spaceInfo && canReadRoot,
     cacheTime: 0,
     retry: false,
   });
   useEffect(() => {
-    if (root.error) showApiError(root.error);
+    if (root.error && !(isErrorEnvelope(root.error) && root.error.status_code === 18000))
+      showApiError(root.error);
   }, [root.error]);
   const rootInfo = spaceInfo ?? (canReadRoot && !root.isError ? root.data : undefined);
   const rootName = rootInfo?.name;
@@ -182,17 +187,16 @@ export function SpaceManagementView({
       requestAnimationFrame(() => moreButton.current?.focus({ preventScroll: true }));
       return;
     }
+    if (onDeleted) onDeleted(spaceId);
+    else if (currentDeletionScope.current === deletionScope) navigate(overviewPath, { replace: true });
     const viewKey = knowledgeQueryKeys.scope(scope);
-    await client.invalidateQueries({
+    void client.invalidateQueries({
       queryKey: viewKey.slice(0, -1),
       predicate: ({ queryKey }) => {
         const [kind, id] = queryKey.slice(viewKey.length);
         return kind !== "space" || id !== spaceId;
       },
-    });
-    if (currentDeletionScope.current === deletionScope) {
-      navigate(overviewPath, { replace: true });
-    }
+    }).catch(() => undefined);
   };
   if (canEdit && legacySettingsTab) return <Navigate to={settingsLocation} replace />;
 

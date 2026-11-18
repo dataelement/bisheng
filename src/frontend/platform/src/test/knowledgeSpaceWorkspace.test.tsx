@@ -8,6 +8,7 @@ import KnowledgePage from "@/pages/KnowledgePage";
 import { KnowledgeSpaceCreatePage } from "@/pages/KnowledgePage/KnowledgeSpaceCreatePage";
 import { KnowledgeSpaceSettingsPage } from "@/pages/KnowledgePage/KnowledgeSpaceSettingsPage";
 import { userContext } from "@/contexts/userContext";
+import { showApiError } from "@/controllers/request";
 import type { ProcessingJobRead } from "@/controllers/API/knowledgeSpace";
 import type { FilesProps } from "@/pages/KnowledgePage/components/Files";
 import type { CreateSpaceForm } from "@/pages/KnowledgePage/components/KnowledgeLibraryDialog";
@@ -493,6 +494,21 @@ it("advances a child-only visible-space cursor without showing a space list", as
   expect(screen.queryByText("ordinary-list")).toBeNull();
 });
 
+
+it("leaves a deleted space instead of reopening it and reporting that it is missing", async () => {
+  const read = mock.get.getMockImplementation()!;
+  mock.get.mockImplementation(async (url: string, options?: unknown) => {
+    if (String(url).endsWith("/info")) throw Object.assign(new Error("missing"), { status_code: 18000 });
+    if (String(url).endsWith("/space/list")) return { data: [], has_more: false, next_cursor: null };
+    return read(url, options);
+  });
+  mount("/filelib/7");
+  await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/filelib"));
+  await waitFor(() => expect(mock.get.mock.calls.some(([url]) => String(url).endsWith("/space/list"))).toBe(true));
+  expect(screen.getByTestId("location").textContent).toBe("/filelib");
+  expect(screen.queryByTestId("files")).toBeNull();
+  expect(showApiError).not.toHaveBeenCalled();
+});
 
 it("does not let a late initial space redirect a user away from QA", async () => {
   let finish!: (value: object[]) => void;
