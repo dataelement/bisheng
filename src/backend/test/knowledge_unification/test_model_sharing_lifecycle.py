@@ -3,7 +3,6 @@
 import pytest
 import sqlalchemy as sa
 
-from bisheng.common.errcode.knowledge import KnowledgeProcessingConflictError
 from bisheng.core.context.tenant import bypass_tenant_filter, management_tenant_scope
 from bisheng.database.models.tenant import Tenant
 from bisheng.dsh.domain.models.unified_policy import ModelVisibility
@@ -86,7 +85,7 @@ async def test_finalization_retry_preserves_admin_restriction_and_original_froze
                 session.add(
                     ModelVisibility(tenant_id=101, model_id=22, everyone=False, subjects=[], version=2, updated_by=7)
                 )
-        with pytest.raises(KnowledgeProcessingConflictError):
+        with pytest.raises(ConnectionError, match="receiver unavailable"):
             await share.aset_sharing(identity=user, server_id=2, enabled=False)
         monkeypatch.setattr(receiver, "initialize_shared_model_visibility", original)
         await share.aset_sharing(identity=user, server_id=2, enabled=True)
