@@ -47,6 +47,7 @@ class WorkflowDisclosureFact:
     owner_user_id: int
     name: str
     status: str
+    creation_state: str
     update_time: object
     version_id: int
     version_name: str
@@ -84,6 +85,7 @@ class WorkflowReferenceSourceRepository:
                 Flow.name,
                 Flow.user_id,
                 Flow.status,
+                Flow.creation_state,
                 Flow.flow_type,
                 Flow.is_delete,
                 Flow.update_time,
@@ -111,6 +113,8 @@ class WorkflowReferenceSourceRepository:
                 or type(row.version_name) is not str
                 or type(row.user_id) is not int
                 or row.user_id <= 0
+                or type(row.creation_state) is not str
+                or row.creation_state not in {"READY", "PENDING"}
             ):
                 raise ReferenceCoverageNotReadyError(reason="workflow_disclosure_metadata_incomplete")
             try:
@@ -124,6 +128,7 @@ class WorkflowReferenceSourceRepository:
                     row.user_id,
                     row.name,
                     status,
+                    row.creation_state,
                     row.update_time,
                     row.version_id,
                     row.version_name,

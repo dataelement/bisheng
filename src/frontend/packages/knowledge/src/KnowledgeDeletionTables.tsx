@@ -30,6 +30,7 @@ interface KnowledgeReferenceTablesProps {
         entry: string | null;
       };
       matched_slot_count: number;
+      locations?: readonly string[];
     }[];
   };
   readonly: boolean;
@@ -46,6 +47,13 @@ const sourceKinds = new Set([
   'model_default',
 ]);
 const restrictedDeletionKinds = new Set(['knowledge', 'model_default']);
+const locationCodes = new Set([
+  'workflow_knowledge_retriever',
+  'workflow_rag_knowledge',
+  'workflow_agent_knowledge',
+  'workflow_qa_retriever',
+  'workflow_reference',
+]);
 const deletionReasons = new Set([
   'not_found',
   'type_mismatch',
@@ -114,6 +122,13 @@ export function KnowledgeReferenceTables({
         (sourceCounts[kind] > 0 || restrictedCounts[kind] > 0)),
   );
   const sourceRows = page?.data ?? [];
+  const workflowLocations = Array.from(
+    new Set(
+      sourceRows.flatMap((row) =>
+        row.disclosure.source.source_type === 'workflow_version' ? row.locations ?? [] : [],
+      ),
+    ),
+  );
 
   return (
     <>
@@ -186,6 +201,14 @@ export function KnowledgeReferenceTables({
             };
           })}
         />
+      )}
+      {workflowLocations.length > 0 && (
+        <p>
+          {tr('workflow_unlink')} {tr('workflow_locations')}
+          {workflowLocations
+            .map((code) => tr(locationCodes.has(code) ? `location_${code}` : 'location_workflow_reference'))
+            .join(tr('location_separator'))}
+        </p>
       )}
     </>
   );

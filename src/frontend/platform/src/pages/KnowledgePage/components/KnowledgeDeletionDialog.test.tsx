@@ -167,6 +167,44 @@ describe("knowledge deletion consent", () => {
   });
 });
 
+it("names an offline workflow and the setting that still references the space", () => {
+  const workflowPage = {
+    ...page,
+    data: [{
+      disclosure: {
+        source: {
+          tenant_id: 1,
+          source_type: "workflow_version",
+          source_id: "PRIVATE-FLOW",
+          source_version: "4776",
+        },
+        name: "测试删除",
+        version_label: "v0",
+        entry: "/flow/PRIVATE-FLOW/",
+      },
+      matched_slot_count: 1,
+      locations: ["workflow_knowledge_retriever"],
+    }],
+  };
+  render(<KnowledgeDeletionDialog operation={operation({
+    ...base,
+    page: workflowPage,
+    result: {
+      ...base.result,
+      impact: {
+        ...base.result.impact,
+        source_counts: { workflow_version: 1 },
+        source_page: workflowPage,
+      },
+    },
+  })} />);
+  expect(screen.getByRole("link", { name: "测试删除" })).toHaveAttribute("href", "/flow/PRIVATE-FLOW/");
+  expect(screen.getByText(/deletion\.workflow_unlink/)).toBeVisible();
+  expect(screen.getByText(/deletion\.location_workflow_knowledge_retriever/)).toBeVisible();
+  expect(screen.queryByText("PRIVATE-FLOW")).not.toBeInTheDocument();
+  expect(screen.queryByText("4776")).not.toBeInTheDocument();
+});
+
 it("explains failed source tasks instead of displaying only a generic resource conflict", () => {
   const view = { ...base, result: undefined, code: 10999, reason: "source_space_move_input_required", error: "Generic resource conflict" };
   render(<KnowledgeDeletionDialog operation={operation(view)} />);

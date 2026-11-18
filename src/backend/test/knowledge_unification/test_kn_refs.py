@@ -146,6 +146,15 @@ async def test_whole_space_retains_known_legacy_missing_but_rejects_new_unexplai
     assert result.blocked and sum(dict(result.slot_counts).values()) == 1
 
 
+def test_workflow_slot_location_names_the_setting_without_the_node_id():
+    assert module.workflow_slot_location("node:knowledge_retriever_d24d7.knowledge") == "workflow_knowledge_retriever"
+    assert module.workflow_slot_location("node:rag_1.knowledge") == "workflow_rag_knowledge"
+    assert module.workflow_slot_location("node:agent_9.knowledge_id") == "workflow_agent_knowledge"
+    assert module.workflow_slot_location("node:qa_retriever_2.qa_knowledge_id") == "workflow_qa_retriever"
+    assert module.workflow_slot_location("node:llm_1.model_id") == "workflow_reference"
+    assert "d24d7" not in module.workflow_slot_location("node:knowledge_retriever_d24d7.knowledge")
+
+
 async def test_space_inventory_does_not_hide_foreign_owner_files_under_the_actual_root(context, service):
     async with context.db.sessions() as session, session.begin():
         with bypass_tenant_filter():
