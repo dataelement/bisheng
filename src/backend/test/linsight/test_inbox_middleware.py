@@ -534,10 +534,17 @@ async def test_planned_executor_builds_the_middleware_only_on_the_unified_channe
 
     await env.start()
     message_id = await env.steer("改成三步")
-    task._unified = SimpleNamespace(conversation_id=CID, run_id=env.run_id, dispatch=env.dispatch, emit=env.emit)
+    task._unified = SimpleNamespace(
+        conversation_id=CID, run_id=env.run_id, dispatch=env.dispatch, emit=env.emit, lease_lost=True
+    )
     inbox = task._inbox_middleware()
 
     assert isinstance(inbox, InboxMiddleware)
+    # A run that lost its lease no longer holds the conversation: the inbox
+    # belongs to the new holder, so this run takes nothing from it.
+    assert await inbox.abefore_model({"messages": []}, None) is None
+    assert env.events == []
+    task._unified.lease_lost = False
     update = await inbox.abefore_model({"messages": []}, None)
     assert [str(m.content) for m in update["messages"]] == ["改成三步"]
     assert env.events == [{"type": "steer_read", "data": {"message_id": message_id}, "run_id": env.run_id}]

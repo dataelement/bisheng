@@ -151,3 +151,138 @@ async def test_svid_prefix_backward_compatible(tmp_path):
 def test_backend_requires_svid_or_prefix(tmp_path):
     with pytest.raises(ValueError):
         WorkspaceBackend(minio=_MemoryObjectStore(), file_dir=str(tmp_path))
+
+
+# ---------------------------------------------------------------------------
+# Same-named attachments of a later run replace the earlier run's file
+# ---------------------------------------------------------------------------
+
+
+class _ClockedObjectStore(_MemoryObjectStore):
+    """Reports ``last_modified`` like the object store: every write and copy gets a later time."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.modified: dict[str, int] = {}
+        self._tick = 0
+
+    def _stamp(self, name: str) -> None:
+        self._tick += 1
+        self.modified[name] = self._tick
+
+    def write(self, name: str, data: bytes) -> None:
+        self.objects[name] = data
+        self._stamp(name)
+
+    def list_objects(self, bucket: str, prefix: str = "", recursive: bool = False):
+        return [
+            SimpleNamespace(object_name=name, size=len(data), is_dir=False, last_modified=self.modified.get(name))
+            for name, data in sorted(self.objects.items())
+            if name.startswith(prefix)
+        ]
+
+    def copy_object_sync(self, source_bucket, source_object, dest_bucket, dest_object):
+        super().copy_object_sync(source_bucket, source_object, dest_bucket, dest_object)
+        self._stamp(dest_object)
+
+
+async def test_copy_prefix_replace_older_takes_the_newer_source():
+    store = _ClockedObjectStore()
+    conv = f"{CONV_PREFIX}/uploads/合同.md"
+    store.write("workspace/sv-1/uploads/合同.md", b"v1")
+    assert (
+        await copy_workspace_prefix(
+            store, src_prefix="workspace/sv-1", dst_prefix=CONV_PREFIX, only_if_empty=False, replace_older=True
+        )
+        == 1
+    )
+
+    # Run 2 ingests an edited file of the same name after run 1's copy.
+    store.write("workspace/sv-2/uploads/合同.md", b"v2")
+    store.write("workspace/sv-2/uploads/附件.md", b"new file")
+    copied = await copy_workspace_prefix(
+        store, src_prefix="workspace/sv-2", dst_prefix=CONV_PREFIX, only_if_empty=False, replace_older=True
+    )
+
+    assert copied == 2
+    assert store.objects[conv] == b"v2"
+    assert store.objects[f"{CONV_PREFIX}/uploads/附件.md"] == b"new file"
+
+
+async def test_copy_prefix_replace_older_keeps_what_the_destination_got_later():
+    store = _ClockedObjectStore()
+    conv = f"{CONV_PREFIX}/uploads/合同.md"
+    store.write("workspace/sv-1/uploads/合同.md", b"v1")
+    kwargs = {"dst_prefix": CONV_PREFIX, "only_if_empty": False, "replace_older": True}
+    await copy_workspace_prefix(store, src_prefix="workspace/sv-1", **kwargs)
+
+    # The same source merged again (resume / continue of the run): nothing to do.
+    assert await copy_workspace_prefix(store, src_prefix="workspace/sv-1", **kwargs) == 0
+
+    # A later write to the conversation workspace (the agent, or run 2's upload) stays
+    # when run 1 is continued and its own prefix is merged once more.
+    store.write(conv, b"v2")
+    assert await copy_workspace_prefix(store, src_prefix="workspace/sv-1", **kwargs) == 0
+    assert store.objects[conv] == b"v2"
+
+
+async def test_copy_prefix_merge_without_replace_older_never_overwrites():
+    """The previous version's workspace is older than the destination: its files never win."""
+    store = _ClockedObjectStore()
+    store.write(f"{CONV_PREFIX}/uploads/合同.md", b"current")
+    store.write("workspace/sv-old/uploads/合同.md", b"modified later, still the older version's file")
+
+    copied = await copy_workspace_prefix(
+        store, src_prefix="workspace/sv-old", dst_prefix=CONV_PREFIX, only_if_empty=False
+    )
+
+    assert copied == 0
+    assert store.objects[f"{CONV_PREFIX}/uploads/合同.md"] == b"current"
+
+
+async def test_run_uploads_replace_the_same_named_file_of_an_earlier_run(monkeypatch: pytest.MonkeyPatch):
+    """Run 1 uploaded 合同.docx; run 2 uploads an edited 合同.docx. Run 2 must read its own file."""
+    from unittest.mock import AsyncMock
+
+    from bisheng.linsight.domain import task_exec
+    from bisheng.linsight.domain.models.linsight_session_version import LinsightSessionVersion
+    from bisheng.linsight.domain.task_exec import LinsightWorkflowTask, set_run_thread_id
+
+    store = _ClockedObjectStore()
+    monkeypatch.setattr(task_exec, "get_minio_storage", AsyncMock(return_value=store))
+    conv_id = "conv-123"
+
+    def version(svid: str) -> LinsightSessionVersion:
+        one = LinsightSessionVersion(id=svid, session_id=conv_id, user_id=1, tenant_id=1, question="q")
+        set_run_thread_id(one, conv_id)
+        return one
+
+    first, second = version("sv-1"), version("sv-2")
+    task = LinsightWorkflowTask()
+    assert task._workspace_prefix(first) == task._workspace_prefix(second) == CONV_PREFIX
+
+    # Attachment ingest writes under the run's own prefix (workbench_impl).
+    store.write("workspace/sv-1/uploads/合同.md", b"v1")
+    store.write("workspace/sv-1/uploads/合同.docx", b"docx v1")
+    await task._merge_run_uploads(first)
+    store.write(f"{CONV_PREFIX}/output/report.md", b"run 1 report")
+
+    store.write("workspace/sv-2/uploads/合同.md", b"v2")
+    store.write("workspace/sv-2/uploads/合同.docx", b"docx v2")
+    await task._merge_run_uploads(second)
+
+    # The file pointer block of run 2 names /uploads/合同.md: it is run 2's file.
+    assert store.objects[f"{CONV_PREFIX}/uploads/合同.md"] == b"v2"
+    assert store.objects[f"{CONV_PREFIX}/uploads/合同.docx"] == b"docx v2"
+    assert store.objects[f"{CONV_PREFIX}/output/report.md"] == b"run 1 report"
+
+    # Run 1 is continued afterwards (same svid, merged again): run 2's file stays.
+    await task._merge_run_uploads(first)
+    assert store.objects[f"{CONV_PREFIX}/uploads/合同.md"] == b"v2"
+
+    # Taking over the previous version's workspace still never overwrites.
+    store.write("workspace/sv-0/uploads/合同.md", b"v0")
+    store.write("workspace/sv-0/uploads/旧附件.md", b"old only")
+    await task._merge_into_workspace(second, "workspace/sv-0")
+    assert store.objects[f"{CONV_PREFIX}/uploads/合同.md"] == b"v2"
+    assert store.objects[f"{CONV_PREFIX}/uploads/旧附件.md"] == b"old only"

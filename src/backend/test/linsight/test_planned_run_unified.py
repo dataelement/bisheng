@@ -1110,3 +1110,202 @@ async def test_start_planned_relay_goes_through_the_send_path(monkeypatch: pytes
     assert await run_message_persist.take_relay_messages(redis, CHAT, "run-relay") == ["m-1"]
     # Taken once; another run id never sees it.
     assert await run_message_persist.take_relay_messages(redis, CHAT, "run-relay") == []
+
+
+# ---------------------------------------------------------------------------
+# A stop (or a lost lease) cancels a RESUMED and a CONTINUED run as well
+# ---------------------------------------------------------------------------
+
+ASK = _call("ask_user", {"reason": "需要确认", "questions": [{"question": "哪一年？", "options": ["2024"]}]}, "ask-1")
+TERMINAL_TYPES = {"run_finished", "run_stopped", "run_failed"}
+# The model item "hold" waits 60 s. A driver that does not cancel it fails here first.
+DRIVE_TIMEOUT = 10
+
+
+async def _agent_for(env: _Env, task: LinsightWorkflowTask, script: list[Any]):
+    model = _PlannedUnifiedModel(script=script)
+    env.monkeypatch.setattr(agent_factory, "_resolve_model", AsyncMock(return_value=(model, False)))
+    await task._enter_conversation_thread(env.version)
+    backend = WorkspaceBackend(
+        workspace_prefix=task._workspace_prefix(env.version), minio=env.store, file_dir=str(env.tmp_path)
+    )
+    agent = await agent_factory.create_linsight_agent(
+        env.version, [], backend=backend, file_dir=str(env.tmp_path), checkpointer=env.saver
+    )
+    return agent, model
+
+
+def _once_in_flight(env: _Env, holder: dict, calls: int, action) -> None:
+    """Run ``action`` once, at the first watcher poll after model call number ``calls`` started."""
+    done: list[bool] = []
+
+    async def on_tick(tick: int) -> None:
+        model = holder.get("model")
+        if not done and model is not None and model.calls >= calls:
+            done.append(True)
+            await action()
+
+    env.on_tick = on_tick
+
+
+async def _park_on_ask_user(env: _Env) -> None:
+    """A fresh run that ends on the ask_user interrupt and parks, as ``_execute_workflow`` orders it."""
+    task = env.task()
+    task._update_session_status = AsyncMock()
+    async with task._acquire_session_run_lock():
+        agent, _model = await _agent_for(env, task, [ASK])
+        assert await task._execute_agent_tasks(agent, env.version) is True
+        await task._handle_task_completion(env.version)
+    assert task._waiting_for_input is True
+    assert (await env.lease.get_state(CHAT)).status == run_lease.STATUS_WAITING
+    env.finished.clear()
+
+
+async def _assert_stopped_once(env: _Env) -> None:
+    events = await env.events()
+    assert [event["type"] for event in events if event["type"] in TERMINAL_TYPES] == ["run_stopped"]
+    assert events[-1]["type"] == "run_stopped"
+    assert env.finished == [(CHAT, SVID)]
+    assert (await env.lease.get_state(CHAT)).status == run_lease.STATUS_IDLE
+    assert env.state.session.status == SessionVersionStatusEnum.TERMINATED
+    assert env.state.types()[-1] == "task_terminated"
+    assert not await env.redis.exists(f"{task_exec.LINSIGHT_RUN_LOCK_KEY_PREFIX}{SVID}")
+
+
+async def test_stop_cancels_a_resumed_run(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    """The user answered the clarification, the run is on the resume path, then the user stops it."""
+    env = _Env(monkeypatch, tmp_path)
+    await _park_on_ask_user(env)
+
+    task = env.task()
+    task.TERMINATION_RACE_INTERVAL = 0.01
+    task._unified_resume = True
+    task._unified_answer = "2024"
+    holder: dict[str, Any] = {}
+    _once_in_flight(env, holder, 1, lambda: env.lease.request_stop(SVID, CHAT))
+    async with task._acquire_session_run_lock():
+        agent, model = await _agent_for(env, task, ["hold"])
+        holder["model"] = model
+        # What _resume_workflow does after building the agent.
+        await asyncio.wait_for(task._drive_resume(agent, env.version, "2024"), DRIVE_TIMEOUT)
+        await task._handle_task_completion(env.version)
+
+    # The model call that was in flight was cancelled; no further call was made.
+    assert model.calls == 1
+    assert "ask_user_answered" in [event["type"] for event in await env.events()]
+    await _assert_stopped_once(env)
+
+
+async def test_stop_cancels_a_continued_run(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    env = _Env(monkeypatch, tmp_path)
+    dispatch = await env._build_dispatch()
+    queued: dict[str, Any] = {}
+
+    async def stop() -> None:
+        # Sent while the model call is in flight: the run never reads it.
+        result = await dispatch.submit(
+            CHAT, {"text": "顺便加一节风险", "task_mode": True, "user_id": 1, "tenant_id": TENANT}
+        )
+        queued["message_id"] = result.message_id
+        await env.lease.request_stop(SVID, CHAT)
+
+    task = env.task()
+    task.TERMINATION_RACE_INTERVAL = 0.01
+    holder: dict[str, Any] = {}
+    _once_in_flight(env, holder, 2, stop)
+    async with task._acquire_session_run_lock():
+        agent, model = await _agent_for(env, task, [_call("write_todos", {"todos": TODOS}, "c1"), "hold"])
+        holder["model"] = model
+        # What _continue_workflow does after building the agent.
+        await asyncio.wait_for(task._drive_continue(agent, env.version, "继续写第二章"), DRIVE_TIMEOUT)
+        await task._handle_task_completion(env.version)
+
+    assert model.calls == 2
+    await _assert_stopped_once(env)
+    # Same terminal handling as the fresh path: the unread message goes back, no relay run.
+    stopped = (await env.events())[-1]
+    assert [m["message_id"] for m in stopped["data"]["unread_messages"]] == [queued["message_id"]]
+    assert env.relays == []
+    assert await env.redis.llen(inbox_key(CHAT)) == 0
+
+
+async def test_continued_run_that_lost_its_lease_is_cancelled_and_leaves_the_new_holder_alone(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+):
+    env = _Env(monkeypatch, tmp_path)
+    dispatch = await env._build_dispatch()
+    lock_key = f"{task_exec.LINSIGHT_RUN_LOCK_KEY_PREFIX}{SVID}"
+
+    async def taken_over() -> None:
+        # Run B holds the conversation now, drives the same record, and has an unread message.
+        await env.redis.hset(run_lease.state_key(CHAT), mapping={"run_id": "run-B"})
+        await env.redis.set(lock_key, "run-B")
+        result = await dispatch.submit(
+            CHAT, {"text": "给 B 的插话", "task_mode": True, "user_id": 1, "tenant_id": TENANT}
+        )
+        assert result.disposition == "queued"
+
+    task = env.task()
+    task.TERMINATION_RACE_INTERVAL = 0.01
+    task._handle_task_failure = AsyncMock()
+    holder: dict[str, Any] = {}
+    _once_in_flight(env, holder, 1, taken_over)
+    async with task._acquire_session_run_lock():
+        agent, model = await _agent_for(env, task, ["hold"])
+        holder["model"] = model
+        run = task._unified
+        await asyncio.wait_for(task._drive_continue(agent, env.version, "继续"), DRIVE_TIMEOUT)
+        await task._handle_task_completion(env.version)
+
+    assert run.lease_lost is True and model.calls == 1
+    # Not a user stop: the record is failed, and nothing is written for the client of run B.
+    task._handle_task_failure.assert_awaited_once_with(env.version, task_exec.EXECUTOR_GONE_MESSAGE)
+    assert not [event for event in await env.events() if event["type"] in TERMINAL_TYPES]
+    assert env.state.types().count("task_terminated") == 0
+    # Run B keeps the conversation, its inbox and its driver lock.
+    state = await env.lease.get_state(CHAT)
+    assert state.status == run_lease.STATUS_RUNNING and state.run_id == "run-B"
+    assert await env.redis.llen(inbox_key(CHAT)) == 1
+    assert await env.redis.get(lock_key) == b"run-B"
+    assert env.relays == [] and env.waiting == []
+
+
+async def test_stopped_run_keeps_its_lease_until_it_has_closed(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    """The watcher keeps renewing after the stop request: no second run starts beside a run that is still closing."""
+    env = _Env(monkeypatch, tmp_path)
+    renewals: list[float] = []
+    real_renew = RunLeaseService.renew
+
+    async def counting_renew(self, conversation_id: str, run_id: str) -> bool:
+        renewals.append(env.clock.now)
+        return await real_renew(self, conversation_id, run_id)
+
+    monkeypatch.setattr(RunLeaseService, "renew", counting_renew)
+    task = env.task()
+    async with task._acquire_session_run_lock():
+        await env.lease.request_stop(SVID, CHAT)
+        for _ in range(400):
+            if task._is_terminated:
+                break
+            await asyncio.sleep(0.005)
+        assert task._is_terminated and task._unified.stop_requested
+        stopped_at = env.clock.now
+        # The run takes 45 more (fake) seconds to close: longer than the 30 s lease.
+        for _ in range(2000):
+            if env.clock.now >= stopped_at + 45:
+                break
+            await asyncio.sleep(0.005)
+        assert env.clock.now >= stopped_at + 45, "the watcher ended with the stop request"
+        assert [at for at in renewals if at > stopped_at]
+        assert await env.lease.is_lease_valid(CHAT)
+        state = await env.lease.get_state(CHAT)
+        assert state.status == run_lease.STATUS_RUNNING and state.run_id == SVID
+
+    await _assert_stopped_once_without_record(env)
+
+
+async def _assert_stopped_once_without_record(env: _Env) -> None:
+    events = await env.events()
+    assert [event["type"] for event in events if event["type"] in TERMINAL_TYPES] == ["run_stopped"]
+    assert env.finished == [(CHAT, SVID)]
+    assert (await env.lease.get_state(CHAT)).status == run_lease.STATUS_IDLE

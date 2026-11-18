@@ -491,6 +491,7 @@ async def copy_workspace_prefix(
     dst_prefix: str,
     zones: tuple[str, ...] = (OUTPUT_DIR, UPLOADS_DIR, LARGE_TOOL_RESULTS_DIR),
     only_if_empty: bool = True,
+    replace_older: bool = False,
 ) -> int:
     """Server-side copy of one workspace's ``zones`` (plus ``manifest.json``) from
     ``src_prefix`` to ``dst_prefix`` (F004: prefix-to-prefix seeding).
@@ -501,8 +502,19 @@ async def copy_workspace_prefix(
 
     ``only_if_empty`` (default) keeps the historical idempotency rule: when the
     destination already holds any object the copy is skipped entirely. With
-    ``only_if_empty=False`` the copy merges instead and never overwrites an
-    object that already exists at the destination, so newer files win.
+    ``only_if_empty=False`` the copy merges instead. What happens to an object
+    that already exists at the destination depends on ``replace_older``:
+
+    * ``False`` (default): it is never overwritten. For a source that holds
+      OLDER files than the destination (the workspace of an earlier version).
+    * ``True``: it is replaced when the source object was modified after it
+      (``last_modified`` of the object store, so one clock decides). For a
+      source that may hold NEWER files of the same name: the attachments a run
+      ingested, merged into a workspace earlier runs already wrote to. An
+      object the destination got later (an earlier merge of the same source, a
+      write of the agent, a newer upload of another run) is kept. An object
+      whose modification time the store does not report is replaced.
+      ``manifest.json`` is not listed, so it follows the ``False`` rule.
 
     Best-effort: a per-object failure is logged and skipped so a partial source
     workspace never blocks the run. Returns the number of objects copied.
@@ -517,27 +529,38 @@ async def copy_workspace_prefix(
         src_root = f"{src}/"
         dst_root = f"{dst}/"
 
-        existing: set[str] = set()
+        # Destination key -> its modification time (None when the store gives none).
+        existing: dict[str, object] = {}
         for obj in minio.minio_client_sync.list_objects(bucket, prefix=dst_root, recursive=True):
             if only_if_empty:
                 # Already seeded, or the run has started writing.
                 return 0
-            existing.add(obj.object_name)
+            existing[obj.object_name] = getattr(obj, "last_modified", None)
 
-        src_keys: list[tuple[str, int]] = []
+        # (key, size, modification time, listed)
+        src_keys: list[tuple[str, int, object, bool]] = []
         for zone in zones:
             prefix = f"{src_root}{zone}/"
             for obj in minio.minio_client_sync.list_objects(bucket, prefix=prefix, recursive=True):
-                src_keys.append((obj.object_name, int(getattr(obj, "size", 0) or 0)))
+                src_keys.append(
+                    (obj.object_name, int(getattr(obj, "size", 0) or 0), getattr(obj, "last_modified", None), True)
+                )
         # manifest.json is a top-level pointer file (not under a zone).
-        src_keys.append((f"{src_root}{MANIFEST_NAME}", 0))
+        src_keys.append((f"{src_root}{MANIFEST_NAME}", 0, None, False))
 
         copied = 0
+        replaced = 0
         copied_bytes = 0
-        for src_key, size in src_keys:
+        for src_key, size, src_modified, listed in src_keys:
             dst_key = dst_root + src_key[len(src_root) :]
             if dst_key in existing:
-                continue
+                if not (replace_older and listed):
+                    continue
+                dst_modified = existing[dst_key]
+                if src_modified is not None and dst_modified is not None and src_modified <= dst_modified:
+                    # The destination already has this copy, or something newer.
+                    continue
+                replaced += 1
             try:
                 minio.copy_object_sync(
                     source_bucket=bucket, source_object=src_key, dest_bucket=bucket, dest_object=dst_key
@@ -556,8 +579,9 @@ async def copy_workspace_prefix(
             # interpreter needs the originals across turns); log the volume so the
             # accumulation is visible to ops instead of silently growing.
             logger.info(
-                "workspace seed: copied {} object(s), {} KiB from {} to {}",
+                "workspace seed: copied {} object(s) ({} replaced an older one), {} KiB from {} to {}",
                 copied,
+                replaced,
                 copied_bytes // 1024,
                 src,
                 dst,

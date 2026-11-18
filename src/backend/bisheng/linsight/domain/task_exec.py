@@ -30,18 +30,18 @@ from bisheng.linsight.domain.models.linsight_execute_task import (
     LinsightExecuteTaskDao,
 )
 from bisheng.linsight.domain.models.linsight_session_version import (
-    get_run_thread_id,
-    has_stored_run_thread_id,
-    set_run_thread_id,
     LinsightSessionVersion,
     LinsightSessionVersionDao,
     SessionVersionStatusEnum,
+    get_run_thread_id,
+    has_stored_run_thread_id,
+    set_run_thread_id,
 )
-from bisheng.linsight.domain.services.agent_factory import _resolve_model, create_linsight_agent
-from bisheng.linsight.domain.services.memory_turns import LinsightMemoryRound, redact_exec_step
-from bisheng.linsight.domain.services.binary_content_guard import CODE_INTERPRETER_TOOL
-from bisheng.linsight.domain.services.resilience_middleware import _MAX_STATE_ONLY_REFUNDS
 from bisheng.linsight.domain.services import run_metrics
+from bisheng.linsight.domain.services.agent_factory import _resolve_model, create_linsight_agent
+from bisheng.linsight.domain.services.binary_content_guard import CODE_INTERPRETER_TOOL
+from bisheng.linsight.domain.services.memory_turns import LinsightMemoryRound, redact_exec_step
+from bisheng.linsight.domain.services.resilience_middleware import _MAX_STATE_ONLY_REFUNDS
 from bisheng.linsight.domain.services.run_event_stream import EventWriter, RunEventStream
 from bisheng.linsight.domain.services.state_message_manager import (
     LinsightStateMessageManager,
@@ -203,6 +203,15 @@ EXECUTOR_GONE_ERROR_TYPE = ErrorType.TASK_ABORTED.value
 EXECUTOR_GONE_MESSAGE = "The run stopped renewing its lease; the process that executed it is gone."
 # How often a running planned run looks at its stop flag (design 决策 3).
 UNIFIED_STOP_POLL_SECONDS = 1
+
+
+# KEYS[1]=driver lock  ARGV[1]=run id that set it
+_DROP_OWN_LOCK_LUA = """
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+  return redis.call('DEL', KEYS[1])
+end
+return 0
+"""
 
 
 async def _run_redis():
@@ -455,6 +464,9 @@ class LinsightWorkflowTask:
     # stop request is detected promptly: at 2s a task that finishes within the
     # window escapes the cancel entirely (terminate-vs-complete race, 2026-06-18).
     USER_TERMINATION_CHECK_INTERVAL = 1
+    # How often (s) a running agent stream looks at the termination flag
+    # (``_run_until_terminated``): the delay between the flag and the cancel.
+    TERMINATION_RACE_INTERVAL = 0.5
 
     # F004: clock and sleep of the lease watcher, replaceable in tests.
     _unified_clock = staticmethod(time.time)
@@ -680,7 +692,14 @@ class LinsightWorkflowTask:
         run_metrics.emit_run_metric(metrics, status, checkpoint_bytes)
 
     async def _unified_watch(self, run: "_UnifiedRun") -> None:
-        """Poll the stop flag every second and renew the lease every 10 s."""
+        """Poll the stop flag every second and renew the lease every 10 s.
+
+        A stop request does not end the watcher. The run keeps the conversation
+        (and its driver lock) until it has written its terminal event and
+        ``_unified_run_scope`` cancels this task; otherwise the lease would lapse
+        while the stopped run is still closing and a new run could start beside it.
+        Only a lost lease ends the watcher early.
+        """
         from bisheng.workstation.domain.services.run_lease import LEASE_SECONDS, RENEW_INTERVAL_SECONDS
 
         clock, sleep = self._unified_clock, self._unified_sleep
@@ -688,12 +707,11 @@ class LinsightWorkflowTask:
         while True:
             await sleep(UNIFIED_STOP_POLL_SECONDS)
             try:
-                if await run.lease.should_stop(run.run_id):
+                if not run.stop_requested and await run.lease.should_stop(run.run_id):
                     logger.info("planned run={} conversation={}: stop requested", run.run_id, run.conversation_id)
                     run.stop_requested = True
-                    # The existing termination monitor turns this into a user stop.
+                    # ``_run_until_terminated`` turns this into a cancelled agent stream.
                     self._is_terminated = True
-                    return
                 if clock() < next_renew:
                     continue
                 next_renew = clock() + RENEW_INTERVAL_SECONDS
@@ -766,7 +784,9 @@ class LinsightWorkflowTask:
     @staticmethod
     async def _drop_driver_lock(run: "_UnifiedRun") -> None:
         try:
-            await run.redis.delete(run.lock_key)
+            # Only the lock this execution set. When this run lost its lease the
+            # key expired with it and may belong to another driver by now.
+            await run.redis.eval(_DROP_OWN_LOCK_LUA, 1, run.lock_key, run.run_id)
         except Exception as e:
             # It expires on its own within the lease time.
             logger.warning("planned run={}: driver lock release failed: {}", run.run_id, e)
@@ -1222,35 +1242,12 @@ class LinsightWorkflowTask:
         rendered identically to the fresh path (design §4.4). The durable
         checkpointer is already bound to the agent at construction; thread_id
         reuse locates the persisted interrupt checkpoint.
+
+        A stop request (or a lost lease) cancels the stream; see ``_drive_turn``.
         """
         from langgraph.types import Command
 
-        linsight_conf = settings.get_linsight_conf()
-        mapper = self._stream_mapper(session_model)
-        # T038: on the unified channel the config also marks the first model request.
-        config = run_metrics.with_metric_callback(
-            {
-                "configurable": {"thread_id": self._thread_id(session_model)},
-                "recursion_limit": _resolve_recursion_limit(linsight_conf),
-            },
-            run_metrics.current(),
-        )
-        try:
-            async for chunk in agent.astream(
-                Command(resume=user_input),
-                config=config,
-                stream_mode=["updates", "messages", "values"],
-                subgraphs=True,
-            ):
-                mode, raw, namespace = self._unpack_stream_chunk(chunk)
-                if mode == "values" and not namespace and isinstance(raw, dict):
-                    self._capture_values_snapshot(raw)
-                for event in await self._normalize_chunk(mapper, mode, raw, namespace):
-                    await self._handle_event(agent, event, session_model)
-        except (LinsightToolLoopError, GraphRecursionError) as e:
-            # L3/L4 on the resume path: stash the salvage; the caller's
-            # _handle_task_completion renders it as a partial result.
-            self._stash_partial_abort(e)
+        await self._drive_turn(agent, session_model, Command(resume=user_input))
 
     # ==================== Continue (multi-turn conversation) ====================
 
@@ -1343,37 +1340,114 @@ class LinsightWorkflowTask:
         durable checkpointer mean the new turn appends to the persisted message
         history and the agent answers with full prior context.
         """
-        linsight_conf = settings.get_linsight_conf()
-        mapper = self._stream_mapper(session_model)
-        # T038: on the unified channel the config also marks the first model request.
-        config = run_metrics.with_metric_callback(
-            {
-                "configurable": {"thread_id": self._thread_id(session_model)},
-                "recursion_limit": _resolve_recursion_limit(linsight_conf),
-            },
-            run_metrics.current(),
-        )
         # Prepend the current-time block (same rationale as _build_agent_input):
         # per-task time awareness without busting the static system-prompt cache.
         agent_input = {
             "messages": [{"role": "user", "content": f"{self._current_time_block()}\n# 用户问题\n{question}"}]
         }
+        await self._drive_turn(agent, session_model, agent_input)
+
+    async def _drive_turn(self, agent, session_model: LinsightSessionVersion, agent_input) -> None:
+        """Drive one resumed or continued turn; a stop cancels the stream.
+
+        Returns normally in every handled case, and the caller goes on to
+        ``_handle_task_completion``. After a stop (or a lost lease) the stream
+        was cancelled and ``_is_terminated`` is set, so that call takes its
+        termination branch (``_handle_user_termination``): the same terminal
+        handling a stop gets on the fresh path.
+        """
         try:
-            async for chunk in agent.astream(
-                agent_input,
-                config=config,
-                stream_mode=["updates", "messages", "values"],
-                subgraphs=True,
-            ):
-                mode, raw, namespace = self._unpack_stream_chunk(chunk)
-                if mode == "values" and not namespace and isinstance(raw, dict):
-                    self._capture_values_snapshot(raw)
-                for event in await self._normalize_chunk(mapper, mode, raw, namespace):
-                    await self._handle_event(agent, event, session_model)
+            await self._run_until_terminated(self._stream_agent(agent, agent_input, session_model))
         except (LinsightToolLoopError, GraphRecursionError) as e:
-            # L3/L4 on the continue path: stash the salvage; the caller's
+            # L3/L4 on the resume/continue path: stash the salvage; the caller's
             # _handle_task_completion renders it as a partial result.
             self._stash_partial_abort(e)
+
+    async def _stream_agent(self, agent, agent_input, session_model: LinsightSessionVersion) -> None:
+        """One ``astream`` of the agent, translated by the mapper and dispatched to ``_handle_event``.
+
+        Shared by the fresh, resume and continue paths, so their chunks are
+        normalised and rendered identically.
+        """
+        mapper = self._stream_mapper(session_model)
+        config = run_metrics.with_metric_callback(
+            {
+                "configurable": {"thread_id": self._thread_id(session_model)},
+                # max_steps -> recursion_limit (design §2.5)
+                "recursion_limit": _resolve_recursion_limit(settings.get_linsight_conf()),
+            },
+            # T038: on the unified channel the config also marks the first model
+            # request (None on the legacy path).
+            run_metrics.current(),
+        )
+        # subgraphs=True so subagent (子图) events冒泡父流 with a namespace
+        # prefix the mapper uses to归并 nested step cards (design §3.1/§3.7).
+        # LIVE (design #1, 2026-06-17): the `task` subagent tool is RE-ENABLED —
+        # agent_factory now registers a single "general-purpose" researcher
+        # subagent and no longer strips `task`, so subgraph events ARE emitted
+        # with a non-empty namespace. The mapper drops namespaced todos (the main
+        # plan stays clean) and tags namespaced tool steps step_type="subagent".
+        async for chunk in agent.astream(
+            agent_input,
+            config=config,
+            stream_mode=["updates", "messages", "values"],
+            subgraphs=True,
+        ):
+            mode, raw, namespace = self._unpack_stream_chunk(chunk)
+            # Capture the agent's latest top-level reply as a fallback
+            # answer for the no-TaskEnd case (e.g. a greeting the planner
+            # answers directly without spawning sub-tasks), plus whether it
+            # left tool calls pending (drives the abort classification).
+            if mode == "values" and not namespace and isinstance(raw, dict):
+                self._capture_values_snapshot(raw)
+            for event in await self._normalize_chunk(mapper, mode, raw, namespace):
+                await self._handle_event(agent, event, session_model)
+
+    async def _run_until_terminated(self, execution) -> bool:
+        """Run the coroutine ``execution`` until it ends or the run is terminated.
+
+        ``_is_terminated`` is set by the termination monitor (the record was
+        stopped) and by ``_unified_watch`` (stop flag, or the lease was lost).
+        It is looked at every ``TERMINATION_RACE_INTERVAL`` seconds; once set,
+        ``execution`` is cancelled and awaited. Returns True when ``execution``
+        completed and False when it was cancelled for a termination. An
+        exception of ``execution`` propagates unchanged.
+
+        When the caller itself is cancelled (the worker is going down),
+        ``execution`` is cancelled with it instead of being left running.
+        """
+
+        async def termination_monitor():
+            while True:
+                await asyncio.sleep(self.TERMINATION_RACE_INTERVAL)
+                self._check_termination()
+
+        agent_task = asyncio.create_task(execution)
+        monitor_task = asyncio.create_task(termination_monitor())
+        try:
+            await asyncio.wait([agent_task, monitor_task], return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            for task in (agent_task, monitor_task):
+                if not task.done():
+                    task.cancel()
+            # Both have ended after this line; their outcome is read below.
+            await asyncio.gather(agent_task, monitor_task, return_exceptions=True)
+
+        if agent_task.cancelled():
+            monitor_error = None if monitor_task.cancelled() else monitor_task.exception()
+            if monitor_error is not None and not isinstance(monitor_error, UserTerminationError):
+                # The monitor itself broke; that is not a stop request.
+                raise monitor_error
+            logger.info("Agent task terminated by user")
+            return False
+        error = agent_task.exception()
+        if isinstance(error, UserTerminationError):
+            logger.info("Agent task terminated by user")
+            return False
+        if error is not None:
+            raise error
+        logger.info("The agent task is completed normally")
+        return True
 
     async def _execute_workflow(self, session_model: LinsightSessionVersion):
         """Execute the core logic of the workflow"""
@@ -1917,7 +1991,9 @@ class LinsightWorkflowTask:
             await self._seed_workspace_from_previous(session_model)
             return
         self._thread_checkpoint_found = await self._thread_has_checkpoint(self._thread_id(session_model))
-        # This run's uploads go in first: copies never overwrite, so they win over older files.
+        # This run's uploads replace same-named files of earlier runs (``_merge_run_uploads``).
+        # The takeover below runs after it and never overwrites, so these uploads
+        # also win over the files of the previous version.
         await self._merge_run_uploads(session_model)
         if self._thread_checkpoint_found:
             return
@@ -1935,18 +2011,35 @@ class LinsightWorkflowTask:
 
         Attachment ingest still addresses the run's own prefix. No-op on the legacy
         thread, where that prefix is the workspace. Best-effort, like the seed.
+
+        An attachment replaces a same-named file an earlier run left in the
+        conversation workspace (``uploads/合同.md`` of run 1 against the edited
+        ``合同.docx`` of run 2): the pointer block of this run names that path, so
+        the agent must read this run's file. Only a NEWER source object replaces
+        (``copy_workspace_prefix(replace_older=True)``), so calling this again on
+        resume / continue does not undo what was written to the workspace since.
         """
         if not self._on_conversation_thread(session_model):
             return
         try:
-            await self._merge_into_workspace(session_model, workspace_prefix_for(session_model.id))
+            await self._merge_into_workspace(session_model, workspace_prefix_for(session_model.id), replace_older=True)
         except Exception as e:
             logger.opt(exception=True).warning("run uploads merge skipped (non-fatal): {}", e)
 
-    async def _merge_into_workspace(self, session_model: LinsightSessionVersion, src_prefix: str) -> None:
+    async def _merge_into_workspace(
+        self, session_model: LinsightSessionVersion, src_prefix: str, *, replace_older: bool = False
+    ) -> None:
+        """Merge ``src_prefix`` into this run's workspace.
+
+        ``replace_older=False``: an existing file is never overwritten (the source
+        is older: the previous version's workspace). ``True``: a newer source
+        file replaces it (the source is this run's attachments).
+        """
         dst_prefix = self._workspace_prefix(session_model)
         minio = await get_minio_storage()
-        copied = await copy_workspace_prefix(minio, src_prefix=src_prefix, dst_prefix=dst_prefix, only_if_empty=False)
+        copied = await copy_workspace_prefix(
+            minio, src_prefix=src_prefix, dst_prefix=dst_prefix, only_if_empty=False, replace_older=replace_older
+        )
         if copied:
             logger.info("Merged {} file(s) from {} into {}", copied, src_prefix, dst_prefix)
 
@@ -2067,11 +2160,18 @@ class LinsightWorkflowTask:
         async def emit(event: dict) -> None:
             await run.emit(event)
 
+        async def drain(conversation_id: str) -> list[dict]:
+            # The inbox belongs to whoever holds the conversation. Between the
+            # failed renewal and the cancel of the stream, this run takes nothing.
+            if run.lease_lost:
+                return []
+            return await run.dispatch.drain_inbox(conversation_id)
+
         metrics = run_metrics.current()
         return InboxMiddleware(
             run.conversation_id,
             run_id=run.run_id,
-            drain=run.dispatch.drain_inbox,
+            drain=drain,
             emit=emit,
             clock=self._unified_clock,
             record_wait=metrics.record_steer_wait if metrics is not None else None,
@@ -2352,8 +2452,6 @@ class LinsightWorkflowTask:
         diff, terminal dedup) — all Redis/MySQL side effects stay in
         ``_handle_event`` (design §3.2 / §3.4).
         """
-        linsight_conf = settings.get_linsight_conf()
-        mapper = self._stream_mapper(session_model)
 
         async def agent_execution():
             """Agent performs a task via astream + mapper."""
@@ -2372,79 +2470,11 @@ class LinsightWorkflowTask:
             knowledge_block = await self._resolve_knowledge_block(session_model)
             # First-message input: prior context + question + sop + file pointer block.
             task_input = self._build_agent_input(session_model, file_list, history_summary, knowledge_block)
-            config = run_metrics.with_metric_callback(
-                {
-                    "configurable": {"thread_id": self._thread_id(session_model)},
-                    # max_steps -> recursion_limit (design §2.5)
-                    "recursion_limit": _resolve_recursion_limit(linsight_conf),
-                },
-                # T038: only on the unified channel (None on the legacy path).
-                run_metrics.current(),
-            )
-            # subgraphs=True so subagent (子图) events冒泡父流 with a namespace
-            # prefix the mapper uses to归并 nested step cards (design §3.1/§3.7).
-            # LIVE (design #1, 2026-06-17): the `task` subagent tool is RE-ENABLED —
-            # agent_factory now registers a single "general-purpose" researcher
-            # subagent and no longer strips `task`, so subgraph events ARE emitted
-            # with a non-empty namespace. The mapper drops namespaced todos (the main
-            # plan stays clean) and tags namespaced tool steps step_type="subagent".
-            async for chunk in agent.astream(
-                task_input,
-                config=config,
-                stream_mode=["updates", "messages", "values"],
-                subgraphs=True,
-            ):
-                mode, raw, namespace = self._unpack_stream_chunk(chunk)
-                # Capture the agent's latest top-level reply as a fallback
-                # answer for the no-TaskEnd case (e.g. a greeting the planner
-                # answers directly without spawning sub-tasks), plus whether it
-                # left tool calls pending (drives the abort classification).
-                if mode == "values" and not namespace and isinstance(raw, dict):
-                    self._capture_values_snapshot(raw)
-                for event in await self._normalize_chunk(mapper, mode, raw, namespace):
-                    await self._handle_event(agent, event, session_model)
-            return True
-
-        async def termination_monitor():
-            """End monitoring task"""
-            while True:
-                await asyncio.sleep(0.5)  # <g id="Bold">Qn,</g>0.5Seconds checked once
-                self._check_termination()
+            await self._stream_agent(agent, task_input, session_model)
 
         try:
-            # Create two concurrent tasks
-            # Preparing user-uploaded files
-            agent_task = asyncio.create_task(agent_execution())
-            monitor_task = asyncio.create_task(termination_monitor())
-
-            # Waiting for any one task to be completed
-            done, pending = await asyncio.wait([agent_task, monitor_task], return_when=asyncio.FIRST_COMPLETED)
-
-            # Cancel Incomplete Task
-            for task in pending:
-                task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    logger.debug("Successfully unsuspended task")
-                    pass
-
-            # Review completed task results
-            for task in done:
-                if task.exception():
-                    if isinstance(task.exception(), UserTerminationError):
-                        logger.info("Agent task terminated by user")
-                        return False
-                    else:
-                        raise task.exception()
-                else:
-                    # If the agent task is completed normally
-                    if task == agent_task:
-                        logger.info("The agent task is completed normally")
-                        return True
-
-            return True
-
+            # The agent races the termination flag; a stop cancels it.
+            return await self._run_until_terminated(agent_execution())
         except UserTerminationError:
             logger.info("Agent task terminated by user")
             return False
