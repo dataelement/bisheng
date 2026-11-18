@@ -39,7 +39,7 @@
 
 ## 章节索引
 
-- 01—12：工作流查询、创建、元数据、版本、发布与下线。
+- 01—12、12A：工作流查询、创建、元数据、版本、发布、下线与删除。
 - 13—16：运行提交、结果轮询、取消与人工输入。
 - 17—20：授权读取、本人权限、授予与撤销。
 - 21—26：平台侧Key管理，**不属于持有业务Key的昆联调用方可用权限**。
@@ -513,6 +513,34 @@ Content-Type: application/json
 {"status_code":200,"status_message":"SUCCESS","data":null}
 ```
 证据：[route](../../src/backend/bisheng/open_endpoints/api/endpoints/kunlian_workflow_api.py#L201-L207)、[独立业务 unpublish 授权与仓储调用](../../src/backend/bisheng/workflow/application/kunlian_workflow_api.py#L153-L163)、[current 检查与状态赋值](../../src/backend/bisheng/workflow/domain/repositories/kunlian_workflow_api.py#L42-L48)。
+
+## 12A 删除工作流
+
+**DELETE `/api/v2/kunlian/workflows/{workflow_id}`**  
+认证：公共 Key 与 user_account；Key 能力：`write`；业务权限：`delete`。
+
+### 请求参数
+| 位置 | 字段 | 类型／必填 | 说明 |
+|---|---|---|---|
+| Path | workflow_id | string／是 | 工作流 ID |
+| Query | user_account | string／是 | 公共参数 |
+
+### data 出参
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| data（envelope） | null | 无删除详情对象 |
+
+### HTTP、示例与限制
+正常 HTTP **200**。仅允许删除未上线或已下线（非 `ONLINE`）的工作流；若工作流处于已上线状态（`ONLINE`），返回 **409／10571**，须先调用 `12 下线工作流` 再删除。工作流不存在、非本租户或非工作流类型返回 **404**；Key 缺少 `write` 能力或账号缺少 `delete` 业务权限返回 **403**。删除操作不可逆，会清理工作流记录、标记版本为已删除，并同步清理权限投影、分组关联资源、访客链接及写入审计日志。
+
+```http
+DELETE http://110.16.193.170:50055/api/v2/kunlian/workflows/workflow-example?user_account=中数SSO编辑测试
+Authorization: Bearer <KUNLIAN_API_KEY>
+```
+```json
+{"status_code":200,"status_message":"SUCCESS","data":null}
+```
+证据：[route](../../src/backend/bisheng/open_endpoints/api/endpoints/kunlian_workflow_api.py#L150-L154)、[application](../../src/backend/bisheng/workflow/application/kunlian_workflow_api.py#L200-L216)、[权限投影删除](../../src/backend/bisheng/api/services/flow.py#L499-L537)。
 
 
 ---

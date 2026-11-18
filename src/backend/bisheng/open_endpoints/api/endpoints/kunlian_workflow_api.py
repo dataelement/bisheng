@@ -147,6 +147,13 @@ async def update(request: Request, workflow_id: str, body: WorkflowMetadata, acc
     )
 
 
+@router.delete("/workflows/{workflow_id}")
+@kunlian_capability("write")
+async def delete(request: Request, workflow_id: str, access=Depends(get_kunlian_request_user)):
+    await management(request).delete(access.user, request, workflow_id)
+    return resp_200()
+
+
 @router.get("/workflows/{workflow_id}/versions")
 @kunlian_capability("read")
 async def versions(request: Request, workflow_id: str, access=Depends(get_kunlian_request_user)):

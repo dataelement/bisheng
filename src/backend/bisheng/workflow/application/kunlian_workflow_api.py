@@ -196,3 +196,22 @@ class KunlianWorkflowApi:
             workflow_management=True,
         )
         return {"id": flow.id, "version_id": version, "name": flow.name}
+
+    async def delete(self, user, request, workflow_id):
+        from bisheng.common.errcode.flow import WorkflowRegistrationConflict
+        from bisheng.database.models.flow import FlowDao, FlowStatus
+        from bisheng.workflow.application.kunlian_workflow_management import workflow_scope
+
+        await self.target(user, workflow_id)
+        db_flow = await to_thread(FlowDao.get_flow_by_id, workflow_id)
+        if not db_flow or db_flow.tenant_id != user.tenant_id or db_flow.flow_type != 10:
+            raise KunlianAccessError("NOT_FOUND")
+        if db_flow.status == FlowStatus.ONLINE.value:
+            raise WorkflowRegistrationConflict()
+        scope = workflow_scope(db_flow.tenant_id, workflow_id, user=user, repository=self.repository)
+        await self.flow_service.project_flow_delete(user, db_flow)
+        if scope:
+            await to_thread(self.repository.delete_offline, scope, workflow_id)
+        else:
+            await to_thread(FlowDao.delete_flow, db_flow)
+        await to_thread(self.flow_service.delete_flow_hook, request, user, db_flow)
