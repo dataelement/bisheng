@@ -189,6 +189,28 @@ def test_original_command_bootstraps_and_repeat_preserves_credentials(install):
     assert all(values[name]["_expected"] not in json.dumps(commands) + first.stdout + first.stderr for name in values)
 
 
+def test_legacy_env_without_runtime_bindings_still_installs(install):
+    """An .env from before the runtime layer lacks the keys the shipped config reads with !env.
+
+    Without app-runtime nothing generates them, so the installer adds them empty,
+    the same as .env.example, instead of failing credential preparation.
+    """
+    root, _env, run, _calls, _values = install
+    runtime_keys = ("BISHENG_RUNTIME_CONTROL_SECRET", "BISHENG_APP_PROXY_HMAC_SECRET", "BISHENG_APP_OBO_SECRET")
+    file = root / "docker/.env"
+    lines = [
+        "COMPOSE_PROFILES=" if line.startswith("COMPOSE_PROFILES=") else line
+        for line in file.read_text().splitlines()
+        if not line.startswith(tuple(key + "=" for key in runtime_keys))
+    ]
+    file.write_text("\n".join(lines) + "\n")
+    result = run()
+    assert result.returncode == 0, result.stderr
+    config = saved_env(root)
+    assert all(config[key] == "" for key in runtime_keys)
+    assert config["COMPOSE_PROFILES"] == ""
+
+
 def test_prepare_only_needs_neither_passwords_nor_images(install):
     root, _env, run, calls, _ = install
     (root / "docker/.env").unlink()
