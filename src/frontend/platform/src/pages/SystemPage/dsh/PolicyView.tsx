@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button } from '@bisheng/ui';
 import { TreeDepartmentSelect } from "@/components/bs-comp/department/TreeDepartmentSelect";
 
@@ -156,7 +157,7 @@ export function PolicyView() {
           role={defaultUserError ? "alert" : "status"}
           className="rounded-lg border p-10 text-center text-sm text-muted-foreground"
         >
-          {t(defaultUserError ? "dsh.unavailable" : defaultUserLoading ? "dsh.loading" : "dsh.empty")}
+          {defaultUserLoading && !defaultUserError ? <LoadingState label={t("dsh.loading")} /> : t(defaultUserError ? "dsh.unavailable" : "dsh.empty")}
         </div>
       ) : (
         <>
@@ -165,7 +166,7 @@ export function PolicyView() {
             <UsageSummaryView summary={summary} />
           ) : (
             <p role={error ? "alert" : "status"} className="py-8 text-sm text-muted-foreground">
-              {t(error ? "dsh.usageRangeUnavailable" : "dsh.loading")}
+              {error ? t("dsh.usageRangeUnavailable") : <LoadingState label={t("dsh.loading")} />}
             </p>
           )}
         </>

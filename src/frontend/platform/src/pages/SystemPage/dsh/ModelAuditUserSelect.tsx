@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Outlined } from "bisheng-icons";
 import {
   Command,
@@ -188,9 +189,7 @@ export function ModelAuditUserSelect({
                 </CommandItem>
               ))}
               {loading && (
-                <p role="status" className="p-4 text-sm text-muted-foreground">
-                  {t("dsh.loading")}
-                </p>
+                <LoadingState size="panel" label={t("dsh.loading")} className="p-4 text-sm text-muted-foreground" />
               )}
               {failed && (
                 <>

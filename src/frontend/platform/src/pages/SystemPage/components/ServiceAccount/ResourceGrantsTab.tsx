@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { useServiceAccountRequestScope } from "./useServiceAccountManagementScope";
 import { TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import { Button, SearchInput, Select, notification, toast } from '@bisheng/ui';
@@ -403,7 +404,7 @@ export function ResourceGrantsTab({
               <TableRow>
                 <TableCell colSpan={7} className="py-8 text-center">
                   <span role="status" aria-label={t("loading")}>
-                    <Outlined.Loading className="mx-auto size-5 animate-spin" />
+                    <LoadingState size="inline" className="mx-auto" />
                   </span>
                 </TableCell>
               </TableRow>

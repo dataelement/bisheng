@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Tooltip, TooltipProvider } from '@bisheng/ui'
 import { Info } from 'lucide-react'
 import UsersSelect from '@/components/bs-comp/selectComponent/Users'
@@ -112,7 +113,7 @@ export function CreditRulesView() {
         </div>
         <p className="text-sm text-muted-foreground">{t('dsh.unified.ruleHelp')}</p>
         {error && <p role="alert">{t(error)}</p>}
-        {!loaded ? <p role="status">{t('dsh.loading')}</p> : <div className="overflow-x-auto">
+        {!loaded ? <LoadingState size="panel" label={t('dsh.loading')} /> : <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
                 <thead><tr className="border-b">
                     <th className="py-3 font-medium">{t(kind === 'USER' ? 'dsh.unified.userTab' : `dsh.unified.${kind}`)}</th>

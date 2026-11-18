@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 
 import { Command, CommandInput, CommandItem, CommandList } from "@/components/bs-ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover";
@@ -132,9 +133,7 @@ export function UsageUserSelect({ value, range, onChange }: UsageUserSelectProps
               </CommandItem>
             ))}
             {loading && (
-              <p role="status" className="p-4 text-sm text-muted-foreground">
-                {t("dsh.loading")}
-              </p>
+              <LoadingState size="panel" label={t("dsh.loading")} className="p-4 text-sm text-muted-foreground" />
             )}
             {error && (
               <CommandItem value="retry" onSelect={() => setRevision((value) => value + 1)}>

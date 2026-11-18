@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { getUserCredits } from "@/controllers/API/modelPricing";
 import { Button } from "@bisheng/ui";
 import { useQuery } from "@tanstack/react-query";
@@ -21,7 +22,7 @@ export function UserCreditsCard({ userId }: UserCreditsCardProps) {
   if (!credits) {
     return (
       <p role={query.isError ? "alert" : "status"} className="flex items-center gap-2 text-sm text-muted-foreground">
-        {t(query.isError ? "dsh.unified.creditsUnavailable" : "dsh.loading")}
+        {query.isError ? t("dsh.unified.creditsUnavailable") : <LoadingState label={t("dsh.loading")} />}
         {query.isError && (
           <Button variant="link" size="small" className="h-auto px-0" onClick={() => void query.refetch()}>
             {t("dsh.refresh")}

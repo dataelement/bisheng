@@ -1,6 +1,6 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button } from '@bisheng/ui';
 
-import { Outlined } from "bisheng-icons";
 
 import { useEffect,useRef } from "react";
 import { useTranslation } from "react-i18next";
@@ -40,8 +40,7 @@ export function OpenApiListFooter({ status, itemCount, onLoadMore, onRetry }: Op
     <div ref={sentinel} role="status" aria-live="polite" aria-busy={status === "loading"}
       className={`flex h-10 w-full items-center justify-center gap-2 text-muted-foreground ${status === "done" ? "text-xs" : "text-sm"}`}>
       {status === "loading" ? <>
-        <Outlined.Loading aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-pulse" />
-        {t("openApiManagement.list.loading")}
+        <LoadingState size="inline" label={t("openApiManagement.list.loading")} />
       </> : null}
       {status === "error" ? (
         <Button variant="text" size="small" type="button" className="h-full w-full hover:text-foreground" onClick={onRetry} color="default">

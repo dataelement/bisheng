@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button, Input, notification } from '@bisheng/ui';
 
 import {
@@ -154,7 +155,7 @@ function AssetOptionContent({
                     onMouseUp={handleDeleteMouseUp}
                     onClick={handleDeleteClick}
                 >
-                    {deleting ? <Outlined.Loading className="size-4 animate-spin" /> : <Outlined.Delete className="size-4" />}
+                    {deleting ? <LoadingState size="inline" /> : <Outlined.Delete className="size-4" />}
                 </button>
             )}
         </div>

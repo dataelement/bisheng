@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { useContext } from "react";
 import { userContext } from "@/contexts/userContext";
 import { locationContext } from "@/contexts/locationContext";
@@ -272,8 +273,8 @@ export function ServiceAccount() {
         <ServiceAccountView />
       </ServiceAccountRequestScopeContext.Provider>
     ) : <div className="space-y-2 text-sm text-muted-foreground">
-      <p>{t(management.loading || management.switching ? "loading" : management.refreshRequired
-        ? "openApiManagement.tenantScope.changed" : "openApiManagement.tenantScope.choose")}</p>
+      {management.loading || management.switching ? <LoadingState label={t("loading")} /> : <p>{t(management.refreshRequired
+        ? "openApiManagement.tenantScope.changed" : "openApiManagement.tenantScope.choose")}</p>}
       {!management.loading && !management.switching && <Button variant="outlined" color="default"
         onClick={handleUiRequest(management.refresh)}>{t("openApiManagement.tenantScope.refresh")}</Button>}
     </div>}

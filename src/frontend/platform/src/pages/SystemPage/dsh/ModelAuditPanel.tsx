@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button, Segmented } from "@bisheng/ui";
 import { userContext } from "@/contexts/userContext";
 import type {
@@ -243,7 +244,7 @@ function ModelAuditRequestPage({ tenantId, initialView = "groups" }: ModelAuditR
       {failed ? (
         <p role="alert">{t("dsh.modelAuditView.loadError")}</p>
       ) : loading ? (
-        <p role="status">{t("dsh.loading")}</p>
+        <LoadingState size="panel" label={t("dsh.loading")} />
       ) : view === "groups" ? (
         <>
           {groups?.scan_limited && <p role="status">{t("dsh.modelAuditView.scan_limited")}</p>}

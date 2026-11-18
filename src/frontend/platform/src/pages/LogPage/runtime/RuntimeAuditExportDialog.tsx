@@ -1,3 +1,4 @@
+import { LoadingState } from '@/components/bs-icons/loading/LoadingState'
 import { Button, Modal } from '@bisheng/ui'
 import { useTranslation } from 'react-i18next'
 import type { RuntimeAuditExport, RuntimeAuditFilters, RuntimeAuditKind } from '@/controllers/API/runtimeAudit'
@@ -41,7 +42,7 @@ export function RuntimeAuditExportDialog({ open, onOpenChange, kind, filters, jo
             <p>{t(`log.runtime.status.${job.status}`)}</p>
             <p>{t('log.runtime.exportRows', { count: job.final_count ?? job.processed_rows ?? 0 })}</p>
             {job.selection_started_at && <p>{t('log.runtime.selectedAt')}: {formatTimestamp(job.selection_started_at)}</p>}
-          </div> : <p role="status">{t('log.runtime.loading')}</p>}
+          </div> : <LoadingState size="panel" label={t('log.runtime.loading')} />}
     </div>
   </Modal>
 }
