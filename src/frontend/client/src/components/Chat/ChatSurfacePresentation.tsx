@@ -291,6 +291,7 @@ export function ChatSurfacePresentation({
                                 onToggleTaskMode={handleToggleTaskMode}
                                 placeholder={composerPlaceholder(t, {
                                   runAwaitingAnswer, awaitingUserInput, runStopped, taskMode,
+                                  runTakesMessages: unifiedRuntime === true && !shareToken && (isStreaming || taskRunning),
                                   taskPlaceholder: (bsConfig as { linsightConfig?: { input_placeholder?: string } } | undefined)
                                     ?.linsightConfig?.input_placeholder,
                                 })}

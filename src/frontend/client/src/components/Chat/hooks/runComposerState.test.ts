@@ -63,6 +63,14 @@ describe('composerPlaceholder', () => {
         expect(composerPlaceholder(t, base)).toBeUndefined();
     });
 
+    it('says the box takes messages while a run is going on, over the mode placeholder', () => {
+        expect(composerPlaceholder(t, { ...base, runTakesMessages: true })).toBe('runComposer.runningPlaceholder');
+        expect(composerPlaceholder(t, { ...base, runTakesMessages: true, taskMode: true, taskPlaceholder: 'admin text' }))
+            .toBe('runComposer.runningPlaceholder');
+        expect(composerPlaceholder(t, { ...base, runTakesMessages: true, runAwaitingAnswer: true }))
+            .toBe('com_linsight_answer_placeholder');
+    });
+
     it('says a message continues the work after a stop, in either mode', () => {
         expect(composerPlaceholder(t, { ...base, runStopped: true })).toBe('runComposer.stoppedPlaceholder');
         expect(composerPlaceholder(t, { ...base, runStopped: true, taskMode: true, taskPlaceholder: 'admin text' }))

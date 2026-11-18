@@ -46,6 +46,8 @@ interface ComposerPlaceholderState {
   awaitingUserInput: boolean;
   /** The user stopped the latest run (unified runtime). */
   runStopped: boolean;
+  /** A run is going on and takes further messages (unified runtime only). */
+  runTakesMessages?: boolean;
   taskMode: boolean;
   /** Admin-configured placeholder of deep research. */
   taskPlaceholder?: string;
@@ -59,6 +61,7 @@ export function composerPlaceholder(
   if (state.runAwaitingAnswer && !state.awaitingUserInput) return t("com_linsight_answer_placeholder");
   if (state.awaitingUserInput) return t("com_linsight_awaiting_reply");
   if (state.runStopped) return t("runComposer.stoppedPlaceholder");
+  if (state.runTakesMessages) return t("runComposer.runningPlaceholder");
   if (state.taskMode) return state.taskPlaceholder || t("com_linsight_input_placeholder");
   return undefined;
 }

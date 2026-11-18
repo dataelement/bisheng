@@ -3148,6 +3148,7 @@
   },
   "runComposer": {
     "stoppedPlaceholder": "Stopped. Send a message to pick up where it left off",
+    "runningPlaceholder": "Type anytime — press Enter to send while the answer is in progress",
     "stopFailed": "Couldn't stop. Please try again",
     "uploadLocked": "You can upload files after the current answer finishes",
     "modelLocked": "You can switch models after the current answer finishes"

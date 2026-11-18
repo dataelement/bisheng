@@ -3077,6 +3077,7 @@
   },
   "runComposer": {
     "stoppedPlaceholder": "已停止。说一句话就能接着做",
+    "runningPlaceholder": "回答进行中，可随时补充，按 Enter 发送",
     "stopFailed": "没能停下来，请再试一次",
     "uploadLocked": "当前回答结束后才能上传文件",
     "modelLocked": "当前回答结束后才能切换模型"

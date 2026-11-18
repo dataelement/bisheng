@@ -3072,6 +3072,7 @@
   },
   "runComposer": {
     "stoppedPlaceholder": "停止しました。メッセージを送ると続きから再開できます",
+    "runningPlaceholder": "回答中でもいつでも入力できます。Enter で送信",
     "stopFailed": "停止できませんでした。もう一度お試しください",
     "uploadLocked": "現在の回答が終わるとファイルをアップロードできます",
     "modelLocked": "現在の回答が終わるとモデルを切り替えられます"
