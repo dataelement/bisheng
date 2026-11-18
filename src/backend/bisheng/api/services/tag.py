@@ -6,7 +6,8 @@ from loguru import logger
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.errcode.tag import TagExistError, TagNotExistError
-from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
+from bisheng.common.models.config import ConfigDao, ConfigKeyEnum
+from bisheng.core.database.tenant_filter import _resolve_tenant_id
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import FlowDao
 from bisheng.database.models.group_resource import ResourceTypeEnum
@@ -15,13 +16,14 @@ from bisheng.permission.application.business_authorization import (
     require_business_action,
 )
 from bisheng.utils.async_utils import run_async_safe
+from bisheng.workstation.domain.models.tenant_workstation_config import TenantWorkstationConfigDao
 
 
 async def _aget_hosted_app(resource_id: str):
     """One hosted application row, or ``None`` once it is deleted.
 
     Deliberately not routed through ``AppQueryService``: that service answers
-    the detail page's question (owner ∪ tenant administrator), while tagging
+    the detail page's question (owner or tenant administrator), while tagging
     asks the generic F048 ``edit`` question a few lines below. Reusing it would
     quietly apply two different rules to the same request. A ``deleted`` app is
     reported as absent — the row survives for audit, but it is not a resource
@@ -40,8 +42,8 @@ async def _aget_hosted_app(resource_id: str):
 class TagService:
     @classmethod
     def get_all_tag(
-        cls, request: Request, login_user: UserPayload, keyword: str = None, page: int = 0, limit: int = 10
-    ) -> (list[Tag], int):
+        cls, request: Request, login_user: UserPayload, keyword: str | None = None, page: int = 0, limit: int = 10
+    ) -> tuple[list[Tag], int]:
         """Get all tags"""
         result = TagDao.search_tags(
             keyword,
@@ -85,7 +87,8 @@ class TagService:
 
     @classmethod
     def delete_tag(cls, request: Request, login_user: UserPayload, tag_id: int) -> bool:
-        """NO NAME SPACE NO KEY VALUE!!"""
+        if TagDao.get_tag_by_id(tag_id) is None:
+            raise TagNotExistError()
         return TagDao.delete_tag(tag_id)
 
     @classmethod
@@ -129,6 +132,8 @@ class TagService:
         cls, request: Request, login_user: UserPayload, tag_id: int, resource_id: str, resource_type: ResourceTypeEnum
     ) -> TagLink:
         """Associate resources with tags"""
+        if TagDao.get_tag_by_id(tag_id) is None:
+            raise TagNotExistError()
         cls.check_tag_link_permission(request, login_user, resource_id, resource_type)
 
         new_link = TagLink(
@@ -151,25 +156,29 @@ class TagService:
         return TagDao.delete_resource_tag(tag_id, resource_id, resource_type)
 
     @classmethod
-    def get_home_tag(cls, request: Request, login_user: UserPayload) -> list[Tag]:
+    async def get_home_tag(cls, request: Request, login_user: UserPayload) -> list[Tag]:
         """Get a list of tags to show on the homepage"""
-        home_tags = ConfigDao.get_config(ConfigKeyEnum.HOME_TAGS)
+        home_tags = await TenantWorkstationConfigDao.aget(_resolve_tenant_id(), ConfigKeyEnum.HOME_TAGS.value)
+        if home_tags is None:
+            # Keep legacy ordering until this tenant saves its own selection.
+            # Tag reads below still exclude every foreign tenant's IDs.
+            home_tags = await ConfigDao.aget_config(ConfigKeyEnum.HOME_TAGS)
         if not home_tags:
             return []
         home_tags = json.loads(home_tags.value)
-        tags = TagDao.get_tags_by_ids(home_tags)
+        tags = await TagDao.aget_tags_by_ids(home_tags)
 
         tags = sorted(tags, key=lambda x: home_tags.index(x.id))
         return tags
 
     @classmethod
-    def update_home_tag(cls, request: Request, login_user: UserPayload, tag_ids: list[int]) -> bool:
+    async def update_home_tag(cls, request: Request, login_user: UserPayload, tag_ids: list[int]) -> bool:
         """Update the list of tags displayed on the homepage"""
-        home_tags = ConfigDao.get_config(ConfigKeyEnum.HOME_TAGS)
-        if not home_tags:
-            home_tags = Config(key=ConfigKeyEnum.HOME_TAGS.value, value=json.dumps(tag_ids))
-        else:
-            home_tags.value = json.dumps(tag_ids)
-
-        ConfigDao.insert_config(home_tags)
+        tag_ids = list(dict.fromkeys(tag_ids))
+        tags = await TagDao.aget_tags_by_ids(tag_ids)
+        if {tag.id for tag in tags} != set(tag_ids):
+            raise TagNotExistError()
+        await TenantWorkstationConfigDao.aupsert(
+            _resolve_tenant_id(), ConfigKeyEnum.HOME_TAGS.value, json.dumps(tag_ids)
+        )
         return True

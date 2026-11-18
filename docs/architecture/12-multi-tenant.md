@@ -182,18 +182,26 @@ _is_management_api     : ContextVar[bool]
 
 `get_current_tenant_id()` **优先返回 admin-scope 覆盖值**（`tenant.py:79-95`）。
 
-### visible_tenant_ids 的不对称性
+### 浏览器业务请求的最终租户范围
 
-`_compute_visible_tenant_ids`（`utils/http_middleware.py:207-227`）：
+`CustomMiddleware._compute_visible_tenant_ids` 仍保留历史兼容集合；真正进入业务端点前，`admin/application/request_admission.py` 的 `bind_admitted_scope` 使用 `tenant_execution_scope` 将其覆盖为本次已确认的单一租户：
 
 | 主体 | 可见集合 | 含义 |
 |------|----------|------|
-| 全局超管（无 admin-scope） | `None` | 不注入任何过滤 |
-| Root 用户 | `{1}` | **闭** —— 总部看不到子租户数据 |
-| Child 用户 | `{自己, 1}` | **开** —— 子租户可见 Root（用于读共享资源）|
-| `tenant_id=0` | `frozenset()` | 注入 `WHERE false()`，中间件另行 403 |
+| Root 普通用户 | `{1}` | 仅 Root 业务资源 |
+| Child 普通用户及租户管理员 | `{当前租户}` | 排除 Root 和其他 Child |
+| 全局超管的管理请求 | `{已选择租户}` | 仅选定的管理视图，不展开全平台数据 |
+| 桌面凭据绑定的请求 | `{凭据租户}` | 不读取浏览器管理视图选择 |
 
-方向性是刻意设计：Root 想看 Child 数据必须显式切 admin-scope，且仅在白名单内生效。
+此边界覆盖 `TENANT` 和 `PERSONAL` 请求的依赖、业务查询及响应流。用户从 Root 迁入 Child 或在两个 Child 之间变更归属后，创建者 ID 不变也不能看到旧租户资源；资源继续留在原所属租户，迁移必须另行明确执行。原始 SQL、隐藏在 UNION 内的表及批量写入仍按下节规则处理。
+
+权限列表候选的业务证明会排除不存在、跨租户或权限投影未就绪的单个资源；后两类业务加载异常写入告警，不阻断其他正常候选。单资源操作仍返回原错误，意外的数据库或运行时故障仍向上传播。该处理位于 `permission/application/business_authorization.py`，不修补资源所属租户或权限投影。
+
+模型提供方共享等允许跨租户读取的能力，由各领域通过显式共享检查和受控 bypass 读取。不能通过默认加入 Root 来代替共享授权。标签首页选择使用现有 `tenant_workstation_config` 的 `home_tags` 键按租户保存；无本租户记录时可沿用旧全局排序，但标签明细仍经过本租户过滤，子租户保存不会改写旧全局配置。
+
+标签的批量删除通过 `database/models/tag.py` 的 `_tenant_delete` 构造作用域条件，覆盖标签及关联表；不能依赖仅拦截 SELECT 的 ORM 事件。标签关联创建和首页选择写入都校验标签属于当前租户。
+
+2026-11-19 回归：`test/admin/test_workspace_tenant_isolation.py` 和 `test/app_runtime/test_workspace_square_tenant_isolation.py` 使用真实 ORM 查询及隔离数据库，覆盖历史创建者记录、知识广场分页和数量、频道发现和公开详情、应用候选、标签读写及模型共享保留路径。
 
 ### strict_tenant_filter 的三类必用场景
 

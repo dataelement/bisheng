@@ -81,12 +81,10 @@ def bind_admitted_scope(admitted):
                     else nullcontext()
                 )
                 with management:
-                    # Existing Root sharing remains available to its domain gates.
-                    token = contexts.set_visible_tenant_ids(frozenset({admitted.tenant_id, contexts.DEFAULT_TENANT_ID}))
-                    try:
-                        yield
-                    finally:
-                        contexts.visible_tenant_ids.reset(token)
+                    # Business resources stay in the admitted tenant even when
+                    # their creator used to belong to Root. Explicit sharing
+                    # (such as model providers) is resolved by its domain gate.
+                    yield
         else:
             yield
 
