@@ -44,6 +44,10 @@ def get_processing_service():
     )
 
 
+async def _require_knowledge_menu(identity):
+    await UserPayload.assert_effective_web_menu_contains(identity.user_id, "knowledge")
+
+
 async def _write_scope(request, identity):
     scope = await resolve_management_scope(identity.user_id, is_super=identity.is_global_super, for_write=True)
     require_expected_management_tenant(request.headers.get("X-Management-Tenant"), scope)
@@ -92,6 +96,7 @@ async def read_processing_target(
 async def get_processing_settings(
     space_id: int = Path(gt=0), identity: UserPayload = Depends(UserPayload.get_login_user)
 ):
+    await _require_knowledge_menu(identity)
     await require_business_action(identity, resource_type="knowledge_space", resource_id=space_id, action="edit")
     async with get_async_db_session() as session:
         data = await ProcessingSettingsService(ProcessingSettingsRepository()).get_settings(
@@ -107,6 +112,7 @@ async def update_processing_settings(
     space_id: int = Path(gt=0),
     identity: UserPayload = Depends(UserPayload.get_login_user),
 ):
+    await _require_knowledge_menu(identity)
     await _write_scope(request, identity)
     await require_business_action(identity, resource_type="knowledge_space", resource_id=space_id, action="edit")
     async with get_async_db_session() as session:
