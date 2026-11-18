@@ -92,22 +92,20 @@ beforeEach(() => {
   mockApi.clearMemoryItemsApi.mockResolvedValue(undefined);
 });
 
-it("lists content, type, recorded time, event time and source, with no pinned/resident mark (AC-88)", async () => {
+it("groups memories by type and shows each summary with its date, nothing else (AC-88)", async () => {
   renderPane();
   await screen.findByText("Prefers short answers");
 
+  // Preferences come first, each group under its own heading.
+  expect(screen.getAllByRole("heading", { level: 4 }).map((h) => h.textContent)).toEqual([
+    "memory.group.preference",
+    "memory.group.fact",
+  ]);
   const first = rowOf("Prefers short answers");
-  expect(within(first).getByText("memory.type.preference")).toBeInTheDocument();
-  expect(within(first).getByText(/2026-11-01 09:30/)).toBeInTheDocument();
-  expect(within(first).getByText(/memory\.source\.daily/)).toBeInTheDocument();
-  // A pinned item carries no extra label.
-  expect(within(first).queryByText(/resident/i)).toBeNull();
-
-  const second = rowOf("Team offsite in Hangzhou");
-  expect(within(second).getByText("memory.type.fact")).toBeInTheDocument();
-  // The event date is already in the content, so the meta line leaves it out.
-  expect(within(second).queryByText(/2026-12-05/)).toBeNull();
-  expect(within(second).getByText(/Travel helper/)).toBeInTheDocument();
+  expect(within(first).getByText("2026-11-01")).toBeInTheDocument();
+  // Type, source, event date and a pinned mark stay off the list.
+  expect(within(first).queryByText(/memory\.type|memory\.source|resident/i)).toBeNull();
+  expect(within(rowOf("Team offsite in Hangzhou")).queryByText(/2026-12-05|Travel helper/)).toBeNull();
 });
 
 const LONG = item({ id: "d1", content: "Weekly report format", type: "experience", has_detail: true });
@@ -128,11 +126,12 @@ it("opens a memory with last updated, summary and details, and goes back (AC-88)
   expect(screen.queryByText(/full_text/)).toBeNull();
 
   await openMemory("Weekly report format");
-  expect(screen.getAllByRole("heading").map((h) => h.textContent)).toEqual([
-    "memory.updated_at",
-    "memory.summary_label",
-    "memory.detail_label",
-  ]);
+  // The memory is the title; category, source and last update sit under it, then details.
+  expect(screen.getByRole("heading", { level: 3 })).toHaveTextContent("Weekly report format");
+  expect(screen.getByText("memory.field.type").nextSibling).toHaveTextContent("memory.type.experience");
+  expect(screen.getByText("memory.field.source").nextSibling).toHaveTextContent("memory.source.daily");
+  expect(screen.getByText("memory.updated_at")).toBeInTheDocument();
+  expect(screen.getByRole("heading", { level: 4 })).toHaveTextContent("memory.detail_label");
   // No hand editing: only delete and the AI box.
   expect(screen.queryByRole("button", { name: "memory.edit" })).toBeNull();
   expect(screen.getByRole("button", { name: "memory.delete" })).toBeInTheDocument();
@@ -186,6 +185,22 @@ it("lets the AI change a memory, follows the new version, and undoes it (AC-107)
   expect(screen.queryByText("memory.revised")).toBeNull();
 });
 
+it("shows that the AI is working while a change is in flight (AC-107)", async () => {
+  mockApi.listMemoryItemsApi.mockResolvedValue([PLAIN]);
+  mockApi.reviseMemoryItemApi.mockReturnValue(new Promise(() => {}));
+  renderPane();
+  const box = await openMemory("Likes iced coffee");
+  fireEvent.change(box, { target: { value: "Make it hot coffee" } });
+  fireEvent.keyDown(box, { key: "Enter" });
+
+  expect(await screen.findByText("memory.revising")).toBeInTheDocument();
+  expect(box).toBeDisabled();
+  // One busy button: the spinner takes the arrow's place instead of sitting next to it.
+  const send = screen.getByRole("button", { name: "memory.revise_send" });
+  expect(send).toHaveAttribute("aria-busy", "true");
+  expect(send.querySelectorAll("svg")).toHaveLength(1);
+});
+
 it("keeps the request and shows why when the AI could not change it (AC-107)", async () => {
   mockApi.listMemoryItemsApi.mockResolvedValue([LONG]);
   mockApi.getMemoryItemDetailApi.mockResolvedValue("Old detail");
@@ -209,8 +224,8 @@ it("keeps the request and shows why when the AI could not change it (AC-107)", a
 
 it("shows a manually added item as added by hand (AC-88)", async () => {
   renderPane();
-  await screen.findByText("Uses metric units");
-  expect(within(rowOf("Uses metric units")).getByText(/memory\.source\.manual/)).toBeInTheDocument();
+  await openMemory("Uses metric units");
+  expect(screen.getByText("memory.field.source").nextSibling).toHaveTextContent("memory.source.manual");
 });
 
 it("asks a second time before clearing everything (AC-89)", async () => {
@@ -236,7 +251,7 @@ it("cancelling the confirmation keeps every item (AC-89)", async () => {
   expect(screen.getByText("Prefers short answers")).toBeInTheDocument();
 });
 
-it("adds an item with one box and deletes one; there is no hand editing (AC-89)", async () => {
+it("adds an item with one box and deletes one from its page; there is no hand editing (AC-89)", async () => {
   renderPane();
   await screen.findByText("Prefers short answers");
   expect(within(rowOf("Prefers short answers")).queryByRole("button", { name: "memory.edit" })).toBeNull();
@@ -249,7 +264,9 @@ it("adds an item with one box and deletes one; there is no hand editing (AC-89)"
   );
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 
-  fireEvent.click(within(rowOf("Team offsite in Hangzhou")).getByRole("button", { name: "memory.delete" }));
+  // Deleting happens on the memory's own page, which then goes back to the list.
+  await openMemory("Team offsite in Hangzhou");
+  fireEvent.click(screen.getByRole("button", { name: "memory.delete" }));
   await waitFor(() => expect(mockApi.deleteMemoryItemApi).toHaveBeenCalledWith("m2"));
 });
 
@@ -283,7 +300,7 @@ it("keeps the list and every action available with my memory off (AC-90)", async
 
   expect(screen.getByRole("button", { name: "memory.add" })).toBeEnabled();
   expect(screen.getByRole("button", { name: "memory.clear" })).toBeEnabled();
-  const row = rowOf("Prefers short answers");
-  fireEvent.click(within(row).getByRole("button", { name: "memory.delete" }));
+  await openMemory("Prefers short answers");
+  fireEvent.click(screen.getByRole("button", { name: "memory.delete" }));
   await waitFor(() => expect(mockApi.deleteMemoryItemApi).toHaveBeenCalledWith("m1"));
 });

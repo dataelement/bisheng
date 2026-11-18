@@ -2963,16 +2963,14 @@
       "preference": "Preference",
       "experience": "Experience"
     },
-    "recorded_at_value": "Saved {{time}}",
     "updated_at": "Last updated",
-    "summary_label": "Summary",
     "detail_label": "Details",
-    "no_detail": "No details yet. You can ask the AI to add some.",
-    "event_time_value": "Event date {{time}}",
-    "back": "Back",
+    "no_detail": "No details yet. Tell the AI below what to add.",
+    "back": "All memories",
     "revise_label": "Ask the AI to change this memory",
     "revise_placeholder": "Tell the AI how to change this memory, e.g. the trip moved to January",
     "revise_send": "Send",
+    "revising": "The AI is updating this memory…",
     "revised": "Updated",
     "undo": "Undo",
     "revise_unchanged": "Nothing in this memory needed changing",
@@ -3035,6 +3033,15 @@
       "reason_12110": "invalid memory type",
       "reason_12111": "the content is empty",
       "reason_other": "the operation did not succeed"
+    },
+    "field": {
+      "type": "Category",
+      "source": "Source"
+    },
+    "group": {
+      "preference": "Preferences",
+      "fact": "Facts",
+      "experience": "Experiences"
     }
   }
 }

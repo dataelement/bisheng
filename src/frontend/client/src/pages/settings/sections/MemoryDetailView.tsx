@@ -1,11 +1,12 @@
 /**
  * One memory, opened from the memory list (F132, AC-88 / AC-107).
  *
- * Laid out like Claude's memory page: last updated, summary, details (markdown). It
- * is changed only by telling the AI how (the box pinned at the bottom), or deleted. An AI change applies at once and can be undone, which edits the item back
- * to the version before.
+ * Laid out like Claude's memory page: the memory as the title, its category, source and
+ * last update, then the details (markdown). It is changed only by telling the AI how (the
+ * box pinned at the bottom), or deleted. An AI change applies at once and can be undone,
+ * which edits the item back to the version before.
  */
-import { Button, Tag } from "@bisheng/ui";
+import { Button } from "@bisheng/ui";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Outlined } from "bisheng-icons";
 import { lazy, Suspense, useState, type KeyboardEvent } from "react";
@@ -90,13 +91,6 @@ export function MemoryDetailView({ item, onBack, onDelete, onReplaced }: MemoryD
     }
   };
 
-  const section = (label: string, body: React.ReactNode) => (
-    <section className="flex flex-col gap-2">
-      <h4 className="text-body-sm text-text-3">{label}</h4>
-      {body}
-    </section>
-  );
-
   const detailBody = () => {
     if (!item.has_detail) return <p className="text-body text-text-3">{localize("memory.no_detail")}</p>;
     if (detailQuery.isError) {
@@ -133,24 +127,31 @@ export function MemoryDetailView({ item, onBack, onDelete, onReplaced }: MemoryD
         </Button>
       </div>
 
-      {/* Same order as Claude's memory page: when it changed, the one-line summary, then the
-          details. Type, source and event date ride in one quiet row above. */}
-      <article className="mt-4 flex flex-col gap-6">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-text-3">
-          <Tag size="small">{memoryTypeLabel(item.type, localize)}</Tag>
-          <span>{memorySourceLabel(item.source, localize)}</span>
-          {item.event_time && <span>{localize("memory.event_time_value", { time: item.event_time })}</span>}
-        </div>
-        {section(localize("memory.updated_at"), <p className="text-body text-text-1">{item.recorded_at ?? ""}</p>)}
-        {section(
-          localize("memory.summary_label"),
-          <p className="whitespace-pre-wrap break-words text-body text-text-1">{item.content}</p>,
-        )}
-        {section(localize("memory.detail_label"), detailBody())}
+      {/* Three levels, top to bottom: the memory itself as the title, a few facts about it
+          (category, where it was learned, when it last changed), then the details. */}
+      <article className="mt-5 flex flex-col">
+        <h3 className="whitespace-pre-wrap break-words text-h3 text-text-1">{item.content}</h3>
+        <dl className="mt-4 grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-body-sm">
+          <dt className="text-text-3">{localize("memory.field.type")}</dt>
+          <dd className="text-text-1">{memoryTypeLabel(item.type, localize)}</dd>
+          <dt className="text-text-3">{localize("memory.field.source")}</dt>
+          <dd className="text-text-1">{memorySourceLabel(item.source, localize)}</dd>
+          <dt className="text-text-3">{localize("memory.updated_at")}</dt>
+          <dd className="tabular-nums text-text-1">{item.recorded_at ?? ""}</dd>
+        </dl>
+        <section className="mt-6 flex flex-col gap-2 border-t border-border-base pt-6">
+          <h4 className="text-body-sm font-medium text-text-2">{localize("memory.detail_label")}</h4>
+          {detailBody()}
+        </section>
       </article>
 
       {/* Tell the AI how to change this memory: pinned to the bottom of the pane. */}
       <div className="sticky bottom-0 mt-auto bg-white pb-2 pt-6">
+        {revise.isLoading && (
+          <p className="mb-2 text-body-sm text-text-3" role="status">
+            {localize("memory.revising")}
+          </p>
+        )}
         {notice && (
           <div className="mb-2 flex items-center gap-2 text-body-sm text-text-2" role="status">
             {notice.kind === "revised" ? (
@@ -186,19 +187,19 @@ export function MemoryDetailView({ item, onBack, onDelete, onReplaced }: MemoryD
             rows={2}
             maxLength={2000}
             placeholder={localize("memory.revise_placeholder")}
-            className="max-h-40 min-h-[48px] flex-1 resize-none bg-transparent text-body text-text-1 outline-none placeholder:text-text-3"
+            className="max-h-40 min-h-[48px] flex-1 resize-none bg-transparent text-body text-text-1 outline-none placeholder:text-text-3 disabled:text-text-3"
           />
           <Button
             size="small"
             iconOnly
             aria-label={localize("memory.revise_send")}
             title={localize("memory.revise_send")}
+            // The arrow goes in `icon`: the button swaps that slot for its spinner while loading.
+            icon={<Outlined.ArrowUp />}
             loading={revise.isLoading}
             disabled={!instruction.trim()}
             onClick={submit}
-          >
-            <Outlined.ArrowUp />
-          </Button>
+          />
         </div>
       </div>
     </div>
