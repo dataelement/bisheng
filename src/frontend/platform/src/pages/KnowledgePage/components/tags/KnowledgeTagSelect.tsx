@@ -27,6 +27,7 @@ interface KnowledgeTagSelectProps {
     onUpdate: () => void;
     isEditable?: boolean;
     mode?: 'auto' | 'single' | 'batch';
+    isSpace?: boolean;
 }
 
 const TAG_NAME_MAX_LENGTH = 100;
@@ -40,6 +41,7 @@ export default function KnowledgeTagSelect({
     onUpdate,
     isEditable = true,
     mode = 'auto',
+    isSpace = false,
     open: controlledOpen,
     onOpenChange
 }: KnowledgeTagSelectProps) {
@@ -70,7 +72,7 @@ export default function KnowledgeTagSelect({
         const response = await getKnowledgeTagsApi(numericKnowledgeId, {
                 page: 1,
                 limit: 100
-            });
+            }, isSpace);
 
         setTags(response.data ?? []);
     };
@@ -80,7 +82,7 @@ export default function KnowledgeTagSelect({
         setInputValue("");
         syncSelectedTags();
         void fetchTags().catch(showApiError);
-    }, [open, numericKnowledgeId]);
+    }, [open, numericKnowledgeId, isSpace]);
 
     useEffect(() => {
         if (!open || isBatch) return;
@@ -133,7 +135,7 @@ export default function KnowledgeTagSelect({
             return;
         }
 
-        const result = await createKnowledgeTagApi(numericKnowledgeId, tagName);
+        const result = await createKnowledgeTagApi(numericKnowledgeId, tagName, isSpace);
 
         const newTag = result as KnowledgeTagItem;
         setTags(prev => [newTag, ...prev.filter(tag => tag.id !== newTag.id)]);
@@ -145,7 +147,7 @@ export default function KnowledgeTagSelect({
         if (deletingTagId !== null) return;
         setDeletingTagId(tag.id);
         try {
-        await deleteKnowledgeTagApi(numericKnowledgeId, tag.id);
+        await deleteKnowledgeTagApi(numericKnowledgeId, tag.id, isSpace);
         setTags(prev => prev.filter(item => item.id !== tag.id));
         setSelectedTagIds(prev => prev.filter(id => id !== tag.id));
         notification.open({ type: 'success', description: String(t('tagDeleted') ?? '') });
@@ -175,7 +177,7 @@ export default function KnowledgeTagSelect({
                     knowledge_id: numericKnowledgeId,
                     file_id: fileIds[0],
                     tag_ids: payloadTagIds
-                })
+                }, isSpace)
         );
         onUpdate();
         handleOpenChange(false);

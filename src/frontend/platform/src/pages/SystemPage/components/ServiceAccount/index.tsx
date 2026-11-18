@@ -259,9 +259,13 @@ export function ServiceAccount() {
   const { t } = useTranslation()
   const user = useContext(userContext).user as User | null
   const { appConfig } = useContext(locationContext)
-  const canSelect = !!appConfig?.multiTenantEnabled && !!user && (user.is_global_super || user.role === "admin")
+  const canSelect = !!appConfig?.multiTenantEnabled && !!user &&
+    (user.is_global_super === true || (user.is_global_super == null && user.role === "admin" && !user.is_child_admin))
+  // /user/info supplies the authenticated leaf separately from legacy tenant_id.
+  // Tenant admins manage that leaf; only global supers read a switchable scope.
+  const ownTenantId = user?.leaf_tenant_id ?? user?.tenant_id ?? 0
   const management = useServiceAccountManagementScope({ enabled: !!canSelect,
-    userId: user?.user_id ?? 0, tenantId: appConfig?.multiTenantEnabled ? user?.tenant_id ?? 0 : 1 })
+    userId: user?.user_id ?? 0, tenantId: appConfig?.multiTenantEnabled ? ownTenantId : 1 })
   return <div className="flex h-full min-h-0 flex-1 flex-col">
     {user?.user_id && management.ready && management.requestScope ? (
       <ServiceAccountRequestScopeContext.Provider key={management.viewKey} value={management.requestScope}>

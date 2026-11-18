@@ -29,6 +29,7 @@ from bisheng.knowledge.domain.repositories.processing_job_repository import (
     ProcessingConfiguration,
     ProcessingJobRepository,
 )
+from bisheng.knowledge.domain.schemas.processing_diagnostics import file_processing_conflict, space_processing_conflict
 from bisheng.knowledge.domain.schemas.processing_job import ProcessingTargetInput, ResourceVersionTarget
 
 
@@ -69,7 +70,11 @@ class ProcessingOwnerRepository:
         if root is None or root.type != KnowledgeTypeEnum.SPACE.value:
             raise SpaceNotFoundError()
         if root.state in {KnowledgeState.COPYING.value, KnowledgeState.REBUILDING.value} or root.model_transition:
-            raise KnowledgeProcessingConflictError(reason="processing_space_not_ready")
+            raise space_processing_conflict(
+                "processing_space_not_ready",
+                state=getattr(root, "state", None),
+                has_transition=bool(getattr(root, "model_transition", None)),
+            )
         with strict_tenant_filter():
             active = (
                 await session.exec(
@@ -170,13 +175,20 @@ class ProcessingOwnerRepository:
     async def aassert_file_processing_available(self, session, space_id, scope, *, exclude_job_id=None):
         root = await KnowledgeModelReferenceRepository().aget(session, space_id, for_update=True)
         if root is None or root.state != KnowledgeState.PUBLISHED.value or root.model_transition is not None:
-            raise KnowledgeProcessingConflictError(reason="processing_space_not_ready")
-        if not scope or any(row.status not in {2, 3, 6, 7} for row in scope):
-            raise KnowledgeProcessingConflictError(reason="file_parse_in_progress")
+            raise space_processing_conflict(
+                "processing_space_not_ready",
+                state=getattr(root, "state", None),
+                has_transition=bool(getattr(root, "model_transition", None)),
+            )
+        unavailable = next((row for row in scope if row.status not in {2, 3, 6, 7}), None)
+        if not scope:
+            raise KnowledgeProcessingConflictError(reason="processing_scope_incomplete")
+        if unavailable is not None:
+            raise file_processing_conflict("processing_file_state_not_ready", unavailable.status)
         item, job = KnowledgeProcessingItem, KnowledgeProcessingJob
         pairs = [(row.target.file_id, row.target.version_id) for row in scope]
         base = (
-            select(job.id)
+            select(job.kind)
             .join(item, and_(item.job_id == job.id, item.tenant_id == job.tenant_id))
             .where(
                 job.space_id == space_id,
@@ -197,7 +209,9 @@ class ProcessingOwnerRepository:
             with strict_tenant_filter():
                 conflict = (await session.exec(query.limit(1))).first()
             if conflict is not None:
-                raise KnowledgeProcessingConflictError(reason="file_parse_in_progress")
+                raise KnowledgeProcessingConflictError(
+                    reason="processing_target_job_active", blocking_operation=conflict
+                )
         return root
 
     async def _file(self, session, space_id, file_id):
@@ -218,7 +232,7 @@ class ProcessingOwnerRepository:
         for item in items:
             row = await self._file(session, space_id, item.target.file_id)
             if row.status not in {2, 3, 6, 7}:
-                raise KnowledgeProcessingConflictError(reason="file_parse_in_progress")
+                raise file_processing_conflict("processing_file_state_not_ready", row.status)
             row.status, row.remark, row.split_rule, row.updater_id = 5, "", rules[item.target.file_id], actor_user_id
         await session.flush()
 
@@ -287,7 +301,11 @@ class ProcessingOwnerRepository:
             return None
         job, item = guarded
         if root.model_transition is not None or root.state != 1:
-            raise KnowledgeProcessingConflictError(reason="processing_space_not_ready")
+            raise space_processing_conflict(
+                "processing_space_not_ready",
+                state=getattr(root, "state", None),
+                has_transition=bool(getattr(root, "model_transition", None)),
+            )
         row = await self._processing_file(session, job, item)
         if row.status not in {1, 5}:
             raise KnowledgeProcessingConflictError(reason="processing_file_state_changed")
@@ -614,7 +632,7 @@ class ProcessingOwnerRepository:
         if len(versions) != 1 or versions[0].parent_id != item.expected_parent_id:
             raise KnowledgeOperationPlanConflictError(reason="processing_file_parent_changed")
         if versions[0].status not in {2, 3, 6}:
-            raise KnowledgeProcessingConflictError(reason="processing_file_state_not_ready")
+            raise file_processing_conflict("processing_file_state_not_ready", versions[0].status)
         if not await jobs.acomplete_item(
             session, lease, configuration=current, succeeded=succeeded, error_code=error_code
         ):

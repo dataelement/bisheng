@@ -741,8 +741,13 @@ class LoginUser(BaseModel):
                     policy.home_tenant_id, user.user_id
                 )
             web_menu = list(set(web_menu) | set(personal_menu))
-            if is_department_admin or await cls.is_home_tenant_admin(user.user_id, policy=policy):
+            tenant_admin = await cls.is_home_tenant_admin(user.user_id, policy=policy)
+            if is_department_admin or tenant_admin:
                 web_menu = list(set(web_menu) | set(_ORGANIZATION_ADMIN_WEB_MENU_SYSTEM))
+                if tenant_admin:
+                    # Verified home-tenant administration includes application
+                    # creation; ordinary role IDs and resource grants stay intact.
+                    web_menu = list(set(web_menu) | {"build", WebMenuResource.CREATE_APP.value})
             else:
                 web_menu = [m for m in web_menu if m not in ("system_config", "sys")]
             web_menu = _effective_web_menu_strip_orphans(web_menu)

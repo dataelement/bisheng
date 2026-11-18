@@ -12,6 +12,7 @@ import {
   resolveErrorMessageTemplate,
   type ErrorPresentation,
 } from "@bisheng/api-client";
+import { knowledgeProcessingConflictVariant } from "@bisheng/knowledge/processing-conflicts";
 import axios, { AxiosRequestConfig } from "axios";
 import i18next from "i18next";
 import { redirectToLogin } from "~/utils/loginRedirect";
@@ -186,6 +187,12 @@ const refreshToken = (retry?: boolean): Promise<t.TRefreshTokenResponse | undefi
   _post(endpoints.refreshToken(retry));
 
 export const translateApiErrorMessage = (data: any) => {
+  const variant = knowledgeProcessingConflictVariant(data);
+  const conflictKey = variant ? `knowledgeProcessing.conflict.${variant}` : '';
+  if (conflictKey && i18next.exists(conflictKey)) {
+    const message = i18next.t(conflictKey);
+    if (typeof message === 'string' && message && message !== conflictKey) return message;
+  }
   const statusCodeKey = data?.status_code != null ? `api_errors.${data.status_code}` : "";
   const statusMessage = typeof data?.status_message === "string" ? data.status_message : "";
   const statusMessageKey = statusMessage ? `api_errors.${statusMessage}` : "";

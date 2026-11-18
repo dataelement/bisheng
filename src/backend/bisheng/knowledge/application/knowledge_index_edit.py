@@ -16,6 +16,7 @@ from bisheng.knowledge.domain import utils
 from bisheng.knowledge.domain.repositories.knowledge_index_edit_repository import KnowledgeIndexEditRepository
 from bisheng.knowledge.domain.repositories.knowledge_version_read_repository import KnowledgeVersionReadRepository
 from bisheng.knowledge.domain.repositories.operation_plan_repository import _digest
+from bisheng.knowledge.domain.schemas.processing_diagnostics import file_processing_conflict
 from bisheng.knowledge.domain.services.knowledge_processing_guard import require_space_processing_idle
 from bisheng.open_api.domain.context import get_current_open_api_principal
 from bisheng.permission.application.business_authorization import require_business_action
@@ -55,7 +56,7 @@ class KnowledgeIndexEditApplication:
             )
         require_space_processing_idle(root, operation="file_user_metadata")
         if file.status in {1, 4, 5}:
-            raise KnowledgeProcessingConflictError(reason="metadata_file_processing")
+            raise file_processing_conflict("metadata_file_processing", file.status)
         if validate:
             anchor = await self.versions.aget_anchor(tenant_id=get_current_tenant_id(), file_id=file.id)
             if (

@@ -100,6 +100,7 @@ from bisheng.knowledge.domain.models.knowledge_space_tag_library import (
 )
 from bisheng.knowledge.domain.models.knowledge_space_user_pin import KnowledgeSpaceUserPinDao
 from bisheng.knowledge.domain.repositories.knowledge_space_listing_repository import KnowledgeSpaceListingRepository
+from bisheng.knowledge.domain.repositories.knowledge_space_tag_repository import KnowledgeSpaceTagRepository
 from bisheng.knowledge.domain.schemas.direct_delete_scope import DeleteSelection
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     FolderUploadItem,
@@ -2867,11 +2868,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if file_ids:
             tag_dict = await asyncio.to_thread(
                 TagDao.get_tags_by_resource_batch,
-                [ResourceTypeEnum.SPACE_FILE],
+                [ResourceTypeEnum.SPACE_FILE, ResourceTypeEnum.KNOWLEDGE_FILE],
                 [str(fid) for fid in file_ids],
             )
             for fid_str, tags in tag_dict.items():
-                file_tags[int(fid_str)] = [{"id": t.id, "name": t.name} for t in tags]
+                file_tags[int(fid_str)] = list({t.id: {"id": t.id, "name": t.name} for t in tags}.values())
 
         result = []
         for one in res:
@@ -4826,19 +4827,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def get_space_tags(self, space_id: int) -> list[Tag]:
         await self._require_read_permission(space_id)
         await self._require_action("knowledge_space", space_id, "visible")
-        tags = await TagDao.get_tags_by_business(
-            business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE, business_id=str(space_id)
-        )
-        return tags
+        return await KnowledgeSpaceTagRepository().list_space_tags(space_id)
 
     async def add_space_tag(self, space_id: int, tag_name: str) -> Tag:
         await self._require_action("knowledge_space", space_id, "edit")
 
-        existing_tags = await TagDao.get_tags_by_business(
-            business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
-            business_id=str(space_id),
-            name=tag_name,
-        )
+        existing_tags = await KnowledgeSpaceTagRepository().list_space_tags(space_id, name=tag_name)
         if any(t.name == tag_name for t in existing_tags):
             raise SpaceTagExistsError()
 
@@ -4852,20 +4846,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def delete_space_tag(self, space_id: int, tag_id: int):
         await self._require_action("knowledge_space", space_id, "edit")
-        return await TagDao.delete_business_tag(
-            tag_id,
-            business_id=str(space_id),
-            business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
-        )
+        return await KnowledgeSpaceTagRepository().delete_space_tag(space_id, tag_id)
 
     async def update_file_tags(self, space_id: int, file_id: int, tag_ids: list[int]):
         """Overwrite tags for a single file."""
         await self._get_file_for_action(file_id, space_id=space_id)
         await self._require_action("knowledge_file", file_id, "rename")
 
-        resource_id = str(file_id)
-        resource_type = ResourceTypeEnum.SPACE_FILE
-        await TagDao.aupdate_resource_tags(tag_ids, resource_id, resource_type, self.login_user.user_id)
+        await KnowledgeSpaceTagRepository().replace_file_tags(
+            space_id, file_id, tag_ids, user_id=self.login_user.user_id
+        )
         await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
 
     async def _ordinary_batch(self, space_id, operation, items, **parameters):
