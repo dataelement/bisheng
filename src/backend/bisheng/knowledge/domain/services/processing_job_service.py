@@ -23,7 +23,7 @@ from bisheng.knowledge.domain.repositories.operation_plan_repository import Oper
 from bisheng.knowledge.domain.repositories.processing_job_repository import NewProcessingItem, ProcessingConfiguration
 from bisheng.knowledge.domain.repositories.processing_owner_repository import ProcessingOwnerRepository
 from bisheng.knowledge.domain.repositories.processing_settings_repository import ProcessingSettingsRepository
-from bisheng.knowledge.domain.schemas.processing_diagnostics import safe_failure_reason
+from bisheng.knowledge.domain.schemas.processing_diagnostics import file_processing_conflict, safe_failure_reason
 from bisheng.knowledge.domain.schemas.processing_job import (
     JobAccepted,
     MetadataSchemaParameters,
@@ -65,8 +65,9 @@ class ProcessingJobService:
 
     @staticmethod
     def require_rebuild_scope_ready(scope):
-        if any(row.status in {1, 4, 5} for row in scope):
-            raise KnowledgeProcessingConflictError(reason="processing_file_state_not_ready")
+        for row in scope:
+            if row.status in {1, 4, 5}:
+                raise file_processing_conflict("processing_file_state_not_ready", row.status)
 
     @staticmethod
     async def _authorize(identity, space_id):

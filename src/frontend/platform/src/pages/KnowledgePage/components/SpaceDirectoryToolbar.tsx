@@ -62,56 +62,44 @@ export function SpaceDirectoryToolbar({
   if (toolbarTarget !== undefined) {
     const controls = (
       <div className="flex flex-wrap items-center gap-3">
-        {hasBatchActions && <Dropdown
-          align="end"
-          menu={
-            <>
-              {onMove && (
-                <DropdownItem disabled={!selectedCount} onSelect={onMove}>
-                  {t("move.title")}
-                </DropdownItem>
-              )}
-              {onBatchDownload && (
-                <DropdownItem
-                  disabled={!selectedCount}
-                  onSelect={onBatchDownload}
-                >
-                  {t("batch.download")}
-                </DropdownItem>
-              )}
-              {onBatchTag && (
-                <DropdownItem disabled={!selectedCount} onSelect={onBatchTag}>
-                  {t("batch.tag")}
-                </DropdownItem>
-              )}
-              {onBatchRetry && (
-                <DropdownItem disabled={!selectedCount} onSelect={onBatchRetry}>
-                  {t("batch.retry")}
-                </DropdownItem>
-              )}
-              {onReferences && (
-                <DropdownItem onSelect={onReferences}>
-                  {t("deletion.references")}
-                </DropdownItem>
-              )}
-              {onDeleteSelected && (
-                <DropdownItem
-                  danger
-                  disabled={!selectedCount}
-                  onSelect={onDeleteSelected}
-                >
-                  {t("deletion.selected")}
-                </DropdownItem>
-              )}
-            </>
-          }
-        >
-          <Button variant="outlined" color="default">
-            {t("detail.batch")}
-            {selectedCount > 0 ? ` (${selectedCount})` : ""}
-            <Outlined.Down />
-          </Button>
-        </Dropdown>}
+        {selectedCount > 0 && hasBatchActions && (
+          <Dropdown
+            align="end"
+            menu={
+              <>
+                {onMove && (
+                  <DropdownItem onSelect={onMove}>{t("move.title")}</DropdownItem>
+                )}
+                {onBatchDownload && (
+                  <DropdownItem onSelect={onBatchDownload}>
+                    {t("batch.download")}
+                  </DropdownItem>
+                )}
+                {onBatchTag && (
+                  <DropdownItem onSelect={onBatchTag}>{t("batch.tag")}</DropdownItem>
+                )}
+                {onBatchRetry && (
+                  <DropdownItem onSelect={onBatchRetry}>{t("batch.retry")}</DropdownItem>
+                )}
+                {onReferences && (
+                  <DropdownItem onSelect={onReferences}>
+                    {t("deletion.references")}
+                  </DropdownItem>
+                )}
+                {onDeleteSelected && (
+                  <DropdownItem danger onSelect={onDeleteSelected}>
+                    {t("deletion.selected")}
+                  </DropdownItem>
+                )}
+              </>
+            }
+          >
+            <Button variant="outlined" color="default">
+              {t("detail.batch")}
+              <Outlined.Down />
+            </Button>
+          </Dropdown>
+        )}
         {(canCreateFolder || canUpload) && (
           <Dropdown
             align="end"

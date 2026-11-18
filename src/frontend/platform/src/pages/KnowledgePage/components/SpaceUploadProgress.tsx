@@ -1,3 +1,4 @@
+import { KnowledgeFileTypeIcon } from "@bisheng/file-viewers/knowledge-artwork";
 import { Button, StateView } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { useState } from "react";
@@ -10,6 +11,7 @@ interface SpaceUploadProgressProps {
   jobs: readonly Upload[];
   observed: ReadonlyMap<number, KnowledgeSpaceChild>;
   unavailable: boolean;
+  scrollRows?: boolean;
   onCancel: (job: Upload) => void;
   onRetry: (job: Upload) => void;
   onRefresh?: () => void;
@@ -51,6 +53,7 @@ export function SpaceUploadProgress({
   jobs,
   observed,
   unavailable,
+  scrollRows = true,
   onCancel,
   onRetry,
   onRefresh,
@@ -98,7 +101,10 @@ export function SpaceUploadProgress({
     ) : <StatusIndicator status={row.status!} remark={row.remark ?? undefined} />;
   };
   return (
-    <section aria-label={t("f118.upload_tasks")} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border-base">
+    <section
+      aria-label={t("f118.upload_tasks")}
+      className={`flex min-w-0 flex-col rounded-lg border border-border-base ${scrollRows ? "min-h-0 flex-1 overflow-hidden" : "overflow-clip"}`}
+    >
       <div className="flex min-h-11 shrink-0 items-center justify-between gap-3 bg-fill-1 px-4 py-2">
         <h2 className="flex items-center gap-2 text-body font-medium text-text-1">
           {t("f118.upload_tasks")}
@@ -108,10 +114,7 @@ export function SpaceUploadProgress({
           <Button variant="text" onClick={onRefresh}>{t("retry")}</Button>
         )}
       </div>
-      {jobs.some((job) => job.registrationStarted) && (
-        <p className="shrink-0 px-4 py-2 text-caption text-text-3">{t("f118.upload_may_continue")}</p>
-      )}
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      <div className={scrollRows ? "min-h-0 flex-1 overflow-y-auto" : undefined}>
         {!jobs.length ? (
           <StateView size="inline" title={t("f118.upload_tasks_empty")} className="h-full min-h-24" />
         ) : (
@@ -121,12 +124,12 @@ export function SpaceUploadProgress({
               const single = !job.folder && job.phase === "registered" && job.rows?.length === 1;
               const canCancel = job.phase === "queued" || job.phase === "uploading" || job.phase === "registering";
               return (
-                <li key={job.id} className="space-y-2 px-4 py-3 even:bg-fill-1">
+                <li key={job.id} className="space-y-2 px-4 py-2 even:bg-fill-1">
                   <div className="flex min-w-0 items-center gap-3">
                     {job.folder ? (
                       <Outlined.FolderClose className="size-8 shrink-0 text-text-2" aria-hidden="true" />
                     ) : (
-                      <Outlined.File className="size-8 shrink-0 text-text-3" aria-hidden="true" />
+                      <KnowledgeFileTypeIcon name={job.file.name} className="size-8 shrink-0" />
                     )}
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-body text-text-1" title={name}>{name}</p>

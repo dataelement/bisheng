@@ -1,4 +1,35 @@
 {
+  "knowledgeProcessing": {
+    "conflict": {
+      "file_parsing": "This file is still being parsed. Wait until this parse finishes. Reparsing or resplitting stays unavailable until then.",
+      "file_busy": "This file is still being processed. Try again once processing finishes.",
+      "space_busy": "The knowledge space is being built, rebuilt or copied. Try again once it finishes.",
+      "job_active": "A task is already processing the affected file or space. Check its type and progress in Task records; retry the original task if it failed.",
+      "model_busy": "The embedding model is in use by a knowledge-space processing task. Try again once it finishes.",
+      "deleting": "This resource is being deleted. Try again shortly.",
+      "rebuild": "The space is rebuilding its vector index. Check Task records and try again when it finishes; retry failed tasks there.",
+      "copy": "Files are being copied in a related space. Check Task records and try again after the required inputs have been copied.",
+      "initializing": "The copy permissions or index are not ready. Check the copy task and retry the original task if initialization failed.",
+      "metadata": "Metadata fields are being synchronized. Check Task records and try again when it finishes; failed items can be retried.",
+      "move": "The affected files are being moved. Check Move tasks; wait for completion or retry the failed move.",
+      "reprocess": "The affected files are being parsed again. Check Processing tasks and try again when they finish.",
+      "resplit": "The affected files are being split again. Check Processing tasks and try again when they finish.",
+      "file_queue": "The file is already queued for processing. Wait for the queued task or check its progress in Task records.",
+      "file_state": "The current file status does not support this operation. Refresh the file list; failed files can be retried from their failure actions.",
+      "source_input": "A move or copy still needs data from this source space. Check Task records before deleting or clearing it; retry failed tasks first.",
+      "transfer_input": "The space has unfinished move or copy tasks. Check their progress and retry failed tasks in Task records.",
+      "move_input": "A move has not finished transferring data or cleaning its source. Check Move tasks and retry the original task if it failed.",
+      "copy_retry": "The current copy state does not allow retry. Refresh the space status and wait for any model rebuild to finish.",
+      "scope_not_empty": "The space still contains historical files or chunks. Change its model by starting a rebuild in Model and index.",
+      "scope_incomplete": "File or version relationships are incomplete. Refresh the file list and retry; contact an administrator if the issue persists.",
+      "space_required": "This resource does not support this space operation. Reopen the file from the space list and try again.",
+      "unsupported": "This task type does not support the operation. Check the task type in Task records.",
+      "task_state": "Task execution or recovery records are incomplete. Refresh task details; contact an administrator if recovery remains unavailable.",
+      "scope_changed": "Your login or management tenant scope changed, so the operation stopped. Refresh and restart it in the correct tenant.",
+      "space_unpublished": "The knowledge space is not ready for this action. Refresh its status; if it remains unavailable, ask an administrator to check initialization.",
+      "space_failed": "The latest knowledge-space build failed. Check the failure reason in Task history and retry the failed task before continuing."
+    }
+  },
   "accountIdentity": {
     "account": "Account",
     "nickname": "Nickname",

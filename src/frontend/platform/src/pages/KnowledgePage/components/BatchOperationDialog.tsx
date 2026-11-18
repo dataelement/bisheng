@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { KnowledgeDialogTable } from "@bisheng/knowledge";
+import { BATCH_OPERATION_DIALOG_CLASS, KnowledgeDialogTable } from "@bisheng/knowledge";
 import { Button, Checkbox } from "@bisheng/ui";
 import {
   Dialog,
@@ -44,6 +44,7 @@ export function BatchOperationDialog({ operation }: BatchOperationDialogProps) {
       }}
     >
       <DialogContent
+        className={BATCH_OPERATION_DIALOG_CLASS}
         aria-describedby={undefined}
         onPointerDownOutside={(event) => {
           if (blockedClose) event.preventDefault();

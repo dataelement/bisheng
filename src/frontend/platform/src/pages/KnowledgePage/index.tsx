@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useKnowledgePageScope } from "@/hooks/useKnowledgePageScope";
+import { KnowledgeScopeUnavailable } from "./components/KnowledgeScopeUnavailable";
 import KnowledgeQa from "./KnowledgeQa";
 import { KnowledgeSpaceWorkspace } from "./KnowledgeSpaceWorkspace";
 
@@ -39,18 +40,12 @@ export default function KnowledgePage() {
   useEffect(() => {
     delete pageWindow.LibPage;
   }, []);
-  const unavailable = (
-    <div role="status" className="space-y-3 p-4">
-      <p>{t(isLoading ? "f118.loading_space" : "f118.scope_unavailable")}</p>
-      <Button
-        disabled={isLoading}
-        onClick={() => {
-          void retry();
-        }}
-      >
-        {t("retry")}
-      </Button>
-    </div>
+  const unavailable = isLoading ? (
+    <p role="status" className="p-4">{t("f118.loading_space")}</p>
+  ) : (
+    <KnowledgeScopeUnavailable
+      action={<Button onClick={() => { void retry(); }}>{t("retry")}</Button>}
+    />
   );
   const ordinary = scopes?.ordinary;
   const ordinaryContent = ordinary ? (
@@ -79,7 +74,7 @@ export default function KnowledgePage() {
           navigate(key === "file" ? "/filelib" : `/filelib?view=${key}`);
         }}
         extra={<div ref={setToolbarTarget} />}
-        className="flex h-full w-full flex-col [&>div:first-child]:mx-2 [&>div:first-child]:mb-2 [&>div:first-child]:shrink-0 [&>[role=tabpanel]]:min-h-0 [&>[role=tabpanel]]:flex-1"
+        className="flex h-full w-full flex-col [&>div:first-child]:mx-2 [&>div:first-child]:shrink-0 [&>[role=tabpanel]]:min-h-0 [&>[role=tabpanel]]:flex-1"
         items={[
           {
             key: "file",

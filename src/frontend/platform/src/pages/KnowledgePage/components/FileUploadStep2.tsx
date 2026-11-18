@@ -8,6 +8,7 @@ import { cn } from "@/util/utils";
 import { Tabs } from "@bisheng/ui";
 import { SearchCheck } from "lucide-react";
 import { forwardRef,useEffect,useImperativeHandle,useMemo,useRef,useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import useKnowledgeStore from "../useKnowledgeStore";
@@ -43,6 +44,7 @@ interface IProps {
     onNext: (step: number, config?: any) => void;
     onPrev: () => void;
     onDirectUpload?: () => void;
+    footerTarget?: HTMLElement | null;
     isAdjustMode?: boolean;
     kId?: string | number;
     // 新增1：接收父组件保存的状态
@@ -60,7 +62,7 @@ const enum DisplayModeType {
 
 
 const FileUploadStep2 = forwardRef(({
-    step, resultFiles, isSubmitting, onNext, onPrev, onDirectUpload, isAdjustMode, kId, previewRenderer,
+    step, resultFiles, isSubmitting, onNext, onPrev, onDirectUpload, footerTarget, isAdjustMode, kId, previewRenderer,
     persistState,
     onPersistStateChange
 }: IProps, ref) => {
@@ -234,6 +236,26 @@ const FileUploadStep2 = forwardRef(({
             rules: { ...rules, knowledgeId: kId }
         });
     };
+    const standaloneFooter = footerTarget === undefined;
+    const paneClassName = cn("h-full min-h-0 min-w-0 overflow-y-auto pr-1", standaloneFooter && "pb-28");
+    const actions = (
+        <>
+            <Button variant="outlined" onClick={() => {
+                onPrev();
+                if (step === 2) setShowPreview(false);
+            }} color="default">
+                {t('previousStep')}
+            </Button>
+            {onDirectUpload && (
+                <Button variant="outlined" onClick={onDirectUpload} color="default">
+                    {t('uploadDirectlyDefaults')}
+                </Button>
+            )}
+            <Button disabled={previewFailed || (isSubmitting && !onDirectUpload) || (rules.splitMode !== 'auto' && strategies.length === 0)} onClick={internalHandleNext}>
+                {t('nextStep')}
+            </Button>
+        </>
+    );
     return (
         <div className="mx-auto flex h-full w-full max-w-[1120px] min-h-0 flex-col gap-6 pt-6">
             <div className="flex min-h-0 flex-1 flex-col gap-4">
@@ -258,7 +280,7 @@ const FileUploadStep2 = forwardRef(({
                     showPreview ? "xl:grid-cols-[minmax(0,1.05fr)_minmax(420px,0.95fr)]" : "grid-cols-1"
                 )}>
                     {displayStep === 2 && (
-                        <div className="min-w-0 min-h-0 h-full overflow-y-auto pb-28 pr-1">
+                        <div className={paneClassName}>
                             {activeStrategyTab === 'file' && <div>
                                 <RuleFile
                                     rules={rules}
@@ -284,7 +306,7 @@ const FileUploadStep2 = forwardRef(({
                     )}
 
                     {(showPreview || (step === 3 && !isAdjustMode)) ? (
-                        <div className="relative min-w-0 min-h-0 h-full overflow-y-auto pb-28 pr-1">
+                        <div className={cn("relative", paneClassName)}>
                             {previewRenderer ? previewRenderer({ rules: applyRule.rules, applyEachCell: applyRule.applyEachCell, cellGeneralConfig: applyRule.cellGeneralConfig, previewCount, step }) : <PreviewResult
                                 showPreview={showPreview}
                                 onFileTypeChange={setStrategyTab}
@@ -305,22 +327,11 @@ const FileUploadStep2 = forwardRef(({
                 </div>
             </div>
 
-            <div className="fixed bottom-0 left-0 right-0 z-30 flex justify-center gap-4 border-t border-[#e4e8ee] bg-white px-4 py-4 sm:left-[184px]">
-                <Button variant="outlined" onClick={() => {
-                        onPrev()
-                        step === 2 && setShowPreview(false)
-                    }} color="default">
-                    {t('previousStep')}
-                </Button>
-                {onDirectUpload && (
-                    <Button variant="outlined" onClick={onDirectUpload} color="default">
-                        {t('uploadDirectlyDefaults')}
-                    </Button>
-                )}
-                <Button disabled={previewFailed || (isSubmitting && !onDirectUpload) || (rules.splitMode !== 'auto' && strategies.length === 0)} onClick={internalHandleNext}>
-                    {t('nextStep')}
-                </Button>
-            </div>
+            {standaloneFooter ? (
+                <div className="fixed bottom-0 left-0 right-0 z-30 flex justify-center gap-4 border-t border-[#e4e8ee] bg-white px-4 py-4 sm:left-[184px]">
+                    {actions}
+                </div>
+            ) : footerTarget && createPortal(actions, footerTarget)}
         </div>
     );
 });

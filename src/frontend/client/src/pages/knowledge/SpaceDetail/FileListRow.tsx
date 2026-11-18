@@ -442,9 +442,9 @@ export function FileListRow({
                 file.is_multi_version &&
                 file.version_no != null &&
                 file.version_no >= 1 && (
-                  <span className="flex h-5 shrink-0 items-center justify-center rounded bg-blue-50 px-1.5 text-xs font-medium text-blue-500">
+                  <Tag size="small" color="brand" className="shrink-0">
                     {`V${file.version_no}`}
-                  </span>
+                  </Tag>
                 )}
               <span
                 className={cn(

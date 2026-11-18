@@ -19,6 +19,7 @@ from bisheng.knowledge.domain.repositories.move_batch_repository import MoveBatc
 from bisheng.knowledge.domain.repositories.move_row_repository import MoveRowRepository
 from bisheng.knowledge.domain.repositories.operation_plan_repository import _digest
 from bisheng.knowledge.domain.schemas.move_processing import DOC_FIELDS, ROOT_FIELDS, MoveRoot, move_path_ids
+from bisheng.knowledge.domain.schemas.processing_diagnostics import file_processing_conflict, space_processing_conflict
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 
 
@@ -96,7 +97,9 @@ class SpaceCopyRepository(MoveRowRepository):
     async def aload_scope(self, session, space_id, *, lock=False):
         source = await self.aroot(session, space_id, lock=lock)
         if source.state != 1 or source.model_transition is not None:
-            raise KnowledgeProcessingConflictError(reason="copy_source_processing")
+            raise space_processing_conflict(
+                "copy_source_processing", state=source.state, has_transition=bool(source.model_transition)
+            )
         files = await self._rows(
             session, File, tuple(File.__table__.c.keys()), File.knowledge_id == space_id, lock=lock
         )
@@ -121,8 +124,9 @@ class SpaceCopyRepository(MoveRowRepository):
             if docs:
                 raise KnowledgeOperationPlanChangedError()
             versions = ()
-        if any(row["file_type"] == 1 and row["status"] in {1, 4, 5} for row in files):
-            raise KnowledgeProcessingConflictError(reason="copy_source_file_processing")
+        for row in files:
+            if row["file_type"] == 1 and row["status"] in {1, 4, 5}:
+                raise file_processing_conflict("copy_source_file_processing", row["status"])
         with session.no_autoflush, strict_tenant_filter():
             tags = (
                 (

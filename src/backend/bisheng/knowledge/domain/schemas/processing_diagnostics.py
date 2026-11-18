@@ -52,3 +52,28 @@ def failure_reason_from_error(error):
     if reason:
         return reason
     return {10903: "model_unavailable", 25008: "permission_projection_not_ready"}.get(getattr(error, "Code", None))
+
+
+def space_processing_conflict(reason, *, state=None, has_transition=False):
+    """Describe only an observed lifecycle blocker, without disclosing jobs."""
+    from bisheng.common.errcode.knowledge import KnowledgeProcessingConflictError
+
+    operation = (
+        "embedding_rebuild"
+        if has_transition or state == 3
+        else "space_copy"
+        if state == 2
+        else "space_unpublished"
+        if state == 0
+        else "space_failed"
+        if state == 4
+        else None
+    )
+    return KnowledgeProcessingConflictError(reason=reason, **({"blocking_operation": operation} if operation else {}))
+
+
+def file_processing_conflict(reason, status):
+    from bisheng.common.errcode.knowledge import KnowledgeProcessingConflictError
+
+    operation = {1: "file_parse", 4: "embedding_rebuild", 5: "file_waiting"}.get(status)
+    return KnowledgeProcessingConflictError(reason=reason, **({"blocking_operation": operation} if operation else {}))

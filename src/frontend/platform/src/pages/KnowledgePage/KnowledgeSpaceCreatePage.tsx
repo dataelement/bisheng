@@ -7,6 +7,7 @@ import { userContext } from "@/contexts/userContext";
 import { knowledgeQueryKeys } from "@/controllers/hooks/knowledge";
 import { useKnowledgePageScope } from "@/hooks/useKnowledgePageScope";
 import { CreateSpaceForm } from "./components/KnowledgeLibraryDialog";
+import { KnowledgeScopeUnavailable } from "./components/KnowledgeScopeUnavailable";
 import { SpacePanelFrame } from "./components/SpacePanelFrame";
 import { canCreateKnowledgeSpace } from "./knowledgeSpaceCreation";
 
@@ -47,6 +48,7 @@ export function KnowledgeSpaceCreatePage() {
         <SpacePanelFrame
           title={t("f118.create_space")}
           presentation="page"
+          contentClassName="h-full"
           back={{ label: t("back"), onClick: handleCancel }}
           footer={
             <>
@@ -55,7 +57,7 @@ export function KnowledgeSpaceCreatePage() {
             </>
           }
         >
-          <p role="status">{t(isLoading ? "f118.loading_space" : "f118.scope_unavailable")}</p>
+          {isLoading ? <p role="status">{t("f118.loading_space")}</p> : <KnowledgeScopeUnavailable />}
         </SpacePanelFrame>
       )}
     </main>

@@ -46,7 +46,6 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeNotQAError,
     KnowledgeOperationConfirmationRequiredError,
     KnowledgeOperationPlanConflictError,
-    KnowledgeProcessingConflictError,
     KnowledgeTagExistError,
     KnowledgeTagNotExistError,
     KnowledgeTenantMismatchError,
@@ -93,6 +92,7 @@ from bisheng.knowledge.domain.schemas.knowledge_schema import (
     AddKnowledgeMetadataFieldsReq,
     UpdateKnowledgeMetadataFieldsReq,
 )
+from bisheng.knowledge.domain.schemas.processing_diagnostics import file_processing_conflict
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
 from bisheng.knowledge.domain.services.knowledge_index_results import require_es_write, require_milvus_write
 from bisheng.knowledge.domain.services.knowledge_metadata_service import KnowledgeMetadataService
@@ -2556,25 +2556,36 @@ class KnowledgeService(KnowledgeUtils):
         cls,
         request: Request,
         login_user: UserPayload,
-        knowledge_id: int,
+        knowledge,
         file_ids: list[int] | None,
-    ) -> list[int]:
+    ) -> list[int] | None:
         """Files whose segment text this caller may read.
 
-        A named file that is hidden, missing, or outside this knowledge is
+        A named file that is hidden, missing, or outside a knowledge space is
         rejected before any index or violation-text read. An unscoped read is
         limited to the files this caller can see.
+
+        ``None`` means "the container grant is the whole decision". Only SPACE
+        containers carry the per-file F048 records this filter is built on; a
+        document library created before the unification may have none at all,
+        and filtering it by that empty set would hide text the container grant
+        already covers. Its index is per container too, so leaving the read
+        unscoped cannot reach another library's text.
         """
         from bisheng.knowledge.domain.services.knowledge_file_visibility_service import (
             KnowledgeFileVisibilityService,
         )
 
         requested = [int(one) for one in (file_ids or [])]
-        candidates = requested or KnowledgeFileDao.list_document_ids(knowledge_id)
+        if knowledge.type != KnowledgeTypeEnum.SPACE.value:
+            # A named file still selects which segments to show; it just is not
+            # a permission decision here.
+            return sorted(set(requested)) if requested else None
+        candidates = requested or KnowledgeFileDao.list_document_ids(knowledge.id)
         if not candidates:
             return []
         visible = run_async_safe(
-            KnowledgeFileVisibilityService(request, login_user).post_filter_visible_files(knowledge_id, candidates),
+            KnowledgeFileVisibilityService(request, login_user).post_filter_visible_files(knowledge.id, candidates),
             timeout=60,
         )
         allowed = {int(one) for one in visible}
@@ -2599,8 +2610,8 @@ class KnowledgeService(KnowledgeUtils):
             "visible",
         )
         requested_file_ids = [int(one) for one in (file_ids or [])]
-        readable_file_ids = cls._readable_chunk_file_ids(request, login_user, knowledge_id, requested_file_ids)
-        if not readable_file_ids:
+        readable_file_ids = cls._readable_chunk_file_ids(request, login_user, db_knowledge, requested_file_ids)
+        if readable_file_ids is not None and not readable_file_ids:
             return [], 0
 
         es_client, index_name = KnowledgeRag.open_stored_chunk_index_sync(db_knowledge, login_user=login_user)
@@ -2625,7 +2636,8 @@ class KnowledgeService(KnowledgeUtils):
                 },
             ],
         }
-        search_data["post_filter"] = {"terms": {"metadata.document_id": readable_file_ids}}
+        if readable_file_ids is not None:
+            search_data["post_filter"] = {"terms": {"metadata.document_id": readable_file_ids}}
         if keyword:
             search_data["query"] = {"match_phrase": {"text": keyword}}
         try:
@@ -2637,7 +2649,8 @@ class KnowledgeService(KnowledgeUtils):
         # A content-safety rejection never writes the retrieval index. Segments
         # kept for the detail view live outside that index and are not searchable.
         if requested_file_ids and res["hits"]["total"]["value"] == 0:
-            display = cls._violation_display_chunks(knowledge_id, readable_file_ids, keyword, page, limit)
+            scope = requested_file_ids if readable_file_ids is None else readable_file_ids
+            display = cls._violation_display_chunks(knowledge_id, scope, keyword, page, limit)
             if display is not None:
                 return display
 
@@ -2650,10 +2663,10 @@ class KnowledgeService(KnowledgeUtils):
         if file_ids:
             file_list = KnowledgeFileDao.get_file_by_ids(list(file_ids))
             file_map = {one.id: one for one in file_list}
-        readable = set(readable_file_ids)
+        readable = None if readable_file_ids is None else set(readable_file_ids)
         for one in res["hits"]["hits"]:
             file_id = one["_source"]["metadata"]["document_id"]
-            if int(file_id) not in readable:
+            if readable is not None and int(file_id) not in readable:
                 continue
             file_info = file_map.get(file_id, None)
             # Filter document summary contents of file names and summaries
@@ -2716,7 +2729,7 @@ class KnowledgeService(KnowledgeUtils):
         if file is None or file.knowledge_id != knowledge.id or file.file_type != 1:
             raise NotFoundError.http_exception()
         if file.status in {1, 4, 5}:
-            raise KnowledgeProcessingConflictError(reason="chunk_file_processing")
+            raise file_processing_conflict("chunk_file_processing", file.status)
         if knowledge.type == KnowledgeTypeEnum.SPACE.value:
             anchor = run_async_safe(
                 cls.version_read_repository.aget_anchor(tenant_id=get_current_tenant_id(), file_id=file_id),

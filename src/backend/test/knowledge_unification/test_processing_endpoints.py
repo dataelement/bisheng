@@ -314,3 +314,21 @@ async def test_confirmed_new_model_is_active_before_any_file_is_indexed(http, ap
         assert root.model_transition["pending_model_id"] == "12"
         assert root.collection_name.startswith("col") and root.collection_name != "col40"
         assert job.state == "accepted" and job.succeeded_count == 0
+
+
+@pytest.mark.parametrize("status,operation", [(1, "file_parse"), (4, "embedding_rebuild"), (5, "file_waiting")])
+async def test_http_rebuild_conflict_names_observed_file_state(http, application, status, operation):
+    async with application.context.sessions() as session:
+        file = await session.get(KnowledgeFile, 81)
+        file.status = status
+        session.add(file)
+        await session.commit()
+    response = await call(
+        http,
+        "POST",
+        "/processing-jobs/precheck",
+        payload={"kind": "embedding_rebuild", "parameters": {}},
+        headers=HEADERS,
+    )
+    assert response["status_code"] == 10999
+    assert response["data"]["blocking_operation"] == operation

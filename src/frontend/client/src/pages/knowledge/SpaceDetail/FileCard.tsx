@@ -339,9 +339,9 @@ export function FileCard({
           file.is_multi_version &&
           file.version_no != null &&
           file.version_no >= 1 && (
-            <span className="mt-0.5 flex h-5 shrink-0 items-center justify-center rounded bg-blue-50 px-1.5 text-xs font-medium text-blue-500">
+            <Tag size="small" color="brand" className="mt-0.5 shrink-0">
               {`V${file.version_no}`}
-            </span>
+            </Tag>
           )}
         <span className={cn("line-clamp-2 min-h-[40px] min-w-0 break-all leading-5", nameToneClass)}>
           {renderHighlightedName(file.name, highlightKeyword)}

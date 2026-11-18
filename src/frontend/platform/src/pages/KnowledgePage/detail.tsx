@@ -15,6 +15,7 @@ import {
 import { showApiError } from "@/controllers/request";
 import Files from "./components/Files";
 import Header from "./components/Header";
+import { KnowledgeScopeUnavailable } from "./components/KnowledgeScopeUnavailable";
 import { SpaceManagementView } from "./components/SpaceManagementView";
 import { SpaceFileDetail } from "./components/SpaceFileDetail";
 import { SpaceProcessingPanel } from "./components/SpaceProcessingDialog";
@@ -228,10 +229,8 @@ export function SpaceDetail({
     );
   if (copyTasks.isInitialLoading)
     return <p role="status">{t("f118.loading_directory")}</p>;
-  if (fileParams.length > 0 && fileId === null)
-    return <p role="status">{t("f118.scope_unavailable")}</p>;
-  if (processingParams.length > 0 && processingFileId === null)
-    return <p role="status">{t("f118.scope_unavailable")}</p>;
+  if ((fileParams.length > 0 && fileId === null) || (processingParams.length > 0 && processingFileId === null))
+    return <KnowledgeScopeUnavailable />;
   if (processingFileId !== null)
     return (
       <div className="h-full overflow-auto px-4">

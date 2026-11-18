@@ -10,6 +10,7 @@ import {
 } from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
 import { useKnowledgePageScope } from "@/hooks/useKnowledgePageScope";
+import { KnowledgeScopeUnavailable } from "./components/KnowledgeScopeUnavailable";
 import { SpaceFileUploadPanel } from "./components/SpaceFileUploadPanel";
 
 const parseId = (value: string | null | undefined): number | null => {
@@ -84,21 +85,22 @@ export function FilesUpload() {
     spaceId === null ||
     (parents.length > 0 && (parents.length !== 1 || parentId === null))
   )
-    return <div role="status">{t("f118.scope_unavailable")}</div>;
+    return <KnowledgeScopeUnavailable />;
   if (isLoading) return <div role="status">{t("f118.loading_directory")}</div>;
   if (!scopes)
     return (
-      <div>
-        <div role="status">{t("f118.scope_unavailable")}</div>
-        <Button
-          variant="outlined"
-          onClick={() => {
-            void retry();
-          }}
-        >
-          {t("retry")}
-        </Button>
-      </div>
+      <KnowledgeScopeUnavailable
+        action={
+          <Button
+            variant="outlined"
+            onClick={() => {
+              void retry();
+            }}
+          >
+            {t("retry")}
+          </Button>
+        }
+      />
     );
   const views = params.getAll("view");
   const scope = canManage && views.length === 1 && views[0] === "admin" ? scopes.admin : scopes.ordinary;

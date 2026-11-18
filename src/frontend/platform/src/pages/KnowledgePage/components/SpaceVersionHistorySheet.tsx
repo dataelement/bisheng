@@ -22,6 +22,7 @@ import { showApiError } from "@/controllers/request";
 import { getMyResourcePermissionsApi } from "@/controllers/API/permission";
 import { locationContext } from "@/contexts/locationContext";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { KnowledgeScopeUnavailable } from "./KnowledgeScopeUnavailable";
 import { SpaceVersionRelationPanel } from "./SpaceVersionRelationPanel";
 import { SpaceVersionUploadPanel } from "./SpaceVersionUploadPanel";
 import { SpaceSimilarDocumentDialog } from "./SpaceSimilarDocumentDialog";
@@ -239,15 +240,13 @@ function HistoryContent({
       </SheetHeader>
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
         {!enabled ? (
-          <p className="text-sm text-muted-foreground">
-            {t("f118.scope_unavailable")}
-          </p>
+          <KnowledgeScopeUnavailable size="panel" />
         ) : query.isError ? (
           <Button variant="outline" onClick={() => void query.refetch()}>
             {t("retry")}
           </Button>
         ) : query.data && !data ? (
-          <p role="alert">{t("f118.scope_unavailable")}</p>
+          <KnowledgeScopeUnavailable size="panel" role="alert" />
         ) : !data ? (
           <p className="text-sm text-muted-foreground" role="status">
             {t("loading")}

@@ -12,7 +12,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { SpaceBreadcrumb } from "./SpaceBreadcrumb";
 import { SpaceActionMenuItems, getSpaceActionFlags } from "./SpaceActionMenuItems";
 import { CopyShareLinkButton } from "~/components/CopyShareLinkButton";
-import { useLocalize, usePrefersMobileLayout } from "~/hooks";
+import { useLocalize } from "~/hooks";
 import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
 import { useRecoilValue } from "recoil";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
@@ -112,7 +112,6 @@ export function KnowledgeSpaceHeader({
   const navigate = useNavigate();
   const location = useLocation();
   const bishengConfig = useRecoilValue(bishengConfState);
-  const isH5 = usePrefersMobileLayout();
 
   const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
   const showShare = canShareSpace && space.visibility !== VisibilityType.PRIVATE;
@@ -130,10 +129,10 @@ export function KnowledgeSpaceHeader({
   // segment, and a second copy up here would read as the current folder's.
   // Also hidden when every row is permission-gated away — an empty menu.
   const showSpaceSettingsButton = currentPath.length === 0 && getSpaceActionFlags(spaceActions).hasAny;
-  const selectedThreshold = isH5 ? 0 : 1;
+  const hasSelection = selectedCount > 0;
   const showAddMenu = canCreateFolder || canUploadFile;
   // Filter / sort / search / view-toggle all moved into FileListToolbar.
-  const showToolbarActions = showAddMenu || isAdmin || selectedCount > selectedThreshold;
+  const showToolbarActions = showAddMenu || isAdmin || hasSelection;
 
   const showProcessSimilar = Boolean(
     versionManagementEnabled && canManageMembers && hasSimilarSelected && onProcessSimilar,
@@ -147,7 +146,7 @@ export function KnowledgeSpaceHeader({
 
   const batchAndAddActions = showToolbarActions && (
     <div className="flex shrink-0 items-center gap-2">
-      {selectedCount > selectedThreshold && (
+      {hasSelection && (
         <Dropdown
           align="end"
           menu={

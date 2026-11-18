@@ -1,3 +1,4 @@
+import { directoryLoadingStyles } from "@bisheng/knowledge";
 import { SpaceProcessingStatus } from "./SpaceProcessingStatus";
 import { BatchOperationDialog } from "./BatchOperationDialog";
 import { KnowledgeDeletionDialog } from "./KnowledgeDeletionDialog";
@@ -149,9 +150,9 @@ export function KnowledgeSpacePresentation({ model }: KnowledgeSpacePresentation
             // showing the previous space's contents while the API responds.
             // A folder upload no longer hits this branch: its placeholder card
             // lives in the grid (displayFiles), keeping the rest interactive.
-            <div className="flex h-full flex-1 flex-col items-center justify-center gap-3 pb-[112px] pt-10 text-center text-text-3">
-              <LoadingIcon className="size-20 text-primary" />
-              <span className="text-sm">{localize("com_list_loading")}</span>
+            <div className={`${directoryLoadingStyles.frame} h-full flex-1 pb-[112px] pt-10`}>
+              <LoadingIcon className={directoryLoadingStyles.icon} />
+              <span>{localize("com_list_loading")}</span>
             </div>
           ) : loadError && displayFiles.length === 0 ? (
             <div className="flex h-full flex-1 flex-col items-center justify-center pb-[112px] pt-10 text-center">

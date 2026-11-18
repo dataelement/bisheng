@@ -15,6 +15,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { Dialog } from "@/components/bs-ui/dialog";
+import { KnowledgeScopeUnavailable } from "./KnowledgeScopeUnavailable";
 import { SpacePanelFrame } from "./SpacePanelFrame";
 import { SpaceBasicFields, isValidSpaceBasic } from "./SpaceBasicFields";
 import { SpaceSettingsSectionHeader } from "./SpaceSettingsControls";
@@ -555,7 +556,7 @@ export function KnowledgeLibraryDialog({
             )}
             onCancel={() => onOpenChange(false)}
           >
-            <p role="alert">{t("f118.scope_unavailable")}</p>
+            <KnowledgeScopeUnavailable size="panel" role="alert" />
           </FormFrame>
         ))}
     </Dialog>

@@ -1865,9 +1865,6 @@
     "@typescript-eslint/no-explicit-any": {
       "count": 12
     },
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 1
-    },
     "no-restricted-syntax": {
       "count": 3
     }
@@ -1991,7 +1988,7 @@
       "count": 6
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 3
+      "count": 2
     }
   },
   "src/pages/KnowledgePage/components/RuleTable.tsx": {

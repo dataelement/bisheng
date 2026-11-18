@@ -147,11 +147,11 @@ export function SpaceDirectoryRow({
         />
       )}
       {similarIndicator}
-      {historyEnabled &&
-        item.is_multi_version === true &&
-        (item.version_no ?? 0) >= 1 && (
-          <Tag size="small">{`V${item.version_no}`}</Tag>
-        )}
+      {historyEnabled && item.is_multi_version === true && (item.version_no ?? 0) >= 1 && (
+        <Tag size="small" color={layout ? "brand" : "default"} className={layout ? "shrink-0" : undefined}>
+          {`V${item.version_no}`}
+        </Tag>
+      )}
     </>
   );
   const actionsContent = (
@@ -245,7 +245,6 @@ export function SpaceDirectoryRow({
               )}
               {historyEnabled &&
                 menuReady &&
-                actions.includes("visible") &&
                 item.is_multi_version === true && (
                   <DropdownItem
                     icon={<Outlined.History aria-hidden />}
@@ -258,12 +257,7 @@ export function SpaceDirectoryRow({
                 scope={scope}
                 spaceId={spaceId}
                 item={item}
-                enabled={
-                  historyEnabled &&
-                  menuReady &&
-                  open &&
-                  actions.includes("visible")
-                }
+                enabled={historyEnabled && menuReady && open}
                 onOpen={(panel) => setHistory({ epoch, panel })}
               />
               {menuReady && actions.includes("delete") && (
@@ -322,6 +316,7 @@ export function SpaceDirectoryRow({
       )}
       {tagsEditor === epoch && (
         <KnowledgeTagSelect
+          isSpace
           knowledgeId={spaceId}
           fileIds={[item.id]}
           initialTags={item.tags}

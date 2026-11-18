@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { userContext } from "@/contexts/userContext";
 import type { KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
+import { KnowledgeScopeUnavailable } from "./components/KnowledgeScopeUnavailable";
 import { SpaceDetail, parseKnowledgeId } from "./detail";
 import { canCreateKnowledgeSpace } from "./knowledgeSpaceCreation";
 import { KnowledgeSpaceSidebar } from "./sidebar/KnowledgeSpaceSidebar";
@@ -100,7 +101,7 @@ export function KnowledgeSpaceWorkspace({
         aria-label={t("workspace.files")}
       >
         {invalid ? (
-          <p role="status" className="p-4">{t("f118.scope_unavailable")}</p>
+          <KnowledgeScopeUnavailable />
         ) : spaceId !== null ? (
           <SpaceDetail
             key={JSON.stringify([scope, spaceId])}
