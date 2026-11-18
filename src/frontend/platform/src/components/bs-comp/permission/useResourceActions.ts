@@ -1,6 +1,7 @@
 import { notification } from '@bisheng/ui';
 
 import { userContext } from "@/contexts/userContext"
+import { managementRequestScope } from "@/controllers/managementScope"
 import { getMyResourcePermissionsApi } from "@/controllers/API/permission"
 import { useCallback, useContext, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -123,7 +124,9 @@ export function useLazyResourceActions(
   requestedActions: readonly string[],
 ): LazyResourceActionsResult {
   const { user } = useContext(userContext)
-  const userId = user?.user_id == null ? "" : String(user.user_id)
+  const userId = user?.user_id == null ? "" : JSON.stringify([
+    user.user_id, user.leaf_tenant_id, managementRequestScope(),
+  ])
   const requestedActionsKey = requestedActions.join("\u0000")
   const scopeKey = JSON.stringify([userId, resourceType, requestedActionsKey])
   const [state, setState] = useState<LazyResourceActionsState>(() =>
@@ -169,6 +172,7 @@ export function useLazyResourceActions(
         resourceType,
         resourceId,
       )).filter((action) => actionFilter.has(action))
+      if (scopeRef.current !== requestScope) return { actions: [], hasError: true }
       if (scopeRef.current === requestScope) {
         setState((current) => current.scopeKey === requestScope ? {
           ...current,
@@ -217,7 +221,9 @@ export function useResourceActions(
   translateRef.current = t
   const [actions, setActions] = useState<Record<string, string[]>>({})
   const [loading, setLoading] = useState(false)
-  const userId = user?.user_id == null ? "" : String(user.user_id)
+  const userId = user?.user_id == null ? "" : JSON.stringify([
+    user.user_id, user.leaf_tenant_id, managementRequestScope(),
+  ])
   const resourceIdsKey = resourceIds.join(",")
   const requestedActionsKey = requestedActions.join(",")
 

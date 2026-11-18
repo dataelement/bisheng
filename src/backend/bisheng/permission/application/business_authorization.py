@@ -27,6 +27,16 @@ from bisheng.permission.domain.services.permission_action_service import Permiss
 _MAX_BATCH_CHECKS = 100
 
 
+def _tenant_admin_business_visibility(actor: PermissionActor, target: VerifiedPermissionTarget, action: str) -> bool:
+    """Business access differs from personal membership's exact visibility."""
+    return (
+        action == "visible"
+        and actor.data_scope == DATA_SCOPE_ALL
+        and actor.current_tenant_id in actor.tenant_admin_tenant_ids
+        and target.tenant_id == actor.current_tenant_id
+    )
+
+
 async def _require_creation_ready(resource_type, resource_ids):
     from bisheng.core.context.tenant import get_current_tenant_id
 
@@ -145,6 +155,8 @@ async def check_business_action(
         actor=actor,
         action=action,
     )
+    if _tenant_admin_business_visibility(actor, target, action):
+        return True
     runtime = await get_f048_runtime()
     return await runtime.check_action(actor, target, action)
 
@@ -257,6 +269,9 @@ async def batch_check_business_actions(
                 continue
             if isinstance(resolution, BaseException):
                 raise resolution
+            if _tenant_admin_business_visibility(actor, resolution, action):
+                result[resource_id].add(requested_action)
+                continue
             targets.append(resolution)
             target_ids.append(resource_id)
         for offset in range(0, len(targets), _MAX_BATCH_CHECKS):

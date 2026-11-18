@@ -1187,6 +1187,8 @@ Mode编译只迁移原before已存在的技术标记，permission_enabled/custom
 
 管理列表继续要求可信具体租户及真实管理员身份。请求准入为非超管 TENANT 请求补齐所属租户管理标记，修复子租户管理员进入管理页签报 19703；不改 `list_admin_spaces` 的授权条件，不以菜单权限代替管理员资格。普通共享读取仍保留 Root 候选，QA 管理员清单快捷路径的 SQL 使用严格当前租户过滤，避免跳过逐条权限后混入 Root 数据。验证覆盖请求准入、真实 SQL 分页、普通用户拒绝及原共享读取；现场/DM8 待验，详见[修复审查记录](../../../docs/reviews/beta1-child-admin-knowledge-lists-20261118.md)。
 
+后续详情修复：业务动作 `visible` 在验证具体目标后保留同租户管理员快捷放行，覆盖空间、目录和文件；个人可见关系与加入状态不快捷放行，避免把管理访问误作已加入。否则租户全量管理列表正常而目录/详情报 18004。实际 Service 调用链与跨租户、普通用户、受限凭证回归见[本轮记录](../../../docs/reviews/beta1-admin-detail-builder-lazy-20261118.md)。
+
 ### 2026-11-18 模型共享空 condition 热修复
 
 116 的共享关闭命令因无条件 tuple 带有 `condition: null` 被三字段严格校验拒绝，返回 25008，停留在 PREPARING。`ModelSharingProjectionApplication.aread` 兼容该 OpenFGA 响应形状，保留关系、资源、规范租户 ID、重复主体及授权 pin 校验。通用客户端继续忠实返回原始 condition；实际条件授权和未知字段仍拒绝。若不了解这个传输差异，合法共享会同时阻断开启和关闭，并留下需要恢复原命令的持久计划。
