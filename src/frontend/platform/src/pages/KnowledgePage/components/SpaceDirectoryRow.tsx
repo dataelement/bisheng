@@ -322,6 +322,7 @@ export function SpaceDirectoryRow({
       )}
       {tagsEditor === epoch && (
         <KnowledgeTagSelect
+          isSpace
           knowledgeId={spaceId}
           fileIds={[item.id]}
           initialTags={item.tags}

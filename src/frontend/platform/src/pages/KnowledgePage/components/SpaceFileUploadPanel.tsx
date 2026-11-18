@@ -394,6 +394,7 @@ function UploadWizard({
               <Button
                 disabled={
                   busy ||
+                  !strategy ||
                   !strategy.rules.fileList.length ||
                   strategy.rules.fileList.some((file) => {
                     const record = book[file.id] ?? book[file.filePath];

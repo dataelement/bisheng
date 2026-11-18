@@ -1,3 +1,4 @@
+import { knowledgeProcessingConflictVariant } from '@bisheng/knowledge/processing-conflicts';
 // @ts-strict-ignore
 import { decodeErrorEnvelope, isApiError, isErrorEnvelope, normalizeApiError, resolveErrorMessageTemplate, hasIndependentScope } from '@bisheng/api-client';
 import type { ErrorEnvelope } from '@bisheng/api-client';
@@ -107,39 +108,8 @@ function rateLimitDiscoveryMessage(envelope: unknown): string {
 // namespace. An unmapped reason keeps the generic api_errors message, and an
 // unloaded namespace falls back the same way (the knowledge page has already
 // loaded it by the time one of these requests can run).
-const KNOWLEDGE_PROCESSING_CONFLICT_REASONS: Record<string, string> = {
-    space_rebuilding: 'space_busy',
-    processing_space_not_ready: 'space_busy',
-    metadata_space_processing: 'space_busy',
-    move_space_processing: 'space_busy',
-    copy_source_processing: 'space_busy',
-    processing_file_state_not_ready: 'file_parsing',
-    file_parse_in_progress: 'file_parsing',
-    processing_file_state_changed: 'file_busy',
-    metadata_file_processing: 'file_busy',
-    chunk_file_processing: 'file_busy',
-    move_file_processing: 'file_busy',
-    copy_source_file_processing: 'file_busy',
-    legacy_retry_file_busy: 'file_busy',
-    processing_target_job_active: 'job_active',
-    metadata_processing_conflict: 'job_active',
-    move_processing_conflict: 'job_active',
-    move_pending_processing_conflict: 'job_active',
-    processing_file_retry_conflict: 'job_active',
-    processing_retry_fence_conflict: 'job_active',
-    model_provider_operation_active: 'model_busy',
-    reference_target_deleting: 'deleting',
-}
-
 function knowledgeProcessingConflictMessage(envelope: unknown): string {
-    if (!isErrorEnvelope(envelope) || envelope.status_code !== 10999) return '';
-    const data = envelope.data;
-    const raw = data && typeof data === 'object' ? (data as { reason?: unknown }).reason : undefined;
-    if (typeof raw !== 'string') return '';
-    // Some reasons carry a scope suffix, e.g. "space_rebuilding:chunk_write".
-    const reason = raw.split(':')[0];
-    const variant = Object.hasOwn(KNOWLEDGE_PROCESSING_CONFLICT_REASONS, reason)
-        ? KNOWLEDGE_PROCESSING_CONFLICT_REASONS[reason] : '';
+    const variant = knowledgeProcessingConflictVariant(envelope);
     if (!variant) return '';
     const key = `knowledge:f118.processing_conflict_${variant}`;
     if (!i18next.exists(key)) return '';

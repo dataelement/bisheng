@@ -38,7 +38,7 @@ async def test_child_admin_with_zero_ordinary_roles_can_login_and_enter_manageme
         roles, menu = await LoginUser.get_roles_web_menu(access.user)
         entry = await LoginUser.user_entry_payload_for_read(access.user)
     assert roles == []
-    assert {"admin", "sys", "system_config"}.issubset(menu)
+    assert {"admin", "sys", "system_config", "build", "create_app"}.issubset(menu)
     assert "workstation" not in menu
     assert entry == {"has_workbench": False, "has_admin_console": True, "default_entry": "platform"}
     assert all(call.args == (674, 20) for call in access.checker.await_args_list)
@@ -137,3 +137,27 @@ async def test_user_info_exposes_child_admin_and_management_entry_together(acces
     assert response.data["default_entry"] == "platform"
     assert response.data["role"] == "[]"
     await LoginUser.assert_effective_web_menu_contains(674, "sys")
+
+
+async def test_child_admin_creation_uses_verified_home_policy_and_revocation(access, monkeypatch):
+    from bisheng.database.models.department import DepartmentDao
+    from bisheng.user.domain.models.user import UserDao
+
+    identity = LoginUser(user_id=674, user_role=[], tenant_id=20)
+    monkeypatch.setattr(LoginUser, "get_login_user", AsyncMock(return_value=identity))
+    monkeypatch.setattr(UserDao, "aget_user", AsyncMock(return_value=access.user))
+    monkeypatch.setattr(DepartmentDao, "aget_user_admin_departments", AsyncMock(return_value=[]))
+    access.checker.return_value = True
+    with management_scope(home=20, target=60):
+        assert await LoginUser.get_app_creator_user(None) is identity
+    assert all(call.args == (674, 20) for call in access.checker.await_args_list)
+    assert not identity.is_admin() and access.policy.role_ids == ()
+    access.checker.return_value = False
+    with pytest.raises(HTTPException):
+        await LoginUser.get_app_creator_user(None)
+
+
+async def test_department_admin_does_not_inherit_tenant_application_creation(access):
+    _, menu = await LoginUser.get_roles_web_menu(access.user, is_department_admin=True)
+    assert "create_app" not in menu
+    assert "build" not in menu

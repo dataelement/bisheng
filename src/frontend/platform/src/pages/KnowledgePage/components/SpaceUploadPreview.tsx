@@ -227,7 +227,7 @@ function PreviewPane({
   useEffect(() => {
     if (value?.status === "completed")
       onPreview(file.id, { value, fingerprint }, file.filePath);
-  }, [value, file.id, fingerprint, onPreview]);
+  }, [value, file.id, file.filePath, fingerprint, onPreview]);
   const data = value?.data;
   const chunks = useMemo(
     () =>

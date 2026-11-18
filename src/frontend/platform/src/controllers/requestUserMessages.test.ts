@@ -63,8 +63,9 @@ it('shows the rate-limit copy when model discovery is throttled', async () => {
 
 it('names the actual blocker behind a knowledge processing conflict', async () => {
  i18next.addResource('en', 'knowledge', 'f118.processing_conflict_file_parsing', 'This file is still being parsed. Wait until this parse finishes.');
+ i18next.addResource('en', 'knowledge', 'f118.processing_conflict_file_state', 'The file state has changed. Refresh its status.');
  i18next.addResource('en', 'knowledge', 'f118.processing_conflict_file_busy', 'This file is still being processed.');
- i18next.addResource('en', 'knowledge', 'f118.processing_conflict_space_busy', 'The knowledge space is still being rebuilt.');
+ i18next.addResource('en', 'knowledge', 'f118.processing_conflict_rebuild', 'The knowledge space is still being rebuilt.');
  request.defaults.adapter = async config => ({ config, status: 200, statusText: 'OK', headers: {}, data: { status_code: 10999, status_message: 'secret', data: { reason: 'file_parse_in_progress', exception: 'SECRET' } } });
  const parsing = await request.post('/api/v1/knowledge/7/processing-jobs/precheck', {}).catch(cause => cause);
  expect(parsing.status_code).toBe(10999);
@@ -74,7 +75,7 @@ it('names the actual blocker behind a knowledge processing conflict', async () =
  notices.mockClear();
  request.defaults.adapter = async config => ({ config, status: 200, statusText: 'OK', headers: {}, data: { status_code: 10999, status_message: 'secret', data: { reason: 'processing_file_state_not_ready', exception: 'SECRET' } } });
  const busy = await request.post('/api/v1/knowledge/7/processing-jobs/precheck', {}).catch(cause => cause);
- expect(busy.message).toBe('This file is still being parsed. Wait until this parse finishes.');
+ expect(busy.message).toBe('The file state has changed. Refresh its status.');
  notices.mockClear();
  // A scope-suffixed reason resolves through its base name.
  request.defaults.adapter = async config => ({ config, status: 200, statusText: 'OK', headers: {}, data: { status_code: 10999, status_message: 'secret', data: { reason: 'space_rebuilding:chunk_write' } } });
@@ -114,5 +115,28 @@ it.each([200, 422])('displays structured validation messages for HTTP %s without
 it('does not render malformed validation arrays or arbitrary server errors', () => {
  for (const [cause, expected] of [[{ status_code: 422, status_message: [{ msg: 'PRIVATE' }] }, messages.fallback], [{ status_code: 500, status_message: [{ type: 'exception', loc: [], msg: 'PRIVATE' }] }, messages['500']]] as const) {
   expect(showApiError(cause).message).toBe(expected);
+ }
+});
+
+
+it.each([
+ ['file_waiting', 'file_queue'], ['file_parse', 'file_parsing'],
+ ['embedding_rebuild', 'rebuild'],
+ ['space_copy', 'copy'], ['space_initialization', 'initializing'],
+ ['metadata_schema_change', 'metadata'], ['move_index', 'move'],
+ ['file_reprocess', 'reprocess'], ['file_resplit', 'resplit'],
+])('prefers the observed %s operation over a broad state reason', (operation, variant) => {
+ const message = `Registered action for ${variant}`;
+ i18next.addResource('en', 'knowledge', `f118.processing_conflict_${variant}`, message);
+ const error = showApiError({ status_code: 10999, data: { reason: 'processing_space_not_ready', blocking_operation: operation, exception: 'PRIVATE' } });
+ expect(error.message).toBe(message);
+ expect(error.message).not.toContain('PRIVATE');
+});
+
+it('requires safe registered operation keys and describes source input separately', () => {
+ i18next.addResource('en', 'knowledge', 'f118.processing_conflict_source_input', 'Complete the source task input before copying.');
+ expect(showApiError({status_code: 10999, data: {reason: 'source_space_move_input_required'}}).message).toBe('Complete the source task input before copying.');
+ for (const operation of ['constructor', '__proto__', 'PRIVATE', {}]) {
+  expect(showApiError({status_code: 10999, data: {reason: 'unknown', blocking_operation: operation}}).message).toBe(messages['10999']);
  }
 });

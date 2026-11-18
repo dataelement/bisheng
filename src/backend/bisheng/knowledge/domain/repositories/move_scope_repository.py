@@ -39,6 +39,7 @@ from bisheng.knowledge.domain.schemas.move_processing import (
     move_path_ids,
     move_scope_parameters,
 )
+from bisheng.knowledge.domain.schemas.processing_diagnostics import file_processing_conflict, space_processing_conflict
 from bisheng.knowledge.domain.schemas.processing_job import ResourceVersionTarget
 from bisheng.knowledge.domain.services.move_metadata_policy import effective_move_removed_fields
 
@@ -91,8 +92,11 @@ class MoveScopeRepository(MoveRowRepository):
         roots = {row["id"]: deepcopy(dict(row)) for row in rows}
         if len(roots) != 2 or any(row["tenant_id"] != tenant or row["type"] != 3 for row in rows):
             raise SpaceNotFoundError()
-        if any(row["state"] != 1 or row["model_transition"] for row in rows):
-            raise KnowledgeProcessingConflictError(reason="move_space_processing")
+        for row in rows:
+            if row["state"] != 1 or row["model_transition"]:
+                raise space_processing_conflict(
+                    "move_space_processing", state=row["state"], has_transition=bool(row["model_transition"])
+                )
         return roots[source], roots[destination]
 
     async def aload_scope(
@@ -105,7 +109,7 @@ class MoveScopeRepository(MoveRowRepository):
         await self._pending_jobs(session, (source_space_id, destination_space_id))
         with session.no_autoflush, strict_tenant_filter():
             active = (
-                select(KnowledgeProcessingJob.id)
+                select(KnowledgeProcessingJob.kind)
                 .where(
                     KnowledgeProcessingJob.space_id.in_((source_space_id, destination_space_id)),
                     KnowledgeProcessingJob.state.in_(("accepted", "running")),
@@ -113,8 +117,9 @@ class MoveScopeRepository(MoveRowRepository):
                 )
                 .limit(1)
             )
-            if (await session.execute(active.with_for_update() if for_update else active)).first():
-                raise KnowledgeProcessingConflictError(reason="move_processing_conflict")
+            found = (await session.execute(active.with_for_update() if for_update else active)).first()
+            if found:
+                raise KnowledgeProcessingConflictError(reason="move_processing_conflict", blocking_operation=found[0])
         selected = await self._by_ids(session, KnowledgeFile, FILE_FIELDS, [root.id for root in roots])
         selected_map = {row["id"]: row for row in selected}
         if len(selected_map) != len({root.id for root in roots}):
@@ -228,7 +233,7 @@ class MoveScopeRepository(MoveRowRepository):
             if row["file_type"] == 1 and row["id"] not in by_file:
                 conflict("move_unversioned_file")
             if row["status"] in (1, 4, 5) and row["file_type"] == 1:
-                raise KnowledgeProcessingConflictError(reason="move_file_processing")
+                raise file_processing_conflict("move_file_processing", row["status"])
             parents.update(path_ids(row["file_level_path"]))
         target_rows = await self._by_ids(
             session, KnowledgeFile, FILE_FIELDS, [destination_folder_id] if destination_folder_id else []

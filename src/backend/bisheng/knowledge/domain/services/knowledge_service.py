@@ -46,7 +46,6 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeNotQAError,
     KnowledgeOperationConfirmationRequiredError,
     KnowledgeOperationPlanConflictError,
-    KnowledgeProcessingConflictError,
     KnowledgeTagExistError,
     KnowledgeTagNotExistError,
     KnowledgeTenantMismatchError,
@@ -93,6 +92,7 @@ from bisheng.knowledge.domain.schemas.knowledge_schema import (
     AddKnowledgeMetadataFieldsReq,
     UpdateKnowledgeMetadataFieldsReq,
 )
+from bisheng.knowledge.domain.schemas.processing_diagnostics import file_processing_conflict
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
 from bisheng.knowledge.domain.services.knowledge_index_results import require_es_write, require_milvus_write
 from bisheng.knowledge.domain.services.knowledge_metadata_service import KnowledgeMetadataService
@@ -2716,7 +2716,7 @@ class KnowledgeService(KnowledgeUtils):
         if file is None or file.knowledge_id != knowledge.id or file.file_type != 1:
             raise NotFoundError.http_exception()
         if file.status in {1, 4, 5}:
-            raise KnowledgeProcessingConflictError(reason="chunk_file_processing")
+            raise file_processing_conflict("chunk_file_processing", file.status)
         if knowledge.type == KnowledgeTypeEnum.SPACE.value:
             anchor = run_async_safe(
                 cls.version_read_repository.aget_anchor(tenant_id=get_current_tenant_id(), file_id=file_id),
