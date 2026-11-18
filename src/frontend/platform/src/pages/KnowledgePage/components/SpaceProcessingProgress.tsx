@@ -1,3 +1,4 @@
+import { KnowledgeDialogTable } from "@bisheng/knowledge";
 import { Button, Pagination } from "@bisheng/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -148,6 +149,7 @@ export function SpaceProcessingProgress({
     percent = Math.min(100, Math.floor((processed / jobData.total_count) * 100));
   }
   const showItems = !metadata || hasFailures;
+  const itemRows = items.data?.data ?? [];
   return (
     <section className="space-y-3" aria-live="polite">
       {metadata && (
@@ -197,18 +199,23 @@ export function SpaceProcessingProgress({
       {metadata && hasFailures && items.isError && (
         <Button onClick={() => void items.refetch()}>{t("retry")}</Button>
       )}
-      {showItems && Boolean(items.data?.data.length) && (
-        <ul className="divide-y">
-          {items.data?.data.map((item, index) => (
-            <li className="py-2" key={item.id}>
-              {t("f118.processing_item_number", {
-                number: (page - 1) * 20 + index + 1,
-              })}
-              : {t(`f118.processing_item_${item.state}`)}
-              {item.error_code ? ` (${t(`api_errors:${item.error_code}`)})` : ""}
-            </li>
-          ))}
-        </ul>
+      {showItems && itemRows.length > 0 && (
+        <KnowledgeDialogTable
+          caption={t("f118.processing_items")}
+          columns={[
+            { label: t("f118.processing_item") },
+            { label: t("status") },
+            { label: t("batch.column_reason") },
+          ]}
+          rows={itemRows.map((item, index) => ({
+            key: item.id,
+            cells: [
+              t("f118.processing_item_number", { number: (page - 1) * 20 + index + 1 }),
+              t(`f118.processing_item_${item.state}`),
+              item.error_code ? t(`api_errors:${item.error_code}`) : "—",
+            ],
+          }))}
+        />
       )}
       {showItems && items.data && items.data.total > 20 && (
         <Pagination

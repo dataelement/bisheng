@@ -1,4 +1,5 @@
 import { Button, Tag } from "@bisheng/ui";
+import type { SimilarDocumentFile } from "@bisheng/knowledge";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -31,6 +32,7 @@ interface SpaceVersionHistorySheetProps {
   spaceId: number;
   parentId: number | null;
   fileId: number | null;
+  file?: SimilarDocumentFile;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   hasSimilar?: boolean;

@@ -113,9 +113,6 @@ export function SpaceDetail({
           ]}
         />
       )}
-      {facts.isInitialLoading && (
-        <div role="status" className={presentation === "workspace" ? "px-4" : undefined}>{t("f118.loading_directory")}</div>
-      )}
       {facts.isError && (
         <Button
           variant="text"

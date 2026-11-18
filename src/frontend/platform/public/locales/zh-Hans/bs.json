@@ -4697,6 +4697,7 @@
   "organization.departments": "部门",
   "organization.secondarySuffix": "（兼职部门）",
   "organization.showArchived": "显示已归档",
+  "organization.loadingSettings": "正在加载部门设置",
   "organization.expandDepartment": "展开 {{name}}",
   "organization.collapseDepartment": "收起 {{name}}",
   "organization.createChildDepartmentFor": "为「{{name}}」创建子部门",

@@ -1,4 +1,5 @@
-import { Button, toast } from "@bisheng/ui";
+import { Button, Tooltip, toast } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -185,9 +186,18 @@ function UploadWizard({
     >
       <header className="flex flex-wrap items-center gap-6">
         {onBack && (
-          <Button variant="text" onClick={onBack}>
-            {t("backToKnowledge")}
-          </Button>
+          <Tooltip content={t("backToKnowledge")}>
+            <Button
+              type="button"
+              variant="text"
+              color="default"
+              iconOnly
+              aria-label={t("backToKnowledge")}
+              onClick={onBack}
+            >
+              <Outlined.ArrowLeft aria-hidden />
+            </Button>
+          </Tooltip>
         )}
         <StepProgress
           currentStep={step}

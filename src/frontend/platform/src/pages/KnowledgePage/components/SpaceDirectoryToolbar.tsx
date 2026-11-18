@@ -1,6 +1,7 @@
 import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
 import { Button, Dropdown, DropdownItem, SearchInput } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
+import { FolderPlus, Link2 } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -116,19 +117,19 @@ export function SpaceDirectoryToolbar({
             menu={
               <>
                 {canCreateFolder && (
-                  <DropdownItem onSelect={onCreateFolder}>
+                  <DropdownItem icon={<FolderPlus />} onSelect={onCreateFolder}>
                     {t("f118.create_folder")}
                   </DropdownItem>
                 )}
                 {canUpload && (
-                  <DropdownItem onSelect={handleUpload}>
+                  <DropdownItem icon={<Outlined.Upload />} onSelect={handleUpload}>
                     {t("uploadFile")}
                   </DropdownItem>
                 )}
                 {canUpload &&
                   knowledgeUploadCapabilities.webLink &&
                   onWebLink && (
-                    <DropdownItem onSelect={onWebLink}>
+                    <DropdownItem icon={<Link2 />} onSelect={onWebLink}>
                       {t("webLink")}
                     </DropdownItem>
                   )}

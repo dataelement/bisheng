@@ -16,6 +16,7 @@ import { getMyResourcePermissionsApi } from "@/controllers/API/permission";
 import { knowledgeQueryKeys, type KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
 import { SpaceDirectoryOverlays } from "./SpaceDirectoryOverlays";
+import { SpaceDirectoryLoading } from "./SpaceDirectoryLoading";
 import { KnowledgeDeletionDialog } from "./KnowledgeDeletionDialog";
 import { useDirectoryDeletion } from "../hooks/useDirectoryDeletion";
 import { useDirectoryDownloadPermissions } from "../hooks/useDirectoryDownloadPermissions";
@@ -451,7 +452,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
   const directoryEmpty = !active.isInitialLoading && !active.error && !rows.length && !hasMore;
   const directoryStatus = (
     <>
-      {active.isInitialLoading && <p role="status" className={workspace ? "px-4 py-6 text-center text-body text-text-3" : undefined}>{t("f118.loading_directory")}</p>}
+      {active.isInitialLoading && <SpaceDirectoryLoading fill={workspace} />}
       {directoryEmpty && (workspace ? (
         <StateView size="page" title={t("f118.directory_empty")} image={<EmptyStateIllustration />} />
       ) : <p>{t("f118.directory_empty")}</p>)}

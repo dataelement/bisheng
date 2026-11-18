@@ -4697,6 +4697,7 @@
   "organization.departments": "部署",
   "organization.secondarySuffix": "（兼務部署）",
   "organization.showArchived": "アーカイブ済みを表示",
+  "organization.loadingSettings": "部門設定を読み込み中",
   "organization.expandDepartment": "{{name}}を展開",
   "organization.collapseDepartment": "{{name}}を折りたたむ",
   "organization.createChildDepartmentFor": "「{{name}}」の子部門を作成",

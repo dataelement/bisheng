@@ -1,7 +1,7 @@
 import { Button, TreeNavigationNode, TreeNavigationStatus } from "@bisheng/ui";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Outlined } from "bisheng-icons";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { knowledgeSpaceApi, type KnowledgeSpaceChild } from "@/controllers/API/knowledgeSpace";
 import { knowledgeQueryKeys, type KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
@@ -24,10 +24,9 @@ interface KnowledgeFolderTreeProps extends KnowledgeTreeExpansion {
   path: readonly number[];
   depth?: number;
   onSelect: (spaceId: number, folderId: number) => void;
-  onEmptyChange?: (empty: boolean) => void;
 }
 
-interface FolderNodeProps extends Omit<KnowledgeFolderTreeProps, "onEmptyChange" | "parentId"> {
+interface FolderNodeProps extends Omit<KnowledgeFolderTreeProps, "parentId"> {
   item: KnowledgeSpaceChild;
 }
 
@@ -36,21 +35,20 @@ function FolderNode({ item, depth = 1, ...props }: FolderNodeProps) {
   const selected = item.id === props.selectedId;
   const key = knowledgeTreeNodeKey(props.spaceId, item.id);
   const expanded = props.expandedKeys.has(key);
-  const [knownEmpty, setKnownEmpty] = useState(false);
   return (
     <TreeNavigationNode
       name={item.file_name}
       depth={depth}
       current={selected && "page"}
-      icon={expanded && !knownEmpty ? <Outlined.FolderOpen /> : <Outlined.FolderClose />}
+      icon={expanded ? <Outlined.FolderOpen /> : <Outlined.FolderClose />}
       onSelect={() => props.onSelect(props.spaceId, item.id)}
-      disclosure={knownEmpty ? undefined : {
+      disclosure={{
         expanded,
         label: `${t(expanded ? "sidebar.collapse" : "sidebar.expand")} ${item.file_name}`,
         onToggle: () => props.onExpansionChange(key, !expanded),
       }}
     >
-      {expanded && <KnowledgeFolderTree {...props} parentId={item.id} depth={depth + 1} onEmptyChange={setKnownEmpty} />}
+      {expanded && <KnowledgeFolderTree {...props} parentId={item.id} depth={depth + 1} />}
     </TreeNavigationNode>
   );
 }
@@ -58,7 +56,7 @@ function FolderNode({ item, depth = 1, ...props }: FolderNodeProps) {
 /** Adapted from the legacy client tree, using the current cursor-based children API. */
 export function KnowledgeFolderTree(props: KnowledgeFolderTreeProps) {
   const { t } = useTranslation("knowledge");
-  const { scope, spaceId, parentId, path, depth = 1, onEmptyChange, ...nodeProps } = props;
+  const { scope, spaceId, parentId, path, depth = 1, ...nodeProps } = props;
   const query = useInfiniteQuery({
     queryKey: [...knowledgeQueryKeys.space(scope, spaceId), "navigation-folders", parentId],
     queryFn: ({ pageParam }) => knowledgeSpaceApi.listChildren(spaceId, {
@@ -85,9 +83,6 @@ export function KnowledgeFolderTree(props: KnowledgeFolderTreeProps) {
     if (target !== undefined && !rows.some((row) => row.id === target) && hasNextPage && !isFetching && !isError)
       void fetchNextPage().catch(showApiError);
   }, [target, rows, hasNextPage, isFetching, isError, fetchNextPage]);
-  const knownEmpty = query.isSuccess && !rows.length && !hasNextPage;
-  useEffect(() => { onEmptyChange?.(knownEmpty); }, [knownEmpty, onEmptyChange]);
-
   return (
     <>
       {rows.map((item) => <FolderNode key={item.id} {...nodeProps} scope={scope} spaceId={spaceId} path={path} depth={depth} item={item} />)}

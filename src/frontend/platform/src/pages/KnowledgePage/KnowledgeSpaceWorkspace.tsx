@@ -41,11 +41,12 @@ export function KnowledgeSpaceWorkspace({
     next.delete("tab");
     next.delete("file_id");
     next.delete("process_file_id");
+    if (scope.view === "admin") next.set("view", "admin");
     navigate(
       { pathname: `/filelib/${initial.space.id}`, search: next.toString() },
       { replace: true },
     );
-  }, [initial.space, active, routeId, params, navigate]);
+  }, [initial.space, active, routeId, params, navigate, scope.view]);
   const canCreate =
     scope.view === "ordinary" && canCreateKnowledgeSpace(user);
   const handleCreate = () => {
@@ -62,6 +63,7 @@ export function KnowledgeSpaceWorkspace({
     if (showFiles) next.delete("tab");
     next.delete("file_id");
     next.delete("process_file_id");
+    if (scope.view === "admin") next.set("view", "admin");
     if (folderId === null) next.delete("parent_id");
     else next.set("parent_id", String(folderId));
     navigate({ pathname: `/filelib/${id}`, search: next.toString() });

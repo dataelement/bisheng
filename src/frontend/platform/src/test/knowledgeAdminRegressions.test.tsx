@@ -82,7 +82,7 @@ it.each([undefined, "workspace"] as const)("shows only server-reported folder an
 it.each([0, 1])("opens the concrete type %s permission editor and retires it on tenant switch", async fileType => {
   rows = [file(11, { file_type: fileType })];
   const view = mount("workspace");
-  fireEvent.click(await within(await menu()).findByRole("menuitem", { name: "manage_permission" }));
+  fireEvent.click(await within(await menu()).findByRole("menuitem", { name: "managePermission" }));
   expect(await screen.findByRole("dialog", { name: "permission-editor" })).toHaveTextContent(`${fileType === 0 ? "folder" : "knowledge_file"}:11:file-11.pdf`);
   expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   view.update({ ...scope, tenantId: 202, managementTenantId: 202 });
@@ -120,7 +120,7 @@ it("withholds privileged row actions without the corresponding server actions", 
   rows = [file(11, { status: 3 })];
   mount("workspace");
   const opened = await menu();
-  for (const name of ["manage_permission", "editTag", "move.title", "retry", "rename"]) {
+  for (const name of ["managePermission", "editTag", "move.title", "retry", "rename"]) {
     expect(within(opened).queryByRole("menuitem", { name })).not.toBeInTheDocument();
   }
 });
@@ -128,7 +128,7 @@ it("withholds privileged row actions without the corresponding server actions", 
 it("offers version management and a direct similar-document entry for a parsed single version", async () => {
   rows = [file(11, { has_similar: true, is_multi_version: false })];
   mount("workspace", true);
-  fireEvent.click(await screen.findByRole("button", { name: "versions.similar" }));
+  fireEvent.click(await screen.findByRole("button", { name: "knowledge.version.pill_similar" }));
   expect(await screen.findByRole("dialog", { name: "version-editor" })).toHaveTextContent('[11,"similar"]');
   const opened = await menu();
   expect(await within(opened).findByRole("menuitem", { name: "versions.manage" })).toBeVisible();
@@ -149,5 +149,5 @@ it.each([false, true])("withholds version management without a feature flag or s
   mount("workspace", enabled);
   const opened = await menu();
   expect(within(opened).queryByRole("menuitem", { name: "versions.manage" })).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "versions.similar" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "knowledge.version.pill_similar" })).not.toBeInTheDocument();
 });

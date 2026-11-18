@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, expect, it, vi } from "vitest";
 import {
@@ -97,7 +97,7 @@ it("polls metadata progress and requests only failed items when failures appear"
 
   expect(await screen.findByText("30%")).toBeVisible();
   expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "30");
-  expect(screen.queryByRole("list")).toBeNull();
+  expect(screen.queryByRole("table")).toBeNull();
   expect(readProcessingItems).not.toHaveBeenCalled();
 
   await act(async () => {
@@ -113,7 +113,10 @@ it("polls metadata progress and requests only failed items when failures appear"
   expect(
     await screen.findByText("f118.processing_state_partial_failed"),
   ).toBeVisible();
-  expect(await screen.findByText(/api_errors:10953/)).toBeVisible();
+  const details = await screen.findByRole("table", { name: "f118.processing_items" });
+  expect(within(details).getByRole("rowheader", { name: "f118.processing_item_number" })).toBeVisible();
+  expect(within(details).getByRole("cell", { name: "f118.processing_item_failed" })).toBeVisible();
+  expect(within(details).getByRole("cell", { name: "api_errors:10953" })).toBeVisible();
   expect(readProcessingItems).toHaveBeenCalledExactlyOnceWith(
     7,
     "job-7",

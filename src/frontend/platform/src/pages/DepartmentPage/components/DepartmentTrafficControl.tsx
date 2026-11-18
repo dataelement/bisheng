@@ -1,4 +1,5 @@
 import { Button, notification } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FlowControl } from "@/components/Pro/FlowControl";
@@ -106,9 +107,9 @@ export function DepartmentTrafficView({
     controller;
   if (loading)
     return (
-      <p role="status" className="py-8 text-sm text-muted-foreground">
-        {t("loading")}
-      </p>
+      <div role="status" aria-label={t("bs:organization.loadingSettings")} className="flex justify-center py-8 text-text-3">
+        <Outlined.Loading aria-hidden className="size-4 animate-spin" />
+      </div>
     );
   if (failed)
     return (

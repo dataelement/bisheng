@@ -156,7 +156,7 @@ export function SpaceDirectoryRow({
               )}
               {canManagePermission && (
                 <DropdownItem icon={<Outlined.PeopleSafe aria-hidden />} onSelect={() => setPermission(epoch)}>
-                  {t("manage_permission", { ns: "permission" })}
+                  {t("managePermission", { ns: "permission" })}
                 </DropdownItem>
               )}
               {canRename && !folder && (
@@ -209,6 +209,7 @@ export function SpaceDirectoryRow({
         spaceId={epoch.spaceId}
         parentId={epoch.parentId}
         fileId={epoch.fileId}
+        file={{ id: item.id, name: item.file_name, version_no: item.version_no, user_name: item.user_name }}
         hasSimilar={
           item.has_similar === true &&
           item.is_multi_version !== true &&

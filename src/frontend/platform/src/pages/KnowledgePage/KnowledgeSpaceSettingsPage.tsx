@@ -27,8 +27,7 @@ export function KnowledgeSpaceSettingsPage() {
   if (admin && !canManage) return <Navigate to={directory} replace />;
 
   const scope = admin ? scopes?.admin : scopes?.ordinary;
-  const returnPath = admin ? "/filelib?view=admin" : directory;
-  const handleBack = () => navigate(returnPath, { replace: true });
+  const handleBack = () => navigate(directory, { replace: true });
   const handleSaved = () => {
     if (scope) return client.invalidateQueries({ queryKey: knowledgeQueryKeys.scope(scope) });
   };

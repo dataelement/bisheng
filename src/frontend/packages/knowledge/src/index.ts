@@ -1,0 +1,15 @@
+export { VersionManagementDialog } from './VersionManagementDialog';
+export type { VersionManagementDialogProps } from './VersionManagementDialog';
+export { RelateDocumentPanel } from './RelateDocumentPanel';
+export type { RelateDocumentPanelProps } from './RelateDocumentPanel';
+export { SimilarDocumentDialog } from './SimilarDocumentDialog';
+export type { SimilarDocumentDialogProps, PendingSimilarFile } from './SimilarDocumentDialog';
+export type { SimilarDocumentFile, SimilarDocumentCandidate, SearchableDocument, VersionLinkResult, SimilarDocumentsServices, SimilarDocumentEvents } from './types';
+export { MoveToDialog } from './MoveToDialog';
+export type { MoveToDialogProps } from './MoveToDialog';
+export type { MoveDestinationServices, MoveDestinationItem, MoveFolder, MoveSpace, MoveSpaceGroups, MoveTarget } from './moveTypes';
+export { MoveConfirmation } from './MoveConfirmation';
+export type { MoveConfirmationProps } from './MoveConfirmation';
+export { useMoveConfirmation } from './useMoveConfirmation';
+export { KnowledgeDialogTable } from './KnowledgeDialogTable';
+export { KnowledgeDeletionItems, KnowledgeReferenceTables } from './KnowledgeDeletionTables';

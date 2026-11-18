@@ -13,6 +13,8 @@ import { knowledgeQueryKeys, type KnowledgeQueryScope } from "@/controllers/hook
 import { showApiError } from "@/controllers/request";
 import { KnowledgeFolderTree, knowledgeTreeNodeKey, type KnowledgeTreeExpansion } from "./KnowledgeFolderTree";
 import { KnowledgeSidebarPane } from "./KnowledgeSidebarPane";
+import { KnowledgeSpaceCatalogFilter } from "./KnowledgeSpaceCatalogFilter";
+import { FileAbnormalStatusCell } from "../components/FileAbnormalStatusCell";
 import { useSpaceCatalog } from "./useSpaceCatalog";
 import { useSpaceActions } from "../hooks/useSpaceActions";
 import { useSpaceFolderPath } from "../hooks/useSpaceFolderPath";
@@ -50,7 +52,6 @@ function SpaceItem({ item, section, path, ...props }: SpaceItemProps) {
   const active = props.spaceId === item.id;
   const key = knowledgeTreeNodeKey(item.id);
   const expanded = props.expandedKeys.has(key);
-  const [knownEmpty, setKnownEmpty] = useState(false);
   const live = useRef(true);
   useEffect(() => {
     live.current = true;
@@ -67,9 +68,9 @@ function SpaceItem({ item, section, path, ...props }: SpaceItemProps) {
       name={item.name}
       current={selected && "page"}
       icon={section === "department" ? <Outlined.City /> : <Outlined.Notebook />}
-      marker={<>{(item.copyTask || item.state === 2) && <span role="status" className="text-caption text-text-3">{t(item.copyTask?.phase === "failed" ? "space_copy_ui.failed" : "space_copy_ui.in_progress")}</span>}{item.is_pinned && <Outlined.Pin aria-hidden />}</>}
+      marker={<>{(item.copyTask || item.state === 2) && <span role="status" className="text-caption text-text-3">{t(item.copyTask?.phase === "failed" ? "space_copy_ui.failed" : "space_copy_ui.in_progress")}</span>}{item.is_pinned && <Outlined.Pin aria-hidden />}{props.scope.view === "admin" && <FileAbnormalStatusCell hasAbnormalFiles={item.has_abnormal_files} />}</>}
       onSelect={() => props.onSelect(item.id, null)}
-      disclosure={item.copyTask || knownEmpty ? undefined : {
+      disclosure={item.copyTask ? undefined : {
         expanded,
         label: `${t(expanded ? "sidebar.collapse" : "sidebar.expand")} ${item.name}`,
         onToggle: () => props.onExpansionChange(key, !expanded),
@@ -94,7 +95,7 @@ function SpaceItem({ item, section, path, ...props }: SpaceItemProps) {
           scope={props.scope} spaceId={item.id} parentId={null}
           selectedId={active ? props.parentId ?? null : null} path={active ? path : []}
           expandedKeys={props.expandedKeys} onExpansionChange={props.onExpansionChange}
-          onSelect={props.onSelect} onEmptyChange={setKnownEmpty}
+          onSelect={props.onSelect}
         />
       )}
     </TreeNavigationNode>
@@ -103,6 +104,7 @@ function SpaceItem({ item, section, path, ...props }: SpaceItemProps) {
 
 interface SectionProps extends KnowledgeSpaceSidebarProps, SpaceMenuProps, KnowledgeTreeExpansion {
   keyword: string;
+  hasAbnormal: boolean;
   catalog: ReturnType<typeof useSpaceCatalog>;
   departmentIds: ReadonlySet<number>;
   createdIds: ReadonlySet<number>;
@@ -111,7 +113,7 @@ interface SectionProps extends KnowledgeSpaceSidebarProps, SpaceMenuProps, Knowl
   path: readonly number[];
 }
 
-function SpaceSectionList({ section, path, keyword, catalog, departmentIds, createdIds, userId, onCreate, ...props }: SectionProps) {
+function SpaceSectionList({ section, path, keyword, hasAbnormal, catalog, departmentIds, createdIds, userId, onCreate, ...props }: SectionProps) {
   const { t } = useTranslation("knowledge");
   const copies = useSpaceCopyTasks(props.scope);
   const copyById = new Map(copies.data?.map((task) => [task.id, task]));
@@ -137,7 +139,7 @@ function SpaceSectionList({ section, path, keyword, catalog, departmentIds, crea
     return !department && (section === "created" ? created : !created);
   }) : query.data ?? [];
   const navigation = new Map(query.data?.map((row) => [row.id, row]));
-  const pending = section === "created" || section === "personal"
+  const pending = !hasAbnormal && (section === "created" || section === "personal")
     ? (copies.data ?? []).filter((task) => task.name.toLocaleLowerCase().includes(keyword.toLocaleLowerCase()))
     : [];
   const rows = [...new Map([...source, ...pending]
@@ -191,6 +193,7 @@ function ScopedKnowledgeSpaceSidebar(props: KnowledgeSpaceSidebarProps) {
   const { t } = useTranslation("knowledge");
   const [search, setSearch] = useState("");
   const [keyword, setKeyword] = useState("");
+  const [hasAbnormal, setHasAbnormal] = useState(false);
   useEffect(() => {
     const timer = window.setTimeout(() => setKeyword(search.trim()), 300);
     return () => window.clearTimeout(timer);
@@ -208,7 +211,7 @@ function ScopedKnowledgeSpaceSidebar(props: KnowledgeSpaceSidebarProps) {
   });
   const createdIds = new Set(created.data?.map((row) => row.id));
   const departmentIds = new Set(department.data?.map((row) => row.id));
-  const catalog = useSpaceCatalog(props.scope, keyword, props.scope.view === "admin" || keyword !== "");
+  const catalog = useSpaceCatalog(props.scope, keyword, props.scope.view === "admin" || keyword !== "", hasAbnormal);
   const sections = props.scope.view === "admin" ? adminSections : ordinarySections;
   const { spaceId, parentId, scope } = props;
   const initialSpaceHandled = useRef(spaceId !== undefined);
@@ -253,15 +256,16 @@ function ScopedKnowledgeSpaceSidebar(props: KnowledgeSpaceSidebarProps) {
   };
   return (
     <>
-      <div className="flex min-h-16 shrink-0 items-center px-2">
-        <SearchInput size="medium" className="w-full" aria-label={t("sidebar.search")}
+      <div className="flex min-h-16 shrink-0 items-center gap-1 px-2">
+        <SearchInput size="medium" className="min-w-0 flex-1" aria-label={t("sidebar.search")}
           placeholder={t("sidebar.search")} value={search} onChange={(event) => setSearch(event.target.value)}
           onSearch={(value) => setKeyword(value.trim())} />
+        {props.scope.view === "admin" && <KnowledgeSpaceCatalogFilter hasAbnormal={hasAbnormal} onChange={setHasAbnormal} />}
       </div>
       <TreeNavigation showLine={false} className="min-h-0 flex-1 pb-5" aria-label={t("sidebar.navigation")}>
         {sections.map((section) => (
           <SpaceSectionList key={section} {...props} section={section} path={path} onSelect={handleSelect}
-            keyword={keyword} catalog={catalog} departmentIds={departmentIds} createdIds={createdIds} userId={user?.user_id}
+            keyword={keyword} hasAbnormal={hasAbnormal} catalog={catalog} departmentIds={departmentIds} createdIds={createdIds} userId={user?.user_id}
             expandedKeys={expandedKeys} onExpansionChange={handleExpansionChange}
             renderActions={actions.render} onMenuOpen={actions.load} />
         ))}

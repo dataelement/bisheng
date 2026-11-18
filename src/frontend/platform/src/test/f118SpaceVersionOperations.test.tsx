@@ -5,13 +5,14 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { locationContext } from "@/contexts/locationContext";
 import { SpaceVersionHistorySheet } from "@/pages/KnowledgePage/components/SpaceVersionHistorySheet";
 import { SpaceVersionRelationPanel } from "@/pages/KnowledgePage/components/SpaceVersionRelationPanel";
-import { SpaceSimilarDocumentPanel } from "@/pages/KnowledgePage/components/SpaceSimilarDocumentPanel";
+import { SpaceSimilarDocumentDialog } from "@/pages/KnowledgePage/components/SpaceSimilarDocumentDialog";
 import { SpaceVersionUploadPanel } from "@/pages/KnowledgePage/components/SpaceVersionUploadPanel";
 import { SpaceDirectoryRow } from "@/pages/KnowledgePage/components/SpaceDirectoryRow";
 import type {
@@ -403,9 +404,10 @@ it("keeps cursor search and merge direction exact, and previews only the authori
   expect(onChanged).toHaveBeenCalledTimes(1);
 });
 
-it("keeps similar as-version in the original link direction, and keep-both uses dismissal", async () => {
+it("shares the client single-file merge direction, search scope and direct dismissal", async () => {
   const ports = api(),
-    changed = vi.fn().mockResolvedValue(undefined);
+    changed = vi.fn().mockResolvedValue(undefined),
+    onOpenChange = vi.fn();
   vi.mocked(ports.getVersionRecommendations).mockResolvedValue([
     {
       target_document_id: 61,
@@ -414,31 +416,89 @@ it("keeps similar as-version in the original link direction, and keep-both uses 
       similarity: 0.98,
     },
   ]);
-  mount(
-    <SpaceSimilarDocumentPanel
+  const dialog = (
+    <SpaceSimilarDocumentDialog
       scope={scope}
       spaceId={7}
       fileId={12}
+      file={{ id: 12, name: "primary.md", version_no: 1, user_name: "Uploader" }}
+      open
+      onOpenChange={onOpenChange}
       api={ports}
       onChanged={changed}
-    />,
+    />
   );
+  const view = mount(dialog);
+  await screen.findByText("Similar");
+  expect(ports.getVersionRecommendations).toHaveBeenCalledExactlyOnceWith(
+    12,
+    true,
+    expect.any(AbortSignal),
+  );
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "source" } });
+  fireEvent.click(screen.getByRole("button", { name: "search_button" }));
+  await waitFor(() => expect(ports.searchVersionDocuments).toHaveBeenCalledExactlyOnceWith(
+    7,
+    12,
+    "source",
+    true,
+    undefined,
+    expect.any(AbortSignal),
+  ));
   fireEvent.click(
-    await screen.findByRole("button", { name: "versions.as_version" }),
+    screen.getByRole("button", { name: "btn_link_as_new_version" }),
   );
-  await confirmLast();
-  expect(ports.linkSpaceFileVersion).toHaveBeenCalledExactlyOnceWith(
+  const confirmation = await screen.findByRole("alertdialog");
+  expect(confirmation).toHaveTextContent("confirm_merge_description");
+  fireEvent.click(within(confirmation).getByRole("button", { name: "confirm" }));
+  await waitFor(() => expect(ports.mergeSpaceFileVersion).toHaveBeenCalledExactlyOnceWith(
     12,
     61,
     expect.any(AbortSignal),
-  );
-  expect(ports.mergeSpaceFileVersion).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "versions.keep_two" }));
-  await confirmLast();
+  ));
+  expect(ports.linkSpaceFileVersion).not.toHaveBeenCalled();
+  expect(changed).toHaveBeenCalledTimes(1);
+  expect(onOpenChange).toHaveBeenCalledWith(false);
+  view.unmount();
+  mount(dialog);
+  fireEvent.click(await screen.findByRole("button", { name: "btn_dismiss" }));
+  await waitFor(() => expect(changed).toHaveBeenCalledTimes(2));
   expect(ports.dismissSpaceSimilarFile).toHaveBeenCalledExactlyOnceWith(
     12,
     expect.any(AbortSignal),
   );
+  expect(mocks.confirm).not.toHaveBeenCalled();
+});
+
+it("retires similar-document requests on scope changes and closes when the feature is disabled", async () => {
+  const ports = api();
+  let resolve!: (rows: Awaited<ReturnType<KnowledgeVersionsApi["getVersionRecommendations"]>>) => void;
+  const previous = new Promise<Awaited<ReturnType<KnowledgeVersionsApi["getVersionRecommendations"]>>>((done) => { resolve = done; });
+  vi.mocked(ports.getVersionRecommendations).mockReturnValueOnce(previous).mockResolvedValue([
+    { target_document_id: 62, title: "New scope candidate", current_primary_version_no: 1, similarity: 0.97 },
+  ]);
+  const dialog = (currentScope = scope) => (
+    <SpaceSimilarDocumentDialog
+      scope={currentScope}
+      spaceId={7}
+      fileId={12}
+      file={{ id: 12, name: "primary.md" }}
+      open
+      onOpenChange={vi.fn()}
+      api={ports}
+    />
+  );
+  const view = mount(dialog());
+  await waitFor(() => expect(ports.getVersionRecommendations).toHaveBeenCalledTimes(1));
+  const signal = vi.mocked(ports.getVersionRecommendations).mock.calls[0][2];
+  const nextScope: KnowledgeQueryScope = { ...scope, identityKey: "user8/credential-b", tenantId: 202, managementTenantId: 202 };
+  view.update(dialog(nextScope));
+  expect(await screen.findByText("New scope candidate")).toBeVisible();
+  expect(signal?.aborted).toBe(true);
+  await act(async () => { resolve([{ target_document_id: 61, title: "Retired scope candidate", current_primary_version_no: 1, similarity: 0.98 }]); });
+  expect(screen.queryByText("Retired scope candidate")).not.toBeInTheDocument();
+  view.update(dialog(nextScope), false);
+  expect(screen.queryByRole("dialog", { name: "dialog_title" })).not.toBeInTheDocument();
 });
 
 it("registers once in the real parent, waits for actual processing success, then requires explicit link confirmation", async () => {
@@ -530,7 +590,7 @@ it("opens the client's two-column similar dialog directly rather than nesting it
   const ports = api();
   mocks.get.mockResolvedValue([{ knowledge_file_id: 12, file_name: "Current.pdf", candidate_count: 0 }]);
   mount(<SpaceVersionHistorySheet scope={scope} spaceId={7} parentId={null} fileId={12} open hasSimilar initialPanel="similar" api={ports} onOpenChange={vi.fn()} />);
-  expect(await screen.findByText("similarReview.currentFile")).toBeVisible();
+  expect(await screen.findByText("section_current_file")).toBeVisible();
   expect(screen.getAllByRole("dialog")).toHaveLength(1);
   expect(ports.getSpaceFileVersions).not.toHaveBeenCalled();
 });

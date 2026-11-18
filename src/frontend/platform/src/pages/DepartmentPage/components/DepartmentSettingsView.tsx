@@ -69,9 +69,9 @@ export function DepartmentSettingsView({
       )}
 
       {loading && (
-        <p className="mb-4 text-sm text-muted-foreground">
-          {t("loading", { ns: "bs" })}
-        </p>
+        <div role="status" aria-label={t("bs:organization.loadingSettings")} className="mb-4 flex h-5 items-center text-text-3">
+          <Outlined.Loading aria-hidden className="size-4 animate-spin" />
+        </div>
       )}
 
       <section className="space-y-4">
@@ -238,6 +238,7 @@ export function DepartmentSettingsView({
                 <Button
                   type="button"
                   onClick={handleUiRequest(() => handleGlobalSave())}
+                  loading={saving}
                   disabled={saving}
                 >
                   {t("save")}

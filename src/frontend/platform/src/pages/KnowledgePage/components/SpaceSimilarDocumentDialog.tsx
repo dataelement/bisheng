@@ -1,71 +1,127 @@
-import { Button } from "@bisheng/ui";
+import {
+  SimilarDocumentDialog,
+  VersionManagementDialog,
+  type SimilarDocumentFile,
+  type SimilarDocumentDialogProps,
+} from "@bisheng/knowledge";
+import { toast } from "@bisheng/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileSearch } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { readPendingSimilarFiles, type KnowledgeVersionsApi } from "@/controllers/API/knowledgeVersions";
-import { knowledgeQueryKeys, type KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
+import { useContext, useEffect, useMemo } from "react";
+import {
+  knowledgeVersionsApi,
+  readPendingSimilarFiles,
+  type KnowledgeVersionsApi,
+  type VersionDocumentCandidate,
+} from "@/controllers/API/knowledgeVersions";
+import {
+  knowledgeQueryKeys,
+  type KnowledgeQueryScope,
+} from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
-import { SpaceSimilarDocumentPanel } from "./SpaceSimilarDocumentPanel";
+import { locationContext } from "@/contexts/locationContext";
 
 interface SpaceSimilarDocumentDialogProps {
   scope: KnowledgeQueryScope;
   spaceId: number;
   restrictToFileIds?: number[];
-  api?: KnowledgeVersionsApi;
+  fileId?: number | null;
+  file?: SimilarDocumentFile;
+  open?: boolean;
   onOpenChange: (open: boolean) => void;
+  onChanged?: () => Promise<void>;
+  api?: Partial<KnowledgeVersionsApi>;
 }
+
+const showSuccess = (message: string) => toast.show({ type: "success", message });
+const validId = (id: number | null | undefined): id is number =>
+  id != null && Number.isSafeInteger(id) && id > 0;
+
 export function SpaceSimilarDocumentDialog(props: SpaceSimilarDocumentDialogProps) {
-  return <SimilarReview key={JSON.stringify([props.scope, props.spaceId, props.restrictToFileIds])} {...props} />;
+  const { appConfig } = useContext(locationContext);
+  const singleFile = props.fileId !== undefined;
+  if (props.open === false || !props.scope.identityKey ||
+      !validId(props.scope.tenantId) || !validId(props.spaceId) ||
+      !(props.restrictToFileIds ?? []).every(validId) ||
+      (singleFile && (!validId(props.fileId) || appConfig.versionManagementEnabled !== true))) {
+    return null;
+  }
+  return <SimilarDocumentContent
+    key={JSON.stringify([props.scope, props.spaceId, props.fileId, props.restrictToFileIds])}
+    {...props}
+  />;
 }
-function SimilarReview({ scope, spaceId, restrictToFileIds, api, onOpenChange }: SpaceSimilarDocumentDialogProps) {
-  const { t } = useTranslation("knowledge");
+
+function SimilarDocumentContent({
+  scope, spaceId, fileId, file, restrictToFileIds, onOpenChange, onChanged, api: customApi,
+}: SpaceSimilarDocumentDialogProps) {
   const client = useQueryClient();
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [processed, setProcessed] = useState<number[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [uncertain, setUncertain] = useState(false);
-  const alive = useRef(true);
-  const opening = useId();
-  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
-  const enabled = Boolean(scope.identityKey) && Number.isSafeInteger(scope.tenantId) && scope.tenantId > 0 && Number.isSafeInteger(spaceId) && spaceId > 0 && (restrictToFileIds ?? []).every(id => Number.isSafeInteger(id) && id > 0);
-  const pending = useQuery({
-    queryKey: [...knowledgeQueryKeys.space(scope, spaceId), "pending-similar", opening],
-    queryFn: ({ signal }) => readPendingSimilarFiles(spaceId, signal),
-    enabled, retry: false, cacheTime: 0,
+  const sourceOnly = fileId !== undefined;
+  const api = { ...knowledgeVersionsApi, ...customApi };
+  const { getVersionRecommendations, searchVersionDocuments, mergeSpaceFileVersion,
+    linkSpaceFileVersion, dismissSpaceSimilarFile } = api;
+  const services = useMemo<SimilarDocumentDialogProps["services"]>(() => ({
+    getPending: readPendingSimilarFiles,
+    getRecommendations: (id, signal) => getVersionRecommendations(id, sourceOnly, signal),
+    searchDocuments: async (id, keyword, currentFileId, signal) => {
+      const documents = new Map<number, VersionDocumentCandidate>();
+      const cursors = new Set<string>();
+      let cursor: string | undefined;
+      do {
+        const page = await searchVersionDocuments(id, currentFileId, keyword, sourceOnly, cursor, signal);
+        for (const document of page.data) documents.set(document.document_id, document);
+        if (!page.has_more) break;
+        if (!page.next_cursor || cursors.has(page.next_cursor))
+          throw new Error("Version candidate cursor did not progress");
+        cursor = page.next_cursor;
+        cursors.add(cursor);
+      } while (!signal?.aborted);
+      return [...documents.values()];
+    },
+    relate: sourceOnly ? mergeSpaceFileVersion : linkSpaceFileVersion,
+    dismiss: dismissSpaceSimilarFile,
+  }), [getVersionRecommendations, searchVersionDocuments, mergeSpaceFileVersion,
+    linkSpaceFileVersion, dismissSpaceSimilarFile, sourceOnly]);
+  const history = useQuery({
+    queryKey: [...knowledgeQueryKeys.space(scope, spaceId), "similar-file", fileId],
+    queryFn: ({ signal }) => api.getSpaceFileVersions(fileId!, signal),
+    enabled: sourceOnly && !file,
+    retry: false,
+    cacheTime: 0,
   });
-  useEffect(() => { if (pending.error) showApiError(pending.error); }, [pending.error]);
-  const visible = (pending.data ?? []).filter(file => !processed.includes(file.knowledge_file_id) && (!restrictToFileIds?.length || restrictToFileIds.includes(file.knowledge_file_id)));
-  const selected = visible.find(file => file.knowledge_file_id === selectedId) ?? visible[0];
-  const handleChanged = async () => {
-    if (!alive.current || !selected) return;
-    setProcessed(previous => [...previous, selected.knowledge_file_id]);
-    setSelectedId(null);
-    await client.invalidateQueries({ queryKey: knowledgeQueryKeys.space(scope, spaceId) });
+  useEffect(() => {
+    if (history.error) showApiError(history.error);
+  }, [history.error]);
+  const handleProcessed = () => {
+    void client.invalidateQueries({ queryKey: knowledgeQueryKeys.space(scope, spaceId) });
+    void onChanged?.();
   };
-  return <Dialog open onOpenChange={open => { if (!busy) onOpenChange(open); }}>
-    <DialogContent className="flex max-h-[80vh] min-h-[560px] max-w-[960px] flex-col gap-0 overflow-hidden p-0" close={!busy} aria-describedby={undefined}
-      onEscapeKeyDown={event => { if (busy) event.preventDefault(); }} onPointerDownOutside={event => { if (busy) event.preventDefault(); }}>
-      <DialogHeader className="shrink-0 border-b border-border-base px-6 py-4"><DialogTitle>{t("versions.similar")}</DialogTitle></DialogHeader>
-      {!enabled ? <p role="alert" className="p-6">{t("f118.scope_unavailable")}</p> : pending.isError ? <div role="alert" className="p-6"><p>{t("detail.load_failed")}</p><Button onClick={() => void pending.refetch()}>{t("retry")}</Button></div>
-        : pending.isInitialLoading ? <p role="status" className="p-6">{t("loading")}</p>
-        : !selected ? <p className="p-6 text-center text-text-3">{t("similarReview.empty")}</p>
-        : <div className="flex min-h-0 flex-1 overflow-hidden">
-          <aside className="flex w-1/3 shrink-0 flex-col border-r border-border-base bg-fill-2 sm:w-[260px]">
-            <p className="border-b border-border-base px-5 py-4 text-xs text-text-3">{t("similarReview.pendingCount", { count: visible.length })}</p>
-            <div className="flex-1 overflow-y-auto p-3">
-              {visible.map(file => <button type="button" key={file.knowledge_file_id} disabled={busy || uncertain} aria-pressed={selected.knowledge_file_id === file.knowledge_file_id}
-                className={`mb-1 flex w-full items-start gap-2 rounded-lg px-3 py-3 text-left hover:bg-fill-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${selected.knowledge_file_id === file.knowledge_file_id ? "bg-primary/10 text-primary" : "text-text-1"}`}
-                onClick={() => setSelectedId(file.knowledge_file_id)}>
-                <FileSearch className="mt-0.5 size-4 shrink-0" /><span className="min-w-0"><span className="block truncate text-sm font-medium" title={file.file_name}>{file.file_name}</span><span className="mt-1 block text-xs text-text-3">{t("similarReview.recommendCount", { count: file.candidate_count })}</span></span>
-              </button>)}
-            </div>
-          </aside>
-          <div className="min-w-0 flex-1 overflow-y-auto">
-            <SpaceSimilarDocumentPanel scope={scope} spaceId={spaceId} fileId={selected.knowledge_file_id} file={selected} api={api} disabled={uncertain} onUncertain={() => setUncertain(true)} onChanged={handleChanged} onBusyChange={setBusy} />
-          </div>
-        </div>}
-    </DialogContent>
-  </Dialog>;
+  if (!sourceOnly) return <SimilarDocumentDialog
+    open
+    onOpenChange={onOpenChange}
+    spaceId={spaceId}
+    restrictToFileIds={restrictToFileIds?.map(String)}
+    services={services}
+    onProcessed={handleProcessed}
+    onError={showApiError}
+    onSuccess={showSuccess}
+  />;
+  const data = history.data?.knowledge_id === spaceId ? history.data : undefined;
+  const current = data?.versions.find(version => version.knowledge_file_id === fileId);
+  const selectedFile = file ?? (data && validId(fileId) ? {
+    id: fileId,
+    name: current?.original_file_name ?? data.title,
+    version_no: current?.version_no ?? data.current_primary_version_no,
+    user_name: current?.uploader_name,
+  } : undefined);
+  return <VersionManagementDialog
+    open
+    onOpenChange={onOpenChange}
+    spaceId={spaceId}
+    file={selectedFile ?? null}
+    services={services}
+    onLinked={handleProcessed}
+    onDismissed={handleProcessed}
+    onError={showApiError}
+    onSuccess={showSuccess}
+  />;
 }

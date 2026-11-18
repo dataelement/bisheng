@@ -69,9 +69,29 @@ it("preserves the three groups and only loads folders when their space is expand
   expect(screen.queryByText("Not a folder")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "sidebar.expand Root folder" }));
   await waitFor(() => expect(mocks.children).toHaveBeenLastCalledWith(7, { parent_id: 9, file_type: 0, page_size: 100 }));
-  await waitFor(() => expect(screen.queryByRole("button", { name: "sidebar.collapse Root folder" })).toBeNull());
+  await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+  expect(screen.getByRole("button", { name: "sidebar.collapse Root folder" })).toHaveAttribute("aria-expanded", "true");
+  fireEvent.click(screen.getByRole("button", { name: "sidebar.collapse Root folder" }));
+  expect(screen.getByRole("button", { name: "sidebar.expand Root folder" })).toHaveAttribute("aria-expanded", "false");
   expect(screen.getByRole("button", { name: "Root folder" })).toBeVisible();
   expect(screen.queryByRole("button", { name: "f118.create_space" })).toBeNull();
+  expect(screen.queryByRole("combobox", { name: "fileStatusFilterLabel" })).toBeNull();
+});
+
+it("keeps the empty space disclosure after loading and allows collapsing it", async () => {
+  const f = setup();
+  render(f.draw());
+  const disclosure = await screen.findByRole("button", { name: "sidebar.expand My space" });
+  fireEvent.click(disclosure);
+  await waitFor(() => expect(mocks.children).toHaveBeenCalledExactlyOnceWith(7, { parent_id: null, file_type: 0, page_size: 100 }));
+  await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+  expect(screen.getByRole("button", { name: "sidebar.collapse My space" })).toBe(disclosure);
+  expect(disclosure).toHaveAttribute("aria-expanded", "true");
+  expect(disclosure.querySelector("svg")).not.toBeNull();
+  fireEvent.click(disclosure);
+  expect(screen.getByRole("button", { name: "sidebar.expand My space" })).toBe(disclosure);
+  expect(disclosure).toHaveAttribute("aria-expanded", "false");
+  expect(f.props.onSelect).not.toHaveBeenCalled();
 });
 
 it("advances an empty cursor page and does not truncate the folder tree", async () => {
@@ -263,6 +283,63 @@ it.each(["ordinary", "admin"] as const)("searches %s in its own scope and restor
   await screen.findByRole("button", { name: "My space" });
   expect(screen.queryByRole("button", { name: "Search result" })).toBeNull();
   expect(f.props.onSelect).not.toHaveBeenCalled();
+});
+
+it("filters abnormal management spaces across search and paging, then restores all matching spaces", async () => {
+  mocks.copies.mockResolvedValue([{ id: 88, name: "matching copy", user_id: 2, state: 0, job_id: "copy-job", job_state: "accepted", phase: "initializing", total_count: 10, succeeded_count: 0, failed_count: 0 }]);
+  mocks.get.mockImplementation(async (_url: string, options: { params: { page: number; keyword?: string; has_abnormal?: boolean } }) => {
+    const query = options.params;
+    if (!query.has_abnormal) return {
+      data: [{ id: 7, name: "Healthy department", space_kind: "department" }, { id: 8, name: "Broken personal", space_kind: "normal", has_abnormal_files: true }], total: 2,
+    };
+    return query.page === 2
+      ? { data: [{ id: 10, name: "Later broken department", space_kind: "department", has_abnormal_files: true }], total: 201 }
+      : { data: [{ id: 8, name: "Broken personal", space_kind: "normal", has_abnormal_files: true }], total: 201 };
+  });
+  const f = setup({ scope: { ...scope, view: "admin" } });
+  render(f.draw());
+  await screen.findByRole("button", { name: "Healthy department" });
+  expect(await screen.findByRole("button", { name: /^matching copy/ })).toBeVisible();
+  expect(screen.getAllByText("fileStatusAbnormal").some((item) => item.closest("[data-tree-row]"))).toBe(true);
+  fireEvent.change(screen.getByRole("searchbox", { name: "sidebar.search" }), { target: { value: "matching" } });
+  await waitFor(() => expect(mocks.get).toHaveBeenCalledWith("/api/v1/knowledge/space/admin/list", { params: { page: 1, page_size: 200, keyword: "matching" } }));
+  fireEvent.click(screen.getByRole("combobox", { name: "fileStatusFilterLabel" }));
+  fireEvent.click(await screen.findByRole("option", { name: "fileStatusAbnormal" }));
+  await waitFor(() => expect(screen.queryByRole("button", { name: "Healthy department" })).toBeNull());
+  expect(screen.queryByRole("button", { name: /^matching copy/ })).toBeNull();
+  expect(mocks.get).toHaveBeenCalledWith("/api/v1/knowledge/space/admin/list", { params: { page: 1, page_size: 200, keyword: "matching", has_abnormal: true } });
+  fireEvent.click(await screen.findByRole("button", { name: "sidebar.more_spaces" }));
+  await screen.findByRole("button", { name: /^Later broken department/ });
+  expect(mocks.get).toHaveBeenLastCalledWith("/api/v1/knowledge/space/admin/list", { params: { page: 2, page_size: 200, keyword: "matching", has_abnormal: true } });
+  fireEvent.click(screen.getByRole("combobox", { name: "fileStatusFilterLabel" }));
+  fireEvent.click(await screen.findByRole("option", { name: "fileStatusFilterAll" }));
+  expect(await screen.findByRole("button", { name: "Healthy department" })).toBeVisible();
+  expect(await screen.findByRole("button", { name: /^matching copy/ })).toBeVisible();
+  expect(screen.queryByRole("button", { name: /^Later broken department/ })).toBeNull();
+  expect(screen.queryByRole("button", { name: "sidebar.more_spaces" })).toBeNull();
+  expect(screen.getByRole("searchbox", { name: "sidebar.search" })).toHaveValue("matching");
+  expect(f.props.onSelect).not.toHaveBeenCalled();
+});
+
+it("resets the management abnormal filter on tenant change and retires its delayed result", async () => {
+  let finish!: (value: object) => void;
+  const pending = new Promise((resolve) => { finish = resolve; });
+  mocks.get.mockImplementation((_url: string, options: { params: { has_abnormal?: boolean } }) => options.params.has_abnormal
+    ? pending
+    : Promise.resolve({ data: [{ id: 7, name: "Tenant A", tenant_id: 60, space_kind: "normal" }], total: 1 }));
+  const f = setup({ scope: { ...scope, view: "admin" } });
+  const view = render(f.draw());
+  await screen.findByRole("button", { name: "Tenant A" });
+  fireEvent.click(screen.getByRole("combobox", { name: "fileStatusFilterLabel" }));
+  fireEvent.click(await screen.findByRole("option", { name: "fileStatusAbnormal" }));
+  await waitFor(() => expect(mocks.get).toHaveBeenCalledWith("/api/v1/knowledge/space/admin/list", { params: { page: 1, page_size: 200, has_abnormal: true } }));
+  mocks.get.mockResolvedValue({ data: [{ id: 9, name: "Tenant B", tenant_id: 202, space_kind: "department" }], total: 1 });
+  view.rerender(f.draw({ ...f.props, scope: { ...scope, view: "admin", tenantId: 202, managementTenantId: 202 } }));
+  expect(await screen.findByRole("button", { name: "Tenant B" })).toBeVisible();
+  expect(mocks.get).toHaveBeenLastCalledWith("/api/v1/knowledge/space/admin/list", { params: { page: 1, page_size: 200 } });
+  await act(async () => finish({ data: [{ id: 8, name: "Retired abnormal space", tenant_id: 60, space_kind: "normal", has_abnormal_files: true }], total: 1 }));
+  expect(screen.queryByRole("button", { name: /Retired abnormal space/ })).toBeNull();
+  expect(screen.getByRole("button", { name: "Tenant B" })).toBeVisible();
 });
 
 it("ignores retired search results and advances sparse ordinary visible cursors", async () => {

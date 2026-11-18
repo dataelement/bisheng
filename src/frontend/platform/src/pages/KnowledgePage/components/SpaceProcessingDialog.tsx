@@ -1,3 +1,4 @@
+import { KnowledgeDialogTable } from "@bisheng/knowledge";
 import { Button, Pagination } from "@bisheng/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useRef, useState } from "react";
@@ -302,15 +303,17 @@ function Content({
     }
   };
   const showReview = !job && !completed && mode !== "jobs";
+  const title = t(
+    mode === "jobs" && jobKind === "space_copy"
+      ? "space_copy_ui.tasks"
+      : mode === "jobs" && jobKind === "move_index"
+        ? "move.jobs"
+        : `f118.processing_title_${mode}`,
+  );
+  const jobRows = [...(jobs.data?.data ?? []), ...(copies.data?.data ?? [])];
   return (
     <SpacePanelFrame
-      title={t(
-        mode === "jobs" && jobKind === "space_copy"
-          ? "space_copy_ui.tasks"
-          : mode === "jobs" && jobKind === "move_index"
-            ? "move.jobs"
-            : `f118.processing_title_${mode}`,
-      )}
+      title={title}
       presentation={presentation}
       hideTitle={hideTitle || inlineEmbedding}
       busy={busy}
@@ -428,44 +431,43 @@ function Content({
               {t("retry")}
             </Button>
           )}
-          {!jobs.isInitialLoading &&
-            !jobs.isError &&
-            !jobs.data?.total &&
-            !copies.data?.total && (
-              <p>
-                {t(
-                  jobKind === "move_index" ? "move.no_jobs" : "detail.no_jobs",
-                )}
-              </p>
-            )}
-          <ul>
-            {[...(jobs.data?.data ?? []), ...(copies.data?.data ?? [])].map(
-              (row) => (
-                <li key={row.id}>
-                  <Button
-                    variant="link"
-                    onClick={() =>
-                      setJob({
-                        id: row.id,
-                        space: spaceId,
-                        ...(row.kind === "space_copy" ||
-                        row.kind === "move_index"
-                          ? { kind: row.kind }
-                          : {}),
-                      })
-                    }
-                  >
-                    {t(
-                      row.kind === "move_index"
-                        ? "move.jobs"
-                        : `f118.processing_kind_${row.kind}`,
-                    )}{" "}
-                    · {t(`f118.processing_state_${row.state}`)}
-                  </Button>
-                </li>
-              ),
-            )}
-          </ul>
+          {!jobs.isInitialLoading && !jobs.isError && !jobs.data?.total && !copies.data?.total && (
+            <p>{t(jobKind === "move_index" ? "move.no_jobs" : "detail.no_jobs")}</p>
+          )}
+          {!!jobRows.length && (
+            <KnowledgeDialogTable
+              caption={title}
+              showCaption={false}
+              columns={[{ label: t("type") }, { label: t("status") }]}
+              rows={jobRows.map((row) => {
+                const label = t(
+                  row.kind === "move_index" ? "move.jobs" : `f118.processing_kind_${row.kind}`,
+                );
+                const status = t(`f118.processing_state_${row.state}`);
+                return {
+                  key: row.id,
+                  cells: [
+                    <Button
+                      variant="link"
+                      aria-label={`${label} · ${status}`}
+                      onClick={() =>
+                        setJob({
+                          id: row.id,
+                          space: spaceId,
+                          ...(row.kind === "space_copy" || row.kind === "move_index"
+                            ? { kind: row.kind }
+                            : {}),
+                        })
+                      }
+                    >
+                      {label}
+                    </Button>,
+                    status,
+                  ],
+                };
+              })}
+            />
+          )}
         </>
       ) : (
         <>
@@ -553,19 +555,23 @@ function Content({
             )}
 
           {plan && (
-            <section>
+            <section className="space-y-3">
               <p>
                 {t("f118.processing_review", {
                   valid: plan.result.valid_items.length,
                   invalid: plan.result.invalid_items.length,
                 })}
               </p>
-              {plan.result.invalid_items.map((item, index) => (
-                <p key={index}>
-                  {item.name ?? t("f118.processing_unavailable")}:{" "}
-                  {invalidReason(item.reason)}
-                </p>
-              ))}
+              {!!plan.result.invalid_items.length && (
+                <KnowledgeDialogTable
+                  caption={t("batch.invalid")}
+                  columns={[{ label: t("batch.column_name") }, { label: t("batch.column_reason") }]}
+                  rows={plan.result.invalid_items.map((item, index) => ({
+                    key: index,
+                    cells: [item.name ?? t("f118.processing_unavailable"), invalidReason(item.reason)],
+                  }))}
+                />
+              )}
             </section>
           )}
         </>

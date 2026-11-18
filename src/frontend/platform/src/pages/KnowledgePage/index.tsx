@@ -2,13 +2,10 @@ import { Button, Tabs } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useKnowledgePageScope } from "@/hooks/useKnowledgePageScope";
 import KnowledgeQa from "./KnowledgeQa";
-import { KnowledgeSpaceAdminList } from "./KnowledgeSpaceAdminList";
 import { KnowledgeSpaceWorkspace } from "./KnowledgeSpaceWorkspace";
-import { SpaceManagementView } from "./components/SpaceManagementView";
-import { parseKnowledgeId } from "./detail";
 
 const pageWindow = window as Window & { LibPage?: { type: string } };
 
@@ -65,30 +62,14 @@ export default function KnowledgePage() {
     />
   ) : unavailable;
   const admin = scopes?.admin;
-  const spaceId = parseKnowledgeId(id);
-  const tab = params.get("tab");
-  const isConfigurationLink = spaceId !== null && !params.has("file_id") && (
-    tab === "settings" || tab === "metadata" || tab === "defaults" ||
-    tab === "embedding" || tab === "jobs"
-  );
-  let adminContent = unavailable;
-  if (activeKey === "admin" && admin) {
-    if (isConfigurationLink) {
-      adminContent = (
-        <SpaceManagementView
-          key={JSON.stringify([admin, spaceId])}
-          scope={admin}
-          spaceId={spaceId}
-        />
-      );
-    } else if (id !== undefined) {
-      adminContent = <Navigate to="/filelib?view=admin" replace />;
-    } else {
-      adminContent = (
-        <KnowledgeSpaceAdminList key={JSON.stringify(admin)} scope={admin} toolbarTarget={toolbarTarget} />
-      );
-    }
-  }
+  const adminContent = canManage && admin ? (
+    <KnowledgeSpaceWorkspace
+      key={JSON.stringify(admin)}
+      scope={admin}
+      routeId={id}
+      active={activeKey === "admin"}
+    />
+  ) : unavailable;
   return (
     <div className="relative h-full w-full px-2 pt-4">
       <Tabs

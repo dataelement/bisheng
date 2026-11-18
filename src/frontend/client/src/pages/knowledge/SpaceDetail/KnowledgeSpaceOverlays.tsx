@@ -53,6 +53,7 @@ export function KnowledgeSpaceOverlays({ model }: KnowledgeSpaceOverlaysProps) {
     webLinkSubmitting,
     resetWebLinkDialog,
     submitWebLink,
+    moveConfirmation,
     moveProgress,
     moveDialogOpen,
     setMoveDialogOpen,
@@ -169,6 +170,7 @@ export function KnowledgeSpaceOverlays({ model }: KnowledgeSpaceOverlaysProps) {
         />
       )}
       {moveProgress && <MoveJobProgress progress={moveProgress} />}
+      {moveConfirmation}
       {/* F034: Move files/folders (same-space + cross-space) */}
       <MoveToDialog
         open={moveDialogOpen}
