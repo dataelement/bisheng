@@ -716,7 +716,15 @@ class ScheduleCenterProcess(Process):
         from bisheng.common.services.llm_error_classifier import classify_for_event
         from bisheng.linsight.domain.services.run_event_stream import RunEventStream
 
+        from bisheng.common.services.failure_context import FailureContextAdapter
+
         classified = classify_for_event(error)
+        # Same redaction as ``UnifiedEventOutput.run_failed``: this event is shown
+        # in the browser, and ``str(error)`` of a database error carries the SQL
+        # text, its parameters and the database host.
+        payload = FailureContextAdapter.public_payload(
+            {"error_code": classified.error_code, "error_type": classified.error_type}, exc=error
+        )
         stream = RunEventStream(redis)
         await stream.append(
             conversation_id, {"type": "run_started", "run_id": run_id, "data": {"profile": "planned", "relay": True}}
@@ -727,10 +735,11 @@ class ScheduleCenterProcess(Process):
                 "type": "run_failed",
                 "run_id": run_id,
                 "data": {
-                    "code": classified.error_code or 11091,
-                    "reason": classified.error_type or "task_aborted",
-                    "detail": classified.detail or str(error),
-                    "reference_id": run_id,
+                    "code": payload.get("error_code") or 11091,
+                    "reason": payload.get("error_type") or "task_aborted",
+                    "detail": payload.get("detail"),
+                    "reference_id": payload.get("reference_id") or run_id,
+                    "failure_info": payload.get("failure_info"),
                     "unread_messages": unread,
                 },
             },

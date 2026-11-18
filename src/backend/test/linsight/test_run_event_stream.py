@@ -313,6 +313,34 @@ async def test_follow_heartbeat_on_idle(redis):
     await reader.aclose()
 
 
+async def test_follow_never_holds_a_connection_in_a_blocking_read(redis, monkeypatch):
+    """Every open conversation page is one follower. With ``XREAD BLOCK`` each of
+    them parks on a pooled connection; the shared pool is capped and raises when it
+    runs out, which fails lease renewals and with them the running answers."""
+    stream = RunEventStream(redis)
+    first = await stream.append(CID, _ev("run_started"))
+    calls: list[dict] = []
+    real_xread = redis.xread
+
+    async def spy(*args, **kwargs):
+        calls.append(kwargs)
+        return await real_xread(*args, **kwargs)
+
+    monkeypatch.setattr(redis, "xread", spy)
+
+    async def produce():
+        await asyncio.sleep(0.03)
+        await stream.append(CID, _ev("run_finished"))
+
+    task = asyncio.create_task(produce())
+    events = await asyncio.wait_for(_collect(stream, cursor=first, follow=True, block_ms=500), timeout=2)
+    await task
+
+    assert [e["type"] for e in events] == ["run_finished"]
+    assert len(calls) >= 2  # it polled while it waited
+    assert all(not call.get("block") for call in calls)
+
+
 async def test_append_rejects_reader_only_types(redis):
     stream = RunEventStream(redis)
     with pytest.raises(ValueError):

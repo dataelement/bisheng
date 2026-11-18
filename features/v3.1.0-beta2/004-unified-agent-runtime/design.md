@@ -4,9 +4,9 @@
 >
 > **证据标注**：每条理由后面标【实测】【读码】或【未验证】。【实测】指 `src/backend/scripts/spike_unified_runtime/README.md` 里的脚本结果；【读码】指在 `origin/feat/3.1.0-beta2`（49ecbd659f）上读到的代码；【未验证】是假设，实现前必须先验证。
 
-**关联**: [spec.md](./spec.md) · [tasks.md](./tasks.md)（尚未创建） · [prototype/index.html](./prototype/index.html)
+**关联**: [spec.md](./spec.md) · [tasks.md](./tasks.md) · [prototype/index.html](./prototype/index.html)
 **版本**: v3.1.0-beta2
-**最后更新**: 2026-11-17（初版，未实施）
+**最后更新**: 2026-11-19（已实施，114 实测中；§4 的“目标”即当前实现，与代码不符处以 §5 和修订历史为准）
 
 ---
 
@@ -192,6 +192,22 @@
 
 ---
 
+### 决策 13：统一运行时默认开启，不做灰度，不提供管理界面开关（用户决定，2026-11-19）
+
+- **备选**：
+  - A. 开关默认关闭，运维按租户逐个打开（原方案，§4.6 的“P1 用一个配置开关按租户切换新旧通道”）。
+  - B. 默认开启。存量用户（含开源版）升级后自动走新链路，不需要任何手动操作；管理界面不加开关。
+- **选定**：B。
+- **实现**：`unified_runtime_enabled` 的缺省值改为开启。没有工作台配置记录、记录里没有这个键、值不是布尔、读取配置失败，都按开启处理。只有记录里显式存了 JSON `false` 才走旧通道。管理端保存工作台配置时，原记录没有这个键就不写入这个键，原记录有显式值就原样保留。
+- **前端怎么知道**：`GET /api/v1/workstation/config` 用 `exclude_unset` 输出，记录里没有这个键时原本不会带出这个字段，前端的 `=== true` 判断就落到旧协议。所以该接口显式写入解析后的值（`config.py`，回归 `test_config_knowledge_permission.py`）。
+- **保留显式 `false` 的原因**：它是不经界面的应急回退手段（直接改 `tenant_workstation_config` / `config` 表里 `workstation` 记录的 JSON）。它不是灰度入口，产品上不对外说明。
+- **由此带来的后果**：
+  - 待定事项里以“开关关闭时行为不变”为前提的结论不再是用户默认看到的行为，旧通道只在显式回退时运行。
+  - 仍用旧协议的客户端（桌面端、未升级的前端静态资源、直接调旧接口的集成方）升级后端后默认对上新链路，待定事项 3、4 描述的情形会直接出现在这些客户端上。
+  - 旧通道的代码在默认配置下不再被执行。是否删除旧通道与显式回退，见 §8。
+- **何时该重新考虑**：出现必须按租户回退的线上问题，且改库不可接受时。
+
+
 ## 4. 系统现状与目标形态
 
 ### 4.1 今天的数据流
@@ -220,10 +236,12 @@
 
 | 契约 | 形式 | 说明 |
 |---|---|---|
-| 发送消息 | `POST /api/v1/workstation/chat/completions`（沿用） | 请求体不变。响应分两种：新客户端带协商头时返回 JSON `{run_id, disposition: "started"｜"queued", message_id}`；不带协商头时保持今天的流式响应（服务端替它订阅事件流并转成旧格式）。 |
+| 发送消息 | `POST /api/v1/workstation/chat/completions`（沿用） | 请求体不变。响应分两种：新客户端带协商头时返回 JSON `{run_id, disposition: "started"｜"queued"｜"blocked", message_id}`；不带协商头时保持今天的流式响应（服务端替它订阅事件流并转成旧格式）。 |
 | 订阅事件 | `GET /api/v1/workstation/conversations/{id}/events`（新增，SSE） | 支持 `Last-Event-ID` 续传。按会话归属校验权限。 |
-| 回答提问 | 沿用 `/api/v1/linsight/workbench/user-input` | 两种档位共用。 |
-| 停止 | 沿用 `/api/v1/linsight/workbench/terminate-execute` | 两种档位共用，改按运行 id 生效。 |
+| 回答提问 | 统一链路：发送入口（会话处于等待回答时，下一条消息即回答）。旧通道沿用 `/api/v1/linsight/workbench/user-input` | 两种档位共用。 |
+| 停止 | `POST /api/v1/workstation/conversations/{id}/stop`（新增）。旧通道沿用 `/api/v1/linsight/workbench/terminate-execute` | 两种档位共用。服务端按会话当前持有者停止，不读请求体里的 `run_id`。 |
+| 文件下载地址 | `GET /api/v1/workstation/conversations/{id}/files/{file_id}/url`（新增） | 只接受本会话工作区登记过的文件 id，不接受调用方给的对象键；本人或审计可取。 |
+| 协议选择 | `GET /api/v1/workstation/config` 的 `unified_runtime_enabled` | 接口总是返回解析后的布尔值（决策 13）。前端按 `=== true` 选新协议。 |
 | 开放 API | `/api/v2/workstation/*` | 不变。 |
 
 事件的统一外形：`{id, run_id, seq, type, data, ts}`。`type` 的取值：
@@ -291,7 +309,7 @@
 | P3 | 直接回答挂工作区与技能、`file` 事件、首字符提速项 | 直接回答能力补齐，文件实时出现 |
 | P4 | 前端删除 handoff 与任务 WebSocket；`/linsight/:id` 降为只读 | 界面按原型统一 |
 
-每一期都能独立上线和回滚。P1 用一个配置开关按租户切换新旧通道。
+每一期都能独立上线和回滚。P1 用一个配置开关按租户切换新旧通道。**（2026-11-19 起由决策 13 取代：默认开启，不按租户灰度。）**
 
 ---
 
@@ -310,7 +328,7 @@
 | 11 | 后端日志已经为每次模型调用记录 `BS_METRIC domain=model_invoke ... ttft_ms=`，每个请求有跟踪号 | 为了测首字符时间去给服务打点、重启，或者去伪造登录 | `scripts/spike_unified_runtime/s5_first_char_timing_from_logs.py` 直接读日志 |
 | 9 | 直接回答今天每次模型调用都查一次 DSH 额度，深度研究每轮只查一次 | 统一后额度口径不一致（AC-37）；直接回答多轮工具调用时每轮多一次查询 | 统一为每次运行开始时查一次（`admit_round`） |
 | 10 | 代码执行器的产物先写到本地 `file_dir`，再同步到 MinIO | `direct` 运行在 API 节点执行、恢复时落到另一个节点，本地文件不在 | 复用 `_sync_workspace_originals`；不依赖本地目录跨运行存在 |
-| 12 | 日常对话的读图组件有四处与统一工厂不兼容：① 它为了补注入 `view_image` 调用，要先缓冲并静音模型输出（`vision_llm.py:338`、`:404`）；② `ImageRegistry` 与已看图片队列是进程内状态，不进 checkpoint；③ 深度研究的检索工具不登记 `⟦img#N⟧`；④ 它和 `ModelContentGuardMiddleware` 都会把图片挪到用户消息，视觉开关也是两套（独立看图模型与主模型 `visual`） | 直接把包装器套在工厂的模型外面：流式正文被缓冲，首字符变慢；等待回答后恢复或换节点时图片编号全部失效；同一张图被挪两次 | T059 改写为 `awrap_model_call` 中间件。`ImageRegistry` 的内容按运行写进图状态。只保留一处挪位。挂载条件统一为“主模型 `visual` 为真，或配置了看图模型”。预计新增约 400 行与配套测试【估算，未实测】 |
+| 12 | 日常对话的读图组件有四处与统一工厂不兼容：① 它为了补注入 `view_image` 调用，要先缓冲并静音模型输出（`vision_llm.py:338`、`:404`）；② `ImageRegistry` 与已看图片队列是进程内状态，不进 checkpoint；③ 深度研究的检索工具不登记 `⟦img#N⟧`；④ 它和 `ModelContentGuardMiddleware` 都会把图片挪到用户消息，视觉开关也是两套（独立看图模型与主模型 `visual`） | 直接把包装器套在工厂的模型外面：流式正文被缓冲，首字符变慢；等待回答后恢复或换节点时图片编号全部失效；同一张图被挪两次 | T059 改写为 `awrap_model_call` 中间件。图片编号与像素都不进图状态：编号在每次模型调用时从线程消息重建（同样的消息得到同样的编号），本进程没取过的像素重新取，所以运行换节点恢复后编号不变（`kb_image_middleware.py` 模块说明；2026-11-19 按代码更正，原文写的是“写进图状态”）。只保留一处挪位。挂载条件统一为“主模型 `visual` 为真，或配置了看图模型”。预计新增约 400 行与配套测试【估算，未实测】 |
 | 13 | deepagents 0.7 新增 `delete` 文件工具。`WorkspaceBackend` 没有重写它，继承来的 `FilesystemBackend.delete` 删的是 worker 本机磁盘上的路径，不动对象存储 | 模型调用 `delete` 后 `ls` 仍能看到文件；路径写错时删到工作区以外 | `agent_factory._workspace_file_tools` 把文件工具限定为工作区实现的 6 个，主图和子代理都替换。`test_deepagents_07_compat.py::test_planned_graph_has_write_todos` 守护。统一工厂（T020）要沿用 |
 | 14 | deepagents 0.7 不再追加英文基础提示词。原来“把英文基础提示词替换成中文”的中间件找不到替换目标，只打一条警告就放行 | 升级后深度研究悄悄丢掉中文基础要求（出错时先分析、不重复重试等） | 删掉该中间件，由 `base_prompt.with_base_prompt` 直接拼在主图系统提示词末尾，位置与原来相同。`test_base_prompt_zh.py` 用真实图断言模型恰好收到一次 |
 | 15 | langchain 1.5 的摘要生成失败改为抛异常，并给摘要模型套了 3 次重试；1.3 是返回 `Error generating summary` 字符串。deepagents 0.7 的 `_offload_to_backend` 多了 `session_id` 参数，历史文件名从线程 id 改为生成的会话 id；`_intercept_large_tool_result` 少了 `runtime` 参数 | F087 的“摘要失败重试一次”失效：失败不再被识别，或一次失败最多打 6 次模型调用；工具结果卸载直接报 `TypeError` | `context_budget.py`：把摘要模型换回不带重试的原模型，重试仍由 BiSheng 的两次循环负责，异常与“too long to summarize”都算失败；两个签名按新版调整 |
@@ -318,6 +336,7 @@
 | 17 | `create_linsight_agent` 按模型的 provider 名在进程内注册一个全局 profile（去掉框架自带的摘要中间件）。测试里不同文件的脚本化模型类同名时 provider 名相同 | 新测试先跑，之后别的文件直接调用 `create_deep_agent` 就报“assembled outside bisheng_summarization” ；单独跑能过，合起来才失败 | 每个用 `create_linsight_agent` 的测试模型都通过 `_get_ls_params` 给自己起独立的 `ls_provider` |
 | 18 | 来源表中间件（`LinsightCitationSourceMiddleware`）在每次模型调用的消息列表末尾追加一条 user 角色消息，原来的挂载条件只看“有检索工具且启用编号”。F075 明确日常对话不注入来源表，旧日常对话从未有过 | `direct` 档共用工厂后每次模型调用都多一条最多 150 行的 user 消息；114 上模型把表头里的 `[Sn]` 当作用户的话向用户复述，前端只转换带数字的编号，`[Sn]` 原样显示 | `agent_factory.py`：来源表只在 `planned` 档挂载（主图与 researcher 相同）；`direct` 档用不提来源表的尾部提示 `_DIRECT_CITATION_TAIL_HANDLES_ZH`；表头、补编号提醒、尾部提示都不再出现字面 `[Sn]`。回归：`test_agent_factory_profiles.py::test_source_table_is_for_deep_research_only`。114 实测（2026-11-18，同一问题同一模型，各 1 次，天气题改动后 3 次）：回复正文引用数 6 → 5/6/3；写 HTML 的问题，文件内编号 201 → 122（39 个不同来源）。中间一版把 `direct` 档尾部提示写成“回答中”，同一问题的 HTML 里编号为 0：日常编号规则只说“回答中”，尾部提示是唯一要求在文件里写编号的地方，所以 `_DIRECT_CITATION_TAIL_HANDLES_ZH` 必须保留“写交付物正文”。对照实验（2026-11-19，114，两组代码只差是否在 `direct` 档挂来源表，每组天气题 5 次 qwen3.8-max、HTML 题 3 次 DeepSeek-flash）：天气题正文引用，有表 7/5/6/7/7，无表 6/8/5/7/5；HTML 题正文引用，有表 2/20/0，无表 8/14/8；HTML 文件内编号，有表 235/115/92，无表 287/220/158；派调研子代理的次数，有表 2/3，无表 1/3。没有观察到去掉来源表使引用减少，也没有观察到它使模型更常派子代理 |
 | 19 | deepagents 0.7 拒绝同一轮里对同一路径的并行写操作（`Error: parallel file mutations to the same path are not allowed.`），只放行第 1 个。`LinsightToolLoopBreaker` 把这一批被拒的调用算作连续失败 | 模型一轮并行发 9 个 `edit_file` 改同一文件，8 个被拒，循环保护判定“连续 8 次失败”并中止运行，已写好的文件随失败的回复一起交付（114 会话 e9134062，run edcbf900） | `tool_loop_middleware.py:_trailing_tool_failure_run` 改为按轮计数：一条 AIMessage 的一批工具结果算一轮，整批都是错误才算该工具失败 1 次，批内有任何成功就结束连续失败。软提示与硬中止都用这个计数。两档共用。回归：`test_tool_loop_middleware.py::test_parallel_refusals_in_one_turn_are_not_a_failure_run` |
+| 20 | 事件订阅如果用 `XREAD BLOCK`，每个打开的会话页（含停在提问上的会话）会长期占住共享异步 Redis 连接池的一条连接；池上限 100，超限直接抛错而不排队 | 单个 API 进程约 100 个同时在线的会话页后，该进程所有 Redis 调用开始失败，续租失败使正在回答的运行被判失败。决策 13 默认开启后每个日常对话都走订阅 | `run_event_stream.py:read`：`follow=True` 改为每 `FOLLOW_POLL_SECONDS`（0.1 秒）非阻塞读一次，等待期间不占连接。回归：`test_run_event_stream.py::test_follow_never_holds_a_connection_in_a_blocking_read`。代价：事件到达浏览器最多晚 0.1 秒。未做压测 |
 
 ---
 
@@ -379,7 +398,7 @@
 14. **附件内联阈值的默认值没有实测依据**（T057，决策 12）：单文件 4000 字符、总量 15000 字符，配置项 `linsight.direct_attachment_inline_chars`、`linsight.direct_attachment_inline_total_chars`。需在 114 实测后确定。
 15. **开关开启时会话页的旧任务回合少了三个动作**（T061）：“重试”、排队卡片的“取消”、旧提问卡片。这三个动作走旧通道，该页已不建 WebSocket。是否用新通道重做“重试”。
 16. **读图由模型自行决定**（T059）：统一运行时不再在问题需要看图时强制调用 `view_image`。真实模型是否会主动调用未验证。
-17. **`direct` 运行不写引用审计日志行**（`log_citation_audit`，T059）。是否补上。
+17. ~~**`direct` 运行不写引用审计日志行**（`log_citation_audit`，T059）。是否补上。~~ 已实现：`run_projector_direct.py` 调 `direct_run_turn.log_citation_audit`，输出 `[daily-citation-audit]`（2026-11-19 在 114 日志中确认）。
 18. **视觉模型的图片附件不进入工作区 `uploads/`**（T057）：之后的运行只能从对话历史看到它，不能用 `read_file` 读取。
 19. **“查看代码和输出”对历史消息也显示**（T060）：开关开启后，历史里存有参数或结果的通用工具行都会出现这个展开。
 20. **已结束的深度研究回合与直接回答用不同的组件渲染**（T061）：历史接口对 task 行不返回事件序列，回看仍走 `TaskTurnPanel`。
@@ -451,7 +470,7 @@ Wave 1–4 留下、技术上已知、尚未处理的：
 - 附件读取等待只包住 backend 的异步方法；代码执行器的同步 `run()` 在延迟准备包装下直接抛错（统一运行时只走异步路径）。
 - 前端判断“已落库的 task 行是否就是当前运行”要多请求一次 `session-version-list`，因为事件里没有 `run_id` 与 `session_version_id` 的对应关系。
 - 重新打开会话时，`/linsight/:id` 独立页的只读状态本次没有再验证。
-- Wave 3、Wave 4 的全部能力只经过脚本化模型与内存替身的单元测试，没有连接真实的 MySQL、Redis、MinIO、代码执行器与模型，界面没有在浏览器里运行过。**在 T039、T051、T062 的人工步骤完成之前，开关不能对真实用户打开。**
+- Wave 3、Wave 4 的全部能力只经过脚本化模型与内存替身的单元测试，没有连接真实的 MySQL、Redis、MinIO、代码执行器与模型，界面没有在浏览器里运行过。**在 T039、T051、T062 的人工步骤完成之前，开关不能对真实用户打开。**（2026-11-19：决策 13 把缺省值改为开启，所以这句话的含义变为“这些人工步骤完成之前，本分支不能合入发版线”。114 已有真实运行，见 §5 第 18、19 条与 verification-final.md。）
 
 ### 尚未完成的验证
 
@@ -467,6 +486,8 @@ Wave 1–4 留下、技术上已知、尚未处理的：
 ---
 
 ## 8. 后续改进 / 不打算做的事
+
+- **待用户决定（决策 13 带来）**：旧通道（旧日常对话的 agent 循环、深度研究的非统一分支、前端的旧 SSE/WebSocket 处理）在默认配置下不再执行。按仓库“死代码要删除”的规则它应当删除，同时删除显式 `false` 回退；这样做之后就没有不改代码的回退手段。删除范围大，需单独立任务，并先按“追调用方 + 追前端入口”逐处核实。
 
 - **真正的并行与后台任务**：等 async subagents 稳定、且许可证与部署成本可接受时再评估（决策 5）。
 - **统一落库结构**：见决策 8 的触发条件。
@@ -487,3 +508,5 @@ Wave 1–4 留下、技术上已知、尚未处理的：
 | 2026-11-19 | §5 #18 补 114 实测数字；增 #19（并行写同一文件被循环保护中止，未处理） | 用同一问题重放对照会话 |
 | 2026-11-19 | §5 #19 已处理：连续失败按轮计数 | 用户确认修复 |
 | 2026-11-19 | §5 #18 补有表/无表对照实验数字 | 用户要求两种配置各跑几次 |
+| 2026-11-19 | 新增决策 13：统一运行时默认开启，不做灰度，不提供管理界面开关 | 用户决定 |
+| 2026-11-19 | 代码审查（`/sdd-code-review`）后的修正：配置接口总是返回开关值；事件订阅改轮询（§5 #20）；接力失败事件脱敏；§4.3 补停止、文件下载地址、协议选择三行；更正坑 12 与待定事项 17 | 四路审查结论 NEEDS_FIX |

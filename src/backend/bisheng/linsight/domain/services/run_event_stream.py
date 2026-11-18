@@ -49,6 +49,9 @@ SNAPSHOT_KEY = "bisheng:run:snapshot:{{{cid}}}"
 DEFAULT_MAXLEN = 2000
 ENDED_TTL_SECONDS = 3600
 LIVE_TTL_SECONDS = 24 * 3600
+# How often a follower re-reads while it waits. Events are coalesced to one per
+# 50 ms upstream; 100 ms keeps the stream smooth at ~10 reads/s per open page.
+FOLLOW_POLL_SECONDS = 0.1
 COALESCE_WINDOW_SECONDS = 0.05
 
 COALESCED_TYPES = frozenset({"text", "thinking"})
@@ -415,8 +418,9 @@ class RunEventStream:
         * If entries between ``cursor`` and the oldest kept entry were trimmed,
           the first yielded event is ``resync`` (the accumulated state, ``id`` =
           the entry it covers up to) and reading continues after it.
-        * ``follow=False`` stops at the end of the Stream. ``follow=True`` blocks
-          for new entries and stops after a terminal event, or when the Stream
+        * ``follow=False`` stops at the end of the Stream. ``follow=True`` waits
+          up to ``block_ms`` for new entries (polling every ``FOLLOW_POLL_SECONDS``,
+          never a blocking read) and stops after a terminal event, or when the Stream
           no longer exists (expired or never started).
         * ``heartbeat=True`` yields ``{"type": "heartbeat"}`` after each block
           timeout so an SSE layer can keep the connection alive.
@@ -440,10 +444,20 @@ class RunEventStream:
                 return
 
         while True:
-            if follow:
-                resp = await client.xread({key: cur}, count=count, block=block_ms)
-            else:
-                resp = await client.xread({key: cur}, count=count)
+            resp = await client.xread({key: cur}, count=count)
+            if follow and not resp:
+                # Poll instead of ``XREAD BLOCK``: a blocked read holds one pooled
+                # connection for its whole wait, every open conversation page is
+                # one follower, and the shared pool is capped (100) and raises
+                # when it is exhausted — at which point lease renewals fail and
+                # running answers are failed with them. A poll gives the
+                # connection back between reads.
+                waited = 0.0
+                while not resp and waited * 1000 < block_ms:
+                    step = min(FOLLOW_POLL_SECONDS, block_ms / 1000 - waited)
+                    await asyncio.sleep(max(step, 0.001))
+                    waited += max(step, 0.001)
+                    resp = await client.xread({key: cur}, count=count)
             entries = resp[0][1] if resp else []
             if not entries:
                 if not follow:
