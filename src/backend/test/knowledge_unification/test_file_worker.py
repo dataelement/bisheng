@@ -102,6 +102,16 @@ async def files(application, monkeypatch, tmp_path):
         with Session(context.sync, expire_on_commit=False) as session:
             yield session
 
+    from bisheng.knowledge.domain.models.knowledge_processing_fence import (
+        KnowledgeProcessingArtifact,
+        KnowledgeProcessingFence,
+    )
+    from bisheng.knowledge.domain.models.knowledge_space_delete_job import KnowledgeSpaceDeleteJob
+    from bisheng.knowledge.domain.repositories import processing_fence_repository as fences
+
+    for model in (KnowledgeProcessingFence, KnowledgeProcessingArtifact, KnowledgeSpaceDeleteJob):
+        model.__table__.create(context.sync, checkfirst=True)
+    monkeypatch.setattr(fences, "get_sync_db_session", sessions)
     monkeypatch.setattr(rebuild, "get_sync_db_session", sessions)
     monkeypatch.setattr(file_model, "get_sync_db_session", sessions)
     vector = SimpleNamespace(col=Mock(), add_documents=Mock())

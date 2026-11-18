@@ -203,7 +203,7 @@ export function useModel(type = 'llm') {
     const { scopes } = useKnowledgePageScope();
     const scope = scopes?.ordinary;
     const pin = managementRequestScope();
-    const { data, isLoading, refetch } = useQuery({
+    const { data, isLoading, refetch, error } = useQuery({
         queryKey: [type === 'llm' ? "QueryModelsKey" : "QueryAssistantModelsKey", scope?.identityKey, scope?.tenantId, scope?.managementTenantId, pin],
         enabled: !!scope,
         cacheTime: 0,
@@ -268,6 +268,7 @@ export function useModel(type = 'llm') {
         asrModel,
         ttsModel,
         isLoading,
+        error,
         rerank,
         refetch
     }

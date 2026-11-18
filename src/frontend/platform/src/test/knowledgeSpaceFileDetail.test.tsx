@@ -105,6 +105,7 @@ function setup() {
   });
   clients.push(client);
   const back = vi.fn();
+  const process = vi.fn();
   const draw = (id = 89, currentScope = scope) => (
     <QueryClientProvider client={client}>
       <SpaceFileDetail
@@ -113,10 +114,11 @@ function setup() {
         spaceId={7}
         fileId={id}
         onBack={back}
+        onProcess={process}
       />
     </QueryClientProvider>
   );
-  return { draw, back };
+  return { draw, back, process };
 }
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -189,7 +191,7 @@ it("searches chunks at the first page and preserves the file target for deletion
   await waitFor(() => expect(mock.remove).toHaveBeenCalledWith(7, 89, chunk));
   expect(mock.confirm).toHaveBeenCalledOnce();
   fireEvent.click(await screen.findByRole("button", { name: "segment.adjustStrategy" }));
-  expect(await screen.findByRole("dialog")).toHaveTextContent("process-89");
+  expect(f.process).toHaveBeenCalledOnce();
 });
 
 it("blocks the strategy entry while the file is still being processed", async () => {

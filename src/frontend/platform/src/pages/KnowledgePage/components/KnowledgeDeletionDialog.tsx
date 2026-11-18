@@ -87,7 +87,9 @@ export function KnowledgeDeletionDialog({ operation }: KnowledgeDeletionDialogPr
           {view.busy && <p role="status">{tr("checking")}</p>}
           {(view.error || view.code) && (
             <p role="alert">
-              {view.code === 10994
+              {view.code === 10999 && view.reason === "source_space_move_input_required"
+                ? tr("source_tasks_block_delete")
+                : view.code === 10994
                 ? tr("unavailable")
                 : view.stale
                   ? tr("changed")

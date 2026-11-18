@@ -1,6 +1,6 @@
 import { Button, Tag } from "@bisheng/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useContext, useEffect, useId, useRef, useState } from "react";
+import { useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Sheet,
@@ -22,7 +22,7 @@ import { locationContext } from "@/contexts/locationContext";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { SpaceVersionRelationPanel } from "./SpaceVersionRelationPanel";
 import { SpaceVersionUploadPanel } from "./SpaceVersionUploadPanel";
-import { SpaceSimilarDocumentPanel } from "./SpaceSimilarDocumentPanel";
+import { SpaceSimilarDocumentDialog } from "./SpaceSimilarDocumentDialog";
 import { SpaceFileTools } from "./SpaceFileTools";
 import { FILE_STATUSES, StatusIndicator } from "./KnowledgeFileStatus";
 
@@ -46,9 +46,20 @@ export function SpaceVersionHistorySheet(props: SpaceVersionHistorySheetProps) {
     props.fileId,
     appConfig.versionManagementEnabled === true,
   ]);
+  const epoch = useMemo(() => ({ targetKey }), [targetKey]);
+  const [similarTarget, setSimilarTarget] = useState<typeof epoch | null>(null);
+  const handleOpenChange = (open: boolean) => {
+    if (!open) setSimilarTarget(null);
+    props.onOpenChange(open);
+  };
+  if (props.open && appConfig.versionManagementEnabled === true && props.fileId !== null &&
+      (props.initialPanel === "similar" || similarTarget === epoch)) {
+    return <SpaceSimilarDocumentDialog scope={props.scope} spaceId={props.spaceId} restrictToFileIds={[props.fileId]}
+      api={{ ...knowledgeVersionsApi, ...props.api }} onOpenChange={handleOpenChange} />;
+  }
   return (
-    <Sheet open={props.open} onOpenChange={props.onOpenChange}>
-      {props.open && <HistoryContent key={targetKey} {...props} />}
+    <Sheet open={props.open} onOpenChange={handleOpenChange}>
+      {props.open && <HistoryContent key={targetKey} {...props} onSimilar={() => setSimilarTarget(epoch)} />}
     </Sheet>
   );
 }
@@ -62,13 +73,14 @@ function HistoryContent({
   hasSimilar = false,
   initialPanel = null,
   api: customApi,
-}: SpaceVersionHistorySheetProps) {
+  onSimilar,
+}: SpaceVersionHistorySheetProps & { onSimilar: () => void }) {
   const { t } = useTranslation("knowledge");
   const { appConfig } = useContext(locationContext);
   const api = { ...knowledgeVersionsApi, ...customApi };
   const client = useQueryClient();
-  const [panel, setPanel] = useState<"upload" | "merge" | "similar" | null>(
-    initialPanel,
+  const [panel, setPanel] = useState<"upload" | "merge" | null>(
+    initialPanel === "merge" ? "merge" : null,
   );
   const [busy, setBusy] = useState(false),
     [uncertain, setUncertain] = useState(false);
@@ -242,7 +254,7 @@ function HistoryContent({
                       variant="outlined"
                       disabled={busy || uncertain}
                       onClick={() =>
-                        setPanel(panel === "similar" ? null : "similar")
+                        onSimilar()
                       }
                     >
                       {t("versions.similar")}
@@ -271,16 +283,6 @@ function HistoryContent({
                     spaceId={spaceId}
                     fileId={fileId!}
                     mode="merge"
-                    api={api}
-                    onChanged={handleChanged}
-                    onBusyChange={setBusy}
-                  />
-                )}
-                {panel === "similar" && (
-                  <SpaceSimilarDocumentPanel
-                    scope={scope}
-                    spaceId={spaceId}
-                    fileId={fileId!}
                     api={api}
                     onChanged={handleChanged}
                     onBusyChange={setBusy}

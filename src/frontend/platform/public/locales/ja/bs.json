@@ -1,4 +1,12 @@
 {
+  "memberRoleIssues": {
+    "inactive": "無効",
+    "missingRole": "ロール {{id}}",
+    "binding_tenant_mismatch": "割り当て先とユーザーの現在のテナントが一致していません",
+    "definition_out_of_scope": "現在のテナントには共有されていないロールです",
+    "department_out_of_scope": "ユーザーがロールの部門範囲外です",
+    "definition_missing": "ロール定義が存在しません"
+  },
   "license": {
     "name": {
       "gateway": "Gateway ライセンス",
@@ -753,6 +761,7 @@
     "serviceProviderName": "サービスプロバイダ名",
     "serviceProviderNameTooltip": "モデル一覧に表示され、サービスの区別に使います",
     "shareToChildren": "子テナントと共有",
+    "sharedStatusRootOnly": "共有モデルの状態は Root 管理ビューで更新してください。",
     "tenantSharedReadonly": "{{tenantName}} で共有 · 読み取り専用",
     "silicon": "硅基流动",
     "timesPerDay": "回/日",

@@ -91,7 +91,7 @@ class MoveScopeRepository(MoveRowRepository):
         roots = {row["id"]: deepcopy(dict(row)) for row in rows}
         if len(roots) != 2 or any(row["tenant_id"] != tenant or row["type"] != 3 for row in rows):
             raise SpaceNotFoundError()
-        if any(row["state"] in (2, 3) or row["model_transition"] for row in rows):
+        if any(row["state"] != 1 or row["model_transition"] for row in rows):
             raise KnowledgeProcessingConflictError(reason="move_space_processing")
         return roots[source], roots[destination]
 

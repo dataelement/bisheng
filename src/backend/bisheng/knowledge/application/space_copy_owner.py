@@ -9,6 +9,7 @@ from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.knowledge import (
     KnowledgeOperationPlanChangedError,
+    KnowledgeProcessingConflictError,
     KnowledgeProcessingObsoleteError,
     ResourceReferenceInvalidError,
 )
@@ -28,6 +29,7 @@ from bisheng.knowledge.domain.schemas.processing_job_acceptance import (
     _digest,
     processing_request_facts,
 )
+from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.permission.application.identity import get_current_permission_actor
 
 
@@ -188,7 +190,14 @@ class SpaceCopyOwner:
         vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(
             actor_id, knowledge=root, reference_session=session, metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA
         )
-        vector.col.load()
+        # Milvus creates a new collection lazily on its first insertion.
+        # A fresh copy has no collection to load until the standard schema
+        # bootstrap has created it and removed its temporary seed row.
+        if vector.col is None:
+            vector = await asyncio.to_thread(KnowledgeUtils.ensure_milvus_schema_ready, actor_id, root, vector)
+        if vector is None or vector.col is None:
+            raise KnowledgeProcessingConflictError(reason="copy_vector_collection_not_ready")
+        await asyncio.to_thread(vector.col.load)
         es = await KnowledgeRag.init_knowledge_es_vectorstore(
             knowledge=root, reference_session=session, metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA
         )

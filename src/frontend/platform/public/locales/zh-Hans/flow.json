@@ -607,5 +607,7 @@
   "rerunWorkflow": "重新运行",
   "type": "类型",
   "valueType": "值类型",
-  "selectDbType": "请选择数据库类型"
+  "selectDbType": "请选择数据库类型",
+  "modelLoadFailed": "模型列表读取失败，请重试",
+  "retryModelLoad": "重试"
 }

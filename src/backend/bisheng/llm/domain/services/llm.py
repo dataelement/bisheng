@@ -24,6 +24,7 @@ from bisheng.common.errcode.llm import (
 )
 from bisheng.common.errcode.llm_tenant import (
     LLMModelNotAccessibleError,
+    LLMModelSharedReadonlyError,
     LLMSystemConfigForbiddenError,
 )
 from bisheng.common.errcode.server import (
@@ -1110,9 +1111,17 @@ class LLMService:
         saved, so it can be weeks stale; this lets an admin confirm a model is
         actually reachable right now without leaving the model list.
         """
-        exist_model = await LLMDao.aget_model_by_id(model_id)
-        if not exist_model:
+        tenant_id = get_current_tenant_id()
+        if type(tenant_id) is not int or tenant_id <= 0:
+            raise LLMSystemConfigForbiddenError()
+        servers = {server.id: server for server in await cls.acollect_visible_servers(tenant_id, strict=True)}
+        with bypass_tenant_filter():
+            exist_model = await LLMDao.aget_model_by_id(model_id)
+        server = servers.get(exist_model.server_id) if exist_model else None
+        if not server or exist_model.tenant_id != server.tenant_id:
             raise NotFoundError.http_exception()
+        if server.tenant_id != tenant_id:
+            raise LLMModelSharedReadonlyError()
         # The probe resolves the model through a 60s in-process cache that no
         # write invalidates, so a model renamed moments ago would be called under
         # its old name and reported back as "does not exist". Evict first — an
@@ -1497,7 +1506,17 @@ class LLMService:
         assistant_llm = await cls.get_assistant_llm(login_user=login_user)
         if not assistant_llm.llm_list:
             return []
-        model_list = await LLMDao.aget_model_by_ids([one.model_id for one in assistant_llm.llm_list])
+        tenant_id = get_current_tenant_id()
+        if type(tenant_id) is not int or tenant_id <= 0:
+            raise LLMSystemConfigForbiddenError()
+        servers = {server.id: server for server in await cls.acollect_visible_servers(tenant_id, strict=True)}
+        with bypass_tenant_filter():
+            candidates = await LLMDao.aget_model_by_ids([one.model_id for one in assistant_llm.llm_list])
+        model_list = [
+            model
+            for model in candidates
+            if model.server_id in servers and model.tenant_id == servers[model.server_id].tenant_id
+        ]
         if not model_list:
             return []
 
@@ -1514,7 +1533,7 @@ class LLMService:
                 model_dict[one.server_id].insert(0, LLMModelInfo(**one.model_dump(exclude={"config"})))
                 continue
             model_dict[one.server_id].append(LLMModelInfo(**one.model_dump(exclude={"config"})))
-        server_list = await LLMDao.aget_server_by_ids(list(model_dict.keys()))
+        server_list = [server for server in servers.values() if server.id in model_dict]
 
         ret = []
         for one in server_list:

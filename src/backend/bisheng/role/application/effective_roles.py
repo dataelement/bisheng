@@ -49,13 +49,18 @@ async def assignable_role_catalog(department_facts) -> dict[int, list]:
     }
 
 
-def _resolve(subject, definitions, member_facts, expected_home):
+def validate_policy_home(subject, member_facts, expected_home=None):
+    """Share verified Home/topology checks with read-only directory display."""
     home = subject.home_tenant_id
     if expected_home is not None and home != expected_home:
         raise RolePolicyUnavailableError()
     primaries = [facts.business_tenant_id for member, facts in member_facts if member.is_primary]
     if len(primaries) > 1 or (primaries[0] if primaries else 1) != home:
         raise RolePolicyUnavailableError()
+
+
+def _resolve(subject, definitions, member_facts, expected_home):
+    validate_policy_home(subject, member_facts, expected_home)
     bound = _binding_ids(subject)
     if bound - {int(row.id) for row in definitions}:
         raise RolePolicyUnavailableError()

@@ -183,3 +183,11 @@ it("rejects malformed write IDs before transport and preserves unknown ACK rejec
   await expect(setSpacePrimaryVersion(51)).rejects.toBe(error);
   expect(request.post).toHaveBeenCalledTimes(1);
 });
+
+it("reads pending similar files from the client's existing endpoint with cancellation", async () => {
+  const { readPendingSimilarFiles } = await import("@/controllers/API/knowledgeVersions");
+  const signal = new AbortController().signal;
+  request.get.mockResolvedValue([{ knowledge_file_id: 11, file_name: "pending.pdf", candidate_count: 2 }]);
+  expect(await readPendingSimilarFiles(7, signal)).toEqual([{ knowledge_file_id: 11, file_name: "pending.pdf", candidate_count: 2 }]);
+  expect(request.get).toHaveBeenCalledExactlyOnceWith("/api/v1/knowledge/space/7/similar-pending", { signal });
+});

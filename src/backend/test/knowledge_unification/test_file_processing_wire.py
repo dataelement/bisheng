@@ -239,3 +239,42 @@ async def test_related_configuration_change_after_real_parse_refuses_new_ingest_
     assert (await worker._execute_processing_job(job_id, accepted["revision"]))["state"] == "obsolete"
     wire.files.provider.assert_not_called()
     wire.files.vector.col.delete.assert_not_called()
+
+
+async def test_single_file_delete_cancels_only_selected_item_and_other_item_resumes(wire):
+    from bisheng.knowledge.domain.models.knowledge_space_delete_job import KnowledgeSpaceDeleteJob
+    from bisheng.knowledge.domain.repositories.knowledge_deletion_execution_repository import (
+        KnowledgeDeletionExecutionRepository,
+    )
+
+    job_id = await submit(wire, targets=[{"file_id": 81, "version_id": 181}, {"file_id": 82, "version_id": 182}])
+    async with wire.files.context.sessions() as session, session.begin():
+        await KnowledgeDeletionExecutionRepository().acancel_processing(
+            session,
+            plan=SimpleNamespace(operation="knowledge_file_delete", space_id=40),
+            scope=SimpleNamespace(resources=[SimpleNamespace(id=81)]),
+        )
+        session.add(
+            KnowledgeSpaceDeleteJob(
+                tenant_id=101,
+                space_id=40,
+                applicant_user_id=7,
+                operation_type="knowledge_file_delete",
+                manifest={"file_ids": [81]},
+            )
+        )
+        revision = (await session.get(KnowledgeProcessingJob, job_id)).revision
+    result = await worker._execute_processing_job(job_id, revision)
+    assert result["state"] == "partial_failed"
+    async with wire.files.context.sessions() as session:
+        items = (
+            await session.exec(
+                select(KnowledgeProcessingItem)
+                .where(KnowledgeProcessingItem.job_id == job_id)
+                .order_by(KnowledgeProcessingItem.file_id)
+            )
+        ).all()
+        assert [item.state for item in items] == ["failed", "succeeded"]
+        assert items[0].step == "resource_deleted"
+        assert (await session.get(KnowledgeFile, 82)).status == 2
+    assert {doc.metadata["document_id"] for doc in wire.files.vector.add_documents.call_args.args[0]} == {82}

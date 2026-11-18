@@ -46,7 +46,7 @@ class MoveBatchRepository(MoveRowRepository):
 
     @staticmethod
     def require_idle(*roots):
-        if any(row["state"] in (2, 3) or row["model_transition"] for row in roots):
+        if any(row["state"] != 1 or row["model_transition"] for row in roots):
             raise KnowledgeProcessingConflictError(reason="move_space_processing")
 
     async def aread(self, session, *, source_space_id, destination_space_id, roots, destination_folder_id, lock=False):

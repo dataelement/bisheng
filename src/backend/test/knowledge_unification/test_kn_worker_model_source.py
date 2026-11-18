@@ -79,6 +79,16 @@ async def rebuild(admission, monkeypatch, request):
     )
     monkeypatch.setattr(document.KnowledgeDao, "query_by_id", load)
     monkeypatch.setattr(document.KnowledgeDao, "update_one", save)
+    from bisheng.knowledge.domain.models.knowledge_processing_fence import (
+        KnowledgeProcessingArtifact,
+        KnowledgeProcessingFence,
+    )
+    from bisheng.knowledge.domain.models.knowledge_space_delete_job import KnowledgeSpaceDeleteJob
+    from bisheng.knowledge.domain.repositories import processing_fence_repository as fences
+
+    for model in (KnowledgeProcessingFence, KnowledgeProcessingArtifact, KnowledgeSpaceDeleteJob):
+        model.__table__.create(context.sync, checkfirst=True)
+    monkeypatch.setattr(fences, "get_sync_db_session", sessions)
     monkeypatch.setattr(read_module, "get_sync_db_session", sessions)
     # The worker's finalization borrows this same isolated Session factory.
     monkeypatch.setattr(document, "get_sync_db_session", sessions, raising=False)

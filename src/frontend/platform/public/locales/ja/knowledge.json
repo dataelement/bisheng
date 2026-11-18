@@ -448,6 +448,7 @@
         "emptyTags": "タグはありません"
     },
     "f118": {
+        "specialized_processing_rules": "この種類のファイルは専用の解析・分割ルールを使用します。文書や表の設定は不要です。",
         "advanced_settings": "詳細設定",
         "create_space": "スペースを作成",
         "defaults_title": "解析・分割の既定設定",
@@ -500,7 +501,7 @@
         "version_uploader": "アップロード者",
         "processing_title_copy": "スペースをコピー",
         "processing_title_embedding": "インデックス再構築 / モデル変更",
-        "processing_title_file": "バージョンを処理",
+        "processing_title_file": "分割設定を調整",
         "processing_title_jobs": "処理タスク",
         "processing_kind_embedding_rebuild": "インデックス再構築",
         "processing_kind_file_reprocess": "再解析",
@@ -561,6 +562,7 @@
         "folder_upload_empty": "アップロードできる対応ファイルがありません。"
     },
     "deletion": {
+        "source_tasks_block_delete": "未完了の移動またはコピータスクがこのスペースを使用しています。失敗したタスクも元ファイルを必要とするため、削除できません。移動先またはコピー先の「処理タスク」で失敗原因を確認して対処し、削除条件を再確認してください。アクセスできない場合は、タスクの実行者または管理者に連絡してください。",
         "references": "参照元",
         "clear": "スペースを空にする",
         "delete_space": "スペースを削除",
@@ -805,5 +807,31 @@
         "independent": "複製は独立したリソース、インデックス、タスクを使用します。広場への公開、購読、ピン留め、チャット履歴は複製しません。",
         "create": "複製を作成",
         "created": "複製を作成しました：{{name}}"
+    },
+    "fileMetadata": {
+        "searchFields": "メタデータ項目を検索",
+        "noAvailableFields": "追加できる項目はありません",
+        "schemaScopeHint": "新しい項目は現在のナレッジスペースに属します。作成タスクの完了後、このファイルの値を入力できます。",
+        "fieldType": "項目の種類",
+        "confirmCreate": "項目の作成を確定",
+        "schemaPending": "項目を作成しています。タスク完了後に値を入力できます。",
+        "uncertain": "処理結果が未確認です。同じ処理を再試行するか、閉じて処理タスクを確認してください。重複して作成しないでください。",
+        "typeString": "文字列",
+        "typeNumber": "数値",
+        "typeTime": "日時"
+    },
+    "similarReview": {
+        "currentFile": "現在のファイル",
+        "primaryVersion": "主バージョン V{{version}}",
+        "recommendCount": "類似文書の候補 {{count}} 件",
+        "recommendHint": "既存文書を選択し、現在のファイルを新しいバージョンとして関連付けます。",
+        "searchTitle": "既存文書を検索",
+        "searchHint": "適切な候補がない場合は、このスペースの他の文書を検索してください。",
+        "noSearchResults": "一致する文書はありません",
+        "keepTitle": "独立した文書として保持",
+        "confirmLink": "現在のファイル「{{name}}」は「{{target}}」の新しいバージョンになります。",
+        "pendingCount": "未処理ファイル（{{count}}）",
+        "similarity": "類似度",
+        "empty": "確認待ちの類似文書はありません"
     }
 }

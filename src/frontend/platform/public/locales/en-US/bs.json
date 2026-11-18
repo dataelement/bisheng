@@ -1,4 +1,12 @@
 {
+  "memberRoleIssues": {
+    "inactive": "Inactive",
+    "missingRole": "Role {{id}}",
+    "binding_tenant_mismatch": "The binding belongs to a different tenant than the user's current tenant",
+    "definition_out_of_scope": "This role is not shared with the user's current tenant",
+    "department_out_of_scope": "The user is outside the role's department scope",
+    "definition_missing": "The role definition no longer exists"
+  },
   "license": {
     "name": {
       "gateway": "Gateway license",
@@ -967,6 +975,7 @@
     "serviceProviderName": "Service Provider Name",
     "serviceProviderNameTooltip": "Shown in the model list to tell providers apart",
     "shareToChildren": "Share with child tenants",
+    "sharedStatusRootOnly": "Update shared model status in the Root management view.",
     "tenantSharedReadonly": "Shared by {{tenantName}} · Read-only",
     "silicon": "Silicon Flow",
     "timesPerDay": "times/day",

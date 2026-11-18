@@ -714,7 +714,12 @@ class TestPermission:
         assert _is_admin(global_super) is True
 
     @pytest.mark.asyncio
-    async def test_get_members_includes_private_groups_for_global_super(self):
+    async def test_get_members_includes_private_groups_for_global_super(self, monkeypatch):
+        # Role-owner integration is covered by test_management_directory_scope.
+        monkeypatch.setattr(
+            "bisheng.role.application.member_role_display.read_member_role_display",
+            AsyncMock(return_value={}),
+        )
         from bisheng.department.domain.services.department_service import DepartmentService
 
         dept = SimpleNamespace(id=10)
@@ -796,7 +801,12 @@ class TestPermission:
         assert "group.visibility" not in str(captured_ug_stmt).lower()
 
     @pytest.mark.asyncio
-    async def test_get_members_includes_user_group_admin_rows_for_display(self):
+    async def test_get_members_includes_user_group_admin_rows_for_display(self, monkeypatch):
+        # Role-owner integration is covered by test_management_directory_scope.
+        monkeypatch.setattr(
+            "bisheng.role.application.member_role_display.read_member_role_display",
+            AsyncMock(return_value={}),
+        )
         from bisheng.department.domain.services.department_service import DepartmentService
 
         dept = SimpleNamespace(id=10)

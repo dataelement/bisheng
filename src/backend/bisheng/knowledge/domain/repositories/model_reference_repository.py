@@ -20,6 +20,7 @@ from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, QAKnow
 from bisheng.knowledge.domain.models.knowledge_space_delete_job import KnowledgeSpaceDeleteJob, deletion_now
 from bisheng.llm.domain.models.llm_server import LLMModel, LLMServer
 from bisheng.resource_reference.application.contracts import ReferenceState, TargetType
+from bisheng.resource_reference.domain.models.resource_reference_tombstone import ResourceReferenceTombstone
 
 
 class KnowledgeModelReferenceRepository:
@@ -128,6 +129,7 @@ class KnowledgeModelReferenceRepository:
             model.attempts,
             model.operation_type,
             model.business_phase,
+            model.completed_steps,
         ).where(model.id == deletion_job.id)
         with session.no_autoflush, strict_tenant_filter():
             row = session.execute(query).mappings().one_or_none()
@@ -137,7 +139,15 @@ class KnowledgeModelReferenceRepository:
             or deletion_job.tenant_id != tenant
             or row["space_id"] != knowledge_id
             or deletion_job.space_id != knowledge_id
-            or row["state"] != "RUNNING"
+            or (
+                row["state"] != "RUNNING"
+                and not (
+                    row["state"] == "SUCCEEDED"
+                    and row["business_phase"] == "finalized"
+                    and row["operation_type"] is not None
+                    and row["completed_steps"] == ["fga", "minio", "es", "milvus"]
+                )
+            )
             or not row["lease_token"]
             or row["lease_token"] != deletion_job.lease_token
             or row["attempts"] != deletion_job.attempts
@@ -299,6 +309,14 @@ class KnowledgeModelReferenceRepository:
                 Knowledge.tenant_id == self._tenant_id(),
                 Knowledge.model_config_revision == expected_revision,
                 Knowledge.index_generation == expected_generation,
+                ~select(ResourceReferenceTombstone.id)
+                .where(
+                    ResourceReferenceTombstone.tenant_id == self._tenant_id(),
+                    ResourceReferenceTombstone.target_type == "knowledge_space",
+                    ResourceReferenceTombstone.target_id == str(row.id),
+                    ResourceReferenceTombstone.target_tenant_id == self._tenant_id(),
+                )
+                .exists(),
             )
             .values(
                 model=model,

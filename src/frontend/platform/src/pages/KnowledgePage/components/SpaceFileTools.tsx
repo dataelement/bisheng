@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { checkResourceActionApi } from "@/controllers/API/permission";
 import { knowledgeQueryKeys, type KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
-import { SpaceProcessingDialog } from "./SpaceProcessingDialog";
+import { useSearchParams } from "react-router-dom";
 import { SpaceIndexEditDialog } from "./SpaceIndexEditDialog";
 
 interface SpaceFileToolsProps {
@@ -18,15 +18,21 @@ interface SpaceFileToolsProps {
   children?: (items: ReactNode) => ReactNode;
 }
 export function SpaceFileTools(props: SpaceFileToolsProps) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const handleProcess = () => {
+    const next = new URLSearchParams(searchParams);
+    next.set("process_file_id", String(props.fileId));
+    setSearchParams(next);
+  };
   const { t } = useTranslation("knowledge");
   const enabled = props.enabled !== false;
   const scopeKey = JSON.stringify([
     ...knowledgeQueryKeys.space(props.scope, props.spaceId),
     props.fileId,
   ]);
-  const [opened, setOpened] = useState<{ key: string; mode: "process" | "index" } | null>(null);
+  const [opened, setOpened] = useState<{ key: string; mode: "index" } | null>(null);
   const active = opened?.key === scopeKey ? opened.mode : null;
-  const setActive = (mode: "process" | "index" | null) =>
+  const setActive = (mode: "index" | null) =>
     setOpened(mode ? { key: scopeKey, mode } : null);
   useEffect(() => {
     setOpened(null);
@@ -53,7 +59,7 @@ export function SpaceFileTools(props: SpaceFileToolsProps) {
   const disabled = [1, 4, 5].includes(props.status ?? -1);
   const items = allowed ? (
     <>
-      <DropdownItem disabled={disabled} onSelect={() => setActive("process")}>
+      <DropdownItem disabled={disabled} onSelect={handleProcess}>
         {t("f118.processing_title_file")}
       </DropdownItem>
       <DropdownItem disabled={disabled} onSelect={() => setActive("index")}>
@@ -68,16 +74,6 @@ export function SpaceFileTools(props: SpaceFileToolsProps) {
           <Button variant="text" disabled={disabled}>{t("f118.processing_title_file")}</Button>
         </Dropdown>
       )}
-      {allowed && <SpaceProcessingDialog
-        scope={props.scope}
-        spaceId={props.spaceId}
-        fileId={props.fileId}
-        mode="file"
-        open={active === "process"}
-        onOpenChange={(open) => {
-          if (!open) setActive(null);
-        }}
-      />}
       {allowed && <SpaceIndexEditDialog
         scope={props.scope}
         spaceId={props.spaceId}

@@ -40,6 +40,7 @@ export function KnowledgeSpaceWorkspace({
     next.delete("parent_id");
     next.delete("tab");
     next.delete("file_id");
+    next.delete("process_file_id");
     navigate(
       { pathname: `/filelib/${initial.space.id}`, search: next.toString() },
       { replace: true },
@@ -60,6 +61,7 @@ export function KnowledgeSpaceWorkspace({
     const next = new URLSearchParams(params);
     if (showFiles) next.delete("tab");
     next.delete("file_id");
+    next.delete("process_file_id");
     if (folderId === null) next.delete("parent_id");
     else next.set("parent_id", String(folderId));
     navigate({ pathname: `/filelib/${id}`, search: next.toString() });
