@@ -633,13 +633,24 @@ services:
       SANDBOX_MAX_COPY_IN_TOTAL_BYTES: "536870912"
       SANDBOX_ENABLE_UID_ISOLATION: "true"
       SANDBOX_LEASE_TTL_S: "900"
+    # Public IPv4 is retained; IPv6 is deliberately unavailable to tasks.
+    sysctls:
+      net.ipv6.conf.all.disable_ipv6: "1"
+      net.ipv6.conf.default.disable_ipv6: "1"
+    dns:
+      - 223.5.5.5
     networks:
-      - sandbox_net
-    restart: on-failure
+      sandbox_net:
+        ipv4_address: 172.30.166.11
+    # Host policy must be verified before every start; no reboot auto-start bypass.
+    restart: "no"
 
   code-runner-2:
     <<: *code_runner
     container_name: bisheng-code-runner-2
+    networks:
+      sandbox_net:
+        ipv4_address: 172.30.166.12
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/data/sandbox/code-runner-2:/sessions
 
@@ -682,12 +693,9 @@ networks:
     name: bisheng-build
     driver: bridge
     internal: true
-  # User code shares the runner network namespace. Not internal, so the
-  # sandbox can reach the public internet. Runners still do not join the
-  # middleware network and do not publish host ports. Docker applies
-  # `internal` only when the network is created; an existing internal
-  # sandbox_net stays closed until it is recreated.
+  # Provisioned ONLY by root host policy helper, never silently by Compose.
+  # backend/controller interfaces join it; runner NEW private/host flows are denied.
+  # See runner-egress.md; public IPv4 remains available, task IPv6 is disabled.
   sandbox_net:
-    name: bisheng-sandbox
-    driver: bridge
-    internal: false
+    name: bisheng-runner
+    external: true
