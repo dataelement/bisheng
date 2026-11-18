@@ -98,6 +98,7 @@ from bisheng.common.models.space_channel_member import (
 )
 from bisheng.common.repositories.interfaces.space_channel_member_repository import SpaceChannelMemberRepository
 from bisheng.common.services.metric_log import emit_metric
+from bisheng.core.context.tenant import strict_tenant_filter
 from bisheng.core.database import get_async_db_session
 from bisheng.core.external.bisheng_information_client.bisheng_information_manager import get_bisheng_information_client
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
@@ -1457,12 +1458,14 @@ class ChannelService:
         - Within each group, sorted by unique active subscriber count descending
         """
         # 1. Multi-table join query for channels with subscription info
-        rows = await self.channel_repository.find_square_channels(
-            user_id=login_user.user_id, keyword=keyword, page=page, page_size=page_size
-        )
+        # Public discovery is tenant-local, including its pagination total.
+        with strict_tenant_filter():
+            rows = await self.channel_repository.find_square_channels(
+                user_id=login_user.user_id, keyword=keyword, page=page, page_size=page_size
+            )
 
-        # 2. Count total matching channels
-        total = await self.channel_repository.count_square_channels(keyword=keyword)
+            # 2. Count total matching channels
+            total = await self.channel_repository.count_square_channels(keyword=keyword)
 
         # 3. Map rows to response items (ES article counts + top source infos)
         result_list = await self._build_square_items(rows, login_user)
@@ -1481,7 +1484,8 @@ class ChannelService:
         ``total`` is the number of qualifying public channels (capped at the candidate
         limit) so the frontend can fall back to the empty illustration when < 3.
         """
-        rows = await self.channel_repository.find_public_recommend_channels(user_id=login_user.user_id)
+        with strict_tenant_filter():
+            rows = await self.channel_repository.find_public_recommend_channels(user_id=login_user.user_id)
 
         items = await self._build_square_items(rows, login_user)
 
@@ -1615,6 +1619,10 @@ class ChannelService:
         if not channels:
             raise ChannelNotFoundError()
         channel = channels[0]
+
+        # Reject before returning an old membership or writing application state.
+        if channel.tenant_id != login_user.tenant_id:
+            raise ChannelNotFoundError()
 
         if await self._has_channel_subscription_access(req.channel_id, login_user):
             return SubscriptionStatusEnum.SUBSCRIBED

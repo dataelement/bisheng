@@ -1,14 +1,16 @@
-import { Button, Tag } from "@bisheng/ui";
+import { Button, Tag, Tooltip } from "@bisheng/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Outlined } from "bisheng-icons";
 import { useContext, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Sheet,
+  SheetClose,
   SheetContent,
-  SheetFooter,
   SheetHeader,
   SheetTitle,
 } from "@/components/bs-ui/sheet";
+import { cname } from "@/components/bs-ui/utils";
 import {
   knowledgeVersionsApi,
   type KnowledgeVersionsApi,
@@ -58,12 +60,12 @@ function HistoryContent({
   spaceId,
   parentId,
   fileId,
-  onOpenChange,
   hasSimilar = false,
   initialPanel = null,
   api: customApi,
 }: SpaceVersionHistorySheetProps) {
   const { t } = useTranslation("knowledge");
+  const closeLabel = t("close", { ns: "bs" });
   const { appConfig } = useContext(locationContext);
   const api = { ...knowledgeVersionsApi, ...customApi };
   const client = useQueryClient();
@@ -174,15 +176,38 @@ function HistoryContent({
   };
   return (
     <SheetContent
+      side="bottom"
+      noClose
       aria-describedby={undefined}
-      className="flex w-full flex-col gap-0 sm:max-w-[400px]"
+      overlayClassName="z-modal bg-black/40 dark:bg-black/60"
+      className={cname(
+        "z-modal flex h-[60dvh] max-h-[90dvh] flex-col gap-0 overflow-hidden rounded-t-2xl border-border-base bg-bg-page text-text-1 shadow-modal outline-none dark:bg-bg-page",
+        "data-[state=closed]:duration-200 data-[state=open]:[animation-duration:240ms] motion-reduce:animate-none",
+        "min-[576px]:inset-y-0 min-[576px]:left-auto min-[576px]:h-full min-[576px]:max-h-none min-[576px]:w-[min(400px,calc(100vw-96px))] min-[576px]:rounded-none min-[576px]:border-l min-[576px]:border-t-0",
+        "min-[576px]:data-[state=closed]:slide-out-to-right min-[576px]:data-[state=closed]:[--tw-exit-translate-y:0] min-[576px]:data-[state=open]:slide-in-from-right min-[576px]:data-[state=open]:[--tw-enter-translate-y:0]",
+      )}
     >
-      <SheetHeader className="h-[60px] shrink-0 justify-center border-b px-6 pr-12">
-        <SheetTitle className="m-0 truncate text-lg font-medium">
+      <div aria-hidden className="mx-auto mt-2 h-1 w-8 shrink-0 rounded-full bg-fill-3 min-[576px]:hidden" />
+      <SheetHeader className="h-14 shrink-0 flex-row items-center justify-between gap-3 space-y-0 border-b border-border-base px-5 text-left">
+        <SheetTitle title={data?.title} className="m-0 min-w-0 truncate text-base font-medium text-text-1">
           {data?.title ?? t("f118.version_history")}
         </SheetTitle>
+        <Tooltip content={closeLabel}>
+          <SheetClose asChild>
+            <Button
+              type="button"
+              iconOnly
+              size="small"
+              color="default"
+              variant="text"
+              className="shrink-0"
+              aria-label={closeLabel}
+              icon={<Outlined.Close aria-hidden />}
+            />
+          </SheetClose>
+        </Tooltip>
       </SheetHeader>
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-5 pb-[calc(20px+env(safe-area-inset-bottom))] min-[576px]:pb-5">
         {!enabled ? (
           <p className="text-sm text-muted-foreground">
             {t("f118.scope_unavailable")}
@@ -199,12 +224,12 @@ function HistoryContent({
           </p>
         ) : (
           <>
-            <dl className="mb-4 space-y-2 text-sm">
+            <dl className="mb-4 grid grid-cols-2 gap-3 rounded-lg bg-fill-1 p-3 text-sm">
               <div>
                 <dt className="text-muted-foreground">
                   {t("f118.document_code")}
                 </dt>
-                <dd>{data.doc_code ?? "--"}</dd>
+                <dd className="break-words">{data.doc_code ?? "--"}</dd>
               </div>
               {data.current_primary_version_no !== null && (
                 <div>
@@ -219,8 +244,7 @@ function HistoryContent({
               <div className="mb-4 space-y-3">
                 <div className="flex flex-wrap gap-2">
                   <Button
-                    size="small"
-                    variant="outlined"
+                    size="medium"
                     disabled={busy || uncertain}
                     onClick={() =>
                       setPanel(panel === "upload" ? null : "upload")
@@ -229,7 +253,8 @@ function HistoryContent({
                     {t("versions.new_version")}
                   </Button>
                   <Button
-                    size="small"
+                    size="medium"
+                    color="default"
                     variant="outlined"
                     disabled={busy || uncertain}
                     onClick={() => setPanel(panel === "merge" ? null : "merge")}
@@ -238,8 +263,9 @@ function HistoryContent({
                   </Button>
                   {hasSimilar && (
                     <Button
-                      size="small"
-                      variant="outlined"
+                      size="medium"
+                      color="default"
+                      variant="text"
                       disabled={busy || uncertain}
                       onClick={() =>
                         setPanel(panel === "similar" ? null : "similar")
@@ -293,13 +319,13 @@ function HistoryContent({
                 {t("f118.no_visible_versions")}
               </p>
             ) : (
-              <ol className="divide-y">
+              <ol className="divide-y divide-border-base border-t border-border-base">
                 {data.versions.map((version) => (
                   <li
                     key={version.version_id}
-                    className="space-y-3 py-4 first:pt-0"
+                    className="space-y-3 py-4 last:pb-0"
                   >
-                    <div className="flex items-center gap-2 text-sm font-medium">
+                    <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-text-1">
                       <span>
                         {t("f118.version_no")} {version.version_no}
                       </span>
@@ -308,9 +334,12 @@ function HistoryContent({
                           {t("f118.primary_version")}
                         </Tag>
                       )}
+                      {version.status !== null && FILE_STATUSES[version.status] && (
+                        <StatusIndicator status={version.status} />
+                      )}
                     </div>
-                    <dl className="space-y-2 text-sm">
-                      <div>
+                    <dl className="grid grid-cols-2 gap-x-3 gap-y-2 break-words text-sm">
+                      <div className="col-span-2 min-w-0">
                         <dt className="text-muted-foreground">
                           {t("fileName")}
                         </dt>
@@ -338,53 +367,47 @@ function HistoryContent({
                           {version.upload_time?.replace("T", " ") ?? "--"}
                         </dd>
                       </div>
-                      <div>
-                        <dt className="mb-1 text-muted-foreground">
-                          {t("status")}
-                        </dt>
-                        <dd>
-                          {version.status !== null &&
-                          FILE_STATUSES[version.status] ? (
-                            <StatusIndicator status={version.status} />
-                          ) : (
-                            "--"
-                          )}
-                        </dd>
-                      </div>
+                      {(version.status === null || !FILE_STATUSES[version.status]) && (
+                        <div>
+                          <dt className="text-muted-foreground">{t("status")}</dt>
+                          <dd>--</dd>
+                        </div>
+                      )}
                     </dl>
-                    {operationsEnabled && !version.is_primary && (
-                      <div className="flex flex-wrap gap-2">
-                        {version.status === 2 && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      {operationsEnabled && !version.is_primary && (
+                        <>
+                          {version.status === 2 && (
+                            <Button
+                              color="default"
+                              variant="text"
+                              disabled={busy || uncertain}
+                              onClick={() =>
+                                handleMutation(version.version_id, "primary")
+                              }
+                            >
+                              {t("versions.set_primary")}
+                            </Button>
+                          )}
                           <Button
-                            size="small"
-                            variant="outlined"
+                            color="danger"
+                            variant="text"
                             disabled={busy || uncertain}
                             onClick={() =>
-                              handleMutation(version.version_id, "primary")
+                              handleMutation(version.version_id, "delete")
                             }
                           >
-                            {t("versions.set_primary")}
+                            {t("versions.delete_history")}
                           </Button>
-                        )}
-                        <Button
-                          size="small"
-                          color="danger"
-                          variant="text"
-                          disabled={busy || uncertain}
-                          onClick={() =>
-                            handleMutation(version.version_id, "delete")
-                          }
-                        >
-                          {t("versions.delete_history")}
-                        </Button>
-                      </div>
-                    )}
-                    <SpaceFileTools
-                      scope={scope}
-                      spaceId={spaceId}
-                      fileId={version.knowledge_file_id}
-                      status={version.status}
-                    />
+                        </>
+                      )}
+                      <SpaceFileTools
+                        scope={scope}
+                        spaceId={spaceId}
+                        fileId={version.knowledge_file_id}
+                        status={version.status}
+                      />
+                    </div>
                   </li>
                 ))}
               </ol>
@@ -392,11 +415,6 @@ function HistoryContent({
           </>
         )}
       </div>
-      <SheetFooter className="h-[60px] shrink-0 items-center border-t px-6">
-        <Button variant="outline" onClick={() => onOpenChange(false)}>
-          {t("close", { ns: "bs" })}
-        </Button>
-      </SheetFooter>
     </SheetContent>
   );
 }

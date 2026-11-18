@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, expect, it, vi } from "vitest";
 import {
@@ -25,7 +25,40 @@ const client = new QueryClient({
 afterEach(() => {
   cleanup();
   client.clear();
+  vi.resetAllMocks();
   vi.useRealTimers();
+});
+
+it("shows loading before move progress arrives and offers retry only once the read fails", async () => {
+  let rejectRead!: (error: Error) => void;
+  vi.mocked(readProcessingJob).mockImplementation(
+    () => new Promise((_resolve, reject) => { rejectRead = reject; }),
+  );
+  vi.mocked(readProcessingItems).mockResolvedValue({ data: [], total: 0 });
+  render(
+    <QueryClientProvider client={client}>
+      <SpaceProcessingProgress
+        spaceId={7}
+        jobId="move-job"
+        kind="move_index"
+        scope={{
+          identityKey: "user:5",
+          tenantId: 60,
+          managementTenantId: 60,
+          view: "ordinary",
+        }}
+      />
+    </QueryClientProvider>,
+  );
+
+  expect(screen.getByRole("status")).toHaveTextContent("detail.loading");
+  expect(screen.queryByRole("button", { name: "retry" })).not.toBeInTheDocument();
+  await act(async () => rejectRead(new Error("Progress read failed")));
+  expect(await screen.findByRole("alert")).toHaveTextContent("detail.load_failed");
+  fireEvent.click(screen.getByRole("button", { name: "retry" }));
+  expect(readProcessingJob).toHaveBeenCalledTimes(2);
+  expect(await screen.findByRole("status")).toHaveTextContent("detail.loading");
+  expect(screen.queryByRole("button", { name: "retry" })).not.toBeInTheDocument();
 });
 
 it("polls metadata progress and requests only failed items when failures appear", async () => {

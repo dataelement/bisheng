@@ -64,6 +64,7 @@ from bisheng.core.context.tenant import (
     get_is_management_api,
     is_tenant_filter_bypassed,
     management_tenant_scope,
+    strict_tenant_filter,
     tenant_execution_scope,
 )
 from bisheng.core.database import get_async_db_session
@@ -2639,15 +2640,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
         Returns: {"total": int, "page": int, "page_size": int, "data": List[KnowledgeSpaceInfoResp]}
         """
         # 1. SQL-level paginated query with multi-table JOIN
-        rows, total = await asyncio.gather(
-            KnowledgeDao.async_get_public_spaces_paginated(
-                user_id=self.login_user.user_id,
-                keyword=keyword,
-                page=page,
-                page_size=page_size,
-            ),
-            KnowledgeDao.async_count_public_spaces(keyword=keyword),
-        )
+        # PUBLIC means discoverable inside the tenant, not across tenants.
+        with strict_tenant_filter():
+            rows, total = await asyncio.gather(
+                KnowledgeDao.async_get_public_spaces_paginated(
+                    user_id=self.login_user.user_id,
+                    keyword=keyword,
+                    page=page,
+                    page_size=page_size,
+                ),
+                KnowledgeDao.async_count_public_spaces(keyword=keyword),
+            )
 
         if not rows:
             return {"total": 0, "page": page, "page_size": page_size, "data": []}
@@ -4958,7 +4961,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         Returns {"status": "subscribed" | "pending", "space_id": space_id}
         """
         space = await KnowledgeDao.aquery_by_id(space_id)
-        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+        if not space or space.type != KnowledgeTypeEnum.SPACE.value or space.tenant_id != self.login_user.tenant_id:
             raise SpaceNotFoundError()
 
         if space.auth_type == AuthTypeEnum.PRIVATE:

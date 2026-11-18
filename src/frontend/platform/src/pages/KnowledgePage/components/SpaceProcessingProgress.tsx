@@ -64,6 +64,7 @@ export function SpaceProcessingProgress({
   const queryOptions = metadata ? { refetchOnMount: "always" as const } : undefined;
   const job = useKnowledgeProcessingJob(scope, spaceId, jobId, api, queryOptions);
   const jobData = !metadata || job.isFetchedAfterMount ? job.data : undefined;
+  const progressReadFailed = job.isError && !job.isFetching;
   const hasFailures = (jobData?.failed_count ?? 0) > 0;
   const items = useKnowledgeProcessingItems(
     scope,
@@ -153,7 +154,7 @@ export function SpaceProcessingProgress({
       {metadata && (
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3">
-            <span>{status ?? t(job.isError ? "detail.load_failed" : "detail.loading")}</span>
+            <span>{status ?? t(progressReadFailed ? "detail.load_failed" : "detail.loading")}</span>
             {percent !== undefined && <span className="tabular-nums">{percent}%</span>}
           </div>
           <Progress
@@ -166,8 +167,13 @@ export function SpaceProcessingProgress({
         </div>
       )}
       {!jobData ? (
-        (!metadata || job.isError) && (
-          <Button onClick={() => void job.refetch()}>{t("retry")}</Button>
+        progressReadFailed ? (
+          <>
+            {!metadata && <p role="alert">{t("detail.load_failed")}</p>}
+            <Button onClick={() => void job.refetch()}>{t("retry")}</Button>
+          </>
+        ) : (
+          !metadata && <p role="status">{t("detail.loading")}</p>
         )
       ) : (
         <>
