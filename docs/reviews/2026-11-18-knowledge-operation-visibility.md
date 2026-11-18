@@ -56,6 +56,11 @@
 - 浏览器验证是组件联调，未视作真实用户/中间件 E2E；临时页面、服务器和浏览器页均已清理。
 - 没有部署 116，没有现场授权或数据变更。
 
+集成最新远端 `a9f82bddbc` 后，207 项联合回归再次通过。远端新增的
+`KnowledgeDeletionDialog.test.tsx` 和 `f118SpaceUpload.test.tsx` 原有 3 项硬编码字符串
+检查、2 项可选值类型错误；仅把测试数据改为英文并收窄 precheck fixture，未改业务行为。
+这两份测试 **39 passed**；集成后的后台完整 lint、类型检查、构建、i18n 均通过。
+
 ## 独立接口发现：版本变更鉴权
 
 静态检查发现 `get_knowledge_version_service` 的 composition 及

@@ -328,7 +328,7 @@ it("points a same-name upload at the existing file instead of a parse failure in
       ? [{
           ...row(81, 3, "report.md"),
           remark: JSON.stringify({ new_name: "report.md", old_name: "report.md" }),
-          old_file_level_path: "/权限测试",
+          old_file_level_path: "/Permission test",
           file_level_path: "/90",
           object_name: "tmp/81.md",
           split_rule: "{}",

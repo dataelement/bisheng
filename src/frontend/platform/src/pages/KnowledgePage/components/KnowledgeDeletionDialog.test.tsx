@@ -168,6 +168,8 @@ describe("knowledge deletion consent", () => {
 });
 
 it("names an offline workflow and the setting that still references the space", () => {
+  const precheck = base.result;
+  if (!precheck) throw new Error("Expected a deletion precheck fixture");
   const workflowPage = {
     ...page,
     data: [{
@@ -178,7 +180,7 @@ it("names an offline workflow and the setting that still references the space", 
           source_id: "PRIVATE-FLOW",
           source_version: "4776",
         },
-        name: "测试删除",
+        name: "Offline delete workflow",
         version_label: "v0",
         entry: "/flow/PRIVATE-FLOW/",
       },
@@ -190,15 +192,15 @@ it("names an offline workflow and the setting that still references the space", 
     ...base,
     page: workflowPage,
     result: {
-      ...base.result,
+      ...precheck,
       impact: {
-        ...base.result.impact,
+        ...precheck.impact,
         source_counts: { workflow_version: 1 },
         source_page: workflowPage,
       },
     },
   })} />);
-  expect(screen.getByRole("link", { name: "测试删除" })).toHaveAttribute("href", "/flow/PRIVATE-FLOW/");
+  expect(screen.getByRole("link", { name: "Offline delete workflow" })).toHaveAttribute("href", "/flow/PRIVATE-FLOW/");
   expect(screen.getByText(/deletion\.workflow_unlink/)).toBeVisible();
   expect(screen.getByText(/deletion\.location_workflow_knowledge_retriever/)).toBeVisible();
   expect(screen.queryByText("PRIVATE-FLOW")).not.toBeInTheDocument();
