@@ -154,7 +154,7 @@ async def test_super_admin_public_subscription_creates_real_membership(monkeypat
     service = ChannelService(
         channel_repository=SimpleNamespace(
             find_channels_by_ids=AsyncMock(
-                return_value=[SimpleNamespace(id="channel-1", visibility=ChannelVisibilityEnum.PUBLIC)]
+                return_value=[SimpleNamespace(id="channel-1", tenant_id=7, visibility=ChannelVisibilityEnum.PUBLIC)]
             )
         ),
         space_channel_member_repository=SimpleNamespace(
@@ -190,7 +190,7 @@ async def test_stale_active_member_can_resubscribe_with_current_approval_rules(m
     service = ChannelService(
         channel_repository=SimpleNamespace(
             find_channels_by_ids=AsyncMock(
-                return_value=[SimpleNamespace(id="channel-1", name="News", visibility=visibility)]
+                return_value=[SimpleNamespace(id="channel-1", tenant_id=7, name="News", visibility=visibility)]
             )
         ),
         space_channel_member_repository=repo,
@@ -224,7 +224,7 @@ async def test_public_subscribe_failure_preserves_retryable_progress(monkeypatch
     service = ChannelService(
         channel_repository=SimpleNamespace(
             find_channels_by_ids=AsyncMock(
-                return_value=[SimpleNamespace(id="channel-1", visibility=ChannelVisibilityEnum.PUBLIC)]
+                return_value=[SimpleNamespace(id="channel-1", tenant_id=7, visibility=ChannelVisibilityEnum.PUBLIC)]
             )
         ),
         space_channel_member_repository=SimpleNamespace(
@@ -318,7 +318,7 @@ async def test_subscription_preserves_a_restricted_administrator_role(monkeypatc
     service = ChannelService(
         channel_repository=SimpleNamespace(
             find_channels_by_ids=AsyncMock(
-                return_value=[SimpleNamespace(id="channel-1", visibility=ChannelVisibilityEnum.PUBLIC)]
+                return_value=[SimpleNamespace(id="channel-1", tenant_id=7, visibility=ChannelVisibilityEnum.PUBLIC)]
             )
         ),
         space_channel_member_repository=repo,

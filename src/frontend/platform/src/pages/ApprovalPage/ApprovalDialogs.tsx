@@ -182,7 +182,7 @@ export function ApprovalDialogs({ controller }: ApprovalDialogsProps) {
       </Dialog>
       {/* ── Exception Approver Picker Dialog ────────────────────────────────── */}
       <Dialog open={exceptionPickerOpen} onOpenChange={(v) => !v && setExceptionPickerOpen(false)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md grid-cols-1">
           <DialogHeader>
             <DialogTitle>{t("approvalPage.assignApproversAction")}</DialogTitle>
           </DialogHeader>

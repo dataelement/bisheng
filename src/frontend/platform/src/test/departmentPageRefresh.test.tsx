@@ -1,7 +1,7 @@
 import userEvent from "@testing-library/user-event";
 import DepartmentPage from "@/pages/DepartmentPage";
 import { getDepartmentChildrenApi } from "@/controllers/API/department";
-import { fireEvent, render, screen, waitFor } from "@/test/test-utils";
+import { fireEvent, render, screen, waitFor, within } from "@/test/test-utils";
 import type { DepartmentTreeNode } from "@/types/api/department";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -57,6 +57,7 @@ const mockedChildren = vi.mocked(getDepartmentChildrenApi);
 describe("DepartmentPage member refresh", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockedChildren.mockReset();
     mockedChildren.mockImplementation((parentId: number | null) =>
       Promise.resolve(parentId == null ? [dept] : [])
     );
@@ -109,10 +110,32 @@ describe("DepartmentPage member refresh", () => {
     render(<DepartmentPage />);
 
     const retry = await screen.findByRole("button", { name: "bs:organization.retry" });
-    expect(screen.getByRole("button", { name: "Root" })).toHaveAttribute("aria-current", "true");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Root" })).toHaveAttribute("aria-current", "true"));
     fireEvent.click(retry);
     expect(await screen.findByRole("button", { name: "Child" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Root" })).toHaveAttribute("aria-current", "true");
     expect(mockedChildren).toHaveBeenLastCalledWith(dept.id, false);
+  });
+
+  it("omits the expand control for a leaf and removes it when a branch loads empty", async () => {
+    const root = { ...dept, has_children: true };
+    const leaf = { ...dept, id: 2, dept_id: "BS@leaf", name: "Leaf", parent_id: root.id, path: "/1/2/" };
+    const emptyBranch = {
+      ...leaf, id: 3, dept_id: "BS@empty", name: "Empty branch", path: "/1/3/", has_children: true,
+    };
+    mockedChildren.mockImplementation(async (parentId) => {
+      if (parentId === null) return [root];
+      if (parentId === root.id) return [leaf, emptyBranch];
+      return [];
+    });
+    render(<DepartmentPage />);
+
+    const leafRow = (await screen.findByRole("button", { name: "Leaf" })).closest<HTMLElement>("[data-tree-row]")!;
+    expect(leafRow.querySelector("[data-tree-disclosure]")).toBeNull();
+    const branchRow = screen.getByRole("button", { name: "Empty branch" }).closest<HTMLElement>("[data-tree-row]")!;
+    await userEvent.click(within(branchRow).getByRole("button", { expanded: false }));
+    await waitFor(() => expect(branchRow.querySelector("[data-tree-disclosure]")).toBeNull());
+    expect(mockedChildren).toHaveBeenCalledWith(emptyBranch.id, false);
+    expect(within(branchRow).getByRole("button", { name: "Empty branch" })).toBeVisible();
   });
 });

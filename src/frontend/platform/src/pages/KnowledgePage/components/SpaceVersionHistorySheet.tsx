@@ -1,5 +1,5 @@
 import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
-import { Button } from "@bisheng/ui";
+import { Button, Tooltip } from "@bisheng/ui";
 import {
   VersionHistoryAction,
   VersionHistoryStatusBadge,
@@ -10,15 +10,17 @@ import {
 } from "@bisheng/knowledge";
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle, Trash2 } from "lucide-react";
+import { Outlined } from "bisheng-icons";
 import { useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Sheet,
+  SheetClose,
   SheetContent,
-  SheetFooter,
   SheetHeader,
   SheetTitle,
 } from "@/components/bs-ui/sheet";
+import { cname } from "@/components/bs-ui/utils";
 import {
   knowledgeVersionsApi,
   type KnowledgeVersionsApi,
@@ -82,7 +84,6 @@ function HistoryContent({
   spaceId,
   parentId,
   fileId,
-  onOpenChange,
   hasSimilar = false,
   initialPanel = null,
   api: customApi,
@@ -90,6 +91,7 @@ function HistoryContent({
 }: SpaceVersionHistorySheetProps & { onSimilar: () => void }) {
   const { t } = useTranslation("knowledge");
   const isManagement = initialPanel === "merge";
+  const closeLabel = t("close", { ns: "bs" });
   const { appConfig } = useContext(locationContext);
   const api = { ...knowledgeVersionsApi, ...customApi };
   const client = useQueryClient();
@@ -240,22 +242,40 @@ function HistoryContent({
   };
   return (
     <SheetContent
+      side="bottom"
+      noClose
       aria-describedby={undefined}
-      side="center"
-      overlayClassName="bg-black/40"
-      closeClassName={`${styles.close} opacity-100 data-[state=open]:bg-transparent`}
-      className={`${isManagement ? styles.managementSize : styles.historySize} ${styles.historyFrame}`}
+      overlayClassName="z-modal bg-black/40 dark:bg-black/60"
+      className={cname(
+        "z-modal flex h-[60dvh] max-h-[90dvh] flex-col gap-0 overflow-hidden rounded-t-2xl border-border-base bg-bg-page text-text-1 shadow-modal outline-none dark:bg-bg-page",
+        "data-[state=closed]:duration-200 data-[state=open]:[animation-duration:240ms] motion-reduce:animate-none",
+        "min-[576px]:inset-y-0 min-[576px]:left-auto min-[576px]:h-full min-[576px]:max-h-none min-[576px]:w-[min(400px,calc(100vw-96px))] min-[576px]:rounded-none min-[576px]:border-l min-[576px]:border-t-0",
+        "min-[576px]:data-[state=closed]:slide-out-to-right min-[576px]:data-[state=closed]:[--tw-exit-translate-y:0] min-[576px]:data-[state=open]:slide-in-from-right min-[576px]:data-[state=open]:[--tw-enter-translate-y:0]",
+      )}
     >
-      <SheetHeader className={isManagement
-        ? "relative shrink-0 border-b border-border-base px-6 py-4 pr-14 text-left"
-        : styles.historyHeader}>
-        <SheetTitle className={isManagement ? "m-0 truncate text-base font-semibold text-text-1" : styles.historyTitle}>
+      <div aria-hidden className="mx-auto mt-2 h-1 w-8 shrink-0 rounded-full bg-fill-3 min-[576px]:hidden" />
+      <SheetHeader className="h-14 shrink-0 flex-row items-center justify-between gap-3 space-y-0 border-b border-border-base px-5 text-left">
+        <SheetTitle title={isManagement ? data?.title : undefined} className="m-0 min-w-0 truncate text-base font-medium text-text-1">
           {isManagement
             ? data?.title ?? t("f118.version_history")
             : t("knowledge.version.history.title", { ns: "shared" })}
         </SheetTitle>
+        <Tooltip content={closeLabel}>
+          <SheetClose asChild>
+            <Button
+              type="button"
+              iconOnly
+              size="small"
+              color="default"
+              variant="text"
+              className="shrink-0"
+              aria-label={closeLabel}
+              icon={<Outlined.Close aria-hidden />}
+            />
+          </SheetClose>
+        </Tooltip>
       </SheetHeader>
-      <div className={`${styles.body} ${isManagement ? "py-5" : "py-4"}`}>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-5 pb-[calc(20px+env(safe-area-inset-bottom))] min-[576px]:pb-5">
         {!enabled ? (
           <KnowledgeScopeUnavailable size="panel" />
         ) : query.isError ? (
@@ -296,8 +316,8 @@ function HistoryContent({
               <div className="mb-4 space-y-3">
                 <div className="flex flex-wrap gap-2">
                   {canUploadVersion && <Button
-                    size="small"
-                    variant="outlined"
+                    size="medium"
+                    variant="solid"
                     disabled={busy || uncertain}
                     onClick={() =>
                       setPanel(panel === "upload" ? null : "upload")
@@ -306,8 +326,9 @@ function HistoryContent({
                     {t("versions.new_version")}
                   </Button>}
                   <Button
-                    size="small"
+                    size="medium"
                     variant="outlined"
+                    color="default"
                     disabled={busy || uncertain}
                     onClick={() => setPanel(panel === "merge" ? null : "merge")}
                   >
@@ -315,8 +336,9 @@ function HistoryContent({
                   </Button>
                   {hasSimilar && (
                     <Button
-                      size="small"
-                      variant="outlined"
+                      size="medium"
+                      variant="text"
+                      color="default"
                       disabled={busy || uncertain}
                       onClick={() =>
                         onSimilar()
@@ -360,7 +382,7 @@ function HistoryContent({
                 {t("f118.no_visible_versions")}
               </p>
             ) : (
-              <VersionHistoryTable rows={data.versions.map((version) => ({
+              <VersionHistoryTable compact rows={data.versions.map((version) => ({
                 id: version.version_id,
                 versionNumber: version.version_no,
                 isPrimary: version.is_primary,
@@ -413,11 +435,6 @@ function HistoryContent({
           </>
         )}
       </div>
-      <SheetFooter className={styles.footer}>
-        <Button variant="outline" onClick={() => onOpenChange(false)}>
-          {t("close", { ns: "bs" })}
-        </Button>
-      </SheetFooter>
     </SheetContent>
   );
 }
