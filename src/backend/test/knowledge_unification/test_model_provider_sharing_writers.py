@@ -4,6 +4,7 @@ import pytest
 import sqlalchemy as sa
 
 from bisheng.common.errcode.knowledge import KnowledgeProcessingConflictError
+from bisheng.common.errcode.permission import PermissionPublishNotReadyError
 from bisheng.core.context.tenant import management_tenant_scope
 from bisheng.database.models import tenant as tenant_module
 from bisheng.database.models.tenant import Tenant
@@ -105,3 +106,33 @@ async def test_unidentified_internal_llm_share_cannot_create_a_reservation_or_tr
     async with factory() as session:
         assert not (await session.execute(sa.select(KnowledgeOperationPlan))).scalars().all()
     assert not client.writes
+
+
+async def test_failed_disable_read_resumes_the_same_plan_with_null_condition_tuples(business, monkeypatch):
+    factory, _, _, _, client = business
+    app = await install_sharing(business, monkeypatch)
+    client.rows = {("tenant:101", "shared_with", "llm_server:2"), ("tenant:202", "shared_with", "llm_server:2")}
+    original = client.iter_tuples
+
+    async def failed_read(**kwargs):
+        raise PermissionPublishNotReadyError(exception="Model sharing projection: invalid existing sharing tuple")
+        yield  # Preserve the streaming transport interface.
+
+    with management_tenant_scope(1), actual.native.actor(super_admin=True) as user:
+        actual.web(user)
+        monkeypatch.setattr(client, "iter_tuples", failed_read)
+        with pytest.raises(PermissionPublishNotReadyError, match="invalid existing sharing tuple"):
+            await app.aset_sharing(identity=user, server_id=2, enabled=False)
+        async with factory() as session:
+            pending = (await session.execute(sa.select(KnowledgeOperationPlan))).scalars().one()
+            plan_id = pending.id
+            assert pending.model_execution_state == "PREPARING"
+        assert len(client.rows) == 2 and not client.writes
+        monkeypatch.setattr(client, "iter_tuples", original)
+        with pytest.raises(KnowledgeProcessingConflictError):
+            await app.aset_sharing(identity=user, server_id=2, enabled=True)
+        assert await app.aset_sharing(identity=user, server_id=2, enabled=False) == [101, 202]
+        assert not client.rows
+        async with factory() as session:
+            completed = (await session.execute(sa.select(KnowledgeOperationPlan))).scalars().one()
+            assert completed.id == plan_id and completed.model_execution_state == "COMPLETED"

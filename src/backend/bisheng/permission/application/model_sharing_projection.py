@@ -153,9 +153,16 @@ class ModelSharingProjectionApplication:
             object=resource, relation="shared_with", consistency=HIGHER_CONSISTENCY
         ):
             self._pin(pin)
+            # OpenFGA may serialize an unconditional tuple with a null condition.
+            # Accept that metadata without flattening actual conditional grants.
             if (
                 not isinstance(row, dict)
-                or set(row) != {"user", "relation", "object"}
+                or set(row)
+                not in (
+                    {"user", "relation", "object"},
+                    {"user", "relation", "object", "condition"},
+                )
+                or row.get("condition") is not None
                 or row["relation"] != "shared_with"
                 or row["object"] != resource
                 or not isinstance(row["user"], str)

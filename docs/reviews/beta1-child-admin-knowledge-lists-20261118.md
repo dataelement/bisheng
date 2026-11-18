@@ -3,6 +3,7 @@
 - 日期：2026-11-18（Asia/Taipei）。
 - 基线：最新 fetch 的 `origin/feat/3.1.0-beta1`，`57fc31cfbf`。
 - 持续修复分支：`codex/3.1.0-beta1/bugfixes-20261118`。
+- 集成时同步发布线并发提交 `8d343af331`（模型共享空 condition 修复）；仅 F118 文档追加位置冲突，逐段保留两项说明，业务源码没有重叠。
 - worktree：`.worktrees/beta1-bugfixes-20261118`；原工作区未提交修改保持原样。
 - 按现有合同修复缺陷，采用 hotfix track；没有新增 API、字段、表或权限合同。
 
