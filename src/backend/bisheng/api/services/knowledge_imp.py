@@ -14,6 +14,7 @@ from sqlmodel import select
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA, QA_KNOWLELDGE_METADATA_SCHEMA
 from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.errcode.knowledge import (
     KnowledgeEtl4lmTimeoutError,
     KnowledgeFileDeleteError,
@@ -552,12 +553,20 @@ def add_qa(db_knowledge: Knowledge, data: QAKnowledgeUpsert) -> QAKnowledge:
     """Usetext ImportQAknowledge"""
     if db_knowledge.type != 1:
         raise Exception("knowledge type error")
+    if data.knowledge_id != db_knowledge.id:
+        raise NotFoundError()
+    qa_db = None
+    if data.id is not None:
+        qa_db = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(data.id)
+        if qa_db is None or qa_db.knowledge_id != db_knowledge.id or qa_db.tenant_id != db_knowledge.tenant_id:
+            raise NotFoundError()
+    # The authenticated parent's owner is authoritative, never a request field.
+    data.tenant_id = db_knowledge.tenant_id
     try:
         # Similar question unified insertion
         questions = data.questions
         if questions:
-            if data.id:
-                qa_db = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(data.id)
+            if qa_db is not None:
                 qa_db.questions = questions
                 qa_db.answers = data.answers
                 qa = QAKnoweldgeDao.update(qa_db)

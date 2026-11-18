@@ -1,132 +1,87 @@
-import type { UseKnowledgeFilePermissionsOptions } from "./knowledgeSpaceTypes";
-import { useState, useRef, useEffect, useCallback } from "react";
-import { FileType, KnowledgeFile } from "~/api/knowledge";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { FileType, type KnowledgeFile } from "~/api/knowledge";
 import { getMyResourcePermissions } from "~/api/permission";
+import { showApiError } from "~/api/request";
+import { useAuthContext } from "~/hooks";
+import type { UseKnowledgeFilePermissionsOptions } from "./knowledgeSpaceTypes";
 import { useKnowledgeDownloadPermissions } from "./useKnowledgeDownloadPermissions";
+
 export function useKnowledgeFilePermissions(options: UseKnowledgeFilePermissionsOptions) {
-  const { displayFiles, space, currentFolderId } = options;
-  const downloadEntryIds = useKnowledgeDownloadPermissions(options);
-  const [moveEntryIds, setMoveEntryIds] = useState<Set<string>>(new Set());
-  const [canCreateFolder, setCanCreateFolder] = useState(false);
-  const [canUploadFile, setCanUploadFile] = useState(false);
-  // The current target must accept uploaded content. Each source is checked
-  // against the concrete move action again by the business endpoint.
-  const [canMoveFile, setCanMoveFile] = useState(false);
-  const [canMoveFolder, setCanMoveFolder] = useState(false);
-  const [permissionEntryIds, setPermissionEntryIds] = useState<Set<string>>(
-    new Set(),
+  const { displayFiles, space, currentFolderId, downloadEpoch = 0 } = options;
+  const { user } = useAuthContext();
+  const client = useQueryClient();
+  const instance = useId();
+  const generation = useRef(0);
+  const identity = JSON.stringify([user?.id, user?.role, user?.tenant_id]);
+  const containerKey = useMemo(
+    () => ["knowledge-action-permissions", instance, ++generation.current, identity, space.id, currentFolderId, downloadEpoch],
+    [instance, identity, space.id, currentFolderId, downloadEpoch],
   );
-  const [renameEntryIds, setRenameEntryIds] = useState<Set<string>>(new Set());
-  const [deleteEntryIds, setDeleteEntryIds] = useState<Set<string>>(new Set());
-  // File ids whose lazy permission lookup is in flight — the row/card menu shows
-  // a loading row instead of the fail-closed item set until it settles.
-  const [pendingFileIds, setPendingFileIds] = useState<Set<string>>(new Set());
-  const permissionEntryProbeKey = displayFiles
-    .filter((file) => !file.isCreating && /^\d+$/.test(String(file.id)))
-    .map((file) => `${file.id}:${file.type}`)
-    .join("|");
-  useEffect(() => {
-    let cancelled = false;
-    const controller = new AbortController();
+  const probeKey = displayFiles.filter(file => !file.isCreating && /^\d+$/.test(file.id))
+    .map(file => `${file.id}:${file.type}`).join("|");
+  const prefix = useMemo(() => [...containerKey, ++generation.current, probeKey], [containerKey, probeKey]);
+  const active = useRef(prefix);
+  active.current = prefix;
+  const [requested, setRequested] = useState<{ prefix: readonly unknown[]; files: KnowledgeFile[] } | null>(null);
+  const files = requested?.prefix === prefix ? requested.files : [];
 
-    const objectType = currentFolderId ? "folder" : "knowledge_space";
-    const objectId = currentFolderId || space.id;
-
-    // Ask what this user holds here, the way the per-file menu does, instead
-    // of asserting each action separately. A per-action probe treats an
-    // action the Catalog has switched off as an error, so disabling
-    // upload_file made every visit pop "Action upload_file is unavailable
-    // for knowledge_space" beside an upload button that was already hidden.
-    // A held-actions list just leaves the action out. One request, not two.
-    getMyResourcePermissions(objectType, String(objectId), {
-      signal: controller.signal,
-    })
-      .then((summary) => {
-        if (cancelled) return;
-        const held = new Set(summary?.actions ?? []);
-        setCanCreateFolder(held.has("create_folder"));
-        const canPlaceInTarget = held.has("upload_file");
-        setCanUploadFile(canPlaceInTarget);
-        setCanMoveFile(canPlaceInTarget);
-        setCanMoveFolder(canPlaceInTarget);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setCanCreateFolder(false);
-          setCanUploadFile(false);
-          setCanMoveFile(false);
-          setCanMoveFolder(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [currentFolderId, space.id]);
-
-  // File actions resolve lazily from one F048 my-permissions summary when the
-  // user opens that file's menu. UI state remains fail-closed while loading.
-  const checkedFileIdsRef = useRef<Set<string>>(new Set());
-
-  // Drop lazily-cached grants when the listed files / folder change, so a re-opened
-  // menu re-checks against the new context (mirrors the old probe-key re-fetch).
-  useEffect(() => {
-    checkedFileIdsRef.current = new Set();
-    setPermissionEntryIds(new Set());
-    setMoveEntryIds(new Set());
-    setRenameEntryIds(new Set());
-    setDeleteEntryIds(new Set());
-    setPendingFileIds(new Set());
-  }, [permissionEntryProbeKey]);
+  const container = useQuery({
+    queryKey: containerKey,
+    queryFn: ({ signal }) => getMyResourcePermissions(
+      currentFolderId ? "folder" : "knowledge_space", currentFolderId || space.id, { signal },
+    ),
+    retry: false,
+    cacheTime: 0,
+    keepPreviousData: false,
+  });
+  const fileQuery = useCallback((file: KnowledgeFile) => ({
+    queryKey: [...prefix, file.type, file.id],
+    queryFn: ({ signal }: { signal?: AbortSignal }) => getMyResourcePermissions(
+      file.type === FileType.FOLDER ? "folder" : "knowledge_file", file.id, { signal },
+    ),
+    retry: false,
+    cacheTime: 0,
+    staleTime: Infinity,
+    refetchOnWindowFocus: "always" as const,
+  }), [prefix]);
+  const summaries = useQueries({ queries: files.map(fileQuery) });
+  const error = container.error || summaries.find(query => query.isError)?.error;
+  useEffect(() => { if (error) showApiError(error); }, [error]);
 
   const ensureFilePermissions = useCallback(async (file: KnowledgeFile) => {
-    const id = String(file.id);
-    if (file.isCreating || !/^\d+$/.test(id)) return;
-    if (checkedFileIdsRef.current.has(id)) return; // already resolved for this file
-    checkedFileIdsRef.current.add(id);
-    setPendingFileIds((prev) => new Set(prev).add(id));
-
-    const resourceType =
-      file.type === FileType.FOLDER ? "folder" : "knowledge_file";
+    if (file.isCreating || !/^[1-9][0-9]*$/.test(file.id) || active.current !== prefix) return;
+    setRequested(previous => {
+      const rows = previous?.prefix === prefix ? previous.files : [];
+      return rows.some(row => row.id === file.id && row.type === file.type)
+        ? previous : { prefix, files: [...rows, file] };
+    });
     try {
-      const summary = await getMyResourcePermissions(resourceType, file.id);
-      const allowed = new Set(summary.actions);
-      const grant = (
-        action: string,
-        setter: (updater: (prev: Set<string>) => Set<string>) => void,
-      ) => {
-        if (allowed.has(action)) {
-          setter((prev) => new Set(prev).add(id));
-        }
-      };
-      grant("manage_permission", setPermissionEntryIds);
-      grant("move", setMoveEntryIds);
-      grant("rename", setRenameEntryIds);
-      grant("delete", setDeleteEntryIds);
+      // Reopening a menu must recheck revoked grants. In-flight requests dedupe
+      // through the query cache; observers hide old actions during the refresh.
+      await client.fetchQuery({ ...fileQuery(file), staleTime: 0 });
     } catch {
-      checkedFileIdsRef.current.delete(id);
-    } finally {
-      setPendingFileIds((prev) => {
-        if (!prev.has(id)) return prev;
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
+      // The observing query reports the error and keeps every action hidden.
     }
-  }, []);
+  }, [client, fileQuery, prefix]);
 
+  const holding = (action: string) => new Set(files.flatMap((file, index) => {
+    const query = summaries[index];
+    return query?.isSuccess && !query.isFetching && query.data?.actions.includes(action) ? [file.id] : [];
+  }));
+  const actions = container.isSuccess && !container.isFetching ? container.data.actions : [];
+  const downloadEntryIds = useKnowledgeDownloadPermissions(options);
   return {
-    moveEntryIds,
-    canCreateFolder,
-    canUploadFile,
-    canMoveFile,
-    canMoveFolder,
-    permissionEntryIds,
-    renameEntryIds,
-    deleteEntryIds,
+    canCreateFolder: actions.includes("create_folder"),
+    canUploadFile: actions.includes("upload_file"),
+    canMoveFile: actions.includes("upload_file"),
+    canMoveFolder: actions.includes("upload_file"),
+    permissionEntryIds: holding("manage_permission"),
+    moveEntryIds: holding("move"),
+    renameEntryIds: holding("rename"),
+    deleteEntryIds: holding("delete"),
+    pendingFileIds: new Set(files.filter((_, index) => summaries[index]?.isFetching).map(file => file.id)),
     downloadEntryIds,
-    pendingFileIds,
     ensureFilePermissions,
   };
 }

@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Iterable
 
+from loguru import logger
+
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.permission import (
     InvalidCatalogActionError,
@@ -92,7 +94,8 @@ async def _admitted_management_targets(resource_type, resource_ids):
     25022 for the whole batch, which took every other candidate down with it:
     a single deleted knowledge base in ``orgKbs`` failed the workstation config
     for every super admin. An unproven id is left out, so it gets no action; a
-    type that cannot prove its targets and a loader failure still raise.
+    resource with an unavailable projection is also excluded. Unexpected
+    loader failures still raise instead of returning a partial success.
     """
 
     proof = await _management_target_loader(resource_type)
@@ -104,7 +107,17 @@ async def _admitted_management_targets(resource_type, resource_ids):
     if records is None:
         records = {}
         for resource_id in resource_ids:
-            records[str(resource_id)] = await port.load_permission_record(resource_id=resource_id)
+            try:
+                records[str(resource_id)] = await port.load_permission_record(resource_id=resource_id)
+            except (PermissionInvalidResourceError, PermissionPublishNotReadyError):
+                # Deny this candidate without making unrelated valid resources
+                # unavailable. Single-resource operations retain the error.
+                logger.opt(exception=True).warning(
+                    "Excluded unreadable listing candidate: tenant={} resource={}:{}",
+                    expected,
+                    resource_type,
+                    resource_id,
+                )
     admitted = []
     for resource_id in resource_ids:
         record = records.get(str(resource_id))

@@ -1,16 +1,17 @@
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 from bisheng.api.services import tag
 from bisheng.common.schemas.api import PageInfiniteCursorData
-from bisheng.core.context.tenant import is_strict_tenant_filter
+from bisheng.core.context.tenant import is_strict_tenant_filter, tenant_execution_scope
 from bisheng.workstation.api.endpoints import apps
 
 
-def test_app_categories_exclude_root_tags(monkeypatch):
+async def test_app_categories_exclude_root_tags(monkeypatch):
     local_tag = SimpleNamespace(id=7)
     root_tag = SimpleNamespace(id=1)
-    monkeypatch.setattr(tag.ConfigDao, "get_config", Mock(return_value=SimpleNamespace(value="[1, 7]")))
+    monkeypatch.setattr(tag.ConfigDao, "aget_config", AsyncMock(return_value=SimpleNamespace(value="[1, 7]")))
+    monkeypatch.setattr(tag.TenantWorkstationConfigDao, "aget", AsyncMock(return_value=None))
 
     def fetch_tags(*args, **kwargs):
         return [local_tag] if is_strict_tenant_filter() else [root_tag, local_tag]
@@ -18,12 +19,13 @@ def test_app_categories_exclude_root_tags(monkeypatch):
     def count_tags(*args, **kwargs):
         return len(fetch_tags())
 
-    monkeypatch.setattr(tag.TagDao, "get_tags_by_ids", fetch_tags)
+    monkeypatch.setattr(tag.TagDao, "aget_tags_by_ids", AsyncMock(side_effect=fetch_tags))
     monkeypatch.setattr(tag.TagDao, "search_tags", fetch_tags)
     monkeypatch.setattr(tag.TagDao, "count_tags", count_tags)
     user = SimpleNamespace(user_id=841, tenant_id=69)
-    assert tag.TagService.get_home_tag(None, user) == [local_tag]
-    assert tag.TagService.get_all_tag(None, user) == ([local_tag], 1)
+    with tenant_execution_scope(69):
+        assert await tag.TagService.get_home_tag(None, user) == [local_tag]
+        assert tag.TagService.get_all_tag(None, user) == ([local_tag], 1)
 
 
 async def test_uncategorized_scans_only_current_tenant(monkeypatch):

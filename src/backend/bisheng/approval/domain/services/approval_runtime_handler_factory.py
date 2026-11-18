@@ -87,13 +87,33 @@ async def eligible_scenario_candidates(instance, candidate_ids):
 
     handler = await build_runtime_handler(instance.handler_key or instance.scenario_code)
     req = SimpleNamespace(
+        instance_id=instance.id,
         tenant_id=instance.tenant_id,
         applicant_user_id=instance.applicant_user_id,
         business_key=instance.business_key,
         payload_snapshot=instance.payload_snapshot or {},
+        business_resource_id=instance.business_resource_id,
     )
     result = await handler.validate_approver_candidates(req, candidate_ids)
     return result
+
+
+async def manual_candidate_policy(instance):
+    """Use the same application policy as submission; no candidate-specific FGA calls."""
+    if instance.scenario_code != "app_publish_request":
+        return None
+    from types import SimpleNamespace
+
+    handler = await build_runtime_handler(instance.handler_key or instance.scenario_code)
+    return await handler.approver_candidate_policy(
+        SimpleNamespace(
+            instance_id=instance.id,
+            tenant_id=instance.tenant_id,
+            applicant_user_id=instance.applicant_user_id,
+            business_resource_id=instance.business_resource_id,
+            payload_snapshot=instance.payload_snapshot or {},
+        )
+    )
 
 
 async def validate_scenario_candidates(instance, candidate_ids):
