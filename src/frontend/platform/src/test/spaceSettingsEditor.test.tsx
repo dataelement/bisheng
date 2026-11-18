@@ -197,7 +197,9 @@ it("requires the existing private-space confirmation before changing access", as
   fireEvent.click(screen.getByRole("radio", { name: "settings_ext.private" }));
   expect(mocks.confirm).toHaveBeenCalled();
   expect(mocks.put).not.toHaveBeenCalled();
-  act(() => mocks.confirm.mock.calls[0][0].onOk());
+  const next = vi.fn();
+  act(() => mocks.confirm.mock.calls[0][0].onOk(next));
+  expect(next).toHaveBeenCalledOnce();
   await waitFor(() =>
     expect(
       screen.queryByRole("switch", { name: "settings_ext.review" }),

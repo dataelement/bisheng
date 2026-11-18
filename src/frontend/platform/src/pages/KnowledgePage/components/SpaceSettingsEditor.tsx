@@ -199,8 +199,9 @@ function SettingsEditor({
       bsConfirm({
         desc: t("settings_ext.private_notice"),
         signal,
-        onOk: () => {
+        onOk: (next) => {
           if (active.current && !signal?.aborted) update("auth", "private");
+          next();
         },
       });
     } else if (value === "shared" && draft.auth === "private")
