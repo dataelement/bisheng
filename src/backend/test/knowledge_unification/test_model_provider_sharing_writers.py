@@ -3,7 +3,6 @@
 import pytest
 import sqlalchemy as sa
 
-from bisheng.common.errcode.knowledge import KnowledgeProcessingConflictError
 from bisheng.common.errcode.permission import PermissionPublishNotReadyError
 from bisheng.core.context.tenant import management_tenant_scope
 from bisheng.database.models import tenant as tenant_module
@@ -66,9 +65,7 @@ async def test_original_share_entry_reserves_even_zero_delta_and_revokes_inactiv
             assert all(row.operation == "model_share_server" and not row.target_manifest for row in rows)
 
 
-async def test_real_share_reservation_blocks_status_online_and_competing_deletion_until_same_command_resumes(
-    business, monkeypatch
-):
+async def test_failed_unstarted_share_releases_status_online_and_provider_edit(business, monkeypatch):
     factory, deletion, _, _, client = business
     app = await install_sharing(business, monkeypatch)
     original = app._permission
@@ -81,16 +78,12 @@ async def test_real_share_reservation_blocks_status_online_and_competing_deletio
         monkeypatch.setattr(app, "_permission", unavailable)
         with pytest.raises(ConnectionError):
             await app.aset_sharing(identity=user, server_id=2, enabled=True)
-        for mutation in (
-            lambda: LLMDao.aupdate_model_status(22, 1, "probe"),
-            lambda: LLMDao.aupdate_model_online(22, False),
-            lambda: deletion.adelete_server(identity=user, server_id=2),
-        ):
-            with pytest.raises(KnowledgeProcessingConflictError):
-                await mutation()
+        await LLMDao.aupdate_model_status(22, 1, "probe")
+        await LLMDao.aupdate_model_online(22, False)
+        await deletion.arequire_idle(server_id=2)
         async with factory() as session:
             row = await session.get(LLMModel, 22)
-            assert row.online is True and row.status == 2
+            assert row.online is False and row.status == 1
         monkeypatch.setattr(app, "_permission", original)
         user.token_version = 4
         user._runtime_credential_reference = {**user._runtime_credential_reference, "token_version": 4}
@@ -108,7 +101,7 @@ async def test_unidentified_internal_llm_share_cannot_create_a_reservation_or_tr
     assert not client.writes
 
 
-async def test_failed_disable_read_resumes_the_same_plan_with_null_condition_tuples(business, monkeypatch):
+async def test_failed_disable_read_does_not_block_new_commands_with_null_condition_tuples(business, monkeypatch):
     factory, _, _, _, client = business
     app = await install_sharing(business, monkeypatch)
     client.rows = {("tenant:101", "shared_with", "llm_server:2"), ("tenant:202", "shared_with", "llm_server:2")}
@@ -126,13 +119,14 @@ async def test_failed_disable_read_resumes_the_same_plan_with_null_condition_tup
         async with factory() as session:
             pending = (await session.execute(sa.select(KnowledgeOperationPlan))).scalars().one()
             plan_id = pending.id
-            assert pending.model_execution_state == "PREPARING"
+            assert pending.model_execution_state == "ABANDONED"
         assert len(client.rows) == 2 and not client.writes
         monkeypatch.setattr(client, "iter_tuples", original)
-        with pytest.raises(KnowledgeProcessingConflictError):
-            await app.aset_sharing(identity=user, server_id=2, enabled=True)
+        await app.aset_sharing(identity=user, server_id=2, enabled=True)
         assert await app.aset_sharing(identity=user, server_id=2, enabled=False) == [101, 202]
         assert not client.rows
         async with factory() as session:
-            completed = (await session.execute(sa.select(KnowledgeOperationPlan))).scalars().one()
-            assert completed.id == plan_id and completed.model_execution_state == "COMPLETED"
+            completed = (await session.execute(sa.select(KnowledgeOperationPlan))).scalars().all()
+            assert len(completed) == 3
+            assert next(row for row in completed if row.id == plan_id).model_execution_state == "SUPERSEDED"
+            assert sum(row.model_execution_state == "COMPLETED" for row in completed) == 2

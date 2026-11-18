@@ -472,6 +472,14 @@ class ModelDeletionApplication:
     async def _run(self, identity, command):
         progress = {"preparation": None, "handoff": False}
         async with model_deletion_request(identity, references=self.references, plans=self.plans) as request:
+            from bisheng.llm.application.model_sharing import ModelSharingApplication
+
+            await ModelSharingApplication(
+                references=self.references,
+                plans=self.plans,
+                session_factory=self.session_factory,
+                sharing_factory=self.sharing_factory,
+            )._recover_previous(request, server_id=command.server_id)
             try:
                 operation = await self._discover(request, command, progress)
                 if operation.execution is not None and operation.execution.model_execution_state == "COMPLETED":

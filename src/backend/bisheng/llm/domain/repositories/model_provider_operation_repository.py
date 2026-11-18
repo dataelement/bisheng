@@ -277,6 +277,20 @@ class ModelProviderOperationRepository:
         tenant, transaction = self._native(session)
         actor = self.plans._actor(actor_reference, tenant)
         await self.arequire_idle(session, server_id=server_id)
+        # A fresh authorized command supersedes cancelled retry receipts. Keep
+        # their signed payload/audit intact, but never replay an older mount
+        # after a newer sharing command has already been accepted.
+        await session.execute(
+            update(KnowledgeOperationPlan)
+            .where(
+                KnowledgeOperationPlan.tenant_id == tenant,
+                KnowledgeOperationPlan.model_server_id == server_id,
+                KnowledgeOperationPlan.model_execution_state == "ABANDONED",
+            )
+            .values(model_execution_state="SUPERSEDED", update_time=self.plans.clock())
+            .execution_options(synchronize_session=False)
+        )
+        transaction.assert_current(session)
         # Match persisted DATETIME(0) before signing; MySQL rounds fractions up.
         now = _utc(self.plans.clock())
         row = KnowledgeOperationPlan(
@@ -324,8 +338,8 @@ class ModelProviderOperationRepository:
 
     async def aset_state(self, session, *, row, expected, target, metadata=None):
         tenant, transaction = self._native(session)
-        if target not in {*ACTIVE_STATES, "COMPLETED", "ABANDONED"} or (
-            target == "ABANDONED" and expected != "PREPARING"
+        if target not in {*ACTIVE_STATES, "COMPLETED", "ABANDONED", "SUPERSEDED"} or (
+            target == "ABANDONED" and (expected not in {"PREPARING", "RESERVED"} or row.operation != SHARE_OPERATION)
         ):
             raise KnowledgeOperationPlanChangedError()
         values = {"model_execution_state": target, "update_time": self.plans.clock()}

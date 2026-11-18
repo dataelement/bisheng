@@ -1,4 +1,4 @@
-"""Only an explicit, untouched and unstarted sharing preparation may retire."""
+"""Explicit maintenance cancellation validates an orphaned, unstarted preparation."""
 
 from copy import deepcopy
 from datetime import timedelta
@@ -16,6 +16,7 @@ from bisheng.permission.application.identity import resolve_permission_actor
 from test.knowledge_unification import test_model_delete_plan_application as actual
 from test.knowledge_unification import test_model_deletion_application as native_business
 from test.knowledge_unification.test_model_provider_sharing_writers import install_sharing
+from test.knowledge_unification.test_model_sharing_projection import reserved
 
 business = native_business.business
 impact = actual.impact
@@ -25,15 +26,9 @@ removal_session = actual.removal_session
 
 
 async def interrupt(share, user, monkeypatch):
-    original = share._permission
-
-    async def unavailable(*args, **kwargs):
-        raise ConnectionError("preparation interrupted before external I/O")
-
-    monkeypatch.setattr(share, "_permission", unavailable)
-    with pytest.raises(ConnectionError):
-        await share.aset_sharing(identity=user, server_id=2, enabled=True)
-    monkeypatch.setattr(share, "_permission", original)
+    # A killed process cannot run the new automatic exception cleanup. Keep a
+    # real, committed orphan for the explicit maintenance-cancellation tests.
+    await reserved(share.session_factory, share.references, share.plans, user)
 
 
 async def saved(factory):

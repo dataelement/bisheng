@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from hashlib import sha256
 
-from sqlalchemy import func, update
+from sqlalchemy import func, or_, update
 from sqlmodel import select
 
 from bisheng.common.errcode.permission import PermissionVersionConflictError
@@ -47,6 +47,52 @@ class ProjectionRepository(
             .with_for_update()
         )
         return (await session.execute(statement)).first() is not None
+
+    async def aabandon_unstarted_model_sharing(self, session, *, tenant_id, server_id, confirmation_id):
+        """Close only PREPARED journals in the caller's provider transaction.
+
+        The PREPARED -> STAGING CAS is the permission writer's I/O gate.
+        Closing it under row locks prevents a writer that already passed its
+        business check from executing after the business reservation is retired.
+        """
+        statement = (
+            select(PermissionProjectionOperation)
+            .where(
+                PermissionProjectionOperation.tenant_id == tenant_id,
+                or_(
+                    PermissionProjectionOperation.scope_key == f"llm_server:{server_id}:{confirmation_id}",
+                    PermissionProjectionOperation.idempotency_key.startswith(f"model-sharing:{confirmation_id}:"),
+                ),
+            )
+            .order_by(PermissionProjectionOperation.id)
+            .with_for_update()
+        )
+        rows = (await session.execute(statement)).scalars().all()
+        if any(
+            row.scope_type != "llm_model_deletion"
+            or row.scope_key != f"llm_server:{server_id}:{confirmation_id}"
+            or row.status != "PREPARED"
+            for row in rows
+        ):
+            return False
+        for row in rows:
+            result = await session.execute(
+                update(PermissionProjectionOperation)
+                .where(
+                    PermissionProjectionOperation.tenant_id == tenant_id,
+                    PermissionProjectionOperation.id == row.id,
+                    PermissionProjectionOperation.status == "PREPARED",
+                )
+                .values(
+                    status="FAILED_CLOSED",
+                    error_message="Business operation abandoned before permission I/O",
+                    update_time=func.now(),
+                )
+                .execution_options(synchronize_session=False)
+            )
+            if result.rowcount != 1:
+                raise PermissionVersionConflictError(msg="Model sharing journal started during cancellation")
+        return True
 
     async def aget_operation(
         self,

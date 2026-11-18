@@ -86,7 +86,9 @@ class ModelProjectionBinding:
         repository.validate(row)
         metadata = execution_metadata(row)
         sharing = metadata["sharing"]
-        if row.model_execution_state not in {"RESERVED", "SHARING_COMPLETE"} or not isinstance(sharing, dict):
+        if row.model_execution_state not in {"RESERVED", "SHARING_COMPLETE", "FAILED_CLOSED"} or not isinstance(
+            sharing, dict
+        ):
             _blocked()
         if set(sharing) != {"server_id", "store_id", "model_id", "before", "after", "batches"}:
             _blocked()
@@ -137,7 +139,7 @@ class ModelProjectionBinding:
             or value.model_server_id != self.server_id
             or value.request_hash != self.request_hash
             or value.plan_digest != self.plan_digest
-            or value.model_execution_state not in {"RESERVED", "SHARING_COMPLETE"}
+            or value.model_execution_state not in {"RESERVED", "SHARING_COMPLETE", "FAILED_CLOSED"}
         ):
             _blocked()
 
@@ -204,7 +206,8 @@ class ModelProviderProjectionScope:
         return True
 
     async def is_failed_closed_recovery_scope(self, plan, operation_id):
-        return False
+        binding = await self._require(plan, operation_id)
+        return binding.operation == "model_share_server"
 
     async def finalize(self, plan, operation_id):
         # The journal's FINALIZED only acknowledges this batch. The provider

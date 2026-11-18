@@ -45,6 +45,7 @@ async def prepare_added_provider_models(*, server_id, identity):
     async with model_deletion_request(identity, references=app.references, plans=app.plans) as request:
         if request.tenant_id != 1 or not request.actor.super_admin:
             raise LLMModelNotAccessibleError()
+        await app._recover_previous(request, server_id=server_id)
         async with model_write_phase(app.session_factory, request) as phase:
             await phase.call(app.providers.alock_provider, phase.session, server_id=server_id)
             await phase.call(app.providers.arequire_idle, phase.session, server_id=server_id)
