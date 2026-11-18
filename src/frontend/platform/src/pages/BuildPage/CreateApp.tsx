@@ -1,7 +1,6 @@
 // @ts-strict-ignore
 import { Button, Input, Textarea } from '@bisheng/ui';
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
-import { Outlined } from "bisheng-icons";
 
 import { Accordion } from "@/components/bs-ui/accordion";
 
@@ -315,8 +314,8 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
                                 {t('cancel')}
                             </Button>
                         </DialogClose>
-                        <Button disabled={((String((formData.name) ?? '').length > 50) || (String((formData.desc) ?? '').length > 1000)) || (!formData.name || loading || templateLoading)} type="submit" onClick={handleSubmit}>
-                            {(loading || templateLoading) && <Outlined.Loading className="animate-spin mr-2" />}
+                        <Button disabled={((String((formData.name) ?? '').length > 50) || (String((formData.desc) ?? '').length > 1000)) || (!formData.name || loading || templateLoading)} type="submit" onClick={handleSubmit} loading={(loading || templateLoading)}>
+
                             {t(isEditMode ? 'save' : 'create')}
                         </Button>
                     </DialogFooter>

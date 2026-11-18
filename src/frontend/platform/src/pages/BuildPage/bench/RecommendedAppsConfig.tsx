@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button, SearchInput, notification } from '@bisheng/ui';
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 
@@ -323,12 +324,12 @@ export default function RecommendedAppsConfig({ selectedAppIds, onSelectedAppsCh
                                     );
                                 })}
                                 {loading && (
-                                    <div className="text-center text-xs text-gray-400 py-2">{t("loading")}</div>
+                                    <LoadingState size="panel" label={t("loading")} className="text-center text-xs text-gray-400 py-2" />
                                 )}
                             </div>
                         ) : loading ? (
                             <div className="flex-1 flex justify-center items-center">
-                                <span className="text-sm text-gray-400">{t("loading")}</span>
+                                <LoadingState size="panel" label={t("loading")} className="text-sm text-gray-400" />
                             </div>
                         ) : (
                             <div className="flex-1 flex justify-center items-center text-sm text-gray-500">

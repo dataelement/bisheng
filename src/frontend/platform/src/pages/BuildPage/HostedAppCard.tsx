@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import type { User } from "@/types/api/user"
 /** Hosted application cards share state badges and actions with the detail page. */
 import CardComponent from "@/components/bs-comp/cardComponent"
@@ -73,9 +74,7 @@ function HostedAppVersionLabel({ appId, online }: HostedAppVersionLabelProps) {
   const latest = versions?.reduce<HostedAppVersion | undefined>((newest, version) =>
     !newest || version.version_no > newest.version_no ? version : newest, undefined)
   const displayedVersion = online ? current : latest
-  const label = loading
-    ? t("hostedApp.version.loading")
-    : failed
+  const label = failed
       ? t("hostedApp.version.loadFailed")
       : !versions?.length
         ? t("hostedApp.version.noCode")
@@ -85,7 +84,7 @@ function HostedAppVersionLabel({ appId, online }: HostedAppVersionLabelProps) {
 
   return (
     <span className="inline-flex h-6 max-w-40 items-center gap-1 whitespace-nowrap text-caption text-text-2">
-      <span className="truncate" title={label}>{label}</span>
+      {loading ? <LoadingState size="inline" label={t("hostedApp.version.loading")} /> : <span className="truncate" title={label}>{label}</span>}
       {!loading && failed && (
         <Button
           color="primary"

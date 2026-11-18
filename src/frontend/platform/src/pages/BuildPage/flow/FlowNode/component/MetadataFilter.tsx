@@ -527,7 +527,6 @@ const MetadataFilter = ({
                             showSearch
                             filterOption={filterMetadataOption}
                             loading={isLoadingMetadata}
-                            loadingText={t('loadingMetadataFields')}
                             emptyText={t('noMetadataFields')}
                             noMatchText={t('noMetadataFields')}
                             status={error || hasError ? 'error' : 'default'}

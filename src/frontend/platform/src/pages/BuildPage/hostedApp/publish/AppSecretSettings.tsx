@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { bsConfirm } from '@/components/bs-ui/alertDialog/useConfirm'
 import { generateUUID } from '@/components/bs-ui/utils'
 import { getHostedAppErrorMessage } from '@/controllers/API/hostedApp'
@@ -55,7 +56,7 @@ export function AppSecretSettings({ appId, canManage, canRebuild = false }: AppS
       </div>
     </div>
     <p className="text-xs text-muted-foreground">{t('hostedApp.secrets.saveHint')}</p>
-    {state.loading && <p className="text-sm">{t('hostedApp.secrets.loading')}</p>}
+    {state.loading && <LoadingState size="panel" label={t('hostedApp.secrets.loading')} className="text-sm" />}
     {!!state.error && <p role="alert" className="text-sm text-muted-foreground">{getHostedAppErrorMessage(state.error) || t('hostedApp.secrets.loadFailed')}</p>}
     {state.data && <>
       {!state.data.items.length && <p className="text-sm text-muted-foreground">{t('hostedApp.secrets.empty')}</p>}

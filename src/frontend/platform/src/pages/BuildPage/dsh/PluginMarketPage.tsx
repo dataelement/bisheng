@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button, Input, notification, Pagination, Segmented } from '@bisheng/ui';
 import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
@@ -253,7 +254,7 @@ function TenantPluginMarket() {
         </div>
       )}
       {loading ? (
-        <p role="status">{t("loading")}</p>
+        <LoadingState size="panel" label={t("loading")} />
       ) : (
         <div className="border rounded-lg overflow-x-auto">
           <table className="w-full text-sm text-left">
@@ -351,7 +352,7 @@ function TenantPluginMarket() {
               setFile(e.target.files?.[0] || null);
             }} />
           <p className="text-xs leading-5 text-muted-foreground">{t("bundleHelp")}</p>
-          {checking && <p role="status">{t("previewing")}</p>}
+          {checking && <LoadingState label={t("previewing")} />}
           {previewError && (
             <p role="alert" className="text-sm text-red-600">
               {t("previewFailed")}

@@ -2641,9 +2641,6 @@
     },
     "no-console": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 4
     }
   },
   "src/workspace/markdown/Mermaid.tsx": {

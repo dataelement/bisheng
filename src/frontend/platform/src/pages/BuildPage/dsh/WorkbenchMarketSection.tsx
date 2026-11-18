@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button, notification, Pagination } from "@bisheng/ui";
 import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
@@ -111,7 +112,7 @@ export function WorkbenchMarketSection() {
         </header>
         {error && <div role="alert" className="text-red-600 flex items-center gap-3">{t("loadFailed")}
             <Button variant="outlined" color="default" onClick={reload}>{t("retry")}</Button></div>}
-        {loading ? <p role="status">{t("loading")}</p> : <div className="border rounded-lg overflow-x-auto">
+        {loading ? <LoadingState size="panel" label={t("loading")} /> : <div className="border rounded-lg overflow-x-auto">
             <table className="w-full text-sm text-left"><thead className="bg-muted"><tr>
                 {["workbenchName", "version", "workbenchIdentity", "updated", "actions"].map(key =>
                     <th className="p-4" key={key}>{t(key)}</th>)}

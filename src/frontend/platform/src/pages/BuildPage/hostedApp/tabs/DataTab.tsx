@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 /**
  * Data tab (AC-56) — the application's own database: table list → one page
  * of rows → single-row edit → CSV export. No DDL: the structure the app
@@ -250,7 +251,7 @@ export function DataTab({ appId, appName }: DataTabProps) {
 
   // -- states that replace the whole tab ----------------------------------
   if (listState === "loading") {
-    return <Notice text={t("hostedApp.data.loading")} />
+    return <LoadingState label={t("hostedApp.data.loading")} />
   }
   if (listState === "forbidden") {
     return <Notice text={t("hostedApp.data.forbidden")} />
@@ -312,8 +313,7 @@ export function DataTab({ appId, appName }: DataTabProps) {
             </span>
           )}
           <div className="ml-auto flex gap-2">
-            <Button variant="outline" size="sm" disabled={rowsLoading} onClick={() => loadRows(true)}>
-              <RefreshCw className={cname("mr-1 size-3.5", rowsLoading && "animate-spin")} />
+            <Button variant="outline" size="sm" disabled={rowsLoading} loading={rowsLoading} icon={<RefreshCw className="mr-1 size-3.5" />} onClick={() => loadRows(true)}>
               {t("hostedApp.data.refresh")}
             </Button>
             <Button variant="outline" size="sm" disabled={exporting || !selected} onClick={handleExport}>
@@ -335,7 +335,7 @@ export function DataTab({ appId, appName }: DataTabProps) {
                   : rowsFailure.message || t("hostedApp.data.loadFailed")}
             </p>
           ) : !schema || !pageData ? (
-            <p className="p-4 text-sm text-muted-foreground">{t("hostedApp.data.loading")}</p>
+            <LoadingState size="panel" label={t("hostedApp.data.loading")} className="p-4 text-sm text-muted-foreground" />
           ) : pageData.rows.length === 0 ? (
             <p className="p-4 text-sm text-muted-foreground">{t("hostedApp.data.noRows")}</p>
           ) : (
