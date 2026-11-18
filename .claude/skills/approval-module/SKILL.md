@@ -112,6 +112,7 @@ ApprovalCenterService.decide_task()
 | `approval/domain/services/approval_gate.py` | 统一入口：路由匹配、实例创建、pass/pending/exception 分流 | `request_or_pass()`、`_create_exception_result()`、`_notify_admins_of_exception()` |
 | `approval/domain/services/approval_center_service.py` | 用户端：任务列表/详情、同意/拒绝、撤回、**业务侧取消**、菜单申请、多节点流转 | `decide_task()`、`_advance_after_node_approved()`、`_dispatch_outbox()`、`_send_approval_notify()`、`withdraw_instance()`（**带 18118 终态守卫**）、**`cancel_instance_by_business()`**（公共 API，见 §4.5） |
 | `approval/domain/services/approval_exception_service.py` | 管理端异常处理：重试/指定审批人/跳过节点/取消/标记完成 | `assign_approvers()`、`_resolve_exception_node()` |
+| `approval/domain/repositories/approver_candidate_repository.py` | 异常指派候选的只读分页搜索；有效且唯一 Home、本租户或已验证全局管理员、安全身份字段 | `search()` |
 | `approval/domain/services/approval_outbox_service.py` | outbox 执行与重试；成功后置 instance=EXECUTED | `execute_outbox()`、`retry_outbox()` |
 | `approval/domain/services/approval_scenario_admin_service.py` | 管理端：场景/分支/流程/节点配置、异常列表 | — |
 | `approval/domain/services/approver_resolver.py` | 解析审批人来源 `direct_user` / `department_admin` / `tenant_admin` | `resolve_approvers_from_sources()`、**`resolve_tenant_admin_user_ids()`** |
@@ -307,6 +308,7 @@ GET    /approval/admin/flows/{flow_definition_id}/nodes       # 节点配置
 PUT    /approval/admin/flows/{flow_definition_id}/nodes       # 提交节点（全量提交触发新版本）
 GET    /approval/admin/flows/{flow_definition_id}/versions/{flow_version_id} # 版本预览
 GET    /approval/admin/exceptions                            # 异常列表
+GET    /approval/admin/exceptions/{exception_id}/approver-candidates # 本异常的合格人员；keyword/page/limit(<=50)，返回 data/total；exclusive 表示只能单独选择
 POST   /approval/admin/exceptions/{exception_id}/retry       # 重试/指定审批人/跳过节点/标记完成
 POST   /approval/admin/exceptions/{exception_id}/cancel      # 取消审批（必须填原因）
 ```
@@ -474,3 +476,11 @@ cd src/backend && uv run pytest test/approval test/app_publish
 - `approval/application/app_publish.py::withdraw_app_publish` → `ApprovalCenterService.withdraw_app_publish` → `app_publish_withdrawal_repository.py` 在一个事务内锁定目标实例、取消任务、写 withdrawn 动作。目标由发布模块基于冻结 tenant/app/deployment/version/instance 生成；发布模块先重验当前 publish，实际操作者计审计。通用 `withdraw_instance` 仍要求申请人。
 - 平台 Vibe 管理页使用 `POST /api/v1/apps/{app_id}/withdraw`，body 含 expected_instance_id 和可选 reason；不拿申请人身份代发通用撤回。完整确认和终态保护不变。
 - 双用途预览由 F055 public `preview_access` 当前资格端口消费 pending task；临时资格不会写入长期 F048 Grant。真实部署 E2E 尚未执行，以 F114 verification 为准。
+
+### 历史发布审批与异常候选一致性（2026-11-19）
+
+- 异常指派弹窗按 exception_id 请求 `approver-candidates`，不使用普通人员搜索结果。服务先验证具体管理租户与异常/实例归属，仅开放 approver_empty + open + instance=exception；保存时再次按当前资格验证，已处理异常不得重开。重试和取消 API 也显式传入具体管理租户围栏。
+- `AppCandidatePolicy` 与 `qualify_app_candidates` 共用双排除/有效人员/真实管理员判据。列表 SQL 在分页及 COUNT 前过滤停用、未知/多重有效 Home、外租户与被排除人员；允许现有真实全局管理员资格。单管理员自审例外用 exclusive 标记，前端双向互斥选择；保存仍重查管理员与候选人员的同一份 SQL 当前性，不能拿列表结果作权限证明。节点配置原 picker 与 approver_resolver 来源语义不变。
+- 只有两个新增身份字段都不存在的旧 CLI 快照，才调用 `app_publish/application/legacy_review_identity.py::frozen_legacy_review_user`。原 owner-only 管线在接收时验证凭据资源归属人等于应用归属人；恢复必须绑定真实 app/deployment/version/instance/tenant、版本号及冻结 owner/applicant，发布记录 authorization_context=NULL、submitted_by 为 0 或该冻结 owner。只恢复自审排除身份，不制造运行授权、不改快照、不使用服务账号当前归属人。
+- 现代字段已存在但为 NULL、发布记录/实例/租户/版本不匹配、提交身份不一致、证据不可读时继续拒绝；不能把 owner 当成通用缺省提交人。持久请求重建通过内部 `ApprovalGateRequest.instance_id`/同级 req 字段携带实例证据，初次请求没有该证据；正常候选、异常指定和后续节点读取同一冻结来源。
+- 现场 436/895 的只读重放、前后差异、未部署与异常 83 的独立执行问题见 `docs/reviews/beta1-approval-candidates-20261119.md`；原生回归在 `test/approval/test_exception_candidates.py`，前端在 `approvalCandidates.test.tsx`。没有迁移或重开已处理单据。

@@ -4,23 +4,38 @@ import { useSubjectSearch } from "@/components/bs-comp/selectComponent/useSubjec
 
 
 import { getUsersApi } from "@/controllers/API/user";
-import type { User } from "@/types/api/user";
+import { getExceptionApproverCandidatesApi, type ApprovalApproverCandidate } from "@/controllers/API/approval";
+import { managementRequestScope } from "@/controllers/managementScope";
 import { Checkbox } from "@bisheng/ui";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 interface ApproverUserPickerProps {
+  exceptionId?: number;
   value: number[];
   names: string[];
   onChange: (ids: number[], names: string[]) => void;
 }
 
-export function ApproverUserPicker({ value, names, onChange }: ApproverUserPickerProps) {
+export function ApproverUserPicker({ exceptionId, value, names, onChange }: ApproverUserPickerProps) {
   const { t } = useTranslation("bs");
-  const selectedUsers = useRef(new Map<number, User>());
-  const search = useSubjectSearch<User>({
-    fetchPage: (keyword, page, signal) => getUsersApi({ name: keyword, page, pageSize: 50, simple: true }, { signal }),
+  const selectedUsers = useRef(new Map<number, ApprovalApproverCandidate>());
+  const [scopeRevision, setScopeRevision] = useState(0);
+  const change = useRef(onChange);
+  change.current = onChange;
+  useEffect(() => {
+    const reset = () => { change.current([], []); setScopeRevision(previous => previous + 1); };
+    window.addEventListener('bisheng:management-scope-changed', reset);
+    return () => window.removeEventListener('bisheng:management-scope-changed', reset);
+  }, []);
+  const scopeKey = JSON.stringify([exceptionId ?? 'flow-node', managementRequestScope(), scopeRevision]);
+  const search = useSubjectSearch<ApprovalApproverCandidate>({
+    scopeKey,
+    fetchPage: (keyword, page, signal) => exceptionId == null
+      ? getUsersApi({ name: keyword, page, pageSize: 50, simple: true }, { signal })
+      : getExceptionApproverCandidatesApi(exceptionId, keyword, page, signal),
   });
+  useEffect(() => { selectedUsers.current.clear(); }, [scopeKey]);
   useEffect(() => {
     for (const user of search.rows) selectedUsers.current.set(user.user_id, user);
   }, [search.rows]);
@@ -57,7 +72,12 @@ export function ApproverUserPicker({ value, names, onChange }: ApproverUserPicke
                       value.filter((id) => id !== user.user_id),
                       names.filter((_, index) => value[index] !== user.user_id),
                     );
-                  else onChange([...value, user.user_id], [...names, user.user_name]);
+                  else if (user.exclusive) onChange([user.user_id], [user.user_name]);
+                  else {
+                    const remaining = value.map((id, index) => ({ id, name: names[index] }))
+                      .filter(({ id }) => !selectedUsers.current.get(id)?.exclusive);
+                    onChange([...remaining.map(({ id }) => id), user.user_id], [...remaining.map(({ name }) => name), user.user_name]);
+                  }
                 }}
               />
               <span className="min-w-0 flex-1 text-sm text-foreground [overflow-wrap:anywhere]">

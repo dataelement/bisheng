@@ -1,5 +1,20 @@
 import axios from "../request";
 
+export interface ApprovalApproverCandidate {
+  user_id: number;
+  user_name: string;
+  external_id?: string | null;
+  exclusive?: boolean;
+}
+
+export function getExceptionApproverCandidatesApi(
+  exceptionId: number, keyword: string, page: number, signal?: AbortSignal,
+): Promise<{ data: ApprovalApproverCandidate[]; total: number }> {
+  return axios.get(`/api/v1/approval/admin/exceptions/${exceptionId}/approver-candidates`, {
+    params: { keyword, page, limit: 50 }, signal,
+  });
+}
+
 export interface ApprovalScenarioPreset {
   scenario_code: string;
   scenario_name: string;

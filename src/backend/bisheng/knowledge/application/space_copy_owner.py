@@ -216,7 +216,7 @@ class SpaceCopyOwner:
             knowledge=root, reference_session=session, metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA
         )
         try:
-            await asyncio.to_thread(es._store._create_index_if_not_exists)
+            await es._store._create_index_if_not_exists()
         finally:
             await es.client.close()
 

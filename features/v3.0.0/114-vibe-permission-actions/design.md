@@ -219,6 +219,10 @@
 
 ### 4.6 应用发布审批的自审与撤回
 
+2026-11-19 历史快照修复：异常候选列表与指派提交共用 `AppCandidatePolicy`，仅异常指派改用资源专属候选接口。对完全不含 `submission_actor`、`self_review_user_id` 的旧 CLI 快照，通过 app publish 的 `frozen_legacy_review_user` 窄端口读取精确关联的原发布记录；仅其 tenant/app/version/instance/冻结 owner/applicant 全部一致、authorization_context 为 NULL、submitted_by 为 0 或冻结 owner 时，按旧 owner-only 提交合同恢复原排除身份。原管线在接收时已验证凭据资源归属人与应用归属人相同（`6ac7704998^` 的 PublishPipelineService.receive/_assert_owned）；不使用当前凭据/当前 owner 猜测，不修改冻结快照，也不制造运行授权。新版字段部分缺失、业务绑定不匹配继续拒绝。只有重新定义历史提交身份或自审业务合同才重评该恢复边界。
+
+已知坑：直接把新增字段设为必填会使旧审批对所有人员返回空候选；直接用 owner 做缺省值又会漏排代提交方。历史记录应先由原发布证据证明旧合同，再恢复排除身份。SQL 候选搜索在分页和 COUNT 前过滤资格；保存仍重读人员与管理员当前性。真实单管理员例外在 UI 互斥选择，管理租户变更会清空选择并退休旧请求；具体记录、基线差异及现场限制见 [热修复记录](../../../docs/reviews/beta1-approval-candidates-20261119.md)。
+
 - 发布 payload 含 `submission_actor` 与 `self_review_user_id`，由发布冻结记录投影；申请人仍是 app owner。多节点运行时 handler 从同一冻结来源重建这些信息，服务账号改绑不改写历史。
 - 应用场景 handler 排除 `{app.owner_user_id, self_review_user_id}`，候选先经过现有有效人员/租户条件，重复 ID 去重。
 - 单管理员例外需要从租户管理身份的可信端口确认实际管理员数量和候选，不用过滤结果或人工配置候选数代替。Root 的既有平台超管来源按原产品口径统计；无法确认时不启用例外。无合格候选沿现有 approver_empty 异常路径通知处理，不伪造任务或自动通过。
@@ -385,6 +389,7 @@
 | `app_publish.application.preview_access` | 签名已验证材料 + 完整且 running 的会话/任务/credential/operation → CapabilityAccessContext | 模型范围端口、检索/附件；starting、绑定缺失或失效默认拒绝 |
 | `app_publish.application.preview_runtime`、open_api 事务凭据端口 | caller-owned session 与受信值对象 → 预览签发绑定、ready 激活、关闭与单凭据吊销；不返回 ORM 或明文凭据给浏览器 | PreviewInstanceService 与 runtime 的 preview fact/cleanup 共用；Version→既有操作围栏→Session/credential 锁顺序，同一 UoW，提交后才 wakeup |
 | 审批 application 场景资格/业务撤回端口 | 仅发布场景接入额外候选资格，业务撤回保留终态约束与操作者 | 发布 handler 与审批引擎；通用用户撤回和其它场景不放宽 |
+| GET `/api/v1/approval/admin/exceptions/{exception_id}/approver-candidates` | 管理员与具体管理租户围栏；仅 open/approver_empty 且实例为 exception；keyword/page/limit（最多50）→ data/total，人员含 user_id/user_name/external_id/exclusive | 异常指派与保存共用场景资格；原节点配置仍用通用人员源，保存重校验当前资格 |
 
 **缺省用途规则**：仅有审批任务资格时兼容为 approval，仅有 edit 时兼容为 management；两者同时存在而省略 purpose 拒绝并要求明确选择，避免身份歧义。该规则覆盖上表预览 GET/POST，不由页面路径推定授权。
 
@@ -537,3 +542,4 @@ VIBE_E2E_BASE_URL=http://192.168.106.116:3001 uv run pytest test/e2e/test_f114_p
 **实施登记（2026-10-30）**：用户明确确认设计后进入任务拆解与开发。首批字段、scope与动作门面/业务资格已实施；T065补齐现有短票据生产者，T066补直接受影响的上下文回归，属于原设计接线细节，不改已确认动作/归属/协议边界。
 
 | 2026-10-30 | 已确认设计实施快照：六动作/具体租户/真实主体、预览事务与阶段许可完成本地接线；补齐私有补包遗留门槛及工具范围头，新增SQL回滚与凭据配对验证 | task-review发现C1新增查询分层与唯一遗留选择器；无产品边界变化。真实E2E及最终L2待完成，未推送部署 |
+| 2026-11-19 | 旧 CLI 审批通过精确发布记录恢复原排除身份；异常指派新增合格候选只读接口、管理租户围栏及前端互斥/请求退休 | 116 实例436原快照缺少F114新增字段，人员895同租户且有效；只读重放证实旧资格为空、修复后通过，不重开已处理异常或恢复执行授权 |
