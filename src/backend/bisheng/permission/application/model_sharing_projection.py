@@ -121,6 +121,22 @@ class _GuardedClient:
 
 
 class ModelSharingProjectionApplication:
+    async def arequire_unstarted(self, session, *, server_id, confirmation_id):
+        """No existing journal may be discarded by preparation cancellation.
+
+        A late preparation can still insert a journal after this current read.
+        Its business binding must continue rejecting a terminated confirmation.
+        """
+        self.guard()
+        _identifier(server_id)
+        if not isinstance(confirmation_id, str) or len(confirmation_id) != 36 or not session.in_transaction():
+            _blocked("invalid unstarted preparation")
+        if await self.repository.ahas_scope_operation(
+            session, scope_type=MODEL_SHARING_SCOPE, scope_key=f"llm_server:{server_id}:{confirmation_id}"
+        ):
+            _blocked("preparation already has a projection journal")
+        self.guard()
+
     def __init__(self, *, client, marker, scope, repository=None, guard=None):
         if not isinstance(repository, (ProjectionRepository, type(None))):
             raise TypeError("a real projection repository is required")

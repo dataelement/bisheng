@@ -345,8 +345,8 @@ class TenantMountService:
         # tuples here, only for this Child (already-mounted Children keep
         # their existing tuples untouched).
         #
-        # Model sharing is governed only by each provider's durable explicit
-        # intent. Historical providers without an intent are never inferred on.
+        # Explicit intent wins; pre-intent providers retain the legacy Root
+        # switch semantics through their actual native sharing recipients.
         from bisheng.database.models.tenant import TenantDao
         from bisheng.llm.application.model_mount_sharing import get_model_mount_sharing_application
 

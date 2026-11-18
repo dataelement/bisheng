@@ -12,11 +12,13 @@
 
 ## 2. 共享权威、接收默认及恢复
 
-新增llm owner独立SQLModel表记录逐提供商共享意图（enabled、version、原操作关联），标准启动只建新表，不回填历史。无记录=历史未知，只保留原实际授权，挂载不推定该提供商已开启。显式开启/关闭通过现有ModelSharingApplication、提供商锁、原actor/command digest和投影台账；完成后记录对应意图，不覆写正在执行的冻结集合。
+新增llm owner独立SQLModel表记录逐提供商共享意图（enabled、version、原操作关联），标准启动只建新表，不回填历史。2026-11-18兼容修订：显式状态优先；无新记录但存在canonical native shared_with接收者时，与旧Root编辑开关一致，视为legacy开启；无记录且无接收者不推定开启。显式开启/关闭通过现有ModelSharingApplication、提供商锁、原actor/command digest和投影台账；完成后记录对应意图，不覆写正在执行的冻结集合。
 
-意图、当前活跃租户、实际共享三者形成可查询覆盖：缺少接收即待补齐，活动计划单独展示；无需另造通用任务系统。新挂载和重新启用读取明确意图，失败保留可重试差异。成员在投影过程中变化不改原计划，原命令完成后新差异由后续原受保护共享命令处理。关闭/相反计划优先尊重已有冲突围栏。
+意图、当前活跃租户、实际共享三者形成可查询覆盖：缺少接收即待补齐，活动计划单独展示；无需另造通用任务系统。新挂载和重新启用消费显式或兼容的legacy开启状态；legacy接收命令在provider锁内复核显式OFF，并在原投影完成事务中持久化开启意图。网络读取不持有SQL事务。失败保留可重试差异；成员变化不改原冻结计划，关闭/相反计划优先尊重已有冲突围栏。
 
 接收默认初始化只针对本次冻结的新增接收模型集合；写入在现有SQL事务中、采用接收租户策略锁及唯一约束，仅缺省行可创建，已有管理员限制不覆盖。历史已共享无记录不自动初始化；失败重试仍使用原初始化集合，若管理员中途写了限制，重试跳过该行。新模型创建在同一提供商锁下读取明确共享意图，对已授权接收者的新模型补缺省规则。DSH规则由其公开application/service边界写入，llm/tenant不直写DSH表。
+
+用户明确授权的存量恢复例外：`arepair_enabled_sharing`把预览的stored_enabled/version/plan_id纳入命令摘要，在provider锁内校验后创建原共享reservation；预览后已关闭或改变则拒绝。冻结当前活跃接收者的初始化receipt，只补缺失可见规则并保留限制。旧提供商新增模型先通过同入口的adopt_only零增量模式冻结原接收集合、产生真实完成计划与intent，再读取新增模型快照；不因新增模型顺带补授权。读取和启动不会创建意图或规则。维护脚本默认预览、要求显式提供商ID、真实Root超管及相同权限runtime。
 
 实际新增两张独立表：`llm_model_sharing_intent`（server_id、tenant_id、enabled、version、plan_id）与`llm_model_sharing_initialization`（plan_id、tenant_id、server_id、child_ids、model_ids）。意图与原计划COMPLETED在同一SQL事务提交；receipt独立冻结初始化范围，不改变旧metadata/digest。两表通过标准模型发现建表，模块显式登记tenant_filter，缺省tenant由既有before_flush填入；Root仓储仍明确写已验证Root。没有旧结构DDL或历史数据回填。实际覆盖读取join仍存在的Root提供商，删除后的审计记录不成为新挂载来源。
 

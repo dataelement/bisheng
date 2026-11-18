@@ -51,9 +51,20 @@ async def prepare_added_provider_models(*, server_id, identity):
             intent = await phase.call(app.intents.aread, phase.session, server_id=server_id)
             pin = (intent.enabled, intent.version, intent.plan_id) if intent else (None, 0, None)
         subjects = ()
-        if pin[0]:
+        if pin[0] or pin[0] is None:
             sharing = await app._permission(request)
             subjects = (await request.call(sharing.aread, server_id=server_id)).subjects
+        if pin[0] is None and subjects:
+            await request.call(
+                app.arepair_enabled_sharing,
+                identity=identity,
+                server_id=server_id,
+                expected_enabled=None,
+                expected_version=0,
+                expected_plan_id=None,
+                adopt_only=True,
+            )
+            return await prepare_added_provider_models(server_id=server_id, identity=identity)
         return {"pin": pin, "subjects": subjects, "actor": deepcopy(request.actor_reference)}
 
 
