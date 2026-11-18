@@ -1,4 +1,4 @@
-import { Button, Input, Tooltip } from '@bisheng/ui';
+import { Button, Input, Tooltip, useLoadingIndicatorRenderer } from '@bisheng/ui';
 import cn from '@bisheng/ui/cn';
 import { Check, Link2, Loader2, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -85,6 +85,7 @@ export function RelateDocumentPanel(props: RelateDocumentPanelProps) {
 
 function RelateDocumentContent({ spaceId, file, services, mode = 'merge', className, disabled = false, ...events }: RelateDocumentPanelProps) {
   const { t } = useTranslation('shared', { keyPrefix: 'knowledge.version' });
+  const renderLoading = useLoadingIndicatorRenderer();
   const state = useSimilarDocuments({ spaceId, fileId: file.id, services, ...events, linkSuccess: t('toast_link_success'), dismissSuccess: t('toast_dismiss_success') });
   const locked = disabled || state.busy || state.writeFailed || state.target !== null;
   const linking = mode === 'link';
@@ -103,7 +104,9 @@ function RelateDocumentContent({ spaceId, file, services, mode = 'merge', classN
           <h3 className="mb-0.5 text-body font-medium text-text-1">{t('section_recommendations')}</h3>
           <p className="mb-3 text-caption text-text-3">{t(linking ? 'section_recommendations_subtitle' : 'section_recommendations_subtitle_merge')}</p>
           {state.candidatesLoading ? (
-            <div className="flex h-16 items-center justify-center rounded-md border border-border-base bg-fill-1"><Loader2 className="size-5 animate-spin text-text-3" /></div>
+            <div role="status" aria-label={t('loading')} aria-busy="true" className="flex h-16 items-center justify-center rounded-md border border-border-base bg-fill-1">
+              {renderLoading ? <span aria-hidden>{renderLoading({ className: 'size-10' })}</span> : <Loader2 className="size-5 animate-spin text-text-3" />}
+            </div>
           ) : state.candidatesError ? (
             <ErrorState error={state.candidatesError} onRetry={state.retryCandidates} />
           ) : state.candidates.length === 0 ? (
@@ -125,7 +128,9 @@ function RelateDocumentContent({ spaceId, file, services, mode = 'merge', classN
             <div className="flex h-16 items-center justify-center rounded-md border border-dashed border-border-base bg-fill-1"><p className="text-body text-text-4">{t('search_placeholder')}</p></div>
           ) : (
             <div className="rounded-md border border-border-base bg-bg-page">
-              {state.searchLoading ? <div className="flex h-16 items-center justify-center"><Loader2 className="size-5 animate-spin text-text-3" /></div>
+              {state.searchLoading ? <div role="status" aria-label={t('loading')} aria-busy="true" className="flex h-16 items-center justify-center">
+                {renderLoading ? <span aria-hidden>{renderLoading({ className: 'size-10' })}</span> : <Loader2 className="size-5 animate-spin text-text-3" />}
+              </div>
                 : state.searchError ? <ErrorState error={state.searchError} onRetry={state.retrySearch} />
                   : state.searchResults.length === 0 ? <p className="px-3 py-4 text-body text-text-3">{t('no_search_results')}</p>
                     : <div className="scrollbar-on-scroll max-h-[220px] overflow-y-auto">{state.searchResults.map((entry) => <SearchResultRow key={entry.document_id} entry={entry} disabled={locked} onLink={state.selectTarget} />)}</div>}

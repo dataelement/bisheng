@@ -1,4 +1,4 @@
-import { Button, Tooltip } from '@bisheng/ui';
+import { Button, Tooltip, useLoadingIndicatorRenderer } from '@bisheng/ui';
 import { Outlined } from 'bisheng-icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -84,6 +84,7 @@ function SimilarDocumentSession({
   onSuccess,
 }: SimilarDocumentDialogProps) {
   const { t } = useTranslation('shared', { keyPrefix: 'knowledge.version' });
+  const renderLoading = useLoadingIndicatorRenderer();
   const [pending, setPending] = useState<PendingSimilarFile[]>([]);
   const [selectedFileId, setSelectedFileId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -163,7 +164,7 @@ function SimilarDocumentSession({
     >
       {loading || loadedServices !== services ? (
         <div className="flex flex-1 items-center justify-center py-16" role="status" aria-label={t('loading')}>
-          <Outlined.Loading aria-hidden className="size-6 animate-spin text-text-3" />
+          {renderLoading ? <span aria-hidden>{renderLoading({ className: 'size-10' })}</span> : <Outlined.Loading aria-hidden className="size-6 animate-spin text-text-3" />}
         </div>
       ) : error ? (
         <div role="alert" className="flex flex-1 flex-col items-center justify-center gap-3 py-16 text-body text-text-3">

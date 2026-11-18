@@ -1,5 +1,5 @@
 import * as Dialog from '@radix-ui/react-dialog';
-import { Button, SearchInput, TreeNavigation, TreeNavigationList, TreeNavigationNode } from '@bisheng/ui';
+import { Button, SearchInput, TreeNavigation, TreeNavigationList, TreeNavigationNode, useLoadingIndicatorRenderer } from '@bisheng/ui';
 import { Outlined } from 'bisheng-icons';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -42,6 +42,7 @@ function DestinationContents({ services, selection, onSelect, onError }: {
   onError: (error: unknown) => void;
 }) {
   const { t } = useTranslation('shared', { keyPrefix: 'knowledge.move' });
+  const renderLoading = useLoadingIndicatorRenderer();
   const spaceId = selection?.spaceId;
   const folderId = selection?.folderId ?? null;
   const load = useCallback((signal: AbortSignal) => spaceId
@@ -53,8 +54,8 @@ function DestinationContents({ services, selection, onSelect, onError }: {
   return (
     <div className="scrollbar-os min-h-0 min-w-0 flex-1 overflow-y-auto p-2 max-[768px]:hidden">
       {resource.loading ? (
-        <div role="status" className="flex h-full items-center justify-center text-text-3">
-          <Outlined.Loading aria-label={t('loading')} className="size-5 animate-spin" />
+        <div role="status" aria-label={t('loading')} className="flex h-full items-center justify-center text-text-3">
+          {renderLoading ? <span aria-hidden>{renderLoading({ className: 'size-10' })}</span> : <Outlined.Loading aria-label={t('loading')} className="size-5 animate-spin" />}
         </div>
       ) : resource.error ? (
         <div className="flex h-full flex-col items-center justify-center text-caption text-text-3">
@@ -86,6 +87,7 @@ function DestinationContents({ services, selection, onSelect, onError }: {
 
 function MoveToContent({ services, currentSpaceId, onOpenChange, onConfirm, onError }: MoveToDialogProps) {
   const { t } = useTranslation('shared', { keyPrefix: 'knowledge.move' });
+  const renderLoading = useLoadingIndicatorRenderer();
   const [search, setSearch] = useState('');
   const [deferredSearch, setDeferredSearch] = useState('');
   const [partial, setPartial] = useState<MoveSpaceGroups | null>(null);
@@ -159,7 +161,9 @@ function MoveToContent({ services, currentSpaceId, onOpenChange, onConfirm, onEr
             <SearchInput aria-label={t('search_placeholder')} placeholder={t('search_placeholder')}
               clearLabel={t('clear_search')} value={search} onChange={(event) => setSearch(event.target.value)} />
           </div>
-          {catalog.loading && !groups ? <div role="status" className="flex flex-1 items-center justify-center text-caption text-text-3">{t('loading')}</div>
+          {catalog.loading && !groups ? <div role="status" aria-label={t('loading')} className="flex flex-1 items-center justify-center text-caption text-text-3">
+            {renderLoading ? <span aria-hidden>{renderLoading({ className: 'size-10' })}</span> : t('loading')}
+          </div>
             : catalog.error ? <div className="flex flex-1 flex-col items-center justify-center text-caption text-text-3">
               {t('load_failed')}<Button variant="text" onClick={catalog.retry}>{t('retry')}</Button>
             </div>
