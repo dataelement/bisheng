@@ -10,7 +10,7 @@ from hashlib import sha256
 from sqlalchemy import select
 
 from bisheng.common.errcode.permission import PermissionPublishNotReadyError, PermissionVersionConflictError
-from bisheng.core.context.tenant import strict_tenant_filter
+from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter
 from bisheng.permission.application.identity import PermissionActor
 from bisheng.permission.application.sql_runtime import FGAProjectionAdapter
 from bisheng.permission.domain.models import PermissionProjectionOperation
@@ -26,6 +26,30 @@ from bisheng.permission.domain.services.projection_service import ProjectionScop
 from bisheng.resource_reference.application.contracts import TransactionIdentity
 
 MODEL_SHARING_SCOPE = "llm_model_deletion"
+
+
+async def abandon_unstarted_model_sharing(session, *, server_id, confirmation_id):
+    """Permission-owned SQL cancellation; needs no functioning FGA transport."""
+    transaction = TransactionIdentity.capture(session)
+    tenant_id = get_current_tenant_id()
+    if (
+        type(tenant_id) is not int
+        or tenant_id <= 0
+        or type(server_id) is not int
+        or server_id <= 0
+        or type(confirmation_id) is not str
+        or len(confirmation_id) != 36
+    ):
+        raise PermissionVersionConflictError(msg="Invalid model sharing cancellation scope")
+    result = await ProjectionRepository().aabandon_unstarted_model_sharing(
+        session, tenant_id=tenant_id, server_id=server_id, confirmation_id=confirmation_id
+    )
+    transaction.assert_current(session)
+    if get_current_tenant_id() != tenant_id:
+        raise PermissionVersionConflictError(msg="Model sharing cancellation scope changed")
+    return result
+
+
 __all__ = [
     "MODEL_SHARING_SCOPE",
     "ModelSharingProjectionApplication",
@@ -33,6 +57,7 @@ __all__ = [
     "ProjectionScopeDeferred",
     "SharingBatch",
     "SharingSnapshot",
+    "abandon_unstarted_model_sharing",
     "get_model_sharing_projection_application",
 ]
 
@@ -348,7 +373,13 @@ class ModelSharingProjectionApplication:
             row = await self.repository.aget_operation(batch.operation_id)
             if row is None or row.request_checksum != batch.request_checksum:
                 _blocked("bound projection journal changed")
-            outcome = await self.service.reconcile_operation(batch.operation_id)
+            if row.status == "FAILED_CLOSED":
+                preview = await self.service.inspect_failed_closed_recovery(batch.operation_id)
+                outcome = await self.service.recover_failed_closed_operation(
+                    batch.operation_id, confirmation_checksum=preview.confirmation_checksum
+                )
+            else:
+                outcome = await self.service.reconcile_operation(batch.operation_id)
             self._pin((prepared.before.store_id, prepared.before.model_id))
             if outcome.status != "FINALIZED" or outcome.request_checksum != batch.request_checksum:
                 _blocked("bound projection did not finalize")

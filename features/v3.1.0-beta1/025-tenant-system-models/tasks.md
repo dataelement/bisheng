@@ -11,3 +11,12 @@
 - [x] 本地提交并交付，不部署、不修复116存量、不自行合并推送。
 
 共享写入：A独占llm/domain/services/llm.py、来源core/runtime及相关调用消费者；B独占共享/挂载链和接收初始化；C独占DSH视觉/价格/模型目录和modelPricing.ts；Root独占llm/api/router.py、管理诊断新文件和平台UI/三语言/文档。跨边界先协调，不抢写。所有Owner禁止stash/reset/clean或repo-wide restore。
+
+## 2026-11-18 失败共享操作收尾修复
+
+- [x] 基于最新remote beta1 83da476446建立独立修复worktree，保留现有工作区。
+- [x] 原生准备凭证、未开始I/O的即时取消、已开始共享的按需恢复、崩溃遗留检查与表单读取修复。
+- [x] 保留挂载重试，新命令明确替代旧取消回执，普通用户仍拒绝。
+- [x] 新增12项故障恢复用例；扩展276通过/1项已有失败，并在同SHA基线验证。
+- [x] 同步AC、design、八列QA用例及七维自行复核记录。
+- [ ] 部署后真实中间件、多进程及页面E2E验收，见docs/reviews/model-operation-failure-recovery-20261118.md。

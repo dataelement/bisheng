@@ -21,8 +21,9 @@ class ModelSharingStatusService:
                     raise LLMModelNotAccessibleError()
                 intent = await phase.call(app.intents.aread, phase.session, server_id=server_id)
                 plan = await phase.call(app.providers.aactive_plan, phase.session, server_id=server_id)
-                if plan is not None:
-                    app.providers.validate(plan)
+                # A historical execution record is diagnostic, not admission
+                # to read/edit the provider form. Writes validate or retire it
+                # through the authenticated recovery path.
                 expected = (
                     await phase.call(app.intents.aactive_children, phase.session)
                     if include_coverage and intent is not None and intent.enabled

@@ -3,6 +3,7 @@
 from bisheng.common.errcode.llm_tenant import LLMModelNotAccessibleError
 from bisheng.database.models.tenant import ROOT_TENANT_ID
 from bisheng.llm.application.model_deletion_context import model_deletion_request, model_write_phase
+from bisheng.llm.application.model_operation_recovery import needs_recovery
 from bisheng.llm.application.model_provider_projection import execution_metadata
 from bisheng.llm.domain.repositories.model_mount_sharing_repository import ModelMountSharingRepository
 
@@ -22,11 +23,29 @@ class ModelMountSharingApplication:
                 if pending:
                     rows = await phase.call(self.repository.apending_candidates, phase.session)
                     for row in rows:
+                        if row.parameters.get("command_digest") != facts.digest(row.model_server_id):
+                            continue
+                        if row.model_execution_state == "ABANDONED":
+                            # This is a retry receipt, not execution authority.
+                            # ashare builds a new plan after rechecking the real
+                            # mount and current Root administrator.
+                            metadata = row.model_execution_metadata
+                            if (
+                                isinstance(metadata, dict)
+                                and metadata.get("purpose") == "model_share_server"
+                                and isinstance(metadata.get("ack"), dict)
+                                and metadata["ack"].get("status") == "abandoned_unstarted"
+                            ):
+                                providers.append(row.model_server_id)
+                            continue
+                        if (
+                            needs_recovery(row, app.plans.clock())
+                            and execution_metadata(row)["purpose"] == "model_share_server"
+                        ):
+                            providers.append(row.model_server_id)
+                            continue
                         app.providers.validate(row)
-                        if execution_metadata(row)["purpose"] == "model_share_server" and row.parameters[
-                            "command_digest"
-                        ] == facts.digest(row.model_server_id):
-                            app.providers.require_current_actor(row, request.actor_reference)
+                        if execution_metadata(row)["purpose"] == "model_share_server":
                             providers.append(row.model_server_id)
                 return facts, child, tuple(sorted(set(providers)))
 

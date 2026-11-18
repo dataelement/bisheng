@@ -1,12 +1,21 @@
 """Serialize the original Root provider sharing writers with model deletion."""
 
+import asyncio
 from copy import deepcopy
+
+from loguru import logger
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanChangedError, KnowledgeProcessingConflictError
 from bisheng.common.errcode.llm_tenant import LLMModelNotAccessibleError
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.tenant import ROOT_TENANT_ID, TenantDao
 from bisheng.llm.application.model_deletion_context import execution_frame, model_deletion_request, model_write_phase
+from bisheng.llm.application.model_operation_recovery import (
+    ModelSharingPreparation,
+    abandon_unstarted,
+    needs_recovery,
+    release_failed_sharing,
+)
 from bisheng.llm.application.model_provider_projection import (
     ModelProjectionBinding,
     ModelProviderProjectionScope,
@@ -53,29 +62,70 @@ class ModelSharingApplication:
             if facts != mounted:
                 raise KnowledgeOperationPlanChangedError()
 
-    async def aresume_existing(self, *, identity, server_id, enabled):
-        """Resume only an existing reservation from the original set-share command."""
-        command = _hash(
-            {"operation": "model_share_server", "server_id": server_id, "enabled": enabled, "child_id": None}
+    async def _recover_previous(self, request, *, server_id):
+        async with model_write_phase(self.session_factory, request) as phase:
+            row = await phase.call(self.providers.aactive_plan, phase.session, server_id=server_id)
+            if row is None:
+                return
+            await phase.call(self.providers.alock_provider, phase.session, server_id=server_id)
+            row = await phase.call(self.providers.aactive_plan, phase.session, server_id=server_id)
+            if row is None or not needs_recovery(row, self.plans.clock()):
+                return
+            if await phase.call(
+                abandon_unstarted,
+                phase.session,
+                providers=self.providers,
+                row=row,
+                actor_user_id=request.actor.subject_id,
+            ):
+                return
+            metadata = execution_metadata(row)
+            if row.operation != "model_share_server" or metadata["purpose"] != "model_share_server":
+                return
+            if request.tenant_id != ROOT_TENANT_ID or not request.actor.super_admin:
+                raise LLMModelNotAccessibleError()
+            self.providers.validate(row)
+            saved = deepcopy(row)
+            binding = ModelProjectionBinding.from_plan(row, self.providers)
+        sharing = await self._permission(request, binding)
+        prepared = await request.call(
+            sharing.arestore,
+            execution_metadata(saved)["sharing"],
+            confirmation_id=saved.id,
+            tenant_id=saved.tenant_id,
+            operation=saved.operation,
+            operator_id=saved.actor_user_id,
         )
+        await request.call(sharing.aexecute, prepared)
+        # Sharing commands store only their digest, never provider credentials.
+        # Explicit ON/OFF is identifiable; child/mount commands retain the switch.
+        intent_enabled = None
+        for value in (False, True):
+            if saved.parameters["command_digest"] == _hash(
+                {"operation": "model_share_server", "server_id": server_id, "enabled": value, "child_id": None}
+            ):
+                intent_enabled = value
+                break
+        await self._finish_sharing(
+            request,
+            saved,
+            prepared,
+            sharing,
+            binding,
+            server_id=server_id,
+            intent_enabled=intent_enabled,
+            recovery=True,
+        )
+
+    async def arecover_before_write(self, *, identity, server_id):
+        """Recover a failed previous command before admitting a new provider PUT."""
         async with model_deletion_request(identity, references=self.references, plans=self.plans) as request:
             if request.tenant_id != ROOT_TENANT_ID or not request.actor.super_admin:
                 raise LLMModelNotAccessibleError()
+            await self._recover_previous(request, server_id=server_id)
             async with model_write_phase(self.session_factory, request) as phase:
                 await phase.call(self.providers.alock_provider, phase.session, server_id=server_id)
-                row = await phase.call(self.providers.aactive_plan, phase.session, server_id=server_id)
-                if row is None:
-                    return False
-                self.providers.validate(row)
-                self.providers.require_current_actor(row, request.actor_reference)
-                if (
-                    row.operation != "model_share_server"
-                    or execution_metadata(row)["purpose"] != "model_share_server"
-                    or row.parameters["command_digest"] != command
-                ):
-                    raise KnowledgeProcessingConflictError(reason="model_provider_operation_active")
-            await request.call(self.aset_sharing, identity=identity, server_id=server_id, enabled=enabled)
-            return True
+                await phase.call(self.providers.arequire_idle, phase.session, server_id=server_id)
 
     async def aset_sharing(self, *, identity, server_id, enabled, child_id=None):
         if (
@@ -105,153 +155,172 @@ class ModelSharingApplication:
         async with model_deletion_request(identity, references=self.references, plans=self.plans) as request:
             if request.tenant_id != ROOT_TENANT_ID or not request.actor.super_admin:
                 raise LLMModelNotAccessibleError()
-            async with model_write_phase(self.session_factory, request) as phase:
-                provider = await phase.call(self.providers.alock_provider, phase.session, server_id=server_id)
-                await self._check_mounted(phase, mounted)
-                if provider.tenant_id != ROOT_TENANT_ID:
-                    raise LLMModelNotAccessibleError()
-                row = await phase.call(self.providers.aactive_plan, phase.session, server_id=server_id)
-                if row is None:
-                    if child_id is not None:
-                        intent = await phase.call(self.intents.aread, phase.session, server_id=server_id)
-                        if intent is None or not intent.enabled:
-                            raise KnowledgeOperationPlanChangedError()
-                    row = await phase.call(
-                        self.providers.acreate_share_reservation,
-                        phase.session,
-                        server_id=server_id,
-                        actor_reference=request.actor_reference,
-                        server_revision=_revision(provider),
-                        command_digest=command,
-                        metadata=execution_frame("model_share_server"),
-                    )
-                else:
-                    self.providers.validate(row)
-                    metadata = execution_metadata(row)
-                    self.providers.require_current_actor(row, request.actor_reference)
-                    if (
-                        row.operation != "model_share_server"
-                        or metadata["purpose"] != "model_share_server"
-                        or row.parameters["command_digest"] != command
-                    ):
-                        raise KnowledgeProcessingConflictError(reason="model_provider_operation_active")
-                saved = deepcopy(row)
-                binding = (
-                    ModelProjectionBinding.from_plan(row, self.providers)
-                    if row.model_execution_state == "RESERVED"
-                    else None
+            await self._recover_previous(request, server_id=server_id)
+            progress = {"preparation": None}
+            try:
+                return await self._execute_sharing(
+                    request,
+                    server_id=server_id,
+                    enabled=enabled,
+                    child_id=child_id,
+                    command=command,
+                    mounted=mounted,
+                    progress=progress,
                 )
-            sharing = await self._permission(request, binding)
-            if saved.model_execution_state == "PREPARING":
-                before = await request.call(sharing.aread, server_id=server_id)
-                if child_id is not None:
-                    children = await request.call(TenantDao.aget_children_ids_active, ROOT_TENANT_ID)
-                    if child_id not in children:
-                        raise LLMModelNotAccessibleError()
-                    after = tuple(sorted(set(before.subjects) | {child_id}))
-                elif enabled:
-                    children = await request.call(TenantDao.aget_children_ids_active, ROOT_TENANT_ID)
-                    after = tuple(sorted(set(before.subjects) | set(children)))
-                else:
-                    after = ()
-                prepared = await request.call(
-                    sharing.aprepare,
-                    before=before,
-                    after=after,
-                    confirmation_id=saved.id,
-                    actor=request.actor,
-                    tenant_id=request.tenant_id,
-                    operation="model_share_server",
-                )
-                async with model_write_phase(self.session_factory, request) as phase:
-                    await phase.call(self.providers.alock_provider, phase.session, server_id=server_id)
-                    await self._check_mounted(phase, mounted)
-                    row = await phase.call(
-                        self.providers.aread_plan, phase.session, confirmation_id=saved.id, lock=True
-                    )
-                    if row.operation_id != saved.operation_id or row.model_execution_state != "PREPARING":
-                        raise KnowledgeOperationPlanChangedError()
-                    self.providers.require_current_actor(row, request.actor_reference)
-                    await phase.call(
-                        self.intents.afreeze_initialization,
-                        phase.session,
-                        plan_id=row.id,
-                        server_id=server_id,
-                        child_ids=set(prepared.after) - set(prepared.before.subjects),
-                    )
-                    metadata = execution_frame("model_share_server")
-                    metadata["sharing"] = prepared.metadata()
-                    await phase.call(self.providers.abind, phase.session, row, server_id=server_id, metadata=metadata)
-                    binding = ModelProjectionBinding.from_plan(row, self.providers)
-                sharing = await self._permission(request, binding)
-                await request.call(sharing.arequire_before, prepared)
-            else:
-                if saved.model_execution_state != "RESERVED":
-                    raise KnowledgeOperationPlanChangedError()
-                prepared = await request.call(
-                    sharing.arestore,
-                    execution_metadata(saved)["sharing"],
-                    confirmation_id=saved.id,
-                    tenant_id=saved.tenant_id,
-                    operation=saved.operation,
-                    operator_id=saved.actor_user_id,
-                )
-            await request.call(sharing.aexecute, prepared)
-            async with model_write_phase(self.session_factory, request) as phase:
-                await phase.call(self.providers.alock_provider, phase.session, server_id=server_id)
-                await self._check_mounted(phase, mounted)
-                row = await phase.call(self.providers.aread_plan, phase.session, confirmation_id=saved.id, lock=True)
-                self.providers.require_current_actor(row, request.actor_reference)
-                binding.check_scalar(
-                    await phase.call(self.providers.ascalar_pin, phase.session, confirmation_id=row.id)
-                )
-                await phase.call(sharing.arequire_finalized, phase.session, prepared)
-                receipt = await phase.call(self.intents.aread_initialization, phase.session, plan_id=row.id)
-                if receipt is not None:
-                    from bisheng.dsh.domain.services.shared_model_visibility import initialize_shared_model_visibility
-
-                    await phase.call(
-                        initialize_shared_model_visibility,
-                        phase.session,
-                        child_ids=receipt.child_ids,
-                        model_ids=receipt.model_ids,
-                        actor_user_id=request.actor.subject_id,
-                        plan_id=row.id,
-                        guard=request.check,
-                    )
-                if child_id is None:
-                    await phase.call(
-                        self.intents.aset, phase.session, server_id=server_id, enabled=enabled, plan_id=row.id
-                    )
-                else:
-                    # A new receiver also advances the producer version. An
-                    # additive writer that froze recipients before this mount
-                    # must retry rather than miss this newly received model.
-                    intent = await phase.call(self.intents.aread, phase.session, server_id=server_id)
-                    if intent is not None:
-                        await phase.call(
-                            self.intents.aset,
-                            phase.session,
-                            server_id=server_id,
-                            enabled=intent.enabled,
-                            plan_id=row.id,
+            except BaseException:
+                if progress["preparation"] is not None:
+                    try:
+                        await asyncio.shield(
+                            release_failed_sharing(
+                                progress["preparation"], session_factory=self.session_factory, providers=self.providers
+                            )
                         )
-                metadata = deepcopy(execution_metadata(row))
-                metadata["ack"] = {"status": "shared", "operation_id": row.operation_id}
-                await phase.call(
-                    self.providers.aset_state,
+                    except Exception:
+                        logger.exception(
+                            "Could not close failed model sharing operation {}; next edit will recover it",
+                            progress["preparation"].confirmation_id,
+                        )
+                raise
+
+    async def _execute_sharing(self, request, *, server_id, enabled, child_id, command, mounted, progress):
+        async with model_write_phase(self.session_factory, request) as phase:
+            provider = await phase.call(self.providers.alock_provider, phase.session, server_id=server_id)
+            await self._check_mounted(phase, mounted)
+            if provider.tenant_id != ROOT_TENANT_ID:
+                raise LLMModelNotAccessibleError()
+            row = await phase.call(self.providers.aactive_plan, phase.session, server_id=server_id)
+            if row is None:
+                if child_id is not None:
+                    intent = await phase.call(self.intents.aread, phase.session, server_id=server_id)
+                    if intent is None or not intent.enabled:
+                        raise KnowledgeOperationPlanChangedError()
+                row = await phase.call(
+                    self.providers.acreate_share_reservation,
                     phase.session,
-                    row=row,
-                    expected="RESERVED",
-                    target="COMPLETED",
-                    metadata=metadata,
+                    server_id=server_id,
+                    actor_reference=request.actor_reference,
+                    server_revision=_revision(provider),
+                    command_digest=command,
+                    metadata=execution_frame("model_share_server"),
                 )
-            if not enabled:
-                return list(prepared.before.subjects)
-            if child_id is not None:
-                return [child_id]
-            active = await request.call(TenantDao.aget_children_ids_active, ROOT_TENANT_ID)
-            return sorted(set(active) & set(prepared.after))
+            else:
+                raise KnowledgeProcessingConflictError(reason="model_provider_operation_active")
+            saved = deepcopy(row)
+            progress["preparation"] = ModelSharingPreparation.from_plan(row)
+        sharing = await self._permission(request)
+        before = await request.call(sharing.aread, server_id=server_id)
+        if child_id is not None:
+            children = await request.call(TenantDao.aget_children_ids_active, ROOT_TENANT_ID)
+            if child_id not in children:
+                raise LLMModelNotAccessibleError()
+            after = tuple(sorted(set(before.subjects) | {child_id}))
+        elif enabled:
+            children = await request.call(TenantDao.aget_children_ids_active, ROOT_TENANT_ID)
+            after = tuple(sorted(set(before.subjects) | set(children)))
+        else:
+            after = ()
+        prepared = await request.call(
+            sharing.aprepare,
+            before=before,
+            after=after,
+            confirmation_id=saved.id,
+            actor=request.actor,
+            tenant_id=request.tenant_id,
+            operation="model_share_server",
+        )
+        async with model_write_phase(self.session_factory, request) as phase:
+            await phase.call(self.providers.alock_provider, phase.session, server_id=server_id)
+            await self._check_mounted(phase, mounted)
+            row = await phase.call(self.providers.aread_plan, phase.session, confirmation_id=saved.id, lock=True)
+            if row.operation_id != saved.operation_id or row.model_execution_state != "PREPARING":
+                raise KnowledgeOperationPlanChangedError()
+            self.providers.require_current_actor(row, request.actor_reference)
+            await phase.call(
+                self.intents.afreeze_initialization,
+                phase.session,
+                plan_id=row.id,
+                server_id=server_id,
+                child_ids=set(prepared.after) - set(prepared.before.subjects),
+            )
+            metadata = execution_frame("model_share_server")
+            metadata["sharing"] = prepared.metadata()
+            await phase.call(self.providers.abind, phase.session, row, server_id=server_id, metadata=metadata)
+            binding = ModelProjectionBinding.from_plan(row, self.providers)
+        sharing = await self._permission(request, binding)
+        await request.call(sharing.arequire_before, prepared)
+        await request.call(sharing.aexecute, prepared)
+        await self._finish_sharing(
+            request,
+            saved,
+            prepared,
+            sharing,
+            binding,
+            server_id=server_id,
+            intent_enabled=enabled if child_id is None else None,
+            mounted=mounted,
+        )
+        if not enabled:
+            return list(prepared.before.subjects)
+        if child_id is not None:
+            return [child_id]
+        active = await request.call(TenantDao.aget_children_ids_active, ROOT_TENANT_ID)
+        return sorted(set(active) & set(prepared.after))
+
+    async def _finish_sharing(
+        self, request, saved, prepared, sharing, binding, *, server_id, intent_enabled, mounted=None, recovery=False
+    ):
+        async with model_write_phase(self.session_factory, request) as phase:
+            await phase.call(self.providers.alock_provider, phase.session, server_id=server_id)
+            await self._check_mounted(phase, mounted)
+            row = await phase.call(self.providers.aread_plan, phase.session, confirmation_id=saved.id, lock=True)
+            if not recovery:
+                self.providers.require_current_actor(row, request.actor_reference)
+            if row.model_execution_state == "COMPLETED" and recovery:
+                return
+            binding.check_scalar(await phase.call(self.providers.ascalar_pin, phase.session, confirmation_id=row.id))
+            await phase.call(sharing.arequire_finalized, phase.session, prepared)
+            receipt = await phase.call(self.intents.aread_initialization, phase.session, plan_id=row.id)
+            if receipt is not None:
+                from bisheng.dsh.domain.services.shared_model_visibility import initialize_shared_model_visibility
+
+                await phase.call(
+                    initialize_shared_model_visibility,
+                    phase.session,
+                    child_ids=receipt.child_ids,
+                    model_ids=receipt.model_ids,
+                    actor_user_id=row.actor_user_id,
+                    plan_id=row.id,
+                    guard=request.check,
+                )
+            if intent_enabled is not None:
+                await phase.call(
+                    self.intents.aset, phase.session, server_id=server_id, enabled=intent_enabled, plan_id=row.id
+                )
+            else:
+                # A new receiver also advances the producer version. An
+                # additive writer that froze recipients before this mount
+                # must retry rather than miss this newly received model.
+                intent = await phase.call(self.intents.aread, phase.session, server_id=server_id)
+                if intent is not None:
+                    await phase.call(
+                        self.intents.aset,
+                        phase.session,
+                        server_id=server_id,
+                        enabled=intent.enabled,
+                        plan_id=row.id,
+                    )
+            metadata = deepcopy(execution_metadata(row))
+            metadata["ack"] = {"status": "shared", "operation_id": row.operation_id}
+            if recovery:
+                metadata["ack"]["recovered_by"] = request.actor.subject_id
+            await phase.call(
+                self.providers.aset_state,
+                phase.session,
+                row=row,
+                expected=row.model_execution_state,
+                target="COMPLETED",
+                metadata=metadata,
+            )
 
 
 async def get_model_sharing_application():
