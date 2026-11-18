@@ -9,7 +9,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.open_api import PersonalTokenDataScopeError
 from bisheng.core.context.tenant import tenant_execution_scope
 from bisheng.permission.application import business_authorization as business
-from bisheng.permission.application.data_scope import DATA_SCOPE_PERSONAL
+from bisheng.permission.application.data_scope import DATA_SCOPE_ALL, DATA_SCOPE_PERSONAL
 from bisheng.permission.domain.schemas import VerifiedPermissionTarget
 from bisheng.permission.domain.services.permission_action_service import PermissionActor
 from test.permission.test_f048_permission_service import _service
@@ -34,7 +34,7 @@ def target(resource_type, tenant=101):
 
 
 @pytest.mark.parametrize(
-    "resource_type", ["knowledge_space", "folder", "knowledge_file", "workflow", "assistant", "app"]
+    "resource_type", ["knowledge_space", "folder", "knowledge_file", "workflow", "assistant", "app", "dashboard"]
 )
 async def test_tenant_admin_can_open_same_tenant_business_without_personal_visible_tuple(access, resource_type):
     access.registry.resolve.return_value = target(resource_type)
@@ -125,3 +125,42 @@ async def test_workflow_detail_admits_non_owner_tenant_admin(access, monkeypatch
     with tenant_execution_scope(101):
         result = await FlowService.get_one_flow(UserPayload(user_id=7, tenant_id=101, user_role=[]), "9")
     assert result.data["id"] == "9"
+
+
+async def test_published_dashboard_list_admits_non_owner_tenant_admin(access, monkeypatch):
+    from bisheng.telemetry_search.domain.models.dashboard import Dashboard, DashboardStatus, DashboardType
+    from bisheng.telemetry_search.domain.models.dashboard_dao import DashboardDao
+    from bisheng.telemetry_search.domain.services import dashboard as dashboard_module
+
+    access.registry.resolve.return_value = target("dashboard")
+    row = Dashboard(
+        id=9,
+        tenant_id=101,
+        user_id=99,
+        title="Created by a system administrator",
+        status=DashboardStatus.PUBLISHED.value,
+        dashboard_type=DashboardType.CUSTOM.value,
+    )
+    monkeypatch.setattr(dashboard_module, "is_commercial", lambda: True)
+    monkeypatch.setattr(DashboardDao, "get_dashboards", AsyncMock(return_value=[row]))
+    monkeypatch.setattr(DashboardDao, "get_default_dashboard", AsyncMock(return_value=None))
+    with tenant_execution_scope(101):
+        result = await dashboard_module.DashboardService(
+            login_user=UserPayload(user_id=7, tenant_id=101, user_role=[])
+        ).get_dashboards()
+    assert [item.id for item in result] == [9]
+    assert access.fga.checks == [] and access.fga.batches == []
+
+
+@pytest.mark.parametrize(
+    "admin_tenant,data_scope,expected",
+    [(101, DATA_SCOPE_ALL, True), (202, DATA_SCOPE_ALL, False), (101, DATA_SCOPE_PERSONAL, False)],
+)
+async def test_management_identity_gate_respects_current_tenant_and_data_scope(admin_tenant, data_scope, expected):
+    from bisheng.permission.application.identity import is_current_tenant_administrator
+
+    actor = PermissionActor(
+        user_id=7, tenant_id=101, tenant_admin_tenant_ids=frozenset({admin_tenant}), data_scope=data_scope
+    )
+    with tenant_execution_scope(101):
+        assert await is_current_tenant_administrator(object(), actor=actor) is expected

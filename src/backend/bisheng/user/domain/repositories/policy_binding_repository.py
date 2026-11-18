@@ -25,8 +25,8 @@ class PolicySubjectFacts:
     memberships: tuple[UserDepartment, ...]
 
 
-def _home(user, homes, tenant) -> int:
-    if user is None or user.delete or len(homes) > 1:
+def _home(user, homes, tenant, *, allow_disabled=False) -> int:
+    if user is None or (user.delete and not allow_disabled) or len(homes) > 1:
         raise RolePolicyUnavailableError()
     if not homes:
         if settings.multi_tenant.enabled:
@@ -46,6 +46,23 @@ def _memberships(user_id: int):
 
 
 class PolicyBindingRepository:
+    @staticmethod
+    async def management_home(user_id: int) -> int:
+        """Prove ownership for account administration, including disabled accounts.
+
+        This returns no effective role, menu or login permission.
+        """
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                user = await session.get(User, user_id)
+                homes = (
+                    await session.exec(
+                        select(UserTenant).where(UserTenant.user_id == user_id, UserTenant.is_active == 1)
+                    )
+                ).all()
+                tenant = await session.get(Tenant, homes[0].tenant_id) if len(homes) == 1 else None
+                return _home(user, homes, tenant, allow_disabled=True)
+
     @staticmethod
     async def subject(user_id: int, *, session=None, cleanup=False, current_read=False) -> PolicySubjectFacts:
         if session is None:
