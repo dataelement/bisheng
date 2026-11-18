@@ -53,6 +53,51 @@ class ModelSharingApplication:
             if facts != mounted:
                 raise KnowledgeOperationPlanChangedError()
 
+    async def aprepare_cancellation(self, *, identity, server_id, expected_fingerprint=None):
+        """Preview or explicitly abandon a preparation that never started I/O."""
+        if type(server_id) is not int or server_id <= 0:
+            raise KnowledgeOperationPlanChangedError()
+        async with model_deletion_request(identity, references=self.references, plans=self.plans) as request:
+            if request.tenant_id != ROOT_TENANT_ID or not request.actor.super_admin:
+                raise LLMModelNotAccessibleError()
+            sharing = await self._permission(request)
+            async with model_write_phase(self.session_factory, request) as phase:
+                await phase.call(self.providers.alock_provider, phase.session, server_id=server_id)
+                row = await phase.call(self.providers.aactive_plan, phase.session, server_id=server_id)
+                if row is None:
+                    raise KnowledgeOperationPlanChangedError()
+                self.providers.require_unstarted_preparation(row)
+                if execution_metadata(row) != execution_frame("model_share_server"):
+                    raise KnowledgeOperationPlanChangedError()
+                receipt = await phase.call(self.intents.aread_initialization, phase.session, plan_id=row.id)
+                if receipt is not None:
+                    raise KnowledgeOperationPlanChangedError()
+                await phase.call(
+                    sharing.arequire_unstarted,
+                    phase.session,
+                    server_id=server_id,
+                    confirmation_id=row.id,
+                )
+                fingerprint = self.providers.preparation_fingerprint(row)
+                if expected_fingerprint is not None:
+                    if expected_fingerprint != fingerprint:
+                        raise KnowledgeOperationPlanChangedError()
+                    metadata = deepcopy(row.model_execution_metadata)
+                    metadata["ack"] = {
+                        "status": "abandoned_unstarted",
+                        "cancel_actor_user_id": request.actor.subject_id,
+                        "original_fingerprint": fingerprint,
+                    }
+                    await phase.call(
+                        self.providers.aset_state,
+                        phase.session,
+                        row=row,
+                        expected="PREPARING",
+                        target="ABANDONED",
+                        metadata=metadata,
+                    )
+                return {"plan_id": row.id, "fingerprint": fingerprint, "abandoned": expected_fingerprint is not None}
+
     async def aresume_existing(self, *, identity, server_id, enabled):
         """Resume only an existing reservation from the original set-share command."""
         command = _hash(
@@ -92,7 +137,60 @@ class ModelSharingApplication:
             identity=identity, server_id=server_id, enabled=enabled, child_id=child_id, command=command
         )
 
-    async def _set_sharing(self, *, identity, server_id, enabled, child_id, command, mounted=None):
+    async def arepair_enabled_sharing(
+        self, *, identity, server_id, expected_enabled, expected_version, expected_plan_id, adopt_only=False
+    ):
+        """Conditionally reconcile an enabled switch; never overwrite a newer OFF.
+
+        Adoption records legacy intent without adding recipients. The additive
+        model writer can then reference a real completed initialization plan.
+        """
+        if (
+            type(server_id) is not int
+            or server_id <= 0
+            or expected_enabled not in (None, True)
+            or (expected_enabled is not None and type(expected_enabled) is not bool)
+            or type(expected_version) is not int
+            or expected_version < 0
+            or (expected_plan_id is not None and (type(expected_plan_id) is not str or len(expected_plan_id) != 36))
+            or ((expected_enabled is None) != (expected_version == 0 and expected_plan_id is None))
+            or (expected_enabled is True and expected_plan_id is None)
+            or type(adopt_only) is not bool
+        ):
+            raise KnowledgeOperationPlanChangedError()
+        pin = (expected_enabled, expected_version, expected_plan_id)
+        command = _hash(
+            {
+                "operation": "model_share_server",
+                "server_id": server_id,
+                "enabled": True,
+                "child_id": None,
+                "expected_intent": pin,
+                "adopt_only": adopt_only,
+            }
+        )
+        return await self._set_sharing(
+            identity=identity,
+            server_id=server_id,
+            enabled=True,
+            child_id=None,
+            command=command,
+            expected_intent=pin,
+            adopt_only=adopt_only,
+        )
+
+    async def _set_sharing(
+        self,
+        *,
+        identity,
+        server_id,
+        enabled,
+        child_id,
+        command,
+        mounted=None,
+        expected_intent=None,
+        adopt_only=False,
+    ):
         if mounted is not None:
             from bisheng.llm.domain.repositories.model_mount_sharing_repository import MountedModelShare
 
@@ -105,17 +203,33 @@ class ModelSharingApplication:
         async with model_deletion_request(identity, references=self.references, plans=self.plans) as request:
             if request.tenant_id != ROOT_TENANT_ID or not request.actor.super_admin:
                 raise LLMModelNotAccessibleError()
+            legacy_snapshot = None
+            if child_id is not None or expected_intent is not None:
+                async with model_write_phase(self.session_factory, request) as phase:
+                    await phase.call(self.providers.alock_provider, phase.session, server_id=server_id)
+                    observed_intent = await phase.call(self.intents.aread, phase.session, server_id=server_id)
+                if observed_intent is None:
+                    # Only legacy authorization needs a preliminary network read.
+                    # Explicit ON still reserves before transport, retaining the
+                    # original mount command after a transport failure.
+                    native = await self._permission(request)
+                    legacy_snapshot = await request.call(native.aread, server_id=server_id)
             async with model_write_phase(self.session_factory, request) as phase:
                 provider = await phase.call(self.providers.alock_provider, phase.session, server_id=server_id)
                 await self._check_mounted(phase, mounted)
                 if provider.tenant_id != ROOT_TENANT_ID:
                     raise LLMModelNotAccessibleError()
+                if child_id is not None or expected_intent is not None:
+                    intent = await phase.call(self.intents.aread, phase.session, server_id=server_id)
+                    pin = (intent.enabled, intent.version, intent.plan_id) if intent else (None, 0, None)
+                    if expected_intent is not None and pin != expected_intent:
+                        raise KnowledgeOperationPlanChangedError()
+                    if (intent is not None and not intent.enabled) or (
+                        intent is None and (legacy_snapshot is None or not legacy_snapshot.subjects)
+                    ):
+                        raise KnowledgeOperationPlanChangedError()
                 row = await phase.call(self.providers.aactive_plan, phase.session, server_id=server_id)
                 if row is None:
-                    if child_id is not None:
-                        intent = await phase.call(self.intents.aread, phase.session, server_id=server_id)
-                        if intent is None or not intent.enabled:
-                            raise KnowledgeOperationPlanChangedError()
                     row = await phase.call(
                         self.providers.acreate_share_reservation,
                         phase.session,
@@ -144,7 +258,11 @@ class ModelSharingApplication:
             sharing = await self._permission(request, binding)
             if saved.model_execution_state == "PREPARING":
                 before = await request.call(sharing.aread, server_id=server_id)
-                if child_id is not None:
+                if adopt_only:
+                    if not before.subjects:
+                        raise KnowledgeOperationPlanChangedError()
+                    after = before.subjects
+                elif child_id is not None:
                     children = await request.call(TenantDao.aget_children_ids_active, ROOT_TENANT_ID)
                     if child_id not in children:
                         raise LLMModelNotAccessibleError()
@@ -163,6 +281,12 @@ class ModelSharingApplication:
                     tenant_id=request.tenant_id,
                     operation="model_share_server",
                 )
+                initialization_children = set(prepared.after) - set(prepared.before.subjects)
+                if expected_intent is not None and not adopt_only:
+                    # An explicit repair also restores missing receiving policy
+                    # rows. Existing restrictions are retained by the DSH owner.
+                    active = await request.call(TenantDao.aget_children_ids_active, ROOT_TENANT_ID)
+                    initialization_children = set(prepared.after) & set(active)
                 async with model_write_phase(self.session_factory, request) as phase:
                     await phase.call(self.providers.alock_provider, phase.session, server_id=server_id)
                     await self._check_mounted(phase, mounted)
@@ -177,7 +301,7 @@ class ModelSharingApplication:
                         phase.session,
                         plan_id=row.id,
                         server_id=server_id,
-                        child_ids=set(prepared.after) - set(prepared.before.subjects),
+                        child_ids=initialization_children,
                     )
                     metadata = execution_frame("model_share_server")
                     metadata["sharing"] = prepared.metadata()
@@ -228,14 +352,13 @@ class ModelSharingApplication:
                     # additive writer that froze recipients before this mount
                     # must retry rather than miss this newly received model.
                     intent = await phase.call(self.intents.aread, phase.session, server_id=server_id)
-                    if intent is not None:
-                        await phase.call(
-                            self.intents.aset,
-                            phase.session,
-                            server_id=server_id,
-                            enabled=intent.enabled,
-                            plan_id=row.id,
-                        )
+                    await phase.call(
+                        self.intents.aset,
+                        phase.session,
+                        server_id=server_id,
+                        enabled=intent.enabled if intent else True,
+                        plan_id=row.id,
+                    )
                 metadata = deepcopy(execution_metadata(row))
                 metadata["ack"] = {"status": "shared", "operation_id": row.operation_id}
                 await phase.call(

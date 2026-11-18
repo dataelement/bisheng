@@ -35,6 +35,19 @@ class ProjectionRepository(
     ) -> None:
         super().__init__(session_factory)
 
+    async def ahas_scope_operation(self, session, *, scope_type: str, scope_key: str) -> bool:
+        """Current locking read in the business owner's original transaction."""
+        statement = (
+            select(PermissionProjectionOperation.id)
+            .where(
+                PermissionProjectionOperation.scope_type == scope_type,
+                PermissionProjectionOperation.scope_key == scope_key,
+            )
+            .limit(1)
+            .with_for_update()
+        )
+        return (await session.execute(statement)).first() is not None
+
     async def aget_operation(
         self,
         operation_id: int,
@@ -194,8 +207,7 @@ class ProjectionRepository(
                     PermissionVisibleSourceProjection.resource_id == source.resource_id,
                     PermissionVisibleSourceProjection.visibility_class == source.visibility_class,
                     PermissionVisibleSourceProjection.projected_subject == source.projected_subject,
-                    PermissionVisibleSourceProjection.contribution_fingerprint
-                    == source.contribution_fingerprint,
+                    PermissionVisibleSourceProjection.contribution_fingerprint == source.contribution_fingerprint,
                 )
                 .with_for_update()
             )
@@ -213,9 +225,7 @@ class ProjectionRepository(
                 "model_key",
             )
             if any(getattr(existing, field) != getattr(source, field) for field in collision_fields):
-                raise PermissionVersionConflictError(
-                    msg="Visible source contribution fingerprint collision"
-                )
+                raise PermissionVersionConflictError(msg="Visible source contribution fingerprint collision")
             if source.source_version < existing.source_version:
                 raise PermissionVersionConflictError(msg="Visible source version is stale")
 
@@ -229,9 +239,7 @@ class ProjectionRepository(
             if source.source_version == existing.source_version:
                 if all(getattr(existing, field) == getattr(source, field) for field in mutable_fields):
                     return existing
-                raise PermissionVersionConflictError(
-                    msg="Visible source version is bound to a different projection"
-                )
+                raise PermissionVersionConflictError(msg="Visible source version is bound to a different projection")
 
             for field in mutable_fields:
                 setattr(existing, field, getattr(source, field))

@@ -36,7 +36,21 @@ class ModelMountSharingApplication:
             if request.tenant_id != ROOT_TENANT_ID or not request.actor.super_admin:
                 raise LLMModelNotAccessibleError()
             async with model_write_phase(app.session_factory, request) as phase:
-                return await phase.call(app.intents.aenabled_server_ids, phase.session)
+                candidates = await phase.call(app.intents.asharing_candidates, phase.session)
+            sharing = None
+            enabled = []
+            for server_id, explicit in candidates:
+                if explicit is True:
+                    enabled.append(server_id)
+                elif explicit is None:
+                    # Match the existing Root switch for pre-intent providers.
+                    # Defaults never grant access; only actual native sharing does.
+                    if sharing is None:
+                        sharing = await app._permission(request)
+                    snapshot = await request.call(sharing.aread, server_id=server_id)
+                    if snapshot.subjects:
+                        enabled.append(server_id)
+            return tuple(enabled)
 
     async def areconcile_child(self, *, identity, child_id):
         """A current explicit command repairs differences after mount/enable.
