@@ -45,8 +45,9 @@
   修复后这些用例通过。对照只在独立 SQLite 数据库执行，没有真实越权写现场。
 - 关键写入、事务异常、实际 HTTP 接线、旧关联/设主版本及重建互斥：**146 passed**。
   保留原先“只提交一次”的断言；读取新增一个回滚会话，写入仍一个会话/一次提交。
-- 扩大到知识空间/文件权限适配器、资源解析一致性、目录禁用动作及旧版本相关测试：
-  **207 passed / 8 failed**。8 个失败在修改前的两个生产文件下逐项复现：
+- 集成最新远端 `c6db361d17` 后，扩大到知识空间/文件权限适配器、资源解析一致性、
+  目录禁用动作及旧版本相关测试：**210 passed / 8 failed**，27 项安全用例全部通过。
+  8 个失败在修改前的两个生产文件下逐项复现：
   5 项历史删除 fixture 缺 `knowledge_processing_fence`，3 项旧测试仍预期 HTTPException 而实际是
   `VersionManagementDisabledError`。这些业务不在本次修复范围内，没有为过测试修改其语义。
 - 修正公用 SQLite Knowledge fixture 的两个已有 ORM 字段 `copy_source_id` / `copy_target_id`，
