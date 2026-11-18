@@ -1,0 +1,3 @@
+interface:
+  display_name: "SDD 领域建模"
+  short_description: "澄清项目业务概念、统一术语并核对技术名称映射与版本依据"

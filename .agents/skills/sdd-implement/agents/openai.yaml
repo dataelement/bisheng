@@ -1,0 +1,3 @@
+interface:
+  display_name: "SDD 编码与自查"
+  short_description: "Implement scoped changes with targeted verification"

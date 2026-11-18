@@ -1,0 +1,13 @@
+---
+description: Client chat UI — patterns not covered by AGENTS.md
+globs: src/frontend/client/**
+alwaysApply: false
+---
+
+# Client (`src/frontend/client/`)
+
+P0 rules: root `AGENTS.md` §4 (Client column).
+
+- Tests: `npx jest <files> --coverage=false --watchAll=false` (cwd `src/frontend/client/`). `npm test` runs jest in watch mode; do not use it from an agent.
+- Do not enable coverage for all of `src/`; `jest.config.cjs` instruments by default and writes `coverage/`.
+- Locales: `src/locales/{en,zh-Hans,ja}/translation.json`; use the `/i18n-localizer` skill for new keys.
