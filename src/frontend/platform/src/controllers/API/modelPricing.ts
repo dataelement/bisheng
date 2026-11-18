@@ -49,10 +49,15 @@ export type CreditSettings = {
     usd_cny_rate: string
     base_model_id: number | null
     effective_base_model_id?: number | null
+    base_reason?: string | null
 }
 
 export type ModelPricingRow = {
     model_id: number
+    can_edit: boolean
+    read_only: boolean
+    source_tenant_id: number
+    base_reason: string | null
     pricing: ModelPricing | null
     effective: { currency: PricingCurrency; input: string; cache_read: string; cache_write: string; output: string } | null
     edited: boolean
@@ -118,3 +123,20 @@ export const getUserCredits = (
     preview?: { monthly_credits: string; enabled: boolean },
 ): Promise<MonthCredits> =>
     request.get(`${admin}/users/${userId}/credits`, { params: preview, signal, silent: true })
+
+/** F025 owner capability AND this tenant's explicit restrictions. */
+export type ModelVisionRow = {
+    model_id: number
+    vision: boolean
+    effective: boolean
+    owner_tenant_id: number | null
+    owner_vision: boolean
+    source: 'owner' | 'local_restriction' | 'unknown'
+    can_edit: boolean
+    read_only: boolean
+    status: 'available' | 'unavailable'
+    reason: string | null
+}
+
+export const getModelVisionRows = (modelIds: number[], signal?: AbortSignal): Promise<ModelVisionRow[]> =>
+    request.post(`${admin}/model-vision`, { model_ids: modelIds }, { signal, silent: true })

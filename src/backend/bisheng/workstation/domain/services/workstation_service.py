@@ -768,7 +768,7 @@ class WorkStationService(BaseService):
         value, _, _, _ = cls._resolve_tenant_config(ConfigKeyEnum.WORKSTATION)
         config = type("TenantConfigValue", (), {"value": value}) if value else None
         ret = cls.parse_config(config)
-        return cls._apply_workbench_models(ret, LLMService.get_workbench_llm_sync())
+        return cls._apply_workbench_models(ret, LLMService.get_workbench_llm_candidates_sync())
 
     @classmethod
     async def aget_config(cls) -> WorkstationConfig | None:
@@ -782,7 +782,7 @@ class WorkStationService(BaseService):
             ret.tools = cls.sync_tool_info(ret.tools)
         if inherited:
             ret = await cls._aproject_daily_config_for_current_tenant(ret, DEFAULT_TENANT_ID)
-        return cls._apply_workbench_models(ret, await LLMService.get_workbench_llm())
+        return cls._apply_workbench_models(ret, await LLMService.get_workbench_llm_candidates())
 
     @classmethod
     async def get_navigation_config(cls) -> dict:
@@ -807,7 +807,7 @@ class WorkStationService(BaseService):
         if inherited:
             ret = await cls._aproject_daily_config_for_current_tenant(ret, DEFAULT_TENANT_ID)
         workbench_config = await (
-            LLMService.get_workbench_llm_for_picker() if for_picker else LLMService.get_workbench_llm()
+            LLMService.get_workbench_llm_for_picker() if for_picker else LLMService.get_workbench_llm_candidates()
         )
         return cls._apply_workbench_models(ret, workbench_config)
 

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@/test/test-utils'
+import { fireEvent, render, screen, waitFor, within } from '@/test/test-utils'
 import { beforeEach, expect, it, vi } from 'vitest'
 import WorkbenchModel from './WorkbenchModel'
 const mocks = vi.hoisted(() => ({ get: vi.fn(), save: vi.fn(), message: vi.fn(), t: (key: string) => key, dshEnabled: true }))
@@ -17,6 +17,7 @@ vi.mock('@/components/bs-ui/select/cascader', () => ({ default: () => null }))
 vi.mock('../dsh/ModelVisionSwitch', () => ({ ModelVisionSwitch: () => null }))
 vi.mock('@/controllers/API/modelPricing', () => ({
     getModelPricingRows: vi.fn(async () => []),
+    getModelVisionRows: vi.fn(async () => []),
     getCreditSettings: vi.fn(async () => ({ version: 1, currency: 'CNY', credit_value: '0.01', usd_cny_rate: '7.2', base_model_id: null })),
     saveCreditSettings: vi.fn(),
 }))
@@ -99,4 +100,39 @@ it('opens the collapsed settings when the required embedding model blocks saving
     fireEvent.click(save)
     await waitFor(() => expect(details).toHaveAttribute('open'))
     expect(mocks.save).not.toHaveBeenCalled()
+})
+
+it('keeps unavailable configured metadata until the administrator explicitly removes it', async () => {
+    render(<WorkbenchModel data={data} onBack={vi.fn()} />)
+    const remove = await screen.findByRole('button', { name: 'model.removeConfiguredModel: Hidden' })
+    expect(screen.getByText('Hidden · 99')).toBeInTheDocument()
+    expect(mocks.save).not.toHaveBeenCalled()
+    fireEvent.click(remove)
+    expect(screen.queryByText('Hidden · 99')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'model.save' }))
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({
+        models: [config.models[0]], chat_default_model_id: '99',
+    })))
+})
+it('exposes the saved unavailable image-reading reference for an explicit clear', async () => {
+    mocks.get.mockResolvedValue({ data: { ...config, image_read_model: { id: '999' } } })
+    render(<WorkbenchModel data={data} onBack={vi.fn()} />)
+    await screen.findByRole('button', { name: 'model.save' })
+    fireEvent.click(screen.getByText('model.otherModelSettings'))
+    const imagePicker = screen.getByRole('combobox', { name: 'model.imageReadingModel' })
+    expect(imagePicker).toHaveTextContent('999')
+    fireEvent.click(within(imagePicker).getByRole('button', { name: 'sharedUi.clear' }))
+    fireEvent.click(screen.getByRole('button', { name: 'model.save' }))
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ image_read_model: null })))
+})
+it('can replace the saved image-reading reference with an available LLM', async () => {
+    mocks.get.mockResolvedValue({ data: { ...config, image_read_model: { id: '999' } } })
+    render(<WorkbenchModel data={data} onBack={vi.fn()} />)
+    await screen.findByRole('button', { name: 'model.save' })
+    fireEvent.click(screen.getByText('model.otherModelSettings'))
+    fireEvent.click(screen.getByRole('combobox', { name: 'model.imageReadingModel' }))
+    fireEvent.click((await screen.findAllByText('Provider')).at(-1)!)
+    fireEvent.click(await screen.findByText('New model'))
+    fireEvent.click(screen.getByRole('button', { name: 'model.save' }))
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ image_read_model: { id: '7' } })))
 })

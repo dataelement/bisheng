@@ -47,25 +47,27 @@ async def test_new_override_cannot_consume_the_inheritance_it_replaces(db):
 
 
 @pytest.mark.parametrize("proof", ["fga", "other_key"])
-async def test_explicit_share_or_another_still_inherited_key_is_eligible(db, proof):
+async def test_only_explicit_share_authorizes_even_with_another_inherited_key(db, proof):
     async with AsyncSession(db[0]) as session, session.begin():
         if proof == "fga":
             db[1].list_resource_ids.return_value = ("2",)
         else:
             session.add(TenantSystemModelConfig(tenant_id=1, key="workflow_llm", value='{"model_id":22}'))
             await session.flush()
-        receipt = (await ModelReferenceTargetOwner().alock_and_verify(session, TARGETS, SOURCE, "bind"))[0]
-        assert receipt.target.new_binding_allowed and receipt.target.target_tenant_id == 1
+        if proof == "fga":
+            receipt = (await ModelReferenceTargetOwner().alock_and_verify(session, TARGETS, SOURCE, "bind"))[0]
+            assert receipt.target.new_binding_allowed and receipt.target.target_tenant_id == 1
+        else:
+            with pytest.raises(ResourceReferenceInvalidError):
+                await ModelReferenceTargetOwner().alock_and_verify(session, TARGETS, SOURCE, "bind")
 
 
-async def test_knowledge_binding_does_not_remove_default_inheritance(db):
+async def test_knowledge_binding_cannot_use_inheritance_as_authorization(db):
     async with AsyncSession(db[0]) as session, session.begin():
-        receipt = (
+        with pytest.raises(ResourceReferenceInvalidError):
             await ModelReferenceTargetOwner().alock_and_verify(
                 session, TARGETS, SourceKey(101, "knowledge", "1", "current"), "bind"
             )
-        )[0]
-        assert receipt.target.new_binding_allowed
 
 
 async def test_existing_exact_override_reference_can_still_be_retained_or_removed(db):
@@ -107,8 +109,12 @@ def test_sync_uses_native_permission_port_and_actual_inherited_server_sql(
     monkeypatch.setattr(module, "get_permission_relation_api_sync", Mock(return_value=api), raising=False)
     with Session(engine) as session, session.begin():
         key = SOURCE if source == "model_default" else SourceKey(101, "knowledge", "1", "current")
-        receipt = ModelReferenceTargetOwner().lock_and_verify(session, TARGETS, key, "bind")[0]
-        assert receipt.target.state == "valid" and receipt.target.new_binding_allowed
+        if allow:
+            receipt = ModelReferenceTargetOwner().lock_and_verify(session, TARGETS, key, "bind")[0]
+            assert receipt.target.state == "valid" and receipt.target.new_binding_allowed
+        else:
+            with pytest.raises(ResourceReferenceInvalidError):
+                ModelReferenceTargetOwner().lock_and_verify(session, TARGETS, key, "bind")
         api.list_resource_ids_sync.assert_called_once()
 
 

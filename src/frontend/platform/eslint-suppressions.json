@@ -2235,9 +2235,6 @@
   "src/pages/ModelPage/manage/tabs/AssisModel.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
-    },
-    "no-console": {
-      "count": 1
     }
   },
   "src/pages/ModelPage/manage/tabs/EvaluationModel.tsx": {
@@ -2250,9 +2247,6 @@
       "count": 1
     },
     "@typescript-eslint/no-unused-expressions": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
       "count": 1
     }
   },
@@ -2267,11 +2261,6 @@
   "src/pages/ModelPage/manage/tabs/WorkflowModel.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 2
-    }
-  },
-  "src/pages/ModelPage/manage/useSystemConfigEnvelope.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
     }
   },
   "src/pages/Report/components/Word.tsx": {

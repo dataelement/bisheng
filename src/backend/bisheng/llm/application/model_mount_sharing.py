@@ -30,6 +30,32 @@ class ModelMountSharingApplication:
                             providers.append(row.model_server_id)
                 return facts, child, tuple(sorted(set(providers)))
 
+    async def aenabled_server_ids(self, *, identity):
+        app = self.sharing
+        async with model_deletion_request(identity, references=app.references, plans=app.plans) as request:
+            if request.tenant_id != ROOT_TENANT_ID or not request.actor.super_admin:
+                raise LLMModelNotAccessibleError()
+            async with model_write_phase(app.session_factory, request) as phase:
+                return await phase.call(app.intents.aenabled_server_ids, phase.session)
+
+    async def areconcile_child(self, *, identity, child_id):
+        """A current explicit command repairs differences after mount/enable.
+
+        Failures remain visible as intent/actual coverage gaps; an active frozen
+        command is never replaced or expanded by this lifecycle producer.
+        """
+        from loguru import logger
+
+        failures = []
+        for server_id in await self.aenabled_server_ids(identity=identity):
+            try:
+                await self.sharing.aset_sharing(identity=identity, server_id=server_id, enabled=True, child_id=child_id)
+            except Exception as error:
+                logger.exception("Provider {} sharing to child {} requires recovery", server_id, child_id)
+                failures.append(error)
+        if failures:
+            raise failures[0]
+
     async def ashare(self, *, identity, server_id, **parameters):
         facts, _, _ = await self._facts(identity, parameters)
         return await self.sharing._set_sharing(

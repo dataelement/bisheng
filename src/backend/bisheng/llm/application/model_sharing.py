@@ -15,6 +15,7 @@ from bisheng.llm.application.model_provider_projection import (
 from bisheng.llm.domain.repositories.model_delete_plan_repository import ModelDeletePlanRepository, _hash
 from bisheng.llm.domain.repositories.model_deletion_repository import _revision
 from bisheng.llm.domain.repositories.model_provider_operation_repository import ModelProviderOperationRepository
+from bisheng.llm.domain.repositories.model_sharing_intent_repository import ModelSharingIntentRepository
 from bisheng.llm.domain.services.model_reference_service import ModelReferenceService
 from bisheng.permission.application.model_sharing_projection import get_model_sharing_projection_application
 
@@ -31,6 +32,7 @@ class ModelSharingApplication:
         self.references = references if references is not None else ModelReferenceService()
         self.plans = plans if plans is not None else ModelDeletePlanRepository()
         self.providers = ModelProviderOperationRepository(self.plans)
+        self.intents = ModelSharingIntentRepository()
         self.session_factory, self.sharing_factory = session_factory, sharing_factory
 
     async def _permission(self, request, binding=None):
@@ -110,6 +112,10 @@ class ModelSharingApplication:
                     raise LLMModelNotAccessibleError()
                 row = await phase.call(self.providers.aactive_plan, phase.session, server_id=server_id)
                 if row is None:
+                    if child_id is not None:
+                        intent = await phase.call(self.intents.aread, phase.session, server_id=server_id)
+                        if intent is None or not intent.enabled:
+                            raise KnowledgeOperationPlanChangedError()
                     row = await phase.call(
                         self.providers.acreate_share_reservation,
                         phase.session,
@@ -166,6 +172,13 @@ class ModelSharingApplication:
                     if row.operation_id != saved.operation_id or row.model_execution_state != "PREPARING":
                         raise KnowledgeOperationPlanChangedError()
                     self.providers.require_current_actor(row, request.actor_reference)
+                    await phase.call(
+                        self.intents.afreeze_initialization,
+                        phase.session,
+                        plan_id=row.id,
+                        server_id=server_id,
+                        child_ids=set(prepared.after) - set(prepared.before.subjects),
+                    )
                     metadata = execution_frame("model_share_server")
                     metadata["sharing"] = prepared.metadata()
                     await phase.call(self.providers.abind, phase.session, row, server_id=server_id, metadata=metadata)
@@ -193,6 +206,36 @@ class ModelSharingApplication:
                     await phase.call(self.providers.ascalar_pin, phase.session, confirmation_id=row.id)
                 )
                 await phase.call(sharing.arequire_finalized, phase.session, prepared)
+                receipt = await phase.call(self.intents.aread_initialization, phase.session, plan_id=row.id)
+                if receipt is not None:
+                    from bisheng.dsh.domain.services.shared_model_visibility import initialize_shared_model_visibility
+
+                    await phase.call(
+                        initialize_shared_model_visibility,
+                        phase.session,
+                        child_ids=receipt.child_ids,
+                        model_ids=receipt.model_ids,
+                        actor_user_id=request.actor.subject_id,
+                        plan_id=row.id,
+                        guard=request.check,
+                    )
+                if child_id is None:
+                    await phase.call(
+                        self.intents.aset, phase.session, server_id=server_id, enabled=enabled, plan_id=row.id
+                    )
+                else:
+                    # A new receiver also advances the producer version. An
+                    # additive writer that froze recipients before this mount
+                    # must retry rather than miss this newly received model.
+                    intent = await phase.call(self.intents.aread, phase.session, server_id=server_id)
+                    if intent is not None:
+                        await phase.call(
+                            self.intents.aset,
+                            phase.session,
+                            server_id=server_id,
+                            enabled=intent.enabled,
+                            plan_id=row.id,
+                        )
                 metadata = deepcopy(execution_metadata(row))
                 metadata["ack"] = {"status": "shared", "operation_id": row.operation_id}
                 await phase.call(

@@ -5,7 +5,8 @@ from fastapi import APIRouter, Depends
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import resp_200
 from bisheng.core.context.tenant import get_current_tenant_id
-from bisheng.dsh.api.endpoints.admin import TenantId, get_management
+from bisheng.dsh.api.endpoints.admin import TenantId
+from bisheng.dsh.api.endpoints.admin import get_model_management as get_management
 from bisheng.dsh.domain.schemas.pricing import CreditSettingInput
 from bisheng.dsh.domain.services.pricing import admin_model_pricing, credit_settings_view, save_credit_settings
 from bisheng.dsh.domain.services.profile import profile_scope

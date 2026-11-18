@@ -1324,7 +1324,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 await self._assert_space_creation_quota()
 
             if selected_model_id is None:
-                workbench_llm = await LLMService.get_workbench_llm()
+                workbench_llm = await LLMService.get_workbench_llm(slots=("embedding_model.id",))
                 if not workbench_llm or not workbench_llm.embedding_model:
                     raise WorkbenchEmbeddingError()
                 selected_model_id = workbench_llm.embedding_model.id
@@ -1708,7 +1708,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if self.prospective_grant_application is None:
             raise RuntimeError("F050 Prospective Grant application is not configured")
         await self._assert_space_creation_quota()
-        workbench_llm = await LLMService.get_workbench_llm()
+        workbench_llm = await LLMService.get_workbench_llm(slots=("embedding_model.id",))
         if not workbench_llm or not workbench_llm.embedding_model:
             raise WorkbenchEmbeddingError()
         return (

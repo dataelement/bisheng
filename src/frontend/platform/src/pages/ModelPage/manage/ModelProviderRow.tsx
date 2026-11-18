@@ -6,6 +6,7 @@ import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/bs-ui/table'
+import { ModelSharingCoverage } from './ModelSharingCoverage'
 
 export type ManagedModel = {
     id: number
@@ -32,6 +33,7 @@ interface ModelProviderRowProps {
     onModel: (id: number) => void
     onToggle: (modelId: number, online: boolean) => Promise<boolean>
     onVerify: (modelId: number) => Promise<void>
+    showSharingCoverage?: boolean
 }
 
 interface ModelRowProps extends Pick<ModelProviderRowProps, 'probing' | 'onToggle' | 'onVerify'> {
@@ -103,7 +105,7 @@ function ModelRow({ model, canEdit, probing, onToggle, onVerify }: ModelRowProps
     </TableRow>
 }
 
-export function ModelProviderRow({ data, canManage, probing, onModel, onToggle, onVerify }: ModelProviderRowProps) {
+export function ModelProviderRow({ data, canManage, probing, onModel, onToggle, onVerify, showSharingCoverage = false }: ModelProviderRowProps) {
     const { t } = useTranslation()
     const [expanded, setExpanded] = useState(false)
     const canEdit = canManage && !data.is_root_shared_readonly
@@ -129,6 +131,7 @@ export function ModelProviderRow({ data, canManage, probing, onModel, onToggle, 
                 </div>
             </div>
             {expanded && <div className="px-12 py-2">
+                {showSharingCoverage && canEdit && <ModelSharingCoverage serverId={data.id} />}
                 {/* The shared library does not yet ship a finalized table. */}
                 <Table>
                     <TableHeader><TableRow>

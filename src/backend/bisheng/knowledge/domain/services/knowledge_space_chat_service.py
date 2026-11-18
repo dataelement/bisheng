@@ -211,7 +211,7 @@ class KnowledgeSpaceChatService:
 
     @staticmethod
     async def generate_conversation(user_id: int, chat_id: str, question: str, answer: str | None = None):
-        llm_conf = await LLMService.get_workbench_llm()
+        llm_conf = await LLMService.get_workbench_llm(slots=("chat_title_llm.id",))
         if not llm_conf or not llm_conf.chat_title_llm or not llm_conf.chat_title_llm.id:
             logger.debug("not found chat title llm")
             return

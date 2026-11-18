@@ -45,6 +45,7 @@ async def business(model_owner_tenant, monkeypatch):
             await connection.run_sync(lambda conn, table=table: table.create(conn))
     async with AsyncSession(engine) as session, session.begin():
         await session.run_sync(models.setup)
+        await session.execute(update(LLMModel).values(online=True))
         session.add(LLMModel(id=12, tenant_id=101, server_id=1, model_name="other", model_type="llm"))
     verifier = ReferenceTargetVerifier({"model": ModelReferenceTargetOwner()})
     runtime = ReferenceBindingRuntime(ReferenceRepository(verifier=verifier), verifier)
@@ -331,3 +332,51 @@ def test_writer_single_tenant_keeps_core_default_without_explicit_root_fallback(
         assert application.current_model_default_tenant() == 1
         with pytest.raises(ResourceReferenceInvalidError):
             application.current_model_default_tenant(101)
+
+
+@pytest.mark.parametrize(
+    "changes,allowed", [({"model_type": "embedding"}, False), ({"online": False}, False), ({}, True)]
+)
+async def test_native_evaluation_post_checks_locked_type_and_online_before_writing(
+    business, monkeypatch, changes, allowed
+):
+    from contextlib import asynccontextmanager
+
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+
+    from bisheng.llm.api import router as api
+    from bisheng.llm.domain.services import llm as service
+
+    @asynccontextmanager
+    async def sessions():
+        async with AsyncSession(business.engine) as session:
+            yield session
+
+    async with AsyncSession(business.engine) as session, session.begin():
+        if changes:
+            await session.execute(update(LLMModel).where(LLMModel.id == 12).values(**changes))
+    monkeypatch.setattr(service, "get_async_db_session", sessions)
+    monkeypatch.setattr(api, "_check_is_global_super", AsyncMock(return_value=False))
+    monkeypatch.setattr("bisheng.permission.application.is_tenant_admin", AsyncMock(return_value=True))
+    monkeypatch.setattr(api, "_read_before_snapshot", AsyncMock(return_value=None))
+    audit = AsyncMock()
+    monkeypatch.setattr(api, "_audit_system_config_update", audit)
+    app = FastAPI()
+    app.include_router(api.router)
+    app.dependency_overrides[UserPayload.get_tenant_admin_user] = lambda: business.user
+    async with AsyncClient(transport=ASGITransport(app), base_url="http://native") as client:
+        if allowed:
+            response = await client.post("/llm/evaluation", json={"model_id": 12})
+            assert response.status_code == 200
+        else:
+            # The isolated ASGI app intentionally lets the actual domain error
+            # propagate; production middleware turns it into its standard code.
+            with pytest.raises(ResourceReferenceInvalidError):
+                await client.post("/llm/evaluation", json={"model_id": 12})
+    async with AsyncSession(business.engine) as session:
+        own = await ModelDefaultRepository().aget_own(session, "evaluation_llm")
+        assert (own is not None) is allowed
+        references = (await session.execute(select(BusinessResourceReference))).scalars().all()
+        assert bool(references) is allowed
+    assert bool(audit.await_count) is allowed
