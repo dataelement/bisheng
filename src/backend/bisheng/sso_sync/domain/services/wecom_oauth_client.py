@@ -46,6 +46,16 @@ _ERRCODE_BAD_CODE = 40029
 #: Credential / permission problems: retrying or degrading would hide a broken
 #: configuration, so they surface as 19334.
 _ERRCODE_AUTH_FAIL = {40001, 40013, 42009, 60011, 48002}
+#: The token itself is no longer accepted (expired, or rotated by another
+#: ``gettoken`` call). The cache key is shared with the org-sync provider, so a
+#: directory sync or another replica fetching a token invalidates ours while our
+#: copy still looks fresh — the one case worth retrying with a token we fetched.
+_ERRCODE_TOKEN_STALE = {40014, 42001}
+
+
+def _errcode(payload: dict) -> int:
+    """WeCom error code, treating an absent or blank value as success."""
+    return int(payload.get("errcode", 0) or 0)
 
 
 @dataclass(frozen=True)
@@ -148,10 +158,22 @@ class WeComOAuthClient:
             # Same reasoning as above: the login still works without the cache.
             logger.warning("wecom sso: token cache write failed")
 
-    async def _access_token(self, http: httpx.AsyncClient) -> str:
-        cached = await self._cached_token()
-        if cached:
-            return cached
+    async def _forget_token(self) -> None:
+        """Drop the cached token so the next read fetches a fresh one."""
+        try:
+            client = await get_redis_client()
+            await client.async_connection.delete(self._token_key())
+        except Exception:
+            # Best effort: if the delete fails, _access_token(refresh=True)
+            # still bypasses the cache for this request.
+            logger.warning("wecom sso: token cache invalidation failed")
+
+    async def _access_token(self, http: httpx.AsyncClient, *, refresh: bool = False) -> tuple[str, bool]:
+        """Return ``(access_token, came_from_cache)``."""
+        if not refresh:
+            cached = await self._cached_token()
+            if cached:
+                return cached, True
         try:
             resp = await http.get(
                 f"{WECOM_API_BASE}/cgi-bin/gettoken",
@@ -173,28 +195,44 @@ class WeComOAuthClient:
         if not token:
             raise WeComSsoUpstreamError(detail="gettoken returned no access_token")
         await self._store_token(token, int(data.get("expires_in", 7200) or 7200))
-        return token
+        return token, False
 
     # ------------------------------------------------------------------
     # Login calls
     # ------------------------------------------------------------------
+
+    async def _getuserinfo(
+        self, http: httpx.AsyncClient, code: str, *, refresh_token: bool = False
+    ) -> tuple[dict, bool]:
+        """Return ``(payload, token_came_from_cache)``."""
+        token, from_cache = await self._access_token(http, refresh=refresh_token)
+        try:
+            resp = await http.get(
+                f"{WECOM_API_BASE}/cgi-bin/auth/getuserinfo",
+                params={"access_token": token, "code": code},
+            )
+            return resp.json(), from_cache
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.warning("wecom sso: getuserinfo transport failure: {!r}", exc)
+            raise WeComSsoUpstreamError(detail="getuserinfo transport failure") from exc
 
     async def exchange_code(self, code: str) -> str:
         """Turn an authorization code into the member's WeCom userid."""
         if not code:
             raise WeComSsoCodeInvalidError()
         async with httpx.AsyncClient(timeout=self._timeout) as http:
-            token = await self._access_token(http)
-            try:
-                resp = await http.get(
-                    f"{WECOM_API_BASE}/cgi-bin/auth/getuserinfo",
-                    params={"access_token": token, "code": code},
+            data, from_cache = await self._getuserinfo(http, code)
+            if from_cache and _errcode(data) in _ERRCODE_TOKEN_STALE:
+                # The shared cache held a token another gettoken call had
+                # rotated. A code stays usable for minutes, so retry once with
+                # a token this process fetched itself.
+                logger.warning(
+                    "wecom sso: cached token rejected errcode={}; refreshing and retrying",
+                    _errcode(data),
                 )
-                data = resp.json()
-            except (httpx.HTTPError, ValueError) as exc:
-                logger.warning("wecom sso: getuserinfo transport failure: {!r}", exc)
-                raise WeComSsoUpstreamError(detail="getuserinfo transport failure") from exc
-        errcode = int(data.get("errcode", 0) or 0)
+                await self._forget_token()
+                data, _ = await self._getuserinfo(http, code, refresh_token=True)
+        errcode = _errcode(data)
         if errcode == _ERRCODE_BAD_CODE:
             raise WeComSsoCodeInvalidError()
         if errcode != 0:
@@ -216,6 +254,21 @@ class WeComOAuthClient:
             raise WeComSsoUpstreamError(detail="member not in the app's visible scope")
         return userid
 
+    async def _get_user(
+        self, http: httpx.AsyncClient, userid: str, *, refresh_token: bool = False
+    ) -> tuple[dict, bool]:
+        """Return ``(payload, token_came_from_cache)``."""
+        token, from_cache = await self._access_token(http, refresh=refresh_token)
+        try:
+            resp = await http.get(
+                f"{WECOM_API_BASE}/cgi-bin/user/get",
+                params={"access_token": token, "userid": userid},
+            )
+            return resp.json(), from_cache
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.warning("wecom sso: user/get transport failure: {!r}", exc)
+            return {}, from_cache
+
     async def fetch_member(self, userid: str) -> WeComMember | None:
         """Read the member's profile + departments.
 
@@ -224,17 +277,23 @@ class WeComOAuthClient:
         to a department-less login instead of failing it — see spec AC-08.
         """
         async with httpx.AsyncClient(timeout=self._timeout) as http:
-            token = await self._access_token(http)
-            try:
-                resp = await http.get(
-                    f"{WECOM_API_BASE}/cgi-bin/user/get",
-                    params={"access_token": token, "userid": userid},
-                )
-                data = resp.json()
-            except (httpx.HTTPError, ValueError) as exc:
-                logger.warning("wecom sso: user/get transport failure: {!r}", exc)
+            data, from_cache = await self._get_user(http, userid)
+            if not data:
+                # Transport failure: degrade instead of failing the login.
                 return None
-        errcode = int(data.get("errcode", 0) or 0)
+            if from_cache and _errcode(data) in _ERRCODE_TOKEN_STALE:
+                # Same shared-cache rotation as exchange_code(). Without the
+                # retry this degrades to a department-less member and silently
+                # parks the user in the guest department.
+                logger.warning(
+                    "wecom sso: cached token rejected on user/get errcode={}; refreshing and retrying",
+                    _errcode(data),
+                )
+                await self._forget_token()
+                data, _ = await self._get_user(http, userid, refresh_token=True)
+                if not data:
+                    return None
+        errcode = _errcode(data)
         if errcode != 0:
             logger.warning(
                 "wecom sso: user/get failed errcode={} errmsg={} userid={}",

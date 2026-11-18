@@ -56,6 +56,9 @@ def token_cache(monkeypatch):
         async def set(self, key, value, ex=None):
             store[key] = value
 
+        async def delete(self, key):
+            store.pop(key, None)
+
     class _Client:
         async_connection = _Conn()
 
@@ -129,6 +132,37 @@ async def test_exchange_code_rejects_bad_code(http, token_cache):
         await client.exchange_code("bad")
 
 
+async def test_exchange_code_refreshes_stale_cached_token(http, token_cache):
+    # The org-sync provider shares this cache key and rotated the token; our
+    # copy still looks fresh inside its TTL but WeCom rejects it.
+    token_cache["org_sync:wecom:token:7"] = "stale-token"
+    http["responses"] = [
+        {"errcode": 40014, "errmsg": "invalid access_token"},
+        _token_ok(),
+        {"errcode": 0, "userid": "zhangsan"},
+    ]
+    client = WeComOAuthClient(corpid="ww123", corpsecret="s", agent_id="1", config_id=7)
+
+    assert await client.exchange_code("code-stale") == "zhangsan"
+
+    assert http["calls"][0][1]["access_token"] == "stale-token"
+    assert http["calls"][1][0].endswith("/cgi-bin/gettoken")
+    assert http["calls"][2][1]["access_token"] == "tok-1"
+    assert token_cache["org_sync:wecom:token:7"] == "tok-1"
+
+
+async def test_exchange_code_does_not_retry_a_freshly_fetched_token(http, token_cache):
+    # No cache hit → the token is already ours, so a 40014 is a real
+    # configuration problem and must surface instead of triggering a loop.
+    http["responses"] = [_token_ok(), {"errcode": 40014, "errmsg": "invalid access_token"}]
+    client = WeComOAuthClient(corpid="ww123", corpsecret="s", agent_id="1", config_id=7)
+
+    with pytest.raises(WeComSsoUpstreamError):
+        await client.exchange_code("code-4014")
+
+    assert len(http["calls"]) == 2
+
+
 async def test_exchange_code_without_userid_is_upstream_failure(http, token_cache):
     # WeCom answers with only ``openid`` when the member is outside the app's
     # visible range — a configuration problem, not a retryable bad code.
@@ -175,6 +209,34 @@ async def test_fetch_member_without_department(http, token_cache):
 
 async def test_fetch_member_degrades_on_contact_permission_error(http, token_cache):
     http["responses"] = [_token_ok(), {"errcode": 60111, "errmsg": "user not found"}]
+    client = WeComOAuthClient(corpid="ww123", corpsecret="s", agent_id="1", config_id=7)
+
+    assert await client.fetch_member("zhangsan") is None
+
+
+async def test_fetch_member_refreshes_stale_cached_token(http, token_cache):
+    token_cache["org_sync:wecom:token:7"] = "stale-token"
+    http["responses"] = [
+        {"errcode": 42001, "errmsg": "access_token expired"},
+        _token_ok(),
+        {"errcode": 0, "userid": "zhangsan", "department": [5], "main_department": 5},
+    ]
+    client = WeComOAuthClient(corpid="ww123", corpsecret="s", agent_id="1", config_id=7)
+
+    member = await client.fetch_member("zhangsan")
+
+    assert member is not None
+    assert member.primary_dept_id == "5"
+    assert token_cache["org_sync:wecom:token:7"] == "tok-1"
+
+
+async def test_fetch_member_degrades_when_the_refreshed_token_also_fails(http, token_cache):
+    token_cache["org_sync:wecom:token:7"] = "stale-token"
+    http["responses"] = [
+        {"errcode": 40014, "errmsg": "invalid access_token"},
+        _token_ok(),
+        {"errcode": 40014, "errmsg": "invalid access_token"},
+    ]
     client = WeComOAuthClient(corpid="ww123", corpsecret="s", agent_id="1", config_id=7)
 
     assert await client.fetch_member("zhangsan") is None
