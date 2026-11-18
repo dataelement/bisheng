@@ -29,6 +29,8 @@
 
 9 项由失败转为通过。剩余失败包括旧测试对 visible 动作的历史预期、未隔离创建就绪检查导致访问本地缺失数据库，以及列表 SQLite fixture 缺少 `flow.is_delete` 字段；未宣称全组通过。
 
+交付前再次同步发布线 `72fdf3aa35`，保留并发的旧模型共享兼容修复，无代码冲突。集成选择共 39 项：修复版 37 通过、2 失败，未带本轮修复的同版本基线为 28 通过、11 失败，新增失败仍为 0。本轮权限、版本及原知识列表相关 22 项全部通过；剩余两项是双方同样失败的旧模型共享 mount fixture 用例（`test_legacy_on_is_visible_to_coverage_and_mount_without_get_backfill`、`test_legacy_mount_promotes_intent_and_initializes_only_new_child`），没有以单独运行结果掩盖组合失败。
+
 前端 **49 项测试全部通过**，覆盖：首次渲染零权限/版本查询、仅当前资源类型查询、请求复用、租户缓存隔离及旧响应退休、工作流点击读取/切换/线上只读/读取失败重试、托管应用按需读取、当前/最新版本区分、菜单权限及删除规则。具体测试文件：`buildLazyActions.test.tsx`、`hostedAppCurrentVersion.test.tsx`、`hostedAppMenuTrim.test.tsx`、`hostedAppDeleteEligibility.test.tsx`、`hostedAppCardComponent.test.tsx`、`sharedControls.test.tsx`、`f114AppActions.test.tsx`。
 
 全量前端 `pnpm lint` 通过。全量 `pnpm typecheck` 在 platform 阶段停止：修复前后同样只有 `src/test/sidebarSpaceActions.test.tsx:175`、`:180` 两个 TS2349，新增诊断为零，后续 workspace 检查未执行。已复用本机安装的外部依赖，并将 workspace 包指向各自源码；未修改锁文件。
