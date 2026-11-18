@@ -85,6 +85,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileDao,
     KnowledgeFileStatus,
     ParseType,
+    QAKnoweldgeDao,
 )
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
@@ -2408,7 +2409,7 @@ class KnowledgeService(KnowledgeUtils):
         from bisheng.worker.knowledge import file_worker
 
         knowledge_file = KnowledgeFileDao.select_list(file_ids)
-        if not knowledge_file:
+        if not knowledge_file or {file.id for file in knowledge_file} != set(file_ids):
             raise NotFoundError.http_exception()
         db_knowledge = KnowledgeDao.query_by_id(knowledge_file[0].knowledge_id)
         if db_knowledge is None or any(file.knowledge_id != db_knowledge.id for file in knowledge_file):
@@ -3063,6 +3064,15 @@ class KnowledgeService(KnowledgeUtils):
                 state="PENDING_INSPECTION",
             ) from exc
         return target
+
+    @classmethod
+    def judge_qa_batch_write(cls, login_user: UserPayload, qa_ids: list[int]):
+        """Resolve the complete batch and its one authorized vector collection."""
+        rows = QAKnoweldgeDao.select_list(qa_ids)
+        if len({row.knowledge_id for row in rows}) != 1:
+            raise NotFoundError()
+        knowledge = cls.judge_qa_knowledge_write(login_user, rows[0].knowledge_id)
+        return knowledge, rows
 
     @classmethod
     def judge_qa_knowledge_write(cls, login_user: UserPayload, qa_knowledge_id: int) -> Knowledge:

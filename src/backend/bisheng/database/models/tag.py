@@ -5,10 +5,9 @@ from sqlalchemy import Column, DateTime, Integer, String, UniqueConstraint
 from sqlmodel import Field, and_, col, delete, func, select, text
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.context.tenant import strict_tenant_filter
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
-from bisheng.core.database.tenant_filter import build_tenant_filter_clause
+from bisheng.core.database.tenant_filter import apply_strict_tenant_filter
 from bisheng.database.models.group_resource import ResourceTypeEnum
 
 
@@ -75,10 +74,7 @@ class TagLink(TagLinkBase, table=True):
 
 def _tenant_delete(model, *conditions):
     """Bulk DELETE bypasses ORM SELECT events; scope each affected table."""
-    statement = delete(model).where(*conditions)
-    with strict_tenant_filter():
-        clause = build_tenant_filter_clause(model.tenant_id)
-    return statement.where(clause) if clause is not None else statement
+    return apply_strict_tenant_filter(delete(model).where(*conditions), model.tenant_id)
 
 
 class TagDao(Tag):

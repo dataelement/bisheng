@@ -199,9 +199,15 @@ _is_management_api     : ContextVar[bool]
 
 模型提供方共享等允许跨租户读取的能力，由各领域通过显式共享检查和受控 bypass 读取。不能通过默认加入 Root 来代替共享授权。标签首页选择使用现有 `tenant_workstation_config` 的 `home_tags` 键按租户保存；无本租户记录时可沿用旧全局排序，但标签明细仍经过本租户过滤，子租户保存不会改写旧全局配置。
 
-标签的批量删除通过 `database/models/tag.py` 的 `_tenant_delete` 构造作用域条件，覆盖标签及关联表；不能依赖仅拦截 SELECT 的 ORM 事件。标签关联创建和首页选择写入都校验标签属于当前租户。
+批量 UPDATE/DELETE 不能依赖仅拦截 SELECT 的 ORM 事件。`core/database/tenant_filter.py` 的 `apply_strict_tenant_filter` 在构造写入语句时收窄到当前租户，不使用较宽的发现可见集合；无租户上下文时按现有多租户规则报错，显式维护 bypass 保留。标签及关联表、聊天消息、会话、知识文件和 QA 的既有批量写入已使用该入口。标签关联创建和首页选择写入也校验标签属于当前租户。
+
+QA 批量追加、删除及旧文件删除要求请求 ID 全部可见，不能把过滤后的部分查询结果当作整批授权。QA 批次必须属于同一个已授权知识库，后续向量删除使用已确认的 ID；新 QA 的租户来自已授权知识库，已有 QA 的 ID 也必须属于这个知识库，客户端不能用另一个父库替换授权目标。
+
+浏览器助手和工作流 WebSocket 在每条后续消息进入权限检查及分发前，通过 `user/application/runtime_identity.py` 的 `browser_message_identity_scope` 重读当前成员归属与 token version；迁租、停用、归属不唯一或凭据失效时拒绝消息。超管还会重新确认超管身份，比较的是认证 Home，不能把连接选定的管理租户误当作成员归属。此校验复用消息准入回调，返回空执行覆盖以保留原客户端状态，不替换 RPC/公开渠道的独立准入逻辑。校验发生在收到下一条消息时；已准入执行的任务不因此自动迁移或取消。
 
 2026-11-19 回归：`test/admin/test_workspace_tenant_isolation.py` 和 `test/app_runtime/test_workspace_square_tenant_isolation.py` 使用真实 ORM 查询及隔离数据库，覆盖历史创建者记录、知识广场分页和数量、频道发现和公开详情、应用候选、标签读写及模型共享保留路径。
+
+第二轮回归：`test/admin/test_migrated_resource_boundaries.py` 覆盖旧 ID 查询/操作、混合批次、同步与异步写入及建连后迁租；`test/chat_session/test_browser_message_identity.py` 验证两个浏览器 WS 入口接线、身份变更拒绝和超管 Home/管理视图分离。旧租户 Cookie 的同步/异步登录初始化拒绝由 `test/role/test_effective_roles.py` 验证。
 
 ### strict_tenant_filter 的三类必用场景
 

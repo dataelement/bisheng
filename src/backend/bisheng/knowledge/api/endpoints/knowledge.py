@@ -757,6 +757,8 @@ def qa_status_switch(
 ):
     """Modify Knowledge Base Information."""
     qa_db = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(id)
+    if qa_db is None:
+        raise NotFoundError()
     if qa_db.status == status:
         return resp_200()
     previous_status = qa_db.status
@@ -796,8 +798,7 @@ def qa_append(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """Add knowledge base information."""
-    qa_list = QAKnoweldgeDao.select_list(ids)
-    knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, qa_list[0].knowledge_id)
+    knowledge, qa_list = KnowledgeService.judge_qa_batch_write(login_user, ids)
 
     for q in qa_list:
         if question in q.questions:
@@ -817,9 +818,8 @@ def qa_append(
 @router.delete("/qa/delete", status_code=200)
 def qa_delete(*, ids: list[int] = Body(embed=True), login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """Delete Knowledge File Information"""
-    qa_list = QAKnoweldgeDao.select_list(ids)
-
-    knowledge = KnowledgeService.judge_qa_knowledge_write(login_user, qa_list[0].knowledge_id)
+    knowledge, qa_list = KnowledgeService.judge_qa_batch_write(login_user, ids)
+    ids = [qa.id for qa in qa_list]
 
     knowledge_imp.delete_vector_data(knowledge, ids)
     QAKnoweldgeDao.delete_batch(ids)
