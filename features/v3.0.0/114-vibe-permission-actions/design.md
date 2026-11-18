@@ -389,6 +389,7 @@
 | `app_publish.application.preview_access` | 签名已验证材料 + 完整且 running 的会话/任务/credential/operation → CapabilityAccessContext | 模型范围端口、检索/附件；starting、绑定缺失或失效默认拒绝 |
 | `app_publish.application.preview_runtime`、open_api 事务凭据端口 | caller-owned session 与受信值对象 → 预览签发绑定、ready 激活、关闭与单凭据吊销；不返回 ORM 或明文凭据给浏览器 | PreviewInstanceService 与 runtime 的 preview fact/cleanup 共用；Version→既有操作围栏→Session/credential 锁顺序，同一 UoW，提交后才 wakeup |
 | 审批 application 场景资格/业务撤回端口 | 仅发布场景接入额外候选资格，业务撤回保留终态约束与操作者 | 发布 handler 与审批引擎；通用用户撤回和其它场景不放宽 |
+| GET `/api/v1/approval/admin/exceptions/{exception_id}/approver-candidates` | 管理员与具体管理租户围栏；仅 open/approver_empty 且实例为 exception；keyword/page/limit（最多50）→ data/total，人员含 user_id/user_name/external_id/exclusive | 异常指派与保存共用场景资格；原节点配置仍用通用人员源，保存重校验当前资格 |
 
 **缺省用途规则**：仅有审批任务资格时兼容为 approval，仅有 edit 时兼容为 management；两者同时存在而省略 purpose 拒绝并要求明确选择，避免身份歧义。该规则覆盖上表预览 GET/POST，不由页面路径推定授权。
 
@@ -541,3 +542,4 @@ VIBE_E2E_BASE_URL=http://192.168.106.116:3001 uv run pytest test/e2e/test_f114_p
 **实施登记（2026-10-30）**：用户明确确认设计后进入任务拆解与开发。首批字段、scope与动作门面/业务资格已实施；T065补齐现有短票据生产者，T066补直接受影响的上下文回归，属于原设计接线细节，不改已确认动作/归属/协议边界。
 
 | 2026-10-30 | 已确认设计实施快照：六动作/具体租户/真实主体、预览事务与阶段许可完成本地接线；补齐私有补包遗留门槛及工具范围头，新增SQL回滚与凭据配对验证 | task-review发现C1新增查询分层与唯一遗留选择器；无产品边界变化。真实E2E及最终L2待完成，未推送部署 |
+| 2026-11-19 | 旧 CLI 审批通过精确发布记录恢复原排除身份；异常指派新增合格候选只读接口、管理租户围栏及前端互斥/请求退休 | 116 实例436原快照缺少F114新增字段，人员895同租户且有效；只读重放证实旧资格为空、修复后通过，不重开已处理异常或恢复执行授权 |
