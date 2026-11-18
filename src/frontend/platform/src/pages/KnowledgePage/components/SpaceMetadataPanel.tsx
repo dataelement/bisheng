@@ -8,14 +8,13 @@ interface SpaceMetadataPanelProps {
   scope: KnowledgeQueryScope;
   spaceId: number;
   onClose: () => void;
-  onSaved?: () => void;
 }
 export function SpaceMetadataPanel(props: SpaceMetadataPanelProps) {
   return <MetadataPanel key={JSON.stringify([props.scope, props.spaceId])} {...props} />;
 }
-function MetadataPanel({ scope, spaceId, onClose, onSaved }: SpaceMetadataPanelProps) {
+function MetadataPanel({ scope, spaceId, onClose }: SpaceMetadataPanelProps) {
   const { t } = useTranslation("knowledge");
-  const { uncertain, schema, recentJobs, canEdit, mutations, jobId, jobState, handleStateChange, handleCompleted, refetch } = useSpaceMetadataSchema({ scope, spaceId, onSaved });
+  const { uncertain, schema, recentJobs, canEdit, mutations, jobId, jobState, handleStateChange, handleCompleted, refetch } = useSpaceMetadataSchema({ scope, spaceId });
   const schemaData = schema.data;
   return (
     <MetadataManagementDialog

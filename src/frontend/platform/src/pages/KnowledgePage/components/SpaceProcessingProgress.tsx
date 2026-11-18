@@ -140,7 +140,7 @@ export function SpaceProcessingProgress({
         expected_job_revision: request.revision,
         idempotency_key: request.key,
         ...(refreshSource ? { refresh_source: true } : {}),
-      });
+      }, kind);
       if (metadata) {
         setPage(1);
       } else {
