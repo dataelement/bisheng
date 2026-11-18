@@ -2,8 +2,9 @@
 
 The switch lives in the per-tenant daily workstation config (``workstation``
 key, ``tenant_workstation_config`` table / legacy ``config`` table), the same
-record the 工作台配置 page edits. It defaults to off, so every tenant stays on
-the legacy path until an operator turns it on.
+record the 工作台配置 page edits. It is on by default (product decision 2026-11-19:
+no gradual rollout, an upgraded install takes the unified runtime without any manual
+step); only an explicit stored ``false`` keeps a tenant on the legacy path.
 """
 
 from __future__ import annotations
@@ -58,25 +59,27 @@ def _payload(**fields) -> str:
 KEY = ConfigKeyEnum.WORKSTATION.value
 
 
-def test_schema_default_is_false():
-    assert WorkstationConfig().unified_runtime_enabled is False
+def test_schema_default_is_true():
+    assert WorkstationConfig().unified_runtime_enabled is True
     # Old payloads (no key) still parse, and the field is not "set" for exclude_unset dumps.
     cfg = WorkstationConfig(**json.loads(_payload(welcomeMessage="hi")))
-    assert cfg.unified_runtime_enabled is False
+    assert cfg.unified_runtime_enabled is True
     assert "unified_runtime_enabled" not in cfg.model_dump(exclude_unset=True)
 
 
-async def test_default_false_when_nothing_stored(multi_tenant):
+async def test_default_true_when_nothing_stored(multi_tenant):
+    """A fresh install (no workstation record at all) takes the unified runtime."""
     multi_tenant({})
-    assert await is_unified_runtime_enabled(5) is False
+    assert await is_unified_runtime_enabled(5) is True
 
 
-async def test_default_false_when_key_missing(multi_tenant):
+async def test_default_true_when_key_missing(multi_tenant):
+    """An upgraded install: the record was saved by an image that did not know the key."""
     multi_tenant({(5, KEY): _payload(welcomeMessage="saved")})
-    assert await is_unified_runtime_enabled(5) is False
+    assert await is_unified_runtime_enabled(5) is True
 
 
-async def test_true_only_for_the_tenant_that_set_it(multi_tenant):
+async def test_explicit_false_is_per_tenant(multi_tenant):
     dao = multi_tenant(
         {
             (5, KEY): _payload(unified_runtime_enabled=True),
@@ -90,8 +93,8 @@ async def test_true_only_for_the_tenant_that_set_it(multi_tenant):
 
 
 async def test_child_tenant_inherits_root_switch(multi_tenant):
-    multi_tenant({(1, KEY): _payload(unified_runtime_enabled=True)})
-    assert await is_unified_runtime_enabled(9) is True
+    multi_tenant({(1, KEY): _payload(unified_runtime_enabled=False)})
+    assert await is_unified_runtime_enabled(9) is False
 
 
 async def test_none_tenant_resolves_to_root(multi_tenant):
@@ -111,7 +114,7 @@ async def test_none_tenant_resolves_to_root(multi_tenant):
 )
 async def test_malformed_values_do_not_raise(multi_tenant, stored):
     multi_tenant({(5, KEY): stored})
-    assert await is_unified_runtime_enabled(5) is False
+    assert await is_unified_runtime_enabled(5) is True
 
 
 async def test_read_failure_does_not_raise(monkeypatch):
@@ -121,7 +124,7 @@ async def test_read_failure_does_not_raise(monkeypatch):
 
     monkeypatch.setattr(WorkStationService, "_multi_tenant_enabled", classmethod(lambda cls: True))
     monkeypatch.setattr(ws_module, "TenantWorkstationConfigDao", _Boom())
-    assert await is_unified_runtime_enabled(5) is False
+    assert await is_unified_runtime_enabled(5) is True
 
 
 async def test_single_tenant_reads_legacy_config(monkeypatch):
@@ -129,10 +132,10 @@ async def test_single_tenant_reads_legacy_config(monkeypatch):
 
     async def fake_aget_config(key):
         assert key == ConfigKeyEnum.WORKSTATION
-        return SimpleNamespace(value=_payload(unified_runtime_enabled=True))
+        return SimpleNamespace(value=_payload(unified_runtime_enabled=False))
 
     monkeypatch.setattr(ws_module.ConfigDao, "aget_config", staticmethod(fake_aget_config))
-    assert await is_unified_runtime_enabled(1) is True
+    assert await is_unified_runtime_enabled(1) is False
 
 
 async def test_admin_save_without_the_field_keeps_stored_switch(monkeypatch):
@@ -143,7 +146,7 @@ async def test_admin_save_without_the_field_keeps_stored_switch(monkeypatch):
         saved["payload"] = payload
 
     async def fake_resolve(key):
-        return _payload(welcomeMessage="old", unified_runtime_enabled=True), False, 5, True
+        return _payload(welcomeMessage="old", unified_runtime_enabled=False), False, 5, True
 
     async def fake_meta():
         return WorkstationConfig(**json.loads(saved["payload"])), False, 5, True, False
@@ -155,10 +158,33 @@ async def test_admin_save_without_the_field_keeps_stored_switch(monkeypatch):
     await WorkStationService.update_daily_chat_config(WorkstationConfig(welcomeMessage="new"))
     stored = json.loads(saved["payload"])
     assert stored["welcomeMessage"] == "new"
-    assert stored["unified_runtime_enabled"] is True
+    assert stored["unified_runtime_enabled"] is False
 
     # An explicit value in the request wins.
     await WorkStationService.update_daily_chat_config(
-        WorkstationConfig(welcomeMessage="new", unified_runtime_enabled=False)
+        WorkstationConfig(welcomeMessage="new", unified_runtime_enabled=True)
     )
-    assert json.loads(saved["payload"])["unified_runtime_enabled"] is False
+    assert json.loads(saved["payload"])["unified_runtime_enabled"] is True
+
+
+async def test_admin_save_stores_no_key_when_none_was_stored(monkeypatch):
+    """A save must not pin the default: with nothing stored, nothing is stored after it."""
+    saved = {}
+
+    async def fake_upsert(key, *, payload):
+        saved["payload"] = payload
+
+    async def fake_resolve(key):
+        return _payload(welcomeMessage="old"), False, 5, True
+
+    async def fake_meta():
+        return WorkstationConfig(**json.loads(saved["payload"])), False, 5, True, False
+
+    monkeypatch.setattr(WorkStationService, "_aupsert_tenant_config", fake_upsert)
+    monkeypatch.setattr(WorkStationService, "_aresolve_tenant_config", fake_resolve)
+    monkeypatch.setattr(WorkStationService, "get_daily_chat_config_with_meta", fake_meta)
+
+    await WorkStationService.update_daily_chat_config(WorkstationConfig(welcomeMessage="new"))
+    stored = json.loads(saved["payload"])
+    assert stored["welcomeMessage"] == "new"
+    assert "unified_runtime_enabled" not in stored

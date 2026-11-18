@@ -833,31 +833,36 @@ class WorkStationService(BaseService):
     @classmethod
     async def update_daily_chat_config(cls, data: WorkstationConfig) -> WorkstationConfig:
         """Update the default workstation configuration for daily chat."""
-        update: dict[str, Any] = {"models": None}
+        workstation_payload = data.model_copy(update={"models": None})
+        payload = workstation_payload.model_dump(mode="json")
         if UNIFIED_RUNTIME_FLAG not in data.model_fields_set:
-            # The 工作台配置 page does not carry the F004 switch; saving it must not turn the switch off.
-            update[UNIFIED_RUNTIME_FLAG] = await cls._astored_unified_runtime_flag()
-        workstation_payload = data.model_copy(update=update)
+            # The 工作台配置 page does not carry the F004 switch. Keep an explicit stored value
+            # (an operator's ``false``) across the save; otherwise store no key at all, so the
+            # tenant keeps following the default instead of pinning today's default forever.
+            stored = await cls._astored_unified_runtime_flag()
+            if stored is None:
+                payload.pop(UNIFIED_RUNTIME_FLAG, None)
+            else:
+                payload[UNIFIED_RUNTIME_FLAG] = stored
         await cls._aupsert_tenant_config(
             ConfigKeyEnum.WORKSTATION,
-            payload=json.dumps(workstation_payload.model_dump(mode="json"), ensure_ascii=True),
+            payload=json.dumps(payload, ensure_ascii=True),
         )
         config, *_ = await cls.get_daily_chat_config_with_meta()
         return config
 
     @classmethod
-    async def _astored_unified_runtime_flag(cls) -> bool:
-        """Current tenant's stored F004 switch, used to carry it across an admin save."""
+    async def _astored_unified_runtime_flag(cls) -> bool | None:
+        """The F004 switch as explicitly stored for the current tenant, or None when no boolean is stored."""
         try:
             value, _inherited, _source, _has_override = await cls._aresolve_tenant_config(ConfigKeyEnum.WORKSTATION)
         except Exception:
-            # Falling back to False keeps the tenant on the legacy path, the safe side of the switch.
             logger.opt(exception=True).warning(
-                "unified runtime switch: reading the stored value before save failed; tenant={} will be saved as off",
+                "unified runtime switch: reading the stored value before save failed; tenant={} is saved without the key",
                 cls._current_tenant_id(),
             )
-            return False
-        return _parse_unified_runtime_flag(value, cls._current_tenant_id())
+            return None
+        return _explicit_unified_runtime_flag(value)
 
     @classmethod
     async def is_unified_runtime_enabled(cls, tenant_id: int | None) -> bool:
@@ -879,9 +884,9 @@ class WorkStationService(BaseService):
                     value, *_ = await TenantWorkstationConfigDao.aresolve(tenant_id, ConfigKeyEnum.WORKSTATION.value)
         except Exception:
             logger.opt(exception=True).warning(
-                "unified runtime switch: reading config failed for tenant={}; using the legacy path", tenant_id
+                "unified runtime switch: reading config failed for tenant={}; using the default (on)", tenant_id
             )
-            return False
+            return True
         return _parse_unified_runtime_flag(value, tenant_id)
 
     @classmethod
@@ -1745,32 +1750,37 @@ class WorkStationService(BaseService):
 UNIFIED_RUNTIME_FLAG = "unified_runtime_enabled"
 
 
-def _parse_unified_runtime_flag(value: str | None, tenant_id: int) -> bool:
-    """Read the F004 switch from a stored daily workstation payload; anything but a JSON ``true`` is off."""
+def _explicit_unified_runtime_flag(value: str | None) -> bool | None:
+    """The boolean stored under the F004 key, or None when the payload holds no boolean there."""
     if not value:
-        return False
+        return None
     try:
         raw = json.loads(value)
     except (TypeError, ValueError):
-        logger.warning(
-            "unified runtime switch: workstation config of tenant={} is not JSON; treating as off", tenant_id
-        )
-        return False
-    if not isinstance(raw, dict):
-        logger.warning(
-            "unified runtime switch: workstation config of tenant={} is not an object; treating as off", tenant_id
-        )
-        return False
-    flag = raw.get(UNIFIED_RUNTIME_FLAG)
-    if flag is None or isinstance(flag, bool):
-        return flag is True
-    logger.warning(
-        "unified runtime switch: tenant={} has non-boolean {}={!r}; treating as off",
-        tenant_id,
-        UNIFIED_RUNTIME_FLAG,
-        flag,
-    )
-    return False
+        return None
+    flag = raw.get(UNIFIED_RUNTIME_FLAG) if isinstance(raw, dict) else None
+    return flag if isinstance(flag, bool) else None
+
+
+def _parse_unified_runtime_flag(value: str | None, tenant_id: int) -> bool:
+    """Read the F004 switch from a stored daily workstation payload; on unless a JSON ``false`` is stored."""
+    explicit = _explicit_unified_runtime_flag(value)
+    if explicit is not None:
+        return explicit
+    if value:
+        try:
+            raw = json.loads(value)
+        except (TypeError, ValueError):
+            raw = None
+        flag = raw.get(UNIFIED_RUNTIME_FLAG) if isinstance(raw, dict) else None
+        if flag is not None:
+            logger.warning(
+                "unified runtime switch: tenant={} has non-boolean {}={!r}; using the default (on)",
+                tenant_id,
+                UNIFIED_RUNTIME_FLAG,
+                flag,
+            )
+    return True
 
 
 async def is_unified_runtime_enabled(tenant_id: int | None) -> bool:

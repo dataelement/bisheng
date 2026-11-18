@@ -38,6 +38,14 @@ async def get_config(
     # follows whichever loader_provider is actually selected and configured.
     knowledge_conf = await bisheng_settings.async_get_knowledge()
     ret = ret.model_dump(exclude_unset=True) if ret else {}
+    # F004 (design decision 13): the client picks its protocol from this key with
+    # ``=== true``. ``exclude_unset`` drops it whenever the stored record has no
+    # such key, which is the normal case now that the runtime is on by default, so
+    # send the resolved value: the same one the send entry uses for this user.
+    from bisheng.workstation.domain.services.content_safety import workbench_tenant_id
+    from bisheng.workstation.domain.services.workstation_service import UNIFIED_RUNTIME_FLAG, is_unified_runtime_enabled
+
+    ret[UNIFIED_RUNTIME_FLAG] = await is_unified_runtime_enabled(workbench_tenant_id(login_user))
     if bisheng_settings.dsh.enabled and ret.get("models"):
         from bisheng.dsh.domain.services.pricing import workbench_pricing_hints
 

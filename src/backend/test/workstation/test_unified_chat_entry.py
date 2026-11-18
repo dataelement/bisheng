@@ -20,6 +20,17 @@ from bisheng.api.v1.schema.chat_schema import APIChatCompletion
 from bisheng.workstation.domain.services import chat_service
 
 
+@pytest.fixture(autouse=True)
+def _legacy_channel(monkeypatch):
+    """These cases cover the legacy channel, which since F004 decision 13 runs only
+    when a tenant's stored config says ``unified_runtime_enabled: false``."""
+
+    async def _off(_tenant_id):
+        return False
+
+    monkeypatch.setattr("bisheng.workstation.domain.services.workstation_service.is_unified_runtime_enabled", _off)
+
+
 def _data(task_mode: bool) -> APIChatCompletion:
     return APIChatCompletion(
         clientTimestamp="2026-06-15T00:00:00Z",

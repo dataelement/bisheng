@@ -38,6 +38,18 @@ from test.linsight._memory_doubles import (  # noqa: F401 - pytest fixtures
     turn_rows,
 )
 
+
+@pytest.fixture(autouse=True)
+def _legacy_channel(monkeypatch):
+    """These cases cover the legacy channel, which since F004 decision 13 runs only
+    when a tenant's stored config says ``unified_runtime_enabled: false``."""
+
+    async def _off(_tenant_id):
+        return False
+
+    monkeypatch.setattr("bisheng.workstation.domain.services.workstation_service.is_unified_runtime_enabled", _off)
+
+
 LOGIN = SimpleNamespace(user_id=USER_1, tenant_id=TENANT_A, user_name="u")
 
 
@@ -217,7 +229,11 @@ async def test_ac10_daily_task_mode_entry_passes_registration_hook(monkeypatch, 
     assert cursor_row(memory_db) is not None
 
     captured.clear()
-    monkeypatch.setattr(tss, "submit_task_turn", _fake_submit_no_hook := AsyncMock(return_value=(SimpleNamespace(chat_id=CHAT, name="已有标题"), _version())))
+    monkeypatch.setattr(
+        tss,
+        "submit_task_turn",
+        _fake_submit_no_hook := AsyncMock(return_value=(SimpleNamespace(chat_id=CHAT, name="已有标题"), _version())),
+    )
     await chat_service._task_mode_stream_completion(None, data, LOGIN)
     assert _fake_submit_no_hook.call_args.kwargs.get("on_session_created") is None
 

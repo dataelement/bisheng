@@ -71,9 +71,19 @@ async def test_public_config_keeps_only_visible_org_kbs(monkeypatch):
     picker = AsyncMock(return_value=[{"id": 362, "default_checked": True}])
     monkeypatch.setattr(CapabilityCatalogService, "picker_tools", picker)
 
+    # F004 decision 13: the stored record carries no switch key, and the client
+    # still has to be told which protocol to speak.
+    assert "unified_runtime_enabled" not in daily_config.model_dump(exclude_unset=True)
+    switch = AsyncMock(return_value=True)
+    monkeypatch.setattr("bisheng.workstation.domain.services.workstation_service.is_unified_runtime_enabled", switch)
+
     response = await config_endpoint.get_config(request=None, login_user=login_user)
 
-    picker.assert_awaited_once_with(configured_tools=daily_config.model_dump(exclude_unset=True)["tools"])
+    assert response.data["unified_runtime_enabled"] is True
+    switch.return_value = False
+    rolled_back = await config_endpoint.get_config(request=None, login_user=login_user)
+    assert rolled_back.data["unified_runtime_enabled"] is False
+    picker.assert_awaited_with(configured_tools=daily_config.model_dump(exclude_unset=True)["tools"])
     assert response.data["tools"][0]["default_checked"] is True
     assert [item["id"] for item in response.data["orgKbs"]] == [13]
     assert response.data["orgKbs"][0]["default_checked"] is True

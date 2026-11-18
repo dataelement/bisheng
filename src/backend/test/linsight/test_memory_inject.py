@@ -44,6 +44,18 @@ from test.linsight._memory_doubles import (  # noqa: F401 - pytest fixtures
     turn_rows,
 )
 
+
+@pytest.fixture(autouse=True)
+def _legacy_channel(monkeypatch):
+    """These cases cover the legacy channel, which since F004 decision 13 runs only
+    when a tenant's stored config says ``unified_runtime_enabled: false``."""
+
+    async def _off(_tenant_id):
+        return False
+
+    monkeypatch.setattr("bisheng.workstation.domain.services.workstation_service.is_unified_runtime_enabled", _off)
+
+
 MEMORY_TOOL_NAMES = {"memory_write", "memory_search"}
 
 

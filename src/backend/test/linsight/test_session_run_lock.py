@@ -31,6 +31,17 @@ from bisheng.linsight.domain.task_exec import (
 from test.linsight.test_deferred_ingest_worker import FakeStateManager
 
 
+@pytest.fixture(autouse=True)
+def _legacy_channel(monkeypatch):
+    """These cases cover the legacy channel, which since F004 decision 13 runs only
+    when a tenant's stored config says ``unified_runtime_enabled: false``."""
+
+    async def _off(_tenant_id):
+        return False
+
+    monkeypatch.setattr("bisheng.workstation.domain.services.workstation_service.is_unified_runtime_enabled", _off)
+
+
 def _session(*, status=SessionVersionStatusEnum.COMPLETED, svid: str = "svid-lock"):
     return LinsightSessionVersion(
         id=svid,

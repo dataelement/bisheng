@@ -11,6 +11,19 @@ from bisheng.linsight.api.endpoints import linsight as linsight_ep
 from bisheng.linsight.domain.schemas.linsight_schema import LinsightQuestionSubmitSchema
 from bisheng.sensitive_word.domain.schemas import SensitiveWordCheckResult, SensitiveWordHit
 from bisheng.workstation.domain.services import chat_service
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _legacy_channel(monkeypatch):
+    """These cases cover the legacy channel, which since F004 decision 13 runs only
+    when a tenant's stored config says ``unified_runtime_enabled: false``."""
+
+    async def _off(_tenant_id):
+        return False
+
+    monkeypatch.setattr("bisheng.workstation.domain.services.workstation_service.is_unified_runtime_enabled", _off)
+
 
 AUTO_REPLY = "当前对话内容违反相关规范，请修改后重新输入"
 HIT = SensitiveWordCheckResult(
