@@ -44,23 +44,57 @@ async def _require_creation_ready(resource_type, resource_ids):
     await require_creation_ready(get_current_tenant_id(), resource_ids)
 
 
-async def _require_management_target(resource_type, resource_ids):
+async def _management_target_loader(resource_type):
+    """Return ``(expected_tenant_id, loader)``, or ``None`` when no proof is due."""
+
     from bisheng.permission.application.request_boundary import request_business_target
 
     expected = request_business_target()
     if expected is None:
-        return
+        return None
     registry = await get_f048_resource_registry()
     port = registry.port_for(resource_type)
     loader = getattr(port, "load_permission_record", None)
     if loader is None:
         raise PermissionInvalidResourceError()
+    return expected, loader
+
+
+async def _require_management_target(resource_type, resource_ids):
+    proof = await _management_target_loader(resource_type)
+    if proof is None:
+        return
+    expected, loader = proof
     # This is a business boundary check, not a second authorization decision.
     # Domain-owned shared-resource scopes deliberately clear the admin override.
     for resource_id in resource_ids:
         record = await loader(resource_id=str(resource_id))
         if record is None or record.tenant_id != expected:
             raise PermissionInvalidResourceError()
+
+
+async def _admitted_management_targets(resource_type, resource_ids):
+    """Batch form of ``_require_management_target``: keep only the proven ids.
+
+    A listing asks "which of these can the caller act on", and its candidates
+    often come from stored references (a workstation config, a reference
+    ledger) that outlive the resource. One deleted or foreign id used to raise
+    25022 for the whole batch, which took every other candidate down with it:
+    a single deleted knowledge base in ``orgKbs`` failed the workstation config
+    for every super admin. An unproven id is left out, so it gets no action; a
+    type that cannot prove its targets and a loader failure still raise.
+    """
+
+    proof = await _management_target_loader(resource_type)
+    if proof is None:
+        return resource_ids
+    expected, loader = proof
+    admitted = []
+    for resource_id in resource_ids:
+        record = await loader(resource_id=resource_id)
+        if record is not None and record.tenant_id == expected:
+            admitted.append(resource_id)
+    return tuple(admitted)
 
 
 @contextual_operation
@@ -165,7 +199,12 @@ async def batch_check_business_actions(
     if not normalized_ids or not normalized_actions:
         return {}
 
-    await _require_management_target(resource_type, normalized_ids)
+    # Ids outside the admitted management target keep an empty action set, the
+    # same answer the resolver below gives for an id it cannot resolve.
+    result: dict[str, set[str]] = {resource_id: set() for resource_id in normalized_ids}
+    normalized_ids = await _admitted_management_targets(resource_type, normalized_ids)
+    if not normalized_ids:
+        return {resource_id: frozenset() for resource_id in result}
     await _require_creation_ready(resource_type, normalized_ids)
     actor = await resolve_permission_actor(login_user)
     if actor.super_admin and actor.data_scope == DATA_SCOPE_ALL:
@@ -175,10 +214,10 @@ async def batch_check_business_actions(
         # therefore paid 500 resolutions to reach a foregone conclusion.
         # F066: a narrowed token pays the full path instead — the runtime is
         # where the data-scope denial lives, and it must not be skipped.
-        return {resource_id: frozenset(normalized_actions) for resource_id in normalized_ids}
+        granted = frozenset(normalized_actions)
+        return {resource_id: granted if resource_id in normalized_ids else frozenset() for resource_id in result}
 
     registry = await get_f048_resource_registry()
-    result: dict[str, set[str]] = {resource_id: set() for resource_id in normalized_ids}
     runtime = await get_f048_runtime()
     for requested_action in normalized_actions:
         action = normalize_legacy_action(requested_action)

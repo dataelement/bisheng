@@ -2989,6 +2989,8 @@
     "files": "会話のファイル",
     "resizePreview": "プレビューの幅を変更",
     "loadingConversation": "会話を読み込み中…",
+    "configLoadFailed": "ワークスペースの設定を読み込めなかったため、メッセージを送信できません。再試行してください。解決しない場合は管理者に連絡してください。",
+    "noModelsConfigured": "利用できるモデルがまだ設定されていないため、メッセージを送信できません。管理者にモデルの追加を依頼してください。",
     "recommendedApps": "おすすめのアプリ",
     "scrollToBottom": "一番下へ",
     "preview": "プレビュー",

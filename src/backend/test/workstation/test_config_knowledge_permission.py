@@ -90,3 +90,55 @@ async def test_org_kb_visibility_filter_short_circuits_empty_input(monkeypatch):
 
     assert await WorkStationService.afilter_org_kbs_by_visible_permission([], _login_user()) == []
     assert await WorkStationService.afilter_org_kbs_by_visible_permission(None, _login_user()) == []
+
+
+async def test_public_config_survives_a_deleted_org_kb_for_super_admin(monkeypatch):
+    """A deleted knowledge base left in orgKbs must not fail the whole config.
+
+    Runs the real batch authorization under an admin management scope: the
+    deleted id (20) is dropped, the surviving ones are still returned.
+    """
+
+    from bisheng.core.context.tenant import management_tenant_scope
+    from bisheng.permission.application import business_authorization as business
+
+    login_user = SimpleNamespace(user_id=1, user_name="admin", tenant_id=60)
+    daily_config = WorkstationConfig(
+        orgKbs=[
+            OrgKbConfig(id=19, name="alive", default_checked=True, sort_order=0),
+            OrgKbConfig(id=20, name="deleted", default_checked=True, sort_order=1),
+        ],
+    )
+
+    async def load_permission_record(*, resource_id):
+        return SimpleNamespace(tenant_id=60) if resource_id == "19" else None
+
+    registry = SimpleNamespace(port_for=lambda _: SimpleNamespace(load_permission_record=load_permission_record))
+    actor = SimpleNamespace(super_admin=True, data_scope=business.DATA_SCOPE_ALL)
+    monkeypatch.setattr(business, "get_f048_resource_registry", AsyncMock(return_value=registry))
+    monkeypatch.setattr(business, "_require_creation_ready", AsyncMock())
+    monkeypatch.setattr(business, "resolve_permission_actor", AsyncMock(return_value=actor))
+    monkeypatch.setattr(WorkStationService, "get_daily_chat_config", AsyncMock(return_value=daily_config))
+    monkeypatch.setattr(WorkStationService, "get_linsight_config", AsyncMock(return_value=None))
+    monkeypatch.setattr(WorkStationService, "get_knowledge_space_config", AsyncMock(return_value=None))
+    monkeypatch.setattr(WorkStationService, "get_subscription_config", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        "bisheng.dsh.domain.services.model_catalog.user_workbench_models",
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        config_endpoint,
+        "bisheng_settings",
+        SimpleNamespace(
+            dsh=SimpleNamespace(enabled=False),
+            async_get_knowledge=AsyncMock(return_value=SimpleNamespace(image_parser_enabled=False)),
+            aget_all_config=AsyncMock(return_value={}),
+            aget_linsight_conf=AsyncMock(return_value=SimpleNamespace(waiting_list_url=None)),
+        ),
+    )
+    monkeypatch.setattr(CapabilityCatalogService, "picker_tools", AsyncMock(return_value=[]))
+
+    with management_tenant_scope(60):
+        response = await config_endpoint.get_config(request=None, login_user=login_user)
+
+    assert [item["id"] for item in response.data["orgKbs"]] == [19]
