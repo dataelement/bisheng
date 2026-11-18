@@ -75,13 +75,15 @@ function Row({ node, depth, searchMode, props }: RowProps) {
 
   if (variant === "navigation") {
     const failed = !searchMode && controller.hasLayerError(node.id)
-    const canExpand = !searchMode && node.has_children
+    const canExpand = !searchMode && node.has_children &&
+      (controller.getChildIds(node.id)?.length !== 0 || failed || isLoading)
     return (
       <TreeNavigationNode
         name={label}
         depth={depth}
         current={isSelected}
         disabled={disabled}
+        hideLeafArrow
         icon={<Outlined.City />}
         marker={node.is_tenant_root && <Tag size="small" color="brand">{t("bs:tenant.mountedTag")}</Tag>}
         disclosure={canExpand ? {

@@ -78,28 +78,24 @@ describe("DepartmentPage member refresh", () => {
     expect(mockedChildren.mock.calls.filter(([parentId]) => parentId == null).length).toBeGreaterThanOrEqual(2);
   });
 
-  it("retains a non-interactive arrow for a known leaf department", async () => {
+  it("leaves an empty arrow slot for a known leaf department", async () => {
     render(<DepartmentPage />);
 
     const label = await screen.findByRole("button", { name: "Root" });
     const arrow = label.closest("[data-tree-row]")?.firstElementChild;
     expect(arrow).toHaveAttribute("aria-hidden", "true");
-    expect(arrow?.querySelector("svg")).not.toBeNull();
+    expect(arrow?.querySelector("svg")).toBeNull();
     expect(screen.queryByRole("button", { name: "bs:organization.expandDepartment" })).toBeNull();
     expect(mockedChildren.mock.calls.every(([parentId]) => parentId === null)).toBe(true);
   });
 
-  it("keeps an expanded empty department disclosure and allows collapsing it", async () => {
+  it("removes the root disclosure when its child request returns no rows", async () => {
     mockedChildren.mockResolvedValueOnce([{ ...dept, has_children: true }]).mockResolvedValue([]);
     render(<DepartmentPage />);
 
     await waitFor(() => expect(mockedChildren).toHaveBeenCalledWith(dept.id, false));
     await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
-    const disclosure = screen.getByRole("button", { name: "bs:organization.collapseDepartment" });
-    expect(disclosure).toHaveAttribute("aria-expanded", "true");
-    fireEvent.click(disclosure);
-    expect(screen.getByRole("button", { name: "bs:organization.expandDepartment" })).toBe(disclosure);
-    expect(disclosure).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("button", { name: "bs:organization.collapseDepartment" })).toBeNull();
     expect(screen.getByRole("button", { name: "Root" })).toHaveAttribute("aria-current", "true");
   });
 
