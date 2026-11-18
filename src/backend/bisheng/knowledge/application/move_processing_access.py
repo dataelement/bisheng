@@ -14,6 +14,7 @@ from bisheng.knowledge.application import move_processing_admission as admission
 from bisheng.knowledge.application.move_processing_owner import KnowledgeMoveProcessingOwner
 from bisheng.knowledge.application.processing_identity import capture_processing_actor
 from bisheng.knowledge.domain.repositories.move_query_repository import MoveQueryRepository
+from bisheng.knowledge.domain.repositories.source_move_input_repository import SourceMoveInputRepository
 from bisheng.knowledge.domain.schemas.move_processing import MoveRoot
 from bisheng.knowledge.domain.schemas.processing_diagnostics import safe_failure_reason
 from bisheng.knowledge.domain.schemas.processing_job import ProcessingItemRead, ProcessingJobRead
@@ -69,7 +70,14 @@ class MoveProcessingAccess:
                 session, job_id=job.id, operator_ids=(actor.subject_id,)
             ):
                 raise KnowledgeProcessingJobNotFoundError()
-        async with admission.identity(reference, current=identity, entry_kind="web") as (actual, _):
+            source_id = job.parameters.get("source_space_id")
+            # The job row lives on the destination. The source space still has to
+            # show it, including to an editor who did not start the move.
+            allow_other = space_id == source_id and space_id != job.space_id
+        async with admission.identity(reference, current=identity, entry_kind="web", allow_other=allow_other) as (
+            actual,
+            _,
+        ):
             roots = ()
             if get_current_permission_actor().data_scope == DATA_SCOPE_PERSONAL:
                 # Personal narrowing needs the original frozen selected roots.
@@ -154,7 +162,7 @@ class MoveProcessingAccess:
         offset = self._page(page, page_size)
         origin = await capture_processing_actor(identity, space_id=space_id, required_action="move", entry_kind="web")
         subject = admission.subject(origin.reference)
-        after, selected, total = None, [], 0
+        after, selected, total, considered = None, [], 0, set()
         while True:
             async with self.owner._session() as session:
                 candidates = await self.owner.move_jobs.alist_query_candidates(
@@ -167,6 +175,7 @@ class MoveProcessingAccess:
                     state=state,
                 )
             for job_id, _timestamp in candidates:
+                considered.add(job_id)
                 try:
                     async with self._authorized(space_id, job_id, identity) as (job, reference, actual):
                         if offset <= total < offset + page_size:
@@ -178,6 +187,23 @@ class MoveProcessingAccess:
                 break
             ident, timestamp = candidates[-1]
             after = (timestamp, ident)
+        async with self.owner._session() as session:
+            blocking = await SourceMoveInputRepository().ablocking_job_ids(
+                session, space_id=space_id, include_copy=False
+            )
+        wanted = None if state is None else getattr(state, "value", state)
+        for job_id in blocking:
+            if job_id in considered:
+                continue
+            try:
+                async with self._authorized(space_id, job_id, identity) as (job, reference, actual):
+                    if wanted is not None and job.state != wanted:
+                        continue
+                    if offset <= total < offset + page_size:
+                        selected.append(await self._read(job, reference, actual))
+                    total += 1
+            except (PermissionDeniedError, KnowledgeProcessingJobNotFoundError):
+                continue
         return PageData[ProcessingJobRead](data=selected, total=total)
 
     async def alist_items(self, space_id, job_id, *, identity, page=1, page_size=20, state=None):
