@@ -1,9 +1,9 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import modelDefaults from "../../../../../public/locales/zh-Hans/model.json";
 import { useDshBrowserConfig } from "@/hooks/useDshBrowserConfig";
 // @ts-strict-ignore
 import { shouldRetryApiError } from "@bisheng/api-client";
 import { Button, Cascader, toast } from "@bisheng/ui";
-import { Outlined } from "bisheng-icons";
 
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
@@ -21,7 +21,8 @@ import { FallbackBlockedBanner, InheritedBadge } from "../SystemConfigBanners";
 import { showApiError } from "@/controllers/request";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { managementRequestScope } from '@/controllers/managementScope';
 import { useModel } from "..";
 import { UserSelectableModels } from "../UserSelectableModels";
 import { updateModelMetadata } from "../userModelMetadata";
@@ -71,7 +72,7 @@ export default function WorkbenchModel({ data, onBack }) {
   const { config: enterpriseConfig } = useDshBrowserConfig();
   const { llmOptions, embeddings, asrModel, ttsModel } = useModel();
   const { t } = useTranslation("model");
-
+  const queryClient = useQueryClient();
 
   const [form, setForm] = useState<any>({
     sourceModelId: null,
@@ -92,6 +93,13 @@ export default function WorkbenchModel({ data, onBack }) {
   const [otherSettingsOpen, setOtherSettingsOpen] = useState(false);
 
   const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
+
+  const unavailableConfiguredModels = useMemo(() => {
+    const available = new Set(data.flatMap((server) => server.models
+      .filter((model) => model.online && model.model_type === "llm")
+      .map((model) => String(model.id))));
+    return form.models.filter((model) => !available.has(String(model.id)));
+  }, [data, form.models]);
 
   // Look up the model's own name from the cascader options by id, used as
   // the default displayName when the admin leaves it empty.
@@ -150,6 +158,8 @@ export default function WorkbenchModel({ data, onBack }) {
       await updateLinsightModelConfig(data);
       lastSaveFormDataRef.current = { ...lastSaveFormDataRef.current, ...data };
       toast.show({ type: "success", message: String(t("model.saveSuccess") ?? "") });
+      await queryClient.invalidateQueries({ queryKey: ['system-model-settings'] });
+            await queryClient.invalidateQueries({ queryKey: ['system-model-settings-impact'] });
       let updatedConfig;
       try {
         updatedConfig = await refetchConfig({ throwOnError: true });
@@ -279,7 +289,7 @@ export default function WorkbenchModel({ data, onBack }) {
   if (loading)
     return (
       <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-        <Outlined.Loading className="size-4 animate-spin" />
+        <LoadingState size="page" />
       </div>
     );
   const inheritedFromRoot = !!linsightConfig?.inherited_from_root;
@@ -290,6 +300,7 @@ export default function WorkbenchModel({ data, onBack }) {
       {inheritedFromRoot && (
         <div className="-mb-2 text-xs text-muted-foreground flex items-center">
           <InheritedBadge visible={true} />
+          <span className="ml-2">{t("model.draftSourceHelp")}</span>
         </div>
       )}
       <UserSelectableModels
@@ -304,6 +315,22 @@ export default function WorkbenchModel({ data, onBack }) {
           }))
         }
       />
+      {unavailableConfiguredModels.length > 0 && <section className="space-y-2 rounded-md border p-4">
+        <h3 className="text-sm font-medium">{t("model.unavailableConfiguredModels")}</h3>
+        <ul className="space-y-2">
+          {unavailableConfiguredModels.map((model) => {
+            const label = model.displayName || model.name || String(model.id);
+            return <li key={model.id} className="flex items-center justify-between gap-4">
+              <span className="min-w-0 break-words text-sm">{label} · {model.id}</span>
+              <Button variant="text" size="small" color="default" disabled={saveload || !linsightConfig}
+                aria-label={`${t("model.removeConfiguredModel")}: ${label}`}
+                onClick={() => setForm((prev) => ({ ...prev, models: prev.models.filter((row) => String(row.id) !== String(model.id)) }))}>
+                {t("model.removeConfiguredModel")}
+              </Button>
+            </li>;
+          })}
+        </ul>
+      </section>}
       <details
         className="mt-2 border-t pt-4"
         open={otherSettingsOpen}
@@ -373,6 +400,13 @@ export default function WorkbenchModel({ data, onBack }) {
             options={llmOptions}
             onChange={(val) => setForm({ ...form, memoryLlmId: val })}
           />
+          <ModelSelect
+            close
+            label={t("model.imageReadingModel")}
+            value={form.imageReadModelId}
+            options={llmOptions}
+            onChange={(val) => setForm({ ...form, imageReadModelId: val })}
+          />
           <SharedToolSettings disabled={saveload || !linsightConfig} />
         </div>
       </details>
@@ -380,9 +414,8 @@ export default function WorkbenchModel({ data, onBack }) {
         <Button variant="outlined" color="default" onClick={onBack}>
           {t("model.cancel")}
         </Button>
-        <Button disabled={saveload || !linsightConfig} onClick={handleSave}>
-          {saveload && <Outlined.Loading className="mr-2 animate-spin" />}
-          {t("model.save")}
+        <Button disabled={saveload || !linsightConfig} onClick={handleSave} loading={saveload}>
+          {t(inheritedFromRoot ? "model.saveLocalConfiguration" : "model.save")}
         </Button>
       </div>
     </div>
@@ -391,7 +424,7 @@ export default function WorkbenchModel({ data, onBack }) {
 
 export function useLinsightConfig() {
   return useQuery({
-    queryKey: ["linsightModelEnvelope"],
+    queryKey: ["linsightModelEnvelope", managementRequestScope()],
     queryFn: () => getLinsightModelEnvelope({ showError: false }),
     onError: showApiError,
     select: (env) => {

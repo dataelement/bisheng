@@ -29,14 +29,7 @@ KNOWLEDGE_MODEL_SLOTS = (
     "qa_similar_model_id",
     "asr_model_id",
 )
-WORKBENCH_MODEL_OBJECTS = (
-    "embedding_model",
-    "asr_model",
-    "tts_model",
-    "chat_title_llm",
-    "memory_llm",
-    "image_read_model",
-)
+WORKBENCH_MODEL_OBJECTS = ("embedding_model", "asr_model", "tts_model", "chat_title_llm", "memory_llm", "image_read_model")
 
 
 def extract_model_default_references(key: str, payload: dict | BaseModel) -> tuple[ReferenceSpec, ...]:
@@ -79,3 +72,78 @@ def extract_model_default_references(key: str, payload: dict | BaseModel) -> tup
         for name in WORKBENCH_MODEL_OBJECTS:
             add(f"{name}.id", (payload.get(name) or {}).get("id"))
     return normalize_references(tuple(result))
+
+
+def validate_model_default_slots(key: str, slots: tuple[str, ...], references: tuple[ReferenceSpec, ...]) -> None:
+    """Only source-defined list members or statically registered scalar slots."""
+    if key not in MODEL_DEFAULT_SCHEMAS or not isinstance(slots, tuple) or len(set(slots)) != len(slots):
+        raise ValueError("invalid model-default slot selection")
+    static = {
+        "knowledge_llm": KNOWLEDGE_MODEL_SLOTS,
+        "assistant_llm": ("auto_llm.model_id",),
+        "evaluation_llm": ("model_id",),
+        "workflow_llm": ("model_id",),
+        "linsight_llm": (
+            "linsight_default_model_id",
+            "chat_default_model_id",
+            *(f"{name}.id" for name in WORKBENCH_MODEL_OBJECTS),
+        ),
+    }
+    registered = set(static[key]) | {reference.slot_key for reference in references}
+    if any(not isinstance(slot, str) or slot not in registered for slot in slots):
+        raise ValueError("unknown model-default slot")
+
+
+def project_model_default(key: str, payload: dict, slots: tuple[str, ...]) -> dict:
+    """Preserve parameters, but never return an unadmitted model reference."""
+    from copy import deepcopy
+
+    result = deepcopy(payload)
+    if key == "knowledge_llm":
+        for name in KNOWLEDGE_MODEL_SLOTS:
+            if name not in slots:
+                result[name] = None
+    elif key == "assistant_llm":
+        result["llm_list"] = [
+            item
+            for item in result.get("llm_list") or []
+            if item.get("model_id") not in (None, "")
+            and f"llm_list.{canonical_target_id(item['model_id'])}.model_id" in slots
+        ]
+        if "auto_llm.model_id" not in slots:
+            result["auto_llm"] = None
+    elif key in {"evaluation_llm", "workflow_llm"}:
+        if "model_id" not in slots:
+            result["model_id"] = None
+    else:
+        result["models"] = [
+            item
+            for item in result.get("models") or []
+            if item.get("id") not in (None, "") and f"models.{canonical_target_id(item['id'])}.id" in slots
+        ]
+        for name in ("linsight_default_model_id", "chat_default_model_id"):
+            if name not in slots:
+                result[name] = None
+        for name in WORKBENCH_MODEL_OBJECTS:
+            if f"{name}.id" not in slots:
+                result[name] = None
+    return result
+
+
+def model_default_slot_types(key: str, slot: str) -> frozenset[str]:
+    if slot in {"embedding_model_id", "embedding_model.id"}:
+        return frozenset({"embedding"})
+    if slot in {"asr_model_id", "asr_model.id"}:
+        return frozenset({"asr", "asr_rt"})
+    if slot == "tts_model.id":
+        return frozenset({"tts"})
+    return frozenset({"llm"})
+
+
+def model_default_models_are_callable(key, references, states):
+    return all(
+        (state := states.get(int(reference.target.target_id))) is not None
+        and state.online
+        and state.model_type in model_default_slot_types(key, reference.slot_key)
+        for reference in references
+    )

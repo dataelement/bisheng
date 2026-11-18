@@ -21,7 +21,7 @@ async def test_current_roles_in_each_route_scenario(policy_db, monkeypatch, scen
     monkeypatch.setattr(DepartmentDao, "aget_user_admin_departments", AsyncMock(return_value=[]))
     monkeypatch.setattr(TenantService, "_is_tenant_admin", AsyncMock(return_value=False))
     with tenant_execution_scope(2):
-        assert await _get_user_role_labels(77, 2) == {"regular_user", "admin", "role_2", "role_3"}
+        assert await _get_user_role_labels(77, 2) == {"regular_user", "admin", "role_2", "role_3", "role_4", "role_5"}
 
 
 async def test_policy_failure_does_not_match_regular_user_route(policy_db, monkeypatch):

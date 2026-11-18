@@ -32,6 +32,7 @@ const SIDEBAR_LINK_CLASS =
 const INSET_PAGE_PATHS = new Set([
     "/dashboard",
     "/build/client",
+    "/build/tools",
     "/filelib",
     "/dataset",
     "/model/management",
@@ -118,6 +119,7 @@ export default function MainLayout() {
     const location = useLocation();
     const hasInsetPanel = INSET_PAGE_PATHS.has(location.pathname.replace(/\/$/, "")) ||
         matchPath("/filelib/:id", location.pathname) !== null ||
+        matchPath("/filelib/:id/settings", location.pathname) !== null ||
         matchPath("/log/chatlog/*", location.pathname) !== null;
     const pendingNavClass =
         (menuKey: string) =>
@@ -143,7 +145,7 @@ export default function MainLayout() {
             <div className="bg-[#f8f8f8] dark:bg-background-main w-full h-screen flex flex-col">
                 {isGlobalSuper && <LicenseBanner />}
                 {/* 1fr / auto / 1fr keeps the page tabs centered even though the logo and the right cluster differ in width */}
-                <div className="grid h-[64px] shrink-0 grid-cols-[1fr_auto_1fr] items-center bg-[#f8f8f8] dark:bg-background-main relative z-[21]">
+                <div className="grid h-[64px] shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-x-4 bg-[#f8f8f8] dark:bg-background-main relative z-[21]">
                     <div className="flex h-9">
                         <div className="inline-block">
                             {/* @ts-ignore */}

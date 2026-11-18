@@ -15,9 +15,10 @@ class RoleDefinitionRepository:
     @staticmethod
     async def replace_menu(session, role_id: int, menu_ids: list[str], *, owner_tenant_id: int):
         with tenant_execution_scope(owner_tenant_id), strict_tenant_filter():
+            # Replace the same per-role WEB_MENU set that legacy reads use;
+            # stale storage-tenant copies must not survive explicit revocation.
             await session.exec(
                 delete(RoleAccess).where(
-                    RoleAccess.tenant_id == owner_tenant_id,
                     RoleAccess.role_id == role_id,
                     RoleAccess.type == AccessType.WEB_MENU.value,
                 )
@@ -71,33 +72,15 @@ class RoleDefinitionRepository:
                     if (role.role_type, role.department_id) != (verified_role.role_type, verified_role.department_id):
                         raise RolePolicyUnavailableError()
                     await cls._check_name(session, role, changes)
-                    affected = []
-                    if "department_id" in changes:
-                        from bisheng.user.application.policy_bindings import (
-                            affected_policy_users,
-                            retire_invalid_policy_bindings,
-                        )
-
-                        affected = await affected_policy_users(session=session, role_ids=[role.id])
-                        await retire_invalid_policy_bindings(
-                            affected, session=session, restrict_role_ids={role.id}, operator_id=operator_id
-                        )
+                    # v3.0.0 definition edits do not revoke person-bound grants.
+                    # Scope constrains new assignments; revoke through the
+                    # explicit binding owner instead of an implicit cleanup.
                     for key, value in changes.items():
                         setattr(role, key, value)
                     role.update_time = func.now()
                     session.add(role)
                     if menu_ids is not None:
                         await cls.replace_menu(session, role.id, menu_ids, owner_tenant_id=int(role.tenant_id))
-                    if "department_id" in changes:
-                        from bisheng.user.application.policy_bindings import (
-                            affected_policy_users,
-                            retire_invalid_policy_bindings,
-                        )
-
-                        affected = await affected_policy_users(session=session, role_ids=[role.id])
-                        await retire_invalid_policy_bindings(
-                            affected, session=session, restrict_role_ids={role.id}, operator_id=operator_id
-                        )
                     await session.commit()
                     await session.refresh(role)
                     return role

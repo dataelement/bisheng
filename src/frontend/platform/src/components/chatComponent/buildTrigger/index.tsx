@@ -2,7 +2,7 @@
 import { Transition } from "@headlessui/react";
 import { Zap } from "lucide-react";
 import { useContext, useState } from "react";
-import Loading from "../../../components/ui/loading";
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { useSSE } from "../../../contexts/SSEContext";
 import { alertContext } from "../../../contexts/alertContext";
 import { typesContext } from "../../../contexts/typesContext";
@@ -187,10 +187,7 @@ export default function BuildTrigger({
                   value={progress}
                 ></RadialProgressComponent>
               ) : isBuilding ? (
-                <Loading
-                  strokeWidth={1.5}
-                  className="build-trigger-loading-icon"
-                />
+                <LoadingState size="inline" />
               ) : (
                 <Zap
                   strokeWidth={1.5}

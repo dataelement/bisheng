@@ -8,7 +8,8 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { KnowledgeSpaceInfo } from "@/controllers/API/knowledgeSpace";
-import { useSidebarSpaceActions } from "@/pages/KnowledgePage/sidebar/useSidebarSpaceActions";
+import { knowledgeQueryKeys } from "@/controllers/hooks/knowledge";
+import { useSpaceActions } from "@/pages/KnowledgePage/hooks/useSpaceActions";
 import type { ReactNode } from "react";
 vi.mock("@bisheng/ui", async (original) => ({
   ...(await original<typeof import("@bisheng/ui")>()),
@@ -75,7 +76,7 @@ function setup(canCreate = true, onDeleted = vi.fn()) {
   });
   clients.push(client);
   function Example() {
-    const menu = useSidebarSpaceActions(scope, canCreate, onDeleted);
+    const menu = useSpaceActions(scope, { canCopy: canCreate, onDeleted });
     return (
       <>
         <button onClick={() => menu.load(row, true)}>open</button>
@@ -135,6 +136,12 @@ it("keeps copy behind creation eligibility and permission management behind its 
   setup(false);
   expect(screen.queryByRole("menuitem")).toBeNull();
 });
+it("withholds copy, delete and permission management from a visible-only creator", () => {
+  mocks.actions = { "7": ["visible"] };
+  setup();
+  expect(screen.queryByRole("menuitem")).toBeNull();
+  expect(mocks.open).not.toHaveBeenCalled();
+});
 it("opens permission management and the existing reference-aware deletion for the selected space", async () => {
   mocks.actions = { "7": ["delete", "manage_permission"] };
   const view = setup();
@@ -145,6 +152,46 @@ it("opens permission management and the existing reference-aware deletion for th
   );
   expect(mocks.open).toHaveBeenCalledWith({ spaceId: 7, kind: "delete" });
   await waitFor(() => expect(view.onDeleted).toHaveBeenCalledWith(7));
+});
+it("leaves the deleted space before refreshing the catalog", async () => {
+  let resolve!: (value: boolean) => void;
+  mocks.open.mockReturnValue(
+    new Promise<boolean>((yes) => {
+      resolve = yes;
+    }),
+  );
+  mocks.actions = { "7": ["delete"] };
+  const order: string[] = [];
+  const invalidate = vi
+    .spyOn(QueryClient.prototype, "invalidateQueries")
+    .mockImplementation(async (filters) => {
+      order.push("refresh");
+      const predicate =
+        filters && typeof filters === "object" && "predicate" in filters
+          ? filters.predicate
+          : undefined;
+      expect(predicate).toEqual(expect.any(Function));
+      expect(
+        predicate?.({
+          queryKey: [...knowledgeQueryKeys.scope(scope), "space", 7, "info"],
+        } as never),
+      ).toBe(false);
+      expect(
+        predicate?.({
+          queryKey: [...knowledgeQueryKeys.scope(scope), "visible-list"],
+        } as never),
+      ).toBe(true);
+    });
+  const view = setup();
+  view.onDeleted.mockImplementation(() => {
+    order.push("leave");
+  });
+  fireEvent.click(
+    screen.getByRole("menuitem", { name: "deletion.delete_space" }),
+  );
+  resolve(true);
+  await waitFor(() => expect(order).toEqual(["leave", "refresh"]));
+  invalidate.mockRestore();
 });
 it("does not navigate after a retired delete result", async () => {
   let resolve!: (value: boolean) => void;

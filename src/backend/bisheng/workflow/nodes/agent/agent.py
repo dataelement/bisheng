@@ -127,11 +127,13 @@ class WorkflowCitationToolWrapper(BaseTool):
             results = json.loads(output)
         except json.JSONDecodeError:
             return output
-        if not isinstance(results, list):
+        envelope = results if isinstance(results, dict) and set(results) == {"response", "web_results"} else None
+        results = envelope["web_results"] if envelope else results
+        if not isinstance(results, list) or any(not isinstance(item, dict) for item in results):
             return output
         results = annotate_web_results_with_citations(results)
         self._extend_citation_registry_items(collect_web_citation_registry_items(results))
-        return json.dumps(results, ensure_ascii=False)
+        return json.dumps({**envelope, "web_results": results} if envelope else results, ensure_ascii=False)
 
     async def _aappend_web_citation(self, output: Any) -> Any:
         if not isinstance(output, str):
@@ -140,11 +142,13 @@ class WorkflowCitationToolWrapper(BaseTool):
             results = json.loads(output)
         except json.JSONDecodeError:
             return output
-        if not isinstance(results, list):
+        envelope = results if isinstance(results, dict) and set(results) == {"response", "web_results"} else None
+        results = envelope["web_results"] if envelope else results
+        if not isinstance(results, list) or any(not isinstance(item, dict) for item in results):
             return output
         results = annotate_web_results_with_citations(results)
         await self._aextend_citation_registry_items(collect_web_citation_registry_items(results))
-        return json.dumps(results, ensure_ascii=False)
+        return json.dumps({**envelope, "web_results": results} if envelope else results, ensure_ascii=False)
 
     def _append_fetch_citation(self, output: Any) -> Any:
         output, items = annotate_fetched_page_with_citation(output, self.fetched_pages)
@@ -338,7 +342,9 @@ class AgentNode(BaseNode):
 
     def _init_agent(self, system_prompt: str):
         # Get a list of configured helper models
-        assistant_llm = LLMService.sync_get_assistant_llm(tenant_id=self.tenant_id)
+        assistant_llm = LLMService.sync_get_assistant_llm(
+            tenant_id=self.tenant_id, slots=(f"llm_list.{self.node_params['model_id']}.model_id",)
+        )
         if not assistant_llm.llm_list:
             raise Exception("Assistant reasoning model list is empty")
         default_llm = [one for one in assistant_llm.llm_list if one.model_id == self.node_params["model_id"]]

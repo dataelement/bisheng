@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Generic, TypeVar
 
 from sqlalchemy import case, func, or_
-from sqlalchemy.orm import load_only
+from sqlalchemy.orm import aliased, load_only
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -17,7 +17,7 @@ from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
-from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile
+from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile, KnowledgeFileStatus
 
 SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
 T = TypeVar("T")
@@ -51,6 +51,15 @@ class VersionCandidateFact:
     version: KnowledgeDocumentVersion
     file: KnowledgeFile
     version_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class FileVersionChain:
+    """One version row of a file, with the length of its logical document."""
+
+    document_id: int
+    version_no: int
+    chain_length: int
 
 
 class KnowledgeVersionReadRepository:
@@ -351,3 +360,108 @@ class KnowledgeVersionReadRepository:
                         more,
                         documents[-1].id if more else None,
                     )
+
+    async def aget_space(self, *, tenant_id: int, space_id: int) -> Knowledge | None:
+        self._scope(tenant_id, space_id)
+        with strict_tenant_filter():
+            async with self._sessions() as session:
+                with session.no_autoflush:
+                    return (
+                        (
+                            await session.execute(
+                                select(Knowledge)
+                                .where(
+                                    Knowledge.id == space_id,
+                                    Knowledge.tenant_id == tenant_id,
+                                    Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+                                )
+                                .options(
+                                    load_only(
+                                        Knowledge.id,
+                                        Knowledge.type,
+                                        Knowledge.tenant_id,
+                                        Knowledge.user_id,
+                                        Knowledge.state,
+                                    )
+                                )
+                            )
+                        )
+                        .scalars()
+                        .first()
+                    )
+
+    async def alist_pending_similar_files(self, *, tenant_id: int, space_id: int) -> list[KnowledgeFile]:
+        """Parsed files in this space that still need a similar-document decision."""
+
+        self._scope(tenant_id, space_id)
+        with strict_tenant_filter():
+            async with self._sessions() as session:
+                with session.no_autoflush:
+                    fields = (
+                        "id",
+                        "knowledge_id",
+                        "tenant_id",
+                        "file_type",
+                        "file_name",
+                        "file_encoding",
+                        "status",
+                        "user_id",
+                        "user_name",
+                        "create_time",
+                        "update_time",
+                        "file_level_path",
+                        "level",
+                        "simhash",
+                    )
+                    statement = (
+                        select(KnowledgeFile)
+                        .where(
+                            KnowledgeFile.knowledge_id == space_id,
+                            KnowledgeFile.tenant_id == tenant_id,
+                            KnowledgeFile.similar_status == 1,
+                            KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
+                        )
+                        .options(load_only(*(getattr(KnowledgeFile, name) for name in fields), raiseload=True))
+                    )
+                    return list((await session.execute(statement)).scalars().all())
+
+    async def alist_version_chains(
+        self, *, tenant_id: int, space_id: int, file_ids: list[int]
+    ) -> dict[int, tuple[FileVersionChain, ...]]:
+        """Version rows for these files, each carrying its document's chain length."""
+
+        self._scope(tenant_id, space_id)
+        ids = list(dict.fromkeys(file_ids))
+        for ident in ids:
+            self._id(ident)
+        if not ids:
+            return {}
+        version = KnowledgeDocumentVersion
+        sibling = aliased(KnowledgeDocumentVersion)
+        with strict_tenant_filter():
+            async with self._sessions() as session:
+                with session.no_autoflush:
+                    rows = (
+                        await session.execute(
+                            select(
+                                version.knowledge_file_id,
+                                version.document_id,
+                                version.version_no,
+                                func.count(sibling.id),
+                            )
+                            .join(KnowledgeFile, KnowledgeFile.id == version.knowledge_file_id)
+                            .join(sibling, sibling.document_id == version.document_id)
+                            .where(
+                                version.knowledge_file_id.in_(ids),
+                                KnowledgeFile.knowledge_id == space_id,
+                                KnowledgeFile.tenant_id == tenant_id,
+                            )
+                            .group_by(version.id, version.knowledge_file_id, version.document_id, version.version_no)
+                        )
+                    ).all()
+        chains: dict[int, list[FileVersionChain]] = {}
+        for file_id, document_id, version_no, chain_length in rows:
+            chains.setdefault(int(file_id), []).append(
+                FileVersionChain(int(document_id), int(version_no), int(chain_length))
+            )
+        return {file_id: tuple(items) for file_id, items in chains.items()}

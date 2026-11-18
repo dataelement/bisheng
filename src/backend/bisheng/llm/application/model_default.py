@@ -22,6 +22,7 @@ from bisheng.llm.domain.services.default_reference_extractor import (
     MODEL_DEFAULT_REFERENCE_EXTRACTOR_VERSION,
     MODEL_DEFAULT_SCHEMAS,
     extract_model_default_references,
+    model_default_models_are_callable,
 )
 from bisheng.open_api.application.access_context import get_current_open_api_principal
 from bisheng.permission.application.data_scope import DATA_SCOPE_ALL
@@ -189,6 +190,15 @@ class ModelDefaultApplication:
             lock_source_root=lock_root,
             new_source=new_source,
         )
+        states = await repository.aread_slot_models(
+            session, tuple(int(reference.target.target_id) for reference in references)
+        )
+        # Missing original references retain F118's exact-source repair rule;
+        # binding receipts already reject a newly introduced missing identity.
+        existing = tuple(reference for reference in references if int(reference.target.target_id) in states)
+        if not model_default_models_are_callable(key, existing, states):
+            raise ResourceReferenceInvalidError(reason="reference_target_invalid")
+        await cls._authorize(login_user, tenant)
         await repository.aput(session, key, canonical_payload_json(config.model_dump(mode="json")))
         await runtime.aapply_source_bindings(session, prepared)
         return ModelDefaultSaveResult(config, embedding_changed)

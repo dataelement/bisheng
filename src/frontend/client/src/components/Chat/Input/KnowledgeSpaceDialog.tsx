@@ -12,7 +12,6 @@ export function KnowledgeSpaceDialog(props: KnowledgePickerSelectionProps) {
   return (
     <KnowledgePickerDialog
       {...props}
-      kind="space"
       keyword={keyword}
       onKeywordChange={setKeyword}
       groups={spaces.length ? [{ key: "visible", items: spaces }] : []}

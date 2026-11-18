@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import {
   knowledgeUploadPreviewApi,
@@ -13,6 +14,7 @@ import {
   type KnowledgeQueryScope,
 } from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
+import { resolveKnowledgeParseFailure } from "../knowledgeParseFailureMessage";
 import useKnowledgeStore from "../useKnowledgeStore";
 import PreviewFile from "./PreviewFile";
 import PreviewParagraph from "./PreviewParagraph";
@@ -31,7 +33,7 @@ interface SpaceUploadPreviewProps {
   spaceId: number;
   strategy: WizardStrategy;
   book: PreviewBook;
-  onPreview: (id: string, record: PreviewBook[string]) => void;
+  onPreview: (id: string, record: PreviewBook[string], path?: string) => void;
   onBusy: (busy: boolean) => void;
   previewCount?: number;
   editable?: boolean;
@@ -164,10 +166,14 @@ function PreviewPane({
             ).preview_id;
       if (signal?.aborted)
         throw new DOMException("Retired preview", "AbortError");
-      onPreview(file.id, {
-        fingerprint,
-        value: { preview_id, revision: 0, status: "processing" },
-      });
+      onPreview(
+        file.id,
+        {
+          fingerprint,
+          value: { preview_id, revision: 0, status: "processing" },
+        },
+        file.filePath,
+      );
       const deadline = Date.now() + 10 * 60 * 1000;
       for (;;) {
         if (Date.now() > deadline) throw new Error(t("previewFailed"));
@@ -179,7 +185,10 @@ function PreviewPane({
         );
         if (signal?.aborted)
           throw new DOMException("Retired preview", "AbortError");
-        if (value.status === "error") throw new Error(t("previewFailed"));
+        if (value.status === "error")
+          throw new Error(
+            resolveKnowledgeParseFailure(value.data, t) ?? t("previewFailed"),
+          );
         if (value.status === "completed") return value;
         await wait(signal);
       }
@@ -212,12 +221,14 @@ function PreviewPane({
     if (query.error) showApiError(query.error);
   }, [query.error]);
   useEffect(() => {
-    onBusy(query.isFetching || query.isError || saving || Boolean(failed));
-  }, [query.isFetching, query.isError, saving, failed, onBusy]);
+    // Preview loading is scoped to the preview panel. Errors can be handled by retrying
+    // or by leaving the preview flow through direct upload.
+    onBusy(query.isFetching || saving || Boolean(failed));
+  }, [query.isFetching, saving, failed, onBusy]);
   useEffect(() => {
     if (value?.status === "completed")
-      onPreview(file.id, { value, fingerprint });
-  }, [value, file.id, fingerprint, onPreview]);
+      onPreview(file.id, { value, fingerprint }, file.filePath);
+  }, [value, file.id, file.filePath, fingerprint, onPreview]);
   const data = value?.data;
   const chunks = useMemo(
     () =>
@@ -252,7 +263,11 @@ function PreviewPane({
   if (query.isError)
     return (
       <div role="alert">
-        <p>{t("previewFailed")}</p>
+        <p>
+          {query.error instanceof Error && query.error.message
+            ? query.error.message
+            : t("previewFailed")}
+        </p>
         <Button
           onClick={() => {
             void query.refetch();
@@ -262,7 +277,10 @@ function PreviewPane({
         </Button>
       </div>
     );
-  if (!data || !value) return <p role="status">{t("loading")}</p>;
+  if (!data || !value)
+    return (
+      <LoadingState label={t("f118.preview_loading")} className="min-h-0 flex-1 px-4 py-6" />
+    );
   const previewFile = {
     ...file,
     id: file.id,
@@ -296,13 +314,14 @@ function PreviewPane({
           </Button>
         </div>
       )}
-      <div className="flex min-h-0 flex-1 gap-3 bg-background-main">
+      <div className={`flex min-h-0 flex-1 gap-3 bg-background-main ${editable ? "p-2" : ""}`}>
         {editable && (
           <PreviewFile
             file={previewFile}
             rawFiles={[previewFile]}
             step={3}
             edit={!saving && !failed}
+            padded={false}
             chunks={chunks}
             setChunks={() => undefined}
             partitions={data.partitions ?? {}}
@@ -319,7 +338,7 @@ function PreviewPane({
             }
           />
         )}
-        <div className="min-h-0 min-w-0 flex-1">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <PreviewParagraph
             key={`${value.preview_id}:${value.revision}`}
             fileId={file.id}
@@ -327,7 +346,8 @@ function PreviewPane({
             previewCount={chunks.length}
             chunks={chunks}
             immediateSave
-            className="h-full min-h-0"
+            padded={!editable}
+            className="min-h-0 flex-1 overscroll-contain"
             loading={query.isFetching || saving}
             edit={editable && !saving && !failed}
             canDelete={editable && !saving && !failed}

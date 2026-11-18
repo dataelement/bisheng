@@ -20,6 +20,7 @@ from bisheng.api.v1 import (
     workflow_router,
     workstation_router,
 )
+from bisheng.api.v1.storage import router as storage_router
 from bisheng.app_governance.api.router import router as runtime_audit_router
 from bisheng.app_publish.api.router import v1_router as app_publish_v1_router
 from bisheng.app_publish.api.router import v2_router as app_publish_v2_router
@@ -57,6 +58,7 @@ from bisheng.knowledge.api.router import (
     qa_router,
 )
 from bisheng.linsight.api.router import router as linsight_router
+from bisheng.llm.api.pricing import router as llm_pricing_router
 from bisheng.llm.api.router import router as llm_router
 from bisheng.memory.api.router import router as memory_router
 from bisheng.message.api.router import router as message_router
@@ -144,6 +146,7 @@ router.include_router(audit_router, request_scope=S.TENANT)
 router.include_router(evaluation_router, request_scope=S.TENANT)
 router.include_router(tag_router, request_scope=S.TENANT)
 router.include_router(llm_router, request_scope=S.TENANT)
+router.include_router(llm_pricing_router, request_scope=S.TENANT)
 router.include_router(workflow_router, request_scope=S.TENANT)
 router.include_router(mark_router, request_scope=S.TENANT)
 router.include_router(workstation_router, request_scope=S.TENANT)
@@ -179,6 +182,7 @@ router.include_router(admin_router, request_scope=S.IDENTITY)
 router.include_router(approval_router, request_scope=S.PERSONAL)
 router.include_router(brand_router, request_scope=S.PLATFORM)
 router.include_router(sensitive_word_policy_router, request_scope=S.TENANT)
+router.include_router(storage_router, request_scope=S.PUBLIC)
 # Open API management face (features/v3.0.0-beta1/053): service accounts,
 # personal tokens, scope catalogue and skill-pack distribution — session auth,
 # tenant-admin gated inside the endpoints.

@@ -3,8 +3,9 @@ import { Outlined } from "bisheng-icons";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import type { KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
 import { useKnowledgePageScope } from "@/hooks/useKnowledgePageScope";
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
+import { KnowledgeScopeUnavailable } from "./components/KnowledgeScopeUnavailable";
 import KnowledgeQa from "./KnowledgeQa";
 import { KnowledgeSpaceWorkspace } from "./KnowledgeSpaceWorkspace";
 
@@ -40,30 +41,31 @@ export default function KnowledgePage() {
   useEffect(() => {
     delete pageWindow.LibPage;
   }, []);
-  const unavailable = (
-    <div role="status" className="space-y-3 p-4">
-      <p>{t(isLoading ? "f118.loading_space" : "f118.scope_unavailable")}</p>
-      <Button
-        disabled={isLoading}
-        onClick={() => {
-          void retry();
-        }}
-      >
-        {t("retry")}
-      </Button>
-    </div>
+  const unavailable = isLoading ? (
+    <LoadingState size="page" className="h-full" label={t("f118.loading_space")} />
+  ) : (
+    <KnowledgeScopeUnavailable
+      action={<Button onClick={() => { void retry(); }}>{t("retry")}</Button>}
+    />
   );
-  const content = (scope: KnowledgeQueryScope | undefined) =>
-    scope ? (
-      <KnowledgeSpaceWorkspace
-        key={JSON.stringify(scope)}
-        scope={scope}
-        routeId={id}
-        active={activeKey === (scope.view === "admin" ? "admin" : "file")}
-      />
-    ) : (
-      unavailable
-    );
+  const ordinary = scopes?.ordinary;
+  const ordinaryContent = ordinary ? (
+    <KnowledgeSpaceWorkspace
+      key={JSON.stringify(ordinary)}
+      scope={ordinary}
+      routeId={id}
+      active={activeKey === "file"}
+    />
+  ) : unavailable;
+  const admin = scopes?.admin;
+  const adminContent = canManage && admin ? (
+    <KnowledgeSpaceWorkspace
+      key={JSON.stringify(admin)}
+      scope={admin}
+      routeId={id}
+      active={activeKey === "admin"}
+    />
+  ) : unavailable;
   return (
     <div className="relative h-full w-full px-2 pt-4">
       <Tabs
@@ -73,13 +75,13 @@ export default function KnowledgePage() {
           navigate(key === "file" ? "/filelib" : `/filelib?view=${key}`);
         }}
         extra={<div ref={setToolbarTarget} />}
-        className="flex h-full w-full flex-col [&>div:first-child]:mx-2 [&>div:first-child]:mb-2 [&>div:first-child]:shrink-0 [&>[role=tabpanel]]:min-h-0 [&>[role=tabpanel]]:flex-1"
+        className="flex h-full w-full flex-col [&>div:first-child]:mx-2 [&>div:first-child]:shrink-0 [&>[role=tabpanel]]:min-h-0 [&>[role=tabpanel]]:flex-1"
         items={[
           {
             key: "file",
             label: t("f118.spaces"),
             icon: <Outlined.Books aria-hidden="true" />,
-            children: content(scopes?.ordinary),
+            children: ordinaryContent,
           },
           {
             key: "qa",
@@ -93,7 +95,7 @@ export default function KnowledgePage() {
                   key: "admin",
                   label: t("f118.manage_spaces"),
                   icon: <Outlined.Books aria-hidden="true" />,
-                  children: content(scopes?.admin),
+                  children: adminContent,
                 },
               ]
             : []),

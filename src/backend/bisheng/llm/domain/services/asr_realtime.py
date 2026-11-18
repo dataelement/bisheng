@@ -38,7 +38,7 @@ async def run_realtime_asr(websocket: WebSocket, login_user):
         start = await asyncio.wait_for(websocket.receive_json(), 10)
         if start.get("type") != "start":
             raise ValueError("ASR session requires a start event")
-        config = await LLMService.get_workbench_llm()
+        config = await LLMService.get_workbench_llm(slots=("asr_model.id",))
         if not config.asr_model or not config.asr_model.id:
             raise NoAsrModelConfigError()
         if str(start.get("model_id")) != str(config.asr_model.id):

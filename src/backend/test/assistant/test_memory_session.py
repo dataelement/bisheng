@@ -406,20 +406,24 @@ def update_env(monkeypatch):
     row = Assistant(id=ASSISTANT_ID, name="差旅助手", tenant_id=TENANT_A, user_id=1, memory_enabled=False)
     saved = []
 
-    async def persist(cls, assistant_id, user_payload, *, changes=None, **_kwargs):
-        # Stands in for the reference-fenced writer: the edit check, then the field writes.
-        await cls.check_update_permission_async(row, user_payload)
-        for key, value in (changes or {}).items():
+    async def persist_changes(assistant_id, user, *, changes, **_kwargs):
+        # 3.1 routes every assistant write through the reference fence
+        # (_persist_assistant_changes, covered against SQL in
+        # test/knowledge_unification/test_as_bindings.py). This stand-in keeps the
+        # two steps the memory switch depends on: the edit-permission check, then
+        # copying ``changes`` onto the row.
+        await AssistantService.check_update_permission_async(row, user)
+        for key, value in changes.items():
             setattr(row, key, value)
         saved.append(row)
         return row
 
-    monkeypatch.setattr(AssistantService, "_persist_assistant_changes", classmethod(persist))
-    monkeypatch.setattr(
-        assistant_service_module,
-        "get_async_db_session",
-        MagicMock(return_value=MagicMock(__aenter__=AsyncMock(), __aexit__=AsyncMock(return_value=False))),
-    )
+    @asynccontextmanager
+    async def no_session():
+        yield None
+
+    monkeypatch.setattr(AssistantService, "_persist_assistant_changes", persist_changes)
+    monkeypatch.setattr(assistant_service_module, "get_async_db_session", no_session)
     monkeypatch.setattr(assistant_service_module.AssistantRepository, "alist_links", AsyncMock(return_value=[]))
     monkeypatch.setattr(assistant_service_module.telemetry_service, "log_event", AsyncMock())
     monkeypatch.setattr(AssistantService, "get_link_info", classmethod(lambda cls, *a: ([], [], [])))

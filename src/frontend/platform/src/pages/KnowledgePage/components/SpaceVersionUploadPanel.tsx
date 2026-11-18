@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button } from "@bisheng/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useContext, useEffect, useId, useRef, useState } from "react";
@@ -107,11 +108,17 @@ export function SpaceVersionUploadPanel({
         controller.signal,
       );
       if (controller.signal.aborted) return;
+      if (!staged.preview_upload_ref)
+        throw new Error(t("versions.upload_unconfirmed"));
       // Registration is attempted once. A lost ACK must never create another file.
       registered.current = true;
       const rows = await knowledgeUploadsApi.registerSpaceFiles(
         spaceId,
-        { file_path: [staged.file_path], parent_id: parentId },
+        {
+          file_path: [staged.file_path],
+          preview_upload_refs: [staged.preview_upload_ref],
+          parent_id: parentId,
+        },
         controller.signal,
       );
       if (controller.signal.aborted) return;
@@ -243,7 +250,7 @@ export function SpaceVersionUploadPanel({
           if (file) void handleUpload(file);
         }}
       />
-      {busy && <p role="status">{t("loading")}</p>}
+      {busy && <LoadingState label={t("loading")} className="min-h-32" />}
       {uncertain && (
         <p role="alert" className="text-sm">
           {t("versions.uncertain")}

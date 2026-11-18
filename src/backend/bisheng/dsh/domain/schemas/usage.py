@@ -6,6 +6,9 @@ from typing import Literal
 from pydantic import Field, model_validator
 
 from bisheng.dsh.domain.schemas.contracts import DshTokenUsage
+from bisheng.dsh.domain.schemas.pricing import PricingSnapshot, price_usage
+
+INT64_MAX = 9_223_372_036_854_775_807
 
 
 class UsageEvent(DshTokenUsage):
@@ -17,7 +20,10 @@ class UsageEvent(DshTokenUsage):
     session_id: str = Field(min_length=1, max_length=36)
     grant_version: int | None = Field(default=None, gt=0)
     model_id: int = Field(gt=0)
+    # Legacy multiplier: only events without a price snapshot (pre-F016) are billed by it.
     credit_rate: int = Field(default=100, ge=1, le=100000, strict=True)
+    # F016: prices frozen when the call started; None only on pre-F016 events.
+    pricing: PricingSnapshot | None = None
     usage_month: str = Field(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
     billing_timezone: str = Field(min_length=1, max_length=64)
     policy_version: int = Field(gt=0)
@@ -38,13 +44,31 @@ class UsageEvent(DshTokenUsage):
 
     @property
     def billed_tokens(self) -> int | None:
-        """Round each call up to one microcredit using integer arithmetic."""
-        return None if self.total_tokens is None else (self.total_tokens * self.credit_rate + 99) // 100
+        """Microcredits charged for this call, rounded up with integer arithmetic."""
+        if self.total_tokens is None:
+            return None
+        if self.pricing is None:
+            # Pre-F016 events keep their original rule so recovery can still rebuild their month.
+            return (self.total_tokens * self.credit_rate + 99) // 100
+        return price_usage(self, self.pricing).billed
+
+    @property
+    def cost_micro(self) -> int | None:
+        """Spend in billing-currency micro-units; None without a snapshot or usage."""
+        if self.pricing is None or self.total_tokens is None:
+            return None
+        return price_usage(self, self.pricing).cost_micro
+
+    @property
+    def currency(self) -> str | None:
+        return None if self.pricing is None else self.pricing.currency
 
     @model_validator(mode="after")
     def validate_state(self):
-        if self.billed_tokens is not None and self.billed_tokens > 9_223_372_036_854_775_807:
+        if self.billed_tokens is not None and self.billed_tokens > INT64_MAX:
             raise ValueError("Billed usage must fit the accounting range")
+        if self.cost_micro is not None and self.cost_micro > INT64_MAX:
+            raise ValueError("Call cost must fit the accounting range")
         reliable = self.total_tokens is not None
         if reliable != (self.status not in {"RUNNING", "USAGE_UNKNOWN"}):
             raise ValueError("Terminal events require reliable usage; unresolved events require NULL")

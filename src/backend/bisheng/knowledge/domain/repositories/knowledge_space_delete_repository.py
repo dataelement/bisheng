@@ -4,7 +4,7 @@ from dataclasses import fields
 from datetime import timedelta
 from uuid import uuid4
 
-from sqlmodel import col, delete, or_, select, update
+from sqlmodel import case, col, delete, or_, select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
@@ -559,6 +559,49 @@ class KnowledgeSpaceDeleteRepository:
                 row.lease_until = None
             session.add(row)
 
+    async def claim_verification(self, job_id):
+        """Receipt-bound periodic compensation without reopening business deletion."""
+        async with self.session_factory() as session, session.begin():
+            job = await self._locked_job(session, job_id)
+            now = deletion_now()
+            if (
+                job.state != "SUCCEEDED"
+                or job.operation_type is None
+                or job.business_phase != "finalized"
+                or job.completed_steps != list(DELETE_STEPS)
+                or job.next_attempt_at > now
+                or (job.lease_until and job.lease_until > now)
+            ):
+                return None
+            job.attempts += 1
+            job.lease_token = str(uuid4())
+            job.lease_until = now + timedelta(seconds=LEASE_SECONDS)
+            session.add(job)
+            await session.flush()
+            session.expunge(job)
+            return job
+
+    async def renew_verification(self, job, *, complete=False, error=None):
+        async with self.session_factory() as session, session.begin():
+            row = await self._locked_job(session, job.id)
+            if (
+                row.state != "SUCCEEDED"
+                or row.lease_token != job.lease_token
+                or row.completed_steps != list(DELETE_STEPS)
+                or row.business_phase != "finalized"
+            ):
+                raise RuntimeError("delete verification lease was replaced")
+            now = deletion_now()
+            if complete or error is not None:
+                row.lease_token = row.lease_until = None
+                row.last_error = error[:4000] if error is not None else None
+                row.next_attempt_at = now + timedelta(
+                    seconds=60 if error is not None else min(86400, 3600 * 2 ** min(max(job.attempts - 2, 0), 5))
+                )
+            else:
+                row.lease_until = now + timedelta(seconds=LEASE_SECONDS)
+            session.add(row)
+
     async def due_jobs(self, *, limit=100) -> list[tuple[int, str]]:
         # Beat enumerates routing metadata only; execution restores each tenant.
         with bypass_tenant_filter():
@@ -568,14 +611,22 @@ class KnowledgeSpaceDeleteRepository:
                     await session.exec(
                         select(KnowledgeSpaceDeleteJob.tenant_id, KnowledgeSpaceDeleteJob.id)
                         .where(
-                            KnowledgeSpaceDeleteJob.state != "SUCCEEDED",
+                            or_(
+                                KnowledgeSpaceDeleteJob.state != "SUCCEEDED",
+                                (KnowledgeSpaceDeleteJob.operation_type.is_not(None))
+                                & (KnowledgeSpaceDeleteJob.business_phase == "finalized"),
+                            ),
                             KnowledgeSpaceDeleteJob.next_attempt_at <= now,
                             or_(
                                 KnowledgeSpaceDeleteJob.lease_until.is_(None),
                                 KnowledgeSpaceDeleteJob.lease_until <= now,
                             ),
                         )
-                        .order_by(KnowledgeSpaceDeleteJob.next_attempt_at, KnowledgeSpaceDeleteJob.id)
+                        .order_by(
+                            case((KnowledgeSpaceDeleteJob.state == "SUCCEEDED", 1), else_=0),
+                            KnowledgeSpaceDeleteJob.next_attempt_at,
+                            KnowledgeSpaceDeleteJob.id,
+                        )
                         .limit(limit)
                     )
                 ).all()

@@ -8,7 +8,8 @@ jest.mock("~/api/knowledge", () => ({
     getFilePreviewApi: jest.fn(),
     getFileDownloadApi: jest.fn(),
 }));
-jest.mock("~/hooks", () => ({ useLocalize: () => (key: string) => key }));
+jest.mock("~/api/permission", () => ({ getMyResourcePermissions: jest.fn().mockResolvedValue({ actions: [] }) }));
+jest.mock("~/hooks", () => ({ useLocalize: () => (key: string) => key, useAuthContext: () => ({ user: { id: '7', role: 'member', tenant_id: 60 } }) }));
 jest.mock("~/pages/Subscription/AiChat/FileAiDock", () => ({ FileAiDock: () => null }));
 jest.mock("./RichKnowledgePreview", () => ({ RichKnowledgePreview: () => null }));
 jest.mock("./index", () => {
@@ -73,7 +74,7 @@ describe("TXT preview content loaded from a search-result route", () => {
         await screen.findByText(/TXT preview acceptance/);
         expect(screen.getByTestId("preview")).toHaveAttribute("data-type", "txt");
         expect(container.querySelector("pre")?.textContent).toBe(body);
-        expect(fetchMock).toHaveBeenCalledWith(objectPath + signature);
+        expect(fetchMock).toHaveBeenCalledWith(objectPath + signature, expect.objectContaining({ signal: expect.anything() }));
         expect(getFilePreviewApi).toHaveBeenCalledWith("11", "6");
     });
 });

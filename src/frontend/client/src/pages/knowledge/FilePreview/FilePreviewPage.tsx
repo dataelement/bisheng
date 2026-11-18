@@ -4,16 +4,17 @@
  * space dock pattern). This is the route-level component; FilePreview itself is
  * a reusable, decoupled component.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { Outlined } from "bisheng-icons";
 import { getFileDownloadApi, getFilePreviewApi } from "~/api/knowledge";
+import { getMyResourcePermissions } from "~/api/permission";
 import type { KnowledgeFilePreview } from "~/api/knowledge";
 import { FileAiDock } from "~/pages/Subscription/AiChat/FileAiDock";
 import FilePreview from "./index";
 import { RichKnowledgePreview } from "./RichKnowledgePreview";
 import { resolveKnowledgePreviewUrl } from "./previewUrlUtils";
-import { useLocalize } from "~/hooks";
+import { useAuthContext, useLocalize } from "~/hooks";
 
 /**
  * Extract file extension from a URL path, ignoring query parameters.
@@ -57,6 +58,19 @@ export default function FilePreviewPage() {
     const [searchParams] = useSearchParams();
     const fileName = searchParams.get("name") || localize("com_knowledge.unknown_file");
     const spaceId = searchParams.get("spaceId") || "";
+    const { user } = useAuthContext();
+    const identity = JSON.stringify([user?.id, user?.role, user?.tenant_id]);
+    const [permissionRevision, setPermissionRevision] = useState(0);
+    const permissionTarget = useMemo(() => ({ fileId, spaceId, identity, permissionRevision }),
+        [fileId, spaceId, identity, permissionRevision]);
+    const currentTarget = useRef<typeof permissionTarget | null>(permissionTarget);
+    currentTarget.current = permissionTarget;
+    useEffect(() => {
+        currentTarget.current = permissionTarget;
+        return () => {
+            if (currentTarget.current === permissionTarget) currentTarget.current = null;
+        };
+    }, [permissionTarget]);
 
     // Fetch real preview URL via API
     const [fileUrl, setFileUrl] = useState<string>("");
@@ -64,15 +78,39 @@ export default function FilePreviewPage() {
     const [previewData, setPreviewData] = useState<KnowledgeFilePreview | null>(null);
     const [loading, setLoading] = useState(true);
     const [conversionFailed, setConversionFailed] = useState(false);
-    const canDownload = Boolean(fileId && spaceId);
+    const [downloadPermission, setDownloadPermission] = useState<{ target: typeof permissionTarget; allowed: boolean } | null>(null);
+    const canDownload = downloadPermission?.target === permissionTarget && downloadPermission.allowed;
+    useEffect(() => {
+        const refresh = () => setPermissionRevision(value => value + 1);
+        window.addEventListener("focus", refresh);
+        return () => window.removeEventListener("focus", refresh);
+    }, []);
+    useEffect(() => {
+        if (!fileId || !spaceId) return;
+        let cancelled = false;
+        const controller = new AbortController();
+        getMyResourcePermissions("knowledge_file", fileId, { signal: controller.signal })
+            .then((summary) => {
+                if (!cancelled) setDownloadPermission({ target: permissionTarget, allowed: summary.actions.includes("download") });
+            })
+            .catch(() => {
+                if (!cancelled) setDownloadPermission({ target: permissionTarget, allowed: false });
+            });
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
+    }, [fileId, spaceId, permissionTarget]);
 
     useEffect(() => {
         if (!fileId || !spaceId) { setLoading(false); return; }
+        let cancelled = false;
         setLoading(true);
         setConversionFailed(false);
         setPreviewData(null);
         getFilePreviewApi(spaceId, fileId)
             .then((data) => {
+                if (cancelled) return;
                 const resolvedPreview = {
                     ...data,
                     original_url: resolveKnowledgePreviewUrl(data.original_url),
@@ -109,14 +147,16 @@ export default function FilePreviewPage() {
                 setFileUrl(resolveKnowledgePreviewUrl(chosenUrl));
                 setFileType(ext);
             })
-            .catch((err) => console.error("Failed to load preview URL:", err))
-            .finally(() => setLoading(false));
-    }, [fileId, spaceId]);
+            .catch((err) => { if (!cancelled) console.error("Failed to load preview URL:", err); })
+            .finally(() => { if (!cancelled) setLoading(false); });
+        return () => { cancelled = true; };
+    }, [fileId, spaceId, identity]);
 
     const handleDownloadFile = useCallback(async () => {
-        if (!fileId || !spaceId) return;
+        if (!canDownload || !fileId || !spaceId) return;
         try {
             const downloadData = await getFileDownloadApi(spaceId, fileId);
+            if (currentTarget.current !== permissionTarget) return;
             const downloadUrl = downloadData.original_url || downloadData.preview_url;
             if (!downloadUrl) return;
 
@@ -130,7 +170,7 @@ export default function FilePreviewPage() {
         } catch (err) {
             console.error("Failed to download file:", err);
         }
-    }, [fileId, fileName, spaceId]);
+    }, [canDownload, fileId, fileName, spaceId, permissionTarget]);
 
     // Mobile layout (<md = 768px): keep a bare preview + floating download (no TopBar).
     const [isMobile, setIsMobile] = useState(false);

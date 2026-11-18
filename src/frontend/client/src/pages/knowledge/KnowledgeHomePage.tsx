@@ -1,3 +1,4 @@
+import { useConfirm } from "~/Providers";
 import { KnowledgeDeletionDialog } from "./SpaceDetail/KnowledgeDeletionDialog";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useReducedMotion } from 'framer-motion';
@@ -37,6 +38,7 @@ const EMPTY_ACTIONS: KnowledgeSpaceAction[] = [];
 
 export function KnowledgeHomePage({ enabled = true, category: controlledCategory, onCategoryChange, onSpaceSelect, onCreateSpace, onSpaceSettings, onKnowledgeSquare }: KnowledgeHomePageProps) {
   const localize = useLocalize();
+  const confirm = useConfirm();
   const menuNames = useWorkbenchMenuNames();
   const tabsRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -100,7 +102,7 @@ export function KnowledgeHomePage({ enabled = true, category: controlledCategory
   const empty = resolved && visible.length === 0;
   const refreshing = lists.mine.isFetching || lists.joined.isFetching || lists.department.isFetching;
 
-  const handleAction = async (item: HomeSpace, action: 'pin' | 'delete') => {
+  const handleAction = async (item: HomeSpace, action: 'pin' | 'delete' | 'leave') => {
     const { space, source } = item;
     if (pendingRef.current.has(space.id)) return;
     pendingRef.current.add(space.id);
@@ -113,7 +115,16 @@ export function KnowledgeHomePage({ enabled = true, category: controlledCategory
         if (animateLayout) setMovingSpaceId(space.id);
         await actions.handlePinSpace(space.id, !space.isPinned, source);
       }
-      else await actions.handleDeleteSpace(space.id);
+      else if (action === 'leave') {
+        const ok = await confirm({
+          title: localize('com_knowledge.prompt'),
+          description: localize('com_knowledge.confirm_exit_space'),
+          confirmText: localize('com_knowledge.exit'),
+          cancelText: localize('com_knowledge.cancel'),
+        });
+        if (ok) await actions.handleLeaveSpace(space.id);
+      }
+      else if (action === 'delete' && source !== 'joined') await actions.handleDeleteSpace(space.id);
     } finally {
       pendingRef.current.delete(space.id);
       setPending(new Set(pendingRef.current));

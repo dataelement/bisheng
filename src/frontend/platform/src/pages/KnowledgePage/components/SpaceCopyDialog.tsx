@@ -8,14 +8,12 @@ import {
   precheckSpaceCopy,
   confirmSpaceCopy,
   type ProcessingCreateRequest,
-  type SpaceCopyResult,
 } from "@/controllers/API/knowledgeProcessing";
 import type { KnowledgeSpaceInfo } from "@/controllers/API/knowledgeSpace";
 import type { KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
 import { createDshOperationId } from "@/util/dshOperationId";
 import { SpacePanelFrame } from "./SpacePanelFrame";
-import { SpaceProcessingProgress } from "./SpaceProcessingProgress";
 
 interface SpaceCopyDialogProps {
   scope: KnowledgeQueryScope;
@@ -24,7 +22,6 @@ interface SpaceCopyDialogProps {
   onCreated: () => void | Promise<void>;
 }
 export function SpaceCopyDialog({
-  scope,
   source,
   onClose,
   onCreated,
@@ -35,8 +32,6 @@ export function SpaceCopyDialog({
     () => source.name.slice(0, Math.max(0, 200 - suffix.length)) + suffix,
   );
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<SpaceCopyResult | null>(null);
-  const [completed, setCompleted] = useState(false);
   const alive = useRef(true),
     locked = useRef(false);
   const pending = useRef<ProcessingCreateRequest | null>(null);
@@ -47,14 +42,7 @@ export function SpaceCopyDialog({
     };
   }, []);
   const handleCreate = async () => {
-    if (
-      !alive.current ||
-      locked.current ||
-      result ||
-      !name.trim() ||
-      name.length > 200
-    )
-      return;
+    if (!alive.current || locked.current || !name.trim() || name.length > 200) return;
     locked.current = true;
     setBusy(true);
     try {
@@ -74,17 +62,15 @@ export function SpaceCopyDialog({
           idempotency_key: createDshOperationId(),
         };
       }
-      const accepted = await confirmSpaceCopy(source.id, pending.current);
+      await confirmSpaceCopy(source.id, pending.current);
       if (!alive.current) return;
-      pending.current = null;
-      setResult(accepted);
-      setCompleted(accepted.completed);
       await onCreated();
+      pending.current = null;
+      onClose();
     } catch (error) {
       if (
         isApiError(error) &&
-        (error.kind === "business" ||
-          (error.kind === "http" && (error.httpStatus ?? 0) < 500))
+        (error.status_code === 18087 || error.status_code === 18088)
       )
         pending.current = null;
       if (alive.current) showApiError(error);
@@ -111,26 +97,22 @@ export function SpaceCopyDialog({
               disabled={busy}
               onClick={onClose}
             >
-              {t(result ? "close" : "cancel", {
-                ns: result ? "bs" : "knowledge",
-              })}
+              {t("cancel")}
             </Button>
-            {!result && (
-              <Button
-                loading={busy}
-                disabled={busy || !name.trim() || name.length > 200}
-                onClick={() => {
-                  void handleCreate();
-                }}
-              >
-                {t("space_copy_ui.create")}
-              </Button>
-            )}
+            <Button
+              loading={busy}
+              disabled={busy || !name.trim() || name.length > 200}
+              onClick={() => {
+                void handleCreate();
+              }}
+            >
+              {t(pending.current ? "retry" : "space_copy_ui.create")}
+            </Button>
           </>
         }
       >
-        {!result ? (
-          <div className="space-y-5 py-2 text-body">
+        <div className="space-y-5 py-2 text-body">
+            {pending.current && !busy && <p role="status">{t("space_copy_ui.retry_notice")}</p>}
             <label className="block space-y-2">
               <span className="font-medium">{t("space_copy_ui.name")}</span>
               <Input
@@ -150,27 +132,6 @@ export function SpaceCopyDialog({
             </div>
             <p className="text-text-3">{t("space_copy_ui.independent")}</p>
           </div>
-        ) : (
-          <div className="space-y-4 py-2">
-            <p>
-              {t(completed ? "space_copy_ui.created" : "copying", {
-                name: result.knowledge.name,
-              })}
-            </p>
-            {result.processing_job && !completed && (
-              <SpaceProcessingProgress
-                scope={scope}
-                spaceId={result.knowledge.id}
-                jobId={result.processing_job.job_id}
-                kind="space_copy"
-                onCompleted={() => {
-                  setCompleted(true);
-                  void Promise.resolve(onCreated()).catch(showApiError);
-                }}
-              />
-            )}
-          </div>
-        )}
       </SpacePanelFrame>
     </Dialog>
   );

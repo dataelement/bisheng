@@ -38,6 +38,9 @@ interface IProps<T> {
   onDelete?: (data: T) => void,
   onSetting?: (data: T) => void,
   onPermission?: (data: T) => void,
+  onMenuOpen?: (data: T) => void,
+  menuLoading?: boolean,
+  menuError?: boolean,
   permissionBadge?: React.ReactNode,
   showSwitch?: boolean,
   /** 与「编辑应用」解耦：由发布/下线权限控制开关是否可操作 */
@@ -107,6 +110,9 @@ export default function CardComponent<T>({
   onCheckedChange,
   onSetting,
   onPermission,
+  onMenuOpen,
+  menuLoading = false,
+  menuError = false,
   permissionBadge = null,
   showSwitch = true,
   canSwitch = edit,
@@ -149,7 +155,7 @@ export default function CardComponent<T>({
   const showDelete = Boolean(!checked && onDelete)
   const hasPlainActions = Boolean(onPermission) || showAddTemp || showCopyItem
   const showDisabledDeleteItem = Boolean(onDelete && checked && deleteDisabledHint)
-  const showActionBar = hasPlainActions || showDelete || showDisabledDeleteItem
+  const showActionBar = hasPlainActions || showDelete || showDisabledDeleteItem || Boolean(onMenuOpen)
 
   // 新建小卡片（sheet）
   if (!id && type === 'sheet') return <Card className="group w-[320px] cursor-pointer border-dashed border-[#BEC6D6] transition hover:border-primary hover:shadow-none bg-background-new" onClick={onClick}>
@@ -239,9 +245,19 @@ export default function CardComponent<T>({
           <div className={`${menuOpen ? 'flex' : 'hidden group-hover:flex'} gap-1 items-center`} onClick={(e) => e.stopPropagation()}>
             <Dropdown
               open={menuOpen}
-              onOpenChange={setMenuOpen}
+              onOpenChange={(open) => {
+                setMenuOpen(open)
+                if (open) onMenuOpen?.(data)
+              }}
               align="end"
-              menu={<>
+              menu={menuLoading || menuError ? (
+                <DropdownItem disabled>
+                  {t(menuLoading ? 'knowledgeRowActions.loading' : 'error.checkFailed', { ns: 'permission' })}
+                </DropdownItem>
+              ) : <>
+                {!hasPlainActions && !showDelete && !showDisabledDeleteItem && (
+                  <DropdownItem disabled>{t('knowledgeRowActions.empty', { ns: 'permission' })}</DropdownItem>
+                )}
                 {onPermission && (
                   <DropdownItem icon={<Shield />} onSelect={() => onPermission(data)}>
                     {t('system.managePermission')}

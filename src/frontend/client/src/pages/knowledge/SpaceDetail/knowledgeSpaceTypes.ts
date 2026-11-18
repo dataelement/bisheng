@@ -39,6 +39,9 @@ export interface KnowledgeProcessingConfirmation {
 export interface KnowledgeSpaceContentProps {
   space: KnowledgeSpace;
   files: KnowledgeFile[];
+  /** Preserve response-page boundaries for independent asynchronous download checks. */
+  downloadPages?: readonly (readonly string[])[];
+  downloadEpoch?: number;
   total: number;
   /** Infinite scroll: load the next page (appends). */
   onLoadMore: () => void;
@@ -112,7 +115,7 @@ export interface KnowledgePermissionTarget {
   type: "folder" | "knowledge_file";
 }
 
-export interface UseKnowledgeFilePermissionsOptions {
+export interface UseKnowledgeFilePermissionsOptions extends Pick<KnowledgeSpaceContentProps, "downloadPages" | "downloadEpoch"> {
   displayFiles: KnowledgeFile[];
   space: KnowledgeSpaceContentProps["space"];
   currentFolderId: KnowledgeSpaceContentProps["currentFolderId"];
@@ -207,6 +210,8 @@ export interface GetKnowledgeBatchActionsOptions {
   canBatchMove: boolean;
   canBatchDelete: boolean;
   canBatchDownload: boolean;
+  canBatchTag: boolean;
+  canBatchRetry: boolean;
   handleBatchDownload: () => void;
   handleBatchTag: () => void;
   handleBatchMove: () => void;

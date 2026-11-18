@@ -1,16 +1,20 @@
-import { TipIcon } from "@/components/bs-icons/tip"
+import { Button } from "@bisheng/ui"
+import * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog"
+import { Outlined } from "bisheng-icons"
 import { showApiError } from "@/controllers/request"
+import { PlatformLoadingProvider } from "@/components/bs-icons/loading/PlatformLoadingProvider"
 import i18next from "i18next"
-import { X } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { createRoot } from "react-dom/client"
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "."
+import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "."
 
 interface ConfirmParams {
     title?: string
     desc: string | React.ReactNode
     canelTxt?: string
     okTxt?: string
+    variant?: "default" | "destructive"
+    /** @deprecated Confirmations close through their explicit action buttons. */
     showClose?: boolean
     /** Acknowledge-only: hide Cancel so the user has a single way out. */
     hideCancel?: boolean
@@ -29,10 +33,16 @@ function ConfirmWrapper() {
     const [pending, setPending] = useState(false)
     const [revision, setRevision] = useState(0)
     const paramRef = useRef<ConfirmParams | null>(null)
+    const contentRef = useRef<HTMLDivElement | null>(null)
+    const openerRef = useRef<HTMLElement | null>(null)
     const settledRef = useRef(false)
     const closedRef = useRef(true)
 
     openFn = (params: ConfirmParams) => {
+        const activeElement = document.activeElement
+        if (activeElement instanceof HTMLElement && !contentRef.current?.contains(activeElement)) {
+            openerRef.current = activeElement
+        }
         paramRef.current = params
         closedRef.current = false
         settledRef.current = false
@@ -84,7 +94,8 @@ function ConfirmWrapper() {
     }
 
     if (!paramRef.current) return null
-    const { title, desc, okTxt, canelTxt, showClose = true, hideCancel = false } = paramRef.current
+    const { title, desc, okTxt, canelTxt, hideCancel = false, variant = hideCancel ? "default" : "destructive" } = paramRef.current
+    const isDestructive = variant === "destructive"
 
     return (
         <AlertDialog
@@ -98,18 +109,42 @@ function ConfirmWrapper() {
                 if (!next) close()
             }}
         >
-            <AlertDialogContent>
-                <AlertDialogHeader className="relative">
-                    <div><TipIcon /></div>
-                    {showClose && <X onClick={hideCancel ? handleOkClick : () => { if (!pending) close() }} className="absolute right-0 top-[-0.5rem] cursor-pointer text-gray-400 hover:text-gray-600"></X>}
-                    <AlertDialogTitle>{title}</AlertDialogTitle>
-                    <AlertDialogDescription className="whitespace-pre-line text-popover-foreground">
-                        {desc}
-                    </AlertDialogDescription>
+            <AlertDialogContent
+                ref={contentRef}
+                overlayClassName="z-[1000] bg-black/40 dark:bg-black/60"
+                className="z-[1000] flex max-h-[calc(100dvh-2rem)] max-w-[calc(100%-2rem)] flex-col gap-4 rounded-2xl border-border-base bg-bg-page p-5 text-text-1 shadow-modal sm:max-w-[400px] sm:rounded-2xl"
+                onCloseAutoFocus={(event) => {
+                    if (openerRef.current?.isConnected) {
+                        event.preventDefault()
+                        openerRef.current.focus()
+                    }
+                }}
+            >
+                <AlertDialogHeader className="shrink-0 flex-row items-center gap-2 space-y-0 text-left">
+                    {isDestructive
+                        ? <Outlined.Delete aria-hidden className="size-5 shrink-0 text-danger" />
+                        : <Outlined.Attention aria-hidden className="size-5 shrink-0 text-blue-500" />}
+                    <AlertDialogTitle className={`text-left text-base font-medium leading-6 ${isDestructive ? "text-danger" : "text-text-1"}`}>
+                        {title}
+                    </AlertDialogTitle>
                 </AlertDialogHeader>
-                <AlertDialogFooter>
-                    {!hideCancel && <AlertDialogCancel disabled={pending} onClick={handleCancelClick} className="px-11">{canelTxt}</AlertDialogCancel>}
-                    <AlertDialogAction disabled={pending} onClick={(event) => { event.preventDefault(); handleOkClick() }} className="px-11">{okTxt}</AlertDialogAction>
+                <AlertDialogDescription className="min-h-0 overflow-y-auto whitespace-pre-line text-left text-sm leading-[22px] text-text-1">
+                    {desc}
+                </AlertDialogDescription>
+                <AlertDialogFooter className="shrink-0 flex-row justify-end gap-3 sm:space-x-0">
+                    {!hideCancel && (
+                        <AlertDialogPrimitive.Cancel asChild>
+                            <Button type="button" variant="outlined" color="default" disabled={pending} onClick={handleCancelClick} className="min-w-[60px] flex-1 sm:flex-none">
+                                {canelTxt}
+                            </Button>
+                        </AlertDialogPrimitive.Cancel>
+                    )}
+                    <AlertDialogPrimitive.Action asChild>
+                        <Button type="button" color={isDestructive ? "danger" : "primary"} loading={pending} disabled={pending}
+                            onClick={(event) => { event.preventDefault(); handleOkClick() }} className="min-w-[60px] flex-1 sm:flex-none">
+                            {okTxt}
+                        </Button>
+                    </AlertDialogPrimitive.Action>
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
@@ -130,7 +165,7 @@ let confirmRoot: ReturnType<typeof createRoot> | null = null;
     if (!confirmRoot) {
         confirmRoot = createRoot(el);
     }
-    confirmRoot.render(<ConfirmWrapper />);
+    confirmRoot.render(<PlatformLoadingProvider><ConfirmWrapper /></PlatformLoadingProvider>);
 })();
 
 

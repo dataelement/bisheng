@@ -1,4 +1,5 @@
 import { Outlined } from 'bisheng-icons';
+import { useLoadingIndicatorRenderer } from '@bisheng/ui';
 import { useCitationPresentation } from './MarkdownServices';
 import type { ChatCitation, CitationPreview } from './types';
 function DefaultSourceIcon() { return <Outlined.FileWord size={16} />; }
@@ -12,12 +13,17 @@ export function CitationPreviewCard({ preview, detail, isLoading, error, notPerm
     onCardClick?: () => void;
     onOpenDocumentPreview?: () => void;
 }) {
+    const renderIndicator = useLoadingIndicatorRenderer();
     const { localize, SourceIcon = DefaultSourceIcon } = useCitationPresentation();
 const CitationSourceIcon = SourceIcon;
     if (isLoading) {
-        return (<div className="flex min-h-[120px] w-[320px] max-w-[calc(100vw-32px)] items-center justify-center rounded-lg bg-white text-sm text-text-3 shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
-        <Outlined.Loading className="mr-2 size-4 animate-spin"/>
-        {localize('shared:app_chat.citation.loading')}
+        return (<div className="flex min-h-[120px] w-[320px] max-w-[calc(100vw-32px)] items-center justify-center rounded-lg bg-white text-sm text-text-3 shadow-[0_4px_19px_rgba(34,34,34,0.07)]"
+          role={renderIndicator ? 'status' : undefined}
+          aria-label={renderIndicator ? localize('shared:app_chat.citation.loading') : undefined}>
+        {renderIndicator ? <span aria-hidden className="inline-flex">{renderIndicator({ className: 'size-10' })}</span> : <>
+          <Outlined.Loading className="mr-2 size-4 animate-spin"/>
+          {localize('shared:app_chat.citation.loading')}
+        </>}
       </div>);
     }
     if (notPermitted) {

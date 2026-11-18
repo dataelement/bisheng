@@ -61,6 +61,8 @@ export function dispatchKnowledgeSpaceFilesRefresh(spaceId?: number | string): v
 export function useFileManager({ activeSpace, initialFolderId, enabled = true }: UseFileManagerOptions) {
     const localize = useLocalize();
     const [files, setFiles] = useState<KnowledgeFile[]>([]);
+    const [downloadPages, setDownloadPages] = useState<string[][]>([]);
+    const [downloadEpoch, setDownloadEpoch] = useState(0);
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize] = useState(SPACE_CHILDREN_DEFAULT_PAGE_SIZE);
     const [total, setTotal] = useState(0);
@@ -131,6 +133,8 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
             } else {
                 setLoadError(false);
                 setLoadMoreError(false);
+                setDownloadPages([]);
+                setDownloadEpoch(epoch => epoch + 1);
                 filesRef.current = [];
                 setFiles([]);
                 setHasMore(false);
@@ -200,6 +204,8 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
 
                 filesRef.current = nextFiles;
                 setFiles(nextFiles);
+                const pageIds = filteredData.map(file => String(file.id));
+                setDownloadPages(previous => isAppending ? [...previous, pageIds] : [pageIds]);
 
                 if (invalidCursor || invalidEmptyPage || invalidDuplicatePage) {
                     if (nextFiles.length === 0) setLoadError(true);
@@ -269,6 +275,8 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
             // switch — not just for empty (e.g. department) spaces — instead of
             // lingering on stale files until the new list arrives.
             setFiles([]);
+
+            setDownloadPages([]);
 
             // The URL folder id is the single source of truth — sync the content
             // pane to it on every change. A previous "consumed" guard skipped
@@ -465,6 +473,8 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
 
     return {
         files,
+        downloadPages,
+        downloadEpoch,
         setFiles,
         currentPage,
         pageSize,

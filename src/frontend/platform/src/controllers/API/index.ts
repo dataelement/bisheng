@@ -504,7 +504,7 @@ type UploadFileFc = {
   separator_rule: ("after" | "before")[]; // 必需
   chunk_size: number; // 必需
   chunk_overlap: number; // 必需
-  file_list: { file_path: string }[]; // 必需
+  file_list: { file_path: string; preview_upload_ref?: string }[]; // 必需
   retain_images?: boolean; //保留文档图片
   force_ocr?: boolean; //强制开启ocr
   enable_formula?: boolean; //开启公式识别
@@ -519,7 +519,7 @@ type UploadFileFc = {
 };
 type DefaultUploadFileFc = {
   knowledge_id: number; // 必需
-  file_list: { file_path: string }[]; // 必需
+  file_list: { file_path: string; preview_upload_ref?: string }[]; // 必需
 };
 ///
 export async function subUploadLibFile(data: UploadFileFc): Promise<any>;

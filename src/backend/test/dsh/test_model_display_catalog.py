@@ -14,12 +14,11 @@ async def test_cross_home_management_display_does_not_build_personal_policy(monk
     from bisheng.dsh import runtime
     from bisheng.dsh.domain.services import model_catalog
     from bisheng.llm.domain.schemas import WorkbenchModelConfig
-    from bisheng.llm.domain.services.llm import LLMService
 
     monkeypatch.setattr(config_service, "settings", SimpleNamespace(dsh=SimpleNamespace(enabled=True)))
     operator = SimpleNamespace(user_id=191, tenant_id=1, is_global_super=True)
     verified = WorkbenchModelConfig(models=[WSModel(id="42")])
-    monkeypatch.setattr(LLMService, "get_workbench_llm", AsyncMock(return_value=verified))
+    monkeypatch.setattr(model_catalog, "read_workbench_metadata", AsyncMock(return_value=verified))
     personal = AsyncMock(side_effect=AssertionError("must not build a child-tenant personal policy"))
     monkeypatch.setattr(runtime, "read_policy", personal)
     projector = AsyncMock(return_value=[WSModel(id="42")])
@@ -153,12 +152,15 @@ async def test_cross_home_display_without_dsh_uses_verified_online_candidates(mo
 
     monkeypatch.setattr(config_service, "settings", SimpleNamespace(dsh=SimpleNamespace(enabled=False)))
     verified = WorkbenchModelConfig(models=[WSModel(id="42", displayName="Target label")])
-    monkeypatch.setattr(LLMService, "get_workbench_llm", AsyncMock(return_value=verified))
-    model = SimpleNamespace(id=42, model_name="model", name="internal")
+    monkeypatch.setattr(model_catalog, "read_workbench_metadata", AsyncMock(return_value=verified))
+    model = SimpleNamespace(id=42, tenant_id=1, model_name="model", name="internal")
     server = SimpleNamespace(id=7, name="Provider", type="openai")
     monkeypatch.setattr(LLMService, "aget_online_chat_models", AsyncMock(return_value=[(model, server)]))
     personal = AsyncMock(side_effect=AssertionError("management display must not read personal policy"))
     monkeypatch.setattr(model_catalog, "read_visible_model_ids", personal)
+    from bisheng.dsh.domain.services import vision
+
+    monkeypatch.setattr(vision, "read_vision", AsyncMock(return_value=SimpleNamespace(vision=False)))
     with management_tenant_scope(60):
         models = await model_catalog.workbench_models_for_display(
             SimpleNamespace(user_id=191, tenant_id=1, is_global_super=True)

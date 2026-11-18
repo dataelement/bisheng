@@ -11,6 +11,7 @@ from loguru import logger
 from bisheng.common.errcode.permission import (
     AuthorizationModelMismatchError,
     InvalidPermissionModeError,
+    PermissionDeniedError,
     PermissionEnumerationIncompleteError,
     PermissionInvalidResourceError,
     PermissionPublishNotReadyError,
@@ -78,6 +79,11 @@ from bisheng.permission.domain.services.permission_explain_service import (
     PermissionExplainContext,
     PermissionExplainService,
     PermissionExplanation,
+)
+from bisheng.permission.domain.services.personal_space_exit_policy import (
+    PersonalSpaceExitStatus,
+    plan_personal_space_exit,
+    require_personal_space_actor,
 )
 from bisheng.permission.domain.services.projection_service import (
     ProjectionOutcome,
@@ -1341,6 +1347,54 @@ class F048PermissionRuntime:
             changes=tuple(changes),
             expected_resource_version=target.resource_version,
             expected_catalog_release_id=(context.current_catalog_release_id),
+            idempotency_key=idempotency_key,
+        )
+
+    async def personal_space_exit_status(
+        self,
+        *,
+        actor: PermissionActor,
+        target: VerifiedPermissionTarget,
+        actor_projected_subjects: frozenset[str],
+    ) -> PersonalSpaceExitStatus:
+        """Evaluate self-exit using the same fresh canonical policy as execution."""
+
+        require_personal_space_actor(actor, target)
+        context = await self.build_grant_context(actor=actor, target=target)
+        return plan_personal_space_exit(
+            actor=actor,
+            context=context,
+            actor_projected_subjects=actor_projected_subjects,
+        ).status
+
+    async def exit_personal_space(
+        self,
+        *,
+        actor: PermissionActor,
+        target: VerifiedPermissionTarget,
+        actor_projected_subjects: frozenset[str],
+        idempotency_key: str,
+    ):
+        """Remove only this user's local personal sources in one fenced mutation."""
+
+        require_personal_space_actor(actor, target)
+        context = await self.build_grant_context(actor=actor, target=target)
+        plan = plan_personal_space_exit(
+            actor=actor,
+            context=context,
+            actor_projected_subjects=actor_projected_subjects,
+        )
+        if plan.execution_forbidden:
+            raise PermissionDeniedError()
+        if not plan.changes:
+            return None
+        # The policy above is the authority for self-removal. Administrator
+        # capability is not needed and cannot widen this frozen source list.
+        return await self._grants.mutate(
+            replace(context, system_authorized=True, capabilities=()),
+            changes=plan.changes,
+            expected_resource_version=target.resource_version,
+            expected_catalog_release_id=context.current_catalog_release_id,
             idempotency_key=idempotency_key,
         )
 

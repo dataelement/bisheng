@@ -187,3 +187,14 @@ it("pages references without issuing a deletion plan", async () => {
   expect(precheck).not.toHaveBeenCalled();
   expect(confirm).not.toHaveBeenCalled();
 });
+
+it("preserves a source-task conflict reason for the deletion explanation", async () => {
+  const { ApiError } = await import("@bisheng/api-client");
+  precheck.mockRejectedValueOnce(new ApiError({ status_code: 10999, data: { reason: "source_space_move_input_required" } }, { message: "Resource conflict" }));
+  const { result } = renderHook(() => useKnowledgeDeletion("scope"));
+  act(() => { void result.current.open(command); });
+  await waitFor(() => expect(result.current.view?.reason).toBe("source_space_move_input_required"));
+  expect(result.current.view?.code).toBe(10999);
+  expect(result.current.view?.result).toBeUndefined();
+  act(() => result.current.cancel());
+});

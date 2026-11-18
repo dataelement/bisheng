@@ -1,5 +1,5 @@
-import { Button, Input, Textarea, notification, toast } from "@bisheng/ui";
-import { SpaceSettingsEditor } from "./SpaceSettingsEditor";
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
+import { Button, notification, toast } from "@bisheng/ui";
 import {
   useQuery,
   useQueryClient,
@@ -8,7 +8,6 @@ import {
 } from "@tanstack/react-query";
 import {
   useEffect,
-  useId,
   useCallback,
   useRef,
   useState,
@@ -17,7 +16,11 @@ import {
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { Dialog } from "@/components/bs-ui/dialog";
+import { KnowledgeScopeUnavailable } from "./KnowledgeScopeUnavailable";
 import { SpacePanelFrame } from "./SpacePanelFrame";
+import { SpaceBasicFields, isValidSpaceBasic } from "./SpaceBasicFields";
+import { SpaceSettingsSectionHeader } from "./SpaceSettingsControls";
+import { validSpaceText } from "./spaceSettingsForm";
 import { getModelListApi } from "@/controllers/API/finetune";
 import {
   knowledgeSpaceApi,
@@ -133,6 +136,7 @@ interface FrameProps {
   children: ReactNode;
   footer?: ReactNode;
   presentation?: "page";
+  showPageNavigation?: boolean;
 }
 function FormFrame({
   title,
@@ -141,6 +145,7 @@ function FormFrame({
   children,
   footer,
   presentation,
+  showPageNavigation = false,
 }: FrameProps) {
   const { t } = useTranslation("knowledge");
   return (
@@ -148,9 +153,10 @@ function FormFrame({
       title={title}
       busy={busy}
       presentation={presentation}
+      back={showPageNavigation ? { label: t("back"), onClick: onCancel } : undefined}
       footer={
         <>
-          {presentation !== "page" && (
+          {(presentation !== "page" || showPageNavigation) && (
             <Button
               variant="outlined"
               color="default"
@@ -168,55 +174,6 @@ function FormFrame({
     </SpacePanelFrame>
   );
 }
-interface BasicFieldsProps {
-  name: string;
-  description: string;
-  onNameChange: (value: string) => void;
-  onDescriptionChange: (value: string) => void;
-  disabled: boolean;
-}
-function BasicFields({
-  name,
-  description,
-  onNameChange,
-  onDescriptionChange,
-  disabled,
-}: BasicFieldsProps) {
-  const { t } = useTranslation("knowledge"),
-    id = useId();
-  return (
-    <div className="space-y-4">
-      <div>
-        <label htmlFor={`${id}-name`} className="bisheng-label">
-          {t("f118.space_name")}
-        </label>
-        <Input
-          id={`${id}-name`}
-          value={name}
-          disabled={disabled}
-          onChange={(event) => onNameChange(event.target.value)}
-        />
-      </div>
-      <div>
-        <label htmlFor={`${id}-description`} className="bisheng-label">
-          {t("f118.space_description")}
-        </label>
-        <Textarea
-          id={`${id}-description`}
-          value={description}
-          disabled={disabled}
-          onChange={(event) => onDescriptionChange(event.target.value)}
-          rows={8}
-        />
-      </div>
-    </div>
-  );
-}
-function validBasic(name: string, description: string) {
-  return (
-    name.trim().length > 0 && name.length <= 200 && description.length <= 200
-  );
-}
 function reportError(error: unknown, scopeMessage: string) {
   const code =
     error && typeof error === "object" && "code" in error ? error.code : null;
@@ -228,12 +185,21 @@ function reportError(error: unknown, scopeMessage: string) {
   } else showApiError(error);
 }
 
-function CreateSpaceForm({
+interface CreateSpaceFormProps extends Pick<ContentProps, "scope" | "onLoadEnd"> {
+  api?: KnowledgeSpaceApi;
+  onCancel: () => void;
+  onCreated?: () => void;
+  presentation?: "page";
+}
+
+export function CreateSpaceForm({
   scope,
-  api,
-  onOpenChange,
+  api = knowledgeSpaceApi,
+  onCancel,
+  onCreated,
   onLoadEnd,
-}: ContentProps) {
+  presentation,
+}: CreateSpaceFormProps) {
   const { t } = useTranslation("knowledge"),
     navigate = useNavigate();
   const bootstrap = useOpeningRead(
@@ -272,13 +238,14 @@ function CreateSpaceForm({
       group.children.some((option) => option.value === modelId),
     );
   const validation = draft ? validateProcessingDefaultsDraft(draft) : null;
+  const validBasicFields = validSpaceText(name, description);
   const ready =
     bootstrap.value !== null && models.value !== null && draft !== null;
   const handleCreate = async (importing: boolean) => {
     if (
       busy ||
       !alive() ||
-      !validBasic(name, description) ||
+      !validBasicFields ||
       !validModel ||
       model === null ||
       !validation?.ok
@@ -295,10 +262,10 @@ function CreateSpaceForm({
       if (!alive()) return;
       await onLoadEnd();
       if (!alive()) return;
-      navigate(
-        `${importing ? `/filelib/upload/${result.id}` : `/filelib/${result.id}`}${scope.view === "admin" ? "?view=admin" : ""}`,
-      );
-      if (alive()) onOpenChange(false);
+      const destination = `${importing ? `/filelib/upload/${result.id}` : `/filelib/${result.id}`}${scope.view === "admin" ? "?view=admin" : ""}`;
+      if (presentation === "page") navigate(destination, { replace: true });
+      else navigate(destination);
+      if (alive()) onCreated?.();
     } catch (error) {
       if (alive()) reportError(error, t("f118.scope_changed"));
     } finally {
@@ -308,14 +275,62 @@ function CreateSpaceForm({
   const disabled =
     busy ||
     !ready ||
-    !validBasic(name, description) ||
+    !validBasicFields ||
     !validModel ||
     !validation?.ok;
+  const page = presentation === "page";
+  const basicFields = (
+    <SpaceBasicFields
+      name={name}
+      description={description}
+      onNameChange={setName}
+      onDescriptionChange={setDescription}
+      disabled={busy}
+      compact={page}
+      mode="create"
+    />
+  );
+  const advancedFields = ready && (
+    <>
+      <fieldset
+        disabled={busy}
+        className={page ? "min-w-0 [&_.bisheng-label]:mb-2 [&_.bisheng-label]:text-body [&_.bisheng-label]:text-text-1" : undefined}
+      >
+        <ModelSelect
+          label={t("f118.embedding_model")}
+          close
+          value={modelId}
+          options={models.value}
+          onChange={(value: string) => {
+            if (!busy) setModelId(value);
+          }}
+        />
+      </fieldset>
+      {!validModel && (
+        <p role="alert" className="text-sm text-red-500">
+          {t("f118.invalid_embedding_model")}{" "}
+          {bootstrap.value?.embedding_model?.name}
+        </p>
+      )}
+      {!page && <h3 className="text-sm font-medium">{t("f118.advanced_settings")}</h3>}
+      <p className={page ? "text-body text-text-3" : "text-sm text-text-2"}>
+        {t("f118.future_uploads_only")}
+      </p>
+      <ProcessingDefaultsEditor
+        value={draft}
+        onChange={setDraft}
+        disabled={busy}
+        compact={page}
+      />
+    </>
+  );
   return (
     <FormFrame
       title={t("f118.create_space")}
       busy={busy}
-      onCancel={() => onOpenChange(false)}
+      onCancel={onCancel}
+      presentation={presentation}
+      showPageNavigation={page}
       footer={
         <>
           <Button
@@ -340,39 +355,20 @@ function CreateSpaceForm({
       }
     >
       {ready ? (
-        <div className="space-y-4">
-          <BasicFields
-            name={name}
-            description={description}
-            onNameChange={setName}
-            onDescriptionChange={setDescription}
-            disabled={busy}
-          />
-          <fieldset disabled={busy}>
-            <ModelSelect
-              label={t("f118.embedding_model")}
-              close
-              value={modelId}
-              options={models.value}
-              onChange={(value: string) => {
-                if (!busy) setModelId(value);
-              }}
-            />
-          </fieldset>
-          {!validModel && (
-            <p role="alert" className="text-sm text-red-500">
-              {t("f118.invalid_embedding_model")}{" "}
-              {bootstrap.value?.embedding_model?.name}
-            </p>
-          )}
-          <h3 className="text-sm font-medium">{t("f118.advanced_settings")}</h3>
-          <p className="text-sm text-text-2">{t("f118.future_uploads_only")}</p>
-          <ProcessingDefaultsEditor
-            value={draft}
-            onChange={setDraft}
-            disabled={busy}
-          />
-        </div>
+        page ? (
+          <div className="space-y-6">
+            <section className="space-y-6">
+              <SpaceSettingsSectionHeader kind="basic" title={t("settings_ext.basic")} />
+              <div className="px-6 max-[768px]:px-0">{basicFields}</div>
+            </section>
+            <section className="space-y-6">
+              <SpaceSettingsSectionHeader kind="advanced" title={t("f118.advanced_settings")} />
+              <div className="min-w-0 space-y-4 px-6 max-[768px]:px-0">{advancedFields}</div>
+            </section>
+          </div>
+        ) : (
+          <div className="space-y-4">{basicFields}{advancedFields}</div>
+        )
       ) : bootstrap.isError || models.isError ? (
         <div role="alert">
           <p>{t("f118.load_failed")}</p>
@@ -389,7 +385,7 @@ function CreateSpaceForm({
           </Button>
         </div>
       ) : (
-        <p role="status">{t("f118.loading_space")}</p>
+        <LoadingState label={t("f118.loading_space")} className="min-h-32" />
       )}
     </FormFrame>
   );
@@ -423,7 +419,7 @@ function EditSpaceForm({
     if (
       busy ||
       !read.current.current ||
-      !validBasic(name, description) ||
+      !isValidSpaceBasic(name, description) ||
       typeof originalPublication !== "boolean"
     )
       return;
@@ -470,7 +466,7 @@ function EditSpaceForm({
           disabled={
             busy ||
             !read.value ||
-            !validBasic(name, description) ||
+            !isValidSpaceBasic(name, description) ||
             typeof originalPublication !== "boolean"
           }
           onClick={() => {
@@ -482,7 +478,7 @@ function EditSpaceForm({
       }
     >
       {read.value ? (
-        <BasicFields
+        <SpaceBasicFields
           name={name}
           description={description}
           onNameChange={setName}
@@ -504,24 +500,9 @@ function EditSpaceForm({
           </Button>
         </div>
       ) : (
-        <p role="status">{t("f118.loading_space")}</p>
+        <LoadingState label={t("f118.loading_space")} className="min-h-32" />
       )}
     </FormFrame>
-  );
-}
-
-interface KnowledgeSpaceSettingsPanelProps {
-  scope: KnowledgeQueryScope;
-  spaceId: number;
-  onSaved: () => void | Promise<void>;
-}
-export function KnowledgeSpaceSettingsPanel({
-  scope,
-  spaceId,
-  onSaved,
-}: KnowledgeSpaceSettingsPanelProps) {
-  return (
-    <SpaceSettingsEditor scope={scope} spaceId={spaceId} onSaved={onSaved} />
   );
 }
 
@@ -558,7 +539,14 @@ export function KnowledgeLibraryDialog({
       {open &&
         (ready ? (
           mode === "create" ? (
-            <CreateSpaceForm key={key} {...props} />
+            <CreateSpaceForm
+              key={key}
+              scope={scope}
+              api={api}
+              onCancel={() => onOpenChange(false)}
+              onCreated={() => onOpenChange(false)}
+              onLoadEnd={onLoadEnd}
+            />
           ) : (
             <EditSpaceForm key={key} {...props} spaceId={spaceId!} />
           )
@@ -569,7 +557,7 @@ export function KnowledgeLibraryDialog({
             )}
             onCancel={() => onOpenChange(false)}
           >
-            <p role="alert">{t("f118.scope_unavailable")}</p>
+            <KnowledgeScopeUnavailable size="panel" role="alert" />
           </FormFrame>
         ))}
     </Dialog>

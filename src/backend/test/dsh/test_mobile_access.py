@@ -2,9 +2,11 @@
 
 import asyncio
 import contextlib
+import json
 import time
 from types import SimpleNamespace
 
+import anyio
 import fakeredis.aioredis
 import pytest
 from fastapi import FastAPI
@@ -15,9 +17,9 @@ from starlette.websockets import WebSocketDisconnect
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.dsh.api.dependencies import desktop_principal
-from bisheng.dsh.api.endpoints.mobile import mobile_service, router
+from bisheng.dsh.api.endpoints.mobile import MobileStreamingResponse, mobile_service, router
 from bisheng.dsh.api.router import router as dsh_router
-from bisheng.dsh.domain.services.mobile_access import MobileAccessService
+from bisheng.dsh.domain.services.mobile_access import MobileAccessService, MobileResult, MobileStream
 from bisheng.dsh.infrastructure.mobile_access import MobileAccessStore
 
 DESKTOP_ID = "a" * 43
@@ -105,7 +107,11 @@ def test_registration_uses_desktop_credential_and_listing_uses_website_login():
         calls = _dependency_calls(by_path[path])
         assert desktop_principal in calls
         assert UserPayload.get_login_user not in calls
-    for path in ("/dsh/mobile/desktops", "/dsh/mobile/desktops/{desktop_id}/rpc"):
+    for path in (
+        "/dsh/mobile/desktops",
+        "/dsh/mobile/desktops/{desktop_id}/rpc",
+        "/dsh/mobile/desktops/{desktop_id}/session/stream",
+    ):
         calls = _dependency_calls(by_path[path])
         assert UserPayload.get_login_user in calls
         assert desktop_principal not in calls
@@ -433,3 +439,462 @@ class _FailingDispatchStore(MobileAccessStore):
     async def pop_request(self, desktop_id: str, connection_id: str, timeout: float) -> dict | None:
         del desktop_id, connection_id, timeout
         raise RedisError("dispatch failed")
+
+
+class _CountingRedis:
+    def __init__(self, inner):
+        self.inner = inner
+        self.blocking_reads = 0
+
+    def __getattr__(self, name):
+        return getattr(self.inner, name)
+
+    async def blpop(self, *args, **kwargs):
+        self.blocking_reads += 1
+        return await self.inner.blpop(*args, **kwargs)
+
+
+@pytest.mark.asyncio
+async def test_session_stream_relays_chunks_and_cancels_from_the_other_worker():
+    inner = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    shared = _CountingRedis(inner)
+    blocking = _CountingRedis(inner)
+    store = MobileAccessStore(shared, blocking)
+    holder = MobileAccessService(store, blpop_timeout=0.05, stream_timeout=30)
+    caller = MobileAccessService(store, blpop_timeout=0.05, stream_timeout=30)
+    assert (await bind(holder)).status == 200
+    socket, task = await connect(holder)
+    opened = None
+    try:
+        await wait_online(store)
+        opened = asyncio.create_task(caller.open_session_stream(user(), DESKTOP_ID, "session-1", "transcript"))
+        frame = await asyncio.wait_for(socket.sent.get(), timeout=2)
+        assert frame["method"] == "GET"
+        assert frame["path"] == "/api/v1/session/stream?sessionId=session-1&view=transcript"
+        # fetch refuses a GET that carries a body, even an empty one.
+        assert "body" not in frame
+        await socket.incoming.put(
+            {
+                "type": "response-start",
+                "id": frame["id"],
+                "status": 200,
+                "headers": {"content-type": "text/event-stream"},
+            }
+        )
+        await socket.incoming.put(
+            {"type": "response-chunk", "id": frame["id"], "data": "event: snapshot\ndata: {}\n\n"}
+        )
+        await socket.incoming.put({"type": "response-chunk", "id": "late", "data": "ignored"})
+        await socket.incoming.put({"type": "response-end", "id": frame["id"]})
+        stream = await asyncio.wait_for(opened, timeout=2)
+        assert stream.status == 200
+        chunks = []
+        async for piece in stream.body:
+            chunks.append(piece)
+            if len(chunks) > 4:
+                break
+        assert chunks[0] == ": keep-alive\n\n"
+        assert "event: snapshot" in chunks[1]
+        await stream.close()
+        cancel = await asyncio.wait_for(socket.sent.get(), timeout=2)
+        assert cancel == {"type": "cancel", "id": frame["id"]}
+        assert blocking.blocking_reads >= 1
+        assert caller.runtime.streams == 0
+    finally:
+        if opened is not None:
+            await stop(opened)
+        await socket.incoming.put(None)
+        await asyncio.wait_for(task, timeout=1)
+
+
+@pytest.mark.asyncio
+async def test_keep_alive_never_lands_inside_a_half_delivered_event():
+    inner = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    store = MobileAccessStore(inner, inner)
+    holder = MobileAccessService(store, blpop_timeout=0.05, stream_timeout=30)
+    caller = MobileAccessService(store, blpop_timeout=0.05, stream_timeout=30, keepalive_interval=0.05)
+    assert (await bind(holder)).status == 200
+    socket, task = await connect(holder)
+    opened = None
+    piece = None
+    try:
+        await wait_online(store)
+        opened = asyncio.create_task(caller.open_session_stream(user(), DESKTOP_ID, "session-1", "transcript"))
+        frame = await asyncio.wait_for(socket.sent.get(), timeout=2)
+        await socket.incoming.put({"type": "response-start", "id": frame["id"], "status": 200, "headers": {}})
+        stream = await asyncio.wait_for(opened, timeout=2)
+        body = stream.body.__aiter__()
+        assert await asyncio.wait_for(body.__anext__(), timeout=2) == ": keep-alive\n\n"
+        # One SSE event split across two desktop chunks.
+        await socket.incoming.put({"type": "response-chunk", "id": frame["id"], "data": 'event: event\ndata: {"a":1'})
+        assert await asyncio.wait_for(body.__anext__(), timeout=2) == 'event: event\ndata: {"a":1'
+        piece = asyncio.create_task(body.__anext__())
+        await asyncio.sleep(0.3)
+        assert not piece.done(), "a comment was written inside an unfinished event"
+        await socket.incoming.put({"type": "response-chunk", "id": frame["id"], "data": "}\n\n"})
+        assert await asyncio.wait_for(piece, timeout=2) == "}\n\n"
+        piece = None
+        # The event is closed, so keep-alive resumes.
+        assert await asyncio.wait_for(body.__anext__(), timeout=2) == ": keep-alive\n\n"
+        await stream.close()
+    finally:
+        if piece is not None:
+            await stop(piece)
+        if opened is not None:
+            await stop(opened)
+        await socket.incoming.put(None)
+        await asyncio.wait_for(task, timeout=1)
+
+
+@pytest.mark.asyncio
+async def test_a_full_request_queue_answers_busy_instead_of_opening_a_stream():
+    inner = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    store = MobileAccessStore(inner, inner)
+    holder = MobileAccessService(store, blpop_timeout=0.05, max_pending=0)
+    caller = MobileAccessService(store, blpop_timeout=0.05, stream_timeout=30)
+    assert (await bind(holder)).status == 200
+    socket, task = await connect(holder)
+    try:
+        await wait_online(store)
+        result = await asyncio.wait_for(
+            caller.open_session_stream(user(), DESKTOP_ID, "session-1", "transcript"), timeout=5
+        )
+        assert isinstance(result, MobileResult)
+        assert result.status == 503
+        assert result.body == '{"error":"busy"}'
+        assert caller.runtime.streams == 0
+    finally:
+        await socket.incoming.put(None)
+        await asyncio.wait_for(task, timeout=1)
+
+
+class _FailingBlpop:
+    """Reads normally until ``fail`` is set, then behaves like a moved slot."""
+
+    def __init__(self, inner):
+        self.inner = inner
+        self.fail = False
+
+    def __getattr__(self, name):
+        return getattr(self.inner, name)
+
+    async def blpop(self, *args, **kwargs):
+        if self.fail:
+            raise RedisError("slot moved")
+        return await self.inner.blpop(*args, **kwargs)
+
+
+@pytest.mark.asyncio
+async def test_a_redis_failure_mid_stream_ends_with_an_error_event():
+    inner = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    blocking = _FailingBlpop(inner)
+    store = MobileAccessStore(inner, blocking)
+    holder = MobileAccessService(store, blpop_timeout=0.05, stream_timeout=30)
+    caller = MobileAccessService(store, blpop_timeout=0.05, stream_timeout=30)
+    assert (await bind(holder)).status == 200
+    socket, task = await connect(holder)
+    opened = None
+    try:
+        await wait_online(store)
+        opened = asyncio.create_task(caller.open_session_stream(user(), DESKTOP_ID, "session-1", "transcript"))
+        frame = await asyncio.wait_for(socket.sent.get(), timeout=2)
+        await socket.incoming.put({"type": "response-start", "id": frame["id"], "status": 200, "headers": {}})
+        stream = await asyncio.wait_for(opened, timeout=2)
+        blocking.fail = True
+        pieces = [piece async for piece in stream.body]
+        assert pieces[0] == ": keep-alive\n\n"
+        assert pieces[-1] == 'event: error\ndata: {"error":"unavailable"}\n\n'
+        await stream.close()
+        assert caller.runtime.streams == 0
+    finally:
+        if opened is not None:
+            await stop(opened)
+        await socket.incoming.put(None)
+        await asyncio.wait_for(task, timeout=1)
+
+
+@pytest.mark.asyncio
+async def test_a_cancelled_stream_request_still_runs_the_stream_cleanup():
+    closed = asyncio.Event()
+    started = asyncio.Event()
+
+    async def body():
+        yield ": keep-alive\n\n"
+        started.set()
+        await asyncio.sleep(30)
+
+    async def close():
+        # The real cleanup awaits Redis. Unshielded, the cancellation that
+        # ended the request lands on this checkpoint and the desktop is never
+        # told to drop its follow.
+        await asyncio.sleep(0)
+        closed.set()
+
+    response = MobileStreamingResponse(MobileStream(200, "text/event-stream", body(), close))
+
+    async def receive():
+        await asyncio.sleep(30)
+        return {"type": "http.disconnect"}
+
+    async def send(message):
+        del message
+
+    # The server runs the request inside a cancel scope. Unlike a bare
+    # task.cancel(), such a scope keeps raising at every later checkpoint,
+    # which is what reaches the cleanup after the body is gone.
+    async with anyio.create_task_group() as group:
+        group.start_soon(response, {"type": "http"}, receive, send)
+        await asyncio.wait_for(started.wait(), timeout=5)
+        group.cancel_scope.cancel()
+    await asyncio.wait_for(closed.wait(), timeout=5)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("pause_at", ["open", "dispatch", "first_frame"])
+async def test_cancel_during_stream_open_releases_slot_and_cancels_desktop(pause_at):
+    waiting = asyncio.Event()
+
+    class PausingStore(MobileAccessStore):
+        async def open_stream(self, *args):
+            await super().open_stream(*args)
+            if pause_at == "open":
+                waiting.set()
+                await asyncio.Event().wait()
+
+        async def push_request(self, desktop_id, connection_id, message):
+            await super().push_request(desktop_id, connection_id, message)
+            if pause_at == "dispatch" and message.get("kind") == "stream":
+                waiting.set()
+                await asyncio.Event().wait()
+
+        async def pop_response(self, *args, **kwargs):
+            waiting.set()
+            await asyncio.Event().wait()
+
+    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    store = PausingStore(redis)
+    service = MobileAccessService(store, max_streams=1)
+    await bind(service)
+    record = await store.read(DESKTOP_ID)
+    await store.activate(DESKTOP_ID, record.secret_hash, "connected", 60)
+    opening = asyncio.create_task(service.open_session_stream(user(), DESKTOP_ID, "session-1", "transcript"))
+    await asyncio.wait_for(waiting.wait(), timeout=2)
+    opening.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await opening
+    assert service.runtime.streams == 0
+    messages = [json.loads(item) for item in await redis.lrange(store.request_key(DESKTOP_ID, "connected"), 0, -1)]
+    cancel = messages[-1]
+    assert cancel["kind"] == "cancel"
+    assert await redis.get(store.stream_key(DESKTOP_ID, cancel["id"])) == "closed"
+    assert await service._acquire_stream() is True
+    await service._release_stream()
+
+
+@pytest.mark.asyncio
+async def test_stream_overflow_cancels_follow_and_emits_busy_across_workers():
+    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    store = MobileAccessStore(redis, max_stream_chunks=2)
+    holder = MobileAccessService(store, blpop_timeout=0.05)
+    caller = MobileAccessService(MobileAccessStore(redis), blpop_timeout=0.05)
+    await bind(holder)
+    socket, task = await connect(holder)
+    stream = None
+    try:
+        connection = await wait_online(store)
+        opening = asyncio.create_task(caller.open_session_stream(user(), DESKTOP_ID, "session-1", "transcript"))
+        request = await asyncio.wait_for(socket.sent.get(), timeout=2)
+        request_id = request["id"]
+        await holder._accept_stream_frame(
+            DESKTOP_ID, connection, {"type": "response-start", "id": request_id, "status": 200, "headers": {}}
+        )
+        stream = await asyncio.wait_for(opening, timeout=2)
+        for _ in range(3):
+            await holder._accept_stream_frame(
+                DESKTOP_ID, connection, {"type": "response-chunk", "id": request_id, "data": "data: {}\n\n"}
+            )
+        assert request_id not in holder.runtime.pending[connection]
+        assert await asyncio.wait_for(socket.sent.get(), timeout=2) == {"type": "cancel", "id": request_id}
+        assert [part async for part in stream.body] == [": keep-alive\n\n", 'event: error\ndata: {"error":"busy"}\n\n']
+        await stream.close()
+        assert caller.runtime.streams == 0
+        assert not await redis.exists(store.response_key(DESKTOP_ID, request_id))
+        # Another worker may already be writing a final chunk when cleanup lands.
+        assert await store.push_stream_response(DESKTOP_ID, request_id, {"type": "response-chunk", "data": "late"}) == 0
+        assert not await redis.exists(store.response_key(DESKTOP_ID, request_id))
+    finally:
+        if stream is not None:
+            await stream.close()
+        await socket.incoming.put(None)
+        await asyncio.wait_for(task, timeout=1)
+
+
+@pytest.mark.asyncio
+async def test_stream_queue_limits_are_atomic_and_count_utf8_bytes():
+    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    store = MobileAccessStore(redis, max_stream_chunks=2, max_stream_frame_bytes=128)
+    await store.open_stream(DESKTOP_ID, "concurrent", 60)
+    results = await asyncio.gather(
+        *(
+            store.push_stream_response(DESKTOP_ID, "concurrent", {"type": "response-chunk", "data": "small"})
+            for _ in range(20)
+        )
+    )
+    assert results.count(1) == 2
+    assert results.count(-1) == 1
+    assert await redis.llen(store.response_key(DESKTOP_ID, "concurrent")) == 1
+    assert await store.pop_response(DESKTOP_ID, "concurrent", 0.01, stream=True) == {
+        "type": "response-error",
+        "error": "busy",
+    }
+    await store.open_stream(DESKTOP_ID, "utf8", 60)
+    # Character count is below 128, but the serialized UTF-8 payload is larger.
+    assert await store.push_stream_response(DESKTOP_ID, "utf8", {"type": "response-chunk", "data": "汉" * 40}) == -1
+
+
+@pytest.mark.asyncio
+async def test_stream_queue_budget_is_reclaimed_when_the_phone_drains():
+    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    store = MobileAccessStore(redis, max_stream_chunks=2)
+    await store.open_stream(DESKTOP_ID, "draining", 60)
+    for index in range(20):
+        frame = {"type": "response-chunk", "data": str(index)}
+        assert await store.push_stream_response(DESKTOP_ID, "draining", frame) == 1
+        assert await store.pop_response(DESKTOP_ID, "draining", 0.01, stream=True) == frame
+    await store.close_stream(DESKTOP_ID, "draining")
+    assert await store.push_stream_response(DESKTOP_ID, "draining", {"type": "response-end"}) == 0
+
+
+@pytest.mark.asyncio
+async def test_mobile_service_initializes_once_for_concurrent_first_requests(monkeypatch):
+    import threading
+
+    from bisheng.core.cache import redis_conn, redis_manager
+    from bisheng.dsh.api.endpoints import mobile
+
+    started, release = threading.Event(), threading.Event()
+    clients = []
+
+    class Client:
+        def __init__(self, *args, **kwargs):
+            self.async_connection = object()
+            self.closed = 0
+            clients.append(self)
+            started.set()
+            assert release.wait(timeout=3)
+
+        async def aclose(self):
+            self.closed += 1
+
+        def close(self):
+            self.closed += 1
+
+    async def shared():
+        return SimpleNamespace(async_connection=object())
+
+    monkeypatch.setattr(mobile, "_service", None)
+    monkeypatch.setattr(mobile, "_blocking_redis", None)
+    monkeypatch.setattr(mobile, "_service_lock", asyncio.Lock())
+    monkeypatch.setattr(redis_conn, "RedisClient", Client)
+    monkeypatch.setattr(redis_manager, "get_redis_client", shared)
+    calls = [asyncio.create_task(mobile.mobile_service()) for _ in range(3)]
+    try:
+        assert await asyncio.to_thread(started.wait, 2)
+        await asyncio.sleep(0)
+        release.set()
+        services = await asyncio.gather(*calls)
+        assert len(clients) == 1
+        assert all(service is services[0] for service in services)
+        await mobile.close_mobile_service()
+        assert clients[0].closed == 2
+    finally:
+        release.set()
+        for call in calls:
+            await stop(call)
+
+
+@pytest.mark.asyncio
+async def test_cancelled_initialization_closes_the_unpublished_redis_client(monkeypatch):
+    import threading
+
+    from bisheng.core.cache import redis_conn, redis_manager
+    from bisheng.dsh.api.endpoints import mobile
+
+    started, release = threading.Event(), threading.Event()
+    clients = []
+
+    class Client:
+        def __init__(self, *args, **kwargs):
+            self.async_connection = object()
+            self.closed = 0
+            clients.append(self)
+            started.set()
+            assert release.wait(timeout=3)
+
+        async def aclose(self):
+            self.closed += 1
+
+        def close(self):
+            self.closed += 1
+
+    async def shared():
+        return SimpleNamespace(async_connection=object())
+
+    monkeypatch.setattr(mobile, "_service", None)
+    monkeypatch.setattr(mobile, "_blocking_redis", None)
+    monkeypatch.setattr(mobile, "_service_lock", asyncio.Lock())
+    monkeypatch.setattr(redis_conn, "RedisClient", Client)
+    monkeypatch.setattr(redis_manager, "get_redis_client", shared)
+    opening = asyncio.create_task(mobile.mobile_service())
+    try:
+        assert await asyncio.to_thread(started.wait, 2)
+        opening.cancel()
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await opening
+        assert mobile._service is None
+        assert mobile._blocking_redis is None
+        assert clients[0].closed == 2
+    finally:
+        release.set()
+        await stop(opening)
+
+
+@pytest.mark.asyncio
+async def test_non_sse_stream_reply_is_bounded_without_changing_unary_rpc():
+    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    store = MobileAccessStore(redis, max_stream_frame_bytes=128)
+    service = MobileAccessService(store)
+    service.runtime.pending["connected"] = {"stream": time.time() + 30, "rpc": time.time() + 30}
+    service.runtime.stream_requests.add("stream")
+    await store.open_stream(DESKTOP_ID, "stream", 60)
+    for request_id in ("stream", "rpc"):
+        await service._accept_response(
+            None,
+            DESKTOP_ID,
+            "connected",
+            {"type": "response", "id": request_id, "status": 200, "body": "x" * 256},
+        )
+    assert await store.pop_response(DESKTOP_ID, "stream", 0.01, stream=True) == {
+        "type": "response-error",
+        "error": "busy",
+    }
+    unary = await store.pop_response(DESKTOP_ID, "rpc", 0.01)
+    assert unary["status"] == 200
+    assert unary["body"] == "x" * 256
+    assert not service.runtime.stream_requests
+
+
+@pytest.mark.asyncio
+async def test_buffered_chunks_and_overflow_survive_a_short_phone_pause():
+    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    store = MobileAccessStore(redis, max_stream_chunks=1)
+    await store.open_stream(DESKTOP_ID, "paused", 180)
+    await store.push_stream_response(DESKTOP_ID, "paused", {"type": "response-chunk", "data": "data: {}\n\n"})
+    # Stream queues are bounded, so retain pending data until the stream's
+    # deadline rather than silently dropping increments at the unary 60s TTL.
+    assert await redis.ttl(store.response_key(DESKTOP_ID, "paused")) >= 175
+    assert await store.push_stream_response(DESKTOP_ID, "paused", {"type": "response-end"}) == -1
+    assert await redis.ttl(store.response_key(DESKTOP_ID, "paused")) >= 175
+    await store.close_stream(DESKTOP_ID, "paused")
+    assert not await redis.exists(store.response_key(DESKTOP_ID, "paused"))

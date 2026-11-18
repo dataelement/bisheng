@@ -2,7 +2,17 @@ import { Cascader, type CascaderOption, type CascaderPath } from "@bisheng/ui";
 import { memo, useEffect, useMemo } from "react";
 import { useLocalize } from "~/hooks";
 import useSelectCopy from "~/hooks/useSelectCopy";
-import type { BsConfig } from "~/types/chat";
+import type { BsConfig, ModelPricingHint } from "~/types/chat";
+
+/**
+ * Credit ratio after the model name: "3.00x" or "Free"; nothing when the server sent none.
+ * The base model reads "1.00x" without a word: picker cells are narrow and truncate long labels.
+ */
+function modelRatioText(hint: ModelPricingHint | null | undefined, free: string): string {
+  if (!hint) return "";
+  if (hint.free) return free;
+  return hint.ratio ? `${hint.ratio}x` : "";
+}
 
 interface AiModelSelectProps {
   options?: BsConfig["models"];
@@ -40,6 +50,7 @@ const AiModelSelect = memo(({ options, value, disabled, onChange, onAutoChange }
   }, [options]);
 
   const unknownProvider = localize("modelPicker.unknownProvider");
+  const ratioFree = localize("modelPicker.ratioFree");
   const { cascaderOptions, modelPaths } = useMemo(() => {
     const groups = new Map<string, CascaderOption>();
     const paths = new Map<string, CascaderPath>();
@@ -50,11 +61,14 @@ const AiModelSelect = memo(({ options, value, disabled, onChange, onAutoChange }
         groups.set(providerKey, { value: providerKey, label: providerName, children: [] });
       }
       const id = String(model.id);
-      groups.get(providerKey)!.children!.push({ value: id, label: model.displayName?.trim() || model.name });
+      const name = model.displayName?.trim() || model.name;
+      // The shared Cascader takes plain-text labels, so the ratio rides in the label text.
+      const ratio = modelRatioText(model.pricing_hint, ratioFree);
+      groups.get(providerKey)!.children!.push({ value: id, label: ratio ? `${name} · ${ratio}` : name });
       paths.set(id, [providerKey, id]);
     }
     return { cascaderOptions: [...groups.values()], modelPaths: paths };
-  }, [uniqueOptions, unknownProvider]);
+  }, [uniqueOptions, unknownProvider, ratioFree]);
 
   // Auto-select first option when current value is invalid
   useEffect(() => {

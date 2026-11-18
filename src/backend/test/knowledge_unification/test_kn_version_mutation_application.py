@@ -3,6 +3,7 @@
 import importlib
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 import sqlalchemy as sa
@@ -27,6 +28,11 @@ from test.knowledge_unification import test_kn_version_mutation_repository as na
 
 native = native_tests.native
 database = native_tests.database
+
+
+@pytest.fixture(autouse=True)
+def admitted_space_editor(monkeypatch):
+    monkeypatch.setattr("bisheng.knowledge.application.knowledge_version_mutation.require_business_action", AsyncMock())
 
 
 def api():
@@ -77,8 +83,8 @@ async def test_actual_factory_one_commit_and_original_identity_is_not_rewritten(
     result = await invoke(built.app, operation, original_user)
     assert result.document_id == 20
     assert result.knowledge_id == 9700 and result.file_name == "private-name"
-    assert built.admissions == [1] and built.commits == [1] and len(built.sessions) == 1
-    assert not built.sessions[0].in_transaction() and original_user.model_dump() == before
+    assert built.admissions == [1] and built.commits == [1] and len(built.sessions) == 2
+    assert all(not session.in_transaction() for session in built.sessions) and original_user.model_dump() == before
     after = await native_tests.snapshot(database)
     rows = [row for row in after["knowledge_document_version"] if row["document_id"] == 20]
     assert len([row for row in rows if row["is_primary"]]) == 1
@@ -186,7 +192,7 @@ async def test_original_business_errors_and_order_have_no_durable_writes(databas
         ("primary", "version_missing", 404),
     ],
 )
-async def test_legacy_http_error_semantics_are_not_replaced_by_a_new_permission_gate(database, operation, case, code):
+async def test_admitted_editor_retains_original_business_error_semantics(database, operation, case, code):
     await corrupt(database, case)
     before = await native_tests.snapshot(database)
     built = build(database)
@@ -252,7 +258,7 @@ async def test_durable_commit_with_lost_ack_propagates_and_never_retries_or_comp
     with pytest.raises(RuntimeError, match="commit reply unavailable"):
         await invoke(built.app, "link")
     after = await native_tests.snapshot(database)
-    assert calls == [1]
+    assert calls == [1, 1]
     assert len([row for row in after["knowledge_document_version"] if row["document_id"] == 20]) == 3
     assert len([row for row in after["knowledge_document_version"] if row["knowledge_file_id"] == 101]) == 1
 
@@ -302,11 +308,12 @@ async def test_unknown_commit_is_preserved_when_factory_close_also_fails(databas
             yield session
         finally:
             await session.close()
-            raise OSError("secondary factory close unavailable")
+            if len(calls) == 2:
+                raise OSError("secondary factory close unavailable")
 
     with pytest.raises(RuntimeError, match="original commit ACK") as caught:
         await invoke(build(database, session_factory=sessions).app, "link")
-    assert caught.value is original and calls == [1]
+    assert caught.value is original and calls == [1, 1]
     after = await native_tests.snapshot(database)
     assert len([row for row in after["knowledge_document_version"] if row["document_id"] == 20]) == 3
 
@@ -315,12 +322,15 @@ async def test_original_business_error_is_preserved_when_native_transaction_roll
     await corrupt(database, "source_failed")
     before, rolled_back = await native_tests.snapshot(database), []
 
+    opened = []
+
     @asynccontextmanager
     async def sessions():
+        opened.append(1)
         async with AsyncSession(database.engine) as session:
 
             def root_created(_session, transaction):
-                if transaction.parent is not None:
+                if transaction.parent is not None or len(opened) == 1:
                     return
                 original_rollback = transaction.rollback
 

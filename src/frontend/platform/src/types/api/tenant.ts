@@ -8,6 +8,13 @@ export interface Tenant {
   storage_used_gb: number | null
   storage_quota_gb: number | null
   create_time: string | null
+  /** Child Admins; null when the permission lookup failed. Root is always []. */
+  admin_users?: TenantAdminUser[] | null
+}
+
+export interface TenantAdminUser {
+  user_id: number
+  user_name: string
 }
 
 export interface TenantDetail extends Tenant {

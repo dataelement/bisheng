@@ -1412,11 +1412,6 @@
       "count": 2
     }
   },
-  "src/components/icons/TxtIcon.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    }
-  },
   "src/components/icons/XlsxIcon.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 2
@@ -2536,19 +2531,9 @@
       "count": 1
     }
   },
-  "src/pages/knowledge/SpaceDetail/FileIcon.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
   "src/pages/knowledge/SpaceDetail/KnowledgeSpaceHeader.tsx": {
     "no-restricted-imports": {
       "count": 1
-    }
-  },
-  "src/pages/knowledge/SpaceDetail/MoveToDialog.tsx": {
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 2
     }
   },
   "src/pages/knowledge/SpaceDetail/SelectionPathBreadcrumb.tsx": {
@@ -2556,21 +2541,8 @@
       "count": 2
     }
   },
-  "src/pages/knowledge/SpaceDetail/SimilarDocumentDialog.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    }
-  },
-  "src/pages/knowledge/SpaceDetail/VersionManagementDialog.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
   "src/pages/knowledge/SpaceDetail/index.tsx": {
     "no-restricted-imports": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
       "count": 1
     }
   },

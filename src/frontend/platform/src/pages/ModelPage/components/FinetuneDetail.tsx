@@ -1,6 +1,5 @@
 // @ts-strict-ignore
 import { Button } from '@bisheng/ui';
-import { Outlined } from "bisheng-icons";
 
 import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -103,13 +102,13 @@ const HeadButtonView = ({ name, status, online, onPublish, onUnPublish, onDelete
 
     return <div className="absolute right-4 flex gap-2">
         {status === TaskStatus.PUBLISH_SUCCESS ?
-            <Button size="small" disabled={loading} onClick={handleUiRequest(cancelPublish)}>
-                {loading && <Outlined.Loading className="animate-spin animate-spin mr-2" size={14} />}
+            <Button size="small" disabled={loading} onClick={handleUiRequest(cancelPublish)} loading={loading}>
+
                 {t('finetune.cancelPublish')}
             </Button> :
             status === TaskStatus.TRAIN_SUCCESS ?
-                <Button size="small" disabled={loading} onClick={handleUiRequest(handlePublish)}>
-                    {loading && <Outlined.Loading className="animate-spin animate-spin mr-2" size={14} />}
+                <Button size="small" disabled={loading} onClick={handleUiRequest(handlePublish)} loading={loading}>
+
                     {t('finetune.publish')}
                 </Button> : null
         }

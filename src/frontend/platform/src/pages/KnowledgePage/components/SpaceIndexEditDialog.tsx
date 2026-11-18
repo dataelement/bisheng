@@ -1,6 +1,7 @@
-import { Button, Input, Pagination, Textarea } from "@bisheng/ui";
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
+import { Button, Input, Pagination, StateView, Textarea } from "@bisheng/ui";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import {
@@ -47,6 +48,7 @@ export function SpaceIndexEditDialog(props: SpaceIndexEditDialogProps) {
 function Content({ scope, spaceId, fileId }: SpaceIndexEditDialogProps) {
   const { t } = useTranslation("knowledge");
   const locale = usePaginationLocale();
+  const metadataHeadingId = useId();
   const [page, setPage] = useState(1),
     [busy, setBusy] = useState(false),
     [text, setText] = useState<Record<number, string>>({});
@@ -118,6 +120,13 @@ function Content({ scope, spaceId, fileId }: SpaceIndexEditDialogProps) {
       if (current.current) setBusy(false);
     }
   };
+  const entries = Object.entries(values ?? {});
+  const availableFields = space.data?.metadata_fields?.filter(
+    (row) => typeof row.field_name === "string" && values && !(row.field_name in values),
+  ) ?? [];
+  const showSave = metadata.isSuccess && values !== null && (
+    entries.length > 0 || Object.keys(metadata.data.user_metadata ?? {}).length > 0
+  );
   return (
     <DialogContent
       className="max-h-[85vh] max-w-3xl overflow-y-auto"
@@ -127,11 +136,17 @@ function Content({ scope, spaceId, fileId }: SpaceIndexEditDialogProps) {
         <DialogTitle>{t("f118.index_edit_title")}</DialogTitle>
       </DialogHeader>
       <fieldset disabled={busy || !target.data} className="space-y-4">
-        <h3>{t("f118.index_metadata")}</h3>
-        {values &&
-          Object.entries(values).map(([key, value]) => (
+        <section aria-labelledby={metadataHeadingId} className="space-y-3">
+          <h3 id={metadataHeadingId} className="text-h4 text-text-1">{t("f118.index_metadata")}</h3>
+          {(space.isInitialLoading || target.isInitialLoading || metadata.isInitialLoading) && (
+            <LoadingState label={t("loading")} className="min-h-32" />
+          )}
+          {space.isSuccess && metadata.isSuccess && values !== null && !entries.length && !availableFields.length && (
+            <StateView size="inline" title={t("f118.index_metadata_empty")} className="rounded-md bg-fill-1" />
+          )}
+          {entries.map(([key, value]) => (
             <div className="flex gap-2" key={key}>
-              <label className="grow">
+              <label className="min-w-0 grow space-y-2 text-body">
                 {key}
                 <Input
                   value={value}
@@ -145,7 +160,7 @@ function Content({ scope, spaceId, fileId }: SpaceIndexEditDialogProps) {
                 onClick={() =>
                   setValues(
                     Object.fromEntries(
-                      Object.entries(values).filter(([name]) => name !== key),
+                      Object.entries(values ?? {}).filter(([name]) => name !== key),
                     ),
                   )
                 }
@@ -154,36 +169,33 @@ function Content({ scope, spaceId, fileId }: SpaceIndexEditDialogProps) {
               </Button>
             </div>
           ))}
-        <div className="flex gap-2">
-          {space.data?.metadata_fields
-            ?.filter(
-              (row) =>
-                typeof row.field_name === "string" &&
-                values &&
-                !(row.field_name in values),
-            )
-            .map((row) => (
-              <Button
-                variant="outlined"
-                key={String(row.field_name)}
-                onClick={() =>
-                  setValues({ ...values, [String(row.field_name)]: "" })
-                }
-              >
-                {String(row.field_name)}
-              </Button>
-            ))}
-        </div>
-        <Button
-          disabled={!values || !metadata.isSuccess}
-          onClick={() =>
-            void handleWrite(() => updateFileMetadata(fileId, values!)).catch(
-              showApiError,
-            )
-          }
-        >
-          {t("save")}
-        </Button>
+          {availableFields.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {availableFields.map((row) => (
+                <Button
+                  variant="outlined"
+                  key={String(row.field_name)}
+                  onClick={() =>
+                    setValues({ ...values, [String(row.field_name)]: "" })
+                  }
+                >
+                  {String(row.field_name)}
+                </Button>
+              ))}
+            </div>
+          )}
+          {showSave && (
+            <Button
+              onClick={() =>
+                void handleWrite(() => updateFileMetadata(fileId, values!)).catch(
+                  showApiError,
+                )
+              }
+            >
+              {t("save")}
+            </Button>
+          )}
+        </section>
         <h3>{t("f118.index_chunks")}</h3>
         {chunks.data?.data.map((chunk) => (
           <div

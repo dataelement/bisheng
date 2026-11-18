@@ -94,7 +94,9 @@ const ToolRowLiteBase: FC<ToolRowLiteProps> = ({ step, memorySearches }) => {
         : null;
     const memoryHits = memoryStep?.op === 'search' && memoryStep.state === 'done' ? memoryStep.itemIds : [];
     const paramsText = isMemoryStep ? '' : formatStepParams(step.params);
-    const hasDetails = isMemoryStep ? memoryHits.length > 0 : !!(parseFailureInfo(step.extraInfo?.failure_info) || step.callReason || paramsText || step.output);
+    const hasDetails = isMemoryStep
+        ? memoryHits.length > 0
+        : !!(parseFailureInfo(step.extraInfo?.failure_info) || step.callReason || paramsText || step.output);
 
     const title = memoryStep ? memoryStepLabel(memoryStep, localize) : resolveTitle(step, localize);
     // Unified icon system (§1.3): running → Accent Loading spinner; done →
@@ -115,7 +117,7 @@ const ToolRowLiteBase: FC<ToolRowLiteProps> = ({ step, memorySearches }) => {
             open={hasDetails && open}
             onToggle={(next) => hasDetails && setOpen(next)}
         >
-            {parseFailureInfo(step.extraInfo?.failure_info) && <ChatErrorCard failureInfo={step.extraInfo?.failure_info} />}
+            {!isMemoryStep && parseFailureInfo(step.extraInfo?.failure_info) && <ChatErrorCard failureInfo={step.extraInfo?.failure_info} />}
             {memoryHits.length > 0 && (
                 <div className="mt-1 w-fit max-w-[560px] border-l-2 border-border-base py-0.5 pl-3">
                     <MemorySearchHits itemIds={memoryHits} />

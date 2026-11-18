@@ -36,13 +36,13 @@ class Client:
     async def iter_tuples(self, **kwargs):
         assert self.active[0] == 0 and kwargs["consistency"] == "HIGHER_CONSISTENCY"
         for user, relation, resource in sorted(self.rows):
-            yield {"user": user, "relation": relation, "object": resource}
+            yield {"user": user, "relation": relation, "object": resource, "condition": None}
 
     async def read_tuples(self, **kwargs):
         assert self.active[0] == 0 and kwargs["consistency"] == "HIGHER_CONSISTENCY"
         self.reads += 1
         key = kwargs["user"], kwargs["relation"], kwargs["object"]
-        return [{"user": key[0], "relation": key[1], "object": key[2]}] if key in self.rows else []
+        return [{"user": key[0], "relation": key[1], "object": key[2], "condition": None}] if key in self.rows else []
 
     async def write_tuples(self, *, writes, deletes):
         assert self.active[0] == 0

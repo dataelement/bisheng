@@ -126,7 +126,6 @@ def _workbench_listed_ws_slot(field: str) -> ModelSlot:
         fill=fill,
     )
 
-
 def _fill_assistant_auto(cfg: AssistantLLMConfig, model: LLMModel) -> None:
     cfg.auto_llm = AssistantLLMItem(model_id=model.id)
 
@@ -173,7 +172,6 @@ SLOTS: tuple[ModelSlot, ...] = (
     _ws_slot("asr_model", KIND_ASR),
     _ws_slot("tts_model", KIND_TTS),
     _ws_slot("chat_title_llm", KIND_LLM),
-    # F132: the same model the consolidation falls back to when this is empty.
     _workbench_listed_ws_slot("memory_llm"),
 )
 

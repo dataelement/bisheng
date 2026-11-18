@@ -114,7 +114,7 @@ class ToolServices(BaseModel):
                 permission_start = perf_counter()
                 actor = await resolve_permission_actor(self.login_user)
                 if actor.current_tenant_id != current_tid:
-                    actor = replace(actor, current_tenant_id=current_tid)
+                    actor = replace(actor, tenant_id=current_tid)
                 visible = await (await get_f048_runtime()).list_visible_objects(
                     actor,
                     resource_type="tool",
@@ -377,8 +377,10 @@ class ToolServices(BaseModel):
                 download = get_url_content
             try:
                 file_content = await download(download_url)
-            except Exception:
-                raise ToolSchemaDownloadError(exception=ValueError("OpenAPI download failed")) from None
+            except Exception as exc:
+                # URLs and transport exceptions can contain query credentials.
+                logger.warning("Tool schema download failed ({})", type(exc).__name__)
+                raise ToolSchemaDownloadError() from None
         if not file_content:
             raise ToolSchemaEmptyError()
         try:

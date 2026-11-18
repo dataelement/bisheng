@@ -1,3 +1,4 @@
+import { useClientEnvironment } from "~/hooks/useClientEnvironment";
 import { WorkbenchMenuButton } from "~/layouts/WorkbenchMenuButton";
 import { readDesktopSettingsSection } from "./desktopSettings";
 import { DesktopSettingsPane } from "./sections/DesktopSettingsPane";
@@ -60,6 +61,8 @@ export default function SettingsPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = usePrefersMobileLayout();
+  const { capabilities } = useClientEnvironment();
+  const hostOwnsHeader = capabilities?.hasHostChatHeader === true;
   const setSystemMenuOpen = useSetRecoilState(store.mobileSystemMenuOpenState);
   const { section: rawSection } = useParams<{ section?: string }>();
   const { unreadCount, pendingApprovalCount, refreshCount } =
@@ -175,22 +178,24 @@ export default function SettingsPage() {
   if (isMenu) {
     return (
       <div className="flex min-h-0 flex-1 flex-col bg-white">
-        <div className="sticky top-0 z-[50] w-full shrink-0 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
-          <div className="relative flex h-11 min-h-11 w-full flex-row items-center justify-between px-4">
-            <WorkbenchMenuButton
-              type="button"
-              aria-label={localize("com_nav_open_sidebar")}
-              onClick={() => setSystemMenuOpen(true)}
-              className="inline-flex size-5 shrink-0 items-center justify-center text-text-1"
-            >
-              <Outlined.SidebarMenu className="size-5" />
-            </WorkbenchMenuButton>
-            <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 truncate text-[16px] font-medium leading-6 text-text-1">
-              {localize("com_nav_settings")}
-            </span>
-            <div className="min-w-0 flex-1" aria-hidden />
+        {!hostOwnsHeader && (
+          <div className="sticky top-0 z-[50] w-full shrink-0 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
+            <div className="relative flex h-11 min-h-11 w-full flex-row items-center justify-between px-4">
+              <WorkbenchMenuButton
+                type="button"
+                aria-label={localize("com_nav_open_sidebar")}
+                onClick={() => setSystemMenuOpen(true)}
+                className="inline-flex size-5 shrink-0 items-center justify-center text-text-1"
+              >
+                <Outlined.SidebarMenu className="size-5" />
+              </WorkbenchMenuButton>
+              <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 truncate text-[16px] font-medium leading-6 text-text-1">
+                {localize("com_nav_settings")}
+              </span>
+              <div className="min-w-0 flex-1" aria-hidden />
+            </div>
           </div>
-        </div>
+        )}
         <div className="scrollbar-os min-h-0 flex-1 overflow-y-auto px-3 pb-6 pt-1">
           {navGroups.map((group, groupIdx) => (
             <div key={group.labelKey} className="flex flex-col gap-0.5">

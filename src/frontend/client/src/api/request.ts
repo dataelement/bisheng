@@ -3,6 +3,8 @@
 import {
   BrowserScopeSession,
   needsBrowserScope,
+  hasIndependentScope,
+  isScopeReconfirmationChange,
   decodeErrorEnvelope,
   isApiError,
   isErrorEnvelope,
@@ -10,6 +12,7 @@ import {
   resolveErrorMessageTemplate,
   type ErrorPresentation,
 } from "@bisheng/api-client";
+import { knowledgeProcessingConflictVariant } from "@bisheng/knowledge/processing-conflicts";
 import axios, { AxiosRequestConfig } from "axios";
 import i18next from "i18next";
 import { redirectToLogin } from "~/utils/loginRedirect";
@@ -18,6 +21,8 @@ import type * as t from "~/types/chat/types";
 
 // Controls automatic error notifications.
 type ErrorOptions = {
+  /** Explicit independent protocol; server authorization is unchanged. */
+  managementContext?: 'independent';
   showError?: boolean;
   /** When true, the interceptor will NOT auto-redirect on 403. The caller handles it. */
   skip403Redirect?: boolean;
@@ -71,10 +76,22 @@ const scopeSnapshots = new WeakMap<object, number>();
 window.addEventListener('storage', event => {
   if (event.key === 'bs:management-scope' && event.oldValue !== event.newValue && browserScope.source !== 'credential') window.location.reload();
 });
+window.addEventListener('bisheng:management-scope-changed', () => window.location.reload());
 
-export async function prepareBrowserHeaders(method: string, url: string): Promise<Record<string, string>> {
-  if (!needsBrowserScope(method, url, window.location.origin)) return {};
-  await browserScope.ensure(async () => {
+export async function prepareBrowserHeaders(method: string, url: string, headers?: object, baseURL?: string): Promise<Record<string, string>> {
+  if (hasIndependentScope(headers) || !needsBrowserScope(method, url, window.location.origin, baseURL)) return {};
+  if (browserScope.isPaused) {
+    try {
+      await browserScope.reconfirm(async () => {
+        const response = await customAxios.get('/api/v1/admin/request-scope');
+        return response.data.data;
+      });
+    } catch (error) {
+      if (isScopeReconfirmationChange(error)) window.dispatchEvent(new Event('bisheng:management-scope-changed'));
+      throw error;
+    }
+  }
+  else await browserScope.ensure(async () => {
     const response = await customAxios.post('/api/v1/admin/request-scope/bootstrap');
     return response.data.data;
   });
@@ -82,7 +99,8 @@ export async function prepareBrowserHeaders(method: string, url: string): Promis
 }
 
 customAxios.interceptors.request.use(async config => {
-  const headers = await prepareBrowserHeaders(config.method || 'GET', config.url || '');
+  const independent = (config as typeof config & ErrorOptions).managementContext === 'independent';
+  const headers = independent ? {} : await prepareBrowserHeaders(config.method || 'GET', config.url || '', config.headers, config.baseURL);
   for (const [name, value] of Object.entries(headers)) config.headers.set(name, value);
   if (headers['X-Management-Tenant'] && browserScope.tenant !== null) scopeSnapshots.set(config, browserScope.tenant);
   return config;
@@ -169,6 +187,12 @@ const refreshToken = (retry?: boolean): Promise<t.TRefreshTokenResponse | undefi
   _post(endpoints.refreshToken(retry));
 
 export const translateApiErrorMessage = (data: any) => {
+  const variant = knowledgeProcessingConflictVariant(data);
+  const conflictKey = variant ? `knowledgeProcessing.conflict.${variant}` : '';
+  if (conflictKey && i18next.exists(conflictKey)) {
+    const message = i18next.t(conflictKey);
+    if (typeof message === 'string' && message && message !== conflictKey) return message;
+  }
   const statusCodeKey = data?.status_code != null ? `api_errors.${data.status_code}` : "";
   const statusMessage = typeof data?.status_message === "string" ? data.status_message : "";
   const statusMessageKey = statusMessage ? `api_errors.${statusMessage}` : "";
@@ -439,7 +463,9 @@ async function normalizeRequestFailure(cause, response?) {
     envelope,
     message: translateApiErrorMessage(envelope),
   });
-  if ([19703, 19704, 19705].includes(error.status_code ?? 0)) browserScope.pause();
+  const snapshot = scopeSnapshots.get(original?.config ?? cause?.config ?? {});
+  if ([19703, 19704, 19705].includes(error.status_code ?? 0) && snapshot !== undefined && snapshot === browserScope.tenant)
+    browserScope.pause();
   if (original && responsePresentation.has(original))
     error.presentation = responsePresentation.get(original)!;
   return error;

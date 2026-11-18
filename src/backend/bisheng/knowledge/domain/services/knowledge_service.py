@@ -2,6 +2,7 @@ import asyncio
 import json
 import math
 import os
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from datetime import datetime
 from time import perf_counter
@@ -46,7 +47,6 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeNotQAError,
     KnowledgeOperationConfirmationRequiredError,
     KnowledgeOperationPlanConflictError,
-    KnowledgeProcessingConflictError,
     KnowledgeTagExistError,
     KnowledgeTagNotExistError,
     KnowledgeTenantMismatchError,
@@ -58,7 +58,7 @@ from bisheng.common.schemas.api import PageInfiniteCursorData
 from bisheng.common.services.metric_log import emit_metric
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
 from bisheng.core.cache.utils import async_file_download, file_download
-from bisheng.core.context.tenant import get_current_tenant_id
+from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage, get_minio_storage_sync
 from bisheng.database.models.group_resource import (
@@ -85,6 +85,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileDao,
     KnowledgeFileStatus,
     ParseType,
+    QAKnoweldgeDao,
 )
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
@@ -93,6 +94,7 @@ from bisheng.knowledge.domain.schemas.knowledge_schema import (
     AddKnowledgeMetadataFieldsReq,
     UpdateKnowledgeMetadataFieldsReq,
 )
+from bisheng.knowledge.domain.schemas.processing_diagnostics import file_processing_conflict
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
 from bisheng.knowledge.domain.services.knowledge_index_results import require_es_write, require_milvus_write
 from bisheng.knowledge.domain.services.knowledge_metadata_service import KnowledgeMetadataService
@@ -145,6 +147,9 @@ class PreparedUpload:
     file_size: int
     split_rule: str = field(repr=False)
     file_info: KnowledgeFileOne = field(repr=False)
+    # False when the body came from a server-resolved PreviewSource: the
+    # client-supplied file_path is then never used to delete objects.
+    cleanup_source: bool = True
 
 
 class KnowledgeService(KnowledgeUtils):
@@ -550,7 +555,8 @@ class KnowledgeService(KnowledgeUtils):
         visible_ids: list[int] | None
         fga_elapsed_ms = 0.0
         if is_admin:
-            # Admin bypass: no F048 enumeration, DB filter left unbounded.
+            # Skip F048 enumeration only within the current tenant. The visible
+            # tenant set may also contain Root for explicitly shared resources.
             visible_ids = None
         else:
             fga_started = perf_counter()
@@ -608,16 +614,17 @@ class KnowledgeService(KnowledgeUtils):
             candidate_page = 1
             authorized: list[Knowledge] = []
             while len(authorized) < target_authorized:
-                batch = await KnowledgeDao.aget_all_knowledge(
-                    name,
-                    knowledge_type,
-                    sort_by,
-                    page=candidate_page,
-                    limit=_KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE,
-                    preferred_ids=preferred_ids,
-                    id_in=visible_ids,
-                    has_abnormal=has_abnormal,
-                )
+                with strict_tenant_filter() if is_admin else nullcontext():
+                    batch = await KnowledgeDao.aget_all_knowledge(
+                        name,
+                        knowledge_type,
+                        sort_by,
+                        page=candidate_page,
+                        limit=_KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE,
+                        preferred_ids=preferred_ids,
+                        id_in=visible_ids,
+                        has_abnormal=has_abnormal,
+                    )
                 if not batch:
                     break
                 if needs_action_check:
@@ -636,16 +643,17 @@ class KnowledgeService(KnowledgeUtils):
         else:
             candidate_cursor = list(keyset_cursor) if keyset_cursor else None
             while len(res) < fetch_limit:
-                batch = await KnowledgeDao.aget_all_knowledge(
-                    name,
-                    knowledge_type,
-                    sort_by,
-                    limit=_KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE,
-                    preferred_ids=preferred_ids,
-                    cursor=candidate_cursor,
-                    id_in=visible_ids,
-                    has_abnormal=has_abnormal,
-                )
+                with strict_tenant_filter() if is_admin else nullcontext():
+                    batch = await KnowledgeDao.aget_all_knowledge(
+                        name,
+                        knowledge_type,
+                        sort_by,
+                        limit=_KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE,
+                        preferred_ids=preferred_ids,
+                        cursor=candidate_cursor,
+                        id_in=visible_ids,
+                        has_abnormal=has_abnormal,
+                    )
                 if not batch:
                     break
                 if needs_action_check:
@@ -1289,13 +1297,28 @@ class KnowledgeService(KnowledgeUtils):
             knowledge_id=knowledge.id,
         )
 
-        return await cls.parse_staged_file(login_user, req_data)
+        from bisheng.knowledge.domain.services.preview_source_service import PreviewSourceService
+
+        # Public preview entry: the client-supplied path must resolve through a
+        # server-issued upload reference or an authorized existing file.
+        if len(req_data.file_list) != 1:
+            raise NotFoundError.http_exception()
+        source = await PreviewSourceService.resolve(
+            item=req_data.file_list[0], login_user=login_user, knowledge_id=req_data.knowledge_id
+        )
+        return await cls.parse_staged_file(login_user, req_data, source=source)
 
     @classmethod
-    async def parse_staged_file(cls, login_user, req_data: KnowledgeFileProcess, *, cache_key: str | None = None):
-        """Parse only after the calling entry has verified its own business target."""
+    async def parse_staged_file(
+        cls, login_user, req_data: KnowledgeFileProcess, *, cache_key: str | None = None, source=None
+    ):
+        """Parse only after the calling entry has verified its own business target.
+
+        ``source`` is the PreviewSource resolved by the public preview entry; staged
+        SPACE uploads pass none because their receipt already owns the server path.
+        """
         legacy_cache = cache_key is None
-        file_path = req_data.file_list[0].file_path
+        file_path = source.cache_path if source is not None else req_data.file_list[0].file_path
         excel_rule = req_data.file_list[0].excel_rule
         file_rule = FileProcessBase(
             knowledge_id=req_data.knowledge_id,
@@ -1339,9 +1362,24 @@ class KnowledgeService(KnowledgeUtils):
                     res.append(FileChunk(text=val["text"], metadata=val["metadata"]))
                 return parse_type, file_share_url, res, partitions
 
-        filepath, file_name = await async_file_download(file_path)
+        if source is not None:
+            from bisheng.core.cache.utils import save_download_file
+
+            def download_source():
+                minio = get_minio_storage_sync()
+                response = minio.download_object_sync(source.bucket, source.object_name)
+                try:
+                    return save_download_file(response, "bisheng", os.path.basename(source.object_name))
+                finally:
+                    response.close()
+                    response.release_conn()
+
+            filepath = await run_in_threadpool(download_source)
+            file_name = source.file_name
+        else:
+            filepath, file_name = await async_file_download(file_path)
+            file_name = cls.get_upload_file_original_name(file_name)
         file_ext = file_name.split(".")[-1].lower()
-        file_name = cls.get_upload_file_original_name(file_name)
 
         # Split text using PreviewFilePipeline
         from bisheng.knowledge.rag.preview_file_pipeline import PreviewFilePipeline
@@ -1381,7 +1419,7 @@ class KnowledgeService(KnowledgeUtils):
 
         from bisheng.knowledge.domain.upload_file_size import MEDIA_FILE_EXTENSIONS
 
-        file_share_url = minio_client.clear_minio_share_host(file_path)
+        file_share_url = minio_client.clear_minio_share_host(source.share_url if source is not None else file_path)
         preview_exts = {
             "doc",
             "docx",
@@ -1419,6 +1457,7 @@ class KnowledgeService(KnowledgeUtils):
             knowledge_id=knowledge.id,
         )
 
+        await cls._authorize_preview_cache_identity(login_user, req_data.knowledge_id, req_data.file_path)
         cache_key = await cls.async_resolve_preview_cache_key(req_data.knowledge_id, req_data.file_path)
         chunk_info = await cls.async_get_preview_cache(cache_key, req_data.chunk_index)
         if not chunk_info:
@@ -1428,19 +1467,28 @@ class KnowledgeService(KnowledgeUtils):
         await cls.async_save_preview_cache(cache_key, chunk_index=req_data.chunk_index, value=chunk_info)
 
     @classmethod
-    def delete_preview_file_chunk(cls, request: Request, login_user: UserPayload, req_data: UpdatePreviewFileChunk):
-        knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
-        try:
-            cls.permission_service.ensure_knowledge_write_sync(
-                login_user=login_user,
-                owner_user_id=knowledge.user_id,
-                knowledge_id=knowledge.id,
-            )
-        except UnAuthorizedError:
-            raise UnAuthorizedError.http_exception()
+    async def _authorize_preview_cache_identity(cls, login_user, knowledge_id: int, file_path: str):
+        if not file_path.startswith("knowledge-preview-file:"):
+            return
+        from bisheng.knowledge.domain.services.preview_source_service import PreviewSourceService
 
-        cache_key = cls.resolve_preview_cache_key_sync(req_data.knowledge_id, req_data.file_path)
-        cls.delete_preview_cache(cache_key, chunk_index=req_data.chunk_index)
+        parts = file_path.split(":")
+        if len(parts) != 3 or not parts[1].isdigit() or parts[2] not in {"original", "converted"}:
+            raise NotFoundError.http_exception()
+        item = KnowledgeFileOne(file_path=file_path, preview_file_id=int(parts[1]), preview_source=parts[2])
+        await PreviewSourceService.resolve(item=item, login_user=login_user, knowledge_id=knowledge_id)
+
+    @classmethod
+    async def delete_preview_file_chunk(
+        cls, request: Request, login_user: UserPayload, req_data: UpdatePreviewFileChunk
+    ):
+        knowledge = await KnowledgeDao.aquery_by_id(req_data.knowledge_id)
+        await cls.permission_service.ensure_knowledge_write_async(
+            login_user=login_user, owner_user_id=knowledge.user_id, knowledge_id=knowledge.id
+        )
+        await cls._authorize_preview_cache_identity(login_user, req_data.knowledge_id, req_data.file_path)
+        cache_key = await cls.async_resolve_preview_cache_key(req_data.knowledge_id, req_data.file_path)
+        await run_in_threadpool(cls.delete_preview_cache, cache_key, chunk_index=req_data.chunk_index)
 
     @classmethod
     def save_knowledge_file(
@@ -1526,12 +1574,28 @@ class KnowledgeService(KnowledgeUtils):
         return knowledge, failed_files, process_files, preview_cache_keys
 
     @classmethod
+    async def _resolve_trusted_uploads(cls, login_user: UserPayload, req_data: KnowledgeFileProcess) -> list:
+        """Resolve every item to a server-issued upload before any file is read."""
+        from bisheng.knowledge.domain.services.preview_source_service import PreviewSourceService
+
+        sources = []
+        for item in req_data.file_list:
+            # Processing accepts uploads only, not references to existing files.
+            if not item.preview_upload_ref or item.preview_file_id:
+                raise NotFoundError.http_exception()
+            sources.append(
+                await PreviewSourceService.resolve(item=item, login_user=login_user, knowledge_id=req_data.knowledge_id)
+            )
+        return sources
+
+    @classmethod
     async def asave_knowledge_file(
         cls,
         login_user: UserPayload,
         req_data: KnowledgeFileProcess,
         *,
         upload_limit_bytes: int | None = None,
+        trusted_uploads_only: bool = False,
     ):
         """Async upload path for request-driven file ingestion."""
         knowledge = await KnowledgeDao.aquery_by_id(req_data.knowledge_id)
@@ -1540,8 +1604,9 @@ class KnowledgeService(KnowledgeUtils):
         if knowledge.type == KnowledgeTypeEnum.SPACE.value:
             from bisheng.knowledge.application.legacy_files import LegacyFilesApplication
 
+            sources = await cls._resolve_trusted_uploads(login_user, req_data) if trusted_uploads_only else None
             owner = LegacyFilesApplication(request=None, identity=login_user)
-            return await owner.astage(req_data)
+            return await owner.astage(req_data, trusted_sources=sources)
         try:
             await cls.permission_service.ensure_knowledge_write_async(
                 login_user=login_user,
@@ -1552,6 +1617,8 @@ class KnowledgeService(KnowledgeUtils):
             raise UnAuthorizedError.http_exception()
         cls.ensure_knowledge_upload_tenant_consistency(login_user, knowledge)
 
+        sources = await cls._resolve_trusted_uploads(login_user, req_data) if trusted_uploads_only else None
+
         failed_files = []
         process_files = []
         created_file_ids = []
@@ -1560,9 +1627,15 @@ class KnowledgeService(KnowledgeUtils):
         limit_bytes = upload_limit_bytes
         current_total_file_size = int(await KnowledgeFileDao.aget_user_upload_total_file_size(login_user.user_id))
         try:
-            for one in req_data.file_list:
+            for index, one in enumerate(req_data.file_list):
                 db_file = await run_in_threadpool(
-                    cls.process_one_file, login_user, knowledge, one, split_rule_dict, processing_rule_request=req_data
+                    cls.process_one_file,
+                    login_user,
+                    knowledge,
+                    one,
+                    split_rule_dict,
+                    processing_rule_request=req_data,
+                    **({"trusted_source": sources[index]} if sources is not None else {}),
                 )
                 if db_file.status != KnowledgeFileStatus.FAILED.value:
                     if getattr(db_file, "id", None):
@@ -1687,17 +1760,21 @@ class KnowledgeService(KnowledgeUtils):
         req_data: KnowledgeFileProcess,
         *,
         upload_limit_bytes: int | None = None,
+        trusted_uploads_only: bool = False,
     ) -> list[KnowledgeFile]:
 
         knowledge = await KnowledgeDao.aquery_by_id(req_data.knowledge_id)
         if knowledge is not None and knowledge.type == KnowledgeTypeEnum.SPACE.value:
             from bisheng.knowledge.application.legacy_files import LegacyFilesApplication
 
+            # SPACE rows are registered by the native owner; the request-driven
+            # entry still accepts only server-issued upload references.
+            sources = await cls._resolve_trusted_uploads(login_user, req_data) if trusted_uploads_only else None
             owner = LegacyFilesApplication(request=request, identity=login_user)
-            return await owner.aprocess(req_data)
+            return await owner.aprocess(req_data, **({"trusted_sources": sources} if sources is not None else {}))
 
         knowledge, failed_files, process_files, preview_cache_keys = await cls.asave_knowledge_file(
-            login_user, req_data, upload_limit_bytes=upload_limit_bytes
+            login_user, req_data, upload_limit_bytes=upload_limit_bytes, trusted_uploads_only=trusted_uploads_only
         )
 
         from bisheng.worker.knowledge import scheduler as file_scheduler
@@ -1875,6 +1952,7 @@ class KnowledgeService(KnowledgeUtils):
         processing_rule_request: FileProcessBase | None = None,
         *,
         ordinary_overrides_only: bool = False,
+        trusted_source=None,
     ) -> PreparedUpload:
         """Stage the original local file and resolve its actual saved rules.
 
@@ -1882,7 +1960,19 @@ class KnowledgeService(KnowledgeUtils):
         effects. The existing writer consumes exactly this prepared snapshot.
         """
         # download original file
-        filepath, file_name = file_download(file_info.file_path)
+        if trusted_source is None:
+            filepath, file_name = file_download(file_info.file_path)
+        else:
+            # Only the server-resolved object is read; the client path is never fetched.
+            from bisheng.core.cache.utils import save_download_file
+
+            response = get_minio_storage_sync().download_object_sync(trusted_source.bucket, trusted_source.object_name)
+            try:
+                filepath = save_download_file(response, "bisheng", os.path.basename(trusted_source.object_name))
+            finally:
+                response.close()
+                response.release_conn()
+            file_name = os.path.basename(trusted_source.object_name)
         md5_ = os.path.splitext(os.path.basename(filepath))[0].split("_")[0]
 
         # Get file size inbytes）
@@ -1929,7 +2019,14 @@ class KnowledgeService(KnowledgeUtils):
         if actual_snapshot is not None:
             split_rule["_effective_processing"] = actual_snapshot.model_dump(mode="json")
         return PreparedUpload(
-            filepath, file_name, original_file_name, md5_, file_size, json.dumps(split_rule), file_info
+            filepath,
+            file_name,
+            original_file_name,
+            md5_,
+            file_size,
+            json.dumps(split_rule),
+            file_info,
+            cleanup_source=trusted_source is None,
         )
 
     @classmethod
@@ -1950,7 +2047,8 @@ class KnowledgeService(KnowledgeUtils):
         db_file.remark = json.dumps({"new_name": prepared.original_file_name, "old_name": old_name}, ensure_ascii=False)
         # Keep the old row unchanged in SQL; the client still chooses overwrite.
         minio_client.put_object_tmp_sync(db_file.object_name, prepared.local_path)
-        cls.remove_unused_file(prepared.file_info.file_path)
+        if prepared.cleanup_source:
+            cls.remove_unused_file(prepared.file_info.file_path)
         db_file.status = KnowledgeFileStatus.FAILED.value
         db_file.split_rule = prepared.split_rule
         db_file.file_size = prepared.file_size
@@ -1966,6 +2064,7 @@ class KnowledgeService(KnowledgeUtils):
         file_kwargs: dict = None,
         skip_dedup: bool = False,
         processing_rule_request: FileProcessBase | None = None,
+        trusted_source=None,
     ) -> KnowledgeFile:
         """Process uploaded files"""
         prepared = cls.prepare_one_file(
@@ -1975,6 +2074,7 @@ class KnowledgeService(KnowledgeUtils):
             split_rule,
             file_kwargs=file_kwargs,
             processing_rule_request=processing_rule_request,
+            trusted_source=trusted_source,
         )
         filepath = prepared.local_path
         original_file_name, md5_, file_size = prepared.original_file_name, prepared.md5, prepared.file_size
@@ -2028,7 +2128,8 @@ class KnowledgeService(KnowledgeUtils):
             minio_client.put_object_sync(
                 bucket_name=minio_client.bucket, object_name=db_file.object_name, file=filepath
             )
-            cls.remove_unused_file(file_info.file_path)
+            if trusted_source is None:
+                cls.remove_unused_file(file_info.file_path)
 
             logger.info("upload_original_file path={}", db_file.object_name)
             KnowledgeFileDao.update(db_file)
@@ -2404,7 +2505,7 @@ class KnowledgeService(KnowledgeUtils):
         from bisheng.worker.knowledge import file_worker
 
         knowledge_file = KnowledgeFileDao.select_list(file_ids)
-        if not knowledge_file:
+        if not knowledge_file or {file.id for file in knowledge_file} != set(file_ids):
             raise NotFoundError.http_exception()
         db_knowledge = KnowledgeDao.query_by_id(knowledge_file[0].knowledge_id)
         if db_knowledge is None or any(file.knowledge_id != db_knowledge.id for file in knowledge_file):
@@ -2499,6 +2600,101 @@ class KnowledgeService(KnowledgeUtils):
         return db_knowledge
 
     @classmethod
+    def _violation_display_chunks(
+        cls,
+        knowledge_id: int,
+        file_ids: list[int],
+        keyword: str | None,
+        page: int | None,
+        limit: int | None,
+    ):
+        """Return detail-only segments for violation files that have no index rows.
+
+        None means the request is not a violation-file read, so the caller keeps
+        the empty index result. Retrieval never reads this store.
+        """
+        from bisheng.api.services.knowledge_imp import ensure_violation_display_chunks
+        from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
+
+        files = KnowledgeFileDao.get_file_by_ids(file_ids)
+        by_id = {one.id: one for one in files}
+        selected = [by_id.get(file_id) for file_id in file_ids]
+        if any(
+            one is None or one.knowledge_id != knowledge_id or one.status != KnowledgeFileStatus.VIOLATION.value
+            for one in selected
+        ):
+            return None
+        rows = []
+        for one in selected:
+            stored = KnowledgeUtils.load_violation_display_chunks(one.id)
+            if stored is None:
+                ensure_violation_display_chunks(one)
+                stored = KnowledgeUtils.load_violation_display_chunks(one.id) or []
+            for item in stored:
+                text = item.get("text") or ""
+                if keyword and keyword not in text:
+                    continue
+                rows.append(
+                    FileChunk(
+                        text=text,
+                        parse_type=one.parse_type,
+                        metadata=Metadata(
+                            document_id=one.id,
+                            document_name=one.file_name,
+                            knowledge_id=knowledge_id,
+                            chunk_index=item.get("chunk_index") or 0,
+                            bbox=item.get("bbox") or "",
+                            page=item.get("page") or 0,
+                        ),
+                    )
+                )
+        page_size = limit or 10
+        start = max((page or 1) - 1, 0) * page_size
+        return rows[start : start + page_size], len(rows)
+
+    @classmethod
+    def _readable_chunk_file_ids(
+        cls,
+        request: Request,
+        login_user: UserPayload,
+        knowledge,
+        file_ids: list[int] | None,
+    ) -> list[int] | None:
+        """Files whose segment text this caller may read.
+
+        A named file that is hidden, missing, or outside a knowledge space is
+        rejected before any index or violation-text read. An unscoped read is
+        limited to the files this caller can see.
+
+        ``None`` means "the container grant is the whole decision". Only SPACE
+        containers carry the per-file F048 records this filter is built on; a
+        document library created before the unification may have none at all,
+        and filtering it by that empty set would hide text the container grant
+        already covers. Its index is per container too, so leaving the read
+        unscoped cannot reach another library's text.
+        """
+        from bisheng.knowledge.domain.services.knowledge_file_visibility_service import (
+            KnowledgeFileVisibilityService,
+        )
+
+        requested = [int(one) for one in (file_ids or [])]
+        if knowledge.type != KnowledgeTypeEnum.SPACE.value:
+            # A named file still selects which segments to show; it just is not
+            # a permission decision here.
+            return sorted(set(requested)) if requested else None
+        candidates = requested or KnowledgeFileDao.list_document_ids(knowledge.id)
+        if not candidates:
+            return []
+        visible = run_async_safe(
+            KnowledgeFileVisibilityService(request, login_user).post_filter_visible_files(knowledge.id, candidates),
+            timeout=60,
+        )
+        allowed = {int(one) for one in visible}
+        if requested and any(one not in allowed for one in requested):
+            raise UnAuthorizedError.http_exception()
+        return sorted(allowed)
+
+    @classmethod
     def get_knowledge_chunks(
         cls,
         request: Request,
@@ -2514,8 +2710,12 @@ class KnowledgeService(KnowledgeUtils):
             knowledge_id,
             "visible",
         )
+        requested_file_ids = [int(one) for one in (file_ids or [])]
+        readable_file_ids = cls._readable_chunk_file_ids(request, login_user, db_knowledge, requested_file_ids)
+        if readable_file_ids is not None and not readable_file_ids:
+            return [], 0
 
-        es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(db_knowledge)
+        es_client, index_name = KnowledgeRag.open_stored_chunk_index_sync(db_knowledge, login_user=login_user)
 
         search_data = {
             "from": (page - 1) * limit,
@@ -2537,15 +2737,23 @@ class KnowledgeService(KnowledgeUtils):
                 },
             ],
         }
-        if file_ids:
-            search_data["post_filter"] = {"terms": {"metadata.document_id": file_ids}}
+        if readable_file_ids is not None:
+            search_data["post_filter"] = {"terms": {"metadata.document_id": readable_file_ids}}
         if keyword:
             search_data["query"] = {"match_phrase": {"text": keyword}}
         try:
-            res = es_client.client.search(index=db_knowledge.index_name, body=search_data)
+            res = es_client.client.search(index=index_name, body=search_data)
         except Exception as e:
             logger.warning(f"act=get_knowledge_chunks error={e!s}")
             raise KnowledgeChunkError.http_exception()
+
+        # A content-safety rejection never writes the retrieval index. Segments
+        # kept for the detail view live outside that index and are not searchable.
+        if requested_file_ids and res["hits"]["total"]["value"] == 0:
+            scope = requested_file_ids if readable_file_ids is None else readable_file_ids
+            display = cls._violation_display_chunks(knowledge_id, scope, keyword, page, limit)
+            if display is not None:
+                return display
 
         # Query the file information corresponding to the next block
         file_ids = set()
@@ -2556,8 +2764,11 @@ class KnowledgeService(KnowledgeUtils):
         if file_ids:
             file_list = KnowledgeFileDao.get_file_by_ids(list(file_ids))
             file_map = {one.id: one for one in file_list}
+        readable = None if readable_file_ids is None else set(readable_file_ids)
         for one in res["hits"]["hits"]:
             file_id = one["_source"]["metadata"]["document_id"]
+            if readable is not None and int(file_id) not in readable:
+                continue
             file_info = file_map.get(file_id, None)
             # Filter document summary contents of file names and summaries
             result.append(
@@ -2619,7 +2830,7 @@ class KnowledgeService(KnowledgeUtils):
         if file is None or file.knowledge_id != knowledge.id or file.file_type != 1:
             raise NotFoundError.http_exception()
         if file.status in {1, 4, 5}:
-            raise KnowledgeProcessingConflictError(reason="chunk_file_processing")
+            raise file_processing_conflict("chunk_file_processing", file.status)
         if knowledge.type == KnowledgeTypeEnum.SPACE.value:
             anchor = run_async_safe(
                 cls.version_read_repository.aget_anchor(tenant_id=get_current_tenant_id(), file_id=file_id),
@@ -2655,6 +2866,10 @@ class KnowledgeService(KnowledgeUtils):
             "edit",
         )
         db_knowledge = cls._chunk_target(db_knowledge, file_id)
+        run_async_safe(
+            require_business_action(login_user, resource_type="knowledge_file", resource_id=file_id, action="visible"),
+            timeout=60,
+        )
 
         logger.info(f"act=update_vector knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}")
         vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(login_user.user_id, db_knowledge)
@@ -2737,6 +2952,10 @@ class KnowledgeService(KnowledgeUtils):
             "edit",
         )
         db_knowledge = cls._chunk_target(db_knowledge, file_id)
+        run_async_safe(
+            require_business_action(login_user, resource_type="knowledge_file", resource_id=file_id, action="visible"),
+            timeout=60,
+        )
 
         logger.info(f"act=delete_vector knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}")
         vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(login_user.user_id, db_knowledge)
@@ -2941,6 +3160,15 @@ class KnowledgeService(KnowledgeUtils):
                 state="PENDING_INSPECTION",
             ) from exc
         return target
+
+    @classmethod
+    def judge_qa_batch_write(cls, login_user: UserPayload, qa_ids: list[int]):
+        """Resolve the complete batch and its one authorized vector collection."""
+        rows = QAKnoweldgeDao.select_list(qa_ids)
+        if len({row.knowledge_id for row in rows}) != 1:
+            raise NotFoundError()
+        knowledge = cls.judge_qa_knowledge_write(login_user, rows[0].knowledge_id)
+        return knowledge, rows
 
     @classmethod
     def judge_qa_knowledge_write(cls, login_user: UserPayload, qa_knowledge_id: int) -> Knowledge:

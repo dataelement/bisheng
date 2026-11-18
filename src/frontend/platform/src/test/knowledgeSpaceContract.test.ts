@@ -67,93 +67,193 @@ const accepted: JobAccepted = {
 beforeEach(() => vi.resetAllMocks());
 
 describe("space basic information update", () => {
-  it.each([true, false])("projects exactly three fields and preserves published=%s", async (is_released) => {
-    const body = { name: "Renamed", description: "New description", is_released, model: "wrong", processing_defaults: settings.effective_defaults, auth_type: "public", is_shared: true };
-    const response = { id: 7, name: "Renamed", is_released };
-    request.put.mockResolvedValue(response);
-    expect(await api.updateSpaceBasicInfo(7, body)).toBe(response);
-    expect(request.put).toHaveBeenCalledExactlyOnceWith("/api/v1/knowledge/space/7", { name: body.name, description: body.description, is_released });
-    expect(api.knowledgeSpaceApi.updateSpaceBasicInfo).toBe(api.updateSpaceBasicInfo);
-  });
+  it.each([true, false])(
+    "projects exactly three fields and preserves published=%s",
+    async (is_released) => {
+      const body = {
+        name: "Renamed",
+        description: "New description",
+        is_released,
+        model: "wrong",
+        processing_defaults: settings.effective_defaults,
+        auth_type: "public",
+        is_shared: true,
+      };
+      const response = { id: 7, name: "Renamed", is_released };
+      request.put.mockResolvedValue(response);
+      expect(await api.updateSpaceBasicInfo(7, body)).toBe(response);
+      expect(request.put).toHaveBeenCalledExactlyOnceWith(
+        "/api/v1/knowledge/space/7",
+        { name: body.name, description: body.description, is_released },
+      );
+      expect(api.knowledgeSpaceApi.updateSpaceBasicInfo).toBe(
+        api.updateSpaceBasicInfo,
+      );
+    },
+  );
   it("keeps the original basic-update ApiError rejected", async () => {
     const error = { status_code: 19000, data: { original: true } };
     request.put.mockRejectedValue(error);
-    await expect(api.updateSpaceBasicInfo(7, { name: "Name", description: "", is_released: true })).rejects.toBe(error);
+    await expect(
+      api.updateSpaceBasicInfo(7, {
+        name: "Name",
+        description: "",
+        is_released: true,
+      }),
+    ).rejects.toBe(error);
   });
 });
 
 describe("ordinary spaces and creation wire contract", () => {
   it("keeps the ordinary cursor page opaque, including an empty progressing page", async () => {
-    const page = { data: [], page_size: 20, has_more: true, next_cursor: "opaque/+==" };
+    const page = {
+      data: [],
+      page_size: 20,
+      has_more: true,
+      next_cursor: "opaque/+==",
+    };
     request.get.mockResolvedValue(page);
     const query = { keyword: "Space", page_size: 20, cursor: "before/+==" };
     expect(await api.listVisibleSpaces(query)).toBe(page);
-    expect(request.get).toHaveBeenCalledWith("/api/v1/knowledge/space/list", { params: query });
+    expect(request.get).toHaveBeenCalledWith("/api/v1/knowledge/space/list", {
+      params: query,
+    });
     await api.listVisibleSpaces();
-    expect(request.get).toHaveBeenLastCalledWith("/api/v1/knowledge/space/list", { params: {} });
+    expect(request.get).toHaveBeenLastCalledWith(
+      "/api/v1/knowledge/space/list",
+      { params: {} },
+    );
     expect(page).not.toHaveProperty("total");
   });
 
   it.each([null, { id: "retired-nonnumeric-id", name: "Original model" }])(
-    "reads the closed creation settings without replacing the original default %j", async (embedding_model) => {
-      const bootstrap: SpaceCreationSettings = { embedding_model, system_defaults: settings.effective_defaults };
+    "reads the closed creation settings without replacing the original default %j",
+    async (embedding_model) => {
+      const bootstrap: SpaceCreationSettings = {
+        embedding_model,
+        system_defaults: settings.effective_defaults,
+      };
       request.get.mockResolvedValue(bootstrap);
       expect(await api.getCreationSettings()).toBe(bootstrap);
-      expect(request.get).toHaveBeenCalledExactlyOnceWith("/api/v1/knowledge/space/creation-settings");
+      expect(request.get).toHaveBeenCalledExactlyOnceWith(
+        "/api/v1/knowledge/space/creation-settings",
+      );
       expect(request.post).not.toHaveBeenCalled();
     },
   );
 
   const body: KnowledgeSpaceCreateRequest = {
-    name: "Created space", description: null, icon: null, auth_type: "approval", is_released: false,
-    auto_tag_enabled: true, auto_tag_library_id: null, auto_tag_custom_tags: ["tag"],
-    creation_request_id: "same-request", initial_permissions: {
+    name: "Created space",
+    description: null,
+    icon: null,
+    auth_type: "approval",
+    is_released: false,
+    auto_tag_enabled: true,
+    auto_tag_library_id: null,
+    auto_tag_custom_tags: ["tag"],
+    creation_request_id: "same-request",
+    initial_permissions: {
       expected_catalog_release_id: 9,
-      grants: [{ model_key: "viewer", subject: { type: "user", id: "7", include_children: false } }],
+      grants: [
+        {
+          model_key: "viewer",
+          subject: { type: "user", id: "7", include_children: false },
+        },
+      ],
     },
-    embedding_model_id: 19, processing_defaults: settings.effective_defaults,
+    embedding_model_id: 19,
+    processing_defaults: settings.effective_defaults,
   };
   it.each([
-    body, { name: "Model only", embedding_model_id: 19 },
+    body,
+    { name: "Model only", embedding_model_id: 19 },
     { name: "Rules only", processing_defaults: settings.effective_defaults },
-  ])("pins only advanced creation to its captured management tenant", async (requestBody) => {
-    const response = { id: 8, name: requestBody.name, type: 3, model: "19", initial_permission_result: {
-      status: "failed" as const, resource_version: null, assignee_ids: [], error_code: 19000, message: null,
-    } };
-    request.post.mockResolvedValue(response);
-    expect(await api.createSpace(requestBody, 101)).toBe(response);
-    expect(request.post).toHaveBeenCalledExactlyOnceWith("/api/v1/knowledge/space", requestBody, {
-      headers: { "X-Management-Tenant": "101" },
-    });
-    expect(response).not.toHaveProperty("file_num");
-    expect(response).not.toHaveProperty("actions");
-  });
+  ])(
+    "pins only advanced creation to its captured management tenant",
+    async (requestBody) => {
+      const response = {
+        id: 8,
+        name: requestBody.name,
+        type: 3,
+        model: "19",
+        initial_permission_result: {
+          status: "failed" as const,
+          resource_version: null,
+          assignee_ids: [],
+          error_code: 19000,
+          message: null,
+        },
+      };
+      request.post.mockResolvedValue(response);
+      expect(await api.createSpace(requestBody, 101)).toBe(response);
+      expect(request.post).toHaveBeenCalledExactlyOnceWith(
+        "/api/v1/knowledge/space",
+        requestBody,
+        {
+          headers: { "X-Management-Tenant": "101" },
+        },
+      );
+      expect(response).not.toHaveProperty("file_num");
+      expect(response).not.toHaveProperty("actions");
+    },
+  );
 
-  it.each([null, 0, -1, 1.5, Number.NaN])("rejects an advanced command without a concrete captured pin %s", async (pin) => {
-    await expect(api.createSpace(body, pin)).rejects.toMatchObject({ code: "knowledge_management_tenant_required" });
-    expect(request.post).not.toHaveBeenCalled();
-  });
+  it.each([null, 0, -1, 1.5, Number.NaN])(
+    "rejects an advanced command without a concrete captured pin %s",
+    async (pin) => {
+      await expect(api.createSpace(body, pin)).rejects.toMatchObject({
+        code: "knowledge_management_tenant_required",
+      });
+      expect(request.post).not.toHaveBeenCalled();
+    },
+  );
 
-  it.each([null, 101])("keeps simplified creation free of management write headers with pin %s", async (pin) => {
-    const simple = { name: "Simple", embedding_model_id: null, processing_defaults: null };
-    request.post.mockResolvedValue({ id: 9, name: "Simple" });
-    await api.createSpace(simple, pin);
-    expect(request.post).toHaveBeenCalledExactlyOnceWith("/api/v1/knowledge/space", simple);
-  });
+  it.each([null, 101])(
+    "keeps simplified creation free of management write headers with pin %s",
+    async (pin) => {
+      const simple = {
+        name: "Simple",
+        embedding_model_id: null,
+        processing_defaults: null,
+      };
+      request.post.mockResolvedValue({ id: 9, name: "Simple" });
+      await api.createSpace(simple, pin);
+      expect(request.post).toHaveBeenCalledExactlyOnceWith(
+        "/api/v1/knowledge/space",
+        simple,
+      );
+    },
+  );
 
-  it.each([Number.NaN, Number.POSITIVE_INFINITY, 0, -1, 1.5])("does not serialize an invalid explicit model %s into a default fallback", async (id) => {
-    await expect(api.createSpace({ name: "Explicit", embedding_model_id: id }, 101)).rejects.toMatchObject({ code: "knowledge_embedding_model_invalid" });
-    expect(request.post).not.toHaveBeenCalled();
-  });
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, 0, -1, 1.5])(
+    "does not serialize an invalid explicit model %s into a default fallback",
+    async (id) => {
+      await expect(
+        api.createSpace({ name: "Explicit", embedding_model_id: id }, 101),
+      ).rejects.toMatchObject({ code: "knowledge_embedding_model_invalid" });
+      expect(request.post).not.toHaveBeenCalled();
+    },
+  );
 
-  it.each(["list", "bootstrap", "create"])("preserves the original ApiError for %s", async (operation) => {
-    const error = { status_code: 10998, status_message: "original", data: { reason: "scope" } };
-    request.get.mockRejectedValue(error);
-    request.post.mockRejectedValue(error);
-    const action = operation === "list" ? api.listVisibleSpaces() : operation === "bootstrap"
-      ? api.getCreationSettings() : api.createSpace(body, 101);
-    await expect(action).rejects.toBe(error);
-  });
+  it.each(["list", "bootstrap", "create"])(
+    "preserves the original ApiError for %s",
+    async (operation) => {
+      const error = {
+        status_code: 10998,
+        status_message: "original",
+        data: { reason: "scope" },
+      };
+      request.get.mockRejectedValue(error);
+      request.post.mockRejectedValue(error);
+      const action =
+        operation === "list"
+          ? api.listVisibleSpaces()
+          : operation === "bootstrap"
+            ? api.getCreationSettings()
+            : api.createSpace(body, 101);
+      await expect(action).rejects.toBe(error);
+    },
+  );
 });
 
 describe("A1 processing API wire contract", () => {
@@ -179,8 +279,11 @@ describe("A1 processing API wire contract", () => {
     expect(await api.getSpaceInfo(7)).toBe(info);
     expect(await api.listChildren(7, query)).toBe(page);
     expect(request.get.mock.calls).toEqual([
-      ["/api/v1/knowledge/space/7/info"],
-      ["/api/v1/knowledge/space/7/children", { params: query }],
+      ["/api/v1/knowledge/space/7/info", undefined],
+      [
+        "/api/v1/knowledge/space/7/children",
+        { params: query, paramsSerializer: { indexes: null } },
+      ],
     ]);
     expect(page).not.toHaveProperty("total");
   });
@@ -377,3 +480,21 @@ describe("A1 processing API wire contract", () => {
     ]);
   });
 });
+
+it("serializes file status filters as repeated FastAPI query keys", async () => {
+  await api.listChildren(7, {
+    file_status: [1, 3, 6],
+    order_field: "file_type",
+    order_sort: "asc",
+  });
+  const [url, options] = request.get.mock.calls.at(-1)!;
+  const { default: transport } = await vi.importActual<
+    typeof import("@/controllers/request")
+  >("@/controllers/request");
+  const query = new URL(
+    transport.getUri({ url, ...options }),
+    "https://app.test",
+  ).searchParams;
+  expect(query.getAll("file_status")).toEqual(["1", "3", "6"]);
+  expect(query.has("file_status[]")).toBe(false);
+}, 15000);

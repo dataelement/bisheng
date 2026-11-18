@@ -17,9 +17,18 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 
+from bisheng.assistant.application.execution_admission import AssistantExecutionAdmission
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.database.models.assistant import Assistant
 from bisheng.database.models.session import MessageSession
 from bisheng.memory.domain.services.resident import RESIDENT_HEADER
+from bisheng.resource_reference.application.contracts import SourceKey
+from bisheng.resource_reference.application.source_contracts import (
+    AuthorizedSourceSnapshot,
+    SourceReferenceReadResult,
+    canonical_payload_json,
+    payload_digest,
+)
 from bisheng.user.domain.models.user import User
 from test.memory.conftest import TENANT_A, USER_1
 
@@ -72,8 +81,13 @@ def make_llm(replies) -> StubChatModel:
 async def build_agent(executor: str, replies, chat_id="chat-a1", tools=None, max_token=32000, user_id=USER_1):
     from bisheng.api.services.assistant_agent import AssistantAgent
 
-    assistant = SimpleNamespace(id=ASSISTANT_ID, prompt=PROMPT, max_token=max_token, name="差旅助手", desc="")
-    agent = AssistantAgent(assistant, chat_id=chat_id, invoke_user_id=user_id)
+    assistant = Assistant(
+        id=ASSISTANT_ID, prompt=PROMPT, max_token=max_token, name="差旅助手", desc="", tenant_id=TENANT_A, user_id=1
+    )
+    _SOURCES[ASSISTANT_ID] = assistant
+    # 3.1: every run re-admits the persisted assistant snapshot with the caller's identity.
+    login_user = UserPayload(user_id=user_id, user_name=f"u{user_id}", tenant_id=TENANT_A, user_role=[])
+    agent = AssistantAgent(assistant, chat_id=chat_id, invoke_user_id=user_id, login_user=login_user)
     agent.memory_allowed = True  # what ChatClient sets on a logged-in connection
 
     async def _source_is_current():
@@ -125,14 +139,34 @@ class SignalSpy(AsyncCallbackHandler):
         self.signals.append(dict(payload))
 
 
+# Assistant snapshots served by the stubbed source admission, keyed by assistant id.
+_SOURCES: dict[str, Assistant] = {}
+
+
+async def _prepare_source(login_user, assistant_id, session=None):
+    """Stand-in for ``AssistantExecutionAdmission.prepare`` (3.1 reference admission).
+
+    The memory tests do not exercise reference admission (covered by
+    test/knowledge_unification/test_as_runtime_admission.py); they only need
+    the agent to receive the assistant snapshot ``build_agent`` registered.
+    """
+    row = _SOURCES[assistant_id]
+    payload = canonical_payload_json({"assistant": row.model_dump(mode="json"), "links": []})
+    snapshot = AuthorizedSourceSnapshot(
+        SourceKey(row.tenant_id, "assistant", assistant_id, "current"), (), "v1", payload_digest(payload), payload
+    )
+    return SourceReferenceReadResult(snapshot, (), 1, 1)
+
+
 @pytest.fixture
-def wired(memory_db, service, index, details, kv):
+def wired(memory_db, service, index, details, kv, monkeypatch):
     """Production factory seeded with the in-memory doubles."""
     from bisheng.memory.domain.services import factory
     from bisheng.memory.domain.services.metrics import MemoryMetrics
     from bisheng.memory.domain.services.resident import ResidentService
     from bisheng.memory.domain.services.search import SearchService
 
+    monkeypatch.setattr(AssistantExecutionAdmission, "prepare", _prepare_source)
     factory.reset()
     metrics = MemoryMetrics(kv)
     factory._instances.update(

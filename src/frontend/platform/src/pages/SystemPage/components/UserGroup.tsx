@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Pagination, Button, SearchInput, toast } from '@bisheng/ui';
 import { Tag } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
@@ -7,7 +8,6 @@ import { useTranslation } from "react-i18next";
 
 
 
-import { LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import {
@@ -245,10 +245,7 @@ export default function UserGroups() {
                 </Table>
                 {loading && (
                     <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/60 dark:bg-blur-shared">
-                        <div className="flex items-center gap-2 rounded-md bg-background px-4 py-2 text-sm text-muted-foreground shadow-sm">
-                            <LoadingIcon className="size-5" />
-                            <span>{t('loading', { ns: 'bs' })}</span>
-                        </div>
+                        <LoadingState label={t('loading', { ns: 'bs' })} />
                     </div>
                 )}
             </div>

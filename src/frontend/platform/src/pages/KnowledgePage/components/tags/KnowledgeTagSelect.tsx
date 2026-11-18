@@ -21,10 +21,13 @@ interface KnowledgeTagSelectProps {
     knowledgeId: string | number;
     fileIds: number[];
     initialTags?: KnowledgeTagItem[];
-    children: React.ReactNode;
+    children?: React.ReactNode;
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
     onUpdate: () => void;
     isEditable?: boolean;
     mode?: 'auto' | 'single' | 'batch';
+    isSpace?: boolean;
 }
 
 const TAG_NAME_MAX_LENGTH = 100;
@@ -37,11 +40,16 @@ export default function KnowledgeTagSelect({
     children,
     onUpdate,
     isEditable = true,
-    mode = 'auto'
+    mode = 'auto',
+    isSpace = false,
+    open: controlledOpen,
+    onOpenChange
 }: KnowledgeTagSelectProps) {
 
     const { t } = useTranslation('knowledge');
-    const [open, setOpen] = useState(false);
+    const [internalOpen, setInternalOpen] = useState(false);
+    const open = controlledOpen ?? internalOpen;
+    const setOpen = (value: boolean) => { setInternalOpen(value); onOpenChange?.(value); };
     const [tags, setTags] = useState<KnowledgeTagItem[]>([]);
     const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
     const [inputValue, setInputValue] = useState("");
@@ -64,7 +72,7 @@ export default function KnowledgeTagSelect({
         const response = await getKnowledgeTagsApi(numericKnowledgeId, {
                 page: 1,
                 limit: 100
-            });
+            }, isSpace);
 
         setTags(response.data ?? []);
     };
@@ -74,7 +82,7 @@ export default function KnowledgeTagSelect({
         setInputValue("");
         syncSelectedTags();
         void fetchTags().catch(showApiError);
-    }, [open, numericKnowledgeId]);
+    }, [open, numericKnowledgeId, isSpace]);
 
     useEffect(() => {
         if (!open || isBatch) return;
@@ -127,7 +135,7 @@ export default function KnowledgeTagSelect({
             return;
         }
 
-        const result = await createKnowledgeTagApi(numericKnowledgeId, tagName);
+        const result = await createKnowledgeTagApi(numericKnowledgeId, tagName, isSpace);
 
         const newTag = result as KnowledgeTagItem;
         setTags(prev => [newTag, ...prev.filter(tag => tag.id !== newTag.id)]);
@@ -139,7 +147,7 @@ export default function KnowledgeTagSelect({
         if (deletingTagId !== null) return;
         setDeletingTagId(tag.id);
         try {
-        await deleteKnowledgeTagApi(numericKnowledgeId, tag.id);
+        await deleteKnowledgeTagApi(numericKnowledgeId, tag.id, isSpace);
         setTags(prev => prev.filter(item => item.id !== tag.id));
         setSelectedTagIds(prev => prev.filter(id => id !== tag.id));
         notification.open({ type: 'success', description: String(t('tagDeleted') ?? '') });
@@ -169,7 +177,7 @@ export default function KnowledgeTagSelect({
                     knowledge_id: numericKnowledgeId,
                     file_id: fileIds[0],
                     tag_ids: payloadTagIds
-                })
+                }, isSpace)
         );
         onUpdate();
         handleOpenChange(false);
@@ -182,7 +190,7 @@ export default function KnowledgeTagSelect({
 
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
-            <DialogTrigger asChild>{children}</DialogTrigger>
+            {children && <DialogTrigger asChild>{children}</DialogTrigger>}
             <DialogContent
                 close={false}
                 className="w-[600px] max-w-[calc(100vw-32px)] gap-0 rounded-xl border-none p-0"

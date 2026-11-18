@@ -116,6 +116,9 @@ def test_default_install_has_vibe_sandbox_and_no_gateway_or_environment_prefligh
     )
     settings = blueprint(documents)["settings"]
     assert settings["app_runtime"]["enabled"] is True
+    assert settings["bs_client"]["enabled"] is True
+    assert "platform_public_url" not in settings["bs_client"]
+    assert "dsh" not in settings
     assert "admin" not in settings
     assert len(settings["sandbox_conf"]["endpoints"]) == 2
     for value in settings["sandbox_conf"]["endpoints"]:
@@ -218,7 +221,7 @@ def test_mixed_dependencies_and_gateway_disabled_preserve_native_dsh(tmp_path, v
             },
         ),
     )
-    assert blueprint(documents)["settings"]["dsh"]["enabled"] is True
+    assert blueprint(documents)["settings"]["bs_client"]["enabled"] is True
     assert any(
         item["kind"] == "Deployment" and item["metadata"]["name"].endswith("openfga")
         for item in documents
@@ -360,7 +363,34 @@ def test_gateway_enabled_has_matching_initialization_and_license_binding(
         if item["kind"] == "ConfigMap" and "application.yml" in item.get("data", {})
     )
     parsed = yaml.safe_load(config)
-    assert len(parsed["spring"]["cloud"]["gateway"]["routes"][0]["predicates"]) == 1
+    docker = yaml.safe_load(
+        (ROOT / "docker/gateway/config/application.yml").read_text()
+    )
+    for application in (parsed, docker):
+        gateway = application["spring"]["cloud"]["gateway"]
+        routes = {route["id"]: route for route in gateway["routes"]}
+        http, mobile = routes["bisheng-http"], routes["bisheng-dsh-mobile-ws"]
+        assert len(http["predicates"]) == 1
+        assert mobile["order"] < http.get("order", 0)
+        assert mobile["uri"].startswith("ws://")
+        assert mobile["predicates"] == [
+            "Path=/api/v1/dsh/mobile/attach",
+            "Header=Upgrade, (?i)websocket",
+        ]
+        assert not mobile.get("filters")
+        assert gateway["global-filter"]["websocket-routing"]["enabled"] is False
+        prefixes = application["bisheng"]["websocket"]["anonymous-path-prefixes"]
+        assert "/api/v1/dsh/mobile/attach" in prefixes
+        for path in ("/api/v1/dsh/mobile/bind", "/api/v1/dsh/mobile/desktops"):
+            assert not any(
+                path == prefix or path.startswith(prefix + "/") for prefix in prefixes
+            )
+        assert (
+            application["logging"]["level"][
+                "com.dataelem.gateway.filter.SelfWebsocketRoutingFilter"
+            ]
+            == "warn"
+        )
     assert "customer-license" in yaml.safe_dump_all(documents)
 
 
@@ -718,3 +748,79 @@ def test_partial_external_tls_is_rejected_before_claiming_external_ca(tmp_path, 
         success=False,
     )
     assert "external TLS" in error
+
+
+@pytest.mark.parametrize(
+    "overrides,enabled",
+    [
+        ({"dsh": {"enabled": False}}, False),
+        ({"dsh": {"enabled": False}, "bs_client": {}}, True),
+        ({"bs_client": {"enabled": False}}, False),
+        ({"config": {"settings": {"dsh": {"enabled": False}}}}, False),
+        ({"config": {"settings": {"bs_client": {}, "dsh": {"enabled": False}}}}, True),
+    ],
+)
+def test_client_defaults_and_legacy_overrides(tmp_path, values, overrides, enabled):
+    """覆盖 AC: AC-01, AC-06, AC-08."""
+    settings = blueprint(render(tmp_path, merge(values, overrides)))["settings"]
+    assert settings["bs_client"].get("enabled", True) is enabled
+    assert "dsh" not in settings
+
+
+def test_client_proxy_records_resolve_pods_not_service_cluster_ip(tmp_path, values):
+    documents = render(tmp_path, values)
+    settings = blueprint(documents)["settings"]
+    peer_service = next(
+        row
+        for row in documents
+        if row["kind"] == "Service"
+        and row["metadata"]["name"].endswith("frontend-peers")
+    )
+    assert peer_service["spec"]["clusterIP"] == "None"
+    assert peer_service["spec"]["selector"]["app.kubernetes.io/component"] == "frontend"
+    assert settings["bs_client"]["trusted_proxy_hosts"][0].startswith(
+        peer_service["metadata"]["name"] + "."
+    )
+
+
+def test_compose_default_package_sources_reach_wheels_and_npm_only_during_build():
+    """覆盖 AC: AC-02, AC-03, AC-09 — deployment values drive the real policy."""
+    from runtime_manager.config import Config
+    from runtime_manager.egress import build_destinations, decide, runtime_destinations
+
+    variables = dict(
+        line.split("=", 1)
+        for line in (ROOT / "docker/.env.example").read_text().splitlines()
+        if line and not line.startswith("#") and "=" in line
+    )
+    config = Config(
+        build_index_url=variables["BISHENG_RTM_BUILD_INDEX_URL"],
+        build_npm_registry=variables["BISHENG_RTM_BUILD_NPM_REGISTRY"],
+    )
+    for host in ["pypi.org", "files.pythonhosted.org", "registry.npmjs.org"]:
+        assert decide(build_destinations(config), host, 443).allowed
+        assert not decide(
+            runtime_destinations(config, platform_api_base="https://platform.example"),
+            host,
+            443,
+        ).allowed
+    private = config.with_overrides(
+        build_index_url="https://python.company.example/simple",
+        build_npm_registry="https://npm.company.example",
+    )
+    for host in ["pypi.org", "files.pythonhosted.org", "registry.npmjs.org"]:
+        assert not decide(build_destinations(private), host, 443).allowed
+
+
+def test_edge_proxy_does_not_forward_arbitrary_client_scheme(tmp_path, values):
+    """覆盖 AC: AC-07 — the trusted backend peer must also sanitize its edge."""
+    documents = render(tmp_path, values)
+    nginx = next(
+        row["data"]["default.conf"]
+        for row in documents
+        if row["kind"] == "ConfigMap" and "default.conf" in row.get("data", {})
+    )
+    assert "geo $bs_trusted_edge" in nginx
+    assert 'default $scheme; "1:http" http; "1:https" https;' in nginx
+    assert "map $http_host $bs_forwarded_host" in nginx
+    assert "default $http_x_forwarded_proto" not in nginx

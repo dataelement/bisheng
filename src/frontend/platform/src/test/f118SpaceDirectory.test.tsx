@@ -11,10 +11,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import Files, { type FilesProps } from "@/pages/KnowledgePage/components/Files";
-import type {
-  KnowledgeSpaceChild,
-  CursorPage,
-} from "@/controllers/API/knowledgeSpace";
+import { row, page } from "./helpers/knowledgeSpaceFixtures";
+import type { KnowledgeSpaceChild } from "@/controllers/API/knowledgeSpace";
 import type { KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
@@ -25,15 +23,23 @@ const mocks = vi.hoisted(() => ({
   preview: vi.fn(),
   download: vi.fn(),
   permissions: vi.fn(),
+  check: vi.fn(),
+  downloadPermissions: vi.fn(),
   error: vi.fn(),
   legacy: vi.fn(),
+  toast: vi.fn(),
 }));
+vi.mock("@bisheng/ui", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@bisheng/ui")>();
+  return { ...actual, toast: { ...actual.toast, show: mocks.toast } };
+});
 vi.mock("@/controllers/request", () => ({
   default: { get: mocks.get, post: mocks.post, put: mocks.put },
   showApiError: mocks.error,
 }));
 vi.mock("@/controllers/API/permission", () => ({
   getMyResourcePermissionsApi: mocks.permissions,
+  checkResourceActionApi: mocks.check,
 }));
 vi.mock("@/controllers/API", () => ({
   readFileByLibDatabase: mocks.legacy,
@@ -60,28 +66,6 @@ const scope: KnowledgeQueryScope = {
 };
 const clients: QueryClient[] = [];
 let grants: Map<string, string[]>;
-const row = (
-  id = 11,
-  name = "report.pdf",
-  file_type = 1,
-): KnowledgeSpaceChild => ({
-  id,
-  knowledge_id: 7,
-  file_name: name,
-  file_type,
-  status: 2,
-  parse_type: "uns",
-  update_time: "2026-11-07T12:00:00",
-});
-const page = (
-  data: KnowledgeSpaceChild[],
-  next_cursor: string | null = null,
-): CursorPage<KnowledgeSpaceChild> => ({
-  data,
-  page_size: 40,
-  has_more: next_cursor !== null,
-  next_cursor,
-});
 const permission = (actions: string[] = []) => ({
   actions,
   mode: "INHERIT",
@@ -131,6 +115,7 @@ async function rename(name = "report.pdf") {
 }
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.check.mockResolvedValue({ allowed: false });
   grants = new Map([["knowledge_space:7", ["visible"]]]);
   mocks.legacy.mockResolvedValue([]);
   mocks.children.mockResolvedValue(page([row()]));
@@ -166,7 +151,24 @@ beforeEach(() => {
       throw new Error(`unexpected API read: ${url}`);
     },
   );
-  mocks.post.mockResolvedValue(row(31, "Created", 0));
+  mocks.downloadPermissions.mockImplementation(
+    async (items: { id: number; type: string }[]) => ({
+      check_complete: true,
+      can_execute: true,
+      valid_items: items.filter((item) =>
+        grants.get(`knowledge_file:${item.id}`)?.includes("download"),
+      ),
+      invalid_items: [],
+      requires_skip_confirmation: false,
+      impact: {},
+    }),
+  );
+  mocks.post.mockImplementation(
+    (url: string, body: { items?: { id: number; type: string }[] }) =>
+      url.endsWith("/files/batch/download/inspect")
+        ? mocks.downloadPermissions(body.items)
+        : Promise.resolve(row(31, "Created", 0)),
+  );
   mocks.put.mockResolvedValue(row(11, "renamed.pdf"));
   vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(
     () => undefined,
@@ -192,6 +194,7 @@ it("reads real SPACE children and continues an opaque empty page without total",
   ]);
   expect(mocks.get).toHaveBeenCalledWith("/api/v1/knowledge/space/7/children", {
     params: expect.objectContaining({ page_size: 40 }),
+    paramsSerializer: { indexes: null },
   });
   expect(mocks.legacy).not.toHaveBeenCalled();
 });
@@ -237,7 +240,9 @@ it("only loads each row's real namespace actions when its menu opens", async () 
   mocks.children.mockResolvedValue(page([row(), row(9, "Folder", 0)]));
   mount();
   await screen.findByText("report.pdf");
-  expect(mocks.permissions.mock.calls).toEqual([["knowledge_space", "7"]]);
+  expect(mocks.permissions.mock.calls).toEqual([
+    ["knowledge_space", "7", { showError: false }],
+  ]);
   await menu();
   await waitFor(() =>
     expect(mocks.permissions).toHaveBeenCalledWith("knowledge_file", "11"),
@@ -292,16 +297,20 @@ it("uses target rename independently of root edit or delete", async () => {
   await waitFor(() =>
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
   );
+  expect(mocks.toast).toHaveBeenCalledExactlyOnceWith({
+    type: "success",
+    message: "renameSuccess",
+  });
   expect(mocks.children).toHaveBeenCalledTimes(2);
   expect(
     screen.queryByRole("menuitem", { name: "delete" }),
   ).not.toBeInTheDocument();
 });
-it("downloads only after an explicit download action and keeps preview separate", async () => {
+it("downloads directly after the page permission check without opening the menu", async () => {
   grants.set("knowledge_file:11", ["download"]);
   mount();
   fireEvent.click(
-    await within(await menu()).findByRole("menuitem", {
+    await screen.findByRole("button", {
       name: "downloadOriginal",
     }),
   );
@@ -329,7 +338,7 @@ it.each([null, 9])(
     });
     fireEvent.click(screen.getByRole("button", { name: "save" }));
     await waitFor(() =>
-      expect(mocks.post).toHaveBeenCalledExactlyOnceWith(
+      expect(mocks.post).toHaveBeenCalledWith(
         "/api/v1/knowledge/space/7/folders",
         {
           name: "Created",
@@ -340,6 +349,13 @@ it.each([null, 9])(
     expect(mocks.permissions).toHaveBeenCalledWith(
       parentId === null ? "knowledge_space" : "folder",
       String(parentId ?? 7),
+      { showError: false },
+    );
+    await waitFor(() =>
+      expect(mocks.toast).toHaveBeenCalledExactlyOnceWith({
+        type: "success",
+        message: "f118.folder_created",
+      }),
     );
     if (parentId !== null)
       expect(mocks.permissions).not.toHaveBeenCalledWith(
@@ -468,7 +484,7 @@ it("ignores a delayed download after a tenant change", async () => {
   grants.set("knowledge_file:11", ["download"]);
   const view = mount();
   fireEvent.click(
-    await within(await menu()).findByRole("menuitem", {
+    await screen.findByRole("button", {
       name: "downloadOriginal",
     }),
   );
@@ -490,6 +506,7 @@ it("keeps failed rename open and reports the original API error", async () => {
   await rename();
   fireEvent.click(screen.getByRole("button", { name: "save" }));
   await waitFor(() => expect(mocks.error).toHaveBeenCalledWith(error));
+  expect(mocks.toast).not.toHaveBeenCalled();
   expect(screen.getByRole("dialog")).toBeInTheDocument();
   expect(screen.getByLabelText("name")).toHaveValue("report.pdf");
 });

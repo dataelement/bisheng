@@ -37,6 +37,7 @@ jest.mock('./useSidebarProjects', () => ({ useSidebarProjects: () => [mockProjec
 jest.mock('~/hooks/useChatProjects', () => ({ useChatProjectActions: () => ({ mutateAsync: jest.fn() }), useProjectIdentity: () => 'account-a' }));
 jest.mock('./ProjectConversations', () => ({ ProjectConversations: () => null }));
 jest.mock('./ProjectSyncStatus', () => ({ ProjectSyncStatus: () => null }));
+jest.mock('~/components/dsh/SidebarCredits', () => ({ SidebarCredits: () => null }));
 jest.mock('./projectsStore', () => ({
   useProjectMemberships: () => ({}), createMockProject: () => mockProject,
   deleteMockProject: noop, renameMockProject: noop,

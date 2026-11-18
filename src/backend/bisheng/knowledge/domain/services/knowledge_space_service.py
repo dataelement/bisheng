@@ -41,7 +41,6 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceFolderDuplicateError,
     SpaceFolderNotFoundError,
     SpaceFolderUploadCountExceededError,
-    SpaceGrantedNotJoinedError,
     SpaceLimitError,
     SpaceNotFoundError,
     SpacePermissionDeniedError,
@@ -65,6 +64,7 @@ from bisheng.core.context.tenant import (
     get_is_management_api,
     is_tenant_filter_bypassed,
     management_tenant_scope,
+    strict_tenant_filter,
     tenant_execution_scope,
 )
 from bisheng.core.database import get_async_db_session
@@ -95,12 +95,13 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileDao,
     KnowledgeFileStatus,
 )
-from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
+from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao, space_child_cursor_key
 from bisheng.knowledge.domain.models.knowledge_space_tag_library import (
     KnowledgeSpaceTagLibraryDao,
 )
 from bisheng.knowledge.domain.models.knowledge_space_user_pin import KnowledgeSpaceUserPinDao
 from bisheng.knowledge.domain.repositories.knowledge_space_listing_repository import KnowledgeSpaceListingRepository
+from bisheng.knowledge.domain.repositories.knowledge_space_tag_repository import KnowledgeSpaceTagRepository
 from bisheng.knowledge.domain.schemas.direct_delete_scope import DeleteSelection
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     FolderUploadItem,
@@ -144,6 +145,7 @@ from bisheng.knowledge.domain.services.web_link_import_service import (
     KnowledgeWebLinkImportService,
     is_web_link_non_dedup_markdown,
 )
+from bisheng.knowledge.domain.upload_policy import validate_knowledge_upload_file
 from bisheng.llm.domain import LLMService
 from bisheng.message.domain.services.notification_content import build_notify_content
 from bisheng.permission.application.access import (
@@ -230,6 +232,11 @@ _RESOURCE_ACTIONS = {
 _logger = logging.getLogger(__name__)
 
 _CHILD_PERMISSION_SCAN_BATCH_SIZE = 100
+_CHILD_CURSOR_VALUE_TYPES = {
+    "file_name": str,
+    "file_size": (int, type(None)),
+    "create_time": str,
+}
 _JOINED_VISIBLE_MAX_RESULTS = 5_000
 _JOINED_DB_ID_BATCH_SIZE = 500
 _MANAGED_VISIBLE_MAX_RESULTS = 5_000
@@ -993,16 +1000,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
             current_tenant_id=tenant_id,
         )
 
-    async def _revoke_direct_space_user_permissions(self, space_id: int, user_id: int) -> None:
-        """Remove direct ReBAC grants and UI binding metadata for a space user."""
-        await self.__class__.sync_direct_space_user_permissions(
-            space_id,
-            user_id,
-            None,
-            is_active=False,
-            operator_user_id=self.login_user.user_id,
-        )
-
     async def _get_effective_actions(
         self,
         object_type: str,
@@ -1328,7 +1325,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 await self._assert_space_creation_quota()
 
             if selected_model_id is None:
-                workbench_llm = await LLMService.get_workbench_llm()
+                workbench_llm = await LLMService.get_workbench_llm(slots=("embedding_model.id",))
                 if not workbench_llm or not workbench_llm.embedding_model:
                     raise WorkbenchEmbeddingError()
                 selected_model_id = workbench_llm.embedding_model.id
@@ -1712,7 +1709,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if self.prospective_grant_application is None:
             raise RuntimeError("F050 Prospective Grant application is not configured")
         await self._assert_space_creation_quota()
-        workbench_llm = await LLMService.get_workbench_llm()
+        workbench_llm = await LLMService.get_workbench_llm(slots=("embedding_model.id",))
         if not workbench_llm or not workbench_llm.embedding_model:
             raise WorkbenchEmbeddingError()
         return (
@@ -2120,10 +2117,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         abnormal = await self.space_listing_repository.aexists_abnormal_files(space_ids=[row.id for row in rows])
         bindings = await DepartmentKnowledgeSpaceDao.aget_by_space_ids([row.id for row in rows]) if rows else []
         department_ids = {binding.space_id for binding in bindings}
+        creator_ids = sorted({row.user_id for row in rows if row.user_id is not None})
+        creators = await UserDao.aget_user_by_ids(creator_ids) if creator_ids else []
+        creator_names = {user.user_id: user.user_name for user in (creators or [])}
         return PageData[KnowledgeSpaceAdminListItemResp](
             data=[
                 KnowledgeSpaceAdminListItemResp.model_validate(row).model_copy(
                     update={
+                        "user_name": creator_names.get(row.user_id, ""),
                         "has_abnormal_files": row.id in abnormal,
                         "space_kind": "department" if row.id in department_ids else "normal",
                     }
@@ -2646,15 +2647,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
         Returns: {"total": int, "page": int, "page_size": int, "data": List[KnowledgeSpaceInfoResp]}
         """
         # 1. SQL-level paginated query with multi-table JOIN
-        rows, total = await asyncio.gather(
-            KnowledgeDao.async_get_public_spaces_paginated(
-                user_id=self.login_user.user_id,
-                keyword=keyword,
-                page=page,
-                page_size=page_size,
-            ),
-            KnowledgeDao.async_count_public_spaces(keyword=keyword),
-        )
+        # PUBLIC means discoverable inside the tenant, not across tenants.
+        with strict_tenant_filter():
+            rows, total = await asyncio.gather(
+                KnowledgeDao.async_get_public_spaces_paginated(
+                    user_id=self.login_user.user_id,
+                    keyword=keyword,
+                    page=page,
+                    page_size=page_size,
+                ),
+                KnowledgeDao.async_count_public_spaces(keyword=keyword),
+            )
 
         if not rows:
             return {"total": 0, "page": page, "page_size": page_size, "data": []}
@@ -2868,11 +2871,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if file_ids:
             tag_dict = await asyncio.to_thread(
                 TagDao.get_tags_by_resource_batch,
-                [ResourceTypeEnum.SPACE_FILE],
+                [ResourceTypeEnum.SPACE_FILE, ResourceTypeEnum.KNOWLEDGE_FILE],
                 [str(fid) for fid in file_ids],
             )
             for fid_str, tags in tag_dict.items():
-                file_tags[int(fid_str)] = [{"id": t.id, "name": t.name} for t in tags]
+                file_tags[int(fid_str)] = list({t.id: {"id": t.id, "name": t.name} for t in tags}.values())
 
         result = []
         for one in res:
@@ -3062,12 +3065,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         through ReBAC filtering, stop once we've accumulated ``page_size + 1``
         visible items (the +1 probes ``has_more``) or the DB is exhausted.
 
-        Returns visible items, ``has_more``, and the last consumed candidate
-        key. The response cursor must resume after that candidate, not after the
-        last visible row, so denied rows are not rescanned on the next page.
+        Returns visible items, ``has_more``, and the response boundary key.
+        Internal batches advance past all scanned candidates. Response cursors
+        for the new sorts use a visible row because they include raw metadata.
         """
-        from bisheng.knowledge.domain.models.knowledge_space_file import _compute_ext_rank_python
-
         visible_page_items: list[KnowledgeFile] = []
         candidate_batch_size = min(max(page_size + 1, 1), _CHILD_PERMISSION_SCAN_BATCH_SIZE)
         scan_started_at = perf_counter()
@@ -3110,14 +3111,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 verified_target_count=(permission_context or {}).get("performance", {}).get("verified_target_count", 0),
             )
 
-        def candidate_cursor(item: KnowledgeFile) -> list:
-            return [
-                item.file_type,
-                _compute_ext_rank_python(item.file_name),
-                item.update_time,
-                item.id,
-            ]
-
         while True:
             batch_count += 1
             db_started_at = perf_counter()
@@ -3152,17 +3145,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 if item.id in visible_ids:
                     if len(visible_page_items) == page_size:
                         emit_scan_metric(has_more=True)
+                        if order_field in _CHILD_CURSOR_VALUE_TYPES:
+                            # The cursor is base64 encoded. Avoid exposing sort
+                            # values from a candidate that failed visibility.
+                            resume_cursor = (
+                                space_child_cursor_key(visible_page_items[-1], order_field)
+                                if visible_page_items
+                                else None
+                            )
                         return visible_page_items, True, resume_cursor
                     visible_page_items.append(item)
                 scanned_candidates += 1
-                resume_cursor = candidate_cursor(item)
+                resume_cursor = space_child_cursor_key(item, order_field)
 
             # Advance batch_cursor to the LAST DB row of this batch (not last
             # visible) so the next batch picks up strictly after; if we used
             # the last visible, items filtered out between them would be
             # re-emitted on the next batch.
             last_db = batch_items[-1]
-            batch_cursor = candidate_cursor(last_db)
+            batch_cursor = space_child_cursor_key(last_db, order_field)
 
             if len(batch_items) < candidate_batch_size:
                 break
@@ -3317,7 +3318,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     expected_key_len=4,
                     expected_context=context,
                 )
-            except CursorDecodeError as exc:
+                if decoded is not None:
+                    value_type = _CHILD_CURSOR_VALUE_TYPES.get(order_field)
+                    if value_type and (decoded[0] != order_field or not isinstance(decoded[1], value_type)):
+                        raise CursorDecodeError("cursor does not contain a valid sort value")
+                    if not isinstance(decoded[3], int) or decoded[3] <= 0:
+                        raise CursorDecodeError("cursor does not contain a valid file ID")
+                    if order_field == "file_type" and not all(isinstance(value, int) for value in decoded[:2]):
+                        raise CursorDecodeError("cursor does not contain a valid file type and extension rank")
+                    decoded[2] = datetime.fromisoformat(decoded[2])
+                    if order_field == "create_time":
+                        decoded[1] = datetime.fromisoformat(decoded[1])
+            except (AttributeError, TypeError, ValueError) as exc:
                 raise KnowledgeSpaceInvalidCursorError(exception=exc) from exc
             stage_elapsed_ms["cursor_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
 
@@ -4041,6 +4053,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         _application=None,
         _deferred: _UploadDispatchBatch | None = None,
         _upload_entries: dict[str, PreparedUpload] | None = None,
+        trusted_sources: list | None = None,
     ) -> list[KnowledgeSpaceFileResponse]:
         if (_legacy_inputs is None) != (_legacy_request is None):
             raise ValueError("Legacy inputs and request must be paired")
@@ -4060,6 +4073,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
             _legacy_inputs, _legacy_request = deepcopy((_legacy_inputs, _legacy_request))
         if _deferred is not None and callback_url is not None:
             raise ValueError("Deferred uploads cannot dispatch callbacks")
+        if trusted_sources is not None:
+            # Server-resolved sources replace client paths; they never mix with
+            # verified upload receipts, which already own their server path.
+            if _upload_entries is not None:
+                raise ValueError("Trusted sources and verified upload receipts are exclusive")
+            if len(trusted_sources) != len(file_path):
+                raise ValueError("Upload sources do not match file paths")
         if file_source is None:
             file_source = FileSource.SPACE_UPLOAD
         if parent_id:
@@ -4094,6 +4114,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 application=_application,
                 deferred=_deferred,
                 **({"_upload_entries": _upload_entries} if _upload_entries is not None else {}),
+                **({"trusted_sources": trusted_sources} if trusted_sources is not None else {}),
             )
 
     @contextmanager
@@ -4136,6 +4157,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         application=None,
         deferred: _UploadDispatchBatch | None = None,
         _upload_entries: dict[str, PreparedUpload] | None = None,
+        trusted_sources: list | None = None,
     ) -> list[KnowledgeSpaceFileResponse]:
         knowledge_id = db_knowledge.id
         file_level_path = ""
@@ -4200,6 +4222,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         preview_cache_keys = []
         application = application if application is not None else self.upload_application_factory()
 
+        if trusted_sources is not None and len(trusted_sources) != len(file_path):
+            raise ValueError("Upload sources do not match file paths")
         try:
             for index, one in enumerate(file_path):
                 selected_upload = _upload_entries.get(one) if _upload_entries is not None else None
@@ -4222,9 +4246,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     file_kwargs={"file_source": file_source.value},
                     processing_rule_request=file_split_rule,
                     ordinary_overrides_only=legacy_inputs is None and not legacy_overrides,
+                    trusted_source=trusted_sources[index] if trusted_sources is not None else None,
                 )
                 if self._upload_execution_guard is not None:
                     await self._upload_execution_guard()
+                # Authoritative per-file gate: the object just read is what will
+                # be registered, so neither the size the caller reported at
+                # staging nor a skipped staging step can widen it.
+                validate_knowledge_upload_file(prepared.original_file_name, prepared.file_size)
                 repeat_files = KnowledgeFileDao.get_file_by_condition(
                     knowledge_id=knowledge_id,
                     md5_=prepared.md5,
@@ -4336,6 +4365,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         *,
         processing_overrides: ProcessingOverrides | None = None,
         _upload_entries: dict[str, PreparedUpload] | None = None,
+        trusted_sources: list | None = None,
     ) -> list[KnowledgeSpaceFileResponse]:
         """F034 §5.5 folder upload: rebuild the client-side directory tree, then
         register every file through the regular add_file pipeline.
@@ -4366,8 +4396,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         with self._upload_execution_scope(db_knowledge):
             return await self._upload_folder_items_in_execution_scope(
-                db_knowledge, items, parent_id, processing_overrides=processing_overrides,
+                db_knowledge,
+                items,
+                parent_id,
+                processing_overrides=processing_overrides,
                 **({"_upload_entries": _upload_entries} if _upload_entries is not None else {}),
+                **({"trusted_sources": trusted_sources} if trusted_sources is not None else {}),
             )
 
     async def _upload_folder_items_in_execution_scope(
@@ -4378,6 +4412,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         *,
         processing_overrides: ProcessingOverrides | None = None,
         _upload_entries: dict[str, PreparedUpload] | None = None,
+        trusted_sources: list | None = None,
     ) -> list[KnowledgeSpaceFileResponse]:
         knowledge_id = db_knowledge.id
         base_path = ""
@@ -4390,14 +4425,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # Parse relative paths into (dir chain, file path); collect every
         # directory that needs creating. "." / ".." / empty segments are
         # dropped so a crafted path cannot escape the drop point.
-        parsed: list[tuple[tuple[str, ...], str]] = []
+        if trusted_sources is not None and len(trusted_sources) != len(items):
+            raise ValueError("Upload sources do not match folder items")
+        parsed: list[tuple[tuple[str, ...], str, object]] = []
         dir_set: set[tuple[str, ...]] = set()
-        for item in items:
+        for index, item in enumerate(items):
             parts = [p for p in item.relative_path.replace("\\", "/").split("/") if p and p not in (".", "..")]
             if not parts:
                 raise SpaceFolderNotFoundError()
             dir_parts = tuple(parts[:-1])
-            parsed.append((dir_parts, item.file_path))
+            parsed.append((dir_parts, item.file_path, trusted_sources[index] if trusted_sources is not None else None))
             for depth in range(1, len(dir_parts) + 1):
                 dir_set.add(dir_parts[:depth])
 
@@ -4457,20 +4494,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
             # Each group retains the ordinary permission/quota/dedup pipeline.
             # One receipt owner covers the entire request; no group dispatches.
-            groups: dict[tuple[str, ...], list[str]] = {}
-            for dir_parts, file_path in parsed:
-                groups.setdefault(dir_parts, []).append(file_path)
-            for dir_parts, file_paths in groups.items():
+            groups: dict[tuple[str, ...], list[tuple[str, object]]] = {}
+            for dir_parts, file_path, source in parsed:
+                groups.setdefault(dir_parts, []).append((file_path, source))
+            for dir_parts, entries in groups.items():
                 results.extend(
                     await self.add_file(
                         knowledge_id,
-                        file_paths,
+                        [path for path, _ in entries],
                         parent_id=node_info[dir_parts][0],
                         audit=False,
                         processing_overrides=processing_overrides,
                         _application=application,
                         _deferred=batch,
                         **({"_upload_entries": _upload_entries} if _upload_entries is not None else {}),
+                        **(
+                            {"trusted_sources": [source for _, source in entries]}
+                            if trusted_sources is not None
+                            else {}
+                        ),
                     )
                 )
         except BaseException:
@@ -4811,19 +4853,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def get_space_tags(self, space_id: int) -> list[Tag]:
         await self._require_read_permission(space_id)
         await self._require_action("knowledge_space", space_id, "visible")
-        tags = await TagDao.get_tags_by_business(
-            business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE, business_id=str(space_id)
-        )
-        return tags
+        return await KnowledgeSpaceTagRepository().list_space_tags(space_id)
 
     async def add_space_tag(self, space_id: int, tag_name: str) -> Tag:
         await self._require_action("knowledge_space", space_id, "edit")
 
-        existing_tags = await TagDao.get_tags_by_business(
-            business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
-            business_id=str(space_id),
-            name=tag_name,
-        )
+        existing_tags = await KnowledgeSpaceTagRepository().list_space_tags(space_id, name=tag_name)
         if any(t.name == tag_name for t in existing_tags):
             raise SpaceTagExistsError()
 
@@ -4837,20 +4872,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def delete_space_tag(self, space_id: int, tag_id: int):
         await self._require_action("knowledge_space", space_id, "edit")
-        return await TagDao.delete_business_tag(
-            tag_id,
-            business_id=str(space_id),
-            business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
-        )
+        return await KnowledgeSpaceTagRepository().delete_space_tag(space_id, tag_id)
 
     async def update_file_tags(self, space_id: int, file_id: int, tag_ids: list[int]):
         """Overwrite tags for a single file."""
         await self._get_file_for_action(file_id, space_id=space_id)
         await self._require_action("knowledge_file", file_id, "rename")
 
-        resource_id = str(file_id)
-        resource_type = ResourceTypeEnum.SPACE_FILE
-        await TagDao.aupdate_resource_tags(tag_ids, resource_id, resource_type, self.login_user.user_id)
+        await KnowledgeSpaceTagRepository().replace_file_tags(
+            space_id, file_id, tag_ids, user_id=self.login_user.user_id
+        )
         await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
 
     async def _ordinary_batch(self, space_id, operation, items, **parameters):
@@ -4962,7 +4993,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         Returns {"status": "subscribed" | "pending", "space_id": space_id}
         """
         space = await KnowledgeDao.aquery_by_id(space_id)
-        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+        if not space or space.type != KnowledgeTypeEnum.SPACE.value or space.tenant_id != self.login_user.tenant_id:
             raise SpaceNotFoundError()
 
         if space.auth_type == AuthTypeEnum.PRIVATE:
@@ -5166,27 +5197,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
             scenario_code="knowledge_space_subscribe_request",
         )
 
+    async def get_space_exit_status(self, space_id: int):
+        from bisheng.knowledge.domain.services.knowledge_space_exit_service import KnowledgeSpaceExitService
+
+        return await KnowledgeSpaceExitService(self).status(space_id)
+
     async def unsubscribe_space(self, space_id: int) -> bool:
-        space = await KnowledgeDao.aquery_by_id(space_id)
-        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
-            raise SpaceNotFoundError()
+        from bisheng.knowledge.domain.services.knowledge_space_exit_service import KnowledgeSpaceExitService
 
-        current_membership = await SpaceChannelMemberDao.async_find_member(space_id, self.login_user.user_id)
-        if space.user_id == self.login_user.user_id or (
-            current_membership and current_membership.user_role == UserRoleEnum.CREATOR
-        ):
-            raise SpacePermissionDeniedError()
-
-        if not current_membership:
-            # The joined list is resolved from the `visible` decision, so it also
-            # carries spaces held through a Grant rather than by joining. Exiting
-            # one of those revoked nothing, deleted no row and still reported
-            # success, so the space came back on the next refresh.
-            raise SpaceGrantedNotJoinedError()
-
-        await self._revoke_direct_space_user_permissions(space_id, self.login_user.user_id)
-        deleted = await SpaceChannelMemberDao.delete_space_member(space_id, self.login_user.user_id)
-        return deleted
+        return await KnowledgeSpaceExitService(self).execute(space_id)
 
 
 def _f066_data_scope_narrowed() -> bool:

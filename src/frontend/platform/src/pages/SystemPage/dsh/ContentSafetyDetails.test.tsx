@@ -526,7 +526,7 @@ describe("audit views without detached safety checks", () => {
       expect(screen.queryByRole("button", { name: "dsh.modelAuditView.views.requests" })).toBeNull();
       expect(screen.queryByRole("button", { name: "dsh.modelAuditView.return_results" })).toBeNull();
       for (const view of ["groups", "unassociated"])
-        expect(screen.getByRole("button", { name: "dsh.modelAuditView.views." + view })).toBeVisible();
+        expect(screen.getByRole("radio", { name: "dsh.modelAuditView.views." + view })).toBeVisible();
       if (initialView === "unassociated")
         expect(api.page).toHaveBeenCalledWith(
           expect.objectContaining({ tenant_id: 101, association_status: "UNASSOCIATED" }),

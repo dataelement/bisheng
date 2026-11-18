@@ -1,3 +1,5 @@
+import { Button, Tooltip } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
 import type { ReactNode } from "react";
 import {
   DialogContent,
@@ -8,21 +10,90 @@ import {
 
 interface SpacePanelFrameProps {
   title: string;
-  presentation?: "page";
+  presentation?: "page" | "inline";
+  hideTitle?: boolean;
+  fill?: boolean;
+  centered?: boolean;
   busy?: boolean;
   children: ReactNode;
   footer?: ReactNode;
   className?: string;
+  contentClassName?: string;
+  back?: { label: string; onClick: () => void };
 }
 
 export function SpacePanelFrame({
   title,
   presentation,
+  hideTitle = false,
+  fill = false,
+  centered = false,
   busy = false,
   children,
   footer,
   className,
+  contentClassName,
+  back,
 }: SpacePanelFrameProps) {
+  if (presentation === "page" && centered)
+    return (
+      <section className="flex h-full min-h-0 min-w-0 flex-col">
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-[1200px] space-y-6 px-6 py-4">
+            {!hideTitle && <h1 className="text-h4 text-text-1">{title}</h1>}
+            {children}
+          </div>
+        </div>
+        {footer && (
+          <footer className="flex min-h-16 shrink-0 flex-wrap items-center justify-center gap-3 border-t border-border-base px-6 py-2 max-[768px]:[&>button]:flex-1">
+            {footer}
+          </footer>
+        )}
+      </section>
+    );
+  if (presentation === "inline")
+    return (
+      <section className={fill ? "flex min-h-0 min-w-0 flex-1 flex-col gap-4" : "min-w-0 space-y-4"}>
+        {!hideTitle && (
+          <h4 className="shrink-0 text-base font-medium text-text-1">{title}</h4>
+        )}
+        {children}
+        {footer && (
+          <div className="flex shrink-0 flex-wrap justify-end gap-2">{footer}</div>
+        )}
+      </section>
+    );
+  if (presentation === "page" && back)
+    return (
+      <section className="flex h-full min-h-0 min-w-0 flex-col px-4 pt-4">
+        <header className="flex h-8 shrink-0 items-center gap-3">
+          <Tooltip content={back.label}>
+            <Button
+              type="button"
+              variant="text"
+              color="default"
+              size="small"
+              iconOnly
+              aria-label={back.label}
+              disabled={busy}
+              onClick={back.onClick}
+            >
+              <Outlined.ArrowLeft aria-hidden />
+            </Button>
+          </Tooltip>
+          <span aria-hidden className="h-3 w-px bg-border-base" />
+          <h1 className="text-body font-medium text-text-1">{title}</h1>
+        </header>
+        <div className="min-h-0 flex-1 overflow-y-auto py-4">
+          <div className={`mx-auto w-full max-w-[648px] ${contentClassName ?? ""}`}>{children}</div>
+        </div>
+        {footer && (
+          <footer className="flex min-h-16 shrink-0 flex-wrap items-center justify-center gap-3 border-t border-border-base py-2 max-[768px]:[&>button]:flex-1">
+            {footer}
+          </footer>
+        )}
+      </section>
+    );
   if (presentation === "page")
     return (
       <section className="max-w-4xl space-y-4 py-4">

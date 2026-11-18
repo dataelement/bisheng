@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Alert, Button } from "@bisheng/ui";
 import { getAuditMode, saveAuditMode } from "@/controllers/API/dshModelAudit";
 import type { AuditMode, AuditModeSnapshot } from "@/types/dshModelAudit";
@@ -84,7 +85,7 @@ export function ModelAuditMode({
             {t("dsh.modelAuditView.modes." + snapshot.mode)}
           </span>
         )}
-        {!snapshot && !failed && <span role="status">{t("dsh.loading")}</span>}
+        {!snapshot && !failed && <LoadingState size="inline" label={t("dsh.loading")} />}
         {canConfigure && (
           <Button
             type="button"

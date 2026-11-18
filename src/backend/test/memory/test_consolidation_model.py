@@ -9,7 +9,10 @@ import pytest
 from bisheng.api.v1.schemas import WorkstationConfig
 from bisheng.common.errcode.memory import MemoryNoModelError
 from bisheng.llm.domain.schemas import WorkbenchModelConfig, WSModel
-from bisheng.llm.domain.services import llm as llm_service
+from bisheng.llm.domain.services.default_reference_extractor import (
+    WORKBENCH_MODEL_OBJECTS,
+    extract_model_default_references,
+)
 from bisheng.memory.domain.services import consolidation_model
 
 
@@ -35,13 +38,16 @@ def test_workstation_config_has_no_memory_field():
 
 
 def test_memory_llm_is_a_checked_model_reference():
-    """memory_llm is a saved model reference like the other single-model fields, so deleting
-    or hiding the model is fenced and an invalid id fails the admitted read."""
-    from bisheng.llm.domain.services.default_reference_extractor import extract_model_default_references
+    """memory_llm is a model reference slot of the workbench defaults, like the other single-model fields.
 
+    3.1 checks system-model defaults through the reference bindings: every saved
+    slot is extracted and its target model verified, so an inaccessible model
+    cannot be saved or read back.
+    """
+    assert "memory_llm" in WORKBENCH_MODEL_OBJECTS
     cfg = WorkbenchModelConfig(memory_llm=WSModel(id="5"), chat_title_llm=WSModel(id="6"))
-    slots = {ref.slot_key: ref.target.target_id for ref in extract_model_default_references("linsight_llm", cfg)}
-    assert slots["memory_llm.id"] == "5" and slots["chat_title_llm.id"] == "6"
+    refs = {(ref.slot_key, ref.target.target_id) for ref in extract_model_default_references("linsight_llm", cfg)}
+    assert {("memory_llm.id", "5"), ("chat_title_llm.id", "6")} <= refs
 
 
 def _cfg(memory_llm=None, models=None):
@@ -69,11 +75,16 @@ async def test_ac106_no_model_available(monkeypatch, cfg):
 
 
 async def test_ac106_child_tenant_inherits_root_value(monkeypatch):
-    """A child tenant without its own row reads the root value the admitted read returns."""
-    from types import SimpleNamespace
+    """A child tenant without its own row gets the root value through the settings inheritance.
 
-    root_value = json.dumps({"memory_llm": {"id": "9"}})
-    runtime = SimpleNamespace(arequire_default=AsyncMock(return_value=SimpleNamespace(payload_json=root_value)))
-    monkeypatch.setattr(llm_service, "get_model_default_read_runtime", lambda: runtime)
-    monkeypatch.setattr(llm_service, "current_model_default_tenant", lambda _tenant_id: 2)
+    3.1 resolves system-model defaults generically per key (Root row when the
+    child has none and Root shares defaults; covered for every key in
+    test/knowledge_unification/test_llm_default_repository.py). What is
+    memory-specific: consolidation picks memory_llm from the inherited workbench
+    payload. Whether the child may use the Root-owned model is decided by the real
+    Root sharing check (F025), not by a memory-specific shortcut.
+    """
+    root_value = '{"memory_llm":{"id":"9"}}'
+    inherited = WorkbenchModelConfig.model_validate_json(root_value)
+    monkeypatch.setattr(consolidation_model.LLMService, "get_workbench_llm", AsyncMock(return_value=inherited))
     assert await consolidation_model.resolve_memory_model_id() == 9

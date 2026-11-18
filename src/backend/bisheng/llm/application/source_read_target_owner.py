@@ -47,7 +47,7 @@ class ModelSourceReadTargetOwner:
             for value in ids
         ):
             raise ResourceReferenceInvalidError(reason="model_reference_target_unavailable")
-        return frozenset(requested) & (frozenset(int(value) for value in ids) | plan.inherited_server_ids)
+        return frozenset(requested) & frozenset(int(value) for value in ids)
 
     @staticmethod
     def _eligible(row, tenant_id, allowed, snapshot, transient):
@@ -86,7 +86,7 @@ class ModelSourceReadTargetOwner:
                 row.key.target_id,
             ):
                 return False
-        raise ResourceReferenceInvalidError(reason="model_reference_target_unavailable")
+        return False
 
     async def _inspect(self, session, scope, target_keys, identity, *, transient):
         get = self.verifier.aget_transient_snapshot if transient else self.verifier.aget_source_snapshot
@@ -173,7 +173,7 @@ class ModelSourceReadTargetOwner:
             for value in ids
         ):
             raise ResourceReferenceInvalidError(reason="model_reference_target_unavailable")
-        return frozenset(requested) & (frozenset(int(value) for value in ids) | plan.inherited_server_ids)
+        return frozenset(requested) & frozenset(int(value) for value in ids)
 
     def _inspect_sync(self, session, scope, target_keys, identity):
         get = self.verifier.get_source_snapshot

@@ -1,14 +1,15 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button, notification, Pagination } from "@bisheng/ui";
 import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { showApiError } from "@/controllers/request";
-import { getMarketContext } from "@/controllers/API/dshMarket";
+import { getMarketContext, type MarketPage } from "@/controllers/API/dshMarket";
 import {
     deleteMarketWorkbench, getMarketWorkbench, listMarketWorkbenches, listWorkbenchImports,
     resumeWorkbenchImport,
 } from "@/controllers/API/dshWorkbenches";
-import type { MarketWorkbench, MarketWorkbenchDetail, WorkbenchImport } from "@/controllers/API/dshWorkbenches";
+import type { MarketWorkbench, MarketWorkbenchDetail, MarketWorkbenchRow, WorkbenchImport } from "@/controllers/API/dshWorkbenches";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { WorkbenchImportDialog } from "./WorkbenchImportDialog";
@@ -18,7 +19,7 @@ export function WorkbenchMarketSection() {
     const paginationLocale = usePaginationLocale();
     const [tenant, setTenant] = useState<number | null>(null);
     const [page, setPage] = useState(1);
-    const [data, setData] = useState<{ data: MarketWorkbench[]; total: number }>({ data: [], total: 0 });
+    const [data, setData] = useState<MarketPage<MarketWorkbenchRow> | null>(null);
     const [imports, setImports] = useState<WorkbenchImport[]>([]);
     const [detail, setDetail] = useState<MarketWorkbenchDetail | null>(null);
     const [loading, setLoading] = useState(false);
@@ -30,6 +31,7 @@ export function WorkbenchMarketSection() {
     const deletion = useRef<AbortController | null>(null);
     const deleteLock = useRef(false);
     const detailRequest = useRef(0);
+    const canManage = data !== null && !data.read_only;
 
     const reload = useCallback(() => setRefresh(value => value + 1), []);
     useEffect(() => {
@@ -56,12 +58,12 @@ export function WorkbenchMarketSection() {
         return () => controller.abort();
     }, [tenant, page, refresh]);
     useEffect(() => {
-        if (tenant === null) return;
+        if (tenant === null || !canManage) return;
         let active = true;
         listWorkbenchImports(tenant).then(result => { if (active) setImports(result); })
             .catch(() => { if (active) setError(true); });
         return () => { active = false; };
-    }, [tenant, refresh]);
+    }, [tenant, refresh, canManage]);
     async function openDetail(id: string) {
         const sequence = ++detailRequest.current;
         try {
@@ -70,7 +72,7 @@ export function WorkbenchMarketSection() {
         } catch { if (mounted.current && sequence === detailRequest.current) setError(true); }
     }
 
-    function handleDelete(row: MarketWorkbench) {
+    function handleDelete(row: Pick<MarketWorkbench, "id" | "revision" | "display_name">) {
         if (tenant === null || deleteLock.current || busy) return;
         deleteLock.current = true;
         const controller = new AbortController();
@@ -105,36 +107,36 @@ export function WorkbenchMarketSection() {
         <header className="flex items-start justify-between gap-6">
             <div className="space-y-3"><h2 className="text-xl font-semibold">{t("workbenchTitle")}</h2>
                 <p className="text-muted-foreground">{t("workbenchIntro")}</p></div>
-            <Button className="shrink-0" disabled={tenant === null || busy} onClick={() => setUploadOpen(true)}>
+            {canManage && <Button className="shrink-0" disabled={busy} onClick={() => setUploadOpen(true)}>
                 {t("workbenchImport")}
-            </Button>
+            </Button>}
         </header>
         {error && <div role="alert" className="text-red-600 flex items-center gap-3">{t("loadFailed")}
             <Button variant="outlined" color="default" onClick={reload}>{t("retry")}</Button></div>}
-        {loading ? <p role="status">{t("loading")}</p> : <div className="border rounded-lg overflow-x-auto">
+        {loading || (!data && !error) ? <LoadingState size="panel" label={t("loading")} /> : <div className="border rounded-lg overflow-x-auto">
             <table className="w-full text-sm text-left"><thead className="bg-muted"><tr>
-                {["workbenchName", "version", "workbenchIdentity", "updated", "actions"].map(key =>
+                {["workbenchName", "version", "workbenchIdentity", "updated", ...(canManage ? ["actions"] : [])].map(key =>
                     <th className="p-4" key={key}>{t(key)}</th>)}
-            </tr></thead><tbody>{data.data.map(row => <tr key={row.id} className="border-t">
+            </tr></thead><tbody>{data?.data.map(row => <tr key={row.id} className="border-t">
                 <td className="p-4"><strong>{row.display_name}</strong><p className="text-muted-foreground max-w-md">{row.description}</p></td>
                 <td className="p-4">{row.current_version.version}</td>
                 <td className="p-4">{row.workbench_key || row.legacy_id}</td>
                 <td className="p-4">{new Date(/(?:Z|[+-]\d{2}:\d{2})$/.test(row.updated_at) ? row.updated_at : `${row.updated_at}Z`).toLocaleString()}</td>
-                <td className="p-4"><div className="flex gap-2"><Button variant="outlined" color="default" onClick={() => void openDetail(row.id)}>{t("details")}</Button>
-                    <Button variant="outlined" color="danger" disabled={busy} onClick={() => handleDelete(row)}>{t("delete")}</Button></div></td>
+                {canManage && "revision" in row && <td className="p-4"><div className="flex gap-2"><Button variant="outlined" color="default" onClick={() => void openDetail(row.id)}>{t("details")}</Button>
+                    <Button variant="outlined" color="danger" disabled={busy} onClick={() => handleDelete(row)}>{t("delete")}</Button></div></td>}
             </tr>)}</tbody></table>
-            {!data.data.length && <p className="p-10 text-center text-muted-foreground">{t("workbenchEmpty")}</p>}
+            {data?.data.length === 0 && <p className="p-10 text-center text-muted-foreground">{t("workbenchEmpty")}</p>}
         </div>}
         <Pagination
             locale={paginationLocale}
             current={page}
             pageSize={20}
-            total={data.total}
+            total={data?.total ?? 0}
             showTotal
             disabled={loading}
             onChange={(nextPage) => setPage(nextPage)}
         />
-        {imports.some(job => job.status !== "completed") && <section className="border rounded-lg p-4 space-y-3">
+        {canManage && imports.some(job => job.status !== "completed") && <section className="border rounded-lg p-4 space-y-3">
             <h3 className="font-semibold">{t("imports")}</h3>
             {imports.filter(job => job.status !== "completed").map(job => <div key={job.id} className="flex gap-3 items-center text-sm">
                 <span>{new Date(/(?:Z|[+-]\d{2}:\d{2})$/.test(job.created_at) ? job.created_at : `${job.created_at}Z`).toLocaleString()}</span>
@@ -146,9 +148,9 @@ export function WorkbenchMarketSection() {
                     finally { setBusy(false); }
                 }}>{t("resume")}</Button>
             </div>)}</section>}
-        {uploadOpen && tenant !== null && <WorkbenchImportDialog key={tenant} tenant={tenant}
+        {canManage && uploadOpen && tenant !== null && <WorkbenchImportDialog key={tenant} tenant={tenant}
             onClose={() => setUploadOpen(false)} onImported={reload} />}
-        <Dialog open={Boolean(detail)} onOpenChange={open => { if (!open) setDetail(null); }}>
+        <Dialog open={canManage && Boolean(detail)} onOpenChange={open => { if (!open) setDetail(null); }}>
             <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
                 {detail && <><DialogHeader><DialogTitle>{detail.display_name}</DialogTitle>
                     <DialogDescription>{detail.description}</DialogDescription></DialogHeader>

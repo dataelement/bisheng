@@ -382,6 +382,27 @@ class KnowledgeRag:
         return cls.init_es_vectorstore(knowledge.index_name, **kwargs)
 
     @classmethod
+    def open_stored_chunk_index_sync(cls, knowledge, *, login_user=None):
+        """Open the current chunk index without executing the saved model.
+
+        Listing stored segments does not embed text. A legacy-missing or
+        cross-tenant model stays non-executable for retrieval and rebuilds.
+        """
+        admitted, _executable = get_knowledge_model_read_runtime_sync().inspect(
+            cls._resource_id(knowledge, None), login_user=login_user
+        )
+        current = cls._current_knowledge(admitted, knowledge)
+        # Document libraries created before index_name existed keep their chunk
+        # index on collection_name. Browsing those files must not report the
+        # saved reference as invalid.
+        index_name = current.index_name if isinstance(current.index_name, str) and current.index_name else None
+        if index_name is None and isinstance(current.collection_name, str) and current.collection_name:
+            index_name = current.collection_name
+        if index_name is None:
+            raise ResourceReferenceInvalidError(reason="knowledge_chunk_index_required")
+        return cls.init_es_vectorstore_sync(index_name), index_name
+
+    @classmethod
     def init_knowledge_es_vectorstore_sync(
         cls,
         knowledge: Knowledge | None = None,

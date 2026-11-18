@@ -12,12 +12,14 @@ from pydantic import BaseModel
 
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.common.chat.utils import SourceType, process_source_document
+from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.services.failure_context import FailureContextAdapter
 from bisheng.common.utils.think_tags import ThinkBlockStreamFilter
 from bisheng.common.utils.title_generator import generate_conversation_title_async
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
+from bisheng.dsh.domain.services import chat_credits
 from bisheng.utils import get_request_ip
 from bisheng.workstation.domain.schemas import WorkstationConversation, WorkstationMessage
 
@@ -88,14 +90,18 @@ async def final_message(
         )
     )
     if source_document:
-        asyncio.create_task(
-            process_source_document(
-                source_document=source_document,
-                chat_id=conversation.chat_id,
-                message_id=response_message.id,
-                answer=text,
+        # F016: traceability is billed as daily chat but runs after the answer was sent, so it is
+        # never compared with the allowance; the task inherits the unmetered context.
+        with chat_credits.unmetered():
+            asyncio.create_task(
+                process_source_document(
+                    source_document=source_document,
+                    chat_id=conversation.chat_id,
+                    message_id=response_message.id,
+                    answer=text,
+                    app_type=ApplicationTypeEnum.DAILY_CHAT,
+                )
             )
-        )
 
     msg = json.dumps(
         {
@@ -122,7 +128,7 @@ async def resolve_title_llm(chat_llm: BaseChatModel, login_user: UserPayload) ->
 
     model_id = None
     try:
-        conf = await LLMService.get_workbench_llm()
+        conf = await LLMService.get_workbench_llm(slots=("chat_title_llm.id",))
         model_id = conf.chat_title_llm.id if conf and conf.chat_title_llm else None
         if not model_id:
             return chat_llm

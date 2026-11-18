@@ -9,6 +9,7 @@ from bisheng.common.errcode.knowledge import (
 )
 from bisheng.resource_reference.application.contracts import ReferenceSpec, TargetKey, reference_set_digest
 from bisheng.resource_reference.application.source_contracts import (
+    ModelDefaultSlotReadResult,
     SourceReferenceReadResult,
     TransientReferenceReadResult,
 )
@@ -57,7 +58,7 @@ class ReferenceSourceReadRuntime:
         if any(not fact.is_valid for fact in facts):
             raise ResourceReferenceInvalidError(reason="reference_target_invalid")
 
-    async def _source(self, session, scope, identity, *, purpose):
+    async def _source(self, session, scope, identity, *, purpose, slots=None):
         snapshot = await self.verifier.aget_source_snapshot(session, scope, identity)
         if scope.purpose != purpose:
             raise ResourceReferenceInvalidError(reason="reference_read_purpose_mismatch")
@@ -73,6 +74,10 @@ class ReferenceSourceReadRuntime:
             if snapshot.invalid_reason is not None:
                 raise ResourceReferenceInvalidError(reason=snapshot.invalid_reason)
             self._require_valid(facts)
+        if slots is not None:
+            return ModelDefaultSlotReadResult(
+                snapshot, facts, current.source.source_revision, current.root.source_revision, slots
+            )
         return SourceReferenceReadResult(snapshot, facts, current.source.source_revision, current.root.source_revision)
 
     async def ainspect_source(self, session, scope, identity):
@@ -88,7 +93,7 @@ class ReferenceSourceReadRuntime:
         self._require_valid(facts)
         return TransientReferenceReadResult(snapshot, facts)
 
-    def _source_sync(self, session, scope, identity, *, purpose):
+    def _source_sync(self, session, scope, identity, *, purpose, slots=None):
         snapshot = self.verifier.get_source_snapshot(session, scope, identity)
         if scope.purpose != purpose:
             raise ResourceReferenceInvalidError(reason="reference_read_purpose_mismatch")
@@ -104,6 +109,10 @@ class ReferenceSourceReadRuntime:
             if snapshot.invalid_reason is not None:
                 raise ResourceReferenceInvalidError(reason=snapshot.invalid_reason)
             self._require_valid(facts)
+        if slots is not None:
+            return ModelDefaultSlotReadResult(
+                snapshot, facts, current.source.source_revision, current.root.source_revision, slots
+            )
         return SourceReferenceReadResult(snapshot, facts, current.source.source_revision, current.root.source_revision)
 
     def inspect_source(self, session, scope, identity):
@@ -111,3 +120,11 @@ class ReferenceSourceReadRuntime:
 
     def require_source_valid(self, session, scope, identity):
         return self._source_sync(session, scope, identity, purpose="execute")
+
+    def require_default_slots_valid(self, session, scope, identity, slots):
+        self.verifier.select_default_slots(session, scope, identity, slots)
+        return self._source_sync(session, scope, identity, purpose="execute", slots=slots)
+
+    async def arequire_default_slots_valid(self, session, scope, identity, slots):
+        await self.verifier.aselect_default_slots(session, scope, identity, slots)
+        return await self._source(session, scope, identity, purpose="execute", slots=slots)

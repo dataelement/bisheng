@@ -18,6 +18,8 @@ export interface UploadPreview {
   status: "processing" | "completed" | "error";
   data?: {
     code?: number;
+    /** Human-readable reason recorded by the backend for a failed preview. */
+    message?: string;
     file_url: string;
     parse_type: string;
     partitions: Record<string, { text: string; type: string; part_id: string }>;

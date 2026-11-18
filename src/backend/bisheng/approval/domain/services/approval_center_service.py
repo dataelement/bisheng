@@ -1103,6 +1103,7 @@ class ApprovalCenterService:
             return
 
         req = SimpleNamespace(
+            instance_id=instance.id,
             tenant_id=instance.tenant_id,
             applicant_user_id=instance.applicant_user_id,
             applicant_user_name=instance.applicant_user_name,

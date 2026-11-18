@@ -18,7 +18,7 @@ interface SkillDetailsProps {
   /** The on / off switch is being saved. */
   toggling?: boolean;
   onClose: () => void;
-  onToggle: (skill: SkillRecord, enabled: boolean) => void;
+  onToggle?: (skill: SkillRecord, enabled: boolean) => void;
   onUpdate: (skill: SkillRecord) => void;
 }
 
@@ -225,7 +225,7 @@ export function SkillDetails({ skill, toggling = false, onClose, onToggle, onUpd
             >
               {localize(shown.enabled ? 'com_skill_center_status_enabled' : 'com_skill_center_disabled_tag')}
             </span>
-            {(
+            {onToggle && (
               <Switch
                 className="shrink-0"
                 checked={skill.enabled}

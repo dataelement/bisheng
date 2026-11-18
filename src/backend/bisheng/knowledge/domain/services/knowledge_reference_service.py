@@ -27,6 +27,27 @@ from bisheng.resource_reference.application.contracts import SourceType
 from bisheng.resource_reference.application.read_identity import AuthenticatedSourceReadIdentity
 from bisheng.resource_reference.application.source_disclosure import SourceDisclosure, SourceDisclosureRuntime
 
+_WORKFLOW_SLOT_LOCATIONS = (
+    ("knowledge_retriever", "knowledge", "workflow_knowledge_retriever"),
+    ("qa_retriever", "qa_knowledge_id", "workflow_qa_retriever"),
+    ("agent", "knowledge_id", "workflow_agent_knowledge"),
+    ("rag", "knowledge", "workflow_rag_knowledge"),
+)
+
+
+def workflow_slot_location(slot_key: str) -> str:
+    """Map a saved workflow slot to a stable place code, without node identifiers."""
+
+    if type(slot_key) is not str or not slot_key.startswith("node:"):
+        return "workflow_reference"
+    node, separator, slot = slot_key[5:].rpartition(".")
+    if not separator or not node or not slot:
+        return "workflow_reference"
+    for prefix, expected, code in _WORKFLOW_SLOT_LOCATIONS:
+        if slot == expected and (node == prefix or node.startswith(f"{prefix}_")):
+            return code
+    return "workflow_reference"
+
 
 def impact_digest(value):
     raw = json.dumps(
@@ -39,6 +60,7 @@ def impact_digest(value):
 class KnowledgeReferenceSourceEntry:
     disclosure: SourceDisclosure
     matched_slot_count: int
+    locations: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +95,23 @@ class KnowledgeReferenceService:
         self.coverage_factory, self.runtime = coverage_factory, runtime
         self.disclosure_runtime, self.sessions = disclosure_runtime, session_factory
         self.identity = AuthenticatedSourceReadIdentity()
+
+    @staticmethod
+    def _entry(item, count, facts):
+        return KnowledgeReferenceSourceEntry(item, count, KnowledgeReferenceService._locations(facts, item.source))
+
+    @staticmethod
+    def _locations(facts, source):
+        if source.source_type != SourceType.WORKFLOW_VERSION:
+            return ()
+        codes = []
+        for row in facts.references:
+            if row.source != source:
+                continue
+            code = workflow_slot_location(row.slot_key)
+            if code not in codes:
+                codes.append(code)
+        return tuple(codes)
 
     @staticmethod
     def _size(value):
@@ -183,7 +222,7 @@ class KnowledgeReferenceService:
                     if item is not None:
                         qualified[item.source.source_type.value] += 1
                         if start + offset < size:
-                            first.append(KnowledgeReferenceSourceEntry(item, slots[item.source]))
+                            first.append(self._entry(item, slots[item.source], facts))
             await self._current(identity, original, stable)
             return KnowledgeReferenceInspection(
                 space_id,
@@ -227,7 +266,7 @@ class KnowledgeReferenceService:
                 raise ResourceReferenceInvalidError(reason="knowledge_reference_cursor_invalid") from error
             result = await self._disclose(identity, candidates[start : start + size])
             await self._current(identity, original, stable)
-            data = [KnowledgeReferenceSourceEntry(item, slots[item.source]) for item in result if item is not None]
+            data = [self._entry(item, slots[item.source], facts) for item in result if item is not None]
             return self._page(data, candidates, start, size, context)
         except BaseErrorCode:
             raise

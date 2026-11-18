@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import type { User } from "@/types/api/user"
 /** Hosted application cards share state badges and actions with the detail page. */
 import CardComponent from "@/components/bs-comp/cardComponent"
@@ -13,6 +14,7 @@ import { AppType } from "@/types/app"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useNavigate } from "react-router-dom"
+import { showApiError } from "@/controllers/request"
 import {
   isDeleteBlockedByState,
   isOnline,
@@ -43,17 +45,20 @@ export interface HostedAppListItem {
 interface HostedAppVersionLabelProps {
   appId: string
   online: boolean
+  onLoadActions: () => Promise<{ hasError: boolean }>
 }
 
 /** Hosted applications show version information; history lives on the detail page. */
-function HostedAppVersionLabel({ appId, online }: HostedAppVersionLabelProps) {
+function HostedAppVersionLabel({ appId, online, onLoadActions }: HostedAppVersionLabelProps) {
   const { t } = useTranslation()
   const [versions, setVersions] = useState<HostedAppVersion[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)
   const [retryAttempt, setRetryAttempt] = useState(0)
+  const [requested, setRequested] = useState(false)
 
   useEffect(() => {
+    if (!requested) return
     let cancelled = false
     setVersions(null)
     setLoading(true)
@@ -67,15 +72,24 @@ function HostedAppVersionLabel({ appId, online }: HostedAppVersionLabelProps) {
       .catch(() => { if (!cancelled) setFailed(true) })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [appId, online, retryAttempt])
+  }, [appId, online, retryAttempt, requested])
+
+  if (!requested) return <Button
+    variant="link"
+    size="small"
+    onClick={(event) => {
+      event.stopPropagation()
+      void onLoadActions().then(result => {
+        if (!result.hasError) setRequested(true)
+      }).catch(showApiError)
+    }}
+  >{t("skills.version")}</Button>
 
   const current = versions?.find((item) => item.is_current)
   const latest = versions?.reduce<HostedAppVersion | undefined>((newest, version) =>
     !newest || version.version_no > newest.version_no ? version : newest, undefined)
   const displayedVersion = online ? current : latest
-  const label = loading
-    ? t("hostedApp.version.loading")
-    : failed
+  const label = failed
       ? t("hostedApp.version.loadFailed")
       : !versions?.length
         ? t("hostedApp.version.noCode")
@@ -85,7 +99,7 @@ function HostedAppVersionLabel({ appId, online }: HostedAppVersionLabelProps) {
 
   return (
     <span className="inline-flex h-6 max-w-40 items-center gap-1 whitespace-nowrap text-caption text-text-2">
-      <span className="truncate" title={label}>{label}</span>
+      {loading ? <LoadingState size="inline" label={t("hostedApp.version.loading")} /> : <span className="truncate" title={label}>{label}</span>}
       {!loading && failed && (
         <Button
           color="primary"
@@ -108,9 +122,10 @@ interface HostedAppCardProps {
   item: HostedAppListItem
   currentUser: Partial<User> | null
   isAdmin: boolean
-  canDelete: boolean
-  canSwitch: boolean
-  canManagePermission: boolean
+  actions?: string[]
+  onLoadActions: () => Promise<{ actions: string[]; hasError: boolean }>
+  menuLoading?: boolean
+  menuError?: boolean
   labelPannel?: React.ReactNode
   onPermission: (item: HostedAppListItem) => void
   /**
@@ -130,6 +145,10 @@ export function HostedAppCard({
   labelPannel = null,
   onPermission,
   onChanged,
+  actions: loadedActions,
+  onLoadActions,
+  menuLoading,
+  menuError,
 }: HostedAppCardProps) {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -144,11 +163,13 @@ export function HostedAppCard({
   const state =
     item.app_state ?? (item.status === 2 ? "online" : undefined)
   const online = isOnline(state) || item.status === 2
-  const actions = appActionState(item.allowed_actions)
+  const actions = appActionState(loadedActions)
   const canSwitch = online ? actions.unpublish : actions.publish
   const appRef = { appId: String(item.id), name: item.name, state }
 
   const handleCheckedChange = async (checked: boolean) => {
+    const result = await onLoadActions()
+    if (result.hasError || !result.actions.includes(checked ? "publish" : "unpublish")) return false
     return checked ? await resumeApp(appRef) : await stopApp(appRef)
   }
 
@@ -170,7 +191,11 @@ export function HostedAppCard({
       currentUser={currentUser}
       isAdmin={isAdmin}
       checked={online}
-      onClick={() => navigate(`/build/apps/${item.id}`)}
+      onClick={() => {
+        void onLoadActions().then(result => {
+          if (!result.hasError) navigate(`/build/apps/${item.id}`)
+        }).catch(showApiError)
+      }}
       onCheckedChange={handleCheckedChange}
       // ⚙️ menu keeps only "manage permission" and "delete": leaving
       // `onAddTemp` undefined and `showCopy` false hides the other two without
@@ -178,15 +203,18 @@ export function HostedAppCard({
       onAddTemp={undefined}
       showCopy={false}
       onPermission={actions.managePermission ? onPermission : undefined}
+      onMenuOpen={() => { void onLoadActions() }}
+      menuLoading={menuLoading}
+      menuError={menuError}
       onDelete={actions.delete ? handleDelete : undefined}
       deleteDisabledHint={
         isDeleteBlockedByState(state) || online
           ? t("hostedApp.actions.deleteBlockedHint")
           : undefined
       }
-      showSwitch={canSwitch}
-      canSwitch={canSwitch}
-      headSelecter={<HostedAppVersionLabel appId={String(item.id)} online={online} />}
+      showSwitch={loadedActions === undefined || canSwitch}
+      canSwitch={true}
+      headSelecter={<HostedAppVersionLabel key={String(item.id)} appId={String(item.id)} online={online} onLoadActions={onLoadActions} />}
       labelPannel={labelPannel}
       footer={
         <div className="absolute right-0 bottom-0 flex items-center gap-1">

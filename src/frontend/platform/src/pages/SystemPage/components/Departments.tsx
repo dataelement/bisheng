@@ -1,5 +1,6 @@
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
-import { Button, Checkbox, Tag, toast } from "@bisheng/ui";
+import { useQueryClient } from "@tanstack/react-query";
+import { Button, Checkbox, Tooltip, toast } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { useTranslation } from "react-i18next";
 import { departmentDisplayName } from "@/components/bs-comp/department/departmentDisplayName";
@@ -27,7 +28,32 @@ import { OrganizationSearchPanel } from "@/pages/DepartmentPage/components/Organ
 import type { DepartmentTreeNode } from "@/types/api/department";
 
 export default function Departments() {
+  const queryClient = useQueryClient();
+  const [directoryRevision, setDirectoryRevision] = useState(0);
+  const handleTenantMounted = () => {
+    // Mounting changes the business boundary. Drop both browse caches and all
+    // local selection/search state before loading the directory in its new scope.
+    queryClient.removeQueries(["dept:false"]);
+    queryClient.removeQueries(["dept:true"]);
+    setDirectoryRevision((revision) => revision + 1);
+  };
+
+  return (
+    <DepartmentDirectory
+      key={directoryRevision}
+      onTenantMounted={handleTenantMounted}
+    />
+  );
+}
+
+interface DepartmentDirectoryProps {
+  onTenantMounted: () => void;
+}
+
+function DepartmentDirectory({ onTenantMounted }: DepartmentDirectoryProps) {
   const { t } = useTranslation();
+  const createDepartmentLabel = t("bs:department.create");
+  const createChildDepartmentLabel = t("bs:organization.createChildDepartment");
   const { appConfig } = useContext(locationContext);
   const { user } = useContext(userContext);
   const [includeArchived, setIncludeArchived] = useState(false);
@@ -46,6 +72,7 @@ export default function Departments() {
     (selectedId == null ? null : tree.getNode(selectedId)) ?? selectedSnapshot;
   const [createOpen, setCreateOpen] = useState(false);
   const [createParentId, setCreateParentId] = useState<number | null>(null);
+  const createTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [settingsTarget, setSettingsTarget] =
     useState<DepartmentTreeNode | null>(null);
   const [mountTarget, setMountTarget] = useState<{
@@ -54,10 +81,10 @@ export default function Departments() {
   } | null>(null);
   const [membersRefreshSignal, setMembersRefreshSignal] = useState(0);
   const [memberFilter, setMemberFilter] = useState("all");
-  const [directOnly, setDirectOnly] = useState(true);
+  const [directOnly, setDirectOnly] = useState(false);
   const [memberLocation, setMemberLocation] = useState<MemberLocationRequest>();
   const locateSequence = useRef(0);
-  const rowRefs = useRef(new Map<string, HTMLDivElement>());
+  const [treeRevealKey, setTreeRevealKey] = useState(0);
   const [leftPaneWidth, setLeftPaneWidth] = useState(260);
   const isResizingRef = useRef(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -75,7 +102,8 @@ export default function Departments() {
     }
   }, [tree, selectedId, selectNode]);
 
-  const handleCreateClick = (parentId: number | null = null) => {
+  const handleCreateClick = (trigger: HTMLButtonElement, parentId: number | null = null) => {
+    createTriggerRef.current = trigger;
     setCreateParentId(parentId);
     setCreateOpen(true);
   };
@@ -102,26 +130,13 @@ export default function Departments() {
         }
       } else if (!removedDeptId && selectedDept) {
         await treeRef.current.reveal(selectedDept.id);
-        window.requestAnimationFrame(() => {
-          if (selectedIdRef.current === selectedDept.id)
-            rowRefs.current
-              .get(selectedDept.dept_id)
-              ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-        });
+        if (selectedIdRef.current === selectedDept.id)
+          setTreeRevealKey((value) => value + 1);
       }
     },
     [tree, selectedDept, includeArchived, selectNode]
   );
 
-  const scrollTreeTo = (deptId: string) => {
-    window.requestAnimationFrame(() =>
-      window.requestAnimationFrame(() => {
-        rowRefs.current
-          .get(deptId)
-          ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-      })
-    );
-  };
   const revealDepartment = async (id: number) => {
     const chain = await tree.reveal(id);
     await new Promise<void>((resolve) =>
@@ -147,7 +162,7 @@ export default function Departments() {
       page: 1,
       requestId: ++locateSequence.current,
     });
-    scrollTreeTo(node.dept_id);
+    setTreeRevealKey((value) => value + 1);
   };
   const handleSelectMember = async (result: OrganizationMemberResult) => {
     const [node, location] = await Promise.all([
@@ -176,7 +191,7 @@ export default function Departments() {
         type: "info",
         message: t("bs:organization.filterAdjusted"),
       });
-    scrollTreeTo(node.dept_id);
+    setTreeRevealKey((value) => value + 1);
   };
 
   useEffect(() => {
@@ -210,51 +225,53 @@ export default function Departments() {
   return (
     <div
       ref={containerRef}
-      className="flex h-[calc(100vh-140px-var(--license-banner-h,0px))] min-h-[360px]"
+      className="flex h-full min-h-0 overflow-hidden"
     >
       <div
-        className="flex min-w-[240px] flex-col border-r pr-4 pt-2"
+        className="flex min-h-0 min-w-[240px] shrink-0 flex-col border-r pr-4 pt-4"
         style={{ width: leftPaneWidth }}
       >
         <div className="mb-4 flex items-center justify-between gap-2">
-          <h2 className="shrink-0 text-sm font-semibold">
+          <h2 className="shrink-0 text-base font-semibold">
             {t("bs:department.tree")}
           </h2>
-          <label className="ml-auto flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
-            <Checkbox
-              checked={includeArchived}
-              onCheckedChange={(checked) => {
-                const include = checked === true;
-                if (!include && selectedDept?.status === "archived") {
-                  let parent =
-                    selectedDept.parent_id == null
+          <Checkbox
+            label={t("bs:organization.showArchived")}
+            wrapperClassName="ml-auto whitespace-nowrap"
+            checked={includeArchived}
+            onCheckedChange={(checked) => {
+              const include = checked === true;
+              if (!include && selectedDept?.status === "archived") {
+                let parent =
+                  selectedDept.parent_id == null
+                    ? undefined
+                    : tree.getNode(selectedDept.parent_id);
+                while (parent?.status === "archived")
+                  parent =
+                    parent.parent_id == null
                       ? undefined
-                      : tree.getNode(selectedDept.parent_id);
-                  while (parent?.status === "archived")
-                    parent =
-                      parent.parent_id == null
-                        ? undefined
-                        : tree.getNode(parent.parent_id);
-                  if (parent) selectNode(parent);
-                  else {
-                    setSelectedId(null);
-                    setSelectedSnapshot(null);
-                  }
+                      : tree.getNode(parent.parent_id);
+                if (parent) selectNode(parent);
+                else {
+                  setSelectedId(null);
+                  setSelectedSnapshot(null);
                 }
-                setIncludeArchived(include);
-              }}
+              }
+              setIncludeArchived(include);
+            }}
+          />
+          <Tooltip content={createDepartmentLabel}>
+            <Button
+              type="button"
+              size="small"
+              color="primary"
+              variant="text"
+              iconOnly
+              icon={<Outlined.Plus aria-hidden />}
+              aria-label={createDepartmentLabel}
+              onClick={(event) => handleCreateClick(event.currentTarget)}
             />
-            {t("bs:organization.showArchived")}
-          </label>
-          <Button
-            size="small"
-            variant="text"
-            aria-label={t("bs:department.create")}
-            title={t("bs:department.create")}
-            onClick={() => handleCreateClick()}
-          >
-            <Outlined.Plus className="size-4" />
-          </Button>
+          </Tooltip>
         </div>
         <OrganizationSearchPanel
           includeArchived={includeArchived}
@@ -264,36 +281,29 @@ export default function Departments() {
         >
           <LazyDepartmentTree
             controller={tree}
+            variant="navigation"
             showSearch={false}
+            revealKey={treeRevealKey}
             selectedDeptId={selectedDept?.dept_id}
             onSelect={selectNode}
-            renderRowSuffix={(node) => (
-              <>
-                {node.is_tenant_root && (
-                  <Tag size="small" color="brand" className="mr-1 shrink-0">
-                    {t("bs:tenant.mountedTag")}
-                  </Tag>
-                )}
-                {node.status !== "archived" && (
-                  <Button
-                    size="small"
-                    variant="text"
-                    className="invisible shrink-0 group-hover:visible"
-                    aria-label={t("bs:department.create")}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      handleCreateClick(node.id);
-                    }}
-                  >
-                    <Outlined.Plus className="size-3.5" />
-                  </Button>
-                )}
-              </>
+            renderRowSuffix={(node) => node.status !== "archived" && (
+              <Tooltip content={createChildDepartmentLabel}>
+                <Button
+                  type="button"
+                  size="small"
+                  color="default"
+                  variant="text"
+                  iconOnly
+                  icon={<Outlined.Plus aria-hidden />}
+                  className="size-[var(--tree-slot)] rounded-md [opacity:var(--tree-menu-visibility)] hover:bg-fill-3 [&_svg]:size-4"
+                  aria-label={t("bs:organization.createChildDepartmentFor", {
+                    name: departmentDisplayName(node, t("bs:department.defaultOrganization")),
+                  })}
+                  aria-haspopup="dialog"
+                  onClick={(event) => handleCreateClick(event.currentTarget, node.id)}
+                />
+              </Tooltip>
             )}
-            rowRef={(deptId, element) => {
-              if (element) rowRefs.current.set(deptId, element);
-              else rowRefs.current.delete(deptId);
-            }}
           />
         </OrganizationSearchPanel>
       </div>
@@ -307,7 +317,7 @@ export default function Departments() {
           document.body.style.userSelect = "none";
         }}
       />
-      <div className="min-w-0 flex-1 overflow-auto pl-4 pt-2">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-2 pl-4 pt-4">
         {selectedDept ? (
           <MemberTable
             deptId={selectedDept.dept_id}
@@ -353,6 +363,10 @@ export default function Departments() {
         <CreateDepartmentDialog
           defaultParentId={createParentId}
           onClose={() => setCreateOpen(false)}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            createTriggerRef.current?.focus();
+          }}
           onCreated={() => {
             setCreateOpen(false);
             void tree.reloadLayer(createParentId).catch(showApiError);
@@ -380,10 +394,7 @@ export default function Departments() {
           deptId={mountTarget.id}
           deptName={mountTarget.name}
           onClose={() => setMountTarget(null)}
-          onMounted={() => {
-            setMountTarget(null);
-            void handleTreeChange().catch(showApiError);
-          }}
+          onMounted={onTenantMounted}
         />
       )}
     </div>

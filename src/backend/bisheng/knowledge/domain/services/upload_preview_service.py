@@ -8,6 +8,7 @@ from uuid import uuid4
 from loguru import logger
 
 from bisheng.api.v1.schemas import KnowledgeFileOne, KnowledgeFileProcess
+from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.knowledge import (
     KnowledgeOperationPlanChangedError,
     KnowledgeOperationPlanConflictError,
@@ -27,7 +28,7 @@ from bisheng.knowledge.domain.schemas.processing_settings import DocumentProcess
 from bisheng.knowledge.domain.schemas.upload_preview import PreparedUpload
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.processing_settings_service import ProcessingSettingsService
-from bisheng.knowledge.domain.upload_file_size import validate_knowledge_upload_file_size
+from bisheng.knowledge.domain.upload_policy import validate_knowledge_upload_file
 
 
 def digest(value) -> str:
@@ -41,7 +42,7 @@ class UploadPreviewService:
 
     async def stage(self, space_id, parent_id, file):
         space = await self.space_service.require_upload_container(space_id, parent_id)
-        validate_knowledge_upload_file_size(file.filename, file.size)
+        validate_knowledge_upload_file(file.filename, file.size)
         name = await KnowledgeService.save_upload_file_original_name(file.filename)
         path = str(await save_uploaded_file(file, "bisheng", name))
         receipt = await self.repository.create(
@@ -143,6 +144,17 @@ class UploadPreviewService:
                 "partitions": partitions,
             }
             status = "completed"
+        except BaseErrorCode as exc:
+            logger.exception("Upload preview parsing failed for upload={}", upload_id)
+            status = "error"
+            # A domain error already carries an actionable code and message
+            # (missing ASR model, no recognizable audio, ...). Discarding them
+            # for a generic 10952 leaves the user with "document parsing failed".
+            result = {
+                "code": exc.code,
+                "message": exc.message,
+                "data": {"exception": str(exc), **exc.kwargs},
+            }
         except Exception:
             logger.exception("Upload preview parsing failed for upload={}", upload_id)
             status, result = "error", {"code": 10952}

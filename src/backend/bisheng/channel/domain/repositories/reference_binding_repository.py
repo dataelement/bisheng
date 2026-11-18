@@ -99,6 +99,9 @@ class ChannelReferenceBindingRepository:
         channel.tenant_id = tenant_id
         session.add(channel)
         await session.flush()
+        # Fingerprint the persisted representation before a locked read reloads
+        # it: MySQL DATETIME(0) drops the Python creation time's microseconds.
+        await session.refresh(channel)
         return channel
 
     def _assert_bound(self, session: AsyncSession, channel: Channel) -> None:

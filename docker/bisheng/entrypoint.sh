@@ -1,9 +1,13 @@
 #!/bin/bash
-set -xe
+set -e
 
 export PYTHONPATH="./"
 
 start_mode=${1:-api}
+
+# Pure configuration validation must finish before migrations or any worker
+# imports can initialize infrastructure clients. No passwords are printed.
+python -m bisheng.core.config.credential_loader
 
 start_knowledge(){
   # 知识库解析的celery worker

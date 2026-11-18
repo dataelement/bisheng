@@ -1,3 +1,4 @@
+import { directoryLoadingStyles } from "@bisheng/knowledge";
 import { SpaceProcessingStatus } from "./SpaceProcessingStatus";
 import { BatchOperationDialog } from "./BatchOperationDialog";
 import { KnowledgeDeletionDialog } from "./KnowledgeDeletionDialog";
@@ -37,6 +38,7 @@ export function KnowledgeSpacePresentation({ model }: KnowledgeSpacePresentation
     cardGridRef,
     cardCols,
     isAdmin,
+    canEditSpace,
     canManageMembers,
     versionManagementEnabled,
     setVersionMgmtFile,
@@ -149,9 +151,9 @@ export function KnowledgeSpacePresentation({ model }: KnowledgeSpacePresentation
             // showing the previous space's contents while the API responds.
             // A folder upload no longer hits this branch: its placeholder card
             // lives in the grid (displayFiles), keeping the rest interactive.
-            <div className="flex h-full flex-1 flex-col items-center justify-center gap-3 pb-[112px] pt-10 text-center text-text-3">
-              <LoadingIcon className="size-20 text-primary" />
-              <span className="text-sm">{localize("com_list_loading")}</span>
+            <div className={`${directoryLoadingStyles.frame} h-full flex-1 pb-[112px] pt-10`}>
+              <LoadingIcon className={directoryLoadingStyles.icon} />
+              <span>{localize("com_list_loading")}</span>
             </div>
           ) : loadError && displayFiles.length === 0 ? (
             <div className="flex h-full flex-1 flex-col items-center justify-center pb-[112px] pt-10 text-center">
@@ -213,7 +215,10 @@ export function KnowledgeSpacePresentation({ model }: KnowledgeSpacePresentation
                       file={file}
                       userRole={space.role}
                       onEnsureFilePermissions={ensureFilePermissions}
-                      permissionsLoading={pendingFileIds.has(String(file.id))}
+                      permissionsLoading={
+                        // A known download stays usable while the other menu actions resolve.
+                        pendingFileIds.has(String(file.id)) && !downloadEntryIds.has(file.id)
+                      }
                       isSelected={selectedFiles.has(file.id)}
                       onSelect={(selected) => handleSelectFile(file.id, selected)}
                       onDownload={() => handleSingleDownload(file.id)}
@@ -243,6 +248,7 @@ export function KnowledgeSpacePresentation({ model }: KnowledgeSpacePresentation
                       onOpenVersionManagement={(f) => setVersionMgmtFile(f)}
                       onOpenVersionHistory={(f) => setVersionHistoryFile(f)}
                       canManageMembers={canManageMembers}
+                      canManageVersions={canEditSpace}
                       canRename={renameEntryIds.has(file.id)}
                       canDelete={deleteEntryIds.has(file.id)}
                       canDownload={downloadEntryIds.has(file.id)}
@@ -305,6 +311,7 @@ export function KnowledgeSpacePresentation({ model }: KnowledgeSpacePresentation
                 onOpenVersionManagement={(f) => setVersionMgmtFile(f)}
                 onOpenVersionHistory={(f) => setVersionHistoryFile(f)}
                 canManageMembers={canManageMembers}
+                canManageVersions={canEditSpace}
                 highlightedTagIds={searchTagIds}
                 highlightKeyword={searchQuery}
                 footer={listBottomStatus}

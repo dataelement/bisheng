@@ -140,6 +140,7 @@ beforeEach(() => {
     },
   );
   mocks.post.mockImplementation(async (url: string) => {
+    if (url.endsWith("/files/batch/download/inspect")) return { check_complete: true, valid_items: [] };
     if (url === "/api/v1/knowledge/space/7/uploads")
       return { file_path: "tmp/report.md", upload_id: "a".repeat(32), repeat: false };
     if (url === "/api/v1/knowledge/space/7/files") return [row(81, 5)];
@@ -223,11 +224,11 @@ it("navigates the real folder entry into the real upload route, register and exa
   );
   fireEvent.click(screen.getByRole("button", { name: "uploadDirectly" }));
   await screen.findByText("completed");
-  expect(mocks.post.mock.calls.map(([url]) => url)).toEqual([
+  expect(mocks.post.mock.calls.filter(([url]) => !url.endsWith("/inspect")).map(([url]) => url)).toEqual([
     "/api/v1/knowledge/space/7/uploads",
     "/api/v1/knowledge/space/7/files",
   ]);
-  expect(mocks.post.mock.calls[1][1]).toMatchObject({
+  expect(mocks.post.mock.calls.find(([url]) => url === "/api/v1/knowledge/space/7/files")![1]).toMatchObject({
     file_path: ["tmp/report.md"],
     parent_id: 9,
   });

@@ -1,7 +1,8 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { useKnowledgeBatch } from "./useKnowledgeBatch";
 import * as api from "@/controllers/API/knowledgeBatch";
+import { BatchOperationDialog } from "../components/BatchOperationDialog";
 vi.mock("@/controllers/API/knowledgeBatch");
 vi.mock("@/controllers/managementScope", () => ({ managementRequestScope: () => 101 }));
 vi.mock("@/controllers/request", () => ({
@@ -160,4 +161,45 @@ it("accepted result remains visible until acknowledged and is not worker complet
   });
   expect(result.current.view?.outcome?.items[0].state).toBe("accepted");
   expect(result.current.view).not.toBeNull();
+});
+it("keeps batch item names, skip reasons, and results in their respective rows", async () => {
+  vi.mocked(api.precheckBatch).mockResolvedValue({
+    ...plan,
+    requires_skip_confirmation: true,
+    invalid_items: [{ reason: "no_permission" }],
+  });
+  function BatchHarness() {
+    const operation = useKnowledgeBatch("scope");
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => {
+            void operation.open({
+              ...command,
+              items: [...command.items, { id: NaN, type: "file", name: "uploading.txt" }],
+            });
+          }}
+        >
+          Start batch
+        </button>
+        <BatchOperationDialog operation={operation} />
+      </>
+    );
+  }
+  render(<BatchHarness />);
+  fireEvent.click(screen.getByRole("button", { name: "Start batch" }));
+  const available = await screen.findByRole("table", { name: "batch.valid" });
+  expect(within(available).getByRole("rowheader", { name: "failed.txt" })).toBeVisible();
+  const unavailable = screen.getByRole("table", { name: "batch.invalid" });
+  expect(
+    within(unavailable).getByRole("row", { name: "batch.unnamed batch.reason_no_permission" }),
+  ).toBeVisible();
+  expect(
+    within(unavailable).getByRole("row", { name: "uploading.txt batch.reason_unsupported" }),
+  ).toBeVisible();
+  fireEvent.click(screen.getByRole("checkbox", { name: "batch.skip" }));
+  fireEvent.click(screen.getByRole("button", { name: "batch.confirm" }));
+  const results = await screen.findByRole("table", { name: "batch.results" });
+  expect(within(results).getByRole("row", { name: "failed.txt batch.state_accepted" })).toBeVisible();
 });

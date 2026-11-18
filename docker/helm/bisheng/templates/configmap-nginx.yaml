@@ -5,8 +5,14 @@ metadata:
 data:
   default.conf: |
     map $http_upgrade $connection_upgrade { default upgrade; '' close; }
-    map $http_x_forwarded_proto $bs_forwarded_proto { default $http_x_forwarded_proto; "" $scheme; }
-    map $http_x_forwarded_host $bs_forwarded_host { default $http_x_forwarded_host; "" $http_host; }
+    geo $bs_trusted_edge {
+      default 0;
+{{- range .Values.frontend.proxy.trustedForwardedCidrs }}
+      {{ . }} 1;
+{{- end }}
+    }
+    map "$bs_trusted_edge:$http_x_forwarded_proto" $bs_forwarded_proto { default $scheme; "1:http" http; "1:https" https; }
+    map $http_host $bs_forwarded_host { default $http_host; }
     server {
       listen {{ .Values.frontend.service.port }};
 {{- if .Values.frontend.service.clientPort }}
@@ -42,10 +48,25 @@ data:
 {{- end }}
         proxy_buffering off;
       }
-      location ~ ^/(workspace/)?({{ .Values.minio.buckets.public }}|{{ .Values.minio.buckets.temporary }})/ {
-        rewrite ^/workspace(/.*)$ $1 break;
+      # F009: browser object paths are /object/{bucket}/{key}; the backend
+      # decides (auth_request) whether {bucket} is the current public/temp bucket.
+      location ~ ^/(workspace/)?object/([^/]+)/ {
+        set $bs_object_bucket $2;
+        auth_request /_object_bucket_ok/$bs_object_bucket;
+        rewrite ^/(?:workspace/)?object/(.*)$ /$1 break;
+        # SigV4 signs Host; must match object_storage.minio.sharepoint.
         proxy_set_header Host {{ if .Values.minio.external.sharepoint }}{{ .Values.minio.external.sharepoint }}{{ else }}{{ get (urlParse .Values.publicUrl) "host" }}{{ end }};
         proxy_pass {{ if .Values.minio.external.secure }}https{{ else }}http{{ end }}://{{ include "bisheng.host" (list . "minio") }}:{{ .Values.minio.external.port }};
+      }
+      location /_object_bucket_ok/ {
+        internal;
+        rewrite ^ /api/v1/storage/browser-bucket break;
+        proxy_pass http://{{ include "bisheng.backendService" . }}:{{ .Values.backend.service.port }};
+        proxy_pass_request_body off;
+        proxy_set_header Content-Length "";
+        proxy_set_header X-Object-Bucket $bs_object_bucket;
+        proxy_set_header Authorization "";
+        proxy_set_header Cookie "";
       }
     }
 {{- if .Values.runtime.enabled }}

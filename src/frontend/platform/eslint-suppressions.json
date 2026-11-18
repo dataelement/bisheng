@@ -30,11 +30,6 @@
       "count": 4
     }
   },
-  "src/components/Pro/FlowRadio.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
   "src/components/Pro/security/FlowSetting.tsx": {
     "@typescript-eslint/no-unused-expressions": {
       "count": 3
@@ -138,9 +133,6 @@
   "src/components/bs-comp/knowledgeUploadComponent/DropZone.tsx": {
     "@typescript-eslint/ban-ts-comment": {
       "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
     }
   },
   "src/components/bs-comp/knowledgeUploadComponent/ProgressItem.tsx": {
@@ -151,10 +143,10 @@
       "count": 1
     },
     "no-console": {
-      "count": 4
+      "count": 3
     },
     "no-restricted-syntax": {
-      "count": 4
+      "count": 3
     },
     "react-hooks/exhaustive-deps": {
       "count": 1
@@ -1328,9 +1320,6 @@
     }
   },
   "src/pages/BuildPage/flow/FlowNode/component/ModelItem.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
     "react-hooks/exhaustive-deps": {
       "count": 2
     }
@@ -1813,11 +1802,6 @@
       "count": 2
     }
   },
-  "src/pages/DepartmentPage/components/MountTenantDialog.tsx": {
-    "no-restricted-syntax": {
-      "count": 16
-    }
-  },
   "src/pages/EvaluationPage/EvaluationCreate.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1
@@ -1876,9 +1860,6 @@
     "@typescript-eslint/no-explicit-any": {
       "count": 12
     },
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 1
-    },
     "no-restricted-syntax": {
       "count": 3
     }
@@ -1919,11 +1900,6 @@
       "count": 1
     }
   },
-  "src/pages/KnowledgePage/components/MetadataManagementDialog.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    }
-  },
   "src/pages/KnowledgePage/components/ParagraphEdit.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 2
@@ -1960,7 +1936,7 @@
   },
   "src/pages/KnowledgePage/components/PreviewFile.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 6
+      "count": 5
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 3
@@ -2007,7 +1983,7 @@
       "count": 6
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 3
+      "count": 2
     }
   },
   "src/pages/KnowledgePage/components/RuleTable.tsx": {
@@ -2254,9 +2230,6 @@
   "src/pages/ModelPage/manage/tabs/AssisModel.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
-    },
-    "no-console": {
-      "count": 1
     }
   },
   "src/pages/ModelPage/manage/tabs/EvaluationModel.tsx": {
@@ -2269,9 +2242,6 @@
       "count": 1
     },
     "@typescript-eslint/no-unused-expressions": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
       "count": 1
     }
   },
@@ -2286,11 +2256,6 @@
   "src/pages/ModelPage/manage/tabs/WorkflowModel.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 2
-    }
-  },
-  "src/pages/ModelPage/manage/useSystemConfigEnvelope.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
     }
   },
   "src/pages/Report/components/Word.tsx": {
@@ -2427,14 +2392,6 @@
     },
     "no-restricted-syntax": {
       "count": 21
-    }
-  },
-  "src/test/departmentPageRefresh.test.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
     }
   },
   "src/test/departmentSettingsPayload.test.tsx": {
@@ -2684,9 +2641,6 @@
     },
     "no-console": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 4
     }
   },
   "src/workspace/markdown/Mermaid.tsx": {

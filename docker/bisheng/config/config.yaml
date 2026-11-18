@@ -1,8 +1,5 @@
-# 数据库配置， 当前加密串的密码是1234，
-# 密码加密参考 https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc#Gxitd1xEeof1TzxdhINcGS6JnXd
-database_url:
-  "mysql+pymysql://root:gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==@mysql:3306/bisheng?charset=utf8mb4"
-  # "dm+dmPython://BISHENG:<enc>@192.168.107.9:5236/?schema=BISHENG"
+# 部署模板；prepare --mode fresh 从客户密码文件生成密文 URL。
+database_url: "mysql+pymysql://root@mysql:3306/bisheng?charset=utf8mb4"
 # 数据库连接池配置（可选，省略则用下方默认值）。
 # 注意：连接池是“每进程每引擎”一套，总连接数 ≈ 进程数 ×（pool_size + max_overflow）。
 # 调优时务必让该总数小于数据库服务端的最大会话数（如达梦 MAX_SESSIONS）。
@@ -27,16 +24,16 @@ database_pool:
 # 代码默认值为 ""；保持省略时使用数据库中自动生成的密钥。
 # jwt_secret: "replace-with-a-long-random-string"
 
-# DSH Desktop 部署默认值（默认关闭）。启用前填写 platform_public_url，
-# 例如 https://work.example.com 或 http://192.0.2.15:18081。
-# 以下配置块须配合支持 DSH 的后端镜像使用；业务接入另在管理页启用。
-# dsh:
+# BS Client 默认开启，地址留空即可按当前请求使用；需要固定公开地址时再覆盖。
+# 配合包含本配置兼容变更的 beta1 后端镜像使用；旧顶层 dsh 仍可读取。
+bs_client:
 #   access_ttl_seconds: 300  # 访问令牌有效期（秒）
 #   session_ttl_seconds: 2592000  # 桌面会话绝对有效期（秒，30 天）
-#   enabled: false  # 只控制管理模块入口；业务接入另在管理页启用
+  enabled: true
 #   client_id: "dsh-desktop"  # 固定协议值
 #   contract_version: "0.5.0"  # 固定协议值
-#   platform_public_url: null  # 公共 HTTP(S) origin；启用 DSH 前必须填写，不带路径
+  platform_public_url: null  # 可选固定 HTTP(S) origin，不带路径
+  trusted_proxy_hosts: [frontend, gateway]  # 只信任本部署代理的公开协议
 #   web_session_cookie_name: "access_token_cookie"  # 桌面浏览器登录 Cookie 名
 #   gateway_internal_url: null  # 已弃用；原生会话不再访问此地址
 #   billing_timezone: "Asia/Shanghai"  # 月度配额结算时区
@@ -63,7 +60,7 @@ database_pool:
 #   audit_active_key_id: null  # 外部加密密钥引用，不填写密钥明文
 
 # 缓存配置  redis://[[username]:[password]]@localhost:6379/0
-# 如果设置了密码，需要参考MySQL密码的加密逻辑对密码进行加密。eg: redis://root:gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==@redis:6379/0
+# 密文字段由 credentials prepare 生成，不复制旧部署密文。
 # 普通模式:
 redis_url: "redis://redis:6379/1"
 
@@ -94,12 +91,12 @@ sso_sync:
 #   mode: "cluster"
 #   startup_nodes: 
 #     - {"host": "192.168.106.115", "port": 6002}
-#   password: encrypt(gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==)
+# 密文字段由 credentials prepare 生成，不复制旧部署密文。
 #   #sentinel
 #   mode: "sentinel"
 #   sentinel_hosts: [("redis", 6379)]
 #   sentinel_master: "mymaster"
-#   sentinel_password: encrypt(gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==)
+# 密文字段由 credentials prepare 生成，不复制旧部署密文。
 #   db: 1
 
 # Celery broker Redis 配置
@@ -113,8 +110,8 @@ celery_redis_url: "redis://redis:6379/2"
 #     - {"host": "redis-sentinel-2", "port": 26379}
 #     - {"host": "redis-sentinel-3", "port": 26379}
 #   sentinel_master: "mymaster"
-#   sentinel_password: encrypt(gAAAAABlp5vQN7g85IfoeK8nLCb9cfVqpy9ZK9kN7b0qbAXZ4NOZT_Ef7stKJBY6PjL0dngQnCvQMdsavuGu-EE2o6Zlvv6l-Frye08DBXRR4WmL7y7EfK4=)
-#   password: encrypt(gAAAAABlp5vQN7g85IfoeK8nLCb9cfVqpy9ZK9kN7b0qbAXZ4NOZT_Ef7stKJBY6PjL0dngQnCvQMdsavuGu-EE2o6Zlvv6l-Frye08DBXRR4WmL7y7EfK4=)
+# 密文字段由 credentials prepare 生成，不复制旧部署密文。
+# 密文字段由 credentials prepare 生成，不复制旧部署密文。
 #   db: 10
 
 # 知识库文件解析调度策略
@@ -157,24 +154,24 @@ celery_task:
 # 知识库的milvus和es配置  支持使用 !env ${PATH} 填写环境变量的值, 若环境变量不存在则会报错
 vector_stores:
   milvus:
-    connection_args: !env ${BS_MILVUS_CONNECTION_ARGS}
-    is_partition: !env ${BS_MILVUS_IS_PARTITION}
-    partition_suffix: !env ${BS_MILVUS_PARTITION_SUFFIX}
+    connection_args: '{"host":"milvus","port":19530,"secure":false}'
+    is_partition: true
+    partition_suffix: '1'
   elasticsearch:
-    url: !env ${BS_ELASTICSEARCH_URL}
-    ssl_verify: !env ${BS_ELASTICSEARCH_SSL_VERIFY}
+    url: http://elasticsearch:9200
+    ssl_verify: {}
 
 
 # 对象存储， 目前只支持minio
 object_storage:
   type: minio
   minio:
-    schema: !env ${BS_MINIO_SCHEMA}
-    cert_check: !env ${BS_MINIO_CERT_CHECK}
-    endpoint: !env ${BS_MINIO_ENDPOINT}
-    sharepoint: !env ${BS_MINIO_SHAREPOINT}
-    access_key: !env ${BS_MINIO_ACCESS_KEY}
-    secret_key: !env ${BS_MINIO_SECRET_KEY}
+    schema: false
+    cert_check: false
+    endpoint: minio:9000
+    sharepoint: minio:9000
+    access_key: ""
+    secret_key: ""
     public_bucket: 'bisheng'  # 公共bucket，存储平台上一些需要持久化的文件。会设置为可公开访问
     tmp_bucket: 'tmp-dir'  # 临时bucket，会对传到此bucket内的文件设置有效期
     # share_schema: false  # 公开访问地址是否使用 HTTPS
@@ -254,11 +251,16 @@ logger_conf:
 #   public_base_url: ""  # 代码默认空；例如 https://kb.example.com
 
 # ── 工场运行时层（F054）─────────────────────────────────────────────────
-# 这一层可以整层不装：enabled 保持 false 时，平台其余部分零变化，
+# 全新 Compose 默认启用；设 enabled: false 并取消 app-runtime profile 可整层不装，
 # /apps/{slug} 会落到"本环境未启用应用工场"引导页，CLI 部署被 16207 明确拒绝。
-# compose 形态下这两个服务挂在 `app-runtime` profile 后面，不带
-# `--profile app-runtime` 启动就根本不创建（scripts/deploy.sh 已自动处理）。
-# app_runtime:
+# Compose 新 .env 默认选择 app-runtime；已有 .env 的 profile 选择保持不变。
+# below !env bindings are supplied to both backend and worker by Compose.
+app_runtime:
+  enabled: true
+  manager_base_url: "http://runtime-manager:8091"
+  manager_hmac_secret: !env ${BISHENG_RUNTIME_CONTROL_SECRET}
+  proxy_hmac_secret: !env ${BISHENG_APP_PROXY_HMAC_SECRET}
+  obo_secret: !env ${BISHENG_APP_OBO_SECRET}
 #   # 以下是运行时 v2 默认值；注释值为环境变量未设置时的回退值。
 #   # 显式填写 YAML 会优先于这些 BISHENG_RUNTIME_* 环境变量的默认工厂。
 #   runtime_service_keys: {}  # 未填写时读取 BISHENG_RUNTIME_SERVICE_KEYS（JSON）

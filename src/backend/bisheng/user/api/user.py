@@ -876,7 +876,7 @@ async def user_addrole(
     admitted = get_admitted_request_scope()
     if admitted is not None and subject.home_tenant_id != admitted.tenant_id:
         raise RolePermissionDeniedError(msg="The subject's Home does not match this management target")
-    all_old_roles = sorted({row.role_id for row in subject.bindings if row.tenant_id == subject.home_tenant_id})
+    all_old_roles = sorted({row.role_id for row in subject.bindings})
     old_roles = all_old_roles.copy()
     if any(row.role_id == AdminRole for row in subject.bindings) or AdminRole in user_role.role_id:
         raise RolePermissionDeniedError(msg="Platform administrator identity is independent of ordinary roles")
@@ -922,6 +922,10 @@ async def user_addrole(
                 include_global_for_binding=True,
             )
             admin_roles.update(one.id for one in visible_roles["data"])
+        if tenant_admin:
+            # Managing this Home includes revoking its members' original role
+            # grants, even when those bindings are still stored in Root.
+            admin_roles.update(all_old_roles)
 
         if not admin_roles:
             raise HTTPException(status_code=500, detail="No rights")
@@ -942,7 +946,7 @@ async def user_addrole(
         operator_id=login_user.user_id,
     )
     new_subject = await read_policy_subject(user_role.user_id)
-    new_roles = sorted({row.role_id for row in new_subject.bindings if row.tenant_id == subject.home_tenant_id})
+    new_roles = sorted({row.role_id for row in new_subject.bindings})
     await LegacyRBACSyncService.sync_user_role_change(user_role.user_id, all_old_roles, new_roles)
     update_user_role_hook(request, login_user, user_role.user_id, old_roles, user_role.role_id)
     return resp_200()
@@ -1144,6 +1148,10 @@ async def has_mark_access(*, request: Request, login_user: LoginUser = Depends(L
     """
     Get whether the current user has annotation permission,Determine if the current user isadmin Or a user group administrator
     """
+    from bisheng.permission.application.identity import is_current_tenant_administrator
+
+    if await is_current_tenant_administrator(login_user):
+        return resp_200(data=True)
     has_mark_access = False
     # Check if there are administrative permissions for the group
     task = MarkTaskDao.get_task(login_user.user_id)

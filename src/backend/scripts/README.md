@@ -2,6 +2,88 @@
 
 This directory contains manual maintenance and migration scripts for the backend.
 
+## Restore omitted Root model sharing
+
+Run from `src/backend` using the live service `config`. This tool recognizes the
+legacy Root switch through actual sharing recipients and honors newer explicit
+OFF records. Preview never writes grants or receiving policies:
+
+```bash
+python scripts/repair_model_sharing.py --operator-id 191 --manifest /tmp/model-sharing.json
+python scripts/repair_model_sharing.py --operator-id 191 --manifest /tmp/model-sharing.json --apply --provider-ids 337,358
+```
+
+Apply requires explicit provider IDs from that preview and a currently authorized
+Root global super administrator. The original sharing Owner checks the preview's
+intent/version under the provider lock, then journals and projects missing grants.
+Only absent receiving visibility policies are initialized; existing restrictions,
+prices, defaults, provider credentials and pending operation records are preserved.
+Results include remaining coverage gaps and conflicts. Failed commands retain
+their original reservation and frozen manifest; do not delete or re-sign them.
+
+For an independently confirmed **unstarted** historical preparation, the preview
+may contain `unstarted_preparation` with its immutable fingerprint. Only with
+explicit operational authorization may that exact preparation be retired:
+
+```bash
+python scripts/repair_model_sharing.py --operator-id 191 --manifest /tmp/model-sharing.json --apply --provider-ids 12 --abandon-preparing
+```
+
+This refuses any changed fingerprint, nonempty frozen execution, receiving
+receipt or existing projection journal. The terminal `ABANDONED` record retains
+its original actor, command, request hash and plan digest, with the cancelling
+actor/fingerprint audited in its acknowledgement. A delayed worker or journal
+cannot execute it. Re-preview before repairing grants; cancellation and sharing
+are separate commands. It never cancels a started/reserved projection.
+
+## Single-version document path recovery
+
+Run `python scripts/repair_knowledge_document_path.py --tenant-id T --space-id S --file-id F`
+to preview a legacy logical-document/physical-file path mismatch. This command only accepts
+one primary version, an idle space/file, a valid folder chain and a CURRENT permission parent
+that already agrees with the physical file. It never moves files, rewrites indexes or grants access.
+Apply the inspected plan using `--apply --expected-digest HASH --backup /private/new-backup.json`.
+The backup must be new and is saved with mode 0600 before writing; changed facts reject the apply.
+Multi-version, ambiguous or permission-inconsistent data requires a separate recovery plan.
+
+## Redis usage and Linsight processing indexes
+
+`backfill_redis_processing_indexes.py` is the explicit upgrade step for old DSH
+usage streams and Linsight checkpoints. Normal consumers, including their first
+invocation, never enumerate the Redis DB. From `src/backend`, export the same
+`config` as the target service and use the new image/code for this command:
+
+1. Close ingress and stop all old API, Celery Workers, Beat and Linsight Workers.
+   Keep Redis and the configured infrastructure available. Do not clear event
+   streams, broker queues, consumer groups, request ledgers or checkpoint data.
+2. Preview, apply, then verify while all producers/consumers remain stopped:
+
+```bash
+python scripts/backfill_redis_processing_indexes.py
+python scripts/backfill_redis_processing_indexes.py --apply --services-stopped
+python scripts/backfill_redis_processing_indexes.py --verify
+```
+
+3. Require `ready: true` and exit code 0 before starting new consumers. On error,
+   keep the services stopped, investigate and repeat the command; partial index
+   additions are safe to repeat. Never discard events to bypass a migration error.
+4. Start the new Celery Worker and Beat to drain the registered usage backlog.
+   Confirm pending work has cleared and SQL projection is correct before starting
+   Linsight/API and reopening traffic. Do not run old and new code together.
+
+The default inventories and checks indexes without writing them; `--verify`
+returns nonzero for incomplete coverage. Apply refuses to run without the stopped
+service confirmation. The command initializes/closes service infrastructure
+clients. It registers every retained usage stream, schedules pending/unread work
+and invalidates old scheduling owners only. Payloads, stream IDs, group offsets,
+ACKs, request ledgers, counters, SQL and checkpoint TTLs are preserved. Drained
+streams are indexed for inspection without being unnecessarily queued again.
+Checkpoint completeness markers are published only after indexing old writes.
+Run against every service Redis DB being upgraded; usage migration is enabled
+when that service's DSH setting is enabled. Redis data/index restores require the
+same stopped-service verification. Fresh installs maintain indexes from their
+first writes and need no legacy scan.
+
 ## Built-in knowledge retrieval tool
 
 `register_work_knowledge_tool.py` completes the Work knowledge-search upgrade in
@@ -151,6 +233,29 @@ column is absent from the DM catalog, and exit `4` means the diagnostic itself
 failed.
 
 ## Model Configuration Upgrade
+
+### `backfill_model_pricing.py`
+
+F016 upgrade step: gives every existing LLM model a price (`llm_model.config.pricing`) with the
+same rule as saving a model in the admin UI — the built-in catalog price when the provider type and
+model name match, otherwise 0 (free) — then gates the upgrade. Existing prices are never touched.
+Run it after `alembic upgrade head` while the service is still stopped; the full sequence is in
+`features/v3.1.0-beta1/016-credit-pricing/runbook.md`.
+
+```bash
+cd src/backend/
+bash scripts/backfill_model_pricing.sh          # dry run: list what each model would get
+bash scripts/backfill_model_pricing.sh apply    # write prices for models that have none
+bash scripts/backfill_model_pricing.sh check    # gate: exit 0 passed, 2 something is missing
+```
+
+Models marked `default 0 (free)` in the dry run include paid cloud models whose names the catalog
+does not know (for example Volcengine Ark endpoint IDs); they stay free until an admin sets a price.
+
+Skipping the step does not stop conversations: a model without a price is billed as free (0 credits,
+with a warning log) and shows "price missing" in the admin table until it is backfilled or priced.
+An invalid stored price (fails the price schema) is treated the same way: the dry run lists it as
+`replace invalid` with its old value, `apply` replaces it, and `check` fails until it is fixed.
 
 ### `migrate_model_token_configs.py`
 
@@ -1639,3 +1744,28 @@ contract and does not change general script initialization. The migration
 runtime does not open ES/Milvus clients. Current query order, comparison rules,
 conversion and publication boundaries are shown in the
 [complete current flow](../../../docs/reviews/f118-migration-current-flow-20261113.md).
+
+## 中间件凭据维护（v3.1.0-beta2）
+
+部署密钥不在源码中。配置准备/原生改密/备份恢复见 [凭据运维手册](../../../docker/中间件凭据运维手册.html)。以下从 src/backend 执行，使用与服务相同的 config 和 BS_SECRET_KEYS_FILE。
+
+- `rewrap_credentials.sh` / `rewrap_credentials.py`：组织同步与沙箱页令牌的独立重加密；默认 dry-run，显式 --all-tenants，--apply 前 fsync 密文备份，失败按 journal resume，不修改真实中间件密码。
+  ```bash
+  bash scripts/rewrap_credentials.sh --all-tenants --backup-dir /secure/bisheng/rewrap/run-a
+  bash scripts/rewrap_credentials.sh --all-tenants --backup-dir /secure/bisheng/rewrap/run-a --apply
+  bash scripts/rewrap_credentials.sh --all-tenants --resume /secure/bisheng/rewrap/run-a --apply
+  ```
+- `check_image_secrets.py`：离线检查实际交付源码与 Docker-save 所有镜像层，不提取档案、不连接服务；缺档案/格式不支持非零退出。可通过 --keyring 传受控文件做已知 key 匹配，不把 key 写参数。
+  ```bash
+  python scripts/check_image_secrets.py --source-root . --image-archive /secure/release/backend.tar
+  ```
+
+
+中间件逐项改密使用原部署入口 `bash docker/install.sh` / `bash scripts/deploy.sh install` 内部编排。容器内管理接口为 `python -m bisheng.core.config.credential_tool rotation`，独立SDK位于 `bisheng/core/config/credential_rotation_native.py`，不初始化全应用上下文，不持有Docker权限；正常运维无需手动执行内部子命令。实际验收范围见特性003的验证记录。
+
+
+### 中间件凭据 v2（2026-11-14）
+
+仍执行原部署入口，不要求运维手动调用加解密、重新加密或权限修改工具。首次隐藏输入；重部署逐项选择是否改密，默认保留。v2 输入、原生配置包、历史和恢复材料加密；主密钥外置并限制访问，运行所需明文只在经过检查的内存文件系统或进程内存中使用。受管 v1 转换失败时保留现场，再次执行原命令恢复。未经验证的旧原生布局不得绕过拒绝检查。
+
+Milvus 原生内部消息 Base64 凭据为用户确认的明确例外，部署器生成材料仍加密。DM、正式发布镜像及主机重启尚待验收，不能将本地覆盖镜像的通过结果扩展到所有部署形态。参见 [HTML 运维手册](../../../docker/中间件凭据运维手册.html)。

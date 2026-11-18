@@ -36,10 +36,12 @@ from bisheng.common.errcode.knowledge_space import SpaceNotFoundError
 from bisheng.core.context.background_execution import get_current_background_task
 from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.models.knowledge_processing_item import KnowledgeProcessingItem
 from bisheng.knowledge.domain.models.knowledge_processing_job import KnowledgeProcessingJob
 from bisheng.knowledge.domain.models.knowledge_processing_retry import KnowledgeProcessingRetryReceipt
 from bisheng.knowledge.domain.repositories.model_reference_repository import KnowledgeModelReferenceRepository
+from bisheng.knowledge.domain.schemas.processing_diagnostics import safe_failure_reason
 from bisheng.knowledge.domain.schemas.processing_job import ItemState, JobState, ProcessingKind
 from bisheng.knowledge.domain.schemas.processing_job_acceptance import (
     ItemLease as ItemLease,
@@ -380,7 +382,11 @@ class ProcessingJobRepository:
         statement = select(KnowledgeProcessingJob).where(KnowledgeProcessingJob.id == job_id)
         if not include_manifest:
             cached = session.identity_map.get(inspect(KnowledgeProcessingJob).identity_key_from_primary_key((job_id,)))
-            if cached is not None and inspect(cached).dict.get("kind") in {"metadata_schema_change", "move_index", "space_copy"}:
+            if cached is not None and inspect(cached).dict.get("kind") in {
+                "metadata_schema_change",
+                "move_index",
+                "space_copy",
+            }:
                 # A prior query may have loaded the manifest in this Session.
                 # Expire only that immutable execution-irrelevant attribute so
                 # the explicit raiseload option cannot reuse its cached JSON.
@@ -505,6 +511,25 @@ class ProcessingJobRepository:
         if any(row.tenant_id != job.tenant_id for row in rows):
             raise KnowledgeProcessingJobNotFoundError()
         return ItemPage(tuple(rows), total)
+
+    async def afile_names(self, session, *, space_id, file_ids):
+        """Caller passes only already permission-filtered item IDs."""
+        ids = tuple(set(file_ids))
+        names = {}
+        for start in range(0, len(ids), 200):
+            with strict_tenant_filter():
+                names.update(
+                    (
+                        await session.execute(
+                            select(KnowledgeFile.id, KnowledgeFile.file_name).where(
+                                KnowledgeFile.tenant_id == self._tenant_id(),
+                                KnowledgeFile.knowledge_id == space_id,
+                                KnowledgeFile.id.in_(ids[start : start + 200]),
+                            )
+                        )
+                    ).all()
+                )
+        return names
 
     async def alatest_retry_actor(self, session: AsyncSession, job_id: str) -> dict:
         job = await self._job(session, job_id, lock=False, include_manifest=False)
@@ -634,7 +659,7 @@ class ProcessingJobRepository:
         if (
             type(space_config_version) is not int
             or space_config_version < 0
-            or (not items and kind != "metadata_schema_change")
+            or (not items and kind not in {"metadata_schema_change", "space_copy"})
         ):
             raise ValueError("a nonempty frozen scope and non-negative settings version are required")
         if not items:
@@ -671,7 +696,7 @@ class ProcessingJobRepository:
             if existing.tenant_id != tenant_id or existing.request_hash != request_hash:
                 raise KnowledgeIdempotencyConflictError()
             return JobRequestResult(existing, True)
-        if not manifest:
+        if not manifest and kind == "metadata_schema_change":
             await _consume_metadata_completion(
                 session,
                 metadata_acceptance,
@@ -721,10 +746,10 @@ class ProcessingJobRepository:
             next_dispatch_at=now,
             create_time=now,
             update_time=now,
-            state="accepted" if manifest else "succeeded",
-            pending_dispatch=bool(manifest),
-            started_at=None if manifest else now,
-            finished_at=None if manifest else now,
+            state="accepted" if manifest or kind == "space_copy" else "succeeded",
+            pending_dispatch=bool(manifest) or kind == "space_copy",
+            started_at=None if manifest or kind == "space_copy" else now,
+            finished_at=None if manifest or kind == "space_copy" else now,
         )
         session.add(job)
         for value in manifest:
@@ -793,6 +818,9 @@ class ProcessingJobRepository:
         job.finished_at = job.update_time = self._now()
         job.revision += 1
 
+    async def _claim_execution_job(self, session, job_id, *, _move=False):
+        return await self._execution_job(session, job_id, _move=_move)
+
     async def aclaim(
         self,
         session: AsyncSession,
@@ -807,7 +835,7 @@ class ProcessingJobRepository:
             raise ValueError("lease_seconds must be positive")
         if expected_job_revision is not None and (type(expected_job_revision) is not int or expected_job_revision < 0):
             raise ValueError("expected_job_revision must be a non-negative integer")
-        job, current = await self._execution_job(session, job_id, _move=_move)
+        job, current = await self._claim_execution_job(session, job_id, _move=_move)
         if expected_job_revision is not None and job.revision != expected_job_revision:
             return None
         now = self._now()
@@ -1017,7 +1045,9 @@ class ProcessingJobRepository:
         counts = await self._state_counts(session, job.id)
         total = sum(counts.values())
         expected_count = (
-            job.total_count if job.kind in {"metadata_schema_change", "move_index", "space_copy"} else len(job.scope_manifest)
+            job.total_count
+            if job.kind in {"metadata_schema_change", "move_index", "space_copy"}
+            else len(job.scope_manifest)
         )
         if total != expected_count:
             raise KnowledgeProcessingConflictError(reason="processing_scope_incomplete")
@@ -1083,6 +1113,8 @@ class ProcessingJobRepository:
             and counts.get("succeeded", 0) == expected_count
         )
         retryable = terminal_failure and (bool(counts.get("failed", 0) + counts.get("pending", 0)) or finalize_only)
+        if job.kind == "space_copy" and expected_count == 0 and terminal_failure and job.error_code is not None:
+            retryable = finalize_only = True
         if job.kind == "move_index":
             if logical_pending:
                 finalize_only = False
@@ -1112,6 +1144,7 @@ class ProcessingJobRepository:
         succeeded: bool,
         result: Mapping[str, Any] | None = None,
         error_code: int | None = None,
+        failure_reason: str | None = None,
         _move: bool = False,
         move_projection_evidence=None,
     ) -> bool:
@@ -1130,6 +1163,7 @@ class ProcessingJobRepository:
         row.state = "succeeded" if succeeded else "failed"
         row.result = outcome
         row.error_code = None if succeeded else error_code
+        row.error_message = None if succeeded else safe_failure_reason(failure_reason)
         row.finished_at = row.update_time = self._now()
         row.lease_until = None
         await session.flush()
@@ -1229,6 +1263,7 @@ class ProcessingJobRepository:
         expected_job_revision: int,
         error_code: int,
         lease: JobLease | None = None,
+        failure_reason: str | None = None,
     ) -> KnowledgeProcessingJob | None:
         background = get_current_background_task()
         if background is None or background.tenant_id != self._tenant_id():
@@ -1298,12 +1333,14 @@ class ProcessingJobRepository:
                     raise KnowledgeProcessingJobNotFoundError()
                 item.state = "failed"
                 item.error_code = error_code
+                item.error_message = safe_failure_reason(failure_reason)
                 item.lease_token = item.lease_until = None
                 item.finished_at = item.update_time = self._now()
             await session.flush()
             await self._refresh_counts(session, job)
             job.state = "partial_failed" if job.succeeded_count and job.failed_count else "failed"
             job.error_code = error_code
+            job.error_message = safe_failure_reason(failure_reason)
         job.pending_dispatch = False
         job.lease_token = job.lease_until = None
         job.finished_at = job.update_time = self._now()
@@ -1333,6 +1370,9 @@ class ProcessingJobRepository:
         await session.flush()
         return job
 
+    async def _retry_execution_job(self, session, job_id, *, _move=False):
+        return await self._execution_job(session, job_id, _move=_move)
+
     async def aretry_failed(
         self,
         session: AsyncSession,
@@ -1344,8 +1384,9 @@ class ProcessingJobRepository:
         actor_reference: Mapping[str, Any],
         configuration: ProcessingConfiguration,
         _move: bool = False,
+        request_options: Mapping[str, Any] | None = None,
     ) -> JobRequestResult:
-        job, current = await self._execution_job(session, job_id, _move=_move)
+        job, current = await self._retry_execution_job(session, job_id, _move=_move)
         key = self._key(idempotency_key)
         actor = self._actor(actor_user_id, actor_reference)
         if type(expected_job_revision) is not int or expected_job_revision < 0:
@@ -1358,15 +1399,16 @@ class ProcessingJobRepository:
             logical_pending = ready.retry_logical_pending(job, counts)
             move_subject = ready.retry_subject(job, actor_user_id=actor_user_id, actor_reference=actor)
             move_eligibility = self._retry_eligibility(job, counts, job.total_count, logical_pending=logical_pending)
-        request_hash = _digest(
-            {
-                "tenant_id": self._tenant_id(),
-                "job_id": job.id,
-                "expected_job_revision": expected_job_revision,
-                "actor_user_id": actor_user_id,
-                "actor_reference": actor,
-            }
-        )
+        request_payload = {
+            "tenant_id": self._tenant_id(),
+            "job_id": job.id,
+            "expected_job_revision": expected_job_revision,
+            "actor_user_id": actor_user_id,
+            "actor_reference": actor,
+        }
+        if request_options:
+            request_payload["options"] = dict(request_options)
+        request_hash = _digest(request_payload)
         with strict_tenant_filter():
             receipt = (
                 await session.exec(

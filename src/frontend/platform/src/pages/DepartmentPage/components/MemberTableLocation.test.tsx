@@ -64,6 +64,32 @@ it("requests the located page and keeps the highlight in React StrictMode", asyn
   expect(result.current.highlightUserId).toBeNull();
 });
 
+it("highlights the located member for three seconds after each search", async () => {
+  vi.useFakeTimers();
+  try {
+    const location = { deptId: "department", userId: 25, page: 2, requestId: 1 };
+    const { result, rerender, unmount } = renderHook(
+      ({ location }) => useMemberTableController({ ...props, location }),
+      { initialProps: { location } }
+    );
+    await act(async () => {});
+    act(() => vi.advanceTimersToNextFrame());
+    act(() => vi.advanceTimersByTime(2500));
+    expect(result.current.highlightUserId).toBe(25);
+
+    rerender({ location: { ...location, requestId: 2 } });
+    await act(async () => {});
+    act(() => vi.advanceTimersToNextFrame());
+    act(() => vi.advanceTimersByTime(2999));
+    expect(result.current.highlightUserId).toBe(25);
+    act(() => vi.advanceTimersByTime(1));
+    expect(result.current.highlightUserId).toBeNull();
+    unmount();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it("does not apply a response from the previously selected department", async () => {
   let finish: (value: {
     data: { user_id: number; user_name: string }[];

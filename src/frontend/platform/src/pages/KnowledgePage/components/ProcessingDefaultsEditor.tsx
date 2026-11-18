@@ -28,6 +28,9 @@ interface ProcessingDefaultsEditorProps {
   value: ProcessingDefaultsDraft;
   onChange: (value: ProcessingDefaultsDraft) => void;
   disabled?: boolean;
+  compact?: boolean;
+  fileScope?: "document" | "table" | "specialized";
+  fileSuffix?: string;
 }
 type DraftValidation =
   | { ok: true; value: ProcessingDefaults }
@@ -131,6 +134,9 @@ export function ProcessingDefaultsEditor({
   value,
   onChange,
   disabled = false,
+  compact = false,
+  fileScope,
+  fileSuffix,
 }: ProcessingDefaultsEditorProps) {
   const { t } = useTranslation("knowledge");
   const [active, setActive] = useState("documents");
@@ -140,11 +146,14 @@ export function ProcessingDefaultsEditor({
     <DocumentProcessingDefaultsFields
       value={document}
       disabled={disabled}
+      compact={compact}
+      fileSuffix={fileSuffix}
       onChange={(next) => onChange({ ...value, document: next })}
     >
       {document.split_mode === "custom" && (
         <FileUploadSplitStrategy
           disabled={disabled}
+          compact={compact}
           pending={value.pendingPattern}
           pendingPosition={value.pendingPosition}
           onPositionChange={(pendingPosition) =>
@@ -176,30 +185,53 @@ export function ProcessingDefaultsEditor({
       )}
     </DocumentProcessingDefaultsFields>
   );
+  const tablePanel = (
+    <TableProcessingDefaultsFields
+      value={value.table}
+      disabled={disabled}
+      onChange={(table) => onChange({ ...value, table })}
+    />
+  );
   return (
     <div className="space-y-4">
-      <Tabs
-        activeKey={active}
-        onChange={setActive}
-        items={[
-          {
-            key: "documents",
-            label: t("f118.documents"),
-            children: documentPanel,
-          },
-          {
-            key: "tables",
-            label: t("f118.tables"),
-            children: (
-              <TableProcessingDefaultsFields
-                value={value.table}
-                disabled={disabled}
-                onChange={(table) => onChange({ ...value, table })}
-              />
-            ),
-          },
-        ]}
-      />
+      {fileScope === "specialized" ? (
+        <p>{t("f118.specialized_processing_rules")}</p>
+      ) : fileScope === "document" ? (
+        documentPanel
+      ) : fileScope === "table" ? (
+        tablePanel
+      ) : (
+        <Tabs
+          activeKey={active}
+          onChange={setActive}
+          className={compact ? "[&>[role=tabpanel]]:pt-4" : undefined}
+          items={[
+            {
+              key: "documents",
+              label: t("f118.documents"),
+              children: documentPanel,
+            },
+            {
+              key: "tables",
+              label: t("f118.tables"),
+              children: (
+                <>
+                  {compact && (
+                    <h3 className="mb-4 text-base font-medium">
+                      {t("splitSettings")}
+                    </h3>
+                  )}
+                  <TableProcessingDefaultsFields
+                    value={value.table}
+                    disabled={disabled}
+                    onChange={(table) => onChange({ ...value, table })}
+                  />
+                </>
+              ),
+            },
+          ]}
+        />
+      )}
       {!validation.ok && (
         <p role="alert" className="text-sm text-red-500">
           {t(`f118.${validation.reason}`)}

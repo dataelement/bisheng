@@ -15,6 +15,7 @@ from bisheng.assistant.domain.services.reference_extractor import (
 )
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.assistant import AssistantNotExistsError
+from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.knowledge import (
     KnowledgeOperationPlanConflictError,
     ReferenceCoverageNotReadyError,
@@ -185,7 +186,16 @@ class AssistantReferenceSourceOwner:
         # Inspection evidence is validated from the actual ACTIVE token row by
         # the Repository in this same Session, including on current-read.
         if request.inspect_token is None:
-            await require_business_action(identity, resource_type="assistant", resource_id=row["id"], action="visible")
+            # Same rule as the workflow detail: an explicit ``visible`` grant,
+            # otherwise an effective ``edit`` decision. The edit decision still
+            # denies another tenant, so tenant-admin identity alone is not a
+            # view of every application.
+            try:
+                await require_business_action(
+                    identity, resource_type="assistant", resource_id=row["id"], action="visible"
+                )
+            except UnAuthorizedError:
+                await require_business_action(identity, resource_type="assistant", resource_id=row["id"], action="edit")
         try:
             source_key = SourceKey(row["tenant_id"], SourceType.ASSISTANT, row["id"], "current")
             legacy_version = legacy_assistant_name_version(row["model_name"])

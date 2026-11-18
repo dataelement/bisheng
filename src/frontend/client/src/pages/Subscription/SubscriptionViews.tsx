@@ -1,3 +1,4 @@
+import { useClientEnvironment } from "~/hooks/useClientEnvironment";
 import { WorkbenchMenuButton } from "~/layouts/WorkbenchMenuButton";
 import type { MutableRefObject } from "react";
 import { Outlined } from "bisheng-icons";
@@ -17,9 +18,11 @@ export function SubscriptionLoadingView({
 }: SubscriptionLoadingViewProps) {
   const localize = useLocalize();
   const menuNames = useWorkbenchMenuNames();
+  const { capabilities } = useClientEnvironment();
+  const hostOwnsHeader = capabilities?.hasHostChatHeader === true;
   return (
     <div className="relative flex flex-1 flex-col items-center justify-center py-10 text-center text-text-3">
-      {mobile && (
+      {mobile && !hostOwnsHeader && (
         <div className="absolute inset-x-0 top-0 z-10 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
           <div className="relative flex h-11 items-center px-4">
             <WorkbenchMenuButton

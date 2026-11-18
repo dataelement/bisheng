@@ -28,7 +28,14 @@ deletion_tenant, db, context, service = native.deletion_tenant, native.db, nativ
 
 @pytest.fixture
 async def application(context, service, monkeypatch):
+    from bisheng.knowledge.domain.models.knowledge_processing_fence import (
+        KnowledgeProcessingArtifact,
+        KnowledgeProcessingFence,
+    )
+
     tables = (
+        KnowledgeProcessingFence,
+        KnowledgeProcessingArtifact,
         KnowledgeOperationPlan,
         KnowledgeProcessingJob,
         KnowledgeProcessingItem,
@@ -95,6 +102,11 @@ async def application(context, service, monkeypatch):
         reference_service=service,
         purge_step=AsyncMock(),
     )
+
+    async def actions(*args, **kwargs):
+        return await module.admission.batch_check_business_actions(*args, **kwargs)
+
+    monkeypatch.setattr(module, "batch_check_business_actions", actions)
     app.user, app.permission_runtime = service.user, runtime
     app.permission_cleanup = AsyncMock()
     return app
@@ -213,3 +225,145 @@ async def test_no_authorized_selection_is_non_executable_without_reading_depende
     assert not review.can_execute and not review.valid_items
     assert review.invalid_items[0].reason == "no_permission" and review.invalid_items[0].name is None
     inspection.assert_not_awaited()
+
+
+@pytest.mark.parametrize("status", [1, 5])
+async def test_processing_file_executable_and_parse_progress_keeps_consent(application, context, status):
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+
+    async with context.db.sessions() as session, session.begin():
+        row = await session.get(KnowledgeFile, 40)
+        row.status = status
+    plan = await application.aprecheck(
+        identity=application.user, space_id=1, selections=native.native.selections(("knowledge_file", 40))
+    )
+    assert plan.can_execute and not plan.invalid_items
+    async with context.db.sessions() as session, session.begin():
+        row = await session.get(KnowledgeFile, 40)
+        row.status, row.thumbnails = 2, "new-thumbnail"
+    async with context.db.sessions() as session, session.begin():
+        saved = await application.execution.apeek_plan(session, plan.confirmation_id)
+        await application._locked(session, saved)
+
+
+async def test_rebuild_allows_space_delete_but_copy_stays_protected(application, context):
+    from bisheng.common.errcode.knowledge import KnowledgeProcessingConflictError
+
+    async with context.db.sessions() as session, session.begin():
+        root = await session.get(Knowledge, 2)
+        root.state = 3
+        root.model_transition = {"operation_id": "obsolete-rebuild", "pending_model_id": "old-model"}
+    plan = await application.aprecheck(identity=application.user, space_id=2, operation="knowledge_space_delete")
+    assert plan.can_execute
+    async with context.db.sessions() as session, session.begin():
+        root = await session.get(Knowledge, 2)
+        root.state, root.model_transition = 2, None
+    with pytest.raises(KnowledgeProcessingConflictError):
+        await application.aprecheck(identity=application.user, space_id=2, operation="knowledge_space_delete")
+
+
+async def test_delete_confirmation_cancels_rebuild_and_dispatches_durable_cleanup(application, context, monkeypatch):
+    from bisheng.knowledge.domain.services import knowledge_space_direct_delete_service as cleanup
+
+    async with context.db.sessions() as session, session.begin():
+        root = await session.get(Knowledge, 2)
+        root.state = 3
+        root.model_transition = {"operation_id": "rebuild", "pending_model_id": "old-model"}
+        session.add(
+            KnowledgeProcessingJob(
+                id="cancel-rebuild",
+                tenant_id=101,
+                space_id=2,
+                kind="embedding_rebuild",
+                state="running",
+                actor_user_id=7,
+                idempotency_key="cancel-rebuild",
+                request_hash="a" * 64,
+                expected_model_config_revision=0,
+                lease_token="old-lease",
+                pending_dispatch=True,
+            )
+        )
+    from bisheng.knowledge.domain.services.model_reference_extractor import KNOWLEDGE_MODEL_REFERENCE_EXTRACTOR_VERSION
+    from bisheng.resource_reference.application.contracts import SourceKey, SourceType
+
+    async with context.db.sessions() as session, session.begin():
+
+        async def lock_root(active):
+            return await active.get(Knowledge, 2)
+
+        binding = await application.runtime.aprepare_source_bindings(
+            session,
+            SourceKey(101, SourceType.KNOWLEDGE, "2", "current"),
+            (),
+            new_source=True,
+            extractor_version=KNOWLEDGE_MODEL_REFERENCE_EXTRACTOR_VERSION,
+            lock_source_root=lock_root,
+        )
+        await application.runtime.aapply_source_bindings(session, binding)
+    target = {
+        "tenant_id": 101,
+        "resource_type": "knowledge_space",
+        "resource_id": "2",
+        "resource_version": 0,
+        "context_version": "test",
+    }
+    monkeypatch.setattr(application, "_targets", AsyncMock(return_value=[target]))
+    monkeypatch.setattr(application.proofs, "arequire_current", AsyncMock())
+    dispatch = AsyncMock()
+    monkeypatch.setattr(cleanup.KnowledgeSpaceDirectDeleteService, "dispatch", dispatch, raising=False)
+    # The service stores this injected publication port on its instance.
+    original = cleanup.KnowledgeSpaceDirectDeleteService.__init__
+
+    def configured(self, **kwargs):
+        original(self, **kwargs, dispatch=dispatch)
+
+    monkeypatch.setattr(cleanup.KnowledgeSpaceDirectDeleteService, "__init__", configured)
+    plan = await application.aprecheck(identity=application.user, space_id=2, operation="knowledge_space_delete")
+    request = ProcessingCreateRequest(
+        confirmation_id=plan.confirmation_id, plan_digest=plan.plan_digest, idempotency_key="delete-rebuild"
+    )
+    result = await application.aconfirm(identity=application.user, space_id=2, request=request)
+    assert result["accepted"] and result["state"] == "pending"
+    async with context.db.sessions() as session:
+        rebuild = await session.get(KnowledgeProcessingJob, "cancel-rebuild")
+        assert rebuild.state == "obsolete" and rebuild.obsolete_reason == "resource_deleted"
+        assert not rebuild.pending_dispatch and rebuild.lease_until is None
+        job = await session.get(KnowledgeSpaceDeleteJob, plan.confirmation_id)
+        assert job.business_phase == "prepared" and job.manifest["cancel_processing"]
+        assert await session.get(Knowledge, 2) is not None
+    dispatch.assert_awaited_once_with(tenant_id=101, job_id=plan.confirmation_id)
+    application.purge_step.assert_not_awaited()
+
+
+async def test_completed_delete_periodically_rechecks_outputs_without_reopening_business(application, context):
+    from bisheng.knowledge.domain.repositories.knowledge_space_delete_repository import KnowledgeSpaceDeleteRepository
+    from bisheng.knowledge.domain.services.knowledge_space_direct_delete_service import (
+        KnowledgeSpaceDirectDeleteService,
+    )
+
+    plan = await application.aprecheck(identity=application.user, space_id=2, operation="knowledge_space_clear")
+    await application.aconfirm(
+        identity=application.user,
+        space_id=2,
+        request=ProcessingCreateRequest(
+            confirmation_id=plan.confirmation_id, plan_digest=plan.plan_digest, idempotency_key="complete-then-verify"
+        ),
+    )
+    async with context.db.sessions() as session, session.begin():
+        (await session.get(KnowledgeSpaceDeleteJob, plan.confirmation_id)).next_attempt_at = datetime(2020, 1, 1)
+    repository = KnowledgeSpaceDeleteRepository(context.db.sessions)
+    assert (101, plan.confirmation_id) in await repository.due_jobs()
+    steps = AsyncMock()
+    service = KnowledgeSpaceDirectDeleteService(
+        session_factory=context.db.sessions, repository=repository, purge_step=steps
+    )
+    assert await service.purge(plan.confirmation_id)
+    assert [call.args[0] for call in steps.await_args_list] == ["minio", "es", "milvus"]
+    assert all(call.kwargs == {"verification": True} for call in steps.await_args_list)
+    async with context.db.sessions() as session:
+        job = await session.get(KnowledgeSpaceDeleteJob, plan.confirmation_id)
+        assert job.state == "SUCCEEDED" and job.business_phase == "finalized"
+        assert job.attempts == 2 and job.lease_token is None
+        assert await session.get(Knowledge, 2) is not None
+    assert not await service.purge(plan.confirmation_id)

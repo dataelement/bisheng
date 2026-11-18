@@ -11,7 +11,8 @@ import { Bot } from "lucide-react"
 import { useContext, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useParams } from "react-router-dom"
-import { MessageContent } from "./DailyMessageContent"
+import CitationReferencesDrawer from "@/components/bs-comp/chatComponent/CitationReferencesDrawer"
+import { MessageContent, visibleAnswerText } from "./DailyMessageContent"
 import { GeneratedFileCards, pickGeneratedFiles, type GeneratedFile } from "./DailyGeneratedFiles"
 import { locationContext } from "@/contexts/locationContext"
 import { isMemoryToolEvent } from "@/components/bs-comp/appChat/memoryPlaceholder"
@@ -166,6 +167,7 @@ export default function DailyChatDetail() {
                                             : <div className="prose prose-sm max-w-none dark:prose-invert prose-pre:bg-zinc-900 prose-pre:border prose-pre:border-zinc-700">
                                                 <MessageContent text={msg.text} chatId={cid} files={msg.generatedFiles} />
                                                 <GeneratedFileCards chatId={cid} files={msg.generatedFiles} />
+                                                {!msg.isCreatedByUser && <CitationReferencesDrawer content={visibleAnswerText(msg.text)} allowRemoteCitationResolve />}
 
                                                 {msg.source === 1 && <div className="mt-2">
                                                     <Button variant="text" size="small" onClick={() => showResouce(msg.messageId, msg.text)} color="default">{t('chat.source')}</Button>

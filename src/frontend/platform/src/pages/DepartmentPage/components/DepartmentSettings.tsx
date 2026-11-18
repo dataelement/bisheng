@@ -351,8 +351,10 @@ export function useDepartmentSettingsController({
 
   const handleDelete = useCallback(() => {
     bsConfirm({
+      variant: "default",
       title: t("bs:organization.archive"),
       desc: t("bs:organization.archiveConfirm"),
+      okTxt: t("bs:organization.archive"),
       onOk: (next) => {
         return deleteDepartmentApi(dept.dept_id).then(() => {
           notification.open({
@@ -369,8 +371,10 @@ export function useDepartmentSettingsController({
 
   const handlePurge = useCallback(() => {
     bsConfirm({
+      variant: "destructive",
       title: t("bs:department.permanentDelete"),
       desc: t("bs:department.confirmPermanentDelete"),
+      okTxt: t("bs:department.permanentDelete"),
       onOk: (next) => {
         return purgeDepartmentApi(dept.dept_id).then(() => {
           notification.open({
@@ -387,8 +391,10 @@ export function useDepartmentSettingsController({
 
   const handleRestore = useCallback(() => {
     bsConfirm({
+      variant: "default",
       title: t("bs:department.restore"),
       desc: t("bs:department.confirmRestore"),
+      okTxt: t("bs:department.restore"),
       onOk: (next) => {
         return restoreDepartmentApi(dept.dept_id).then(() => {
           notification.open({

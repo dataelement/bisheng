@@ -1,6 +1,6 @@
 """Bind declared routes before dependencies and retain scope through ASGI completion."""
 
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 
 from loguru import logger
@@ -69,16 +69,19 @@ def bind_admitted_scope(admitted):
         if admitted.kind in {RequestScope.TENANT, RequestScope.PERSONAL}:
             if admitted.source == "credential":
                 yield
-            elif admitted.is_super:
-                with contexts.management_tenant_scope(admitted.tenant_id):
-                    yield
             else:
-                # Existing Root sharing remains available to its domain gates.
-                token = contexts.set_visible_tenant_ids(frozenset({admitted.tenant_id, contexts.DEFAULT_TENANT_ID}))
-                try:
+                # A verified own-tenant target also pins management services;
+                # the marker grants no administrator or resource permission.
+                management = (
+                    contexts.management_tenant_scope(admitted.tenant_id)
+                    if admitted.is_super or admitted.kind == RequestScope.TENANT
+                    else nullcontext()
+                )
+                with management:
+                    # Business resources stay in the admitted tenant even when
+                    # their creator used to belong to Root. Explicit sharing
+                    # (such as model providers) is resolved by its domain gate.
                     yield
-                finally:
-                    contexts.visible_tenant_ids.reset(token)
         else:
             yield
 

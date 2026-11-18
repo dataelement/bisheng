@@ -154,3 +154,15 @@ describe("useFileUpload helpers", () => {
     );
   });
 });
+
+
+test("repeated conflicts for one existing file render and submit only the latest staged response", () => {
+  const duplicate = makeKnowledgeFile({ id: "11", name: "existing.txt", status: FileStatus.FAILED,
+    oldFileLevelPath: "", _raw: { id: 11, name: "existing.txt", type: "file", remark: "first" } });
+  const latest: KnowledgeFile = { ...duplicate, _raw: { id: 11, name: "existing.txt", type: "file", remark: "latest" } };
+  const unique = makeKnowledgeFile({ id: "12", name: "new.txt", status: FileStatus.WAITING });
+  const duplicates = extractDuplicateFileEntries([duplicate, duplicate, duplicate, duplicate, latest, unique]);
+  expect(duplicates).toHaveLength(1);
+  expect(duplicates[0].rawObj).toBe(latest._raw);
+  expect(mergeVisibleRegisteredFiles([], [unique]).addedCount).toBe(1);
+});

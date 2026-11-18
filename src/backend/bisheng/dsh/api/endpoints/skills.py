@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, StrictBool
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import resp_200
+from bisheng.linsight.domain.schemas.skill_schema import skill_provider
 from bisheng.linsight.domain.services.skill_service import SkillService
 from bisheng.linsight.domain.services.skill_store import (
     pack_bundle_zip,
@@ -29,7 +30,7 @@ async def list_skills(user=Depends(UserPayload.get_login_user)):
             "description": skill.description,
             "enabled": enabled,
             "content_hash": skill.content_hash,
-            "source": "personal" if skill.source == "personal" or skill.owner_user_id else "platform",
+            "source": skill_provider(skill),
             "builtin_key": skill.name if skill.source == "builtin" else None,
             "updated_at": skill.update_time or skill.create_time,
         }

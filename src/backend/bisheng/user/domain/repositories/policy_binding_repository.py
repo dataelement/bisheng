@@ -25,8 +25,8 @@ class PolicySubjectFacts:
     memberships: tuple[UserDepartment, ...]
 
 
-def _home(user, homes, tenant) -> int:
-    if user is None or user.delete or len(homes) > 1:
+def _home(user, homes, tenant, *, allow_disabled=False) -> int:
+    if user is None or (user.delete and not allow_disabled) or len(homes) > 1:
         raise RolePolicyUnavailableError()
     if not homes:
         if settings.multi_tenant.enabled:
@@ -46,6 +46,23 @@ def _memberships(user_id: int):
 
 
 class PolicyBindingRepository:
+    @staticmethod
+    async def management_home(user_id: int) -> int:
+        """Prove ownership for account administration, including disabled accounts.
+
+        This returns no effective role, menu or login permission.
+        """
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                user = await session.get(User, user_id)
+                homes = (
+                    await session.exec(
+                        select(UserTenant).where(UserTenant.user_id == user_id, UserTenant.is_active == 1)
+                    )
+                ).all()
+                tenant = await session.get(Tenant, homes[0].tenant_id) if len(homes) == 1 else None
+                return _home(user, homes, tenant, allow_disabled=True)
+
     @staticmethod
     async def subject(user_id: int, *, session=None, cleanup=False, current_read=False) -> PolicySubjectFacts:
         if session is None:
@@ -73,6 +90,56 @@ class PolicyBindingRepository:
             bindings = (await session.exec(bindings_query)).all()
             members = (await session.exec(members_query)).all()
         return PolicySubjectFacts(user_id, home, tuple(bindings), tuple(members))
+
+    @staticmethod
+    async def directory_subjects(user_ids: set[int]) -> dict[int, PolicySubjectFacts]:
+        """Read one already-authorized directory page; never an authorization API."""
+        if not user_ids:
+            return {}
+        if len(user_ids) > 100 or any(type(ident) is not int or ident <= 0 for ident in user_ids):
+            raise ValueError("An exact bounded directory page is required")
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                users = (await session.exec(select(User).where(User.user_id.in_(user_ids)))).all()
+                homes = (
+                    await session.exec(
+                        select(UserTenant).where(UserTenant.user_id.in_(user_ids), UserTenant.is_active == 1)
+                    )
+                ).all()
+                tenant_ids = {row.tenant_id for row in homes}
+                tenants = (
+                    (await session.exec(select(Tenant).where(Tenant.id.in_(tenant_ids)))).all() if tenant_ids else []
+                )
+                bindings = (await session.exec(select(UserRole).where(UserRole.user_id.in_(user_ids)))).all()
+                memberships = (
+                    await session.exec(
+                        select(UserDepartment)
+                        .join(Department, Department.id == UserDepartment.department_id)
+                        .where(
+                            UserDepartment.user_id.in_(user_ids),
+                            Department.status == "active",
+                            Department.is_deleted == 0,
+                        )
+                    )
+                ).all()
+        users_by_id = {row.user_id: row for row in users}
+        tenants_by_id = {row.id: row for row in tenants}
+        result = {}
+        for ident in user_ids:
+            user = users_by_id.get(ident)
+            if user is not None and user.delete:
+                # Disabled directory rows remain visible, but have no effective access.
+                continue
+            owned_homes = [row for row in homes if row.user_id == ident]
+            tenant = tenants_by_id.get(owned_homes[0].tenant_id) if owned_homes else None
+            home = _home(user, owned_homes, tenant)
+            result[ident] = PolicySubjectFacts(
+                ident,
+                home,
+                tuple(row for row in bindings if row.user_id == ident),
+                tuple(row for row in memberships if row.user_id == ident),
+            )
+        return result
 
     @staticmethod
     def subject_sync(user_id: int, *, session=None) -> PolicySubjectFacts:
@@ -182,13 +249,17 @@ class PolicyBindingRepository:
                 home, supported = await cls._supported(subject, session)
                 if home != expected_home:
                     raise RolePolicyUnavailableError()
+                existing = {row.role_id for row in subject.bindings}
                 legal = {role.id for role in definitions if eligible_role(role, home, supported)}
-                if not set(picked).issubset(legal):
+                if not set(picked).issubset({role.id for role in definitions}) or not (set(picked) - existing).issubset(
+                    legal
+                ):
                     raise RolePolicyUnavailableError()
-                existing = {row.role_id for row in subject.bindings if row.tenant_id == home}
                 removed = set()
                 for row in subject.bindings:
-                    if row.tenant_id == home and row.role_id in replace_ids and row.role_id not in picked:
+                    # Reads retain historical bindings across storage tenants;
+                    # explicit revocation must remove those same grants too.
+                    if row.role_id in replace_ids and row.role_id not in picked:
                         removed.add(row.role_id)
                         await session.delete(row)
                 added = set(picked) - existing

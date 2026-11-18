@@ -5,10 +5,11 @@ from loguru import logger
 from starlette.responses import StreamingResponse
 
 from bisheng.admin.application.tenant_scope import require_expected_management_tenant, resolve_management_scope
+from bisheng.api.v1.schemas import KnowledgeFileOne
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.admin_scope import AdminScopeChangedError
-from bisheng.common.errcode.http_error import ServerError
+from bisheng.common.errcode.http_error import NotFoundError, ServerError
 from bisheng.common.schemas.api import SSEResponse, resp_200
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.database import get_async_db_session
@@ -53,6 +54,7 @@ from bisheng.knowledge.domain.services.knowledge_space_chat_service import (
 from bisheng.knowledge.domain.services.knowledge_space_service import (
     KnowledgeSpaceService,
 )
+from bisheng.knowledge.domain.services.preview_source_service import PreviewSourceService
 from bisheng.knowledge.domain.services.work_retrieval import retrieve_workspace_chunks
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
@@ -524,11 +526,25 @@ async def upload_folder(
 ) -> Any:
     """F034 §5.5: register a whole client-side folder (nested) in one batch."""
     if req.upload_context is not None:
+        # Owned upload receipts already bind each server path to this actor.
         return resp_200(await register_owned_upload(svc, space_id, req, folder=True))
+    # Legacy wire: every client path must resolve through a server-issued upload reference.
+    await svc._require_action(
+        "folder" if req.parent_id else "knowledge_space", req.parent_id or space_id, "upload_file"
+    )
+    sources = [
+        await PreviewSourceService.resolve(
+            item=KnowledgeFileOne(file_path=item.file_path, preview_upload_ref=item.preview_upload_ref),
+            login_user=svc.login_user,
+            knowledge_id=space_id,
+        )
+        for item in req.items
+    ]
     files = await svc.upload_folder_items(
         knowledge_id=space_id,
         items=req.items,
         parent_id=req.parent_id,
+        trusted_sources=sources,
         **({"processing_overrides": req.overrides} if req.overrides is not None else {}),
     )
     return resp_200(files)
@@ -575,11 +591,27 @@ async def add_file(
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     if req.upload_context is not None:
+        # Owned upload receipts already bind each server path to this actor.
         return resp_200(await register_owned_upload(svc, space_id, req))
+    # Legacy wire: every client path must resolve through a server-issued upload reference.
+    await svc._require_action(
+        "folder" if req.parent_id else "knowledge_space", req.parent_id or space_id, "upload_file"
+    )
+    if len(req.file_path) != len(req.preview_upload_refs) or not req.file_path:
+        raise NotFoundError.http_exception()
+    sources = [
+        await PreviewSourceService.resolve(
+            item=KnowledgeFileOne(file_path=path, preview_upload_ref=ref),
+            login_user=svc.login_user,
+            knowledge_id=space_id,
+        )
+        for path, ref in zip(req.file_path, req.preview_upload_refs)
+    ]
     file_record = await svc.add_file(
         knowledge_id=space_id,
         file_path=req.file_path,
         parent_id=req.parent_id,
+        trusted_sources=sources,
         **({"processing_overrides": req.overrides} if req.overrides is not None else {}),
     )
     return resp_200(file_record)
@@ -738,6 +770,14 @@ async def retry_space_files(
 
 
 # ──────────────────────────── Subscribe ───────────────────────────────────────
+
+
+@router.get("/{space_id}/exit-status")
+async def get_space_exit_status(
+    space_id: int,
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    return resp_200(await svc.get_space_exit_status(space_id))
 
 
 @router.post("/{space_id}/subscribe", response_model=None)

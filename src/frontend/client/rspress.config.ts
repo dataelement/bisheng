@@ -133,6 +133,7 @@ export default defineConfig({
           items: [
             { text: '面包屑 Breadcrumb', link: '/components/breadcrumb' },
             { text: '下拉菜单 Dropdown', link: '/components/dropdown' },
+            { text: '树形结构 Tree', link: '/components/tree-navigation' },
             { text: '标签页 Tabs', link: '/components/tabs' },
             { text: '分页 Pagination', link: '/components/pagination' },
           ],
@@ -218,6 +219,7 @@ export default defineConfig({
             { text: '气泡卡片 Popover', link: '/组件-Popover气泡卡片' },
             { text: '面包屑 Breadcrumb', link: '/组件-Breadcrumb面包屑' },
             { text: '下拉菜单 Dropdown', link: '/组件-Dropdown下拉菜单' },
+            { text: '树形结构 Tree', link: '/组件-TreeNavigation树形导航' },
             { text: '分页 Pagination', link: '/组件-Pagination分页' },
             { text: '弹窗 Modal', link: '/组件-Modal弹窗' },
             { text: '二次确认 Confirm', link: '/组件-Confirm二次确认' },

@@ -11,6 +11,8 @@ import { useTranslation } from "react-i18next";
 import { isGlobalSuperUser } from "./permissions";
 import { isSpeechModelType } from "./speechConfig";
 import { ScopeBanner } from "./SystemConfigBanners";
+import { SystemModelDiagnostics } from './SystemModelDiagnostics';
+import type { SystemModelKey } from '@/controllers/API/systemModelSettings';
 import AssisModel from "./tabs/AssisModel";
 import EvaluationModel from "./tabs/EvaluationModel";
 import { KnowledgeModel } from "./tabs/KnowledgeModel";
@@ -44,6 +46,12 @@ export default function SystemModelConfig({
   // calls so Child Admins do not trip the request.ts 403→/403 redirect.
   const { scope } = useAdminScope({ enabled: isGlobalSuper });
   const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [settingsRevisions, setSettingsRevisions] = useState<Record<string, number>>({});
+  const scopeKey = `${user?.user_id}:${user?.leaf_tenant_id}:${scope.scope_tenant_id}`;
+  const configKeys: Record<string, SystemModelKey> = {
+    workbench: 'linsight_llm', knowledge: 'knowledge_llm', assis: 'assistant_llm',
+    evaluation: 'evaluation_llm', workflow: 'workflow_llm',
+  };
 
   useEffect(() => {
     setActiveTab(defaultTab === "desktop" ? "workbench" : defaultTab || "workbench");
@@ -134,7 +142,10 @@ export default function SystemModelConfig({
               childTenant={childTenant}
             />
           )}
+          <SystemModelDiagnostics key={`${scopeKey}:${activeTab}:${settingsRevisions[activeTab] ?? 0}`} configKey={configKeys[activeTab] ?? 'linsight_llm'}
+            scopeKey={scopeKey} onRestored={() => setSettingsRevisions(value => ({ ...value, [activeTab]: (value[activeTab] ?? 0) + 1 }))} />
           <Tabs
+            key={scopeKey}
             className="[&_[role=tablist]]:px-4"
             activeKey={activeTab}
             onChange={(tab) => {
@@ -147,6 +158,7 @@ export default function SystemModelConfig({
                 label: t("model.userSelectableModels"),
                 children: (
                   <WorkbenchModel
+                    key={settingsRevisions.workbench ?? 0}
                     data={data}
                     onBack={onBack}
                   />
@@ -157,6 +169,7 @@ export default function SystemModelConfig({
                 label: t("model.knowledgeBaseModel"),
                 children: (
                   <KnowledgeModel
+                    key={settingsRevisions.knowledge ?? 0}
                     llmOptions={llmOptions}
                     embeddings={embeddings}
                     asrModel={asrModel}
@@ -167,17 +180,17 @@ export default function SystemModelConfig({
               {
                 key: "assis",
                 label: t("model.assistantModel"),
-                children: <AssisModel llmOptions={llmOptions} onBack={onBack} />,
+                children: <AssisModel key={settingsRevisions.assis ?? 0} llmOptions={llmOptions} onBack={onBack} />,
               },
               {
                 key: "evaluation",
                 label: t("model.evaluationModel"),
-                children: <EvaluationModel llmOptions={llmOptions} onBack={onBack} />,
+                children: <EvaluationModel key={settingsRevisions.evaluation ?? 0} llmOptions={llmOptions} onBack={onBack} />,
               },
               {
                 key: "workflow",
                 label: t("model.workflowModel"),
-                children: <WorkflowModel llmOptions={llmOptions} onBack={onBack} />,
+                children: <WorkflowModel key={settingsRevisions.workflow ?? 0} llmOptions={llmOptions} onBack={onBack} />,
               },
             ]}
           />

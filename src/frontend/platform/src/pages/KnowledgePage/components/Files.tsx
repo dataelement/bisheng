@@ -5,9 +5,9 @@ import { BatchOperationDialog } from "./BatchOperationDialog";
 import { BatchTagDraftDialog } from "./BatchTagDraftDialog";
 import { MoveDialog } from "./MoveDialog";
 import type { MoveSelection } from "@/controllers/API/knowledgeMove";
-import { Button } from "@bisheng/ui";
+import { Button, EmptyStateIllustration, StateView, toast } from "@bisheng/ui";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import { knowledgeSpaceApi, type KnowledgeSpaceChild } from "@/controllers/API/knowledgeSpace";
@@ -15,9 +15,15 @@ import { knowledgeFilesApi, type SpaceFilePreview } from "@/controllers/API/know
 import { getMyResourcePermissionsApi } from "@/controllers/API/permission";
 import { knowledgeQueryKeys, type KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
+import { isErrorEnvelope } from "@bisheng/api-client";
 import { SpaceDirectoryOverlays } from "./SpaceDirectoryOverlays";
+import { SpaceDirectoryLoading } from "./SpaceDirectoryLoading";
+import { SpaceDirectoryLoadMore } from "./SpaceDirectoryLoadMore";
+import { KnowledgeScopeUnavailable } from "./KnowledgeScopeUnavailable";
 import { KnowledgeDeletionDialog } from "./KnowledgeDeletionDialog";
 import { useDirectoryDeletion } from "../hooks/useDirectoryDeletion";
+import { useDirectoryDownloadPermissions } from "../hooks/useDirectoryDownloadPermissions";
+import { useDirectorySelectionActions } from "../hooks/useDirectorySelectionActions";
 import { SpaceDirectoryRow } from "./SpaceDirectoryRow";
 import { SpaceDirectoryToolbar } from "./SpaceDirectoryToolbar";
 import { SpaceDirectoryView, type DirectorySortField, type DirectoryViewMode } from "./SpaceDirectoryView";
@@ -59,15 +65,14 @@ const validId = (id: unknown): id is number =>
   typeof id === "number" && Number.isSafeInteger(id) && id > 0;
 const rowKey = (item: KnowledgeSpaceChild) => `${item.file_type}:${item.id}`;
 export default function Files(props: FilesProps) {
-  const { t } = useTranslation("knowledge");
   const { scope, spaceId, parentId } = props;
   if (
     !scope ||
-    !validId(spaceId) ||
     !validId(scope.tenantId) ||
+    !validId(spaceId) ||
     (parentId != null && !validId(parentId))
   )
-    return <div role="status">{t("f118.scope_unavailable")}</div>;
+    return <KnowledgeScopeUnavailable />;
   return (
     <Directory
       key={JSON.stringify([
@@ -95,8 +100,8 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
   const [keyword, setKeyword] = useState("");
   const [page, setPage] = useState(1);
   const [viewMode, setViewMode] = useWorkspaceViewMode(scope, presentation === "workspace");
-  const [sortField, setSortField] = useState<DirectorySortField>("update_time");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [sortField, setSortField] = useState<DirectorySortField>("file_type");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [statuses, setStatuses] = useState<number[]>(() =>
     searchParams.get("fileStatus") === "abnormal" ? [3, 6, 7] : [],
   );
@@ -126,6 +131,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
   );
   const current = useRef<Epoch | null>(epoch);
   current.current = epoch;
+  const isDirectoryCurrent = useCallback(() => current.current === epoch, [epoch]);
   const menuToken = useRef<Target | null>(null),
     editToken = useRef<Edit | null>(null),
     previewToken = useRef<Target | null>(null);
@@ -151,14 +157,18 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
   const sorting = presentation === "workspace" ? { order_field: sortField, order_sort: sortDirection } : {};
   const ordinary = useInfiniteQuery({
     queryKey: [...epoch.prefix, "children"],
-    queryFn: ({ pageParam }) =>
-      knowledgeSpaceApi.listChildren(spaceId, {
+    queryFn: async ({ pageParam }) => {
+      const result = await knowledgeSpaceApi.listChildren(spaceId, {
         parent_id: parentId,
         page_size: 40,
         ...filters,
         ...sorting,
         ...(typeof pageParam === "string" ? { cursor: pageParam } : {}),
-      }),
+      });
+      if (presentation === "workspace" && typeof pageParam === "string" && result.has_more && result.next_cursor === pageParam)
+        throw new Error("Knowledge directory pagination cursor did not advance");
+      return result;
+    },
     getNextPageParam: (result) => (result.has_more ? (result.next_cursor ?? undefined) : undefined),
     enabled: !keyword,
     keepPreviousData: false,
@@ -192,6 +202,11 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
     ],
     [keyword, search.data, ordinary.data],
   );
+  const downloadIds = useDirectoryDownloadPermissions({
+    prefix: epoch.prefix,
+    spaceId,
+    pages: keyword ? (search.data ? [search.data] : []) : (ordinary.data?.pages ?? []),
+  });
   const rowLifetimes = useRef(new Map<string, RowLifetime>());
   const rowKeys = new Set(rows.map(rowKey));
   for (const [key, lifetime] of rowLifetimes.current) {
@@ -217,12 +232,13 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
   }, [active.error]);
   useEffect(() => {
     const type = parentId === null ? "knowledge_space" : "folder";
-    void getMyResourcePermissionsApi(type, String(parentId ?? spaceId))
+    void getMyResourcePermissionsApi(type, String(parentId ?? spaceId), { showError: false })
       .then((result) => {
         if (current.current === epoch) setContainer({ epoch, actions: result.actions });
       })
       .catch((error) => {
-        if (current.current === epoch) showApiError(error);
+        if (current.current === epoch && !(isErrorEnvelope(error) && error.status_code === 25022))
+          showApiError(error);
       });
   }, [epoch, parentId, spaceId]);
 
@@ -295,6 +311,12 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
         await knowledgeFilesApi.renameSpaceFolder(spaceId, token.item.id, body);
       else await knowledgeFilesApi.renameSpaceFile(spaceId, token.item.id, body);
       if (editToken.current !== token || !isCurrent(token)) return;
+      // Report the write as soon as it lands: the refreshed list may drop this
+      // row (current search/filter), which would otherwise end the flow silently.
+      toast.show({
+        type: "success",
+        message: t(token.item ? "renameSuccess" : "f118.folder_created"),
+      });
       await client.invalidateQueries({ queryKey: base });
       if (editToken.current === token && isCurrent(token)) closeEdit();
     } catch (error) {
@@ -325,14 +347,8 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
     }
   };
   const handleDownload = async (item: KnowledgeSpaceChild) => {
-    const token = menu?.token;
-    if (
-      !token ||
-      token.item.id !== item.id ||
-      !menu.actions.includes("download") ||
-      !isCurrent(token)
-    )
-      return;
+    const token = { epoch, item, rowLifetime: rowLifetimes.current.get(rowKey(item)) };
+    if (item.file_type !== 1 || !downloadIds.has(item.id) || !isCurrent(token)) return;
     try {
       const data = await knowledgeFilesApi.getSpaceFileDownload(spaceId, item.id);
       if (!isCurrent(token) || !data.original_url) return;
@@ -361,23 +377,25 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
     epoch,
     scopeKey: JSON.stringify([...base, parentId, keyword, statuses, page, sortField, sortDirection]),
     rows,
-    isCurrent: () => current.current === epoch,
+    isCurrent: isDirectoryCurrent,
     onDeleted: () => client.invalidateQueries({ queryKey: base }),
   });
+  const selectedActions = useDirectorySelectionActions({ prefix: epoch.prefix, rows: selectedRows });
   const batch = useKnowledgeBatch(JSON.stringify([...base, parentId, selectedKeys]));
   const [batchTagsOpen, setBatchTagsOpen] = useState(false);
-  const [move, setMove] = useState<{ mode: "move" | "jobs"; items: MoveSelection[] } | null>(null);
+  const [move, setMove] = useState<MoveSelection[] | null>(null);
   const [webLinkOpen, setWebLinkOpen] = useState(false);
   const runBatch = async (
     operation: "download" | "tag" | "retry",
     tag_ids?: number[],
     new_tag_names?: string[],
+    items = selectedRows,
   ) => {
     setBatchTagsOpen(false);
     const outcome = await batch.open({
       spaceId,
       operation,
-      items: selectedRows.map((item) => ({
+      items: items.map((item) => ({
         id: item.id,
         type: item.file_type === 0 ? "folder" : "file",
         name: item.file_name,
@@ -419,6 +437,10 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
             references([item]);
         }}
         onRename={() => handleEdit(item)}
+        onMove={() => setMove([{ id: item.id, type: item.file_type === 0 ? "folder" : "file" }])}
+        onRetry={() => { void runBatch("retry", undefined, undefined, [item]); }}
+        onChanged={() => client.invalidateQueries({ queryKey: base })}
+        canDownload={downloadIds.has(item.id)}
         onDownload={() => {
           void handleDownload(item);
         }}
@@ -436,13 +458,58 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
       />
     );
   };
+  const workspace = presentation === "workspace";
+  const scrollPaging = workspace && !keyword && ordinary.hasNextPage;
+  const directoryEmpty = !active.isInitialLoading && !active.error && !rows.length && !hasMore;
+  const directoryStatus = (
+    <>
+      {active.isInitialLoading && <SpaceDirectoryLoading fill={workspace} />}
+      {directoryEmpty && (workspace ? (
+        <StateView size="page" title={t("f118.directory_empty")} image={<EmptyStateIllustration />} />
+      ) : <p>{t("f118.directory_empty")}</p>)}
+      {!!active.error && !scrollPaging && (
+        <Button
+          className={workspace ? "mx-4 my-2" : undefined}
+          onClick={() => void active.refetch()}
+        >
+          {t("retry")}
+        </Button>
+      )}
+      {scrollPaging ? (
+        <SpaceDirectoryLoadMore key={sequence.current} directory={ordinary} isCurrent={isDirectoryCurrent} />
+      ) : !keyword && ordinary.hasNextPage && (
+        <Button
+          disabled={ordinary.isFetchingNextPage}
+          onClick={() => void ordinary.fetchNextPage()}
+        >
+          {t("f118.more_files")}
+        </Button>
+      )}
+      {!!keyword && (
+        <div className={`flex justify-end gap-2${workspace ? " p-4" : ""}`}>
+          <Button
+            disabled={page === 1 || search.isFetching}
+            onClick={() => setPage((value) => value - 1)}
+          >
+            {t("pagination.prev", { ns: "bs" })}
+          </Button>
+          <Button
+            disabled={!search.data?.has_more || search.isFetching}
+            onClick={() => setPage((value) => value + 1)}
+          >
+            {t("pagination.next", { ns: "bs" })}
+          </Button>
+        </div>
+      )}
+    </>
+  );
   return (
-    <div className="relative space-y-4">
-      {move && <MoveDialog scope={scope} spaceId={spaceId} parentId={parentId} items={move.items} mode={move.mode} onClose={() => setMove(null)} />}
+    <div className={workspace ? "relative flex min-h-0 min-w-0 flex-1 flex-col" : "relative space-y-4"}>
+      {move && <MoveDialog scope={scope} spaceId={spaceId} parentId={parentId} items={move} onClose={() => setMove(null)} />}
       {selectionError === epoch && <p role="alert">{t("deletion.reason_no_permission")}</p>}
       <SpaceDirectoryToolbar
         toolbarTarget={toolbarTarget}
-        compact={presentation === "workspace"}
+        compact={workspace}
         spaceId={spaceId}
         parentId={parentId}
         keyword={keyword}
@@ -454,23 +521,22 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
         onCreateFolder={() => handleEdit()}
         canUpload={containerActions.includes("upload_file")}
         onWebLink={() => setWebLinkOpen(true)}
-        onBatchDownload={() => {
+        onBatchDownload={selectedActions.canDownload ? () => {
           void runBatch("download");
-        }}
-        onBatchRetry={() => {
+        } : undefined}
+        onBatchRetry={selectedActions.canRetry ? () => {
           void runBatch("retry");
-        }}
-        onBatchTag={() => setBatchTagsOpen(true)}
-        onMove={() => setMove({ mode: "move", items: selectedRows.map(item => ({ id: item.id, type: item.file_type === 0 ? "folder" : "file" })) })}
-        onMoveJobs={() => setMove({ mode: "jobs", items: [] })}
+        } : undefined}
+        onBatchTag={selectedActions.canTag ? () => setBatchTagsOpen(true) : undefined}
+        onMove={selectedActions.canMove ? () => setMove(selectedRows.map(item => ({ id: item.id, type: item.file_type === 0 ? "folder" : "file" }))) : undefined}
         selectedCount={selectedRows.length}
-        onDeleteSelected={() => {
+        onDeleteSelected={selectedActions.canDelete ? () => {
           void remove(selectedRows);
-        }}
-        onReferences={selectedRows.length ? () => references(selectedRows) : undefined}
+        } : undefined}
+        onReferences={selectedActions.canDelete ? () => references(selectedRows) : undefined}
       />
       <SpaceDirectoryView
-        workspace={presentation === "workspace"}
+        workspace={workspace}
         viewMode={viewMode}
         onViewModeChange={setViewMode}
         sortField={sortField}
@@ -497,46 +563,9 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
         }}
         rows={rows}
         renderRow={renderRow}
+        footer={workspace ? directoryStatus : undefined}
       />
-      {active.isInitialLoading && <p role="status">{t("f118.loading_directory")}</p>}
-      {!active.isInitialLoading && !active.error && !rows.length && !hasMore && (
-        <p>{t("f118.directory_empty")}</p>
-      )}
-      {!!active.error && (
-        <Button
-          onClick={() => {
-            void active.refetch();
-          }}
-        >
-          {t("retry")}
-        </Button>
-      )}
-      {!keyword && ordinary.hasNextPage && (
-        <Button
-          disabled={ordinary.isFetchingNextPage}
-          onClick={() => {
-            void ordinary.fetchNextPage();
-          }}
-        >
-          {t("f118.more_files")}
-        </Button>
-      )}
-      {!!keyword && (
-        <div className="flex justify-end gap-2">
-          <Button
-            disabled={page === 1 || search.isFetching}
-            onClick={() => setPage((value) => value - 1)}
-          >
-            {t("pagination.prev", { ns: "bs" })}
-          </Button>
-          <Button
-            disabled={!search.data?.has_more || search.isFetching}
-            onClick={() => setPage((value) => value + 1)}
-          >
-            {t("pagination.next", { ns: "bs" })}
-          </Button>
-        </div>
-      )}
+      {!workspace && directoryStatus}
       <SpaceDirectoryOverlays
         instance={instance}
         editOpen={!!visibleEdit}
@@ -563,7 +592,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
       <BatchTagDraftDialog
         spaceId={spaceId}
         availableTags={selectedRows.flatMap((item) => item.tags ?? [])}
-        open={batchTagsOpen}
+        open={batchTagsOpen && selectedActions.canTag}
         onClose={() => setBatchTagsOpen(false)}
         onReview={(ids, names) => {
           void runBatch("tag", ids, names);

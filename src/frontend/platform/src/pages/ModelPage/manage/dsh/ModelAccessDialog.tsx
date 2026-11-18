@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { bsConfirm } from '@/components/bs-ui/alertDialog/useConfirm'
 import { Button } from "@bisheng/ui";
 import { Switch } from "@bisheng/ui";
@@ -71,11 +72,12 @@ export function ModelAccessDialog({ model, onClose }: ModelAccessDialogProps) {
             <DialogHeader className="mb-4"><DialogTitle>{t('dsh.unified.visibility')} · {model?.name}</DialogTitle><DialogDescription className="sr-only">{t('dsh.unified.visibilityHelp')}</DialogDescription></DialogHeader>
             {error && <p role="alert">{t(error)}</p>}
             {!value ? <Button variant="outlined" onClick={() => setRevision(old => old + 1)}>
-                {t(error ? 'dsh.refresh' : 'dsh.loading')}
+                {error ? t('dsh.refresh') : <LoadingState size="inline" label={t('dsh.loading')} />}
             </Button> : <>
+                <p className="text-xs text-muted-foreground">{t('model:model.visibilityTenantHelp')}</p>
                 <div className="flex shrink-0 items-center justify-between gap-4 rounded-lg border px-4 py-3">
                     <div className="min-w-0 space-y-1">
-                        <label htmlFor="model-visible-to-everyone" className="cursor-pointer text-sm font-medium">{t('dsh.unified.everyoneVisible')}</label>
+                        <label htmlFor="model-visible-to-everyone" className="cursor-pointer text-sm font-medium">{t('model:model.currentTenantEveryone')}</label>
                         <p id="model-visibility-description" className="text-xs text-muted-foreground">
                             {t(value.everyone ? 'dsh.unified.everyoneVisibleHelp' : 'dsh.unified.selectedVisibleHelp')}
                         </p>

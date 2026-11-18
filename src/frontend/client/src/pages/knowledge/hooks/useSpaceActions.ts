@@ -16,7 +16,7 @@ import {
   extractApiStatusCode,
 } from "~/utils/apiStatusError";
 
-const ORGANIZATION_GRANT_EXIT_DENIED_CODE = 18071;
+const ORGANIZATION_GRANT_EXIT_DENIED_CODE = 18080;
 
 interface UseSpaceActionsOptions {
   activeSpaceId?: string;
@@ -146,11 +146,11 @@ export function useSpaceActions({
       if (exitCode && exitCode !== 200) {
         throw createApiStatusError(response);
       }
-      queryClient.setQueryData(["knowledgeSpaces", "joined", joinedSortBy], nextJoined);
+      updateAllCaches((list) => list.filter((space) => space.id !== spaceId));
       if (activeSpaceId === spaceId) {
         onSpaceSelect(nextActive);
       }
-      queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces", "joined"] });
+      queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
       showToast({
         message: localize("com_knowledge.exited_space"),
         severity: NotificationSeverity.SUCCESS,
@@ -169,6 +169,12 @@ export function useSpaceActions({
           ? localize("com_knowledge.organization_grant_exit_blocked")
           : extractApiErrorMessage(e) || localize("com_knowledge.exit_space_failed");
       showToast({ message, severity: NotificationSeverity.WARNING });
+    } finally {
+      // A changed grant may reject execution; refresh both card and detail eligibility.
+      void queryClient.invalidateQueries({
+        predicate: (query) => query.queryKey[0] === "space-exit-status" &&
+          query.queryKey[query.queryKey.length - 1] === spaceId,
+      });
     }
   };
 

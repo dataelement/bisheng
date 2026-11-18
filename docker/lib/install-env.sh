@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # Shared deployment helpers. Only this checked-in file is sourced, never .env.
 
+# Credentials stay outside the code tree. Tests may redefine this function.
+credential_store_path() {
+  printf '%s\n' /opt/bisheng/.credential-security
+}
+
 env_get() { awk -v MODE=get -v KEY="$2" -f "${SCRIPT_DIR}/lib/env.awk" "$1"; }
 
 env_set() {

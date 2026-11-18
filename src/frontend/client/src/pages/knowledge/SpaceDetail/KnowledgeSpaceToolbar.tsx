@@ -56,6 +56,8 @@ export function KnowledgeSpaceToolbar({ model }: KnowledgeSpaceToolbarProps) {
     canBatchMove,
     canBatchDelete,
     canBatchDownload,
+    canBatchTag,
+    canBatchRetry,
     handleBatchDownload,
     handleBatchTag,
     handleBatchMove,
@@ -353,6 +355,8 @@ export function KnowledgeSpaceToolbar({ model }: KnowledgeSpaceToolbarProps) {
             onClearSelection={() => setSelectedFiles(new Set())}
             onBatchDownload={handleBatchDownload}
             canBatchDownload={canBatchDownload}
+            canBatchTag={canBatchTag}
+            canBatchRetry={canBatchRetry}
             onBatchTag={handleBatchTag}
             onBatchRetry={handleBatchRetry}
             onBatchMove={handleBatchMove}

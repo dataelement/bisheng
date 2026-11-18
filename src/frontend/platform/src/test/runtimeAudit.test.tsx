@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { endOfDay, format, startOfDay, subDays } from 'date-fns'
 import type { PropsWithChildren } from 'react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { useRuntimeAudit } from '@/pages/LogPage/runtime/useRuntimeAudit'
@@ -13,6 +14,11 @@ vi.mock('@/hooks/useAdminScope', () => ({ useAdminScope: () => ({ scope: { scope
 vi.mock('@/controllers/API/tenant', () => ({ getTenantsApi: vi.fn().mockResolvedValue({ data: [] }) }))
 vi.mock('@/controllers/request', () => ({ showApiError: vi.fn() }))
 const wrapper = ({ children }: PropsWithChildren) => <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false, cacheTime: 0 } } })}>{children}</QueryClientProvider>
+const defaultDateFilters = (today: Date) => ({
+  time_range: 'custom',
+  start_time: startOfDay(subDays(today, 6)).toISOString(),
+  end_time: endOfDay(today).toISOString().replace('.999Z', '.999999Z'),
+})
 afterEach(cleanup)
 beforeEach(() => {
   vi.clearAllMocks()
@@ -46,6 +52,7 @@ it('renders real source rows and distinguishes failed loading from empty records
 
 it('reloads the first page on every search without clearing an unchanged visitor filter', async () => {
   const user = userEvent.setup()
+  const today = new Date()
   mock.candidates.mockResolvedValue({ items: [{ id: '7', label: 'Audit visitor' }] })
   mock.records.mockImplementation(async (_kind, _filters, cursor?: string) => ({
     items: [], next_cursor: cursor ? null : 'page-two', snapshot_id: 'initial', matched_count: null,
@@ -53,7 +60,7 @@ it('reloads the first page on every search without clearing an unchanged visitor
   render(<RuntimeAuditPanel kind="model" />, { wrapper })
   await user.click(screen.getByRole('combobox', { name: 'log.runtime.visitor' }))
   await user.click(await screen.findByRole('option', { name: 'Audit visitor' }))
-  const expectedFilters = expect.objectContaining({ time_range: 'recent7d', visitor_id: 7 })
+  const expectedFilters = expect.objectContaining({ ...defaultDateFilters(today), visitor_id: 7 })
   await waitFor(() => expect(mock.records).toHaveBeenLastCalledWith('model', expectedFilters, undefined))
 
   const pager = screen.getByRole('navigation', { name: 'pagination.nav' })
@@ -223,24 +230,29 @@ it('renders zoned runtime timestamps in the viewers local time instead of raw UT
   expect(screen.queryByText(value)).toBeNull()
 })
 
-it('accepts either date boundary and resets to the first page of the default time range', async () => {
+it('defaults to seven calendar days and supports the shortcut, custom dates, clearing and reset', async () => {
   const user = userEvent.setup()
+  const today = new Date()
+  const recentStart = format(subDays(today, 6), 'yyyy-MM-dd')
+  const recentEnd = format(today, 'yyyy-MM-dd')
+  const firstPageFilters = { ...defaultDateFilters(today), tenant_id: undefined }
   mock.records.mockResolvedValueOnce({ items: [], next_cursor: 'recent-next', snapshot_id: 'recent', matched_count: null })
   render(<RuntimeAuditPanel kind="model" />, { wrapper })
+  const start = screen.getByRole('combobox', { name: 'datePicker.startDate' })
+  const end = screen.getByRole('combobox', { name: 'datePicker.endDate' })
+  expect(start).toHaveValue(recentStart)
+  expect(end).toHaveValue(recentEnd)
   const next = screen.getByRole('button', { name: 'pagination.next' })
   await waitFor(() => expect(next).toBeEnabled())
   await user.click(next)
-  await waitFor(() => expect(mock.records).toHaveBeenLastCalledWith('model', { time_range: 'recent7d', tenant_id: undefined }, 'recent-next'))
-  await user.click(screen.getByRole('combobox', { name: 'log.runtime.timeRange' }))
-  await user.click(screen.getByRole('option', { name: 'log.runtime.custom' }))
-  const start = screen.getByRole('combobox', { name: 'datePicker.startDate' })
-  const end = screen.getByRole('combobox', { name: 'datePicker.endDate' })
+  await waitFor(() => expect(mock.records).toHaveBeenLastCalledWith('model', firstPageFilters, 'recent-next'))
+
   const search = screen.getByRole('button', { name: 'log.runtime.apply' })
-  await user.click(search)
-  expect(screen.getByRole('alert')).toHaveTextContent('log.runtime.invalidRange')
+  fireEvent.click(screen.getByRole('button', { name: 'datePicker.clear' }))
   fireEvent.change(start, { target: { value: '2026-10-20' } })
   fireEvent.keyDown(start, { key: 'Enter' })
   expect(end).toHaveAttribute('placeholder', 'datePicker.unlimited')
+  expect(mock.records).toHaveBeenLastCalledWith('model', firstPageFilters, 'recent-next')
   await user.click(search)
   await waitFor(() => expect(mock.records).toHaveBeenLastCalledWith('model', expect.objectContaining({
     time_range: 'custom', start_time: new Date(2026, 9, 20).toISOString(), end_time: undefined,
@@ -255,9 +267,22 @@ it('accepts either date boundary and resets to the first page of the default tim
     time_range: 'custom', start_time: undefined,
     end_time: new Date(2026, 9, 21, 23, 59, 59).toISOString().replace('.000Z', '.999999Z'),
   }), undefined))
+
+  fireEvent.keyDown(start, { key: 'ArrowDown' })
+  await user.click(await screen.findByRole('button', { name: 'log.runtime.recent7d' }))
+  expect(start).toHaveValue(recentStart)
+  expect(end).toHaveValue(recentEnd)
+  await user.click(search)
+  await waitFor(() => expect(mock.records).toHaveBeenLastCalledWith('model', firstPageFilters, undefined))
+
+  fireEvent.click(screen.getByRole('button', { name: 'datePicker.clear' }))
+  await user.click(search)
+  await waitFor(() => expect(mock.records).toHaveBeenLastCalledWith('model', {
+    time_range: 'all', start_time: undefined, end_time: undefined, tenant_id: undefined,
+  }, undefined))
   await user.click(screen.getByRole('button', { name: 'log.resetButton' }))
-  expect(screen.getByRole('combobox', { name: 'log.runtime.timeRange' })).toHaveTextContent('log.runtime.recent7d')
-  expect(screen.queryByRole('combobox', { name: 'datePicker.startDate' })).not.toBeInTheDocument()
-  await waitFor(() => expect(mock.records).toHaveBeenLastCalledWith('model', { time_range: 'recent7d', tenant_id: undefined }, undefined))
+  expect(screen.getByRole('combobox', { name: 'datePicker.startDate' })).toHaveValue(recentStart)
+  expect(screen.getByRole('combobox', { name: 'datePicker.endDate' })).toHaveValue(recentEnd)
+  await waitFor(() => expect(mock.records).toHaveBeenLastCalledWith('model', firstPageFilters, undefined))
   expect(screen.getByRole('button', { name: 'pagination.prev' })).toBeDisabled()
 })

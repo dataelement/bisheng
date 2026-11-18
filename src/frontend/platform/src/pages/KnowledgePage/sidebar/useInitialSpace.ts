@@ -1,4 +1,4 @@
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useQueries, type QueryClient } from "@tanstack/react-query";
 import {
   knowledgeSpaceApi,
   type KnowledgeSpaceInfo,
@@ -15,15 +15,62 @@ import {
 import { useSpaceCatalog } from "./useSpaceCatalog";
 
 const sections: SpaceSection[] = ["department", "created", "joined"];
-function available(rows: KnowledgeSpaceInfo[], scope: KnowledgeQueryScope) {
+const noExclusions: ReadonlySet<number> = new Set();
+
+export function retiredKnowledgeSpacesKey(scope: KnowledgeQueryScope) {
+  return [
+    "retired-knowledge-spaces",
+    scope.identityKey,
+    scope.tenantId,
+    scope.managementTenantId,
+    scope.view,
+  ] as const;
+}
+
+/** Survives the filelib route remount that drops component state after deletion. */
+export function rememberRetiredKnowledgeSpace(
+  client: QueryClient,
+  scope: KnowledgeQueryScope,
+  id: number,
+) {
+  const key = retiredKnowledgeSpacesKey(scope);
+  client.setQueryData<readonly number[]>(key, (current) =>
+    current?.includes(id) ? current : [...(current ?? []), id],
+  );
+}
+
+function useRetiredSpaces(scope: KnowledgeQueryScope) {
+  const client = useQueryClient();
+  const key = retiredKnowledgeSpacesKey(scope);
+  const retired = useQuery({
+    queryKey: key,
+    queryFn: () => client.getQueryData<readonly number[]>(key) ?? [],
+    initialData: [] as readonly number[],
+    staleTime: Infinity,
+    cacheTime: Infinity,
+  });
+  return retired.data ?? [];
+}
+function available(
+  rows: KnowledgeSpaceInfo[],
+  scope: KnowledgeQueryScope,
+  excluded: ReadonlySet<number>,
+) {
   return rows.find(
     (row) =>
       Number.isSafeInteger(row.id) &&
       row.id > 0 &&
+      !excluded.has(row.id) &&
       (row.tenant_id == null || row.tenant_id === scope.tenantId),
   );
 }
-export function useInitialSpace(scope: KnowledgeQueryScope, enabled: boolean) {
+export function useInitialSpace(
+  scope: KnowledgeQueryScope,
+  enabled: boolean,
+  excluded: ReadonlySet<number> = noExclusions,
+) {
+  const retired = useRetiredSpaces(scope);
+  const blocked = new Set<number>([...excluded, ...retired]);
   const admin = useSpaceCatalog(scope, "", enabled && scope.view === "admin");
   const groups = useQueries({
     queries: sections.map((section) => ({
@@ -41,11 +88,15 @@ export function useInitialSpace(scope: KnowledgeQueryScope, enabled: boolean) {
   });
   const ready = groups.every((query) => query.isSuccess);
   const first = ready
-    ? groups.map((query) => available(query.data ?? [], scope)).find(Boolean)
+    ? groups.map((query) => available(query.data ?? [], scope, blocked)).find(Boolean)
     : undefined;
   // Child-only grants may be absent from the personal navigation groups.
   const fallback = useQuery({
-    queryKey: [...knowledgeQueryKeys.scope(scope), "initial-visible-space"],
+    queryKey: [
+      ...knowledgeQueryKeys.scope(scope),
+      "initial-visible-space",
+      [...blocked].sort((left, right) => left - right),
+    ],
     queryFn: async ({ signal }) => {
       let cursor: string | undefined;
       const seen = new Set<string>();
@@ -54,7 +105,7 @@ export function useInitialSpace(scope: KnowledgeQueryScope, enabled: boolean) {
           page_size: 1,
           ...(cursor ? { cursor } : {}),
         });
-        const row = available(page.data, scope);
+        const row = available(page.data, scope, blocked);
         if (row || !page.has_more) return row ?? null;
         if (!page.next_cursor || seen.has(page.next_cursor))
           throw new Error("Invalid visible-space cursor");
@@ -74,7 +125,8 @@ export function useInitialSpace(scope: KnowledgeQueryScope, enabled: boolean) {
         available(
           rows.filter((row) => row.space_kind === "department"),
           scope,
-        ) ?? available(rows, scope),
+          blocked,
+        ) ?? available(rows, scope, blocked),
       loading: enabled && admin.isInitialLoading,
       error: admin.isError,
       retry: () => admin.refetch(),

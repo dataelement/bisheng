@@ -4,16 +4,14 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 import { Dialog,DialogContent,DialogHeader,DialogTitle } from "@/components/bs-ui/dialog";
 
-import { Label } from "@/components/bs-ui/label";
 import { Sheet,SheetContent,SheetFooter,SheetHeader,SheetTitle } from "@/components/bs-ui/sheet";
 import { Table,TableBody,TableCell,TableHead,TableHeader,TableRow } from "@/components/bs-ui/table";
 
 import { createTool,deleteTool,downloadToolSchema,testToolApi,updateTool } from "@/controllers/API/tools";
 import { showApiError } from "@/controllers/request";
-import { RadioGroup,Radio as RadioGroupItem } from "@bisheng/ui";
+import { OpenApiAuthentication } from "./OpenApiAuthentication";
 import { forwardRef,useEffect,useImperativeHandle,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
-import { AppHint } from "../components/AppHint";
 import { formData } from "./toolSchemaExamples";
 import { OpenApiSchemaInput } from "./OpenApiSchemaInput";
 import type { OpenApiSchemaSource } from "@/controllers/API/tools";
@@ -270,99 +268,8 @@ const EditTool = forwardRef((props: any, ref) => {
                     <div className="px-6 mb-4">
                         <OpenApiSchemaInput value={formState.schemaContent} onChange={(schemaContent) => setFormState(prev => ({ ...prev, schemaContent }))} onParse={handleImportSchema} />
                     </div>
-                    <label htmlFor="open" className="px-6">{t('tools.authenticationType')}</label>
-                    <div className="px-6">
-                        <div className="px-6 mb-4" >
-                            <label htmlFor="open" className="bisheng-label">{t('tools.authType')}</label>
-                            <RadioGroup
-                                id="authMethod"
-                                name="authMethod"
-                                value={formState.authMethod}
-                                className="flex mt-2 gap-4"
-                                onValueChange={(value) => setFormState(prevState => ({ ...prevState, authMethod: value }))}
-                            >
-                                <div className="flex items-center space-x-2">
-                                    <RadioGroupItem value="none" id="r1" />
-                                    <Label htmlFor="r1">{t('tools.none')}</Label>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                    <RadioGroupItem value="apikey" id="r2" />
-                                    <Label htmlFor="r2">{t('tools.apiKey')}</Label>
-                                </div>
-                            </RadioGroup>
-                        </div>
-                        {formState.authMethod === "apikey" && (<>
-                            <div className="px-6 mb-4" >
-                                <Label htmlFor="open" className="bisheng-label flex items-center gap-1">
-                                    {t('tools.authTypeLabel')}
-                                    <AppHint content={<div>
-                                        <p>{t('tools.basicBearerDescription')}</p>
-                                        <p>{t('tools.customDescription')}</p>
-                                    </div>} />
-                                </Label>
-                                <RadioGroup
-                                    id="authType"
-                                    name="authType"
-                                    value={formState.authType}
-                                    className="flex mt-2 gap-4"
-                                    onValueChange={(value) => setFormState(prevState => ({ ...prevState, authType: value }))}
-                                >
-                                    <div className="flex items-center space-x-2">
-                                        <RadioGroupItem value="basic" id="r4" />
-                                        <Label htmlFor="r4">{t('tools.basic')}</Label>
-                                    </div>
-                                    <div className="flex items-center space-x-2">
-                                        <RadioGroupItem value="bearer" id="r5" />
-                                        <Label htmlFor="r5">{t('tools.bearer')}</Label>
-                                    </div>
-                                    <div className="flex items-center space-x-2">
-                                        <RadioGroupItem value="custom" id="r6" />
-                                        <Label htmlFor="r6">{t('tools.custom')}</Label>
-                                    </div>
-                                </RadioGroup>
-                            </div>
-                            {formState.authType === "custom" && <>
-                                <div className="px-6 mb-4" >
-                                    <Label htmlFor="apiLocation" className="bisheng-label flex items-center gap-1">
-                                        {t('tools.apiLocationLabel')}
-                                        <AppHint content={<div>
-                                            <p>{t('tools.headerDescription')}</p>
-                                            <p>{t('tools.queryDescription')}</p>
-                                        </div>} />
-                                    </Label>
-                                    <RadioGroup
-                                        id="apiLocation"
-                                        name="apiLocation"
-                                        value={formState.apiLocation}
-                                        className="flex mt-2 gap-4"
-                                        onValueChange={(value) => setFormState(prevState => ({
-                                            ...prevState, apiLocation: value
-                                        }))}
-                                    >
-                                        <div className="flex items-center space-x-2">
-                                            <RadioGroupItem value="header" id="r7" />
-                                            <Label htmlFor="r7">{t('tools.header')}</Label>
-                                        </div>
-                                        <div className="flex items-center space-x-2">
-                                            <RadioGroupItem value="query" id="r8" />
-                                            <Label htmlFor="r8">{t('tools.query')}</Label>
-                                        </div>
-                                    </RadioGroup>
-                                </div>
-                                <div className="px-6 mb-4">
-                                    <Label className="bisheng-label" htmlFor="parameter">
-                                        <span className="text-red-500">*</span> {t('tools.parameterName')}
-                                    </Label>
-                                    <Input id="parameter" name="parameter" placeholder={t('tools.parameterPlaceholder')} value={formState.parameter} onChange={handleInputChange} className={"mt-2"} />
-                                </div>
-                            </>}
-                            <div className="px-6 mb-4">
-                                <Label className="bisheng-label" htmlFor="apiKey">
-                                    <span className="text-red-500">*</span> {t('tools.apiKeyLabel')}
-                                </Label>
-                                <Input id="apiKey" name="apiKey" placeholder={t('tools.apiKeyPlaceholder')} value={formState.apiKey} onChange={handleInputChange} className={"mt-2"} />
-                            </div>
-                        </>)}
+                    <div className="px-6 mb-4">
+                        <OpenApiAuthentication id="tool-auth" value={formState} onChange={auth => setFormState(prev => ({ ...prev, ...auth }))} />
                     </div>
                     <label htmlFor="open" className="px-6">{t('tools.availableTools')}</label>
                     <div className="px-6 mb-4" >
@@ -399,34 +306,6 @@ const EditTool = forwardRef((props: any, ref) => {
                             </TableBody>
                         </Table>
                     </div>
-                </div>
-                <label htmlFor="open" className="px-6">{t('tools.authenticationType')}</label>
-                <div className="px-6">
-                    <div className="px-6 mb-4" >
-                        <label htmlFor="open" className="bisheng-label">{t('tools.authType')}</label>
-                        <RadioGroup
-                            id="authMethod"
-                            name="authMethod"
-                            defaultValue="none"
-                            className="flex mt-2 gap-4"
-                            onValueChange={(value) => setFormState(prevState => ({ ...prevState, authMethod: value }))}
-                        >
-                            <div className="flex items-center space-x-2">
-                                <RadioGroupItem value="none" id="r1" />
-                                <Label htmlFor="r1">{t('tools.none')}</Label>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                                <RadioGroupItem value="apikey" id="r2" />
-                                <Label htmlFor="r2">{t('tools.apiKey')}</Label>
-                            </div>
-                        </RadioGroup>
-                    </div>
-                    {formState.authMethod === "apikey" && (
-                        <div className="px-6 mb-4">
-                            <label htmlFor="apiKey">{t('tools.apiKey')}</label>
-                            <Input id="apiKey" name="apiKey" value={formState.apiKey} onChange={handleInputChange} className={"mt-2"} />
-                        </div>
-                    )}
                 </div>
                 <SheetFooter className="absolute bottom-0 right-0 w-full px-6 py-4">
                     {delShow && canDelete && (

@@ -27,8 +27,8 @@ async def test_preflight_narrows_scope_and_preserves_rows(policy_db, monkeypatch
             await session.commit()
     result = await inspect_managed_tenant(2, [77])
     assert result["read_only"] and len(result["people"]) == 1
-    assert result["people"][0]["effective_roles"] == [2, 3]
-    assert result["people"][0]["excluded_roles"] == [4, 5]
+    assert result["people"][0]["effective_roles"] == [2, 3, 4, 5]
+    assert result["people"][0]["excluded_roles"] == []
     assert [item["id"] for item in result["resources"]] == ["pending-a"]
     with bypass_tenant_filter():
         async with policy_db.sessions() as session:

@@ -252,8 +252,8 @@ class ChatManager:
         flow_lease_id: str | None = None,
         message_admission: Callable[[], AbstractAsyncContextManager[ChatMessageExecution]] | None = None,
         workflow_execution_port: WorkflowExecutionPort | None = None,
-        conversation_persistence: ConversationPersistencePort | None = None,
         memory_register: Callable[[str], Any] | None = None,
+        conversation_persistence: ConversationPersistencePort | None = None,
     ):
         """``memory_register`` (F132) is passed only by logged-in endpoints; the
         client calls it whenever its chat_id is set or switched. Guest-link and

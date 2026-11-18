@@ -56,6 +56,7 @@ class _Registration:
     nonce: object
     scope_ref: ReferenceType
     target_plan: tuple[ReferenceTargetReadFact, ...] | None = None
+    selected_slots: tuple[str, ...] | None = None
 
 
 def _invalid(reason="reference_read_scope_invalid"):
@@ -186,7 +187,12 @@ class SourceReadVerifier:
     async def aassert_target_keys(self, session, scope, identity, target_keys, *, allowed_types):
         registration = await self._registration(session, scope, identity)
         types = {TargetType(kind) for kind in allowed_types}
-        expected = {ref.target for ref in registration.snapshot.references if ref.target.target_type in types}
+        expected = {
+            ref.target
+            for ref in registration.snapshot.references
+            if ref.target.target_type in types
+            and (registration.selected_slots is None or ref.slot_key in registration.selected_slots)
+        }
         if (
             not isinstance(target_keys, tuple)
             or any(not isinstance(key, TargetKey) for key in target_keys)
@@ -211,12 +217,41 @@ class SourceReadVerifier:
             raise ValueError("a source authority cannot replace its registered target Owners")
         self._target_owners = MappingProxyType(registered)
 
+    @staticmethod
+    def _select_default_slots(registration, slots):
+        if (
+            registration.snapshot.source_key.source_type != SourceType.MODEL_DEFAULT
+            or registration.target_plan is not None
+            or registration.selected_slots is not None
+            or not isinstance(slots, tuple)
+            or any(not isinstance(slot, str) for slot in slots)
+            or len(slots) != len(set(slots))
+            or not set(slots).issubset({ref.slot_key for ref in registration.snapshot.references})
+        ):
+            raise _invalid("reference_read_slot_plan_invalid")
+        registration.selected_slots = slots
+
+    async def aselect_default_slots(self, session, scope, identity, slots):
+        self._select_default_slots(await self._registration(session, scope, identity), slots)
+
+    def select_default_slots(self, session, scope, identity, slots):
+        self._select_default_slots(self._registration_sync(session, scope, identity), slots)
+
     async def _ainspect_targets(self, session, scope, identity):
         registration = await self._registration(session, scope, identity)
         registration.target_plan = None
         if self._target_owners is None:
             raise ReferenceCoverageNotReadyError(reason="reference_read_targets_unconfigured")
-        keys = tuple(sorted({ref.target for ref in registration.snapshot.references}, key=lambda k: k.lock_order_key))
+        keys = tuple(
+            sorted(
+                {
+                    ref.target
+                    for ref in registration.snapshot.references
+                    if registration.selected_slots is None or ref.slot_key in registration.selected_slots
+                },
+                key=lambda k: k.lock_order_key,
+            )
+        )
         groups = []
         for key in keys:
             owner = self._target_owners.get(key.target_type)
@@ -335,7 +370,12 @@ class SourceReadVerifier:
     def assert_target_keys(self, session, scope, identity, target_keys, *, allowed_types):
         registration = self._registration_sync(session, scope, identity)
         types = {TargetType(kind) for kind in allowed_types}
-        expected = {value.target for value in registration.snapshot.references if value.target.target_type in types}
+        expected = {
+            value.target
+            for value in registration.snapshot.references
+            if value.target.target_type in types
+            and (registration.selected_slots is None or value.slot_key in registration.selected_slots)
+        }
         if (
             not isinstance(target_keys, tuple)
             or any(not isinstance(key, TargetKey) for key in target_keys)
@@ -351,7 +391,14 @@ class SourceReadVerifier:
         if self._target_owners is None:
             raise ReferenceCoverageNotReadyError(reason="reference_read_targets_unconfigured")
         keys = tuple(
-            sorted({value.target for value in registration.snapshot.references}, key=lambda k: k.lock_order_key)
+            sorted(
+                {
+                    value.target
+                    for value in registration.snapshot.references
+                    if registration.selected_slots is None or value.slot_key in registration.selected_slots
+                },
+                key=lambda k: k.lock_order_key,
+            )
         )
         groups = []
         for key in keys:

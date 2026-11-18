@@ -542,12 +542,12 @@ class ChatClient:
             raise
         except BaseErrorCode as e:
             logger.exception("handle gpts message error: ")
-            if question_saved:
-                await self.notify_answer_persisted(None, interrupted=False)
             if isinstance(e, KnowledgeOperationPlanConflictError):
                 self.gpts_agent = None
                 self.db_assistant = None
                 self.gpts_async_callback = None
+            if question_saved:
+                await self.notify_answer_persisted(None, interrupted=False)
             await self.send_response("system", "start", "")
             await e.websocket_close_message(websocket=self.websocket, close_ws=False)
         except Exception as e:
@@ -568,7 +568,7 @@ class ChatClient:
             return
         self.new_session.name = "New Chat"
 
-        llm_conf = await LLMService.get_workbench_llm()
+        llm_conf = await LLMService.get_workbench_llm(slots=("chat_title_llm.id",))
         if not llm_conf or not llm_conf.chat_title_llm or not llm_conf.chat_title_llm.id:
             return
         llm = await LLMService.get_bisheng_llm(

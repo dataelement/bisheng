@@ -104,6 +104,10 @@ class TestPromoteChatAttachments:
 class TestTempObjectNameFromUrl:
     """The link we issued at upload is what tells us the object to move."""
 
+    def test_browser_prefix_is_the_same_object(self):
+        url = "/object/bisheng-tmp/abc.png?X-Amz-Signature=abc"
+        assert temp_object_name_from_url(url, "bisheng-tmp") == "abc.png"
+
     def test_presigned_link_with_query_string(self):
         url = "/bisheng-tmp/abc.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Expires=604800"
         assert temp_object_name_from_url(url, "bisheng-tmp") == "abc.png"

@@ -1,5 +1,6 @@
 """Confirmed knowledge deletion: original projection, native cutover, durable purge."""
 
+import asyncio
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 
@@ -23,14 +24,15 @@ from bisheng.knowledge.domain.repositories.knowledge_deletion_execution_reposito
 )
 from bisheng.knowledge.domain.repositories.knowledge_space_delete_repository import KnowledgeSpaceDeleteRepository
 from bisheng.knowledge.domain.repositories.operation_plan_repository import OperationPlanRepository
+from bisheng.knowledge.domain.repositories.processing_fence_repository import ProcessingFenceRepository
 from bisheng.knowledge.domain.repositories.source_move_input_repository import SourceMoveInputRepository
 from bisheng.knowledge.domain.repositories.space_delete_scope_repository import SpaceDeleteScopeRepository
-from bisheng.knowledge.domain.schemas.direct_delete_scope import DeleteSelection
+from bisheng.knowledge.domain.schemas.direct_delete_scope import DeleteSelection, deletion_scope_payload
 from bisheng.knowledge.domain.schemas.direct_delete_scope import select_delete_scope as _selected
 from bisheng.knowledge.domain.schemas.processing_job import (
     ProcessingCreateRequest,
 )
-from bisheng.knowledge.domain.services.knowledge_processing_guard import require_space_processing_idle
+from bisheng.knowledge.domain.services.knowledge_processing_guard import require_space_deletion_allowed
 from bisheng.knowledge.domain.services.knowledge_reference_service import KnowledgeReferenceService, impact_digest
 from bisheng.knowledge.domain.services.model_reference_extractor import KNOWLEDGE_MODEL_REFERENCE_EXTRACTOR_VERSION
 from bisheng.permission.application.access import get_f048_resource_adapter, get_f048_runtime
@@ -210,7 +212,7 @@ class KnowledgeDeletionApplication:
             ):
                 raise ResourceReferenceConflictError()
             raise KnowledgeOperationPlanConflictError(reason="knowledge_delete_explicit_review_required")
-        result = await self.aconfirm(
+        await self.aconfirm(
             identity=identity,
             space_id=space_id,
             request=ProcessingCreateRequest(
@@ -219,8 +221,6 @@ class KnowledgeDeletionApplication:
                 idempotency_key=f"delete:{review.confirmation_id}",
             ),
         )
-        if result["state"] != "succeeded":
-            raise KnowledgeOperationPlanConflictError(reason="knowledge_delete_cleanup_pending")
         async with self._session() as session:
             job = await self.execution.aget(session, review.confirmation_id)
             return {
@@ -299,9 +299,9 @@ class KnowledgeDeletionApplication:
             root, checksum = await self.execution.aroot(active, plan.space_id, lock=True)
             if checksum != plan.source_revisions["root"]:
                 raise KnowledgeOperationPlanConflictError(reason="knowledge_delete_root_changed")
-            require_space_processing_idle(root, operation="delete")
-            if plan.operation != "knowledge_file_delete":
-                await SourceMoveInputRepository().arequire_released(active, space_id=plan.space_id)
+            require_space_deletion_allowed(root, operation=plan.operation)
+            await self.execution.arequire_transfer_idle(active, space_id=plan.space_id)
+            await SourceMoveInputRepository().arequire_released(active, space_id=plan.space_id)
             facts_holder["facts"] = await self._collect(
                 active,
                 space_id=plan.space_id,
@@ -331,7 +331,12 @@ class KnowledgeDeletionApplication:
             plan.source_revisions["inbound"] if manifest is None else manifest["execution"]["inbound_digest"]
         )
         if (
-            impact_digest(asdict(facts.scope)) != expected_scope
+            impact_digest(
+                deletion_scope_payload(facts.scope)
+                if values.get("processing_fence_version") == 1
+                else asdict(facts.scope)
+            )
+            != expected_scope
             or impact_digest([asdict(row) for row in facts.references]) != expected_inbound
             or (facts.coverage_epoch, facts.inventory_hash)
             != (plan.source_revisions["epoch"], plan.source_revisions["inventory"])
@@ -395,7 +400,7 @@ class KnowledgeDeletionApplication:
                     raise KnowledgeOperationPlanConflictError(reason="knowledge_delete_catalog_changed")
                 async with self._session() as session:
                     async with self._savepoint(session):
-                        _, facts, scope, _ = await self._locked(session, plan)
+                        root, facts, scope, _ = await self._locked(session, plan)
                         locked = await self.plans.aget_for_execution(
                             session,
                             plan.id,
@@ -428,6 +433,14 @@ class KnowledgeDeletionApplication:
                         manifest = self.execution.cleanup_manifest(scope)
                         manifest.update(
                             {
+                                "queued_files": [
+                                    {"file_id": row.id, "user_id": row.user_id}
+                                    for row in scope.resources
+                                    if row.file_type == 1
+                                ],
+                                "cancel_processing": root.state == 3
+                                or root.model_transition is not None
+                                or any(unit.processing_file_ids for unit in scope.units),
                                 "projection_targets": targets,
                                 "continuation": continuation,
                                 "execution": {
@@ -436,13 +449,16 @@ class KnowledgeDeletionApplication:
                                     "idempotency_key": request.idempotency_key,
                                     "actor_reference": plan.actor_reference,
                                     "selections": [asdict(row) for row in scope.selections],
-                                    "scope_digest": impact_digest(asdict(scope)),
+                                    "scope_digest": impact_digest(deletion_scope_payload(scope)),
                                     "inbound_digest": impact_digest([asdict(row) for row in facts.references])
                                     if plan.operation != "knowledge_file_delete"
                                     else impact_digest([]),
                                 },
                             }
                         )
+                        # The marker and task cancellation share the confirmation transaction.
+                        cancelled = await self.execution.acancel_processing(session, plan=locked, scope=scope)
+                        manifest["cancel_processing"] = manifest["cancel_processing"] or cancelled
                         await self.execution.acreate(session, plan=locked, manifest=manifest)
         from bisheng.knowledge.domain.services.knowledge_space_direct_delete_service import (
             KnowledgeSpaceDirectDeleteService,
@@ -451,7 +467,18 @@ class KnowledgeDeletionApplication:
         service = KnowledgeSpaceDirectDeleteService(
             session_factory=self.sessions, execution_application_factory=lambda: self, purge_step=self.purge_step
         )
-        await service.purge(plan.id)
+        # Parsing/rebuild deletion returns promptly; cleanup waits for actual
+        # writer transactions in the worker, never in this request.
+        async with self._session() as session:
+            job = await self.execution.aget(session, plan.id)
+        asynchronous = job.manifest.get("cancel_processing", False)
+        if asynchronous:
+            try:
+                await service.dispatch(tenant_id=job.tenant_id, job_id=job.id)
+            except Exception:
+                logger.exception("Deletion accepted; periodic dispatch will recover job={}", job.id)
+        else:
+            await service.purge(plan.id)
         async with self._session() as session:
             job = await self.execution.aget(session, plan.id)
             return {"job_id": job.id, "state": job.state.lower(), "accepted": job.state != "SUCCEEDED"}
@@ -492,10 +519,11 @@ class KnowledgeDeletionApplication:
                         or job.manifest["execution"]["plan_digest"] != plan.plan_digest
                     ):
                         raise KnowledgeOperationPlanConflictError(reason="knowledge_delete_execution_plan_changed")
-                    if self.execution.cleanup_manifest(scope) != {
-                        key: job.manifest[key] for key in self.execution.cleanup_manifest(scope)
-                    }:
+                    refreshed = self.execution.cleanup_manifest(scope)
+                    if any(refreshed[key] != job.manifest[key] for key in refreshed if key != "object_names"):
                         raise KnowledgeOperationPlanConflictError(reason="knowledge_delete_manifest_changed")
+                    # Keep the original frozen manifest. Newly generated keys
+                    # are also collected from the crash-safe output inventory.
                     actor = get_current_permission_actor()
                     expected = tuple(DeleteProjectionExpectation(job.id, row, actor.user_id) for row in targets)
                     for start in range(0, max(1, len(expected)), 200):
@@ -519,47 +547,9 @@ class KnowledgeDeletionApplication:
 
     async def apurge_claimed(self, job, *, repository, purge_step):
         try:
-            async with self._session() as session:
-                plan = await self.execution.apeek_plan(session, job.id)
-                self.execution.validate_job(job, plan)
-            if "fga" not in job.completed_steps:
-                for raw in job.manifest["projection_targets"]:
-                    await repository.advance(job)
-                    async with admission.identity(
-                        job.manifest["execution"]["actor_reference"], continuation=job.manifest["continuation"]
-                    ):
-                        target = VerifiedPermissionTarget.from_business_service(**raw)
-                        await admission.narrow(((target.resource_type, target.resource_id),))
-                        await (await get_f048_runtime()).project_delete(
-                            actor=get_current_permission_actor(),
-                            target=target,
-                            idempotency_key=delete_key(job.id, target),
-                        )
-                await repository.advance(job, step="fga")
-            if job.business_phase == "prepared":
-                await self._finalize(job)
-            if job.business_phase != "finalized":
-                raise KnowledgeOperationPlanConflictError(reason="knowledge_delete_phase_invalid")
-            # The business transaction above still needs the original mode and
-            # RESOURCE_DELETE receipt. Purge mirrors only after that cutover.
-            for raw in job.manifest["projection_targets"]:
-                await repository.advance(job)
-                target = VerifiedPermissionTarget.from_business_service(**raw)
-                # This is receipt-bound deletion cleanup, like physical purge.
-                # Personal ownership was checked before cutover: the deleted
-                # row cannot now satisfy a fresh live filter_owned query.
-                await self.permission_cleanup(
-                    actor=PermissionActor(user_id=job.applicant_user_id, current_tenant_id=job.tenant_id),
-                    target=target,
-                    delete_idempotency_key=delete_key(job.id, target),
-                )
-            for step in DELETE_STEPS[1:]:
-                if step not in job.completed_steps:
-                    await repository.advance(job)
-                    await purge_step(step, job)
-                    await repository.advance(job, step=step)
-            await repository.advance(job, complete=True)
-            return True
+            fence = ProcessingFenceRepository(async_sessions=self.sessions)
+            async with fence.cleanup(job):
+                return await self._purge_quiescent(job, repository=repository, purge_step=purge_step)
         except BaseException as error:
             try:
                 await repository.advance(job, error=type(error).__name__)
@@ -568,3 +558,52 @@ class KnowledgeDeletionApplication:
                     "Knowledge deletion failure checkpoint could not be acknowledged job={}", job.id
                 )
             raise
+
+    async def _purge_quiescent(self, job, *, repository, purge_step):
+        if job.manifest.get("cancel_processing"):
+            from bisheng.worker.knowledge.scheduler import FileScheduler
+
+            scheduler = FileScheduler()
+            for row in job.manifest.get("queued_files", ()):
+                await asyncio.to_thread(scheduler.purge_file, user_id=str(row["user_id"]), file_id=str(row["file_id"]))
+        async with self._session() as session:
+            plan = await self.execution.apeek_plan(session, job.id)
+            self.execution.validate_job(job, plan)
+        if "fga" not in job.completed_steps:
+            for raw in job.manifest["projection_targets"]:
+                await repository.advance(job)
+                async with admission.identity(
+                    job.manifest["execution"]["actor_reference"], continuation=job.manifest["continuation"]
+                ):
+                    target = VerifiedPermissionTarget.from_business_service(**raw)
+                    await admission.narrow(((target.resource_type, target.resource_id),))
+                    await (await get_f048_runtime()).project_delete(
+                        actor=get_current_permission_actor(),
+                        target=target,
+                        idempotency_key=delete_key(job.id, target),
+                    )
+            await repository.advance(job, step="fga")
+        if job.business_phase == "prepared":
+            await self._finalize(job)
+        if job.business_phase != "finalized":
+            raise KnowledgeOperationPlanConflictError(reason="knowledge_delete_phase_invalid")
+        # The business transaction above still needs the original mode and
+        # RESOURCE_DELETE receipt. Purge mirrors only after that cutover.
+        for raw in job.manifest["projection_targets"]:
+            await repository.advance(job)
+            target = VerifiedPermissionTarget.from_business_service(**raw)
+            # This is receipt-bound deletion cleanup, like physical purge.
+            # Personal ownership was checked before cutover: the deleted
+            # row cannot now satisfy a fresh live filter_owned query.
+            await self.permission_cleanup(
+                actor=PermissionActor(user_id=job.applicant_user_id, current_tenant_id=job.tenant_id),
+                target=target,
+                delete_idempotency_key=delete_key(job.id, target),
+            )
+        for step in DELETE_STEPS[1:]:
+            if step not in job.completed_steps:
+                await repository.advance(job)
+                await purge_step(step, job)
+                await repository.advance(job, step=step)
+        await repository.advance(job, complete=True)
+        return True

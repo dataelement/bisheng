@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button, Input } from "@bisheng/ui";
 import { useTranslation } from "react-i18next";
 import {
@@ -103,7 +104,7 @@ export function SpaceDirectoryOverlays({
               }}
             />
           ) : (
-            <p role="status">{t("loading")}</p>
+            <LoadingState label={t("loading")} className="min-h-32" />
           )}
           <DialogFooter>
             <Button variant="outlined" onClick={closePreview}>

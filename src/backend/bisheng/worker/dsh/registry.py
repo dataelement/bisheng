@@ -39,7 +39,7 @@ def register_dsh_tasks(app):
                 raise ValueError("DSH inspection requires a matching trusted tenant header")
             with profile_scope(tenant_id):
                 async with projection_worker_runtime() as service:
-                    _, changed = await service.inspect_running(
+                    next_cursor, changed = await service.inspect_running(
                         tenant_id, user_id, now=datetime.now(UTC), timeout_seconds=3600, cursor=cursor
                     )
                     await service.cleanup_batch(tenant_id, user_id)
@@ -56,52 +56,8 @@ def register_dsh_tasks(app):
     @app.task(name="dsh.dispatch_usage", ignore_result=True)
     def dispatch_usage():
         async def execute():
-            async with operations_worker_runtime() as runtime:
-                await runtime.activate()
-                quota = runtime.quota
-                scan_owner = owner or uuid4().hex
-                lease_key = quota.prefix + (":inspect_scan_lease" if inspect_requests else ":projection_scan_lease")
-                async with quota.topology.lock:
-                    await quota.topology.check()
-                    if owner is None:
-                        if cursor != 0 or not await quota.redis.set(lease_key, scan_owner, nx=True, px=60000):
-                            return 0
-                    elif not await quota.redis.eval(
-                        "if redis.call('GET',KEYS[1])==ARGV[1] then return redis.call('PEXPIRE',KEYS[1],60000) end return 0",
-                        1,
-                        lease_key,
-                        scan_owner,
-                    ):
-                        return 0
-                    next_cursor, keys = await quota.redis.scan(cursor, match=quota.prefix + ":*:events", count=100)
-                    partitions = []
-                    for key in keys:
-                        match = re.fullmatch(re.escape(quota.prefix) + r":\{([1-9][0-9]*):([1-9][0-9]*)\}:events", key)
-                        if not match:
-                            raise ValueError("Malformed quota stream partition")
-                        tenant_id, user_id = map(int, match.groups())
-                        groups = await quota.redis.xinfo_groups(key)
-                        group = next((row for row in groups if row["name"] == "dsh-sql-projection-v1"), None)
-                        if inspect_requests or group is None or group.get("pending") or group.get("lag") != 0:
-                            partitions.append((tenant_id, user_id))
-                for tenant_id, user_id in partitions:
-                    with profile_scope(tenant_id):
-                        target = inspect_usage if inspect_requests else project
-                        target.apply_async(args=[tenant_id, user_id], headers={"tenant_id": tenant_id})
-                if next_cursor:
-                    # Redis SCAN is incremental, but an immediate Celery chain can still
-                    # traverse a large shared DB at hundreds of task receipts per second.
-                    # One page per second keeps the lease alive while bounding broker,
-                    # Redis and task-lifecycle log pressure.
-                    scan_usage.apply_async(args=[next_cursor, inspect_requests, scan_owner], countdown=1)
-                else:
-                    await quota.redis.eval(
-                        "if redis.call('GET',KEYS[1])==ARGV[1] then return redis.call('DEL',KEYS[1]) end return 0",
-                        1,
-                        lease_key,
-                        scan_owner,
-                    )
-                return len(partitions)
+            async with projection_worker_runtime() as service:
+                return await UsageDispatcher(service).dispatch()
 
         return run_async_task(execute)
 

@@ -1,3 +1,4 @@
+import { useClientEnvironment } from "~/hooks/useClientEnvironment";
 import { WorkbenchMenuButton } from "~/layouts/WorkbenchMenuButton";
 import { refreshChannelState } from "./hooks/useChannelStateRefresh";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -87,6 +88,8 @@ export function ChannelDiscoveryHome({
     onCreateChannel,
 }: ChannelDiscoveryHomeProps) {
     const localize = useLocalize();
+    const { capabilities } = useClientEnvironment();
+    const hostOwnsHeader = capabilities?.hasHostChatHeader === true;
     // 模块标题跟随后台配置的菜单显示名称
     const menuNames = useWorkbenchMenuNames();
     const { showToast } = useToastContext();
@@ -218,6 +221,7 @@ export function ChannelDiscoveryHome({
 
     const renderHeader = () => {
         if (isH5) {
+            if (hostOwnsHeader) return null;
             return (
                 <div className="absolute inset-x-0 top-0 z-10 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
                     <div className="relative flex h-11 items-center px-4">
@@ -344,7 +348,7 @@ export function ChannelDiscoveryHome({
                     // Carousel supplies its own spacing via the viewport's py-8; only the
                     // empty illustration / loading states need the gap to the actions.
                     !showCarousel && "gap-9",
-                    isH5 && "pt-11"
+                    isH5 && !hostOwnsHeader && "pt-11"
                 )}
             >
                 {renderCenter()}

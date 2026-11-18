@@ -197,7 +197,7 @@ class LLMDao:
             await session.commit()
             await session.refresh(server)
 
-        if operator is not None and share_to_children and server.tenant_id == _ROOT_TENANT_ID:
+        if operator is not None and server.tenant_id == _ROOT_TENANT_ID:
             from bisheng.tenant.domain.services.resource_share_service import (
                 ResourceShareService,
             )
@@ -207,13 +207,13 @@ class LLMDao:
             # the per-request ``share_to_children`` flag — the ModelConfig UI
             # is the source of truth for super admins.
             try:
-                await ResourceShareService.enable_sharing(
-                    "llm_server",
-                    str(server.id),
-                    operator=operator,
+                writer = (
+                    ResourceShareService.enable_sharing if share_to_children else ResourceShareService.disable_sharing
                 )
+                await writer("llm_server", str(server.id), operator=operator)
             except Exception:
-                _LOG.exception("enable_sharing llm_server=%s failed", server.id)
+                _LOG.exception("set_sharing llm_server=%s failed", server.id)
+                raise
 
         return server
 
@@ -256,6 +256,12 @@ class LLMDao:
         from bisheng.llm.domain.repositories.model_deletion_repository import ModelDeletionRepository
         from bisheng.llm.domain.repositories.model_provider_operation_repository import ModelProviderOperationRepository
 
+        sharing_snapshot = None
+        if server.tenant_id == _ROOT_TENANT_ID and any(not model.id for model in models):
+            from bisheng.llm.application.model_sharing_lifecycle import prepare_added_provider_models
+
+            sharing_snapshot = await prepare_added_provider_models(server_id=server.id, identity=operator)
+
         async with get_async_db_session() as session:
             await session.begin()
             providers = ModelProviderOperationRepository()
@@ -271,6 +277,16 @@ class LLMDao:
                 raise LLMModelNotAccessibleError.http_exception()
             for field in ("name", "description", "type", "limit_flag", "limit", "config"):
                 setattr(current, field, getattr(server, field))
+            # F016: the form omits unchanged prices; fill them from the rows locked above so a
+            # price edited since the form loaded is kept, or a stale revision is refused.
+            from bisheng.llm.domain.pricing.service import apply_pricing_on_save
+
+            stored = await session.exec(
+                select(LLMModel.id, LLMModel.config).where(
+                    LLMModel.server_id == current.id, LLMModel.id.in_(retained or (0,))
+                )
+            )
+            apply_pricing_on_save(current.type, models, {row[0]: row[1] for row in stored.all()})
 
             add_models = []
             update_models = []
@@ -295,6 +311,17 @@ class LLMDao:
                     await initialize_new_model_visibility(
                         session, add_models, operator.user_id if operator else server.user_id
                     )
+            if add_models and current.tenant_id == _ROOT_TENANT_ID:
+                from bisheng.llm.application.model_sharing_lifecycle import initialize_added_provider_models
+
+                await session.flush()
+                await initialize_added_provider_models(
+                    session,
+                    server_id=current.id,
+                    model_ids=tuple(model.id for model in add_models),
+                    identity=operator,
+                    sharing_snapshot=sharing_snapshot,
+                )
             # Update data for existing models
             for one in update_models:
                 await session.exec(

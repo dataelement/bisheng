@@ -21,9 +21,9 @@ import { dailyFailureMetadata, createBrowserNetworkFailure, parseFailureInfo, ty
 import { SSE } from "sse.js";
 import type { AgentEvent, ChatMessage, ContentPart } from "~/api/chatApi";
 import { getSSEUrl } from "~/api/chatApi";
-import { translateApiErrorMessage, prepareBrowserHeaders } from "~/api/request";
-import { bindProjectChatCreation, captureProjectChatDraft, type ProjectChatDraft } from "~/layouts/WorkbenchSidebar/projectChatCreation";
 import { parseMemorySignal, type MemoryFlags } from "~/api/memory";
+import { prepareBrowserHeaders, translateApiErrorMessage } from "~/api/request";
+import { bindProjectChatCreation, captureProjectChatDraft, type ProjectChatDraft } from "~/layouts/WorkbenchSidebar/projectChatCreation";
 
 /**
  * Structured update emitted as agent SSE events stream in. Consumers merge
@@ -163,6 +163,7 @@ export function openChatStream(
 
     const sseUrl = submission.sseUrl || getSSEUrl();
     const sse = new SSE(sseUrl, {
+        start: false,
         payload: JSON.stringify({ ...payload, ...projectIntent }),
         headers: {
             "Content-Type": "application/json",
@@ -511,7 +512,7 @@ export function openChatStream(
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
         handleOffline();
     } else {
-        void prepareBrowserHeaders('POST', sseUrl).then(headers => {
+        void prepareBrowserHeaders('POST', sseUrl, sse.headers).then(headers => {
             if (endCalled || expectedClose) return;
             sse.headers = {...sse.headers, ...headers};
             sse.stream();

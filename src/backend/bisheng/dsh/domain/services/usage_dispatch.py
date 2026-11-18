@@ -52,7 +52,7 @@ class UsageDispatcher:
         return events
 
     async def repair(self):
-        """One SCAN page per tick: legacy streams, running orphans and retention are not hot-path work."""
+        """Inspect registered partitions only; unrelated Redis keys never affect the sweep."""
         redis = self.quota.redis
         lease, owner = self.quota.prefix + ":usage_repair_lease", uuid4().hex
         cursor_key = self.quota.prefix + ":usage_repair_cursor"
@@ -64,7 +64,7 @@ class UsageDispatcher:
             async with self.quota.topology.lock:
                 await self.quota.topology.check()
                 cursor = int(await redis.get(cursor_key) or 0)
-                next_cursor, streams = await redis.scan(cursor, match=self.quota.prefix + ":*:events", count=20)
+                next_cursor, streams = await redis.sscan(self.work.partitions, cursor, count=100)
             for stream in streams:
                 tenant, user = self.partition(stream)
                 async with self.quota.topology.lock:

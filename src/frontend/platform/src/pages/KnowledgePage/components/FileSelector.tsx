@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { FileIcon } from "@/components/bs-icons/file";
 import { truncateString } from "@/util/utils";
 import { DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuTrigger } from '@radix-ui/react-dropdown-menu';
@@ -412,7 +413,7 @@ export default function FileSelector({
                                 {/* 加载更多指示器 */}
                                 {hasMore && (
                                     <div className="px-4 py-3 flex justify-center items-center min-h-10">
-                                        {loading && <Outlined.Loading className="animate-spin w-5 h-5" />}
+                                        {loading && <LoadingState size="inline" />}
                                     </div>
                                 )}
 

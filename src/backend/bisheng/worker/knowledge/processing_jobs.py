@@ -18,6 +18,7 @@ from bisheng.core.context.tenant import get_current_tenant_id, tenant_execution_
 from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.application.processing_identity import restore_processing_actor
 from bisheng.knowledge.application.processing_owner import KnowledgeProcessingOwner
+from bisheng.knowledge.domain.repositories.processing_fence_repository import ProcessingCancelled
 from bisheng.knowledge.domain.repositories.processing_owner_repository import ProcessingOwnerRepository
 from bisheng.knowledge.domain.schemas.processing_job import ResourceVersionTarget
 from bisheng.knowledge.domain.services.processing_job_service import ProcessingJobService
@@ -65,13 +66,21 @@ async def _actor(reference, tenant_id, space_id):
 
 async def _failed(owner, job_id, revision, lease, error_code):
     async with get_async_db_session() as session:
-        changed = await owner.afail_attempt(
+        changed = await owner.afail_rebuild(
             session,
             job_id,
             expected_job_revision=revision,
             lease=lease,
             error_code=error_code,
         )
+        if changed is None:
+            changed = await owner.afail_attempt(
+                session,
+                job_id,
+                expected_job_revision=revision,
+                lease=lease,
+                error_code=error_code,
+            )
         current = changed if changed is not None else await owner.jobs.aget(session, job_id)
         result = _summary(current)
         await session.commit()
@@ -313,6 +322,10 @@ async def _execute_processing_job(job_id: str, expected_dispatch_revision: int):
                     await session.commit()
                     if not completed:
                         return result
+    except ProcessingCancelled:
+        logger.info("Knowledge processing cancelled by deletion job={}", job_id)
+        async with get_async_db_session() as session:
+            return _summary(await owner.jobs.aget(session, job_id))
     except BaseErrorCode as error:
         logger.opt(exception=True).warning("Knowledge processing rejected job={} code={}", job_id, error.Code)
         return await _failed(owner, job_id, revision, lease, error.Code)
@@ -322,6 +335,7 @@ async def _execute_processing_job(job_id: str, expected_dispatch_revision: int):
 
 
 async def _dispatch_pending_processing_jobs() -> int:
+    scan_proof = get_current_background_task()
     owner = _new_owner()
     count = 0
     for tenant_id in await _active_tenant_ids():
@@ -356,6 +370,19 @@ async def _dispatch_pending_processing_jobs() -> int:
                         )
                         await session.commit()
                     after = row.job_id
+            if scan_proof is not None and scan_proof.task_name == SCAN_TASK:
+                from bisheng.knowledge.domain.repositories.rebuild_cleanup_repository import RebuildCleanupRepository
+                from bisheng.worker.knowledge.rebuild_cleanup import cleanup_superseded_collections
+
+                async with get_async_db_session() as session:
+                    cleanup_due = await RebuildCleanupRepository().acandidates(session)
+                if cleanup_due:
+                    try:
+                        cleanup_superseded_collections.apply_async(
+                            headers={"tenant_id": tenant_id}, queue="knowledge_celery"
+                        )
+                    except Exception:
+                        logger.exception("Rebuild cleanup dispatch failed tenant={}", tenant_id)
     return count
 
 

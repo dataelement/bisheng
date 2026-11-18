@@ -323,6 +323,7 @@ interface RawKnowledgeFile {
 export interface UploadFileResponse {
     file_name: string;
     file_path: string;
+    preview_upload_ref?: string | null;
     flowId: string | null;
     relative_path: string | null;
     repeat: boolean;
@@ -509,6 +510,16 @@ function extractFileFailureEvidence(raw: { remark?: unknown; error_message?: unk
     return { remark: raw.remark, errorMessage: raw.error_message };
 }
 
+// Codes whose user-facing copy is a bare "parse failed" sentence: the code is
+// appended so support can trace the failure without exposing raw exceptions.
+const GENERIC_PARSE_FAILURE_CODES = new Set([10952]);
+
+function withParseFailureCode(code: unknown, message: string): string {
+    const numeric = Number(code);
+    if (!GENERIC_PARSE_FAILURE_CODES.has(numeric)) return message;
+    return String(i18next.t('com_knowledge.file_parse_failed_detail', { message, code: numeric }));
+}
+
 export function extractKnowledgeFileError(raw: any): string | undefined {
     const remark = raw?.remark;
     if (!remark && !raw?.error_message) return undefined;
@@ -518,7 +529,7 @@ export function extractKnowledgeFileError(raw: any): string | undefined {
             return formatSensitiveViolationMessage(Array.isArray(parsed.hits) ? parsed.hits : []);
         }
         const registered = formatMediaParseFailureMessage(parsed ?? {});
-        if (registered) return registered;
+        if (registered) return withParseFailureCode(parsed?.status_code ?? parsed?.code, registered);
         if (typeof parsed?.old_name === 'string' || typeof parsed?.new_name === 'string') return undefined;
         return String(i18next.t('api_errors.fallback'));
     } catch {
@@ -1446,7 +1457,7 @@ export { uploadFileToServerApi } from "./knowledgeUpload";
  */
 export async function addFilesApi(
     space_id: string,
-    data: { file_path: string[]; parent_id?: number | null }
+    data: { file_path: string[]; preview_upload_refs: string[]; parent_id?: number | null }
 ): Promise<KnowledgeFile[]> {
     const res = await request.post(
         `/api/v1/knowledge/space/${space_id}/files`,
@@ -1492,6 +1503,7 @@ export async function importWebLinkApi(
 /** One file of a folder upload: uploaded body path + its path inside the picked folder. */
 export interface FolderUploadItemPayload {
     file_path: string;
+    preview_upload_ref: string;
     relative_path: string;
     size: number;
 }

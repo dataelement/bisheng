@@ -77,13 +77,12 @@ async def test_ac10_initialize_registers_before_the_question_row(monkeypatch):
     order = []
     model = SimpleNamespace(id="m1", displayName="stub")
     monkeypatch.setattr(
-        chat_service.WorkStationService, "aget_config", AsyncMock(return_value=SimpleNamespace(models=[model]))
+        chat_service.WorkStationService, "aget_config", AsyncMock(return_value=SimpleNamespace(models=[]))
     )
-    # The user-facing model list comes from the shared catalog (online models the
-    # user may see); this test only needs model "m1" to be selectable.
-    monkeypatch.setattr(
-        "bisheng.dsh.domain.services.model_catalog.user_workbench_models", AsyncMock(return_value=[model])
-    )
+    # 3.1: the selectable models come from the user's visible workbench models.
+    from bisheng.dsh.domain.services import model_catalog
+
+    monkeypatch.setattr(model_catalog, "user_workbench_models", AsyncMock(return_value=[model]))
     monkeypatch.setattr(chat_service.MessageSessionDao, "async_insert_one", AsyncMock())
     monkeypatch.setattr(chat_service.telemetry_service, "log_event", AsyncMock())
 
@@ -92,6 +91,8 @@ async def test_ac10_initialize_registers_before_the_question_row(monkeypatch):
 
     monkeypatch.setattr(chat_service.MessageSessionDao, "async_get_one", _get_one)
     monkeypatch.setattr(chat_service, "promote_chat_attachments", AsyncMock())
+    # skip_llm (a blocked input) also flags the session row since 3.1.
+    monkeypatch.setattr(chat_service, "mark_session_content_violation", MagicMock())
 
     async def _insert(row):
         order.append(("question", row.chat_id))
@@ -103,8 +104,6 @@ async def test_ac10_initialize_registers_before_the_question_row(monkeypatch):
     async def _register(chat_id):
         order.append(("register", chat_id))
 
-    # skip_llm marks the session as a content-safety hit; that write is not under test.
-    monkeypatch.setattr(chat_service, "mark_session_content_violation", lambda _chat_id: None)
     data = SimpleNamespace(model="m1", conversationId=None, files=None, text="hi", project_id=None)
     out = await chat_service._agent_initialize_chat(data, login_user(), skip_llm=True, memory_register=_register)
     chat_id = out[1].chat_id

@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { Outlined } from 'bisheng-icons';
 import cn from '../../utils/cn';
+import { useLoadingIndicatorRenderer } from '../../providers/LoadingIndicatorProvider';
 import { Checkbox } from '../Checkbox/Checkbox';
 import { CONTROL_BASE, CONTROL_CHECKED, CONTROL_SIZE } from '../Selection/shared';
 import { Tooltip } from '../Tooltip/Tooltip';
@@ -112,6 +113,7 @@ interface RowProps extends Omit<CascaderPanelProps, 'columns' | 'searchResults' 
 }
 
 function CascaderRow(props: RowProps) {
+  const renderIndicator = useLoadingIndicatorRenderer();
   const {
     treeId,
     entry,
@@ -201,7 +203,8 @@ function CascaderRow(props: RowProps) {
       {option.icon !== undefined && <span className={OPTION_ICON}>{option.icon}</span>}
       <OptionLabel label={label} />
       {loading ? (
-        <Outlined.Loading className="size-4 shrink-0 animate-spin text-text-3" aria-hidden />
+        renderIndicator ? <span className="inline-flex shrink-0" aria-hidden>{renderIndicator({ className: 'size-4 text-text-3' })}</span>
+          : <Outlined.Loading className="size-4 shrink-0 animate-spin text-text-3" aria-hidden />
       ) : parent ? (
         <Outlined.Right
           className={cn('size-4 shrink-0 text-text-3', failed && 'text-warning')}
@@ -215,6 +218,7 @@ function CascaderRow(props: RowProps) {
 }
 
 export function CascaderPanel(props: CascaderPanelProps) {
+  const renderIndicator = useLoadingIndicatorRenderer();
   const {
     columns,
     searchResults,
@@ -256,8 +260,13 @@ export function CascaderPanel(props: CascaderPanelProps) {
   if (loading) {
     return (
       <div className={PANEL_MESSAGE} role="status">
-        <Outlined.Loading className="size-4 animate-spin" aria-hidden />
-        {loadingText}
+        {renderIndicator ? <>
+          <span className="inline-flex shrink-0" aria-hidden>{renderIndicator({ className: 'size-4' })}</span>
+          <span className="sr-only">{loadingText}</span>
+        </> : <>
+          <Outlined.Loading className="size-4 animate-spin" aria-hidden />
+          {loadingText}
+        </>}
       </div>
     );
   }
