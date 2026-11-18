@@ -35,6 +35,8 @@
 
 新增失败为 0，6 项原先失败转为通过。既有失败集中在旧管理中间件预期、接口范围生成清单漂移、缺少权限运行时等；10 项 fixture 错误均为旧测试仍尝试替换已不存在的 `tenant_scope.TenantDao`，未将整组回归描述为全绿。较小的关联选择为 69 通过、1 项既有权限运行时初始化失败。
 
+同步发布线 `8d343af331` 后，重新执行准入、子租户知识列表、原知识列表及三组模型共享关联回归，**50 项全部通过**。
+
 Ruff format 已执行；准入文件和新增测试 lint 通过。`knowledge_service.py` 修复前后使用同一 `src/backend/pyproject.toml` 检查，均为 38 项存量诊断，新增 0；F821 与 architecture guard 通过。`git diff --check` 通过。
 
 ## sdd-code-review
