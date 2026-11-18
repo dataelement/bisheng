@@ -1828,6 +1828,8 @@ class ChannelService:
         if not channels:
             raise ChannelNotFoundError()
         channel = channels[0]
+        if channel.tenant_id != login_user.tenant_id:
+            raise ChannelNotFoundError()
 
         # 2. Verify current user permission.
         # F040: a single ``find_membership_split`` lookup returns both

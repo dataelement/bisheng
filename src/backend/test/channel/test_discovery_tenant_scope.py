@@ -67,3 +67,15 @@ async def test_cross_tenant_subscription_rejected_before_access_or_membership():
             SimpleNamespace(channel_id="root-channel"), SimpleNamespace(user_id=841, tenant_id=69)
         )
     service._has_channel_subscription_access.assert_not_awaited()
+
+
+async def test_cross_tenant_public_detail_is_rejected_before_enrichment():
+    service = _service("get_channel_detail")
+    service.channel_repository = SimpleNamespace(
+        find_channels_by_ids=AsyncMock(return_value=[SimpleNamespace(tenant_id=1)])
+    )
+    service.space_channel_member_repository = SimpleNamespace(
+        find_membership_split=AsyncMock(side_effect=AssertionError("foreign metadata must not be loaded"))
+    )
+    with pytest.raises(ChannelNotFoundError):
+        await service.get_channel_detail("root-channel", SimpleNamespace(user_id=841, tenant_id=69))

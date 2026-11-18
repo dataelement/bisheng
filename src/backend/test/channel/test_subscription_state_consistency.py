@@ -47,6 +47,7 @@ async def test_detail_square_and_followed_share_effective_access(monkeypatch, st
     now = datetime.now()
     channel = SimpleNamespace(
         id="channel-1",
+        tenant_id=7,
         name="News",
         description="",
         user_id=9,
