@@ -328,23 +328,30 @@ class KunlianPlatformLLMClient:
         *,
         call_id: str,
         messages: list[dict[str, Any]],
-        temperature: float = 1.0,
+        workflow_run_id: str | None = None,
+        node_run_id: str | None = None,
         trace_id: str | None = None,
     ) -> ChatCompletionResult:
         """调用昆联 POST /api/platform/v1/chat/completions（标准 OpenAI 非流式 JSON 契约）。"""
         if not call_id.strip() or call_id.strip().lower() == "latest" or not messages:
             raise PlatformLLMConfigurationError()
+        req_trace = trace_id or uuid4().hex
+        wf_run = (workflow_run_id or "").strip() or req_trace
+        nd_run = (node_run_id or "").strip() or uuid4().hex
         headers = {
             "Authorization": f"Bearer {resource_token.get_secret_value()}",
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "X-Trace-ID": trace_id or uuid4().hex,
+            "X-Trace-ID": req_trace,
         }
         payload = {
             "model": call_id.strip(),
             "messages": messages,
-            "temperature": temperature,
             "stream": False,
+            "metadata": {
+                "workflow_run_id": wf_run,
+                "node_run_id": nd_run,
+            },
         }
         try:
             async with self._build_client(self.config.invoke_timeout_seconds) as client:

@@ -67,7 +67,8 @@ class PlatformLLMNode(BaseNode):
                 int(self.user_id),
                 call_id=ref.call_id,
                 messages=messages,
-                temperature=self._temperature,
+                workflow_run_id=self.workflow_id,
+                node_run_id=unique_id,
             ),
             timeout=None,
         )

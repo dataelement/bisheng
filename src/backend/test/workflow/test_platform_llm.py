@@ -257,12 +257,11 @@ def test_platform_llm_node_execution(monkeypatch):
 
     assert graph_state.get_variable("platform_llm_1", "output") == "昆联模型回复：你好"
     assert len(seen_payloads) == 1
-    assert seen_payloads[0] == {
-        "model": "ver-101",
-        "messages": [
-            {"role": "system", "content": "你是助手"},
-            {"role": "user", "content": "问题：设备温度过高怎么办"},
-        ],
-        "temperature": 0.3,
-        "stream": False,
-    }
+    assert seen_payloads[0]["model"] == "ver-101"
+    assert seen_payloads[0]["messages"] == [
+        {"role": "system", "content": "你是助手"},
+        {"role": "user", "content": "问题：设备温度过高怎么办"},
+    ]
+    assert seen_payloads[0]["stream"] is False
+    assert seen_payloads[0]["metadata"]["workflow_run_id"] == "wf-1"
+    assert seen_payloads[0]["metadata"]["node_run_id"]

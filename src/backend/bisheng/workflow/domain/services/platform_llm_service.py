@@ -161,7 +161,8 @@ class PlatformLLMService:
         *,
         call_id: str,
         messages: list[dict],
-        temperature: float = 1.0,
+        workflow_run_id: str | None = None,
+        node_run_id: str | None = None,
         session_reference: str | None = None,
         trace_id: str | None = None,
     ):
@@ -178,6 +179,7 @@ class PlatformLLMService:
             exchanged.access_token,
             call_id=call_id,
             messages=messages,
-            temperature=temperature,
+            workflow_run_id=workflow_run_id,
+            node_run_id=node_run_id,
             trace_id=req_trace,
         )
