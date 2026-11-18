@@ -1,0 +1,3 @@
+interface:
+  display_name: "SDD 实施计划"
+  short_description: "Plan verifiable slices with dependencies and acceptance"

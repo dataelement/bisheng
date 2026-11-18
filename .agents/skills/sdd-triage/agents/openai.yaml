@@ -1,0 +1,3 @@
+interface:
+  display_name: "SDD 任务评估与诊断"
+  short_description: "Assess task scope, bug causes, risk and entry stage"

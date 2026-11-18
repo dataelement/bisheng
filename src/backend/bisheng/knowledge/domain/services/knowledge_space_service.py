@@ -2922,6 +2922,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         membership_map = {int(member.business_id): member for member in (memberships or [])}
         spaces = await KnowledgeDao.async_get_spaces_by_ids(space_ids, order_by)
+        # KnowledgeState.DELETING means retirement has started: the delete API
+        # already returned success, but the hard-delete Celery task may still
+        # be running. async_get_spaces_by_ids does not filter by state, so
+        # without this skip the sidebar would keep showing a "deleted" space.
+        spaces = [
+            space
+            for space in spaces
+            if int(getattr(space, "state", KnowledgeState.PUBLISHED.value) or 0)
+            != KnowledgeState.DELETING.value
+        ]
         if exclude_created:
             spaces = [space for space in spaces if space.user_id != self.login_user.user_id]
         if not spaces:

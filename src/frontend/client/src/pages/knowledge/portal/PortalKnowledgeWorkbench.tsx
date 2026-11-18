@@ -661,17 +661,26 @@ export default function PortalKnowledgeWorkbench() {
         });
         if (!ok) return;
 
+        const levelQueryKey = getSpacesLevelQueryKey(space.spaceLevel);
+        const previousSpaces = queryClient.getQueryData<KnowledgeSpace[]>(levelQueryKey);
+        // Optimistic remove: delete returns after retirement starts (DELETING),
+        // before hard-delete finishes. Keep the sidebar in sync immediately.
+        queryClient.setQueryData<KnowledgeSpace[]>(levelQueryKey, (current) =>
+            (current ?? []).filter((item) => item.id !== space.id),
+        );
+        if (activeSpace?.id === space.id) {
+            setActiveSpace(getNextActiveSpace(space.id));
+        }
         try {
             await deleteSpaceApi(space.id);
-            if (activeSpace?.id === space.id) {
-                setActiveSpace(getNextActiveSpace(space.id));
-            }
-            // Only refresh the current category list — other levels are unchanged.
-            await queryClient.invalidateQueries({
-                queryKey: getSpacesLevelQueryKey(space.spaceLevel),
-            });
+            await queryClient.invalidateQueries({ queryKey: levelQueryKey });
             showToast({ message: "知识库已删除", severity: NotificationSeverity.SUCCESS });
         } catch (error) {
+            if (previousSpaces) {
+                queryClient.setQueryData(levelQueryKey, previousSpaces);
+            } else {
+                await queryClient.invalidateQueries({ queryKey: levelQueryKey });
+            }
             showToast({
                 message: extractKnowledgeActionErrorMessage(error) || "删除知识库失败",
                 severity: NotificationSeverity.ERROR,
