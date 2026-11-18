@@ -1,13 +1,12 @@
-import { Tabs } from "@bisheng/ui";
+import { Segmented } from "@bisheng/ui";
 import { useQueryClient } from "@tanstack/react-query";
-import type { ReactElement } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/bs-ui/dialog";
 import {
   knowledgeQueryKeys,
@@ -22,7 +21,6 @@ interface SpaceTaskRecordsDialogProps {
   onOpenChange: (open: boolean) => void;
   canReadProcessing: boolean;
   initialKind?: "embedding_rebuild" | "move_index";
-  trigger?: ReactElement;
 }
 
 export function SpaceTaskRecordsDialog({
@@ -32,63 +30,75 @@ export function SpaceTaskRecordsDialog({
   onOpenChange,
   canReadProcessing,
   initialKind = "embedding_rebuild",
-  trigger,
 }: SpaceTaskRecordsDialogProps) {
   const { t } = useTranslation("knowledge");
-  const client = useQueryClient();
   const title = t("detail.task_records");
-  const moves = (
-    <SpaceProcessingPanel
-      scope={scope}
-      spaceId={spaceId}
-      mode="jobs"
-      jobKind="move_index"
-      presentation="inline"
-      hideTitle={canReadProcessing}
-      onSaved={() => {
-        void client.invalidateQueries({ queryKey: knowledgeQueryKeys.scope(scope) });
-      }}
-    />
-  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
       <DialogContent
-        className="flex max-h-[calc(100dvh-64px)] w-[calc(100vw-32px)] max-w-[600px] flex-col"
+        className="flex h-[min(clamp(24rem,80dvh,48rem),calc(100dvh-3rem))] w-[calc(100vw-32px)] max-w-[600px] flex-col overflow-hidden"
         aria-describedby={undefined}
       >
         <DialogHeader className="shrink-0 text-left">
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-        <div className="min-h-0 overflow-y-auto overscroll-contain">
-          {canReadProcessing ? (
-            <Tabs
-              aria-label={title}
-              size="small"
-              className="space-y-3"
-              defaultActiveKey={initialKind}
-              items={[
-                {
-                  key: "embedding_rebuild",
-                  label: t("f118.processing_title_jobs"),
-                  children: (
-                    <SpaceProcessingPanel
-                      scope={scope}
-                      spaceId={spaceId}
-                      mode="jobs"
-                      jobKind="embedding_rebuild"
-                      presentation="inline"
-                      hideTitle
-                    />
-                  ),
-                },
-                { key: "move_index", label: t("move.jobs"), children: moves },
-              ]}
-            />
-          ) : moves}
+        <div className="flex min-h-0 flex-1 flex-col">
+          <TaskRecordsContent
+            scope={scope}
+            spaceId={spaceId}
+            canReadProcessing={canReadProcessing}
+            initialKind={initialKind}
+          />
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function TaskRecordsContent({
+  scope,
+  spaceId,
+  canReadProcessing,
+  initialKind,
+}: Pick<SpaceTaskRecordsDialogProps, "scope" | "spaceId" | "canReadProcessing" | "initialKind">) {
+  const { t } = useTranslation("knowledge");
+  const client = useQueryClient();
+  const [selectedKind, setSelectedKind] = useState(initialKind ?? "embedding_rebuild");
+  const kind = canReadProcessing ? selectedKind : "move_index";
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      {canReadProcessing && (
+        <Segmented
+          className="shrink-0 self-start"
+          aria-label={t("detail.task_records")}
+          value={kind}
+          onChange={(value) => setSelectedKind(value as "embedding_rebuild" | "move_index")}
+          options={[
+            {
+              value: "embedding_rebuild",
+              label: t("f118.processing_title_jobs"),
+            },
+            {
+              value: "move_index",
+              label: t("move.jobs"),
+            },
+          ]}
+        />
+      )}
+      <SpaceProcessingPanel
+        scope={scope}
+        spaceId={spaceId}
+        mode="jobs"
+        jobKind={kind}
+        presentation="inline"
+        fill
+        hideTitle={canReadProcessing}
+        onSaved={kind === "move_index" ? () => {
+          void client.invalidateQueries({ queryKey: knowledgeQueryKeys.scope(scope) });
+        } : undefined}
+      />
+    </div>
   );
 }

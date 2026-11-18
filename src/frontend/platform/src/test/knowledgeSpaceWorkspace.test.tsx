@@ -9,12 +9,12 @@ import { KnowledgeSpaceCreatePage } from "@/pages/KnowledgePage/KnowledgeSpaceCr
 import { KnowledgeSpaceSettingsPage } from "@/pages/KnowledgePage/KnowledgeSpaceSettingsPage";
 import { userContext } from "@/contexts/userContext";
 import { showApiError } from "@/controllers/request";
-import type { ProcessingJobRead } from "@/controllers/API/knowledgeSpace";
 import type { FilesProps } from "@/pages/KnowledgePage/components/Files";
 import type { CreateSpaceForm } from "@/pages/KnowledgePage/components/KnowledgeLibraryDialog";
 import type { SpaceSettingsEditor } from "@/pages/KnowledgePage/components/SpaceSettingsEditor";
 import type { SpaceFileDetail } from "@/pages/KnowledgePage/components/SpaceFileDetail";
 import type { User } from "@/types/api/user";
+import { jobsPath, mockTaskRecords, taskKinds } from "./knowledgeSpaceTaskFixtures";
 
 const mock = vi.hoisted(() => ({ get: vi.fn(), permissions: vi.fn(), scope: vi.fn() }));
 vi.mock("@/contexts/userContext", async () => ({ userContext: (await import("react")).createContext({ user: {} }) }));
@@ -57,9 +57,6 @@ vi.mock("@/pages/KnowledgePage/components/SpaceFileDetail", () => ({
 }));
 
 const scope = { identityKey: "user:5", tenantId: 60, managementTenantId: 60, view: "ordinary" } as const;
-const taskKinds = ["embedding_rebuild", "move_index"] as const;
-const jobsPath = "/api/v1/knowledge/space/7/processing-jobs";
-type TaskKind = (typeof taskKinds)[number];
 const clients: QueryClient[] = [];
 function Location() {
   const location = useLocation();
@@ -87,35 +84,17 @@ function mount(path = "/filelib", user: Partial<User> = {}) {
   return { ...view, client };
 }
 
-function mockTaskRecords(kinds: readonly TaskKind[]) {
-  const jobs: ProcessingJobRead[] = kinds.map((kind) => ({
-    id: `job-${kind}`,
-    space_id: 7,
-    kind,
-    state: "succeeded",
-    revision: 1,
-    accepted_at: "2026-11-17T09:00:00",
-    started_at: null,
-    finished_at: null,
-    total_count: 1,
-    succeeded_count: 1,
-    failed_count: 0,
-    pending_count: 0,
-    hidden_item_count: 0,
-    retryable: false,
-    error_code: null,
-    obsolete_reason: null,
-  }));
-  const read = mock.get.getMockImplementation()!;
-  mock.get.mockImplementation(async (url: string, options?: { params?: { kind?: string } }) => {
-    if (url === jobsPath) {
-      const data = jobs.filter(({ kind }) => kind === options?.params?.kind);
-      return { data, total: data.length };
-    }
-    if (url.startsWith(`${jobsPath}/`) && url.endsWith("/items")) return { data: [], total: 0 };
-    const job = jobs.find(({ id }) => url === `${jobsPath}/${id}`);
-    return job ?? read(url, options);
-  });
+async function openSpaceMore() {
+  const info = await screen.findByRole("button", { name: "detail.space_info" });
+  const more = await within(info.closest("header")!).findByRole("button", { name: "more" });
+  fireEvent.keyDown(more, { key: "Enter" });
+  return { more, menu: within(await screen.findByRole("menu")) };
+}
+async function openTaskRecords() {
+  const { more, menu } = await openSpaceMore();
+  fireEvent.click(await menu.findByRole("menuitem", { name: "detail.view_task_records" }));
+  await screen.findByRole("dialog", { name: "detail.task_records" });
+  return more;
 }
 
 beforeEach(() => {
@@ -229,56 +208,108 @@ it("hides task records when both histories are empty", async () => {
     expect(client.isFetching()).toBe(0);
   });
   expect(screen.queryByRole("button", { name: "detail.task_records" })).not.toBeInTheDocument();
+  expect((await openSpaceMore()).menu.queryByRole("menuitem", { name: "detail.view_task_records" })).not.toBeInTheDocument();
 });
 
-it.each(taskKinds)("shows the root header entry when only %s has records and hides it in folders", async (kind) => {
+it.each(taskKinds)("shows the root menu entry when only %s has records and hides it in folders", async (kind) => {
   mock.permissions.mockResolvedValue({ actions: ["edit"] });
-  mockTaskRecords([kind]);
+  mockTaskRecords(mock.get, [kind]);
   mount("/filelib/7");
-  const title = await screen.findByRole("heading", { name: "Reports" });
-  const entry = await within(title.closest("header")!).findByRole("button", { name: "detail.task_records" });
-  expect(title.compareDocumentPosition(entry) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-
+  const interaction = userEvent.setup();
+  expect(await (await openSpaceMore()).menu.findByRole("menuitem", { name: "detail.view_task_records" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "detail.task_records" })).not.toBeInTheDocument();
+  await interaction.keyboard("{Escape}");
   const sidebar = within(screen.getByRole("complementary"));
   fireEvent.click(await sidebar.findByRole("button", { name: "Finance" }));
   await screen.findByRole("navigation", { name: "f118.current_folder" });
-  expect(screen.queryByRole("button", { name: "detail.task_records" })).not.toBeInTheDocument();
-
+  expect((await openSpaceMore()).menu.queryByRole("menuitem", { name: "detail.view_task_records" })).not.toBeInTheDocument();
+  await interaction.keyboard("{Escape}");
   fireEvent.click(await within(screen.getByRole("navigation", { name: "f118.current_folder" })).findByRole("button", { name: "Reports" }));
-  expect(await screen.findByRole("button", { name: "detail.task_records" })).toBeVisible();
+  expect(await (await openSpaceMore()).menu.findByRole("menuitem", { name: "detail.view_task_records" })).toBeVisible();
+});
+
+it.each(taskKinds)("opens the empty category when only %s has records and returns to its history", async (kind) => {
+  mock.permissions.mockResolvedValue({ actions: ["edit"] });
+  mockTaskRecords(mock.get, [kind]);
+  mount("/filelib/7");
+  const interaction = userEvent.setup();
+  await openTaskRecords();
+  const dialog = within(await screen.findByRole("dialog", { name: "detail.task_records" }));
+  const processing = dialog.getByRole("radio", { name: "f118.processing_title_jobs" });
+  const moves = dialog.getByRole("radio", { name: "move.jobs" });
+  const populated = kind === "embedding_rebuild" ? processing : moves;
+  const empty = kind === "embedding_rebuild" ? moves : processing;
+  const emptyKind = kind === "embedding_rebuild" ? "move_index" : "embedding_rebuild";
+  const rowLabel = kind === "embedding_rebuild"
+    ? "f118.processing_kind_embedding_rebuild · f118.processing_state_succeeded"
+    : "move.jobs · f118.processing_state_succeeded";
+
+  expect(populated).toBeEnabled();
+  expect(populated).toHaveAttribute("aria-checked", "true");
+  expect(empty).toBeEnabled();
+  expect(empty).toHaveAttribute("aria-checked", "false");
+  expect(await dialog.findByRole("link", { name: rowLabel })).toBeVisible();
+
+  await interaction.click(empty);
+  expect(populated).toHaveAttribute("aria-checked", "false");
+  expect(empty).toHaveAttribute("aria-checked", "true");
+  const emptyLabel = kind === "embedding_rebuild" ? "move.no_jobs" : "detail.no_jobs";
+  const emptyState = await dialog.findByText(emptyLabel);
+  expect(emptyState).toBeVisible();
+  expect(emptyState.parentElement?.querySelector('[aria-hidden="true"] svg')).toBeInTheDocument();
+  expect(empty).not.toHaveAttribute("aria-describedby");
+  expect(mock.get).toHaveBeenCalledWith(jobsPath, {
+    params: { page: 1, page_size: 20, kind: emptyKind },
+  });
+
+  expect(empty).toHaveFocus();
+  const arrow = kind === "embedding_rebuild" ? "ArrowLeft" : "ArrowRight";
+  await interaction.keyboard(`{${arrow}>}`);
+  await waitFor(() => expect(populated).toHaveAttribute("aria-checked", "true"));
+  await interaction.keyboard(`{/${arrow}}`);
+  expect(empty).toHaveAttribute("aria-checked", "false");
+  expect(await dialog.findByRole("link", { name: rowLabel })).toBeVisible();
+  expect(dialog.queryByText(emptyLabel)).not.toBeInTheDocument();
 });
 
 it("opens both histories and their job details from a single dialog", async () => {
   mock.permissions.mockResolvedValue({ actions: ["edit"] });
-  mockTaskRecords(taskKinds);
+  mockTaskRecords(mock.get, taskKinds);
   mount("/filelib/7");
   const interaction = userEvent.setup();
-  const entry = await screen.findByRole("button", { name: "detail.task_records" });
-  await interaction.click(entry);
+  const more = await openTaskRecords();
   const dialog = within(await screen.findByRole("dialog", { name: "detail.task_records" }));
-  expect(dialog.getByRole("tab", { name: "f118.processing_title_jobs" })).toHaveAttribute("aria-selected", "true");
-  await interaction.click(await dialog.findByRole("button", { name: "f118.processing_kind_embedding_rebuild · f118.processing_state_succeeded" }));
-  expect(await dialog.findByText("f118.processing_counts")).toBeVisible();
+  expect(dialog.getByRole("radio", { name: "f118.processing_title_jobs" })).toHaveAttribute("aria-checked", "true");
+  await interaction.click(await dialog.findByRole("link", { name: "f118.processing_kind_embedding_rebuild · f118.processing_state_succeeded" }));
+  const counts = await dialog.findByText("f118.processing_counts");
+  const detailHeader = within(dialog.getByRole("heading", { name: "f118.processing_items", level: 3 }).closest("header")!);
+  expect(detailHeader.getByText("f118.processing_counts")).toBe(counts);
+  expect(dialog.queryByText("f118.processing_state_succeeded", { selector: "p" })).not.toBeInTheDocument();
+  const back = detailHeader.getByRole("button", { name: "detail.back_to_jobs" });
+  expect(back).toHaveTextContent("");
   expect(mock.get).toHaveBeenCalledWith(`${jobsPath}/job-embedding_rebuild`, expect.any(Object));
-  await interaction.click(dialog.getByRole("button", { name: "detail.back_to_jobs" }));
+  await interaction.click(back);
 
-  await interaction.click(dialog.getByRole("tab", { name: "move.jobs" }));
-  await interaction.click(await dialog.findByRole("button", { name: "move.jobs · f118.processing_state_succeeded" }));
+  await interaction.click(dialog.getByRole("radio", { name: "move.jobs" }));
+  await interaction.click(await dialog.findByRole("link", { name: "move.jobs · f118.processing_state_succeeded" }));
   expect(await dialog.findByText("f118.processing_counts")).toBeVisible();
   expect(mock.get).toHaveBeenCalledWith(`${jobsPath}/job-move_index`, { params: { kind: "move_index" } });
 
   await interaction.keyboard("{Escape}");
   expect(screen.queryByRole("dialog", { name: "detail.task_records" })).not.toBeInTheDocument();
   expect(screen.getByTestId("location")).toHaveTextContent(/^\/filelib\/7$/);
+  await waitFor(() => expect(more).toHaveFocus());
+  expect(await (await openSpaceMore()).menu.findByRole("menuitem", { name: "detail.view_task_records" })).toBeVisible();
 });
 
 it("opens permitted move records without requesting processing history for a non-editor", async () => {
   mock.permissions.mockResolvedValue({ actions: ["visible"] });
-  mockTaskRecords(["move_index"]);
+  mockTaskRecords(mock.get, ["move_index"]);
   mount("/filelib/7");
-  fireEvent.click(await screen.findByRole("button", { name: "detail.task_records" }));
+  await openTaskRecords();
   const dialog = within(await screen.findByRole("dialog", { name: "detail.task_records" }));
-  expect(await dialog.findByRole("button", { name: "move.jobs · f118.processing_state_succeeded" })).toBeVisible();
+  expect(await dialog.findByRole("link", { name: "move.jobs · f118.processing_state_succeeded" })).toBeVisible();
+  expect(dialog.queryByRole("radio", { name: "f118.processing_title_jobs" })).not.toBeInTheDocument();
   expect(mock.get).not.toHaveBeenCalledWith(jobsPath, {
     params: expect.objectContaining({ kind: "embedding_rebuild" }),
   });
@@ -538,7 +569,7 @@ it.each([
 it("waits for a concrete management scope before reading spaces", () => {
   mock.scope.mockReturnValue({ scopes: undefined, canManage: true, isLoading: true, retry: vi.fn() });
   mount("/filelib?view=admin");
-  expect(screen.getByText("f118.loading_space")).toBeVisible();
+  expect(screen.getByRole("status", { name: "f118.loading_space" })).toBeVisible();
   expect(screen.queryByText("f118.scope_unavailable")).not.toBeInTheDocument();
   expect(mock.get).not.toHaveBeenCalled();
 });

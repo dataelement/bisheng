@@ -1,10 +1,13 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { KnowledgeDialogTable } from "@bisheng/knowledge";
-import { Button, Pagination } from "@bisheng/ui";
+import { Button, Pagination, Tooltip } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   knowledgeSpaceApi,
+  type ItemState,
   type JobState,
   type ProcessingKind,
 } from "@/controllers/API/knowledgeSpace";
@@ -22,6 +25,8 @@ import {
 import { processingFailureKey } from "./processingFailure";
 import { Progress } from "@/components/bs-ui/progress";
 import { showApiError } from "@/controllers/request";
+import { SpaceProcessingLoading } from "./SpaceProcessingLoading";
+import { SpaceProcessingItemsTable } from "./SpaceProcessingItemsTable";
 import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { createDshOperationId as createOperationId } from "@/util/dshOperationId";
 
@@ -32,6 +37,8 @@ interface SpaceProcessingProgressProps {
   kind?: ProcessingKind;
   onCompleted?: () => void;
   onStateChange?: (state: JobState) => void;
+  onBack?: () => void;
+  fill?: boolean;
 }
 export function SpaceProcessingProgress({
   scope,
@@ -40,11 +47,15 @@ export function SpaceProcessingProgress({
   kind,
   onCompleted,
   onStateChange,
+  onBack,
+  fill = false,
 }: SpaceProcessingProgressProps) {
   const { t } = useTranslation("knowledge");
   const metadata = kind === "metadata_schema_change";
   const [page, setPage] = useState(1),
     [busy, setBusy] = useState(false);
+  const [itemFilter, setItemFilter] = useState<ItemState>();
+  const history = Boolean(onBack) && !metadata;
   const locale = usePaginationLocale();
   const api = useMemo(
     () => ({
@@ -80,7 +91,7 @@ export function SpaceProcessingProgress({
     scope,
     spaceId,
     jobId,
-    { page, page_size: 20, state: metadata ? "failed" : undefined },
+    { page, page_size: 20, state: metadata ? "failed" : itemFilter },
     api,
     { enabled: !metadata || hasFailures, ...queryOptions },
   );
@@ -173,16 +184,41 @@ export function SpaceProcessingProgress({
   }
   const showItems = !metadata || hasFailures;
   const itemRows = items.data?.data ?? [];
+  const itemTotal = items.data?.total;
+  useEffect(() => {
+    if (history && itemTotal !== undefined) {
+      const lastPage = Math.max(1, Math.ceil(itemTotal / 20));
+      if (page > lastPage) setPage(lastPage);
+    }
+  }, [history, itemTotal, page]);
   const failureKey =
     jobData && processingFailureKey(jobData, kind ?? jobData.kind);
   return (
-    <section className="space-y-3" aria-live="polite">
+    <section className={fill ? "flex min-h-0 flex-1 flex-col gap-3 [&>p]:shrink-0 [&>button]:shrink-0 [&>button]:self-start" : "space-y-3"} aria-live="polite">
+      {onBack && (
+        <header className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1">
+          <Tooltip content={t("detail.back_to_jobs")}>
+            <Button
+              type="button"
+              variant="text"
+              color="default"
+              size="small"
+              iconOnly
+              aria-label={t("detail.back_to_jobs")}
+              onClick={onBack}
+            >
+              <Outlined.ArrowLeft aria-hidden />
+            </Button>
+          </Tooltip>
+          <h3 className="text-body font-medium text-text-1">{t("f118.processing_items")}</h3>
+          {counts && <p className="text-caption text-text-3">{counts}</p>}
+        </header>
+      )}
       {metadata && (
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3">
             <span>
-              {status ??
-                t(job.isError ? "detail.load_failed" : "detail.loading")}
+              {status ?? (job.isError ? t("detail.load_failed") : <LoadingState size="inline" label={t("detail.loading")} />)}
             </span>
             {percent !== undefined && (
               <span className="tabular-nums">{percent}%</span>
@@ -197,26 +233,23 @@ export function SpaceProcessingProgress({
           />
         </div>
       )}
-      {!jobData ? (
+      {!metadata && job.isInitialLoading ? (
+        <SpaceProcessingLoading className={fill ? "min-h-0 flex-1" : undefined} />
+      ) : !jobData ? (
         job.isError ? (
           <Button onClick={() => void job.refetch()}>{t("retry")}</Button>
         ) : (
-          <p>{t("sidebar.loading")}</p>
+          <LoadingState label={t("sidebar.loading")} />
         )
       ) : (
         <>
-          {!metadata && (
+          {!metadata && !onBack && (
             <>
               <p>{status}</p>
               <p>{counts}</p>
             </>
           )}
-          {failureKey && <p role="alert">{t(failureKey)}</p>}
-          {hasFailures && (
-            <p className="text-caption text-text-3">
-              {t("f118.processing_task_id", { id: jobId })}
-            </p>
-          )}
+          {failureKey && !onBack && <p role="alert">{t(failureKey)}</p>}
           {showItems && jobData.hidden_item_count > 0 && (
             <p>
               {t("f118.processing_hidden", {
@@ -249,9 +282,25 @@ export function SpaceProcessingProgress({
       {metadata && hasFailures && items.isError && (
         <Button onClick={() => void items.refetch()}>{t("retry")}</Button>
       )}
-      {showItems && itemRows.length > 0 && (
+      {history && jobData && (
+        <SpaceProcessingItemsTable
+          items={itemRows}
+          fill={fill}
+          kind={kind ?? jobData.kind}
+          filter={itemFilter}
+          onFilterChange={(state) => {
+            setPage(1);
+            setItemFilter(state);
+          }}
+          loading={items.isInitialLoading}
+          failed={items.isError}
+          onRetry={() => { void items.refetch(); }}
+        />
+      )}
+      {!history && showItems && itemRows.length > 0 && (
         <KnowledgeDialogTable
           caption={t("f118.processing_items")}
+          showCaption={!onBack}
           columns={[
             { label: t("f118.processing_item") },
             { label: t("status") },
@@ -272,6 +321,7 @@ export function SpaceProcessingProgress({
       )}
       {showItems && items.data && items.data.total > 20 && (
         <Pagination
+          className="shrink-0"
           current={page}
           total={items.data.total}
           pageSize={20}

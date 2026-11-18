@@ -1,6 +1,7 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import type { SpaceProcessingDialogProps } from "./processingDialogTypes";
 import { KnowledgeDialogTable } from "@bisheng/knowledge";
-import { Button, Pagination } from "@bisheng/ui";
+import { Button, EmptyStateIllustration, Pagination, StateView } from "@bisheng/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -31,6 +32,8 @@ import {
   type ProcessingDefaultsDraft,
 } from "./ProcessingDefaultsEditor";
 import { SpaceProcessingProgress } from "./SpaceProcessingProgress";
+import { SpaceProcessingJobsTable } from "./SpaceProcessingJobsTable";
+import { SpaceProcessingLoading } from "./SpaceProcessingLoading";
 import { SpacePanelFrame } from "./SpacePanelFrame";
 import { SpaceProcessingActions } from "./SpaceProcessingActions";
 import StepProgress from "@/components/bs-ui/step";
@@ -91,6 +94,7 @@ function Content({
   includeCopies = false,
   jobKind,
   hideTitle = false,
+  fill = false,
   onOpenChange,
   onSaved,
   presentation,
@@ -300,6 +304,7 @@ function Content({
       presentation={presentation}
       centered={mode === "file"}
       hideTitle={hideTitle || inlineEmbedding}
+      fill={fill}
       busy={busy}
       className="max-h-[85vh] sm:max-w-[960px] overflow-y-auto"
       footer={
@@ -390,26 +395,21 @@ function Content({
         </p>
       )}
       {job ? (
-        <>
-          {mode === "jobs" && (
-            <Button variant="text" onClick={() => setJob(null)}>
-              {t("detail.back_to_jobs")}
-            </Button>
-          )}
-          <SpaceProcessingProgress
-            scope={scope}
-            spaceId={job.space}
-            jobId={job.id}
-            kind={job.kind}
-            onCompleted={onSaved}
-          />
-        </>
+        <SpaceProcessingProgress
+          scope={scope}
+          spaceId={job.space}
+          jobId={job.id}
+          kind={job.kind}
+          onCompleted={onSaved}
+          onBack={mode === "jobs" ? () => setJob(null) : undefined}
+          fill={fill}
+        />
       ) : completed ? (
         <p>{t("completed")}</p>
       ) : mode === "jobs" ? (
         <>
           {jobs.isInitialLoading && (
-            <p role="status">{t("f118.loading_space")}</p>
+            <SpaceProcessingLoading className={fill ? "min-h-0 flex-1" : undefined} />
           )}
           {jobs.isError && (
             <Button
@@ -424,46 +424,26 @@ function Content({
             !jobs.isError &&
             !jobs.data?.total &&
             !copies.data?.total && (
-              <p>
-                {t(
+              <StateView
+                size="page"
+                className={fill ? "min-h-0 flex-1" : undefined}
+                image={<EmptyStateIllustration />}
+                title={t(
                   jobKind === "move_index" ? "move.no_jobs" : "detail.no_jobs",
                 )}
-              </p>
+              />
             )}
           {!!jobRows.length && (
-            <KnowledgeDialogTable
-              caption={title}
-              showCaption={false}
-              columns={[{ label: t("type") }, { label: t("status") }]}
-              rows={jobRows.map((row) => {
-                const label = t(
-                  row.kind === "move_index"
-                    ? "move.jobs"
-                    : `f118.processing_kind_${row.kind}`,
-                );
-                const status = t(`f118.processing_state_${row.state}`);
-                return {
-                  key: row.id,
-                  cells: [
-                    <Button
-                      variant="link"
-                      aria-label={`${label} · ${status}`}
-                      onClick={() =>
-                        setJob({
-                          id: row.id,
-                          space: spaceId,
-                          ...(row.kind === "space_copy" ||
-                          row.kind === "move_index"
-                            ? { kind: row.kind }
-                            : {}),
-                        })
-                      }
-                    >
-                      {label}
-                    </Button>,
-                    status,
-                  ],
-                };
+            <SpaceProcessingJobsTable
+              title={title}
+              jobs={jobRows}
+              scrollable={fill}
+              onSelect={(row) => setJob({
+                id: row.id,
+                space: spaceId,
+                ...(row.kind === "space_copy" || row.kind === "move_index"
+                  ? { kind: row.kind }
+                  : {}),
               })}
             />
           )}
@@ -496,7 +476,7 @@ function Content({
                   </p>
                 )}
                 {configured.isInitialLoading && (
-                  <p role="status">{t("f118.loading_space")}</p>
+                  <LoadingState label={t("f118.loading_space")} className="min-h-32" />
                 )}
                 {configured.isError && (
                   <div role="alert">
@@ -587,6 +567,7 @@ function Content({
         !job &&
         Math.max(jobs.data?.total ?? 0, copies.data?.total ?? 0) > 20 && (
           <Pagination
+            className="shrink-0"
             current={jobsPage}
             total={Math.max(jobs.data?.total ?? 0, copies.data?.total ?? 0)}
             pageSize={20}

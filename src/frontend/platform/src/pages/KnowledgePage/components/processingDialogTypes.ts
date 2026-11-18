@@ -13,6 +13,7 @@ export interface SpaceProcessingDialogProps {
   includeCopies?: boolean;
   jobKind?: ProcessingKind;
   hideTitle?: boolean;
+  fill?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved?: () => void;
