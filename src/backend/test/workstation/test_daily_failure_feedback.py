@@ -134,6 +134,53 @@ def test_daily_history_sanitizes_old_provider_errors_and_keeps_partial_answer():
     assert "secret" not in json.dumps(public)
     assert public["message"]["msg"] == "partial answer"
     assert public["extra"]["error_code"] == 12045
+    # The placeholder that replaced ``error_msg`` said nothing and is not sent.
+    assert "error_msg" not in public["extra"]
+
+
+def test_daily_history_returns_the_redacted_detail_of_a_failed_answer():
+    """A reloaded failure shows what the live one showed (114, 2026-11-18: the
+    detail section of a reloaded failure only said "Request failed.")."""
+    namespace = _namespace()
+    namespace["_message_base_fields"] = lambda row: {"id": row.id}
+    helpers = _load(
+        "workstation/domain/services/chat_helpers.py",
+        {"_format_new_message", "_normalise_agent_message_content"},
+        namespace,
+    )
+
+    def _public_extra(extra: dict) -> dict:
+        row = SimpleNamespace(
+            id=1,
+            category="agent_answer",
+            type="end",
+            extra=json.dumps(extra),
+            message=json.dumps({"msg": "", "events": []}),
+        )
+        return helpers._format_new_message(row)["extra"]
+
+    detail = 'ValueError: "ToolExecutor" object has no field "executor"'
+    public = _public_extra(
+        {
+            "error": True,
+            "error_msg": detail,
+            "error_code": 11091,
+            "error_type": "chat_unknown",
+            "detail": detail,
+            "reference_id": "fdec5972c50d4238a5fe4e2599b4e561",
+            "run_id": "fdec5972c50d4238a5fe4e2599b4e561",
+        }
+    )
+    assert public["detail"] == detail
+    assert public["error_type"] == "chat_unknown"
+    assert public["reference_id"] == "fdec5972c50d4238a5fe4e2599b4e561"
+    assert "Request failed." not in json.dumps(public)
+
+    # A row without a detail gets none, and a detail on a clean row is not sent.
+    assert "detail" not in _public_extra({"error": True, "error_msg": "stream interrupted"})
+    assert "detail" not in _public_extra({"detail": "left over"})
+    leaked = _public_extra({"error": True, "detail": "open /opt/bisheng/conf/config.yaml token=abc at 10.0.0.8:3306"})
+    assert leaked["detail"] == "open <path> token=*** at <host>"
 
 
 @pytest.mark.parametrize("wrapped", [False, True])

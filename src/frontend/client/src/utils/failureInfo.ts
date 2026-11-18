@@ -77,6 +77,10 @@ export interface DailyFailureMetadata {
     say which side failed, not what to do, so the card keeps its per-type copy. */
 const UMBRELLA_FAILURE_CODES = new Set([11090, 11091]);
 
+export function isUmbrellaFailureCode(code: unknown): boolean {
+    return typeof code === 'number' && UMBRELLA_FAILURE_CODES.has(code);
+}
+
 /** Only a registered numeric translation can supply business failure copy. */
 export function localizedBusinessFailure(code: number | undefined, localize: (key: string, values?: Record<string, unknown>) => string, data?: unknown): string | undefined {
     if (!Number.isInteger(code) || code === undefined || code < 10000 || code > 99999 || code === 18106) return undefined;

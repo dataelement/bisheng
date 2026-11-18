@@ -171,7 +171,7 @@ describe('rows of unread messages given back (items 1, 6)', () => {
             { type: 'run_failed', data: { code: 11091, reason: 'task_aborted', detail: 'boom', reference_id: 'r1' } },
         ]);
         const next = addEndedRunRow([row('q', true), row('a', false)], failed, 'AI', 'failed');
-        expect(next[2]).toMatchObject({ messageId: 'run:r1', error: true, errorText: 'failed', errorCode: 11091, referenceId: 'r1' });
+        expect(next[2]).toMatchObject({ messageId: 'run:r1', error: true, errorText: '', errorCode: 11091, referenceId: 'r1' });
         expect(next[2].liveRunId).toBeUndefined();
         expect(addEndedRunRow(next, failed, 'AI', 'failed')).toBe(next);
     });

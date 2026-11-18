@@ -316,6 +316,19 @@ _DEFAULT_ENQUEUE_RELAY: Callable[[dict], Awaitable[None]] | None = None
 _TASKS: set[asyncio.Task] = set()
 
 
+# ``reason`` of a failure the classifier could not name, as the legacy daily chat
+# sends it (``chat_service``): the client then shows "the reply failed", not the
+# deep-research "the task failed".
+CHAT_UNKNOWN_REASON = "chat_unknown"
+
+
+def _as_chat_failure(event: dict) -> None:
+    """Give an unclassified ``run_failed`` of a direct run the daily-chat reason."""
+    data = event.get("data")
+    if event.get("type") == run_events.RUN_FAILED and isinstance(data, dict) and data.get("reason") == "unknown":
+        data["reason"] = CHAT_UNKNOWN_REASON
+
+
 async def _add_terminal_fields(ctx: DirectRunContext, event: dict, hooks: list) -> None:
     """Let the hooks' owners add fields to a terminal event before it is written.
 
@@ -534,6 +547,7 @@ class DirectRunner:
 
         async def write(event: dict) -> None:
             if event.get("type") in run_events.TERMINAL_EVENT_TYPES:
+                _as_chat_failure(event)
                 await _add_terminal_fields(ctx, event, hooks)
             for_hooks = extras.dress(event)
             await writer.emit(event)

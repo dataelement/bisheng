@@ -183,7 +183,7 @@ describe('relay run that could not be created (item 1)', () => {
         );
         expect(conv().draftReturn).toBe('one');
         expect(result.current.stored.map((m) => m.messageId)).toEqual(['q', 'a', 'run:r2']);
-        expect(result.current.stored[2]).toMatchObject({ error: true, errorCode: 11091, referenceId: 'r2', errorText: 'failed' });
+        expect(result.current.stored[2]).toMatchObject({ error: true, errorCode: 11091, referenceId: 'r2', errorText: '' });
         // The history has no row for this run: it must not replace the failure.
         expect(mockGetAgentMessages).not.toHaveBeenCalled();
     });

@@ -736,6 +736,7 @@
   "failure_sso": "【单点登录】登录认证异常，请重新登录；持续异常时，请联系单点登录维护人员排查。",
   "failure_object_storage": "【对象存储】文件存储服务访问异常，请联系对象存储维护人员排查。",
   "failure_id": "故障标识：{{0}}",
+  "failure_id_hint": "联系管理员时请提供这个标识，管理员可以用它在服务日志里找到这次失败的记录。",
   "failure_trace_id": "追踪标识：{{0}}",
   "failure_operation_search": "检索",
   "failure_operation_read_file": "读取文件",

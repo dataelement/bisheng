@@ -545,6 +545,30 @@ async def test_failure_emits_run_failed_and_releases(make_env):
     assert (await env.state()).status == rl.STATUS_IDLE
 
 
+async def test_unexpected_failure_is_a_chat_failure_with_a_readable_detail(make_env):
+    """114, 2026-11-18: a ValueError while a direct run was prepared showed the
+    deep-research card ("任务执行失败"). The legacy daily chat sends ``chat_unknown``
+    for a failure the classifier cannot name, with the exception type and message."""
+    env = make_env([ValueError('"ToolExecutor" object has no field "executor"')])
+    ctx = await env.submit("你好")
+
+    await env.run(ctx)
+
+    data = (await env.events())[-1]["data"]
+    assert data["reason"] == "chat_unknown"
+    assert data["detail"] == 'ValueError: "ToolExecutor" object has no field "executor"'
+    assert data["reference_id"]
+
+
+def test_only_an_unclassified_failure_gets_the_chat_reason():
+    classified = {"type": "run_failed", "data": {"reason": "rate_limit"}}
+    finished = {"type": "run_finished", "data": {"reason": "unknown"}}
+    direct_run._as_chat_failure(classified)
+    direct_run._as_chat_failure(finished)
+    assert classified["data"]["reason"] == "rate_limit"
+    assert finished["data"]["reason"] == "unknown"
+
+
 async def test_worker_entry_runs_relay_item_and_restores_tenant(make_env, monkeypatch: pytest.MonkeyPatch):
     seen: dict[str, Any] = {}
 

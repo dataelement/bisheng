@@ -129,16 +129,37 @@ describe('live row', () => {
         const failed = runOf([
             { type: 'run_started' },
             { type: 'text', data: { text: 'partial' } },
-            { type: 'run_failed', data: { code: 11091, reason: 'internal', detail: 'boom', reference_id: 'ref' } },
+            { type: 'run_failed', data: { code: 12045, reason: 'internal', detail: 'boom', reference_id: 'ref' } },
         ]);
         const frozen = freezeLiveRun([user('q'), bot('run:r1', { liveRunId: 'r1' })], failed, 'It failed');
         expect(frozen[1].liveRunId).toBeUndefined();
         expect(frozen[1]).toMatchObject({
-            text: 'partial', error: true, errorText: 'It failed', errorCode: 11091, errorType: 'internal',
+            text: 'partial', error: true, errorText: 'It failed', errorCode: 12045, errorType: 'internal',
             errorDetail: 'boom', referenceId: 'ref',
         });
         // No row carries the mark any more, so nothing mirrors the store.
         expect(withLiveRun(frozen, failed)).toBe(frozen);
+    });
+
+    // 114, 2026-11-18: the live failure and the reloaded one must carry the same
+    // fields. The copy of an umbrella code is deep-research wording, so it is
+    // not kept as the row's text; the dependency provenance is kept.
+    it('gives a failed direct run the fields the stored row has', () => {
+        const failureInfo = {
+            version: 1, failure_id: 'f-1', category: 'model_service', service: 'llm', occurred_at: '2026-11-18T08:00:00Z',
+        };
+        const failed = runOf([
+            { type: 'run_started' },
+            {
+                type: 'run_failed',
+                data: { code: 11091, reason: 'chat_unknown', detail: 'ValueError: boom', reference_id: 'r1', failure_info: failureInfo },
+            },
+        ]);
+        const frozen = freezeLiveRun([user('q'), bot('run:r1', { liveRunId: 'r1' })], failed, 'copy of code 11091');
+        expect(frozen[1]).toMatchObject({
+            error: true, errorText: '', errorCode: 11091, errorType: 'chat_unknown',
+            errorDetail: 'ValueError: boom', referenceId: 'r1', failureInfo,
+        });
     });
 });
 

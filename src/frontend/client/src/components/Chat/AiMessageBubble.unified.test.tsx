@@ -153,6 +153,29 @@ describe("stopped answer (design §7 item 2)", () => {
   });
 });
 
+// 114, 2026-11-18: a failed direct answer showed the deep-research card.
+describe("failed direct answer", () => {
+  const failed: Partial<ChatMessage> = {
+    category: "agent_answer", linsightSessionVersionId: undefined, messageId: "a1", events: [],
+    error: true, errorCode: 11091, errorType: "chat_unknown", errorDetail: "ValueError: boom", referenceId: "run-1",
+  };
+
+  it.each([
+    ["frozen from the live run", { ...failed, errorText: "" }],
+    ["reloaded from the history", failed],
+  ])("is a chat failure card with the detail and the reference, %s", (_name, row) => {
+    renderBubble(taskRow(row), true);
+    expect(mockTaskPanels).toHaveLength(0);
+    expect(mockErrorCards).toHaveLength(1);
+    expect(mockErrorCards[0]).toMatchObject({
+      surface: "chat", hideHint: true, errorType: "chat_unknown", errorCode: 11091,
+      detail: "ValueError: boom", referenceId: "run-1",
+    });
+    // No generic line stands in for the detail.
+    expect((mockErrorCards[0] as { fallbackMessage?: string }).fallbackMessage).toBeFalsy();
+  });
+});
+
 describe("queued mark of a user message", () => {
   const question = (extra: Partial<ChatMessage> = {}): ChatMessage =>
     taskRow({ category: "question", isCreatedByUser: true, sender: "User", messageId: "m1", text: "more", linsightSessionVersionId: undefined, ...extra });

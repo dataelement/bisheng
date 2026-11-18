@@ -10,6 +10,7 @@
  */
 import type { AgentEvent, ChatMessage } from '~/api/chatApi';
 import type { RunSendResult, RunState } from '~/store/runStore';
+import { isUmbrellaFailureCode, parseFailureInfo } from '~/utils/failureInfo';
 
 // ---------------------------------------------------------------------------
 // Send response
@@ -179,13 +180,20 @@ export function liveFieldsOfRun(run: RunState): Partial<ChatMessage> {
     };
 }
 
-/** Failure fields of the answer row of a failed run. `errorText` is the localized copy. */
+/**
+ * Failure fields of the answer row of a failed run, the same ones the history
+ * gives for the stored row. `errorText` is the localized copy of the code; the
+ * copy of an umbrella code (11090 / 11091) is deep-research wording and says
+ * nothing a user can act on, so the card's own copy per type is used instead.
+ */
 export function failureFieldsOfRun(run: RunState, errorText: string): Partial<ChatMessage> {
     if (run.status !== 'failed') return {};
     const error = run.error;
+    const failureInfo = parseFailureInfo(error?.failure_info);
     return {
         error: true,
-        errorText,
+        errorText: isUmbrellaFailureCode(error?.code) ? '' : errorText,
+        ...(failureInfo ? { failureInfo } : {}),
         ...(error?.code != null ? { errorCode: error.code } : {}),
         ...(error?.reason ? { errorType: error.reason } : {}),
         ...(error?.detail ? { errorDetail: error.detail } : {}),

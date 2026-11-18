@@ -368,7 +368,17 @@ def _format_new_message(msg: ChatMessage) -> dict:
             extra = {}
     except (json.JSONDecodeError, TypeError):
         extra = {}
+    stored_detail = extra.get("detail")
     extra = FailureContextAdapter.public_payload(extra)
+    # ``public_payload`` replaces ``error_msg`` with a fixed placeholder and drops
+    # ``detail``. The placeholder says nothing, so it is not sent: the client then
+    # uses its own localized line. ``detail`` was redacted when the row was saved;
+    # it is redacted again and returned, like the replay of a deep-research
+    # failure (``task_failure_payload``), so a reloaded failure shows what the
+    # live one showed.
+    extra.pop("error_msg", None)
+    if extra.get("error") and isinstance(stored_detail, str) and stored_detail.strip():
+        extra["detail"] = FailureContextAdapter.public_text(stored_detail)
     if isinstance(message_content, dict):
         for event in message_content.get("events") or []:
             if not isinstance(event, dict) or event.get("type") != "tool_call":

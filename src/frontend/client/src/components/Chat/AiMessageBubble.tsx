@@ -781,9 +781,9 @@ function AssistantBubble({
                             referenceId={message.referenceId}
                             fallbackMessage={isPlainFailure ? undefined : message.errorText || regularContent}
                             description={isPlainFailure ? plainFailureText : undefined}
-                            // Daily chat never shows the per-type "建议…" line: the
-                            // input box is right below, so "re-send" goes without saying.
+                            // No per-type "建议…" line: the chat description says what to do.
                             hideHint
+                            surface="chat"
                         />
                     )
                 )}

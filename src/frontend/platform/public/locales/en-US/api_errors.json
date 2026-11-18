@@ -770,6 +770,7 @@
   "failure_sso": "[Single sign-on] Authentication failed. Please sign in again. If the issue persists, contact the single sign-on administrator.",
   "failure_object_storage": "[Object storage] File storage service access failed. Please contact the object storage administrator.",
   "failure_id": "Failure ID: {{0}}",
+  "failure_id_hint": "Give this ID to your administrator. They can use it to find this failure in the server logs.",
   "failure_trace_id": "Trace ID: {{0}}",
   "failure_operation_search": "Search",
   "failure_operation_read_file": "Read file",
