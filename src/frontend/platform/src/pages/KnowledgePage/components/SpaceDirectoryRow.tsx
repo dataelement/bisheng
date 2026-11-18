@@ -245,7 +245,6 @@ export function SpaceDirectoryRow({
               )}
               {historyEnabled &&
                 menuReady &&
-                actions.includes("visible") &&
                 item.is_multi_version === true && (
                   <DropdownItem
                     icon={<Outlined.History aria-hidden />}
@@ -258,12 +257,7 @@ export function SpaceDirectoryRow({
                 scope={scope}
                 spaceId={spaceId}
                 item={item}
-                enabled={
-                  historyEnabled &&
-                  menuReady &&
-                  open &&
-                  actions.includes("visible")
-                }
+                enabled={historyEnabled && menuReady && open}
                 onOpen={(panel) => setHistory({ epoch, panel })}
               />
               {menuReady && actions.includes("delete") && (
