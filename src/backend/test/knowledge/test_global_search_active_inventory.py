@@ -61,3 +61,44 @@ async def test_global_search_returns_only_current_active_files(async_db_session,
         items += second_page["data"]
     assert {item["file_id"] for item in items} == {101, 108}
     assert all(item["file_name"] == name and item["space_id"] == 19 for item in items)
+
+
+async def test_global_search_matches_spaces_by_name_even_without_matching_files(async_db_session, monkeypatch):
+    @asynccontextmanager
+    async def session_factory():
+        yield async_db_session
+
+    monkeypatch.setattr("bisheng.knowledge.domain.models.knowledge_file.get_async_db_session", session_factory)
+    service = object.__new__(KnowledgeSpaceService)
+    service.get_grouped_spaces = AsyncMock(
+        return_value=SimpleNamespace(
+            public_spaces=[
+                SimpleNamespace(id=10, name="Sales Finance Standards", space_level=KnowledgeSpaceLevelEnum.PUBLIC),
+            ],
+            department_spaces=[
+                SimpleNamespace(id=20, name="计划财务部", space_level=KnowledgeSpaceLevelEnum.DEPARTMENT, is_pinned=True),
+            ],
+            team_spaces=[
+                SimpleNamespace(id=30, name="销售财务中心(计划)", space_level=KnowledgeSpaceLevelEnum.TEAM_KS),
+                SimpleNamespace(id=31, name="会计室(计财)", space_level=KnowledgeSpaceLevelEnum.TEAM_KS),
+            ],
+            personal_spaces=[
+                SimpleNamespace(id=40, name="我的收藏", space_level=KnowledgeSpaceLevelEnum.PERSONAL, is_favorite=True),
+            ],
+        )
+    )
+
+    result = await service.global_search_files(keyword="财务")
+
+    assert result["total"] == 0
+    assert result["data"] == []
+    assert result["space_total"] == 2
+    assert [item["space_id"] for item in result["spaces"]] == [20, 30]
+    assert result["spaces"][0]["space_level_label"] == "部门知识库"
+    assert result["spaces"][1]["space_level"] == "team_ks"
+    assert result["spaces"][1]["space_level_label"] == "科室知识库"
+
+    case_insensitive = await service.global_search_files(keyword="sales finance")
+    assert case_insensitive["space_total"] == 1
+    assert case_insensitive["spaces"][0]["space_id"] == 10
+

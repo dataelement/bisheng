@@ -24,12 +24,18 @@ class _Scope:
         self.level = level
 
 
-def _patches(*, binding=None, scope_level="team", target_id=None, target_model="emb-1"):
+def _patches(*, binding=None, scope_level="team", target_id=None, target_model="emb-1", has_file=True):
     return [
         patch(f"{MOD}.DepartmentKnowledgeSpaceDao.aget_by_space_id", new=AsyncMock(return_value=binding)),
         patch(f"{MOD}.KnowledgeSpaceScopeDao.aget_by_space_id", new=AsyncMock(return_value=_Scope(scope_level))),
-        patch.object(FreeSpaceMigrationService, "resolve_target_department_space", new=AsyncMock(return_value=target_id)),
-        patch(f"{MOD}.KnowledgeDao.aquery_by_id", new=AsyncMock(return_value=_Space(target_id, 0, model=target_model) if target_id else None)),
+        patch.object(
+            FreeSpaceMigrationService, "resolve_target_department_space", new=AsyncMock(return_value=target_id)
+        ),
+        patch(
+            f"{MOD}.KnowledgeDao.aquery_by_id",
+            new=AsyncMock(return_value=_Space(target_id, 0, model=target_model) if target_id else None),
+        ),
+        patch(f"{MOD}.KnowledgeFileDao.ahas_non_directory_file", new=AsyncMock(return_value=has_file)),
     ]
 
 
@@ -53,8 +59,10 @@ async def test_migrating_state_blocks():
 
 @pytest.mark.asyncio
 async def test_bound_department_space_allows_direct_delete():
-    with patch(f"{MOD}.DepartmentKnowledgeSpaceDao.aget_by_space_id", new=AsyncMock(return_value=object())), \
-         patch.object(FreeSpaceMigrationService, "resolve_target_department_space", new=AsyncMock()) as resolve_target:
+    with (
+        patch(f"{MOD}.DepartmentKnowledgeSpaceDao.aget_by_space_id", new=AsyncMock(return_value=object())),
+        patch.object(FreeSpaceMigrationService, "resolve_target_department_space", new=AsyncMock()) as resolve_target,
+    ):
         d = await FreeSpaceMigrationService.pre_delete_guard(_Space(1, 5))
 
     assert d.action == "normal_delete"
@@ -76,16 +84,24 @@ async def test_free_space_no_target_blocks():
 
 @pytest.mark.asyncio
 async def test_free_space_ambiguous_target_blocks():
-    with patch(
-        f"{MOD}.DepartmentKnowledgeSpaceDao.aget_by_space_id",
-        new=AsyncMock(return_value=None),
-    ), patch(
-        f"{MOD}.KnowledgeSpaceScopeDao.aget_by_space_id",
-        new=AsyncMock(return_value=_Scope("team")),
-    ), patch.object(
-        FreeSpaceMigrationService,
-        "resolve_target_department_space",
-        new=AsyncMock(side_effect=DepartmentKnowledgeSpaceAmbiguousError()),
+    with (
+        patch(
+            f"{MOD}.DepartmentKnowledgeSpaceDao.aget_by_space_id",
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
+            f"{MOD}.KnowledgeSpaceScopeDao.aget_by_space_id",
+            new=AsyncMock(return_value=_Scope("team")),
+        ),
+        patch(
+            f"{MOD}.KnowledgeFileDao.ahas_non_directory_file",
+            new=AsyncMock(return_value=True),
+        ),
+        patch.object(
+            FreeSpaceMigrationService,
+            "resolve_target_department_space",
+            new=AsyncMock(side_effect=DepartmentKnowledgeSpaceAmbiguousError()),
+        ),
     ):
         decision = await FreeSpaceMigrationService.pre_delete_guard(_Space(1, 5))
 
@@ -105,3 +121,17 @@ async def test_free_space_ok_migrates():
     d = await _run(_Space(1, 5, model="emb-1"), target_id=900, target_model="emb-1")
     assert d.action == "migrate"
     assert d.target_space_id == 900
+
+
+@pytest.mark.asyncio
+async def test_free_team_without_files_deletes_without_migration():
+    with (
+        patch(f"{MOD}.DepartmentKnowledgeSpaceDao.aget_by_space_id", new=AsyncMock(return_value=None)),
+        patch(f"{MOD}.KnowledgeSpaceScopeDao.aget_by_space_id", new=AsyncMock(return_value=_Scope("team"))),
+        patch(f"{MOD}.KnowledgeFileDao.ahas_non_directory_file", new=AsyncMock(return_value=False)),
+        patch.object(FreeSpaceMigrationService, "resolve_target_department_space", new=AsyncMock()) as resolve_target,
+    ):
+        decision = await FreeSpaceMigrationService.pre_delete_guard(_Space(1, 5))
+
+    assert decision.action == "normal_delete"
+    resolve_target.assert_not_awaited()

@@ -4082,6 +4082,16 @@ export async function recordPortalDownloadEventApi(
     }
 }
 
+export interface GlobalSearchSpaceResult {
+    space_id: number;
+    space_name: string;
+    space_level: string;
+    space_level_label: string;
+    space_level_order: number;
+    is_pinned?: boolean;
+    is_favorite?: boolean;
+}
+
 export interface GlobalSearchFileResult {
     file_id: number;
     file_name: string;
@@ -4099,6 +4109,8 @@ export interface GlobalSearchResult {
     page: number;
     page_size: number;
     data: GlobalSearchFileResult[];
+    space_total?: number;
+    spaces?: GlobalSearchSpaceResult[];
 }
 
 export async function globalSearchSpaceFilesApi(
@@ -4110,5 +4122,5 @@ export async function globalSearchSpaceFilesApi(
         `/api/v1/knowledge/space/global-search`,
         { params: { keyword, page, page_size: pageSize } },
     );
-    return res?.data ?? { total: 0, page: 1, page_size: pageSize, data: [] };
+    return res?.data ?? { total: 0, page: 1, page_size: pageSize, data: [], space_total: 0, spaces: [] };
 }

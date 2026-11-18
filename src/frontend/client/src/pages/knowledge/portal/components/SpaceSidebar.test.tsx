@@ -181,3 +181,10 @@ describe("SpaceSidebar 个人知识库不能新建（去掉 + 按钮）", () => 
         expect(screen.queryByLabelText("新增部门知识库")).not.toBeInTheDocument();
     });
 });
+
+describe("SpaceSidebar 全局搜索选库联动", () => {
+    it("renders search input with space and file placeholder", () => {
+        renderSidebar();
+        expect(screen.getByPlaceholderText("搜索知识库或文件")).toBeInTheDocument();
+    });
+});

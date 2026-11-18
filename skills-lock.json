@@ -23,7 +23,7 @@
       "source": "likaiaki/sdd-workflow-skills",
       "sourceType": "github",
       "skillPath": "skills/sdd-design/SKILL.md",
-      "computedHash": "28383c27eaf36c0034b41903d417870ad5919cbaf202d68fe3e766f1cdb9f03b"
+      "computedHash": "415d3a8244ff4c9fbd1c988c7aa4f951a1ce8cd1c90f0fc369fcf8736f07679c"
     },
     "sdd-implement": {
       "source": "likaiaki/sdd-workflow-skills",
@@ -65,7 +65,7 @@
       "source": "likaiaki/sdd-workflow-skills",
       "sourceType": "github",
       "skillPath": "skills/sdd-workflow/SKILL.md",
-      "computedHash": "0528860031533f00e977367fa13d2ba325c86fb4c27091389ee1d21f98eb431b"
+      "computedHash": "7ea8da435c85a88d857310bf8c45709a7946275bf3a9e7d65a9a9d88b5ad2e02"
     }
   }
 }

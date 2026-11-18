@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import List, Literal, Optional
+from typing import Literal
 
 from bisheng.common.errcode.knowledge_space import (
     DepartmentKnowledgeSpaceAmbiguousError,
@@ -12,6 +12,7 @@ from bisheng.knowledge.domain.models.department_knowledge_space import (
     DepartmentKnowledgeSpaceDao,
 )
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeState
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
 from bisheng.knowledge.domain.models.knowledge_space_scope import (
     KnowledgeSpaceLevelEnum,
     KnowledgeSpaceScopeDao,
@@ -26,7 +27,7 @@ _logger = logging.getLogger(__name__)
 @dataclass
 class MigrationDecision:
     action: Literal["normal_delete", "migrate", "block"]
-    target_space_id: Optional[int] = None
+    target_space_id: int | None = None
     reason: str = ""
 
 
@@ -34,11 +35,11 @@ class FreeSpaceMigrationService:
     """自由知识库删除时的迁移目标查找与删除前置判定。"""
 
     @staticmethod
-    def _parse_path_ids(path: Optional[str]) -> List[int]:
+    def _parse_path_ids(path: str | None) -> list[int]:
         """把物化路径 '/1/2/3/' 解析成 [1, 2, 3]（从根到叶）。"""
         if not path:
             return []
-        ids: List[int] = []
+        ids: list[int] = []
         for part in path.split("/"):
             part = part.strip()
             if part.isdigit():
@@ -46,7 +47,7 @@ class FreeSpaceMigrationService:
         return ids
 
     @classmethod
-    async def _department_id_chain(cls, primary_department_id: int) -> List[int]:
+    async def _department_id_chain(cls, primary_department_id: int) -> list[int]:
         """返回 [主部门, 父, 祖父, ... 根]（自近到远，含自身）。"""
         dept = await DepartmentDao.aget_by_id(primary_department_id)
         if dept is None:
@@ -58,7 +59,7 @@ class FreeSpaceMigrationService:
         return list(reversed(path_ids))
 
     @classmethod
-    async def resolve_target_department_space(cls, creator_user_id: int) -> Optional[int]:
+    async def resolve_target_department_space(cls, creator_user_id: int) -> int | None:
         """创建者主部门→沿 path 向上找最近的已绑定科室库 space_id；找不到返回 None。"""
         primary = await UserDepartmentDao.aget_user_primary_department(creator_user_id)
         if primary is None or getattr(primary, "department_id", None) is None:
@@ -76,13 +77,14 @@ class FreeSpaceMigrationService:
             return int(space_id)
         _logger.info(
             "resolve_target creator=%s chain(近→远)=%s → 沿途无已绑定科室库",
-            creator_user_id, chain,
+            creator_user_id,
+            chain,
         )
         return None
 
     @classmethod
-    async def pre_delete_guard(cls, space) -> "MigrationDecision":
-        """删除前置判定：迁移中阻断；科室库和非 team 库直接删除；自由 team 库判迁移目标与向量模型。"""
+    async def pre_delete_guard(cls, space) -> MigrationDecision:
+        """Delete guard: block while copying; direct-delete bound or non-team spaces; direct-delete an empty free team space; otherwise resolve a migration target."""
         space_id = getattr(space, "id", None)
         if space.state == KnowledgeState.COPYING.value:
             _logger.info("pre_delete_guard space=%s → block(migrating 迁移中)", space_id)
@@ -99,6 +101,14 @@ class FreeSpaceMigrationService:
         if not KnowledgeSpaceLevelEnum.is_team_level(level):
             _logger.info("pre_delete_guard space=%s level=%s → normal_delete(非自由 team 库，直接删)", space_id, level)
             return MigrationDecision("normal_delete")
+        # Nothing to copy: empty folders are not files. Skip target lookup so a
+        # space with no department library can still be deleted.
+        if not await KnowledgeFileDao.ahas_non_directory_file(int(space.id)):
+            _logger.info(
+                "pre_delete_guard space=%s → normal_delete(free team space has no files, skip migration)",
+                space_id,
+            )
+            return MigrationDecision("normal_delete")
         try:
             target_id = await cls.resolve_target_department_space(space.user_id)
         except DepartmentKnowledgeSpaceAmbiguousError:
@@ -110,7 +120,8 @@ class FreeSpaceMigrationService:
         if target_id is None:
             _logger.info(
                 "pre_delete_guard space=%s creator=%s → block(target_not_found 无法迁移，找不到目标科室库)",
-                space_id, getattr(space, "user_id", None),
+                space_id,
+                getattr(space, "user_id", None),
             )
             return MigrationDecision("block", reason="target_not_found")
         target = await KnowledgeDao.aquery_by_id(target_id)
@@ -118,7 +129,9 @@ class FreeSpaceMigrationService:
             _logger.info(
                 "pre_delete_guard space=%s target=%s → block(embedding_mismatch 向量模型不一致) "
                 "source_model=%s target_model=%s",
-                space_id, target_id, getattr(space, "model", None),
+                space_id,
+                target_id,
+                getattr(space, "model", None),
                 getattr(target, "model", None) if target is not None else None,
             )
             return MigrationDecision("block", reason="embedding_mismatch")

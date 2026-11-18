@@ -505,6 +505,21 @@ class KnowledgeFileDao(KnowledgeFileBase):
             return await session.scalar(statement)
 
     @classmethod
+    async def ahas_non_directory_file(cls, knowledge_id: int) -> bool:
+        """Whether the space has a live file. Directories and soft-deleted rows do not count."""
+        statement = (
+            select(KnowledgeFile.id)
+            .where(
+                KnowledgeFile.knowledge_id == knowledge_id,
+                KnowledgeFile.file_type != FileType.DIR.value,
+                col(KnowledgeFile.deleted_at).is_(None),
+            )
+            .limit(1)
+        )
+        async with get_async_db_session() as session:
+            return (await session.exec(statement)).first() is not None
+
+    @classmethod
     async def async_count_success_files_batch(cls, knowledge_ids: list[int]) -> dict:
         """Async: Batch count SUCCESS files for multiple knowledge spaces.
 

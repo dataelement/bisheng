@@ -1,5 +1,5 @@
 import type { MutableRefObject } from "react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
     LogOut,
     MoreHorizontal,
@@ -90,6 +90,7 @@ interface SpaceSidebarProps {
     ) => void;
     onDeleteSpace: (space: KnowledgeSpace) => void;
     onLeaveSpace: (space: KnowledgeSpace) => void;
+    onGlobalSearchSelectSpace?: (spaceId: number, spaceLevel: string) => void;
     onGlobalSearchSelectFile: (spaceId: number, fileId: number, fileName: string) => void;
 }
 
@@ -288,14 +289,38 @@ export function SpaceSidebar({
     onReorderSpace,
     onDeleteSpace,
     onLeaveSpace,
+    onGlobalSearchSelectSpace,
     onGlobalSearchSelectFile,
 }: SpaceSidebarProps) {
     const [sidebarWidth, setSidebarWidth] = useState(getSavedWidth);
     const [spaceDrag, setSpaceDrag] = useState<SpaceDragState | null>(null);
     const [spaceDropTarget, setSpaceDropTarget] = useState<SpaceDropTarget | null>(null);
+    const [pendingScrollSpaceId, setPendingScrollSpaceId] = useState<string | null>(null);
+    const spaceRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
     const isDraggingRef = useRef(false);
     const dragStartXRef = useRef(0);
     const dragStartWidthRef = useRef(0);
+
+    const handleGlobalSearchSpaceSelect = useCallback((spaceId: number, spaceLevel: string) => {
+        setPendingScrollSpaceId(String(spaceId));
+        onGlobalSearchSelectSpace?.(spaceId, spaceLevel);
+    }, [onGlobalSearchSelectSpace]);
+
+    useEffect(() => {
+        if (!pendingScrollSpaceId || collapsed) return;
+        const row = spaceRowRefs.current[pendingScrollSpaceId];
+        if (!row) return;
+        const schedule = typeof window !== "undefined" && window.requestAnimationFrame
+            ? window.requestAnimationFrame.bind(window)
+            : (callback: FrameRequestCallback) => window.setTimeout(callback, 0);
+        schedule(() => {
+            spaceRowRefs.current[pendingScrollSpaceId]?.scrollIntoView?.({
+                block: "nearest",
+                behavior: "smooth",
+            });
+            setPendingScrollSpaceId(null);
+        });
+    }, [pendingScrollSpaceId, collapsed, groups, expandedGroups]);
 
     const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
@@ -452,7 +477,11 @@ export function SpaceSidebar({
                             />
                         </button>
                     </div>
-                    <GlobalSearchPanel onSelectFile={onGlobalSearchSelectFile} />
+                    <GlobalSearchPanel
+                        activeSpaceId={activeSpaceId}
+                        onSelectSpace={onGlobalSearchSelectSpace ? handleGlobalSearchSpaceSelect : undefined}
+                        onSelectFile={onGlobalSearchSelectFile}
+                    />
                     <div className={s.spaceList}>
                         {groups.map((group) => {
                             const expanded = expandedGroups[group.key];
@@ -510,6 +539,9 @@ export function SpaceSidebar({
                                                 group.spaces.map((space) => (
                                                     <div
                                                         key={`${group.key}-${space.id}`}
+                                                        ref={(node) => {
+                                                            spaceRowRefs.current[String(space.id)] = node;
+                                                        }}
                                                         data-testid={`space-row-${space.id}`}
                                                         className={[
                                                             s.spaceRow,

@@ -13706,24 +13706,77 @@ class KnowledgeSpaceService(KnowledgeUtils):
         page: int = 1,
         page_size: int = 30,
     ) -> dict:
-        """Search files by name across all spaces the user can access.
+        """Search files and spaces by name across all spaces the user can access.
 
-        Returns tree-structured results grouped by space level then space, with
-        resolved folder paths for each matching file.
+        Returns matched spaces plus tree-structured file results grouped by
+        space level then space, with resolved folder paths for each file.
         """
         grouped = await self.get_grouped_spaces()
         all_spaces: list[KnowledgeRead] = (
             grouped.public_spaces + grouped.department_spaces + grouped.team_spaces + grouped.personal_spaces
         )
         if not all_spaces:
-            return {"total": 0, "page": page, "page_size": page_size, "data": []}
+            return {"total": 0, "page": page, "page_size": page_size, "data": [], "space_total": 0, "spaces": []}
+
+        level_order = {
+            KnowledgeSpaceLevelEnum.PUBLIC: 0,
+            KnowledgeSpaceLevelEnum.DEPARTMENT: 1,
+            KnowledgeSpaceLevelEnum.TEAM: 2,
+            KnowledgeSpaceLevelEnum.TEAM_KS: 2,
+            KnowledgeSpaceLevelEnum.PERSONAL: 3,
+        }
+        level_labels = {
+            KnowledgeSpaceLevelEnum.PUBLIC: "公共知识库",
+            KnowledgeSpaceLevelEnum.DEPARTMENT: "部门知识库",
+            KnowledgeSpaceLevelEnum.TEAM: "团队知识库",
+            KnowledgeSpaceLevelEnum.TEAM_KS: "科室知识库",
+            KnowledgeSpaceLevelEnum.PERSONAL: "个人知识库",
+        }
+
+        def _space_level_meta(raw_level: Any) -> tuple[str, str, int]:
+            level = raw_level or KnowledgeSpaceLevelEnum.PERSONAL
+            if not isinstance(level, KnowledgeSpaceLevelEnum):
+                try:
+                    level = KnowledgeSpaceLevelEnum(str(level))
+                except ValueError:
+                    level_str = str(level)
+                    return level_str, level_str, 99
+            return (
+                str(level.value),
+                level_labels.get(level, str(level.value)),
+                level_order.get(level, 99),
+            )
+
+        trimmed_keyword = (keyword or "").strip()
+        normalized_keyword = trimmed_keyword.lower()
+        matched_spaces: list[dict[str, Any]] = []
+        if normalized_keyword:
+            for space in all_spaces:
+                space_name = str(getattr(space, "name", "") or "")
+                if normalized_keyword not in space_name.lower():
+                    continue
+                level_value, level_label, order = _space_level_meta(getattr(space, "space_level", None))
+                matched_spaces.append(
+                    {
+                        "space_id": int(space.id),
+                        "space_name": space_name,
+                        "space_level": level_value,
+                        "space_level_label": level_label,
+                        "space_level_order": order,
+                        "is_pinned": bool(getattr(space, "is_pinned", False)),
+                        "is_favorite": bool(getattr(space, "is_favorite", False)),
+                    }
+                )
+            matched_spaces.sort(
+                key=lambda item: (item["space_level_order"], not item["is_pinned"], item["space_name"])
+            )
 
         space_id_list = [int(space.id) for space in all_spaces]
         space_by_id = {int(space.id): space for space in all_spaces}
 
         files = await KnowledgeFileDao.aget_file_by_space_filters(
             space_id_list,
-            file_name=keyword.strip() if keyword else None,
+            file_name=trimmed_keyword if trimmed_keyword else None,
             status=[KnowledgeFileStatus.SUCCESS.value],
             active_inventory_only=True,
         )
@@ -13748,28 +13801,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 int(fd.id): str(fd.file_name or "") for fd in folders if int(fd.file_type) == FileType.DIR.value
             }
 
-        # Build flat list of results enriched with space/folder info
-        level_order = {
-            KnowledgeSpaceLevelEnum.PUBLIC: 0,
-            KnowledgeSpaceLevelEnum.DEPARTMENT: 1,
-            KnowledgeSpaceLevelEnum.TEAM: 2,
-            KnowledgeSpaceLevelEnum.TEAM_KS: 2,
-            KnowledgeSpaceLevelEnum.PERSONAL: 3,
-        }
-        level_labels = {
-            KnowledgeSpaceLevelEnum.PUBLIC: "公共知识库",
-            KnowledgeSpaceLevelEnum.DEPARTMENT: "部门知识库",
-            KnowledgeSpaceLevelEnum.TEAM: "团队知识库",
-            KnowledgeSpaceLevelEnum.TEAM_KS: "科室知识库",
-            KnowledgeSpaceLevelEnum.PERSONAL: "个人知识库",
-        }
-
         result_items = []
         for f in page_files:
             space = space_by_id.get(int(f.knowledge_id))
             if not space:
                 continue
-            level = space.space_level or KnowledgeSpaceLevelEnum.PERSONAL
+            level_value, level_label, order = _space_level_meta(getattr(space, "space_level", None))
             folder_segments: list[str] = []
             for part in (f.file_level_path or "").split("/"):
                 if part:
@@ -13785,15 +13822,22 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     else "",
                     "space_id": int(f.knowledge_id),
                     "space_name": space.name or "",
-                    "space_level": str(level.value) if isinstance(level, KnowledgeSpaceLevelEnum) else str(level),
-                    "space_level_label": level_labels.get(level, str(level)),
-                    "space_level_order": level_order.get(level, 99),
+                    "space_level": level_value,
+                    "space_level_label": level_label,
+                    "space_level_order": order,
                     "folder_path": folder_segments,
                 }
             )
 
         result_items.sort(key=lambda x: (x["space_level_order"], x["space_name"], x["folder_path"], x["file_name"]))
-        return {"total": total, "page": page, "page_size": page_size, "data": result_items}
+        return {
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "data": result_items,
+            "space_total": len(matched_spaces),
+            "spaces": matched_spaces[:100],
+        }
 
     async def get_authorized_space_options(
         self,
