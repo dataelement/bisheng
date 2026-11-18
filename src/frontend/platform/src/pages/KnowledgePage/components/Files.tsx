@@ -20,6 +20,7 @@ import { SpaceDirectoryLoading } from "./SpaceDirectoryLoading";
 import { KnowledgeDeletionDialog } from "./KnowledgeDeletionDialog";
 import { useDirectoryDeletion } from "../hooks/useDirectoryDeletion";
 import { useDirectoryDownloadPermissions } from "../hooks/useDirectoryDownloadPermissions";
+import { useDirectorySelectionActions } from "../hooks/useDirectorySelectionActions";
 import { SpaceDirectoryRow } from "./SpaceDirectoryRow";
 import { SpaceDirectoryToolbar } from "./SpaceDirectoryToolbar";
 import { SpaceDirectoryView, type DirectorySortField, type DirectoryViewMode } from "./SpaceDirectoryView";
@@ -371,6 +372,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
     isCurrent: () => current.current === epoch,
     onDeleted: () => client.invalidateQueries({ queryKey: base }),
   });
+  const selectedActions = useDirectorySelectionActions({ prefix: epoch.prefix, rows: selectedRows });
   const batch = useKnowledgeBatch(JSON.stringify([...base, parentId, selectedKeys]));
   const [batchTagsOpen, setBatchTagsOpen] = useState(false);
   const [move, setMove] = useState<MoveSelection[] | null>(null);
@@ -513,19 +515,19 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
         onCreateFolder={() => handleEdit()}
         canUpload={containerActions.includes("upload_file")}
         onWebLink={() => setWebLinkOpen(true)}
-        onBatchDownload={() => {
+        onBatchDownload={selectedActions.canDownload ? () => {
           void runBatch("download");
-        }}
-        onBatchRetry={() => {
+        } : undefined}
+        onBatchRetry={selectedActions.canRetry ? () => {
           void runBatch("retry");
-        }}
-        onBatchTag={() => setBatchTagsOpen(true)}
-        onMove={() => setMove(selectedRows.map(item => ({ id: item.id, type: item.file_type === 0 ? "folder" : "file" })))}
+        } : undefined}
+        onBatchTag={selectedActions.canTag ? () => setBatchTagsOpen(true) : undefined}
+        onMove={selectedActions.canMove ? () => setMove(selectedRows.map(item => ({ id: item.id, type: item.file_type === 0 ? "folder" : "file" }))) : undefined}
         selectedCount={selectedRows.length}
-        onDeleteSelected={() => {
+        onDeleteSelected={selectedActions.canDelete ? () => {
           void remove(selectedRows);
-        }}
-        onReferences={selectedRows.length ? () => references(selectedRows) : undefined}
+        } : undefined}
+        onReferences={selectedActions.canDelete ? () => references(selectedRows) : undefined}
       />
       <SpaceDirectoryView
         workspace={workspace}
@@ -584,7 +586,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
       <BatchTagDraftDialog
         spaceId={spaceId}
         availableTags={selectedRows.flatMap((item) => item.tags ?? [])}
-        open={batchTagsOpen}
+        open={batchTagsOpen && selectedActions.canTag}
         onClose={() => setBatchTagsOpen(false)}
         onReview={(ids, names) => {
           void runBatch("tag", ids, names);
