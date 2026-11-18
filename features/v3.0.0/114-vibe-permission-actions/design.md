@@ -219,6 +219,10 @@
 
 ### 4.6 应用发布审批的自审与撤回
 
+2026-11-19 历史快照修复：异常候选列表与指派提交共用 `AppCandidatePolicy`，仅异常指派改用资源专属候选接口。对完全不含 `submission_actor`、`self_review_user_id` 的旧 CLI 快照，通过 app publish 的 `frozen_legacy_review_user` 窄端口读取精确关联的原发布记录；仅其 tenant/app/version/instance/冻结 owner/applicant 全部一致、authorization_context 为 NULL、submitted_by 为 0 或冻结 owner 时，按旧 owner-only 提交合同恢复原排除身份。原管线在接收时已验证凭据资源归属人与应用归属人相同（`6ac7704998^` 的 PublishPipelineService.receive/_assert_owned）；不使用当前凭据/当前 owner 猜测，不修改冻结快照，也不制造运行授权。新版字段部分缺失、业务绑定不匹配继续拒绝。只有重新定义历史提交身份或自审业务合同才重评该恢复边界。
+
+已知坑：直接把新增字段设为必填会使旧审批对所有人员返回空候选；直接用 owner 做缺省值又会漏排代提交方。历史记录应先由原发布证据证明旧合同，再恢复排除身份。SQL 候选搜索在分页和 COUNT 前过滤资格；保存仍重读人员与管理员当前性。真实单管理员例外在 UI 互斥选择，管理租户变更会清空选择并退休旧请求；具体记录、基线差异及现场限制见 [热修复记录](../../../docs/reviews/beta1-approval-candidates-20261119.md)。
+
 - 发布 payload 含 `submission_actor` 与 `self_review_user_id`，由发布冻结记录投影；申请人仍是 app owner。多节点运行时 handler 从同一冻结来源重建这些信息，服务账号改绑不改写历史。
 - 应用场景 handler 排除 `{app.owner_user_id, self_review_user_id}`，候选先经过现有有效人员/租户条件，重复 ID 去重。
 - 单管理员例外需要从租户管理身份的可信端口确认实际管理员数量和候选，不用过滤结果或人工配置候选数代替。Root 的既有平台超管来源按原产品口径统计；无法确认时不启用例外。无合格候选沿现有 approver_empty 异常路径通知处理，不伪造任务或自动通过。

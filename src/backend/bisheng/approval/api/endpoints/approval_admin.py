@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from bisheng.approval.domain.services.approval_center_service import ApprovalCenterService
@@ -318,6 +318,26 @@ class CancelExceptionReq(BaseModel):
     reason: str = Field(min_length=1, max_length=2000)
 
 
+@router.get("/exceptions/{exception_id}/approver-candidates")
+async def list_exception_approver_candidates(
+    exception_id: int,
+    keyword: str = Query(default="", max_length=255),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=50, ge=1, le=50),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    await _ensure_admin(login_user)
+    return resp_200(
+        await ApprovalExceptionService.list_approver_candidates(
+            exception_id=exception_id,
+            tenant_id=_tenant(login_user),
+            keyword=keyword,
+            page=page,
+            limit=limit,
+        )
+    )
+
+
 @router.post("/exceptions/{exception_id}/retry")
 async def retry_exception(
     exception_id: int,
@@ -329,6 +349,7 @@ async def retry_exception(
     try:
         result = await ApprovalExceptionService.retry_exception_api(
             exception_id=exception_id,
+            tenant_id=_tenant(login_user),
             action=req.action,
             operator_user_id=login_user.user_id,
             approver_user_ids=req.approver_user_ids,
@@ -350,6 +371,7 @@ async def cancel_exception(
     return resp_200(
         await ApprovalExceptionService.cancel_exception_api(
             exception_id=exception_id,
+            tenant_id=_tenant(login_user),
             operator_user_id=login_user.user_id,
             reason=req.reason,
             ip_address=get_request_ip(request),

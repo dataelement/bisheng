@@ -16,14 +16,47 @@ from bisheng.approval.domain.repositories.approval_instance_repository import Ap
 from bisheng.approval.domain.repositories.approval_scenario_repository import ApprovalScenarioRepository
 from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateRequest
 from bisheng.approval.domain.services.approval_runtime_handler_factory import build_runtime_handler
+from bisheng.common.errcode.approval import ApprovalRequestNotFoundError
 from bisheng.database.models.audit_log import AuditLogDao
 
 logger = logging.getLogger(__name__)
 
 
 class ApprovalExceptionService:
-    def __init__(self, *, instance_repository) -> None:
+    def __init__(self, *, instance_repository, tenant_id: int | None = None) -> None:
         self.instance_repository = instance_repository
+        self.tenant_id = tenant_id
+
+    @staticmethod
+    def _require_assignable(exception, instance):
+        from bisheng.common.errcode.approval import ApprovalRequestAlreadyProcessedError
+
+        if exception.status != "open" or exception.exception_type != "approver_empty" or instance.status != "exception":
+            raise ApprovalRequestAlreadyProcessedError()
+
+    @classmethod
+    async def list_approver_candidates(cls, *, exception_id, tenant_id, keyword, page, limit):
+        from bisheng.approval.domain.repositories.approver_candidate_repository import ApproverCandidateRepository
+        from bisheng.approval.domain.services.approval_runtime_handler_factory import manual_candidate_policy
+
+        service = cls(instance_repository=ApprovalInstanceRepository, tenant_id=tenant_id)
+        exception = await service._get_exception(exception_id)
+        instance = await service._get_instance(exception.instance_id)
+        service._require_assignable(exception, instance)
+        policy = await manual_candidate_policy(instance)
+        if instance.scenario_code == "app_publish_request" and policy is None:
+            return {"data": [], "total": 0}
+        rows, total = await ApproverCandidateRepository.search(
+            tenant_id,
+            keyword=keyword,
+            page=page,
+            limit=limit,
+            global_ids=policy.global_ids if policy else (),
+            excluded_ids=policy.search_excluded_ids if policy else (),
+        )
+        for row in rows:
+            row["exclusive"] = policy is not None and row["user_id"] == policy.exclusive_user_id
+        return {"data": rows, "total": total}
 
     @classmethod
     async def retry_exception_api(
@@ -34,8 +67,9 @@ class ApprovalExceptionService:
         operator_user_id: int,
         approver_user_ids: list[int] | None = None,
         ip_address: str | None = None,
+        tenant_id: int | None = None,
     ):
-        service = cls(instance_repository=ApprovalInstanceRepository)
+        service = cls(instance_repository=ApprovalInstanceRepository, tenant_id=tenant_id)
         exception = await service._get_exception(exception_id)
         instance = await service._get_instance(exception.instance_id)
 
@@ -163,10 +197,11 @@ class ApprovalExceptionService:
         operator_user_id: int,
         reason: str,
         ip_address: str | None = None,
+        tenant_id: int | None = None,
     ):
         if not reason or not reason.strip():
             raise ValueError("cancel reason is required")
-        service = cls(instance_repository=ApprovalInstanceRepository)
+        service = cls(instance_repository=ApprovalInstanceRepository, tenant_id=tenant_id)
         exception = await service._get_exception(exception_id)
         instance = await service._get_instance(exception.instance_id)
 
@@ -273,6 +308,7 @@ class ApprovalExceptionService:
     ) -> None:
         exception = await self._get_exception(exception_id)
         instance = await self._get_instance(exception.instance_id)
+        self._require_assignable(exception, instance)
         from bisheng.approval.domain.services.approval_runtime_handler_factory import validate_scenario_candidates
 
         approver_user_ids = await validate_scenario_candidates(instance, approver_user_ids)
@@ -627,14 +663,22 @@ class ApprovalExceptionService:
     async def _get_exception(self, exception_id: int):
         exception = await self.instance_repository.get_exception(exception_id)
         if exception is None:
-            raise ValueError(f"exception not found: {exception_id}")
+            raise ApprovalRequestNotFoundError()
+        self._require_tenant(exception)
         return exception
 
     async def _get_instance(self, instance_id: int):
         instance = await self.instance_repository.get_instance(instance_id)
         if instance is None:
-            raise ValueError(f"instance not found: {instance_id}")
+            raise ApprovalRequestNotFoundError()
+        self._require_tenant(instance)
         return instance
+
+    def _require_tenant(self, row):
+        from bisheng.common.errcode.approval import ApprovalRequestPermissionDeniedError
+
+        if self.tenant_id is not None and row.tenant_id != self.tenant_id:
+            raise ApprovalRequestPermissionDeniedError()
 
     async def _retry_route_missing(self, exception, instance, operator_user_id: int) -> None:
         """Re-run the full gate route-matching logic for a route_missing exception.
@@ -744,6 +788,7 @@ class ApprovalExceptionService:
     @staticmethod
     def _build_gate_request(instance) -> ApprovalGateRequest:
         return ApprovalGateRequest(
+            instance_id=instance.id,
             tenant_id=instance.tenant_id,
             scenario_code=instance.scenario_code,
             business_key=instance.business_key,
