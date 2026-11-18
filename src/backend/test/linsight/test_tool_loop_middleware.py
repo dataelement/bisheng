@@ -167,6 +167,64 @@ async def test_no_raise_when_model_switched_tools():
     assert await mw.aafter_model({"messages": messages}, None) is None
 
 
+def _parallel_turn(tool, results):
+    """One AIMessage with len(results) parallel calls, then their ToolMessages."""
+    calls = [
+        {
+            "name": tool,
+            "args": {"file_path": "/output/report.html", "old_string": str(i)},
+            "id": f"p{i}",
+            "type": "tool_call",
+        }
+        for i in range(len(results))
+    ]
+    msgs = [AIMessage(content="", tool_calls=calls)]
+    for i, ok in enumerate(results):
+        msgs.append(
+            ToolMessage(content="Successfully replaced 1 instance(s)", tool_call_id=f"p{i}", name=tool)
+            if ok
+            else ToolMessage(
+                content="Error: parallel file mutations to the same path are not allowed.",
+                tool_call_id=f"p{i}",
+                name=tool,
+                status="error",
+            )
+        )
+    return msgs
+
+
+async def test_parallel_refusals_in_one_turn_are_not_a_failure_run():
+    """114, 2026-11-18 (run edcbf900): nine parallel edit_file calls for one file,
+    the first applied and deepagents refused the other eight. That is one turn that
+    made progress, not eight consecutive failures."""
+    mw = _mw(soft=3, hard=8)
+    messages = _parallel_turn("edit_file", [True] + [False] * 8) + [_ai_call(tool="edit_file")]
+    assert await mw.aafter_model({"messages": messages}, None) is None
+
+
+async def test_a_fully_failing_parallel_turn_counts_once():
+    mw = _mw(soft=3, hard=8)
+    one_turn = _parallel_turn("edit_file", [False] * 9) + [_ai_call(tool="edit_file")]
+    assert await mw.aafter_model({"messages": one_turn}, None) is None
+
+    eight_turns = []
+    for _ in range(8):
+        eight_turns += _parallel_turn("edit_file", [False] * 2)
+    with pytest.raises(LinsightToolLoopError) as ei:
+        await mw.aafter_model({"messages": eight_turns + [_ai_call(tool="edit_file")]}, None)
+    assert ei.value.tool_name == "edit_file" and ei.value.count == 8
+
+
+async def test_soft_nudge_counts_turns_not_parallel_results():
+    """The corrective hint blames an over-long content argument; a single refused
+    parallel batch must not trigger it."""
+    mw = _mw(soft=3, hard=8)
+    messages = _parallel_turn("edit_file", [False] * 5) + [_ai_call(tool="edit_file")]
+    req = _Req({"name": "edit_file", "args": {}, "id": "tc"}, messages)
+    out = await mw.awrap_tool_call(req, _error_handler(tool="edit_file"))
+    assert "⚠️" not in out.content
+
+
 # --------------------------------------------------------------------------- salvage assembly
 
 

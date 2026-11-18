@@ -317,7 +317,7 @@
 | 16 | deepagents 0.7 遇到超窗时先裁剪尾部，裁剪后没有变短就直接抛 `ContextOverflowError`，不再重试一次 | 历史很短的子代理超窗时只调用 1 次模型就结束，测试剧本里多出来的回复被主图吃掉 | 行为可接受（子代理仍以“未完成”说明返回主任务）。`test_context_overflow_flow.py` 的子代理剧本补了 3 次读页，让压缩有内容可裁 |
 | 17 | `create_linsight_agent` 按模型的 provider 名在进程内注册一个全局 profile（去掉框架自带的摘要中间件）。测试里不同文件的脚本化模型类同名时 provider 名相同 | 新测试先跑，之后别的文件直接调用 `create_deep_agent` 就报“assembled outside bisheng_summarization” ；单独跑能过，合起来才失败 | 每个用 `create_linsight_agent` 的测试模型都通过 `_get_ls_params` 给自己起独立的 `ls_provider` |
 | 18 | 来源表中间件（`LinsightCitationSourceMiddleware`）在每次模型调用的消息列表末尾追加一条 user 角色消息，原来的挂载条件只看“有检索工具且启用编号”。F075 明确日常对话不注入来源表，旧日常对话从未有过 | `direct` 档共用工厂后每次模型调用都多一条最多 150 行的 user 消息；114 上模型把表头里的 `[Sn]` 当作用户的话向用户复述，前端只转换带数字的编号，`[Sn]` 原样显示 | `agent_factory.py`：来源表只在 `planned` 档挂载（主图与 researcher 相同）；`direct` 档用不提来源表的尾部提示 `_DIRECT_CITATION_TAIL_HANDLES_ZH`；表头、补编号提醒、尾部提示都不再出现字面 `[Sn]`。回归：`test_agent_factory_profiles.py::test_source_table_is_for_deep_research_only`。114 实测（2026-11-18，同一问题同一模型，各 1 次，天气题改动后 3 次）：回复正文引用数 6 → 5/6/3；写 HTML 的问题，文件内编号 201 → 122（39 个不同来源）。中间一版把 `direct` 档尾部提示写成“回答中”，同一问题的 HTML 里编号为 0：日常编号规则只说“回答中”，尾部提示是唯一要求在文件里写编号的地方，所以 `_DIRECT_CITATION_TAIL_HANDLES_ZH` 必须保留“写交付物正文” |
-| 19 | deepagents 0.7 拒绝同一轮里对同一路径的并行写操作（`Error: parallel file mutations to the same path are not allowed.`），只放行第 1 个。`LinsightToolLoopBreaker` 把这一批被拒的调用算作连续失败 | 模型一轮并行发 9 个 `edit_file` 改同一文件，8 个被拒，循环保护判定“连续 8 次失败”并中止运行，已写好的文件随失败的回复一起交付（114 会话 e9134062，run edcbf900） | **未处理**。两档共用同一套中间件，深度研究同样会遇到 |
+| 19 | deepagents 0.7 拒绝同一轮里对同一路径的并行写操作（`Error: parallel file mutations to the same path are not allowed.`），只放行第 1 个。`LinsightToolLoopBreaker` 把这一批被拒的调用算作连续失败 | 模型一轮并行发 9 个 `edit_file` 改同一文件，8 个被拒，循环保护判定“连续 8 次失败”并中止运行，已写好的文件随失败的回复一起交付（114 会话 e9134062，run edcbf900） | `tool_loop_middleware.py:_trailing_tool_failure_run` 改为按轮计数：一条 AIMessage 的一批工具结果算一轮，整批都是错误才算该工具失败 1 次，批内有任何成功就结束连续失败。软提示与硬中止都用这个计数。两档共用。回归：`test_tool_loop_middleware.py::test_parallel_refusals_in_one_turn_are_not_a_failure_run` |
 
 ---
 
@@ -485,3 +485,4 @@ Wave 1–4 留下、技术上已知、尚未处理的：
 | 2026-11-17 | 独立评审后修订：决策 9 增加“等待回答”和“租约过期”分支与接力运行；决策 3 改用短租约判活；决策 7 明确 `direct` 运行不建 `linsight_session_version`、在途任务与工作区键的处理；决策 4 增加 `resync`；补充事件字段与 AC 承接表；更正 3 处与代码不符的陈述 | `/sdd-review design` |
 | 2026-11-18 | §5 增 #18：`direct` 档不再注入来源表；提示词里去掉字面 `[Sn]` | 114 实测会话 9d256fd6 的回复向用户提到 `[Sn]` |
 | 2026-11-19 | §5 #18 补 114 实测数字；增 #19（并行写同一文件被循环保护中止，未处理） | 用同一问题重放对照会话 |
+| 2026-11-19 | §5 #19 已处理：连续失败按轮计数 | 用户确认修复 |
