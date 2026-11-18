@@ -20,7 +20,7 @@ from bisheng.common.errcode.llm_tenant import LLMModelNotAccessibleError, LLMMod
 from bisheng.core.context.tenant import bypass_tenant_filter, strict_tenant_filter
 from bisheng.knowledge.domain.models.knowledge_operation_plan import KnowledgeOperationPlan
 from bisheng.llm.domain.models.llm_server import LLMServer
-from bisheng.llm.domain.repositories.model_delete_plan_repository import ModelDeletePlanRepository, _hash
+from bisheng.llm.domain.repositories.model_delete_plan_repository import ModelDeletePlanRepository, _hash, _utc
 from bisheng.resource_reference.application.contracts import TransactionIdentity
 from bisheng.resource_reference.domain.repositories.reference_repository import ReferenceRepository
 
@@ -237,7 +237,8 @@ class ModelProviderOperationRepository:
         tenant, transaction = self._native(session)
         actor = self.plans._actor(actor_reference, tenant)
         await self.arequire_idle(session, server_id=server_id)
-        now = self.plans.clock()
+        # Match persisted DATETIME(0) before signing; MySQL rounds fractions up.
+        now = _utc(self.plans.clock())
         row = KnowledgeOperationPlan(
             tenant_id=tenant,
             actor_user_id=actor["actor_user_id"],
