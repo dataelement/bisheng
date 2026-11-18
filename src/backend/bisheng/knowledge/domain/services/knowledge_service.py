@@ -2,6 +2,7 @@ import asyncio
 import json
 import math
 import os
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from datetime import datetime
 from time import perf_counter
@@ -57,7 +58,7 @@ from bisheng.common.schemas.api import PageInfiniteCursorData
 from bisheng.common.services.metric_log import emit_metric
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
 from bisheng.core.cache.utils import async_file_download, file_download
-from bisheng.core.context.tenant import get_current_tenant_id
+from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage, get_minio_storage_sync
 from bisheng.database.models.group_resource import (
@@ -550,7 +551,8 @@ class KnowledgeService(KnowledgeUtils):
         visible_ids: list[int] | None
         fga_elapsed_ms = 0.0
         if is_admin:
-            # Admin bypass: no F048 enumeration, DB filter left unbounded.
+            # Skip F048 enumeration only within the current tenant. The visible
+            # tenant set may also contain Root for explicitly shared resources.
             visible_ids = None
         else:
             fga_started = perf_counter()
@@ -608,16 +610,17 @@ class KnowledgeService(KnowledgeUtils):
             candidate_page = 1
             authorized: list[Knowledge] = []
             while len(authorized) < target_authorized:
-                batch = await KnowledgeDao.aget_all_knowledge(
-                    name,
-                    knowledge_type,
-                    sort_by,
-                    page=candidate_page,
-                    limit=_KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE,
-                    preferred_ids=preferred_ids,
-                    id_in=visible_ids,
-                    has_abnormal=has_abnormal,
-                )
+                with strict_tenant_filter() if is_admin else nullcontext():
+                    batch = await KnowledgeDao.aget_all_knowledge(
+                        name,
+                        knowledge_type,
+                        sort_by,
+                        page=candidate_page,
+                        limit=_KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE,
+                        preferred_ids=preferred_ids,
+                        id_in=visible_ids,
+                        has_abnormal=has_abnormal,
+                    )
                 if not batch:
                     break
                 if needs_action_check:
@@ -636,16 +639,17 @@ class KnowledgeService(KnowledgeUtils):
         else:
             candidate_cursor = list(keyset_cursor) if keyset_cursor else None
             while len(res) < fetch_limit:
-                batch = await KnowledgeDao.aget_all_knowledge(
-                    name,
-                    knowledge_type,
-                    sort_by,
-                    limit=_KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE,
-                    preferred_ids=preferred_ids,
-                    cursor=candidate_cursor,
-                    id_in=visible_ids,
-                    has_abnormal=has_abnormal,
-                )
+                with strict_tenant_filter() if is_admin else nullcontext():
+                    batch = await KnowledgeDao.aget_all_knowledge(
+                        name,
+                        knowledge_type,
+                        sort_by,
+                        limit=_KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE,
+                        preferred_ids=preferred_ids,
+                        cursor=candidate_cursor,
+                        id_in=visible_ids,
+                        has_abnormal=has_abnormal,
+                    )
                 if not batch:
                     break
                 if needs_action_check:
