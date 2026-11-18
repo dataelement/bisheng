@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { cn } from '@bisheng/ui';
 import { usePreviewResource } from '../usePreviewResource';
+import { usePreviewLoadingRenderer } from '../PreviewLoading';
 import type { PreviewViewerProps } from '../viewerTypes';
 import { MarkdownBody } from './MarkdownViewer';
 import { readPreview, usePreviewFailure } from './PreviewState';
@@ -26,6 +27,7 @@ function TranscriptCueList({ cues }: { cues: Array<{ time: string; text: string 
 
 interface TranscriptProps extends PreviewViewerProps { className?: string; bottomInset?: number }
 export function MediaTranscriptTabs({ resource, locale, className, onError, bottomInset = 16 }: TranscriptProps) {
+    const renderLoading = usePreviewLoadingRenderer();
     const [activeTab, setActiveTab] = useState<'recognized' | 'entry'>('recognized');
     const url = resource.previewUrl;
     const state = usePreviewResource(url, async signal => (await readPreview(url, signal)).text());
@@ -68,7 +70,7 @@ export function MediaTranscriptTabs({ resource, locale, className, onError, bott
             </div>
             {loading ? (
                 <div className="flex flex-1 items-center justify-center text-sm text-text-3">
-                    {locale.loading}
+                    {renderLoading ? renderLoading({ size: 'panel', label: locale.loading }) : locale.loading}
                 </div>
             ) : error ? (
                 <div className="flex flex-1 items-center justify-center text-sm text-text-3">{error}</div>
