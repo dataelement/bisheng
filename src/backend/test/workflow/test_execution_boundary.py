@@ -2,6 +2,7 @@
 
 import copy
 import json
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -13,9 +14,27 @@ from bisheng.common.chat.clients import workflow_client as client_module
 from bisheng.common.chat.clients.workflow_client import WorkflowClient
 from bisheng.common.errcode.flow import WorkFlowInvalidUserInputError
 from bisheng.common.errcode.http_error import UnAuthorizedError
+from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
 from bisheng.worker.workflow.redis_callback import RedisCallback
+from bisheng.workflow.application import execution_admission as admission
+from bisheng.workflow.application.execution_port import BoundWorkflowExecutionPort
 from bisheng.workflow.domain.services import published_workflow_service as service_module
 from bisheng.workflow.graph.graph_engine import GraphEngine
+
+
+@asynccontextmanager
+async def local_read_session(_session):
+    yield object()
+
+
+def saved_runtime(graph):
+    snapshot = SimpleNamespace(payload_json=json.dumps({"graph": graph}), configuration_digest="saved")
+    scope = SimpleNamespace(snapshot=snapshot)
+    return SimpleNamespace(
+        verifier=SimpleNamespace(aissue_scope=AsyncMock(return_value=scope)),
+        arequire_source_valid=AsyncMock(return_value=SimpleNamespace(snapshot=snapshot)),
+    )
+
 
 FORM = {"node_id": "input_1", "input_schema": {"tab": "form_input", "value": [{"key": "city", "value": "City"}]}}
 DIALOG = {"node_id": "input_1", "input_schema": {"tab": "dialog_input", "key": "user_input"}}
@@ -69,7 +88,7 @@ async def test_websocket_rejects_message_workflow_switch_before_session_access(m
     client.client_id, client.chat_id, client.session_subject = "allowed", "own", object()
     lookup = AsyncMock()
     monkeypatch.setattr(client_module.ChatSessionService, "get_subject_session_if_exists", lookup)
-    with pytest.raises(HTTPException):
+    with pytest.raises(ResourceReferenceInvalidError):
         await client.check_status({"flow_id": "different", "chat_id": "victim"})
     lookup.assert_not_awaited()
     assert client.chat_id == "own"
@@ -102,14 +121,19 @@ async def test_use_only_init_ignores_client_graph(monkeypatch, public_without_ch
     client.get_execute_worker = AsyncMock(return_value="q")
     client.send_response, client.workflow_run = AsyncMock(), AsyncMock()
     callback = SimpleNamespace(async_set_workflow_data=AsyncMock(), async_set_workflow_status=AsyncMock())
-    graph = {"nodes": [], "edges": [], "source": "persisted"}
+    graph = {"nodes": [], "edges": []}
     monkeypatch.setattr(client_module.FlowDao, "get_flow_by_id", Mock(return_value=SimpleNamespace(data=graph)))
     monkeypatch.setattr(client_module, "RedisCallback", Mock(return_value=callback))
     monkeypatch.setattr(client_module, "ensure_client_execution_lease", AsyncMock(return_value="skipped"))
-    monkeypatch.setattr(client_module, "record_business_activity", AsyncMock())
     monkeypatch.setattr(client_module.execute_workflow, "apply_async", Mock())
-    await client.init_workflow({"data": {"source": "client"}})
-    callback.async_set_workflow_data.assert_awaited_once_with(graph)
+    client.execution_port = BoundWorkflowExecutionPort("allowed", client.login_user, allow_preview=False)
+    monkeypatch.setattr(admission, "_read_session", local_read_session)
+    runtime = saved_runtime(graph)
+    monkeypatch.setattr(admission, "get_reference_read_runtime", AsyncMock(return_value=runtime))
+    client.websocket = SimpleNamespace(send_json=AsyncMock())
+    await client.init_workflow({"data": {"nodes": [], "edges": []}})
+    callback.async_set_workflow_data.assert_awaited_once_with({"nodes": [], "edges": []})
+    runtime.arequire_source_valid.assert_awaited_once()
 
 
 @pytest.mark.parametrize("can_edit", [False, True])
@@ -124,13 +148,23 @@ async def test_draft_graph_requires_edit_and_keeps_editor_preview(monkeypatch, c
     callback = SimpleNamespace(async_set_workflow_data=AsyncMock(), async_set_workflow_status=AsyncMock())
     monkeypatch.setattr(client_module, "RedisCallback", Mock(return_value=callback))
     monkeypatch.setattr(client_module, "ensure_client_execution_lease", AsyncMock(return_value="skipped"))
-    monkeypatch.setattr(client_module, "record_business_activity", AsyncMock())
     monkeypatch.setattr(client_module.execute_workflow, "apply_async", Mock())
     gate = AsyncMock(side_effect=None if can_edit else UnAuthorizedError())
-    monkeypatch.setattr(client_module, "require_business_action", gate)
-    graph = {"nodes": [], "edges": [], "source": "draft"}
+    graph = {"nodes": [{"data": {"id": "code", "type": "code"}}], "edges": []}
+    client.websocket = SimpleNamespace(send_json=AsyncMock())
+    client.execution_port = BoundWorkflowExecutionPort("wf", client.login_user)
+    monkeypatch.setattr(admission, "_read_session", local_read_session)
+    runtime = saved_runtime({"nodes": [], "edges": []})
+    runtime.verifier.aissue_transient_scope = gate
+    runtime.arequire_transient_valid = AsyncMock(
+        return_value=SimpleNamespace(
+            snapshot=SimpleNamespace(payload_json=json.dumps({"graph": graph}), configuration_digest="draft")
+        )
+    )
+    monkeypatch.setattr(admission, "get_reference_read_runtime", AsyncMock(return_value=runtime))
     await client.init_workflow({"data": graph})
-    assert gate.await_args.kwargs["action"] == "edit"
+    assert gate.await_args.args[1].resource_type == "workflow"
+    assert gate.await_args.args[1].resource_id == "wf"
     if can_edit:
         callback.async_set_workflow_data.assert_awaited_once_with(graph)
     else:
@@ -149,7 +183,7 @@ async def test_published_override_requires_edit_before_writing(monkeypatch):
     with pytest.raises(UnAuthorizedError):
         await service_module.PublishedWorkflowService.prepare_invocation(
             workflow_id="wf",
-            operator_user_id=2,
+            operator=SimpleNamespace(user_id=2),
             session_subject=SessionSubject.natural_person(tenant_id=1, user_id=2),
             execution_snapshot=SimpleNamespace(tenant_id=1),
             session_id=None,
@@ -179,9 +213,12 @@ async def test_authorized_editor_override_is_enqueued(monkeypatch):
     monkeypatch.setattr(service_module.execute_workflow, "apply_async", enqueue)
     snapshot = SimpleNamespace(tenant_id=1, model_dump=lambda **kwargs: {"channel": "open_api_v2"})
     override = {"tool_1": {"url": "changed"}}
+    operator = SimpleNamespace(user_id=2)
+    prepared = AsyncMock(return_value=SimpleNamespace(graph=graph))
+    monkeypatch.setattr(service_module, "prepare_saved", prepared)
     await service_module.PublishedWorkflowService.prepare_invocation(
         workflow_id="wf",
-        operator_user_id=2,
+        operator=operator,
         session_subject=SessionSubject.natural_person(tenant_id=1, user_id=2),
         execution_snapshot=snapshot,
         session_id="chat_async_task_id",
@@ -190,7 +227,8 @@ async def test_authorized_editor_override_is_enqueued(monkeypatch):
         message_id=None,
     )
     assert gate.await_args.kwargs["action"] == "edit"
-    callback.set_workflow_data.assert_called_once_with(graph, override=override)
+    callback.set_workflow_data.assert_called_once_with(graph)
+    prepared.assert_awaited_once_with(operator, "wf", override=override)
     enqueue.assert_called_once()
 
 
@@ -254,12 +292,39 @@ def test_pending_message_replay_is_rejected(message_id):
 
 async def test_v1_route_binds_natural_person_subject(monkeypatch):
     from bisheng.api.v1 import workflow as endpoint
+    from bisheng.common.chat import manager as manager_module
+    from bisheng.database.models.flow import FlowType
+    from bisheng.workflow.application import browser_scope
 
-    dispatch = AsyncMock()
-    monkeypatch.setattr(endpoint, "require_business_action", AsyncMock())
-    monkeypatch.setattr(endpoint.chat_manager, "dispatch_client", dispatch)
-    await endpoint.workflow_ws(workflow_id="wf", websocket=Mock(), login_user=SimpleNamespace(tenant_id=7, user_id=9))
-    assert dispatch.await_args.kwargs["session_subject"] == SessionSubject.natural_person(tenant_id=7, user_id=9)
+    user = SimpleNamespace(tenant_id=7, user_id=9, _dsh_web_session_tenant_id=7)
+    monkeypatch.setattr(
+        browser_scope.CreationRepository,
+        "load",
+        AsyncMock(return_value=SimpleNamespace(flow_type=FlowType.WORKFLOW.value, creation_state="READY")),
+    )
+    gate = AsyncMock()
+    monkeypatch.setattr(endpoint, "require_business_action", gate)
+    captured = {}
+
+    class CapturedClient:
+        def __init__(self, *args, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr(manager_module, "WorkflowClient", CapturedClient)
+
+    class StopDispatch(Exception):
+        pass
+
+    async def accepted(*args):
+        raise StopDispatch
+
+    monkeypatch.setattr(endpoint.chat_manager, "accept_client", accepted)
+    websocket = SimpleNamespace(state=SimpleNamespace(admitted_request=None))
+    with pytest.raises(StopDispatch):
+        await endpoint.workflow_ws(workflow_id="wf", websocket=websocket, login_user=user)
+    gate.assert_awaited_once_with(user, resource_type="workflow", resource_id="wf", action="use")
+    assert captured["session_subject"] == SessionSubject.natural_person(tenant_id=7, user_id=9)
+    assert isinstance(captured["workflow_execution_port"], BoundWorkflowExecutionPort)
 
 
 @pytest.mark.parametrize(

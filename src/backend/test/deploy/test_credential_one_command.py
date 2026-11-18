@@ -25,7 +25,11 @@ def install(tmp_path):
     for name in ("install.sh", "credentials.sh", ".env.example", "docker-compose.yml"):
         shutil.copyfile(ROOT / "docker" / name, docker / name)
     for name in ("lib", "bisheng/config", "gateway", "nginx", "redis", "mysql", "milvus"):
-        shutil.copytree(ROOT / "docker" / name, docker / name)
+        # Copy deployment assets, never local middleware volumes (including sockets).
+        shutil.copytree(ROOT / "docker" / name, docker / name, ignore=shutil.ignore_patterns("data"))
+    assert not (docker / "mysql/data").exists()
+    assert (docker / "mysql/credential-entrypoint.sh").is_file()
+    assert (docker / "mysql/credential-health.sh").is_file()
     fixed_store = root.parent / "credential-security"
     env_lib = docker / "lib/install-env.sh"
     env_lib.write_text(env_lib.read_text().replace("/opt/bisheng/.credential-security", str(fixed_store)))
@@ -96,6 +100,13 @@ sys.exit(0)
         "BACKEND_SOURCE": str(ROOT / "src/backend"),
         "FAIL_ONLINE": str(tmp_path / "fail-online"),
         "SERVICES_STARTED": str(tmp_path / "services-started"),
+        "BS_MILVUS_IS_PARTITION": "false",
+        "BS_MILVUS_PARTITION_SUFFIX": "",
+        "BS_MINIO_SCHEMA": "false",
+        "BS_MINIO_CERT_CHECK": "false",
+        "BS_MINIO_SHAREPOINT": "",
+        "BS_MINIO_ENDPOINT": "minio:9000",
+        "BS_ELASTICSEARCH_URL": "http://elasticsearch:9200",
     }
     values = {}
     inputs = tmp_path / "inputs"
@@ -126,8 +137,30 @@ sys.exit(0)
         .replace("BISHENG_CREDENTIAL_INPUTS_FILE=", f"BISHENG_CREDENTIAL_INPUTS_FILE={manifest}")
         .replace("BISHENG_SECRET_KEYS_FILE=", f"BISHENG_SECRET_KEYS_FILE={key}")
     )
+    # Current shared templates require explicit non-secret deployment settings.
+    # Keep these in the fixture .env, as the real Compose environment would.
+    text += '\nBS_MILVUS_IS_PARTITION=false\nBS_MILVUS_PARTITION_SUFFIX=""\n'
+    text += "BS_MINIO_SCHEMA=false\nBS_MINIO_CERT_CHECK=false\n"
+    text += 'BS_MINIO_SHAREPOINT=""\nBS_MINIO_ENDPOINT=minio:9000\n'
+    text += "BS_ELASTICSEARCH_URL=http://elasticsearch:9200\n"
     (docker / ".env").write_text(text)
     (docker / ".env").chmod(0o600)
+    # Recovery tests lose activation metadata, not required topology settings.
+    (docker / "fixture-topology.env").write_text(
+        (docker / ".env.example").read_text()
+        + "".join(
+            f"{name}={env[name]}\n"
+            for name in (
+                "BS_MILVUS_IS_PARTITION",
+                "BS_MILVUS_PARTITION_SUFFIX",
+                "BS_MINIO_SCHEMA",
+                "BS_MINIO_CERT_CHECK",
+                "BS_MINIO_SHAREPOINT",
+                "BS_MINIO_ENDPOINT",
+            )
+        )
+        + "BS_ELASTICSEARCH_URL=http://elasticsearch:9200\n"
+    )
     for name in values:
         values[name]["_expected"] = expected[name]
 
@@ -295,9 +328,20 @@ def test_unverified_es_source_stops_before_any_native_change(install, tmp_path):
     root, env, run, calls, _ = install
     old_key = Fernet.generate_key()
     fernet = Fernet(old_key)
-    source = yaml.safe_load(
-        (root / "docker/bisheng/config/config.yaml").read_text().replace("!env ${BISHENG_GATEWAY_HMAC_SECRET}", '""')
-    )
+    from bisheng.core.config.credential_loader import load_config, read_env_file
+
+    source = load_config(
+        root / "docker/bisheng/config/config.yaml",
+        {
+            **read_env_file(root / "docker/.env"),
+            "BS_MILVUS_CONNECTION_ARGS": '{"host":"milvus","port":"19530","user":"root","password":"legacy-milvus"}',
+            "BS_ELASTICSEARCH_URL": "http://elasticsearch:9200",
+            "BS_ELASTICSEARCH_SSL_VERIFY": "{}",
+            "BS_MINIO_ENDPOINT": "minio:9000",
+            "BS_MINIO_ACCESS_KEY": "existing-account",
+            "BS_MINIO_SECRET_KEY": "actual-old-minio-password",
+        },
+    ).data
     source["database_url"] = (
         "mysql+pymysql://root:" + fernet.encrypt(b"actual-old-password").decode() + "@mysql:3306/bisheng"
     )
@@ -430,7 +474,7 @@ def test_prepared_identity_recovers_when_env_write_was_lost(install):
     initial = saved_env(root)
     key = Path(initial["BISHENG_SECRET_KEYS_FILE"]).read_bytes()
     # Simulate losing activation metadata after successful private preparation.
-    (root / "docker/.env").write_bytes((root / "docker/.env.example").read_bytes())
+    (root / "docker/.env").write_bytes((root / "docker/fixture-topology.env").read_bytes())
     result = run(wrapper=True)
     assert result.returncode == 0, result.stderr
     after = saved_env(root)

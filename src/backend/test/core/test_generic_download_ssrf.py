@@ -125,6 +125,9 @@ async def test_space_permission_denial_precedes_fetch_and_upload_write(parent_id
 
 
 async def test_space_success_authorizes_before_fetch():
+    from bisheng.api.v1.schemas import FileProcessBase
+    from bisheng.knowledge.application.file_processing_adapter import capture_legacy_processing_overrides
+
     events = []
 
     async def permission(*args):
@@ -143,6 +146,13 @@ async def test_space_success_authorizes_before_fetch():
         _KB_TYPES=(0, 1),
         async_file_download=download,
         resp_200=lambda **kwargs: kwargs,
+        FileProcessBase=FileProcessBase,
+        capture_legacy_processing_overrides=capture_legacy_processing_overrides,
     )
-    assert await handler(request=None, knowledge_id=1, file_url="https://public.example/a") == {"data": "stored"}
+    request = SimpleNamespace(form=AsyncMock(return_value={}))
+    assert await handler(request=request, knowledge_id=1, file_url="https://public.example/a") == {"data": "stored"}
     assert events == ["authorize", "download"]
+    request.form.assert_awaited_once()
+    space.add_file.assert_awaited_once_with(
+        knowledge_id=1, file_path=["/tmp/cached"], parent_id=None, processing_overrides=None
+    )

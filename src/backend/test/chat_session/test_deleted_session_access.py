@@ -113,14 +113,21 @@ class ShareLink(BaseModel):
 
 
 @pytest.fixture
-async def client(lifecycle):
+async def client(lifecycle, monkeypatch):
+    from bisheng.chat_session.application import conversation_persistence
     from bisheng.chat_session.domain.services.session_read_authorization import require_session_read
 
+    # Keep the production read-scope rule; replace only its repository/context boundary.
+    monkeypatch.setattr(
+        conversation_persistence.ModerationRepository, "session_subject", lambda chat_id: lifecycle.session
+    )
+    monkeypatch.setattr(conversation_persistence, "get_current_tenant_id", lambda: 1)
     router = APIRouter()
     namespace = {
         "MessageSessionDao": lifecycle.dao,
         "optional_session_reader": User.get_login_user,
         "require_session_read": require_session_read,
+        "conversation_read_scope": conversation_persistence.conversation_read_scope,
         "router": router,
         "Depends": Depends,
         "Query": Query,

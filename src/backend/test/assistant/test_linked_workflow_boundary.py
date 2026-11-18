@@ -78,14 +78,21 @@ async def test_update_route_denied_flow_precedes_any_mutation(monkeypatch):
     monkeypatch.setattr(module.AssistantDao, "get_one_assistant", Mock(return_value=row))
     monkeypatch.setattr(module.AssistantService, "check_update_permission_async", AsyncMock())
     monkeypatch.setattr(AssistantBoundaryService, "authorize_flow_bindings", AsyncMock(side_effect=UnAuthorizedError()))
-    persist = Mock()
-    monkeypatch.setattr(module.AssistantDao, "update_assistant", persist)
+    runtime = SimpleNamespace(aprepare_source_bindings=AsyncMock(), aapply_source_bindings=AsyncMock())
+    monkeypatch.setattr(module, "get_reference_binding_runtime", AsyncMock(return_value=runtime))
+    persist = AsyncMock()
+    links = AsyncMock()
+    monkeypatch.setattr(module.AssistantRepository, "asave", persist)
+    monkeypatch.setattr(module.AssistantRepository, "areplace_links", links)
     with pytest.raises(UnAuthorizedError):
         await module.AssistantService.update_assistant(
             None, SimpleNamespace(user_id=7), AssistantUpdateReq(id="own", name="new", flow_list=["private"])
         )
     assert row.name == "old"
-    persist.assert_not_called()
+    persist.assert_not_awaited()
+    links.assert_not_awaited()
+    runtime.aprepare_source_bindings.assert_not_awaited()
+    runtime.aapply_source_bindings.assert_not_awaited()
 
 
 async def test_auto_flow_suggestion_never_serializes_original_graph(monkeypatch):
@@ -113,8 +120,12 @@ async def test_flow_post_route_does_not_persist_denied_reference(monkeypatch):
     monkeypatch.setattr(module.AssistantDao, "get_one_assistant", Mock(return_value=SimpleNamespace(id="own")))
     monkeypatch.setattr(module.AssistantService, "check_update_permission_async", AsyncMock())
     monkeypatch.setattr(AssistantBoundaryService, "authorize_flow_bindings", AsyncMock(side_effect=UnAuthorizedError()))
-    persist = Mock()
-    monkeypatch.setattr(module.AssistantLinkDao, "update_assistant_flow", persist)
+    runtime = SimpleNamespace(aprepare_source_bindings=AsyncMock(), aapply_source_bindings=AsyncMock())
+    monkeypatch.setattr(module, "get_reference_binding_runtime", AsyncMock(return_value=runtime))
+    persist = AsyncMock()
+    monkeypatch.setattr(module.AssistantRepository, "areplace_links", persist)
     with pytest.raises(UnAuthorizedError):
         await module.AssistantService.update_flow_list("own", ["private"], SimpleNamespace(user_id=7))
-    persist.assert_not_called()
+    persist.assert_not_awaited()
+    runtime.aprepare_source_bindings.assert_not_awaited()
+    runtime.aapply_source_bindings.assert_not_awaited()

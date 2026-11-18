@@ -10,6 +10,7 @@ from starlette.websockets import WebSocketState
 from bisheng.api.services import report_template
 from bisheng.api.services.flow import FlowService
 from bisheng.api.services.office_callback import afetch_office_document
+from bisheng.api.services.report_editor_security import verify_callback
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.v1.chat import chat_manager
 from bisheng.api.v1.schemas import FlowVersionCreate, resp_200
@@ -323,15 +324,21 @@ async def force_save_report_file(
 
 @router.post("/report/callback", status_code=200)
 async def upload_report_file(request: Request, data: dict = Body(...)):
-    """office Callback interface save reportTemplate file for the node"""
-    status = data.get("status")
-    file_url = data.get("url")
-    key = data.get("key")
-    logger.debug(f"callback={data}")
+    """Verify document-server authenticity before consulting an editor ticket."""
+    authorization = request.headers.get("authorization")
+    authorization = authorization if isinstance(authorization, str) else None
+    if not isinstance(data.get("token"), str) and not authorization:
+        return {"error": 1}
+    secret = bisheng_settings.get_from_db("office_jwt_secret") or ""
+    body = verify_callback(data, secret, authorization)
+    if body is None:
+        return {"error": 1}
+    status = body.get("status")
+    file_url = body.get("url")
+    key = body.get("key")
     if status not in {2, 6}:
         # Non-saved callbacks are not processed
         return {"error": 0}
-    logger.info(f"office_callback url={file_url}")
     # The callback carries no user identity, so it cannot be authorized on its
     # own. It is accepted only for a template the backend handed to an editor,
     # and only when that editor was opened by someone with edit rights.

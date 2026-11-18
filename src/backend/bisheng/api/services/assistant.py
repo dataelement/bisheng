@@ -151,6 +151,12 @@ class AssistantService(BaseService, AssistantUtils):
             or any(value is not None for value in (tool_ids, flow_ids, knowledge_ids))
         ):
             raise ValueError("only an unchanged ONLINE transition may skip persistence")
+        from bisheng.assistant.domain.services.assistant_boundary_service import AssistantBoundaryService
+
+        if knowledge_ids is not None:
+            await AssistantBoundaryService.authorize_knowledge_bindings(user_payload, knowledge_ids)
+        if flow_ids is not None:
+            await AssistantBoundaryService.authorize_flow_bindings(user_payload, flow_ids)
         async with get_async_db_session() as session:
             candidate = await repository.aget(session, assistant_id)
             if candidate is None or candidate.is_delete:
@@ -523,7 +529,8 @@ class AssistantService(BaseService, AssistantUtils):
                 action="visible",
             ):
                 visible_ids.append(row.id)
-        tool_list, flow_list, knowledge_list = cls.get_link_info(
+        tool_list, flow_list, knowledge_list = await cls.get_link_info(
+            login_user,
             [link["tool_id"] for link in links if link.get("tool_id")],
             [link["flow_id"] for link in links if link.get("flow_id")],
             visible_ids,
@@ -781,7 +788,9 @@ class AssistantService(BaseService, AssistantUtils):
             user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION, trace_id=trace_id_var.get()
         )
 
-        tool_list, flow_list, knowledge_list = cls.get_link_info(req.tool_list, req.flow_list, req.knowledge_list)
+        tool_list, flow_list, knowledge_list = await cls.get_link_info(
+            login_user, req.tool_list, req.flow_list, req.knowledge_list
+        )
         if req.knowledge_list is None:
             # None means this write retained its selections. Reading their
             # IDs does not re-run admission or turn an accepted save into a
@@ -927,14 +936,17 @@ class AssistantService(BaseService, AssistantUtils):
         )
 
     @classmethod
-    def get_link_info(
+    async def get_link_info(
         cls,
+        login_user: UserPayload,
         tool_list: list[int],
         flow_list: list[str],
         knowledge_list: list[int] | None = None,
     ):
         tool_list = GptsToolsDao.get_list_by_ids(tool_list) if tool_list else []
-        flow_list = FlowDao.get_flow_by_ids(flow_list) if flow_list else []
+        from bisheng.assistant.domain.services.assistant_boundary_service import AssistantBoundaryService
+
+        flow_list = await AssistantBoundaryService.flow_views(login_user, flow_list)
         knowledge_list = KnowledgeDao.get_list_by_ids(knowledge_list) if knowledge_list else []
         return tool_list, flow_list, knowledge_list
 
@@ -1077,5 +1089,14 @@ class AssistantService(BaseService, AssistantUtils):
         flow_info = []
         for one in flow_list:
             if flow_dict.get(one):
-                flow_info.append(flow_dict[one])
+                from bisheng.database.models.flow import FlowRead
+
+                source = flow_dict[one]
+                # Suggestion/SSE consumers need identity and display metadata,
+                # never the executable graph or inline credentials.
+                flow_info.append(
+                    FlowRead.model_validate(
+                        source.model_dump(include={"id", "name", "description", "logo", "status", "flow_type"})
+                    )
+                )
         return flow_info

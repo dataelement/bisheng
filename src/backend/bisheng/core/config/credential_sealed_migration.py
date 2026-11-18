@@ -369,10 +369,15 @@ def sanitize_environment(bundle, env_file, session, *, key_file):
         "database_url",
         "redis_url",
         "celery_redis_url",
-        "object_storage.minio",
+        # Match prepare_bundle's materialized credential fields, not whole
+        # component objects: topology !env references remain live in the bundle.
+        "object_storage.minio.secret_key",
+        "object_storage.minio.access_key",
         "vector_stores.milvus.connection_args",
-        "vector_stores.elasticsearch",
-        "telemetry_elasticsearch",
+        "vector_stores.elasticsearch.ssl_verify",
+        "vector_stores.elasticsearch.url",
+        "telemetry_elasticsearch.ssl_verify",
+        "telemetry_elasticsearch.url",
     )
     names = {
         name

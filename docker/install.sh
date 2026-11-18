@@ -6,6 +6,7 @@ umask 077
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${SCRIPT_DIR}/.env"
 source "${SCRIPT_DIR}/lib/install-env.sh"
+source "${SCRIPT_DIR}/lib/sandbox-security.sh"
 source "${SCRIPT_DIR}/lib/credential-install.sh"
 source "${SCRIPT_DIR}/lib/credential-migrate.sh"
 source "${SCRIPT_DIR}/lib/credential-rotate.sh"
@@ -60,6 +61,7 @@ fi
 # An existing .env is never replaced or merged automatically.
 [[ -f "$ENV_FILE" ]] || cp "${SCRIPT_DIR}/.env.example" "$ENV_FILE"
 chmod 600 "$ENV_FILE"
+sandbox_initialize_token
 compose() { "${COMPOSE[@]}" --env-file "$ENV_FILE" -f "${SCRIPT_DIR}/docker-compose.yml" "$@"; }
 credential_initialize_store
 profiles="$(env_get "$ENV_FILE" COMPOSE_PROFILES)"

@@ -59,7 +59,7 @@ def make_client(monkeypatch, callback, *, has_history=True, online=True):
     monkeypatch.setattr(
         workflow_client_module.ChatSessionService, "get_subject_session", AsyncMock(return_value=session)
     )
-    monkeypatch.setattr(workflow_client_module, "record_business_activity", AsyncMock())
+    client.memory_register = None
     monkeypatch.setattr(workflow_client_module, "require_business_action", AsyncMock())
     client.execution_snapshot = None
     client.hash_key = None

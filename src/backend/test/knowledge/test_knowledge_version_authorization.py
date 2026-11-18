@@ -14,7 +14,8 @@ from bisheng.knowledge.domain.services import knowledge_version_service as modul
 
 
 @pytest.fixture
-def version_case(monkeypatch):
+def version_case(monkeypatch, tenant_context):
+    tenant_context(1)
     knowledge = SimpleNamespace(id=10, tenant_id=1, type=3, state=1)
     files = {
         key: SimpleNamespace(
@@ -95,6 +96,30 @@ def version_case(monkeypatch):
         doc_repo=doc_repo,
         version_repo=version_repo,
         knowledge_file_repo=file_repo,
+    )
+    # Application ports own reads/transactions after these resource guards.
+    svc._version_read_service = MagicMock()
+    for name in (
+        "list_versions_for_file",
+        "search_associable_documents",
+        "search_version_sources",
+        "similar_candidates",
+        "search_candidates_page",
+    ):
+        setattr(svc._version_read_service, name, AsyncMock(return_value=SimpleNamespace(knowledge_id=10)))
+    svc._version_read_service.similar_candidates = AsyncMock(return_value=[])
+    svc.version_mutation_application = MagicMock()
+    result = SimpleNamespace(
+        knowledge_id=10, file_name="synthetic", document_id=20, new_version_no=2, new_primary_version_no=1
+    )
+    for name in ("alink_file", "aset_primary", "amerge_document"):
+        setattr(svc.version_mutation_application, name, AsyncMock(return_value=result))
+    svc.deletion_application_factory = MagicMock(
+        return_value=SimpleNamespace(
+            adelete_historical_version=AsyncMock(
+                return_value={"knowledge_id": 10, "file_name": "synthetic", "document_id": 20, "deleted_version_no": 1}
+            )
+        )
     )
     monkeypatch.setattr(svc, "_require_version_management_enabled", AsyncMock())
     return SimpleNamespace(
@@ -286,6 +311,26 @@ async def test_second_chain_file_is_independently_authorized(version_case):
     with pytest.raises(HTTPException) as exc:
         await case.svc.list_versions_for_file(101)
     assert exc.value.status_code == 403
+
+
+@pytest.mark.parametrize("method,args", [("list_versions_for_file", (100,)), ("set_primary_version", (30,))])
+async def test_failed_container_does_not_allow_reads_or_mutations(version_case, method, args):
+    case = version_case
+    case.knowledge.state = 4
+    case.permission.side_effect = None
+    with pytest.raises(HTTPException) as error:
+        await getattr(case.svc, method)(*args)
+    assert error.value.status_code == 404
+    case.svc.version_mutation_application.aset_primary.assert_not_awaited()
+
+
+async def test_failed_container_cleanup_still_requires_edit(version_case):
+    case = version_case
+    case.knowledge.state = 4
+    with pytest.raises(HTTPException) as error:
+        await case.svc.delete_version(30)
+    assert error.value.status_code == 403
+    case.svc.deletion_application_factory.assert_not_called()
 
 
 async def test_foreign_tenant_is_rejected_even_for_admin(version_case):

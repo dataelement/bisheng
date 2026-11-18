@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from urllib3.util.url import parse_url
 
 from bisheng_langchain.gpts.tools.bing_search.tool import BingSearchResults
+from bisheng_langchain.utils.structured_output import StructuredOutputError, parse_data
 
 
 class SearchInput(BaseModel):
@@ -175,8 +176,18 @@ class BingSearch(SearchTool):
             num_results=10,
         )
         res = bingtool.invoke({"query": query})
-        if isinstance(res, str):
-            res = eval(res)
+        # BingSearchResults historically returns repr(list[dict]), not JSON.
+        # Accept that data-only wire format without interpreting Python code.
+        res = parse_data(res, python_literals=True)
+        fields = {"id", "title", "link", "snippet", "thumbnail"}
+        if type(res) not in (list,) or len(res) > 100:  # Accept only plain data containers.
+            raise StructuredOutputError("Bing search output must be a bounded list of results")
+        for result in res:
+            if type(result) not in (dict,) or any(  # Reject custom container behavior.
+                key in fields and value is not None and type(value) not in (str,)  # Protocol values are plain strings.
+                for key, value in result.items()
+            ):
+                raise StructuredOutputError("Bing search result fields must contain text")
         web_list = []
         for index, result in enumerate(res):
             # 处理搜索结果

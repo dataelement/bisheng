@@ -14,12 +14,15 @@ from bisheng.common.chat.types import WorkType
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.chat import WorkflowOfflineError
+from bisheng.common.errcode.flow import WorkFlowInvalidUserInputError
+from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError, ResourceReferenceInvalidError
 from bisheng.common.errcode.workstation import DepartmentDailyChatConcurrentLimitError
 from bisheng.common.interfaces.resource_execution import WorkflowExecutionPort
 from bisheng.database.models.flow import FlowDao, FlowStatus
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession
+from bisheng.permission.application.business_authorization import require_business_action
 from bisheng.utils import generate_uuid, get_request_ip
 from bisheng.worker.workflow.redis_callback import RedisCallback
 from bisheng.worker.workflow.tasks import continue_workflow, execute_workflow, workflow_stateful_worker
@@ -51,7 +54,11 @@ class WorkflowClient(BaseClient):
         self.hash_key = None
         self.ws_closed = False
         self.run_lock = asyncio.Lock()
-        self.session_subject = kwargs.get("session_subject")
+        from bisheng.chat_session.domain.session_subject import SessionSubject
+
+        self.session_subject = kwargs.get("session_subject") or SessionSubject.natural_person(
+            tenant_id=login_user.tenant_id, user_id=login_user.user_id
+        )
         self.execution_snapshot = kwargs.get("execution_snapshot")
         self.execution_port = kwargs.get("workflow_execution_port")
 
@@ -80,6 +87,13 @@ class WorkflowClient(BaseClient):
                 websocket=self.websocket, close_ws=False
             )
             return
+        if message.get("action") in {"input", "stop"}:
+            if message.get("chat_id", self.chat_id) != self.chat_id:
+                raise NotFoundError.http_exception()
+            if self.chat_id and self.session_subject is not None:
+                session = await ChatSessionService.get_subject_session(self.chat_id, self.session_subject)
+                if session.flow_id != self.client_id:
+                    raise NotFoundError.http_exception()
         if message.get("action") == "init_data":
             # InisialisasiworkflowDATA
             await self.init_workflow(message)
@@ -115,27 +129,21 @@ class WorkflowClient(BaseClient):
         if message.get("flow_id", self.client_id) != self.client_id:
             raise ResourceReferenceInvalidError(reason="workflow_connection_root_mismatch")
         workflow_id = self.client_id
-        self.chat_id = message.get("chat_id", "")
-        if self.chat_id and self.memory_register is not None:
-            await self._register_memory_session()
-        if self.chat_id and self.session_subject is not None:
+        chat_id = message.get("chat_id", self.chat_id) or ""
+        if chat_id and self.session_subject is not None:
             session = await ChatSessionService.get_subject_session_if_exists(
-                self.chat_id,
+                chat_id,
                 self.session_subject,
             )
             if session is not None and session.flow_id != workflow_id:
-                from bisheng.common.errcode.http_error import NotFoundError
-
                 raise NotFoundError.http_exception()
             if session is None:
                 workflow_db = FlowDao.get_flow_by_id(workflow_id)
                 if workflow_db is None:
-                    from bisheng.common.errcode.http_error import NotFoundError
-
                     raise NotFoundError.http_exception()
                 await ChatSessionService.create_subject_session(
                     MessageSession(
-                        chat_id=self.chat_id,
+                        chat_id=chat_id,
                         flow_id=workflow_id,
                         flow_name=workflow_db.name,
                         flow_type=workflow_db.flow_type,
@@ -143,6 +151,14 @@ class WorkflowClient(BaseClient):
                     ),
                     self.session_subject,
                 )
+        if not chat_id and self.execution_snapshot is None:
+            await require_business_action(
+                self.login_user, resource_type="workflow", resource_id=workflow_id, action="edit"
+            )
+        # Commit the connection target only after ownership/flow checks pass.
+        self.chat_id = chat_id
+        if self.chat_id and self.memory_register is not None:
+            await self._register_memory_session()
         unique_id = generate_uuid()
         if self.chat_id:
             await self.init_history()
@@ -292,7 +308,9 @@ class WorkflowClient(BaseClient):
     async def ensure_workflow_available(self, workflow_id: str) -> bool:
         # Draft previews may run offline flows, but never deleted ones.
         workflow_db = FlowDao.get_flow_by_id(workflow_id)
-        if workflow_db and (not self.chat_id or workflow_db.status == FlowStatus.ONLINE.value):
+        if workflow_db and (
+            (not self.chat_id and self.execution_snapshot is None) or workflow_db.status == FlowStatus.ONLINE.value
+        ):
             return True
 
         if self.workflow:
@@ -334,7 +352,10 @@ class WorkflowClient(BaseClient):
             message_id = None
             new_message = None
             new_files = None
-            # Currently one input node is supported
+            # Exactly one interrupted node is supported; extra nodes can carry
+            # executable parameter mutations and must not be dropped silently.
+            if not isinstance(data, dict) or len(data) != 1:
+                raise WorkFlowInvalidUserInputError(msg="input must contain exactly one waiting node")
             for node_id, node_info in data.items():
                 user_input[node_id] = node_info["data"]
                 message_id = node_info.get("message_id")
@@ -344,7 +365,11 @@ class WorkflowClient(BaseClient):
                 new_files = node_info.get("files")
                 break
             await self.workflow.async_set_user_input(
-                user_input, message_id=message_id, message_content=new_message, files=new_files
+                user_input,
+                message_id=message_id,
+                message_content=new_message,
+                files=new_files,
+                verify_input=True,
             )
             await self.workflow.async_set_workflow_status(WorkflowStatus.INPUT_OVER.value)
             continue_workflow.apply_async(

@@ -67,7 +67,8 @@ PRESET_QUESTION = "preset_question"
 
 # redis key
 CAPTCHA_PREFIX = "cap_"
-RSA_KEY = "rsa_login_2048_v1"
+# v1 could contain a merge-regressed 512-bit pair; do not reuse it or legacy rsa_.
+RSA_KEY = "rsa_login_2048_v2"
 # Stores the number of times a user's password is incorrect.keyareusername
 USER_PASSWORD_ERROR = "user_password_error:{}"
 # Store current user logged incookie, keyIs Userid

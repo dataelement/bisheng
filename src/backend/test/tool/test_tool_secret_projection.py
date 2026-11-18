@@ -11,7 +11,15 @@ from bisheng.tool.domain.const import ToolPresetType
 from bisheng.tool.domain.models.gpts_tools import GptsTools, GptsToolsType, GptsToolsTypeRead
 from bisheng.tool.domain.services import tool
 
+pytestmark = pytest.mark.mock
+
 CANARY = "synthetic-api-key-DO-NOT-EXPOSE"
+
+
+@pytest.fixture(autouse=True)
+def preset_child_identity_boundary(monkeypatch):
+    # Mainline now resolves preset identity through this additional DAO boundary.
+    monkeypatch.setattr(tool.GptsToolsDao, "aget_preset_child_keys", AsyncMock(return_value={}))
 
 
 @pytest.mark.parametrize("action", ["use", "visible"])
@@ -108,7 +116,12 @@ async def test_preset_config_mask_roundtrip_keeps_nested_list_secrets(monkeypatc
 async def test_authorized_mcp_update_restores_mask_before_schema_discovery(monkeypatch):
     schema = {"mcpServers": {"server": {"url": "https://example.invalid/mcp", "headers": {"Authorization": CANARY}}}}
     saved = GptsToolsType(
-        id=11, name="MCP", is_preset=ToolPresetType.MCP.value, openapi_schema=json.dumps(schema), api_key=CANARY
+        id=11,
+        name="MCP",
+        tenant_id=1,
+        is_preset=ToolPresetType.MCP.value,
+        openapi_schema=json.dumps(schema),
+        api_key=CANARY,
     )
     request_schema = deepcopy(schema)
     request_schema["mcpServers"]["server"]["headers"]["Authorization"] = "********"
@@ -156,6 +169,20 @@ async def test_partial_preset_update_merges_nested_config_without_data_loss(monk
     }
     assert json.loads(saved.extra) == old
     assert submitted["config"]["local"]["api_key"] == "********"
+
+
+async def test_partial_preset_secret_explicit_clear_preserves_omitted_fields(monkeypatch):
+    old = {"config": {"api_key": CANARY, "keep": {"endpoint": "https://example.invalid"}}, "other": True}
+    saved = GptsToolsType(
+        id=11, name="Preset", tenant_id=1, is_preset=ToolPresetType.PRESET.value, extra=json.dumps(old)
+    )
+    monkeypatch.setattr(tool.GptsToolsDao, "aget_one_tool_type", AsyncMock(return_value=saved))
+    write = AsyncMock()
+    monkeypatch.setattr(tool.GptsToolsDao, "update_tools_extra", write)
+    service = tool.ToolServices(login_user=UserPayload(user_id=1, tenant_id=1, user_role=[], is_global_super=True))
+    await service.update_tool_config(11, {"config": {"api_key": ""}})
+    assert json.loads(write.call_args.args[1]) == {**old, "config": {**old["config"], "api_key": ""}}
+    assert json.loads(saved.extra) == old
 
 
 @pytest.mark.parametrize("old", ["[]", '"text"', "not-json", "null"])

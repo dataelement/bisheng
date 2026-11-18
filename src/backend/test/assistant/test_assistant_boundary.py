@@ -147,17 +147,21 @@ async def test_denied_binding_does_not_persist_any_assistant_or_link(monkeypatch
     monkeypatch.setattr(
         AssistantBoundaryService, "authorize_knowledge_bindings", AsyncMock(side_effect=UnAuthorizedError())
     )
-    update = Mock()
-    links = Mock()
-    monkeypatch.setattr(service.AssistantDao, "update_assistant", update)
-    monkeypatch.setattr(service.AssistantLinkDao, "update_assistant_knowledge", links)
+    runtime = SimpleNamespace(aprepare_source_bindings=AsyncMock(), aapply_source_bindings=AsyncMock())
+    monkeypatch.setattr(service, "get_reference_binding_runtime", AsyncMock(return_value=runtime))
+    update = AsyncMock()
+    links = AsyncMock()
+    monkeypatch.setattr(service.AssistantRepository, "asave", update)
+    monkeypatch.setattr(service.AssistantRepository, "areplace_links", links)
     with pytest.raises(UnAuthorizedError):
         await service.AssistantService.update_assistant(
             None, SimpleNamespace(user_id=7), AssistantUpdateReq(id="a", knowledge_list=[11], name="new")
         )
     assert assistant.name == "old"
     update.assert_not_called()
-    links.assert_not_called()
+    links.assert_not_awaited()
+    runtime.aprepare_source_bindings.assert_not_awaited()
+    runtime.aapply_source_bindings.assert_not_awaited()
 
 
 async def test_cached_agent_revalidates_before_history_and_refreshes_tools(monkeypatch):

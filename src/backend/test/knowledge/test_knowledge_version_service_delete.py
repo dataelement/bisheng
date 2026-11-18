@@ -8,7 +8,6 @@ import sqlalchemy as sa
 from fastapi import HTTPException
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.common.errcode.permission import PermissionProjectionFailedError
 from bisheng.knowledge.application.model_reference import KnowledgeModelReferenceApplication
 from bisheng.knowledge.domain.models.knowledge import Knowledge
@@ -41,6 +40,7 @@ def enable_switch(monkeypatch):
     conf.version_management.enabled = True
     mock_settings.async_get_knowledge = AsyncMock(return_value=conf)
     monkeypatch.setattr(kvs_mod, "bisheng_settings", mock_settings)
+    monkeypatch.setattr(kvs_mod, "require_business_action", AsyncMock())
 
 
 async def _seed_two_version_doc(session):
@@ -67,7 +67,7 @@ async def _seed_two_version_doc(session):
 def _build_svc(session):
     return KnowledgeVersionService(
         request=MagicMock(),
-        login_user=MagicMock(),
+        login_user=SimpleNamespace(user_id=1, tenant_id=1),
         doc_repo=KnowledgeDocumentRepositoryImpl(session),
         version_repo=KnowledgeDocumentVersionRepositoryImpl(session),
         knowledge_file_repo=KnowledgeFileRepositoryImpl(session),
@@ -86,16 +86,18 @@ async def test_delete_history_removes_version_and_file(deletion_case):
 
 
 @pytest.mark.asyncio
-async def test_delete_primary_is_rejected(enable_switch, async_db_session, monkeypatch):
-    _doc, _v1, v2 = await _seed_two_version_doc(async_db_session)
+async def test_delete_primary_is_rejected(deletion_case, monkeypatch):
+    case = deletion_case
+    row = await case.seed(
+        file_id=100, version_id=1, document_id=1, primary_file_id=101, primary_version_id=2, space_id=1
+    )
     monkeypatch.setattr(
         "bisheng.knowledge.domain.services.knowledge_audit_telemetry_service."
         "KnowledgeAuditTelemetryService.audit_delete_file_version",
         MagicMock(return_value=None),
     )
-    svc = _build_svc(async_db_session)
     with pytest.raises(HTTPException) as ctx:
-        await svc.delete_version(version_id=v2.id)
+        await case.service.delete_version(version_id=row.primary_version_id)
     assert ctx.value.status_code == 409
 
 
@@ -116,10 +118,13 @@ async def test_delete_rejected_when_switch_off(async_db_session, monkeypatch):
     conf.version_management.enabled = False
     mock_settings.async_get_knowledge = AsyncMock(return_value=conf)
     monkeypatch.setattr(kvs_mod, "bisheng_settings", mock_settings)
+    monkeypatch.setattr(kvs_mod, "require_business_action", AsyncMock())
     svc = _build_svc(async_db_session)
-    with pytest.raises(HTTPException) as ctx:
+    from bisheng.common.errcode.knowledge_space import VersionManagementDisabledError
+
+    with pytest.raises(VersionManagementDisabledError) as ctx:
         await svc.delete_version(version_id=1)
-    assert ctx.value.status_code == 403
+    assert ctx.value.Code == VersionManagementDisabledError.Code
 
 
 # Real deletion application, SQL cutover/Plan/TargetOwner and F048 journals;
@@ -144,6 +149,24 @@ async def deletion_case(deletion_consumer, enable_switch, monkeypatch):
         version_repo=KnowledgeDocumentVersionRepositoryImpl(session),
         knowledge_file_repo=KnowledgeFileRepositoryImpl(session),
     )
+    # These cleanup cases use a tenant101 natural person, not management-scope switching.
+    context.user.tenant_id = 101
+    context.user._runtime_credential_reference = {
+        **context.user._runtime_credential_reference,
+        "tenant_id": context.user.tenant_id,
+    }
+
+    async def read_tuples(*, object, consistency):
+        return [
+            {"user": user, "relation": relation, "object": obj}
+            for user, relation, obj in context.transport.present
+            if obj == object
+        ]
+
+    from bisheng.knowledge.application import knowledge_deletion
+
+    permission_runtime = await knowledge_deletion.get_f048_runtime()
+    permission_runtime._client.read_tuples = read_tuples
     svc.deletion_application_factory = lambda: case.app
     case.service = svc
     monkeypatch.setattr(
@@ -397,8 +420,9 @@ async def test_delete_version_knowledge_none_skips_vector_but_runs_minio(deletio
     case = deletion_case
     row = await case.seed(file_id=13, version_id=45, document_id=10, version_no=5, space_id=99, root_exists=False)
     before = native.state(case.context)
-    with pytest.raises(KnowledgeOperationPlanConflictError):
+    with pytest.raises(HTTPException) as error:
         await case.service.delete_version(version_id=45)
+    assert error.value.status_code == 404
     assert native.state(case.context) == before and not case.io and not case.context.order
     async with case.context.sessions() as session:
         assert await session.get(KnowledgeFile, row.file_id) is not None

@@ -563,7 +563,7 @@ class RagUtils(BaseNode):
         knowledge_ids = [key for key in self._knowledge_vector_list if int(key) not in scoped_spaces]
         excluded_file_ids = self._fetch_non_primary_file_ids(knowledge_ids)
 
-        for _knowledge_id, knowledge_info in self._knowledge_vector_list.items():
+        for knowledge_id, knowledge_info in self._knowledge_vector_list.items():
             knowledge = knowledge_info.get("knowledge")
             milvus_vector = knowledge_info.get("milvus")
             es_vector = knowledge_info.get("es")

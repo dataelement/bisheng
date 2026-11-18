@@ -1,7 +1,6 @@
 import argparse
 import asyncio
 import logging
-import pickle
 import socket
 import uuid
 from functools import partial
@@ -12,6 +11,7 @@ from typing import Any, Union
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_conn import RedisClient
 from bisheng.core.cache.redis_manager import get_redis_client_sync
+from bisheng.core.cache.serialization import decode_redis_value
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.logger import set_logger_config
 from bisheng.linsight.domain.models.linsight_execute_task import (
@@ -186,10 +186,7 @@ class LinsightQueue:
         # Add a new element to the far LEFT (head) of the queue so it is picked
         # up before any tail-queued task. Used by park-and-release for resume
         # items (PRD §4.4.4: an answered task continues ahead of new tasks).
-        # RedisClient.alpush does not pickle, but ablpop/lrange unpickle, so we
-        # must pickle here to keep the queue's serialization uniform with put().
-        payload = pickle.dumps(data) if not isinstance(data, bytes) else data
-        await self.__db.alpush(self.key, payload, expiration=timeout)
+        await self.__db.alpush(self.key, data, expiration=timeout)
 
     async def get_wait(self, timeout=None):
         # Returns the first element of the queue, if empty, wait until an element is queued (the timeout threshold istimeout, if isNonehas been waiting)
@@ -199,7 +196,7 @@ class LinsightQueue:
     async def get_nowait(self):
         # Returns the first element of the queue directly, if the queue is emptyNone
         item = await self.__db.alpop(self.key)
-        return item
+        return decode_redis_value(self.key, item) if item is not None else None
 
     # Get the position of a task's data in the queue
     async def index(self, session_version_id):

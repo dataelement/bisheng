@@ -10,7 +10,7 @@ from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
 
 
 async def test_space_upload_staging_does_not_require_library_edit():
-    knowledge = SimpleNamespace(id=4, user_id=1, type=KnowledgeTypeEnum.SPACE.value)
+    knowledge = SimpleNamespace(id=4, user_id=1, tenant_id=1, type=KnowledgeTypeEnum.SPACE.value)
     file = UploadFile(filename="a.pdf", file=BytesIO(b"file"))
     user = SimpleNamespace(user_id=8, tenant_id=1)
     with (
@@ -20,10 +20,8 @@ async def test_space_upload_staging_does_not_require_library_edit():
             "bisheng.knowledge.api.endpoints.knowledge.KnowledgeService.permission_service.ensure_knowledge_write_async",
             AsyncMock(side_effect=AssertionError("not a library")),
         ) as library_edit,
-        patch(
-            "bisheng.knowledge.api.endpoints.knowledge.KnowledgeService.save_upload_file_original_name",
-            AsyncMock(return_value="random.pdf"),
-        ),
+        patch("bisheng.knowledge.api.endpoints.knowledge.generate_uuid", return_value="random"),
+        patch("bisheng.knowledge.domain.upload_file_size.settings", SimpleNamespace(get_from_db=lambda key: {})),
         patch(
             "bisheng.knowledge.api.endpoints.knowledge.save_uploaded_file",
             AsyncMock(return_value="https://minio/tmp/random.pdf"),

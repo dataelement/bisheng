@@ -411,6 +411,25 @@ async def upload_file(
     ignored). Knowledge space (3) → ``KnowledgeSpaceService.add_file`` which
     natively places the file under ``parent_id`` (must exist, else 18010).
     """
+    # Identity, existence and exact target permission must precede any URL fetch
+    # or cache write. Scope authorization alone does not authorize this resource.
+    loging_user = await get_open_api_operator_async()
+    db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
+    if not db_knowledge:
+        raise NotFoundError.http_exception()
+    space_svc = None
+    if db_knowledge.type == KnowledgeTypeEnum.SPACE.value:
+        space_svc = _build_space_service(request, loging_user, version_repo, doc_repo)
+        if parent_id:
+            await space_svc._get_folder_for_action(knowledge_id, parent_id)
+        await space_svc._require_action(
+            "folder" if parent_id else "knowledge_space", parent_id or knowledge_id, "upload_file"
+        )
+    elif db_knowledge.type in _KB_TYPES:
+        await KnowledgeService.ajudge_knowledge_access(loging_user, knowledge_id, "edit")
+    else:
+        raise KnowledgeTypeNotSupportedError.http_exception()
+
     if file:
         file_name = file.filename
         if not file_name:
@@ -428,15 +447,8 @@ async def upload_file(
             # unreachable or answers non-200. Storage errors still surface as 5xx.
             raise HTTPException(status_code=400, detail=f"file_url cannot be downloaded: {exc}") from exc
 
-    loging_user = await get_open_api_operator_async()
-
-    db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
-    if not db_knowledge:
-        raise NotFoundError.http_exception()
-
     # Knowledge space: delegate to the space file-add path (handles parent_id).
-    if db_knowledge.type == KnowledgeTypeEnum.SPACE.value:
-        space_svc = _build_space_service(request, loging_user, version_repo, doc_repo)
+    if space_svc is not None:
         provided = await request.form()
         rule_values = {
             "split_mode": split_mode,
@@ -743,9 +755,7 @@ def add_qa(*, knowledge_id: int = Body(embed=True), data: list[APIAddQAParam] = 
 
         res.append(knowledge_imp.add_qa(knowledge, qa_insert))
 
-    _audit_open_qa(
-        login_user, "create_qa", knowledge_id, f"库={knowledge_id}；数量={len(res)}；来源=开放接口；结果=成功"
-    )
+    _audit_open_qa(login_user, "create_qa", knowledge_id, f"库={knowledge_id};数量={len(res)};来源=开放接口;结果=成功")
     return resp_200(res)
 
 
@@ -769,7 +779,7 @@ def append_qa(*, knowledge_id: int = Body(embed=True), data: APIAppendQAParam = 
         login_user,
         "update_qa",
         knowledge_id,
-        f"库={knowledge_id}；条目={data.id}；来源=开放接口；字段=相似问题；结果=成功",
+        f"库={knowledge_id};条目={data.id};来源=开放接口;字段=相似问题;结果=成功",
     )
     return resp_200(saved)
 
@@ -805,7 +815,7 @@ def delete_qa_data(*, qa_id: int, question: str | None = None):
         login_user,
         "update_qa" if keep_pair else "delete_qa",
         knowledge.id,
-        f"库={knowledge.id}；条目={qa_id}；来源=开放接口；结果=成功",
+        f"库={knowledge.id};条目={qa_id};来源=开放接口;结果=成功",
     )
     return resp_200()
 
@@ -848,7 +858,7 @@ def update_qa(
         login_user,
         "update_qa",
         knowledge.id,
-        f"库={knowledge.id}；条目={id}；来源=开放接口；字段={','.join(changed) or '无'}；结果=成功",
+        f"库={knowledge.id};条目={id};来源=开放接口;字段={','.join(changed) or '无'};结果=成功",
     )
     return resp_200()
 

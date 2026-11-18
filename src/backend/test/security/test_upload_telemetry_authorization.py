@@ -160,9 +160,7 @@ async def test_helper_keeps_server_selected_preview_and_openapi_keys(object_stor
 
 
 async def test_generic_knowledge_upload_is_owned(monkeypatch, object_store):
-    monkeypatch.setattr(
-        knowledge.KnowledgeService, "save_upload_file_original_name", AsyncMock(return_value="uuid.png")
-    )
+    monkeypatch.setattr(knowledge, "generate_uuid", lambda: "uuid")
     issue = AsyncMock(return_value="owned-reference")
     monkeypatch.setattr(PreviewSourceService, "issue", issue)
     result = await knowledge.upload_file(file=upload(), login_user=UserPayload.model_construct(user_id=8, tenant_id=7))
@@ -192,11 +190,9 @@ async def test_knowledge_staging_reference_roundtrip(monkeypatch, object_store, 
     monkeypatch.setattr(
         knowledge.KnowledgeDao,
         "aquery_by_id",
-        AsyncMock(return_value=SimpleNamespace(id=4, user_id=1, type=KnowledgeTypeEnum.SPACE.value)),
+        AsyncMock(return_value=SimpleNamespace(id=4, user_id=1, tenant_id=7, type=KnowledgeTypeEnum.SPACE.value)),
     )
-    monkeypatch.setattr(
-        knowledge.KnowledgeService, "save_upload_file_original_name", AsyncMock(return_value="uuid.png")
-    )
+    monkeypatch.setattr(knowledge, "generate_uuid", lambda: "uuid")
     monkeypatch.setattr(knowledge.KnowledgeFileDao, "get_repeat_file", AsyncMock(return_value=None))
     response = await knowledge.upload_knowledge_file.__wrapped__(
         request=None, file=upload(), knowledge_id=4, login_user=UserPayload.model_construct(user_id=8, tenant_id=7)
