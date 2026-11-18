@@ -249,7 +249,21 @@ const EditMarkdown = ({ data, active, oneLeft, fileSuffix, edit = false, canDele
 }
 
 // 分段结果列表
-export default function PreviewParagraph({ fileId, page = 1, previewCount, edit, canDelete = false, fileSuffix, loading, chunks, className, onDel, onChange, immediateSave = false }) {
+export default function PreviewParagraph({
+    fileId,
+    page = 1,
+    previewCount,
+    edit,
+    canDelete = false,
+    fileSuffix,
+    loading,
+    chunks,
+    className,
+    onDel,
+    onChange,
+    immediateSave = false,
+    padded = true,
+}) {
     const { t } = useTranslation('knowledge');
 
     const containerRef = useRef(null);
@@ -296,7 +310,7 @@ export default function PreviewParagraph({ fileId, page = 1, previewCount, edit,
 
     // flex chain lets a `flex-1 min-h-0` className fill a bounded parent (upload
     // step 3); fixed-height classNames (knowledge detail) are unaffected.
-    return <div className="pt-3 relative w-full flex-1 min-h-0 flex flex-col">
+    return <div className={cn("relative flex min-h-0 w-full flex-1 flex-col", padded && "pt-3")}>
         {loading && (
             <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                 <Outlined.Loading  className="size-4 animate-spin"/>

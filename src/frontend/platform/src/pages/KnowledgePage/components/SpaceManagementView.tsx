@@ -1,3 +1,4 @@
+import { directoryTitleClass } from "@bisheng/knowledge";
 import { Breadcrumb, Button, Dropdown, DropdownItem, DropdownSeparator, Tooltip, type BreadcrumbItem } from "@bisheng/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Outlined } from "bisheng-icons";
@@ -259,7 +260,7 @@ export function SpaceManagementView({
             />
           ) : (
             <div className="flex min-w-0 items-center gap-1">
-              <h1 className="min-w-0 truncate text-h4 text-text-1">{spaceTitle}</h1>
+              <h1 className={children ? directoryTitleClass : "min-w-0 truncate text-h4 text-text-1"}>{spaceTitle}</h1>
               {spaceInfoButton}
               {children && parentId === null && rootInfo && (
                 <SpaceTaskRecordsButton

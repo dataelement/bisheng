@@ -209,8 +209,8 @@ it("keeps the file actions in the header and opens permissions from More", async
   ).closest("header")!;
   expect(within(header).queryByRole("button", { name: "detail.members" })).toBeNull();
   expect(
-    within(header).getByRole("button", { name: "detail.batch" }),
-  ).toBeVisible();
+    within(header).queryByRole("button", { name: "detail.batch" }),
+  ).toBeNull();
   fireEvent.keyDown(
     within(header).getByRole("button", { name: "detail.add" }),
     { key: "ArrowDown" },
@@ -342,7 +342,7 @@ it.each(["denied", "failed"])(
     render(f.draw());
     expect(screen.getByText("directory-files")).toBeVisible();
     await waitFor(() =>
-      expect(mock.permission).toHaveBeenCalledWith("knowledge_space", "7"),
+      expect(mock.permission).toHaveBeenCalledWith("knowledge_space", "7", { showError: false }),
     );
     expect(screen.queryByRole("button", { name: "more" })).toBeNull();
     expect(screen.getByTestId("location").textContent).toBe(directory);

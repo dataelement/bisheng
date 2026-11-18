@@ -147,11 +147,11 @@ export function SpaceDirectoryRow({
         />
       )}
       {similarIndicator}
-      {historyEnabled &&
-        item.is_multi_version === true &&
-        (item.version_no ?? 0) >= 1 && (
-          <Tag size="small">{`V${item.version_no}`}</Tag>
-        )}
+      {historyEnabled && item.is_multi_version === true && (item.version_no ?? 0) >= 1 && (
+        <Tag size="small" color={layout ? "brand" : "default"} className={layout ? "shrink-0" : undefined}>
+          {`V${item.version_no}`}
+        </Tag>
+      )}
     </>
   );
   const actionsContent = (

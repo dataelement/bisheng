@@ -17,6 +17,7 @@ interface SpacePanelFrameProps {
   children: ReactNode;
   footer?: ReactNode;
   className?: string;
+  contentClassName?: string;
   back?: { label: string; onClick: () => void };
 }
 
@@ -29,6 +30,7 @@ export function SpacePanelFrame({
   children,
   footer,
   className,
+  contentClassName,
   back,
 }: SpacePanelFrameProps) {
   if (presentation === "page" && centered)
@@ -81,7 +83,7 @@ export function SpacePanelFrame({
           <h1 className="text-body font-medium text-text-1">{title}</h1>
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto py-4">
-          <div className="mx-auto w-full max-w-[648px]">{children}</div>
+          <div className={`mx-auto w-full max-w-[648px] ${contentClassName ?? ""}`}>{children}</div>
         </div>
         {footer && (
           <footer className="flex min-h-16 shrink-0 flex-wrap items-center justify-center gap-3 border-t border-border-base py-2 max-[768px]:[&>button]:flex-1">

@@ -7,7 +7,7 @@ import { MoveDialog } from "./MoveDialog";
 import type { MoveSelection } from "@/controllers/API/knowledgeMove";
 import { Button, EmptyStateIllustration, StateView, toast } from "@bisheng/ui";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import { knowledgeSpaceApi, type KnowledgeSpaceChild } from "@/controllers/API/knowledgeSpace";
@@ -18,6 +18,8 @@ import { showApiError } from "@/controllers/request";
 import { isErrorEnvelope } from "@bisheng/api-client";
 import { SpaceDirectoryOverlays } from "./SpaceDirectoryOverlays";
 import { SpaceDirectoryLoading } from "./SpaceDirectoryLoading";
+import { SpaceDirectoryLoadMore } from "./SpaceDirectoryLoadMore";
+import { KnowledgeScopeUnavailable } from "./KnowledgeScopeUnavailable";
 import { KnowledgeDeletionDialog } from "./KnowledgeDeletionDialog";
 import { useDirectoryDeletion } from "../hooks/useDirectoryDeletion";
 import { useDirectoryDownloadPermissions } from "../hooks/useDirectoryDownloadPermissions";
@@ -63,15 +65,14 @@ const validId = (id: unknown): id is number =>
   typeof id === "number" && Number.isSafeInteger(id) && id > 0;
 const rowKey = (item: KnowledgeSpaceChild) => `${item.file_type}:${item.id}`;
 export default function Files(props: FilesProps) {
-  const { t } = useTranslation("knowledge");
   const { scope, spaceId, parentId } = props;
   if (
     !scope ||
-    !validId(spaceId) ||
     !validId(scope.tenantId) ||
+    !validId(spaceId) ||
     (parentId != null && !validId(parentId))
   )
-    return <div role="status">{t("f118.scope_unavailable")}</div>;
+    return <KnowledgeScopeUnavailable />;
   return (
     <Directory
       key={JSON.stringify([
@@ -130,6 +131,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
   );
   const current = useRef<Epoch | null>(epoch);
   current.current = epoch;
+  const isDirectoryCurrent = useCallback(() => current.current === epoch, [epoch]);
   const menuToken = useRef<Target | null>(null),
     editToken = useRef<Edit | null>(null),
     previewToken = useRef<Target | null>(null);
@@ -155,14 +157,18 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
   const sorting = presentation === "workspace" ? { order_field: sortField, order_sort: sortDirection } : {};
   const ordinary = useInfiniteQuery({
     queryKey: [...epoch.prefix, "children"],
-    queryFn: ({ pageParam }) =>
-      knowledgeSpaceApi.listChildren(spaceId, {
+    queryFn: async ({ pageParam }) => {
+      const result = await knowledgeSpaceApi.listChildren(spaceId, {
         parent_id: parentId,
         page_size: 40,
         ...filters,
         ...sorting,
         ...(typeof pageParam === "string" ? { cursor: pageParam } : {}),
-      }),
+      });
+      if (presentation === "workspace" && typeof pageParam === "string" && result.has_more && result.next_cursor === pageParam)
+        throw new Error("Knowledge directory pagination cursor did not advance");
+      return result;
+    },
     getNextPageParam: (result) => (result.has_more ? (result.next_cursor ?? undefined) : undefined),
     enabled: !keyword,
     keepPreviousData: false,
@@ -371,7 +377,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
     epoch,
     scopeKey: JSON.stringify([...base, parentId, keyword, statuses, page, sortField, sortDirection]),
     rows,
-    isCurrent: () => current.current === epoch,
+    isCurrent: isDirectoryCurrent,
     onDeleted: () => client.invalidateQueries({ queryKey: base }),
   });
   const selectedActions = useDirectorySelectionActions({ prefix: epoch.prefix, rows: selectedRows });
@@ -453,6 +459,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
     );
   };
   const workspace = presentation === "workspace";
+  const scrollPaging = workspace && !keyword && ordinary.hasNextPage;
   const directoryEmpty = !active.isInitialLoading && !active.error && !rows.length && !hasMore;
   const directoryStatus = (
     <>
@@ -460,23 +467,20 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
       {directoryEmpty && (workspace ? (
         <StateView size="page" title={t("f118.directory_empty")} image={<EmptyStateIllustration />} />
       ) : <p>{t("f118.directory_empty")}</p>)}
-      {!!active.error && (
+      {!!active.error && !scrollPaging && (
         <Button
           className={workspace ? "mx-4 my-2" : undefined}
-          onClick={() => {
-            void active.refetch();
-          }}
+          onClick={() => void active.refetch()}
         >
           {t("retry")}
         </Button>
       )}
-      {!keyword && ordinary.hasNextPage && (
+      {scrollPaging ? (
+        <SpaceDirectoryLoadMore key={sequence.current} directory={ordinary} isCurrent={isDirectoryCurrent} />
+      ) : !keyword && ordinary.hasNextPage && (
         <Button
-          className={workspace ? "mx-4 my-2" : undefined}
           disabled={ordinary.isFetchingNextPage}
-          onClick={() => {
-            void ordinary.fetchNextPage();
-          }}
+          onClick={() => void ordinary.fetchNextPage()}
         >
           {t("f118.more_files")}
         </Button>

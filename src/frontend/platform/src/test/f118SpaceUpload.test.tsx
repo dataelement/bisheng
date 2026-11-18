@@ -289,6 +289,28 @@ it("waits for server-selected management scope and preserves the original actor 
   await waitFor(() => expect(registerCalls()).toHaveLength(1));
   expect(user.tenant_id).toBe(1);
 });
+it("shows the illustrated scope failure and retries before checking upload permissions", async () => {
+  user = { ...user, is_global_super: true };
+  management.scope.scope_tenant_id = null;
+  const refresh = deferred<void>();
+  management.refresh.mockReturnValueOnce(refresh.promise);
+  const { container } = mount();
+  expect(screen.getByText("f118.scope_unavailable")).toHaveAttribute("role", "status");
+  expect(container.querySelector("[aria-hidden=true] svg.brand-illustration")).toBeVisible();
+  expect(mocks.permission).not.toHaveBeenCalled();
+
+  fireEvent.click(screen.getByRole("button", { name: "retry" }));
+
+  expect(management.refresh).toHaveBeenCalledTimes(1);
+  expect(screen.getByText("f118.loading_directory")).toBeVisible();
+  expect(mocks.permission).not.toHaveBeenCalled();
+  await act(async () => {
+    management.scope.scope_tenant_id = 202;
+    refresh.resolve(undefined);
+  });
+  await waitFor(() => expect(mocks.permission).toHaveBeenCalledExactlyOnceWith("folder", "9"));
+  expect(screen.queryByText("f118.scope_unavailable")).not.toBeInTheDocument();
+});
 it("does not report completion after staging before registration finishes", async () => {
   const pending = deferred<ReturnType<typeof row>[]>();
   mocks.post.mockImplementation(async (url: string) =>
@@ -410,7 +432,7 @@ it("retires a cancelled registration without pretending the server rolled it bac
   expect(signal.aborted).toBe(true);
   await act(async () => pending.resolve([row()]));
   expect(mocks.children).not.toHaveBeenCalled();
-  expect(screen.getByText("f118.upload_may_continue")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "retry" })).not.toBeInTheDocument();
   expect(screen.queryByText("completed")).not.toBeInTheDocument();
 });
 it.each(["scope", "parent"])(
@@ -466,7 +488,7 @@ it("never exposes cancellation as deletion after registration has completed", as
   expect(
     screen.queryByRole("button", { name: "cancel" }),
   ).not.toBeInTheDocument();
-  expect(screen.getByText("f118.upload_may_continue")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "delete" })).not.toBeInTheDocument();
 });
 
 it("bounds exact status IDs to batches of 100 rather than scanning the whole directory", async () => {

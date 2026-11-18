@@ -1,4 +1,4 @@
-import { Button, Tooltip, toast } from "@bisheng/ui";
+import { Alert, Button, Tooltip, toast } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useId, useMemo, useRef, useState } from "react";
@@ -54,12 +54,12 @@ function UploadWizard({
   const [strategy, setStrategy] = useState<WizardStrategy>();
   const [book, setBook] = useState<PreviewBook>({});
   const [busy, setBusy] = useState(false);
+  const [footerTarget, setFooterTarget] = useState<HTMLElement | null>(null);
   const previewBusy = useRef(false);
   const handleBusy = useCallback((value: boolean) => {
     previewBusy.current = value;
     setBusy(value);
   }, []);
-  const folderInput = useRef<HTMLInputElement>(null);
   const settings = useQuery({
     queryKey: [
       ...knowledgeQueryKeys.space(scope, spaceId),
@@ -209,10 +209,11 @@ function UploadWizard({
       invalidRules();
     }
   };
+  const handleDirectUpload = () => handleCommit(true);
   return (
     <section
       aria-label={t("uploadFile")}
-      className="flex h-full min-h-0 flex-col gap-6 p-4"
+      className="flex h-full min-h-0 flex-col gap-6 px-4 pt-4"
     >
       <header className="flex flex-wrap items-center gap-6">
         {onBack && (
@@ -242,29 +243,12 @@ function UploadWizard({
         />
       </header>
       <div
+        key={step}
         className={`flex min-h-0 flex-1 flex-col ${step === 3 ? "overflow-hidden" : "overflow-auto"}`}
       >
         {step === 1 && (
-          <div className="mx-auto w-full max-w-[1450px] space-y-4 py-4">
-            <DropZone onDrop={queue.handleDrop} />
-            <Button
-              variant="outlined"
-              onClick={() => folderInput.current?.click()}
-            >
-              {t("f118.upload_folder")}
-            </Button>
-            <input
-              type="file"
-              multiple
-              className="hidden"
-              aria-label={t("f118.upload_folder")}
-              ref={folderInput}
-              {...{ webkitdirectory: "", directory: "" }}
-              onChange={(event) => {
-                queue.handleFolder(Array.from(event.target.files ?? []));
-                event.target.value = "";
-              }}
-            />
+          <div className="mx-auto w-full max-w-[1450px] shrink-0 space-y-4 py-4">
+            <DropZone onDrop={queue.handleDrop} onFolderDrop={queue.handleFolder} />
             {settings.isError ? (
               <div role="alert">
                 <p>{t("f118.load_failed")}</p>
@@ -285,6 +269,7 @@ function UploadWizard({
               jobs={queue.jobs}
               observed={queue.observed}
               unavailable={queue.unavailable}
+              scrollRows={false}
               onCancel={queue.handleCancel}
               onRetry={queue.retry}
               onRemove={queue.remove}
@@ -293,21 +278,18 @@ function UploadWizard({
             />
           </div>
         )}
-        {step === 2 && (
-          <p className="text-sm text-text-secondary">
-            {t("f118.upload_rules_hint")}
-          </p>
-        )}
+        {step === 2 && <Alert description={t("f118.upload_rules_hint")} />}
         {step === 2 && strategy && (
           <FileUploadStep2
             step={2}
             kId={spaceId}
+            footerTarget={footerTarget}
             resultFiles={files}
             isSubmitting={busy}
             persistState={strategy}
             onPersistStateChange={handleStrategy}
             onPrev={() => setStep(1)}
-            onDirectUpload={() => handleCommit(true)}
+            onDirectUpload={handleDirectUpload}
             onNext={() => {
               try {
                 files.forEach((file) =>
@@ -363,58 +345,62 @@ function UploadWizard({
           </Button>
         )}
       </div>
-      {step !== 2 && (
-        <footer className="flex justify-center gap-4 border-t py-4">
-          {step === 1 && (
-            <>
-              <Button
-                variant="outlined"
-                disabled={!ready}
-                onClick={() => handleCommit(true)}
-              >
-                {t("uploadDirectly")}
-              </Button>
-              <Button disabled={!ready} onClick={handleNext}>
-                {t("nextStep")}
-              </Button>
-            </>
-          )}
-          {step === 3 && (
-            <>
-              <Button
-                variant="outlined"
-                disabled={busy}
-                onClick={() => setStep(2)}
-              >
-                {t("previousStep")}
-              </Button>
-              <Button variant="outlined" onClick={() => handleCommit(true)}>
-                {t("uploadDirectlyDefaults")}
-              </Button>
-              <Button
-                disabled={
-                  busy ||
-                  !strategy.rules.fileList.length ||
-                  strategy.rules.fileList.some((file) => {
-                    const record = book[file.id] ?? book[file.filePath];
-                    return record?.value.status !== "completed";
-                  }) ||
-                  files.some((file) => {
-                    const record = book[file.id] ?? book[file.file_path];
-                    return record != null && record.value.status !== "completed";
-                  })
-                }
-                onClick={() => handleCommit(false)}
-              >
-                {t("nextStep")}
-              </Button>
-            </>
-          )}
-          {step === 4 && onBack && (
-            <Button onClick={onBack}>{t("backToKnowledge")}</Button>
-          )}
-        </footer>
-      )}
+      <footer
+        ref={setFooterTarget}
+        className="flex shrink-0 flex-wrap items-center justify-center gap-4 border-t border-border-base py-4"
+      >
+        {step === 1 && (
+          <>
+            <Button
+              color="default"
+              variant="outlined"
+              disabled={!ready}
+              onClick={handleDirectUpload}
+            >
+              {t("uploadDirectly")}
+            </Button>
+            <Button disabled={!ready} onClick={handleNext}>
+              {t("nextStep")}
+            </Button>
+          </>
+        )}
+        {step === 3 && (
+          <>
+            <Button
+              color="default"
+              variant="outlined"
+              disabled={busy}
+              onClick={() => setStep(2)}
+            >
+              {t("previousStep")}
+            </Button>
+            <Button color="default" variant="outlined" onClick={handleDirectUpload}>
+              {t("uploadDirectlyDefaults")}
+            </Button>
+            <Button
+              disabled={
+                busy ||
+                !strategy ||
+                !strategy.rules.fileList.length ||
+                strategy.rules.fileList.some((file) => {
+                  const record = book[file.id] ?? book[file.filePath];
+                  return record?.value.status !== "completed";
+                }) ||
+                files.some((file) => {
+                  const record = book[file.id] ?? book[file.file_path];
+                  return record != null && record.value.status !== "completed";
+                })
+              }
+              onClick={() => handleCommit(false)}
+            >
+              {t("nextStep")}
+            </Button>
+          </>
+        )}
+        {step === 4 && onBack && (
+          <Button onClick={onBack}>{t("backToKnowledge")}</Button>
+        )}
+      </footer>
     </section>
   );
 }

@@ -45,6 +45,7 @@ import {
 import { KnowledgeSidebarPane } from "./KnowledgeSidebarPane";
 import { KnowledgeSpaceCatalogFilter } from "./KnowledgeSpaceCatalogFilter";
 import { FileAbnormalStatusCell } from "../components/FileAbnormalStatusCell";
+import { KnowledgeScopeUnavailable } from "../components/KnowledgeScopeUnavailable";
 import { useSpaceCatalog } from "./useSpaceCatalog";
 import { useSpaceActions } from "../hooks/useSpaceActions";
 import { useSpaceFolderPath } from "../hooks/useSpaceFolderPath";
@@ -565,23 +566,20 @@ function ScopedKnowledgeSpaceSidebar(props: KnowledgeSpaceSidebarProps) {
 
 /** Keep navigation isolated across identity, tenant and ordinary/management views. */
 export function KnowledgeSpaceSidebar(props: KnowledgeSpaceSidebarProps) {
-  const { t } = useTranslation("knowledge");
   const { scope } = props;
-  if (
-    !scope.identityKey ||
-    !Number.isSafeInteger(scope.tenantId) ||
-    scope.tenantId <= 0 ||
-    (scope.managementTenantId !== null &&
-      (!Number.isSafeInteger(scope.managementTenantId) ||
-        scope.managementTenantId <= 0))
-  )
-    return <div role="status">{t("f118.scope_unavailable")}</div>;
+  const hasValidScope =
+    Boolean(scope.identityKey) &&
+    Number.isSafeInteger(scope.tenantId) &&
+    scope.tenantId > 0 &&
+    (scope.managementTenantId === null ||
+      (Number.isSafeInteger(scope.managementTenantId) && scope.managementTenantId > 0));
   return (
     <KnowledgeSidebarPane>
-      <ScopedKnowledgeSpaceSidebar
-        key={JSON.stringify(knowledgeQueryKeys.scope(scope))}
-        {...props}
-      />
+      {hasValidScope ? (
+        <ScopedKnowledgeSpaceSidebar key={JSON.stringify(knowledgeQueryKeys.scope(scope))} {...props} />
+      ) : (
+        <KnowledgeScopeUnavailable size="panel" />
+      )}
     </KnowledgeSidebarPane>
   );
 }

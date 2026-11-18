@@ -94,7 +94,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileDao,
     KnowledgeFileStatus,
 )
-from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
+from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao, space_child_cursor_key
 from bisheng.knowledge.domain.models.knowledge_space_tag_library import (
     KnowledgeSpaceTagLibraryDao,
 )
@@ -230,6 +230,11 @@ _RESOURCE_ACTIONS = {
 _logger = logging.getLogger(__name__)
 
 _CHILD_PERMISSION_SCAN_BATCH_SIZE = 100
+_CHILD_CURSOR_VALUE_TYPES = {
+    "file_name": str,
+    "file_size": (int, type(None)),
+    "create_time": str,
+}
 _JOINED_VISIBLE_MAX_RESULTS = 5_000
 _JOINED_DB_ID_BATCH_SIZE = 500
 _MANAGED_VISIBLE_MAX_RESULTS = 5_000
@@ -3056,12 +3061,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         through ReBAC filtering, stop once we've accumulated ``page_size + 1``
         visible items (the +1 probes ``has_more``) or the DB is exhausted.
 
-        Returns visible items, ``has_more``, and the last consumed candidate
-        key. The response cursor must resume after that candidate, not after the
-        last visible row, so denied rows are not rescanned on the next page.
+        Returns visible items, ``has_more``, and the response boundary key.
+        Internal batches advance past all scanned candidates. Response cursors
+        for the new sorts use a visible row because they include raw metadata.
         """
-        from bisheng.knowledge.domain.models.knowledge_space_file import _compute_ext_rank_python
-
         visible_page_items: list[KnowledgeFile] = []
         candidate_batch_size = min(max(page_size + 1, 1), _CHILD_PERMISSION_SCAN_BATCH_SIZE)
         scan_started_at = perf_counter()
@@ -3104,14 +3107,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 verified_target_count=(permission_context or {}).get("performance", {}).get("verified_target_count", 0),
             )
 
-        def candidate_cursor(item: KnowledgeFile) -> list:
-            return [
-                item.file_type,
-                _compute_ext_rank_python(item.file_name),
-                item.update_time,
-                item.id,
-            ]
-
         while True:
             batch_count += 1
             db_started_at = perf_counter()
@@ -3146,17 +3141,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 if item.id in visible_ids:
                     if len(visible_page_items) == page_size:
                         emit_scan_metric(has_more=True)
+                        if order_field in _CHILD_CURSOR_VALUE_TYPES:
+                            # The cursor is base64 encoded. Avoid exposing sort
+                            # values from a candidate that failed visibility.
+                            resume_cursor = (
+                                space_child_cursor_key(visible_page_items[-1], order_field)
+                                if visible_page_items
+                                else None
+                            )
                         return visible_page_items, True, resume_cursor
                     visible_page_items.append(item)
                 scanned_candidates += 1
-                resume_cursor = candidate_cursor(item)
+                resume_cursor = space_child_cursor_key(item, order_field)
 
             # Advance batch_cursor to the LAST DB row of this batch (not last
             # visible) so the next batch picks up strictly after; if we used
             # the last visible, items filtered out between them would be
             # re-emitted on the next batch.
             last_db = batch_items[-1]
-            batch_cursor = candidate_cursor(last_db)
+            batch_cursor = space_child_cursor_key(last_db, order_field)
 
             if len(batch_items) < candidate_batch_size:
                 break
@@ -3311,7 +3314,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     expected_key_len=4,
                     expected_context=context,
                 )
-            except CursorDecodeError as exc:
+                if decoded is not None:
+                    value_type = _CHILD_CURSOR_VALUE_TYPES.get(order_field)
+                    if value_type and (decoded[0] != order_field or not isinstance(decoded[1], value_type)):
+                        raise CursorDecodeError("cursor does not contain a valid sort value")
+                    if not isinstance(decoded[3], int) or decoded[3] <= 0:
+                        raise CursorDecodeError("cursor does not contain a valid file ID")
+                    if order_field == "file_type" and not all(isinstance(value, int) for value in decoded[:2]):
+                        raise CursorDecodeError("cursor does not contain a valid file type and extension rank")
+                    decoded[2] = datetime.fromisoformat(decoded[2])
+                    if order_field == "create_time":
+                        decoded[1] = datetime.fromisoformat(decoded[1])
+            except (AttributeError, TypeError, ValueError) as exc:
                 raise KnowledgeSpaceInvalidCursorError(exception=exc) from exc
             stage_elapsed_ms["cursor_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
 

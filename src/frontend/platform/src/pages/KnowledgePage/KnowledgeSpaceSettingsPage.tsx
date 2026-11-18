@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { knowledgeQueryKeys } from "@/controllers/hooks/knowledge";
 import { useKnowledgePageScope } from "@/hooks/useKnowledgePageScope";
+import { KnowledgeScopeUnavailable } from "./components/KnowledgeScopeUnavailable";
 import { SpacePanelFrame } from "./components/SpacePanelFrame";
 import { SpaceSettingsEditor } from "./components/SpaceSettingsEditor";
 import { parseKnowledgeId } from "./detail";
@@ -40,6 +41,7 @@ export function KnowledgeSpaceSettingsPage() {
         <SpacePanelFrame
           title={t("detail.settings")}
           presentation="page"
+          contentClassName="h-full"
           back={{ label: t("back"), onClick: handleBack }}
           footer={
             <>
@@ -48,7 +50,7 @@ export function KnowledgeSpaceSettingsPage() {
             </>
           }
         >
-          <p role="status">{t(isLoading ? "f118.loading_space" : "f118.scope_unavailable")}</p>
+          {isLoading ? <p role="status">{t("f118.loading_space")}</p> : <KnowledgeScopeUnavailable />}
         </SpacePanelFrame>
       )}
     </main>

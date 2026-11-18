@@ -29,16 +29,19 @@ beforeEach(() => {
     throw new Error(`Unexpected request ${url}`);
   });
 });
-afterEach(() => { cleanup(); client.clear(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); client.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 it("keeps preview navigation actionable and allows direct upload during a pending media preview", async () => {
+  vi.stubGlobal("BRAND_CONFIG", { URLLoadingIcon: "/assets/custom-preview-loading.svg" });
   const notice = vi.spyOn(notification, "open");
   render(<MemoryRouter><QueryClientProvider client={client}><SpaceFileUploadPanel scope={scope} spaceId={7} parentId={9} /></QueryClientProvider></MemoryRouter>);
   await act(async () => fireEvent.change(document.querySelector('input[type="file"]')!, { target: { files: [new File(["x"], "video.mp4", { type: "video/mp4" })] } }));
   await waitFor(() => expect(screen.getByRole("button", { name: "nextStep" })).toBeEnabled());
   fireEvent.click(screen.getByRole("button", { name: "nextStep" }));
   fireEvent.click(await screen.findByRole("button", { name: "previewResults" }));
-  await screen.findByText("previewInProgress");
+  const loading = (await screen.findByText("f118.preview_loading")).closest('[role="status"]');
+  expect(loading).toHaveAttribute("aria-busy", "true");
+  expect(loading?.querySelector("img")).toHaveAttribute("src", "/assets/custom-preview-loading.svg");
   await waitFor(() => expect(mocks.get.mock.calls.some(([url]) => url.includes("/previews/"))).toBe(true));
   expect(screen.getByRole("button", { name: "nextStep" })).toBeEnabled();
   fireEvent.click(screen.getByRole("button", { name: "nextStep" }));

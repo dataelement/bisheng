@@ -12,4 +12,6 @@ export { MoveConfirmation } from './MoveConfirmation';
 export type { MoveConfirmationProps } from './MoveConfirmation';
 export { useMoveConfirmation } from './useMoveConfirmation';
 export { KnowledgeDialogTable } from './KnowledgeDialogTable';
+export { BATCH_OPERATION_DIALOG_CLASS } from './batchOperationDialogStyles';
 export { KnowledgeDeletionItems, KnowledgeReferenceTables } from './KnowledgeDeletionTables';
+export { directoryLoadingStyles, directoryTitleClass } from './directoryStyles';

@@ -539,5 +539,19 @@ it("waits for a concrete management scope before reading spaces", () => {
   mock.scope.mockReturnValue({ scopes: undefined, canManage: true, isLoading: true, retry: vi.fn() });
   mount("/filelib?view=admin");
   expect(screen.getByText("f118.loading_space")).toBeVisible();
+  expect(screen.queryByText("f118.scope_unavailable")).not.toBeInTheDocument();
   expect(mock.get).not.toHaveBeenCalled();
+});
+
+it("shows an illustrated error and keeps retry available when settings cannot determine the scope", () => {
+  const retry = vi.fn().mockResolvedValue(undefined);
+  mock.scope.mockReturnValue({ scopes: null, canManage: true, isLoading: false, retry });
+  const { container } = mount("/filelib/7/settings?parent_id=9");
+
+  expect(screen.getByText("f118.scope_unavailable")).toHaveAttribute("role", "status");
+  expect(container.querySelector("main [aria-hidden=true] svg.brand-illustration")).toBeVisible();
+  expect(screen.getByRole("button", { name: "cancel" })).toBeVisible();
+  expect(mock.get).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "retry" }));
+  expect(retry).toHaveBeenCalledTimes(1);
 });

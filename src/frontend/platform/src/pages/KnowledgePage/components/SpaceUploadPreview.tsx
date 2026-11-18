@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import {
   knowledgeUploadPreviewApi,
@@ -227,7 +228,7 @@ function PreviewPane({
   useEffect(() => {
     if (value?.status === "completed")
       onPreview(file.id, { value, fingerprint }, file.filePath);
-  }, [value, file.id, fingerprint, onPreview]);
+  }, [value, file.id, file.filePath, fingerprint, onPreview]);
   const data = value?.data;
   const chunks = useMemo(
     () =>
@@ -276,7 +277,17 @@ function PreviewPane({
         </Button>
       </div>
     );
-  if (!data || !value) return <p role="status">{t("previewInProgress")}</p>;
+  if (!data || !value)
+    return (
+      <div
+        role="status"
+        aria-busy="true"
+        className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-4 py-6 text-center text-body text-text-3"
+      >
+        <span aria-hidden="true"><LoadingIcon className="size-10" /></span>
+        <p>{t("f118.preview_loading")}</p>
+      </div>
+    );
   const previewFile = {
     ...file,
     id: file.id,
@@ -310,13 +321,14 @@ function PreviewPane({
           </Button>
         </div>
       )}
-      <div className="flex min-h-0 flex-1 gap-3 bg-background-main">
+      <div className={`flex min-h-0 flex-1 gap-3 bg-background-main ${editable ? "p-2" : ""}`}>
         {editable && (
           <PreviewFile
             file={previewFile}
             rawFiles={[previewFile]}
             step={3}
             edit={!saving && !failed}
+            padded={false}
             chunks={chunks}
             setChunks={() => undefined}
             partitions={data.partitions ?? {}}
@@ -341,6 +353,7 @@ function PreviewPane({
             previewCount={chunks.length}
             chunks={chunks}
             immediateSave
+            padded={!editable}
             className="min-h-0 flex-1 overscroll-contain"
             loading={query.isFetching || saving}
             edit={editable && !saving && !failed}

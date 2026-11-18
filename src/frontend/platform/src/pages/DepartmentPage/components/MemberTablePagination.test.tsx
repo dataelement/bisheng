@@ -186,7 +186,8 @@ it("toggles descendant memberships at the heading and edits the selected departm
   expect(mocks.members).toHaveBeenLastCalledWith(
     "parent", expect.objectContaining({ page: 1, include_descendants: true })
   );
-  await user.click(within(childRow).getByRole("button", { name: "edit" }));
+  await user.click(within(childRow).getByRole("button", { name: "more Ada" }));
+  await user.click(screen.getByRole("menuitem", { name: "edit" }));
   expect(screen.getByRole("dialog")).toHaveTextContent("child");
 
   await user.click(checkbox);

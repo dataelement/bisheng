@@ -27,6 +27,7 @@ export default function PreviewFile({
   step,
   setChunks,
   edit = false,
+  padded = true,
   resultFiles,
   etl,
   previewUrl,
@@ -40,6 +41,7 @@ export default function PreviewFile({
   rawFiles: any[];
   setChunks: any;
   edit?: boolean;
+  padded?: boolean;
   step?: number;
   previewUrl?: string;
   previewData?: any;
@@ -359,7 +361,7 @@ export default function PreviewFile({
       : 'overflow-y-auto';
   // Match the paragraph column's breathing room (page furniture is px-6, cards pt-3).
   // PDF keeps its own full-bleed viewer layout.
-  const previewPaddingClass = file.suffix === 'pdf' ? '' : 'pl-6 pt-3';
+  const previewPaddingClass = padded && file.suffix !== 'pdf' ? 'pl-6 pt-3' : '';
 
   return <div className={cn('relative', step === 3 ? "w-full max-w-[50%] h-full flex flex-col" : "w-1/2", step === 2 ? "-mt-9 w-full max-w-[50%]" : "")} onClick={e => {
     e.stopPropagation()
