@@ -40,6 +40,24 @@ it('new credit APIs and a never-enumerated endpoint carry scope before navigatin
     expect(config.headers.get('X-Management-Tenant')).toBe('60');
 });
 
+it('market list helpers follow the confirmed view while retaining the login-tenant identity header', async () => {
+  const {seen} = await transport();
+  const {acceptManagementScope} = await import('./managementScope');
+  const {listMarketPlugins, getMarketContext} = await import('./API/dshMarket');
+  const {listMarketWorkbenches} = await import('./API/dshWorkbenches');
+  for (const tenant of [60, 65, 1]) {
+    acceptManagementScope(tenant);
+    await listMarketPlugins({page: 1}, 1);
+    await listMarketWorkbenches(1, 1);
+  }
+  const lists = seen.filter(row => row.url === '/api/v1/dsh/market/admin/plugins'
+    || row.url === '/api/v1/dsh/market/admin/workbenches');
+  expect(lists.map(row => row.headers.get('X-Management-Tenant'))).toEqual(['60', '60', '65', '65', '1', '1']);
+  expect(lists.every(row => row.headers.get('X-DSH-Market-Tenant') === '1')).toBe(true);
+  await getMarketContext();
+  expect(seen.at(-1)?.headers.has('X-Management-Tenant')).toBe(false);
+});
+
 it('the actual admin hook API recovers a silent failure with strict GET, not a Home bootstrap', async () => {
   const t = await transport();
   await t.request.get('/api/v1/dsh/admin/credit-settings');

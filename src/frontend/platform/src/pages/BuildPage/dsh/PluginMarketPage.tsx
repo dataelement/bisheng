@@ -35,11 +35,23 @@ interface PluginMarketPageProps {
 export function PluginMarketPage({ toolbarTarget }: PluginMarketPageProps) {
   const { user } = useContext(userContext);
   const { t } = useTranslation("dshMarket");
+  const [viewRevision, setViewRevision] = useState(0);
+  useEffect(() => {
+    // A management-view switch does not change the login tenant. Retire the
+    // active pane's requests and dialogs even when the host keeps this page mounted.
+    const reset = () => setViewRevision(value => value + 1);
+    window.addEventListener("bisheng:management-scope-changed", reset);
+    return () => window.removeEventListener("bisheng:management-scope-changed", reset);
+  }, []);
   if (!canManageWorkbenchConfig(user)) return <div className="p-8">{t("forbidden")}</div>;
-  return <PluginMarketContent key={`${user.user_id}:${user.tenant_id}`} toolbarTarget={toolbarTarget} />;
+  return <PluginMarketContent key={`${user.user_id}:${user.tenant_id}`} toolbarTarget={toolbarTarget} viewRevision={viewRevision} />;
 }
 
-function PluginMarketContent({ toolbarTarget }: PluginMarketPageProps) {
+interface PluginMarketContentProps extends PluginMarketPageProps {
+  viewRevision: number;
+}
+
+function PluginMarketContent({ toolbarTarget, viewRevision }: PluginMarketContentProps) {
   const { t } = useTranslation("dshMarket");
   const [section, setSection] = useState("plugins");
   const selector = (
@@ -57,7 +69,7 @@ function PluginMarketContent({ toolbarTarget }: PluginMarketPageProps) {
   return (
     <div className="h-full overflow-auto px-2 pb-4">
       {toolbarTarget ? createPortal(selector, toolbarTarget) : toolbarTarget === undefined ? selector : null}
-      {section === "plugins" ? <TenantPluginMarket /> : <WorkbenchMarketSection />}
+      {section === "plugins" ? <TenantPluginMarket key={viewRevision} /> : <WorkbenchMarketSection key={viewRevision} />}
     </div>
   );
 }
