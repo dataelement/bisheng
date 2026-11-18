@@ -7,7 +7,7 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeProcessingJobNotFoundError,
     KnowledgeProcessingObsoleteError,
 )
-from bisheng.common.errcode.permission import PermissionDeniedError
+from bisheng.common.errcode.permission import PermissionDeniedError, PermissionInvalidResourceError
 from bisheng.common.schemas.api import PageData
 from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.application import move_processing_admission as admission
@@ -181,7 +181,9 @@ class MoveProcessingAccess:
                         if offset <= total < offset + page_size:
                             selected.append(await self._read(job, reference, actual))
                         total += 1
-                except (PermissionDeniedError, KnowledgeProcessingJobNotFoundError):
+                except (PermissionDeniedError, KnowledgeProcessingJobNotFoundError, PermissionInvalidResourceError):
+                    # A deleted destination is not a permission target. Omit that
+                    # historical job instead of failing the whole space page.
                     continue
             if len(candidates) < 200:
                 break
@@ -202,7 +204,7 @@ class MoveProcessingAccess:
                     if offset <= total < offset + page_size:
                         selected.append(await self._read(job, reference, actual))
                     total += 1
-            except (PermissionDeniedError, KnowledgeProcessingJobNotFoundError):
+            except (PermissionDeniedError, KnowledgeProcessingJobNotFoundError, PermissionInvalidResourceError):
                 continue
         return PageData[ProcessingJobRead](data=selected, total=total)
 
