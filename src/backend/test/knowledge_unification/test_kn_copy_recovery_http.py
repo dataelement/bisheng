@@ -130,18 +130,23 @@ async def test_http_recovers_uninitialized_copy_without_target_permission_or_dup
     await owner.astart(jid, current.revision)
     async with ctx.sessions() as session:
         assert (await session.execute(sa.select(sa.func.count()).select_from(Job))).scalar_one() == 1
-        assert (await session.get(Knowledge, sid)).state == 2
+        assert (await session.get(Knowledge, sid)).state == 1
         operations = (await session.execute(sa.select(PermissionProjectionOperation))).scalars().all()
         assert len(operations) == 3 and all(row.status == "FINALIZED" for row in operations)
 
 
-async def test_confirm_http_accepts_without_running_initialization(copying, monkeypatch):
+async def test_confirm_http_initializes_permissions_and_indexes_before_exposing_usable_space(copying, monkeypatch):
     app, ctx = copying.app, copying.ctx
     plan = await app.aprecheck(40, name="Background copy", identity=ctx.user)
     monkeypatch.setattr(copy_endpoints, "SpaceCopyApplication", lambda: app)
     monkeypatch.setattr(copy_endpoints, "_write_scope", AsyncMock())
-    initialize = AsyncMock(side_effect=AssertionError("initialization must run in worker"))
-    monkeypatch.setattr(SpaceCopyOwner, "aensure_logical", initialize)
+    original = SpaceCopyOwner.aensure_logical
+    initialize = AsyncMock(side_effect=original)
+
+    async def initialize_bound(self, *args, **kwargs):
+        await initialize(self, *args, **kwargs)
+
+    monkeypatch.setattr(SpaceCopyOwner, "aensure_logical", initialize_bound)
     web = FastAPI()
     web.include_router(copy_endpoints.router, prefix="/api/v1/knowledge/space")
     web.dependency_overrides[UserPayload.get_login_user] = lambda: ctx.user
@@ -152,7 +157,8 @@ async def test_confirm_http_accepts_without_running_initialization(copying, monk
         assert result["processing_job"]["accepted"] and not result["completed"]
         repeated = (await http.post("/api/v1/knowledge/space/40/copy/confirm", json=command(plan).model_dump())).json()
         assert repeated["data"]["knowledge"]["id"] == result["knowledge"]["id"]
-    initialize.assert_not_awaited()
+    assert initialize.await_count == 2
+    assert result["knowledge"]["state"] == 1
     async with ctx.sessions() as session:
         job = (await session.execute(sa.select(Job))).scalars().one()
         assert job.pending_dispatch and job.state == "accepted"
@@ -208,9 +214,10 @@ async def test_initialization_claim_is_exclusive_and_failure_uses_original_lease
     copying, monkeypatch, actual_processing_task
 ):
     app, ctx = copying.app, copying.ctx
-    result = await app.aconfirm(
-        40, command(await app.aprecheck(40, name="Claim first", identity=ctx.user)), identity=ctx.user
-    )
+    plan = await app.aprecheck(40, name="Claim first", identity=ctx.user)
+    with monkeypatch.context() as patch:
+        patch.setattr(SpaceCopyOwner, "aensure_logical", AsyncMock())
+        result = await app.aconfirm(40, command(plan), identity=ctx.user)
     jid = result["processing_job"].job_id
     owner = SpaceCopyOwner(app)
     access = SpaceCopyAccess(owner)

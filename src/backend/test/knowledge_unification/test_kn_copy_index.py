@@ -13,6 +13,17 @@ from test.knowledge_unification import test_move_worker as native
 from test.knowledge_unification.test_metadata_index_worker import response
 
 
+@pytest.fixture(autouse=True)
+def copy_tenant():
+    from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
+
+    token = set_current_tenant_id(101)
+    try:
+        yield
+    finally:
+        current_tenant_id.reset(token)
+
+
 class Collection(native.NativeCollection):
     def delete(self, expr):
         assert expr == "document_id == 181"
@@ -111,6 +122,7 @@ async def copying(monkeypatch):
         "destination": root_facts(target),
         "source_file": {
             "id": 81,
+            "status": 2,
             "knowledge_id": 40,
             "object_name": "original/81.txt",
             "preview_file_object_name": "preview/81.md",
@@ -127,13 +139,14 @@ async def copying(monkeypatch):
     return SimpleNamespace(old=old_es, new=new_es, col=collection, objects=objects, snapshot=snapshot)
 
 
-async def apply(context):
+async def apply(context, **kwargs):
     return await module.apply_space_copy_item(
         operation_id="copy",
         snapshot=context.snapshot,
         file_ids={"81": 181},
         invoke_user_id=7,
         guard=AsyncMock(return_value=None),
+        **kwargs,
     )
 
 
@@ -214,3 +227,37 @@ async def test_copy_after_move_rewrites_current_index_chunks_without_changing_so
     assert result.milvus_count == result.es_count == 2
     assert all("/50/181/" in row["_source"]["text"] for row in copying.new.rows)
     assert copying.old.rows == before
+
+
+async def test_index_failure_retries_from_independent_inputs_after_source_is_gone(copying):
+    saved = []
+    copying.new.fail_add = RuntimeError("index unavailable")
+    with pytest.raises(RuntimeError, match="index unavailable"):
+        await apply(copying, input_ready=AsyncMock(side_effect=lambda value: saved.append(value)))
+    assert len(saved) == 1
+    copying.objects.values = {
+        key: value
+        for key, value in copying.objects.values.items()
+        if key not in {"original/81.txt", "preview/81.md", "knowledge/images/40/81/same.png"}
+    }
+    copying.old.rows.clear()
+    copying.new.fail_add = None
+    result = await apply(copying, input_state=saved[0])
+    assert result.source_count == result.es_count == result.milvus_count == 2
+    assert copying.objects.values["original/181.txt"] == b"source bytes"
+
+
+async def test_corrupt_recovery_input_is_rejected_instead_of_publishing_success(copying):
+    saved = []
+    await apply(copying, input_ready=AsyncMock(side_effect=lambda value: saved.append(value)))
+    copying.objects.values[saved[0]["key"]] += b"corrupt"
+    with pytest.raises(ValueError, match="checksum"):
+        await apply(copying, input_state=saved[0])
+
+
+async def test_cross_target_input_descriptor_is_rejected(copying):
+    saved = []
+    await apply(copying, input_ready=AsyncMock(side_effect=lambda value: saved.append(value)))
+    copying.snapshot["target_version"]["id"] += 1
+    with pytest.raises(ValueError, match="target differs"):
+        await apply(copying, input_state=saved[0])

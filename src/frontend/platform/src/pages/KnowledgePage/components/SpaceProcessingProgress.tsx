@@ -1,3 +1,4 @@
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { KnowledgeDialogTable } from "@bisheng/knowledge";
 import { Button, Pagination } from "@bisheng/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -18,6 +19,7 @@ import {
   useKnowledgeProcessingActions,
   type KnowledgeQueryScope,
 } from "@/controllers/hooks/knowledge";
+import { processingFailureKey } from "./processingFailure";
 import { Progress } from "@/components/bs-ui/progress";
 import { showApiError } from "@/controllers/request";
 import { usePaginationLocale } from "@/hooks/usePaginationLocale";
@@ -62,8 +64,16 @@ export function SpaceProcessingProgress({
     }),
     [kind],
   );
-  const queryOptions = metadata ? { refetchOnMount: "always" as const } : undefined;
-  const job = useKnowledgeProcessingJob(scope, spaceId, jobId, api, queryOptions);
+  const queryOptions = metadata
+    ? { refetchOnMount: "always" as const }
+    : undefined;
+  const job = useKnowledgeProcessingJob(
+    scope,
+    spaceId,
+    jobId,
+    api,
+    queryOptions,
+  );
   const jobData = !metadata || job.isFetchedAfterMount ? job.data : undefined;
   const hasFailures = (jobData?.failed_count ?? 0) > 0;
   const items = useKnowledgeProcessingItems(
@@ -75,9 +85,11 @@ export function SpaceProcessingProgress({
     { enabled: !metadata || hasFailures, ...queryOptions },
   );
   const actions = useKnowledgeProcessingActions(scope, spaceId, api);
-  const [retry, setRetry] = useState<{ revision: number; key: string } | null>(
-    null,
-  );
+  const [retry, setRetry] = useState<{
+    revision: number;
+    key: string;
+    refreshSource: boolean;
+  } | null>(null);
   useEffect(() => {
     const error = job.error || items.error;
     if (error) showApiError(error);
@@ -110,18 +122,24 @@ export function SpaceProcessingProgress({
     }, 2000);
     return () => window.clearInterval(timer);
   }, [metadata, state, hasFailures, refreshJob, refreshItems]);
-  const handleRetry = async () => {
+  const handleRetry = async (refreshSource = false) => {
     if (!jobData?.retryable || busy) return;
     const request =
-      retry?.revision === jobData.revision
+      retry?.revision === jobData.revision &&
+      retry.refreshSource === refreshSource
         ? retry
-        : { revision: jobData.revision, key: createOperationId() };
+        : {
+            revision: jobData.revision,
+            key: createOperationId(),
+            refreshSource,
+          };
     setRetry(request);
     setBusy(true);
     try {
       await actions.retryJob(jobId, {
         expected_job_revision: request.revision,
         idempotency_key: request.key,
+        ...(refreshSource ? { refresh_source: true } : {}),
       });
       if (metadata) {
         setPage(1);
@@ -136,27 +154,39 @@ export function SpaceProcessingProgress({
     }
   };
   const status = state && t(`f118.processing_state_${state}`);
-  const counts = jobData && t("f118.processing_counts", {
-    completed: jobData.succeeded_count,
-    failed: jobData.failed_count,
-    pending: jobData.pending_count,
-  });
+  const counts =
+    jobData &&
+    t("f118.processing_counts", {
+      completed: jobData.succeeded_count,
+      failed: jobData.failed_count,
+      pending: jobData.pending_count,
+    });
   let percent: number | undefined;
   if (state === "succeeded") {
     percent = 100;
   } else if (jobData?.total_count) {
     const processed = jobData.succeeded_count + jobData.failed_count;
-    percent = Math.min(100, Math.floor((processed / jobData.total_count) * 100));
+    percent = Math.min(
+      100,
+      Math.floor((processed / jobData.total_count) * 100),
+    );
   }
   const showItems = !metadata || hasFailures;
   const itemRows = items.data?.data ?? [];
+  const failureKey =
+    jobData && processingFailureKey(jobData, kind ?? jobData.kind);
   return (
     <section className="space-y-3" aria-live="polite">
       {metadata && (
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3">
-            <span>{status ?? t(job.isError ? "detail.load_failed" : "detail.loading")}</span>
-            {percent !== undefined && <span className="tabular-nums">{percent}%</span>}
+            <span>
+              {status ??
+                t(job.isError ? "detail.load_failed" : "detail.loading")}
+            </span>
+            {percent !== undefined && (
+              <span className="tabular-nums">{percent}%</span>
+            )}
           </div>
           <Progress
             aria-label={t("f118.processing_kind_metadata_schema_change")}
@@ -179,8 +209,11 @@ export function SpaceProcessingProgress({
               <p>{counts}</p>
             </>
           )}
-          {jobData.error_code && (
-            <p role="alert">{t(`api_errors:${jobData.error_code}`)}</p>
+          {failureKey && <p role="alert">{t(failureKey)}</p>}
+          {hasFailures && (
+            <p className="text-caption text-text-3">
+              {t("f118.processing_task_id", { id: jobId })}
+            </p>
           )}
           {showItems && jobData.hidden_item_count > 0 && (
             <p>
@@ -192,6 +225,21 @@ export function SpaceProcessingProgress({
           {jobData.retryable && (
             <Button disabled={busy} onClick={() => void handleRetry()}>
               {t("retry")}
+            </Button>
+          )}
+          {jobData.retryable && kind === "space_copy" && (
+            <Button
+              variant="outlined"
+              disabled={busy}
+              onClick={() =>
+                bsConfirm({
+                  title: t("f118.copy_refresh_source"),
+                  desc: t("f118.copy_refresh_source_notice"),
+                  onOk: () => handleRetry(true),
+                })
+              }
+            >
+              {t("f118.copy_refresh_source")}
             </Button>
           )}
         </>
@@ -207,12 +255,15 @@ export function SpaceProcessingProgress({
             { label: t("status") },
             { label: t("batch.column_reason") },
           ]}
-          rows={itemRows.map((item, index) => ({
+          rows={itemRows.map((item) => ({
             key: item.id,
             cells: [
-              t("f118.processing_item_number", { number: (page - 1) * 20 + index + 1 }),
+              item.file_name ??
+                t("f118.processing_file_id", { id: item.file_id }),
               t(`f118.processing_item_${item.state}`),
-              item.error_code ? t(`api_errors:${item.error_code}`) : "—",
+              processingFailureKey(item, kind ?? jobData?.kind)
+                ? t(processingFailureKey(item, kind ?? jobData?.kind)!)
+                : "—",
             ],
           }))}
         />

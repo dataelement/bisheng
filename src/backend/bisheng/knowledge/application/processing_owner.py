@@ -9,6 +9,7 @@ from dataclasses import dataclass
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge import (
+    KnowledgeFileFailedError,
     KnowledgeOperationPlanConflictError,
     KnowledgeProcessingConflictError,
     ResourceReferenceInvalidError,
@@ -255,6 +256,7 @@ class KnowledgeProcessingOwner:
         if not self.jobs._active_job_lease(job, lease):
             return None
         current = await self.aread_current(session, job.space_id, job=job)
+        await self.jobs._refresh_counts(session, job)
         if current.operation_id is not None:
             try:
                 receipt = await self._cutovers.afinalize(session, job, lease)
@@ -264,7 +266,47 @@ class KnowledgeProcessingOwner:
             if acknowledged is None:
                 raise ResourceReferenceInvalidError(reason="processing_cutover_lease_changed")
             current = await self.aread_current(session, job.space_id, job=job)
-        return await self.scope.afinalize_attempt(session, lease, jobs=self.jobs)
+        result = await self.scope.afinalize_attempt(session, lease, jobs=self.jobs)
+        if (
+            result is not None
+            and result.kind == "embedding_rebuild"
+            and result.total_count
+            and result.failed_count == result.total_count
+        ):
+            result.error_code, result.error_message = KnowledgeFileFailedError.Code, "all_files_failed"
+            await session.flush()
+        return result
+
+    async def afail_rebuild(self, session, job_id, *, expected_job_revision, error_code, lease=None):
+        job = await self.jobs.aget(session, job_id)
+        if job.kind != "embedding_rebuild":
+            return None
+        root = await KnowledgeModelReferenceApplication.repository.aget(session, job.space_id)
+        transition = root.model_transition if root is not None else None
+        active = transition and str(root.model) == str(transition.get("pending_model_id"))
+        if not active:
+            return None
+        current = await self.aread_current(session, job.space_id, job=job)
+        if lease is None:
+            lease = await self.jobs.aclaim(
+                session, job_id, configuration=current.configuration, expected_job_revision=expected_job_revision
+            )
+        if lease is None or not self.jobs._active_job_lease(job, lease):
+            return None
+        if not await self.scope.afail_rebuild_items(session, job, lease, jobs=self.jobs, error_code=error_code):
+            return None
+        result = await self.afinalize_and_ack(session, job, lease)
+        if result is not None:
+            result.error_code = error_code
+            result.error_message = (
+                "model_unavailable"
+                if error_code == 10903
+                else "all_files_failed"
+                if error_code == KnowledgeFileFailedError.Code and result.failed_count == result.total_count
+                else None
+            )
+            await session.flush()
+        return result
 
     async def abegin_retry_fence(self, session, job, *, identity):
         await self._operator(identity)
@@ -342,6 +384,7 @@ class KnowledgeProcessingOwner:
         parameters,
         operation_id: str | None = None,
         expected_configuration: ProcessingConfiguration | None = None,
+        activate: bool = False,
     ) -> PreparedKnowledgeModelChange:
         operator = await self._operator(identity)
         request = EmbeddingRebuildParameters.model_validate(parameters)
@@ -355,9 +398,12 @@ class KnowledgeProcessingOwner:
                 "expected_model_config_revision": expected_configuration.model_config_revision,
                 "expected_index_generation": expected_configuration.index_generation,
             }
-        return await KnowledgeModelReferenceApplication.aprepare_rebuild(
-            session, space_id, selected, login_user=operator, operation_id=operation_id, **expected
+        prepare = (
+            KnowledgeModelReferenceApplication.aprepare_active_rebuild
+            if activate
+            else KnowledgeModelReferenceApplication.aprepare_rebuild
         )
+        return await prepare(session, space_id, selected, login_user=operator, operation_id=operation_id, **expected)
 
     async def aprepare(
         self, session, space_id, *, identity, parameters, operation_id, expected_configuration=None
@@ -369,6 +415,7 @@ class KnowledgeProcessingOwner:
             parameters=parameters,
             operation_id=operation_id,
             expected_configuration=expected_configuration,
+            activate=True,
         )
         await KnowledgeModelReferenceApplication.aapply_model_change(session, plan)
         # This checks the actual new pending slot, complete source and current

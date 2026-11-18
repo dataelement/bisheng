@@ -15,6 +15,7 @@ from bisheng.knowledge.application.move_processing_owner import KnowledgeMovePro
 from bisheng.knowledge.application.processing_identity import capture_processing_actor
 from bisheng.knowledge.domain.repositories.move_query_repository import MoveQueryRepository
 from bisheng.knowledge.domain.schemas.move_processing import MoveRoot
+from bisheng.knowledge.domain.schemas.processing_diagnostics import safe_failure_reason
 from bisheng.knowledge.domain.schemas.processing_job import ProcessingItemRead, ProcessingJobRead
 from bisheng.permission.application.business_authorization import batch_check_business_actions
 from bisheng.permission.application.data_scope import DATA_SCOPE_PERSONAL
@@ -145,6 +146,7 @@ class MoveProcessingAccess:
             retryable=eligibility.retryable,
             obsolete_reason=job.obsolete_reason,
             error_code=job.error_code,
+            failure_reason=safe_failure_reason(job.obsolete_reason) or safe_failure_reason(job.error_message),
         )
         return result
 
@@ -202,10 +204,16 @@ class MoveProcessingAccess:
                                         "error_code",
                                     )
                                 },
+                                failure_reason=safe_failure_reason(row.get("error_message")),
                                 retryable=job.state in {"partial_failed", "failed"} and row["state"] == "failed",
                             )
                         )
                     total += 1
+            async with self.owner._session() as session:
+                names = await self.owner.jobs.afile_names(
+                    session, space_id=job.space_id, file_ids=[row.file_id for row in selected]
+                )
+            selected = [row.model_copy(update={"file_name": names.get(row.file_id)}) for row in selected]
         return PageData[ProcessingItemRead](data=selected, total=total)
 
     async def aretry(self, space_id, job_id, request, *, identity):

@@ -63,6 +63,7 @@ _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.chat_session.domain.models.workflow_file_manifest",
     "bisheng.chat_session.domain.models.project",
     "bisheng.knowledge.domain.models.knowledge",
+    "bisheng.knowledge.domain.models.knowledge_vector_cleanup",
     "bisheng.knowledge.domain.models.department_knowledge_space",
     "bisheng.llm.domain.models.llm_server",
     "bisheng.llm.domain.models.llm_call_log",

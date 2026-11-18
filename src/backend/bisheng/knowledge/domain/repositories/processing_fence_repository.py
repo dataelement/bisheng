@@ -170,6 +170,22 @@ class ProcessingFenceRepository:
                 )
             session.commit()
 
+    async def arecord_artifact(self, space_id, file_id, object_name, *, session=None):
+        if session is None:
+            async with self.async_sessions() as active:
+                await self.arecord_artifact(space_id, file_id, object_name, session=active)
+                await active.commit()
+            return
+        tenant = self.tenant()
+        key = hashlib.sha256(f"{tenant}:{space_id}:{file_id}:{object_name}".encode()).hexdigest()
+        if await session.get(KnowledgeProcessingArtifact, key) is None:
+            session.add(
+                KnowledgeProcessingArtifact(
+                    id=key, tenant_id=tenant, space_id=space_id, file_id=file_id, object_name=object_name
+                )
+            )
+        await session.flush()
+
     async def aensure(self, space_id, file_id):
         row = self.row(space_id, file_id)
         key = row.id

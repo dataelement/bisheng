@@ -82,8 +82,8 @@ class MetadataProcessingService:
             "tenant_id": scope.tenant_id,
             "space_id": scope.space_id,
             "schema_revision": scope.schema_revision,
-            "model_config_revision": scope.model_config_revision,
-            "index_generation": scope.index_generation,
+            "model_config_revision": None if scope.schema_only else scope.model_config_revision,
+            "index_generation": None if scope.schema_only else scope.index_generation,
             "schema_fields": scope.schema_fields,
             "items": [
                 {
@@ -194,7 +194,11 @@ class MetadataProcessingService:
 
     async def apreview(self, session, space_id, parameters: MetadataSchemaParameters) -> PreparedMetadataSchema:
         parameters = MetadataSchemaParameters.model_validate(parameters.model_dump(mode="json"))
-        scope = await self.repository.aload_scope(session, space_id)
+        pure_add = all(change.operation == "add" for change in parameters.changes)
+        schema_only = pure_add and not await self.repository.ahas_field_residue(
+            session, space_id, {change.field_name for change in parameters.changes}
+        )
+        scope = await self.repository.aload_scope(session, space_id, schema_only=schema_only)
         if parameters.expected_schema_revision != scope.schema_revision:
             raise KnowledgeOperationPlanConflictError(reason="metadata_schema_changed")
         changes = tuple(value.model_dump(mode="json") for value in parameters.changes)
@@ -204,6 +208,8 @@ class MetadataProcessingService:
         for item in scope.items:
             before = deepcopy(item.user_metadata)
             after = self._after_values(before, changes, timestamp)
+            if pure_add and metadata_digest(before) == metadata_digest(after):
+                continue
             items.append(
                 PreparedMetadataItem(
                     ResourceVersionTarget.model_validate(item.target.model_dump(mode="json")),
@@ -249,7 +255,13 @@ class MetadataProcessingService:
 
     async def aaccept(self, session, prepared) -> PreparedMetadataSchema:
         issued = self._check(session, prepared)
-        current = await self.repository.aload_scope(session, prepared.space_id, for_update=True)
+        current = await self.repository.aload_scope(
+            session, prepared.space_id, for_update=True, schema_only=prepared._scope.schema_only
+        )
+        if prepared._scope.schema_only and await self.repository.ahas_field_residue(
+            session, prepared.space_id, {change["field_name"] for change in prepared.changes}
+        ):
+            raise KnowledgeOperationPlanConflictError(reason="metadata_scope_changed")
         self._check(session, prepared)
         if metadata_digest(self._scope_facts(current)) != metadata_digest(self._scope_facts(prepared._scope)):
             raise KnowledgeOperationPlanConflictError(reason="metadata_scope_changed")

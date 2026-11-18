@@ -1,12 +1,26 @@
-import { act, cleanup, render, screen, within } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, expect, it, vi } from "vitest";
 import {
   readProcessingItems,
   readProcessingJob,
+  retryProcessing,
 } from "@/controllers/API/knowledgeProcessing";
 import type { ProcessingJobRead } from "@/controllers/API/knowledgeSpace";
 import { SpaceProcessingProgress } from "@/pages/KnowledgePage/components/SpaceProcessingProgress";
+
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+vi.mock("@/components/bs-ui/alertDialog/useConfirm", () => ({
+  bsConfirm: vi.fn(),
+}));
 
 vi.mock("@/controllers/request", () => ({
   default: {},
@@ -66,6 +80,8 @@ it("polls metadata progress and requests only failed items when failures appear"
       {
         id: "item-38",
         file_id: 38,
+        file_name: "changed-metadata.txt",
+        failure_reason: "file_changed",
         document_id: 62,
         version_id: 95,
         step: "metadata_index_written",
@@ -96,7 +112,10 @@ it("polls metadata progress and requests only failed items when failures appear"
   );
 
   expect(await screen.findByText("30%")).toBeVisible();
-  expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "30");
+  expect(screen.getByRole("progressbar")).toHaveAttribute(
+    "aria-valuenow",
+    "30",
+  );
   expect(screen.queryByRole("table")).toBeNull();
   expect(readProcessingItems).not.toHaveBeenCalled();
 
@@ -113,14 +132,86 @@ it("polls metadata progress and requests only failed items when failures appear"
   expect(
     await screen.findByText("f118.processing_state_partial_failed"),
   ).toBeVisible();
-  const details = await screen.findByRole("table", { name: "f118.processing_items" });
-  expect(within(details).getByRole("rowheader", { name: "f118.processing_item_number" })).toBeVisible();
-  expect(within(details).getByRole("cell", { name: "f118.processing_item_failed" })).toBeVisible();
-  expect(within(details).getByRole("cell", { name: "api_errors:10953" })).toBeVisible();
+  const details = await screen.findByRole("table", {
+    name: "f118.processing_items",
+  });
+  expect(
+    within(details).getByRole("rowheader", { name: "changed-metadata.txt" }),
+  ).toBeVisible();
+  expect(
+    within(details).getByRole("cell", { name: "f118.processing_item_failed" }),
+  ).toBeVisible();
+  expect(
+    within(details).getByRole("cell", { name: "f118.failure_file_changed" }),
+  ).toBeVisible();
   expect(readProcessingItems).toHaveBeenCalledExactlyOnceWith(
     7,
     "job-7",
     { page: 1, page_size: 20, state: "failed" },
     "metadata_schema_change",
+  );
+});
+
+it("requires explicit confirmation before refreshing failed copy inputs", async () => {
+  vi.mocked(readProcessingJob).mockReset().mockResolvedValue({
+    id: "copy-7",
+    space_id: 7,
+    kind: "space_copy",
+    state: "failed",
+    revision: 5,
+    accepted_at: "2026-11-18T07:00:00Z",
+    started_at: null,
+    finished_at: null,
+    total_count: 1,
+    succeeded_count: 0,
+    failed_count: 1,
+    pending_count: 0,
+    hidden_item_count: 0,
+    retryable: true,
+    obsolete_reason: null,
+    error_code: null,
+  });
+  vi.mocked(readProcessingItems).mockResolvedValue({ data: [], total: 0 });
+  vi.mocked(retryProcessing).mockReset().mockResolvedValue({
+    job_id: "copy-7",
+    state: "accepted",
+    reused: false,
+    accepted: true,
+  });
+  render(
+    <QueryClientProvider client={client}>
+      <SpaceProcessingProgress
+        spaceId={7}
+        jobId="copy-7"
+        kind="space_copy"
+        scope={{
+          identityKey: "user:5",
+          tenantId: 60,
+          managementTenantId: 60,
+          view: "ordinary",
+        }}
+      />
+    </QueryClientProvider>,
+  );
+  fireEvent.click(
+    await screen.findByRole("button", { name: "f118.copy_refresh_source" }),
+  );
+  expect(retryProcessing).not.toHaveBeenCalled();
+  expect(bsConfirm).toHaveBeenCalledWith(
+    expect.objectContaining({ desc: "f118.copy_refresh_source_notice" }),
+  );
+  await act(async () => {
+    await vi.mocked(bsConfirm).mock.calls.at(-1)![0].onOk?.(vi.fn());
+  });
+  await waitFor(() =>
+    expect(retryProcessing).toHaveBeenCalledWith(
+      7,
+      "copy-7",
+      expect.objectContaining({
+        expected_job_revision: 5,
+        refresh_source: true,
+      }),
+      "space_copy",
+    ),
   );
 });

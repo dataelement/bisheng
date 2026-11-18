@@ -252,9 +252,10 @@ it("sends sort changes to the directory and search APIs and resets the cursor", 
   await screen.findByText("report.pdf");
   expect(mocks.get).toHaveBeenCalledWith("/api/v1/knowledge/space/7/children", {
     params: expect.objectContaining({
-      order_field: "update_time",
-      order_sort: "desc",
+      order_field: "file_type",
+      order_sort: "asc",
     }),
+    paramsSerializer: { indexes: null },
   });
   fireEvent.keyDown(screen.getByRole("button", { name: "workspace.sort" }), {
     key: "Enter",
@@ -270,6 +271,7 @@ it("sends sort changes to the directory and search APIs and resets the cursor", 
           order_field: "file_name",
           order_sort: "asc",
         }),
+        paramsSerializer: { indexes: null },
       },
     ),
   );
@@ -303,8 +305,15 @@ it.each([
   mocks.permissions.mockResolvedValue({ actions: ["visible", "delete"] });
   mount();
   await screen.findByRole("button", { name: "report.pdf" });
-  if (layout === "card") fireEvent.click(screen.getByRole("button", { name: "workspace.card_view" }));
-  fireEvent.keyDown(screen.getByRole("button", { name: `more ${name}` }), { key: "ArrowDown" });
+  if (layout === "card")
+    fireEvent.click(
+      screen.getByRole("button", { name: "workspace.card_view" }),
+    );
+  fireEvent.keyDown(screen.getByRole("button", { name: `more ${name}` }), {
+    key: "ArrowDown",
+  });
   expect(await screen.findByRole("menuitem", { name: "delete" })).toBeVisible();
-  expect(screen.queryByRole("menuitem", { name: "deletion.delete_items" })).toBeNull();
+  expect(
+    screen.queryByRole("menuitem", { name: "deletion.delete_items" }),
+  ).toBeNull();
 });

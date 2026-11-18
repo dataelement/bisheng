@@ -93,7 +93,7 @@ async def test_add_clears_stale_same_named_values_without_touching_other_fields(
         assert "fresh" in item.before_values and "fresh" not in item.after_values
         assert item.after_values["other"] == item.before_values["other"]
         assert item.after_values["note"] == item.before_values["note"]
-        assert plan.items[1].before_values is None and plan.items[1].after_values is None
+        assert len(plan.items) == 1  # Only the file with stale values needs index cleanup.
 
 
 async def test_rename_missing_old_value_does_not_resurrect_stale_destination(metadata):
