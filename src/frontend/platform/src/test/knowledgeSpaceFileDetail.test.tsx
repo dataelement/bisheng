@@ -204,6 +204,35 @@ it("blocks the strategy entry while the file is still being processed", async ()
   expect(screen.queryByRole("dialog")).toBeNull();
 });
 
+it("labels retained content after a failed attempt and closes chunk editing", async () => {
+  mock.info.mockResolvedValue({
+    ...info,
+    status: 3,
+    remark: '{"code": 10953}',
+    retrievable: false,
+    version_no: 1,
+  });
+  const f = setup();
+  render(f.draw());
+  expect(await screen.findByText("f118.content_notice_failed_retained")).toBeVisible();
+  expect(await screen.findByText("Original chunk")).toBeVisible();
+  // The retained content is excluded from retrieval, so its editor stays closed.
+  expect(screen.queryByRole("textbox", { name: "chunk-0" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "metadialog.title" })).toBeNull();
+  // Reprocessing stays reachable; otherwise a failed file could never recover.
+  expect(screen.getByRole("button", { name: "segment.adjustStrategy" })).toBeEnabled();
+  fireEvent.click(screen.getByRole("button", { name: "f118.processing_kind_file_reprocess" }));
+  expect(await screen.findByRole("dialog")).toHaveTextContent("process-89");
+});
+
+it("explains a file that is not retrievable without a failed attempt", async () => {
+  mock.info.mockResolvedValue({ ...info, status: 2, retrievable: false });
+  const f = setup();
+  render(f.draw());
+  expect(await screen.findByText("f118.content_notice_not_retrievable")).toBeVisible();
+  expect(screen.queryByRole("textbox", { name: "chunk-0" })).toBeNull();
+});
+
 it("edits metadata for the same physical file and saves through the existing endpoint", async () => {
   const f = setup();
   render(f.draw());

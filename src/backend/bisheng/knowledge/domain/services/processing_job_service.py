@@ -149,10 +149,20 @@ class ProcessingJobService:
                 },
                 expires_at=self.plans.clock() + timedelta(minutes=5),
             )
+            executable = bool(preview.items) and preview.executable
             return plan.model_copy(
                 update={
-                    "can_execute": bool(preview.items),
-                    "valid_items": [OperationItem(id=space_id, type="space")] if preview.items else [],
+                    "can_execute": executable,
+                    "valid_items": [OperationItem(id=space_id, type="space")] if executable else [],
+                    "invalid_items": []
+                    if preview.executable
+                    else [
+                        OperationInvalidItem(
+                            id=space_id,
+                            type="model",
+                            reason="embedding_model_invalid",
+                        )
+                    ],
                 }
             )
         preview = await self.owner.apreview(session, space_id, identity=identity, parameters=parameters)

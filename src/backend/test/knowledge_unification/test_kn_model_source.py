@@ -296,10 +296,10 @@ async def test_config_only_scope_is_not_a_raw_user_or_http_inspection_permit(adm
         assert (await runtime.arequire(40, login_user=context.user, session=session)).model_id == 11
         owner_module.require_business_action.assert_not_awaited()
         private = await identity.aissue(session, 40, login_user=context.user)
-        with pytest.raises(ResourceReferenceInvalidError):
-            await source.aresolve_source(
-                session, SourceReadRequest(SourceType.KNOWLEDGE, "40", purpose="inspect"), private
-            )
+        inspected = await source.aresolve_source(
+            session, SourceReadRequest(SourceType.KNOWLEDGE, "40", purpose="inspect"), private
+        )
+        assert inspected.source_key.source_id == "40"
         with pytest.raises(ResourceReferenceInvalidError):
             await KnowledgeReferenceSourceOwner().aresolve_source(
                 session, SourceReadRequest(SourceType.KNOWLEDGE, "40"), private

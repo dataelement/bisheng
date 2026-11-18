@@ -350,6 +350,7 @@
   "18023": "The article already exists in the knowledge space",
   "18024": "The current account's knowledge space file upload capacity has reached the limit. Please contact the administrator to adjust the configuration.",
   "18025": "A single batch upload supports at most 1000 files.",
+  "18026": "Unsupported file format. Check the file type and try again.",
   "18030": "Private knowledge spaces cannot be subscribed to",
   "18031": "You have already subscribed to or applied for this knowledge space",
   "18032": "You can subscribe to a maximum of {{quota}} knowledge spaces",

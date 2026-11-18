@@ -2515,7 +2515,7 @@ class KnowledgeService(KnowledgeUtils):
             "visible",
         )
 
-        es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(db_knowledge)
+        es_client, index_name = KnowledgeRag.open_stored_chunk_index_sync(db_knowledge, login_user=login_user)
 
         search_data = {
             "from": (page - 1) * limit,
@@ -2542,7 +2542,7 @@ class KnowledgeService(KnowledgeUtils):
         if keyword:
             search_data["query"] = {"match_phrase": {"text": keyword}}
         try:
-            res = es_client.client.search(index=db_knowledge.index_name, body=search_data)
+            res = es_client.client.search(index=index_name, body=search_data)
         except Exception as e:
             logger.warning(f"act=get_knowledge_chunks error={e!s}")
             raise KnowledgeChunkError.http_exception()

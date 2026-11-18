@@ -45,6 +45,7 @@ from bisheng.permission.application.business_authorization import require_busine
 @dataclass(frozen=True, slots=True)
 class ProcessingBusinessState:
     admitted: AdmittedKnowledgeModel
+    executable: bool = True
 
     @property
     def model_id(self):
@@ -64,6 +65,7 @@ class PreparedFileProcessingPlan:
     configuration: ProcessingConfiguration
     source_revisions: dict
     items: tuple[NewProcessingItem, ...]
+    executable: bool = True
 
 
 class _CutoverNotReady(Exception):
@@ -88,7 +90,7 @@ class KnowledgeProcessingOwner:
                 identity, resource_type="knowledge_file", resource_id=row.target.file_id, action="visible"
             )
         await self.scope.aassert_file_processing_available(session, space_id, scope)
-        current = await self.aread_current(session, space_id, identity=identity)
+        current = await self.aread_current(session, space_id, identity=identity, admission="inspect")
         settings = await ProcessingSettingsRepository().aget(session, space_id)
         defaults = (
             ProcessingDefaults.model_validate(settings.saved_defaults) if settings.saved_defaults is not None else None
@@ -124,7 +126,7 @@ class KnowledgeProcessingOwner:
             "processing_config_version": settings.config_version,
             "versions": {f"{row.target.file_id}:{row.target.version_id}": row.revision for row in scope},
         }
-        return PreparedFileProcessingPlan(current.configuration, revisions, tuple(items))
+        return PreparedFileProcessingPlan(current.configuration, revisions, tuple(items), current.executable)
 
     async def aprepare_file_processing(
         self,
@@ -146,6 +148,9 @@ class KnowledgeProcessingOwner:
         )
         if plan.configuration != expected_configuration or plan.source_revisions != expected_source_revisions:
             raise KnowledgeOperationPlanConflictError(reason="processing_file_plan_changed")
+        current = await self.aread_current(session, space_id, identity=identity)
+        if not plan.executable or not current.executable or current.configuration != plan.configuration:
+            raise ResourceReferenceInvalidError(reason="reference_target_invalid")
         operator = await self._operator(identity)
         rules = {
             item.target.file_id: legacy_rule_from_snapshot(
@@ -172,7 +177,11 @@ class KnowledgeProcessingOwner:
             return await get_open_api_operator_async()
         raise ResourceReferenceInvalidError(reason="processing_original_identity_required")
 
-    async def aread_current(self, session, space_id, *, identity=None, job=None) -> ProcessingBusinessState:
+    async def aread_current(
+        self, session, space_id, *, identity=None, job=None, admission="execute"
+    ) -> ProcessingBusinessState:
+        if admission not in {"execute", "inspect"} or (job is not None and admission != "execute"):
+            raise ResourceReferenceInvalidError(reason="processing_model_admission_invalid")
         if isinstance(identity, OpenApiPrincipal):
             if get_current_open_api_principal() is not identity:
                 raise ResourceReferenceInvalidError(reason="processing_original_identity_required")
@@ -180,7 +189,11 @@ class KnowledgeProcessingOwner:
         else:
             login_user = identity
         runtime = await get_knowledge_model_read_runtime()
-        admitted = await runtime.arequire(space_id, login_user=login_user, session=session)
+        if admission == "inspect":
+            admitted, executable = await runtime.ainspect(space_id, login_user=login_user, session=session)
+        else:
+            admitted = await runtime.arequire(space_id, login_user=login_user, session=session)
+            executable = True
         row = json.loads(admitted.read.snapshot.payload_json)["knowledge"]
         if row["type"] != KnowledgeTypeEnum.SPACE.value:
             raise ResourceReferenceInvalidError(reason="processing_space_required")
@@ -203,7 +216,7 @@ class KnowledgeProcessingOwner:
                     expected_model_config_revision=job.expected_model_config_revision,
                     expected_index_generation=job.expected_index_generation,
                 )
-        return ProcessingBusinessState(admitted)
+        return ProcessingBusinessState(admitted, executable)
 
     async def _aperform_model_cutover(self, session, job, lease):
         # Existing R2 takes model/parent locks before the Knowledge root. Only

@@ -73,6 +73,11 @@ async def legacy(files, monkeypatch, tmp_path):
     storage.get_minio_share_host.return_value = "http://private-storage.invalid"
     monkeypatch.setattr(module, "get_minio_storage_sync", lambda: storage)
     monkeypatch.setattr(module, "get_redis_client_sync", lambda: SimpleNamespace(get=lambda key: None))
+    # Per-file upload limits resolve through 系统配置 (a Redis-cached DB read);
+    # isolate that transport like storage, keeping the shipped defaults.
+    from bisheng.knowledge.domain import upload_file_size
+
+    monkeypatch.setattr(upload_file_size, "settings", SimpleNamespace(get_from_db=lambda key: {}))
     source = tmp_path / "digest_source.txt"
     source.write_text("name\nalpha\nbeta\n", encoding="utf-8")
     downloads = {"opaque-document": (str(source), "document.txt"), "opaque-table": (str(source), "sheet.csv")}

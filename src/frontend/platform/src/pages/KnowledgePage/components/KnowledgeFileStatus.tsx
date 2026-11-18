@@ -54,10 +54,16 @@ export function StatusIndicator({ status, remark, workspace = false }: StatusInd
     const label = <Tag size="small" dot color={color} className="shrink-0 whitespace-nowrap">
         {t(labelKey, { ns: 'knowledge' })}
     </Tag>
+    // A failed attempt does not delete the previous successful content, it only
+    // removes it from retrieval. Without this line the badge reads as "no content".
+    const outcomeNote = status === 3 ? t('f118.parse_failed_retains_content', { ns: 'knowledge' }) : ''
+    const withOutcomeNote = (text: string) => outcomeNote
+        ? <span>{text}<br />{outcomeNote}</span>
+        : text
     if (workspace) {
         const hint = status === 6 ? reason || t('timeoutTip', { ns: 'knowledge' }) : reason
         return hint && status !== 5 ? (
-            <Tooltip content={hint} side="top">
+            <Tooltip content={withOutcomeNote(hint)} side="top">
                 <span tabIndex={0} className="inline-flex shrink-0">{label}</span>
             </Tooltip>
         ) : label
@@ -66,7 +72,7 @@ export function StatusIndicator({ status, remark, workspace = false }: StatusInd
     const hint = status === 6 ? t('timeoutTip', { ns: 'knowledge' }) : status === 3 ? reason : ''
     return <span className="inline-flex items-center gap-1 whitespace-nowrap">
         {label}
-        {hint && <Tooltip content={hint}>
+        {hint && <Tooltip content={withOutcomeNote(hint)}>
             <Button type="button" size="small" variant="ghost" iconOnly color="danger" aria-label={hint}>
                 <Outlined.Attention />
             </Button>
