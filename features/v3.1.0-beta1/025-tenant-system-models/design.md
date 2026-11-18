@@ -12,11 +12,25 @@
 
 ## 2. 共享权威、接收默认及恢复
 
-新增llm owner独立SQLModel表记录逐提供商共享意图（enabled、version、原操作关联），标准启动只建新表，不回填历史。无记录=历史未知，只保留原实际授权，挂载不推定该提供商已开启。显式开启/关闭通过现有ModelSharingApplication、提供商锁、原actor/command digest和投影台账；完成后记录对应意图，不覆写正在执行的冻结集合。
+新增llm owner独立SQLModel表记录逐提供商共享意图（enabled、version、原操作关联），标准启动只建新表，不回填历史。2026-11-18兼容修订：显式状态优先；无新记录但存在canonical native shared_with接收者时，与旧Root编辑开关一致，视为legacy开启；无记录且无接收者不推定开启。显式开启/关闭通过现有ModelSharingApplication、提供商锁、原actor/command digest和投影台账；完成后记录对应意图，不覆写正在执行的冻结集合。
 
-意图、当前活跃租户、实际共享三者形成可查询覆盖：缺少接收即待补齐，活动计划单独展示；无需另造通用任务系统。新挂载和重新启用读取明确意图，失败保留可重试差异。成员在投影过程中变化不改原计划，原命令完成后新差异由后续原受保护共享命令处理。关闭/相反计划优先尊重已有冲突围栏。
+意图、当前活跃租户、实际共享三者形成可查询覆盖：缺少接收即待补齐，活动计划单独展示；无需另造通用任务系统。新挂载和重新启用消费显式或兼容的legacy开启状态；legacy接收命令在provider锁内复核显式OFF，并在原投影完成事务中持久化开启意图。网络读取不持有SQL事务。失败保留可重试差异；成员变化不改原冻结计划。正在执行的共享保留互斥；失败操作先按下述规则恢复，再允许相反的新命令。
+
+### 2.1 失败操作收尾（2026-11-18）
+
+共享请求失败或取消时，由本次请求持有的确切原计划标识执行机械清理。PREPARING及尚未开始权限I/O的RESERVED共享操作，在提供商锁内将该计划对应的全部PREPARED权限日志和业务预留原子关闭：权限日志转FAILED_CLOSED，业务计划转ABANDONED，保留原actor、command、digest及取消指纹。权限日志的PREPARED→STAGING CAS是外部写入入口，取消成功后晚到Worker无法越过此入口。清理不依赖FGA可用，业务代码不直写权限表。
+
+已有STAGING、COMMIT_UNKNOWN、COMMITTED、FINALIZED或FAILED_CLOSED日志时，不能以失败或超时为由释放围栏。记录retryable_failure，当前有权限的Root超管下一次编辑时按原store/model、原投影日志及冻结AFTER完成权限恢复与SQL收尾，然后执行新命令。原actor和计划摘要不改变，恢复者单独记入ack.recovered_by；恢复不要求原操作者/原凭证仍有效，也不伪造旧身份。FAILED_CLOSED纠正仍要求原业务围栏绑定和权限模块的确认摘要。持续的权限服务故障继续返回实际错误，恢复后可直接重试正常编辑。
+
+进程被终止而未执行清理时，以最后更新时间超过5分钟作为允许检查恢复的条件；它不是删除未知写入的TTL。下一次授权写入先核验日志，未开始的共享/删除准备预留可取消，已开始的共享恢复后收尾。正常模型删除/移除的已交接业务执行计划仍走其原有受保护事务及引用目标校验，不由共享清理器解锁。GET仅返回活动记录的诊断字段，不把历史执行摘要校验作为读取表单的条件；写入时仍进行完整核验。
+
+选择即时失败收尾加按需恢复，而不是给所有围栏统一过期释放：后者无法区分未写入和已经变更的权限。没有新增任务表、后台轮询或Redis锁。已知坑：HTTP失败并不撤销先前已提交的PREPARING记录；只校验原actor/原命令会把历史故障变成永久阻断，在model_operation_recovery和ModelSharingApplication处理。若将来外部执行超过5分钟且需要延长活跃窗口，再增加真实执行心跳，而非扩大盲目解锁范围。
+
+ABANDONED仅是已取消且可供原挂载流程识别的失败回执，不在活动集合中。接纳任意新的共享命令时，在同一提供商事务内将旧ABANDONED标记SUPERSEDED，防止后续重试已被新命令替代的挂载。签名载荷及原取消审计不变。挂载重试须再次验证真实部门/租户挂载关系和当前Root超管，创建新计划；无关或已经替代的历史记录不阻塞新挂载。
 
 接收默认初始化只针对本次冻结的新增接收模型集合；写入在现有SQL事务中、采用接收租户策略锁及唯一约束，仅缺省行可创建，已有管理员限制不覆盖。历史已共享无记录不自动初始化；失败重试仍使用原初始化集合，若管理员中途写了限制，重试跳过该行。新模型创建在同一提供商锁下读取明确共享意图，对已授权接收者的新模型补缺省规则。DSH规则由其公开application/service边界写入，llm/tenant不直写DSH表。
+
+用户明确授权的存量恢复例外：`arepair_enabled_sharing`把预览的stored_enabled/version/plan_id纳入命令摘要，在provider锁内校验后创建原共享reservation；预览后已关闭或改变则拒绝。冻结当前活跃接收者的初始化receipt，只补缺失可见规则并保留限制。旧提供商新增模型先通过同入口的adopt_only零增量模式冻结原接收集合、产生真实完成计划与intent，再读取新增模型快照；不因新增模型顺带补授权。读取和启动不会创建意图或规则。维护脚本默认预览、要求显式提供商ID、真实Root超管及相同权限runtime。
 
 实际新增两张独立表：`llm_model_sharing_intent`（server_id、tenant_id、enabled、version、plan_id）与`llm_model_sharing_initialization`（plan_id、tenant_id、server_id、child_ids、model_ids）。意图与原计划COMPLETED在同一SQL事务提交；receipt独立冻结初始化范围，不改变旧metadata/digest。两表通过标准模型发现建表，模块显式登记tenant_filter，缺省tenant由既有before_flush填入；Root仓储仍明确写已验证Root。没有旧结构DDL或历史数据回填。实际覆盖读取join仍存在的Root提供商，删除后的审计记录不成为新挂载来源。
 
@@ -53,5 +67,7 @@ C1：权限tuple只由permission owner写；C2：新表/SQL用通用类型，DM8
 后端native SQLite+隔离HTTP覆盖真实owner/身份/事务和相反命令；前端vitest覆盖来源、诊断、只读共享价格和租户切换；lint/typecheck/i18n/build、架构守卫、E2E清单和独立代码审查。真实116/DM8/多进程验收单列，不把mock测试当部署。
 
 ## 修订历史
+
+2026-11-18：按用户要求修复失败共享永久占用；增加即时取消、跨授权管理员的冻结计划恢复、过期遗留检查与挂载失败回执，GET不再把旧执行摘要作为表单读取闸。
 
 2026-11-18：用户授权评审通过后开发；独立设计复审PROCEED。实施复查修复Root状态服务实例接线、失效引用修复入口、保存来源/影响刷新、保存槽位检查、运行语音DTO及普通用户显式选模。最终独立代码审查PASS；实际检查与遗留基线见validation.md及quality-baseline.json。

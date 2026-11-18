@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button, Input, Textarea, notification } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 
@@ -189,8 +190,7 @@ export function QaLibraryDialog({ datalist, open, onOpenChange, onLoadEnd, mode 
                         <label htmlFor="model" className="bisheng-label">{t('embeddingModel')}</label>
                         {isLoading ? (
                             <div className="flex items-center gap-2 p-3 border rounded-md bg-gray-50">
-                                <Outlined.Loading className="animate-spin w-4 h-4 animate-spin" />
-                                <span className="text-sm text-gray-600">{t('loadingModelList')}</span>
+                                <LoadingState size="inline" label={t('loadingModelList')} />
                             </div>
                         ) : embeddings.length > 0 ? (
                             <ModelSelect
@@ -223,8 +223,7 @@ export function QaLibraryDialog({ datalist, open, onOpenChange, onLoadEnd, mode 
                     </DialogClose>
                     {mode === 'create' ? (
                         <>
-                            <Button type="submit" className="flex" onClick={() => handleCreate(false)} disabled={isSubmitting}>
-                                {isSubmitting && <Outlined.Loading className="animate-spin mr-1" />}
+                            <Button type="submit" className="flex" onClick={() => handleCreate(false)} loading={isSubmitting}>
                                 {t('completeCreation')}
                             </Button>
                             {/* <Button
@@ -233,13 +232,11 @@ export function QaLibraryDialog({ datalist, open, onOpenChange, onLoadEnd, mode 
                                 onClick={() => handleCreate(true)}
                                 disabled={isSubmitting}
                             >
-                                {isSubmitting && <Outlined.Loading className="animate-spin mr-1" />}
                                 {t('createImport')}
                             </Button> */}
                         </>
                     ) : (
-                        <Button type="submit" className="flex" onClick={() => handleCreate(false)} disabled={isSubmitting}>
-                            {isSubmitting && <Outlined.Loading className="animate-spin mr-1" />}
+                        <Button type="submit" className="flex" onClick={() => handleCreate(false)} loading={isSubmitting}>
                             {t('confirm')}
                         </Button>
                     )}

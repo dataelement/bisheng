@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { directoryTitleClass } from "@bisheng/knowledge";
 import { Breadcrumb, Button, Dropdown, DropdownItem, DropdownSeparator, Tooltip, type BreadcrumbItem } from "@bisheng/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -11,6 +12,7 @@ import { getMyResourcePermissionsApi } from "@/controllers/API/permission";
 import { knowledgeSpaceApi, type KnowledgeSpaceInfo } from "@/controllers/API/knowledgeSpace";
 import {
   knowledgeQueryKeys,
+  useKnowledgeProcessingJobs,
   type KnowledgeQueryScope,
 } from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
@@ -18,7 +20,7 @@ import { isErrorEnvelope } from "@bisheng/api-client";
 import { useKnowledgeDeletion } from "../hooks/useKnowledgeDeletion";
 import { KnowledgeDeletionDialog } from "./KnowledgeDeletionDialog";
 import { SpaceMetadataPanel } from "./SpaceMetadataPanel";
-import { SpaceTaskRecordsButton } from "./SpaceTaskRecordsButton";
+import { SpaceTaskRecordsDialog } from "./SpaceTaskRecordsDialog";
 
 interface SpaceFolderBreadcrumbProps {
   items: BreadcrumbItem[];
@@ -92,6 +94,7 @@ export function SpaceManagementView({
   );
   const [permissionOpen, setPermissionOpen] = useState(false);
   const [metadataOpen, setMetadataOpen] = useState(false);
+  const [taskRecordsOpen, setTaskRecordsOpen] = useState(false);
   const moreButton = useRef<HTMLButtonElement>(null);
   const deletionScope = JSON.stringify([scope, spaceId]);
   const currentDeletionScope = useRef<string | null>(deletionScope);
@@ -138,6 +141,26 @@ export function SpaceManagementView({
       showApiError(root.error);
   }, [root.error]);
   const rootInfo = spaceInfo ?? (canReadRoot && !root.isError ? root.data : undefined);
+  const canShowTaskRecords = Boolean(children) && parentId === null && Boolean(rootInfo);
+  const processingJobs = useKnowledgeProcessingJobs(
+    scope,
+    spaceId,
+    { page: 1, page_size: 1, kind: "embedding_rebuild" },
+    undefined,
+    { enabled: canShowTaskRecords && canEdit },
+  );
+  const moveJobs = useKnowledgeProcessingJobs(
+    scope,
+    spaceId,
+    { page: 1, page_size: 1, kind: "move_index" },
+    undefined,
+    { enabled: canShowTaskRecords },
+  );
+  const hasProcessing = canShowTaskRecords && canEdit && (processingJobs.data?.total ?? 0) > 0;
+  const hasTaskRecords = hasProcessing || (canShowTaskRecords && (moveJobs.data?.total ?? 0) > 0);
+  useEffect(() => {
+    if (!hasTaskRecords) setTaskRecordsOpen(false);
+  }, [hasTaskRecords]);
   const rootName = rootInfo?.name;
   const spaceTitle = rootName ?? title;
   const spaceDescription = rootInfo ? rootInfo.description : description;
@@ -257,41 +280,41 @@ export function SpaceManagementView({
             <div className="flex min-w-0 items-center gap-1">
               <h1 className={children ? directoryTitleClass : "min-w-0 truncate text-h4 text-text-1"}>{spaceTitle}</h1>
               {spaceInfoButton}
-              {children && parentId === null && rootInfo && (
-                <SpaceTaskRecordsButton
-                  key={deletionScope}
-                  scope={scope}
-                  spaceId={spaceId}
-                  canReadProcessing={canEdit}
-                />
-              )}
             </div>
           )}
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-3">
-          {(canEdit || canManageMembers || canDelete) && (
+          {(canEdit || canManageMembers || canDelete || hasTaskRecords) && (
             <Dropdown
               align="end"
               onCloseAutoFocus={(event) => {
-                if (permissionOpen || metadataVisible || deletion.view) event.preventDefault();
+                if (permissionOpen || metadataVisible || deletion.view || taskRecordsOpen) event.preventDefault();
               }}
               menu={
                 <>
                   {canEdit && (
-                    <>
-                      <DropdownItem
-                        icon={<Outlined.File aria-hidden />}
-                        onSelect={() => setMetadataOpen(true)}
-                      >
-                        {t("detail.metadata")}
-                      </DropdownItem>
-                      <DropdownItem
-                        icon={<Outlined.Edit aria-hidden />}
-                        onSelect={() => navigate(settingsLocation)}
-                      >
-                        {t("detail.settings")}
-                      </DropdownItem>
-                    </>
+                    <DropdownItem
+                      icon={<Outlined.File aria-hidden />}
+                      onSelect={() => setMetadataOpen(true)}
+                    >
+                      {t("detail.metadata")}
+                    </DropdownItem>
+                  )}
+                  {hasTaskRecords && (
+                    <DropdownItem
+                      icon={<Outlined.History aria-hidden />}
+                      onSelect={() => setTaskRecordsOpen(true)}
+                    >
+                      {t("detail.view_task_records")}
+                    </DropdownItem>
+                  )}
+                  {canEdit && (
+                    <DropdownItem
+                      icon={<Outlined.Edit aria-hidden />}
+                      onSelect={() => navigate(settingsLocation)}
+                    >
+                      {t("detail.settings")}
+                    </DropdownItem>
                   )}
                   {canManageMembers && (
                     <DropdownItem
@@ -303,7 +326,7 @@ export function SpaceManagementView({
                   )}
                   {canDelete && (
                     <>
-                      {(canEdit || canManageMembers) && <DropdownSeparator />}
+                      {(canEdit || canManageMembers || hasTaskRecords) && <DropdownSeparator />}
                       <DropdownItem
                         danger
                         icon={<Outlined.Delete aria-hidden />}
@@ -349,9 +372,7 @@ export function SpaceManagementView({
         </div>
       ) : (
         !canEdit && !permission.isError && (
-          <p role="status" className="px-4">
-            {t(permission.isInitialLoading ? "f118.loading_space" : "noOperationPermission")}
-          </p>
+          permission.isInitialLoading ? <LoadingState size="page" label={t("f118.loading_space")} className="min-h-0 flex-1" /> : <p role="status" className="px-4">{t("noOperationPermission")}</p>
         )
       )}
       {metadataVisible && (
@@ -371,6 +392,20 @@ export function SpaceManagementView({
           resourceType="knowledge_space"
           resourceId={String(spaceId)}
           resourceName={spaceTitle}
+        />
+      )}
+      {hasTaskRecords && (
+        <SpaceTaskRecordsDialog
+          key={deletionScope}
+          scope={scope}
+          spaceId={spaceId}
+          open={taskRecordsOpen}
+          onOpenChange={(open) => {
+            setTaskRecordsOpen(open);
+            if (!open) requestAnimationFrame(() => moreButton.current?.focus({ preventScroll: true }));
+          }}
+          canReadProcessing={canEdit}
+          initialKind={hasProcessing ? "embedding_rebuild" : "move_index"}
         />
       )}
       <KnowledgeDeletionDialog operation={deletion} />

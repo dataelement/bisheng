@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
+import type { MoveSpaceGroups } from "@bisheng/knowledge";
 import request from "@/controllers/request";
 import { createMoveDestinationServices } from "@/controllers/API/knowledgeMoveDestinations";
 
@@ -86,6 +87,73 @@ it("enumerates management destinations beyond 200 without an uploadable-list cut
       .mocked(request.get)
       .mock.calls.some(([url]) => url.endsWith("/uploadable")),
   ).toBe(false);
+});
+
+it("shows the first space page before later pages and membership lists finish", async () => {
+  const signal = new AbortController().signal;
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  vi.mocked(request.get).mockImplementation(async (url, config) => {
+    if (url.endsWith("/list")) {
+      const cursor = (config?.params as { cursor?: string } | undefined)?.cursor;
+      if (!cursor)
+        return {
+          data: [{ id: 5, name: "First" }],
+          has_more: true,
+          next_cursor: "next",
+        };
+      await gate;
+      return {
+        data: [{ id: 6, name: "Second" }],
+        has_more: false,
+        next_cursor: null,
+      };
+    }
+    await gate;
+    if (url.endsWith("/department")) return [{ id: 5, name: "First" }];
+    return [];
+  });
+  const seen: MoveSpaceGroups[] = [];
+  const pending = createMoveDestinationServices(101).listSpaces(signal, {
+    onPartial: (groups) => seen.push(groups),
+  });
+  await vi.waitFor(() => expect(seen.length).toBeGreaterThan(0));
+  expect(seen[0]?.available).toEqual([{ id: "5", name: "First" }]);
+  release();
+  await expect(pending).resolves.toEqual({
+    department: [{ id: "5", name: "First" }],
+    created: [],
+    joined: [],
+    available: [{ id: "6", name: "Second" }],
+  });
+});
+
+it("sends a typed space name to the list instead of downloading every space", async () => {
+  const signal = new AbortController().signal;
+  vi.mocked(request.get).mockImplementation(async (url) => {
+    if (url.endsWith("/list"))
+      return {
+        data: [{ id: 8, name: "New space" }],
+        has_more: false,
+        next_cursor: null,
+      };
+    return [];
+  });
+  await expect(
+    createMoveDestinationServices(101).searchSpaces?.("New space", signal),
+  ).resolves.toEqual({
+    department: [],
+    created: [],
+    joined: [],
+    available: [{ id: "8", name: "New space" }],
+  });
+  expect(request.get).toHaveBeenCalledWith("/api/v1/knowledge/space/list", {
+    headers: { "X-Management-Tenant": "101" },
+    signal,
+    params: { page_size: 200, cursor: undefined, keyword: "New space" },
+  });
 });
 
 it("loads all directory pages and preserves overlapping file and folder IDs", async () => {

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useKnowledgePageScope } from "@/hooks/useKnowledgePageScope";
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { KnowledgeScopeUnavailable } from "./components/KnowledgeScopeUnavailable";
 import KnowledgeQa from "./KnowledgeQa";
 import { KnowledgeSpaceWorkspace } from "./KnowledgeSpaceWorkspace";
@@ -41,7 +42,7 @@ export default function KnowledgePage() {
     delete pageWindow.LibPage;
   }, []);
   const unavailable = isLoading ? (
-    <p role="status" className="p-4">{t("f118.loading_space")}</p>
+    <LoadingState size="page" className="h-full" label={t("f118.loading_space")} />
   ) : (
     <KnowledgeScopeUnavailable
       action={<Button onClick={() => { void retry(); }}>{t("retry")}</Button>}

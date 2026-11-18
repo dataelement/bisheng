@@ -32,7 +32,7 @@ import {
   type PreviewStatus,
 } from "@/controllers/API/hostedAppPreview"
 import { getHostedAppErrorMessage } from "@/controllers/API/hostedApp"
-import { Eye, Loader2 } from "lucide-react"
+import { Eye } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -167,10 +167,8 @@ export function OwnerPreviewCard({ appId, versionId }: OwnerPreviewCardProps) {
                 size="sm"
                 disabled={busy}
                 onClick={handleReclaim}
-              >
-                {pending === "reclaim" && (
-                  <Loader2 className="mr-1 size-3.5 animate-spin" />
-                )}
+               loading={pending === "reclaim"}>
+
                 {t(`${KEY}.previewReclaim`)}
               </Button>
             </>
@@ -179,10 +177,8 @@ export function OwnerPreviewCard({ appId, versionId }: OwnerPreviewCardProps) {
               size="sm"
               disabled={busy || !status || !status.runnable}
               onClick={handleStart}
-            >
-              {pending === "start" && (
-                <Loader2 className="mr-1 size-3.5 animate-spin" />
-              )}
+             loading={pending === "start"}>
+
               {t(
                 status?.state === "reclaimed"
                   ? `${KEY}.previewStartAgain`

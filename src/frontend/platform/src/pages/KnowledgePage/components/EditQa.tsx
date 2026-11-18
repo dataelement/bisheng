@@ -1,7 +1,6 @@
 import { Button, Input, Textarea, toast } from '@bisheng/ui';
 import { Dialog,DialogClose,DialogContent,DialogFooter,DialogHeader,DialogTitle } from "@/components/bs-ui/dialog";
 
-import { Outlined } from "bisheng-icons";
 import type { ChangeEvent } from 'react';
 import { forwardRef,useImperativeHandle,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -160,8 +159,8 @@ export const EditQa = forwardRef<EditQaHandle, EditQaProps>(function EditQa({ kn
                             value={form.similarQuestions}
                             onChange={handleSimilarQuestionsChange}
                         />
-                        <Button className="mt-2" size="small" onClick={handleModelGenerate} disabled={loading}>
-                            {loading && <Outlined.Loading  className="size-4 animate-spin"/>} {t('aiGenerate')}
+                        <Button className="mt-2" size="small" onClick={handleModelGenerate} loading={loading}>
+                            {t('aiGenerate')}
                         </Button>
                     </div>
                     <div>

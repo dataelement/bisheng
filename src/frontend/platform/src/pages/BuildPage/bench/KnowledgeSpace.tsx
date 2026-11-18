@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button, Input, Textarea, notification } from '@bisheng/ui';
 
 import { CardContent } from "@/components/bs-ui/card";
@@ -232,9 +233,7 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
                                             </div>
                                             <div className="mt-4 space-y-3">
                                                 {departmentSpacesLoading ? (
-                                                    <div className="rounded-lg border border-dashed border-[#D9DDE5] bg-white px-4 py-8 text-center text-sm text-[#86909C]">
-                                                        {t("loading")}
-                                                    </div>
+                                                    <LoadingState size="panel" label={t("loading")} className="rounded-lg border border-dashed border-[#D9DDE5] bg-white px-4 py-8 text-center text-sm text-[#86909C]" />
                                                 ) : !departmentSpaces.length ? (
                                                     <div className="rounded-lg border border-dashed border-[#D9DDE5] bg-white px-4 py-8 text-center text-sm text-[#86909C]">
                                                         {t("bench.departmentKnowledgeSpaceCreatedEmpty")}

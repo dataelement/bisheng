@@ -930,9 +930,7 @@ class LLMService:
             from bisheng.llm.application.model_sharing import get_model_sharing_application
 
             sharing_application = await get_model_sharing_application()
-            await sharing_application.aresume_existing(
-                identity=login_user, server_id=exist_server.id, enabled=server.share_to_children
-            )
+            await sharing_application.arecover_before_write(identity=login_user, server_id=exist_server.id)
         await application.arequire_idle(server_id=exist_server.id)
 
         mask_maker = JsonFieldMasker()

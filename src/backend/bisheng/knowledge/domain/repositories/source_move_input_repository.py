@@ -144,6 +144,28 @@ class SourceMoveInputRepository:
                 return
             after = page[-1]["id"]
 
+    async def ablocking_job_ids(self, session, *, space_id, include_copy=True):
+        """Jobs whose source input this space must keep. Same rule as ``arequire_released``."""
+        tenant, transaction = self._context(session, space_id)
+        after, found = None, []
+        while True:
+            with session.no_autoflush, strict_tenant_filter():
+                page = (
+                    (await session.execute(self._query(tenant, space_id, after, include_copy=include_copy)))
+                    .mappings()
+                    .all()
+                )
+            self._current(session, tenant, transaction)
+            for row in page:
+                try:
+                    self._check(row, space_id)
+                except KnowledgeProcessingConflictError:
+                    if row["job_id"] is not None:
+                        found.append(row["job_id"])
+            if len(page) < 200:
+                return tuple(dict.fromkeys(found))
+            after = page[-1]["id"]
+
     def require_released(self, session, *, space_id):
         tenant, transaction = self._context(session, space_id)
         after = None

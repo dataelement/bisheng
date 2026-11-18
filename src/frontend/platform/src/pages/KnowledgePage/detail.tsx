@@ -13,6 +13,7 @@ import {
   type KnowledgeQueryScope,
 } from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import Files from "./components/Files";
 import Header from "./components/Header";
 import { KnowledgeScopeUnavailable } from "./components/KnowledgeScopeUnavailable";
@@ -228,7 +229,7 @@ export function SpaceDetail({
       />
     );
   if (copyTasks.isInitialLoading)
-    return <p role="status">{t("f118.loading_directory")}</p>;
+    return <LoadingState size="page" className="h-full" label={t("f118.loading_directory")} />;
   if ((fileParams.length > 0 && fileId === null) || (processingParams.length > 0 && processingFileId === null))
     return <KnowledgeScopeUnavailable />;
   if (processingFileId !== null)
@@ -281,9 +282,7 @@ export function SpaceDetail({
     );
   if (spaceMissing)
     return (
-      <p role="status" className="p-4">
-        {t("sidebar.loading")}
-      </p>
+      <LoadingState size="page" className="h-full" label={t("sidebar.loading")} />
     );
   if (presentation === "workspace")
     return (

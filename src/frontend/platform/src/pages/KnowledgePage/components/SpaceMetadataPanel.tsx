@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button } from "@bisheng/ui";
 import { useTranslation } from "react-i18next";
 import type { KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
@@ -28,7 +29,7 @@ function MetadataPanel({ scope, spaceId, onClose }: SpaceMetadataPanelProps) {
       mutations={mutations}
       placeholder={schemaData ? undefined : (
         <div role={schema.isError ? "alert" : "status"} className="space-y-3">
-          <p>{t(schema.isError ? "f118.load_failed" : "f118.loading_space")}</p>
+          {schema.isError ? <p>{t("f118.load_failed")}</p> : <LoadingState label={t("f118.loading_space")} className="min-h-32" />}
           {schema.isError && (
             <Button onClick={() => { void refetch(); }}>
               {t("retry")}

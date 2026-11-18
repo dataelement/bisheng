@@ -98,6 +98,44 @@ describe('MoveToDialog', () => {
     expect(props.onOpenChange).toHaveBeenCalledWith(false);
   });
 
+  it('shows a partial catalog before the full space list resolves', async () => {
+    const pending = deferred<SpaceCatalog>();
+    const services = createServices({
+      listSpaces: vi.fn(async (_signal, hooks) => {
+        hooks?.onPartial?.({
+          department: [],
+          created: [{ id: 'source', name: 'Source space' }],
+          joined: [],
+        });
+        return pending.promise;
+      }),
+    });
+    render(<MoveToDialog {...propsFor(services)} />);
+
+    await screen.findByTitle('Source space');
+    expect(screen.queryByText('loading')).toBeNull();
+    pending.resolve(catalog);
+  });
+
+  it('asks a host that can search on the server once the typed name settles', async () => {
+    const searchSpaces = vi.fn<NonNullable<MoveServices['searchSpaces']>>(async () => ({
+      department: [],
+      created: [{ id: 'target', name: 'New space' }],
+      joined: [],
+    }));
+    const services = createServices({ searchSpaces });
+    render(<MoveToDialog {...propsFor(services)} />);
+    await screen.findByTitle('Source space');
+
+    fireEvent.change(screen.getByPlaceholderText('search_placeholder'), {
+      target: { value: 'New space' },
+    });
+
+    await waitFor(() => expect(searchSpaces).toHaveBeenCalled());
+    expect(searchSpaces.mock.calls[0]?.[0]).toBe('New space');
+    await screen.findByTitle('New space');
+  });
+
   it('keeps the chosen folder while filtering spaces by name', async () => {
     const props = propsFor();
     render(<MoveToDialog {...props} />);

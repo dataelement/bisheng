@@ -27,7 +27,7 @@ export function ModelVisionSwitch({ modelId, row, onSaved }: ModelVisionSwitchPr
         }
     }
     return <div className="flex items-center gap-2">
-        <Switch checked={row?.effective ?? false}
+        <Switch checked={row?.effective ?? false} loading={saving}
             disabled={saving || !row || !row.can_edit || row.status !== 'available'}
             aria-label={t('model.supportsImages')} onCheckedChange={handleSave} />
         {row?.source === 'local_restriction' && <Tag>{t('model.visionLocalRestriction')}</Tag>}

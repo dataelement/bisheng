@@ -15,7 +15,7 @@ vi.mock("@/pages/KnowledgePage/components/SpaceIndexEditDialog", () => ({
   SpaceIndexEditDialog: () => null,
 }));
 const clients: QueryClient[] = [];
-function mount(status = 2, enabled = true) {
+function mount(status = 2, enabled = true, historyTrigger = false) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   clients.push(client);
   const element = (tenantId: number) => (
@@ -27,7 +27,7 @@ function mount(status = 2, enabled = true) {
         status={status}
         enabled={enabled}
       >
-        {(items) => <Dropdown menu={<><DropdownItem>rename</DropdownItem>{items}</>}>
+        {historyTrigger ? undefined : (items) => <Dropdown menu={<><DropdownItem>rename</DropdownItem>{items}</>}>
           <Button>more</Button>
         </Dropdown>}
       </SpaceFileTools>
@@ -88,9 +88,9 @@ it("does not revive an old edit response through tenant A-B-A", async () => {
 });
 
 it("opens the processing page and preserves the current folder when its menu closes", async () => {
-  mount();
-  await waitFor(() => expect(mocks.action).toHaveBeenCalledOnce());
-  fireEvent.keyDown(screen.getByRole("button", { name: "more" }), { key: "ArrowDown" });
+  mount(2, true, true);
+  const trigger = await screen.findByRole("button", { name: "f118.processing_title_file" });
+  fireEvent.keyDown(trigger, { key: "ArrowDown" });
   fireEvent.click(await screen.findByRole("menuitem", { name: "f118.processing_title_file" }));
   expect(mocks.navigate).toHaveBeenCalledOnce();
   expect(mocks.navigate.mock.calls[0][0].get("process_file_id")).toBe("81");

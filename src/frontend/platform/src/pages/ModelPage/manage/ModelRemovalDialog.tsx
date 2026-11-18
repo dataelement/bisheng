@@ -10,6 +10,7 @@ import { Table } from "@/components/bs-ui/table";
 import { Alert, Button } from "@bisheng/ui";
 import { useTranslation } from "react-i18next";
 import type { ModelRemovalView } from "./useModelRemoval";
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 
 interface ModelRemovalDialogProps {
   view: ModelRemovalView | null;
@@ -123,9 +124,7 @@ export function ModelRemovalDialog({
         </DialogHeader>
         <div className="min-h-0 max-h-[60vh] space-y-4 overflow-y-auto">
           {!inspection && view.pending && (
-            <p role="status" className="text-sm">
-              {t("model.removalChecking")}
-            </p>
+            <LoadingState label={t("model.removalChecking")} />
           )}
           {view.error && <Alert type="error" live description={view.error} />}
           {view.dispatched && !view.pending && (

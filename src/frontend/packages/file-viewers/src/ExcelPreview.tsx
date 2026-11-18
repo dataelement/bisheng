@@ -13,6 +13,7 @@ import {
 } from './sheetUtils';
 import type { ExtractedImage, ResolvedImage, SheetData, SheetImageIndex } from './types';
 import { extractSheetImages } from './xlsxImages';
+import { usePreviewLoadingRenderer } from './PreviewLoading';
 
 export interface ExcelPreviewProps {
   filePath: string;
@@ -62,6 +63,7 @@ function DefaultSpinner() {
 }
 
 export function ExcelPreview({ filePath, fileExt: fileExtProp, loadingIcon }: ExcelPreviewProps) {
+  const renderLoading = usePreviewLoadingRenderer();
   // useSuspense: false — a suspending viewer gets torn down and remounted by the
   // nearest boundary while the namespace settles, and every remount refetches the
   // file. These labels are error text only, so resolving them a frame late is fine.
@@ -490,11 +492,11 @@ export function ExcelPreview({ filePath, fileExt: fileExtProp, loadingIcon }: Ex
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full min-h-[500px] bg-white rounded-lg border border-gray-200">
-        <div className="flex flex-col items-center gap-3">
+        {renderLoading ? renderLoading({ size: 'page', label: t('loading') }) : <div className="flex flex-col items-center gap-3">
           <div className="relative">{loadingIcon ?? <DefaultSpinner />}</div>
           <span className="text-sm text-gray-500">{t('loading')}</span>
           <span className="text-xs text-gray-400">{t('supportedFormats')}</span>
-        </div>
+        </div>}
       </div>
     );
   }

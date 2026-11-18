@@ -30,11 +30,6 @@
       "count": 4
     }
   },
-  "src/components/Pro/FlowRadio.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
   "src/components/Pro/security/FlowSetting.tsx": {
     "@typescript-eslint/no-unused-expressions": {
       "count": 3
@@ -2646,9 +2641,6 @@
     },
     "no-console": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 4
     }
   },
   "src/workspace/markdown/Mermaid.tsx": {

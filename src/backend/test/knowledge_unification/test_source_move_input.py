@@ -95,11 +95,14 @@ async def test_actual_persisted_source_plan_job_and_item_ack_are_required(
     async with db.sessions() as session, session.begin():
         if allowed:
             await SourceMoveInputRepository().arequire_released(session, space_id=1)
+            assert await SourceMoveInputRepository().ablocking_job_ids(session, space_id=1) == ()
         else:
             with pytest.raises(KnowledgeProcessingConflictError):
                 await SourceMoveInputRepository().arequire_released(session, space_id=1)
+            assert await SourceMoveInputRepository().ablocking_job_ids(session, space_id=1) == (job_id,)
         # Being the destination is not the source-index dependency.
         await SourceMoveInputRepository().arequire_released(session, space_id=2)
+        assert await SourceMoveInputRepository().ablocking_job_ids(session, space_id=2) == ()
 
 
 async def test_deleted_failed_copy_target_releases_source_but_active_copy_still_protects_input(db):

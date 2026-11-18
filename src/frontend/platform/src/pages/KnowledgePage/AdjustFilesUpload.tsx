@@ -8,6 +8,7 @@ import StepProgress from "@/components/bs-ui/step";
 import { rebUploadFile,retryKnowledgeFileApi } from "@/controllers/API";
 import { checkResourceActionApi } from "@/controllers/API/permission";
 import { showApiError } from "@/controllers/request";
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 
 import { useEffect,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -331,7 +332,7 @@ export default function AdjustFilesUpload() {
   if (!permissionChecked || !hasEditPermission) {
     return (
       <div className="relative h-full flex items-center justify-center">
-        <Outlined.Loading  className="size-4 animate-spin"/>
+        <LoadingState size="page" />
       </div>
     );
   }
@@ -398,8 +399,7 @@ export default function AdjustFilesUpload() {
                   <Button variant="outlined" onClick={handleBack} color="default">
                     {t('previousStep')}
                   </Button>
-                  <Button onClick={handleNext} disabled={isNextDisabled || isSubmitting}>
-                    {isSubmitting ? <Outlined.Loading className="animate-spin h-4 w-4 mr-1" /> : null}
+                  <Button onClick={handleNext} loading={isSubmitting} disabled={isNextDisabled || isSubmitting}>
                     {t('nextStep')}
                   </Button>
                 </div>

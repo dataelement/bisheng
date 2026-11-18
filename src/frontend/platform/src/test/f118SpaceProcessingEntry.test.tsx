@@ -7,6 +7,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
@@ -131,6 +132,7 @@ afterEach(() => {
   clients.splice(0).forEach((client) => client.clear());
   vi.restoreAllMocks();
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
 });
 beforeEach(() => {
   vi.mocked(indexApi.readFileMetadata).mockResolvedValue({
@@ -342,6 +344,8 @@ it("file processing resolves the selected physical history version and confirms 
 });
 
 it("fetches and retries move tasks using their job kind", async () => {
+  const loadingIcon = "/assets/custom-processing-loading.svg";
+  vi.stubGlobal("BRAND_CONFIG", { URLLoadingIcon: loadingIcon });
   const job: ProcessingJobRead = {
     id: "move-job",
     space_id: 40,
@@ -358,12 +362,35 @@ it("fetches and retries move tasks using their job kind", async () => {
     hidden_item_count: 0,
     retryable: true,
     obsolete_reason: null,
+    failure_reason: "model_unavailable",
     error_code: null,
   };
   const list = vi
     .mocked(knowledgeSpaceApi.listProcessingJobs)
     .mockResolvedValue({ data: [job], total: 1 });
-  vi.mocked(api.readProcessingJob).mockResolvedValue(job);
+  let resolveList!: (value: { data: ProcessingJobRead[]; total: number }) => void;
+  list.mockReturnValueOnce(new Promise((resolve) => { resolveList = resolve; }));
+  let resolveJob!: (value: ProcessingJobRead) => void;
+  vi.mocked(api.readProcessingJob)
+    .mockResolvedValue(job)
+    .mockReturnValueOnce(new Promise((resolve) => { resolveJob = resolve; }));
+  vi.mocked(api.readProcessingItems).mockResolvedValue({
+    data: [{
+      id: "move-item",
+      file_id: 82,
+      file_name: "moved.txt",
+      document_id: 80,
+      version_id: 182,
+      step: "index_written",
+      state: "failed",
+      attempt: 1,
+      error_code: null,
+      message: null,
+      failure_reason: "file_changed",
+      retryable: true,
+    }],
+    total: 1,
+  });
   vi.mocked(api.retryProcessing).mockResolvedValue({
     job_id: job.id,
     accepted: true,
@@ -387,12 +414,49 @@ it("fetches and retries move tasks using their job kind", async () => {
   );
 
   expect(screen.getByRole("heading", { name: "move.jobs" })).toBeVisible();
+  const loadingList = screen.getByRole("status", { name: "loading" });
+  expect(loadingList).toHaveAttribute("aria-busy", "true");
+  expect(loadingList).toHaveTextContent("");
+  expect(loadingList.querySelector("img")).toHaveAttribute("src", loadingIcon);
+  expect(screen.queryByText("move.no_jobs")).not.toBeInTheDocument();
+  await act(async () => resolveList({ data: [job], total: 1 }));
   const tasks = await screen.findByRole("table", { name: "move.jobs" });
+  expect(screen.queryByRole("status", { name: "loading" })).not.toBeInTheDocument();
   expect(within(tasks).getByRole("columnheader", { name: "status" })).toBeVisible();
-  expect(within(tasks).getByRole("cell", { name: "f118.processing_state_failed" })).toBeVisible();
-  fireEvent.click(within(tasks).getByRole("button", { name: "move.jobs · f118.processing_state_failed" }));
+  expect(within(tasks).getByRole("cell", { name: /f118.processing_state_failed/ })).toBeVisible();
+  const interaction = userEvent.setup();
+  const hint = within(tasks).getByRole("button", { name: "f118.failure_model_unavailable" });
+  expect(screen.queryByText("f118.failure_model_unavailable")).not.toBeInTheDocument();
+  await interaction.hover(hint);
+  expect(await screen.findByRole("tooltip")).toHaveTextContent("f118.failure_model_unavailable");
+  await interaction.unhover(hint);
+  const taskLink = within(tasks).getByRole("link", { name: "move.jobs · f118.processing_state_failed" });
+  expect(taskLink.tagName).toBe("SPAN");
+  expect(taskLink).toHaveClass("text-blue-500");
+  expect(taskLink).toHaveAttribute("tabindex", "0");
+  fireEvent.keyDown(taskLink, { key: "Enter" });
   expect(list).toHaveBeenCalledWith(40, { page: 1, page_size: 20, kind: "move_index" });
   await waitFor(() => expect(api.readProcessingJob).toHaveBeenCalledWith(40, job.id, "move_index"));
+  const loadingDetail = screen.getByRole("status", { name: "loading" });
+  expect(loadingDetail).toHaveAttribute("aria-busy", "true");
+  expect(loadingDetail.querySelector("img")).toHaveAttribute("src", loadingIcon);
+  expect(screen.queryByRole("button", { name: "retry" })).not.toBeInTheDocument();
+  await act(async () => resolveJob(job));
+  const counts = await screen.findByText("f118.processing_counts");
+  const heading = screen.getByRole("heading", { name: "f118.processing_items", level: 3 });
+  const header = within(heading.closest("header")!);
+  expect(header.getByText("f118.processing_counts")).toBe(counts);
+  expect(counts).toHaveClass("text-caption", "text-text-3");
+  const back = header.getByRole("button", { name: "detail.back_to_jobs" });
+  expect(back).toHaveTextContent("");
+  expect(back.querySelector("svg")).not.toBeNull();
+  const items = await screen.findByRole("table", { name: "f118.processing_items" });
+  expect(items.querySelector("caption")).toHaveClass("sr-only");
+  expect(within(items).getByRole("rowheader", { name: "moved.txt" })).toBeVisible();
+  expect(within(items).getByRole("button", { name: "f118.failure_file_changed" })).toBeVisible();
+  expect(screen.queryByText("f118.failure_model_unavailable")).not.toBeInTheDocument();
+  expect(screen.queryByText("f118.processing_state_failed", { selector: "p" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("status", { name: "loading" })).not.toBeInTheDocument();
   expect(api.readProcessingItems).toHaveBeenCalledWith(40, job.id, { page: 1, page_size: 20, state: undefined }, "move_index");
   fireEvent.click(await screen.findByRole("button", { name: "retry" }));
   await waitFor(() =>
@@ -403,16 +467,51 @@ it("fetches and retries move tasks using their job kind", async () => {
       "move_index",
     ),
   );
-  fireEvent.click(screen.getByRole("button", { name: "detail.back_to_jobs" }));
+  fireEvent.click(back);
   expect(
-    await screen.findByRole("button", {
+    await screen.findByRole("link", {
       name: "move.jobs · f118.processing_state_failed",
     }),
   ).toBeVisible();
 });
 
+it("keeps stopped-task diagnostics in tooltips and successful statuses free of hints", async () => {
+  const original: ProcessingJobRead = {
+    id: "stopped", space_id: 40, kind: "embedding_rebuild", state: "obsolete", revision: 1,
+    accepted_at: "2026-11-18", started_at: null, finished_at: null,
+    total_count: 1, pending_count: 0, succeeded_count: 0, failed_count: 0,
+    hidden_item_count: 0, retryable: false, obsolete_reason: "model_config_revision_changed", error_code: null,
+  };
+  const jobs = [original, { ...original, id: "legacy", obsolete_reason: null }, {
+    ...original, id: "completed", state: "succeeded" as const, succeeded_count: 1, obsolete_reason: null,
+  }];
+  vi.mocked(knowledgeSpaceApi.listProcessingJobs).mockResolvedValue({ data: jobs, total: 3 });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  clients.push(client);
+  render(<QueryClientProvider client={client}><SpaceProcessingPanel scope={scope} spaceId={40} mode="jobs" jobKind="embedding_rebuild" presentation="inline" /></QueryClientProvider>);
+  const table = await screen.findByRole("table", { name: "f118.processing_title_jobs" });
+  const interaction = userEvent.setup();
+  for (const reason of ["f118.failure_model_changed", "f118.processing_state_obsolete"]) {
+    const hint = within(table).getByRole("button", { name: reason });
+    expect(screen.queryByText(reason)).not.toBeInTheDocument();
+    const tag = within(hint.closest("tr")!).getByText("f118.processing_item_obsolete").parentElement!;
+    expect(tag).toHaveClass("text-danger", "h-5");
+    expect(tag.querySelector('[aria-hidden="true"]')).toHaveClass("rounded-full", "size-1");
+    await interaction.hover(hint);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(reason);
+    await interaction.keyboard("{Escape}");
+    await interaction.unhover(hint);
+    await waitFor(() => expect(screen.queryByRole("tooltip")).not.toBeInTheDocument());
+  }
+  const completed = within(table).getByRole("link", { name: "f118.processing_kind_embedding_rebuild · f118.processing_state_succeeded" }).closest("tr")!;
+  expect(within(completed).getByText("f118.processing_state_succeeded").parentElement).toHaveClass("text-success", "h-5");
+  expect(within(completed).queryByRole("button")).not.toBeInTheDocument();
+});
+
 it("loads only Embedding rebuild jobs for the embedded model history", async () => {
   const read = vi.mocked(knowledgeSpaceApi.listProcessingJobs);
+  let resolveList!: (value: { data: ProcessingJobRead[]; total: number }) => void;
+  read.mockReturnValueOnce(new Promise((resolve) => { resolveList = resolve; }));
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -437,6 +536,11 @@ it("loads only Embedding rebuild jobs for the embedded model history", async () 
   expect(
     read.mock.calls.every(([, query]) => query.kind === "embedding_rebuild"),
   ).toBe(true);
+  expect(screen.getByRole("status", { name: "loading" })).toHaveAttribute("aria-busy", "true");
+  expect(screen.queryByText("detail.no_jobs")).not.toBeInTheDocument();
+  await act(async () => resolveList({ data: [], total: 0 }));
+  expect(await screen.findByText("detail.no_jobs")).toBeVisible();
+  expect(screen.queryByRole("status", { name: "loading" })).not.toBeInTheDocument();
 });
 
 it.each(["xlsx", "html", "mp3", "mp4"])(

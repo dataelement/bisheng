@@ -1,9 +1,9 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import modelDefaults from "../../../../../public/locales/zh-Hans/model.json";
 import { useDshBrowserConfig } from "@/hooks/useDshBrowserConfig";
 // @ts-strict-ignore
 import { shouldRetryApiError } from "@bisheng/api-client";
 import { Button, Cascader, toast } from "@bisheng/ui";
-import { Outlined } from "bisheng-icons";
 
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
@@ -281,7 +281,7 @@ export default function WorkbenchModel({ data, onBack }) {
   if (loading)
     return (
       <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-        <Outlined.Loading className="size-4 animate-spin" />
+        <LoadingState size="page" />
       </div>
     );
   const inheritedFromRoot = !!linsightConfig?.inherited_from_root;
@@ -398,8 +398,7 @@ export default function WorkbenchModel({ data, onBack }) {
         <Button variant="outlined" color="default" onClick={onBack}>
           {t("model.cancel")}
         </Button>
-        <Button disabled={saveload || !linsightConfig} onClick={handleSave}>
-          {saveload && <Outlined.Loading className="mr-2 animate-spin" />}
+        <Button disabled={saveload || !linsightConfig} onClick={handleSave} loading={saveload}>
           {t(inheritedFromRoot ? "model.saveLocalConfiguration" : "model.save")}
         </Button>
       </div>

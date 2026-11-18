@@ -7,6 +7,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, expect, it, vi } from "vitest";
 import {
@@ -14,7 +15,7 @@ import {
   readProcessingJob,
   retryProcessing,
 } from "@/controllers/API/knowledgeProcessing";
-import type { ProcessingJobRead } from "@/controllers/API/knowledgeSpace";
+import type { ProcessingItemRead, ProcessingJobRead } from "@/controllers/API/knowledgeSpace";
 import { SpaceProcessingProgress } from "@/pages/KnowledgePage/components/SpaceProcessingProgress";
 
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
@@ -31,6 +32,13 @@ vi.mock("@/controllers/API/knowledgeProcessing", () => ({
   readProcessingJob: vi.fn(),
   retryProcessing: vi.fn(),
 }));
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (key: string, values?: Record<string, unknown>) => key === "f118.processing_counts"
+      ? `${key} ${values?.completed}/${values?.failed}/${values?.pending}`
+      : key,
+  }),
+}));
 
 const client = new QueryClient({
   defaultOptions: { queries: { retry: false } },
@@ -39,7 +47,30 @@ const client = new QueryClient({
 afterEach(() => {
   cleanup();
   client.clear();
+  vi.clearAllMocks();
   vi.useRealTimers();
+});
+
+it("shows loading instead of retry while a move job has not arrived", async () => {
+  vi.mocked(readProcessingJob).mockReturnValue(new Promise(() => undefined));
+  vi.mocked(readProcessingItems).mockReturnValue(new Promise(() => undefined));
+  render(
+    <QueryClientProvider client={client}>
+      <SpaceProcessingProgress
+        spaceId={7}
+        jobId="job-pending"
+        kind="move_index"
+        scope={{
+          identityKey: "user:5",
+          tenantId: 60,
+          managementTenantId: 60,
+          view: "ordinary",
+        }}
+      />
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByRole("status", { name: "loading" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "retry" })).toBeNull();
 });
 
 it("polls metadata progress and requests only failed items when failures appear", async () => {
@@ -214,4 +245,71 @@ it("requires explicit confirmation before refreshing failed copy inputs", async 
       "space_copy",
     ),
   );
+});
+
+it("filters history items on the server from later pages and recovers an empty selection", async () => {
+  const job: ProcessingJobRead = {
+    id: "history-7", space_id: 7, kind: "move_index", state: "partial_failed", revision: 2,
+    accepted_at: "2026-11-18", started_at: null, finished_at: null,
+    total_count: 21, succeeded_count: 20, failed_count: 1, pending_count: 0,
+    hidden_item_count: 0, retryable: false, obsolete_reason: null, error_code: null,
+  };
+  const succeeded: ProcessingItemRead[] = Array.from({ length: 20 }, (_, index) => ({
+    id: `item-${index + 1}`, file_id: index + 1, file_name: `File ${index + 1}.txt`,
+    document_id: index + 1, version_id: index + 1, step: "index_written", state: "succeeded",
+    attempt: 1, error_code: null, message: null, retryable: false,
+  }));
+  const failed: ProcessingItemRead = {
+    ...succeeded[0], id: "failed-item", file_id: 21, file_name: "Changed.txt",
+    state: "failed", failure_reason: "file_changed", retryable: true,
+  };
+  const records = [...succeeded, failed];
+  vi.mocked(readProcessingJob).mockReset().mockResolvedValue(job);
+  const read = vi.mocked(readProcessingItems).mockReset().mockImplementation(async (_space, _job, query) => {
+    const filtered = records.filter((item) => !query.state || item.state === query.state);
+    const offset = ((query.page ?? 1) - 1) * (query.page_size ?? 20);
+    return { data: filtered.slice(offset, offset + (query.page_size ?? 20)), total: filtered.length };
+  });
+  render(
+    <QueryClientProvider client={client}>
+      <SpaceProcessingProgress
+        spaceId={7} jobId={job.id} kind="move_index" onBack={vi.fn()}
+        scope={{ identityKey: "user:5", tenantId: 60, managementTenantId: 60, view: "ordinary" }}
+      />
+    </QueryClientProvider>,
+  );
+  const interaction = userEvent.setup();
+  const table = await screen.findByRole("table", { name: "f118.processing_items" });
+  const summary = await screen.findByText("f118.processing_counts 20/1/0");
+  expect(within(table).getAllByRole("columnheader")).toHaveLength(2);
+  expect(within(table).queryByRole("columnheader", { name: "batch.column_reason" })).not.toBeInTheDocument();
+  const first = (await within(table).findByRole("rowheader", { name: "File 1.txt" })).closest("tr")!;
+  expect(within(first).queryByRole("button")).not.toBeInTheDocument();
+  expect(within(first).getByText("f118.processing_item_succeeded").parentElement).toHaveClass("text-success", "h-5");
+  await interaction.click(screen.getByRole("button", { name: "pagination.next" }));
+  expect(await screen.findByRole("rowheader", { name: "Changed.txt" })).toBeVisible();
+  expect(read).toHaveBeenLastCalledWith(7, job.id, { page: 2, page_size: 20, state: undefined }, "move_index");
+
+  const selectStatus = async (label: string) => {
+    await interaction.click(screen.getByRole("combobox", { name: /^f118.processing_filter_status/ }));
+    await interaction.click(await screen.findByRole("option", { name: label }));
+  };
+  await selectStatus("f118.processing_item_failed");
+  await waitFor(() => expect(read).toHaveBeenLastCalledWith(7, job.id, { page: 1, page_size: 20, state: "failed" }, "move_index"));
+  const filtered = (await screen.findByRole("rowheader", { name: "Changed.txt" })).closest("tr")!;
+  expect(within(filtered).getByText("f118.processing_item_failed").parentElement).toHaveClass("text-danger", "h-5");
+  expect(screen.queryByText("f118.failure_file_changed")).not.toBeInTheDocument();
+  await interaction.hover(within(filtered).getByRole("button", { name: "f118.failure_file_changed" }));
+  expect(await screen.findByRole("tooltip")).toHaveTextContent("f118.failure_file_changed");
+  await interaction.keyboard("{Escape}");
+
+  await selectStatus("f118.processing_item_running");
+  expect(await screen.findByText("f118.processing_no_matching_items")).toBeVisible();
+  expect(screen.getByRole("table", { name: "f118.processing_items" })).toBeVisible();
+  expect(screen.getByText("f118.processing_counts 20/1/0")).toBe(summary);
+  await selectStatus("all");
+  expect(await screen.findByRole("rowheader", { name: "File 1.txt" })).toBeVisible();
+  expect(read).toHaveBeenLastCalledWith(7, job.id, { page: 1, page_size: 20, state: undefined }, "move_index");
+  expect(screen.queryByText("f118.processing_no_matching_items")).not.toBeInTheDocument();
+  expect(screen.getByText("f118.processing_counts 20/1/0")).toBe(summary);
 });

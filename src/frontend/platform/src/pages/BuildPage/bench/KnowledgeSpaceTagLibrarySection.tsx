@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button, Input, SearchInput, Textarea, notification } from '@bisheng/ui';
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
@@ -281,7 +282,7 @@ export default function KnowledgeSpaceTagLibrarySection({ visible, onToggle }: K
                                                 className="px-4 py-10 text-center text-sm text-muted-foreground"
                                                 colSpan={4}
                                             >
-                                                {t("loading")}
+                                                <LoadingState label={t("loading")} />
                                             </td>
                                         </tr>
                                     ) : filteredRows.length === 0 ? (

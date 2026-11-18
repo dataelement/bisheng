@@ -12,6 +12,22 @@ from bisheng.resource_reference.domain.repositories.reference_repository import 
 
 
 class ModelSharingIntentRepository:
+    async def asharing_candidates(self, session):
+        context = self._context(session)
+        with session.no_autoflush, strict_tenant_filter():
+            rows = tuple(
+                (
+                    await session.execute(
+                        select(LLMServer.id, ModelSharingIntent.enabled)
+                        .outerjoin(ModelSharingIntent, ModelSharingIntent.server_id == LLMServer.id)
+                        .where(LLMServer.tenant_id == ROOT_TENANT_ID)
+                        .order_by(LLMServer.id)
+                    )
+                ).all()
+            )
+        self._check(session, context)
+        return rows
+
     @staticmethod
     def _context(session):
         tenant, transaction = ModelProviderOperationRepository._native(session)
@@ -34,22 +50,6 @@ class ModelSharingIntentRepository:
             ).scalar_one_or_none()
         self._check(session, context)
         return row
-
-    async def aenabled_server_ids(self, session):
-        context = self._context(session)
-        with session.no_autoflush, strict_tenant_filter():
-            ids = tuple(
-                (
-                    await session.execute(
-                        select(ModelSharingIntent.server_id)
-                        .join(LLMServer, LLMServer.id == ModelSharingIntent.server_id)
-                        .where(ModelSharingIntent.enabled.is_(True), LLMServer.tenant_id == ROOT_TENANT_ID)
-                        .order_by(ModelSharingIntent.server_id)
-                    )
-                ).scalars()
-            )
-        self._check(session, context)
-        return ids
 
     async def aset(self, session, *, server_id, enabled, plan_id):
         context = self._context(session)

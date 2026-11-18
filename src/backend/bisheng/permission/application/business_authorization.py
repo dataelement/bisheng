@@ -27,6 +27,16 @@ from bisheng.permission.domain.services.permission_action_service import Permiss
 _MAX_BATCH_CHECKS = 100
 
 
+def _tenant_admin_business_visibility(actor: PermissionActor, target: VerifiedPermissionTarget, action: str) -> bool:
+    """Business access differs from personal membership's exact visibility."""
+    return (
+        action == "visible"
+        and actor.data_scope == DATA_SCOPE_ALL
+        and actor.current_tenant_id in actor.tenant_admin_tenant_ids
+        and target.tenant_id == actor.current_tenant_id
+    )
+
+
 async def _require_creation_ready(resource_type, resource_ids):
     from bisheng.core.context.tenant import get_current_tenant_id
 
@@ -45,7 +55,7 @@ async def _require_creation_ready(resource_type, resource_ids):
 
 
 async def _management_target_loader(resource_type):
-    """Return ``(expected_tenant_id, loader)``, or ``None`` when no proof is due."""
+    """Return ``(expected_tenant_id, port)``, or ``None`` when no proof is due."""
 
     from bisheng.permission.application.request_boundary import request_business_target
 
@@ -57,18 +67,18 @@ async def _management_target_loader(resource_type):
     loader = getattr(port, "load_permission_record", None)
     if loader is None:
         raise PermissionInvalidResourceError()
-    return expected, loader
+    return expected, port
 
 
 async def _require_management_target(resource_type, resource_ids):
     proof = await _management_target_loader(resource_type)
     if proof is None:
         return
-    expected, loader = proof
+    expected, port = proof
     # This is a business boundary check, not a second authorization decision.
     # Domain-owned shared-resource scopes deliberately clear the admin override.
     for resource_id in resource_ids:
-        record = await loader(resource_id=str(resource_id))
+        record = await port.load_permission_record(resource_id=str(resource_id))
         if record is None or record.tenant_id != expected:
             raise PermissionInvalidResourceError()
 
@@ -88,10 +98,16 @@ async def _admitted_management_targets(resource_type, resource_ids):
     proof = await _management_target_loader(resource_type)
     if proof is None:
         return resource_ids
-    expected, loader = proof
+    expected, port = proof
+    batch = getattr(port, "load_permission_records", None)
+    records = await batch(resource_ids=tuple(str(value) for value in resource_ids)) if batch is not None else None
+    if records is None:
+        records = {}
+        for resource_id in resource_ids:
+            records[str(resource_id)] = await port.load_permission_record(resource_id=resource_id)
     admitted = []
     for resource_id in resource_ids:
-        record = await loader(resource_id=resource_id)
+        record = records.get(str(resource_id))
         if record is not None and record.tenant_id == expected:
             admitted.append(resource_id)
     return tuple(admitted)
@@ -139,6 +155,8 @@ async def check_business_action(
         actor=actor,
         action=action,
     )
+    if _tenant_admin_business_visibility(actor, target, action):
+        return True
     runtime = await get_f048_runtime()
     return await runtime.check_action(actor, target, action)
 
@@ -251,6 +269,9 @@ async def batch_check_business_actions(
                 continue
             if isinstance(resolution, BaseException):
                 raise resolution
+            if _tenant_admin_business_visibility(actor, resolution, action):
+                result[resource_id].add(requested_action)
+                continue
             targets.append(resolution)
             target_ids.append(resource_id)
         for offset in range(0, len(targets), _MAX_BATCH_CHECKS):

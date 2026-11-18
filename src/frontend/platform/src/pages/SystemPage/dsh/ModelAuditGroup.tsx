@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button } from "@bisheng/ui";
 import "@/style/dsh-content-safety.css";
 import { Badge, Tag } from "@bisheng/ui";
@@ -266,7 +267,7 @@ export function ModelAuditGroupRequests({
       {failed ? (
         <p role="alert">{t("dsh.modelAuditView.loadError")}</p>
       ) : loading ? (
-        <p role="status">{t("dsh.loading")}</p>
+        <LoadingState size="panel" label={t("dsh.loading")} />
       ) : !page?.items.length ? (
         <p>{t("dsh.modelAuditView.empty")}</p>
       ) : (

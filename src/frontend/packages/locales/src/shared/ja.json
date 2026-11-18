@@ -94,7 +94,32 @@
       "error": "エラー",
       "retry": "再試行",
       "loading": "読み込み中",
-      "uncertain": "完了を確認できませんでした。閉じて一覧を更新し、再送信する前に結果を確認してください。アップロード済みの独立したファイルは保持されます。"
+      "uncertain": "完了を確認できませんでした。閉じて一覧を更新し、再送信する前に結果を確認してください。アップロード済みの独立したファイルは保持されます。",
+      "history": {
+        "title": "バージョン履歴",
+        "document": "ロジカル文書",
+        "document_code": "文書コード",
+        "current_primary": "現在の主バージョン",
+        "primary_badge": "主バージョン",
+        "columns": {
+          "version": "バージョン",
+          "filename": "元のファイル名",
+          "file_code": "ファイルコード",
+          "uploader": "アップロード者",
+          "upload_time": "アップロード日時",
+          "parse_status": "解析ステータス",
+          "actions": "操作"
+        },
+        "status": {
+          "parsing": "解析中",
+          "success": "成功",
+          "failed": "失敗",
+          "processing": "処理中",
+          "queueing": "待機中",
+          "timeout": "タイムアウト",
+          "violation": "違反"
+        }
+      }
     },
     "move": {
       "title": "移動先",

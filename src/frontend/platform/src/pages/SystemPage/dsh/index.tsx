@@ -1,3 +1,4 @@
+import { LoadingState } from '@/components/bs-icons/loading/LoadingState'
 import { Button } from '@bisheng/ui'
 import { getModelListApi } from '@/controllers/API/finetune'
 import { userContext } from '@/contexts/userContext'
@@ -22,7 +23,7 @@ export function DshManagement({ section = 'credits' }: DshManagementProps) {
     const { t } = useTranslation()
     const { user } = useContext(userContext)
     const { config, failed } = useDshBrowserConfig()
-    if (!config) return <div role={failed ? 'alert' : 'status'}>{t(failed ? 'dsh.unavailable' : 'dsh.loading')}</div>
+    if (!config) return failed ? <div role="alert">{t('dsh.unavailable')}</div> : <LoadingState size="page" label={t('dsh.loading')} className="h-full" />
     if (!config.management_enabled) return <p>{t('dsh.managementUnavailable')}</p>
     const activeSection = config.enabled ? section : 'access'
     return <div className="flex h-full min-h-0 flex-col px-2 py-4">
@@ -66,7 +67,7 @@ function DshModelsView() {
         return (
             <div className="space-y-3">
                 <p role={error ? 'alert' : 'status'}>
-                    {t(error ? 'dsh.modelsUnavailable' : 'dsh.loading')}
+                    {error ? t('dsh.modelsUnavailable') : <LoadingState label={t('dsh.loading')} />}
                 </p>
                 {error && (
                     <Button

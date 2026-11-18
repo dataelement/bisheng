@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 /**
  * Read-only version record of one hosted application (AC-39 / AC-61).
  *
@@ -170,9 +171,7 @@ function VersionHistory({ appId, reloadKey = "" }: VersionListCardProps) {
       </div>
 
       {waiting && (
-        <p className="mt-3 text-sm text-muted-foreground">
-          {t("hostedApp.versionList.loading")}
-        </p>
+        <LoadingState size="panel" label={t("hostedApp.versionList.loading")} className="mt-3 text-sm text-muted-foreground" />
       )}
       {!waiting && !failure && rows.length === 0 && (
         <p className="mt-3 text-sm text-muted-foreground">

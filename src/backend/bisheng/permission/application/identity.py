@@ -5,7 +5,8 @@ from __future__ import annotations
 from contextvars import ContextVar, Token
 from typing import Protocol
 
-from bisheng.core.context.tenant import DEFAULT_TENANT_ID
+from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
+from bisheng.permission.application.data_scope import DATA_SCOPE_ALL
 from bisheng.permission.domain.services.permission_action_service import (
     PermissionActor,
 )
@@ -30,6 +31,18 @@ def set_current_permission_actor(actor: PermissionActor | None) -> Token:
 
 def reset_current_permission_actor(token: Token) -> None:
     current_permission_actor.reset(token)
+
+
+async def is_current_tenant_administrator(
+    login_user: LoginPermissionIdentity, *, actor: PermissionActor | None = None
+) -> bool:
+    """Identity gate for tenant management; resource actions still verify targets."""
+    actor = actor or await resolve_permission_actor(login_user)
+    if actor.data_scope != DATA_SCOPE_ALL:
+        return False
+    return actor.super_admin or (
+        actor.current_tenant_id == get_current_tenant_id() and actor.current_tenant_id in actor.tenant_admin_tenant_ids
+    )
 
 
 async def resolve_permission_actor(

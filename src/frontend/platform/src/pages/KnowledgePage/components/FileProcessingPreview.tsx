@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
@@ -45,9 +46,9 @@ export function FileProcessingPreview({
   }, [preview.error]);
   if (!preview.data)
     return (
-      <p role="status">
-        {t(preview.isError ? "f118.load_failed" : "f118.loading_space")}
-      </p>
+      preview.isError ? (
+        <p role="alert">{t("f118.load_failed")}</p>
+      ) : <LoadingState label={t("f118.loading_space")} className="min-h-32" />
     );
   const strategy = initialWizardStrategy(defaults, spaceId, [
     {

@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import {
   Button,
   Checkbox,
@@ -219,7 +220,7 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
                     colSpan={8}
                     className="py-8 text-center text-muted-foreground"
                   >
-                    {t("loading")}
+                    <LoadingState label={t("loading")} />
                   </TableCell>
                 </TableRow>
               ) : members.length === 0 ? (

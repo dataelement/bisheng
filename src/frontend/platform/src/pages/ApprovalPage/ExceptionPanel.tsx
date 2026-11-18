@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button } from '@bisheng/ui';
 
 import { Tag } from "@bisheng/ui";
@@ -201,7 +202,7 @@ export function ExceptionPanel({ controller }: ExceptionPanelProps) {
                       </Button>
                       {expandedProgressIds.has(item.id) &&
                         (loadingProgressId === item.id ? (
-                          <div className="mt-2 text-xs text-muted-foreground">{t("loading")}</div>
+                          <LoadingState size="panel" label={t("loading")} className="mt-2 text-xs text-muted-foreground" />
                         ) : instanceDetailCache[item.id] ? (
                           <>
                             <ApprovalTimeline detail={instanceDetailCache[item.id]} />

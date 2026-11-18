@@ -7,6 +7,10 @@ async def read_policy_subject(user_id: int, *, session=None) -> PolicySubjectFac
     return await PolicyBindingRepository.subject(user_id, session=session)
 
 
+async def read_management_home(user_id: int) -> int:
+    return await PolicyBindingRepository.management_home(user_id)
+
+
 async def read_directory_policy_subjects(user_ids: set[int]) -> dict[int, PolicySubjectFacts]:
     """Exact user IDs come from an authorized, bounded organization page."""
     return await PolicyBindingRepository.directory_subjects(user_ids)

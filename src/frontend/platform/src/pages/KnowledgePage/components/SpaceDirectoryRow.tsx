@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import {
   Button,
   Checkbox,
@@ -5,6 +6,7 @@ import {
   DropdownItem,
   DropdownSeparator,
   Tag,
+  Tooltip,
 } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { useContext, useMemo, useState } from "react";
@@ -115,6 +117,9 @@ export function SpaceDirectoryRow({
   const retryable = folder
     ? item.has_failed_files === true
     : [3, 6, 7].includes(item.status ?? -1);
+  const rowActionClass = layout === "list"
+    ? `rounded-lg focus-visible:ring-0 focus-visible:ring-offset-0 ${selected ? "hover:bg-white/60" : "hover:bg-btn-fill-2"}`
+    : undefined;
   const selection = (layout || (known && onSelect)) && (
     <Checkbox
       aria-label={`${t("deletion.select")} ${item.file_name}`}
@@ -157,15 +162,22 @@ export function SpaceDirectoryRow({
   const actionsContent = (
     <>
       {!folder && canDownload && (
-        <Button
-          variant="text"
-          color="default"
-          iconOnly
-          aria-label={t("downloadOriginal")}
-          onClick={onDownload}
-        >
-          <Outlined.Download />
-        </Button>
+        <Tooltip content={t("download", { ns: "bs" })}>
+          <Button
+            variant="text"
+            color="default"
+            size="medium"
+            iconOnly
+            className={rowActionClass}
+            aria-label={t("downloadOriginal")}
+            onClick={onDownload}
+          >
+            <Outlined.Download />
+          </Button>
+        </Tooltip>
+      )}
+      {layout === "list" && !folder && canDownload && known && (
+        <span aria-hidden className="mx-1 h-2 w-px shrink-0 bg-border-base" />
       )}
       {known && (
         <Dropdown
@@ -175,16 +187,8 @@ export function SpaceDirectoryRow({
           menu={
             <>
               {loading && (
-                <DropdownItem
-                  disabled
-                  icon={
-                    <Outlined.Loading
-                      aria-hidden
-                      className="animate-spin motion-reduce:animate-pulse"
-                    />
-                  }
-                >
-                  {t("loading")}
+                <DropdownItem disabled aria-label={t("loading")}>
+                  <LoadingState size="inline" label={t("loading")} />
                 </DropdownItem>
               )}
               {error && (
@@ -284,13 +288,12 @@ export function SpaceDirectoryRow({
           <Button
             variant={layout === "card" ? "outlined" : "text"}
             color="default"
+            size="medium"
             iconOnly
             className={
               layout === "card"
                 ? "size-5 rounded-md px-0"
-                : layout
-                  ? "rounded-lg"
-                  : undefined
+                : rowActionClass
             }
             aria-label={`${t("more", { ns: "bs" })} ${item.file_name}`}
           >

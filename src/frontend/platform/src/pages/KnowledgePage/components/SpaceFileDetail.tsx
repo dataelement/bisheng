@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button, Pagination, SearchInput, Tag, Tooltip } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { useMemo, useState } from "react";
@@ -192,7 +193,7 @@ export function SpaceFileDetail({ scope, spaceId, fileId, initialFile, onBack, o
           </Button>
         </div>
       ) : !model.preview.data ? (
-        <p role="status">{t("loading")}</p>
+        <LoadingState label={t("loading")} className="min-h-32" />
       ) : (
         <>
           <div className="flex min-h-0 flex-1 gap-3 bg-background-main" aria-busy={model.busy}>

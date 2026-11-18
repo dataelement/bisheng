@@ -1,5 +1,6 @@
 import { useRef, type ReactNode, type RefObject } from 'react';
 import { Outlined } from 'bisheng-icons';
+import { useLoadingIndicatorRenderer } from '@bisheng/ui';
 import { asRecord, displayText, sourceId } from '../core/normalizeHistory';
 import { splitMessageContent } from '../core/messageContent';
 import type { RunPresentation } from '../core/describeRun';
@@ -35,6 +36,7 @@ export interface ConversationMessagesProps {
 }
 interface ConversationRowProps extends Omit<ConversationMessagesProps, 'messages'> { message: ChatMessage }
 function ConversationRow({ message, canExecute, labels, slots, onChoice, onError }: ConversationRowProps) {
+  const renderIndicator = useLoadingIndicatorRenderer();
   const contentRef = useRef<HTMLDivElement>(null);
   const payload = asRecord(message.payload);
   const { text, reasoning } = splitMessageContent(message.text);
@@ -68,12 +70,14 @@ function ConversationRow({ message, canExecute, labels, slots, onChoice, onError
   if (message.kind === 'run') {
     const run = slots.runPresentation?.(message);
     if (message.category === 'node_run') return <div className="py-1 px-4 flex items-center font-bold gap-2 text-sm">
-      {!message.final && <Outlined.Loading size={16} className="animate-spin text-primary" />}
+      {!message.final && (renderIndicator ? <span aria-hidden className="inline-flex">{renderIndicator({ className: 'size-4' })}</span>
+        : <Outlined.Loading size={16} className="animate-spin text-primary" />)}
       <span>{displayText(payload.name)}</span>
     </div>;
     return <div><details className="py-1 rounded-sm border max-w-[90%]">
       <summary className="flex items-center gap-2 px-4 py-2 cursor-pointer text-sm font-bold">
-        {!message.final ? <Outlined.Loading size={16} className="animate-spin text-primary" />
+        {!message.final ? renderIndicator ? <span aria-hidden className="inline-flex">{renderIndicator({ className: 'size-4' })}</span>
+          : <Outlined.Loading size={16} className="animate-spin text-primary" />
           : (message.raw.interrupted || run?.unavailable) ? <Outlined.CloseCircle size={16} className="text-danger" /> : <Outlined.CheckCircle size={16} className="text-success" />}
         {run?.title || displayText(payload.name) || (message.final ? labels.completed : labels.thinking)}
       </summary>

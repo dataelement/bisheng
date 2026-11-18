@@ -1148,6 +1148,10 @@ async def has_mark_access(*, request: Request, login_user: LoginUser = Depends(L
     """
     Get whether the current user has annotation permission,Determine if the current user isadmin Or a user group administrator
     """
+    from bisheng.permission.application.identity import is_current_tenant_administrator
+
+    if await is_current_tenant_administrator(login_user):
+        return resp_200(data=True)
     has_mark_access = False
     # Check if there are administrative permissions for the group
     task = MarkTaskDao.get_task(login_user.user_id)

@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button } from "@bisheng/ui";
 import type {
   AuditQueryReadiness,
@@ -201,7 +202,7 @@ function TreeChildren({
           </Button>
         </div>
       ) : state.loading ? (
-        <p role="status">{t("dsh.loading")}</p>
+        <LoadingState size="panel" label={t("dsh.loading")} />
       ) : (
         <>
           {state.page?.scan_limited && (

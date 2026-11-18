@@ -2,6 +2,7 @@ import * as React from 'react';
 import * as SwitchPrimitive from '@radix-ui/react-switch';
 import { Outlined } from 'bisheng-icons';
 import cn from '../../utils/cn';
+import { useLoadingIndicatorRenderer } from '../../providers/LoadingIndicatorProvider';
 
 /**
  * Switch — design-system base component (组件-Switch开关.md v1).
@@ -56,6 +57,7 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
     { size = 'default', loading = false, disabled, checkedChildren, unCheckedChildren, className, ...props },
     ref,
   ) => {
+    const renderIndicator = useLoadingIndicatorRenderer();
     // §3 — small cannot fit inner text, so it never renders any.
     const showInner = size === 'default';
     return (
@@ -98,7 +100,9 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
             THUMB_SIZE[size],
           )}
         >
-          {loading && <Outlined.Loading className="animate-spin text-text-3" />}
+          {loading && (renderIndicator ? (
+            <span aria-hidden className="inline-flex shrink-0">{renderIndicator({ className: `${size === 'small' ? 'size-2.5' : 'size-3.5'} text-text-3` })}</span>
+          ) : <Outlined.Loading className="animate-spin text-text-3" />)}
         </SwitchPrimitive.Thumb>
       </SwitchPrimitive.Root>
     );

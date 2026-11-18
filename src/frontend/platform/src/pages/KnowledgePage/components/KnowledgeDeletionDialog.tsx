@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { useState } from "react";
 import { KnowledgeDeletionItems, KnowledgeReferenceTables } from "@bisheng/knowledge";
 import { Button, Checkbox } from "@bisheng/ui";
@@ -66,7 +67,7 @@ export function KnowledgeDeletionDialog({ operation }: KnowledgeDeletionDialogPr
           </DialogTitle>
         </DialogHeader>
         <div className="min-h-0 min-w-0 max-h-[60vh] overflow-y-auto space-y-4 text-body-sm">
-          {view.busy && <p role="status">{tr("checking")}</p>}
+          {view.busy && <LoadingState label={tr("checking")} className="min-h-32" />}
           {(view.error || view.code) && (
             <p role="alert">
               {view.code === 10999 && view.reason === "source_space_move_input_required"

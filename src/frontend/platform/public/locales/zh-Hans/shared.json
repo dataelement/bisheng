@@ -94,7 +94,32 @@
       "error": "错误",
       "retry": "重试",
       "loading": "加载中",
-      "uncertain": "操作未确认完成。请关闭后刷新列表核对结果，不要重复提交；已上传的独立文件会保留。"
+      "uncertain": "操作未确认完成。请关闭后刷新列表核对结果，不要重复提交；已上传的独立文件会保留。",
+      "history": {
+        "title": "版本历史",
+        "document": "逻辑文档",
+        "document_code": "文档编码",
+        "current_primary": "当前主版本",
+        "primary_badge": "主版本",
+        "columns": {
+          "version": "版本",
+          "filename": "原始文件名",
+          "file_code": "文件编码",
+          "uploader": "上传人",
+          "upload_time": "上传时间",
+          "parse_status": "解析状态",
+          "actions": "操作"
+        },
+        "status": {
+          "parsing": "解析中",
+          "success": "成功",
+          "failed": "失败",
+          "processing": "处理中",
+          "queueing": "排队中",
+          "timeout": "超时",
+          "violation": "违规"
+        }
+      }
     },
     "move": {
       "title": "移动到",

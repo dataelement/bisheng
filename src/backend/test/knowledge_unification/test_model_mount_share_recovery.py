@@ -14,6 +14,7 @@ from bisheng.llm.domain.models.model_sharing_intent import ModelSharingIntent
 from bisheng.tenant.domain.services.tenant_mount_service import TenantMountService, default_tenant_code
 from test.knowledge_unification import test_model_delete_plan_application as actual
 from test.knowledge_unification import test_model_deletion_application as native_business
+from test.knowledge_unification.test_model_operation_failure_recovery import root_user
 from test.knowledge_unification.test_model_provider_sharing_writers import (
     install_sharing,
 )
@@ -25,7 +26,10 @@ ready = actual.ready
 removal_session = actual.removal_session
 
 
-async def test_only_real_unfinished_original_mount_share_can_bypass_already_mounted_conflict(business, monkeypatch):
+@pytest.mark.parametrize("retry_user_id", [7, 8])
+async def test_only_real_unfinished_original_mount_share_can_bypass_already_mounted_conflict(
+    business, monkeypatch, retry_user_id
+):
     factory, _, _, _, client = business
     share = await install_sharing(business, monkeypatch)
     mounted = ModelMountSharingApplication(share)
@@ -84,11 +88,14 @@ async def test_only_real_unfinished_original_mount_share_can_bypass_already_moun
         monkeypatch.setattr(share, "_permission", original)
         user.token_version = 4
         user._runtime_credential_reference = {**user._runtime_credential_reference, "token_version": 4}
-        child = await TenantMountService.mount_child(98, None, "Original child name", user)
+        with root_user(retry_user_id) as retry_user:
+            retry_user.is_global_super = True
+            child = await TenantMountService.mount_child(98, None, "Original child name", retry_user)
         assert child.id == 101 and client.rows == {("tenant:101", "shared_with", "llm_server:2")}
         with pytest.raises(TenantTreeMountConflictError):
             await TenantMountService.mount_child(98, None, "Original child name", user)
         async with factory() as session:
             assert len((await session.execute(sa.select(Tenant))).scalars().all()) == 3
             rows = (await session.execute(sa.select(KnowledgeOperationPlan))).scalars().all()
-            assert len(rows) == 1 and rows[0].model_execution_state == "COMPLETED"
+            assert len(rows) == 2
+            assert {row.model_execution_state for row in rows} == {"SUPERSEDED", "COMPLETED"}

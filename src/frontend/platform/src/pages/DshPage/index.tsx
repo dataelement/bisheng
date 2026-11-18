@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { useDshBrowserConfig } from "@/hooks/useDshBrowserConfig";
@@ -84,7 +85,7 @@ export function DshPage() {
               >
                 {!config ? (
                   <p role={failed ? "alert" : "status"}>
-                    {t(failed ? "dsh.unavailable" : "dsh.loading")}
+                    {failed ? t("dsh.unavailable") : <LoadingState label={t("dsh.loading")} />}
                   </p>
                 ) : !config.management_enabled ? (
                   <p>{t("dsh.managementUnavailable")}</p>

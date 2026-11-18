@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { useState } from "react";
 import { BATCH_OPERATION_DIALOG_CLASS, KnowledgeDialogTable } from "@bisheng/knowledge";
 import { Button, Checkbox } from "@bisheng/ui";
@@ -57,7 +58,7 @@ export function BatchOperationDialog({ operation }: BatchOperationDialogProps) {
           <DialogTitle>{tr(view.command.operation)}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3 max-h-[60vh] overflow-y-auto text-body-sm">
-          {view.busy && <p role="status">{tr("checking")}</p>}
+          {view.busy && <LoadingState label={tr("checking")} className="min-h-32" />}
           {view.error && <p role="alert">{view.stale ? tr("changed") : view.error}</p>}
           {!!view.result?.valid_items.length && (
             <KnowledgeDialogTable

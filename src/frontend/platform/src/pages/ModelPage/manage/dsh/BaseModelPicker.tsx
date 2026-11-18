@@ -1,7 +1,8 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button, Select, type SelectValue } from '@bisheng/ui'
 import { useSelectLabels } from '@/components/bs-comp/formFields/useSelectLabels'
 import type { ModelPricingRow } from '@/controllers/API/modelPricing'
-import { Check, Loader2 } from 'lucide-react'
+import { Check } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { creditPricingErrorKey, useCreditSettings } from './useCreditPricing'
@@ -62,7 +63,7 @@ export function BaseModelPicker({ models, rows }: BaseModelPickerProps) {
                     // also in the trigger once chosen.
                     ...models.map(model => ({ value: model.id, label: t('dsh.pricing.baseModelOption', { model: model.label, provider: model.provider }) })),
                 ]} />
-            {mutation.isLoading && <Loader2 className="size-4 animate-spin text-muted-foreground" aria-label={t('dsh.pricing.saving')} />}
+            {mutation.isLoading && <LoadingState size="inline" label={t('dsh.pricing.saving')} />}
             {mutation.isSuccess && !error && <Check className="size-4 text-green-600" aria-label={t('dsh.pricing.saved')} />}
         </div>
         <p className="text-xs text-muted-foreground">{t('dsh.pricing.baseModelHelp')}</p>

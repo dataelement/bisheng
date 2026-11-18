@@ -9,6 +9,7 @@ import {
   type KnowledgeQueryScope,
 } from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { useKnowledgePageScope } from "@/hooks/useKnowledgePageScope";
 import { KnowledgeScopeUnavailable } from "./components/KnowledgeScopeUnavailable";
 import { SpaceFileUploadPanel } from "./components/SpaceFileUploadPanel";
@@ -49,7 +50,7 @@ function UploadTarget({ scope, spaceId, parentId }: UploadTargetProps) {
   return (
     <div className="h-full min-h-0">
       {permissions.isInitialLoading ? (
-        <div role="status">{t("f118.loading_directory")}</div>
+        <LoadingState size="page" className="h-full" label={t("f118.loading_directory")} />
       ) : permissions.isError ? (
         <Button
           variant="outlined"
@@ -86,7 +87,7 @@ export function FilesUpload() {
     (parents.length > 0 && (parents.length !== 1 || parentId === null))
   )
     return <KnowledgeScopeUnavailable />;
-  if (isLoading) return <div role="status">{t("f118.loading_directory")}</div>;
+  if (isLoading) return <LoadingState size="page" className="h-full" label={t("f118.loading_directory")} />;
   if (!scopes)
     return (
       <KnowledgeScopeUnavailable

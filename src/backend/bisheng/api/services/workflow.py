@@ -203,7 +203,9 @@ class WorkFlowService(BaseService):
         owner_activity = {one.user_id: int(getattr(one, "delete", 0) or 0) != 1 for one in user_infos}
 
         # Get version information in the list
-        version_infos = FlowVersionDao.get_list_by_flow_ids(resource_ids)
+        # The builder loads a workflow's versions only when its selector opens.
+        # Other consumers retain the historical list enrichment contract.
+        version_infos = [] if managed else FlowVersionDao.get_list_by_flow_ids(resource_ids)
         flow_versions = {}
         for one in version_infos:
             if one.flow_id not in flow_versions:

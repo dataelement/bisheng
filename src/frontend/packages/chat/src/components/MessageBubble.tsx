@@ -1,4 +1,5 @@
 import { Outlined } from 'bisheng-icons';
+import { useLoadingIndicatorRenderer } from '@bisheng/ui';
 import { useState, type ReactNode, type Ref } from 'react';
 
 export interface ReasoningDetailsProps {
@@ -9,6 +10,7 @@ export interface ReasoningDetailsProps {
 }
 /** Reasoning presentation extracted from the client answer message. */
 export function ReasoningDetails({ text, pending, stopped = false, labels }: ReasoningDetailsProps) {
+  const renderIndicator = useLoadingIndicatorRenderer();
   const [open, setOpen] = useState(true);
   if (!text) return null;
   return <div className="py-1 mb-4">
@@ -18,7 +20,8 @@ export function ReasoningDetails({ text, pending, stopped = false, labels }: Rea
         onClick={() => setOpen(value => !value)}
         onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setOpen(value => !value); } }}>
         <div className="flex items-center font-bold gap-2 text-sm">
-          {pending ? <Outlined.Loading size={16} className="text-primary duration-300 animate-spin" />
+          {pending ? renderIndicator ? <span aria-hidden className="inline-flex">{renderIndicator({ className: 'size-4' })}</span>
+            : <Outlined.Loading size={16} className="text-primary duration-300 animate-spin" />
             : stopped ? <Outlined.Square size={16} className="text-text-3" /> : <Outlined.CheckCircle size={16} className="text-success" />}
           <span>{stopped ? labels.stopped : pending ? labels.thinking : labels.completed}</span>
         </div>
@@ -47,6 +50,7 @@ export interface MessageBubbleProps {
 }
 /** Host actions/resources are slots; one shared message layout owns both apps. */
 export function MessageBubble({ title, logo, sender, selection, reasoning, children, attachments, footer, status, pending, contentRef, hideBody }: MessageBubbleProps) {
+  const renderIndicator = useLoadingIndicatorRenderer();
   return <div className="bisheng-message flex w-full py-2 items-start gap-2">
     {selection}
     <div className="w-fit group max-w-[90%]">
@@ -61,7 +65,8 @@ export function MessageBubble({ title, logo, sender, selection, reasoning, child
               <div ref={contentRef}>
                 {children}
                 {attachments}
-                {pending && <Outlined.Loading size={24} className="animate-spin text-primary" />}
+                {pending && (renderIndicator ? <span aria-hidden className="inline-flex">{renderIndicator({ className: 'size-6' })}</span>
+                  : <Outlined.Loading size={24} className="animate-spin text-primary" />)}
               </div>
             </div>
           </div>

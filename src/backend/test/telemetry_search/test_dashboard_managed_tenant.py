@@ -9,12 +9,13 @@ from sqlmodel import select
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.permission import PermissionFGAUnavailableError
-from bisheng.core.context.tenant import bypass_tenant_filter
+from bisheng.core.context.tenant import bypass_tenant_filter, tenant_execution_scope, visible_tenant_ids
 from bisheng.permission.domain.services.permission_action_service import PermissionActor
 from bisheng.telemetry_search.domain.models.dashboard import (
     Dashboard,
     DashboardComponent,
     DashboardDefault,
+    DashboardType,
 )
 from bisheng.telemetry_search.domain.models.dashboard_dao import DashboardDao
 from bisheng.telemetry_search.domain.schemas.dashboard import DashboardCreate
@@ -117,3 +118,34 @@ async def test_refresh_failure_does_not_commit_orphan_dashboard(monkeypatch, man
         with bypass_tenant_filter():
             async with managed_db.sessions() as session:
                 assert (await session.exec(select(Dashboard))).all() == []
+
+
+async def test_child_admin_can_create_without_ordinary_menu_grant(monkeypatch, managed_db):
+    await managed_db.create(Dashboard, DashboardComponent, DashboardDefault)
+    monkeypatch.setattr(
+        "bisheng.telemetry_search.domain.models.dashboard_dao.get_async_db_session", managed_db.sessions
+    )
+    monkeypatch.setattr(dashboard_module, "is_commercial", lambda: True)
+    menu = AsyncMock(return_value=False)
+    monkeypatch.setattr(UserPayload, "async_access_check", menu)
+    monkeypatch.setattr(DashboardService, "create_dashboard_hook", AsyncMock())
+    actor = PermissionActor(user_id=7, tenant_id=2, tenant_admin_tenant_ids=frozenset({2}))
+    monkeypatch.setattr(dashboard_module, "resolve_permission_actor", AsyncMock(return_value=actor))
+    permission = SimpleNamespace(authorize_created=AsyncMock())
+    monkeypatch.setattr(dashboard_module, "get_f048_resource_adapter", AsyncMock(return_value=permission))
+    user = UserPayload(user_id=7, tenant_id=2, user_role=[])
+    with tenant_execution_scope(1):
+        for i in range(20):
+            await DashboardDao.insert(
+                Dashboard(tenant_id=1, user_id=3, title=f"Root {i}", dashboard_type=DashboardType.CUSTOM.value)
+            )
+    with tenant_execution_scope(2):
+        token = visible_tenant_ids.set(frozenset({1, 2}))
+        try:
+            row = await DashboardService(login_user=user).create_dashboard(DashboardCreate(title="Child admin"))
+            assert row.tenant_id == 2 and row.user_id == 7
+            assert (await DashboardDao.get_one(row.id)).tenant_id == 2
+        finally:
+            visible_tenant_ids.reset(token)
+    menu.assert_not_awaited()
+    assert permission.authorize_created.await_args.kwargs["record"].tenant_id == 2
