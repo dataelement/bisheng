@@ -211,6 +211,46 @@ class ModelProviderOperationRepository:
             raise KnowledgeOperationPlanChangedError()
 
     @staticmethod
+    def preparation_fingerprint(row):
+        return _hash(
+            {
+                "payload": ModelDeletePlanRepository._payload(row),
+                "id": row.id,
+                "request_hash": row.request_hash,
+                "plan_digest": row.plan_digest,
+                "expires_at": row.expires_at.isoformat(),
+                "operation_id": row.operation_id,
+                "consumed_at": row.consumed_at.isoformat() if row.consumed_at else None,
+                "server_id": row.model_server_id,
+                "state": row.model_execution_state,
+                "execution": row.model_execution_metadata,
+                "create_time": row.create_time.isoformat(),
+                "update_time": row.update_time.isoformat(),
+            }
+        )
+
+    def require_unstarted_preparation(self, row):
+        # Termination does not execute this payload or repair its old signature.
+        # Keep the signed material intact even when DATETIME precision lost it.
+        if (
+            row.operation != SHARE_OPERATION
+            or row.model_execution_state != "PREPARING"
+            or row.space_id is not None
+            or row.target_manifest != []
+            or row.source_revisions != {}
+            or row.impact != {}
+            or set(row.parameters) != {"command_digest"}
+            or row.request_hash != _hash(self.plans._payload(row))
+            or not row.operation_id
+            or row.consumed_at is None
+        ):
+            raise KnowledgeOperationPlanChangedError()
+        actor = self.plans._actor(row.actor_reference, row.tenant_id)
+        if actor["actor_user_id"] != row.actor_user_id:
+            raise KnowledgeOperationPlanChangedError()
+        self.plans._revisions(row.target_revisions, [])
+
+    @staticmethod
     def require_current_actor(row, actor_reference):
         # An unconsumed confirmation retains the exact original credential.
         old = row.actor_reference
@@ -284,7 +324,9 @@ class ModelProviderOperationRepository:
 
     async def aset_state(self, session, *, row, expected, target, metadata=None):
         tenant, transaction = self._native(session)
-        if target not in {*ACTIVE_STATES, "COMPLETED"}:
+        if target not in {*ACTIVE_STATES, "COMPLETED", "ABANDONED"} or (
+            target == "ABANDONED" and expected != "PREPARING"
+        ):
             raise KnowledgeOperationPlanChangedError()
         values = {"model_execution_state": target, "update_time": self.plans.clock()}
         if metadata is not None:

@@ -1,3 +1,5 @@
+> 2026-11-18后续共享兼容与116实际恢复验收见 [sharing-compatibility-validation.md](sharing-compatibility-validation.md)。下文保留原功能开发阶段的验证边界；后续用户已单独授权环境恢复和合并推送。
+
 # F025 实施与交付验证
 
 2026-11-18。独立分支 `codex/3.1.0-beta1/tenant-system-models-20261118`，基线 `c36ba672be0ff2f79d0e7358954e77973d2495f2`，工作区 `beta1-tenant-system-models-20261118`。用户授权评审通过后开发；本轮不合并、不推送、不部署、不恢复116存量。
