@@ -584,13 +584,23 @@ class FlowService(BaseService):
             meta_data = share_link.meta_data or {}
             share_flow_id = str(meta_data.get("flowId") or share_link.resource_id or "")
             has_share_grant = share_flow_id == str(flow_id)
+        # ``visible`` is an explicit grant and is not implied by a tenant-admin
+        # role. The builder still opens an app the caller may edit: that
+        # decision already rejects a different tenant, so a tenant admin does
+        # not gain every application on the platform.
         if not has_share_grant and not await check_business_action(
             login_user,
             resource_type="workflow",
             resource_id=flow_info.id,
             action="visible",
         ):
-            raise UnAuthorizedError()
+            if not await check_business_action(
+                login_user,
+                resource_type="workflow",
+                resource_id=flow_info.id,
+                action="edit",
+            ):
+                raise UnAuthorizedError()
 
         flow_info.logo = await cls.get_logo_share_link_async(flow_info.logo)
 
