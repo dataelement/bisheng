@@ -489,6 +489,25 @@ class _DeferredWorkspaceExecutor:
         raise RuntimeError("the workspace-bound code interpreter of a direct run must be called asynchronously")
 
 
+def _executor_owner(tool: BaseTool) -> BaseTool:
+    """The tool object that really holds ``executor``.
+
+    A platform tool reaches the model as ``ToolExecutor(tool_instance=<interpreter>)``.
+    ``ToolExecutor.__getattr__`` forwards reads to the inner tool, so ``tool.executor``
+    reads fine, but assigning it on the pydantic wrapper raises "object has no field".
+    Walk down ``tool_instance`` to the object that declares the attribute.
+    """
+    owner = tool
+    for _ in range(8):
+        if "executor" in getattr(type(owner), "model_fields", {}) or "executor" in getattr(owner, "__dict__", {}):
+            return owner
+        inner = getattr(owner, "__dict__", {}).get("tool_instance")
+        if not isinstance(inner, BaseTool):
+            break
+        owner = inner
+    raise TypeError(f"cannot find the object holding the executor of tool {getattr(tool, 'name', tool)!r}")
+
+
 def defer_workspace_preparation(tools: list[BaseTool], prepare: Any) -> int:
     """Run ``await prepare()`` before the first execution of each code interpreter in ``tools``.
 
@@ -503,6 +522,6 @@ def defer_workspace_preparation(tools: list[BaseTool], prepare: Any) -> int:
             continue
         if isinstance(executor, _DeferredWorkspaceExecutor):
             continue
-        tool.executor = _DeferredWorkspaceExecutor(executor, prepare)
+        _executor_owner(tool).executor = _DeferredWorkspaceExecutor(executor, prepare)
         wrapped += 1
     return wrapped
