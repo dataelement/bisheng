@@ -210,6 +210,7 @@ class KnowledgeFilePipeline(BaseFilePipeline):
                 document_id=str(self.db_file.id),
                 knowledge_id=self.db_file.knowledge_id,
                 knowledge_file=self.db_file,
+                processing_guard=self.processing_guard,
             )
         )
         abstract_transformers.append(
@@ -218,6 +219,7 @@ class KnowledgeFilePipeline(BaseFilePipeline):
                 document_id=str(self.db_file.id),
                 knowledge_id=self.db_file.knowledge_id,
                 retain_images=self.file_split_rule.retain_images == 1,
+                processing_guard=self.processing_guard,
             )
         )
         if self.need_thumbnail:
@@ -225,6 +227,7 @@ class KnowledgeFilePipeline(BaseFilePipeline):
                 ThumbnailTransformer(
                     loader=self.loader,
                     knowledge_file=self.db_file,
+                    processing_guard=self.processing_guard,
                 )
             )
         if self.should_use_ppt_page_split():
@@ -261,6 +264,7 @@ class KnowledgeFilePipeline(BaseFilePipeline):
                 document_id=str(self.db_file.id),
                 knowledge_id=self.db_file.knowledge_id,
                 knowledge_file=self.db_file,
+                processing_guard=self.processing_guard,
             )
         )
         abstract_transformers.append(
@@ -269,6 +273,7 @@ class KnowledgeFilePipeline(BaseFilePipeline):
                 document_id=str(self.db_file.id),
                 knowledge_id=self.db_file.knowledge_id,
                 retain_images=self.file_split_rule.retain_images == 1,
+                processing_guard=self.processing_guard,
             )
         )
         abstract_transformers.append(

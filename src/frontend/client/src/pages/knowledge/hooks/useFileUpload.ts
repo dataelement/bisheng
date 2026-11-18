@@ -246,7 +246,7 @@ export function extractDuplicateFileEntries(registeredFiles: KnowledgeFile[]): D
   // Backend marks duplicates by setting `old_file_level_path` to a string (possibly empty
   // when the existing file lives at the space root). Real parse failures leave the field
   // unset (None → undefined). Use type check, not truthiness, to keep root-level duplicates.
-  return registeredFiles
+  const entries = registeredFiles
     .filter(
       (file) =>
         file.status === FileStatus.FAILED && typeof file.oldFileLevelPath === "string" && Boolean(file._raw),
@@ -257,6 +257,9 @@ export function extractDuplicateFileEntries(registeredFiles: KnowledgeFile[]): D
       oldFileLevelPath: file.oldFileLevelPath || "",
       rawObj: file._raw,
     }));
+  // Staging uses one temporary object per existing file. Keep its latest
+  // response once, matching the bytes that the server will actually replace.
+  return Array.from(new Map(entries.map((entry) => [entry.fileId, entry])).values());
 }
 
 export function mergeVisibleRegisteredFiles(

@@ -37,7 +37,9 @@ class ImageUploadTransformer(BaseDocumentTransformer):
         knowledge_id: int | str,
         retain_images: bool = True,
         storage: ImageStorageContext | None = None,
+        processing_guard=None,
     ) -> None:
+        self.processing_guard = processing_guard
         self.loader = loader
         self.document_id = document_id
         self.knowledge_id = knowledge_id
@@ -82,7 +84,12 @@ class ImageUploadTransformer(BaseDocumentTransformer):
         try:
             for fname in files:
                 object_name = f"{target_dir}/{fname}"
-                minio.put_object_sync(
+                upload = (
+                    (lambda **args: self.processing_guard.upload(minio, **args))
+                    if self.processing_guard
+                    else minio.put_object_sync
+                )
+                upload(
                     object_name=object_name,
                     file=os.path.join(local_dir, fname),
                     bucket_name=bucket_name,

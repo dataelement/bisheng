@@ -1114,3 +1114,20 @@ Mode编译只迁移原before已存在的技术标记，permission_enabled/custom
 ### 2026-11-17 聊天重复知识入口退役
 
 移除 `ChatResourceMenu` 的“选择知识库”入口、`KnowledgeBaseDialog` 与三语言专用文案；`KnowledgePickerDialog` 仅服务空间选择，继续保留空间访问复核和确认前草稿。旧接口仍供历史调用使用；把旧响应中的类型标签当成未迁移存量会误判数据来源。`ChatResourceMenu.test.tsx` 验证仅有空间入口且可打开选择器，`KnowledgeSpaceDialog.test.tsx` 覆盖选择和访问校验。
+
+### 2026-11-17 文件可见性与覆盖上传修复
+
+分段更新/删除继续要求实际空间 edit、物理版本归属和 idle 状态，同时在索引 IO 前要求 knowledge_file visible；处理目标读取、文件重处理预检/确认使用同一可见性门槛。空间级模型/元数据任务仍按原空间编辑权限确定范围，不扩大此次文件级修复。
+
+用户端覆盖上传按已有物理文件 ID 合并重复冲突，保留最后一次暂存响应。既有 MD5/名称判重可令同一上传批次多次命中相同 ID，暂存对象也会被后一次覆盖；不能把这些响应重复传入严格拒绝重复 ID 的 retry 接口。此次没有改变判重规则、迁移配额或解析中删除保护。详见 [排查记录](../../../docs/reviews/knowledge-processing-bugfix-20261117.md)。
+
+### 2026-11-17 复制空集合初始化与移动目标就绪校验
+
+116 日志证实：新复制目标的 Milvus collection 是懒创建，直接 vector.col.load() 会在 None 上调用，导致 ES 初始化也未执行。复制初始化复用标准 schema bootstrap，创建并删除元数据种子后 load；两个模型引用读取继续复用持锁 session，避免自身事务重入。若以后替换向量库，需同时验证空目标建 schema 与已存在目标两条路径，不可仅 mock 出始终存在的 col。
+
+移动的源/目标应为已发布且就绪的空间；普通批次、跨空间范围和执行复核均要求 state=1，拒绝未初始化 state=0，防止逻辑迁入后才遇到目标 ES 404。旧复制源权限版本变化继续尊重冻结计划，不随修复自动重写或恢复任务。实际任务、日志与验证边界见 [116 根因记录](../../../docs/reviews/knowledge-copy-move-116-20261117.md)。
+
+
+### 2026-11-17 删除并发修复增量（用户已确认）
+
+复用现有删除计划、墓碑、处理任务租约、删除台账及 Beat。确认事务使旧任务失效；物理写入与清理由数据库互斥行协调，MinIO 生成物在上传前持久化；最终文件更新仅写现存行，模型配置 CAS 排除删除墓碑。处理中删除返回 accepted 并后台执行。完成后的物理输出复核复用原回执与有效租约，保持业务状态 SUCCEEDED；清空复核只操作原物理文件集合。新独立表为 `knowledge_processing_fence`、`knowledge_processing_artifact`；未修改已有表结构。实现边界、旧计划兼容和实机待验项见 [修复设计](../../../docs/reviews/knowledge-delete-processing-cancellation-20261117.md)。这替代本文件早期普通排队/解析阻断整空间删除的结论。

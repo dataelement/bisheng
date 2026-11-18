@@ -636,7 +636,7 @@ it("retires a delayed abnormal page across fileStatus URL ABA", async () => {
   expect(mocks.children).toHaveBeenCalledTimes(3);
 });
 
-it.each(["file_id=0", "file_id=11&file_id=12"])("rejects invalid file targets before reading file or root data: %s", async (query) => {
+it.each(["file_id=0", "file_id=11&file_id=12", "process_file_id=0", "process_file_id=11&process_file_id=12"])("rejects invalid file targets before reading file or root data: %s", async (query) => {
   mount(`/filelib/7?${query}`);
   expect(await screen.findByText("f118.scope_unavailable")).toBeVisible();
   expect(mocks.get).not.toHaveBeenCalled();

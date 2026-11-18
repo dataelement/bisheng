@@ -2655,6 +2655,10 @@ class KnowledgeService(KnowledgeUtils):
             "edit",
         )
         db_knowledge = cls._chunk_target(db_knowledge, file_id)
+        run_async_safe(
+            require_business_action(login_user, resource_type="knowledge_file", resource_id=file_id, action="visible"),
+            timeout=60,
+        )
 
         logger.info(f"act=update_vector knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}")
         vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(login_user.user_id, db_knowledge)
@@ -2737,6 +2741,10 @@ class KnowledgeService(KnowledgeUtils):
             "edit",
         )
         db_knowledge = cls._chunk_target(db_knowledge, file_id)
+        run_async_safe(
+            require_business_action(login_user, resource_type="knowledge_file", resource_id=file_id, action="visible"),
+            timeout=60,
+        )
 
         logger.info(f"act=delete_vector knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}")
         vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(login_user.user_id, db_knowledge)

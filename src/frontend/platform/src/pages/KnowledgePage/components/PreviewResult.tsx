@@ -15,6 +15,7 @@ import PreviewParagraph from "./PreviewParagraph";
 import { buildMediaUploadPreviewData,isMediaUploadSuffix,type RichPreviewData } from "./RichPreviewFile";
 
 interface IProps {
+  editable?: boolean;
   rules: any;
   step: number;
   /** 刷新 */
@@ -31,7 +32,7 @@ export type Partition = {
   [key in string]: { text: string, type: string, part_id: string }
 }
 export default function PreviewResult({
-  showPreview, previewCount, rules, resultFiles, step, applyEachCell, cellGeneralConfig, kId, handlePreviewResult, onDeleteFile, onFileTypeChange
+  editable = true, showPreview, previewCount, rules, resultFiles, step, applyEachCell, cellGeneralConfig, kId, handlePreviewResult, onDeleteFile, onFileTypeChange
 }: IProps) {
   const { id } = useParams()
   const { t } = useTranslation(['knowledge', 'bs']);
@@ -244,7 +245,7 @@ export default function PreviewResult({
         fileSuffix={currentFile?.suffix}
         previewCount={previewCount}
         className="flex-1 min-h-0"
-        edit={step === 3 || (step === 2 && !showPreview)}
+        edit={editable && (step === 3 || (step === 2 && !showPreview))}
         loading={loading}
         chunks={chunks}
         onDel={handleUiRequest(handleDelete)}

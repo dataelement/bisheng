@@ -9,7 +9,6 @@ import type { KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
 import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import PreviewFile from "./PreviewFile";
 import PreviewParagraph from "./PreviewParagraph";
-import { SpaceProcessingDialog } from "./SpaceProcessingDialog";
 import { SpaceFileMetadataDialog } from "./SpaceFileMetadataDialog";
 import { useSpaceFileDetail } from "./useSpaceFileDetail";
 interface SpaceFileDetailProps {
@@ -18,6 +17,7 @@ interface SpaceFileDetailProps {
   fileId: number;
   initialFile?: KnowledgeSpaceChild;
   onBack: () => void;
+  onProcess: () => void;
 }
 function safeBbox(value: string | null | undefined): string {
   if (!value) return "";
@@ -27,12 +27,11 @@ function safeBbox(value: string | null | undefined): string {
     return "";
   }
 }
-export function SpaceFileDetail({ scope, spaceId, fileId, initialFile, onBack }: SpaceFileDetailProps) {
+export function SpaceFileDetail({ scope, spaceId, fileId, initialFile, onBack, onProcess }: SpaceFileDetailProps) {
   const { t } = useTranslation("knowledge");
   const locale = usePaginationLocale();
   const model = useSpaceFileDetail(scope, spaceId, fileId);
   const [metadataOpen, setMetadataOpen] = useState(false);
-  const [processingOpen, setProcessingOpen] = useState(false);
   const raw = model.info.data ?? initialFile;
   // Waiting (5), processing (1) and rebuilding (4) files reject a reprocess plan
   // on the backend (10999), so the entry explains that instead of letting the
@@ -107,7 +106,7 @@ export function SpaceFileDetail({ scope, spaceId, fileId, initialFile, onBack }:
               >
                 <Button
                   disabled={fileProcessing || model.busy || model.failed}
-                  onClick={() => setProcessingOpen(true)}
+                  onClick={onProcess}
                 >
                   {t("segment.adjustStrategy")}
                 </Button>
@@ -215,17 +214,7 @@ export function SpaceFileDetail({ scope, spaceId, fileId, initialFile, onBack }:
           onSaved={() => model.info.refetch()}
         />
       )}
-      <SpaceProcessingDialog
-        scope={scope}
-        spaceId={spaceId}
-        fileId={fileId}
-        mode="file"
-        open={processingOpen && model.canEdit}
-        onOpenChange={setProcessingOpen}
-        onSaved={() => {
-          void model.chunks.refetch();
-        }}
-      />
+
     </section>
   );
 }

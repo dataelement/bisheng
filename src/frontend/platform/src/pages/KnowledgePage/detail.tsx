@@ -47,6 +47,8 @@ export function SpaceDetail({
   const client = useQueryClient();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const processingParams = searchParams.getAll("process_file_id");
+  const processingFileId = processingParams.length === 1 ? parseKnowledgeId(processingParams[0]) : null;
   const fileParams = searchParams.getAll("file_id");
   const fileId = fileParams.length === 1 ? parseKnowledgeId(fileParams[0]) : null;
   const [openedFile, setOpenedFile] = useState<{ parentId: number | null; item: KnowledgeSpaceChild }>();
@@ -59,7 +61,7 @@ export function SpaceDetail({
   const spaceInfo = useQuery({
     queryKey: [...knowledgeQueryKeys.info(scope, spaceId), "directory-root", instance],
     queryFn: () => knowledgeSpaceApi.getSpaceInfo(spaceId),
-    enabled: parentId === null && fileParams.length === 0 && !copyTasks.isInitialLoading && !copyTask,
+    enabled: parentId === null && fileParams.length === 0 && processingParams.length === 0 && !copyTasks.isInitialLoading && !copyTask,
     keepPreviousData: false,
     cacheTime: 0,
   });
@@ -161,10 +163,18 @@ export function SpaceDetail({
   }} />;
   if (copyTasks.isInitialLoading) return <p role="status">{t("f118.loading_directory")}</p>;
   if (fileParams.length > 0 && fileId === null) return <p role="status">{t("f118.scope_unavailable")}</p>;
+  if (processingParams.length > 0 && processingFileId === null) return <p role="status">{t("f118.scope_unavailable")}</p>;
+  if (processingFileId !== null) return <div className="h-full overflow-auto px-4">
+    <SpaceProcessingPanel key={JSON.stringify([scope, spaceId, processingFileId])}
+      scope={scope} spaceId={spaceId} fileId={processingFileId} mode="file"
+      onBack={() => { const next = new URLSearchParams(searchParams); next.delete("process_file_id"); setSearchParams(next); }}
+      onSaved={() => { void client.invalidateQueries({ queryKey: knowledgeQueryKeys.space(scope, spaceId) }); }} />
+  </div>;
   if (presentation === "workspace" && fileId !== null) return (
     <div className="h-full min-h-0 px-4">
       <SpaceFileDetail
         key={JSON.stringify([scope, spaceId, parentId, fileId])} scope={scope} spaceId={spaceId} fileId={fileId}
+        onProcess={() => { const next = new URLSearchParams(searchParams); next.set("process_file_id", String(fileId)); setSearchParams(next); }}
         initialFile={openedFile?.parentId === parentId && openedFile.item.id === fileId ? openedFile.item : undefined}
         onBack={() => { const next = new URLSearchParams(searchParams); next.delete("file_id"); setSearchParams(next); }}
       />

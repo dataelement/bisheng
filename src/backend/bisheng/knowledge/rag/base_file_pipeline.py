@@ -160,7 +160,12 @@ class BaseFilePipeline(BasePipeline):
             self.loader = loader
             transformers = getattr(self, transformers_func)() if transformers_func else []
             self.transformers = transformers
-            pipeline = NormalPipeline(loader=loader, transformers=transformers, vector_store=self.vector_store)
+            pipeline = NormalPipeline(
+                loader=loader,
+                transformers=transformers,
+                vector_store=self.vector_store,
+                processing_guard=self.processing_guard,
+            )
             return pipeline.run(config)
 
     def _get_loader_common_params(self, file_path: str | None = None, file_extension: str | None = None) -> dict:

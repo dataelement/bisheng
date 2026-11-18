@@ -83,6 +83,10 @@ class KnowledgeProcessingOwner:
         await self._operator(identity)
         await require_business_action(identity, resource_type="knowledge_space", resource_id=space_id, action="edit")
         scope = await self.scope.aload_scope(session, space_id, targets=targets, for_update=True)
+        for row in scope:
+            await require_business_action(
+                identity, resource_type="knowledge_file", resource_id=row.target.file_id, action="visible"
+            )
         await self.scope.aassert_file_processing_available(session, space_id, scope)
         current = await self.aread_current(session, space_id, identity=identity)
         settings = await ProcessingSettingsRepository().aget(session, space_id)
