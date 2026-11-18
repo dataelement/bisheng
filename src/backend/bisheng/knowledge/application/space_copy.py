@@ -231,23 +231,24 @@ class SpaceCopyApplication:
                 await self.quota(actual)
             assert_authority(authority)
             result = await self._accept(source_space_id, request, scope, actual)
+            if result["processing_job"] is not None:
+                # The job is already durable and pending dispatch. Permission
+                # projection, index bootstrap and file copy continue in the
+                # worker, so this response can return as soon as the task exists.
+                return result
             from bisheng.knowledge.application.space_copy_owner import SpaceCopyOwner
 
-            # The target becomes usable after permissions and empty indexes
-            # are ready. File content is the independent asynchronous phase.
+            # An empty copy has no worker. Finish its permissions and indexes
+            # here; there is no file phase left to wait for.
             await SpaceCopyOwner(self).aensure_logical(
-                result["knowledge"].id,
-                result["processing_job"].job_id if result["processing_job"] else None,
-                identity=actual,
-                entry_kind=entry_kind,
+                result["knowledge"].id, None, identity=actual, entry_kind=entry_kind
             )
             async with self.sessions() as session:
                 context = authority_context()
                 row = await self.rows.aroot(session, result["knowledge"].id)
                 clean(session, context)
                 result["knowledge"] = row.model_copy(deep=True)
-                if result["processing_job"] is None:
-                    result["completed"] = row.state == 1
+                result["completed"] = row.state == 1
             return result
 
     async def _accept(self, source_id, request, scope, identity):

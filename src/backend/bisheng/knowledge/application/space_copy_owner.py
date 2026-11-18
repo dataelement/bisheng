@@ -27,6 +27,7 @@ from bisheng.knowledge.application.space_copy import (
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.repositories.processing_fence_repository import ProcessingFenceRepository
 from bisheng.knowledge.domain.repositories.space_copy_repository import SpaceCopyScope, root_facts
+from bisheng.knowledge.domain.schemas.processing_diagnostics import failure_reason_from_error
 from bisheng.knowledge.domain.schemas.processing_job import JobAccepted
 from bisheng.knowledge.domain.schemas.processing_job_acceptance import (
     ProcessingConfiguration,
@@ -249,7 +250,13 @@ class SpaceCopyOwner:
                     # The caller has not received the lease yet. Persist failure
                     # with this exact lease so another executor cannot be failed.
                     code = error.Code if isinstance(error, BaseErrorCode) else ResourceReferenceInvalidError.Code
-                    await self.afail(job_id, revision, lease=result, error_code=code)
+                    await self.afail(
+                        job_id,
+                        revision,
+                        lease=result,
+                        error_code=code,
+                        failure_reason=failure_reason_from_error(error) or "copy_initialization_failed",
+                    )
                     raise
             return result
 
