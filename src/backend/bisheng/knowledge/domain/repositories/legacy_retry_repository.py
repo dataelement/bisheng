@@ -83,7 +83,7 @@ class LegacyRetryRepository:
             blocked("space_missing")
         root = roots[0]
         require_space_processing_idle(root, operation="legacy_retry")
-        await SourceMoveInputRepository().arequire_released(session, space_id=space_id)
+        await SourceMoveInputRepository().arequire_released(session, space_id=space_id, include_copy=False)
         current()
         files = {}
         for start in range(0, len(file_ids), 200):

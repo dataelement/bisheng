@@ -1,7 +1,10 @@
 import { useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listOwnedSpaceCopies } from "@/controllers/API/knowledgeCopy";
-import { knowledgeQueryKeys, type KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
+import {
+  knowledgeQueryKeys,
+  type KnowledgeQueryScope,
+} from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
 
 export function useSpaceCopyTasks(scope: KnowledgeQueryScope) {
@@ -16,7 +19,12 @@ export function useSpaceCopyTasks(scope: KnowledgeQueryScope) {
     retry: false,
   });
   const previous = useRef<string>();
-  const signature = query.data?.map((task) => `${task.id}:${task.phase}:${task.job_state}`).join("|");
+  const signature = query.data
+    ?.map(
+      (task) =>
+        `${task.id}:${task.phase}:${task.job_state}:${task.succeeded_count}:${task.failed_count}`,
+    )
+    .join("|");
   useEffect(() => {
     if (signature === undefined) return;
     if (previous.current !== undefined && previous.current !== signature) {

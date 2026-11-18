@@ -66,13 +66,21 @@ async def _actor(reference, tenant_id, space_id):
 
 async def _failed(owner, job_id, revision, lease, error_code):
     async with get_async_db_session() as session:
-        changed = await owner.afail_attempt(
+        changed = await owner.afail_rebuild(
             session,
             job_id,
             expected_job_revision=revision,
             lease=lease,
             error_code=error_code,
         )
+        if changed is None:
+            changed = await owner.afail_attempt(
+                session,
+                job_id,
+                expected_job_revision=revision,
+                lease=lease,
+                error_code=error_code,
+            )
         current = changed if changed is not None else await owner.jobs.aget(session, job_id)
         result = _summary(current)
         await session.commit()
@@ -327,6 +335,7 @@ async def _execute_processing_job(job_id: str, expected_dispatch_revision: int):
 
 
 async def _dispatch_pending_processing_jobs() -> int:
+    scan_proof = get_current_background_task()
     owner = _new_owner()
     count = 0
     for tenant_id in await _active_tenant_ids():
@@ -361,6 +370,19 @@ async def _dispatch_pending_processing_jobs() -> int:
                         )
                         await session.commit()
                     after = row.job_id
+            if scan_proof is not None and scan_proof.task_name == SCAN_TASK:
+                from bisheng.knowledge.domain.repositories.rebuild_cleanup_repository import RebuildCleanupRepository
+                from bisheng.worker.knowledge.rebuild_cleanup import cleanup_superseded_collections
+
+                async with get_async_db_session() as session:
+                    cleanup_due = await RebuildCleanupRepository().acandidates(session)
+                if cleanup_due:
+                    try:
+                        cleanup_superseded_collections.apply_async(
+                            headers={"tenant_id": tenant_id}, queue="knowledge_celery"
+                        )
+                    except Exception:
+                        logger.exception("Rebuild cleanup dispatch failed tenant={}", tenant_id)
     return count
 
 

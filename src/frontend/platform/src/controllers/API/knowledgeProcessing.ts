@@ -18,6 +18,7 @@ export interface ProcessingCreateRequest {
 export interface ProcessingRetryRequest {
   idempotency_key: string;
   expected_job_revision: number;
+  refresh_source?: boolean;
 }
 export interface JobAccepted {
   job_id: string;
@@ -93,9 +94,7 @@ export function readProcessingTarget(
   return axios.get(`${path(spaceId)}/files/${fileId}/processing-target`);
 }
 
-export function readMetadataSchema(
-  spaceId: number,
-): Promise<{
+export function readMetadataSchema(spaceId: number): Promise<{
   revision: number;
   fields: { field_name: string; field_type: string }[];
 }> {

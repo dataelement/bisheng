@@ -135,6 +135,7 @@ class ProcessingCreateRequest(ProcessingSchema):
 class ProcessingRetryRequest(ProcessingSchema):
     idempotency_key: IdempotencyKey
     expected_job_revision: NonNegativeInteger
+    refresh_source: bool = Field(default=False, strict=True)
 
 
 class JobAccepted(ProcessingSchema):

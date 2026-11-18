@@ -114,6 +114,8 @@ class KnowledgeModelReferenceApplication:
             row.model_config_revision,
             row.index_generation,
             row.state,
+            row.collection_name,
+            row.index_name,
         )
 
     @staticmethod
@@ -478,6 +480,19 @@ class KnowledgeModelReferenceApplication:
         )
 
     @classmethod
+    async def aprepare_active_rebuild(cls, session, knowledge_id, new_model_id, *, login_user, **expected):
+        """The confirmed model is active while its file indexing is in progress."""
+        prepared = await cls.aprepare_rebuild(session, knowledge_id, new_model_id, login_user=login_user, **expected)
+        selected = canonical_target_id(new_model_id)
+        transition = {**prepared.transition, "current_model_id": selected}
+        references = extract_knowledge_model_references(model=selected, model_transition=transition)
+        bindings = replace(prepared.bindings, verified=replace(prepared.bindings.verified, references=references))
+        return cls._register_model_plan(
+            session,
+            replace(prepared, model=selected, transition=transition, bindings=bindings, purpose="active_rebuild"),
+        )
+
+    @classmethod
     async def aprepare_empty_model_change(
         cls,
         session,
@@ -529,6 +544,10 @@ class KnowledgeModelReferenceApplication:
                 new_generation=prepared.new_generation,
             )
             prepared.row.state = prepared.next_state
+            if prepared.purpose == "activate_pending":
+                cls.repository.assign_rebuild_collection(
+                    session, prepared.row, "col" + prepared.new_generation.replace("-", "")
+                )
             cls.repository.save(session, prepared.row)
             prepared.runtime.apply_source_bindings(session, prepared.bindings)
         return prepared.row
@@ -552,6 +571,12 @@ class KnowledgeModelReferenceApplication:
                 new_generation=prepared.new_generation,
             )
             prepared.row.state = prepared.next_state
+            if prepared.purpose in {"active_rebuild", "empty_change"}:
+                # ES retains the editable source chunks. A distinct Milvus
+                # collection keeps old dimensions out of the new model.
+                await cls.repository.aassign_rebuild_collection(
+                    session, prepared.row, "col" + prepared.new_generation.replace("-", "")
+                )
             await cls.repository.asave(session, prepared.row)
             await prepared.runtime.aapply_source_bindings(session, prepared.bindings)
         return prepared.row
@@ -812,6 +837,24 @@ class KnowledgeModelReferenceApplication:
             session, runtime.verifier, cls._source(row), bindings.verified.context
         )
         return cls._freeze_finalization(session, row, runtime, bindings, selected, operation_id, background, kinds)
+
+    @classmethod
+    def prepare_pending_activation(cls, session, knowledge_id, **expected):
+        prepared = cls.prepare_finalization(session, knowledge_id, **expected)
+        transition = {**prepared.row.model_transition, "current_model_id": prepared.model}
+        references = extract_knowledge_model_references(model=prepared.model, model_transition=transition)
+        bindings = replace(prepared.bindings, verified=replace(prepared.bindings.verified, references=references))
+        return cls._register_model_plan(
+            session,
+            replace(
+                prepared,
+                transition=transition,
+                bindings=bindings,
+                next_state=KnowledgeState.REBUILDING.value,
+                purpose="activate_pending",
+            ),
+            get_current_background_task(),
+        )
 
     @classmethod
     def apply_finalization(cls, session, prepared):

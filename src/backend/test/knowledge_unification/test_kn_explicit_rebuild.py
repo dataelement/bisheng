@@ -20,6 +20,9 @@ business = fixtures.business
 
 @pytest.mark.parametrize("native", [False, True])
 async def test_explicit_same_model_creates_operation_revision_and_generation(business, native):
+    from bisheng.knowledge.domain.models.knowledge_vector_cleanup import KnowledgeVectorCleanup
+
+    KnowledgeVectorCleanup.__table__.create(business.sync, checkfirst=True)
     await fixtures.seed(business)
 
     def native_rebuild():
@@ -54,6 +57,9 @@ async def test_explicit_same_model_creates_operation_revision_and_generation(bus
 
 
 async def test_normal_same_model_change_remains_metadata_only(business):
+    from bisheng.knowledge.domain.models.knowledge_vector_cleanup import KnowledgeVectorCleanup
+
+    KnowledgeVectorCleanup.__table__.create(business.sync, checkfirst=True)
     await fixtures.seed(business)
     before = fixtures.state(business)
     async with business.sessions() as session:
@@ -65,6 +71,9 @@ async def test_normal_same_model_change_remains_metadata_only(business):
 
 
 async def test_explicit_rebuild_and_reference_rows_rollback_with_caller(business):
+    from bisheng.knowledge.domain.models.knowledge_vector_cleanup import KnowledgeVectorCleanup
+
+    KnowledgeVectorCleanup.__table__.create(business.sync, checkfirst=True)
     await fixtures.seed(business)
     before = fixtures.state(business)
     async with business.sessions() as session:
@@ -75,6 +84,9 @@ async def test_explicit_rebuild_and_reference_rows_rollback_with_caller(business
 
 
 async def test_explicit_rebuild_refuses_stale_configuration_and_an_active_operation(business):
+    from bisheng.knowledge.domain.models.knowledge_vector_cleanup import KnowledgeVectorCleanup
+
+    KnowledgeVectorCleanup.__table__.create(business.sync, checkfirst=True)
     await fixtures.seed(business)
     async with business.sessions() as session:
         with pytest.raises(KnowledgeOperationPlanConflictError):
@@ -95,8 +107,10 @@ async def test_explicit_rebuild_refuses_stale_configuration_and_an_active_operat
 async def test_offline_target_is_rejected_before_configuration_or_reference_changes(business, native, target):
     from bisheng.common.errcode.knowledge import KnowledgeEmbeddingUnavailableError
     from bisheng.core.context.tenant import bypass_tenant_filter
+    from bisheng.knowledge.domain.models.knowledge_vector_cleanup import KnowledgeVectorCleanup
     from bisheng.llm.domain.models.llm_server import LLMModel
 
+    KnowledgeVectorCleanup.__table__.create(business.sync, checkfirst=True)
     await fixtures.seed(business)
     with Session(business.sync) as session, bypass_tenant_filter():
         model = session.get(LLMModel, target)

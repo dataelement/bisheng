@@ -11,6 +11,9 @@ const REASONS = new Set([
   "file_unavailable",
   "resource_deleted",
   "all_files_failed",
+  "copy_input_failed",
+  "copy_index_failed",
+  "copy_initialization_failed",
 ]);
 const OBSOLETE_REASONS: Record<string, string> = {
   model_config_revision_changed: "model_changed",

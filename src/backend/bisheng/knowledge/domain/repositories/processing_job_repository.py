@@ -1384,6 +1384,7 @@ class ProcessingJobRepository:
         actor_reference: Mapping[str, Any],
         configuration: ProcessingConfiguration,
         _move: bool = False,
+        request_options: Mapping[str, Any] | None = None,
     ) -> JobRequestResult:
         job, current = await self._retry_execution_job(session, job_id, _move=_move)
         key = self._key(idempotency_key)
@@ -1398,15 +1399,16 @@ class ProcessingJobRepository:
             logical_pending = ready.retry_logical_pending(job, counts)
             move_subject = ready.retry_subject(job, actor_user_id=actor_user_id, actor_reference=actor)
             move_eligibility = self._retry_eligibility(job, counts, job.total_count, logical_pending=logical_pending)
-        request_hash = _digest(
-            {
-                "tenant_id": self._tenant_id(),
-                "job_id": job.id,
-                "expected_job_revision": expected_job_revision,
-                "actor_user_id": actor_user_id,
-                "actor_reference": actor,
-            }
-        )
+        request_payload = {
+            "tenant_id": self._tenant_id(),
+            "job_id": job.id,
+            "expected_job_revision": expected_job_revision,
+            "actor_user_id": actor_user_id,
+            "actor_reference": actor,
+        }
+        if request_options:
+            request_payload["options"] = dict(request_options)
+        request_hash = _digest(request_payload)
         with strict_tenant_filter():
             receipt = (
                 await session.exec(

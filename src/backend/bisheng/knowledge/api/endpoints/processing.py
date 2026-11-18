@@ -6,6 +6,7 @@ from bisheng.admin.application.tenant_scope import require_expected_management_t
 from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.admin_scope import AdminScopeChangedError
+from bisheng.common.errcode.knowledge import KnowledgeProcessingConflictError
 from bisheng.common.schemas.api import resp_200
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.database import get_async_db_session
@@ -227,6 +228,8 @@ async def retry_processing_job(
     service: ProcessingJobService = Depends(get_processing_service),
 ):
     await _write_scope(request, identity)
+    if change.refresh_source and kind != "space_copy":
+        raise KnowledgeProcessingConflictError(reason="copy_refresh_source_only")
     if kind == "space_copy":
         return resp_200(await SpaceCopyAccess().aretry(space_id, job_id, change, identity=identity))
     if kind == "move_index":

@@ -113,8 +113,8 @@ class MetadataProcessingOwner:
             metadata_schema_digest=metadata_digest(core.after_schema),
         )
         sources = {
-            "model_config_revision": core.model_config_revision,
-            "index_generation": core.index_generation,
+            "model_config_revision": None if core._scope.schema_only else core.model_config_revision,
+            "index_generation": None if core._scope.schema_only else core.index_generation,
             "metadata_schema_revision": core.before_schema_revision,
             "metadata_schema_digest": metadata_digest(core.before_schema),
             "scope_digest": metadata_digest(self.core._scope_facts(core._scope)),
@@ -146,7 +146,12 @@ class MetadataProcessingOwner:
                 raise KnowledgeOperationPlanConflictError(reason="metadata_owner_model_changed")
         core = await self.core.aaccept(session, prepared.core_plan)
         actual = await self.execution.aread_configuration(session, prepared.space_id)
-        if asdict(actual) != asdict(prepared.configuration):
+        expected = prepared.configuration
+        if core._scope.schema_only:
+            expected = replace(
+                expected, model_config_revision=actual.model_config_revision, index_generation=actual.index_generation
+            )
+        if asdict(actual) != asdict(expected):
             raise KnowledgeOperationPlanConflictError(reason="metadata_owner_schema_changed")
         affected = tuple(
             dict.fromkeys(
@@ -180,7 +185,7 @@ class MetadataProcessingOwner:
         del self._issued[prepared]
         return AcceptedMetadataOperation(
             prepared.space_id,
-            prepared.configuration,
+            expected,
             actor.actor_user_id,
             actor.reference,
             {

@@ -1,3 +1,4 @@
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button, Pagination } from "@bisheng/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -83,9 +84,11 @@ export function SpaceProcessingProgress({
     { enabled: !metadata || hasFailures, ...queryOptions },
   );
   const actions = useKnowledgeProcessingActions(scope, spaceId, api);
-  const [retry, setRetry] = useState<{ revision: number; key: string } | null>(
-    null,
-  );
+  const [retry, setRetry] = useState<{
+    revision: number;
+    key: string;
+    refreshSource: boolean;
+  } | null>(null);
   useEffect(() => {
     const error = job.error || items.error;
     if (error) showApiError(error);
@@ -118,18 +121,24 @@ export function SpaceProcessingProgress({
     }, 2000);
     return () => window.clearInterval(timer);
   }, [metadata, state, hasFailures, refreshJob, refreshItems]);
-  const handleRetry = async () => {
+  const handleRetry = async (refreshSource = false) => {
     if (!jobData?.retryable || busy) return;
     const request =
-      retry?.revision === jobData.revision
+      retry?.revision === jobData.revision &&
+      retry.refreshSource === refreshSource
         ? retry
-        : { revision: jobData.revision, key: createOperationId() };
+        : {
+            revision: jobData.revision,
+            key: createOperationId(),
+            refreshSource,
+          };
     setRetry(request);
     setBusy(true);
     try {
       await actions.retryJob(jobId, {
         expected_job_revision: request.revision,
         idempotency_key: request.key,
+        ...(refreshSource ? { refresh_source: true } : {}),
       });
       if (metadata) {
         setPage(1);
@@ -214,6 +223,21 @@ export function SpaceProcessingProgress({
           {jobData.retryable && (
             <Button disabled={busy} onClick={() => void handleRetry()}>
               {t("retry")}
+            </Button>
+          )}
+          {jobData.retryable && kind === "space_copy" && (
+            <Button
+              variant="outlined"
+              disabled={busy}
+              onClick={() =>
+                bsConfirm({
+                  title: t("f118.copy_refresh_source"),
+                  desc: t("f118.copy_refresh_source_notice"),
+                  onOk: () => handleRetry(true),
+                })
+              }
+            >
+              {t("f118.copy_refresh_source")}
             </Button>
           )}
         </>

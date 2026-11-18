@@ -577,11 +577,16 @@
         "failure_index_not_ready": "目标空间的检索索引尚未准备完成，文件处理未开始。请先完成空间初始化后重试。",
         "failure_file_unavailable": "原文件已被删除或当前不可访问，无法继续处理。请检查文件后重新提交。",
         "failure_resource_deleted": "文件或空间已删除，此任务已停止。",
-        "failure_all_files_failed": "所有文件均重建失败，目标模型尚未切换。请检查目标模型后重试重建。",
+        "failure_all_files_failed": "所有文件均重建失败。空间已使用新模型，可检查模型后重试失败文件，或继续上传新文件。",
         "failure_copy_details_missing": "复制未完成：旧任务只记录了引用或权限校验错误，未记录具体原因。请提供下方任务编号联系管理员查看日志。",
         "failure_metadata_details_missing": "元数据处理未完成：旧任务只记录了配置冲突，未记录具体原因。请提供下方任务编号联系管理员查看日志。",
         "processing_task_id": "任务编号：{{id}}",
-        "processing_file_id": "文件 #{{id}}"
+        "processing_file_id": "文件 #{{id}}",
+        "copy_refresh_source": "按当前版本重新复制",
+        "copy_refresh_source_notice": "仅对失败项重新读取源文件当前主版本并复制。已经成功的文件不会改变；被后续修改的目标文件不会覆盖。",
+        "failure_copy_input_failed": "原文、预览或分段复制失败。请检查源文件和文件存储后重试复制。",
+        "failure_copy_index_failed": "文件已复制，但检索入库失败。请检查向量模型和索引后重试，无需重新复制源文件。",
+        "failure_copy_initialization_failed": "空间的权限或索引初始化未完成。请重试；持续失败时可提供任务编号联系管理员。"
     },
     "deletion": {
         "source_tasks_block_delete": "此空间仍被未完成的移动或复制任务占用。失败任务也可能需要源文件继续处理，因此暂时无法删除。请到复制或移动的目标空间查看“处理任务”，处理完成后重新检查。若无法访问目标空间，请联系任务发起人或管理员。",

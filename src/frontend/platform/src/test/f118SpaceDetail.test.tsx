@@ -37,7 +37,9 @@ const mocks = vi.hoisted(() => ({
   preview: vi.fn(),
   copies: vi.fn(),
 }));
-vi.mock("@/controllers/API/knowledgeCopy", () => ({ listOwnedSpaceCopies: mocks.copies }));
+vi.mock("@/controllers/API/knowledgeCopy", () => ({
+  listOwnedSpaceCopies: mocks.copies,
+}));
 vi.mock("@/controllers/request", () => ({
   default: { get: mocks.get, post: mocks.post },
   showApiError: mocks.error,
@@ -51,9 +53,13 @@ vi.mock("@/contexts/userContext", async () => ({
   userContext: (await import("react")).createContext({ user: null }),
 }));
 vi.mock("@/hooks/useAdminScope", () => ({ useAdminScope: mocks.management }));
-vi.mock("@/pages/KnowledgePage/sidebar/KnowledgeSpaceSidebar", () => ({ KnowledgeSpaceSidebar: () => null }));
+vi.mock("@/pages/KnowledgePage/sidebar/KnowledgeSpaceSidebar", () => ({
+  KnowledgeSpaceSidebar: () => null,
+}));
 vi.mock("@/pages/KnowledgePage/KnowledgeQa", () => ({ default: () => null }));
-vi.mock("@/pages/KnowledgePage/components/KnowledgeLibraryDialog", () => ({ KnowledgeLibraryDialog: () => null }));
+vi.mock("@/pages/KnowledgePage/components/KnowledgeLibraryDialog", () => ({
+  KnowledgeLibraryDialog: () => null,
+}));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) => key,
@@ -150,7 +156,12 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.copies.mockResolvedValue([]);
   mocks.post.mockResolvedValue({
-    check_complete: true, can_execute: false, valid_items: [], invalid_items: [], requires_skip_confirmation: false, impact: {},
+    check_complete: true,
+    can_execute: false,
+    valid_items: [],
+    invalid_items: [],
+    requires_skip_confirmation: false,
+    impact: {},
   });
   const storage = new Map<string, string>();
   vi.stubGlobal("localStorage", {
@@ -201,7 +212,13 @@ beforeEach(() => {
         return mocks.children(url, options?.params);
       if (url.endsWith("/processing-jobs")) return { data: [], total: 0 };
       if (url.endsWith("/preview")) return mocks.preview(url);
-      if (url.includes("/file/info/")) return { id: 11, file_name: "report.pdf", knowledge_id: 7, user_metadata: {} };
+      if (url.includes("/file/info/"))
+        return {
+          id: 11,
+          file_name: "report.pdf",
+          knowledge_id: 7,
+          user_metadata: {},
+        };
       if (url.endsWith("/chunk")) return { data: [], total: 0 };
       if (url.endsWith("/file_bbox")) return {};
       throw new Error(`unexpected API read: ${url}`);
@@ -230,7 +247,9 @@ it.each([false, true])(
     expect(await screen.findByText("Server 7")).toBeInTheDocument();
     expect(screen.queryByText("Description 7")).not.toBeInTheDocument();
     const interaction = userEvent.setup();
-    await interaction.hover(screen.getByRole("button", { name: "detail.space_info" }));
+    await interaction.hover(
+      screen.getByRole("button", { name: "detail.space_info" }),
+    );
     const info = await screen.findByRole("tooltip");
     expect(info).toHaveTextContent("ID: 7");
     expect(info).toHaveTextContent("Description 7");
@@ -247,7 +266,9 @@ it.each([false, true])(
     expect(JSON.stringify(key)).toContain("ordinary");
     expect(user?.tenant_id).toBe(1);
     expect(mocks.containerEdit).not.toHaveBeenCalled();
-    expect(screen.queryByRole("button", { name: "f118.processing_title_file" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "f118.processing_title_file" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByText("Unscoped private title"),
     ).not.toBeInTheDocument();
@@ -274,9 +295,24 @@ it("mounts visible-only child content when root info fails and never enters lega
 });
 
 it("shows an initializing copy after a fresh page load without reading its files", async () => {
-  mocks.copies.mockResolvedValue([{ id: 7, name: "Background copy", user_id: 7, state: 0, job_id: "original-copy", job_state: "running", phase: "initializing", total_count: 10, succeeded_count: 0, failed_count: 0 }]);
+  mocks.copies.mockResolvedValue([
+    {
+      id: 7,
+      name: "Background copy",
+      user_id: 7,
+      state: 0,
+      job_id: "original-copy",
+      job_state: "running",
+      phase: "initializing",
+      total_count: 10,
+      succeeded_count: 0,
+      failed_count: 0,
+    },
+  ]);
   mount();
-  expect(await screen.findByRole("heading", { name: "Background copy" })).toBeVisible();
+  expect(
+    await screen.findByRole("heading", { name: "Background copy" }),
+  ).toBeVisible();
   expect(screen.getByText("space_copy_ui.phase_initializing")).toBeVisible();
   expect(screen.getByText("space_copy_ui.background_notice")).toBeVisible();
   expect(mocks.info).not.toHaveBeenCalled();
@@ -284,17 +320,46 @@ it("shows an initializing copy after a fresh page load without reading its files
 });
 
 it("opens a failed copy directly and retries the same job before returning to its files", async () => {
-  mocks.copies.mockResolvedValue([{ id: 7, name: "Background copy", user_id: 7, state: 0, job_id: "original-copy", job_state: "failed", phase: "failed", total_count: 10, succeeded_count: 0, failed_count: 10 }]);
+  mocks.copies.mockResolvedValue([
+    {
+      id: 7,
+      name: "Background copy",
+      user_id: 7,
+      state: 0,
+      job_id: "original-copy",
+      job_state: "failed",
+      phase: "failed",
+      total_count: 10,
+      succeeded_count: 0,
+      failed_count: 10,
+    },
+  ]);
   const read = mocks.get.getMockImplementation()!;
-  const job = { id: "original-copy", space_id: 7, kind: "space_copy", state: "failed", revision: 1, total_count: 10, succeeded_count: 0, failed_count: 10, pending_count: 0, hidden_item_count: 10, retryable: true };
-  mocks.get.mockImplementation((url: string, options?: { params?: unknown }) => {
-    if (url.endsWith("/processing-jobs/original-copy/items")) return { data: [], total: 0 };
-    if (url.endsWith("/processing-jobs/original-copy")) return job;
-    return read(url, options);
-  });
+  const job = {
+    id: "original-copy",
+    space_id: 7,
+    kind: "space_copy",
+    state: "failed",
+    revision: 1,
+    total_count: 10,
+    succeeded_count: 0,
+    failed_count: 10,
+    pending_count: 0,
+    hidden_item_count: 10,
+    retryable: true,
+  };
+  mocks.get.mockImplementation(
+    (url: string, options?: { params?: unknown }) => {
+      if (url.endsWith("/processing-jobs/original-copy/items"))
+        return { data: [], total: 0 };
+      if (url.endsWith("/processing-jobs/original-copy")) return job;
+      return read(url, options);
+    },
+  );
   const post = mocks.post.getMockImplementation()!;
   mocks.post.mockImplementation(async (url: string, ...args: unknown[]) => {
-    if (!url.endsWith("/processing-jobs/original-copy/retry")) return post(url, ...args);
+    if (!url.endsWith("/processing-jobs/original-copy/retry"))
+      return post(url, ...args);
     job.state = "succeeded";
     mocks.copies.mockResolvedValue([]);
     return { job_id: job.id, state: "accepted", accepted: true, reused: false };
@@ -303,49 +368,81 @@ it("opens a failed copy directly and retries the same job before returning to it
   await screen.findByText("space_copy_ui.phase_failed");
   expect(mocks.children).not.toHaveBeenCalled();
   fireEvent.click(await screen.findByRole("button", { name: "retry" }));
-  await waitFor(() => expect(mocks.post).toHaveBeenCalledWith(
-    "/api/v1/knowledge/space/7/processing-jobs/original-copy/retry",
-    { expected_job_revision: 1, idempotency_key: expect.any(String) },
-    { params: { kind: "space_copy" } },
-  ));
-  expect(await screen.findByRole("button", { name: "report.pdf" })).toBeVisible();
+  await waitFor(() =>
+    expect(mocks.post).toHaveBeenCalledWith(
+      "/api/v1/knowledge/space/7/processing-jobs/original-copy/retry",
+      { expected_job_revision: 1, idempotency_key: expect.any(String) },
+      { params: { kind: "space_copy" } },
+    ),
+  );
+  expect(
+    await screen.findByRole("button", { name: "report.pdf" }),
+  ).toBeVisible();
 });
 
 it("recovers the original copy from a detail page whose target permissions are not initialized", async () => {
-  mocks.info.mockRejectedValue(new ApiError({ status_code: 25008 }, { message: "Projection not ready" }));
+  mocks.info.mockRejectedValue(
+    new ApiError({ status_code: 25008 }, { message: "Projection not ready" }),
+  );
   const read = mocks.get.getMockImplementation()!;
   const job = {
-    id: "original-copy", space_id: 7, kind: "space_copy", state: "failed", revision: 1,
-    accepted_at: "2026-11-16", started_at: null, finished_at: null,
-    total_count: 10, succeeded_count: 0, failed_count: 10, pending_count: 0,
-    hidden_item_count: 10, retryable: true, error_code: 25009, obsolete_reason: null,
+    id: "original-copy",
+    space_id: 7,
+    kind: "space_copy",
+    state: "failed",
+    revision: 1,
+    accepted_at: "2026-11-16",
+    started_at: null,
+    finished_at: null,
+    total_count: 10,
+    succeeded_count: 0,
+    failed_count: 10,
+    pending_count: 0,
+    hidden_item_count: 10,
+    retryable: true,
+    error_code: 25009,
+    obsolete_reason: null,
   };
-  mocks.get.mockImplementation((url: string, options?: { params?: unknown }) => {
-    if (url.endsWith("/processing-jobs")) return { data: [job], total: 1 };
-    if (url.endsWith("/processing-jobs/original-copy/items")) return { data: [], total: 0 };
-    if (url.endsWith("/processing-jobs/original-copy")) return job;
-    return read(url, options);
-  });
+  mocks.get.mockImplementation(
+    (url: string, options?: { params?: unknown }) => {
+      if (url.endsWith("/processing-jobs")) return { data: [job], total: 1 };
+      if (url.endsWith("/processing-jobs/original-copy/items"))
+        return { data: [], total: 0 };
+      if (url.endsWith("/processing-jobs/original-copy")) return job;
+      return read(url, options);
+    },
+  );
   const post = mocks.post.getMockImplementation()!;
   mocks.post.mockImplementation(async (url: string, ...args: unknown[]) => {
-    if (!url.endsWith("/processing-jobs/original-copy/retry")) return post(url, ...args);
+    if (!url.endsWith("/processing-jobs/original-copy/retry"))
+      return post(url, ...args);
     mocks.info.mockResolvedValue({ id: 7, name: "Recovered copy", state: 1 });
     return { job_id: job.id, state: "accepted", accepted: true, reused: false };
   });
   mount();
-  const heading = await screen.findByRole("heading", { name: "space_copy_ui.tasks" });
+  const heading = await screen.findByRole("heading", {
+    name: "space_copy_ui.tasks",
+  });
   expect(screen.getByText("space_copy_ui.recovery_notice")).toBeVisible();
   const recovery = within(heading.closest("section")!);
-  fireEvent.click(await recovery.findByRole("button", { name: "f118.processing_kind_space_copy · f118.processing_state_failed" }));
+  fireEvent.click(
+    await recovery.findByRole("button", {
+      name: "f118.processing_kind_space_copy · f118.processing_state_failed",
+    }),
+  );
   await recovery.findByText("f118.processing_counts");
   fireEvent.click(await recovery.findByRole("button", { name: "retry" }));
-  await waitFor(() => expect(mocks.post).toHaveBeenCalledWith(
-    "/api/v1/knowledge/space/7/processing-jobs/original-copy/retry",
-    { expected_job_revision: 1, idempotency_key: expect.any(String) },
-    { params: { kind: "space_copy" } },
-  ));
+  await waitFor(() =>
+    expect(mocks.post).toHaveBeenCalledWith(
+      "/api/v1/knowledge/space/7/processing-jobs/original-copy/retry",
+      { expected_job_revision: 1, idempotency_key: expect.any(String) },
+      { params: { kind: "space_copy" } },
+    ),
+  );
   expect(await screen.findByText("Recovered copy")).toBeVisible();
-  await waitFor(() => expect(screen.queryByText("space_copy_ui.recovery_notice")).toBeNull());
+  await waitFor(() =>
+    expect(screen.queryByText("space_copy_ui.recovery_notice")).toBeNull(),
+  );
 });
 it("direct child admission uses current folder facts without a root info or visible precondition", async () => {
   mocks.containerEdit.mockResolvedValue({ allowed: false });
@@ -376,19 +473,28 @@ it("keeps the breadcrumb in the header and preserves filters through folder navi
   mount(root);
   fireEvent.click(await screen.findByRole("button", { name: "Folder" }));
   await waitFor(() =>
-    expect(screen.getByTestId("location").textContent).toBe(`${root}&parent_id=9`),
+    expect(screen.getByTestId("location").textContent).toBe(
+      `${root}&parent_id=9`,
+    ),
   );
   const nav = await screen.findByRole("navigation", {
     name: "f118.current_folder",
   });
   const header = nav.closest("header");
   expect(header).not.toBeNull();
-  expect(await within(nav).findByRole("button", { name: "Server 7" })).toBeVisible();
-  expect(within(nav).getByText("Child 9")).toHaveAttribute("aria-current", "page");
+  expect(
+    await within(nav).findByRole("button", { name: "Server 7" }),
+  ).toBeVisible();
+  expect(within(nav).getByText("Child 9")).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
 
   fireEvent.click(within(header!).getByRole("button", { name: "back" }));
   await waitFor(() =>
-    expect(screen.getByTestId("location").textContent).toBe(`${root}&parent_id=8`),
+    expect(screen.getByTestId("location").textContent).toBe(
+      `${root}&parent_id=8`,
+    ),
   );
   fireEvent.click(await screen.findByRole("button", { name: "Folder" }));
   const childPath = await screen.findByRole("navigation", {
@@ -396,17 +502,23 @@ it("keeps the breadcrumb in the header and preserves filters through folder navi
   });
   fireEvent.click(within(childPath).getByRole("button", { name: "Parent" }));
   await waitFor(() =>
-    expect(screen.getByTestId("location").textContent).toBe(`${root}&parent_id=8`),
+    expect(screen.getByTestId("location").textContent).toBe(
+      `${root}&parent_id=8`,
+    ),
   );
 
   const parentPath = await screen.findByRole("navigation", {
     name: "f118.current_folder",
   });
-  fireEvent.click(await within(parentPath).findByRole("button", { name: "Server 7" }));
+  fireEvent.click(
+    await within(parentPath).findByRole("button", { name: "Server 7" }),
+  );
   await waitFor(() =>
     expect(screen.getByTestId("location").textContent).toBe(root),
   );
-  expect(screen.queryByRole("navigation", { name: "f118.current_folder" })).toBeNull();
+  expect(
+    screen.queryByRole("navigation", { name: "f118.current_folder" }),
+  ).toBeNull();
   expect(
     mocks.children.mock.calls.every(
       ([, query]) => query.file_status?.join() === "3,6,7",
@@ -417,10 +529,11 @@ it("keeps the breadcrumb in the header and preserves filters through folder navi
 it("keeps the space header and permissions while loading another folder", async () => {
   const nextDirectory = deferred<ReturnType<typeof page>>();
   const nextFolderPermissions = deferred<ReturnType<typeof permission>>();
-  mocks.children.mockImplementation(async (_url: string, query: { parent_id: number }) =>
-    query.parent_id === 42
-      ? nextDirectory.promise
-      : page([child(11, "previous.pdf"), child(42, "Nested folder", 0)]),
+  mocks.children.mockImplementation(
+    async (_url: string, query: { parent_id: number }) =>
+      query.parent_id === 42
+        ? nextDirectory.promise
+        : page([child(11, "previous.pdf"), child(42, "Nested folder", 0)]),
   );
   mocks.permissions.mockImplementation(async (type: string, id: string) => {
     if (type === "knowledge_space") return permission(["edit", "visible"]);
@@ -435,9 +548,15 @@ it("keeps the space header and permissions while loading another folder", async 
   const navigation = await within(header).findByRole("navigation", {
     name: "f118.current_folder",
   });
-  expect(await within(navigation).findByRole("button", { name: "Server 7" })).toBeVisible();
-  expect(await within(header).findByRole("button", { name: "detail.add" })).toBeVisible();
-  expect(await screen.findByRole("button", { name: "previous.pdf" })).toBeVisible();
+  expect(
+    await within(navigation).findByRole("button", { name: "Server 7" }),
+  ).toBeVisible();
+  expect(
+    await within(header).findByRole("button", { name: "detail.add" }),
+  ).toBeVisible();
+  expect(
+    await screen.findByRole("button", { name: "previous.pdf" }),
+  ).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "Nested folder" }));
 
   await waitFor(() =>
@@ -452,7 +571,9 @@ it("keeps the space header and permissions while loading another folder", async 
   expect(screen.getByRole("button", { name: "more" })).toBe(more);
   expect(more.closest("header")).toBe(header);
   expect(screen.queryByRole("button", { name: "previous.pdf" })).toBeNull();
-  expect(within(header).queryByRole("button", { name: "detail.add" })).toBeNull();
+  expect(
+    within(header).queryByRole("button", { name: "detail.add" }),
+  ).toBeNull();
   expect(mocks.permissions).toHaveBeenCalledWith("folder", "9");
   expect(mocks.permissions).toHaveBeenCalledWith("folder", "42");
 
@@ -460,12 +581,16 @@ it("keeps the space header and permissions while loading another folder", async 
     nextFolderPermissions.resolve(permission());
     nextDirectory.resolve(page([child(12, "current.pdf")]));
   });
-  expect(await screen.findByRole("button", { name: "current.pdf" })).toBeVisible();
-  expect(within(header).queryByRole("button", { name: "detail.add" })).toBeNull();
+  expect(
+    await screen.findByRole("button", { name: "current.pdf" }),
+  ).toBeVisible();
+  expect(
+    within(header).queryByRole("button", { name: "detail.add" }),
+  ).toBeNull();
   expect(mocks.info).toHaveBeenCalledExactlyOnceWith(7);
-  expect(mocks.permissions.mock.calls.filter(([type]) => type === "knowledge_space")).toEqual([
-    ["knowledge_space", "7"],
-  ]);
+  expect(
+    mocks.permissions.mock.calls.filter(([type]) => type === "knowledge_space"),
+  ).toEqual([["knowledge_space", "7"]]);
 });
 
 it.each([
@@ -636,33 +761,115 @@ it("retires a delayed abnormal page across fileStatus URL ABA", async () => {
   expect(mocks.children).toHaveBeenCalledTimes(3);
 });
 
-it.each(["file_id=0", "file_id=11&file_id=12", "process_file_id=0", "process_file_id=11&process_file_id=12"])("rejects invalid file targets before reading file or root data: %s", async (query) => {
-  mount(`/filelib/7?${query}`);
-  expect(await screen.findByText("f118.scope_unavailable")).toBeVisible();
-  expect(mocks.get).not.toHaveBeenCalled();
-});
+it.each([
+  "file_id=0",
+  "file_id=11&file_id=12",
+  "process_file_id=0",
+  "process_file_id=11&process_file_id=12",
+])(
+  "rejects invalid file targets before reading file or root data: %s",
+  async (query) => {
+    mount(`/filelib/7?${query}`);
+    expect(await screen.findByText("f118.scope_unavailable")).toBeVisible();
+    expect(mocks.get).not.toHaveBeenCalled();
+  },
+);
 
-it.each([false, true])("opens the chunk editor in the ordinary view and preserves directory filters for admin=%s", async (isAdmin) => {
-  user = { ...user, is_child_admin: isAdmin };
-  const current = mount("/filelib/7?parent_id=9&fileStatus=abnormal&keep=1");
-  fireEvent.click(await screen.findByRole("button", { name: "report.pdf" }));
-  await waitFor(() => expect(screen.getByTestId("detail-chunks")).toBeInTheDocument());
-  expect(screen.getByTestId("location")).toHaveTextContent("file_id=11");
-  fireEvent.click(screen.getByRole("button", { name: "back" }));
-  expect(await screen.findByRole("button", { name: "report.pdf" })).toBeVisible();
-  expect(screen.getByTestId("location")).toHaveTextContent("parent_id=9&fileStatus=abnormal&keep=1");
-  expect(screen.getByTestId("location")).not.toHaveTextContent("file_id=");
-  const views = current.client.getQueryCache().getAll().map((query) => query.queryKey[4]);
-  expect(views).toContain("ordinary");
-  expect(views).not.toContain("admin");
-  expect(screen.getByRole("tab", { name: "f118.spaces" })).toHaveAttribute("data-state", "active");
-});
+it.each([false, true])(
+  "opens the chunk editor in the ordinary view and preserves directory filters for admin=%s",
+  async (isAdmin) => {
+    user = { ...user, is_child_admin: isAdmin };
+    const current = mount("/filelib/7?parent_id=9&fileStatus=abnormal&keep=1");
+    fireEvent.click(await screen.findByRole("button", { name: "report.pdf" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("detail-chunks")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("location")).toHaveTextContent("file_id=11");
+    fireEvent.click(screen.getByRole("button", { name: "back" }));
+    expect(
+      await screen.findByRole("button", { name: "report.pdf" }),
+    ).toBeVisible();
+    expect(screen.getByTestId("location")).toHaveTextContent(
+      "parent_id=9&fileStatus=abnormal&keep=1",
+    );
+    expect(screen.getByTestId("location")).not.toHaveTextContent("file_id=");
+    const views = current.client
+      .getQueryCache()
+      .getAll()
+      .map((query) => query.queryKey[4]);
+    expect(views).toContain("ordinary");
+    expect(views).not.toContain("admin");
+    expect(screen.getByRole("tab", { name: "f118.spaces" })).toHaveAttribute(
+      "data-state",
+      "active",
+    );
+  },
+);
 
 it("does not turn a forged management URL into an admin scope for an ordinary user", async () => {
   const current = mount("/filelib/7?view=admin");
-  expect(await screen.findByRole("button", { name: "report.pdf" })).toBeVisible();
+  expect(
+    await screen.findByRole("button", { name: "report.pdf" }),
+  ).toBeVisible();
   expect(screen.queryByRole("tab", { name: "f118.manage_spaces" })).toBeNull();
-  const keys = JSON.stringify(current.client.getQueryCache().getAll().map((query) => query.queryKey));
+  const keys = JSON.stringify(
+    current.client
+      .getQueryCache()
+      .getAll()
+      .map((query) => query.queryKey),
+  );
   expect(keys).toContain("ordinary");
   expect(keys).not.toContain('"admin"');
 });
+
+it.each(["running", "failed"])(
+  "keeps ready copied space usable while file copy is %s",
+  async (state) => {
+    mocks.copies.mockResolvedValue([
+      {
+        id: 7,
+        name: "Usable copy",
+        user_id: 7,
+        state: 1,
+        job_id: "background-files",
+        job_state: state,
+        phase: state === "failed" ? "failed" : "copying",
+        total_count: 10,
+        succeeded_count: 4,
+        failed_count: state === "failed" ? 6 : 0,
+      },
+    ]);
+    const get = mocks.get.getMockImplementation()!;
+    mocks.get.mockImplementation((url: string, ...args) => {
+      if (url.endsWith("/processing-jobs/background-files/items"))
+        return { data: [], total: 0 };
+      if (url.endsWith("/processing-jobs/background-files"))
+        return {
+          id: "background-files",
+          space_id: 7,
+          kind: "space_copy",
+          state,
+          revision: 1,
+          total_count: 10,
+          succeeded_count: 4,
+          failed_count: state === "failed" ? 6 : 0,
+          pending_count: state === "failed" ? 0 : 6,
+          hidden_item_count: 0,
+          retryable: state === "failed",
+        };
+      return get(url, ...args);
+    });
+    mount();
+    expect(await screen.findByText("report.pdf")).toBeVisible();
+    expect(screen.getByText("Folder")).toBeVisible();
+    expect(screen.getByText("Server 7")).toBeVisible();
+    expect(mocks.children).toHaveBeenCalled();
+    expect(
+      screen.getByText(
+        state === "failed"
+          ? "space_copy_ui.phase_failed"
+          : "space_copy_ui.phase_copying",
+      ),
+    ).toBeVisible();
+  },
+);

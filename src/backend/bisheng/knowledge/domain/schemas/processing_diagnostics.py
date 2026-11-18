@@ -12,6 +12,9 @@ REASONS = frozenset(
         "file_unavailable",
         "resource_deleted",
         "all_files_failed",
+        "copy_input_failed",
+        "copy_index_failed",
+        "copy_initialization_failed",
     }
 )
 ALIASES = {
@@ -27,6 +30,8 @@ ALIASES = {
     "knowledge_model_configuration_changed": "model_changed",
     "knowledge_new_model_invalid": "model_unavailable",
     "knowledge_embedding_unavailable": "model_unavailable",
+    "copy_source_file_changed": "file_changed",
+    "copy_target_changed": "file_changed",
     "copy_permission_sources_changed": "copy_permissions_changed",
     "copy_projection_unavailable": "permission_projection_not_ready",
     "copy_vector_collection_not_ready": "index_not_ready",

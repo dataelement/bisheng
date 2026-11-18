@@ -2,7 +2,7 @@
 
 from copy import deepcopy
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import and_, delete, or_, select, update
 from sqlalchemy.orm import defer
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, KnowledgeProcessingObsoleteError
@@ -148,7 +148,13 @@ class KnowledgeDeletionExecutionRepository:
                     KnowledgeProcessingJob.tenant_id == context[0],
                     KnowledgeProcessingJob.space_id == space_id,
                     KnowledgeProcessingJob.kind.in_(("move_index", "space_copy")),
-                    KnowledgeProcessingJob.state != "succeeded",
+                    or_(
+                        and_(KnowledgeProcessingJob.kind == "move_index", KnowledgeProcessingJob.state != "succeeded"),
+                        and_(
+                            KnowledgeProcessingJob.kind == "space_copy",
+                            KnowledgeProcessingJob.state.in_(("accepted", "running")),
+                        ),
+                    ),
                 )
                 .limit(1)
             )

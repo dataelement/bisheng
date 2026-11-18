@@ -89,6 +89,10 @@ async def test_pending_actual_model_not_job_hint_is_used_and_whole_source_must_s
     async with context.sessions() as session, session.begin():
         await session.execute(sa.delete(LLMModel).where(LLMModel.id == 11, LLMModel.tenant_id == 101))
     async with context.sessions() as session:
+        assert (await owner.aread_current(session, 40, job=job)).model_id == 12
+    async with context.sessions() as session, session.begin():
+        await session.execute(sa.delete(LLMModel).where(LLMModel.id == 12, LLMModel.tenant_id == 101))
+    async with context.sessions() as session:
         with pytest.raises(ResourceReferenceInvalidError):
             await owner.aread_current(session, 40, job=job)
 

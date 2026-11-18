@@ -36,14 +36,15 @@ application = fixtures.application
 
 
 @pytest.fixture
-async def dispatch(application, monkeypatch):
+async def dispatch(application, monkeypatch, request):
     app = application
     clock = [datetime.now(UTC).replace(tzinfo=None)]
     app.owner.jobs.clock = lambda: clock[0]
     async with app.context.sessions() as session:
         row = await session.get(Knowledge, 40)
         row.index_name, row.collection_name = "idx40", "col40"
-        plan = await fixtures.precheck(app, session)
+        selected = getattr(request, "param", 11)
+        plan = await fixtures.precheck(app, session, fixtures.request(selected))
         accepted = await fixtures.create(app, session, plan)
         job = await app.owner.jobs.aget(session, accepted.job_id)
         revision = job.revision
@@ -113,6 +114,7 @@ async def dispatch(application, monkeypatch):
     try:
         yield SimpleNamespace(
             app=app,
+            selected=selected,
             job_id=job.id,
             revision=revision,
             clock=clock,
@@ -236,7 +238,7 @@ async def test_retry_preclaim_credential_rejection_releases_fence_and_new_author
         job = await dispatch.app.owner.jobs.aget(session, dispatch.job_id)
         assert job.failed_count == 2 and not job.pending_dispatch
         row = await session.get(Knowledge, 40)
-        assert row.state == 3 and row.model_transition is not None
+        assert row.state == 1 and row.model_transition is None
         await dispatch.app.app.aretry(
             session,
             40,
@@ -255,7 +257,8 @@ async def test_retry_preclaim_credential_rejection_releases_fence_and_new_author
     dispatch.vector.col.drop.assert_called_once()
 
 
-async def test_all_failed_rebuild_keeps_original_model_and_same_task_retry_recovers(dispatch):
+@pytest.mark.parametrize("dispatch", [11, 12], indirect=True)
+async def test_all_failed_rebuild_keeps_confirmed_model_and_same_task_retry_recovers(dispatch):
     dispatch.vector.add_texts.side_effect = RuntimeError("provider failed after probe")
     assert (await module._execute_processing_job(dispatch.job_id, dispatch.revision))["state"] == "failed"
     async with dispatch.app.context.sessions() as session:
@@ -263,8 +266,8 @@ async def test_all_failed_rebuild_keeps_original_model_and_same_task_retry_recov
         row = await session.get(Knowledge, 40)
         assert job.failed_count == 2 and job.succeeded_count == 0
         assert job.error_message == "all_files_failed"
-        assert row.model == "11" and row.model_transition is not None and row.state == 3
-        assert row.model_config_revision == job.accepted_model_config_revision
+        assert row.model == str(dispatch.selected) and row.model_transition is None and row.state == 1
+        assert row.model_config_revision == job.accepted_model_config_revision + 1
         await dispatch.app.app.aretry(
             session,
             40,
@@ -283,13 +286,62 @@ async def test_all_failed_rebuild_keeps_original_model_and_same_task_retry_recov
         assert row.model_transition is None and row.state == 1
 
 
-@pytest.mark.parametrize("probe", [[], [float("nan")], [True], "not-a-vector"])
-async def test_invalid_embedding_probe_fails_before_dropping_existing_vectors(dispatch, probe):
-    dispatch.provider.return_value.embed_query.return_value = probe
+async def test_provider_outage_after_confirmation_records_failed_files_and_releases_space(dispatch):
+    dispatch.provider.side_effect = RuntimeError("provider went down after confirmation")
     assert (await module._execute_processing_job(dispatch.job_id, dispatch.revision))["state"] == "failed"
-    dispatch.vector.col.drop.assert_not_called()
-    dispatch.vector.add_texts.assert_not_called()
     dispatch.es.client.delete_by_query.assert_not_called()
     async with dispatch.app.context.sessions() as session:
         row = await session.get(Knowledge, 40)
-        assert row.model_transition is not None and row.model == "11"
+        assert row.model_transition is None and row.model == "11" and row.state == 1
+        assert row.collection_name != "col40"
+        assert (await session.exec(select(KnowledgeFile.status).where(KnowledgeFile.id.in_((81, 82))))).all() == [3, 3]
+
+
+async def test_old_collection_cleanup_is_durable_retryable_and_never_drops_current_collection(dispatch, monkeypatch):
+    from bisheng.knowledge.domain.models.knowledge_vector_cleanup import KnowledgeVectorCleanup
+    from bisheng.worker.knowledge import rebuild_cleanup
+
+    assert (await module._execute_processing_job(dispatch.job_id, dispatch.revision))["state"] == "succeeded"
+    drop = Mock(side_effect=RuntimeError("milvus unavailable"))
+    monkeypatch.setattr(rebuild_cleanup, "_drop", drop)
+    assert await rebuild_cleanup.cleanup_rebuild_collections(dispatch.app.context.sessions) == 0
+    async with dispatch.app.context.sessions() as session:
+        cleanup = (await session.exec(select(KnowledgeVectorCleanup))).one()
+        assert cleanup.collection_name == "col40" and cleanup.state == "pending" and cleanup.attempts == 1
+        assert (await session.get(Knowledge, 40)).collection_name != cleanup.collection_name
+    drop.side_effect = None
+    assert await rebuild_cleanup.cleanup_rebuild_collections(dispatch.app.context.sessions) == 1
+    assert await rebuild_cleanup.cleanup_rebuild_collections(dispatch.app.context.sessions) == 0
+    assert drop.call_args.args == ("col40",)
+    dispatch.es.client.delete_by_query.assert_not_called()
+
+
+async def test_cleanup_protects_shared_collection_and_survives_origin_deletion(dispatch, monkeypatch):
+    import sqlalchemy as sa
+
+    from bisheng.core.context.tenant import bypass_tenant_filter
+    from bisheng.knowledge.domain.repositories.rebuild_cleanup_repository import RebuildCleanupRepository
+    from bisheng.worker.knowledge import rebuild_cleanup
+
+    sessions = dispatch.app.context.sessions
+    drop = Mock()
+    monkeypatch.setattr(rebuild_cleanup, "_drop", drop)
+    # A physical collection is global: another tenant using a legacy shared
+    # collection must be protected without exposing that tenant's resource.
+    async with sessions() as session, session.begin():
+        session.add(
+            Knowledge(
+                id=4000, tenant_id=202, user_id=7, name="Other owner", type=3, model="11", collection_name="col40"
+            )
+        )
+    assert await rebuild_cleanup.cleanup_rebuild_collections(sessions) == 0
+    drop.assert_not_called()
+    async with sessions() as session, session.begin():
+        with bypass_tenant_filter():
+            await session.execute(sa.delete(Knowledge).where(Knowledge.id.in_((40, 4000))))
+    assert await rebuild_cleanup.cleanup_rebuild_collections(sessions) == 1
+    drop.assert_called_once_with("col40")
+    workers.reset_tenant_context(sender=dispatch.sender)
+    async with sessions() as session:
+        with pytest.raises(ResourceReferenceInvalidError):
+            await RebuildCleanupRepository().aread(session, "not-an-authority")

@@ -7,7 +7,7 @@ its actual handler); only FGA transports are replaced in this use-case test.
 
 from datetime import datetime, timedelta
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from sqlmodel import select
@@ -50,6 +50,14 @@ processing = fixtures.processing
 @pytest.fixture
 async def application(processing, monkeypatch):
     context, owner = processing
+    from bisheng.knowledge.domain.models.knowledge_vector_cleanup import KnowledgeVectorCleanup
+
+    KnowledgeVectorCleanup.__table__.create(context.sync, checkfirst=True)
+    from bisheng.knowledge.application.model_availability import LLMService
+
+    embedding = Mock()
+    embedding.embed_query.return_value = [0.1, 0.2]
+    monkeypatch.setattr(LLMService, "get_bisheng_knowledge_embedding_sync", Mock(return_value=embedding))
     for model in (
         KnowledgeFile,
         KnowledgeDocument,
@@ -66,6 +74,10 @@ async def application(processing, monkeypatch):
         "knowledge_processing_item",
         "knowledge_processing_retry_receipt",
         "knowledge_operation_plan",
+        "knowledge_vector_cleanup",
+        "knowledge_processing_fence",
+        "knowledge_processing_artifact",
+        "knowledge_space_delete_job",
     }
     monkeypatch.setattr(tenant_filter, "_tenant_aware_tables", names)
     context.user._runtime_credential_reference = {
