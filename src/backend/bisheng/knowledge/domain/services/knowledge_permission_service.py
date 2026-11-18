@@ -18,6 +18,7 @@ from bisheng.knowledge.domain.models.knowledge import (
     KnowledgeDao,
     KnowledgeState,
     KnowledgeTypeEnum,
+    assert_copy_ready,
 )
 from bisheng.knowledge.domain.models.knowledge_file import (
     FileType,
@@ -252,6 +253,13 @@ class KnowledgePermissionService:
 
 
 @dataclass(frozen=True, slots=True)
+class KnowledgeTenantProof:
+    """Tenant ownership of one resource. Not a permission snapshot."""
+
+    tenant_id: int
+
+
+@dataclass(frozen=True, slots=True)
 class KnowledgeContainerPermissionRecord:
     """Business-verified permission facts for a space or library."""
 
@@ -342,6 +350,43 @@ class KnowledgeContainerDaoPermissionLoader:
             permission_version=version,
             context_version=context_version,
         )
+
+    async def load_permission_records(
+        self,
+        resource_type: str,
+        resource_ids: tuple[str, ...],
+    ) -> dict[str, KnowledgeTenantProof | None]:
+        """Prove many ids belong to the caller in one query.
+
+        Listing only needs the tenant on each row. Permission versions stay on
+        the single-record path, which is what an action check still uses.
+        """
+
+        result: dict[str, KnowledgeTenantProof | None] = dict.fromkeys(resource_ids)
+        numeric = [int(resource_id) for resource_id in resource_ids if resource_id.isdigit()]
+        if not numeric:
+            return result
+        rows: list[Knowledge] = []
+        for offset in range(0, len(numeric), 500):
+            rows.extend(await KnowledgeDao.aget_list_by_ids(numeric[offset : offset + 500]))
+        for row in rows:
+            assert_copy_ready(row)
+        allowed_kinds = {"knowledge_space": {"SPACE"}, "knowledge_library": {"NORMAL", "QA"}}
+        for row in rows:
+            if row.id is None or row.tenant_id is None:
+                continue
+            resource_id = str(row.id)
+            if resource_id not in result:
+                continue
+            try:
+                kind = KnowledgeTypeEnum(row.type).name
+                KnowledgeState(row.state)
+            except ValueError:
+                continue
+            if kind not in allowed_kinds.get(resource_type, set()):
+                continue
+            result[resource_id] = KnowledgeTenantProof(tenant_id=int(row.tenant_id))
+        return result
 
     async def load_permission_records_from_rows(
         self, rows: list[Knowledge], *, resource_type: str
@@ -490,6 +535,12 @@ class F048KnowledgeContainerPermissionAdapter:
             resource_type,
             resource_id,
         )
+
+    async def load_permission_records(self, *, resource_type: str, resource_ids: tuple[str, ...]):
+        method = getattr(self._loader, "load_permission_records", None)
+        if method is None:
+            return None
+        return await method(resource_type, resource_ids)
 
     async def resolve_permission_target(
         self,

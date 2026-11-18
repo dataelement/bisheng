@@ -198,8 +198,10 @@ export function SpaceProcessingProgress({
         </div>
       )}
       {!jobData ? (
-        (!metadata || job.isError) && (
+        job.isError ? (
           <Button onClick={() => void job.refetch()}>{t("retry")}</Button>
+        ) : (
+          <p>{t("sidebar.loading")}</p>
         )
       ) : (
         <>

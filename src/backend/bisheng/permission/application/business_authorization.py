@@ -45,7 +45,7 @@ async def _require_creation_ready(resource_type, resource_ids):
 
 
 async def _management_target_loader(resource_type):
-    """Return ``(expected_tenant_id, loader)``, or ``None`` when no proof is due."""
+    """Return ``(expected_tenant_id, port)``, or ``None`` when no proof is due."""
 
     from bisheng.permission.application.request_boundary import request_business_target
 
@@ -57,18 +57,18 @@ async def _management_target_loader(resource_type):
     loader = getattr(port, "load_permission_record", None)
     if loader is None:
         raise PermissionInvalidResourceError()
-    return expected, loader
+    return expected, port
 
 
 async def _require_management_target(resource_type, resource_ids):
     proof = await _management_target_loader(resource_type)
     if proof is None:
         return
-    expected, loader = proof
+    expected, port = proof
     # This is a business boundary check, not a second authorization decision.
     # Domain-owned shared-resource scopes deliberately clear the admin override.
     for resource_id in resource_ids:
-        record = await loader(resource_id=str(resource_id))
+        record = await port.load_permission_record(resource_id=str(resource_id))
         if record is None or record.tenant_id != expected:
             raise PermissionInvalidResourceError()
 
@@ -88,10 +88,16 @@ async def _admitted_management_targets(resource_type, resource_ids):
     proof = await _management_target_loader(resource_type)
     if proof is None:
         return resource_ids
-    expected, loader = proof
+    expected, port = proof
+    batch = getattr(port, "load_permission_records", None)
+    records = await batch(resource_ids=tuple(str(value) for value in resource_ids)) if batch is not None else None
+    if records is None:
+        records = {}
+        for resource_id in resource_ids:
+            records[str(resource_id)] = await port.load_permission_record(resource_id=resource_id)
     admitted = []
     for resource_id in resource_ids:
-        record = await loader(resource_id=resource_id)
+        record = records.get(str(resource_id))
         if record is not None and record.tenant_id == expected:
             admitted.append(resource_id)
     return tuple(admitted)

@@ -39,7 +39,30 @@ const client = new QueryClient({
 afterEach(() => {
   cleanup();
   client.clear();
+  vi.clearAllMocks();
   vi.useRealTimers();
+});
+
+it("shows loading instead of retry while a move job has not arrived", async () => {
+  vi.mocked(readProcessingJob).mockReturnValue(new Promise(() => undefined));
+  vi.mocked(readProcessingItems).mockReturnValue(new Promise(() => undefined));
+  render(
+    <QueryClientProvider client={client}>
+      <SpaceProcessingProgress
+        spaceId={7}
+        jobId="job-pending"
+        kind="move_index"
+        scope={{
+          identityKey: "user:5",
+          tenantId: 60,
+          managementTenantId: 60,
+          view: "ordinary",
+        }}
+      />
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByText("sidebar.loading")).toBeVisible();
+  expect(screen.queryByRole("button", { name: "retry" })).toBeNull();
 });
 
 it("polls metadata progress and requests only failed items when failures appear", async () => {

@@ -87,13 +87,28 @@ function DestinationContents({ services, selection, onSelect, onError }: {
 function MoveToContent({ services, currentSpaceId, onOpenChange, onConfirm, onError }: MoveToDialogProps) {
   const { t } = useTranslation('shared', { keyPrefix: 'knowledge.move' });
   const [search, setSearch] = useState('');
+  const [deferredSearch, setDeferredSearch] = useState('');
+  const [partial, setPartial] = useState<MoveSpaceGroups | null>(null);
   const [selection, setSelection] = useState<MoveTarget | null>(null);
   const [expandedSpaces, setExpandedSpaces] = useState<Set<string>>(() => new Set());
   const [visitedSpaces, setVisitedSpaces] = useState<Set<string>>(() => new Set());
   const [collapsedCategories, setCollapsedCategories] = useState<Set<Category>>(() => new Set());
-  const loadSpaces = useCallback((signal: AbortSignal) => services.listSpaces(signal), [services]);
+  const serverSearch = services.searchSpaces;
+  const keyword = serverSearch ? deferredSearch.trim() : '';
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDeferredSearch(search), 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+  useEffect(() => { setPartial(null); }, [keyword, services]);
+  const loadSpaces = useCallback((signal: AbortSignal) => {
+    const hooks = {
+      onPartial: (groups: MoveSpaceGroups) => { if (!signal.aborted) setPartial(groups); },
+    };
+    if (keyword && serverSearch) return serverSearch(keyword, signal, hooks);
+    return services.listSpaces(signal, hooks);
+  }, [services, serverSearch, keyword]);
   const catalog = useMoveResource(loadSpaces, onError);
-  const groups = catalog.data;
+  const groups = catalog.error ? undefined : catalog.data ?? partial ?? undefined;
 
   useEffect(() => {
     if (!groups) return;
@@ -144,7 +159,7 @@ function MoveToContent({ services, currentSpaceId, onOpenChange, onConfirm, onEr
             <SearchInput aria-label={t('search_placeholder')} placeholder={t('search_placeholder')}
               clearLabel={t('clear_search')} value={search} onChange={(event) => setSearch(event.target.value)} />
           </div>
-          {catalog.loading ? <div role="status" className="flex flex-1 items-center justify-center text-caption text-text-3">{t('loading')}</div>
+          {catalog.loading && !groups ? <div role="status" className="flex flex-1 items-center justify-center text-caption text-text-3">{t('loading')}</div>
             : catalog.error ? <div className="flex flex-1 flex-col items-center justify-center text-caption text-text-3">
               {t('load_failed')}<Button variant="text" onClick={catalog.retry}>{t('retry')}</Button>
             </div>
@@ -183,7 +198,7 @@ function MoveToContent({ services, currentSpaceId, onOpenChange, onConfirm, onEr
       </div>
       <div className="flex shrink-0 flex-row justify-end gap-2">
         <Button color="default" variant="outlined" className="max-[768px]:flex-1" onClick={() => onOpenChange(false)}>{t('cancel')}</Button>
-        <Button className="max-[768px]:flex-1" onClick={handleConfirm} disabled={!selection || catalog.loading || catalog.error}>{t('move_here')}</Button>
+        <Button className="max-[768px]:flex-1" onClick={handleConfirm} disabled={!selection || !groups}>{t('move_here')}</Button>
       </div>
     </Dialog.Content>
     </Dialog.Portal>
