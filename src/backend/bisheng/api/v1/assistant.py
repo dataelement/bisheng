@@ -22,6 +22,7 @@ from bisheng.permission.application.business_authorization import (
 from bisheng.role.domain.services.quota_service import QuotaResourceType, require_quota
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
+from bisheng.user.application.runtime_identity import browser_message_identity_scope
 from bisheng.utils import generate_uuid
 
 router = APIRouter(prefix="/assistant", tags=["Assistant"])
@@ -270,6 +271,7 @@ async def chat(
             WorkType.GPTS,
             websocket,
             conversation_persistence=ConversationPersistence(login_user.user_id, user=login_user),
+            message_admission=lambda: browser_message_identity_scope(login_user),
             flow_lease_id=flow_lease_id,
         )
     except UnAuthorizedError:

@@ -21,6 +21,7 @@ from bisheng.core.context.tenant import (
     is_management_all_tenants,
     is_strict_tenant_filter,
     is_tenant_filter_bypassed,
+    strict_tenant_filter,
 )
 
 logger = logging.getLogger(__name__)
@@ -307,6 +308,17 @@ def register_tenant_filter_events() -> None:
 
     _initialized = True
     logger.info(f"Tenant filter events registered for {len(_tenant_aware_tables)} tables")
+
+
+def apply_strict_tenant_filter(statement, tenant_col):
+    """Scope bulk writes, which do not receive the ORM SELECT event filter.
+
+    A wider discovery/management visibility set must not widen a mutation.
+    Explicitly authorized maintenance bypass remains the caller's responsibility.
+    """
+    with strict_tenant_filter():
+        clause = build_tenant_filter_clause(tenant_col)
+    return statement.where(clause) if clause is not None else statement
 
 
 def build_tenant_filter_clause(tenant_col):
