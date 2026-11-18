@@ -19,6 +19,7 @@ from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.admin_scope import AdminScopeChangedError, AdminScopeTenantRequiredError
+from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.knowledge import KnowledgeProcessingConflictError, KnowledgeProcessingObsoleteError
 from bisheng.common.errcode.permission import PermissionDeniedError
 from bisheng.knowledge.api.endpoints import processing as api
@@ -48,8 +49,10 @@ def mount(context, monkeypatch):
     app.dependency_overrides[UserPayload.get_login_user] = lambda: context.user
     monkeypatch.setattr(api, "get_async_db_session", context.sessions)
     auth = AsyncMock()
+    menu = AsyncMock()
     scope = AsyncMock(return_value=EffectiveManagementScope(101, "own", None))
     monkeypatch.setattr(api, "require_business_action", auth)
+    monkeypatch.setattr(UserPayload, "assert_effective_web_menu_contains", menu)
     monkeypatch.setattr(api, "resolve_management_scope", scope)
 
     @app.exception_handler(BaseErrorCode)
@@ -60,7 +63,7 @@ def mount(context, monkeypatch):
     async def validation_error(request, error):
         return JSONResponse({"status_code": 422, "status_message": "invalid request", "data": None})
 
-    return SimpleNamespace(app=app, auth=auth, scope=scope)
+    return SimpleNamespace(app=app, auth=auth, menu=menu, scope=scope)
 
 
 @pytest.fixture
@@ -150,6 +153,35 @@ async def test_settings_use_real_legacy_defaults_cas_and_original_container_edit
         assert (await session.get(KnowledgeFile, 81)).split_rule == '{"original":"kept"}'
     http.auth.side_effect = PermissionDeniedError()
     assert (await call(http, "GET", "/processing-settings"))["status_code"] == PermissionDeniedError.Code
+    assert {item.args[1] for item in http.menu.await_args_list} == {"knowledge"}
+
+
+async def test_processing_settings_reject_a_caller_without_the_knowledge_menu(http, monkeypatch):
+    from bisheng.knowledge.domain.schemas.processing_settings import DocumentProcessingRule
+    from bisheng.knowledge.domain.services.processing_settings_service import ProcessingSettingsService
+
+    http.menu.side_effect = UnAuthorizedError.http_exception()
+    touched = []
+
+    async def blocked(*_args, **_kwargs):
+        touched.append(True)
+
+    monkeypatch.setattr(ProcessingSettingsService, "get_settings", blocked)
+    monkeypatch.setattr(ProcessingSettingsService, "save_settings", blocked)
+    legacy = FileProcessBase(knowledge_id=40)
+    payload = {
+        "expected_config_version": 0,
+        "defaults": {
+            "document": legacy.model_dump(include=set(DocumentProcessingRule.model_fields)),
+            "table": legacy.excel_rule.model_dump(mode="json"),
+        },
+    }
+    async with AsyncClient(transport=ASGITransport(app=http.app), base_url="http://offline") as client:
+        read = await client.get(BASE + "/processing-settings")
+        saved = await client.put(BASE + "/processing-settings", json=payload, headers=HEADERS)
+    assert read.status_code == 403 and saved.status_code == 403
+    assert touched == [] and not http.auth.await_args_list
+    assert {item.args[1] for item in http.menu.await_args_list} == {"knowledge"}
 
 
 async def test_http_retry_and_worker_share_actual_durable_state_and_original_failed_scope(dispatch, monkeypatch):

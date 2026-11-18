@@ -12,6 +12,9 @@ export async function resolveSpaceExitScope(): Promise<string> {
   return tenant;
 }
 
-export function getSpaceExitStatus(spaceId: string): Promise<SpaceExitStatus> {
-  return request.get(`/api/v1/knowledge/space/${encodeURIComponent(spaceId)}/exit-status`);
+export async function getSpaceExitStatus(spaceId: string): Promise<SpaceExitStatus> {
+  const { data } = await request.get<{ data: SpaceExitStatus }>(
+    `/api/v1/knowledge/space/${encodeURIComponent(spaceId)}/exit-status`,
+  );
+  return data;
 }

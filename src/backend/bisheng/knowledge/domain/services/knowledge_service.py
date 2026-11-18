@@ -2552,6 +2552,37 @@ class KnowledgeService(KnowledgeUtils):
         return rows[start : start + page_size], len(rows)
 
     @classmethod
+    def _readable_chunk_file_ids(
+        cls,
+        request: Request,
+        login_user: UserPayload,
+        knowledge_id: int,
+        file_ids: list[int] | None,
+    ) -> list[int]:
+        """Files whose segment text this caller may read.
+
+        A named file that is hidden, missing, or outside this knowledge is
+        rejected before any index or violation-text read. An unscoped read is
+        limited to the files this caller can see.
+        """
+        from bisheng.knowledge.domain.services.knowledge_file_visibility_service import (
+            KnowledgeFileVisibilityService,
+        )
+
+        requested = [int(one) for one in (file_ids or [])]
+        candidates = requested or KnowledgeFileDao.list_document_ids(knowledge_id)
+        if not candidates:
+            return []
+        visible = run_async_safe(
+            KnowledgeFileVisibilityService(request, login_user).post_filter_visible_files(knowledge_id, candidates),
+            timeout=60,
+        )
+        allowed = {int(one) for one in visible}
+        if requested and any(one not in allowed for one in requested):
+            raise UnAuthorizedError.http_exception()
+        return sorted(allowed)
+
+    @classmethod
     def get_knowledge_chunks(
         cls,
         request: Request,
@@ -2568,6 +2599,9 @@ class KnowledgeService(KnowledgeUtils):
             "visible",
         )
         requested_file_ids = [int(one) for one in (file_ids or [])]
+        readable_file_ids = cls._readable_chunk_file_ids(request, login_user, knowledge_id, requested_file_ids)
+        if not readable_file_ids:
+            return [], 0
 
         es_client, index_name = KnowledgeRag.open_stored_chunk_index_sync(db_knowledge, login_user=login_user)
 
@@ -2591,8 +2625,7 @@ class KnowledgeService(KnowledgeUtils):
                 },
             ],
         }
-        if file_ids:
-            search_data["post_filter"] = {"terms": {"metadata.document_id": file_ids}}
+        search_data["post_filter"] = {"terms": {"metadata.document_id": readable_file_ids}}
         if keyword:
             search_data["query"] = {"match_phrase": {"text": keyword}}
         try:
@@ -2604,7 +2637,7 @@ class KnowledgeService(KnowledgeUtils):
         # A content-safety rejection never writes the retrieval index. Segments
         # kept for the detail view live outside that index and are not searchable.
         if requested_file_ids and res["hits"]["total"]["value"] == 0:
-            display = cls._violation_display_chunks(knowledge_id, requested_file_ids, keyword, page, limit)
+            display = cls._violation_display_chunks(knowledge_id, readable_file_ids, keyword, page, limit)
             if display is not None:
                 return display
 
@@ -2617,8 +2650,11 @@ class KnowledgeService(KnowledgeUtils):
         if file_ids:
             file_list = KnowledgeFileDao.get_file_by_ids(list(file_ids))
             file_map = {one.id: one for one in file_list}
+        readable = set(readable_file_ids)
         for one in res["hits"]["hits"]:
             file_id = one["_source"]["metadata"]["document_id"]
+            if int(file_id) not in readable:
+                continue
             file_info = file_map.get(file_id, None)
             # Filter document summary contents of file names and summaries
             result.append(

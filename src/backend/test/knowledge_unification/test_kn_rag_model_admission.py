@@ -239,6 +239,22 @@ async def test_stored_chunk_index_opens_when_saved_model_is_legacy_missing(rag):
     module.ElasticsearchFactory.init_vectorstore.assert_not_called()
 
 
+async def test_stored_chunk_index_uses_collection_name_when_legacy_index_name_is_empty(rag):
+    context, stale = rag
+    async with context.sessions() as session, session.begin():
+        await session.execute(
+            sa.update(Knowledge)
+            .where(Knowledge.id == 40, Knowledge.tenant_id == 101)
+            .values(index_name=None, collection_name="legacy_collection")
+        )
+    _store, index_name = await asyncio.to_thread(
+        KnowledgeRag.open_stored_chunk_index_sync, stale, login_user=context.user
+    )
+    assert index_name == "legacy_collection"
+    assert module.ElasticsearchFactory.init_vectorstore_sync.call_args.args[0] == "legacy_collection"
+    module.ElasticsearchFactory.init_vectorstore.assert_not_called()
+
+
 @pytest.mark.parametrize("native", [False, True])
 async def test_keyword_only_current_retrieval_cannot_bypass_invalid_pending_model(rag, native):
     context, stale = rag
