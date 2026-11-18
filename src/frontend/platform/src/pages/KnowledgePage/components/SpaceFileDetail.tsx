@@ -42,20 +42,27 @@ export function SpaceFileDetail({ scope, spaceId, fileId, initialFile, onBack, o
   // `status` answers "how did the latest attempt end"; the chunks below may still
   // be the previous successful result. Say which of the two the user is looking
   // at instead of letting the failed badge and the content contradict each other.
-  const failedAttempt = raw?.status === 3 || raw?.status === 6 || raw?.status === 7;
+  const violation = raw?.status === 7;
+  const failedAttempt = raw?.status === 3 || raw?.status === 6 || violation;
   const retainedContent = (model.chunks.data?.total ?? 0) > 0;
   // Do not claim "no retrievable content" while the chunk read is still in flight.
   const contentKnown = !model.chunks.isInitialLoading && !model.chunks.isError;
   const notRetrievable = model.info.data?.retrievable === false;
-  const notice = failedAttempt
+  const notice = violation
     ? contentKnown
       ? retainedContent
-        ? t("f118.content_notice_failed_retained")
-        : t("f118.content_notice_failed_empty")
+        ? t("f118.content_notice_violation")
+        : t("f118.content_notice_violation_empty")
       : ""
-    : notRetrievable
-      ? t("f118.content_notice_not_retrievable")
-      : "";
+    : failedAttempt
+      ? contentKnown
+        ? retainedContent
+          ? t("f118.content_notice_failed_retained")
+          : t("f118.content_notice_failed_empty")
+        : ""
+      : notRetrievable
+        ? t("f118.content_notice_not_retrievable")
+        : "";
   const name = model.preview.isSuccess ? (raw?.file_name ?? t("detail.file_title", { id: fileId })) : "";
   const file = useMemo(
     () => ({

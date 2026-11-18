@@ -117,6 +117,32 @@ def process_file_task(
         raise e
 
 
+def _save_violation_display(pipeline: KnowledgeFilePipeline, file_id: int, documents) -> None:
+    """Segment a rejected file for the detail page and keep it out of the index."""
+    try:
+        chunks = pipeline.segment_for_display(documents)
+        KnowledgeUtils.save_violation_display_chunks(file_id, chunks)
+    except Exception:
+        logger.opt(exception=True).warning("violation display segments unavailable file={}", file_id)
+        KnowledgeUtils.save_violation_display_chunks(file_id, [])
+
+
+def ensure_violation_display_chunks(db_file: KnowledgeFile) -> None:
+    """Build detail segments for a violation file that was rejected before this fix."""
+    if KnowledgeUtils.load_violation_display_chunks(db_file.id) is not None:
+        return
+    try:
+        pipeline = KnowledgeFilePipeline(
+            invoke_user_id=db_file.user_id or db_file.updater_id or 0,
+            db_file=db_file,
+            no_summary=True,
+        )
+        KnowledgeUtils.save_violation_display_chunks(db_file.id, pipeline.load_and_segment_for_display())
+    except Exception:
+        logger.opt(exception=True).warning("violation display segments unavailable file={}", db_file.id)
+        KnowledgeUtils.save_violation_display_chunks(db_file.id, [])
+
+
 def delete_vector_files(file_ids: list[int], knowledge: Knowledge) -> bool:
     """Delete vector data andesDATA"""
     if not file_ids:
@@ -138,6 +164,7 @@ def delete_vector_files(file_ids: list[int], knowledge: Knowledge) -> bool:
         )
         logger.info(f"act=delete_es file_ids={file_ids} res={res}")
 
+    KnowledgeUtils.delete_violation_display_chunks(file_ids)
     return True
 
 
@@ -241,6 +268,7 @@ def addEmbedding(
             if not pipeline_result.documents:
                 raise KnowledgeFileEmptyError()
             db_file.status = KnowledgeFileStatus.SUCCESS.value
+            KnowledgeUtils.delete_violation_display_chunks([db_file.id])
 
             # TODO[plan-3-async]: trigger SimHash similar-scan after successful parse.
             # addEmbedding runs in a sync Celery worker; async scan is deferred to a
@@ -321,6 +349,7 @@ def addEmbedding(
             status = "parse_failed"
         except ContentSafetyViolation as e:
             logger.warning(f"process_file_sensitive_violation file_id={db_file.id} file_name={db_file.file_name}")
+            _save_violation_display(knowledge_file_pipeline, db_file.id, e.documents)
             db_file.status = KnowledgeFileStatus.VIOLATION.value
             db_file.remark = json.dumps(e.to_remark(), ensure_ascii=False)
             status = "failed"

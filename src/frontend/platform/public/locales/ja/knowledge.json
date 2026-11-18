@@ -533,6 +533,8 @@
         "processing_conflict_deleting": "リソースを削除中です。しばらくしてから再試行してください。",
         "content_notice_failed_retained": "直近の処理に失敗しました。以下は前回成功した解析結果で、現在は検索対象外です。",
         "content_notice_failed_empty": "直近の処理に失敗し、検索できる内容はまだありません。",
+        "content_notice_violation": "このファイルはコンテンツ安全ポリシーに一致しました。以下の解析結果は検索対象外です。",
+        "content_notice_violation_empty": "このファイルはコンテンツ安全ポリシーに一致し、解析セグメントはまだ保存されていません。",
         "content_notice_not_retrievable": "このファイルは現在検索対象外です。",
         "parse_failed_retains_content": "以前に成功した解析内容は保持されますが、検索対象にはなりません。",
         "index_edit_title": "チャンクとメタデータを編集",

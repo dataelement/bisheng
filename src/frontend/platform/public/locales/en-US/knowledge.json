@@ -539,6 +539,8 @@
         "processing_conflict_deleting": "This resource is being deleted. Try again shortly.",
         "content_notice_failed_retained": "The latest attempt failed. What you see below is the last successful parse, which is not retrievable right now.",
         "content_notice_failed_empty": "The latest attempt failed and this file has no content that can be retrieved yet.",
+        "content_notice_violation": "This file matched the content-safety policy. The parse result below is not retrievable.",
+        "content_notice_violation_empty": "This file matched the content-safety policy, and its parse segments have not been saved.",
         "content_notice_not_retrievable": "This file is not retrievable right now.",
         "parse_failed_retains_content": "Content from an earlier successful parse is kept but not retrieved.",
         "index_edit_title": "Edit chunks and metadata",

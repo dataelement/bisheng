@@ -539,6 +539,8 @@
         "processing_conflict_deleting": "资源正在删除中，请稍后重试。",
         "content_notice_failed_retained": "最近一次处理失败；下面展示的是上次成功解析的内容，当前不参与检索。",
         "content_notice_failed_empty": "最近一次处理失败；该文件尚未生成可检索的内容。",
+        "content_notice_violation": "该文件命中内容安全策略，以下为解析结果，不参与检索。",
+        "content_notice_violation_empty": "该文件命中内容安全策略，解析分段尚未保存。",
         "content_notice_not_retrievable": "该文件当前不参与检索。",
         "parse_failed_retains_content": "此前成功解析的内容会保留，但不参与检索。",
         "index_edit_title": "编辑分块和元数据",
