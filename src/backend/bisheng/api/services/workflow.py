@@ -1407,9 +1407,7 @@ class WorkFlowService(BaseService):
             user_link_order[user_link.type_detail] = index
 
         # Get a list of skills visible to the user (no pagination as we need to sort manually)
-        if user.is_admin():
-            data, _ = FlowDao.get_all_apps(status=FlowStatus.ONLINE.value, id_list=flow_ids, page=0, limit=0)
-        else:
+        with strict_tenant_filter():
             data, _ = FlowDao.get_all_apps(status=FlowStatus.ONLINE.value, id_list=flow_ids, page=0, limit=0)
         data = cls.filter_supported_apps(data)
         data = await cls.filter_apps_by_action(

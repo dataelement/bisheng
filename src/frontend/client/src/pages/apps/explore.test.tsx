@@ -5,7 +5,7 @@
  * Both list endpoints are F027 cursor waterfalls: the first page asks with a
  * `null` cursor and the answer is `{ list, hasMore, nextCursor }`.
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 const mockGetChatOnlineApi = jest.fn();
 const mockGetHomeLabelApi = jest.fn();
@@ -35,7 +35,11 @@ jest.mock('~/utils', () => ({
   cn: (...classes: unknown[]) => classes.filter(Boolean).join(' '),
   copyText: jest.fn(),
 }));
-jest.mock('~/components/ui/Button', () => ({ Button: () => null }));
+jest.mock('~/components/ui/Button', () => ({
+  Button: ({ children, onClick }: React.ComponentProps<'button'>) => (
+    <button onClick={onClick}>{children}</button>
+  ),
+}));
 jest.mock('~/components/ui/icon/Loading', () => ({ LoadingIcon: () => null }));
 jest.mock('~/components/illustrations', () => ({ EmptyStateIllustration: () => null }));
 jest.mock('./appUtils', () => ({ getAppShareUrl: () => '' }));
@@ -65,8 +69,12 @@ async function selectTaggedTab() {
   await waitFor(() => expect(mockGetChatOnlineApi).toHaveBeenCalledWith(null, '', 7, PAGE_SIZE));
 }
 
+let notifyIntersection: () => void;
 beforeAll(() => {
   class IntersectionObserverStub {
+    constructor(callback: IntersectionObserverCallback) {
+      notifyIntersection = () => callback([{ isIntersecting: true } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+    }
     observe() {
       /* no-op */
     }
@@ -193,4 +201,30 @@ describe('ExplorePlaza search scope', () => {
     await waitFor(() => expect(screen.getAllByTestId('agent')).toHaveLength(1));
     expect(screen.getByTestId('agent')).toHaveTextContent('searched app');
   });
+});
+
+it.each([false, true])('pauses scroll after a request fails and retries the same page (append=%s)', async (append) => {
+  mockGetChatOnlineApi.mockClear();
+  if (append) {
+    mockGetChatOnlineApi.mockResolvedValueOnce({
+      list: [{ id: '1', name: 'First app' }], hasMore: true, nextCursor: 'next',
+    });
+  }
+  mockGetChatOnlineApi.mockRejectedValueOnce(new Error('unavailable')).mockResolvedValueOnce({
+    list: [{ id: '2', name: 'Recovered app' }], hasMore: false, nextCursor: null,
+  });
+  render(<ExplorePlaza />);
+  if (append) {
+    await screen.findByText('First app');
+    act(() => notifyIntersection());
+  }
+
+  const retry = await screen.findByRole('button', { name: 'com_error_retry' });
+  act(() => notifyIntersection());
+  expect(mockGetChatOnlineApi).toHaveBeenCalledTimes(append ? 2 : 1);
+  if (append) expect(screen.getByText('First app')).toBeTruthy();
+
+  fireEvent.click(retry);
+  await screen.findByText('Recovered app');
+  expect(mockGetChatOnlineApi).toHaveBeenLastCalledWith(append ? 'next' : null, '', -1, PAGE_SIZE);
 });
