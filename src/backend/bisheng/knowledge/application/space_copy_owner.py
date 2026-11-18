@@ -306,7 +306,7 @@ class SpaceCopyOwner:
                 None if guarded is None else SimpleNamespace(snapshot=snapshot, configuration=self.configuration(root))
             )
 
-    async def acomplete(self, lease, *, result=None, error_code=None):
+    async def acomplete(self, lease, *, result=None, error_code=None, failure_reason=None):
         from dataclasses import asdict
 
         from bisheng.worker.knowledge.space_copy_worker import SpaceCopyResult
@@ -380,6 +380,7 @@ class SpaceCopyOwner:
                     succeeded=succeeded,
                     result=asdict(result) if succeeded else None,
                     error_code=error_code,
+                    failure_reason=failure_reason,
                 )
                 clean(session, context)
                 await session.commit()
@@ -398,12 +399,17 @@ class SpaceCopyOwner:
             await session.commit()
             return result
 
-    async def afail(self, job_id, revision, *, lease=None, error_code):
+    async def afail(self, job_id, revision, *, lease=None, error_code, failure_reason=None):
         admission.tenant()
         async with self.sessions() as session:
             context = authority_context()
             result = await self.jobs.afail_attempt(
-                session, job_id, expected_job_revision=revision, lease=lease, error_code=error_code
+                session,
+                job_id,
+                expected_job_revision=revision,
+                lease=lease,
+                error_code=error_code,
+                failure_reason=failure_reason,
             )
             clean(session, context)
             await session.commit()

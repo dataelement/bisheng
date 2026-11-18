@@ -189,6 +189,7 @@ it("reads real SPACE children and continues an opaque empty page without total",
   ]);
   expect(mocks.get).toHaveBeenCalledWith("/api/v1/knowledge/space/7/children", {
     params: expect.objectContaining({ page_size: 40 }),
+    paramsSerializer: { indexes: null },
   });
   expect(mocks.legacy).not.toHaveBeenCalled();
 });

@@ -10,6 +10,7 @@ from bisheng.common.errcode.knowledge import KnowledgeProcessingConflictError, R
 from bisheng.core.context.background_execution import get_current_background_task
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.knowledge.application.space_copy_owner import SpaceCopyOwner
+from bisheng.knowledge.domain.schemas.processing_diagnostics import failure_reason_from_error
 from bisheng.worker.knowledge.space_copy_worker import apply_space_copy_item
 
 
@@ -84,7 +85,9 @@ async def execute_copy_job(job_id, revision, *, proof, owner=None):
             except Exception as error:
                 logger.exception("Space copy item failed job={} item={}", job_id, claimed.item.id)
                 code = error.Code if isinstance(error, BaseErrorCode) else ResourceReferenceInvalidError.Code
-                if not await owner.acomplete(claimed.lease, error_code=code):
+                if not await owner.acomplete(
+                    claimed.lease, error_code=code, failure_reason=failure_reason_from_error(error)
+                ):
                     return await summary()
     except asyncio.CancelledError:
         raise
@@ -92,5 +95,7 @@ async def execute_copy_job(job_id, revision, *, proof, owner=None):
         logger.exception("Space copy attempt failed job={}", job_id)
         job, _ = await owner.aread(job_id)
         code = error.Code if isinstance(error, BaseErrorCode) else ResourceReferenceInvalidError.Code
-        await owner.afail(job_id, job.revision, lease=lease, error_code=code)
+        await owner.afail(
+            job_id, job.revision, lease=lease, error_code=code, failure_reason=failure_reason_from_error(error)
+        )
         return await summary()

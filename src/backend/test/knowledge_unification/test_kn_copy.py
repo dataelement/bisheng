@@ -431,3 +431,74 @@ async def test_consumed_copy_keeps_original_actor_and_frozen_defaults_across_fre
         job = await session.get(Job, first["processing_job"].job_id)
         assert job.actor_reference["credential_reference"]["token_version"] == 0
         assert (await session.get(Knowledge, first["knowledge"].id)).description != "A later description"
+
+
+@pytest.mark.parametrize("damage", [None, "source_ref", "source_fingerprint", "subject_id", "protected"])
+async def test_copy_normalizes_legacy_source_and_still_rejects_actual_target_tampering(copying, damage):
+    from bisheng.common.errcode.permission import PermissionPublishNotReadyError
+
+    ctx = copying.ctx
+    async with ctx.sessions() as session, session.begin():
+        session.add(
+            PermissionGrant(
+                id=901,
+                tenant_id=101,
+                resource_type="knowledge_space",
+                resource_id="40",
+                model_key="owner",
+                state="ACTIVE",
+                projection_state="CURRENT",
+            )
+        )
+        for ident, subject_type, subject_id, relation, source_type, ref in (
+            (902, "user", "686", None, "DIRECT", "user:686|owner|knowledge_space:40|"),
+            (903, "department", "142", "member", "DEPARTMENT", "department:142#member|owner|knowledge_space:40|"),
+        ):
+            session.add(
+                PermissionGrantAssignee(
+                    id=ident,
+                    tenant_id=101,
+                    grant_id=901,
+                    subject_type=subject_type,
+                    subject_id=subject_id,
+                    userset_relation=relation,
+                    source_type=source_type,
+                    source_ref=ref,
+                    source_locator=ref,
+                    source_fingerprint=str(ident)[-1] * 64,
+                    projected_subject=f"{subject_type}:{subject_id}" + (f"#{relation}" if relation else ""),
+                    state="ACTIVE",
+                    protected=False,
+                )
+            )
+    plan = await copying.app.aprecheck(40, name="Legacy grants copy", identity=ctx.user)
+    result = await copying.app.aconfirm(40, command(plan), identity=ctx.user)
+    sid, jid = result["knowledge"].id, result["processing_job"].job_id
+    owner = SpaceCopyOwner(copying.app)
+    await owner.aensure_logical(sid, jid)
+    async with ctx.sessions() as session:
+        rows = (
+            (
+                await session.execute(
+                    sa.select(PermissionGrantAssignee)
+                    .join(
+                        PermissionGrant,
+                        PermissionGrant.id == PermissionGrantAssignee.grant_id,
+                    )
+                    .where(PermissionGrant.resource_id == str(sid), PermissionGrant.resource_type == "knowledge_space")
+                )
+            )
+            .scalars()
+            .all()
+        )
+        ordinary = [row for row in rows if not row.protected]
+        assert {row.source_ref for row in ordinary} == {"user:686", "142#member"}
+        assert len([row for row in rows if row.protected]) == 1
+    if damage:
+        async with ctx.sessions() as session, session.begin():
+            row = await session.get(PermissionGrantAssignee, ordinary[0].id)
+            setattr(row, damage, True if damage == "protected" else "tampered")
+        with pytest.raises(PermissionPublishNotReadyError):
+            await owner.aensure_logical(sid, jid)
+    else:
+        await owner.aensure_logical(sid, jid)

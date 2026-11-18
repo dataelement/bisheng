@@ -66,6 +66,8 @@ it("polls metadata progress and requests only failed items when failures appear"
       {
         id: "item-38",
         file_id: 38,
+        file_name: "changed-metadata.txt",
+        failure_reason: "file_changed",
         document_id: 62,
         version_id: 95,
         step: "metadata_index_written",
@@ -96,7 +98,10 @@ it("polls metadata progress and requests only failed items when failures appear"
   );
 
   expect(await screen.findByText("30%")).toBeVisible();
-  expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "30");
+  expect(screen.getByRole("progressbar")).toHaveAttribute(
+    "aria-valuenow",
+    "30",
+  );
   expect(screen.queryByRole("list")).toBeNull();
   expect(readProcessingItems).not.toHaveBeenCalled();
 
@@ -113,7 +118,10 @@ it("polls metadata progress and requests only failed items when failures appear"
   expect(
     await screen.findByText("f118.processing_state_partial_failed"),
   ).toBeVisible();
-  expect(await screen.findByText(/api_errors:10953/)).toBeVisible();
+  expect(
+    await screen.findByText(/changed-metadata.txt.*f118.failure_file_changed/),
+  ).toBeVisible();
+  expect(screen.queryByText(/processing_item_number/)).toBeNull();
   expect(readProcessingItems).toHaveBeenCalledExactlyOnceWith(
     7,
     "job-7",

@@ -1,6 +1,8 @@
 import json
 from copy import deepcopy
 from dataclasses import dataclass
+from math import isfinite
+from numbers import Real
 
 from loguru import logger
 from pymilvus import Collection
@@ -9,6 +11,7 @@ from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.errcode.knowledge import (
+    KnowledgeEmbeddingUnavailableError,
     KnowledgeFileFailedError,
     KnowledgeOperationPlanConflictError,
     KnowledgeProcessingConflictError,
@@ -55,6 +58,8 @@ def rebuild_knowledge_celery(
         }
         knowledge, selected_model_id = _require_current_rebuild(knowledge_id, new_model_id, **command)
 
+        _probe_embedding(knowledge, selected_model_id, invoke_user_id)
+
         # 1. according knowledge_id Found knowledgefile All in the tablestatus=2Andstatus=4File, put thestatusto4
         files = KnowledgeFileDao.get_files_by_multiple_status(
             knowledge_id, [KnowledgeFileStatus.SUCCESS.value, KnowledgeFileStatus.REBUILDING.value]
@@ -89,6 +94,11 @@ def rebuild_knowledge_celery(
                 file.remark = KnowledgeFileFailedError(data={"exception": "rebuild error"}).to_json_str()
                 KnowledgeFileDao.update(file)
 
+        if files and not success_files:
+            # Keep the original model and pending operation. A later retry
+            # must explicitly rebuild, never publish an empty replacement.
+            raise KnowledgeFileFailedError(reason="all_files_failed")
+
         # 5. Release the container; the failure lives on the files that failed.
         # Marking the whole knowledge FAILED existed to drive a later automatic
         # rebuild, which no longer happens — a failed file is recovered by
@@ -110,6 +120,26 @@ def rebuild_knowledge_celery(
         # Global failures did not complete the operation. Keep its actual
         # pending slot/revision and let Celery retain the failure diagnostic.
         raise
+
+
+def _probe_embedding(knowledge, model_id, invoke_user_id):
+    """Check the actual endpoint before any destructive index operation."""
+    try:
+        embedding = LLMService.get_bisheng_knowledge_embedding_sync(model_id=model_id, invoke_user_id=invoke_user_id)
+        vector = embedding.embed_query("embedding availability check")
+        if (
+            not isinstance(vector, (list, tuple))
+            or not vector
+            or any(isinstance(value, bool) or not isinstance(value, Real) or not isfinite(value) for value in vector)
+        ):
+            raise ValueError("embedding availability probe returned an invalid vector")
+        return embedding
+    except KnowledgeUnificationError:
+        raise
+    except Exception as error:
+        raise KnowledgeEmbeddingUnavailableError(
+            knowledge_name=knowledge.name, reason="knowledge_embedding_unavailable"
+        ) from error
 
 
 def _rebuild_rag_scope(*, operation_id, expected_model_config_revision, expected_index_generation):
@@ -394,7 +424,8 @@ def _require_processing_model(
 @guarded_processing()
 def reset_processing_target(*, space_id: int, invoke_user_id: int, **expectations) -> bool:
     """Reset the original physical target before any file succeeds in this job."""
-    knowledge, _, scope = _require_processing_model(space_id, **expectations)
+    knowledge, admitted, scope = _require_processing_model(space_id, **expectations)
+    _probe_embedding(knowledge, admitted.model_id, invoke_user_id)
     vector = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
         invoke_user_id=invoke_user_id,
         knowledge=knowledge,

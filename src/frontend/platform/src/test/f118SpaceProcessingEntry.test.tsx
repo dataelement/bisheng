@@ -321,8 +321,12 @@ it("file processing resolves the selected physical history version and confirms 
       model_config_revision: 5,
     });
   setup("file");
-  await waitFor(() => expect(screen.getByText("nextStep")).not.toBeDisabled());
-  fireEvent.click(screen.getByText("nextStep"));
+  await waitFor(() =>
+    expect(
+      screen.getByText("f118.processing_preview_chunks"),
+    ).not.toBeDisabled(),
+  );
+  fireEvent.click(screen.getByText("f118.processing_preview_chunks"));
   await waitFor(() =>
     expect(precheck).toHaveBeenCalledWith(
       40,
@@ -332,9 +336,10 @@ it("file processing resolves the selected physical history version and confirms 
       }),
     ),
   );
-  expect(screen.getByText("nextStep")).toBeDisabled();
+  expect(screen.getByText("f118.processing_replace_chunks")).toBeDisabled();
   fireEvent.click(await screen.findByText("preview-complete"));
-  fireEvent.click(screen.getByText("nextStep"));
+  expect(screen.queryByText("f118.processing_review")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByText("f118.processing_replace_chunks"));
   await waitFor(() =>
     expect(create).toHaveBeenCalledWith(
       40,
@@ -475,7 +480,9 @@ it.each(["xlsx", "html", "mp3", "mp4"])(
     });
     setup("file");
     await waitFor(() =>
-      expect(screen.getByText("nextStep")).not.toBeDisabled(),
+      expect(
+        screen.getByText("f118.processing_preview_chunks"),
+      ).not.toBeDisabled(),
     );
     expect(screen.queryByRole("tab")).not.toBeInTheDocument();
     expect(

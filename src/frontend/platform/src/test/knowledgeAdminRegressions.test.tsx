@@ -82,7 +82,7 @@ it.each([undefined, "workspace"] as const)("shows only server-reported folder an
 it.each([0, 1])("opens the concrete type %s permission editor and retires it on tenant switch", async fileType => {
   rows = [file(11, { file_type: fileType })];
   const view = mount("workspace");
-  fireEvent.click(await within(await menu()).findByRole("menuitem", { name: "manage_permission" }));
+  fireEvent.click(await within(await menu()).findByRole("menuitem", { name: "actionName.manage_permission" }));
   expect(await screen.findByRole("dialog", { name: "permission-editor" })).toHaveTextContent(`${fileType === 0 ? "folder" : "knowledge_file"}:11:file-11.pdf`);
   expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   view.update({ ...scope, tenantId: 202, managementTenantId: 202 });

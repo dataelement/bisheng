@@ -9,6 +9,7 @@ from dataclasses import dataclass
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge import (
+    KnowledgeFileFailedError,
     KnowledgeOperationPlanConflictError,
     KnowledgeProcessingConflictError,
     ResourceReferenceInvalidError,
@@ -242,6 +243,14 @@ class KnowledgeProcessingOwner:
         if not self.jobs._active_job_lease(job, lease):
             return None
         current = await self.aread_current(session, job.space_id, job=job)
+        await self.jobs._refresh_counts(session, job)
+        if job.kind == "embedding_rebuild" and job.total_count and not job.pending_count and not job.succeeded_count:
+            failed = await self.jobs.afinalize(session, lease, configuration=current.configuration)
+            if failed is not None:
+                failed.error_code = KnowledgeFileFailedError.Code
+                failed.error_message = "all_files_failed"
+                await session.flush()
+            return failed
         if current.operation_id is not None:
             try:
                 receipt = await self._cutovers.afinalize(session, job, lease)

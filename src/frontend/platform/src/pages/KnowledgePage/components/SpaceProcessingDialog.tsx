@@ -312,6 +312,7 @@ function Content({
             : `f118.processing_title_${mode}`,
       )}
       presentation={presentation}
+      centered={mode === "file"}
       hideTitle={hideTitle || inlineEmbedding}
       busy={busy}
       className="max-h-[85vh] sm:max-w-[960px] overflow-y-auto"
@@ -348,7 +349,9 @@ function Content({
                 void (plan ? handleConfirm() : handleReview());
               }}
             >
-              {t("nextStep")}
+              {t(plan
+                ? "f118.processing_replace_chunks"
+                : "f118.processing_preview_chunks")}
             </Button>
           </>
         ) : (
@@ -380,6 +383,7 @@ function Content({
     >
       {mode === "file" && (
         <StepProgress
+          align="center"
           currentStep={job || completed ? 3 : plan ? 2 : 1}
           labels={[
             t("segmentStrategy"),
@@ -554,12 +558,14 @@ function Content({
 
           {plan && (
             <section>
-              <p>
-                {t("f118.processing_review", {
-                  valid: plan.result.valid_items.length,
-                  invalid: plan.result.invalid_items.length,
-                })}
-              </p>
+              {mode !== "file" && (
+                <p>
+                  {t("f118.processing_review", {
+                    valid: plan.result.valid_items.length,
+                    invalid: plan.result.invalid_items.length,
+                  })}
+                </p>
+              )}
               {plan.result.invalid_items.map((item, index) => (
                 <p key={index}>
                   {item.name ?? t("f118.processing_unavailable")}:{" "}

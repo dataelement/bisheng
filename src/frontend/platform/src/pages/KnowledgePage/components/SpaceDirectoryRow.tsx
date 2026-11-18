@@ -156,7 +156,7 @@ export function SpaceDirectoryRow({
               )}
               {canManagePermission && (
                 <DropdownItem icon={<Outlined.PeopleSafe aria-hidden />} onSelect={() => setPermission(epoch)}>
-                  {t("manage_permission", { ns: "permission" })}
+                  {t("actionName.manage_permission", { ns: "permission" })}
                 </DropdownItem>
               )}
               {canRename && !folder && (

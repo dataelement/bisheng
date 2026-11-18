@@ -88,3 +88,33 @@ async def test_explicit_rebuild_refuses_stale_configuration_and_an_active_operat
             await App.aprepare_rebuild(session, 40, 11, login_user=business.user)
         await session.rollback()
     assert fixtures.state(business) == before
+
+
+@pytest.mark.parametrize("native", [False, True])
+@pytest.mark.parametrize("target", [11, 12, 22])
+async def test_offline_target_is_rejected_before_configuration_or_reference_changes(business, native, target):
+    from bisheng.common.errcode.knowledge import KnowledgeEmbeddingUnavailableError
+    from bisheng.core.context.tenant import bypass_tenant_filter
+    from bisheng.llm.domain.models.llm_server import LLMModel
+
+    await fixtures.seed(business)
+    with Session(business.sync) as session, bypass_tenant_filter():
+        model = session.get(LLMModel, target)
+        model.status = 1
+        session.commit()
+    before = fixtures.state(business)
+    if native:
+
+        def reject_native():
+            with Session(business.sync) as session:
+                with pytest.raises(KnowledgeEmbeddingUnavailableError):
+                    App.prepare_rebuild(session, 40, target, login_user=business.user)
+                session.rollback()
+
+        await asyncio.to_thread(reject_native)
+    else:
+        async with business.sessions() as session:
+            with pytest.raises(KnowledgeEmbeddingUnavailableError):
+                await App.aprepare_rebuild(session, 40, target, login_user=business.user)
+            await session.rollback()
+    assert fixtures.state(business) == before

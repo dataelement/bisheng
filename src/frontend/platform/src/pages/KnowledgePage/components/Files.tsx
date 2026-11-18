@@ -96,8 +96,8 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
   const [keyword, setKeyword] = useState("");
   const [page, setPage] = useState(1);
   const [viewMode, setViewMode] = useWorkspaceViewMode(scope, presentation === "workspace");
-  const [sortField, setSortField] = useState<DirectorySortField>("update_time");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [sortField, setSortField] = useState<DirectorySortField>("file_type");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [statuses, setStatuses] = useState<number[]>(() =>
     searchParams.get("fileStatus") === "abnormal" ? [3, 6, 7] : [],
   );

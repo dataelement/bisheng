@@ -17,6 +17,7 @@ import {
   useKnowledgeProcessingActions,
   type KnowledgeQueryScope,
 } from "@/controllers/hooks/knowledge";
+import { processingFailureKey } from "./processingFailure";
 import { Progress } from "@/components/bs-ui/progress";
 import { showApiError } from "@/controllers/request";
 import { usePaginationLocale } from "@/hooks/usePaginationLocale";
@@ -61,8 +62,16 @@ export function SpaceProcessingProgress({
     }),
     [kind],
   );
-  const queryOptions = metadata ? { refetchOnMount: "always" as const } : undefined;
-  const job = useKnowledgeProcessingJob(scope, spaceId, jobId, api, queryOptions);
+  const queryOptions = metadata
+    ? { refetchOnMount: "always" as const }
+    : undefined;
+  const job = useKnowledgeProcessingJob(
+    scope,
+    spaceId,
+    jobId,
+    api,
+    queryOptions,
+  );
   const jobData = !metadata || job.isFetchedAfterMount ? job.data : undefined;
   const hasFailures = (jobData?.failed_count ?? 0) > 0;
   const items = useKnowledgeProcessingItems(
@@ -135,26 +144,38 @@ export function SpaceProcessingProgress({
     }
   };
   const status = state && t(`f118.processing_state_${state}`);
-  const counts = jobData && t("f118.processing_counts", {
-    completed: jobData.succeeded_count,
-    failed: jobData.failed_count,
-    pending: jobData.pending_count,
-  });
+  const counts =
+    jobData &&
+    t("f118.processing_counts", {
+      completed: jobData.succeeded_count,
+      failed: jobData.failed_count,
+      pending: jobData.pending_count,
+    });
   let percent: number | undefined;
   if (state === "succeeded") {
     percent = 100;
   } else if (jobData?.total_count) {
     const processed = jobData.succeeded_count + jobData.failed_count;
-    percent = Math.min(100, Math.floor((processed / jobData.total_count) * 100));
+    percent = Math.min(
+      100,
+      Math.floor((processed / jobData.total_count) * 100),
+    );
   }
   const showItems = !metadata || hasFailures;
+  const failureKey =
+    jobData && processingFailureKey(jobData, kind ?? jobData.kind);
   return (
     <section className="space-y-3" aria-live="polite">
       {metadata && (
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3">
-            <span>{status ?? t(job.isError ? "detail.load_failed" : "detail.loading")}</span>
-            {percent !== undefined && <span className="tabular-nums">{percent}%</span>}
+            <span>
+              {status ??
+                t(job.isError ? "detail.load_failed" : "detail.loading")}
+            </span>
+            {percent !== undefined && (
+              <span className="tabular-nums">{percent}%</span>
+            )}
           </div>
           <Progress
             aria-label={t("f118.processing_kind_metadata_schema_change")}
@@ -177,8 +198,11 @@ export function SpaceProcessingProgress({
               <p>{counts}</p>
             </>
           )}
-          {jobData.error_code && (
-            <p role="alert">{t(`api_errors:${jobData.error_code}`)}</p>
+          {failureKey && <p role="alert">{t(failureKey)}</p>}
+          {hasFailures && (
+            <p className="text-caption text-text-3">
+              {t("f118.processing_task_id", { id: jobId })}
+            </p>
           )}
           {showItems && jobData.hidden_item_count > 0 && (
             <p>
@@ -199,15 +223,20 @@ export function SpaceProcessingProgress({
       )}
       {showItems && Boolean(items.data?.data.length) && (
         <ul className="divide-y">
-          {items.data?.data.map((item, index) => (
-            <li className="py-2" key={item.id}>
-              {t("f118.processing_item_number", {
-                number: (page - 1) * 20 + index + 1,
-              })}
-              : {t(`f118.processing_item_${item.state}`)}
-              {item.error_code ? ` (${t(`api_errors:${item.error_code}`)})` : ""}
-            </li>
-          ))}
+          {items.data?.data.map((item) => {
+            const itemFailureKey = processingFailureKey(
+              item,
+              kind ?? jobData?.kind,
+            );
+            return (
+              <li className="py-2" key={item.id}>
+                {item.file_name ??
+                  t("f118.processing_file_id", { id: item.file_id })}
+                : {t(`f118.processing_item_${item.state}`)}
+                {itemFailureKey ? ` (${t(itemFailureKey)})` : ""}
+              </li>
+            );
+          })}
         </ul>
       )}
       {showItems && items.data && items.data.total > 20 && (

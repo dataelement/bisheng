@@ -96,7 +96,9 @@ async def dispatch(application, monkeypatch):
     }
     es.client.scroll.return_value = {"hits": {"hits": []}}
     vector = SimpleNamespace(col=Mock(spec=handler.Collection), add_texts=Mock())
-    provider = Mock(return_value=Mock())
+    embedding = Mock()
+    embedding.embed_query.return_value = [0.25, 0.5]
+    provider = Mock(return_value=embedding)
     monkeypatch.setattr(KnowledgeRag, "init_es_vectorstore_sync", lambda *args, **kwargs: es)
     monkeypatch.setattr(KnowledgeRag, "init_milvus_vectorstore", lambda *args, **kwargs: vector)
     monkeypatch.setattr(handler.LLMService, "get_bisheng_knowledge_embedding_sync", provider)
@@ -233,7 +235,8 @@ async def test_retry_preclaim_credential_rejection_releases_fence_and_new_author
     async with dispatch.app.context.sessions() as session:
         job = await dispatch.app.owner.jobs.aget(session, dispatch.job_id)
         assert job.failed_count == 2 and not job.pending_dispatch
-        assert (await session.get(Knowledge, 40)).state == 1
+        row = await session.get(Knowledge, 40)
+        assert row.state == 3 and row.model_transition is not None
         await dispatch.app.app.aretry(
             session,
             40,
@@ -250,3 +253,43 @@ async def test_retry_preclaim_credential_rejection_releases_fence_and_new_author
     )
     assert (await module._execute_processing_job(dispatch.job_id, revision))["state"] == "succeeded"
     dispatch.vector.col.drop.assert_called_once()
+
+
+async def test_all_failed_rebuild_keeps_original_model_and_same_task_retry_recovers(dispatch):
+    dispatch.vector.add_texts.side_effect = RuntimeError("provider failed after probe")
+    assert (await module._execute_processing_job(dispatch.job_id, dispatch.revision))["state"] == "failed"
+    async with dispatch.app.context.sessions() as session:
+        job = await dispatch.app.owner.jobs.aget(session, dispatch.job_id)
+        row = await session.get(Knowledge, 40)
+        assert job.failed_count == 2 and job.succeeded_count == 0
+        assert job.error_message == "all_files_failed"
+        assert row.model == "11" and row.model_transition is not None and row.state == 3
+        assert row.model_config_revision == job.accepted_model_config_revision
+        await dispatch.app.app.aretry(
+            session,
+            40,
+            job.id,
+            ProcessingRetryRequest(idempotency_key="retry-all-failed", expected_job_revision=job.revision),
+            identity=dispatch.app.context.user,
+            entry_kind="web",
+        )
+        revision = job.revision
+        await session.commit()
+    dispatch.vector.add_texts.side_effect = None
+    assert (await module._execute_processing_job(dispatch.job_id, revision))["state"] == "succeeded"
+    dispatch.vector.col.drop.assert_called_once()
+    async with dispatch.app.context.sessions() as session:
+        row = await session.get(Knowledge, 40)
+        assert row.model_transition is None and row.state == 1
+
+
+@pytest.mark.parametrize("probe", [[], [float("nan")], [True], "not-a-vector"])
+async def test_invalid_embedding_probe_fails_before_dropping_existing_vectors(dispatch, probe):
+    dispatch.provider.return_value.embed_query.return_value = probe
+    assert (await module._execute_processing_job(dispatch.job_id, dispatch.revision))["state"] == "failed"
+    dispatch.vector.col.drop.assert_not_called()
+    dispatch.vector.add_texts.assert_not_called()
+    dispatch.es.client.delete_by_query.assert_not_called()
+    async with dispatch.app.context.sessions() as session:
+        row = await session.get(Knowledge, 40)
+        assert row.model_transition is not None and row.model == "11"

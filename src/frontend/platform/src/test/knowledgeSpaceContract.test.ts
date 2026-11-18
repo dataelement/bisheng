@@ -180,7 +180,7 @@ describe("A1 processing API wire contract", () => {
     expect(await api.listChildren(7, query)).toBe(page);
     expect(request.get.mock.calls).toEqual([
       ["/api/v1/knowledge/space/7/info"],
-      ["/api/v1/knowledge/space/7/children", { params: query }],
+      ["/api/v1/knowledge/space/7/children", { params: query, paramsSerializer: { indexes: null } }],
     ]);
     expect(page).not.toHaveProperty("total");
   });
@@ -376,4 +376,17 @@ describe("A1 processing API wire contract", () => {
       { id: 2, name: "department" },
     ]);
   });
+});
+
+it("serializes file status filters as repeated FastAPI query keys", async () => {
+  await api.listChildren(7, {
+    file_status: [1, 3, 6],
+    order_field: "file_type",
+    order_sort: "asc",
+  });
+  const [url, options] = request.get.mock.calls.at(-1)!;
+  const { default: transport } = await vi.importActual<typeof import("@/controllers/request")>("@/controllers/request");
+  const query = new URL(transport.getUri({ url, ...options }), "https://app.test").searchParams;
+  expect(query.getAll("file_status")).toEqual(["1", "3", "6"]);
+  expect(query.has("file_status[]")).toBe(false);
 });

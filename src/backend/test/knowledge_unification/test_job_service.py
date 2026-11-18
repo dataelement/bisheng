@@ -213,6 +213,15 @@ async def test_query_filters_current_file_scope_before_pagination_and_summary_hi
         assert detail.hidden_item_count == 1 and detail.total_count == 2
         items = await app.app.alist_items(session, 40, created.job_id, identity=app.context.user, page=1, page_size=1)
         assert items.total == 1 and items.data[0].file_id == 81
+        physical = await session.get(KnowledgeFile, 81)
+        assert items.data[0].file_name == physical.file_name
+        job = await app.owner.jobs.aget(session, created.job_id)
+        job.error_message = "metadata_execution_source_or_values_changed"
+        assert (
+            await app.app.aget(session, 40, created.job_id, identity=app.context.user)
+        ).failure_reason == "file_changed"
+        job.error_message = "secret provider payload"
+        assert (await app.app.aget(session, 40, created.job_id, identity=app.context.user)).failure_reason is None
         app.visibility.ids = set()
         assert (
             await app.app.alist_items(session, 40, created.job_id, identity=app.context.user, page=1, page_size=10)

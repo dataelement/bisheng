@@ -12,6 +12,7 @@ from weakref import WeakKeyDictionary, ref
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge import (
+    KnowledgeEmbeddingUnavailableError,
     KnowledgeNoEmbeddingError,
     KnowledgeNotExistError,
     KnowledgeOperationPlanConflictError,
@@ -401,6 +402,14 @@ class KnowledgeModelReferenceApplication:
         )
         kinds = cls.repository.model_kinds(session, runtime.verifier, cls._source(row), bindings.verified.context)
         repair = cls._validate_configuration(row, bindings, kinds, selected)
+        if _explicit_rebuild or selected != (canonical_target_id(row.model) if row.model else None):
+            status = cls.repository.model_status(
+                session, runtime.verifier, cls._source(row), bindings.verified.context, selected
+            )
+            if status == 1:
+                raise KnowledgeEmbeddingUnavailableError(
+                    knowledge_name=row.name, reason="knowledge_embedding_unavailable"
+                )
         return cls._freeze(
             session, row, runtime, bindings, selected, transition, repair, explicit_rebuild=_explicit_rebuild
         )
@@ -443,6 +452,14 @@ class KnowledgeModelReferenceApplication:
             session, runtime.verifier, cls._source(row), bindings.verified.context
         )
         repair = cls._validate_configuration(row, bindings, kinds, selected)
+        if _explicit_rebuild or selected != (canonical_target_id(row.model) if row.model else None):
+            status = await cls.repository.amodel_status(
+                session, runtime.verifier, cls._source(row), bindings.verified.context, selected
+            )
+            if status == 1:
+                raise KnowledgeEmbeddingUnavailableError(
+                    knowledge_name=row.name, reason="knowledge_embedding_unavailable"
+                )
         return cls._freeze(
             session, row, runtime, bindings, selected, transition, repair, explicit_rebuild=_explicit_rebuild
         )

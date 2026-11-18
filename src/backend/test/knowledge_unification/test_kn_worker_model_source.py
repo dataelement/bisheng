@@ -14,6 +14,7 @@ import sqlalchemy as sa
 from sqlmodel import Session
 
 from bisheng.common.errcode.knowledge import (
+    KnowledgeEmbeddingUnavailableError,
     KnowledgeOperationPlanConflictError,
     ReferenceCoverageNotReadyError,
     ResourceReferenceInvalidError,
@@ -291,9 +292,12 @@ def test_global_provider_failure_preserves_unfinished_stage_and_does_not_finaliz
         "get_bisheng_knowledge_embedding_sync",
         Mock(side_effect=RuntimeError("provider unavailable")),
     )
-    with pytest.raises(RuntimeError, match="provider unavailable"):
+    expected = KnowledgeEmbeddingUnavailableError if kind == "document" else RuntimeError
+    with pytest.raises(expected):
         execute(rebuild, kind)
     assert_stage_preserved(rebuild)
+    if kind == "document":
+        assert rebuild.events == []
 
 
 @pytest.mark.parametrize("kind", ["document", "qa"])

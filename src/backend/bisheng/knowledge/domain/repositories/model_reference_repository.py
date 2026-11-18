@@ -201,6 +201,22 @@ class KnowledgeModelReferenceRepository:
         with session.no_autoflush, bypass_tenant_filter():
             return {key: (await session.exec(query)).one_or_none() for key, query in queries}
 
+    def _selected_status_query(self, session, verifier, source_key, context, model_id):
+        queries = self._embedding_queries(session, verifier, source_key, context)
+        return next(
+            query.with_only_columns(LLMModel.status) for key, query in queries if key.target_id == str(model_id)
+        )
+
+    def model_status(self, session, verifier, source_key, context, model_id):
+        query = self._selected_status_query(session, verifier, source_key, context, model_id)
+        with session.no_autoflush, bypass_tenant_filter():
+            return session.exec(query).one_or_none()
+
+    async def amodel_status(self, session, verifier, source_key, context, model_id):
+        query = self._selected_status_query(session, verifier, source_key, context, model_id)
+        with session.no_autoflush, bypass_tenant_filter():
+            return (await session.exec(query)).one_or_none()
+
     @staticmethod
     def _tenant_id():
         tenant_id = _resolve_tenant_id()
