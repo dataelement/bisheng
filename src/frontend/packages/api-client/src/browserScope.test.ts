@@ -136,3 +136,16 @@ it.each([true, false])('late recovery cannot overwrite a newer confirmation, suc
   expect(session.tenant).toBe(65);
   expect(session.isPaused).toBe(false);
 });
+
+
+it('only sends the management tenant for the two market list GETs', () => {
+  const origin = 'http://localhost';
+  const admin = '/api/v1/dsh/market/admin';
+  for (const resource of ['plugins', 'workbenches']) {
+    expect(needsBrowserScope('GET', `${admin}/${resource}?page=2`, origin)).toBe(true);
+    expect(needsBrowserScope('GET', `${admin}/${resource}/record`, origin)).toBe(false);
+    expect(needsBrowserScope('POST', `${admin}/${resource}`, origin)).toBe(false);
+  }
+  expect(needsBrowserScope('GET', '/api/v1/dsh/market/catalog', origin)).toBe(false);
+  expect(needsBrowserScope('POST', `${admin}/imports`, origin)).toBe(false);
+});

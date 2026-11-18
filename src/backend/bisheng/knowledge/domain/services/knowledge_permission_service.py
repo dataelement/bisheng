@@ -11,7 +11,6 @@ from bisheng.common.errcode.permission import (
     PermissionInvalidResourceError,
 )
 from bisheng.common.services.metric_log import emit_metric
-from bisheng.database.models.department import DepartmentDao
 from bisheng.database.models.tenant import UserTenantDao
 from bisheng.knowledge.domain.models.knowledge import (
     Knowledge,
@@ -740,12 +739,15 @@ class F048KnowledgeContainerPermissionAdapter:
         )
         if record is None:
             raise PermissionInvalidResourceError()
-        departments = await DepartmentDao.aget_by_ids([department_id])
-        if (
-            len(departments) != 1
-            or departments[0].tenant_id != record.tenant_id
-            or getattr(departments[0], "status", "active") != "active"
-        ):
+        from bisheng.common.errcode.department import DepartmentPermissionDeniedError
+        from bisheng.common.errcode.role import RolePolicyUnavailableError
+        from bisheng.department.domain.repositories.directory_repository import DirectoryRepository
+
+        try:
+            departments = await DirectoryRepository.active_departments(record.tenant_id, [department_id])
+        except (DepartmentPermissionDeniedError, RolePolicyUnavailableError) as exc:
+            raise PermissionInvalidResourceError() from exc
+        if len(departments) != 1:
             raise PermissionInvalidResourceError()
         actor = PermissionActor(
             user_id=operator_user_id,

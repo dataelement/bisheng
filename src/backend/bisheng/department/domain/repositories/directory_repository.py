@@ -188,3 +188,34 @@ class DirectoryRepository:
                         }
                     )
         return records
+
+    @staticmethod
+    async def active_departments(tenant_id, department_ids):
+        """Active departments inside one business tenant's organization directory.
+
+        Department rows stay on the directory storage tenant. A query filtered by
+        the business tenant id misses a department the organization picker shows.
+        """
+        if not department_ids:
+            return []
+        scope = await DirectoryRepository.scope(tenant_id)
+        condition = (Department.tenant_id == scope.storage_tenant_id) & Department.path.like(f"{scope.root_path}%")
+        for excluded in scope.excluded_paths:
+            condition &= ~Department.path.like(f"{excluded}%")
+        ids = list(dict.fromkeys(int(department_id) for department_id in department_ids))
+        found = []
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                for offset in range(0, len(ids), 500):
+                    rows = (
+                        await session.exec(
+                            select(Department).where(
+                                Department.id.in_(ids[offset : offset + 500]),
+                                condition,
+                                Department.status == "active",
+                                Department.is_deleted == 0,
+                            )
+                        )
+                    ).all()
+                    found.extend(rows)
+        return found

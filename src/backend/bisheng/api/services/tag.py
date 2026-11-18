@@ -7,6 +7,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.errcode.tag import TagExistError, TagNotExistError
 from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
+from bisheng.core.context.tenant import strict_tenant_filter
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import FlowDao
 from bisheng.database.models.group_resource import ResourceTypeEnum
@@ -21,7 +22,7 @@ async def _aget_hosted_app(resource_id: str):
     """One hosted application row, or ``None`` once it is deleted.
 
     Deliberately not routed through ``AppQueryService``: that service answers
-    the detail page's question (owner ∪ tenant administrator), while tagging
+    the detail page's question (owner or tenant administrator), while tagging
     asks the generic F048 ``edit`` question a few lines below. Reusing it would
     quietly apply two different rules to the same request. A ``deleted`` app is
     reported as absent — the row survives for audit, but it is not a resource
@@ -40,19 +41,22 @@ async def _aget_hosted_app(resource_id: str):
 class TagService:
     @classmethod
     def get_all_tag(
-        cls, request: Request, login_user: UserPayload, keyword: str = None, page: int = 0, limit: int = 10
+        cls, request: Request, login_user: UserPayload, keyword: str | None = None, page: int = 0, limit: int = 10
     ) -> (list[Tag], int):
         """Get all tags"""
-        result = TagDao.search_tags(
-            keyword,
-            page,
-            limit,
-            business_type=TagBusinessTypeEnum.APPLICATION,
-            business_id=TagBusinessTypeEnum.APPLICATION.value,
-        )
-        return result, TagDao.count_tags(
-            keyword, business_type=TagBusinessTypeEnum.APPLICATION, business_id=TagBusinessTypeEnum.APPLICATION.value
-        )
+        with strict_tenant_filter():
+            result = TagDao.search_tags(
+                keyword,
+                page,
+                limit,
+                business_type=TagBusinessTypeEnum.APPLICATION,
+                business_id=TagBusinessTypeEnum.APPLICATION.value,
+            )
+            return result, TagDao.count_tags(
+                keyword,
+                business_type=TagBusinessTypeEnum.APPLICATION,
+                business_id=TagBusinessTypeEnum.APPLICATION.value,
+            )
 
     @classmethod
     def create_tag(cls, request: Request, login_user: UserPayload, name: str) -> Tag:
@@ -157,7 +161,8 @@ class TagService:
         if not home_tags:
             return []
         home_tags = json.loads(home_tags.value)
-        tags = TagDao.get_tags_by_ids(home_tags)
+        with strict_tenant_filter():
+            tags = TagDao.get_tags_by_ids(home_tags)
 
         tags = sorted(tags, key=lambda x: home_tags.index(x.id))
         return tags

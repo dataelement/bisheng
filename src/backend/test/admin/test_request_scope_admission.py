@@ -166,7 +166,7 @@ async def test_frozen_response_target_replaces_legacy_headers_exactly_once(admit
         (RequestScope.TENANT, "own", False, 60, frozenset({1, 60})),
         (RequestScope.PERSONAL, "own", False, None, frozenset({1, 60})),
         (RequestScope.TENANT, "credential", False, None, frozenset({60})),
-        (RequestScope.TENANT, "selected", True, 60, frozenset({60})),
+        (RequestScope.TENANT, "selected", True, 60, frozenset({1, 60})),
     ],
 )
 def test_verified_tenant_binding_preserves_sharing_and_restores_context_on_failure(

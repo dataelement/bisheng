@@ -100,6 +100,50 @@ async def test_root_view_excludes_child_mounts_before_counts_and_flags(directory
         admitted_request_scope.reset(token)
 
 
+async def test_archived_child_is_hidden_and_cannot_receive_a_knowledge_space(directory_db, selected):
+    from bisheng.common.errcode.department import DepartmentNotFoundError
+    from bisheng.knowledge.domain.services.department_knowledge_space_service import (
+        DepartmentKnowledgeSpaceService,
+    )
+
+    with bypass_tenant_filter():
+        async with directory_db.sessions() as session:
+            (await session.get(Department, 30)).status = "archived"
+            await session.commit()
+    token = selected(2)
+    try:
+        async with organization_directory_scope():
+            assert [row["id"] for row in await service.DepartmentService.aget_children_layer(actor(), 20)] == []
+        with pytest.raises(DepartmentNotFoundError):
+            await DepartmentKnowledgeSpaceService._load_departments([30])
+    finally:
+        admitted_request_scope.reset(token)
+
+
+async def test_child_directory_department_loads_for_its_management_view(directory_db, selected):
+    from bisheng.common.errcode.department import DepartmentPermissionDeniedError
+    from bisheng.core.context.tenant import management_tenant_scope
+    from bisheng.knowledge.domain.services.department_knowledge_space_service import (
+        DepartmentKnowledgeSpaceService,
+    )
+
+    token = selected(2)
+    try:
+        with management_tenant_scope(2):
+            loaded = await DepartmentKnowledgeSpaceService._load_departments([30])
+            assert loaded[30].tenant_id == 1
+            assert loaded[30].name == "leaf"
+    finally:
+        admitted_request_scope.reset(token)
+    token = selected(1)
+    try:
+        with management_tenant_scope(1):
+            with pytest.raises(DepartmentPermissionDeniedError):
+                await DepartmentKnowledgeSpaceService._load_departments([30])
+    finally:
+        admitted_request_scope.reset(token)
+
+
 async def test_foreign_affiliate_visible_without_leaking_primary_path(directory_db, selected):
     from bisheng.department.domain.services.organization_search_service import OrganizationSearchService
 

@@ -76,13 +76,14 @@ export interface TreeNavigationNodeProps {
   href?: string;
   onSelect?: () => void;
   disclosure?: { expanded: boolean; label: string; onToggle: () => void };
+  hideLeafArrow?: boolean;
   actions?: ReactNode;
   /** Child list items, including any branch loading, error or pagination state. */
   children?: ReactNode;
 }
 
 export function TreeNavigationNode({
-  name, depth = 0, icon, marker, current, disabled, href, onSelect, disclosure, actions, children,
+  name, depth = 0, icon, marker, current, disabled, href, onSelect, disclosure, hideLeafArrow, actions, children,
 }: TreeNavigationNodeProps) {
   const id = useId();
   const expanded = disclosure?.expanded ?? true;
@@ -117,7 +118,7 @@ export function TreeNavigationNode({
             aria-expanded={expanded} aria-controls={id} onClick={disclosure.onToggle}>
             {expanded ? <Outlined.Down aria-hidden /> : <Outlined.Right aria-hidden />}
           </button>
-        ) : <span className={styles.disclosure} aria-hidden><Outlined.Right /></span>}
+        ) : <span className={styles.disclosure} aria-hidden>{!hideLeafArrow && <Outlined.Right />}</span>}
         {href && !disabled
           ? <a {...targetProps} href={href}>{targetContent}</a>
           : <button {...targetProps} type="button" disabled={disabled}>{targetContent}</button>}

@@ -30,6 +30,7 @@ export default function ExplorePlaza() {
   const [agents, setAgents] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadError, setLoadError] = useState<"initial" | "append" | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // --- 游标瀑布流加载状态 ---
@@ -79,6 +80,7 @@ export default function ExplorePlaza() {
       // previous filter's apps with the new keyword sitting in the box.
       if (isAppend && (loading || loadingMore)) return;
       const seq = isAppend ? listSeqRef.current : ++listSeqRef.current;
+      setLoadError(null);
       if (isAppend) setLoadingMore(true);
       else setLoading(true);
       try {
@@ -105,6 +107,7 @@ export default function ExplorePlaza() {
       } catch (error) {
         console.error("Failed to fetch agents:", error);
         if (seq !== listSeqRef.current) return;
+        setLoadError(isAppend ? "append" : "initial");
         if (!isAppend) setAgents([]);
       } finally {
         // The append lane owns `loadingMore` alone, so it always clears it.
@@ -140,6 +143,8 @@ export default function ExplorePlaza() {
           !loading &&
           !loadingMore &&
           hasMore &&
+          !loadError &&
+          cursorRef.current !== null &&
           activeTabId !== null &&
           !loadMoreLockRef.current
         ) {
@@ -155,7 +160,7 @@ export default function ExplorePlaza() {
     }
 
     return () => observer.disconnect();
-  }, [loading, loadingMore, hasMore, searchQuery, activeTabId, fetchAgents]);
+  }, [loading, loadingMore, hasMore, loadError, searchQuery, activeTabId, fetchAgents]);
 
   // Show the spinner while the navigation initializes the default tab.
   const showLoading = loading || activeTabId === null;
@@ -297,13 +302,27 @@ export default function ExplorePlaza() {
                   {localize("com_app_explore_loading_more")}
                 </span>
               </div>
+            ) : loadError ? (
+              <div className="flex flex-col items-center gap-2 text-sm text-text-3" role="alert">
+                <p>{localize("com_list_load_failed")}</p>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    if (activeTabId === null) return;
+                    const append = loadError === "append";
+                    void fetchAgents(searchQuery, activeTabId, append ? cursorRef.current : null, append);
+                  }}
+                >
+                  {localize("com_error_retry")}
+                </Button>
+              </div>
             ) : null}
-            {!hasMore && agents.length > 0 && (
+            {!loadError && !hasMore && agents.length > 0 && (
               <p className="text-[#a9aeb8] text-[12px] font-['PingFang_SC'] mt-4">
                 {localize("com_app_explore_end_of_list")}
               </p>
             )}
-            {!showLoading && agents.length === 0 && (
+            {!showLoading && !loadError && agents.length === 0 && (
               <div className="flex flex-col items-center">
                 <EmptyStateIllustration className="size-[120px] mb-4" />
                 <p className="text-[#a9aeb8] text-[14px] font-['PingFang_SC']">
