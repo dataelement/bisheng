@@ -537,6 +537,7 @@
         "processing_unavailable": "Unavailable item",
         "processing_review_again": "Review again",
         "processing_review_action": "Review impact",
+        "processing_conflict_file_parsing": "This file is still being parsed. Wait until this parse finishes. Reparsing or resplitting stays unavailable until then.",
         "processing_conflict_file_busy": "This file is still being processed. Try again once processing finishes.",
         "processing_conflict_space_busy": "The knowledge space is being built, rebuilt or copied. Try again once it finishes.",
         "processing_conflict_job_active": "A processing task is already running for this file or space. Try again once it finishes.",

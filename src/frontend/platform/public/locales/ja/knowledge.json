@@ -531,6 +531,7 @@
         "processing_unavailable": "利用できない項目",
         "processing_review_again": "再確認",
         "processing_review_action": "影響を確認",
+        "processing_conflict_file_parsing": "このファイルは解析中です。今回の解析が終わるまでお待ちください。解析が完了するまで、再解析や再分割はできません。",
         "processing_conflict_file_busy": "このファイルは処理中です。処理が完了してから再試行してください。",
         "processing_conflict_space_busy": "ナレッジスペースは構築・再構築・コピー中です。完了してから再試行してください。",
         "processing_conflict_job_active": "このファイルまたはスペースで処理タスクが実行中です。タスクの終了後に再試行してください。",

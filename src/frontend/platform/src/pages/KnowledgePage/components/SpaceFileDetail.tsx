@@ -129,7 +129,7 @@ export function SpaceFileDetail({ scope, spaceId, fileId, initialFile, onBack, o
                 </Button>
               )}
               <Tooltip
-                content={t("f118.processing_conflict_file_busy")}
+                content={t("f118.processing_conflict_file_parsing")}
                 disabled={!fileProcessing}
               >
                 <Button

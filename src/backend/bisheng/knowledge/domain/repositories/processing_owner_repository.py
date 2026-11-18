@@ -172,7 +172,7 @@ class ProcessingOwnerRepository:
         if root is None or root.state != KnowledgeState.PUBLISHED.value or root.model_transition is not None:
             raise KnowledgeProcessingConflictError(reason="processing_space_not_ready")
         if not scope or any(row.status not in {2, 3, 6, 7} for row in scope):
-            raise KnowledgeProcessingConflictError(reason="processing_file_state_not_ready")
+            raise KnowledgeProcessingConflictError(reason="file_parse_in_progress")
         item, job = KnowledgeProcessingItem, KnowledgeProcessingJob
         pairs = [(row.target.file_id, row.target.version_id) for row in scope]
         base = (
@@ -197,7 +197,7 @@ class ProcessingOwnerRepository:
             with strict_tenant_filter():
                 conflict = (await session.exec(query.limit(1))).first()
             if conflict is not None:
-                raise KnowledgeProcessingConflictError(reason="processing_target_job_active")
+                raise KnowledgeProcessingConflictError(reason="file_parse_in_progress")
         return root
 
     async def _file(self, session, space_id, file_id):
@@ -218,7 +218,7 @@ class ProcessingOwnerRepository:
         for item in items:
             row = await self._file(session, space_id, item.target.file_id)
             if row.status not in {2, 3, 6, 7}:
-                raise KnowledgeProcessingConflictError(reason="processing_file_state_not_ready")
+                raise KnowledgeProcessingConflictError(reason="file_parse_in_progress")
             row.status, row.remark, row.split_rule, row.updater_id = 5, "", rules[item.target.file_id], actor_user_id
         await session.flush()
 

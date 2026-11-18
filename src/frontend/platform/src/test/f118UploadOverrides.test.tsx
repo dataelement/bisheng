@@ -161,6 +161,20 @@ it("loads effective rules for the actual folder eagerly and stages without proce
     screen.getByRole("checkbox", { name: "keepImages" }),
   ).not.toBeChecked();
 });
+it("enables comparison next once the preview is on screen", async () => {
+  mocks.get.mockImplementation(async (url: string) => {
+    if (url.endsWith("/upload-settings")) return uploadSettings();
+    if (url.includes("/previews/")) return preview();
+    throw new Error(`unexpected read ${url}`);
+  });
+  mount();
+  await drop();
+  fireEvent.click(screen.getByRole("button", { name: "nextStep" }));
+  fireEvent.click(await screen.findByRole("button", { name: "nextStep" }));
+  await screen.findByText("original-preview");
+  await screen.findByText("original chunk");
+  expect(screen.getByRole("button", { name: "nextStep" })).toBeEnabled();
+});
 it("submits the same manual rule and edited preview revision only after comparison confirmation", async () => {
   mount();
   await drop();

@@ -98,15 +98,26 @@ function UploadWizard({
     queue.jobs.every((job) => job.phase === "staged"),
   );
   const handlePreview = useCallback(
-    (id: string, record: PreviewBook[string]) => {
-      setBook((previous) =>
-        previous[id]?.value === record.value &&
-        previous[id]?.fingerprint === record.fingerprint
-          ? previous
-          : { ...previous, [id]: record },
-      );
+    (id: string, record: PreviewBook[string], path?: string) => {
+      setBook((previous) => {
+        const queued = files.find(
+          (item) => item.id === id || (path != null && item.file_path === path),
+        );
+        const keys = [...new Set([id, queued?.id, path].filter(Boolean))] as string[];
+        if (
+          keys.every(
+            (key) =>
+              previous[key]?.value === record.value &&
+              previous[key]?.fingerprint === record.fingerprint,
+          )
+        )
+          return previous;
+        const next = { ...previous };
+        for (const key of keys) next[key] = record;
+        return next;
+      });
     },
-    [],
+    [files],
   );
   const handleStrategy = useCallback(
     (value: Step2PersistState) => setStrategy(value as WizardStrategy),
@@ -383,12 +394,15 @@ function UploadWizard({
               <Button
                 disabled={
                   busy ||
-                  book[files[0]?.id]?.value.status !== "completed" ||
-                  files.some(
-                    (file) =>
-                      book[file.id] &&
-                      book[file.id].value.status !== "completed",
-                  )
+                  !strategy.rules.fileList.length ||
+                  strategy.rules.fileList.some((file) => {
+                    const record = book[file.id] ?? book[file.filePath];
+                    return record?.value.status !== "completed";
+                  }) ||
+                  files.some((file) => {
+                    const record = book[file.id] ?? book[file.file_path];
+                    return record != null && record.value.status !== "completed";
+                  })
                 }
                 onClick={() => handleCommit(false)}
               >
