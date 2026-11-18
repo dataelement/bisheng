@@ -117,6 +117,47 @@ afterEach(() => {
   clients.splice(0).forEach((client) => client.clear());
 });
 
+it.each(["file", "folder"])(
+  "switches %s task actions from cancel to retry/remove and then staged removal",
+  async (kind) => {
+    let finishUpload!: (value: { file_path: string; upload_id: string; repeat: boolean }) => void;
+    mocks.post.mockImplementation(() => new Promise((resolve) => {
+      finishUpload = resolve;
+    }));
+    mount();
+    const selected = kind === "folder" ? file("Root/a.txt") : file("report.txt");
+    const input = kind === "folder"
+      ? screen.getByLabelText("f118.upload_folder")
+      : document.querySelector('input[type="file"]')!;
+    await act(async () => fireEvent.change(input, { target: { files: [selected] } }));
+    await waitFor(() => expect(stages()).toHaveLength(1));
+    expect(screen.getByRole("button", { name: "cancel" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "delete" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "retry" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "cancel" }));
+    expect(stages()[0][2].signal.aborted).toBe(true);
+    expect(screen.queryByRole("button", { name: "cancel" })).toBeNull();
+    expect(screen.getByRole("button", { name: "retry" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "delete" })).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "retry" }));
+    await waitFor(() => expect(stages()).toHaveLength(2));
+    expect(screen.getByRole("button", { name: "cancel" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "delete" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "retry" })).toBeNull();
+
+    await act(async () => finishUpload({ file_path: "tmp/a", upload_id: "a".repeat(32), repeat: false }));
+    await screen.findByText("f118.upload_staged");
+    expect(screen.queryByRole("button", { name: "cancel" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "retry" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "delete" }));
+    expect(screen.queryByText(kind === "folder" ? "Root" : "report.txt")).toBeNull();
+    expect(screen.getByText("f118.upload_tasks_empty")).toBeVisible();
+    expect(registers()).toHaveLength(0);
+  },
+);
+
 it("stages the complete tree before one original registration with exact relative paths", async () => {
   mount();
   await pick();

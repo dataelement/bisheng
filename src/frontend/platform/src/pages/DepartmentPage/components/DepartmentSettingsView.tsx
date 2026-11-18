@@ -31,7 +31,6 @@ export function DepartmentSettingsView({
     handleRestore,
     isArchived,
     t,
-    loading,
     isSynced,
     name,
     setName,
@@ -66,12 +65,6 @@ export function DepartmentSettingsView({
           className="mb-4"
           description={t("bs:department.archivedNotice")}
         />
-      )}
-
-      {loading && (
-        <div role="status" aria-label={t("bs:organization.loadingSettings")} className="mb-4 flex h-5 items-center text-text-3">
-          <Outlined.Loading aria-hidden className="size-4 animate-spin" />
-        </div>
       )}
 
       <section className="space-y-4">

@@ -366,6 +366,10 @@ it("aborts staging on cancel and never registers a late successful body", async 
   );
   expect(registerCalls()).toHaveLength(0);
   expect(screen.getByText("f118.upload_cancelled")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "retry" })).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "delete" }));
+  expect(screen.queryByText("report.md")).not.toBeInTheDocument();
+  expect(screen.getByText("f118.upload_tasks_empty")).toBeVisible();
 });
 it("retires a cancelled registration without pretending the server rolled it back", async () => {
   const pending = deferred<ReturnType<typeof row>[]>();
@@ -536,6 +540,8 @@ it("limits active staging to six and releases cancelled slots even when the old 
   mount();
   await select(Array.from({ length: 7 }, (_, index) => file(`${index}.md`)));
   await waitFor(() => expect(stageCalls()).toHaveLength(6));
+  expect(screen.getAllByRole("button", { name: "cancel" })).toHaveLength(7);
+  expect(screen.queryByRole("button", { name: "delete" })).toBeNull();
   fireEvent.click(screen.getAllByRole("button", { name: "cancel" })[0]);
   await waitFor(() => expect(stageCalls()).toHaveLength(7));
   expect(stageCalls()[0][2].signal.aborted).toBe(true);

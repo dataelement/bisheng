@@ -66,6 +66,7 @@ export function SpaceUploadProgress({
             {jobs.map((job) => {
               const name = job.folder?.name ?? job.file.name;
               const single = !job.folder && job.phase === "registered" && job.rows?.length === 1;
+              const canCancel = job.phase === "queued" || job.phase === "uploading" || job.phase === "registering";
               return (
                 <li key={job.id} className="space-y-2 px-4 py-3 even:bg-fill-1">
                   <div className="flex min-w-0 items-center gap-3">
@@ -81,13 +82,13 @@ export function SpaceUploadProgress({
                       </p>
                     </div>
                     {single && <div className="shrink-0">{renderStatus(job.rows![0])}</div>}
-                    {(job.phase === "queued" || job.phase === "uploading" || job.phase === "registering") && (
+                    {canCancel && (
                       <Button variant="text" color="default" onClick={() => onCancel(job)}>{t("cancel")}</Button>
                     )}
-                    {onRemove && !job.registrationStarted && <Button variant="text" onClick={() => onRemove(job)}>{t("delete")}</Button>}
                     {!job.registrationStarted && (job.phase === "error" || job.phase === "cancelled") && (
                       <Button variant="text" onClick={() => onRetry(job)}>{t("retry")}</Button>
                     )}
+                    {onRemove && !job.registrationStarted && !canCancel && <Button variant="text" onClick={() => onRemove(job)}>{t("delete")}</Button>}
                   </div>
                   {job.phase === "registered" && !single && job.rows?.map((original, index) => (
                     <div key={`${original.id}:${index}`} className="ml-11 flex min-w-0 items-center justify-between gap-3 py-1">
