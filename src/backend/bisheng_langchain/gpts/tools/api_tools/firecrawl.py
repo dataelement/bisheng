@@ -4,7 +4,7 @@ from typing import Any
 import requests
 from pydantic import BaseModel, Field
 
-from bisheng_langchain.gpts.tools.api_tools.base import (MultArgsSchemaTool)
+from bisheng_langchain.gpts.tools.api_tools.base import MultArgsSchemaTool
 
 
 class InputArgs(BaseModel):
@@ -20,14 +20,19 @@ class FireCrawl(BaseModel):
 
     def search_crawl(self, target_url: str) -> str:
         """crawl from firecrawl"""
-        url = "https://api.firecrawl.dev/v1/crawl"
+        url = "https://api.firecrawl.dev/v2/crawl"
         headers = {
             "Content-Type": "application/json",
             "Authorization": "Bearer " + self.api_key,
         }
         params = {
             "url": target_url,
-            "maxDepth": self.maxdepth,
+            # v1 maxDepth limits URL path segments, not discovery hops.
+            "regexOnFullURL": False,
+            "includePaths": [
+                rf"^(/+[^/]+){{0,{self.maxdepth}}}/*$",
+                rf"^(/+[^/]+){{0,{self.maxdepth}}}/+index\.(html|php)/*$",
+            ],
             "limit": self.limit,
             "scrapeOptions": {
                 "formats": ["markdown"],
@@ -56,7 +61,7 @@ class FireCrawl(BaseModel):
 
     def search_scrape(self, target_url: str) -> str:
         """scrape from firecrawl"""
-        url = "https://api.firecrawl.dev/v1/scrape"
+        url = "https://api.firecrawl.dev/v2/scrape"
         headers = {
             "Content-Type": "application/json",
             "Authorization": "Bearer " + self.api_key,

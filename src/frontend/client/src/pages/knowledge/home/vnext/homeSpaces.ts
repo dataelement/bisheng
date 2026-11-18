@@ -5,6 +5,9 @@ export type HomeCategory = 'all' | HomeSource;
 export type HomeSort = 'create_time' | 'update_time' | 'name';
 export type HomeSpace = { space: KnowledgeSpace; source: HomeSource };
 
+const nameCollator = new Intl.Collator(undefined, { sensitivity: 'base' });
+const idCollator = new Intl.Collator(undefined, { numeric: true });
+
 /** Preserve department precedence, then resolve overlaps by stable ID. */
 export function groupHomeSpaces(mine: KnowledgeSpace[], joined: KnowledgeSpace[], department: KnowledgeSpace[]): Record<HomeCategory, HomeSpace[]> {
   const seen = new Set<string>();
@@ -38,16 +41,18 @@ export function mergePinnedOrder(order: readonly string[], pinnedIds: readonly s
 
 /** Pinned items use their own explicit newest-first order; only normal items use the selected sort. */
 export function sortHomeSpaces(items: HomeSpace[], sort: HomeSort, pinnedOrder: readonly string[] = []): HomeSpace[] {
-  const collator = new Intl.Collator(undefined, { sensitivity: 'base' });
   const orderedPins = mergePinnedOrder(pinnedOrder, items.filter(({ space }) => space.isPinned).map(({ space }) => space.id));
   const rank = new Map(orderedPins.map((id, index) => [id, index]));
+  const timestamps = sort === 'name' ? null : new Map(items.map(({ space }) => [
+    space.id,
+    homeTimestamp(sort === 'create_time' ? space.createdAt : space.updatedAt),
+  ]));
   return [...items].sort((a, b) => {
     const pin = Number(b.space.isPinned) - Number(a.space.isPinned);
     if (pin) return pin;
     if (a.space.isPinned && b.space.isPinned) return rank.get(a.space.id)! - rank.get(b.space.id)!;
-    const order = sort === 'name' ? collator.compare(a.space.name, b.space.name)
-      : homeTimestamp(sort === 'create_time' ? b.space.createdAt : b.space.updatedAt)
-      - homeTimestamp(sort === 'create_time' ? a.space.createdAt : a.space.updatedAt);
-    return order || a.space.id.localeCompare(b.space.id, undefined, { numeric: true });
+    const order = timestamps ? timestamps.get(b.space.id)! - timestamps.get(a.space.id)!
+      : nameCollator.compare(a.space.name, b.space.name);
+    return order || idCollator.compare(a.space.id, b.space.id);
   });
 }

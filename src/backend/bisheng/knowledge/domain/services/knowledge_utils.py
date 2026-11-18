@@ -6,6 +6,7 @@ from langchain_core.language_models import BaseChatModel
 from loguru import logger
 
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
+from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.common.services.base import BaseService
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
@@ -166,7 +167,9 @@ class KnowledgeUtils(BaseService):
         )
 
     @classmethod
-    async def async_save_preview_cache(cls, cache_key, mapping: dict = None, chunk_index: int = 0, value: dict = None):
+    async def async_save_preview_cache(
+        cls, cache_key, mapping: dict | None = None, chunk_index: int = 0, value: dict | None = None
+    ):
         redis_client = await get_redis_client()
         if mapping:
             for key, val in mapping.items():
@@ -176,7 +179,7 @@ class KnowledgeUtils(BaseService):
             await redis_client.ahset(cache_key, key=str(chunk_index), value=json.dumps(value, ensure_ascii=False))
 
     @classmethod
-    def delete_preview_cache(cls, cache_key, chunk_index: int = None):
+    def delete_preview_cache(cls, cache_key, chunk_index: int | None = None):
         redis_client = get_redis_client_sync()
         if chunk_index is None:
             redis_client.delete(cache_key)
@@ -187,7 +190,7 @@ class KnowledgeUtils(BaseService):
             redis_client.hdel(cache_key, chunk_index)
 
     @classmethod
-    def get_preview_cache(cls, cache_key, chunk_index: int = None) -> dict:
+    def get_preview_cache(cls, cache_key, chunk_index: int | None = None) -> dict:
         redis_client = get_redis_client_sync()
         if chunk_index is None:
             all_chunk_info = redis_client.hgetall(cache_key)
@@ -201,7 +204,7 @@ class KnowledgeUtils(BaseService):
             return chunk_info
 
     @classmethod
-    async def async_get_preview_cache(cls, cache_key, chunk_index: int = None) -> dict:
+    async def async_get_preview_cache(cls, cache_key, chunk_index: int | None = None) -> dict:
         redis_client = await get_redis_client()
         if chunk_index is None:
             all_chunk_info = await redis_client.ahgetall(cache_key)
@@ -215,7 +218,7 @@ class KnowledgeUtils(BaseService):
             return chunk_info
 
     @classmethod
-    def get_knowledge_file_image_dir(cls, doc_id: str, knowledge_id: int = None) -> str:
+    def get_knowledge_file_image_dir(cls, doc_id: str, knowledge_id: int | None = None) -> str:
         """Get file image atminioStorage directory for"""
         if knowledge_id:
             return f"knowledge/images/{knowledge_id}/{doc_id}"
@@ -246,7 +249,7 @@ class KnowledgeUtils(BaseService):
 
     @classmethod
     def get_knowledge_preview_file_object_name(
-        cls, file_id: int | str, file_name: str = None, file_ext: str = None
+        cls, file_id: int | str, file_name: str | None = None, file_ext: str | None = None
     ) -> str | None:
         """Get the preview file corresponding to the knowledge base file atminioStorage Path for This path is stored in the officialbucketand within"""
         if file_name:
@@ -265,7 +268,7 @@ class KnowledgeUtils(BaseService):
 
     @classmethod
     def resolve_preview_object_name(
-        cls, file_id: int | str, file_name: str = None, preview_file_object_name: str | None = None
+        cls, file_id: int | str, file_name: str | None = None, preview_file_object_name: str | None = None
     ) -> str | None:
         """Prefer the persisted preview path and fall back to the canonical preview path."""
         if preview_file_object_name:
@@ -473,15 +476,56 @@ class KnowledgeUtils(BaseService):
         SpaceFileDao.update_records_update_time_sync(folder_ids)
 
     @classmethod
+    def processing_snapshot_for_legacy_request(
+        cls, request, *, knowledge, file_name, file_source=None, file_overrides=None, legacy_split_rule=None
+    ):
+        from bisheng.knowledge.application.file_processing_adapter import (
+            capture_legacy_processing_overrides,
+            resolve_file_processing_snapshot,
+            system_processing_defaults,
+        )
+        from bisheng.knowledge.domain.schemas.processing_settings import ProcessingDefaults
+
+        saved = knowledge.processing_defaults
+        return resolve_file_processing_snapshot(
+            file_name=file_name,
+            file_source=file_source,
+            system_defaults=system_processing_defaults(knowledge.id),
+            space_defaults=ProcessingDefaults.model_validate(saved) if saved is not None else None,
+            space_config_version=knowledge.processing_config_version,
+            batch_overrides=capture_legacy_processing_overrides(request),
+            file_overrides=file_overrides,
+            legacy_split_rule=legacy_split_rule,
+        )
+
+    @classmethod
     async def process_rebuild_file(cls, db_file, req_data, login_user_id: int, login_user_name: str):
         """Shared logic to rebuild a knowledge file with new rules."""
-        from bisheng.api.v1.schemas import FileProcessBase
+        from bisheng.common.errcode.http_error import NotFoundError
+        from bisheng.common.errcode.knowledge import KnowledgeNotExistError, KnowledgeProcessingConflictError
+        from bisheng.knowledge.application.file_processing_adapter import legacy_rule_from_snapshot
+        from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
         from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao, KnowledgeFileStatus
+        from bisheng.knowledge.domain.services.knowledge_processing_guard import require_space_processing_idle
         from bisheng.worker.knowledge import file_worker
 
-        split_rule_dict = req_data.model_dump(include=set(list(FileProcessBase.model_fields.keys())))
-        if req_data.excel_rule is not None:
-            split_rule_dict["excel_rule"] = req_data.excel_rule.model_dump()
+        if db_file.knowledge_id != req_data.knowledge_id:
+            raise NotFoundError.http_exception()
+        knowledge = await KnowledgeDao.aquery_by_id(db_file.knowledge_id)
+        if knowledge is None:
+            raise KnowledgeNotExistError()
+        require_space_processing_idle(knowledge, operation="legacy_file_rebuild")
+        if db_file.status in {1, 4, 5}:
+            raise KnowledgeProcessingConflictError(reason="processing_file_state_not_ready")
+        actual = cls.processing_snapshot_for_legacy_request(
+            req_data,
+            knowledge=knowledge,
+            file_name=db_file.file_name,
+            file_source=db_file.file_source,
+            legacy_split_rule=db_file.split_rule,
+        )
+        split_rule_dict = legacy_rule_from_snapshot(actual, space_id=knowledge.id).model_dump(mode="json")
+        split_rule_dict["_effective_processing"] = actual.model_dump(mode="json")
         db_file.split_rule = json.dumps(split_rule_dict)
         db_file.status = KnowledgeFileStatus.WAITING.value
         db_file.updater_id = login_user_id
@@ -499,7 +543,17 @@ class KnowledgeUtils(BaseService):
 
     @classmethod
     async def process_retry_files(cls, db_files, id2input: dict, login_user) -> tuple[list, set]:
-        """Shared logic for retrying multiple files with updated configuration"""
+        """Retry content in place; a directory change requires the move protocol."""
+        db_files = tuple(db_files)
+        # Validate the whole batch before copying objects or updating any row.
+        # Old duplicate-upload clients may send their new upload directory here.
+        for file in db_files:
+            input_file = id2input.get(file.id)
+            if input_file is None or (
+                (input_file.get("file_level_path", file.file_level_path) or "") != (file.file_level_path or "")
+            ):
+                raise KnowledgeOperationPlanConflictError(reason="legacy_retry_parent_changed")
+
         from bisheng.core.storage.minio.minio_manager import get_minio_storage
         from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao, KnowledgeFileStatus
         from bisheng.worker.knowledge import file_worker
@@ -551,7 +605,6 @@ class KnowledgeUtils(BaseService):
             file.simhash = None
             file.updater_id = login_user.user_id
             file.updater_name = login_user.user_name
-            file.file_level_path = input_file["file_level_path"]
             if file.file_level_path:
                 file_level_path.add(file.file_level_path)
 

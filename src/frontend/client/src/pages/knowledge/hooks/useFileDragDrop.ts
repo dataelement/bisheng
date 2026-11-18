@@ -65,7 +65,7 @@ export function useFileDragDrop({
             if (item.kind === "file") {
                 const type = item.type.toLowerCase();
                 if (type && !allowedMime.includes(type)) {
-                    return `包含不支持的文件格式 (${type || localize("com_knowledge.unknown_format")})`;
+                    return localize("com_knowledge.unsupported_drag_format", { 0: type || localize("com_knowledge.unknown_format") });
                 }
             }
         }

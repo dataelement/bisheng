@@ -118,8 +118,14 @@ export function refreshClientEnvironment(): ClientEnvironment {
     }),
     capabilities: Object.freeze({ hasNativePresentation, hasHostChatHeader }),
   });
-  if (typeof document !== "undefined")
-    document.documentElement.dataset.bishengSurface = channel;
+  if (typeof document !== "undefined") {
+    const root = document.documentElement;
+    root.dataset.bishengSurface = channel;
+    // Legacy Electron hosts do not expose hostInfo. Use Chromium's OS signal
+    // for caption geometry only, and require a native bridge on that path.
+    const layoutOS = host?.os ?? (hasNativePresentation ? browser.os : "unknown");
+    root.toggleAttribute("data-bisheng-windows-desktop", channel === "desktop" && layoutOS === "windows");
+  }
   if (JSON.stringify(next) !== JSON.stringify(snapshot)) {
     snapshot = next;
     [...listeners].forEach((listener) => listener());

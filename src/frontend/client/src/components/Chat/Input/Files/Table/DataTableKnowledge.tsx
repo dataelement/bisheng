@@ -222,7 +222,7 @@ export default function DataTableKnowledge<TData, TValue>({
       if (duplicateFiles.length > 0) {
         setRepeatFiles(duplicateFiles.map(item => ({
           id: item.name,
-          remark: `${item.file_name} 对应已存在文件 ${item.repeat_file_name}`,
+          remark: localize('com_ui_duplicate_file_remark', { 0: item.file_name, 1: item.repeat_file_name }),
           file_path: item.file_path,
           preview_upload_ref: item.preview_upload_ref,
           fileType: 'file',

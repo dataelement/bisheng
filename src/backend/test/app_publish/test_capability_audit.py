@@ -33,6 +33,8 @@ from bisheng.app_publish.domain.services.capability_bus_service import Capabilit
 from bisheng.common.errcode.app_publish import AppCapabilityRevokedError
 from bisheng.common.errcode.mcp_face import RetrievalIdentityMissingError
 
+from .reference_fixtures import bind_saved_source as bind_saved_source
+
 ACCESS_USER_ID = 93077
 
 
@@ -64,7 +66,7 @@ def fake_facade(monkeypatch):
     return state
 
 
-async def _online_app_declaring(publish_db, app_factory, knowledge_ids):
+async def _online_app_declaring(publish_db, app_factory, knowledge_ids, binding):
     from bisheng.database.models.app_version import AppVersionDao
 
     app_row, version = await app_factory(state="online", name="调研应用")
@@ -73,6 +75,7 @@ async def _online_app_declaring(publish_db, app_factory, knowledge_ids):
         row.capabilities = {"knowledge_bases": [{"id": str(one)} for one in knowledge_ids]}
         session.add(row)
         await session.commit()
+    await binding(app_row, version)
     return app_row, version
 
 
@@ -82,10 +85,10 @@ async def _online_app_declaring(publish_db, app_factory, knowledge_ids):
 
 
 async def test_a_retrieval_records_the_app_as_actor_and_the_visitor_as_subject(
-    publish_db, app_factory, knowledge_factory, fake_facade
+    publish_db, app_factory, knowledge_factory, fake_facade, bind_saved_source
 ):
     kb = await knowledge_factory(name="产品手册")
-    app_row, version = await _online_app_declaring(publish_db, app_factory, [kb.id])
+    app_row, version = await _online_app_declaring(publish_db, app_factory, [kb.id], bind_saved_source)
     fake_facade["effective"] = [kb.id]
 
     await CapabilityBusService.retrieve(app_id=app_row.id, access_user_id=ACCESS_USER_ID, query="报销流程")
@@ -101,11 +104,11 @@ async def test_a_retrieval_records_the_app_as_actor_and_the_visitor_as_subject(
 
 
 async def test_the_record_carries_the_retrieval_target_not_the_question(
-    publish_db, app_factory, knowledge_factory, fake_facade
+    publish_db, app_factory, knowledge_factory, fake_facade, bind_saved_source
 ):
     kb = await knowledge_factory(name="产品手册")
     other = await knowledge_factory(name="制度汇编")
-    app_row, _version = await _online_app_declaring(publish_db, app_factory, [kb.id, other.id])
+    app_row, _version = await _online_app_declaring(publish_db, app_factory, [kb.id, other.id], bind_saved_source)
     fake_facade["effective"] = [kb.id]
 
     await CapabilityBusService.retrieve(
@@ -123,11 +126,13 @@ async def test_the_record_carries_the_retrieval_target_not_the_question(
     assert "社保基数怎么算" not in str(serialised)
 
 
-async def test_a_refusal_is_recorded_too_with_its_code(publish_db, app_factory, knowledge_factory, fake_facade):
+async def test_a_refusal_is_recorded_too_with_its_code(
+    publish_db, app_factory, knowledge_factory, fake_facade, bind_saved_source
+):
     from bisheng.common.errcode.mcp_face import KnowledgeCapabilityRevokedError
 
     kb = await knowledge_factory(name="产品手册")
-    app_row, _version = await _online_app_declaring(publish_db, app_factory, [kb.id])
+    app_row, _version = await _online_app_declaring(publish_db, app_factory, [kb.id], bind_saved_source)
     fake_facade["raise"] = KnowledgeCapabilityRevokedError(knowledge_id=kb.id)
 
     with pytest.raises(AppCapabilityRevokedError):
@@ -139,7 +144,7 @@ async def test_a_refusal_is_recorded_too_with_its_code(publish_db, app_factory, 
 
 
 async def test_a_refusal_the_bus_itself_raises_is_recorded_like_any_other(
-    publish_db, app_factory, knowledge_factory, fake_facade
+    publish_db, app_factory, knowledge_factory, fake_facade, bind_saved_source
 ):
     """Which layer said no must not decide whether the attempt is in the ledger.
 
@@ -152,7 +157,7 @@ async def test_a_refusal_the_bus_itself_raises_is_recorded_like_any_other(
 
     kb = await knowledge_factory(name="产品手册")
     undeclared = await knowledge_factory(name="财务档案")
-    app_row, _version = await _online_app_declaring(publish_db, app_factory, [kb.id])
+    app_row, _version = await _online_app_declaring(publish_db, app_factory, [kb.id], bind_saved_source)
 
     with pytest.raises(AppCapabilityNotDeclaredError):
         await CapabilityBusService.retrieve(
@@ -175,7 +180,7 @@ async def test_a_refusal_the_bus_itself_raises_is_recorded_like_any_other(
 
 
 async def test_a_retrieval_with_no_access_user_is_refused_and_attributed_to_nobody(
-    publish_db, app_factory, knowledge_factory, fake_facade
+    publish_db, app_factory, knowledge_factory, fake_facade, bind_saved_source
 ):
     """AC-55's sharp edge on the retrieval side.
 
@@ -184,7 +189,7 @@ async def test_a_retrieval_with_no_access_user_is_refused_and_attributed_to_nobo
     not lost: the caller gets 26320.
     """
     kb = await knowledge_factory(name="产品手册")
-    app_row, _version = await _online_app_declaring(publish_db, app_factory, [kb.id])
+    app_row, _version = await _online_app_declaring(publish_db, app_factory, [kb.id], bind_saved_source)
 
     with pytest.raises(RetrievalIdentityMissingError):
         await CapabilityBusService.retrieve(app_id=app_row.id, access_user_id=None, query="报销流程")
@@ -193,10 +198,10 @@ async def test_a_retrieval_with_no_access_user_is_refused_and_attributed_to_nobo
 
 
 async def test_recording_never_breaks_a_working_retrieval(
-    monkeypatch, publish_db, app_factory, knowledge_factory, fake_facade
+    monkeypatch, publish_db, app_factory, knowledge_factory, fake_facade, bind_saved_source
 ):
     kb = await knowledge_factory(name="产品手册")
-    app_row, _version = await _online_app_declaring(publish_db, app_factory, [kb.id])
+    app_row, _version = await _online_app_declaring(publish_db, app_factory, [kb.id], bind_saved_source)
     fake_facade["effective"] = [kb.id]
 
     class Exploding:
@@ -212,7 +217,7 @@ async def test_recording_never_breaks_a_working_retrieval(
     assert await _records(publish_db) == []
 
 
-async def test_the_table_is_insert_only(publish_db, app_factory, knowledge_factory, fake_facade):
+async def test_the_table_is_insert_only(publish_db, app_factory, knowledge_factory, fake_facade, bind_saved_source):
     """No update path exists — a record of something that happened does not change."""
     from bisheng.app_publish.domain.models import capability_call_record
 

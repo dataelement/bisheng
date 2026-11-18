@@ -2,11 +2,11 @@ import type { UseKnowledgeFilePermissionsOptions } from "./knowledgeSpaceTypes";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { FileType, KnowledgeFile } from "~/api/knowledge";
 import { getMyResourcePermissions } from "~/api/permission";
-export function useKnowledgeFilePermissions({
-  displayFiles,
-  space,
-  currentFolderId,
-}: UseKnowledgeFilePermissionsOptions) {
+import { useKnowledgeDownloadPermissions } from "./useKnowledgeDownloadPermissions";
+export function useKnowledgeFilePermissions(options: UseKnowledgeFilePermissionsOptions) {
+  const { displayFiles, space, currentFolderId } = options;
+  const downloadEntryIds = useKnowledgeDownloadPermissions(options);
+  const [moveEntryIds, setMoveEntryIds] = useState<Set<string>>(new Set());
   const [canCreateFolder, setCanCreateFolder] = useState(false);
   const [canUploadFile, setCanUploadFile] = useState(false);
   // The current target must accept uploaded content. Each source is checked
@@ -18,9 +18,6 @@ export function useKnowledgeFilePermissions({
   );
   const [renameEntryIds, setRenameEntryIds] = useState<Set<string>>(new Set());
   const [deleteEntryIds, setDeleteEntryIds] = useState<Set<string>>(new Set());
-  const [downloadEntryIds, setDownloadEntryIds] = useState<Set<string>>(
-    new Set(),
-  );
   // File ids whose lazy permission lookup is in flight — the row/card menu shows
   // a loading row instead of the fail-closed item set until it settles.
   const [pendingFileIds, setPendingFileIds] = useState<Set<string>>(new Set());
@@ -77,8 +74,8 @@ export function useKnowledgeFilePermissions({
   useEffect(() => {
     checkedFileIdsRef.current = new Set();
     setPermissionEntryIds(new Set());
+    setMoveEntryIds(new Set());
     setRenameEntryIds(new Set());
-    setDownloadEntryIds(new Set());
     setDeleteEntryIds(new Set());
     setPendingFileIds(new Set());
   }, [permissionEntryProbeKey]);
@@ -104,8 +101,8 @@ export function useKnowledgeFilePermissions({
         }
       };
       grant("manage_permission", setPermissionEntryIds);
+      grant("move", setMoveEntryIds);
       grant("rename", setRenameEntryIds);
-      grant("download", setDownloadEntryIds);
       grant("delete", setDeleteEntryIds);
     } catch {
       checkedFileIdsRef.current.delete(id);
@@ -120,6 +117,7 @@ export function useKnowledgeFilePermissions({
   }, []);
 
   return {
+    moveEntryIds,
     canCreateFolder,
     canUploadFile,
     canMoveFile,

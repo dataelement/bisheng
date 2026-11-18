@@ -14,6 +14,8 @@ import type { SVGProps } from 'react';
 /** Shared shape of every illustration: any SVG prop, plus the grey-draft flag. */
 export type IllustrationProps = SVGProps<SVGSVGElement> & { grey?: boolean };
 
+export { AppInaccessibleIllustration } from './AppInaccessibleIllustration';
+export { AppUnpublishedIllustration } from './AppUnpublishedIllustration';
 export { ArticleQAIllustration } from './ArticleQAIllustration';
 export { CrawlingIllustration } from './CrawlingIllustration';
 export { EmptyStateIllustration } from './EmptyStateIllustration';

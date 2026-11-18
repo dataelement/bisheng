@@ -1,0 +1,27 @@
+{
+  "id": "past-event-rewritten",
+  "acs": [
+    "AC-95"
+  ],
+  "turns": [
+    {
+      "user": "记一下：本月 3 号我要参加信创适配评审",
+      "new_session": false,
+      "expect_write": true
+    }
+  ],
+  "question": {
+    "user": "信创适配评审的情况你还记得吗？",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "must_contain_any": [
+      "参加了",
+      "已经",
+      "过"
+    ]
+  },
+  "notes": "事件日期过去之后、下一次整理之后再提问",
+  "requires_consolidation": true
+}

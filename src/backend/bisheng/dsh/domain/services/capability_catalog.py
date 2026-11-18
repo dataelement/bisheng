@@ -22,7 +22,7 @@ DEMO_TOOLS = {
 
 
 def demo_for(tool):
-    identity = tool.tool_key if tool.is_preset == 1 else tool.name
+    identity = WorkCapabilitiesService._tool_name(tool)
     return DEMO_TOOLS.get((tool.is_preset, identity))
 
 
@@ -38,12 +38,22 @@ class CapabilityCatalogService:
         disabled = await UserToolAvailabilityService(self.user.user_id).disabled_ids(
             [tool for group in groups for tool in group.children or []]
         )
+        named = WorkCapabilitiesService._named_tools(
+            {
+                tool.id: tool
+                for group in groups
+                for tool in group.children or []
+                if not tool.is_delete and tool.id not in disabled
+            },
+        )
         rows = []
         for group in groups:
             for tool in group.children or []:
                 if tool.is_delete:
                     continue
                 demo = demo_for(tool)
+                name = WorkCapabilitiesService._tool_name(tool)
+                callable_name = name if name and len(named.get(name, [])) == 1 else None
                 # Select fields explicitly. Group schemas and extras may contain credentials.
                 rows.append(
                     {
@@ -54,11 +64,11 @@ class CapabilityCatalogService:
                         "tool_key": tool.tool_key if tool.is_preset == 1 else None,
                         "description": tool.desc or "",
                         "provider": group.name,
-                        "ready": tool.id not in disabled,
+                        "ready": tool.id not in disabled and callable_name is not None,
                         "availability_enabled": tool.id not in disabled if manages_availability(tool) else None,
                         "demo": bool(demo and demo["scenario"] != "time"),
                         "trial": demo,
-                        "invocation_name": f"mcp__bisheng__bisheng_tool_{tool.id}",
+                        "invocation_name": f"mcp__bisheng__{callable_name}" if callable_name else None,
                     }
                 )
         usable_tool_ids = {row["resource_id"] for row in rows if row["ready"]}
@@ -155,14 +165,29 @@ class CapabilityCatalogService:
         ]
 
     async def set_availability(self, tool_id: int, enabled: bool):
-        from bisheng.tool.domain.services.tool import ToolServices
-
-        groups = await ToolServices(login_user=self.user).get_tool_list(action="use")
-        tool = next(
-            (tool for group in groups for tool in group.children or [] if tool.id == tool_id and not tool.is_delete),
-            None,
+        from bisheng.common.errcode.permission import (
+            InvalidCatalogActionError,
+            PermissionInvalidResourceError,
+            PermissionPublishNotReadyError,
         )
-        if tool is None or not manages_availability(tool):
+        from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
+        from bisheng.permission.application.business_authorization import check_business_action
+        from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
+
+        tenant_id = get_current_tenant_id() or DEFAULT_TENANT_ID
+        tool = await GptsToolsDao.aget_one_tool(tool_id)
+        if tool is None or tool.is_delete or tool.tenant_id != tenant_id or not manages_availability(tool):
+            raise HTTPException(404, "Account availability is unavailable for this tool")
+        category = await GptsToolsDao.aget_one_tool_type(tool.type)
+        if category is None or category.is_delete or category.tenant_id != tenant_id:
+            raise HTTPException(404, "Account availability is unavailable for this tool")
+        try:
+            allowed = await check_business_action(
+                self.user, resource_type="tool", resource_id=category.id, action="use"
+            )
+        except (InvalidCatalogActionError, PermissionInvalidResourceError, PermissionPublishNotReadyError) as exc:
+            raise HTTPException(404, "Account availability is unavailable for this tool") from exc
+        if not allowed:
             raise HTTPException(404, "Account availability is unavailable for this tool")
         await UserToolAvailabilityService(self.user.user_id).save(tool_id, enabled)
         await self.work.publications.audit(self.user, "availability", "tool", tool_id, {"enabled": enabled})
@@ -174,10 +199,13 @@ class CapabilityCatalogService:
         tool = (await self.work._tools()).get(tool_id)
         if tool is None or demo_for(tool) is None:
             raise HTTPException(404, "This capability has no read-only demonstration")
+        name = WorkCapabilitiesService._tool_name(tool)
+        if name is None:
+            raise HTTPException(409, "Tool has no stable invocation name")
         started = monotonic()
         try:
             # The ordinary Work path rechecks tenant, use permission, schema and audit.
-            result = await self.work.call_tool(f"bisheng_tool_{tool_id}", arguments)
+            result = await self.work.call_tool(name, arguments)
         except jsonschema.ValidationError:
             raise HTTPException(422, "Demo arguments do not match the tool schema") from None
         if isinstance(result, str):

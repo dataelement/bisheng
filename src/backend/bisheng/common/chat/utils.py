@@ -85,18 +85,20 @@ def sync_judge_source(result, source_document, chat_id, extra: dict):
         result = json.loads(metadata.get("extra", "{}")).get("answer")
         if result:
             source = SourceType.QA.value
-            extra.update({
-                "qa": question,
-                "url": json.loads(metadata.get("extra", "{}")).get("url"),
-            })
+            extra.update(
+                {
+                    "qa": question,
+                    "url": json.loads(metadata.get("extra", "{}")).get("url"),
+                }
+            )
             return source, result
         source_document = [source_document]
     if source_document and chat_id:
         if any(not doc.metadata.get("right", True) for doc in source_document):
             source = SourceType.NO_PERMISSION.value
         elif all(
-                doc.metadata.get("user_metadata") and doc.metadata.get("user_metadata", {}).get("url")
-                for doc in source_document
+            doc.metadata.get("user_metadata") and doc.metadata.get("user_metadata", {}).get("url")
+            for doc in source_document
         ):
             source = SourceType.LINK.value
             repeat_doc = {}
@@ -160,7 +162,7 @@ def sync_process_source_document(source_document: list[Document], chat_id, messa
             db_session.commit()
 
 
-async def process_source_document(source_document: list[Document], chat_id, message_id, answer):
+async def process_source_document(source_document: list[Document], chat_id, message_id, answer, app_type=None):
     logger.debug(f"process_source_document: {len(source_document)} message_id: {message_id}")
 
     if not source_document or not message_id:
@@ -168,7 +170,9 @@ async def process_source_document(source_document: list[Document], chat_id, mess
     message_info = await ChatMessageDao.aget_message_by_id(message_id)
     if not message_info:
         return
-    llm = await LLMService.get_knowledge_source_llm_async(message_info.user_id)
+    # F016: the workbench passes daily_chat so traceability is billed; workflows keep the default.
+    extra = {"app_type": app_type} if app_type is not None else {}
+    llm = await LLMService.get_knowledge_source_llm_async(message_info.user_id, **extra)
 
     answer_keywords = await extract_answer_keys_async(answer, llm)
 

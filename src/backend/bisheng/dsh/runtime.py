@@ -28,6 +28,26 @@ async def read_policy(user_id: int):
     return await asyncio.to_thread(read)
 
 
+async def read_model_pricing(model_id: int) -> dict | None:
+    """F016: price config of an already-authorized model, read without any cache."""
+    from bisheng.llm.domain.services.llm import LLMService
+
+    return await LLMService.read_model_pricing(model_id)
+
+
+async def read_credit_setting():
+    """F016: current tenant's credit settings; defaults when the tenant has none."""
+
+    def read():
+        from bisheng.core.database import get_sync_db_session
+        from bisheng.dsh.domain.repositories.credit_setting import DshCreditSettingRepository
+
+        with get_sync_db_session() as session:
+            return DshCreditSettingRepository(session).effective()
+
+    return await asyncio.to_thread(read)
+
+
 async def read_persisted_usage(user_id: int, month: str):
     def read():
         from bisheng.core.database import get_sync_db_session
@@ -126,6 +146,7 @@ async def get_model_runtime(runtime) -> ModelRuntime:
     def build(model, server, principal, request):
         return LLMService.build_dsh_llm(model, server, user_id=int(principal.user_id), streaming=request.stream)
 
+    from bisheng.dsh.domain.services.pricing import read_hint_context
     from bisheng.dsh.infrastructure.model_capabilities import desktop_model_capabilities
 
     capabilities = desktop_model_capabilities
@@ -144,7 +165,8 @@ async def get_model_runtime(runtime) -> ModelRuntime:
         billing_timezone=config.billing_timezone,
         audit_factory=audit.capture,
         display_names_reader=read_display_names,
-        activity_recorder=runtime.sessions.record_activity,
+        credit_setting_reader=read_credit_setting,
+        hint_context_reader=read_hint_context,
     )
     result = ModelRuntime(model, usage, quota, config, audit=audit)
     runtime.models = result

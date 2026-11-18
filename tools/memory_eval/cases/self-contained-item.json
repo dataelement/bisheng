@@ -1,0 +1,25 @@
+{
+  "id": "self-contained-item",
+  "acs": [
+    "AC-13"
+  ],
+  "turns": [
+    {
+      "user": "他是我们部门新来的架构师，叫周明，你记一下他负责权限模块",
+      "new_session": false,
+      "expect_write": true
+    }
+  ],
+  "question": {
+    "user": "我们部门谁负责权限模块？",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "must_contain_any": [
+      "周明"
+    ]
+  },
+  "notes": "条目里不应只写'他负责权限模块'",
+  "requires_consolidation": false
+}

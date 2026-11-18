@@ -4,6 +4,7 @@ import {
   mutateResourceGrants,
 } from "~/api/permission";
 import type {
+  GrantablePermissionModel,
   PermissionGrantAssignee,
   ResourcePermissionContext,
 } from "~/api/permission";
@@ -94,6 +95,10 @@ const mockedMutate = mutateResourceGrants as jest.MockedFunction<
   typeof mutateResourceGrants
 >;
 
+const pureModel: GrantablePermissionModel = {
+  key: "pure-visible", name: "Pure visibility", level: 3, active: true, visibility_only: true,
+};
+
 const context: ResourcePermissionContext = {
   mode: "CUSTOM",
   parent_type: null,
@@ -112,7 +117,7 @@ function existing(
     assignee_id: id,
     assignee_version: 2,
     subject: { type: "user", id: String(id), name: `User ${id}` },
-    model: { key: "viewer", name: "Viewer", level: 1, active: true },
+    model: pureModel,
     source: { type: "DIRECT", include_children: false },
     scope: "LOCAL",
     inherited_from: null,
@@ -125,7 +130,7 @@ function existing(
 describe("F048 Client PermissionGrantTab", () => {
   beforeEach(() => {
     mockedGetModels.mockResolvedValue([
-      { key: "viewer", name: "Viewer", level: 1, active: true },
+      pureModel,
       { key: "editor", name: "Editor", level: 2, active: true },
       { key: "owner", name: "Owner", level: 4, active: true },
       { key: "inactive", name: "Inactive", level: 3, active: false },
@@ -176,7 +181,7 @@ describe("F048 Client PermissionGrantTab", () => {
     );
   });
 
-  it("submits exact ADD, MOVE, and REMOVE changes with IDs and versions", async () => {
+  it("submits exact pure-visible ADD, MOVE and REMOVE without changing the server level", async () => {
     render(
       <PermissionGrantTab
         resourceType="channel"
@@ -235,7 +240,7 @@ describe("F048 Client PermissionGrantTab", () => {
           },
           {
             op: "ADD",
-            model_key: "viewer",
+            model_key: "pure-visible",
             subject: {
               type: "user",
               id: "99",
@@ -244,8 +249,9 @@ describe("F048 Client PermissionGrantTab", () => {
         ],
       }),
     );
+    expect(pureModel).toMatchObject({ level: 3, visibility_only: true });
     const payload = JSON.stringify(mockedMutate.mock.calls[0][2]);
-    expect(payload).not.toMatch(/"source"|"protected"|"level"/);
+    expect(payload).not.toMatch(/"source"|"protected"|"level"|"visibility_only"|"actions"|"use"/);
   });
 
   it("locks inherited and protected rows", async () => {
@@ -346,7 +352,7 @@ describe("F048 Client PermissionGrantTab", () => {
 
   it("locks an owner row when owner is outside the grantable models", async () => {
     mockedGetModels.mockResolvedValueOnce([
-      { key: "viewer", name: "Viewer", level: 1, active: true },
+      pureModel,
       { key: "editor", name: "Editor", level: 2, active: true },
     ]);
 
@@ -396,7 +402,7 @@ describe("F048 Client PermissionGrantTab", () => {
     expect(screen.getByTestId("disabled-user-ids")).toHaveTextContent("99");
     // The badge says which model they hold, so the locked row explains itself.
     expect(screen.getByTestId("granted-user-labels")).toHaveTextContent(
-      "99=Viewer",
+      "99=Pure visibility",
     );
   });
 
@@ -465,7 +471,7 @@ describe("F048 Client PermissionGrantTab", () => {
         changes: [
           {
             op: "ADD",
-            model_key: "viewer",
+            model_key: "pure-visible",
             subject: {
               type: "department",
               id: "42",
@@ -508,7 +514,7 @@ describe("F048 Client PermissionGrantTab", () => {
         changes: [
           {
             op: "ADD",
-            model_key: "viewer",
+            model_key: "pure-visible",
             subject: {
               type: "user_group",
               id: "77",
@@ -547,7 +553,7 @@ describe("F048 Client PermissionGrantTab", () => {
 
   it("keeps the old model visible and permits precise revocation when authorized", async () => {
     const row = existing("8", {
-      model: { key: "retired", name: "Old permission", level: 1, active: false },
+      model: { ...pureModel, key: "retired", name: "Old permission", active: false },
     });
     render(
       <PermissionGrantTab
@@ -569,5 +575,17 @@ describe("F048 Client PermissionGrantTab", () => {
     expect(mockedMutate.mock.calls.at(-1)?.[2].changes).toEqual([
       { op: "REMOVE", assignee_id: "8", expected_assignee_version: 2 },
     ]);
+  });
+
+  it.each([
+    { ...context, can_manage_permission: false },
+    { ...context, mode: "INHERIT" as const },
+  ])("keeps pure-visible grants read-only without custom management: %j", async (readOnlyContext) => {
+    render(<PermissionGrantTab resourceType="channel" resourceId="channel-1"
+      context={readOnlyContext} assignees={[existing("locked")]} onSuccess={jest.fn()} />);
+    expect(await screen.findByLabelText("f048_permission.grant.model.locked")).toBeDisabled();
+    expect(screen.getByLabelText("f048_permission.grant.remove.locked")).toBeDisabled();
+    expect(screen.queryByLabelText("f048_permission.grant.add_model")).not.toBeInTheDocument();
+    expect(mockedMutate).not.toHaveBeenCalled();
   });
 });

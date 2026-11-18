@@ -12,6 +12,8 @@ turn, the Open API writes nothing) and generate titles differently.
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+
 from loguru import logger
 
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
@@ -40,6 +42,7 @@ async def submit_task_turn(
     telemetry_source: str = "platform",
     session_name: str = "New Chat",
     strict_enqueue: bool = False,
+    on_session_created: Callable[[MessageSession, LinsightSessionVersion], Awaitable[None]] | None = None,
 ) -> tuple[MessageSession, LinsightSessionVersion]:
     """Create the task turn and hand it to the linsight queue.
 
@@ -48,6 +51,10 @@ async def submit_task_turn(
     (Open API, no browser to fall back on): an enqueue failure marks the version
     failed and raises 26068 (HTTP 503), so the caller never receives an id for a
     task that will not run.
+
+    ``on_session_created`` (F132): awaited once the conversation exists and
+    before the run is queued. Only the logged-in daily task-mode entry passes
+    it (long-term memory registration); the Open API never does.
     """
     # Local imports avoid a module-level workstation->linsight cycle.
     from bisheng.linsight.domain import utils as linsight_execute_utils
@@ -60,11 +67,7 @@ async def submit_task_turn(
             from bisheng.common.errcode.chat import ProjectInputError
 
             raise ProjectInputError()
-        project_intent = {
-            "project_id": data.project_id,
-            "request_id": data.project_request_id,
-            "payload": data.project_creation_payload(),
-        }
+        project_intent = {"project_id": data.project_id}
     consumed = await _consume_task_invite(login_user.user_id)
     submit_obj = _to_linsight_submit(data)
     # Pass the original daily-shape files (filepath/type/file_id) so the user
@@ -85,6 +88,8 @@ async def submit_task_turn(
         if consumed:
             await InviteCodeService.revoke_invite_code(user_id=login_user.user_id)
         raise
+    if on_session_created is not None:
+        await on_session_created(session, session_version)
 
     # Persist the bot task turn BEFORE enqueueing. The worker's start-time call
     # (`_execute_workflow`) is the same find-then-insert upsert with no unique

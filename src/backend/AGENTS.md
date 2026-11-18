@@ -114,7 +114,7 @@ uv run alembic revision --autogenerate -m "msg"   # autogen reflects MySQL only;
 
 ## Config & Packaging Contracts
 
-- **A new top-level key in the shipped `config.yaml` makes older images refuse to start.** `ConfigService.load_settings_from_yaml` (`common/services/config_service.py`) walks every top-level key and raises `KeyError` for anything absent from `Settings.model_fields`, and it runs at import time — so the container just restart-loops. That file has to stay loadable by *any* image version it might be paired with: ship a key introduced by a new version commented out by default.
+- **Unknown top-level YAML keys warn and are ignored; older images can still reject them.** `ConfigService.load_settings_from_yaml` (`common/services/config_service.py`) filters keys absent from `Settings.model_fields` before validation and logs only the key/path. Known fields retain their type validation. Verified by `test/common/test_yaml_settings_loading.py` (2026-11-10). Keep newly introduced keys commented out in shared deployment templates for compatibility with older images; ignored keys never enable the associated feature.
 
 - **A component usually has more than one deployment form (source + systemd, docker-compose, release image); "it works in one" says nothing about the others.** Treat "check whether other branches already fixed this" as also meaning "check the other deployment forms" — the same environment-variable name misspelled in one form and correct in another is the normal case, not the exotic one. The failure mode is nasty too: missing configuration is often logged at error level without exiting, so health checks stay green while every request renders an error page. Keep container-side and host-side paths distinct as well — bind mounts are interpreted by the host daemon, not in the calling process's filesystem.
 
@@ -145,6 +145,7 @@ uv run alembic revision --autogenerate -m "msg"   # autogen reflects MySQL only;
 - **Permission** (ReBAC / OpenFGA) → `architecture/10` (+ constitution C4)
 - **Multi-tenant** → `architecture/12` (+ constitution C3)
 - **Gateway** (commercial) → `architecture/11`
+- **Long-term memory (F132)** — `memory/` (domain module: gate / service / resident / search / tools / redaction / consolidation) + `worker/memory/` (scan, consolidate, reconcile, metrics, cleanup). Integration points live in each scene (`workstation/domain/services/daily_memory.py`, `api/services/assistant_memory.py`, `workflow/nodes/memory_retriever/`, `linsight/domain/services/memory_turns.py`). Design → `features/v3.0.0/132-long-term-memory/design.md`.
 - **Approval center (F025)** — `approval/` (domain module) + `worker/approval/` (outbox exec) + `notification/` (in-app messages). Read the `approval-module` skill before touching it.
 
 **Cross-cutting dirs** (not domain modules; touched constantly):

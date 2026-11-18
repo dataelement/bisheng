@@ -1,7 +1,12 @@
+"""OpenAPI document loading and operation discovery shared by tool consumers."""
+
 import json
-from typing import Dict
+
+import yaml
+from yaml.tokens import AliasToken, AnchorToken
 
 from bisheng.tool.domain.const import AuthMethod, AuthType
+from bisheng.utils.bounded_json import check_tree, strict_json
 
 
 class OpenApiSchema:
@@ -10,101 +15,162 @@ class OpenApiSchema:
         self.api_location = None
         self.contents = contents
         self.version = contents["openapi"]
-        self.info = contents["info"]
-        self.title = self.info["title"]
+        self.info = contents.get("info", {})
+        self.title = self.info.get("title", "")
         self.auth_type = "basic"
         self.auth_method = 0
         self.description = self.info.get("description", "")
         self.default_server = ""
         self.apis = []
 
+    @classmethod
+    def from_content(cls, content: str):
+        """Load bounded JSON/YAML and resolve local references without network access."""
+        if not isinstance(content, str) or len(content.encode("utf-8")) > 1024 * 1024:
+            raise ValueError("Invalid OpenAPI document size")
+        if any(isinstance(token, (AliasToken, AnchorToken)) for token in yaml.scan(content)):
+            raise ValueError("OpenAPI aliases are unsupported")
+        document = strict_json(content) if content.lstrip().startswith("{") else yaml.safe_load(content)
+        if not isinstance(document, dict):
+            raise ValueError("Invalid OpenAPI document")
+        check_tree(document)
+        count = 0
+
+        def resolve(value, stack=(), depth=0):
+            nonlocal count
+            count += 1
+            if count > 50000 or depth > 32:
+                raise ValueError("OpenAPI reference complexity limit")
+            if isinstance(value, dict):
+                if "$ref" in value:
+                    ref = value["$ref"]
+                    if len(value) != 1 or not isinstance(ref, str) or not ref.startswith("#/") or ref in stack:
+                        raise ValueError("Unsupported OpenAPI reference")
+                    target = document
+                    for part in ref[2:].split("/"):
+                        target = target[part.replace("~1", "/").replace("~0", "~")]
+                    return resolve(target, (*stack, ref), depth + 1)
+                return {key: resolve(item, stack, depth + 1) for key, item in value.items()}
+            if isinstance(value, list):
+                return [resolve(item, stack, depth + 1) for item in value]
+            return value
+
+        return cls(resolve(document))
+
     def parse_server(self) -> str:
-        """
-        get the default server url
-        """
-        if self.contents.get("servers") is None:
-            raise Exception("openapi schema must have servers")
-        servers = self.contents["servers"]
-        if isinstance(servers, list):
-            self.default_server = servers[0]["url"]
-        else:
-            self.default_server = servers["url"]
-
+        servers = self.contents.get("servers")
+        if not servers:
+            raise ValueError("OpenAPI schema must have servers")
+        self.default_server = servers[0]["url"] if isinstance(servers, list) else servers["url"]
         security_schemes = self.contents.get("components", {}).get("securitySchemes", {})
-        api_key_auth = security_schemes.get("ApiKeyAuth", {})
-
-        # Get certification type
-        auth_type = api_key_auth.get("type")
-        if auth_type == "apiKey":
-            self.auth_type = "custom"
-        elif auth_type == "http":
-            self.auth_type = api_key_auth.get("schema")
-        else:
-            self.auth_type = "basic"
-
-        # Set authentication method
+        scheme = security_schemes.get("ApiKeyAuth", {})
+        requirements = self.contents.get("security", [])
+        if isinstance(requirements, list) and len(requirements) == 1 and isinstance(requirements[0], dict):
+            if len(requirements[0]) == 1:
+                scheme = security_schemes.get(next(iter(requirements[0])), scheme)
+        auth_type = scheme.get("type")
+        self.auth_type = (
+            "custom"
+            if auth_type == "apiKey"
+            else scheme.get("scheme", scheme.get("schema"))
+            if auth_type == "http"
+            else "basic"
+        )
         self.auth_method = 1 if auth_type in ("apiKey", "http") else 0
-
-        # Dapatkan API Location and parameter name
-        self.api_location = api_key_auth.get("in")
-        self.parameter_name = api_key_auth.get("name")
+        self.api_location = scheme.get("in")
+        self.parameter_name = scheme.get("name")
         return self.default_server
 
-    def parse_paths(self) -> list[dict]:
-        paths = self.contents["paths"]
+    def security_scheme(self, operation):
+        requirements = operation.get("security", self.contents.get("security", []))
+        if not isinstance(requirements, list):
+            raise ValueError("Invalid OpenAPI security")
+        if not requirements or requirements == [{}]:
+            return None
+        if len(requirements) != 1 or not isinstance(requirements[0], dict) or len(requirements[0]) != 1:
+            raise ValueError("Unsupported OpenAPI security alternatives")
+        name = next(iter(requirements[0]))
+        scheme = self.contents.get("components", {}).get("securitySchemes", {}).get(name)
+        if not isinstance(scheme, dict):
+            raise ValueError("Unknown OpenAPI security scheme")
+        return scheme
 
-        self.apis = []
-
-        for path, path_info in paths.items():
-            for method, method_info in path_info.items():
-                one_api_info = {
-                    "path": path,
-                    "method": method,
-                    "description": method_info.get("description", "") or method_info.get("summary", ""),
-                    "operationId": method_info["operationId"],
-                    "parameters": [],
-                }
-                if method not in ["get", "post", "put", "delete"]:
+    def iter_operations(self):
+        paths = self.contents.get("paths")
+        if not isinstance(paths, dict) or not paths:
+            raise ValueError("OpenAPI schema must have paths")
+        for path, path_item in paths.items():
+            if not isinstance(path, str) or not isinstance(path_item, dict):
+                raise ValueError("Invalid OpenAPI path")
+            for method, operation in path_item.items():
+                if method not in ("get", "post", "put", "delete", "patch", "head", "options", "trace"):
                     continue
-
-                if "requestBody" in method_info:
-                    for _, content in method_info["requestBody"]["content"].items():
-                        if "$ref" in content["schema"]:
-                            schema_ref = content["schema"]["$ref"]
-                            schema_name = schema_ref.split("/")[-1]
-                            schema = self.contents["components"]["schemas"][schema_name]
-                        else:
-                            schema = content["schema"]
-
-                        if "properties" in schema:
-                            for param_name, param_info in schema["properties"].items():
-                                param = {
-                                    "name": param_name,
-                                    "description": param_info.get("description", ""),
+                if not isinstance(operation, dict):
+                    raise ValueError("Invalid OpenAPI operation")
+                merged = {}
+                for scope in (path_item.get("parameters", []), operation.get("parameters", [])):
+                    if not isinstance(scope, list):
+                        raise ValueError("Invalid OpenAPI parameters")
+                    seen = set()
+                    for param in scope:
+                        if not isinstance(param, dict):
+                            raise ValueError("Invalid OpenAPI parameter")
+                        key = (param.get("in"), param.get("name"))
+                        if not all(isinstance(v, str) and v for v in key) or key in seen:
+                            raise ValueError("Invalid or duplicate OpenAPI parameter")
+                        seen.add(key)
+                        merged[key] = param
+                parameters = list(merged.values())
+                if "requestBody" in operation:
+                    content = operation["requestBody"]["content"]
+                    if not isinstance(content, dict):
+                        raise ValueError("Invalid OpenAPI body")
+                    # Preserve the tool editor's supported body media types.
+                    for media in content.values():
+                        schema = media["schema"]
+                        required = schema.get("required", [])
+                        props = schema.get("properties", {})
+                        if (
+                            not isinstance(required, list)
+                            or not isinstance(props, dict)
+                            or not set(required).issubset(props)
+                        ):
+                            raise ValueError("Invalid OpenAPI body properties")
+                        for name, prop in props.items():
+                            parameters.append(
+                                {
+                                    "name": name,
                                     "in": "body",
-                                    "required": param_name in schema.get("required", []),
-                                    "schema": {
-                                        "type": param_info.get("type", "string"),
-                                        "title": param_info.get("title", param_name),
-                                        "properties": param_info.get("properties", {}),
-                                    },
+                                    "required": name in required,
+                                    "description": prop.get("description", ""),
+                                    "schema": {**prop, "title": prop.get("title", name)},
                                 }
-                                one_api_info["parameters"].append(param)
-                else:
-                    # no request body get parameters
-                    one_api_info["parameters"].extend(method_info.get("parameters", []))
-                self.apis.append(one_api_info)
+                            )
+                yield path, method, operation, parameters
+
+    def parse_paths(self) -> list[dict]:
+        self.apis = [
+            {
+                "path": path,
+                "method": method,
+                "description": operation.get("description", "") or operation.get("summary", ""),
+                "operationId": operation["operationId"],
+                "parameters": parameters,
+            }
+            for path, method, operation, parameters in self.iter_operations()
+            if method in ("get", "post", "put", "delete")
+        ]
         return self.apis
 
     @staticmethod
     def parse_openapi_tool_params(
         name: str,
         description: str,
-        extra: str | Dict,
+        extra: str | dict,
         server_host: str,
         auth_method: int,
-        auth_type: str = None,
-        api_key: str = None,
+        auth_type: str | None = None,
+        api_key: str | None = None,
     ):
         if isinstance(extra, str):
             extra = json.loads(extra)

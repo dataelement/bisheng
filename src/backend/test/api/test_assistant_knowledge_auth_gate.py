@@ -16,23 +16,13 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from bisheng.api.services.assistant_agent import AssistantAgent
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
 
 _ALLOWED_KB = 11
 _FORBIDDEN_KB = 12
 _SPACE = 13
-
-
-@pytest.fixture(autouse=True)
-def current_tenant():
-    from bisheng.core.context.tenant import current_tenant_id
-
-    token = current_tenant_id.set(1)
-    try:
-        yield
-    finally:
-        current_tenant_id.reset(token)
 
 
 def _agent(*, knowledge_auth: bool) -> AssistantAgent:
@@ -46,6 +36,8 @@ def _agent(*, knowledge_auth: bool) -> AssistantAgent:
         knowledge_auth=knowledge_auth,
     )
     agent.invoke_user_id = 150041  # the runtime user, granted the assistant only
+    agent.login_user = UserPayload(user_id=150041, user_name="actor", tenant_id=1, user_role=[])
+    agent._source_links = tuple(_links())
     agent.llm = object()
     agent.knowledge_retriever = {"max_content": 15000}
     agent.citation_registry_collector = SimpleNamespace(clear=lambda: None, list_items=list)
@@ -61,8 +53,8 @@ def _links():
 
 def _knowledge_rows():
     return [
-        SimpleNamespace(id=_ALLOWED_KB, type=KnowledgeTypeEnum.NORMAL.value, name="allowed", tenant_id=1),
-        SimpleNamespace(id=_FORBIDDEN_KB, type=KnowledgeTypeEnum.NORMAL.value, name="forbidden", tenant_id=1),
+        SimpleNamespace(id=_ALLOWED_KB, type=KnowledgeTypeEnum.NORMAL.value, name="allowed"),
+        SimpleNamespace(id=_FORBIDDEN_KB, type=KnowledgeTypeEnum.NORMAL.value, name="forbidden"),
     ]
 
 
@@ -72,17 +64,13 @@ async def _run_init_tools(agent, *, usable_ids):
     )
     with (
         patch(
-            "bisheng.api.services.assistant_agent.AssistantLinkDao.get_assistant_link",
-            AsyncMock(return_value=_links()),
-        ),
+            "bisheng.database.models.assistant.AssistantLinkDao.get_assistant_link",
+            AsyncMock(side_effect=AssertionError("must consume the admitted snapshot links")),
+        ) as independent_links,
         patch(
             "bisheng.knowledge.domain.models.knowledge.KnowledgeDao.get_list_by_ids",
             return_value=_knowledge_rows(),
         ),
-        patch(
-            "bisheng.knowledge.domain.services.space_flow_retrieval.abuild_scoped_login_user",
-            AsyncMock(side_effect=lambda user_id, tenant_id: SimpleNamespace(user_id=user_id)),
-        ) as identity_builder,
         patch.object(
             KnowledgeRag,
             "afilter_usable_knowledge_ids",
@@ -96,10 +84,7 @@ async def _run_init_tools(agent, *, usable_ids):
         patch.object(AssistantAgent, "_resolve_kb_name_by_id", staticmethod(lambda ids: {})),
     ):
         await agent.init_tools()
-        identity_builder.assert_awaited_once_with(
-            agent.invoke_user_id if agent.assistant.knowledge_auth else agent.assistant.user_id,
-            agent.assistant.tenant_id,
-        )
+        independent_links.assert_not_awaited()
     built_for = [
         call.kwargs.get("knowledge_id", call.args[1] if len(call.args) > 1 else None)
         for call in init_knowledge_tool.await_args_list
@@ -114,6 +99,7 @@ async def test_toggle_on_drops_a_knowledge_base_the_runtime_user_cannot_use():
     assert built_for == [_ALLOWED_KB]
     assert _FORBIDDEN_KB not in built_for
     usable_filter.assert_awaited_once()
+    assert usable_filter.await_args.args[0] is agent.login_user
 
 
 async def test_toggle_on_asks_about_ordinary_knowledge_bases_only():
@@ -125,12 +111,12 @@ async def test_toggle_on_asks_about_ordinary_knowledge_bases_only():
     assert _SPACE not in asked_for
 
 
-async def test_toggle_off_still_requires_author_current_use_permission():
+async def test_toggle_off_leaves_the_previous_behaviour_alone():
     agent = _agent(knowledge_auth=False)
     built_for, usable_filter = await _run_init_tools(agent, usable_ids=set())
 
-    assert built_for == []
-    usable_filter.assert_awaited_once()
+    assert built_for == [_ALLOWED_KB, _FORBIDDEN_KB]
+    usable_filter.assert_not_awaited()
 
 
 @pytest.mark.parametrize(

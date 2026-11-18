@@ -91,6 +91,7 @@ export type LinsightInfo = {
         error_code?: number;
         error_type?: string;
         detail?: string;
+        reference_id?: string;
         failure_info?: FailureInfo;
     };
     summary: string;
@@ -139,6 +140,7 @@ export type LinsightRoundSnapshot = {
         error_code?: number;
         error_type?: string;
         detail?: string;
+        reference_id?: string;
         failure_info?: FailureInfo;
     };
 };

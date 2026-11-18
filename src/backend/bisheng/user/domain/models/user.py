@@ -4,6 +4,7 @@ from typing import ClassVar, Optional
 from pydantic import field_validator
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     Column,
     DateTime,
     Index,
@@ -20,6 +21,7 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import Field, Relationship, col, select
 
 from bisheng.common.models.base import SQLModelSerializable
+from bisheng.common.subject_search import escape_like
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
 from bisheng.database.constants import AdminRole, DefaultRole
@@ -77,13 +79,13 @@ class UserBase(SQLModelSerializable):
     def validate_str(cls, v):
         # dict_keys(['description', 'name', 'id', 'data'])
         if not v:
-            raise ValueError("user_name Tidak boleh kosong.")
+            raise ValueError("Nickname cannot be empty.")
         return v
 
 
 class User(UserBase, table=True):
     user_id: int | None = Field(default=None, primary_key=True)
-    password: str = Field(index=False, max_length=255)
+    password: str = Field(index=False, max_length=255, exclude=True)
     password_update_time: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
@@ -114,6 +116,20 @@ class User(UserBase, table=True):
         sa_column=Column(BigInteger, nullable=False, server_default=text("0")),
     )
 
+    # F011: legacy identities retain the database's original account comparison.
+    account_rule_version: int = Field(
+        default=0, exclude=True, sa_column=Column(Integer, nullable=False, server_default=text("0"))
+    )
+    account_match_key: str = Field(
+        default="legacy", exclude=True, sa_column=Column(String(64), nullable=False, server_default=text("'legacy'"))
+    )
+    nickname_customized: bool = Field(
+        default=False, exclude=True, sa_column=Column(Boolean, nullable=False, server_default=text("0"))
+    )
+    legacy_sso_name: str | None = Field(
+        default=None, exclude=True, sa_column=Column(String(128), nullable=True, index=True)
+    )
+
     # DefinitiongroupsAndrolesQuery Relationships for
     groups: list["Group"] = Relationship(link_model=UserGroup)
     roles: list["Role"] = Relationship(link_model=UserRole)
@@ -122,7 +138,7 @@ class User(UserBase, table=True):
 
     __tablename__ = "user"
     __table_args__ = (
-        UniqueConstraint("source", "external_id", name="uk_user_source_external_id"),
+        UniqueConstraint("source", "external_id", "account_match_key", name="uk_user_source_account_match"),
         Index("ix_user_external_id_search", "external_id"),
     )
 
@@ -143,7 +159,7 @@ class UserRead(UserBase):
     # PRD 3.2.2 用户组管理入口：超管 / 部门管理员
     can_manage_user_groups: bool | None = None
     is_department_admin: bool | None = None
-    # Multi-tenant fields (F010)
+    # Multi-tenant fields (F012)
     requires_tenant_selection: bool | None = None
     tenants: list[dict] | None = None
     tenant_id: int | None = None
@@ -165,6 +181,7 @@ class UserQuery(UserBase):
 
 
 class UserLogin(UserBase):
+    user_name: str = Field(max_length=255)
     password: str
 
     captcha_key: str | None = None
@@ -236,38 +253,31 @@ class UserDao(UserBase):
 
     @classmethod
     async def aget_login_candidates_by_account(cls, account: str) -> list[User]:
-        """登录账号仅支持 external_id（人员ID），并过滤禁用账号。
+        """Compatibility adapter; the repository preserves each rule version."""
+        from starlette.concurrency import run_in_threadpool
 
-        No principal-type lock is needed: service accounts are not rows of this
-        table (F053 design K15 / K17), so they structurally cannot log in.
-        """
-        acc = (account or "").strip()
-        if not acc:
-            return []
-        async with get_async_db_session() as session:
-            statement = select(User).where(
-                User.delete == 0,
-                User.external_id == acc,
-            )
-            result = await session.exec(statement)
-            return list(result.all())
+        from bisheng.user.domain.repositories.account_identity_repository import AccountIdentityRepository
+
+        rows = await run_in_threadpool(AccountIdentityRepository.login_candidates, account or "")
+        return [user for user in rows if user.delete == 0]
 
     @classmethod
     async def aexists_disabled_login_account(cls, account: str) -> bool:
-        """与登录账号字段一致（external_id），且 delete=1 的禁用用户是否存在。"""
-        acc = (account or "").strip()
-        if not acc:
-            return False
-        async with get_async_db_session() as session:
-            statement = select(User.user_id).where(User.delete == 1, User.external_id == acc).limit(1)
-            result = await session.exec(statement)
-            return result.first() is not None
+        from starlette.concurrency import run_in_threadpool
+
+        from bisheng.user.domain.repositories.account_identity_repository import AccountIdentityRepository
+
+        rows = await run_in_threadpool(AccountIdentityRepository.login_candidates, account or "")
+        return any(user.delete == 1 for user in rows)
 
     @classmethod
     async def aget_user_for_login(cls, account: str) -> User | None:
-        """兼容旧调用：仅返回首条；登录请用 ``aget_login_candidates_by_account``。"""
-        rows = await cls.aget_login_candidates_by_account(account)
-        return rows[0] if rows else None
+        from starlette.concurrency import run_in_threadpool
+
+        from bisheng.user.domain.repositories.account_identity_repository import AccountIdentityRepository
+        from bisheng.user.domain.rules.identity import resolve_login_candidates
+
+        return resolve_login_candidates(await run_in_threadpool(AccountIdentityRepository.login_candidates, account))
 
     @classmethod
     def update_user(cls, user: User) -> User:
@@ -295,7 +305,10 @@ class UserDao(UserBase):
         if user_ids:
             statement = statement.where(User.user_id.in_(user_ids))
         if keyword:
-            statement = statement.where(User.user_name.like(f"%{keyword}%"))
+            pattern = f"%{escape_like(keyword)}%"
+            statement = statement.where(
+                or_(User.user_name.like(pattern, escape="/"), User.external_id.like(pattern, escape="/"))
+            )
         return statement.order_by(User.user_id.desc())
 
     @classmethod
@@ -323,9 +336,14 @@ class UserDao(UserBase):
 
     @classmethod
     def get_unique_user_by_name(cls, user_name: str) -> User | None:
+        from bisheng.common.errcode.user import AmbiguousAccountError
+
         with get_sync_db_session() as session:
             statement = select(User).where(User.user_name == user_name)
-            return session.exec(statement).first()
+            users = session.exec(statement).all()
+            if len(users) > 1:
+                raise AmbiguousAccountError()
+            return users[0] if users else None
 
     @classmethod
     def search_user_by_name(cls, user_name: str) -> list[User] | None:
@@ -335,26 +353,19 @@ class UserDao(UserBase):
 
     @classmethod
     def create_user(cls, db_user: User) -> User:
-        with get_sync_db_session() as session:
-            session.add(db_user)
-            session.commit()
-            session.refresh(db_user)
-            return db_user
+        from bisheng.user.domain.repositories.account_identity_repository import AccountIdentityRepository
+
+        return AccountIdentityRepository.create(db_user, exact=db_user.source == "local", role_ids=[], group_ids=[])
 
     @classmethod
     async def add_user_and_default_role(cls, user: User) -> User:
-        """
-        Add users and add default roles
-        """
-        async with get_async_db_session() as session:
-            session.add(user)
-            await session.commit()
-            await session.refresh(user)
-            db_user_role = UserRole(user_id=user.user_id, role_id=DefaultRole)
-            session.add(db_user_role)
-            await session.commit()
-            await session.refresh(user)
-            return user
+        from starlette.concurrency import run_in_threadpool
+
+        from bisheng.user.domain.repositories.account_identity_repository import AccountIdentityRepository
+
+        return await run_in_threadpool(
+            AccountIdentityRepository.create, user, exact=False, role_ids=[DefaultRole], group_ids=[]
+        )
 
     @classmethod
     async def add_user_and_configured_default_auth(
@@ -383,54 +394,35 @@ class UserDao(UserBase):
             if default_groupid is not None and role.group_id != default_groupid:
                 raise ValueError("Configured default_roleid does not belong to default_groupid")
 
-            session.add(user)
-            await session.commit()
-            await session.refresh(user)
+        from starlette.concurrency import run_in_threadpool
 
-            db_user_role = UserRole(user_id=user.user_id, role_id=role_id)
-            session.add(db_user_role)
+        from bisheng.user.domain.repositories.account_identity_repository import AccountIdentityRepository
 
-            if default_groupid is not None:
-                db_user_group = UserGroup(
-                    user_id=user.user_id,
-                    group_id=default_groupid,
-                    is_group_admin=False,
-                )
-                session.add(db_user_group)
-
-            await session.commit()
-            await session.refresh(user)
-            return user
+        return await run_in_threadpool(
+            AccountIdentityRepository.create,
+            user,
+            exact=False,
+            role_ids=[role_id],
+            group_ids=[default_groupid] if default_groupid is not None else [],
+        )
 
     @classmethod
     async def add_user_and_admin_role(cls, user: User) -> User:
-        """
-        Add users and add super admin roles
-        """
-        async with get_async_db_session() as session:
-            session.add(user)
-            await session.commit()
-            await session.refresh(user)
-            db_user_role = UserRole(user_id=user.user_id, role_id=AdminRole)
-            session.add(db_user_role)
-            await session.commit()
-            await session.refresh(user)
-            return user
+        from starlette.concurrency import run_in_threadpool
+
+        from bisheng.user.domain.repositories.account_identity_repository import AccountIdentityRepository
+
+        return await run_in_threadpool(
+            AccountIdentityRepository.create, user, exact=False, role_ids=[AdminRole], group_ids=[]
+        )
 
     @classmethod
     def add_user_with_groups_and_roles(cls, user: User, group_ids: list[int], role_ids: list[int]) -> User:
-        with get_sync_db_session() as session:
-            session.add(user)
-            session.flush()
-            for group_id in group_ids:
-                db_user_group = UserGroup(user_id=user.user_id, group_id=group_id)
-                session.add(db_user_group)
-            for role_id in role_ids:
-                db_user_role = UserRole(user_id=user.user_id, role_id=role_id)
-                session.add(db_user_role)
-            session.commit()
-            session.refresh(user)
-            return user
+        from bisheng.user.domain.repositories.account_identity_repository import AccountIdentityRepository
+
+        return AccountIdentityRepository.create(
+            user, exact=user.source == "local", group_ids=group_ids, role_ids=role_ids
+        )
 
     @classmethod
     def get_all_users(cls, page: int = 0, limit: int = 0) -> list[User]:
@@ -479,30 +471,33 @@ class UserDao(UserBase):
 
     @classmethod
     async def aget_by_source_external_id(cls, source: str, external_id: str) -> Optional["User"]:
-        """Get user by source + external_id combination (for org sync matching)."""
-        async with get_async_db_session() as session:
-            statement = select(User).where(
-                User.source == source,
-                User.external_id == external_id,
-            )
-            result = await session.exec(statement)
-            return result.first()
+        from starlette.concurrency import run_in_threadpool
+
+        from bisheng.user.domain.repositories.account_identity_repository import AccountIdentityRepository
+        from bisheng.user.domain.rules.identity import resolve_external_candidates
+
+        return resolve_external_candidates(
+            await run_in_threadpool(AccountIdentityRepository.find_external, external_id, source=source)
+        )
 
     @classmethod
     async def aget_by_external_id(cls, external_id: str) -> Optional["User"]:
-        """Get user by external_id globally (cross-source)."""
-        async with get_async_db_session() as session:
-            statement = select(User).where(User.external_id == external_id)
-            result = await session.exec(statement)
-            return result.first()
+        from starlette.concurrency import run_in_threadpool
+
+        from bisheng.user.domain.repositories.account_identity_repository import AccountIdentityRepository
+        from bisheng.user.domain.rules.identity import resolve_external_candidates
+
+        return resolve_external_candidates(
+            await run_in_threadpool(AccountIdentityRepository.find_external, external_id)
+        )
 
     @classmethod
     async def aget_users_by_external_id(cls, external_id: str) -> list["User"]:
-        """Get all users by external_id globally, including soft-deleted rows."""
-        async with get_async_db_session() as session:
-            statement = select(User).where(User.external_id == external_id)
-            result = await session.exec(statement)
-            return list(result.all())
+        from starlette.concurrency import run_in_threadpool
+
+        from bisheng.user.domain.repositories.account_identity_repository import AccountIdentityRepository
+
+        return await run_in_threadpool(AccountIdentityRepository.find_external, external_id)
 
     # ---------------------------------------------------------------
     # v2.5.1 F012: token_version helpers

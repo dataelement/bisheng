@@ -1,6 +1,6 @@
 {
   "name": "bishengchat",
-  "version": "3.0.0",
+  "version": "3.0.1-beta1",
   "description": "",
   "type": "module",
   "scripts": {
@@ -33,6 +33,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
+    "@bisheng/identity": "workspace:*",
     "@hello-pangea/dnd": "catalog:",
     "@ariakit/react": "^0.4.15",
     "@ariakit/react-core": "^0.4.15",

@@ -12,12 +12,14 @@ from pydantic import BaseModel
 
 from bisheng.api.services.audit_log import AuditLogService
 from bisheng.common.chat.utils import SourceType, process_source_document
+from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.services.failure_context import FailureContextAdapter
 from bisheng.common.utils.think_tags import ThinkBlockStreamFilter
 from bisheng.common.utils.title_generator import generate_conversation_title_async
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
+from bisheng.dsh.domain.services import chat_credits
 from bisheng.utils import get_request_ip
 from bisheng.workstation.domain.schemas import WorkstationConversation, WorkstationMessage
 
@@ -88,14 +90,18 @@ async def final_message(
         )
     )
     if source_document:
-        asyncio.create_task(
-            process_source_document(
-                source_document=source_document,
-                chat_id=conversation.chat_id,
-                message_id=response_message.id,
-                answer=text,
+        # F016: traceability is billed as daily chat but runs after the answer was sent, so it is
+        # never compared with the allowance; the task inherits the unmetered context.
+        with chat_credits.unmetered():
+            asyncio.create_task(
+                process_source_document(
+                    source_document=source_document,
+                    chat_id=conversation.chat_id,
+                    message_id=response_message.id,
+                    answer=text,
+                    app_type=ApplicationTypeEnum.DAILY_CHAT,
+                )
             )
-        )
 
     msg = json.dumps(
         {
@@ -159,9 +165,7 @@ async def gen_title(
     title = await generate_conversation_title_async(question=human, llm=title_llm)
     session = await MessageSessionDao.async_get_one(conversation_id)
     if session:
-        from bisheng.chat_session.domain.chat import ChatSessionService
-
-        await ChatSessionService.update_generated_session_name(chat_id=session.chat_id, name=title)
+        await MessageSessionDao.update_session_name(chat_id=session.chat_id, name=title)
         await AuditLogService.create_chat_message(
             user=login_user,
             ip_address=get_request_ip(request),
@@ -217,6 +221,19 @@ def _sse_resp(
     if citations is not None:
         resp["citations"] = citations
     return f"event: message\ndata: {json.dumps(resp, ensure_ascii=False, default=custom_json_serializer)}\n\n"
+
+
+# F132: category of the long-term memory signal. The payload carries the turn id
+# and two flags only, never item text; the client fetches the notice and the
+# attribution from /api/v1/memory/turn.
+MEMORY_SSE_CATEGORY = "memory"
+_MEMORY_SIGNAL_KEYS = ("turn_id", "has_write", "has_attribution")
+
+
+def _memory_sse(signal: dict, chat_id: str, message_id=None) -> str:
+    """Build the `memory` SSE event: {turn_id, has_write, has_attribution}."""
+    payload = {key: signal[key] for key in _MEMORY_SIGNAL_KEYS}
+    return _sse_resp(MEMORY_SSE_CATEGORY, "over", payload, chat_id, message_id=message_id)
 
 
 def _is_new_format(msg: ChatMessage) -> bool:

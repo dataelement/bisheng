@@ -28,6 +28,7 @@ from bisheng.permission.domain.models import (
     PermissionCatalogRelease,
     PermissionGrant,
     PermissionGrantAssignee,
+    PermissionProjectionOperation,
     PermissionVisibleSourceProjection,
     ResourcePermissionMode,
 )
@@ -310,7 +311,7 @@ class RedisConsistencyMarker:
                     resource_id=None,
                 ),
             )
-        elif plan.scope_type in {"department", "tenant", "user_group"}:
+        elif plan.scope_type in {"department", "tenant", "user_group", "llm_model_deletion"}:
             keys = (self._tenant_key(plan.tenant_id),)
         else:
             raise ValueError(f"unsupported permission marker scope: {plan.scope_type}")
@@ -580,6 +581,18 @@ class SqlProjectionScopeGuard:
                         ResourcePermissionMode.tenant_id == plan.tenant_id,
                         ResourcePermissionMode.resource_type == resource_type,
                         ResourcePermissionMode.resource_id == resource_id,
+                        ResourcePermissionMode.operation_id.in_(
+                            select(PermissionProjectionOperation.id).where(
+                                PermissionProjectionOperation.tenant_id == plan.tenant_id,
+                                PermissionProjectionOperation.idempotency_key == plan.idempotency_key,
+                                PermissionProjectionOperation.scope_type == plan.scope_type,
+                                PermissionProjectionOperation.scope_key == plan.scope_key,
+                                PermissionProjectionOperation.expected_version == plan.expected_version,
+                                PermissionProjectionOperation.target_version == plan.target_version,
+                                PermissionProjectionOperation.status == "FAILED_CLOSED",
+                            )
+                        ),
+                        ResourcePermissionMode.version.in_((plan.expected_version, plan.target_version)),
                     )
                     .values(
                         projection_state="FAILED_CLOSED",
@@ -708,19 +721,37 @@ class SqlProjectionFinalizer:
 
                 source_projection_state = mode_row.projection_state
 
-                grant_ids = tuple(
+                original_grant_keys = {
+                    endpoint.partition("#")[0].removeprefix("permission_grant:")
+                    for delta in plan.deltas
+                    for endpoint in (delta.user, delta.object)
+                    if endpoint.startswith("permission_grant:")
+                }
+                candidates = tuple(
                     (
                         await session.execute(
-                            select(PermissionGrant.id).where(
+                            select(PermissionGrant).where(
                                 PermissionGrant.tenant_id == plan.tenant_id,
                                 PermissionGrant.resource_type == resource_type,
                                 PermissionGrant.resource_id == resource_id,
-                                PermissionGrant.projection_state == "PROJECTING",
+                                PermissionGrant.projection_state.in_(("PROJECTING", "FAILED_CLOSED")),
                             )
                         )
                     )
                     .scalars()
                     .all()
+                )
+                grant_ids = tuple(
+                    row.id
+                    for row in candidates
+                    if row.projection_state == "PROJECTING"
+                    or stable_grant_key(
+                        tenant_id=plan.tenant_id,
+                        resource_type=resource_type,
+                        resource_id=resource_id,
+                        model_key=row.model_key,
+                    )
+                    in original_grant_keys
                 )
                 if grant_ids:
                     await session.execute(

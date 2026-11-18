@@ -50,7 +50,7 @@ def _spec(tenant_id=1, resource_id="902"):
         tenant_id=tenant_id,
         resource_type="tool",
         resource_id=resource_id,
-        action_codes=("use", "visible"),
+        action_codes=("visible",),
         context_version=f"preset:{tenant_id}:{resource_id}",
     )
 
@@ -84,7 +84,7 @@ class _FGA(FakeFGAProjection):
                     select(PermissionProjectionOperation).order_by(PermissionProjectionOperation.id.desc())
                 )
             ).first()
-            assert operation.status in {"STAGING", "COMMIT_UNKNOWN"}
+            assert operation.status in {"STAGING", "COMMIT_UNKNOWN", "FAILED_CLOSED"}
             ledger = (
                 await session.exec(
                     select(PermissionProjectionTuple).where(PermissionProjectionTuple.operation_id == operation.id)
@@ -151,7 +151,13 @@ async def repair_env(monkeypatch):
             models=(
                 RuntimeModelSnapshot(
                     snapshot=GrantModelSnapshot(
-                        model_key="viewer", active=True, action_codes=("use",), derived_level=1
+                        model_key="viewer",
+                        active=True,
+                        action_codes=(),
+                        derived_level=1,
+                        visibility_only=True,
+                        visibility_level=1,
+                        visibility_only_resource_types=("tool", "linsight_skill"),
                     ),
                     name="Viewer",
                     kind="STANDARD",
@@ -282,9 +288,28 @@ async def test_non_current_resources_fail_closed(repair_env, status):
             )
         )
         await session.commit()
-    with pytest.raises(PermissionPublishNotReadyError, match="non-current"):
+    with pytest.raises(PermissionPublishNotReadyError, match="ledger is missing"):
         await reconcile_system_owned_resources(env.runtime, (_spec(),), apply=True, operator_id=1)
     assert not env.fga.calls
+
+
+async def test_original_failed_closed_system_creation_recovers_its_pending_grant(repair_env):
+    env = repair_env
+    env.fga.timeout_mode, env.fga.timeout_call = "mixed", 2
+    with pytest.raises(Exception) as failure:
+        await reconcile_system_owned_resources(env.runtime, (_spec(),), apply=True, operator_id=1)
+    async with env.factory() as session:
+        mode = (await session.exec(select(ResourcePermissionMode))).one()
+        grant = (await session.exec(select(PermissionGrant))).one()
+        assert mode.projection_state == grant.projection_state == "FAILED_CLOSED", (
+            type(failure.value).__name__,
+            str(failure.value),
+        )
+    report = await reconcile_system_owned_resources(env.runtime, (_spec(),), apply=True, operator_id=1)
+    assert report.current_count == 1
+    async with env.factory() as session:
+        assert (await session.exec(select(PermissionGrant))).one().state == "ACTIVE"
+        assert (await session.exec(select(PermissionGrantAssignee))).one().state == "ACTIVE"
 
 
 async def test_builtin_skill_entrypoint_uses_real_permission_creation(repair_env, monkeypatch):

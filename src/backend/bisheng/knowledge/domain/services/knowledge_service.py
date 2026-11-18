@@ -2,6 +2,7 @@ import asyncio
 import json
 import math
 import os
+from dataclasses import dataclass, field
 from datetime import datetime
 from time import perf_counter
 from typing import Any
@@ -41,24 +42,33 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeFileFailedError,
     KnowledgeInvalidCursorError,
     KnowledgeNoEmbeddingError,
+    KnowledgeNotExistError,
     KnowledgeNotQAError,
+    KnowledgeOperationConfirmationRequiredError,
+    KnowledgeOperationPlanConflictError,
+    KnowledgeProcessingConflictError,
     KnowledgeTagExistError,
     KnowledgeTagNotExistError,
     KnowledgeTenantMismatchError,
+    KnowledgeTypeNotSupportedError,
 )
 from bisheng.common.errcode.knowledge_space import SpaceFileSizeLimitError
 from bisheng.common.errcode.permission import PermissionEnumerationIncompleteError
 from bisheng.common.schemas.api import PageInfiniteCursorData
 from bisheng.common.services.metric_log import emit_metric
-from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
-from bisheng.core.cache.utils import file_download
+from bisheng.core.cache.utils import async_file_download, file_download
 from bisheng.core.context.tenant import get_current_tenant_id
+from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage, get_minio_storage_sync
 from bisheng.database.models.group_resource import (
     ResourceTypeEnum,
 )
 from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagDao
+from bisheng.knowledge.application.model_reference import (
+    KnowledgeModelRebuildCommand,
+    KnowledgeModelReferenceApplication,
+)
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import (
     Knowledge,
@@ -75,21 +85,23 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileDao,
     KnowledgeFileStatus,
     ParseType,
-    QAKnoweldgeDao,
 )
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
+from bisheng.knowledge.domain.repositories.knowledge_version_read_repository import KnowledgeVersionReadRepository
 from bisheng.knowledge.domain.schemas.knowledge_schema import (
     AddKnowledgeMetadataFieldsReq,
     UpdateKnowledgeMetadataFieldsReq,
 )
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
+from bisheng.knowledge.domain.services.knowledge_index_results import require_es_write, require_milvus_write
 from bisheng.knowledge.domain.services.knowledge_metadata_service import KnowledgeMetadataService
 from bisheng.knowledge.domain.services.knowledge_permission_service import (
     KnowledgeContainerPermissionRecord,
     KnowledgeFilePermissionRecord,
     KnowledgePermissionService,
 )
+from bisheng.knowledge.domain.services.knowledge_processing_guard import require_space_processing_idle
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.llm.domain.utils import to_llm_invoke_error
 from bisheng.permission.application.access import (
@@ -102,13 +114,13 @@ from bisheng.permission.application.business_authorization import (
 )
 from bisheng.permission.application.data_scope import DATA_SCOPE_ALL
 from bisheng.permission.application.identity import resolve_permission_actor
+from bisheng.resource_reference.application.contracts import canonical_target_id
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_knowledge_index_name, generate_uuid
 from bisheng.utils.async_utils import run_async_safe
 
 _KNOWLEDGE_LIST_ACTIONS = [
     "visible",
-    "use",
     "edit",
     "delete",
     "manage_permission",
@@ -124,11 +136,26 @@ _KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE = 100
 _LIBRARY_VISIBLE_MAX_RESULTS = 5000
 
 
+@dataclass(frozen=True, slots=True)
+class PreparedUpload:
+    local_path: str = field(repr=False)
+    download_name: str
+    original_file_name: str
+    md5: str
+    file_size: int
+    split_rule: str = field(repr=False)
+    file_info: KnowledgeFileOne = field(repr=False)
+    # False when the body came from a server-resolved PreviewSource: the
+    # client-supplied file_path is then never used to delete objects.
+    cleanup_source: bool = True
+
+
 class KnowledgeService(KnowledgeUtils):
     """Service class for managing knowledge domain operations."""
 
     permission_service = KnowledgePermissionService()
     audit_telemetry_service = KnowledgeAuditTelemetryService()
+    version_read_repository = KnowledgeVersionReadRepository()
 
     def __init__(
         self,
@@ -448,7 +475,7 @@ class KnowledgeService(KnowledgeUtils):
         sort_by: str = "update_time",
         cursor: str | None = None,
         page_size: int = 10,
-        action: str = "use",
+        action: str = "visible",
         preferred_ids: list[int] | None = None,
         has_abnormal: bool | None = None,
     ) -> PageInfiniteCursorData[KnowledgeRead]:
@@ -465,14 +492,18 @@ class KnowledgeService(KnowledgeUtils):
             they can see (``list_visible_objects``), then run the historical
             keyset scan under an ``id IN (:visible_ids)`` filter. ``visible``
             is the superset of every concrete action, so the pre-filter is
-            valid for ``action="use"``; the per-page BatchCheck below still
-            narrows the result to rows the user can actually ``use``.
+            sufficient for legacy ``action="use"``, normalized to visible.
+            Other requested actions still use the per-page BatchCheck.
           * ``sort_by`` ∈ {``update_time``, ``create_time``} → true keyset
             cursor with key ``[sort_value, id]``; ``sort_by="name"`` still
             uses a pseudo-cursor (offset internally, AD-15) with key
             ``[page_num]``. ``has_more`` is detected by fetching
             ``page_size + 1`` rows; the ``total`` field is no longer computed.
         """
+        if knowledge_type == KnowledgeTypeEnum.PRIVATE:
+            raise KnowledgeTypeNotSupportedError()
+        # Retain the old HTTP action as an alias, never as a business action.
+        action = "visible" if action == "use" else action
         total_start = perf_counter()
 
         # ---- 1. Decode cursor (branch on sort_by) ----
@@ -565,7 +596,7 @@ class KnowledgeService(KnowledgeUtils):
         res: list[Knowledge] = []
         filter_start = perf_counter()
         # ``action`` values other than "visible" still require a per-page
-        # BatchCheck: visible ⊇ use ⊇ …, so the pre-filter is a superset. Admin
+        # BatchCheck: visible is the superset of concrete actions. Admin
         # bypass skips this because every action is granted.
         needs_action_check = (not is_admin) and action != "visible"
 
@@ -813,6 +844,8 @@ class KnowledgeService(KnowledgeUtils):
         knowledge_type = (
             knowledge.type if isinstance(knowledge.type, KnowledgeTypeEnum) else KnowledgeTypeEnum(knowledge.type)
         )
+        if knowledge_type == KnowledgeTypeEnum.PRIVATE:
+            raise KnowledgeTypeNotSupportedError()
         repeat_knowledge = KnowledgeDao.get_knowledge_by_name(
             knowledge.name,
             login_user.user_id,
@@ -855,6 +888,8 @@ class KnowledgeService(KnowledgeUtils):
         knowledge_type = (
             knowledge.type if isinstance(knowledge.type, KnowledgeTypeEnum) else KnowledgeTypeEnum(knowledge.type)
         )
+        if knowledge_type == KnowledgeTypeEnum.PRIVATE:
+            raise KnowledgeTypeNotSupportedError()
         repeat_knowledge = await KnowledgeDao.aget_knowledge_by_name(
             knowledge.name,
             login_user.user_id,
@@ -890,16 +925,21 @@ class KnowledgeService(KnowledgeUtils):
         db_knowledge.index_name = generate_knowledge_index_name()
         db_knowledge.collection_name = db_knowledge.index_name
 
-        # Insert into Database
         db_knowledge.user_id = login_user.user_id
-        db_knowledge.tenant_id = login_user.tenant_id
-        db_knowledge = KnowledgeDao.insert_one(db_knowledge)
+        db_knowledge.tenant_id = get_current_tenant_id()
 
-        # The permission mirror is what makes the resource reachable, so it is
-        # built before any external store and the row is removed again if it
-        # cannot be built. See `_project_created_or_undo`.
-        if not skip_hook:
-            cls._project_created_or_undo_sync(login_user, db_knowledge)
+        def project_created(actual):
+            if not skip_hook:
+                run_async_safe(cls._project_library_created(login_user, actual), timeout=60)
+
+        # The actual flushed row drives projection. Knowledge and outgoing
+        # bindings share one SQL transaction; a projection failure rolls both
+        # back without invoking a compensating DAO in another Session.
+        with get_sync_db_session() as session:
+            KnowledgeModelReferenceApplication.create(
+                session, db_knowledge, login_user=login_user, project_created=project_created
+            )
+            session.commit()
 
         # qa knowledge builds its index lazily on first Q&A add (different schema)
         cls._init_knowledge_indices_sync(login_user.user_id, db_knowledge)
@@ -910,29 +950,7 @@ class KnowledgeService(KnowledgeUtils):
         return db_knowledge
 
     @classmethod
-    def _project_created_or_undo_sync(cls, login_user: UserPayload, knowledge: Knowledge) -> None:
-        """Build the permission mirror, or take the knowledge row back out.
-
-        The business row and the permission mirror are written to different
-        places and cannot share a transaction, so the row used to survive a
-        failed mirror. What that leaves behind is a knowledge base that exists
-        in the list and answers every permission question with "projection is
-        not current" — it cannot be opened, and it cannot be deleted either,
-        because deleting also asks the permission layer first.
-
-        A live tenant collected seven of these in one afternoon while the
-        permission runtime was refusing to start after an authorization-model
-        change. Creating them looked like it failed; the rows stayed.
-        """
-        try:
-            run_async_safe(cls._project_library_created(login_user, knowledge), timeout=60)
-        except Exception:
-            logger.exception("knowledge permission projection failed, undoing knowledge_id={}", knowledge.id)
-            KnowledgeDao.delete_knowledge(int(knowledge.id))
-            raise
-
-    @classmethod
-    def _init_knowledge_indices_sync(cls, invoke_user_id: int, db_knowledge: Knowledge) -> None:
+    def _init_knowledge_indices_sync(cls, invoke_user_id: int, db_knowledge: Knowledge, raise_on_error=False) -> None:
         """Create the Milvus collection + ES index for a (non-QA) knowledge resource.
 
         Shared by knowledge creation and by clear (only_clear), where the prior
@@ -961,7 +979,9 @@ class KnowledgeService(KnowledgeUtils):
             )
             es_client._store._create_index_if_not_exists()
         except Exception:
-            logger.exception("init knowledge index error knowledge_id=%s", db_knowledge.id)
+            logger.exception("init knowledge index error knowledge_id={}", db_knowledge.id)
+            if raise_on_error:
+                raise
 
     @classmethod
     async def acreate_knowledge_base(
@@ -970,13 +990,17 @@ class KnowledgeService(KnowledgeUtils):
         db_knowledge.index_name = generate_knowledge_index_name()
         db_knowledge.collection_name = db_knowledge.index_name
         db_knowledge.user_id = login_user.user_id
-        db_knowledge.tenant_id = login_user.tenant_id
-        db_knowledge = await KnowledgeDao.async_insert_one(db_knowledge)
+        db_knowledge.tenant_id = get_current_tenant_id()
 
-        # Same ordering as the sync path: the mirror decides whether the row
-        # survives, so it runs before any external store is touched.
-        if not skip_hook:
-            await cls._aproject_created_or_undo(login_user, db_knowledge)
+        async def project_created(actual):
+            if not skip_hook:
+                await cls._project_library_created(login_user, actual)
+
+        async with get_async_db_session() as session:
+            await KnowledgeModelReferenceApplication.acreate(
+                session, db_knowledge, login_user=login_user, project_created=project_created
+            )
+            await session.commit()
 
         if db_knowledge.type != KnowledgeTypeEnum.QA.value:
             try:
@@ -1012,17 +1036,6 @@ class KnowledgeService(KnowledgeUtils):
                 db_knowledge,
             )
         return db_knowledge
-
-    @classmethod
-    async def _aproject_created_or_undo(cls, login_user: UserPayload, knowledge: Knowledge) -> None:
-        """Async twin of `_project_created_or_undo_sync`; same contract."""
-
-        try:
-            await cls._project_library_created(login_user, knowledge)
-        except Exception:
-            logger.exception("knowledge permission projection failed, undoing knowledge_id={}", knowledge.id)
-            await KnowledgeDao.async_delete_knowledge(int(knowledge.id))
-            raise
 
     @classmethod
     def create_knowledge_hook(cls, request: Request, login_user: UserPayload, knowledge: Knowledge):
@@ -1075,44 +1088,22 @@ class KnowledgeService(KnowledgeUtils):
         knowledge_id: int,
         only_clear: bool = False,
     ):
-        knowledge = KnowledgeDao.query_by_id(knowledge_id)
-        if not knowledge:
-            raise NotFoundError.http_exception()
-
-        try:
-            cls.permission_service.ensure_knowledge_delete_sync(
-                login_user=login_user,
-                owner_user_id=knowledge.user_id,
-                knowledge_id=knowledge_id,
+        with get_sync_db_session() as session:
+            prepared = KnowledgeModelReferenceApplication.prepare_removal(
+                session, knowledge_id, login_user=login_user, only_clear=only_clear
             )
-        except UnAuthorizedError:
-            raise UnAuthorizedError.http_exception()
-
-        run_async_safe(
-            cls._project_library_deletion(
-                login_user,
-                knowledge_id=knowledge_id,
-                include_container=not only_clear,
-            ),
-            timeout=300,
-        )
-
-        # Cleaned vectorData in
-        cls.delete_knowledge_file_in_vector(knowledge)
-
-        # CleanedminioData
-        cls.delete_knowledge_file_in_minio(knowledge_id)
-
-        # DeletemysqlDATA
-        KnowledgeDao.delete_knowledge(knowledge_id, only_clear)
-
-        # QA knowledge bases keep their Q&A pairs in the QAKnowledge table (not
-        # KnowledgeFile), so the deletion above doesn't touch them. Remove them
-        # explicitly for both clear and full delete to avoid orphaned rows.
-        if knowledge.type == KnowledgeTypeEnum.QA.value:
-            qa_rows = QAKnoweldgeDao.get_qa_knowledge_by_knowledge_ids([knowledge_id])
-            if qa_rows:
-                QAKnoweldgeDao.delete_batch([qa.id for qa in qa_rows])
+            knowledge = prepared.row
+            # Preserve the existing projection -> external cleanup -> SQL
+            # finalize order. Files, QA pairs, Knowledge and outgoing bindings
+            # now finalize inside this one transaction.
+            run_async_safe(
+                cls._project_library_deletion(login_user, knowledge_id=knowledge_id, include_container=not only_clear),
+                timeout=300,
+            )
+            cls.delete_knowledge_file_in_vector(knowledge)
+            cls.delete_knowledge_file_in_minio(knowledge_id)
+            KnowledgeModelReferenceApplication.apply_removal(session, prepared)
+            session.commit()
 
         # Clear dropped the Milvus collection + ES index above; recreate empty
         # indices so the cleared (still-existing) resource stays queryable instead
@@ -1127,11 +1118,98 @@ class KnowledgeService(KnowledgeUtils):
         return True
 
     @classmethod
-    def delete_knowledge_file_in_vector(cls, knowledge: Knowledge, del_es: bool = True):
-        embeddings = FakeEmbeddings()
-        vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
-            invoke_user_id=0, knowledge=knowledge, embeddings=embeddings
+    def update_knowledge_model(
+        cls,
+        *,
+        login_user,
+        knowledge_id,
+        model_id,
+        name=None,
+        description=None,
+        confirmation=None,
+        processing_commands=None,
+    ):
+        """Legacy metadata/QA semantics; SPACE model changes use real PROC."""
+        with get_sync_db_session() as session:
+            candidate = KnowledgeModelReferenceApplication.repository.get(session, knowledge_id)
+            advanced = (
+                candidate is not None
+                and candidate.type == KnowledgeTypeEnum.SPACE.value
+                and str(candidate.model) != str(model_id)
+            )
+        if advanced:
+            if confirmation is None or processing_commands is None:
+                raise KnowledgeOperationConfirmationRequiredError()
+            return run_async_safe(
+                processing_commands.alegacy_model_confirm(
+                    knowledge_id, confirmation, identity=login_user, name=name, description=description
+                ),
+                timeout=60,
+            )
+        command = None
+        repository = KnowledgeModelReferenceApplication.repository
+        with get_sync_db_session() as session:
+            candidate = repository.get(session, knowledge_id)
+            if candidate is None:
+                raise KnowledgeNotExistError()
+            selected = canonical_target_id(model_id)
+            current = canonical_target_id(candidate.model) if candidate.model else None
+            if current == selected:
+                old = KnowledgeModelReferenceApplication._facts(candidate)
+                row = repository.get(session, knowledge_id, for_update=True)
+                if row is None or KnowledgeModelReferenceApplication._facts(row) != old:
+                    raise KnowledgeOperationPlanConflictError(reason="knowledge_model_configuration_changed")
+                KnowledgeModelReferenceApplication._user(login_user)
+                run_async_safe(KnowledgeModelReferenceApplication._authorize(login_user, row))
+                if name is not None:
+                    row.name = name
+                row.description = description
+                repository.save(session, row)
+            else:
+                prepared = KnowledgeModelReferenceApplication.prepare_model_change(
+                    session, knowledge_id, selected, login_user=login_user
+                )
+                row = prepared.row
+                if name is not None:
+                    row.name = name
+                row.description = description
+                KnowledgeModelReferenceApplication.apply_model_change(session, prepared)
+                if prepared.changed:
+                    command = KnowledgeModelRebuildCommand(
+                        row.id,
+                        row.type,
+                        prepared.operation_id,
+                        row.model_config_revision,
+                        row.index_generation,
+                        row.tenant_id,
+                        login_user.user_id,
+                    )
+            session.commit()
+        if command is not None:
+            # A queue failure cannot roll back already committed business
+            # configuration. Operators retry this same operation/revision.
+            cls._dispatch_model_rebuild(command)
+        return row
+
+    @staticmethod
+    def _dispatch_model_rebuild(command: KnowledgeModelRebuildCommand):
+        if command.type == KnowledgeTypeEnum.QA.value:
+            from bisheng.worker.knowledge.qa import rebuild_qa_knowledge_celery as task
+        else:
+            from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery as task
+        task.apply_async(
+            args=(command.knowledge_id, None, command.actor_user_id),
+            kwargs={
+                "operation_id": command.operation_id,
+                "expected_model_config_revision": command.expected_model_config_revision,
+                "expected_index_generation": command.expected_index_generation,
+            },
+            headers={"tenant_id": command.tenant_id},
         )
+
+    @classmethod
+    def delete_knowledge_file_in_vector(cls, knowledge: Knowledge, del_es: bool = True):
+        vector_client = KnowledgeRag.init_knowledge_milvus_cleanup_sync(knowledge)
         if isinstance(vector_client.col, Collection):
             logger.info(f"delete_vector col={knowledge.collection_name} knowledge_id={knowledge.id}")
             if knowledge.collection_name.startswith("col"):
@@ -1141,7 +1219,7 @@ class KnowledgeService(KnowledgeUtils):
                 raise ValueError("knowledge.collection_name must start with 'col' not support partition mode")
         if del_es:
             index_name = knowledge.index_name or knowledge.collection_name  # Compatible with older versions
-            es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge)
+            es_client = KnowledgeRag.init_knowledge_es_cleanup_sync(knowledge)
             res = es_client.client.indices.delete(index=index_name, ignore=[400, 404])
             logger.info(f"act=delete_es index={index_name} res={res}")
 
@@ -1216,12 +1294,26 @@ class KnowledgeService(KnowledgeUtils):
 
         from bisheng.knowledge.domain.services.preview_source_service import PreviewSourceService
 
+        # Public preview entry: the client-supplied path must resolve through a
+        # server-issued upload reference or an authorized existing file.
         if len(req_data.file_list) != 1:
             raise NotFoundError.http_exception()
         source = await PreviewSourceService.resolve(
             item=req_data.file_list[0], login_user=login_user, knowledge_id=req_data.knowledge_id
         )
-        file_path = source.cache_path
+        return await cls.parse_staged_file(login_user, req_data, source=source)
+
+    @classmethod
+    async def parse_staged_file(
+        cls, login_user, req_data: KnowledgeFileProcess, *, cache_key: str | None = None, source=None
+    ):
+        """Parse only after the calling entry has verified its own business target.
+
+        ``source`` is the PreviewSource resolved by the public preview entry; staged
+        SPACE uploads pass none because their receipt already owns the server path.
+        """
+        legacy_cache = cache_key is None
+        file_path = source.cache_path if source is not None else req_data.file_list[0].file_path
         excel_rule = req_data.file_list[0].excel_rule
         file_rule = FileProcessBase(
             knowledge_id=req_data.knowledge_id,
@@ -1239,13 +1331,13 @@ class KnowledgeService(KnowledgeUtils):
             retain_images=req_data.retain_images,
             excel_rule=excel_rule,
         )
-        cache_key = cls.preview_cache_key_for_split_rule(req_data.knowledge_id, file_path, file_rule)
+        cache_key = cache_key or cls.preview_cache_key_for_split_rule(req_data.knowledge_id, file_path, file_rule)
         legacy_cache_key = cls.legacy_preview_cache_key(req_data.knowledge_id, file_path)
 
         redis_client = await get_redis_client()
 
         # Attempt to fetch from cache
-        if req_data.cache:
+        if req_data.cache and legacy_cache:
             used_cache_key = cache_key
             cache_value = await cls.async_get_preview_cache(cache_key)
             if not cache_value and legacy_cache_key != cache_key:
@@ -1265,19 +1357,23 @@ class KnowledgeService(KnowledgeUtils):
                     res.append(FileChunk(text=val["text"], metadata=val["metadata"]))
                 return parse_type, file_share_url, res, partitions
 
-        from bisheng.core.cache.utils import save_download_file
+        if source is not None:
+            from bisheng.core.cache.utils import save_download_file
 
-        def download_source():
-            minio = get_minio_storage_sync()
-            response = minio.download_object_sync(source.bucket, source.object_name)
-            try:
-                return save_download_file(response, "bisheng", os.path.basename(source.object_name))
-            finally:
-                response.close()
-                response.release_conn()
+            def download_source():
+                minio = get_minio_storage_sync()
+                response = minio.download_object_sync(source.bucket, source.object_name)
+                try:
+                    return save_download_file(response, "bisheng", os.path.basename(source.object_name))
+                finally:
+                    response.close()
+                    response.release_conn()
 
-        filepath = await run_in_threadpool(download_source)
-        file_name = source.file_name
+            filepath = await run_in_threadpool(download_source)
+            file_name = source.file_name
+        else:
+            filepath, file_name = await async_file_download(file_path)
+            file_name = cls.get_upload_file_original_name(file_name)
         file_ext = file_name.split(".")[-1].lower()
 
         # Split text using PreviewFilePipeline
@@ -1318,7 +1414,7 @@ class KnowledgeService(KnowledgeUtils):
 
         from bisheng.knowledge.domain.upload_file_size import MEDIA_FILE_EXTENSIONS
 
-        file_share_url = minio_client.clear_minio_share_host(source.share_url)
+        file_share_url = minio_client.clear_minio_share_host(source.share_url if source is not None else file_path)
         preview_exts = {
             "doc",
             "docx",
@@ -1338,7 +1434,8 @@ class KnowledgeService(KnowledgeUtils):
 
         # Deposit Cache
         await cls.async_save_preview_cache(cache_key, mapping=cache_map)
-        await cls.async_bind_preview_cache_key(req_data.knowledge_id, file_path, cache_key)
+        if legacy_cache:
+            await cls.async_bind_preview_cache_key(req_data.knowledge_id, file_path, cache_key)
         await redis_client.aset(f"{cache_key}_parse_type", parse_type)
         await redis_client.aset(f"{cache_key}_file_path", file_share_url)
         await redis_client.aset(f"{cache_key}_partitions", partitions)
@@ -1408,6 +1505,11 @@ class KnowledgeService(KnowledgeUtils):
         knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
         if not knowledge:
             raise NotFoundError.http_exception()
+        if knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            from bisheng.knowledge.application.legacy_files import LegacyFilesApplication
+
+            owner = LegacyFilesApplication(request=None, identity=login_user)
+            return run_async_safe(owner.astage(req_data), timeout=3600)
         try:
             cls.permission_service.ensure_knowledge_write_sync(
                 login_user=login_user,
@@ -1428,7 +1530,9 @@ class KnowledgeService(KnowledgeUtils):
         try:
             for one in req_data.file_list:
                 # Upload source files, create data records
-                db_file = cls.process_one_file(login_user, knowledge, one, split_rule_dict)
+                db_file = cls.process_one_file(
+                    login_user, knowledge, one, split_rule_dict, processing_rule_request=req_data
+                )
                 # Duplicate file data using asynchronous tasks to execute
                 if db_file.status != KnowledgeFileStatus.FAILED.value:
                     if getattr(db_file, "id", None):
@@ -1440,7 +1544,7 @@ class KnowledgeService(KnowledgeUtils):
                     cache_key = cls.preview_cache_key_for_split_rule(
                         req_data.knowledge_id,
                         one.file_path,
-                        {**split_rule_dict, "excel_rule": (one.excel_rule or ExcelRule()).model_dump()},
+                        json.loads(db_file.split_rule),
                     )
                     preview_cache_keys.append(cache_key)
                     process_files.append(db_file)
@@ -1465,6 +1569,21 @@ class KnowledgeService(KnowledgeUtils):
         return knowledge, failed_files, process_files, preview_cache_keys
 
     @classmethod
+    async def _resolve_trusted_uploads(cls, login_user: UserPayload, req_data: KnowledgeFileProcess) -> list:
+        """Resolve every item to a server-issued upload before any file is read."""
+        from bisheng.knowledge.domain.services.preview_source_service import PreviewSourceService
+
+        sources = []
+        for item in req_data.file_list:
+            # Processing accepts uploads only, not references to existing files.
+            if not item.preview_upload_ref or item.preview_file_id:
+                raise NotFoundError.http_exception()
+            sources.append(
+                await PreviewSourceService.resolve(item=item, login_user=login_user, knowledge_id=req_data.knowledge_id)
+            )
+        return sources
+
+    @classmethod
     async def asave_knowledge_file(
         cls,
         login_user: UserPayload,
@@ -1477,6 +1596,12 @@ class KnowledgeService(KnowledgeUtils):
         knowledge = await KnowledgeDao.aquery_by_id(req_data.knowledge_id)
         if not knowledge:
             raise NotFoundError.http_exception()
+        if knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            from bisheng.knowledge.application.legacy_files import LegacyFilesApplication
+
+            sources = await cls._resolve_trusted_uploads(login_user, req_data) if trusted_uploads_only else None
+            owner = LegacyFilesApplication(request=None, identity=login_user)
+            return await owner.astage(req_data, trusted_sources=sources)
         try:
             await cls.permission_service.ensure_knowledge_write_async(
                 login_user=login_user,
@@ -1487,16 +1612,7 @@ class KnowledgeService(KnowledgeUtils):
             raise UnAuthorizedError.http_exception()
         cls.ensure_knowledge_upload_tenant_consistency(login_user, knowledge)
 
-        sources = None
-        if trusted_uploads_only:
-            from bisheng.knowledge.domain.services.preview_source_service import PreviewSourceService
-
-            sources = []
-            for item in req_data.file_list:
-                # Processing accepts uploads only, not references to existing files.
-                if not item.preview_upload_ref or item.preview_file_id:
-                    raise NotFoundError.http_exception()
-                sources.append(await PreviewSourceService.resolve(item=item, login_user=login_user, knowledge_id=knowledge.id))
+        sources = await cls._resolve_trusted_uploads(login_user, req_data) if trusted_uploads_only else None
 
         failed_files = []
         process_files = []
@@ -1507,12 +1623,15 @@ class KnowledgeService(KnowledgeUtils):
         current_total_file_size = int(await KnowledgeFileDao.aget_user_upload_total_file_size(login_user.user_id))
         try:
             for index, one in enumerate(req_data.file_list):
-                if sources is None:
-                    db_file = await run_in_threadpool(cls.process_one_file, login_user, knowledge, one, split_rule_dict)
-                else:
-                    db_file = await run_in_threadpool(
-                        cls.process_one_file, login_user, knowledge, one, split_rule_dict, trusted_source=sources[index]
-                    )
+                db_file = await run_in_threadpool(
+                    cls.process_one_file,
+                    login_user,
+                    knowledge,
+                    one,
+                    split_rule_dict,
+                    processing_rule_request=req_data,
+                    **({"trusted_source": sources[index]} if sources is not None else {}),
+                )
                 if db_file.status != KnowledgeFileStatus.FAILED.value:
                     if getattr(db_file, "id", None):
                         created_file_ids.append(db_file.id)
@@ -1522,7 +1641,7 @@ class KnowledgeService(KnowledgeUtils):
                     cache_key = cls.preview_cache_key_for_split_rule(
                         req_data.knowledge_id,
                         one.file_path,
-                        {**split_rule_dict, "excel_rule": (one.excel_rule or ExcelRule()).model_dump()},
+                        json.loads(db_file.split_rule),
                     )
                     preview_cache_keys.append(cache_key)
                     process_files.append(db_file)
@@ -1601,6 +1720,13 @@ class KnowledgeService(KnowledgeUtils):
         upload_limit_bytes: int | None = None,
     ) -> list[KnowledgeFile]:
         """Process uploaded files"""
+        knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
+        if knowledge is not None and knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            from bisheng.knowledge.application.legacy_files import LegacyFilesApplication
+
+            owner = LegacyFilesApplication(request=request, identity=login_user)
+            return run_async_safe(owner.aprocess(req_data), timeout=3600)
+
         knowledge, failed_files, process_files, preview_cache_keys = cls.save_knowledge_file(
             login_user, req_data, upload_limit_bytes=upload_limit_bytes
         )
@@ -1632,6 +1758,16 @@ class KnowledgeService(KnowledgeUtils):
         trusted_uploads_only: bool = False,
     ) -> list[KnowledgeFile]:
 
+        knowledge = await KnowledgeDao.aquery_by_id(req_data.knowledge_id)
+        if knowledge is not None and knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            from bisheng.knowledge.application.legacy_files import LegacyFilesApplication
+
+            # SPACE rows are registered by the native owner; the request-driven
+            # entry still accepts only server-issued upload references.
+            sources = await cls._resolve_trusted_uploads(login_user, req_data) if trusted_uploads_only else None
+            owner = LegacyFilesApplication(request=request, identity=login_user)
+            return await owner.aprocess(req_data, **({"trusted_sources": sources} if sources is not None else {}))
+
         knowledge, failed_files, process_files, preview_cache_keys = await cls.asave_knowledge_file(
             login_user, req_data, upload_limit_bytes=upload_limit_bytes, trusted_uploads_only=trusted_uploads_only
         )
@@ -1660,6 +1796,13 @@ class KnowledgeService(KnowledgeUtils):
         upload_limit_bytes: int | None = None,
     ) -> list[KnowledgeFile]:
         """Sync uploaded files"""
+        knowledge = KnowledgeDao.query_by_id(req_data.knowledge_id)
+        if knowledge is not None and knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            from bisheng.knowledge.application.legacy_files import LegacyFilesApplication
+
+            owner = LegacyFilesApplication(request=request, identity=login_user)
+            return run_async_safe(owner.aprocess(req_data, inline=True), timeout=3600)
+
         knowledge, failed_files, process_files, preview_cache_keys = cls.save_knowledge_file(
             login_user, req_data, upload_limit_bytes=upload_limit_bytes
         )
@@ -1678,7 +1821,9 @@ class KnowledgeService(KnowledgeUtils):
         return failed_files + process_files
 
     @classmethod
-    async def rebuild_knowledge_file(cls, request: Request, login_user: UserPayload, req_data: KnowledgeFileReProcess):
+    async def rebuild_knowledge_file(
+        cls, request: Request, login_user: UserPayload, req_data: KnowledgeFileReProcess, *, processing_commands=None
+    ):
         """
         Rebuild Knowledge Base Files
         :param request:
@@ -1700,8 +1845,23 @@ class KnowledgeService(KnowledgeUtils):
 
         db_file = await KnowledgeFileDao.query_by_id(req_data.kb_file_id)
 
-        if not db_file:
+        if not db_file or db_file.knowledge_id != knowledge.id:
             raise NotFoundError.http_exception()
+        if knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            from bisheng.knowledge.domain.schemas.processing_job import ProcessingCreateRequest
+
+            if processing_commands is None or not all(
+                (req_data.confirmation_id, req_data.plan_digest, req_data.idempotency_key)
+            ):
+                raise KnowledgeOperationConfirmationRequiredError()
+            command = ProcessingCreateRequest(
+                confirmation_id=req_data.confirmation_id,
+                plan_digest=req_data.plan_digest,
+                idempotency_key=req_data.idempotency_key,
+            )
+            return await processing_commands.alegacy_file_confirm(
+                knowledge.id, command, identity=login_user, file_id=db_file.id
+            )
 
         db_file = await cls.process_rebuild_file(db_file, req_data, login_user.user_id, login_user.user_name)
 
@@ -1713,6 +1873,8 @@ class KnowledgeService(KnowledgeUtils):
         request: Request,
         login_user: UserPayload,
         req_data: dict,
+        *,
+        retry_application=None,
     ):
 
         db_file_retry = req_data.get("file_objs")
@@ -1726,6 +1888,22 @@ class KnowledgeService(KnowledgeUtils):
         knowledge = await KnowledgeDao.aquery_by_id(db_files[0].knowledge_id)
         if not knowledge:
             raise NotFoundError.http_exception()
+        if knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            if retry_application is None:
+                raise RuntimeError("SPACE legacy retry application is not configured")
+            result = await retry_application.aretry(
+                request=request,
+                identity=login_user,
+                req_data=req_data,
+                space_id=knowledge.id,
+            )
+            if not isinstance(result, tuple):
+                return result
+            actual_space, files, paths = result
+            cls.upload_knowledge_file_hook(request, login_user, actual_space, files)
+            for path in paths:
+                await cls.update_folder_update_time(path)
+            return []
         await cls.permission_service.ensure_knowledge_write_async(
             login_user=login_user,
             owner_user_id=knowledge.user_id,
@@ -1759,20 +1937,28 @@ class KnowledgeService(KnowledgeUtils):
         cls.audit_telemetry_service.audit_upload_knowledge_file(login_user, request, knowledge, file_list)
 
     @classmethod
-    def process_one_file(
+    def prepare_one_file(
         cls,
         login_user: UserPayload,
         knowledge: Knowledge,
         file_info: KnowledgeFileOne,
         split_rule: dict,
-        file_kwargs: dict = None,
-        skip_dedup: bool = False,
+        file_kwargs: dict | None = None,
+        processing_rule_request: FileProcessBase | None = None,
+        *,
+        ordinary_overrides_only: bool = False,
         trusted_source=None,
-    ) -> KnowledgeFile:
-        """Process uploaded files."""
+    ) -> PreparedUpload:
+        """Stage the original local file and resolve its actual saved rules.
+
+        This has no registration, permission projection or object-write side
+        effects. The existing writer consumes exactly this prepared snapshot.
+        """
+        # download original file
         if trusted_source is None:
             filepath, file_name = file_download(file_info.file_path)
         else:
+            # Only the server-resolved object is read; the client path is never fetched.
             from bisheng.core.cache.utils import save_download_file
 
             response = get_minio_storage_sync().download_object_sync(trusted_source.bucket, trusted_source.object_name)
@@ -1787,43 +1973,120 @@ class KnowledgeService(KnowledgeUtils):
         # Get file size inbytes）
         file_size = os.path.getsize(filepath)
 
-        file_extension_name = file_name.split(".")[-1]
         original_file_name = cls.get_upload_file_original_name(file_name)
-        # Does it contain duplicate files?
+        actual_snapshot = None
+        if processing_rule_request is not None:
+            from bisheng.knowledge.application.file_processing_adapter import (
+                _AUDIO_EXTENSIONS,
+                _VIDEO_EXTENSIONS,
+                capture_legacy_processing_overrides,
+                legacy_rule_from_snapshot,
+            )
+
+            if ordinary_overrides_only and (
+                file_name.rsplit(".", 1)[-1].lower() in _AUDIO_EXTENSIONS | _VIDEO_EXTENSIONS
+                or (file_kwargs or {}).get("file_source") in {"web_link", "audio_transcript", "video_transcript"}
+            ):
+                processing_rule_request = FileProcessBase(knowledge_id=knowledge.id)
+
+            file_overrides = (
+                capture_legacy_processing_overrides(
+                    FileProcessBase(knowledge_id=knowledge.id, excel_rule=file_info.excel_rule)
+                )
+                if file_info.excel_rule is not None
+                else None
+            )
+            actual_snapshot = cls.processing_snapshot_for_legacy_request(
+                processing_rule_request,
+                knowledge=knowledge,
+                file_name=file_name,
+                file_source=(file_kwargs or {}).get("file_source"),
+                file_overrides=file_overrides,
+            )
+            actual_rule = legacy_rule_from_snapshot(actual_snapshot, space_id=knowledge.id)
+            split_rule = actual_rule.model_dump(mode="json")
+            # The old writer always applies a per-file ExcelRule below. Feed
+            # it the resolved value without mutating the caller's raw input.
+            file_info = file_info.model_copy(update={"excel_rule": actual_rule.excel_rule})
+        if not file_info.excel_rule:
+            file_info.excel_rule = ExcelRule()
+        split_rule["excel_rule"] = file_info.excel_rule.model_dump()
+        if actual_snapshot is not None:
+            split_rule["_effective_processing"] = actual_snapshot.model_dump(mode="json")
+        return PreparedUpload(
+            filepath,
+            file_name,
+            original_file_name,
+            md5_,
+            file_size,
+            json.dumps(split_rule),
+            file_info,
+            cleanup_source=trusted_source is None,
+        )
+
+    @classmethod
+    def stage_prepared_duplicate(
+        cls,
+        *,
+        prepared: PreparedUpload,
+        repeat_files: tuple[KnowledgeFile, ...] | list[KnowledgeFile],
+    ) -> KnowledgeFile:
+        """Stage the original duplicate response without preparing or persisting it again."""
+        minio_client = get_minio_storage_sync()
+        # Preserve the existing precedence: content duplicates win over name-only duplicates.
+        db_file = next((file for file in repeat_files if file.md5 == prepared.md5), repeat_files[0])
+        old_name = db_file.file_name
+        file_type = prepared.download_name.rsplit(".", 1)[-1]
+        obj_name = f"tmp/{db_file.id}.{file_type}"
+        db_file.object_name = obj_name
+        db_file.remark = json.dumps({"new_name": prepared.original_file_name, "old_name": old_name}, ensure_ascii=False)
+        # Keep the old row unchanged in SQL; the client still chooses overwrite.
+        minio_client.put_object_tmp_sync(db_file.object_name, prepared.local_path)
+        if prepared.cleanup_source:
+            cls.remove_unused_file(prepared.file_info.file_path)
+        db_file.status = KnowledgeFileStatus.FAILED.value
+        db_file.split_rule = prepared.split_rule
+        db_file.file_size = prepared.file_size
+        return db_file
+
+    @classmethod
+    def process_one_file(
+        cls,
+        login_user: UserPayload,
+        knowledge: Knowledge,
+        file_info: KnowledgeFileOne,
+        split_rule: dict,
+        file_kwargs: dict = None,
+        skip_dedup: bool = False,
+        processing_rule_request: FileProcessBase | None = None,
+        trusted_source=None,
+    ) -> KnowledgeFile:
+        """Process uploaded files"""
+        prepared = cls.prepare_one_file(
+            login_user,
+            knowledge,
+            file_info,
+            split_rule,
+            file_kwargs=file_kwargs,
+            processing_rule_request=processing_rule_request,
+            trusted_source=trusted_source,
+        )
+        filepath = prepared.local_path
+        original_file_name, md5_, file_size = prepared.original_file_name, prepared.md5, prepared.file_size
+        str_split_rule, file_info = prepared.split_rule, prepared.file_info
         repeat_files = KnowledgeFileDao.get_file_by_condition(
             knowledge_id=knowledge.id,
             md5_=md5_,
             file_name=original_file_name,
         )
-
-        if not file_info.excel_rule:
-            file_info.excel_rule = ExcelRule()
-        split_rule["excel_rule"] = file_info.excel_rule.model_dump()
-        str_split_rule = json.dumps(split_rule)
-        minio_client = get_minio_storage_sync()
-
         # ``skip_dedup``: callers that have already resolved a guaranteed-unique
         # filename (e.g. F028 conversation export → import, which appends "(N)")
         # force a fresh insert. Otherwise re-importing the same conversation
         # collides on content md5 here and is silently rejected as a duplicate.
         if repeat_files and not skip_dedup:
-            # Preserve the existing precedence: content duplicates win over name-only duplicates.
-            db_file = next((file for file in repeat_files if file.md5 == md5_), repeat_files[0])
-            old_name = db_file.file_name
-            file_type = file_name.rsplit(".", 1)[-1]
-            obj_name = f"tmp/{db_file.id}.{file_type}"
-            db_file.object_name = obj_name
-            db_file.remark = json.dumps({"new_name": original_file_name, "old_name": old_name}, ensure_ascii=False)
-            # Uploaded to minio, do not modify the database, it is up to the front-end to decide whether to overwrite or not. If it is overwritten, the retry interface
-            minio_client.put_object_tmp_sync(db_file.object_name, filepath)
-            if trusted_source is None:
-                cls.remove_unused_file(file_info.file_path)
-            db_file.status = KnowledgeFileStatus.FAILED.value
-            db_file.split_rule = str_split_rule
-            # Update file size information
-            db_file.file_size = file_size
-            return db_file
+            return cls.stage_prepared_duplicate(prepared=prepared, repeat_files=repeat_files)
 
+        minio_client = get_minio_storage_sync()
         # Insert new data, upload the original file tominio
         db_file = KnowledgeFile(
             knowledge_id=knowledge.id,
@@ -1937,6 +2200,23 @@ class KnowledgeService(KnowledgeUtils):
         db_knowledge = KnowledgeDao.query_by_id(knowledge_id)
         if not db_knowledge:
             raise NotFoundError.http_exception()
+        if db_knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            from bisheng.knowledge.application.legacy_files import LegacyFilesApplication
+
+            owner = LegacyFilesApplication(request=request, identity=login_user)
+            result, writeable = run_async_safe(
+                owner.alist(
+                    knowledge=db_knowledge,
+                    decorate=cls._adecorate_knowledge_files,
+                    keyword=file_name,
+                    status=status,
+                    file_ids=file_ids,
+                    page=page,
+                    page_size=page_size,
+                ),
+                timeout=300,
+            )
+            return result[0], result[1], writeable
 
         try:
             cls.permission_service.ensure_knowledge_read_sync(
@@ -1992,6 +2272,20 @@ class KnowledgeService(KnowledgeUtils):
         db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not db_knowledge:
             raise NotFoundError.http_exception()
+        if db_knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            from bisheng.knowledge.application.legacy_files import LegacyFilesApplication
+
+            owner = LegacyFilesApplication(request=request, identity=login_user)
+            result, writeable = await owner.alist(
+                knowledge=db_knowledge,
+                decorate=cls._adecorate_knowledge_files,
+                keyword=file_name,
+                status=status,
+                file_ids=file_ids,
+                page=page,
+                page_size=page_size,
+            )
+            return result[0], result[1], writeable
 
         try:
             await cls.permission_service.ensure_knowledge_read_async(
@@ -2057,7 +2351,9 @@ class KnowledgeService(KnowledgeUtils):
         file_tags_map = (
             await asyncio.to_thread(
                 TagDao.get_tags_by_resource,
-                ResourceTypeEnum.KNOWLEDGE_FILE,
+                ResourceTypeEnum.SPACE_FILE
+                if db_knowledge.type == KnowledgeTypeEnum.SPACE.value
+                else ResourceTypeEnum.KNOWLEDGE_FILE,
                 [str(one.id) for one in res],
             )
             if res
@@ -2098,6 +2394,24 @@ class KnowledgeService(KnowledgeUtils):
         meaning, so an old page-number cursor fails with 10991 instead of
         being read as an id.
         """
+        db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
+        if not db_knowledge:
+            raise NotFoundError.http_exception()
+        if db_knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            from bisheng.knowledge.application.legacy_files import LegacyFilesApplication
+
+            owner = LegacyFilesApplication(request=request, identity=login_user)
+            return await owner.alist(
+                knowledge=db_knowledge,
+                decorate=cls._adecorate_knowledge_files,
+                keyword=file_name,
+                status=status,
+                file_ids=file_ids,
+                page_size=page_size,
+                cursor=cursor,
+                use_cursor=True,
+            )
+
         context = "filelib_file|kb|id_desc"
         try:
             decoded = decode_cursor(cursor, expected_key_len=1, expected_context=context)
@@ -2107,9 +2421,6 @@ class KnowledgeService(KnowledgeUtils):
         if after_id is not None and (isinstance(after_id, bool) or not isinstance(after_id, int) or after_id < 1):
             raise KnowledgeInvalidCursorError()
 
-        db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
-        if not db_knowledge:
-            raise NotFoundError.http_exception()
         try:
             await cls.permission_service.ensure_knowledge_read_async(
                 login_user=login_user,
@@ -2375,7 +2686,8 @@ class KnowledgeService(KnowledgeUtils):
                     raise ValueError("milvus chunk pk field or vector field is None")
                 record["updater"] = login_user.user_name
                 record["update_time"] = update_time
-                vector_client.col.upsert(record)
+                result = vector_client.col.upsert(record)
+                require_milvus_write(result, attribute="upsert_count", expected=1)
         logger.debug("update_milvus_chunk_updater_info over")
 
         res = es_client.client.update_by_query(
@@ -2393,7 +2705,34 @@ class KnowledgeService(KnowledgeUtils):
             },
             conflicts="proceed",
         )
+        require_es_write(res, action="updated")
         logger.debug(f"update_es_chunk_updater_info: {res}")
+
+    @classmethod
+    def _chunk_target(cls, knowledge, file_id):
+        require_space_processing_idle(knowledge, operation="chunk_write")
+        file = KnowledgeFileDao.query_by_id_sync(file_id)
+        if file is None or file.knowledge_id != knowledge.id or file.file_type != 1:
+            raise NotFoundError.http_exception()
+        if file.status in {1, 4, 5}:
+            raise KnowledgeProcessingConflictError(reason="chunk_file_processing")
+        if knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            anchor = run_async_safe(
+                cls.version_read_repository.aget_anchor(tenant_id=get_current_tenant_id(), file_id=file_id),
+                timeout=60,
+            )
+            if anchor is None or anchor.space.id != knowledge.id:
+                raise NotFoundError.http_exception()
+        current = KnowledgeDao.query_by_id(knowledge.id)
+        if current is None:
+            raise NotFoundError.http_exception()
+        require_space_processing_idle(current, operation="chunk_write")
+        if (current.model_config_revision, current.index_generation) != (
+            knowledge.model_config_revision,
+            knowledge.index_generation,
+        ):
+            raise KnowledgeOperationPlanConflictError(reason="chunk_configuration_changed")
+        return current
 
     @classmethod
     def update_knowledge_chunk(
@@ -2411,6 +2750,7 @@ class KnowledgeService(KnowledgeUtils):
             knowledge_id,
             "edit",
         )
+        db_knowledge = cls._chunk_target(db_knowledge, file_id)
 
         logger.info(f"act=update_vector knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}")
         vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(login_user.user_id, db_knowledge)
@@ -2435,6 +2775,8 @@ class KnowledgeService(KnowledgeUtils):
         new_text = KnowledgeUtils.aggregate_chunk_metadata(text, new_metadata)
         try:
             res = vector_client.add_texts([new_text], [new_metadata], timeout=10)
+            if not isinstance(res, list) or len(res) != 1:
+                raise KnowledgeFileFailedError(exception="chunk_vector_write_incomplete")
         except MilvusException:
             raise
         except Exception as e:
@@ -2444,8 +2786,10 @@ class KnowledgeService(KnowledgeUtils):
         # delete data
         logger.info(f"act=delete_vector pk={pk}")
         res = vector_client.col.delete(f"pk in {pk}", timeout=10)
+        require_milvus_write(res, attribute="delete_count", expected=len(pk))
         logger.info(f"act=update_vector_over {res}")
 
+        cls._chunk_target(db_knowledge, file_id)
         logger.info(f"act=update_es knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}")
         es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(db_knowledge)
         res = es_client.client.update_by_query(
@@ -2463,11 +2807,13 @@ class KnowledgeService(KnowledgeUtils):
                 },
             },
         )
+        require_es_write(res, action="updated")
         logger.info(f"act=update_es_chunk_over {res}")
 
         # update metadata updater and update_time
         cls.update_chunk_updater_info(vector_client, es_client, db_knowledge, file_id, login_user)
 
+        cls._chunk_target(db_knowledge, file_id)
         KnowledgeFileDao.update_file_updater(file_id, login_user.user_id, login_user.user_name)
 
         return True
@@ -2486,6 +2832,7 @@ class KnowledgeService(KnowledgeUtils):
             knowledge_id,
             "edit",
         )
+        db_knowledge = cls._chunk_target(db_knowledge, file_id)
 
         logger.info(f"act=delete_vector knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}")
         vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(login_user.user_id, db_knowledge)
@@ -2493,6 +2840,8 @@ class KnowledgeService(KnowledgeUtils):
             expr=f"document_id == {file_id} && chunk_index == {chunk_index}",
             timeout=10,
         )
+        require_milvus_write(res, attribute="delete_count")
+        cls._chunk_target(db_knowledge, file_id)
         logger.info(f"act=delete_vector_over {res}")
 
         logger.info(
@@ -2509,10 +2858,12 @@ class KnowledgeService(KnowledgeUtils):
             },
             conflicts="proceed",
         )
+        require_es_write(res, action="deleted")
         logger.info(f"act=delete_es_over {res}")
 
         cls.update_chunk_updater_info(vector_client, es_client, db_knowledge, file_id, login_user)
 
+        cls._chunk_target(db_knowledge, file_id)
         KnowledgeFileDao.update_file_updater(file_id, login_user.user_id, login_user.user_name)
 
         return True
@@ -2617,103 +2968,75 @@ class KnowledgeService(KnowledgeUtils):
         knowledge: Knowledge,
         knowledge_name: str = None,
     ) -> Any:
-        from bisheng.worker.knowledge import file_worker
-
-        source_permission = await cls._load_library_permission_record(int(knowledge.id))
-        await KnowledgeDao.async_update_state(knowledge.id, KnowledgeState.COPYING, update_time=knowledge.update_time)
-        knowldge_dict = knowledge.model_dump()
-        knowldge_dict.pop("id")
-        knowldge_dict.pop("create_time")
-        knowldge_dict.pop("update_time", None)
-        knowldge_dict.pop("collection_name", None)
-        knowldge_dict.pop("index_name", None)
-        knowldge_dict["name"] = f"{knowledge.name} Copy"[:200] if not knowledge_name else knowledge_name[:200]
-
-        knowldge_dict["state"] = KnowledgeState.UNPUBLISHED.value
-        knowledge_new = Knowledge(**knowldge_dict)
-
-        target_knowlege = await run_in_threadpool(
-            cls.create_knowledge_base,
-            request,
-            login_user,
-            knowledge_new,
-            True,
-        )
-        await cls._project_library_copy(
-            login_user,
-            source=source_permission,
-            target=target_knowlege,
-        )
-        await run_in_threadpool(
-            cls.audit_telemetry_service.audit_create_knowledge,
-            login_user,
-            request,
-            target_knowlege,
-        )
-        await run_in_threadpool(
-            cls.audit_telemetry_service.telemetry_new_knowledge,
-            login_user,
-            target_knowlege,
-        )
-
-        params = {
-            "source_knowledge_id": knowledge.id,
-            "target_id": target_knowlege.id,
-            "login_user_id": login_user.user_id,
-        }
-        file_worker.file_copy_celery.delay(params)
-        return target_knowlege
+        return await cls._reserve_and_dispatch_copy(request, login_user, knowledge, knowledge_name, qa=False)
 
     @classmethod
-    async def copy_qa_knowledge(
-        cls,
-        request,
-        login_user: UserPayload,
-        qa_knowledge: Knowledge,
-        knowledge_name: str = None,
-    ) -> Any:
-        source_permission = await cls._load_library_permission_record(int(qa_knowledge.id))
-        await KnowledgeDao.async_update_state(
-            qa_knowledge.id, KnowledgeState.COPYING, update_time=qa_knowledge.update_time
-        )
-        qa_knowldge_dict = qa_knowledge.model_dump()
-        qa_knowldge_dict.pop("id")
-        qa_knowldge_dict.pop("create_time")
-        qa_knowldge_dict.pop("update_time", None)
-        qa_knowldge_dict["user_id"] = login_user.user_id
-        qa_knowldge_dict["index_name"] = generate_knowledge_index_name()
-        qa_knowldge_dict["collection_name"] = qa_knowldge_dict["index_name"]
-        qa_knowldge_dict["name"] = f"{qa_knowledge.name} Copy"[:200] if not knowledge_name else knowledge_name[:200]
-        qa_knowldge_dict["state"] = KnowledgeState.UNPUBLISHED.value
-        qa_knowledge_new = Knowledge(**qa_knowldge_dict)
-        target_qa_knowlege = await KnowledgeDao.async_insert_one(qa_knowledge_new)
+    async def copy_qa_knowledge(cls, request, login_user, qa_knowledge, knowledge_name=None):
+        return await cls._reserve_and_dispatch_copy(request, login_user, qa_knowledge, knowledge_name, qa=True)
 
-        await cls._project_library_copy(
-            login_user,
-            source=source_permission,
-            target=target_qa_knowlege,
-        )
-        await run_in_threadpool(
-            cls.audit_telemetry_service.audit_create_knowledge,
-            login_user,
-            request,
-            target_qa_knowlege,
-        )
-        await run_in_threadpool(
-            cls.audit_telemetry_service.telemetry_new_knowledge,
-            login_user,
-            target_qa_knowlege,
-        )
+    @classmethod
+    async def _reserve_and_dispatch_copy(cls, request, login_user, source, name, *, qa):
+        from bisheng.common.errcode.knowledge import KnowledgeCPError
+        from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter, tenant_execution_scope
+        from bisheng.knowledge.domain.repositories.copy_repository import CopyRepository
 
-        from bisheng.worker.knowledge.qa import copy_qa_knowledge_celery
-
-        copy_qa_knowledge_celery.delay(
-            source_knowledge_id=qa_knowledge.id,
-            target_knowledge_id=target_qa_knowlege.id,
-            login_user_id=login_user.user_id,
+        tenant_id = int(source.tenant_id)
+        if get_current_tenant_id() != tenant_id:
+            raise KnowledgeCPError(msg="Copy source is outside the verified target tenant")
+        source_permission = await cls._load_library_permission_record(int(source.id))
+        values = source.model_dump(exclude={"id", "create_time", "update_time", "copy_source_id", "copy_target_id"})
+        values.update(
+            user_id=login_user.user_id,
+            tenant_id=tenant_id,
+            name=(name or f"{source.name} Copy")[:200],
+            index_name=generate_knowledge_index_name(),
         )
+        values["collection_name"] = values["index_name"]
+        target = await CopyRepository.reserve(source, Knowledge(**values))
+        try:
+            with tenant_execution_scope(tenant_id), strict_tenant_filter():
+                await cls._project_library_copy(login_user, source=source_permission, target=target)
+                if not qa:
+                    await run_in_threadpool(cls._init_knowledge_indices_sync, login_user.user_id, target, True)
+                await run_in_threadpool(cls.audit_telemetry_service.audit_create_knowledge, login_user, request, target)
+                await run_in_threadpool(cls.audit_telemetry_service.telemetry_new_knowledge, login_user, target)
+                if qa:
+                    from bisheng.worker.knowledge.qa import copy_qa_knowledge_celery
 
-        return target_qa_knowlege
+                    copy_qa_knowledge_celery.apply_async(
+                        kwargs={
+                            "source_knowledge_id": source.id,
+                            "target_knowledge_id": target.id,
+                            "login_user_id": login_user.user_id,
+                            "tenant_id": tenant_id,
+                        },
+                        headers={"tenant_id": tenant_id},
+                    )
+                else:
+                    from bisheng.worker.knowledge.file_worker import file_copy_celery
+
+                    file_copy_celery.apply_async(
+                        args=[
+                            {
+                                "source_knowledge_id": source.id,
+                                "target_id": target.id,
+                                "login_user_id": login_user.user_id,
+                                "tenant_id": tenant_id,
+                            }
+                        ],
+                        headers={"tenant_id": tenant_id},
+                    )
+        except Exception as exc:
+            logger.exception(
+                "Knowledge copy pending inspection source={} target={} tenant={}", source.id, target.id, tenant_id
+            )
+            raise KnowledgeCPError(
+                msg="Knowledge copy requires inspection",
+                source_id=source.id,
+                target_id=target.id,
+                state="PENDING_INSPECTION",
+            ) from exc
+        return target
 
     @classmethod
     def judge_qa_knowledge_write(cls, login_user: UserPayload, qa_knowledge_id: int) -> Knowledge:
@@ -2788,6 +3111,8 @@ class KnowledgeService(KnowledgeUtils):
         login_user: UserPayload,
         knowledge_id: int,
         file_ids: list[int],
+        *,
+        batch_application=None,
     ) -> str:
         """Batch download knowledge-base files.
 
@@ -2810,6 +3135,21 @@ class KnowledgeService(KnowledgeUtils):
         knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not knowledge:
             raise NotFoundError(msg="knowledge not found")
+        if knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            if batch_application is None:
+                raise RuntimeError("ordinary batch application is not configured")
+            from bisheng.knowledge.domain.schemas.knowledge_batch import BatchCommand
+
+            result = await batch_application.aordinary(
+                identity=login_user,
+                space_id=knowledge_id,
+                command=BatchCommand(operation="download", items=[{"id": ident, "type": "file"} for ident in file_ids]),
+            )
+            if any(row["state"] == "failed" for row in result["items"]):
+                from bisheng.common.errcode.knowledge import KnowledgeOperationPlanChangedError
+
+                raise KnowledgeOperationPlanChangedError(reason="batch_download_partial_failure", result=result)
+            return result["url"]
         db_files: list[KnowledgeFile] = KnowledgeFileDao.select_list(file_ids)
         # Keep only files that actually belong to this knowledge base
         db_files = [f for f in db_files if f.knowledge_id == knowledge_id]
@@ -2974,9 +3314,31 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     async def batch_add_file_tags(
-        cls, login_user: UserPayload, knowledge_id: int, file_ids: list[int], tag_ids: list[int]
+        cls,
+        login_user: UserPayload,
+        knowledge_id: int,
+        file_ids: list[int],
+        tag_ids: list[int],
+        *,
+        batch_application=None,
     ):
         """批量添加标签到文档"""
+        knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
+        if knowledge is not None and knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            if batch_application is None:
+                raise RuntimeError("ordinary batch application is not configured")
+            from bisheng.knowledge.domain.schemas.knowledge_batch import BatchCommand
+
+            if not file_ids or not tag_ids:
+                return
+            await batch_application.aordinary(
+                identity=login_user,
+                space_id=knowledge_id,
+                command=BatchCommand(
+                    operation="tag", items=[{"id": ident, "type": "file"} for ident in file_ids], tag_ids=tag_ids
+                ),
+            )
+            return
         tag_ids = cls._deduplicate_tag_ids(tag_ids)
 
         await cls._get_writable_knowledge(login_user=login_user, knowledge_id=knowledge_id)

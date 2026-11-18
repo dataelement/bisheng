@@ -85,9 +85,13 @@ def test_revoke_on_child_tenant_returns_200(client):
 
 def test_list_admins_returns_user_ids(client):
     permissions = MagicMock(list_subject_ids=AsyncMock(return_value=("7", "9")))
-    with patch(
-        "bisheng.tenant.domain.services.tenant_admin_service.get_permission_relation_api",
-        AsyncMock(return_value=permissions),
+    users = [SimpleNamespace(user_id=7, user_name="alice"), SimpleNamespace(user_id=9, user_name="bob")]
+    with (
+        patch(
+            "bisheng.tenant.domain.services.tenant_admin_service.get_permission_relation_api",
+            AsyncMock(return_value=permissions),
+        ),
+        patch("bisheng.user.domain.models.user.UserDao.aget_user_by_ids", AsyncMock(return_value=users)),
     ):
         response = client.get("/tenants/5/admins")
 
@@ -95,6 +99,10 @@ def test_list_admins_returns_user_ids(client):
     payload = response.json()
     assert payload["status_code"] == 200
     assert sorted(payload["data"]["user_ids"]) == [7, 9]
+    assert payload["data"]["users"] == [
+        {"user_id": 7, "user_name": "alice"},
+        {"user_id": 9, "user_name": "bob"},
+    ]
 
 
 def test_list_admins_root_returns_empty(client):

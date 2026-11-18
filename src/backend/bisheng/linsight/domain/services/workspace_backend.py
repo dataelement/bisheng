@@ -119,6 +119,8 @@ SCRATCH_DIR = "scratch"
 # the producing call — so a follow-up turn (and the code interpreter) must
 # still see the same objects.
 LARGE_TOOL_RESULTS_DIR = "large_tool_results"
+# F132: returned when a long-term memory result would be offloaded (it stays in context).
+_MEMORY_OFFLOAD_REFUSED = "memory tool results are not written to the workspace"
 MANIFEST_NAME = "manifest.json"
 # Where the platform copies this run's skill bundles at task start (canonical
 # name: ``skill_provisioning.WORKSPACE_SKILLS_DIR``, duplicated here as a literal
@@ -130,6 +132,14 @@ SKILLS_DIR = "skills"
 # Exported so tests (and any future tool-layer guard) can assert on the refusal
 # without pinning the whole sentence.
 SKILLS_READONLY_ERROR_PREFIX = "[read-only]"
+
+# F013: a skill keeps credentials (e.g. a business-database password) under
+# ``skills/<name>/secrets/``. The workspace file tools never return that content:
+# whatever read_file / grep return is stored as step output, which the UI and share
+# links render. Code in bisheng_code_interpreter still reads it from the local disk
+# (the executor never goes through this backend).
+SKILL_SECRETS_DIR = "secrets"
+SKILL_SECRET_ERROR_PREFIX = "[secret]"
 
 # Extensions deepagents' ``_EXTENSION_TO_FILE_TYPE`` classifies as ``image`` — the
 # ONE multimodal shape mainstream OpenAI-compatible endpoints accept. Reading one
@@ -198,6 +208,26 @@ def _is_skills_path(rel_path: str) -> bool:
     silently refuse it.
     """
     return rel_path == SKILLS_DIR or rel_path.startswith(SKILLS_DIR + "/")
+
+
+def _is_skill_secret_path(rel_path: str) -> bool:
+    """True for ``skills/<name>/secrets/...`` (credentials only code may read)."""
+    parts = rel_path.split("/")
+    return len(parts) >= 4 and parts[0] == SKILLS_DIR and parts[2] == SKILL_SECRETS_DIR
+
+
+def _skill_secret_error(file_path: str) -> str:
+    """Refusal for a file-tool read of a skill's secrets/ file, routed to the executor."""
+    parts = file_path.strip("/").split("/")
+    code_path = "/".join(parts[parts.index(SKILLS_DIR) :]) if SKILLS_DIR in parts else file_path.lstrip("/")
+    return (
+        f"{SKILL_SECRET_ERROR_PREFIX} `{file_path}` 是技能的凭据文件，文件工具不能读取。"
+        f'请在 bisheng_code_interpreter 的代码里用 open("{code_path}") 读取并直接用于建立连接，'
+        f"不要 print、记录或写出其中的内容。\n"
+        f"{SKILL_SECRET_ERROR_PREFIX} `{file_path}` holds skill credentials and cannot be read with file "
+        f'tools. Read it inside bisheng_code_interpreter code with open("{code_path}") and use it to connect; '
+        f"never print or write out its content."
+    )
 
 
 def _skills_readonly_error(file_path: str) -> str:
@@ -879,11 +909,32 @@ class WorkspaceBackend(FilesystemBackend):
     _normalize_markdown_citation_bytes = _canonicalize_citation_bytes
 
     # -- write --------------------------------------------------------------
+    def _refuses_memory_offload(self, rel: str, content) -> bool:
+        """F132 (R3): a long-term memory tool result is never offloaded to large_tool_results/.
+
+        The three offload paths (two inside deepagents) all write here and keep
+        the message in context when the write fails. The check is on content
+        only (fixed prefix of the memory tool output), so it is stateless.
+        """
+        if not rel.startswith(LARGE_TOOL_RESULTS_DIR + "/"):
+            return False
+        from bisheng.memory.domain.services.redaction import is_memory_tool_output
+
+        text = content.decode("utf-8", "ignore") if isinstance(content, (bytes, bytearray)) else content
+        if isinstance(text, list):
+            text = "".join(str(part) for part in text)
+        if not is_memory_tool_output(text):
+            return False
+        logger.info("[linsight-memory] svid={} refused offloading a memory tool result to {}", self.svid, rel)
+        return True
+
     def write(self, file_path: str, content) -> WriteResult:
         rel = self._ws_rel(file_path)
         if _is_skills_path(rel):
             logger.warning("[linsight-skills-readonly] svid={} refused write to {}", self.svid, rel)
             return WriteResult(error=_skills_readonly_error(file_path))
+        if self._refuses_memory_offload(rel, content):
+            return WriteResult(error=_MEMORY_OFFLOAD_REFUSED)
         data = self._canonicalize_citation_bytes(rel, self._to_bytes(content))
         # cache first (fast local), then write-through to MinIO (truth).
         self._cache_write(rel, data)
@@ -910,6 +961,8 @@ class WorkspaceBackend(FilesystemBackend):
 
     def read(self, file_path: str, offset: int = 0, limit: int = 2000) -> ReadResult:
         rel = self._ws_rel(file_path)
+        if _is_skill_secret_path(rel):
+            return ReadResult(error=_skill_secret_error(file_path))
         from bisheng.linsight.domain.services.skill_runtime_guard import refuse_workspace_read
 
         refusal = refuse_workspace_read(rel, self.skill_snapshot, self._skill_enabled_sync)
@@ -963,6 +1016,24 @@ class WorkspaceBackend(FilesystemBackend):
                 payload["failure_info"] = info
             return LsResult(error=json.dumps(payload))
         return LsResult(entries=entries)
+
+    def _file_entry(self, rel_path: str) -> LsResult:
+        """The one object stored exactly at ``rel_path``, in ``ls`` entry shape (empty if none)."""
+        key = self._object_key(rel_path.rstrip("/"))
+        key_prefix = f"{WORKSPACE_PREFIX}/{self.svid}/"
+        try:
+            for obj in self.minio.minio_client_sync.list_objects(self._bucket(), prefix=key, recursive=False):
+                if obj.object_name != key:
+                    continue
+                size = int(getattr(obj, "size", 0) or 0)
+                return LsResult(entries=[FileInfo(path="/" + key[len(key_prefix) :], is_dir=False, size=size)])
+        except Exception as e:
+            logger.exception("workspace stat failed for svid={} path={}", self.svid, rel_path)
+            payload = {"error": "Workspace listing failed."}
+            if info := FailureContextAdapter.from_error(e):
+                payload["failure_info"] = info
+            return LsResult(error=json.dumps(payload))
+        return LsResult(entries=[])
 
     # -- edit (cache mutation + write-through) ------------------------------
     def edit(
@@ -1076,18 +1147,30 @@ class WorkspaceBackend(FilesystemBackend):
         ls_res = self.ls(base)
         if ls_res.error is not None:
             return GrepResult(error=ls_res.error)
+        entries = ls_res.entries or []
+        if base and not entries:
+            # ``ls`` ends the prefix at a directory boundary (``base/``), so a path
+            # naming one file lists nothing. Search that file instead of answering
+            # "No matches" for every pattern (106, 2026-11-16: 29 empty greps).
+            file_res = self._file_entry(base)
+            if file_res.error is not None:
+                return GrepResult(error=file_res.error)
+            entries = file_res.entries or []
         prefix = f"/{WORKSPACE_PREFIX}/{self.svid}/"
         matches: list = []
 
         terms = _grep_terms(pattern)
         skipped_large = 0
         skipped_binary = 0
-        for entry in ls_res.entries or []:
+        for entry in entries:
             full = entry["path"]
             rel_in_ws = full[len(prefix) :] if full.startswith(prefix) else full.lstrip("/")
             # Same spelling tolerance as ``glob`` — an absolute filter must not
             # silently narrow the scan to nothing.
             if glob and not self._glob_matches(rel_in_ws, glob):
+                continue
+            # Matched lines are returned verbatim, so a secrets/ file is never scanned.
+            if _is_skill_secret_path(rel_in_ws):
                 continue
             # ``ls`` already reports the object size; use it to avoid downloading a
             # multi-MB original (uploads/ carries them since the dual-track write)
@@ -1153,6 +1236,8 @@ class WorkspaceBackend(FilesystemBackend):
         if _is_skills_path(rel):
             logger.warning("[linsight-skills-readonly] svid={} refused write to {}", self.svid, rel)
             return WriteResult(error=_skills_readonly_error(file_path))
+        if self._refuses_memory_offload(rel, content):
+            return WriteResult(error=_MEMORY_OFFLOAD_REFUSED)
         data = self._canonicalize_citation_bytes(rel, self._to_bytes(content))
         await asyncio.to_thread(self._cache_write, rel, data)
         await self.minio.put_object(
@@ -1164,6 +1249,8 @@ class WorkspaceBackend(FilesystemBackend):
 
     async def aread(self, file_path: str, offset: int = 0, limit: int = 2000) -> ReadResult:
         rel = self._ws_rel(file_path)
+        if _is_skill_secret_path(rel):
+            return ReadResult(error=_skill_secret_error(file_path))
         from bisheng.linsight.domain.services.skill_runtime_guard import arefuse_workspace_read
 
         refusal = await arefuse_workspace_read(rel, self.skill_snapshot, self._skill_enabled)

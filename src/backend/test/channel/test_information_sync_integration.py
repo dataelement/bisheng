@@ -295,11 +295,20 @@ async def test_delivery_failure_is_terminal_and_disabled_routing_does_not_backfi
     channel_service = ChannelService()
     channel_repository = SimpleNamespace(find_by_id=lambda _channel_id: _return(channel))
     config_repository = SimpleNamespace(find_by_id=lambda _config_id: _return(config))
+
+    async def admitted(*_args):
+        # Consumer port only: real worker/identity/Core integration is covered
+        # separately; this case preserves per-article terminal-failure order.
+        return SimpleNamespace(
+            config=vars(config), channel=vars(channel), identity=SimpleNamespace(user_id=1, tenant_id=101)
+        )
+
     delivery = InformationKnowledgeDeliveryService(
         channel_repository,
         config_repository,
-        SimpleNamespace(),
+        SimpleNamespace(match_article_ids_sync=lambda ids, *_: ids),
         channel_service=channel_service,
+        prepare_delivery=admitted,
     )
 
     result = await delivery.deliver_to_config(

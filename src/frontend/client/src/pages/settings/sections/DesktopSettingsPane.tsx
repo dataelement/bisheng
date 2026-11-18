@@ -21,6 +21,7 @@ function DesktopAccountPane() {
   return (
     <AccountSection
       username={user?.username ?? ""}
+      account={user?.external_id}
       avatarUrl={avatarUrl}
       onAvatarUpdated={setAvatarUrl}
     />

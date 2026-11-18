@@ -22,6 +22,7 @@ import {
 } from "~/components/ui/Dialog";
 import store from "~/store";
 import { useAgentToolPreferences } from "~/components/Chat/Input/AgentToolSelector";
+import { useMemoryTimezone } from "~/hooks/useMemoryTimezone";
 
 const systemNoticeTodayKey = () => {
   const d = new Date();
@@ -38,12 +39,15 @@ export default function MainLayout() {
   const { data: bsConfig } = useGetBsConfig();
   useAgentToolPreferences(bsConfig?.tools);
   const { user, logout, isUserLoading } = useAuthContext();
+  // F132: report the browser timezone for memory dates (once per change).
+  useMemoryTimezone(user?.id != null ? String(user.id) : null);
   const localize = useLocalize();
   const menuNames = useWorkbenchMenuNames();
   const {
-    identity: { channel },
+    identity: { channel, capabilities },
     prefersMobileLayout: isMobile,
   } = useClientLayout();
+  const hostOwnsHeader = capabilities?.hasHostChatHeader === true;
   const outletScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
   const isAppsArea = pathname.includes("/apps");
 
@@ -297,6 +301,7 @@ export default function MainLayout() {
             {/* Unavailable pages have no menu trigger of their own; keep the
                 global menu reachable after the narrow sidebar closes. */}
             {shouldHideSidebarOnMobileAppsArea &&
+            !hostOwnsHeader &&
             !isChannelRoute &&
             !isAppChatRoute &&
             !isKnowledgeRoute ? (
@@ -376,6 +381,7 @@ export default function MainLayout() {
             >
                   {/* The narrow apps header opens the shared workbench menu. */}
               {shouldHideSidebarOnMobileAppsArea &&
+              !hostOwnsHeader &&
               isAppsArea &&
               !isAppChatRoute &&
               !isAppsExploreRoute ? (

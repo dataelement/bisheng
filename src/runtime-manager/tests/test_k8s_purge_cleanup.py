@@ -226,7 +226,10 @@ def test_non_pending_api_errors_are_not_accepted_as_cleanup_progress(destroy, mo
     destroy.manager().execute(destroy.operation["operation_id"])
     held(destroy)
     assert len(calls) == 1
-    assert destroy.platform.operation(destroy.operation["operation_id"])["failure"]["reason"] == "execution_failed"
+    current = destroy.platform.operation(destroy.operation["operation_id"])
+    assert current["status"] == "failed"
+    # KubernetesAPIError carries a safe classification that the operation preserves.
+    assert current["failure"]["reason"] == "fixture_api_unavailable"
 
 
 def test_volume_cleanup_still_uses_destroy_authority_and_preserves_creator(destroy, monkeypatch):

@@ -28,9 +28,25 @@ def workbench(models, default_id=None):
 
 
 async def resolve(conf, model_id):
-    """Run ``_resolve_model`` with only the two external services faked out."""
+    """Run ``_resolve_model`` with only the two external services faked out.
+
+    The user-facing catalog is built from the online chat models the user may see;
+    here every configured model is online and visible, so the flag still comes
+    straight from the stored ``visual`` metadata.
+    """
+    from types import SimpleNamespace
+
+    from bisheng.dsh.domain.services import model_catalog
+
+    server = SimpleNamespace(id=1, name="provider", type="openai")
+    online = [
+        (SimpleNamespace(id=int(entry.id), model_name=f"m{entry.id}", name=f"m{entry.id}"), server)
+        for entry in conf.models or []
+    ]
     with (
         patch.object(agent_factory.LLMService, "get_workbench_llm", AsyncMock(return_value=conf)),
+        patch.object(agent_factory.LLMService, "aget_online_chat_models", AsyncMock(return_value=online)),
+        patch.object(model_catalog, "read_visible_model_ids", AsyncMock(side_effect=lambda _user, ids: set(ids))),
         patch.object(agent_factory.LLMService, "get_bisheng_linsight_llm", AsyncMock(return_value="LLM")),
         # settings is a pydantic model -> patch the CLASS method, not the instance
         # attribute (pydantic rejects the assignment).

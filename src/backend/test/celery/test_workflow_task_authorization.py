@@ -45,6 +45,13 @@ def guest_snapshot(*, super_admin: bool = True) -> dict:
 def harness(monkeypatch):
     """Stub everything around the gate and record what the gate observed."""
 
+    from bisheng.workflow.domain.repositories.creation_repository import CreationRepository
+
+    monkeypatch.setattr(CreationRepository, "tenant_for_message", lambda _: 3)
+    # The shared test bootstrap mocks Celery; a direct .run has no current task.
+    from bisheng.worker import tenant_context as task_context
+
+    monkeypatch.setattr(task_context, "current_task", SimpleNamespace(_get_current_object=lambda: None))
     seen = SimpleNamespace(calls=[], ran=[], allow=True)
 
     async def require_business_action(login_user, *, resource_type, resource_id, action, actor=None):
@@ -64,21 +71,19 @@ def harness(monkeypatch):
             raise UnAuthorizedError()
 
     monkeypatch.setattr(tasks, "require_business_action", require_business_action)
-    monkeypatch.setattr(
-        tasks, "_execute_workflow", lambda *args, **kwargs: seen.ran.append("execute")
-    )
-    monkeypatch.setattr(
-        tasks, "_continue_workflow", lambda *args, **kwargs: seen.ran.append("continue")
-    )
+    monkeypatch.setattr(tasks, "_execute_workflow", lambda *args, **kwargs: seen.ran.append("execute"))
+    monkeypatch.setattr(tasks, "_continue_workflow", lambda *args, **kwargs: seen.ran.append("continue"))
     monkeypatch.setattr(
         "bisheng.open_api.domain.services.execution_context.validate_execution_snapshot",
         lambda _snapshot: None,
     )
-    monkeypatch.setattr(
-        tasks.WorkFlowService, "get_one_workflow_simple_info_sync", lambda _id: None
-    )
+    monkeypatch.setattr(tasks.WorkFlowService, "get_one_workflow_simple_info_sync", lambda _id: None)
     monkeypatch.setattr(tasks.telemetry_service, "log_event_sync", lambda **kwargs: None)
-    return seen
+    from bisheng.core.context.tenant import tenant_execution_scope
+
+    monkeypatch.setattr(tasks, "should_skip_public_workflow_use", lambda **kwargs: False)
+    with tenant_execution_scope(3):
+        yield seen
 
 
 @pytest.mark.parametrize(
@@ -105,9 +110,7 @@ def test_use_gate_sees_the_restored_identity(harness, task, label) -> None:
 
 
 def test_gate_carries_a_plain_operator_without_privilege(harness) -> None:
-    tasks.execute_workflow.run(
-        "unique-1", WORKFLOW_ID, "chat-1", 41, "api", guest_snapshot(super_admin=False)
-    )
+    tasks.execute_workflow.run("unique-1", WORKFLOW_ID, "chat-1", 41, "api", guest_snapshot(super_admin=False))
 
     assert harness.calls[0]["actor_kwarg"].super_admin is False
 

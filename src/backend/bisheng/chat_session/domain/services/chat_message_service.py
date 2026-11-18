@@ -2,6 +2,7 @@ from loguru import logger
 
 from bisheng.api.services.chat_imp import comment_answer
 from bisheng.api.v1.schemas import AddChatMessages, ChatInput
+from bisheng.chat_session.domain.services.moderation_scope import moderation_add_scope, moderation_update_scope
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError, ServerError, UnAuthorizedError
 from bisheng.common.errcode.tenant_sharing import TenantContextMissingError
@@ -37,15 +38,15 @@ class ChatMessageService:
 
     @staticmethod
     def add_qa_messages(data: AddChatMessages, login_user: UserPayload, request_ip: str) -> list:
-        """Add a Q&A message pair. Creates session if needed.
+        """Legacy moderation: existing session tenant, otherwise authenticated Home."""
+        if not data.chat_id or not data.flow_id:
+            raise ServerError.http_exception()
+        with moderation_add_scope(data, login_user) as resource:
+            return ChatMessageService._add_qa_messages_in_scope(data, login_user, request_ip, resource)
 
-        Returns the saved message list.
-
-        F017 §5.4: both messages carry ``tenant_id = user's leaf tenant``
-        (NOT the resource tenant). Child users talking to a Root-shared
-        assistant produce Child-owned messages, keeping Root's quota usage
-        free of Child traffic (INV-T13).
-        """
+    @staticmethod
+    def _add_qa_messages_in_scope(data: AddChatMessages, login_user: UserPayload, request_ip: str, resource) -> list:
+        """Write only after the caller has established the durable tenant."""
         import json
 
         logger.debug(f"gateway add_chat_messages {data}")
@@ -58,8 +59,8 @@ class ChatMessageService:
         leaf_tenant_id = _resolve_leaf_tenant_id(login_user)
 
         save_human_message = data.human_message
-        flow_info = FlowDao.get_flow_by_id(flow_id)
-        if flow_info and flow_info.flow_type == FlowType.WORKFLOW.value:
+        flow_info = resource if resource is not None else FlowDao.get_flow_by_id(flow_id)
+        if flow_info and getattr(flow_info, "flow_type", None) == FlowType.WORKFLOW.value:
             try:
                 tmp_human_message = json.loads(data.human_message)
                 for _node_id, node_input in tmp_human_message.items():
@@ -89,12 +90,13 @@ class ChatMessageService:
             category="answer",
             tenant_id=leaf_tenant_id,
         )
-        message_dbs = ChatMessageDao.insert_batch([human_message, bot_message])
-        MessageSessionDao.update_sensitive_status(chat_id, SensitiveStatus.VIOLATIONS)
-
         from bisheng.chat_session.domain.chat import ChatSessionService
 
-        ChatSessionService.get_or_create_session(chat_id, flow_id, login_user, request_ip)
+        # Establish/validate the session first. A conflicting or inaccessible
+        # chat ID must never leave messages behind in the caller's Home tenant.
+        ChatSessionService.get_or_create_session(chat_id, flow_id, login_user, request_ip, resource=resource)
+        message_dbs = ChatMessageDao.insert_batch([human_message, bot_message])
+        MessageSessionDao.update_sensitive_status(chat_id, SensitiveStatus.VIOLATIONS)
 
         return message_dbs
 
@@ -133,7 +135,13 @@ class ChatMessageService:
         return ChatMessageDao.insert_batch([chat_message])[0]
 
     @staticmethod
-    def update_message(
+    def update_message(message_id: int, message: str, category: str | None, login_user: UserPayload) -> None:
+        """Resolve the caller-owned message before binding its original tenant."""
+        with moderation_update_scope(message_id, login_user):
+            ChatMessageService._update_message_in_scope(message_id, message, category, login_user)
+
+    @staticmethod
+    def _update_message_in_scope(
         message_id: int,
         message: str,
         category: str | None,
@@ -162,30 +170,12 @@ class ChatMessageService:
         ChatMessageDao.delete_by_message_id(user_id, message_id)
 
     @staticmethod
-    def _feedback_message(message_id: int, login_user: UserPayload) -> ChatMessage:
-        """A browser feedback write requires the real natural-person session owner."""
-        from bisheng.chat_session.domain.session_subject import SessionSubject
-
-        message = ChatMessageDao.get_message_by_id(message_id)
-        if not message:
-            raise NotFoundError.http_exception()
-        tenant_id = _resolve_leaf_tenant_id(login_user)
-        session = MessageSessionDao.get_one(message.chat_id)
-        subject = SessionSubject.natural_person(tenant_id=tenant_id, user_id=login_user.user_id)
-        if (
-            session is None
-            or not subject.matches(session)
-            or message.tenant_id != tenant_id
-            or message.user_id != login_user.user_id
-        ):
-            raise UnAuthorizedError.http_exception()
-        return message
-
-    @staticmethod
-    def like_response(data: ChatInput, login_user: UserPayload) -> None:
+    def like_response(data: ChatInput) -> None:
         """Process like/dislike with session counter updates."""
         message_id = data.message_id
-        message = ChatMessageService._feedback_message(message_id, login_user)
+        message = ChatMessageDao.get_message_by_id(data.message_id)
+        if not message:
+            raise NotFoundError.http_exception()
 
         if message.liked == data.liked:
             return
@@ -214,15 +204,16 @@ class ChatMessageService:
         MessageSessionDao.add_dislike_count(message.chat_id, dislike_count)
 
     @staticmethod
-    def mark_copied(message_id: int, login_user: UserPayload) -> None:
+    def mark_copied(message_id: int) -> None:
         """Mark a message as copied with session counter update."""
-        message = ChatMessageService._feedback_message(message_id, login_user)
+        message = ChatMessageDao.get_message_by_id(message_id)
+        if not message:
+            raise NotFoundError.http_exception()
         if message.copied != 1:
             ChatMessageDao.update_message_copied(message_id, 1)
             MessageSessionDao.add_copied_count(message.chat_id, 1)
 
     @staticmethod
-    def comment_on_answer(message_id: int, comment: str, login_user: UserPayload) -> None:
+    def comment_on_answer(message_id: int, comment: str) -> None:
         """Add a comment to a message answer."""
-        ChatMessageService._feedback_message(message_id, login_user)
         comment_answer(message_id, comment)

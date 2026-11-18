@@ -1,0 +1,338 @@
+pageType: process
+background:
+  type: solid
+  color: $white
+elements:
+- elementId: top-band
+  elementType: shape
+  bounds:
+  - 0
+  - 0
+  - 960
+  - 8
+  shapeName: rect
+  fill:
+    type: solid
+    color: $red
+  border:
+    color: $red
+    width: 0
+- elementId: top-gold
+  elementType: shape
+  bounds:
+  - 0
+  - 8
+  - 960
+  - 2
+  shapeName: rect
+  fill:
+    type: solid
+    color: $gold
+  border:
+    color: $gold
+    width: 0
+- elementId: kicker
+  elementType: text
+  bounds:
+  - 48
+  - 28
+  - 600
+  - 16
+  content:
+    text: 二、重点任务完成情况
+    style: $kicker
+- elementId: title
+  elementType: text
+  bounds:
+  - 48
+  - 46
+  - 864
+  - 36
+  content:
+    text: 全年工作按季度推进，关键节点全部按期达成
+    style: $title
+- elementId: title-mark
+  elementType: shape
+  bounds:
+  - 48
+  - 88
+  - 56
+  - 3
+  shapeName: rect
+  fill:
+    type: solid
+    color: $gold
+  border:
+    color: $gold
+    width: 0
+- elementId: footer-rule
+  elementType: line
+  bounds:
+  - 48
+  - 502
+  - 864
+  - 1
+  viewBox:
+  - 864
+  - 1
+  points: 0,0 864,0
+  border:
+    color: $rule
+    width: 0.8
+- elementId: footer-org
+  elementType: text
+  bounds:
+  - 48
+  - 508
+  - 500
+  - 16
+  content:
+    text: 示例单位 · 2026 年度工作汇报
+    style: $meta
+- elementId: footer-no
+  elementType: text
+  bounds:
+  - 852
+  - 508
+  - 60
+  - 16
+  content:
+    text: '07'
+    style: $meta
+    align:
+    - right
+    - top
+- elementId: tl-axis
+  elementType: line
+  bounds:
+  - 68
+  - 206
+  - 824
+  - 1
+  viewBox:
+  - 824
+  - 1
+  points: 0,0 824,0
+  border:
+    color: $red
+    width: 2
+- elementId: tl-dot-1
+  elementType: shape
+  bounds:
+  - 68.0
+  - 198
+  - 16
+  - 16
+  shapeName: ellipse
+  fill:
+    type: solid
+    color: $gold
+  border:
+    color: $red
+    width: 2
+- elementId: tl-q-1
+  elementType: text
+  bounds:
+  - 68.0
+  - 140
+  - 186.0
+  - 28
+  content:
+    text: 一季度
+    style: $title
+    fontSize: 20
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: tl-h-1
+  elementType: text
+  bounds:
+  - 68.0
+  - 236
+  - 180.0
+  - 24
+  content:
+    text: 改革方案获批
+    style: $lead
+- elementId: tl-d-1
+  elementType: text
+  bounds:
+  - 68.0
+  - 266
+  - 180.0
+  - 80
+  content:
+    text: 完成三项制度改革方案报批，明确责任分工
+    style: $body
+- elementId: tl-dot-2
+  elementType: shape
+  bounds:
+  - 284.0
+  - 198
+  - 16
+  - 16
+  shapeName: ellipse
+  fill:
+    type: solid
+    color: $gold
+  border:
+    color: $red
+    width: 2
+- elementId: tl-q-2
+  elementType: text
+  bounds:
+  - 284.0
+  - 140
+  - 186.0
+  - 28
+  content:
+    text: 二季度
+    style: $title
+    fontSize: 20
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: tl-h-2
+  elementType: text
+  bounds:
+  - 284.0
+  - 236
+  - 180.0
+  - 24
+  content:
+    text: 平台挂牌运行
+    style: $lead
+- elementId: tl-d-2
+  elementType: text
+  bounds:
+  - 284.0
+  - 266
+  - 180.0
+  - 80
+  content:
+    text: 省级研发中心挂牌，首批 12 个项目立项
+    style: $body
+- elementId: tl-dot-3
+  elementType: shape
+  bounds:
+  - 500.0
+  - 198
+  - 16
+  - 16
+  shapeName: ellipse
+  fill:
+    type: solid
+    color: $gold
+  border:
+    color: $red
+    width: 2
+- elementId: tl-q-3
+  elementType: text
+  bounds:
+  - 500.0
+  - 140
+  - 186.0
+  - 28
+  content:
+    text: 三季度
+    style: $title
+    fontSize: 20
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: tl-h-3
+  elementType: text
+  bounds:
+  - 500.0
+  - 236
+  - 180.0
+  - 24
+  content:
+    text: 系统主体上线
+    style: $lead
+- elementId: tl-d-3
+  elementType: text
+  bounds:
+  - 500.0
+  - 266
+  - 180.0
+  - 80
+  content:
+    text: 核心业务系统切换，覆盖 9 家二级单位
+    style: $body
+- elementId: tl-dot-4
+  elementType: shape
+  bounds:
+  - 716.0
+  - 198
+  - 16
+  - 16
+  shapeName: ellipse
+  fill:
+    type: solid
+    color: $gold
+  border:
+    color: $red
+    width: 2
+- elementId: tl-q-4
+  elementType: text
+  bounds:
+  - 716.0
+  - 140
+  - 186.0
+  - 28
+  content:
+    text: 四季度
+    style: $title
+    fontSize: 20
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: tl-h-4
+  elementType: text
+  bounds:
+  - 716.0
+  - 236
+  - 180.0
+  - 24
+  content:
+    text: 专项整治收官
+    style: $lead
+- elementId: tl-d-4
+  elementType: text
+  bounds:
+  - 716.0
+  - 266
+  - 180.0
+  - 80
+  content:
+    text: 隐患整改全部闭环，通过上级验收
+    style: $body
+- elementId: tl-band
+  elementType: shape
+  bounds:
+  - 48
+  - 380
+  - 864
+  - 72
+  shapeName: rect
+  fill:
+    type: solid
+    color: $surface
+  border:
+    color: $surface
+    width: 0
+- elementId: tl-band-text
+  elementType: text
+  bounds:
+  - 68
+  - 394
+  - 824
+  - 48
+  content:
+    text: 全年 16 个关键节点中 15 个按期完成，1 个延期并已制定补救计划。（示例）
+    style: $lead
+    bold: false
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei

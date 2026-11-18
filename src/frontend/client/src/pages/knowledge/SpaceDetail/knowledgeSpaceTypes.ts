@@ -13,9 +13,35 @@ import {
 } from "~/api/knowledge";
 import { type UploadSizeLimits } from "../knowledgeUtils";
 import { SearchParams } from "./CompoundSearchInput";
+import type {
+  OperationPrecheck,
+  PageData,
+  ProcessingIdentityScope,
+  ProcessingItemRead,
+  ProcessingJobRead,
+} from "~/api/knowledgeProcessing";
+
+/** Display data remains distinct from an executable confirmation plan. */
+export interface KnowledgeProcessingState {
+  jobs: PageData<ProcessingJobRead> | null;
+  selectedJob: ProcessingJobRead | null;
+  items: PageData<ProcessingItemRead> | null;
+  loading: boolean;
+  error: unknown;
+}
+
+/** A later mutation must compare this issuing scope with the current identity. */
+export interface KnowledgeProcessingConfirmation {
+  scope: Readonly<ProcessingIdentityScope>;
+  precheck: OperationPrecheck;
+}
+
 export interface KnowledgeSpaceContentProps {
   space: KnowledgeSpace;
   files: KnowledgeFile[];
+  /** Preserve response-page boundaries for independent asynchronous download checks. */
+  downloadPages?: readonly (readonly string[])[];
+  downloadEpoch?: number;
   total: number;
   /** Infinite scroll: load the next page (appends). */
   onLoadMore: () => void;
@@ -89,7 +115,7 @@ export interface KnowledgePermissionTarget {
   type: "folder" | "knowledge_file";
 }
 
-export interface UseKnowledgeFilePermissionsOptions {
+export interface UseKnowledgeFilePermissionsOptions extends Pick<KnowledgeSpaceContentProps, "downloadPages" | "downloadEpoch"> {
   displayFiles: KnowledgeFile[];
   space: KnowledgeSpaceContentProps["space"];
   currentFolderId: KnowledgeSpaceContentProps["currentFolderId"];
@@ -147,6 +173,7 @@ export interface UseKnowledgeFileActionsOptions {
   confirm: KnowledgeUiPorts["confirm"];
   selectedList: KnowledgeFile[];
   canBatchDelete: boolean;
+  deletionScopeKey: string;
   space: KnowledgeSpaceContentProps["space"];
   onDeleteFile: KnowledgeSpaceContentProps["onDeleteFile"];
   onBatchDeleteFiles: KnowledgeSpaceContentProps["onBatchDeleteFiles"];

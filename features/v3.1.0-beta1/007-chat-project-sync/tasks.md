@@ -55,3 +55,13 @@
 ## 实际偏差记录
 
 用户最新要求覆盖原确认式迁移：Web 与 Desktop 登录后自动迁移，移除入口和确认弹窗。Web 旧来源绑定首次当前账号；失败自动重试。无新增 Worker，原任务队列租户上下文保持。补充测试 useProjectMigration.test.tsx、Desktop 自动迁移重试用例，并将 SidebarConversationList/ProjectConversations 等实际消费文件纳入 T022。源码、构建与实际加载分别记载于 verification.md。
+
+## 2026-11-11 简化修订
+
+| ID | 内容 | 状态 |
+| --- | --- | --- |
+| R001 | 后端删除 events 接口、Redis 推送、revision/receipt 两表、首条消息 request_id 与 13013/13014/13016/13017/13018；create 改为客户端生成项目 ID；会话删除在同一提交内解绑归属；标题写入恢复直接走 MessageSessionDao | ✅ `test/chat_session`、`test/e2e/test_e2e_chat_project_sync.py`、`test/linsight/test_task_title.py` 102 passed |
+| R002 | 导入改为按对话归属判定项目主人：确定性项目 ID（uuid5）、无本账号对话不导入、已导入不重复 | ✅ 同上，含双账号拆分用例 |
+| R003 | Web 去掉常驻 SSE，改为获得焦点/重连/操作后重新读取；去掉迁移来源绑定首个账号；nginx 删除 events location；三语文案与错误码生成物同步 | ✅ client tsc-strict 无新增错误；相关 jest 通过 |
+| R004 | Desktop（BishengWork）改为获得焦点时读取快照，去掉 events/request_id/revision 依赖 | ⏳ 待桌面端负责人确认已发版本并同步修改；合入前置条件 |
+

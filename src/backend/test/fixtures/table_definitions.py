@@ -172,6 +172,13 @@ CREATE TABLE IF NOT EXISTS knowledge (
     auto_tag_enabled INTEGER NOT NULL DEFAULT 0,
     auto_tag_library_id INTEGER,
     metadata_fields JSON,
+    processing_defaults JSON,
+    processing_config_version INTEGER NOT NULL DEFAULT 0,
+    metadata_schema_revision INTEGER NOT NULL DEFAULT 0,
+    model_config_revision INTEGER NOT NULL DEFAULT 0,
+    model_transition JSON,
+    index_generation VARCHAR(64),
+    migration_origin VARCHAR(64),
     creation_request_id VARCHAR(64),
     creation_payload_hash VARCHAR(64),
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
@@ -403,6 +410,7 @@ CREATE TABLE IF NOT EXISTS assistant (
     model_name VARCHAR(255),
     status INTEGER DEFAULT 1,
     is_delete INTEGER DEFAULT 0,
+    memory_enabled BOOLEAN NOT NULL DEFAULT 0,
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
 )"""

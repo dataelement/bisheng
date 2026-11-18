@@ -22,6 +22,7 @@ export interface GrantablePermissionModel {
   name: string;
   level: PermissionActionLevel | null;
   active: boolean;
+  readonly visibility_only?: boolean;
 }
 
 export interface CreationPermissionContext {

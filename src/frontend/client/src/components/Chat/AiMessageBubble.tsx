@@ -6,7 +6,7 @@ import {
     ChevronLeftIcon,
     ChevronRightIcon,
 } from "lucide-react";
-import { memo, useMemo } from "react";
+import { memo, useCallback, useMemo, type ReactNode } from "react";
 import { MessageTime } from "./MessageTime";
 import DeepThinkingGroup from "~/components/Chat/Messages/DeepThinkingGroup";
 import ThinkingContent from "~/components/Chat/Messages/ThinkingContent";
@@ -20,6 +20,7 @@ import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
 import { ChatErrorCard, isTransientErrorType } from "~/components/ChatErrorCard";
 import { MessageFeedbackButtons } from "~/components/Chat/MessageFeedbackButtons";
+import { MemoryNotice } from "~/components/Chat/MemoryNotice";
 import { likeChatApi, disLikeCommentApi } from "~/api/apps";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { useAuthContext, useLocalize } from "~/hooks";
@@ -33,6 +34,7 @@ import { CopyButton } from "~/components/Chat/MessageCopyButton";
 import type { AgentEvent, ChatMessage } from "~/api/chatApi";
 import { MediaAttachmentChip, isMediaChipFile } from "~/components/Chat/attachments/MediaAttachmentChip";
 import { ChatHistoryFileRow } from "~/components/Chat/attachments/ChatHistoryFileRow";
+import { renderGeneratedFileLink } from "~/components/Chat/attachments/GeneratedFileLink";
 import { isImageFileName } from "~/components/ui/icon/File/FileIcon";
 import { MessageImage } from "~/components/Chat/Messages/Content/MessageImage";
 import { ServiceBusyNotice } from "~/components/ServiceBusyNotice";
@@ -44,17 +46,21 @@ import { ServiceBusyNotice } from "~/components/ServiceBusyNotice";
 // has to reach the calm "busy" card rather than the red failure one.
 const RETRYABLE_ERROR_CODES = new Set([12046, 429, 503, 10540, 12045]);
 
+/** `source` the backend stamps on files the code interpreter attached to an answer. */
+const GENERATED_FILE_SOURCE = "code_interpreter";
+
 /**
- * Uploaded-file list for a user message. Every attachment — pictures, media,
- * documents — keeps its type-specific preview in upload order, right-aligned under the
- * bubble. No horizontal scroll and no cap of its own: the row wraps at the
- * bubble's width, exactly as the picture row always did.
+ * Attachment list of a message. Every attachment — pictures, media,
+ * documents — keeps its type-specific preview in order: right-aligned above a
+ * user bubble (uploads), left-aligned under an answer (files the code
+ * interpreter produced). No horizontal scroll and no cap of its own: the row
+ * wraps at the bubble's width, exactly as the picture row always did.
  */
-function UploadedFileList({ files, conversationId, onPreviewFile }: { files: any[]; conversationId?: string; onPreviewFile?: (file: ArtifactFile) => void }) {
+function UploadedFileList({ files, conversationId, onPreviewFile, align = "end" }: { files: any[]; conversationId?: string; onPreviewFile?: (file: ArtifactFile) => void; align?: "start" | "end" }) {
     if (!files || files.length === 0) return null;
 
     return (
-        <div className="mb-2 mt-1 flex flex-wrap justify-end gap-2">
+        <div className={cn("flex flex-wrap gap-2", align === "end" ? "mb-2 mt-1 justify-end" : "mt-2 justify-start")}>
             {files.map((file, i) => {
                 const name = file.name || file.file_name;
                 // Pictures keep their own component: the link stored on the message
@@ -74,7 +80,7 @@ function UploadedFileList({ files, conversationId, onPreviewFile }: { files: any
                 if (isMediaChipFile(file)) {
                     return <MediaAttachmentChip key={`media-${i}`} file={file} variant="message" />;
                 }
-                return <ChatHistoryFileRow key={`file-${i}`} file={file} onPreviewFile={onPreviewFile} />;
+                return <ChatHistoryFileRow key={file.file_id ?? `file-${i}`} file={file} conversationId={conversationId} onPreviewFile={onPreviewFile} />;
             })}
         </div>
     );
@@ -547,6 +553,19 @@ function AssistantBubble({
 
     const { data: bsConfig } = useGetBsConfig()
 
+    const generatedFiles = useMemo(
+        () => (message.files || []).filter((file) => file?.source === GENERATED_FILE_SOURCE),
+        [message.files],
+    );
+    const renderFileLink = useCallback(
+        (href: string, children: ReactNode) =>
+            renderGeneratedFileLink(generatedFiles, href, children, {
+                conversationId: message.conversationId,
+                onPreviewFile,
+            }),
+        [generatedFiles, message.conversationId, onPreviewFile],
+    );
+
     const modelName = message.sender || "AI";
     const showCursor = isLatest && isStreaming;
     const isWaitingFirstToken =
@@ -681,9 +700,20 @@ function AssistantBubble({
                                 showCursor={showCursor}
                                 isLatestMessage={!!isLatest}
                                 compactImages={knowledgeChatLayout}
+                                renderFileLink={renderFileLink}
                             />
                         )}
                     </div>
+                )}
+
+                {/* Files the code interpreter left under output/ this turn. */}
+                {!showWaiting && (
+                    <UploadedFileList
+                        files={generatedFiles}
+                        conversationId={message.conversationId}
+                        onPreviewFile={onPreviewFile}
+                        align="start"
+                    />
                 )}
 
                 {/* Error state — replaces the body when nothing streamed in, and sits
@@ -720,6 +750,7 @@ function AssistantBubble({
                             failureInfo={message.failureInfo}
                             errorType={resolvedErrorType}
                             detail={message.errorDetail}
+                            referenceId={message.referenceId}
                             fallbackMessage={isPlainFailure ? undefined : message.errorText || regularContent}
                             description={isPlainFailure ? plainFailureText : undefined}
                             // Daily chat never shows the per-type "建议…" line: the
@@ -733,7 +764,7 @@ function AssistantBubble({
                     transient busy notice — copy/feedback on a "try again" status is
                     meaningless; the notice carries its own Retry. */}
                 {!isStreaming && regularContent && !isTransientError && (
-                    <div className="dsh-message-actions dsh-response-actions flex items-center gap-1 mt-1.5 text-gray-400">
+                    <div className="dsh-message-actions dsh-response-actions flex flex-wrap items-center gap-1 mt-1.5 text-gray-400">
                         <CitationReferencesDrawer
                             content={regularContent}
                             webContent={webContent}
@@ -779,7 +810,7 @@ function AssistantBubble({
                                         />
                                     )}
                                     <TextToSpeechButton
-                                        className="flex size-6 items-center justify-center rounded-md transition-colors hover:bg-[#F7F7F7]"
+                                        className="dsh-message-action"
                                         messageId={message.messageId || ""}
                                         text={regularContent}
                                     />
@@ -791,7 +822,14 @@ function AssistantBubble({
                         {siblingIdx !== undefined && siblingCount !== undefined && setSiblingIdx && (
                             <SiblingSwitch siblingIdx={siblingIdx} siblingCount={siblingCount} setSiblingIdx={setSiblingIdx} />
                         )}
+                        {/* F132: what this answer remembered sits with the answer's own actions,
+                            owner only (flags never reach a share view). */}
+                        {message.memory && <MemoryNotice inline flags={message.memory} messageId={message.messageId} />}
                     </div>
+                )}
+                {/* No action row (e.g. an answer with no text): the notice stands on its own. */}
+                {!isStreaming && message.memory && !(regularContent && !isTransientError) && (
+                    <MemoryNotice flags={message.memory} messageId={message.messageId} />
                 )}
             </div>
         </div>

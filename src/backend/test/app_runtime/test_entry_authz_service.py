@@ -26,6 +26,7 @@ def runtime_enabled(monkeypatch):
     from bisheng.common.services.config_service import settings
 
     monkeypatch.setattr(settings.app_runtime, "enabled", True, raising=False)
+    monkeypatch.setattr(settings.app_runtime, "runtime_protocol_version", 1)
     monkeypatch.setattr(settings.app_runtime, "obo_secret", OBO_SECRET, raising=False)
     monkeypatch.setattr(settings.app_runtime, "obo_ttl_seconds", 900, raising=False)
     return settings
@@ -229,14 +230,14 @@ class TestVisibleScope:
         assert verdict["user_id"] == normal_user.user_id
         assert "headers" not in verdict, "a refusal must still inject nothing"
 
-    async def test_visible_scope_uses_the_use_action(
+    async def test_visible_scope_uses_the_visible_action(
         self, app_db, app_factory, app_owner, runtime_enabled, no_tenant_blacklist, visible
     ):
         """D9 — ``use`` is the action the permission dialog's viewer tier grants,
         so "who can open it" matches what the owner sees when sharing."""
         app, _ = await app_factory(slug="action-app", state=AppState.ONLINE.value)
         await _verdict("action-app", _token(app_owner.user_id))
-        assert visible["calls"] == [("app", app.id, "use")]
+        assert visible["calls"] == [("app", app.id, "visible")]
 
     async def test_stopped_returns_stopped_page_only_for_visible_users(
         self, app_db, app_factory, app_owner, normal_user, runtime_enabled, no_tenant_blacklist, visible

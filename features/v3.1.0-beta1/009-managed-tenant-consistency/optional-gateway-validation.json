@@ -1,0 +1,121 @@
+{
+  "date": "2026-11-16",
+  "branch": "codex/3.1.0-beta1/optional-gateway-compat",
+  "base": "089e152db046237e30a2115fe2e5600a2d16188d",
+  "remote_refresh": "SUCCESS_BEFORE_MERGE",
+  "gateway_protocol_baseline": "62399806",
+  "gateway_changed": false,
+  "schema_changed": false,
+  "historical_data_changed": false,
+  "tests": {
+    "new_callback_sql_api_passed": 21,
+    "extended_backend_passed": 54,
+    "extended_backend_failed": 4,
+    "baseline_passed": 33,
+    "baseline_same_failed": 4,
+    "f017_passed": 7,
+    "shared_frontend_passed": 23,
+    "e2e_skipped": 13
+  },
+  "frontend_lint": "PASS",
+  "frontend_typecheck": "PASS",
+  "scope_metadata_routes": 963,
+  "arch_guard": "PASS 9 Python files",
+  "ruff_new_or_changed_code": "PASS except 4 unchanged audit_log baseline findings",
+  "qa_cases_added": 15,
+  "real_gateway_e2e": "NOT_RUN",
+  "mysql_dm8": "NOT_RUN",
+  "deployed": false,
+  "merged": false,
+  "pushed": false,
+  "review_status": "LOCAL_CONTINUATION_FIX_PASS_FIELD_E2E_PENDING",
+  "assessment": {
+    "date": "2026-11-16",
+    "business_code_changed": false,
+    "new_qa_cases": 8,
+    "continuation_storage_conflict": "CONFIRMED_ISOLATED_SQL",
+    "real_ws_trigger_sequence": "NOT_RUN",
+    "probe_pass_means_risk_mechanism_confirmed": true,
+    "report": "docs/reviews/tenant-context-optional-gateway-impact-test-focus-20261116.md"
+  },
+  "continuation_fix": {
+    "tests_new": 24,
+    "targeted_and_adjacent_pytest_passed": 117,
+    "assistant_stop_unittest_passed": 11,
+    "f017_passed": 7,
+    "local_total_passed": 135,
+    "e2e_skipped": 13,
+    "scope_metadata_routes": 963,
+    "gateway_changed": false,
+    "schema_changed": false,
+    "historical_data_changed": false,
+    "worker_upgrade_required": true,
+    "real_java_browser_mysql_dm8": "NOT_RUN",
+    "report": "continuation-fix-delivery-20261116.md"
+  },
+  "continuation_static_review": {
+    "python_files": 20,
+    "new_findings": [],
+    "preserved_arch_findings": [
+      {
+        "path": "src/backend/bisheng/api/v1/assistant.py",
+        "finding": "⚠️  [arch-guard] RULE-3 WARNING: assistant.py — Endpoint 直接导入 database/models（应通过 Domain 层）"
+      },
+      {
+        "path": "src/backend/bisheng/api/v1/workflow.py",
+        "finding": "⚠️  [arch-guard] RULE-3 WARNING: workflow.py — Endpoint 直接导入 database/models（应通过 Domain 层）"
+      },
+      {
+        "path": "src/backend/bisheng/chat_session/api/endpoints/chat.py",
+        "finding": "⚠️  [arch-guard] RULE-5 VIOLATION: chat.py — 禁止跨模块 API 层互相导入"
+      },
+      {
+        "path": "src/backend/bisheng/common/chat/client.py",
+        "finding": "⚠️  [arch-guard] RULE-1 VIOLATION: client.py — common/core 禁止导入领域模块"
+      },
+      {
+        "path": "src/backend/bisheng/common/chat/client.py",
+        "finding": "⚠️  [arch-guard] RULE-1 VIOLATION: client.py — common/core 禁止导入 api 层"
+      },
+      {
+        "path": "src/backend/bisheng/common/chat/clients/workflow_client.py",
+        "finding": "⚠️  [arch-guard] RULE-1 VIOLATION: workflow_client.py — common/core 禁止导入领域模块"
+      },
+      {
+        "path": "src/backend/bisheng/common/chat/clients/workflow_client.py",
+        "finding": "⚠️  [arch-guard] RULE-1 VIOLATION: workflow_client.py — common/core 禁止导入 api 层"
+      },
+      {
+        "path": "src/backend/bisheng/common/chat/manager.py",
+        "finding": "⚠️  [arch-guard] RULE-1 VIOLATION: manager.py — common/core 禁止导入领域模块"
+      },
+      {
+        "path": "src/backend/bisheng/common/chat/manager.py",
+        "finding": "⚠️  [arch-guard] RULE-1 VIOLATION: manager.py — common/core 禁止导入 api 层"
+      }
+    ],
+    "preserved_ruff_findings": [
+      {
+        "path": "src/backend/bisheng/api/services/audit_log.py",
+        "code": "RUF013",
+        "message": "PEP 484 prohibits implicit `Optional`"
+      },
+      {
+        "path": "src/backend/bisheng/api/services/audit_log.py",
+        "code": "RUF001",
+        "message": "String contains ambiguous `；` (FULLWIDTH SEMICOLON). Did you mean `;` (SEMICOLON)?"
+      },
+      {
+        "path": "src/backend/bisheng/api/services/audit_log.py",
+        "code": "B905",
+        "message": "`zip()` without an explicit `strict=` parameter"
+      },
+      {
+        "path": "src/backend/bisheng/api/services/audit_log.py",
+        "code": "RUF059",
+        "message": "Unpacked variable `total` is never used"
+      }
+    ]
+  },
+  "merge_target_before": "2581f2a410f6ff32475874ffa0c581f17bc951cb"
+}

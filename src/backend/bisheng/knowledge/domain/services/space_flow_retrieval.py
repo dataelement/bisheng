@@ -24,7 +24,6 @@ from loguru import logger
 from pydantic import Field
 
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.core.context.tenant import DEFAULT_TENANT_ID
 from bisheng.tool.domain.langchain.knowledge import KnowledgeRagTool, KnowledgeRetrieverTool
 from bisheng.user.domain.models.user import UserDao
 
@@ -42,9 +41,10 @@ async def abuild_scoped_login_user(user_id: int | None, tenant_id: int | None) -
     Unlike ``resolve_operator`` (F030), this NEVER calls ``set_current_tenant_id``:
     the workflow node / assistant is mid-execution in the flow's tenant, and
     switching to the author's active tenant would pollute subsequent
-    tenant-scoped queries in the same node (design gotcha 5.10). The author is
-    resolved within the current (flow) tenant, which is correct because the
-    selected knowledge spaces live in that tenant.
+    tenant-scoped queries in the same node (design gotcha 5.10). The identity
+    keeps its authoritative Home. ``tenant_id`` is the resource execution scope,
+    never an assertion about the author's Home. Retrieval still checks the
+    resource scope and the selected identity's current action permissions.
 
     Returns ``None`` when ``user_id`` is falsy or the user no longer exists — the
     caller treats a ``None`` identity as "no visible files" (empty retrieval).
@@ -57,7 +57,7 @@ async def abuild_scoped_login_user(user_id: int | None, tenant_id: int | None) -
     return await UserPayload.init_login_user(
         user_id=user.user_id,
         user_name=user.user_name,
-        tenant_id=tenant_id if tenant_id is not None else DEFAULT_TENANT_ID,
+        require_current_super=True,
     )
 
 
@@ -88,6 +88,7 @@ async def _aretrieve_one_space(
     sort_by_source_and_index: bool,
     version_repo: Any,
     request: Any,
+    retrieval_multipliers: tuple[int, ...] | None = None,
 ) -> list[Document]:
     """Retrieve view_file-filtered docs from a single knowledge space.
 
@@ -125,7 +126,11 @@ async def _aretrieve_one_space(
     base_es = _merge_es_clauses(index_filter.es_filter, extra_es_filter)
 
     conf = visibility._config()
-    multipliers = (conf.retrieval_initial_multiplier, conf.retrieval_expansion_multiplier)
+    multipliers = (
+        retrieval_multipliers
+        if retrieval_multipliers is not None
+        else (conf.retrieval_initial_multiplier, conf.retrieval_expansion_multiplier)
+    )
 
     survivors: list[Document] = []
     for attempt_idx, multiplier in enumerate(multipliers, start=1):
@@ -184,6 +189,7 @@ async def aretrieve_space_documents(
     version_repo: Any = None,
     request: Any = None,
     access_scope: str = "per_user",
+    retrieval_multipliers: tuple[int, ...] | None = None,
 ) -> list[Document]:
     """Retrieve view_file-filtered chunks across one or more knowledge spaces.
 
@@ -224,6 +230,7 @@ async def aretrieve_space_documents(
                 sort_by_source_and_index=sort_by_source_and_index,
                 version_repo=version_repo,
                 request=request,
+                **({"retrieval_multipliers": retrieval_multipliers} if retrieval_multipliers is not None else {}),
             )
         )
     # Stamp the access gate so the citation registry (T008) persists it per source.

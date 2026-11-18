@@ -5,7 +5,7 @@ from datetime import datetime
 # if TYPE_CHECKING:
 from pydantic import field_validator
 from sqlalchemy import Integer, String, func
-from sqlmodel import Column, DateTime, Field, select, text, update
+from sqlmodel import Column, DateTime, Field, or_, select, text, update
 
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.models.base import SQLModelSerializable
@@ -68,6 +68,9 @@ class FlowVersionDao(FlowVersionBase):
             parent = session.exec(
                 select(Flow).where(Flow.id == version.flow_id, Flow.is_delete == 0).with_for_update()
             ).first()
+            from bisheng.database.models.flow import assert_workflow_ready
+
+            assert_workflow_ready(parent)
             if parent is None:
                 raise NotFoundError()
             session.add(version)
@@ -81,10 +84,16 @@ class FlowVersionDao(FlowVersionBase):
             parent = session.exec(
                 select(Flow).where(Flow.id == version.flow_id, Flow.is_delete == 0).with_for_update()
             ).first()
+            from bisheng.database.models.flow import assert_workflow_ready
+
+            assert_workflow_ready(parent)
             if parent is None:
                 raise NotFoundError()
             current = session.exec(
-                select(FlowVersion).where(FlowVersion.id == version.id, FlowVersion.flow_id == parent.id)
+                select(FlowVersion)
+                .join(Flow, Flow.id == FlowVersion.flow_id)
+                .where(or_(Flow.flow_type != FlowType.WORKFLOW.value, Flow.creation_state == "READY"))
+                .where(FlowVersion.id == version.id, FlowVersion.flow_id == parent.id)
             ).first()
             if current is None:
                 raise NotFoundError()
@@ -106,11 +115,17 @@ class FlowVersionDao(FlowVersionBase):
                     select(Flow).where(Flow.id == version.flow_id, Flow.is_delete == 0).with_for_update()
                 )
             ).first()
+            from bisheng.database.models.flow import assert_workflow_ready
+
+            assert_workflow_ready(parent)
             if parent is None:
                 raise NotFoundError()
             current = (
                 await session.exec(
-                    select(FlowVersion).where(FlowVersion.id == version.id, FlowVersion.flow_id == parent.id)
+                    select(FlowVersion)
+                    .join(Flow, Flow.id == FlowVersion.flow_id)
+                    .where(or_(Flow.flow_type != FlowType.WORKFLOW.value, Flow.creation_state == "READY"))
+                    .where(FlowVersion.id == version.id, FlowVersion.flow_id == parent.id)
                 )
             ).first()
             if current is None:
@@ -131,8 +146,11 @@ class FlowVersionDao(FlowVersionBase):
         By SkillIDand version name for version information
         """
         with get_sync_db_session() as session:
-            statement = select(FlowVersion).where(
-                FlowVersion.flow_id == flow_id, FlowVersion.name == name, FlowVersion.is_delete == 0
+            statement = (
+                select(FlowVersion)
+                .join(Flow, Flow.id == FlowVersion.flow_id)
+                .where(or_(Flow.flow_type != FlowType.WORKFLOW.value, Flow.creation_state == "READY"))
+                .where(FlowVersion.flow_id == flow_id, FlowVersion.name == name, FlowVersion.is_delete == 0)
             )
             return session.exec(statement).first()
 
@@ -142,7 +160,12 @@ class FlowVersionDao(FlowVersionBase):
         According to versionIDGet information on the skill version
         """
         with get_sync_db_session() as session:
-            statement = select(FlowVersion).where(FlowVersion.id == version_id)
+            statement = (
+                select(FlowVersion)
+                .join(Flow, Flow.id == FlowVersion.flow_id)
+                .where(or_(Flow.flow_type != FlowType.WORKFLOW.value, Flow.creation_state == "READY"))
+                .where(FlowVersion.id == version_id)
+            )
             if not include_delete:
                 statement = statement.where(FlowVersion.is_delete == 0)
             return session.exec(statement).first()
@@ -153,7 +176,12 @@ class FlowVersionDao(FlowVersionBase):
         According to versionIDGet skill version information (asynchronous)
         """
         async with get_async_db_session() as session:
-            statement = select(FlowVersion).where(FlowVersion.id == version_id)
+            statement = (
+                select(FlowVersion)
+                .join(Flow, Flow.id == FlowVersion.flow_id)
+                .where(or_(Flow.flow_type != FlowType.WORKFLOW.value, Flow.creation_state == "READY"))
+                .where(FlowVersion.id == version_id)
+            )
             if not include_delete:
                 statement = statement.where(FlowVersion.is_delete == 0)
             result = await session.exec(statement)
@@ -165,8 +193,11 @@ class FlowVersionDao(FlowVersionBase):
         By SkillIDGet information on the current skill version
         """
         with get_sync_db_session() as session:
-            statement = select(FlowVersion).where(
-                FlowVersion.flow_id == flow_id, FlowVersion.is_current == 1, FlowVersion.is_delete == 0
+            statement = (
+                select(FlowVersion)
+                .join(Flow, Flow.id == FlowVersion.flow_id)
+                .where(or_(Flow.flow_type != FlowType.WORKFLOW.value, Flow.creation_state == "READY"))
+                .where(FlowVersion.flow_id == flow_id, FlowVersion.is_current == 1, FlowVersion.is_delete == 0)
             )
             return session.exec(statement).first()
 
@@ -176,7 +207,12 @@ class FlowVersionDao(FlowVersionBase):
         accordingIDList for all version details
         """
         with get_sync_db_session() as session:
-            statement = select(FlowVersion).where(FlowVersion.id.in_(ids))
+            statement = (
+                select(FlowVersion)
+                .join(Flow, Flow.id == FlowVersion.flow_id)
+                .where(or_(Flow.flow_type != FlowType.WORKFLOW.value, Flow.creation_state == "READY"))
+                .where(FlowVersion.id.in_(ids))
+            )
             return session.exec(statement).all()
 
     @classmethod
@@ -252,11 +288,17 @@ class FlowVersionDao(FlowVersionBase):
             parent = (
                 await session.exec(select(Flow).where(Flow.id == flow_id, Flow.is_delete == 0).with_for_update())
             ).first()
+            from bisheng.database.models.flow import assert_workflow_ready
+
+            assert_workflow_ready(parent)
             if parent is None:
                 return False
             target = (
                 await session.exec(
-                    select(FlowVersion).where(
+                    select(FlowVersion)
+                    .join(Flow, Flow.id == FlowVersion.flow_id)
+                    .where(or_(Flow.flow_type != FlowType.WORKFLOW.value, Flow.creation_state == "READY"))
+                    .where(
                         FlowVersion.id == new_version_info.id,
                         FlowVersion.flow_id == flow_id,
                         FlowVersion.is_delete == 0,

@@ -40,6 +40,8 @@ export default function PreviewFile({
   rawFiles: any[];
   setChunks: any;
   edit?: boolean;
+  step?: number;
+  previewUrl?: string;
   previewData?: any;
   previewErrorMessage?: string;
 }) {
@@ -86,8 +88,12 @@ export default function PreviewFile({
   const labelsMapTempRef = useRef({})
   const [labelChange, setLabelChange] = useState(false)
   const [showPos, setShowPos] = useState(false)
-  const labelTextRef = useRef<any>(partitions);
   const [rePostion, setRePostion] = useState(false)
+
+  // Coordinate responses arrive independently of the preview URL.
+  useEffect(() => {
+    labelsMapTempRef.current = {};
+  }, [partitions]);
 
   // 4. 初始化标签数据（完全对齐ParagraphEdit的initData逻辑）
   useEffect(() => {
@@ -113,7 +119,7 @@ export default function PreviewFile({
     }
 
     // 转换标签数据（与ParagraphEdit使用相同方法）
-    const allLabels = convertJsonData(labelTextRef.current || partitions);
+    const allLabels = convertJsonData(partitions);
     const activeIds = new Set();
 
     // 标记当前chunk的激活标签
@@ -140,11 +146,9 @@ export default function PreviewFile({
       });
     });
 
-    if (labelsMap.size) {
-      setRePostion(!rePostion);
-      setLabelsMap(labelsMap);
-      labelsMapRef.current = labelsMap;
-    }
+    setRePostion(!rePostion);
+    setLabelsMap(labelsMap);
+    labelsMapRef.current = labelsMap;
   }, [suffix, chunks, selectedChunkIndex, isUnsType, partitions]);
   useEffect(() => {
     // 当 chunks 变化且存在选中的 chunkIndex 时，检查该 chunk 是否仍存在
@@ -186,13 +190,13 @@ export default function PreviewFile({
 
     const distinct = {};
     const newActiveLabelMap = lbs.reduce((map, { id, active }) => {
-      const partId = labelTextRef.current[id]?.part_id;
+      const partId = partitions[id]?.part_id;
       if (distinct[partId]) return map;
 
       distinct[partId] = true;
       // 同步相同part_id的标签状态
-      Object.keys(labelTextRef.current).forEach(key => {
-        if (labelTextRef.current[key]?.part_id === partId) {
+      Object.keys(partitions).forEach(key => {
+        if (partitions[key]?.part_id === partId) {
           map.set(key, active);
         }
       });
@@ -311,12 +315,12 @@ export default function PreviewFile({
     let str = '';
 
     Array.from(labelsMap.values()).forEach((item) => {
-      if (typeof labelTextRef.current[item.id] === 'string') {
+      if (typeof partitions[item.id] === 'string') {
         return alert(previewLocale.fileExpired);
       }
 
       if (item.active) {
-        const { text, type, part_id } = labelTextRef.current[item.id];
+        const { text, type, part_id } = partitions[item.id];
 
         if (str === '') {
           str += text + (type === 'Title' ? '\n' : '');

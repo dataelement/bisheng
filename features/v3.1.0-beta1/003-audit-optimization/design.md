@@ -64,7 +64,7 @@
 ### 决策 3：快照取值规则
 
 - **选定**：
-  - 先判断不适用：审计行 `operator_id == 0`（系统触发和服务账号都写 0）写 `-1`。会话行 `api_subject_type` 不为空（`service_account`、`public_v3`）写 `-1`，因为开放接口会话的 `user_id` 是兼容用的用户编号，按它查部门会记成某个人。运行记录按各自的主体字段判断，见 §4.1。
+  - 先判断不适用：审计行 `operator_id <= 0`（系统触发和服务账号写 0；`policy_binding_repository` 的租户角色绑定变更在无操作人时写 -1）写 `-1`。会话行 `api_subject_type` 不为空（`service_account`、`public_v3`）写 `-1`，因为开放接口会话的 `user_id` 是兼容用的用户编号，按它查部门会记成某个人。运行记录按各自的主体字段判断，见 §4.1。
   - 否则取该用户 `is_primary = 1` 的 `UserDepartment.department_id`；没有就写 `0`。
   - 名称路径由 `department.path`（`/1/2/3/`）里的主键批量换成 `department.name`，用 `/` 连接。
   - 查询异常时两列都留空，`logger.warning` 后继续写入。
@@ -79,14 +79,16 @@
 - **选定**：B。
 - **原因**：A 会让 `app_governance` 领域依赖 `api/` 包。范围本质是部门闭包查询，归部门模块。一个函数供三方共用，保证列表、候选、详情、导出口径一致（AC-18）。
 - **范围对象** `AuditDeptScope`：
-  - `unrestricted=True`：全局超管、租户管理员，不加部门条件。
-  - 否则带 `admin_paths`（部门管理员所管部门的 `path` 列表）或 `exact_ids`（菜单角色的本人主部门 id）。闭包不含 `NULL` / `0` / `-1`。
+  - `unrestricted=True`：全局超管（含系统管理员角色），不加部门条件。
+  - 否则带 `admin_paths`（部门管理员所管部门的 `path` 列表；租户管理员为本租户部门树根路径 `AuditDeptRepository.root_paths`）或 `exact_ids`（菜单角色的本人主部门 id）。闭包不含 `NULL` / `0` / `-1`。
+  - `unattributed=True`：仅租户管理员。闭包另并上 `0` / `-1`，组织面板提供「无所属部门」；`NULL`（「未记录」）仍不在闭包内。查询已按租户隔离，并上的哨兵行只会是本租户的。
 - **身份判定顺序**：
-  1. `is_global_super`，或当前租户的租户管理员 → `unrestricted`；即使 `aget_user_admin_departments` 也有结果。
-  2. 否则必须有审计菜单，没有则 `UnAuthorizedError`。
-  3. 当前审计租户内有所管部门 → `admin_paths`。
-  4. 否则取本人主部门 → `exact_ids`；连主部门都没有 → 空闭包，结果为空。
-  - 菜单判定在 `AuditDeptScopeService._has_audit_menu`。旧的 `_user_has_log_web_menu` 已删除：它对租户管理员直接返回真，拿它当「只有审计菜单」会把租户管理员收成主部门范围。租户管理员必须在第 1 步就判成不限。
+  1. 当前审计租户的租户管理员（`check_tenant_admin` 实时关系）→ `restricted(admin_paths=本租户根路径, unattributed=True)`；即使 `aget_user_admin_departments` 也有结果。必须先于第 2 步：子租户管理员也带 AdminRole，`is_admin()` 和 `is_global_super` 都为真。
+  2. `is_global_super` 或 `is_admin()` → `unrestricted`。
+  3. 否则必须有审计菜单，没有则 `UnAuthorizedError`。
+  4. 当前审计租户内有所管部门 → `admin_paths`。
+  5. 否则取本人主部门 → `exact_ids`；连主部门都没有 → 空闭包，结果为空。
+  - 菜单判定在 `AuditDeptScopeService._has_audit_menu`。旧的 `_user_has_log_web_menu` 已删除：它对租户管理员直接返回真，拿它当「只有审计菜单」会把租户管理员收成主部门范围。租户管理员必须在第 1 步就判定。
 - **部门管理员的闭包**：所管部门 `path` 前缀下的全部部门，含 `status = archived`（Spec Discovery 确认）。不用 `aget_active_descendants_under_path`：它排除自身，且只要 active。
 - **何时重新考虑**：审计范围需要与部门管理页的 `_aget_user_scope`（租户挂载点并集）统一时。
 
@@ -95,7 +97,7 @@
 - **选定**：
   - 一个纯函数 `build_dept_predicate(column, scope, selection)`，放在 `database/models/org_snapshot.py`，`AuditLogDao` 和各 repository 共用（`database/models` 可被 domain 导入，反之不行）。
   - 选择展开：「包含下级」为真时，每个选中的有效部门生成 `department.path LIKE '<path>%'` 且 `status = active` 的 id 子查询。`path` 自带结尾 `/`，所以 `/1/2/` 不会命中 `/1/20/`。为假时用精确 id。再并上单独选中的归档部门 id、`include_none` → `= 0`、`include_unrecorded` → `IS NULL`。
-  - 与范围求交：`unrestricted` 时只用选择；否则丢掉 `include_none` / `include_unrecorded`，再 AND 闭包。闭包分两段：`admin_paths` 是 `department.path` 前缀子查询（含归档）；`exact_ids` 是主部门 id 的直接 `IN`，不走 path 子查询。主部门只有一个 id，不是下面被否的「把下级摊成大 IN 列表」。
+  - 与范围求交：`unrestricted` 时只用选择；否则丢掉 `include_unrecorded`，`include_none` 仅在 `unattributed` 时保留，再 AND 闭包。闭包分两段：`admin_paths` 是 `department.path` 前缀子查询（含归档）；`exact_ids` 是主部门 id 的直接 `IN`，不走 path 子查询。主部门只有一个 id，不是下面被否的「把下级摊成大 IN 列表」。
   - 不选任何组织：`unrestricted` 不加条件；受限时只加闭包。
 - **原因**：AC-22、AC-23、AC-16。子查询让数据库在小表上展开，不把几百个下级 id 塞进参数。
 - **被否**：在 Python 里先展开下级 id 再 `IN` —— 参数爆炸，DM8 对 `IN` 列表长度更敏感。
@@ -151,7 +153,7 @@
   - `RuntimeAuditRepository.statement` 和候选查询按 `dept_scope` 加条件。
   - 导出任务的 `job_scope` 每次都会重新调用 `resolve_scope`，所以列表和导出口径一致。
   - `dept_scope` 进入 `digest()`：范围变化后旧游标失效。导出不靠 `check_snapshot_scope`（它只比对冻结的应用列表），而是按执行时重新解析的范围取数；导出过程中范围变化时，`run` 循环里现有的 `current != scope` 比较会终止任务。
-  - 只对审计菜单入口（无 `app_id`）解析部门范围；全局超管和租户管理员 `dept_scope` 为空即不限；带 `app_id` 的请求走应用自己的 `audit_read` 授权，不加部门条件（实现期补充）。
+  - 只对审计菜单入口（无 `app_id`）解析部门范围；全局超管 `dept_scope` 为不限，租户管理员按决策 4 第 1 步受限；带 `app_id` 的请求走应用自己的 `audit_read` 授权，不加部门条件（实现期补充）。
   - CSV 的 `operator_dept_path` 为空时按 `operator_dept_id` 写「未记录」「无所属部门」「不适用」，与 AC-10 文案一致。
 - **原因**：前端只对 `admin` / 子管理员显示该页签，但后端 `resolve_scope` 也放行只有审计菜单的人，并按可编辑应用限制。不加部门条件，这些人直接调接口就能拿到其他部门的记录（AC-20）。
 - **被否**：因为页签隐藏就不加条件。
@@ -224,9 +226,9 @@
 | 1 | `database/models/` 禁止导入 `domain/`（RULE-2），审计 DAO 就在这一层 | 快照解析写进部门领域服务后，DAO 无法调用；硬导入会被 arch-guard 拦下 | 快照函数放 `database/models/org_snapshot.py`，只用已有部门 DAO |
 | 2 | `UserDepartment.id` 是成员关系主键，部门主键在 `department_id` | 快照记成随机数，筛选全错 | `org_snapshot` |
 | 3 | `department.path` 是 `/1/2/3/` 主键路径，不是名称 | 列表显示数字串 | 批量换名 |
-| 4 | 服务账号和系统触发都写 `operator_id = 0`；开放接口会话 `user_id` 是兼容值 | 服务调用被记到某个人的部门，扩大部门管理员范围 | 决策 3 |
+| 4 | 服务账号和系统触发写 `operator_id = 0`，租户角色绑定变更无操作人时写 `-1`；开放接口会话 `user_id` 是兼容值 | 服务调用被记到某个人的部门，扩大部门管理员范围；`-1` 按用户去查主部门会落成「无所属部门」 | 决策 3：`operator_id <= 0` 一律不适用 |
 | 5 | 直接 `session.add(AuditLog(...))` 的只有 5 处：`credential_repository` 3 处、`app_secret_repository`、`personal_skill_service`。中间件和 `open_mcp` 只入队，`guest_link` 自己调用 `ainsert_audit_logs` | 在入队文件里再盖一次章，或漏掉这 5 处，新行显示「未记录」 | 决策 2；守卫认快照函数、两个 DAO 插入方法和 `enqueue` |
-| 6 | 旧函数 `_user_has_log_web_menu` 已删除。它对租户管理员直接返回真 | 把租户管理员当成「只有审计菜单」，范围收成主部门 | `AuditDeptScopeService._has_audit_menu`；租户管理员在决策 4 第 1 步就是不限 |
+| 6 | 旧函数 `_user_has_log_web_menu` 已删除。它对租户管理员直接返回真 | 把租户管理员当成「只有审计菜单」，范围收成主部门 | `AuditDeptScopeService._has_audit_menu`；租户管理员在决策 4 第 1 步判定 |
 | 7 | 部门接口 `_aget_user_scope` 拒绝只有审计菜单的用户 | 组织面板对菜单角色报错 | 决策 6 |
 | 8 | 运行记录 `filters()` 拒绝未知键和重复键，且只拷贝固定的六个键 | 只改 `normalize()` 时参数被拒绝或丢失 | `router.filters()` |
 | 9 | 查询串里的 `"false"` 是真值字符串 | 取消「包含下级」仍然展开 | 只接受 `true` / `false`，在解析处转布尔 |
@@ -297,7 +299,7 @@
 
 - **后端单元**（`test/audit/`）：
   - `org_snapshot`：哨兵规则、成员关系主键陷阱、名称路径、异常留空、批量。
-  - `build_dept_predicate`：前缀带结尾 `/`、包含与不包含下级、归档、两个固定项、与闭包求交、受限用户丢弃固定项。
+  - `build_dept_predicate`：前缀带结尾 `/`、包含与不包含下级、归档、两个固定项、与闭包求交、受限用户丢弃固定项、租户管理员保留「无所属部门」并看到 `0` / `-1`。
   - 范围解析：五类身份，以及租户管理员兼部门管理员。
   - 守卫测试：直接构造 `AuditLog(` 的文件都调用了快照函数。
 - **后端集成**（SQLite fixture 沿用 `test/audit` 现有 `audit_session`）：
@@ -341,3 +343,4 @@
 | 2026-11-03 | 初版：以 `docs/审计功能优化方案.md` 为基础；列名改为 `operator_dept_*`；会话快照从 ORM 钩子改为 DAO 收口；范围计算移到部门领域 | Spec 确认后进入 design |
 | 2026-11-03 | 实现核对：直接盖章改为 5 处（入队和 `guest_link` 走 DAO）；删除 `_user_has_log_web_menu`，菜单判定改到 `_has_audit_menu`；表名写明 `auditlog`。决策 8 增加标注人放行；决策 10 改为导出按执行时范围取数，带 `app_id` 不加部门条件 | T016 审查：design 与代码偏离 |
 | 2026-11-03 | 决策 5：闭包拆开写。`admin_paths` 用 path 前缀子查询；`exact_ids` 用主部门 id 的直接 `IN` | T016 第二轮：原文把两段都写成闭包子查询 |
+| 2026-11-13 | 决策 4：租户管理员改为按本租户部门树裁剪，另带 `unattributed` 可见本租户「无所属部门」「不适用」，「未记录」不可见；判定顺序改为租户管理员先于 RBAC 超管。决策 3：`operator_id <= 0` 一律不适用。决策 5、10 同步 | 2026-11-09 产品要求租户管理员按部门裁剪；beta1 复测发现租户管理员漏看无组织归属记录、`-1` 系统行被记成「无所属部门」 |

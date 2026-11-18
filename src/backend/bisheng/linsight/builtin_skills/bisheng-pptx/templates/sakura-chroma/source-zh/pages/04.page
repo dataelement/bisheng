@@ -1,0 +1,593 @@
+pageType: content
+background:
+  type: solid
+  color: '#F1E6CB'
+notes: Authored journey composition. All new example statements and figures are illustrative, not reported facts. Replace them with user evidence. Four stages aligned across actions and independent outcome measures
+elements:
+  - elementId: s1
+    elementType: shape
+    bounds:
+      - 754
+      - 27
+      - 48
+      - 13
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E54489'
+    border:
+      width: 0
+      color: '#E54489'
+  - elementId: s2
+    elementType: shape
+    bounds:
+      - 807
+      - 27
+      - 48
+      - 13
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#F09131'
+    border:
+      width: 0
+      color: '#F09131'
+  - elementId: s3
+    elementType: shape
+    bounds:
+      - 860
+      - 27
+      - 48
+      - 13
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#547A46'
+    border:
+      width: 0
+      color: '#547A46'
+  - elementId: t4
+    elementType: text
+    bounds:
+      - 48
+      - 27
+      - 665
+      - 20
+    content:
+      text: SAKURA CHROMA
+      fontFamily: &ref_0
+        latin: Arial
+        mac: PingFang SC
+        win: Microsoft YaHei
+        ea: Noto Sans CJK SC
+      fontSize: 10
+      lineHeight: 1.1
+      color: '#3A2516'
+      bold: false
+  - elementId: l5
+    elementType: line
+    bounds:
+      - 48
+      - 59
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.6
+      color: '#baac95'
+  - elementId: t6
+    elementType: text
+    bounds:
+      - 48
+      - 76
+      - 864
+      - 64
+    content:
+      text: 定位旅程中的阻力
+      fontFamily: &ref_1
+        latin: Arial Narrow
+        mac: PingFang SC
+        win: Microsoft YaHei
+        ea: Noto Sans CJK SC
+      fontSize: 32
+      lineHeight: 1.1
+      color: '#3A2516'
+      bold: true
+  - elementId: t7
+    elementType: text
+    bounds:
+      - 754
+      - 46
+      - 158
+      - 13
+    content:
+      text: 图示 03
+      fontFamily: *ref_0
+      fontSize: 9
+      lineHeight: 1.1
+      color: '#715f4c'
+      bold: false
+      align: right
+  - elementId: t8
+    elementType: text
+    bounds:
+      - 48
+      - 188
+      - 115
+      - 30
+    content:
+      text: 阶段
+      fontFamily: *ref_0
+      fontSize: 12
+      lineHeight: 1.1
+      color: '#3A2516'
+      bold: false
+  - elementId: t9
+    elementType: text
+    bounds:
+      - 48
+      - 282
+      - 115
+      - 30
+    content:
+      text: 行动
+      fontFamily: *ref_0
+      fontSize: 12
+      lineHeight: 1.1
+      color: '#3A2516'
+      bold: false
+  - elementId: t10
+    elementType: text
+    bounds:
+      - 48
+      - 376
+      - 115
+      - 30
+    content:
+      text: 信号
+      fontFamily: *ref_0
+      fontSize: 12
+      lineHeight: 1.1
+      color: '#3A2516'
+      bold: false
+  - elementId: s11
+    elementType: shape
+    bounds:
+      - 183
+      - 174
+      - 167
+      - 63
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E5D6B0'
+    border:
+      width: 0
+      color: '#E5D6B0'
+  - elementId: t12
+    elementType: text
+    bounds:
+      - 195
+      - 187
+      - 143
+      - 44
+    content:
+      text: 关注
+      fontFamily: *ref_0
+      fontSize: 18
+      lineHeight: 1.1
+      color: '#181915'
+      bold: false
+      align: center
+  - elementId: l13
+    elementType: line
+    bounds:
+      - 351
+      - 207
+      - 13
+      - 1
+    viewBox:
+      - 13
+      - 1
+    points: 0,0 13,0
+    border:
+      width: 1.2
+      color: '#E54489'
+  - elementId: l14
+    elementType: line
+    bounds:
+      - 358.03232834558344
+      - 207
+      - 5.967671654416563
+      - 3.6588106025146203
+    viewBox:
+      - 5.967671654416563
+      - 3.6588106025146203
+    points: 0,3.6588106025146203 5.967671654416563,0
+    border:
+      width: 1.2
+      color: '#E54489'
+  - elementId: l15
+    elementType: line
+    bounds:
+      - 358.03232834558344
+      - 203.34118939748538
+      - 5.967671654416563
+      - 3.6588106025146203
+    viewBox:
+      - 5.967671654416563
+      - 3.6588106025146203
+    points: 0,0 5.967671654416563,3.6588106025146203
+    border:
+      width: 1.2
+      color: '#E54489'
+  - elementId: t16
+    elementType: text
+    bounds:
+      - 183
+      - 279
+      - 159
+      - 62
+    content:
+      text: 比较方案
+      fontFamily: *ref_0
+      fontSize: 20
+      lineHeight: 1.1
+      color: '#3A2516'
+      bold: false
+  - elementId: t17
+    elementType: text
+    bounds:
+      - 183
+      - 368
+      - 159
+      - 55
+    content:
+      text: 62%
+      fontFamily: *ref_1
+      fontSize: 35
+      lineHeight: 1.1
+      color: '#3A2516'
+      bold: true
+  - elementId: s18
+    elementType: shape
+    bounds:
+      - 366
+      - 174
+      - 167
+      - 63
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E54489'
+    border:
+      width: 0
+      color: '#E54489'
+  - elementId: t19
+    elementType: text
+    bounds:
+      - 378
+      - 187
+      - 143
+      - 44
+    content:
+      text: 兴趣
+      fontFamily: *ref_0
+      fontSize: 18
+      lineHeight: 1.1
+      color: '#F8F6EE'
+      bold: false
+      align: center
+  - elementId: l20
+    elementType: line
+    bounds:
+      - 534
+      - 207
+      - 13
+      - 1
+    viewBox:
+      - 13
+      - 1
+    points: 0,0 13,0
+    border:
+      width: 1.2
+      color: '#E54489'
+  - elementId: l21
+    elementType: line
+    bounds:
+      - 541.0323283455834
+      - 207
+      - 5.967671654416563
+      - 3.6588106025146203
+    viewBox:
+      - 5.967671654416563
+      - 3.6588106025146203
+    points: 0,3.6588106025146203 5.967671654416563,0
+    border:
+      width: 1.2
+      color: '#E54489'
+  - elementId: l22
+    elementType: line
+    bounds:
+      - 541.0323283455834
+      - 203.34118939748538
+      - 5.967671654416563
+      - 3.6588106025146203
+    viewBox:
+      - 5.967671654416563
+      - 3.6588106025146203
+    points: 0,0 5.967671654416563,3.6588106025146203
+    border:
+      width: 1.2
+      color: '#E54489'
+  - elementId: t23
+    elementType: text
+    bounds:
+      - 366
+      - 279
+      - 159
+      - 62
+    content:
+      text: 确定下一步
+      fontFamily: *ref_0
+      fontSize: 20
+      lineHeight: 1.1
+      color: '#3A2516'
+      bold: false
+  - elementId: t24
+    elementType: text
+    bounds:
+      - 366
+      - 368
+      - 159
+      - 55
+    content:
+      text: 48%
+      fontFamily: *ref_1
+      fontSize: 35
+      lineHeight: 1.1
+      color: '#3A2516'
+      bold: true
+  - elementId: s25
+    elementType: shape
+    bounds:
+      - 549
+      - 174
+      - 167
+      - 63
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E5D6B0'
+    border:
+      width: 0
+      color: '#E5D6B0'
+  - elementId: t26
+    elementType: text
+    bounds:
+      - 561
+      - 187
+      - 143
+      - 44
+    content:
+      text: 参与
+      fontFamily: *ref_0
+      fontSize: 18
+      lineHeight: 1.1
+      color: '#181915'
+      bold: false
+      align: center
+  - elementId: l27
+    elementType: line
+    bounds:
+      - 717
+      - 207
+      - 13
+      - 1
+    viewBox:
+      - 13
+      - 1
+    points: 0,0 13,0
+    border:
+      width: 1.2
+      color: '#E54489'
+  - elementId: l28
+    elementType: line
+    bounds:
+      - 724.0323283455834
+      - 207
+      - 5.967671654416563
+      - 3.6588106025146203
+    viewBox:
+      - 5.967671654416563
+      - 3.6588106025146203
+    points: 0,3.6588106025146203 5.967671654416563,0
+    border:
+      width: 1.2
+      color: '#E54489'
+  - elementId: l29
+    elementType: line
+    bounds:
+      - 724.0323283455834
+      - 203.34118939748538
+      - 5.967671654416563
+      - 3.6588106025146203
+    viewBox:
+      - 5.967671654416563
+      - 3.6588106025146203
+    points: 0,0 5.967671654416563,3.6588106025146203
+    border:
+      width: 1.2
+      color: '#E54489'
+  - elementId: t30
+    elementType: text
+    bounds:
+      - 549
+      - 279
+      - 159
+      - 62
+    content:
+      text: 看到结果
+      fontFamily: *ref_0
+      fontSize: 20
+      lineHeight: 1.1
+      color: '#3A2516'
+      bold: false
+  - elementId: t31
+    elementType: text
+    bounds:
+      - 549
+      - 368
+      - 159
+      - 55
+    content:
+      text: 76%
+      fontFamily: *ref_1
+      fontSize: 35
+      lineHeight: 1.1
+      color: '#3A2516'
+      bold: true
+  - elementId: s32
+    elementType: shape
+    bounds:
+      - 732
+      - 174
+      - 167
+      - 63
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#E5D6B0'
+    border:
+      width: 0
+      color: '#E5D6B0'
+  - elementId: t33
+    elementType: text
+    bounds:
+      - 744
+      - 187
+      - 143
+      - 44
+    content:
+      text: 再次参与
+      fontFamily: *ref_0
+      fontSize: 18
+      lineHeight: 1.1
+      color: '#181915'
+      bold: false
+      align: center
+  - elementId: t34
+    elementType: text
+    bounds:
+      - 732
+      - 279
+      - 159
+      - 62
+    content:
+      text: 决定后续行动
+      fontFamily: *ref_0
+      fontSize: 20
+      lineHeight: 1.1
+      color: '#3A2516'
+      bold: false
+  - elementId: t35
+    elementType: text
+    bounds:
+      - 732
+      - 368
+      - 159
+      - 55
+    content:
+      text: 58%
+      fontFamily: *ref_1
+      fontSize: 35
+      lineHeight: 1.1
+      color: '#3A2516'
+      bold: true
+  - elementId: l36
+    elementType: line
+    bounds:
+      - 48
+      - 260
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.6
+      color: '#c3b69e'
+  - elementId: l37
+    elementType: line
+    bounds:
+      - 48
+      - 353
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.6
+      color: '#c3b69e'
+  - elementId: l38
+    elementType: line
+    bounds:
+      - 48
+      - 465
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.6
+      color: '#c9bca3'
+  - elementId: t39
+    elementType: text
+    bounds:
+      - 48
+      - 475
+      - 864
+      - 25
+    content:
+      text: 各阶段成功率独立统计，优先检查最薄弱的交接点。
+      fontFamily: *ref_0
+      fontSize: 13
+      lineHeight: 1.1
+      color: '#3A2516'
+      bold: false
+  - elementId: t40
+    elementType: text
+    bounds:
+      - 48
+      - 507
+      - 783
+      - 16
+    content:
+      text: 版式示例 / 数据为模拟值
+      fontFamily: *ref_0
+      fontSize: 9
+      lineHeight: 1.1
+      color: '#3A2516'
+      bold: false
+  - elementId: t41
+    elementType: text
+    bounds:
+      - 871
+      - 504
+      - 41
+      - 22
+    content:
+      text: '04'
+      fontFamily: *ref_0
+      fontSize: 11
+      lineHeight: 1.1
+      color: '#3A2516'
+      bold: false

@@ -26,6 +26,7 @@ import { useModel } from "..";
 import { UserSelectableModels } from "../UserSelectableModels";
 import { updateModelMetadata } from "../userModelMetadata";
 import { hasValidWorkbenchEmbeddingModelId } from "./workbenchModelValidation";
+import { SharedToolSettings } from "./SharedToolSettings";
 
 export const ModelSelect = ({
   required = false,
@@ -39,8 +40,8 @@ export const ModelSelect = ({
 }) => {
   const { t } = useTranslation();
   const selectLabels = useSelectLabels();
-  const cascaderOptions = useMemo(() => toModelCascaderOptions(options), [options]);
-  const cascaderValue = useMemo(() => toModelCascaderValue(value, options), [options, value]);
+  const cascaderOptions = useMemo(() => toModelCascaderOptions(options, value, t('references.unavailable')), [options, value, t]);
+  const cascaderValue = useMemo(() => toModelCascaderValue(value, options, true), [options, value]);
 
   return (
     <div className="min-w-0">
@@ -80,12 +81,15 @@ export default function WorkbenchModel({ data, onBack }) {
     ttsModelId: null,
     knowledgeSpaceLlmId: null,
     chatTitleLlmId: null,
+    memoryLlmId: null,
     imageReadModelId: null,
     models: [],
   });
 
   const lastSaveFormDataRef = useRef(null);
   const [saveload, setSaveLoad] = useState(false);
+  // The collapsed section holds the required embedding model; open it when it blocks a save.
+  const [otherSettingsOpen, setOtherSettingsOpen] = useState(false);
 
   const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
 
@@ -117,6 +121,7 @@ export default function WorkbenchModel({ data, onBack }) {
       asrModelId,
       ttsModelId,
       chatTitleLlmId,
+      memoryLlmId,
       imageReadModelId,
       models,
     } = form;
@@ -137,6 +142,8 @@ export default function WorkbenchModel({ data, onBack }) {
         tts_model: ttsModelId ? { id: String(ttsModelId) } : null, // Accept an empty value.
         // Model that names new conversations (workbench, knowledge spaces, apps).
         chat_title_llm: chatTitleLlmId ? { id: String(chatTitleLlmId) } : null, // Accept an empty value.
+        // Model that consolidates long-term memory; empty falls back to the first daily-chat model.
+        memory_llm: memoryLlmId ? { id: String(memoryLlmId) } : null,
         image_read_model: imageReadModelId ? { id: String(imageReadModelId) } : null,
       };
 
@@ -161,6 +168,7 @@ export default function WorkbenchModel({ data, onBack }) {
         asrModelId: newConfig?.asr_model?.id || null,
         ttsModelId: newConfig?.tts_model?.id || null,
         chatTitleLlmId: newConfig?.chat_title_llm?.id || null,
+        memoryLlmId: newConfig?.memory_llm?.id || null,
         imageReadModelId: newConfig?.image_read_model?.id || null,
         knowledgeSpaceLlmId: newConfig?.knowledge_space_llm?.id || null,
         models: newConfig?.models || [],
@@ -174,6 +182,7 @@ export default function WorkbenchModel({ data, onBack }) {
         asr_model: { id: newConfig?.asr_model?.id },
         tts_model: { id: newConfig?.tts_model?.id },
         chat_title_llm: { id: newConfig?.chat_title_llm?.id },
+        memory_llm: { id: newConfig?.memory_llm?.id },
         image_read_model: { id: newConfig?.image_read_model?.id },
         knowledge_space_llm: { id: newConfig?.knowledge_space_llm?.id },
         models: newConfig?.models || [],
@@ -196,9 +205,8 @@ export default function WorkbenchModel({ data, onBack }) {
   const handleSave = () => {
     if (form.models.some((model) => String(model.description ?? "").length > 50)) return;
     const errors = [];
-    if (!enterpriseConfig?.enabled && !form.models.length) {
-      errors.push(t("model.chatModelRequired"));
-    }
+    // Every online chat model is offered by default (narrowed by visibility), so
+    // the stored list only holds optional labels and may be empty.
     // Reject blank rows: a model without an id serializes to `{ id: '' }`,
     // which reaches the client model picker as <SelectItem value="">
     // (empty string) and crashes the whole page in Radix. Force the admin
@@ -208,6 +216,7 @@ export default function WorkbenchModel({ data, onBack }) {
     }
     if (!hasValidWorkbenchEmbeddingModelId(form.sourceModelId)) {
       errors.push(t("model.workVectorModel") + t("bs:required"));
+      setOtherSettingsOpen(true);
     }
     if (errors.length) {
       toast.show({ type: "error", message: errors.filter(Boolean).join("\n") });
@@ -245,6 +254,7 @@ export default function WorkbenchModel({ data, onBack }) {
         asrModelId: linsightConfig.asr_model?.id || null,
         ttsModelId: linsightConfig.tts_model?.id || null,
         chatTitleLlmId: linsightConfig.chat_title_llm?.id || null,
+        memoryLlmId: linsightConfig.memory_llm?.id || null,
         imageReadModelId: linsightConfig.image_read_model?.id || null,
         knowledgeSpaceLlmId: linsightConfig.knowledge_space_llm?.id || null,
         models: linsightConfig.models || [],
@@ -258,6 +268,7 @@ export default function WorkbenchModel({ data, onBack }) {
         asr_model: { id: linsightConfig.asr_model?.id },
         tts_model: { id: linsightConfig.tts_model?.id },
         chat_title_llm: { id: linsightConfig.chat_title_llm?.id },
+        memory_llm: { id: linsightConfig.memory_llm?.id },
         image_read_model: { id: linsightConfig.image_read_model?.id },
         knowledge_space_llm: { id: linsightConfig.knowledge_space_llm?.id },
         models: linsightConfig.models || [],
@@ -293,7 +304,11 @@ export default function WorkbenchModel({ data, onBack }) {
           }))
         }
       />
-      <details className="mt-2 border-t pt-4">
+      <details
+        className="mt-2 border-t pt-4"
+        open={otherSettingsOpen}
+        onToggle={(event) => setOtherSettingsOpen(event.currentTarget.open)}
+      >
         <summary className="cursor-pointer text-sm text-muted-foreground">
           {t("model.otherModelSettings")}
         </summary>
@@ -301,7 +316,7 @@ export default function WorkbenchModel({ data, onBack }) {
           <ModelSelect
             close
             label={t("model.linsightDefaultModel")}
-            tooltipText={t("model.linsightDefaultModelTooltip")}
+            tooltipText={`${t("model.linsightDefaultModelTooltip")} ${t("model.defaultModelVisibilityNote")}`}
             value={form.linsightDefaultModelId}
             options={llmOptions}
             onChange={(val) => handleDefaultModelChange("linsightDefaultModelId", val)}
@@ -309,6 +324,7 @@ export default function WorkbenchModel({ data, onBack }) {
           <ModelSelect
             close
             label={t("model.dailyDefaultModel")}
+            tooltipText={`${t("model.dailyDefaultModelTooltip")} ${t("model.defaultModelVisibilityNote")}`}
             value={form.chatDefaultModelId}
             options={llmOptions}
             onChange={(val) => handleDefaultModelChange("chatDefaultModelId", val)}
@@ -349,6 +365,15 @@ export default function WorkbenchModel({ data, onBack }) {
             options={llmOptions}
             onChange={(val) => setForm({ ...form, chatTitleLlmId: val })}
           />
+          <ModelSelect
+            close
+            label={t("model.memoryLlm")}
+            tooltipText={t("model.memoryLlmTooltip")}
+            value={form.memoryLlmId}
+            options={llmOptions}
+            onChange={(val) => setForm({ ...form, memoryLlmId: val })}
+          />
+          <SharedToolSettings disabled={saveload || !linsightConfig} />
         </div>
       </details>
       <div className="mt-6 flex justify-end gap-4">
@@ -383,6 +408,7 @@ export function useLinsightConfig() {
         tts_model: null,
         knowledge_space_llm: null,
         chat_title_llm: null,
+        memory_llm: null,
         image_read_model: null,
       };
       return {

@@ -10,7 +10,6 @@ from pydantic import BaseModel, Field
 from urllib3.util.url import parse_url
 
 from bisheng_langchain.gpts.tools.bing_search.tool import BingSearchResults
-from bisheng_langchain.utils.structured_output import StructuredOutputError, parse_data
 
 
 class SearchInput(BaseModel):
@@ -115,11 +114,40 @@ class SearchTool(ABC):
             "cloudsway": CloudswaySearch,
             "searXNG": SearXNGSearch,
             "deepseek": DeepSeekSearch,
+            "custom": CustomSearch,
         }
         if name not in tool_class:
             raise ValueError(f"Tool {name} not found.")
         c = tool_class[name](*args, **kwargs)
         return c
+
+
+class CustomSearch(SearchTool):
+    """Custom search adapter with explicitly authorized outbound access."""
+
+    def _invoke(self, query: str, **kwargs):
+        from bisheng_langchain.gpts.tools.web_search.custom import build_request, execute_request, map_response
+
+        request = build_request(self.kwargs.get("operation"), query, self.kwargs.get("api_key"))
+        raw = execute_request(request)
+        operation = self.kwargs.get("operation", {})
+        if operation.get("version") == 2:
+            from .openapi_request import read_openapi_response
+
+            result = read_openapi_response(raw, operation, self.kwargs.get("api_key"))
+            if operation.get("response_mode") == "raw":
+                return result
+            _, results = map_response(
+                json.dumps(result).encode(),
+                self.kwargs.get("mapping"),
+                self.normalize_result_item,
+                self.kwargs.get("api_key"),
+            )
+            return {"response": result, "web_results": results}
+        _, results = map_response(
+            raw, self.kwargs.get("mapping"), self.normalize_result_item, self.kwargs.get("api_key")
+        )
+        return results
 
 
 class WebSearchTool(BaseTool):
@@ -147,21 +175,8 @@ class BingSearch(SearchTool):
             num_results=10,
         )
         res = bingtool.invoke({"query": query})
-        # BingSearchResults historically returns repr(list[dict]), not JSON.
-        # Accept that data-only wire format without interpreting Python code.
-        res = parse_data(res, python_literals=True)
-        fields = {"id", "title", "link", "snippet", "thumbnail"}
-        if type(res) is not list or len(res) > 100:  # noqa: E721
-            raise StructuredOutputError("Bing search output must be a bounded list of results")
-        for result in res:
-            if (
-                type(result) is not dict  # noqa: E721
-                or any(
-                    key in fields and value is not None and type(value) is not str  # noqa: E721
-                    for key, value in result.items()
-                )
-            ):
-                raise StructuredOutputError("Bing search result fields must contain text")
+        if isinstance(res, str):
+            res = eval(res)
         web_list = []
         for index, result in enumerate(res):
             # 处理搜索结果

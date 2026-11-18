@@ -3,7 +3,7 @@ import os
 import time
 import zipfile
 from io import BytesIO
-from typing import Literal, Union
+from typing import Annotated, Literal, Union
 from urllib import parse
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Query, Request, UploadFile
@@ -17,7 +17,7 @@ from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.citation.domain.services.citation_handle_service import strip_citation_handles
 from bisheng.citation.domain.services.citation_prompt_helper import strip_citation_markers
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
-from bisheng.common.dependencies.user_deps import UserPayload, record_business_activity
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.errcode.linsight import (
@@ -37,6 +37,7 @@ from bisheng.common.services.failure_context import FailureContextAdapter
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.context.tenant import bypass_tenant_filter_if, get_current_tenant_id
 from bisheng.core.logger import trace_id_var
+from bisheng.core.session_activity import business_activity
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.session import MessageSessionDao, SensitiveStatus
 from bisheng.department.domain.services.department_flow_service import (
@@ -63,6 +64,7 @@ from bisheng.linsight.domain.services.deliverable_download_service import (
     workspace_fetcher,
 )
 from bisheng.linsight.domain.services.md_image_refs import build_markdown_bundle, inline_local_images
+from bisheng.linsight.domain.services.memory_turns import register_memory_session
 from bisheng.linsight.domain.services.message_stream_handle import MessageStreamHandle
 from bisheng.linsight.domain.services.state_message_manager import (
     LinsightStateMessageManager,
@@ -179,6 +181,7 @@ async def linsight_file_preview(
 
 # Submit an Idea User Issue Request
 @router.post("/workbench/submit", summary="Submit an Idea User Issue Request")
+@business_activity()
 async def submit_linsight_workbench(
     request: Request,
     submit_obj: LinsightQuestionSubmitSchema = Body(..., description="Idea User Issue Submitter"),
@@ -251,6 +254,8 @@ async def submit_linsight_workbench(
             message_session_model, linsight_session_version_model = await LinsightWorkbenchImpl.submit_user_question(
                 submit_obj, login_user
             )
+            # F132: login-state entry registers the conversation for long-term memory.
+            await register_memory_session(message_session_model.chat_id, login_user)
 
             response_data = {
                 "message_session": message_session_model.model_dump(),
@@ -287,6 +292,7 @@ async def submit_linsight_workbench(
 
 # workbench to process
 @router.post("/workbench/start-execute", summary="Start Executing Reims", response_model=UnifiedResponseModel)
+@business_activity()
 async def start_execute(
     linsight_session_version_id: str = Body(..., description="Inspiration Conversation VersionID", embed=True),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
@@ -360,9 +366,11 @@ async def start_execute(
 
 
 @router.post("/workbench/continue", summary="Continue a task-mode conversation with a new turn")
+@business_activity()
 async def continue_conversation(
     session_version_id: str = Body(..., description="Existing session version id to continue", embed=True),
     question: str = Body(..., description="Follow-up user message", embed=True),
+    model: Annotated[str | None, Body(min_length=1, description="Current model selection for a retry")] = None,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> UnifiedResponseModel:
     """Continue an already-finished task-mode conversation (F035 multi-turn).
@@ -391,13 +399,14 @@ async def continue_conversation(
         return LinsightSessionVersionRunningError.return_resp()
 
     await MessageSessionDao.touch_session(session_version_model.session_id)
+    # F132: login-state entry registers the conversation for long-term memory.
+    await register_memory_session(session_version_model.session_id, login_user)
 
-    await record_business_activity(login_user)
-
-    # Flip back to IN_PROGRESS BEFORE enqueue so the worker's pre-flight
-    # non-terminal guard accepts the continue item.
+    previous_status, previous_model = session_version_model.status, session_version_model.model
+    # Persist a retry's model together with the status before the worker can pick it up.
+    model_update = {"model": model} if model is not None else {}
     await LinsightSessionVersionDao.batch_update_session_versions_status(
-        [session_version_id], SessionVersionStatusEnum.IN_PROGRESS
+        [session_version_id], SessionVersionStatusEnum.IN_PROGRESS, **model_update
     )
 
     try:
@@ -414,9 +423,9 @@ async def continue_conversation(
         )
     except Exception as e:
         logger.error(f"Failed to continue the Ideas conversation: {e!s}")
-        # Roll back the status flip so the conversation isn't stuck IN_PROGRESS.
+        # Restore the original terminal state and model if dispatch was not accepted.
         await LinsightSessionVersionDao.batch_update_session_versions_status(
-            [session_version_id], SessionVersionStatusEnum.COMPLETED
+            [session_version_id], previous_status, **({"model": previous_model} if model is not None else {})
         )
         return LinsightStartTaskError.return_resp(data=str(e))
 
@@ -425,6 +434,7 @@ async def continue_conversation(
 
 # workbench User input
 @router.post("/workbench/user-input", summary="User input Ideas", response_model=UnifiedResponseModel)
+@business_activity()
 async def user_input(
     session_version_id: str = Body(..., description="Inspiration Conversation VersionID"),
     linsight_execute_task_id: str = Body(..., description="Inspiration Task ExecutionID"),
@@ -450,6 +460,8 @@ async def user_input(
         return UnAuthorizedError.return_resp()
 
     await MessageSessionDao.touch_session(session_version_model.session_id)
+    # F132: login-state entry registers the conversation for long-term memory.
+    await register_memory_session(session_version_model.session_id, login_user)
 
     state_message_manager = LinsightStateMessageManager(session_version_id=session_version_id)
 
@@ -469,7 +481,6 @@ async def user_input(
     already_completed = existing_task is not None and existing_task.status == ExecuteTaskStatusEnum.USER_INPUT_COMPLETED
 
     if not already_completed:
-        await record_business_activity(login_user)
         # Legacy parked sessions created before the pseudo-task row existed have
         # no row for a session-level clarify; the resume reads the answer from the
         # queue item, so persistence is best-effort there (skip when no row).

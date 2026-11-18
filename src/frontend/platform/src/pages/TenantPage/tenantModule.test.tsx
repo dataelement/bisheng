@@ -8,6 +8,7 @@ import TenantPage from "./index";
 import { CreateTenantDialog } from "./components/CreateTenantDialog";
 import { TenantQuotaDialog } from "./components/TenantQuotaDialog";
 import { TenantUserDialog } from "./components/TenantUserDialog";
+import { TenantAdminDialog } from "./components/TenantAdminDialog";
 import type { Tenant } from "@/types/api/tenant";
 import * as api from "@/controllers/API/tenant";
 
@@ -95,7 +96,7 @@ beforeEach(() => {
     ],
     total: 2,
   });
-  vi.mocked(api.listTenantAdminsApi).mockResolvedValue({ user_ids: [7] });
+  vi.mocked(api.listTenantAdminsApi).mockResolvedValue({ user_ids: [7], users: [{ user_id: 7, user_name: "Admin" }] });
   for (const fn of [
     api.updateTenantApi,
     api.updateTenantStatusApi,
@@ -238,5 +239,47 @@ describe("Tenant module", () => {
     vi.mocked(api.getTenantQuotaApi).mockResolvedValueOnce({ quota_config: { storage_gb: -1 }, usage: {} });
     render(<TenantQuotaDialog tenant={tenant} onClose={vi.fn()} onSuccess={vi.fn()} />);
     expect(await screen.findByRole('spinbutton')).toHaveValue(null);
+  });
+
+  it("shows each tenant's admins in the list and opens the admin dialog from there", async () => {
+    vi.mocked(api.getTenantsApi).mockResolvedValueOnce({
+      data: [
+        { ...tenant, admin_users: [{ user_id: 7, user_name: "Alice" }, { user_id: 8, user_name: "Bob" }, { user_id: 9, user_name: "Carol" }] },
+        { ...tenant, id: 5, tenant_name: "NoAdmin", admin_users: [] },
+        { ...tenant, id: 6, tenant_name: "Broken", admin_users: null },
+        { ...tenant, id: 1, tenant_name: "Root", admin_users: [] },
+      ],
+      total: 4,
+    });
+    render(
+      <Fixture>
+        <TenantPage />
+      </Fixture>,
+    );
+    expect(await screen.findByText(/Alice.*Bob/)).toBeInTheDocument();
+    expect(screen.queryByText(/Carol/)).not.toBeInTheDocument();
+    expect(screen.getByText("tenant.adminNotSet")).toBeInTheDocument();
+    expect(screen.getByText("tenant.adminLookupFailed")).toBeInTheDocument();
+    expect(screen.getByText("tenant.adminRootManaged")).toBeInTheDocument();
+    // Root row carries no manage entry: three manage links for three child tenants.
+    const manage = screen.getAllByRole("button", { name: "tenant.adminManage" });
+    expect(manage).toHaveLength(3);
+    await userEvent.click(manage[1]);
+    expect(await screen.findByRole("dialog", { name: "tenant.adminDialogTitle" })).toBeInTheDocument();
+    await waitFor(() => expect(api.listTenantAdminsApi).toHaveBeenCalledWith(5));
+  });
+  it("grants and revokes from the dedicated admin dialog and refreshes the list", async () => {
+    const onChanged = vi.fn();
+    render(<TenantAdminDialog tenant={tenant} onClose={vi.fn()} onChanged={onChanged} />);
+    const current = await screen.findByRole("region", { name: /tenant.currentAdmins/ });
+    expect(await within(current).findByText("Admin")).toBeInTheDocument();
+    const add = screen.getByRole("region", { name: "tenant.addAdmin" });
+    expect(await within(add).findByText("tenant.alreadyAdmin")).toBeInTheDocument();
+    await userEvent.click(within(add).getByRole("button", { name: "tenant.promoteAdmin" }));
+    await waitFor(() => expect(api.grantTenantAdminApi).toHaveBeenCalledWith(2, 8));
+    await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+    await userEvent.click(within(current).getByRole("button", { name: "tenant.revokeAdmin" }));
+    await waitFor(() => expect(api.revokeTenantAdminApi).toHaveBeenCalledWith(2, 7));
+    await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(2));
   });
 });

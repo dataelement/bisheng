@@ -9,6 +9,17 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import SettingsPage from "./SettingsPage";
 
+let mockMobile = false;
+let mockHostHeader = false;
+beforeEach(() => { mockMobile = false; mockHostHeader = false; });
+jest.mock("~/hooks/useClientEnvironment", () => ({
+  ...jest.requireActual("~/hooks/useClientEnvironment"),
+  useClientEnvironment: () => ({
+    channel: "web",
+    capabilities: { hasHostChatHeader: mockHostHeader },
+  }),
+}));
+
 const mockRefreshCount = jest.fn().mockResolvedValue(undefined);
 
 jest.mock("recoil", () => ({
@@ -18,7 +29,7 @@ jest.mock("recoil", () => ({
 
 jest.mock("~/hooks", () => ({
   useLocalize: () => (key: string) => key,
-  usePrefersMobileLayout: () => false,
+  usePrefersMobileLayout: () => mockMobile,
 }));
 
 jest.mock("~/hooks/useNotificationCount", () => ({
@@ -129,4 +140,27 @@ describe("SettingsPage history", () => {
       "/knowledge/space/42?tab=files#recent",
     );
   });
+});
+
+it.each([false, true])("keeps settings entries usable with native header=%s", (native) => {
+  mockMobile = true;
+  mockHostHeader = native;
+  render(
+    <MemoryRouter initialEntries={["/settings"]}>
+      <Routes>
+        <Route path="settings/:section?" element={<SettingsPage />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+  const menu = screen.queryByRole("button", { name: "com_nav_open_sidebar" });
+  const title = screen.queryByText("com_nav_settings");
+  if (native) {
+    expect(menu).toBeNull();
+    expect(title).toBeNull();
+  } else {
+    expect(menu).toBeVisible();
+    expect(title).toBeVisible();
+  }
+  fireEvent.click(screen.getByRole("button", { name: "com_account_info_title" }));
+  expect(screen.getByText("account-pane")).toBeVisible();
 });

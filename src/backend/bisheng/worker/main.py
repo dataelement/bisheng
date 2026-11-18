@@ -61,6 +61,7 @@ def _register_worker_permission_contexts() -> None:
         get_department_projection_scope,
         register_department_projection_runtime_context,
     )
+    from bisheng.llm.application.model_provider_projection import get_model_provider_projection_scope
     from bisheng.permission.application.process_runtime import (
         register_f048_permission_runtime_context,
     )
@@ -70,11 +71,22 @@ def _register_worker_permission_contexts() -> None:
             client,
             external_scopes={
                 "department": get_department_projection_scope(),
+                "llm_model_deletion": get_model_provider_projection_scope(),
             },
         )
 
     register_f048_permission_runtime_context(initialize)
     register_department_projection_runtime_context()
+
+
+def _prepare_native_reference_permissions() -> None:
+    """Prepare native readers on the existing persistent worker loop."""
+    if not settings.openfga.enabled:
+        return
+    from bisheng.permission.application.process_runtime import get_f048_process_runtime
+    from bisheng.worker._asyncio_utils import run_async_task
+
+    run_async_task(get_f048_process_runtime)
 
 
 def _register_app_publish_composition() -> None:
@@ -94,6 +106,12 @@ def _register_app_publish_composition() -> None:
         logger.exception("app_publish composition root failed to register on worker; continuing startup")
 
 
+def _register_resource_reference_composition() -> None:
+    from bisheng.resource_reference.composition import register
+
+    register()
+
+
 @celeryd_after_setup.connect
 def on_worker_init(*args, **kwargs):
     global _WORKER_START
@@ -103,7 +121,9 @@ def on_worker_init(*args, **kwargs):
     get_worker_loop()  # start the persistent loop thread before any task arrives
     run_async_task(lambda: initialize_app_context(settings, instance_role="celery"))
     _register_worker_permission_contexts()
+    _prepare_native_reference_permissions()
     _register_app_publish_composition()
+    _register_resource_reference_composition()
     queues = bisheng_celery.amqp.queues
     all_queues = []
     for queue_name, _ in queues.items():

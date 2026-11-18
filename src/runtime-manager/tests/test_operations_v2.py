@@ -1361,6 +1361,23 @@ def test_expired_stop_special_cleanup_does_not_change_docker_failure_path(tmp_pa
         executor.close()
 
 
+def test_disk_full_failure_keeps_stable_reason_after_diagnostic_expiry(tmp_path):
+    platform = Platform("deploy")
+    platform.op["stage"] = "starting"
+    runtime = SimpleNamespace(
+        cleanup=lambda operation: {"complete": True},
+        diagnostics=lambda operation: "docker: no space left on device",
+        cleanup_local_scratch=lambda operation: None,
+    )
+    executor = OperationExecutor(Config(data_root=tmp_path), platform=platform, runtime=runtime)
+    try:
+        executor._failure(platform.op, None, RuntimeError("container create failed"))
+        assert platform.op["failure"]["reason"] == "disk_full"
+        assert platform.op["failure"]["failed_stage"] == "starting"
+    finally:
+        executor.close()
+
+
 @pytest.mark.parametrize(
     "cause", ["claim-503", "pending-fact-503", "fresh-operation-503", "resources-503", "controller-503", "snapshot-503"]
 )

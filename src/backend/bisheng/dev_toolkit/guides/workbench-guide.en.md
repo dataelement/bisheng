@@ -12,16 +12,19 @@ Normal use loads the hosted production URL inside the native workbench and check
 
 This guide is served by the enterprise platform and is shared by cloud workbenches and hosted applications. Do not ask for a local Markdown attachment.
 
-First call `cloud_workbench` with `operation: "guide"`; the tool returns this enterprise server’s guideUrl; visit that URL instead of reading a local Markdown attachment. Use the tool for the operations below. The authenticated local Harness transport is `POST /api/desktop-workbenches/cloud` with JSON:
+First call `cloud_workbench` with `operation: "guide"` and read the complete returned guideMarkdown. Record guideUrl and guideSha256 as the actual source and content identity. Desktop fetches the protocol using the current enterprise account, including private-network deployments. Use the returned body directly. Development and publishing use the tool. The following JSON objects are tool parameters. The page-facing `POST /api/desktop-workbenches/cloud` route provides only guide, list, limits and progress queries.
 
 - `{"operation":"list"}` lists usable online apps; follow next_cursor.
 - `{"operation":"list","managed":true}` lists editable apps.
-- `{"operation":"create"}` allocates an empty managed directory and projectId. Define requirements first, then create source and bisheng-app.yaml there.
+- `{"operation":"create"}` allocates an empty managed source directory within the current authorized workspace and returns its projectId and path. Define requirements first, then create source and bisheng-app.yaml there.
 - `{"operation":"checkout","appId":"real app ID","versionId":"real version ID"}` authorizes source editing and safely extracts a verified source archive into a new directory, returning projectId, path and baseVersionId. Never overwrite another directory or run untrusted install scripts.
+- `{"operation":"resume","projectId":"existing project ID"}` prepares an existing local project in the current authorized workspace, returning projectId/path and preserving its app and version baseline. Use the returned projectId; the original project is retained.
 - `{"operation":"publish","projectId":"real project ID","releaseNotes":"description"}` packages the managed source and submits as the signed-in person through scan, precheck, approval and release. Existing projects retain the checked-out baseline. Merge a stale baseline instead of overwriting. Do not infer destructive database-change confirmation.
 - `{"operation":"progress","appId":"real ID","deploymentId":"real receipt ID"}` observes the actual pipeline state. Upload acceptance does not mean production is online.
 
 Hosted pages cannot access this host channel. Never obtain platform tokens, publishing keys, cookies or production database files. Preserve source and genuine failure receipts. Reconnect after session expiry or enterprise switching; do not publish a project into a different enterprise identity.
+
+When a release reaches failed, stop polling and report its stage, error code, platform hints and management link. Fix and self-test only the current application project when the platform diagnostic identifies an application-source problem, then request publication confirmation again. Platform, node and transport failures require an administrator. Do not investigate a failed release by scanning the computer, platform source, host process environments, Docker, service configuration or credentials.
 
 ## Enterprise SDK and runtime contract
 
@@ -35,9 +38,13 @@ Business APIs obtain trusted visitor identity from the platform and enforce thei
 
 Cloud scheduling, background workers and webhooks must continue without an open page; page timers do not satisfy a continuous-processing requirement. After release, guide the owner to team visibility management without changing permissions automatically.
 
+Desktop requires native confirmation before source download or snapshot submission. Explain the target app, version, release summary and migration impact, then wait for the user. Schema changes require a separate native acknowledgement checkbox. A tool argument cannot replace this confirmation. Renderer requests are limited to discovery, guides and progress; use cloud_workbench for development operations.
+
+Only a validated successful mutation receipt may clear a pending operation or unsaved draft. A snapshot fetched after HTTP 409 is still a read result, never a save receipt: preserve the draft and its baseline until explicit rebase and a successful mutation. Test the actual asynchronous UI handler for this path. After successful recovery, update connection feedback and clear the transport error from that outage while preserving independent save-conflict or mutation errors. On authorization loss, disable save and mutation-retry controls and reject stopped-state writes in the handler as well as closing subscriptions. Reconnect must survive several consecutive network or snapshot failures using bounded backoff; one failed recovery fetch must not stop future attempts. Preserve the cursor and draft, stop on authentication/authorization denial, and resume after explicit reload following restored permission.
+
 ## Acceptance
 
-Verify ordinary-user allow/deny pairs, two distinct users synchronizing records, conflicts, retries, reconnect replay, revocation, code updates and process replacement with persistent data. Verify required jobs after Desktop closes. List unverified items honestly; builds do not prove deployment or installation.
+Verify ordinary-user allow/deny pairs, two distinct users synchronizing records, conflicts, retries, reconnect replay, revocation, code updates and process replacement with persistent data. Execute the shipped browser script through its real startup path: tests that instantiate a factory and call boot themselves do not prove that the production page starts. Verify required jobs after Desktop closes. List unverified items honestly; builds do not prove deployment or installation.
 
 
 Account and server binding: reuse the current desktop account, tenant and configured server. Do not introduce separate cloud connection or publishing-key settings. Discover applications automatically after sign-in; refresh discovery and clear stale publishing selections after an account or enterprise change. Sign-in uses the desktop account flow.
@@ -48,7 +55,7 @@ Account and server binding: reuse the current desktop account, tenant and config
 
 1. Reuse confirmed requirements, explain the local/cloud/hybrid deployment rationale in business language, and confirm the smallest scope.
 2. After implementation and verification, show the change summary, target, schema effects and proposed team visibility. Proceed when release authorization already exists; otherwise confirm in the conversation. Permission to develop does not imply permission to release or broaden access.
-3. Use the `cloud_workbench` tool with create/checkout, publish and progress, genuine project IDs, version baselines and receipts. Read the returned developmentWorkspace status after create/checkout. If ready is false, stop and ask to open its exact directory as the development conversation workspace, carrying the confirmed requirements and projectId. Changing working_directory alone does not change the writable workspace. Do not inspect Desktop internals or broaden sandbox permissions to work around this boundary.
+3. Use the `cloud_workbench` tool with create/checkout, publish and progress, genuine project IDs, version baselines and receipts. Create/checkout prepares a separate source subdirectory within the current conversation’s effectively authorized workspace, with project identity stored separately by Desktop. Retain the confirmed requirements and returned projectId, and continue development, verification and publishing in this conversation without switching workspaces or opening another conversation. For an older project outside the current authorized workspace, call `resume` with its projectId to prepare the existing source here and retain the returned projectId. The original project is retained, and the app and version baseline remain associated. Read the returned developmentWorkspace status. If ready is false, retain the project, report the specific directory authorization problem and check the effective session permissions. Cloud hosting itself does not require switching conversations, and changing working_directory does not grant file permissions.
 4. Submit through existing scan, precheck and approval steps, and check progress. Distinguish submitted, awaiting approval and online. Never approve on behalf of an administrator. Preserve source and receipts on failure, and merge stale baselines.
 5. Verify the production entry, explain native workbench switching, and guide the owner to team visibility management. Never change member permissions without authorization.
 

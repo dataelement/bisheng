@@ -89,6 +89,7 @@ async def test_root_llm_default_shared_writes_viewer_tuple():
     server = LLMServer(name="s1", type="openai", config={})
 
     enable_mock = AsyncMock(return_value=[5, 7])
+    operator = _mk_user()
     with (
         patch("bisheng.llm.domain.models.llm_server.get_async_db_session", _session_context(session)),
         patch("bisheng.llm.domain.models.llm_server.get_current_tenant_id", return_value=1),
@@ -105,10 +106,10 @@ async def test_root_llm_default_shared_writes_viewer_tuple():
             server,
             models=[],
             share_to_children=True,
-            operator=_mk_user(),
+            operator=operator,
         )
 
-    enable_mock.assert_awaited_once_with("llm_server", "100")
+    enable_mock.assert_awaited_once_with("llm_server", "100", operator=operator)
     assert server.tenant_id == 1
 
 
@@ -212,6 +213,7 @@ async def test_toggle_root_llm_share_enables_fga_tuple():
 
     enable_mock = AsyncMock(return_value=[5])
     disable_mock = AsyncMock()
+    operator = _mk_user()
     with (
         patch.object(LLMDao, "aget_server_by_id", new=AsyncMock(return_value=root_server)),
         patch(
@@ -223,9 +225,9 @@ async def test_toggle_root_llm_share_enables_fga_tuple():
         ),
         patch("bisheng.llm.domain.models.llm_server._check_is_global_super", new=AsyncMock(return_value=True)),
     ):
-        await LLMDao.aupdate_server_share(200, True, _mk_user())
+        await LLMDao.aupdate_server_share(200, True, operator)
 
-    enable_mock.assert_awaited_once_with("llm_server", "200")
+    enable_mock.assert_awaited_once_with("llm_server", "200", operator=operator)
     disable_mock.assert_not_awaited()
 
 
@@ -236,6 +238,7 @@ async def test_toggle_root_llm_share_off_removes_fga_tuple():
 
     enable_mock = AsyncMock()
     disable_mock = AsyncMock(return_value=[5])
+    operator = _mk_user()
     with (
         patch.object(LLMDao, "aget_server_by_id", new=AsyncMock(return_value=root_server)),
         patch(
@@ -247,9 +250,9 @@ async def test_toggle_root_llm_share_off_removes_fga_tuple():
         ),
         patch("bisheng.llm.domain.models.llm_server._check_is_global_super", new=AsyncMock(return_value=True)),
     ):
-        await LLMDao.aupdate_server_share(200, False, _mk_user())
+        await LLMDao.aupdate_server_share(200, False, operator)
 
-    disable_mock.assert_awaited_once_with("llm_server", "200")
+    disable_mock.assert_awaited_once_with("llm_server", "200", operator=operator)
     enable_mock.assert_not_awaited()
 
 

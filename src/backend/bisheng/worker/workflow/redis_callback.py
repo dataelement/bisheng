@@ -1,16 +1,17 @@
 import asyncio
-import copy
 import json
 import os
 import time
 import uuid
 from collections.abc import AsyncIterator, Iterator
+from contextlib import nullcontext
 
 from langchain_core.documents import Document
 from loguru import logger
 
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import ChatResponse
+from bisheng.chat_session.application.conversation_persistence import ConversationPersistence
 from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema, CitationType
 from bisheng.citation.domain.services.citation_prompt_helper import (
     attach_temp_object_names,
@@ -35,6 +36,7 @@ from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.common.utils.title_generator import generate_conversation_title_sync
 from bisheng.core.cache.redis_manager import get_redis_client_sync
+from bisheng.core.context.tenant import tenant_execution_scope
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.chat_attachment import promote_chat_attachments_sync
 from bisheng.database.models.flow import FlowDao, FlowType
@@ -82,7 +84,6 @@ class RedisCallback(BaseCallback):
         self.workflow_status_key = f"workflow:{unique_id}:status"
         self.workflow_event_key = f"workflow:{unique_id}:event"
         self.workflow_input_key = f"workflow:{unique_id}:input"
-        self.workflow_pending_key = f"workflow:{unique_id}:pending_input"
         self.workflow_stop_key = f"workflow:{unique_id}:stop"
         self.workflow_expire_time = settings.get_workflow_conf().timeout * 60 + 60
 
@@ -95,24 +96,22 @@ class RedisCallback(BaseCallback):
         if not override:
             return data
 
-        if not isinstance(override, dict):
-            raise WorkFlowInvalidUserInputError(msg="override must be an object")
-        # Callers must authorize edit before using this mutation capability.
-        # Never alter the persisted graph object (including ORM JSON values).
-        data = copy.deepcopy(data)
-        nodes = {node.get("data", {}).get("id"): node.get("data", {}) for node in data.get("nodes", [])}
-        for node_id, values in override.items():
-            if node_id not in nodes or not isinstance(values, dict):
-                raise WorkFlowInvalidUserInputError(msg="override contains an unknown node or invalid parameters")
-            params = {
-                param.get("key"): param
-                for group in nodes[node_id].get("group_params", [])
-                for param in group.get("params", [])
-            }
-            if set(values) - set(params):
-                raise WorkFlowInvalidUserInputError(msg="override contains an unknown parameter")
-            for key, value in values.items():
-                params[key]["value"] = value
+        def replace_param(one_params: list[dict], one_node_id: str):
+            for param in one_params:
+                param_key = param.get("key")
+                if param_key not in override[one_node_id]:
+                    continue
+                param["value"] = override[one_node_id][param_key]
+
+        nodes = data.get("nodes", [])
+        for node in nodes:
+            node_data = node.get("data", {})
+            node_id = node_data.get("id")
+            if node_id not in override:
+                continue
+            group_params = node_data.get("group_params", [])
+            for group_param in group_params:
+                replace_param(group_param.get("params", []), node_id)
         return data
 
     async def async_set_workflow_data(self, data: dict):
@@ -339,35 +338,22 @@ class RedisCallback(BaseCallback):
                     continue
                 yield chat_response
 
-    def _remember_pending_input(self, response: ChatResponse):
-        self.redis_client.set(
-            self.workflow_pending_key,
-            {"message": response.message, "message_id": response.message_id},
-            expiration=self.workflow_expire_time,
-        )
-
-    def _verify_pending_input(self, pending: dict | None, data: dict, message_id: int | None):
-        if not pending or message_id != pending.get("message_id"):
-            raise WorkFlowInvalidUserInputError(msg="input does not match the current waiting message")
-        message = pending["message"]
-        if "input_schema" in message:
-            self._verify_input_schema(message, data)
-        else:
-            values = self._verify_node_input(message, data)
-            if not message.get("key") or set(values) != {message["key"]}:
-                raise WorkFlowInvalidUserInputError(msg="input contains undefined fields")
-
     def set_user_input(
         self, data: dict, message_id: int | None = None, message_content: str | None = None, verify_input: bool = False
     ):
-        if verify_input:
-            self._verify_pending_input(self.redis_client.get(self.workflow_pending_key), data, message_id)
-        if self.chat_id and message_id:
-            message_db = self._own_message(ChatMessageDao.get_message_by_id(message_id), verify_input)
-            self.update_old_message(data, message_db, message_content, verify_input)
-        # Notify Asynchronous Task User Input
-        self.redis_client.set(self.workflow_input_key, data, expiration=self.workflow_expire_time)
-        return
+        port = (
+            ConversationPersistence(self.user_id)
+            if getattr(self, "source", None) == "platform" and self.chat_id
+            else None
+        )
+        scope = port.scope(self.chat_id, self.workflow_id, self.user_id) if port else nullcontext()
+        with scope:
+            if self.chat_id and message_id:
+                message_db = self._own_message(ChatMessageDao.get_message_by_id(message_id), verify_input)
+                self.update_old_message(data, message_db, message_content, verify_input)
+            # Notify Asynchronous Task User Input
+            self.redis_client.set(self.workflow_input_key, data, expiration=self.workflow_expire_time)
+            return
 
     async def async_set_user_input(
         self,
@@ -377,17 +363,29 @@ class RedisCallback(BaseCallback):
         verify_input: bool = False,
         files: list | None = None,
     ):
-        if verify_input:
-            self._verify_pending_input(await self.redis_client.aget(self.workflow_pending_key), data, message_id)
-        if self.chat_id and message_id:
-            message_db = self._own_message(await ChatMessageDao.aget_message_by_id(message_id), verify_input)
-            await self.async_update_old_message(data, message_db, message_content, verify_input, files)
-        # Notify Asynchronous Task User Input
-        await self.redis_client.aset(self.workflow_input_key, data, expiration=self.workflow_expire_time)
-        return
+        port = (
+            ConversationPersistence(self.user_id)
+            if getattr(self, "source", None) == "platform" and self.chat_id
+            else None
+        )
+        scope = port.scope(self.chat_id, self.workflow_id, self.user_id) if port else nullcontext()
+        with scope:
+            if self.chat_id and message_id:
+                message_db = self._own_message(await ChatMessageDao.aget_message_by_id(message_id), verify_input)
+                await self.async_update_old_message(data, message_db, message_content, verify_input, files)
+            # Notify Asynchronous Task User Input
+            await self.redis_client.aset(self.workflow_input_key, data, expiration=self.workflow_expire_time)
+            return
 
     def _own_message(self, message_db: ChatMessage | None, verify_input: bool) -> ChatMessage | None:
         """When verifying caller input, a message of another session counts as not found."""
+        if getattr(self, "source", None) == "platform" and (
+            message_db is None
+            or message_db.chat_id != self.chat_id
+            or message_db.flow_id != self.workflow_id
+            or message_db.user_id != self.user_id
+        ):
+            raise WorkFlowInvalidUserInputError(msg="message_id does not belong to this conversation")
         if verify_input and message_db is not None and message_db.chat_id != self.chat_id:
             return None
         return message_db
@@ -396,7 +394,7 @@ class RedisCallback(BaseCallback):
     def _verify_node_input(input_schema_message: dict, user_input: dict) -> dict:
         """Return the input of the waiting node; the caller input must be an object per node."""
         node_id = input_schema_message["node_id"]
-        if not isinstance(user_input, dict) or set(user_input) != {node_id}:
+        if not isinstance(user_input, dict) or node_id not in user_input:
             raise WorkFlowInvalidUserInputError(msg=f"input does not contain the waiting node {node_id}")
         node_input = user_input[node_id]
         if not isinstance(node_input, dict):
@@ -418,9 +416,8 @@ class RedisCallback(BaseCallback):
             if user_input_keys:
                 raise WorkFlowInvalidUserInputError(msg=f"extra key {list(user_input_keys.keys())} found in user input")
         else:
-            allowed_keys = {input_schema["key"], "dialog_files_content"}
-            if input_schema["key"] not in user_input or set(user_input) - allowed_keys:
-                raise WorkFlowInvalidUserInputError(msg="dialog input does not match the defined fields")
+            if input_schema["key"] not in user_input:
+                raise WorkFlowInvalidUserInputError(msg=f"key {input_schema['key']} not found in user input")
 
     _INPUT_CATEGORIES = frozenset(
         {
@@ -455,8 +452,8 @@ class RedisCallback(BaseCallback):
                 raise WorkFlowInvalidUserInputError(msg="message_id does not refer to a message that waits for input")
             if message_db.category != WorkflowEventType.UserInput.value:
                 node_input = cls._verify_node_input(old_message, user_input)
-                if set(node_input) != {old_message["key"]}:
-                    raise WorkFlowInvalidUserInputError(msg="output input does not match the defined field")
+                if old_message["key"] not in node_input:
+                    raise WorkFlowInvalidUserInputError(msg=f"key {old_message['key']} not found in user input")
         if message_db.category == WorkflowEventType.OutputWithInput.value:
             old_message["hisValue"] = user_input[old_message["node_id"]][old_message["key"]]
         elif message_db.category == WorkflowEventType.OutputWithChoose.value:
@@ -607,8 +604,25 @@ class RedisCallback(BaseCallback):
             citation_registry_items=citation_registry_items,
         )
 
-        message = ChatMessageDao.insert_one(
-            ChatMessage(
+        port = ConversationPersistence(self.user_id) if getattr(self, "source", None) == "platform" else None
+        scope = port.scope(self.chat_id, self.workflow_id, self.user_id) if port else nullcontext()
+        with scope:
+            template = None
+            # Platform prompts are persisted too: create their parent in the
+            # same transaction, before Gateway can intercept the first input.
+            needs_session = not self.create_session and (
+                port is not None or chat_response.category != WorkflowEventType.UserInput.value
+            )
+            if needs_session and MessageSessionDao.get_one(self.chat_id) is None:
+                db_workflow = FlowDao.get_flow_by_id(self.workflow_id)
+                template = MessageSession(
+                    chat_id=self.chat_id,
+                    flow_id=self.workflow_id,
+                    flow_name=db_workflow.name,
+                    flow_type=FlowType.WORKFLOW.value,
+                    user_id=self.user_id,
+                )
+            row = ChatMessage(
                 user_id=self.user_id,
                 chat_id=self.chat_id,
                 flow_id=self.workflow_id,
@@ -622,41 +636,28 @@ class RedisCallback(BaseCallback):
                 category=chat_response.category,
                 files=json.dumps(chat_response.files, ensure_ascii=False),
             )
-        )
-
-        save_message_citations_sync(
-            message_id=message.id,
-            items=items,
-            chat_id=self.chat_id,
-            flow_id=self.workflow_id,
-        )
-
-        # If the document is traceable, handle the recallchunk
-        if chat_response.source not in [0, 4]:
-            thread_pool.submit(
-                f"workflow_source_document_{self.chat_id}",
-                sync_process_source_document,
-                source_documents,
-                self.chat_id,
-                message.id,
-                chat_response.message.get("msg"),
+            if port:
+                message, created = port.save(row, template)
+            else:
+                message = ChatMessageDao.insert_one(row)
+                created = MessageSessionDao.insert_one(template) if template is not None else None
+            save_message_citations_sync(
+                message_id=message.id,
+                items=items,
+                chat_id=self.chat_id,
+                flow_id=self.workflow_id,
             )
-
-        # Determine if a new session is needed
-        if not self.create_session and chat_response.category != WorkflowEventType.UserInput.value:
-            # Insert a new session without session data
-            if not MessageSessionDao.get_one(self.chat_id):
-                db_workflow = FlowDao.get_flow_by_id(self.workflow_id)
-                self.new_session = MessageSessionDao.insert_one(
-                    MessageSession(
-                        chat_id=self.chat_id,
-                        flow_id=self.workflow_id,
-                        flow_name=db_workflow.name,
-                        flow_type=FlowType.WORKFLOW.value,
-                        user_id=self.user_id,
-                    )
+            if chat_response.source not in [0, 4]:
+                thread_pool.submit(
+                    f"workflow_source_document_{self.chat_id}",
+                    sync_process_source_document,
+                    source_documents,
+                    self.chat_id,
+                    message.id,
+                    chat_response.message.get("msg"),
                 )
-                # RecordTelemetryJournal
+            if created is not None:
+                self.new_session = created
                 telemetry_service.log_event_sync(
                     user_id=self.user_id,
                     event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
@@ -665,12 +666,12 @@ class RedisCallback(BaseCallback):
                         session_id=self.chat_id,
                         app_id=self.workflow_id,
                         source=self.source,
-                        app_name=db_workflow.name,
+                        app_name=created.flow_name,
                         app_type=ApplicationTypeEnum.WORKFLOW,
                     ),
                 )
-
-            self.create_session = True
+            if needs_session:
+                self.create_session = True
 
         # A greeting can create the session before the user submits anything.
         # Only a persisted question contains content suitable for its title.
@@ -783,16 +784,25 @@ class RedisCallback(BaseCallback):
         return json.dumps(message, ensure_ascii=False)
 
     def generate_session_title(self):
-        session = MessageSessionDao.get_one(self.chat_id)
-        if not session:
-            return
-        if session.name and session.name != "New Chat":
-            return
+        target = getattr(self, "tenant_id", None)
+        scope = tenant_execution_scope(target) if target is not None else nullcontext()
+        with scope:
+            self._generate_session_title_in_execution_scope()
 
-        input_message = ChatMessageDao.get_messages_by_chat_id(self.chat_id, ["question"], 1)
-        if not input_message or not input_message[0].message:
-            return
-        question = input_message[0].message
+    def _generate_session_title_in_execution_scope(self):
+        port = ConversationPersistence(self.user_id) if getattr(self, "source", None) == "platform" else None
+        scope = port.scope(self.chat_id, self.workflow_id, self.user_id) if port else nullcontext()
+        with scope:
+            session = MessageSessionDao.get_one(self.chat_id)
+            if not session:
+                return
+            if session.name and session.name != "New Chat":
+                return
+
+            input_message = ChatMessageDao.get_messages_by_chat_id(self.chat_id, ["question"], 1)
+            if not input_message or not input_message[0].message:
+                return
+            question = input_message[0].message
 
         llm_conf = LLMService.get_workbench_llm_sync(tenant_id=self.tenant_id)
         if not llm_conf or not llm_conf.chat_title_llm or not llm_conf.chat_title_llm.id:
@@ -850,7 +860,6 @@ class RedisCallback(BaseCallback):
         msg_id = self.save_chat_message(chat_response)
         if msg_id:
             chat_response.message_id = msg_id
-        self._remember_pending_input(chat_response)
         self.send_chat_response(chat_response)
 
     def on_guide_word(self, data: GuideWordData):
@@ -958,7 +967,6 @@ class RedisCallback(BaseCallback):
         )
         if msg_id:
             chat_response.message_id = msg_id
-        self._remember_pending_input(chat_response)
         self.send_chat_response(chat_response)
 
     def on_output_input(self, data: OutputMsgInputData):
@@ -981,5 +989,4 @@ class RedisCallback(BaseCallback):
         )
         if msg_id:
             chat_response.message_id = msg_id
-        self._remember_pending_input(chat_response)
         self.send_chat_response(chat_response)

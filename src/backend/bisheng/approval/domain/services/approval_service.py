@@ -4,16 +4,16 @@ Backs the old `approval_request`-table flow. Kept only for backward compatibilit
 with existing data; do NOT add new features here. New approval needs go through the
 unified approval center (`approval_gate.py` / `approval_center_service.py`).
 """
+
 from __future__ import annotations
 
 import asyncio
 import os
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from collections.abc import Iterable, Sequence
 from urllib.parse import urlparse
 
 from fastapi import Request
 
-from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.approval.domain.models.approval_request import (
     ApprovalRequest,
     ApprovalRequestDao,
@@ -27,7 +27,7 @@ from bisheng.approval.domain.schemas.approval_schema import (
     ApprovalRequestResp,
     DepartmentKnowledgeSpaceApprovalSettings,
 )
-from bisheng.core.database import get_async_db_session
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.approval import (
     ApprovalRejectReasonRequiredError,
     ApprovalRequestAlreadyProcessedError,
@@ -35,6 +35,8 @@ from bisheng.common.errcode.approval import (
     ApprovalRequestPermissionDeniedError,
     ApprovalSettingsPermissionDeniedError,
 )
+from bisheng.core.context.tenant import get_current_tenant_id
+from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpaceDao
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import FileSource, FileType
@@ -44,8 +46,7 @@ from bisheng.message.domain.repositories.implementations.inbox_message_repositor
     InboxMessageRepositoryImpl,
 )
 
-
-_MESSAGE_ACTION_CODE = 'request_department_knowledge_space_upload'
+_MESSAGE_ACTION_CODE = "request_department_knowledge_space_upload"
 
 
 class ApprovalService:
@@ -55,7 +56,7 @@ class ApprovalService:
     async def _sync_message_after_decision(
         cls,
         *,
-        message_id: Optional[int],
+        message_id: int | None,
         operator_user_id: int,
         action: ApprovalDecisionActionEnum,
     ) -> None:
@@ -69,8 +70,8 @@ class ApprovalService:
             updated_content = []
             for item in message.content or []:
                 new_item = dict(item)
-                if item.get('type') == 'agree_reject_button':
-                    new_item['content'] = 'agree' if action == ApprovalDecisionActionEnum.APPROVE else 'reject'
+                if item.get("type") == "agree_reject_button":
+                    new_item["content"] = "agree" if action == ApprovalDecisionActionEnum.APPROVE else "reject"
                 updated_content.append(new_item)
             await repo.update_message_after_approval(
                 message_id=message_id,
@@ -91,7 +92,7 @@ class ApprovalService:
     ) -> DepartmentKnowledgeSpaceApprovalSettings:
         binding = await DepartmentKnowledgeSpaceDao.aget_by_space_id(space_id)
         if not binding:
-            raise ApprovalRequestNotFoundError(msg='Department knowledge space does not exist')
+            raise ApprovalRequestNotFoundError(msg="Department knowledge space does not exist")
         return DepartmentKnowledgeSpaceApprovalSettings(
             approval_enabled=binding.approval_enabled,
             sensitive_check_enabled=binding.sensitive_check_enabled,
@@ -109,7 +110,7 @@ class ApprovalService:
             raise ApprovalSettingsPermissionDeniedError()
         binding = await DepartmentKnowledgeSpaceDao.aget_by_space_id(space_id)
         if not binding:
-            raise ApprovalRequestNotFoundError(msg='Department knowledge space does not exist')
+            raise ApprovalRequestNotFoundError(msg="Department knowledge space does not exist")
         binding.approval_enabled = settings.approval_enabled
         binding.sensitive_check_enabled = settings.sensitive_check_enabled
         await DepartmentKnowledgeSpaceDao.aupdate(binding)
@@ -117,7 +118,8 @@ class ApprovalService:
 
     @classmethod
     async def should_require_department_space_approval(
-        cls, space_id: int,
+        cls,
+        space_id: int,
     ) -> bool:
         binding = await DepartmentKnowledgeSpaceDao.aget_by_space_id(space_id)
         if not binding:
@@ -128,13 +130,13 @@ class ApprovalService:
     def _original_file_name_from_path(cls, file_path: str) -> str:
         basename = os.path.basename(urlparse(file_path).path)
         if not basename:
-            return ''
+            return ""
 
-        uuid_file_name = basename.split('.')[0]
+        uuid_file_name = basename.split(".")[0]
         try:
             from bisheng.core.cache.redis_manager import get_redis_client_sync
 
-            original_file_name = get_redis_client_sync().get(f'file_name:{uuid_file_name}')
+            original_file_name = get_redis_client_sync().get(f"file_name:{uuid_file_name}")
             if isinstance(original_file_name, bytes):
                 original_file_name = original_file_name.decode()
             if isinstance(original_file_name, str) and original_file_name:
@@ -142,13 +144,13 @@ class ApprovalService:
         except Exception:
             pass
 
-        if '_' in basename:
-            return basename.split('_', 1)[1]
+        if "_" in basename:
+            return basename.split("_", 1)[1]
         return basename
 
     @classmethod
-    def _file_size_from_path(cls, file_path: str) -> Optional[int]:
-        local_candidate = file_path.split('?', 1)[0]
+    def _file_size_from_path(cls, file_path: str) -> int | None:
+        local_candidate = file_path.split("?", 1)[0]
         if local_candidate and os.path.isfile(local_candidate):
             return os.path.getsize(local_candidate)
 
@@ -157,12 +159,12 @@ class ApprovalService:
             from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 
             parsed = urlparse(file_path)
-            path = parsed.path.lstrip('/')
+            path = parsed.path.lstrip("/")
             if not path:
                 return None
-            parts = path.split('/', 1)
+            parts = path.split("/", 1)
             bucket = parts[0]
-            object_name = parts[1] if len(parts) > 1 else ''
+            object_name = parts[1] if len(parts) > 1 else ""
             if not bucket or not object_name:
                 return None
 
@@ -178,17 +180,17 @@ class ApprovalService:
         *,
         space_id: int,
         file_paths: Sequence[str],
-    ) -> List[Dict]:
-        out: List[Dict] = []
+    ) -> list[dict]:
+        out: list[dict] = []
         for file_path in file_paths:
             item = {
-                'file_path': file_path,
-                'file_name': cls._original_file_name_from_path(file_path),
-                'space_id': space_id,
+                "file_path": file_path,
+                "file_name": cls._original_file_name_from_path(file_path),
+                "space_id": space_id,
             }
             file_size = cls._file_size_from_path(file_path)
             if file_size is not None:
-                item['file_size'] = file_size
+                item["file_size"] = file_size
             out.append(item)
         return out
 
@@ -199,8 +201,8 @@ class ApprovalService:
         request: Request,
         login_user: UserPayload,
         space_id: int,
-        parent_folder_id: Optional[int],
-    ) -> List[int]:
+        parent_folder_id: int | None,
+    ) -> list[int]:
         from bisheng.common.models.space_channel_member import SpaceChannelMemberDao, UserRoleEnum
 
         # Approval routing is a business fact, not a second permission
@@ -212,13 +214,7 @@ class ApprovalService:
             space_id,
             user_roles=[UserRoleEnum.CREATOR, UserRoleEnum.ADMIN],
         )
-        return sorted(
-            {
-                int(member.user_id)
-                for member in reviewer_members
-                if member.is_active
-            }
-        )
+        return sorted({int(member.user_id) for member in reviewer_members if member.is_active})
 
     @classmethod
     async def get_department_space_reviewer_user_ids(
@@ -227,9 +223,9 @@ class ApprovalService:
         request: Request,
         login_user: UserPayload,
         space_id: int,
-        parent_folder_id: Optional[int],
-        exclude_user_ids: Optional[Iterable[int]] = None,
-    ) -> List[int]:
+        parent_folder_id: int | None,
+        exclude_user_ids: Iterable[int] | None = None,
+    ) -> list[int]:
         reviewer_ids = await cls._resolve_reviewer_user_ids(
             request=request,
             login_user=login_user,
@@ -246,7 +242,7 @@ class ApprovalService:
         request: Request,
         login_user: UserPayload,
         space_id: int,
-        parent_folder_id: Optional[int],
+        parent_folder_id: int | None,
     ) -> bool:
         reviewer_user_ids = await cls.get_department_space_reviewer_user_ids(
             request=request,
@@ -276,9 +272,9 @@ class ApprovalService:
         cls,
         *,
         row: ApprovalRequest,
-    ) -> List[int]:
+    ) -> list[int]:
         return await cls.get_department_space_reviewer_user_ids(
-            request=Request(scope={'type': 'http'}),
+            request=Request(scope={"type": "http"}),
             login_user=cls._build_system_login_user(
                 user_id=row.applicant_user_id,
                 user_name=row.applicant_user_name,
@@ -306,8 +302,8 @@ class ApprovalService:
         cls,
         *,
         settings: DepartmentKnowledgeSpaceApprovalSettings,
-        file_payloads: List[Dict],
-    ) -> Tuple[str, Optional[str]]:
+        file_payloads: list[dict],
+    ) -> tuple[str, str | None]:
         if not settings.sensitive_check_enabled:
             return ApprovalSafetyStatusEnum.SKIPPED.value, None
         # Hook point for a future provider-backed content safety implementation.
@@ -321,23 +317,23 @@ class ApprovalService:
         *,
         applicant_user_id: int,
         applicant_user_name: str,
-        reviewer_user_ids: List[int],
+        reviewer_user_ids: list[int],
         approval_request: ApprovalRequest,
         space_name: str,
-    ) -> Optional[int]:
+    ) -> int | None:
         if not reviewer_user_ids:
             return None
         from bisheng.core.database import get_async_db_session
         from bisheng.message.api.dependencies import get_message_service as _get_message_service
 
-        business_name = f'{space_name}（{approval_request.file_count}个文件）'
+        business_name = f"{space_name}（{approval_request.file_count}个文件）"
         async with get_async_db_session() as session:
             message_service = await _get_message_service(session)
             msg = await message_service.send_generic_approval(
                 applicant_user_id=applicant_user_id,
                 applicant_user_name=applicant_user_name,
                 action_code=_MESSAGE_ACTION_CODE,
-                business_type='approval_request_id',
+                business_type="approval_request_id",
                 business_id=str(approval_request.id),
                 business_name=business_name,
                 button_action_code=_MESSAGE_ACTION_CODE,
@@ -354,7 +350,7 @@ class ApprovalService:
         action_code: str,
         business_name: str,
         approval_request_id: int,
-        reason: Optional[str] = None,
+        reason: str | None = None,
     ) -> None:
         from bisheng.core.database import get_async_db_session
         from bisheng.message.api.dependencies import get_message_service as _get_message_service
@@ -363,23 +359,25 @@ class ApprovalService:
             message_service = await _get_message_service(session)
             content = [
                 {
-                    'type': 'system_text',
-                    'content': action_code,
+                    "type": "system_text",
+                    "content": action_code,
                 },
                 {
-                    'type': 'business_url',
-                    'content': f'--{business_name}',
-                    'metadata': {
-                        'business_type': 'approval_request_id',
-                        'data': {'approval_request_id': str(approval_request_id)},
+                    "type": "business_url",
+                    "content": f"--{business_name}",
+                    "metadata": {
+                        "business_type": "approval_request_id",
+                        "data": {"approval_request_id": str(approval_request_id)},
                     },
                 },
             ]
             if reason:
-                content.append({
-                    'type': 'tooltip_text',
-                    'content': reason,
-                })
+                content.append(
+                    {
+                        "type": "tooltip_text",
+                        "content": reason,
+                    }
+                )
             await message_service.send_generic_notify(
                 sender=sender,
                 receiver_user_ids=[receiver_user_id],
@@ -393,16 +391,16 @@ class ApprovalService:
         request: Request,
         login_user: UserPayload,
         space_id: int,
-        parent_folder_id: Optional[int],
+        parent_folder_id: int | None,
         file_paths: Sequence[str],
     ) -> ApprovalRequest:
         binding = await DepartmentKnowledgeSpaceDao.aget_by_space_id(space_id)
         if not binding:
-            raise ApprovalRequestPermissionDeniedError(msg='This space is not a department knowledge space')
+            raise ApprovalRequestPermissionDeniedError(msg="This space is not a department knowledge space")
 
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
-            raise ApprovalRequestNotFoundError(msg='Target knowledge space does not exist')
+            raise ApprovalRequestNotFoundError(msg="Target knowledge space does not exist")
 
         settings = await cls.get_department_knowledge_space_settings(space_id=space_id)
         file_payloads = await cls._build_file_payload(space_id=space_id, file_paths=file_paths)
@@ -426,7 +424,7 @@ class ApprovalService:
             )
             if not reviewer_user_ids:
                 raise ApprovalRequestPermissionDeniedError(
-                    msg='No eligible reviewers available for this approval request'
+                    msg="No eligible reviewers available for this approval request"
                 )
 
         request_row = ApprovalRequest(
@@ -442,9 +440,9 @@ class ApprovalService:
             reviewer_user_ids=reviewer_user_ids,
             file_count=len(file_payloads),
             payload_json={
-                'files': file_payloads,
-                'space_id': space_id,
-                'parent_folder_id': parent_folder_id,
+                "files": file_payloads,
+                "space_id": space_id,
+                "parent_folder_id": parent_folder_id,
             },
             safety_status=safety_status,
             safety_reason=safety_reason,
@@ -455,7 +453,7 @@ class ApprovalService:
             await cls._send_result_notify(
                 sender=login_user.user_id,
                 receiver_user_id=login_user.user_id,
-                action_code='sensitive_rejected_department_knowledge_space_upload',
+                action_code="sensitive_rejected_department_knowledge_space_upload",
                 business_name=space.name,
                 approval_request_id=request_row.id,
                 reason=safety_reason,
@@ -479,30 +477,32 @@ class ApprovalService:
         cls,
         *,
         approval_request: ApprovalRequest,
-    ) -> List[KnowledgeSpaceFileResponse]:
-        files = list((approval_request.payload_json or {}).get('files') or [])
-        out: List[KnowledgeSpaceFileResponse] = []
+    ) -> list[KnowledgeSpaceFileResponse]:
+        files = list((approval_request.payload_json or {}).get("files") or [])
+        out: list[KnowledgeSpaceFileResponse] = []
         for idx, item in enumerate(files):
-            file_size = item.get('file_size', item.get('size'))
+            file_size = item.get("file_size", item.get("size"))
             try:
                 file_size = int(file_size) if file_size is not None else None
             except (TypeError, ValueError):
                 file_size = None
-            out.append(KnowledgeSpaceFileResponse(
-                id=-(approval_request.id * 1000 + idx + 1),
-                knowledge_id=approval_request.space_id,
-                file_name=item.get('file_name') or '',
-                file_type=FileType.FILE.value,
-                file_source=FileSource.SPACE_UPLOAD.value,
-                file_size=file_size,
-                level=0,
-                file_level_path='',
-                status=5,
-                approval_request_id=approval_request.id,
-                approval_status=approval_request.status,
-                is_pending_approval=approval_request.status == ApprovalRequestStatusEnum.PENDING_REVIEW.value,
-                approval_reason=approval_request.safety_reason or approval_request.decision_reason,
-            ))
+            out.append(
+                KnowledgeSpaceFileResponse(
+                    id=-(approval_request.id * 1000 + idx + 1),
+                    knowledge_id=approval_request.space_id,
+                    file_name=item.get("file_name") or "",
+                    file_type=FileType.FILE.value,
+                    file_source=FileSource.SPACE_UPLOAD.value,
+                    file_size=file_size,
+                    level=0,
+                    file_level_path="",
+                    status=5,
+                    approval_request_id=approval_request.id,
+                    approval_status=approval_request.status,
+                    is_pending_approval=approval_request.status == ApprovalRequestStatusEnum.PENDING_REVIEW.value,
+                    approval_reason=approval_request.safety_reason or approval_request.decision_reason,
+                )
+            )
         return out
 
     @classmethod
@@ -531,7 +531,10 @@ class ApprovalService:
 
     @classmethod
     async def get_request_for_user(
-        cls, *, request_id: int, login_user: UserPayload,
+        cls,
+        *,
+        request_id: int,
+        login_user: UserPayload,
     ) -> ApprovalRequest:
         row = await ApprovalRequestDao.aget_by_id(request_id)
         if not row:
@@ -545,11 +548,11 @@ class ApprovalService:
         cls,
         *,
         login_user: UserPayload,
-        space_id: Optional[int] = None,
-        statuses: Optional[List[str]] = None,
+        space_id: int | None = None,
+        statuses: list[str] | None = None,
         page: int = 1,
         page_size: int = 20,
-    ) -> tuple[List[ApprovalRequestResp], int]:
+    ) -> tuple[list[ApprovalRequestResp], int]:
         if login_user.is_admin():
             rows, total = await ApprovalRequestDao.alist(
                 space_id=space_id,
@@ -565,45 +568,20 @@ class ApprovalService:
             space_id=space_id,
             statuses=statuses,
         )
-        visible_mask = await asyncio.gather(*[
-            cls._can_user_access_request(row=row, login_user=login_user)
-            for row in candidate_rows
-        ])
+        visible_mask = await asyncio.gather(
+            *[cls._can_user_access_request(row=row, login_user=login_user) for row in candidate_rows]
+        )
         visible_rows = [row for row, visible in zip(candidate_rows, visible_mask) if visible]
         total = len(visible_rows)
         offset = (page - 1) * page_size
-        rows = visible_rows[offset:offset + page_size]
+        rows = visible_rows[offset : offset + page_size]
         return [cls._to_resp(row) for row in rows], total
 
     @classmethod
-    async def _finalize_request(
-        cls,
-        *,
-        request_row: ApprovalRequest,
-    ) -> None:
-        from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
-
-        payload = dict(request_row.payload_json or {})
-        service = KnowledgeSpaceService(
-            request=Request(scope={'type': 'http'}),
-            login_user=cls._build_system_login_user(
-                user_id=request_row.applicant_user_id,
-                user_name=request_row.applicant_user_name,
-                tenant_id=request_row.tenant_id,
-            ),
-        )
-        files = await service.add_file(
-            knowledge_id=request_row.space_id,
-            file_path=[one.get('file_path') for one in payload.get('files', [])],
-            parent_id=request_row.parent_folder_id,
-            skip_approval=True,
-        )
-        payload['finalized_file_ids'] = [file.id for file in files]
-        await ApprovalRequestDao.aset_final_status(
-            request_id=request_row.id,
-            status=ApprovalRequestStatusEnum.FINALIZED.value,
-            payload_json=payload,
-        )
+    async def _finalize_request(cls, *, request_row: ApprovalRequest, operator_user_id: int, upload_finalizer) -> None:
+        if not callable(upload_finalizer):
+            raise RuntimeError("Legacy upload finalizer is not configured")
+        await upload_finalizer(request_id=request_row.id, operator_user_id=operator_user_id)
 
     @classmethod
     async def decide_request(
@@ -612,19 +590,22 @@ class ApprovalService:
         request_id: int,
         operator_user_id: int,
         action: ApprovalDecisionActionEnum,
-        reason: Optional[str],
+        reason: str | None,
+        upload_finalizer=None,
     ) -> ApprovalRequest:
         row = await ApprovalRequestDao.aget_by_id(request_id)
         if not row:
             raise ApprovalRequestNotFoundError()
+        if row.tenant_id != get_current_tenant_id():
+            raise ApprovalRequestPermissionDeniedError()
         if row.status != ApprovalRequestStatusEnum.PENDING_REVIEW.value:
             raise ApprovalRequestAlreadyProcessedError()
         if operator_user_id == row.applicant_user_id:
-            raise ApprovalRequestPermissionDeniedError(msg='Applicant cannot approve their own request')
+            raise ApprovalRequestPermissionDeniedError(msg="Applicant cannot approve their own request")
         current_reviewer_ids = set(await cls._get_live_reviewer_user_ids_for_row(row=row))
         if operator_user_id not in current_reviewer_ids:
             raise ApprovalRequestPermissionDeniedError()
-        if action == ApprovalDecisionActionEnum.REJECT and not (reason or '').strip():
+        if action == ApprovalDecisionActionEnum.REJECT and not (reason or "").strip():
             raise ApprovalRejectReasonRequiredError()
 
         new_status = (
@@ -651,22 +632,44 @@ class ApprovalService:
         )
 
         space = await KnowledgeDao.aquery_by_id(row.space_id)
-        business_name = space.name if space else f'space:{row.space_id}'
+        business_name = space.name if space else f"space:{row.space_id}"
         if action == ApprovalDecisionActionEnum.APPROVE:
             try:
-                await cls._finalize_request(request_row=row)
-            except Exception as e:
-                await ApprovalRequestDao.aset_final_status(
-                    request_id=row.id,
-                    status=ApprovalRequestStatusEnum.FINALIZE_FAILED.value,
-                    safety_reason=str(e),
+                await cls._finalize_request(
+                    request_row=row,
+                    operator_user_id=operator_user_id,
+                    upload_finalizer=upload_finalizer,
                 )
+            except Exception as e:
+                current = await ApprovalRequestDao.aget_by_id(row.id)
+                fields = ("tenant_id", "space_id", "parent_folder_id", "applicant_user_id", "decided_by")
+                if (
+                    current is None
+                    or row.tenant_id != get_current_tenant_id()
+                    or current.status != ApprovalRequestStatusEnum.APPROVED.value
+                    or current.decided_by != operator_user_id
+                    or any(getattr(current, name) != getattr(row, name) for name in fields)
+                ):
+                    raise ApprovalRequestPermissionDeniedError() from e
+                from bisheng.approval.domain.repositories.legacy_upload_execution_repository import (
+                    LegacyUploadExecutionRepository,
+                )
+
+                async with get_async_db_session() as failure, failure.begin():
+                    await LegacyUploadExecutionRepository().amark_failed(
+                        failure,
+                        row=row,
+                        operator_id=operator_user_id,
+                        error=e,
+                    )
+                    if get_current_tenant_id() != row.tenant_id:
+                        raise ApprovalRequestPermissionDeniedError() from e
                 row = await ApprovalRequestDao.aget_by_id(request_id)
                 return row
             await cls._send_result_notify(
                 sender=operator_user_id,
                 receiver_user_id=row.applicant_user_id,
-                action_code='approved_department_knowledge_space_upload',
+                action_code="approved_department_knowledge_space_upload",
                 business_name=business_name,
                 approval_request_id=row.id,
             )
@@ -676,7 +679,7 @@ class ApprovalService:
         await cls._send_result_notify(
             sender=operator_user_id,
             receiver_user_id=row.applicant_user_id,
-            action_code='rejected_department_knowledge_space_upload',
+            action_code="rejected_department_knowledge_space_upload",
             business_name=business_name,
             approval_request_id=row.id,
             reason=reason,

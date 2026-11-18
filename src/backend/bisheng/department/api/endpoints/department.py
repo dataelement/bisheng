@@ -144,15 +144,9 @@ async def get_user_primary_department(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """Return the user's primary department. Called by Gateway for traffic control."""
-    from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+    from bisheng.department.domain.services.directory_scope import own_primary_department
 
-    ud = await UserDepartmentDao.aget_user_primary_department(user_id)
-    if not ud:
-        return resp_200([])
-    dept = await DepartmentDao.aget_by_id(ud.department_id)
-    if not dept:
-        return resp_200([])
-    return resp_200([{"id": dept.id, "dept_id": dept.dept_id, "name": dept.name}])
+    return resp_200(await own_primary_department(user_id, login_user))
 
 
 @router.get("/{dept_id}")

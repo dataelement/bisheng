@@ -1,14 +1,8 @@
-// F019-admin-tenant-scope — axios wrappers for the admin management-view
-// switch. Only global super admins may invoke these endpoints; Child
-// Admins and ordinary users receive HTTP 403 + body.status_code 19701.
-//
-// This file intentionally carries NO UI (per spec §9 Out of Scope):
-// F020 owns the `<AdminScopeSelector>` component and the
-// `useAdminScope` hook that wraps these calls. Keep this surface thin so
-// F020 can evolve the UI without touching the backend contract.
+// Existing management-view HTTP contract. Only global super admins may
+// change the selection; authenticated users can read their confirmed scope.
 
-import axios from "@/controllers/request"
-import { announceManagementScope } from "@/controllers/managementScope"
+import axios, { bootstrapManagementRequestScope } from "@/controllers/request"
+import { announceManagementScope, beginManagementScopeSwitch } from "@/controllers/managementScope"
 
 export interface AdminScopeResponse {
   // A server response always names one concrete tenant; null is loading-only.
@@ -32,15 +26,29 @@ export interface AdminScopeResponse {
 export async function setTenantScope(
   tenantId: number,
 ): Promise<AdminScopeResponse> {
-  const result: AdminScopeResponse = await axios.post("/api/v1/admin/tenant-scope", { tenant_id: tenantId })
-  if (result.scope_tenant_id && Number.isSafeInteger(result.scope_tenant_id)) announceManagementScope(result.scope_tenant_id)
-  return result
+  const finishSwitch = beginManagementScopeSwitch();
+  try {
+    await axios.post("/api/v1/admin/tenant-scope", { tenant_id: tenantId });
+    const confirmed: AdminScopeResponse = await axios.get("/api/v1/admin/request-scope");
+    if (confirmed.scope_tenant_id) announceManagementScope(confirmed.scope_tenant_id);
+    return confirmed;
+  } catch (error) {
+    // Redis may already have changed even when audit or response delivery failed.
+    try {
+      const confirmed: AdminScopeResponse = await axios.get("/api/v1/admin/request-scope");
+      if (confirmed.scope_tenant_id) announceManagementScope(confirmed.scope_tenant_id);
+    } catch { /* Keep requests paused until an explicit successful confirmation. */ }
+    throw error;
+  } finally {
+    finishSwitch();
+  }
 }
 
 /**
- * Read the caller's current management-view scope. Returns
- * `{scope_tenant_id: null, expires_at: null}` if no scope is active.
+ * Read the confirmed request scope. A paused session uses a strict server GET;
+ * an unavailable or expired selection rejects instead of creating a default.
  */
 export async function getTenantScope(): Promise<AdminScopeResponse> {
-  return await axios.get("/api/v1/admin/tenant-scope")
+  const proof = await bootstrapManagementRequestScope();
+  return { ...proof, expires_at: null }
 }

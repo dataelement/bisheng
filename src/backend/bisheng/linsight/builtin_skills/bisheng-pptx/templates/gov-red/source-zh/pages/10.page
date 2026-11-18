@@ -1,0 +1,452 @@
+pageType: evidence
+background:
+  type: solid
+  color: $white
+elements:
+- elementId: top-band
+  elementType: shape
+  bounds:
+  - 0
+  - 0
+  - 960
+  - 8
+  shapeName: rect
+  fill:
+    type: solid
+    color: $red
+  border:
+    color: $red
+    width: 0
+- elementId: top-gold
+  elementType: shape
+  bounds:
+  - 0
+  - 8
+  - 960
+  - 2
+  shapeName: rect
+  fill:
+    type: solid
+    color: $gold
+  border:
+    color: $gold
+    width: 0
+- elementId: kicker
+  elementType: text
+  bounds:
+  - 48
+  - 28
+  - 600
+  - 16
+  content:
+    text: 三、存在的问题与不足
+    style: $kicker
+- elementId: title
+  elementType: text
+  bounds:
+  - 48
+  - 46
+  - 864
+  - 36
+  content:
+    text: 问题聚焦三个方面，逐项明确原因和措施
+    style: $title
+- elementId: title-mark
+  elementType: shape
+  bounds:
+  - 48
+  - 88
+  - 56
+  - 3
+  shapeName: rect
+  fill:
+    type: solid
+    color: $gold
+  border:
+    color: $gold
+    width: 0
+- elementId: footer-rule
+  elementType: line
+  bounds:
+  - 48
+  - 502
+  - 864
+  - 1
+  viewBox:
+  - 864
+  - 1
+  points: 0,0 864,0
+  border:
+    color: $rule
+    width: 0.8
+- elementId: footer-org
+  elementType: text
+  bounds:
+  - 48
+  - 508
+  - 500
+  - 16
+  content:
+    text: 示例单位 · 2026 年度工作汇报
+    style: $meta
+- elementId: footer-no
+  elementType: text
+  bounds:
+  - 852
+  - 508
+  - 60
+  - 16
+  content:
+    text: '10'
+    style: $meta
+    align:
+    - right
+    - top
+- elementId: pcm-head-1
+  elementType: shape
+  bounds:
+  - 48
+  - 114
+  - 260
+  - 36
+  shapeName: rect
+  fill:
+    type: solid
+    color: $red
+  border:
+    color: $red
+    width: 0
+- elementId: pcm-head-text-1
+  elementType: text
+  bounds:
+  - 64
+  - 120
+  - 228
+  - 24
+  content:
+    text: 问题
+    style: $lead
+    fontSize: 15
+    color: $white
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: pcm-cell-1-1
+  elementType: shape
+  bounds:
+  - 48
+  - 162
+  - 260
+  - 92
+  shapeName: rect
+  fill:
+    type: solid
+    color: $surface
+  border:
+    color: $rule
+    width: 0.8
+- elementId: pcm-text-1-1
+  elementType: text
+  bounds:
+  - 64
+  - 176
+  - 228
+  - 66
+  content:
+    text: 新兴业务盈利偏弱
+    style: $body
+    fontSize: 14
+    bold: true
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: pcm-cell-2-1
+  elementType: shape
+  bounds:
+  - 48
+  - 266
+  - 260
+  - 92
+  shapeName: rect
+  fill:
+    type: solid
+    color: $surface
+  border:
+    color: $rule
+    width: 0.8
+- elementId: pcm-text-2-1
+  elementType: text
+  bounds:
+  - 64
+  - 280
+  - 228
+  - 66
+  content:
+    text: 数字化推进不均衡
+    style: $body
+    fontSize: 14
+    bold: true
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: pcm-cell-3-1
+  elementType: shape
+  bounds:
+  - 48
+  - 370
+  - 260
+  - 92
+  shapeName: rect
+  fill:
+    type: solid
+    color: $surface
+  border:
+    color: $rule
+    width: 0.8
+- elementId: pcm-text-3-1
+  elementType: text
+  bounds:
+  - 64
+  - 384
+  - 228
+  - 66
+  content:
+    text: 高端人才短缺
+    style: $body
+    fontSize: 14
+    bold: true
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: pcm-head-2
+  elementType: shape
+  bounds:
+  - 324
+  - 114
+  - 300
+  - 36
+  shapeName: rect
+  fill:
+    type: solid
+    color: $deepred
+  border:
+    color: $deepred
+    width: 0
+- elementId: pcm-head-text-2
+  elementType: text
+  bounds:
+  - 340
+  - 120
+  - 268
+  - 24
+  content:
+    text: 原因
+    style: $lead
+    fontSize: 15
+    color: $white
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: pcm-cell-1-2
+  elementType: shape
+  bounds:
+  - 324
+  - 162
+  - 300
+  - 92
+  shapeName: rect
+  fill:
+    type: solid
+    color: $surface
+  border:
+    color: $rule
+    width: 0.8
+- elementId: pcm-text-1-2
+  elementType: text
+  bounds:
+  - 340
+  - 176
+  - 268
+  - 66
+  content:
+    text: 市场开拓期投入集中，规模效应尚未形成
+    style: $body
+    fontSize: 14
+    bold: false
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: pcm-cell-2-2
+  elementType: shape
+  bounds:
+  - 324
+  - 266
+  - 300
+  - 92
+  shapeName: rect
+  fill:
+    type: solid
+    color: $surface
+  border:
+    color: $rule
+    width: 0.8
+- elementId: pcm-text-2-2
+  elementType: text
+  bounds:
+  - 340
+  - 280
+  - 268
+  - 66
+  content:
+    text: 二级单位基础差异大，缺少统一标准
+    style: $body
+    fontSize: 14
+    bold: false
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: pcm-cell-3-2
+  elementType: shape
+  bounds:
+  - 324
+  - 370
+  - 300
+  - 92
+  shapeName: rect
+  fill:
+    type: solid
+    color: $surface
+  border:
+    color: $rule
+    width: 0.8
+- elementId: pcm-text-3-2
+  elementType: text
+  bounds:
+  - 340
+  - 384
+  - 268
+  - 66
+  content:
+    text: 薪酬竞争力不足，培养周期长
+    style: $body
+    fontSize: 14
+    bold: false
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: pcm-head-3
+  elementType: shape
+  bounds:
+  - 640
+  - 114
+  - 272
+  - 36
+  shapeName: rect
+  fill:
+    type: solid
+    color: $gold
+  border:
+    color: $gold
+    width: 0
+- elementId: pcm-head-text-3
+  elementType: text
+  bounds:
+  - 656
+  - 120
+  - 240
+  - 24
+  content:
+    text: 整改措施
+    style: $lead
+    fontSize: 15
+    color: $white
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: pcm-cell-1-3
+  elementType: shape
+  bounds:
+  - 640
+  - 162
+  - 272
+  - 92
+  shapeName: rect
+  fill:
+    type: solid
+    color: $white
+  border:
+    color: $rule
+    width: 0.8
+- elementId: pcm-text-1-3
+  elementType: text
+  bounds:
+  - 656
+  - 176
+  - 240
+  - 66
+  content:
+    text: 设定分业务毛利率目标，季度复盘
+    style: $body
+    fontSize: 14
+    bold: false
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: pcm-cell-2-3
+  elementType: shape
+  bounds:
+  - 640
+  - 266
+  - 272
+  - 92
+  shapeName: rect
+  fill:
+    type: solid
+    color: $white
+  border:
+    color: $rule
+    width: 0.8
+- elementId: pcm-text-2-3
+  elementType: text
+  bounds:
+  - 656
+  - 280
+  - 240
+  - 66
+  content:
+    text: 制定数据标准，实行挂图作战
+    style: $body
+    fontSize: 14
+    bold: false
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: pcm-cell-3-3
+  elementType: shape
+  bounds:
+  - 640
+  - 370
+  - 272
+  - 92
+  shapeName: rect
+  fill:
+    type: solid
+    color: $white
+  border:
+    color: $rule
+    width: 0.8
+- elementId: pcm-text-3-3
+  elementType: text
+  bounds:
+  - 656
+  - 384
+  - 240
+  - 66
+  content:
+    text: 实施专项引才计划，建立后备库
+    style: $body
+    fontSize: 14
+    bold: false
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei

@@ -43,7 +43,8 @@ from typing import Any
 # membership without special cases. Environments that published it as `f048-v6`
 # (114, 2026-09-15) hold the same model — checksum 3266b35a…, unchanged by the
 # rename — and need no action.
-MODEL_VERSION = "f048-v6-app"
+# F118 retains the predecessor label and identifies its use-retirement shape.
+MODEL_VERSION = "f048-v6-app-f118"
 
 DEFAULT_ACTION_CODES: tuple[str, ...] = (
     "manage_permission",
@@ -55,7 +56,6 @@ DEFAULT_ACTION_CODES: tuple[str, ...] = (
     "download",
     "delete",
     "share",
-    "use",
     "publish",
     "unpublish",
 )
@@ -111,7 +111,6 @@ RESOURCE_ACTION_SCOPES: dict[str, frozenset[str]] = {
     "download": frozenset({"folder", "knowledge_file"}),
     "delete": frozenset(MIGRATED_RESOURCE_TYPES),
     "share": frozenset({"knowledge_space", "knowledge_file", "workflow", "assistant"}),
-    "use": frozenset({"knowledge_library", "workflow", "assistant", "tool", "app", "linsight_skill"}),
     "publish": frozenset({"workflow", "assistant", "app"}),
     "unpublish": frozenset({"workflow", "assistant", "app"}),
 }
@@ -131,7 +130,6 @@ PARENT_TYPES: dict[str, tuple[str, ...]] = {
 
 SYSTEM_SHARED_ACTION_TYPES: dict[str, frozenset[str]] = {
     "download": frozenset({"knowledge_space", "folder", "knowledge_file"}),
-    "use": frozenset({"knowledge_library", "workflow", "assistant", "tool", "linsight_skill"}),
 }
 
 # These resource types are enumerated directly by ListObjects.  Folder and
@@ -577,6 +575,8 @@ def build_authorization_model_f048(
     normalized_actions = tuple(sorted(set(action_codes)))
     if not normalized_actions:
         raise ValueError("F048 authorization model requires at least one action")
+    if {"use", "use_kb"} & set(normalized_actions):
+        raise ValueError("The independent use action is retired")
     if any(
         not action or action != action.strip().casefold() or not action.replace("_", "").isalnum()
         for action in normalized_actions

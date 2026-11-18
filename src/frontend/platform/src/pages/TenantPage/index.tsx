@@ -12,12 +12,13 @@ import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { useTable } from "@/util/hook";
 import { displayTenantName } from "@/utils/tenantDisplayName";
-import { useContext, useState } from "react";
+import { useContext, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate } from "react-router-dom";
 import { CreateTenantDialog } from "./components/CreateTenantDialog";
 import { TenantUserDialog } from "./components/TenantUserDialog";
 import { TenantQuotaDialog } from "./components/TenantQuotaDialog";
+import { TenantAdminDialog } from "./components/TenantAdminDialog";
 import { isGlobalSuperUser } from "@/pages/ModelPage/manage/permissions";
 import type { Tenant } from "@/types/api/tenant";
 
@@ -27,6 +28,50 @@ const statusColors: Record<string, TagColor> = { active: "success", disabled: "d
 // rejected server-side with errcode 22008. Hide the disable button to avoid
 // surfacing an error path; edit/quota remain allowed.
 const isRootTenant = (tenant: Tenant) => tenant.id === 1;
+
+const ADMIN_NAMES_SHOWN = 2;
+
+/**
+ * Admin column: shows who administers each tenant so a missing admin is
+ * visible while scanning the list, and carries the entry to manage admins.
+ */
+function TenantAdminCell({ tenant, onManage }: { tenant: Tenant; onManage: () => void }) {
+  const { t } = useTranslation("bs");
+  // Root authority = global super admins; Child Admin grants are rejected (19204).
+  if (isRootTenant(tenant)) {
+    return <span className="text-muted-foreground">{t("tenant.adminRootManaged")}</span>;
+  }
+  const admins = tenant.admin_users;
+  let summary: ReactNode;
+  if (admins == null) {
+    summary = <span className="text-muted-foreground">{t("tenant.adminLookupFailed")}</span>;
+  } else if (!admins.length) {
+    summary = (
+      <Tag size="small" color="warning" className="shrink-0 whitespace-nowrap">
+        {t("tenant.adminNotSet")}
+      </Tag>
+    );
+  } else {
+    const names = admins.slice(0, ADMIN_NAMES_SHOWN).map((a) => a.user_name).join(t("tenant.adminNameSeparator"));
+    const rest = admins.length - ADMIN_NAMES_SHOWN;
+    summary = (
+      <span className="truncate" title={admins.map((a) => a.user_name).join(", ")}>
+        {names}
+        {rest > 0 && <span className="text-muted-foreground"> {t("tenant.adminMore", { total: admins.length, rest })}</span>}
+      </span>
+    );
+  }
+  return (
+    <div className="flex items-center gap-2 min-w-0 max-w-[260px]">
+      {summary}
+      {tenant.status !== "archived" && (
+        <Button type="button" size="small" variant="link" className="shrink-0" onClick={onManage}>
+          {t("tenant.adminManage")}
+        </Button>
+      )}
+    </div>
+  );
+}
 
 // The /tenant route currently uses permission='sys' so the route guard
 // admits Child Admins (routes/index.tsx falls 'sys' back for them). But
@@ -51,6 +96,7 @@ function TenantPageInner() {
   const [editTenant, setEditTenant] = useState<Tenant | null>(null);
   const [userDialogTenant, setUserDialogTenant] = useState<Tenant | null>(null);
   const [quotaDialogTenant, setQuotaDialogTenant] = useState<Tenant | null>(null);
+  const [adminDialogTenant, setAdminDialogTenant] = useState<Tenant | null>(null);
   const [deleteConfirmCode, setDeleteConfirmCode] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<Tenant | null>(null);
 
@@ -131,6 +177,7 @@ function TenantPageInner() {
               <TableHead>{t("tenant.name")}</TableHead>
               <TableHead>{t("tenant.code")}</TableHead>
               <TableHead>{t("tenant.statusFilter")}</TableHead>
+              <TableHead>{t("tenant.adminColumn")}</TableHead>
               <TableHead>{t("tenant.userCount")}</TableHead>
               <TableHead>{t("tenant.storageUsage")}</TableHead>
               <TableHead>{t("tenant.createdAt")}</TableHead>
@@ -164,6 +211,9 @@ function TenantPageInner() {
                     >
                       {t(`tenant.status.${tenant.status}`)}
                     </Tag>
+                  </TableCell>
+                  <TableCell>
+                    <TenantAdminCell tenant={tenant} onManage={() => setAdminDialogTenant(tenant)} />
                   </TableCell>
                   <TableCell>
                     <Button type="button" size="small" variant="link" onClick={() => setUserDialogTenant(tenant)}>
@@ -258,6 +308,11 @@ function TenantPageInner() {
 
       {/* User Management Dialog */}
       {userDialogTenant && <TenantUserDialog tenant={userDialogTenant} onClose={() => setUserDialogTenant(null)} />}
+
+      {/* Admin Dialog */}
+      {adminDialogTenant && (
+        <TenantAdminDialog tenant={adminDialogTenant} onClose={() => setAdminDialogTenant(null)} onChanged={reload} />
+      )}
 
       {/* Quota Dialog */}
       {quotaDialogTenant && (

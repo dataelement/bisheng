@@ -19,7 +19,7 @@ from bisheng.common.errcode.knowledge_space import SpaceNotFoundError, SpacePerm
 from bisheng.common.models.space_channel_member import MembershipStatusEnum, UserRoleEnum
 from bisheng.knowledge.api.dependencies import get_knowledge_space_service
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeState
-from bisheng.knowledge.domain.schemas.knowledge_space_schema import SpaceSubscriptionStatusEnum
+from bisheng.knowledge.domain.schemas.knowledge_space_schema import KnowledgeSpaceInfoResp, SpaceSubscriptionStatusEnum
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 from bisheng.permission.domain.services.permission_action_service import PermissionActor
 from test.knowledge.test_knowledge_space_service import _make_login_user, _make_member, _make_space
@@ -260,9 +260,9 @@ async def test_ac06_stage_metrics_include_failed_time_and_propagate_error(info_c
         "subscription_role": info_case.find_member,
         "department": info_case.department,
         "auto_tag": info_case.auto_tag,
-        "rebuild": info_case.rebuild,
+        "rebuild": None,
     }
-    if failing_stage != "prepare":
+    if failing_stage not in {"prepare", "rebuild"}:
         fail_at[failing_stage].side_effect = fail
     if failing_stage == "rebuild":
         info_case.space.state = KnowledgeState.REBUILDING.value
@@ -270,6 +270,17 @@ async def test_ac06_stage_metrics_include_failed_time_and_propagate_error(info_c
         stack.enter_context(patch(f"{MODULE}.perf_counter", side_effect=lambda: clock[0]))
         if failing_stage == "prepare":
             stack.enter_context(patch(f"{MODULE}.KnowledgeSpaceInfoResp", side_effect=fail))
+        elif failing_stage == "rebuild":
+            original_setattr = KnowledgeSpaceInfoResp.__setattr__
+
+            def set_state(model, name, value):
+                if name == "state":
+                    fail()
+                original_setattr(model, name, value)
+
+            # The measured stage only copies current status into the response;
+            # query visibility never creates a rebuild operation or queue job.
+            stack.enter_context(patch.object(KnowledgeSpaceInfoResp, "__setattr__", set_state))
         with pytest.raises(RuntimeError, match="offline injected failure"):
             await info_case.service.get_space_info(303)
 
@@ -365,18 +376,14 @@ async def test_ac03_authorization_failure_never_falls_back_to_public_preview(inf
     assert info_case.metric.call_args.kwargs["failed_stage"] == "auth"
 
 
-@pytest.mark.parametrize("current_tenant_id,should_rebuild", [(1, True), (2, False)])
-async def test_ac05_rebuild_dispatch_keeps_tenant_guard(info_case, current_tenant_id, should_rebuild):
+@pytest.mark.parametrize("current_tenant_id", [1, 2])
+async def test_ac05_info_only_observes_rebuild_state_in_either_tenant(info_case, current_tenant_id):
     info_case.space.state = KnowledgeState.REBUILDING.value
     info_case.space.tenant_id = 1
     with patch(f"{MODULE}.get_current_tenant_id", return_value=current_tenant_id):
-        await info_case.service.get_space_info(303)
+        result = await info_case.service.get_space_info(303)
 
-    if should_rebuild:
-        info_case.rebuild.assert_called_once_with(
-            303,
-            new_model_id=info_case.space.model,
-            invoke_user_id=info_case.service.login_user.user_id,
-        )
-    else:
-        info_case.rebuild.assert_not_called()
+    assert result.state == KnowledgeState.REBUILDING.value
+    assert result.actions == ["visible"]
+    assert info_case.space.state == KnowledgeState.REBUILDING.value
+    info_case.rebuild.assert_not_called()

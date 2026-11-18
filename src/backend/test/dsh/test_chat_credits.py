@@ -7,7 +7,10 @@ from langchain_core.messages import AIMessage, AIMessageChunk
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 
 from bisheng.dsh.domain.schemas.contracts import DshTokenUsage
+from bisheng.dsh.domain.schemas.pricing import CreditSettingState
 from bisheng.dsh.domain.services import chat_credits
+from bisheng.dsh.domain.services.pricing import build_snapshot
+from test.dsh.pricing_fixtures import LEGACY_EQUIVALENT_PRICING
 
 
 @pytest.fixture
@@ -145,14 +148,21 @@ async def test_chat_admission_uses_loaded_model_id(monkeypatch, requested_id):
         model=object(),
     )
     monkeypatch.setattr(runtime, "get_model_runtime", AsyncMock(return_value=service))
+    pricing_reader = AsyncMock(return_value=LEGACY_EQUIVALENT_PRICING)
+    monkeypatch.setattr(runtime, "read_model_pricing", pricing_reader)
+    monkeypatch.setattr(runtime, "read_credit_setting", AsyncMock(return_value=CreditSettingState()))
     # Replace the immutable nested fixture without revalidating unrelated runtime settings.
     monkeypatch.setitem(settings.__dict__, "dsh", settings.dsh.model_copy(update={"billing_timezone": "Asia/Shanghai"}))
     _, event, _ = await chat_credits.start(
         SimpleNamespace(user_id=2, model_id=requested_id, model_info=SimpleNamespace(id=7)),
     )
     assert event.model_id == 7
-    assert event.credit_rate == 125
+    # F016: the legacy multiplier no longer applies; prices come from the uncached read of model 7.
+    assert event.credit_rate == 100
+    pricing_reader.assert_awaited_once_with(7)
+    assert event.pricing == build_snapshot(LEGACY_EQUIVALENT_PRICING, CreditSettingState())
     admission.assert_awaited_once()
+    assert admission.await_args.kwargs["mode"] == ""
 
 
 @pytest.mark.parametrize(

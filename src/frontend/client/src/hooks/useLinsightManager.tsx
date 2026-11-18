@@ -1,5 +1,5 @@
+import { prepareBrowserHeaders } from "~/api/request";
 // @ts-strict-ignore
-// src/hooks/useLinsightManager.ts
 import { resolveLinsightSubmitFailure, type PendingSubmitFailure } from './linsightSubmitFailure';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -23,8 +23,6 @@ import {
     formatTime,
     toggleNav
 } from '~/utils';
-
-
 /**
  * Backend SessionVersionStatusEnum values a run can no longer leave, i.e. the
  * ones that emit no further WS events. `waiting_for_user_input` is NOT one of
@@ -38,33 +36,28 @@ const TERMINAL_SESSION_STATUSES = new Set([
     'terminated',
     'sop_generation_failed',
 ]);
-
 export const useLinsightManager = () => {
     const [linsightMap, setLinsightMap] = useRecoilState(linsightMapState);
     const setActiveSessionId = useSetRecoilState(activeSessionIdState);
-
+    const continuingVersions = useRef(new Set<string>());
     // 创建新会话信息
     const createLinsight = useCallback((versionId: string, initialData: Omit<LinsightInfo, 'id'>) => {
         const newLinsight: LinsightInfo = {
             id: versionId,
             ...initialData
         };
-
         setLinsightMap(prevMap => {
             const newMap = new Map(prevMap);
             newMap.set(versionId, newLinsight);
             return newMap;
         });
-
         setActiveSessionId(versionId);
         return versionId;
     }, [setLinsightMap, setActiveSessionId]);
-
     // 更新会话信息
     const updateLinsight = useCallback((versionId: string, update: Partial<LinsightInfo> | ((current: LinsightInfo) => Partial<LinsightInfo>)) => {
         setLinsightMap(prevMap => {
             if (!prevMap.has(versionId)) return prevMap;
-
             const newMap = new Map(prevMap);
             const current = newMap.get(versionId)!;
 
@@ -86,36 +79,7 @@ export const useLinsightManager = () => {
         return linsightMap.get(versionId) || null;
     };
 
-    /**
-     * Re-sync one session version from the server and adopt a TERMINAL state.
-     *
-     * The task-message-stream WS is the only carrier of terminal events
-     * (final_result / task_terminated / error_message), and the backend hands
-     * them out with a destructive BLPOP: a socket that dies between the pop and
-     * the send takes the event with it. The reconnect that follows then blocks
-     * on an empty queue forever, so a run that finished inside the disconnect
-     * window leaves the panel spinning on its last live snapshot (and its task
-     * progress frozen mid-count) until the user reloads the page.
-     *
-     * Reconciling against the DB — the authority — closes that window. It runs
-     * on every WS open rather than only on reconnects, because the same event
-     * can also be swallowed by a competing consumer of the shared queue (a
-     * second tab on the same session, or a previous connection's server-side
-     * coroutine still parked in BLPOP), which a first connection is no more
-     * immune to than a relink.
-     *
-     * Deliberately one-way: server state is adopted ONLY once the run has
-     * reached a terminal status. A still-running session is left untouched —
-     * the snapshot is fetched asynchronously and would otherwise clobber live
-     * WS events that landed while it was in flight. Terminal states take no
-     * further events, so there is nothing left to lose.
-     *
-     * Reads the store through a Recoil snapshot: the caller lives inside the
-     * WS pump's `[]`-deps connect callback, where a captured `getLinsight`
-     * would be a first-render closure.
-     *
-     * @returns true if a terminal state was adopted, false if left alone.
-     */
+    /** Repair missed terminal events, without replacing a later conversation round. */
     const reconcileLinsightFromServer = useRecoilCallback(({ snapshot }) => async (versionId: string) => {
         const map = await snapshot.getPromise(linsightMapState);
         const current = map.get(versionId);
@@ -129,61 +93,84 @@ export const useLinsightManager = () => {
         // Same shape the reload path builds (switchAndUpdateLinsight), so a
         // reconciled panel is indistinguishable from a freshly loaded one.
         const tasks = await getLinsightTaskList(versionId, item, '');
-        updateLinsight(versionId, {
-            status: mapSessionVersionStatus(item.status, item.execute_feedback),
-            output_result: item.output_result,
-            execute_feedback: item.execute_feedback,
-            tasks: buildTaskTree(tasks),
-            file_list: item.output_result?.final_files || [],
-            taskError: 'failed' === item.status ? item.output_result?.error_message : '',
-            taskErrorInfo: taskErrorInfoFromOutput(item.status, item.output_result),
-            // Carry the persisted task ChatMessage id + verdict, exactly as the
-            // live final_result handler does, so like/dislike targets the right
-            // row instead of a streaming placeholder.
-            ...(item.message_id != null ? { message_id: item.message_id, liked: item.liked } : {}),
-            queueCount: 0,
+        let adopted = false;
+        updateLinsight(versionId, (latest) => {
+            // Continuing appends a new history array, retiring reads from the old round.
+            if (latest.history !== current.history) return {};
+            adopted = true;
+            return {
+                status: mapSessionVersionStatus(item.status, item.execute_feedback),
+                output_result: item.output_result,
+                execute_feedback: item.execute_feedback,
+                tasks: buildTaskTree(tasks),
+                file_list: item.output_result?.final_files || [],
+                taskError: 'failed' === item.status ? item.output_result?.error_message : '',
+                taskErrorInfo: taskErrorInfoFromOutput(item.status, item.output_result),
+                // Carry the persisted task ChatMessage id + verdict, exactly as the
+                // live final_result handler does, so like/dislike targets the right
+                // row instead of a streaming placeholder.
+                ...(item.message_id != null ? { message_id: item.message_id, liked: item.liked } : {}),
+                queueCount: 0,
+            };
         });
-        return true;
+        return adopted;
     }, [updateLinsight]);
 
     // F035 多轮对话：在已完成的同一会话里追加新一轮。
     // 复用同一 session_version (versionId) + 同一 agent thread，后端保留全部上下文；
     // 前端把当前轮快照进 history，再清空顶层字段开新轮，WS 事件继续更新顶层（=当前轮）。
-    const continueConversation = useCallback(async (versionId: string, question: string) => {
-        updateLinsight(versionId, (prev) => ({
-            history: [
-                ...(prev.history || []),
-                {
-                    // Stable id for React keys: position-derived but never reused
-                    // (history is append-only, so the length is monotonic).
-                    roundId: `${versionId}_round_${(prev.history || []).length}`,
-                    question: prev.question,
-                    tasks: prev.tasks || [],
-                    sessionSteps: prev.sessionSteps || [],
-                    output_result: prev.output_result,
-                    file_list: prev.file_list || [],
-                    // Carry the finished round's terminal state so ConversationRound
-                    // can render its own stopped/error banner in history.
-                    status: prev.status,
-                    taskError: prev.taskError,
-                    taskErrorInfo: prev.taskErrorInfo,
-                },
-            ],
-            question,
-            tasks: [],
-            sessionSteps: [],
-            output_result: null,
-            file_list: [],
-            taskError: '',
-            status: SopStatus.Running,
-        }));
+    const continueConversation = useCallback(async (versionId: string, question: string, model?: string) => {
+        if (continuingVersions.current.has(versionId)) return;
+        continuingVersions.current.add(versionId);
         try {
-            await continueLinsight(versionId, question);
+            // Accept the new round before Running opens a socket and reconciles server state.
+            await continueLinsight(versionId, question, model);
+            updateLinsight(versionId, (prev) => ({
+                history: [
+                    ...(prev.history || []),
+                    {
+                        // Stable id for React keys: position-derived but never reused
+                        // (history is append-only, so the length is monotonic).
+                        roundId: `${versionId}_round_${(prev.history || []).length}`,
+                        question: prev.question,
+                        tasks: prev.tasks || [],
+                        sessionSteps: prev.sessionSteps || [],
+                        output_result: prev.output_result,
+                        file_list: prev.file_list || [],
+                        // Carry the finished round's terminal state so ConversationRound
+                        // can render its own stopped/error banner in history.
+                        status: prev.status,
+                        taskError: prev.taskError,
+                        taskErrorInfo: prev.taskErrorInfo,
+                    },
+                ],
+                question,
+                tasks: [],
+                sessionSteps: [],
+                output_result: null,
+                file_list: [],
+                taskError: '',
+                taskErrorInfo: undefined,
+                execute_feedback: null,
+                queueCount: 0,
+                status: SopStatus.Running,
+            }));
         } catch (e) {
             console.error('continueLinsight failed :>> ', e);
-            updateLinsight(versionId, { status: SopStatus.Stoped, taskError: String(e) });
+            updateLinsight(versionId, (prev) => ({
+                status: SopStatus.Stoped, taskError: String(e), taskErrorInfo: undefined,
+                output_result: prev.output_result?.error_message ? null : prev.output_result,
+            }));
+        } finally {
+            continuingVersions.current.delete(versionId);
         }
     }, [updateLinsight]);
+
+    const retryConversation = useRecoilCallback(({ snapshot }) => async (versionId: string, question: string) => {
+        // Read at click time: the selector may have changed since this task failed.
+        const selectedModel = await snapshot.getPromise(store.chatModel);
+        await continueConversation(versionId, question, selectedModel.id > 0 ? String(selectedModel.id) : undefined);
+    }, [continueConversation]);
 
     // 切换当前会话
     const switchSession = useCallback((versionId: string) => {
@@ -223,6 +210,7 @@ export const useLinsightManager = () => {
         switchSession,
         switchAndUpdateLinsight,
         continueConversation,
+        retryConversation,
         reconcileLinsightFromServer,
         linsightMap
     };
@@ -237,7 +225,6 @@ export const useActiveLinsight = () => {
         ? linsightMap.get(activeSessionId) || null
         : null;
 };
-
 
 export const useLinsightSessionManager = (versionId: string) => {
     const linsightSubmission = useRecoilValue(submissionState(versionId));
@@ -263,7 +250,6 @@ export const useLinsightSessionManager = (versionId: string) => {
         clearLinsightSubmission
     };
 };
-
 
 /**
  * F035 Track H (P5): submit pipeline for a new task-mode session.
@@ -354,10 +340,12 @@ export const useLinsightSubmit = (versionId, setVersionId, setVersions, ensureFl
                     session_id: linsightSubmission.sessionId || null,
                 }
 
+                const scopeHeaders = await prepareBrowserHeaders('POST', `${__APP_ENV__.BASE_URL}/api/v1/linsight/workbench/submit`);
                 const sse = new SSE(`${__APP_ENV__.BASE_URL}/api/v1/linsight/workbench/submit`, {
                     payload: JSON.stringify(payload),
                     headers: {
                         'Content-Type': 'application/json',
+                        ...scopeHeaders,
                         ...(presence?.leaseId ? { 'X-Flow-Lease-Id': presence.leaseId } : {}),
                     },
                 });
@@ -476,13 +464,15 @@ export const useLinsightSubmit = (versionId, setVersionId, setVersions, ensureFl
                 sse.stream();
         }
         resetAfterSubmit()
-        void run()
+        void run().catch(() => {
+            setLoading(false);
+            setError(true);
+            showToast({message: localize('api_errors.fallback'), status: 'warning'});
+        })
     }, [linsightSubmission, ensureFlowLeaseId])
 
     return [loading, error, failureOwnerPath.current === window.location.pathname ? pendingSubmitFailure : undefined] as const
 }
-
-
 
 // 工具转换数据结构  筛选 -> sop二级列表
 const convertTools = (tools) => {
@@ -520,7 +510,6 @@ const convertTools = (tools) => {
         tools: sopTools
     }
 }
-
 
 /**
  * Map a backend session-version status (SessionVersionStatusEnum) to the
@@ -561,25 +550,7 @@ export function mapSessionVersionStatus(status: string, executeFeedback?: string
     }
 }
 
-/**
- * Project the server's task rows onto the shape the panels render.
- *
- * Status is passed through as-is. There used to be a sticky `hasTerminated` flag
- * here that rewrote EVERY row after the first `terminated`/`failed` one to
- * `not_started` (to hide them), back when `terminated` could only mean "the user
- * hit stop". It no longer can: `_diff_todos` now also marks a todo `terminated` when
- * the MODEL prunes it from its own plan, so one pruned todo silently buried every
- * task after it — a session with 8 successful tasks rendered "3/18" with grey
- * rings, and since `isTaskStarted('not_started')` is false, those tasks' steps
- * vanished from the timeline too.
- *
- * Nothing is lost by passing status through: a manually stopped run has its
- * unfinished rows swept to TERMINATED by the backend (`_terminate_unfinished_tasks`)
- * and its in-flight row rewritten by `getLinsightTaskList`, `TaskPanel` keys the
- * stopped-run rendering off its own `terminated` prop, and a pruned row with no
- * history is dropped by TaskStepRow's empty guard. The live WS path never called
- * this function at all — so this is the reload view converging on the live one.
- */
+// Preserve task statuses: one pruned or stopped row must not hide later tasks.
 function buildTaskTree(tasks) {
     const newTasks = tasks.map(task => {
         const taskTree = {
@@ -615,51 +586,4 @@ function buildTaskTree(tasks) {
     })
     return newTasks
 
-    // 创建任务ID到任务的映射
-    // const taskMap = new Map();
-    // tasks.forEach(task => taskMap.set(task.id, task));
-
-    // // 存储根任务（一级任务）
-    // const rootTasks: any[] = [];
-    // // 存储二级任务（按parent_task_id分组）
-    // const childTasksMap = new Map();
-
-    // // 第一次遍历：分离一级和二级任务
-    // tasks.forEach(task => {
-    //     if (task.parent_task_id === null) {
-    //         // 一级任务
-    //         rootTasks.push({
-    //             id: task.id,
-    //             name: task.task_data?.target || '',
-    //             status: task.status,
-    //             history: task.history || [],
-    //             event_type: task.status === 'waiting_for_user_input' ? 'user_input' : '',
-    //             call_reason: '',
-    //             children: []  // 初始化子任务数组
-    //         });
-    //     } else {
-    //         // 二级任务（按父ID分组）
-    //         const parentId = task.parent_task_id;
-    //         if (!childTasksMap.has(parentId)) {
-    //             childTasksMap.set(parentId, []);
-    //         }
-    //         childTasksMap.get(parentId).push({
-    //             id: task.id,
-    //             name: task.task_data?.target || '',
-    //             status: task.status,
-    //             history: task.history || [],
-    //             event_type: task.status === 'waiting_for_user_input' ? 'user_input' : '',
-    //             call_reason: ''
-    //             // 二级任务没有children字段
-    //         });
-    //     }
-    // });
-
-    // // 第二次遍历：将二级任务挂载到一级任务
-    // rootTasks.forEach(rootTask => {
-    //     const children = childTasksMap.get(rootTask.id) || [];
-    //     rootTask.children = children;
-    // });
-
-    // return rootTasks;
 }

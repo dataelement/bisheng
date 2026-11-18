@@ -4,6 +4,7 @@ import { Outlined } from 'bisheng-icons';
 import type { MouseEvent, MutableRefObject, ReactElement, ReactNode } from 'react';
 import { cloneElement, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { SidebarCredits } from '~/components/dsh/SidebarCredits';
 import { useStartNewChat } from '~/components/Nav/NewChat';
 import { useAuthContext, useLocalize } from '~/hooks';
 import { useConversationsInfiniteQuery, useGetBsConfig } from '~/hooks/queries/data-provider';
@@ -22,7 +23,7 @@ const DEFAULT_BRAND_NAME = 'BISHENG';
 
 const BRAND_LINK = 'flex h-8 min-w-0 items-center gap-2.5';
 
-const NAV_ROW = 'flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left text-body text-text-1 transition-colors hover:bg-fill-1 coarse-pointer:min-h-11';
+const NAV_ROW = 'flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left text-body text-text-1 transition-colors hover:bg-fill-1';
 const noop = () => undefined;
 
 interface SidebarNavRowProps {
@@ -125,7 +126,7 @@ export function WorkbenchSidebar({ hidden = false, mobile = false, open = false,
         mobile ? 'workbench-sidebar-mobile border-0' : 'pt-5',
       )}
     >
-      <div className="flex h-8 w-full shrink-0 items-center justify-between gap-1 px-2 coarse-pointer:min-h-11">
+      <div className="flex h-8 w-full shrink-0 items-center justify-between gap-1 px-2">
         {homeLink ? (
           <NavLink
             to={homeLink.to}
@@ -197,6 +198,7 @@ export function WorkbenchSidebar({ hidden = false, mobile = false, open = false,
       )}
 
       <div className="h-px w-full shrink-0 bg-border-base" />
+      <SidebarCredits onNavigate={handleNavigate} />
       {/* Two controls, one row chrome: both 32px tall with the nav rows' 8px radius and
           fill-1 hover — the account button stretches, the admin link is the 32px square. */}
       <div className="flex w-full shrink-0 items-center justify-between gap-1">

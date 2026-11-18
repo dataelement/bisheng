@@ -26,8 +26,13 @@ const DataSetPage = lazy(() => import("@/pages/DataSetPage"));
 const EvaluatingPage = lazy(() => import("@/pages/EvaluationPage"));
 const EvaluatingCreate = lazy(() => import("@/pages/EvaluationPage/EvaluationCreate"));
 const KnowledgePage = lazy(() => import("@/pages/KnowledgePage"));
+const KnowledgeSpaceCreatePage = lazy(() =>
+  import("@/pages/KnowledgePage/KnowledgeSpaceCreatePage").then(({ KnowledgeSpaceCreatePage }) => ({ default: KnowledgeSpaceCreatePage })),
+);
+const KnowledgeSpaceSettingsPage = lazy(() =>
+  import("@/pages/KnowledgePage/KnowledgeSpaceSettingsPage").then(({ KnowledgeSpaceSettingsPage }) => ({ default: KnowledgeSpaceSettingsPage })),
+);
 const AdjustFilesUpload = lazy(() => import("@/pages/KnowledgePage/AdjustFilesUpload"));
-const FilesPage = lazy(() => import("@/pages/KnowledgePage/detail"));
 const FilesUpload = lazy(() => import("@/pages/KnowledgePage/filesUpload"));
 const QasPage = lazy(() => import("@/pages/KnowledgePage/qas"));
 const LabelPage = lazy(() => import("@/pages/LabelPage"));
@@ -82,7 +87,9 @@ const privateRouter = [
       // Normalize the legacy /admin redirect before userContext chooses the landing page.
       { path: "admin", element: <Navigate to="/label" replace /> },
       { path: "filelib", element: <KnowledgePage />, permission: 'knowledge', },
-      { path: "filelib/:id", element: <FilesPage />, permission: 'knowledge', },
+      { path: "filelib/create", element: <KnowledgeSpaceCreatePage />, permission: 'knowledge', },
+      { path: "filelib/:id/settings", element: <KnowledgeSpaceSettingsPage />, permission: 'knowledge', },
+      { path: "filelib/:id", element: <KnowledgePage />, permission: 'knowledge', },
       { path: "filelib/upload/:id", element: <FilesUpload />, permission: 'knowledge', },
       { path: "filelib/adjust/:fileId", element: <AdjustFilesUpload />, permission: 'knowledge', },
       { path: "filelib/qalib/:id", element: <QasPage />, permission: 'knowledge', },

@@ -263,8 +263,8 @@ _UI_VISIBLE_V2_ACTIONS: tuple[str, ...] = (
     "approval.scenario.create",
     "approval.exception.skip_node",
     "approval.menu_access.revoke_grant",
-    # F049 open API auth (design D11). Registered once for all five families;
-    # grant / share_link / ws events start being written in later waves.
+    # F049 open API auth (design D11). Only actions with a writer are listed;
+    # an action without one would be a filter option that can never match.
     "open_api.service_account.create",
     "open_api.service_account.update",
     "open_api.service_account.enable",
@@ -273,20 +273,6 @@ _UI_VISIBLE_V2_ACTIONS: tuple[str, ...] = (
     "open_api.api_key.issue",
     "open_api.api_key.update",
     "open_api.api_key.revoke",
-    "open_api.api_key.revoke_all",
-    "open_api.api_key.expire",
-    "open_api.api_key.invalidate_by_subject",
-    "open_api.grant.add",
-    "open_api.grant.update",
-    "open_api.grant.remove",
-    "open_api.grant.remove_all",
-    "open_api.share_link.revoke",
-    "open_api.share_link.expire",
-    "open_api.ws.connect",
-    # F052 MCP face: one row per tools/call, plus the refusals that never
-    # reached a tool. The generic ``open_api.call`` middleware is short-circuited
-    # for that path, so this is the only writer and there is no double row.
-    "open_api.mcp.tool_call",
     # F054 app factory (design D14 / pit 24). The hosted-application state
     # machine, meta updates and the data-tab row edit / export (AC-56, written
     # by AppDataService).
@@ -362,6 +348,27 @@ _V2_NAMESPACE_TO_ACTION_PREFIX: dict[str, str] = {
     "approval": "approval.",
     "open_api": "open_api.",
     "app": "app.",
+}
+
+# Rows written before the personal-skill writer moved to ``system`` stored
+# ``system_id='linsight'``. The audit page files those four actions under the
+# system module and has no linsight module, so a system-module filter (list,
+# count and export share this query) has to see them. New rows are written
+# with ``system_id='system'``.
+_LEGACY_MODULE_EVENT_TYPES: dict[str, tuple[tuple[str, frozenset[str]], ...]] = {
+    "system": (
+        (
+            "linsight",
+            frozenset(
+                {
+                    EventType.PERSONAL_SKILL_CREATE.value,
+                    EventType.PERSONAL_SKILL_STATUS.value,
+                    EventType.PERSONAL_SKILL_DELETE.value,
+                    EventType.PERSONAL_SKILL_OVERWRITE.value,
+                }
+            ),
+        ),
+    ),
 }
 
 
@@ -510,6 +517,14 @@ class AuditLogDao(AuditLogBase):
                 module_predicate = col(AuditLog.action).like(f"{prefix}%")
             else:
                 module_predicate = AuditLog.system_id == system_id
+                for legacy_system_id, event_types in _LEGACY_MODULE_EVENT_TYPES.get(system_id, ()):
+                    module_predicate = or_(
+                        module_predicate,
+                        and_(
+                            AuditLog.system_id == legacy_system_id,
+                            col(AuditLog.event_type).in_(event_types),
+                        ),
+                    )
             statement = statement.where(module_predicate)
             count_statement = count_statement.where(module_predicate)
         if event_type:

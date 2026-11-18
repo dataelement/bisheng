@@ -86,6 +86,8 @@ export function AddToKnowledgeModal(props: AddToKnowledgeModalProps) {
     selectedId,
     expandedIds,
     editingId,
+    isCreatingFolder,
+    canConfirm,
     isConfirming,
     spacesLoading,
     duplicateFiles,
@@ -239,8 +241,8 @@ export function AddToKnowledgeModal(props: AddToKnowledgeModalProps) {
             variant="solid"
             size="medium"
             onClick={() => void handleConfirm()}
-            disabled={!selectedId || isConfirming}
-            loading={isConfirming}
+            disabled={!canConfirm}
+            loading={isConfirming || isCreatingFolder}
             className={cn(
               "min-w-[64px] shrink-0",
               isChannelSyncFullScreenFooter && "rounded-lg",

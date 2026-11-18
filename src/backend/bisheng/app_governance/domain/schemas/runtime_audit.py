@@ -85,10 +85,14 @@ def normalize(kind, filters, *, now=None):
     if mode not in {"recent7d", "custom", "all"} or (kind != "model" and result.get("credential_id") is not None):
         raise RuntimeAuditFilterInvalidError()
     if mode == "custom":
-        start, end = utc_time(result.get("start_time")), utc_time(result.get("end_time"))
-        if start > end:
+        start = utc_time(result["start_time"]) if "start_time" in result else None
+        end = utc_time(result["end_time"]) if "end_time" in result else None
+        if (start is None and end is None) or (start is not None and end is not None and start > end):
             raise RuntimeAuditFilterInvalidError()
-        result.update(start_time=start.isoformat(), end_time=end.isoformat())
+        if start is not None:
+            result["start_time"] = start.isoformat()
+        if end is not None:
+            result["end_time"] = end.isoformat()
     elif result.get("start_time") or result.get("end_time"):
         raise RuntimeAuditFilterInvalidError()
     for key in ("visitor_id", "credential_id"):

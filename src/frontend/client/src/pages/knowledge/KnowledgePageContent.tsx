@@ -1,3 +1,5 @@
+import { useClientEnvironment } from "~/hooks/useClientEnvironment";
+import { KnowledgeDeletionDialog } from "./SpaceDetail/KnowledgeDeletionDialog";
 import { WorkbenchMenuButton } from "~/layouts/WorkbenchMenuButton";
 import { knowledgePathWithTab } from "./knowledgeListNavigation";
 import { ApiRequestFailure } from "~/components/ApiRequestFailure";
@@ -34,6 +36,8 @@ interface KnowledgePageContentProps {
 }
 
 export function KnowledgePageContent({ model }: KnowledgePageContentProps) {
+  const { capabilities } = useClientEnvironment();
+  const hostOwnsHeader = capabilities?.hasHostChatHeader === true;
   const {
     localize,
     menuNames,
@@ -151,6 +155,7 @@ export function KnowledgePageContent({ model }: KnowledgePageContentProps) {
 
   return (
     <div className="relative flex h-full min-h-0">
+      <KnowledgeDeletionDialog operation={model.spaceDeletion} />
       {/* Drag and Drop Overlay. Frosted glass here is the sanctioned exception
                 (single full-screen overlay, only while dragging) and is gated by the
                 global FROSTED_GLASS_ENABLED switch — see ~/utils/frostedGlass. */}
@@ -291,6 +296,8 @@ export function KnowledgePageContent({ model }: KnowledgePageContentProps) {
             <KnowledgeSpaceContent
               space={activeSpace}
               files={fileManager.files}
+              downloadPages={fileManager.downloadPages}
+              downloadEpoch={fileManager.downloadEpoch}
               total={fileManager.total}
               onLoadMore={fileManager.loadMore}
               hasMore={fileManager.hasMore}
@@ -371,22 +378,24 @@ export function KnowledgePageContent({ model }: KnowledgePageContentProps) {
         /* Mobile: standalone full-page space list. Tapping a space navigates to
                    /knowledge/space/:id (handled by handleSpaceSelect) → the file page. */
         <div className="flex h-[var(--dsh-chat-viewport-height,100dvh)] min-h-0 w-full flex-col overflow-hidden bg-white">
-          <div className="shrink-0 rounded-t-xl bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
-            <div className="flex h-11 w-full min-w-0 items-center justify-between gap-3 px-4">
-              <WorkbenchMenuButton
-                type="button"
-                aria-label={localize("com_nav_open_sidebar")}
-                onClick={() => setSystemMenuOpen(true)}
-                className={mobileHeadIconBtnClassName}
-              >
-                <Outlined.SidebarMenu className="size-5" />
-              </WorkbenchMenuButton>
-              <span className="min-w-0 flex-1 truncate text-center text-[16px] font-medium leading-6 text-text-1">
-                {menuNames.knowledge}
-              </span>
-              <span className="size-5 shrink-0" aria-hidden />
+          {!hostOwnsHeader && (
+            <div className="shrink-0 rounded-t-xl bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
+              <div className="flex h-11 w-full min-w-0 items-center justify-between gap-3 px-4">
+                <WorkbenchMenuButton
+                  type="button"
+                  aria-label={localize("com_nav_open_sidebar")}
+                  onClick={() => setSystemMenuOpen(true)}
+                  className={mobileHeadIconBtnClassName}
+                >
+                  <Outlined.SidebarMenu className="size-5" />
+                </WorkbenchMenuButton>
+                <span className="min-w-0 flex-1 truncate text-center text-[16px] font-medium leading-6 text-text-1">
+                  {menuNames.knowledge}
+                </span>
+                <span className="size-5 shrink-0" aria-hidden />
+              </div>
             </div>
-          </div>
+          )}
           {spacesError ? (
             <ApiRequestFailure error={spacesError} onRetry={retrySpaces} />
           ) : hasNoSpace ? (

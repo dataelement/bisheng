@@ -4,14 +4,15 @@ import { useEffect, useRef, useState } from 'react';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '~/components/ui/Dialog';
 import { useLocalize } from '~/hooks';
 import { PROJECT_NAME_MAX_LENGTH } from './projectsStore';
-import { newProjectRequestId } from '~/api/chatProjects';
+import { newProjectId } from '~/api/chatProjects';
 
 interface ProjectNameDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Present when renaming; absent when creating. */
   initialName?: string;
-  onSubmit: (name: string, requestId: string) => void | Promise<void>;
+  /** draftProjectId is minted once per open, so a retried create returns the same project. */
+  onSubmit: (name: string, draftProjectId: string) => void | Promise<void>;
 }
 
 /** 新建项目 / 重命名项目 — one name field, shared by both. */
@@ -20,12 +21,12 @@ export function ProjectNameDialog({ open, onOpenChange, initialName, onSubmit }:
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
-  const requestId = useRef('');
+  const draftProjectId = useRef('');
   const renaming = initialName !== undefined;
 
   // Start from a clean draft on every open.
   useEffect(() => {
-    if (open) { setName(initialName ?? ''); setFailed(false); requestId.current = newProjectRequestId(); }
+    if (open) { setName(initialName ?? ''); setFailed(false); draftProjectId.current = newProjectId(); }
   }, [open, initialName]);
 
   const trimmed = name.trim();
@@ -37,7 +38,7 @@ export function ProjectNameDialog({ open, onOpenChange, initialName, onSubmit }:
     event.preventDefault();
     if (!valid || busy) return;
     setBusy(true); setFailed(false);
-    try { await onSubmit(trimmed, requestId.current); onOpenChange(false); }
+    try { await onSubmit(trimmed, draftProjectId.current); onOpenChange(false); }
     catch { setFailed(true); }
     finally { setBusy(false); }
   };

@@ -2,7 +2,6 @@ import { Button, Dropdown, DropdownItem, Tooltip } from '@bisheng/ui';
 import { Outlined } from 'bisheng-icons';
 import { showApiError } from '~/api/request';
 import { useLocalize } from '~/hooks';
-import { useConfirm } from '~/Providers';
 import type { KnowledgeSpaceAction } from '../../hooks/useKnowledgeSpacePermissions';
 import styles from './KnowledgeHomeCard.module.css';
 
@@ -13,24 +12,22 @@ interface KnowledgeHomeCardMenuProps {
   onOpen: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  canLeave: boolean;
+  allowDelete: boolean;
+  onLeave: () => void;
 }
 
 export function KnowledgeHomeCardMenu({
-  disabled, permissions, permissionsLoading, onOpen, onEdit, onDelete,
+  disabled, permissions, permissionsLoading, onOpen, onEdit, onDelete, canLeave, allowDelete, onLeave,
 }: KnowledgeHomeCardMenuProps) {
   const localize = useLocalize();
-  const confirm = useConfirm();
   const canEdit = permissions.includes('edit') || permissions.includes('manage_permission');
-  const canDelete = permissions.includes('delete');
+  const canDelete = allowDelete && !canLeave && permissions.includes('delete');
   const moreLabel = localize('com_knowledge.home_next.more');
 
   const handleDelete = async () => {
     if (!canDelete || disabled) return;
-    const confirmed = await confirm({
-      description: `${localize('com_knowledge.confirm_delete_space')}${localize('com_knowledge.delete_irreversible_warning')}`,
-      variant: 'destructive',
-    });
-    if (confirmed) onDelete();
+    onDelete();
   };
 
   const menu = permissionsLoading ? (
@@ -48,7 +45,12 @@ export function KnowledgeHomeCardMenu({
           {localize('com_knowledge.delete_space')}
         </DropdownItem>
       )}
-      {!canEdit && !canDelete && (
+      {canLeave && (
+        <DropdownItem icon={<Outlined.LogOut />} danger disabled={disabled} onSelect={onLeave}>
+          {localize('com_knowledge.exit_space_short')}
+        </DropdownItem>
+      )}
+      {!canEdit && !canDelete && !canLeave && (
         <DropdownItem disabled>{localize('com_knowledge.home_next.no_actions')}</DropdownItem>
       )}
     </>

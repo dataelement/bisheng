@@ -36,5 +36,7 @@ export interface MarkdownServices {
   diagramTitle?: string;
   renderArtifact?: (props: Record<string, unknown>) => ReactNode;
   onLinkClick?: (href: string, event: MouseEvent<HTMLAnchorElement>) => void | Promise<void>;
+  /** Replaces the anchor when it returns a node. `undefined` keeps the default link. */
+  renderLink?: (href: string, children: ReactNode) => ReactNode | undefined;
   renderDocumentPreview: (preview: CitationDocumentPreviewState | null, onClose: () => void) => ReactNode;
 }

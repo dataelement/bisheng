@@ -21,7 +21,8 @@ import { dailyFailureMetadata, createBrowserNetworkFailure, parseFailureInfo, ty
 import { SSE } from "sse.js";
 import type { AgentEvent, ChatMessage, ContentPart } from "~/api/chatApi";
 import { getSSEUrl } from "~/api/chatApi";
-import { translateApiErrorMessage } from "~/api/request";
+import { parseMemorySignal, type MemoryFlags } from "~/api/memory";
+import { prepareBrowserHeaders, translateApiErrorMessage } from "~/api/request";
 import { bindProjectChatCreation, captureProjectChatDraft, type ProjectChatDraft } from "~/layouts/WorkbenchSidebar/projectChatCreation";
 
 /**
@@ -38,6 +39,10 @@ export interface AgentPatch {
     category?: string;
     /** True once the final `agent_answer.end` event has been received. */
     finalised?: boolean;
+    /** Files the code interpreter produced this turn, sent on `agent_answer.end`. */
+    files?: ChatMessage["files"];
+    /** F132: memory flags of this answer (from the `memory` SSE category). */
+    memory?: MemoryFlags;
 }
 
 export interface SSESubmission {
@@ -70,7 +75,7 @@ export interface SSESubmission {
     onError: (
         error: string,
         errorCode?: number,
-        meta?: { errorType?: string; errorDetail?: string; failureInfo?: FailureInfo },
+        meta?: { errorType?: string; errorDetail?: string; referenceId?: string; failureInfo?: FailureInfo },
     ) => void;
     onStart: () => void;
     onEnd: () => void;
@@ -123,8 +128,7 @@ export function openChatStream(
     const projectDraft = submission.projectDraft === undefined
         ? captureProjectChatDraft(payload.conversationId, submission.sseUrl)
         : submission.projectDraft;
-    const projectIntent = bindProjectChatCreation(projectDraft ?? undefined, payload);
-    const draftPath = projectDraft?.href ?? window.location.href;
+    const projectIntent = bindProjectChatCreation(projectDraft ?? undefined);
 
     // ---- Agent-mode accumulators ---------------------------------------
     const events: AgentEvent[] = [];
@@ -159,6 +163,7 @@ export function openChatStream(
 
     const sseUrl = submission.sseUrl || getSSEUrl();
     const sse = new SSE(sseUrl, {
+        start: false,
         payload: JSON.stringify({ ...payload, ...projectIntent }),
         headers: {
             "Content-Type": "application/json",
@@ -172,6 +177,12 @@ export function openChatStream(
     let endCalled = false;
     let expectedClose = false;
     let failureReported = false;
+    const handleOffline = () => {
+        if (endCalled || expectedClose || failureReported) return;
+        reportNetworkFailure();
+        sse.close();
+        safeEnd();
+    };
     const reportNetworkFailure = () => {
         if (endCalled || expectedClose || failureReported) return;
         failureReported = true;
@@ -180,6 +191,7 @@ export function openChatStream(
     const safeEnd = () => {
         if (endCalled) return;
         endCalled = true;
+        if (typeof window !== 'undefined') window.removeEventListener('offline', handleOffline);
         onEnd();
     };
 
@@ -360,6 +372,9 @@ export function openChatStream(
                             events: snapshot(),
                             category: "agent_answer",
                             finalised: true,
+                            ...(Array.isArray(message?.files) && message.files.length
+                                ? { files: message.files }
+                                : {}),
                         });
                         emitLegacy();
                         return;
@@ -371,6 +386,14 @@ export function openChatStream(
 
                 if (category === "processing") {
                     if (type === "close") expectedClose = true;
+                    return;
+                }
+
+                // F132: memory signal — turn id + notice/attribution flags, never item text.
+                if (category === "memory") {
+                    const flags = parseMemorySignal(data);
+                    if (!flags) return;
+                    emitAgent({ memory: flags });
                     return;
                 }
 
@@ -465,12 +488,6 @@ export function openChatStream(
             // back to legacy plain-text shapes, then a generic message.
             const resolved = translateApiErrorMessage(data);
             const code = typeof data?.status_code === "number" ? data.status_code : undefined;
-            if (code === 13018 && typeof data?.data?.chat_id === 'string' && /^[A-Za-z0-9_-]{1,255}$/.test(data.data.chat_id)) {
-                const currentDraft = captureProjectChatDraft(null, submission.sseUrl);
-                if (projectDraft && window.location.href === draftPath && currentDraft?.entryKey === projectDraft.entryKey) window.dispatchEvent(new CustomEvent('bisheng:project-conversation-recovered', { detail: { chatId: data.data.chat_id } }));
-                safeEnd();
-                return;
-            }
             // `data.data` carries the backend's classification alongside the
             // localized copy: without it the bubble could only ever say
             // "服务器错误" and the upstream reason (which file, which service,
@@ -490,7 +507,22 @@ export function openChatStream(
 
     sse.addEventListener("cancel", () => { expectedClose = true; safeEnd(); });
 
-    sse.stream();
+    // An open XHR may stay pending after the browser loses connectivity.
+    if (typeof window !== 'undefined') window.addEventListener('offline', handleOffline);
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        handleOffline();
+    } else {
+        void prepareBrowserHeaders('POST', sseUrl, sse.headers).then(headers => {
+            if (endCalled || expectedClose) return;
+            sse.headers = {...sse.headers, ...headers};
+            sse.stream();
+        }).catch(() => {
+            if (endCalled || expectedClose) return;
+            failureReported = true;
+            onError(localize('api_errors.fallback'));
+            safeEnd();
+        });
+    }
 
     return {
         close: () => {

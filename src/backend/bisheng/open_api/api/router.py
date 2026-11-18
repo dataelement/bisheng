@@ -1,5 +1,5 @@
-from fastapi import APIRouter
-
+from bisheng.common.request_scope import RequestScope as S
+from bisheng.common.request_scope import ScopedAPIRouter as APIRouter
 from bisheng.open_api.api.endpoints.auth import router as auth_router
 from bisheng.open_api.api.endpoints.model_gateway import router as model_gateway_router
 from bisheng.open_api.api.endpoints.personal_token_admin import router as personal_token_admin_router
@@ -11,16 +11,16 @@ from bisheng.open_api.api.endpoints.service_account_scope import router as servi
 from bisheng.open_api.api.endpoints.skill_pack import router as skill_pack_router
 
 management_router = APIRouter()
-management_router.include_router(skill_pack_router)
-management_router.include_router(personal_token_self_router)
-management_router.include_router(personal_token_admin_router)
-management_router.include_router(scopes_router)
-management_router.include_router(service_account_scope_router)
-management_router.include_router(service_account_keys_router)
-management_router.include_router(service_account_crud_router)
+management_router.include_router(skill_pack_router, request_scope=S.TENANT)
+management_router.include_router(personal_token_self_router, request_scope=S.IDENTITY)
+management_router.include_router(personal_token_admin_router, request_scope=S.TENANT)
+management_router.include_router(scopes_router, request_scope=S.IDENTITY)
+management_router.include_router(service_account_scope_router, request_scope=S.IDENTITY)
+management_router.include_router(service_account_keys_router, request_scope=S.TENANT)
+management_router.include_router(service_account_crud_router, request_scope=S.TENANT)
 
 rpc_router = APIRouter()
-rpc_router.include_router(auth_router)
+rpc_router.include_router(auth_router, request_scope=S.CREDENTIAL)
 
 # F051 is exported separately and deliberately NOT folded into ``rpc_router``:
 # it is the one v2 sub-router mounted conditionally, because AC-28 asks that the

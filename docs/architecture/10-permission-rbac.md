@@ -645,8 +645,8 @@ bash scripts/upgrade_f048_authorization_model.sh verify
 
 - **跑完必须重启全部进程**（API / celery×3 / beat / linsight worker）。心跳 15s 复核、TTL 45s，
   没重启的旧进程不是"还能用"，而是会自行 fail-closed。
-- **先发代码、后往 `config.yaml` 加新键**。`load_settings_from_yaml` 遇未知顶层键直接 `KeyError`
-  拒绝启动，顺序反了的现象是后端起不来，而不是功能不可用。
+- **先发代码、后往 `config.yaml` 加新键**。旧镜像遇未知顶层键可能直接 `KeyError`
+  拒绝启动；包含未知字段兼容修复的新镜像会警告并忽略，但对应功能仍不会生效。
 - **存量环境先 `plan` 再 `apply`**。
 
 **回滚语义**（别被"事务"两字误导）：`rollback` 子命令把 ACTIVE 指针指回 M1 行、撤掉新类型的

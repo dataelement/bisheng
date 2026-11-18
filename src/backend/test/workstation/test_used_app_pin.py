@@ -14,6 +14,7 @@ from bisheng.api.v1.schemas import UsedAppPin
 from bisheng.common.errcode.workstation import UsedAppNotFoundError, UsedAppNotOnlineError
 from bisheng.database.models import flow as flow_mod
 from bisheng.database.models import user_link as link_mod
+from bisheng.database.models.app import App
 from bisheng.database.models.assistant import Assistant
 from bisheng.database.models.flow import Flow
 from bisheng.workstation.api.endpoints import apps as apps_mod
@@ -26,7 +27,9 @@ async def pin_store(tmp_path, monkeypatch):
     tenant_token = set_current_tenant_id(1)
     database = tmp_path / "pins.sqlite"
     engine = create_engine(f"sqlite:///{database}")
-    SQLModel.metadata.create_all(engine, tables=[Flow.__table__, Assistant.__table__, link_mod.UserLink.__table__])
+    SQLModel.metadata.create_all(
+        engine, tables=[Flow.__table__, Assistant.__table__, App.__table__, link_mod.UserLink.__table__]
+    )
     with Session(engine) as session:
         session.add(Assistant(id="asst-1", name="Assistant", tenant_id=1, status=2))
         session.add(Assistant(id="asst-offline", name="Offline", tenant_id=1, status=1))
@@ -79,7 +82,7 @@ async def test_pin_refresh_unpin_round_trip(pin_store, app_id, resource_type):
     user = pin_store.user
     reply = await apps_mod.pin_used_app(login_user=user, data=UsedAppPin(flow_id=app_id))
     assert reply.status_code == 200
-    pin_store.check.assert_awaited_once_with(user, resource_type=resource_type, resource_id=app_id, action="use")
+    pin_store.check.assert_awaited_once_with(user, resource_type=resource_type, resource_id=app_id, action="visible")
     # Each read opens a fresh database session, matching a page reload.
     for _ in range(2):
         page = await apps_mod.get_used_apps(login_user=user, page=1, limit=1)

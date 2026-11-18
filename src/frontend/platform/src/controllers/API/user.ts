@@ -124,6 +124,7 @@ export async function getRolesPageApi(params: {
 
 export async function createRoleV2Api(data: {
   role_name: string
+  role_type?: "tenant" | "global"
   department_id?: number | null
   quota_config?: Record<string, unknown>
   remark?: string
@@ -224,9 +225,10 @@ export async function updateUserGroups(userId, groupIds) {
 }
 
 // 超管创建用户组
-export async function createUserApi(user_name: string, password: string, group_roles: any[]) {
+export async function createUserApi(user_name: string, password: string, group_roles: { group_id: number; role_ids: number[] }[], external_id?: string) {
   return await axios.post('/api/v1/user/create', {
     user_name,
+    external_id,
     password,
     group_roles
   })

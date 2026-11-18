@@ -192,6 +192,7 @@ class AdmissionPolicy:
         data_key_configmap: str = "runtime-data-public-keys",
         cni_username: str = "",
         storage_controller_usernames: tuple[str, ...] = ("system:kube-controller-manager", "system:kube-scheduler"),
+        image_check_max_seconds: int = 120,
     ):
         self.namespace = validate_namespace(namespace)
         if not manager_username.startswith("system:serviceaccount:") or not status_policy_revision:
@@ -206,6 +207,9 @@ class AdmissionPolicy:
         if any(not isinstance(value, str) or not value.startswith("system:") for value in storage_controller_usernames):
             raise ValueError("admission_storage_identity_invalid")
         self.storage_controller_usernames = tuple(storage_controller_usernames)
+        if type(image_check_max_seconds) is not int or not 1 <= image_check_max_seconds <= 1800:
+            raise ValueError("admission_image_check_timeout_invalid")
+        self.image_check_max_seconds = image_check_max_seconds
 
     def review(self, review: dict) -> dict:
         uid = ""
@@ -471,7 +475,7 @@ class AdmissionPolicy:
                 )
                 or containers[0].get("args")
                 or type(spec.get("activeDeadlineSeconds")) is not int
-                or not 1 <= spec.get("activeDeadlineSeconds", 0) <= 120
+                or not 1 <= spec.get("activeDeadlineSeconds", 0) <= self.image_check_max_seconds
                 or any(
                     "persistentVolumeClaim" in v or v.get("name") not in {"tmp", "registry-auth"}
                     for v in spec.get("volumes", [])
@@ -926,6 +930,7 @@ def main():
         manager_username=os.environ["RTM_ADMISSION_MANAGER_USERNAME"],
         status_policy_revision=os.environ["RTM_ADMISSION_STATUS_POLICY_REVISION"],
         plan_reader=reader,
+        image_check_max_seconds=int(os.getenv("RTM_ADMISSION_IMAGE_CHECK_MAX_SECONDS", "120")),
         data_key_configmap=os.getenv("RTM_DATA_PUBLIC_KEYS_CONFIGMAP", "runtime-data-public-keys"),
         cni_username=os.getenv("RTM_ADMISSION_CNI_USERNAME", ""),
         storage_controller_usernames=tuple(

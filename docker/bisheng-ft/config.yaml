@@ -1,0 +1,4 @@
+# Celery broker for FT command results; keep DB 5 separate from backend queues.
+# With an external/password-protected Redis, use the FT image's password
+# encryption format (same as backend). Redis Cluster is not supported.
+redis_url: "redis://redis:6379/5"

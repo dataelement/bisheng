@@ -41,10 +41,12 @@ async def list_tenant_admins(
     """List user ids holding direct tenant#admin tuple on the tenant.
 
     Root tenant returns an empty list by design (no tuples exist).
+    ``users`` carries ``{user_id, user_name}`` for display; ``user_ids`` is
+    kept for existing callers.
     """
     try:
-        user_ids = await TenantAdminService.list_tenant_admins(tenant_id)
-        return resp_200(data={'user_ids': user_ids})
+        users = (await TenantAdminService.list_tenant_admin_users([tenant_id])).get(tenant_id) or []
+        return resp_200(data={'user_ids': [u['user_id'] for u in users], 'users': users})
     except BaseErrorCode as e:
         return e.return_resp_instance()
 

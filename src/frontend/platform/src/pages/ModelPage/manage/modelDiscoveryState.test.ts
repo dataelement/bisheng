@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DiscoveredModel } from '@/controllers/API/modelDiscovery';
-import { availableModelTypes, importableModels } from './modelDiscoveryState';
+import { availableModelTypes, discoveredModelConfig, importableModels } from './modelDiscoveryState';
 
 const models: DiscoveredModel[] = [
     { model_name: 'gpt-4o', display_name: 'GPT', model_type: 'llm', type_source: 'registry' },
@@ -41,4 +41,18 @@ it('imports a confirmed speech row only after a type is chosen', () => {
     expect(importableModels([speech], new Set(['paraformer-v2']), {}, [], 'qwen')).toEqual([]);
     expect(importableModels([speech], new Set(['paraformer-v2']), { 'paraformer-v2': 'asr_rt' }, [], 'qwen')
         .map(model => model.model_type)).toEqual(['asr_rt']);
+});
+
+it('writes a listed context window into the advanced config of an imported llm', () => {
+    const listed: DiscoveredModel = {
+        model_name: 'deepseek-chat',
+        display_name: 'DeepSeek',
+        model_type: 'llm',
+        type_source: 'metadata',
+        context_window: 128000,
+    };
+    expect(JSON.parse(discoveredModelConfig('deepseek', listed).user_kwargs || '')).toEqual({ context_window: 128000 });
+    expect(JSON.parse(discoveredModelConfig('ollama', listed).user_kwargs || '')).toEqual({ num_ctx: 128000 });
+    expect(discoveredModelConfig('deepseek', { ...listed, model_type: 'embedding' })).toEqual({});
+    expect(discoveredModelConfig('deepseek', { ...listed, context_window: undefined })).toEqual({});
 });

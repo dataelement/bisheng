@@ -22,6 +22,7 @@ from bisheng.linsight.domain.models.linsight_session_version import (
     LinsightSessionVersionDao,
     SessionVersionStatusEnum,
 )
+from bisheng.linsight.domain.services.task_failure_payload import task_failure_payload
 from bisheng.utils import util
 
 
@@ -912,7 +913,6 @@ async def announce_stranded_session_failure(session_version_id: str) -> None:
         session_model = await LinsightSessionVersionDao.get_by_id(session_version_id)
         if session_model is None:
             return
-        output = session_model.output_result or {}
         state_manager = LinsightStateMessageManager(session_version_id)
 
         await state_manager.set_session_version_info(session_model)
@@ -930,12 +930,7 @@ async def announce_stranded_session_failure(session_version_id: str) -> None:
         await state_manager.push_message(
             MessageData(
                 event_type=MessageEventType.ERROR_MESSAGE,
-                data={
-                    "error": output.get("error_message") or "",
-                    "error_code": output.get("error_code"),
-                    "error_type": output.get("error_type") or "unknown",
-                    "detail": output.get("detail"),
-                },
+                data=task_failure_payload(session_model.output_result),
             )
         )
     except Exception as e:

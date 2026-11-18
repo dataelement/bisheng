@@ -56,11 +56,11 @@ it('creates and assigns in one server operation and waits for confirmation', asy
   expect(input).toHaveFocus();
   fireEvent.change(input, { target: { value: 'Research' } });
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'com_ui_create' })); });
-  expect(mockMutate).toHaveBeenCalledWith({ operation: { operation: 'create', name: 'Research', chat_id: 'chat-one' }, requestId: expect.any(String) });
+  expect(mockMutate).toHaveBeenCalledWith({ operation: { operation: 'create', project_id: expect.stringMatching(/^[0-9a-f-]{36}$/), name: 'Research', chat_id: 'chat-one' } });
   expect(mockMutate).toHaveBeenCalledTimes(1);
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 });
-it('retains failed input and retries with the same idempotency key', async () => {
+it('retains failed input and retries with the same client-generated project id', async () => {
   mockMutate.mockRejectedValueOnce(new Error('offline'));
   const input = openCreateDialog();
   fireEvent.change(input, { target: { value: 'Retry research' } });
@@ -68,7 +68,8 @@ it('retains failed input and retries with the same idempotency key', async () =>
   expect(input).toHaveValue('Retry research');
   expect(screen.getByRole('alert')).toHaveTextContent('project_sync.save_failed');
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'com_ui_create' })); });
-  expect(mockMutate.mock.calls[0][0].requestId).toBe(mockMutate.mock.calls[1][0].requestId);
+  expect(mockMutate.mock.calls[0][0].operation.project_id).toEqual(expect.any(String));
+  expect(mockMutate.mock.calls[0][0].operation.project_id).toBe(mockMutate.mock.calls[1][0].operation.project_id);
 });
 it('cancels without sending a mutation', () => {
   openCreateDialog(); fireEvent.click(screen.getByRole('button', { name: 'com_ui_cancel' }));

@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { AddToKnowledgeModal } from "./AddToKnowledgeModal";
 
 let mockWidth = 390;
 const mockToast = jest.fn();
+const mockCreateFolder = jest.fn();
 const mockLocalize = (key: string) => key;
 const mockSpaces = jest.fn(async () => [
   { id: "space", name: "Available space" },
@@ -23,6 +24,7 @@ jest.mock("~/api/knowledge", () => ({
   getManagedSpacesApi: () => mockSpaces(),
   getMineSpacesApi: () => mockSpaces(),
   getSpaceChildrenApi: async () => [],
+  createFolderApi: (...args: unknown[]) => mockCreateFolder(...args),
   FileType: { FOLDER: "folder" },
 }));
 jest.mock("~/components/illustrations", () => ({
@@ -100,3 +102,35 @@ it.each(["article", "channel_sync"] as const)(
     expect(screen.queryByRole("dialog")).toBeNull();
   },
 );
+
+it("keeps confirmation disabled until the entered folder name is persisted", async () => {
+  mockWidth = 1200;
+  let resolve!: (folder: { id: string; name: string }) => void;
+  mockCreateFolder.mockReturnValueOnce(new Promise((done) => { resolve = done; }));
+  const selected = jest.fn();
+  render(
+    <AddToKnowledgeModal
+      open
+      mode="channel_sync"
+      onOpenChange={jest.fn()}
+      onSyncSelect={selected}
+      dataSourceApi={async () => [{ id: "10", name: "Available space" }]}
+    />,
+  );
+  await screen.findByText("Available space");
+  fireEvent.click(screen.getByTitle("com_subscription.new_subfolder"));
+  const input = screen.getByDisplayValue("com_subscription.unnamed_folder_code");
+  fireEvent.change(input, { target: { value: "Created folder" } });
+  const confirm = screen.getByRole("button", { name: "com_subscription.add" });
+  expect(confirm).toBeDisabled();
+  fireEvent.keyDown(input, { key: "Enter" });
+  fireEvent.blur(input);
+  expect(mockCreateFolder).toHaveBeenCalledTimes(1);
+  expect(mockCreateFolder).toHaveBeenCalledWith("10", { name: "Created folder", parent_id: null });
+  fireEvent.click(confirm);
+  expect(selected).not.toHaveBeenCalled();
+  await act(async () => resolve({ id: "100", name: "Created folder" }));
+  await waitFor(() => expect(confirm).toBeEnabled());
+  fireEvent.click(confirm);
+  expect(selected).toHaveBeenCalledWith(expect.objectContaining({ folderId: "100", folderPath: "Created folder" }));
+});

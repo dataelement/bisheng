@@ -19,6 +19,7 @@ from bisheng.dsh.domain.repositories.usage import DshUsageRepository
 from bisheng.dsh.domain.services.automatic_quota_recovery import AutomaticQuotaRecovery
 from bisheng.dsh.domain.services.projection import DshProjectionService
 from bisheng.dsh.infrastructure.quota_redis import QuotaRejected
+from test.dsh.pricing_fixtures import PRICED_CONFIG
 from test.dsh.test_quota_admission import quota as quota
 from test.dsh.test_quota_admission import running
 from test.dsh.test_quota_settlement import terminal
@@ -368,7 +369,7 @@ async def test_http_model_call_recovers_then_projects_actual_usage(quota, recove
 
     async def model_loader(model_id):
         return SimpleNamespace(
-            id=4, name="e2e-auto-model", model_name="test-model", create_time=datetime.now(), config={}
+            id=4, name="e2e-auto-model", model_name="test-model", create_time=datetime.now(), config=dict(PRICED_CONFIG)
         ), SimpleNamespace(name="Test", type="openai")
 
     usage = DshUsageService(quota)

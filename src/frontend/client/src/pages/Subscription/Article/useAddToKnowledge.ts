@@ -41,6 +41,8 @@ export function useAddToKnowledge(
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+  const pendingFolderRef = useRef<{ id: string } | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
   const [spacesLoading, setSpacesLoading] = useState(false);
   // Duplicate file detection state
@@ -61,9 +63,19 @@ export function useAddToKnowledge(
   // Filtered tree by search
   const displayTree = search.trim() ? filterTree(tree, search) : tree;
   const isSearchMode = !!search.trim();
+  const canConfirm =
+    !!selectedId &&
+    !selectedId.startsWith("new-folder-") &&
+    !editingId &&
+    !isCreatingFolder &&
+    !isConfirming;
 
   // ─── Load spaces list on open ──────────────────────────────
   useEffect(() => {
+    pendingFolderRef.current = null;
+    setIsCreatingFolder(false);
+    setEditingId(null);
+    setSelectedId(null);
     if (!open) return;
     const { dataSourceApi, mode, localize, showToast } = loadOptions.current;
     setSpacesLoading(true);
@@ -189,12 +201,13 @@ export function useAddToKnowledge(
     setSelectedId(id);
   };
 
-  /** Create folder via API */
+  /** Start naming a folder; saving its name persists it through the space API. */
   const handleAddFolder = async (
     parentId: string,
     parentLevel: number,
     spaceId: string,
   ) => {
+    if (editingId || pendingFolderRef.current) return;
     if (parentLevel >= 10) {
       showToast({
         message: localize("com_subscription.folder_depth_limit"),
@@ -237,6 +250,7 @@ export function useAddToKnowledge(
 
   /** Save folder name — creates via API */
   const handleSaveEdit = async (id: string, name: string) => {
+    if (pendingFolderRef.current) return;
     if (getFullWidthLength(name) > 50) {
       showToast({
         message: localize("com_subscription.folder_name_too_long"),
@@ -250,6 +264,9 @@ export function useAddToKnowledge(
 
     // If it's a newly created temp node, call createFolder API
     if (id.startsWith("new-folder-")) {
+      const pending = { id };
+      pendingFolderRef.current = pending;
+      setIsCreatingFolder(true);
       try {
         // Determine the real parent_id: if parent is a space, parent_id is null
         const parentNode = node.parentId ? findNode(tree, node.parentId) : null;
@@ -259,6 +276,7 @@ export function useAddToKnowledge(
           name,
           parent_id: apiParentId,
         });
+        if (pendingFolderRef.current !== pending) return;
 
         // Replace temp node with real node
         setTree((prev) =>
@@ -279,6 +297,7 @@ export function useAddToKnowledge(
         );
         setSelectedId(created.id);
       } catch {
+        if (pendingFolderRef.current !== pending) return;
         showToast({
           message: localize("com_subscription.create_folder_failed"),
           severity: NotificationSeverity.WARNING,
@@ -295,7 +314,15 @@ export function useAddToKnowledge(
           }
           return removeNode(prev);
         });
+        setSelectedId(null);
+      } finally {
+        if (pendingFolderRef.current === pending) {
+          pendingFolderRef.current = null;
+          setIsCreatingFolder(false);
+          setEditingId(null);
+        }
       }
+      return;
     } else {
       // Just update name in local tree (rename not needed here)
       setTree((prev) =>
@@ -311,6 +338,7 @@ export function useAddToKnowledge(
 
   /** Cancel editing (remove newly created temp node) */
   const handleCancelEdit = () => {
+    if (pendingFolderRef.current) return;
     if (editingId?.startsWith("new-folder-")) {
       function removeNode(nodes: KnowledgeNode[]): KnowledgeNode[] {
         return nodes
@@ -328,10 +356,15 @@ export function useAddToKnowledge(
 
   /** Confirm — add article to selected space/folder */
   const handleConfirm = async (forceReplace = false) => {
+    if (
+      editingId ||
+      pendingFolderRef.current ||
+      selectedId?.startsWith("new-folder-")
+    ) return;
     // v2.5 Module D — channel-sync mode: report selection back to caller,
     // no article upload.
     if (mode === "channel_sync") {
-      if (!selectedId) return;
+      if (!canConfirm || !selectedId) return;
       const node = findNode(tree, selectedId);
       if (!node) return;
       const spaceNode = findNode(tree, node.spaceId) || node;
@@ -440,6 +473,8 @@ export function useAddToKnowledge(
   // Reset on close
   const handleOpenChange = (val: boolean) => {
     if (!val) {
+      pendingFolderRef.current = null;
+      setIsCreatingFolder(false);
       setSearch("");
       setSelectedId(null);
       setEditingId(null);
@@ -482,6 +517,8 @@ export function useAddToKnowledge(
     selectedId,
     expandedIds,
     editingId,
+    isCreatingFolder,
+    canConfirm,
     isConfirming,
     spacesLoading,
     duplicateFiles,

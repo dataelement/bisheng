@@ -10,7 +10,9 @@ from bisheng.common.errcode.open_api import ServiceAccountOperationForbiddenErro
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
 from bisheng.permission.api.actors import permission_actor
 from bisheng.permission.api.dependencies import (
+    PermissionResourceNormalizerPort,
     ResourcePermissionApiPort,
+    get_permission_resource_normalizer,
     get_resource_permission_api,
 )
 from bisheng.permission.api.responses import permission_error_response
@@ -32,8 +34,10 @@ async def get_grantable_models(
     resource_id: str,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     api: ResourcePermissionApiPort = Depends(get_resource_permission_api),
+    resources: PermissionResourceNormalizerPort = Depends(get_permission_resource_normalizer),
 ) -> UnifiedResponseModel:
     try:
+        resource_type = await resources.anormalize_permission_resource(resource_type, resource_id)
         data = await api.get_grantable_models(
             resource_type=resource_type,
             resource_id=resource_id,
@@ -53,8 +57,10 @@ async def get_resource_permission_context(
     resource_id: str,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     api: ResourcePermissionApiPort = Depends(get_resource_permission_api),
+    resources: PermissionResourceNormalizerPort = Depends(get_permission_resource_normalizer),
 ) -> UnifiedResponseModel:
     try:
+        resource_type = await resources.anormalize_permission_resource(resource_type, resource_id)
         data = await api.get_context(
             resource_type=resource_type,
             resource_id=resource_id,
@@ -78,8 +84,10 @@ async def list_resource_grants(
     subject_type: str | None = Query(default=None, pattern="^(user|department|user_group|service_account)$"),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     api: ResourcePermissionApiPort = Depends(get_resource_permission_api),
+    resources: PermissionResourceNormalizerPort = Depends(get_permission_resource_normalizer),
 ) -> UnifiedResponseModel:
     try:
+        resource_type = await resources.anormalize_permission_resource(resource_type, resource_id)
         data = await api.list_grants(
             resource_type=resource_type,
             resource_id=resource_id,
@@ -102,8 +110,10 @@ async def get_my_resource_permissions(
     resource_id: str,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     api: ResourcePermissionApiPort = Depends(get_resource_permission_api),
+    resources: PermissionResourceNormalizerPort = Depends(get_permission_resource_normalizer),
 ) -> UnifiedResponseModel:
     try:
+        resource_type = await resources.anormalize_permission_resource(resource_type, resource_id)
         data = await api.get_my_permissions(
             resource_type=resource_type,
             resource_id=resource_id,
@@ -124,8 +134,10 @@ async def mutate_resource_grants(
     body: GrantMutationRequest,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     api: ResourcePermissionApiPort = Depends(get_resource_permission_api),
+    resources: PermissionResourceNormalizerPort = Depends(get_permission_resource_normalizer),
 ) -> UnifiedResponseModel:
     try:
+        resource_type = await resources.anormalize_permission_resource(resource_type, resource_id)
         if any(change.subject is not None and change.subject.type == "service_account" for change in body.changes):
             # Service-account grants are intentionally available only from the
             # account detail management API, never the generic resource picker.
@@ -151,8 +163,10 @@ async def create_permission_mode_draft(
     body: PermissionModeDraftRequest,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     api: ResourcePermissionApiPort = Depends(get_resource_permission_api),
+    resources: PermissionResourceNormalizerPort = Depends(get_permission_resource_normalizer),
 ) -> UnifiedResponseModel:
     try:
+        resource_type = await resources.anormalize_permission_resource(resource_type, resource_id)
         data = await api.create_mode_draft(
             resource_type=resource_type,
             resource_id=resource_id,
@@ -175,8 +189,10 @@ async def apply_permission_mode_draft(
     body: PermissionModeApplyRequest,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     api: ResourcePermissionApiPort = Depends(get_resource_permission_api),
+    resources: PermissionResourceNormalizerPort = Depends(get_permission_resource_normalizer),
 ) -> UnifiedResponseModel:
     try:
+        resource_type = await resources.anormalize_permission_resource(resource_type, resource_id)
         data = await api.apply_mode_draft(
             resource_type=resource_type,
             resource_id=resource_id,

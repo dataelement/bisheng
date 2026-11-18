@@ -1,6 +1,7 @@
 import { collectChatAttachments, toChatArtifact } from './collectChatAttachments';
 
 jest.mock('~/pages/knowledge/FilePreview/previewUrlUtils', () => ({ resolveKnowledgePreviewUrl: (url: string) => url }));
+jest.mock('~/api/chatApi', () => ({ getAttachmentUrl: jest.fn() }));
 
 describe('conversation attachment collection', () => {
   it('keeps files across turns and replaces renewed URLs by stable file identity', () => {

@@ -8,6 +8,7 @@ import {
     useCallback,
     useEffect,
     useLayoutEffect,
+    useMemo,
     useRef,
     useState,
     type KeyboardEvent,
@@ -24,6 +25,7 @@ import { ChatResourceMenu } from "~/components/Chat/Input/ChatResourceMenu";
 
 import { ComposerEditor } from "./Input/ComposerEditor";
 import { useComposerReferences } from "./Input/useComposerReferences";
+import { labelForGroup, type AvailableToolGroup } from "./Input/AgentToolSelector";
 import { handleComposerResourceKeyDown } from "./Input/composerResourceKeyboard";
 import { AttachmentBar } from "~/components/Chat/Input/AttachmentBar";
 import DragDropOverlay from "~/components/Chat/Input/Files/DragDropOverlay";
@@ -74,7 +76,7 @@ interface AiChatInputProps {
     /** Identifies the composer across async admission checks and navigation. */
     composerIdentity?: string;
     size?: '' | 'mini';
-    /** Conversation setup choices belong to the new-chat surface. */
+    /** False on an established conversation: only switches the placeholder to the follow-up wording. */
     allowConfiguration?: boolean;
     features?: AiChatInputFeatures;
     disabled?: boolean;
@@ -354,7 +356,10 @@ const AiChatInput = memo(
         const showSkillPicker = !isLingsi && !!onSelectedOrgKbsChange
             && (taskMode || (taskModeEntry && !!onToggleTaskMode))
             && showAddSkill;
-        const showToolPicker = allowConfiguration && tools && (agentMode || (!!onSearchTypeChange && !!bsConfig?.webSearch?.enabled));
+        // Tools are sent with every request (see useAiChat), so an established
+        // conversation keeps the picker: a tool removed from the composer can be
+        // added back, and a later turn can use a tool the first one did not.
+        const showToolPicker = tools && (agentMode || (!!onSearchTypeChange && !!bsConfig?.webSearch?.enabled));
         const filesDisabled = !!disabled;
 
         const navigate = useNavigate();
@@ -496,10 +501,24 @@ const AiChatInput = memo(
 
         // Resource IDs share the native editor document while execution metadata stays in state.
         const mountedSkills = taskMode && !isLingsi ? dailySkills : [];
-        const mountedTools = tools && agentMode && !isLingsi && onSelectedOrgKbsChange ? selectedTools : [];
+        // Default-checked (auto) tools stay selected but out of the editor text;
+        // the "+" menu shows them. Editor edits only replace the visible part.
+        const showMountedTools = !!tools && agentMode && !isLingsi && !!onSelectedOrgKbsChange;
+        const mountedTools = useMemo(
+            () => (showMountedTools ? selectedTools.filter((tool) => !tool.auto) : []),
+            [showMountedTools, selectedTools],
+        );
+        const handleVisibleToolsChange = useCallback(
+            (items: typeof selectedTools) => setSelectedTools((prev) => [...prev.filter((tool) => tool.auto), ...items]),
+            [setSelectedTools],
+        );
         const { references, onReferencesChange } = useComposerReferences(
             mountedSkills, isLingsi ? [] : selectedOrgKbs, setDailySkills, onSelectedOrgKbsChange,
-            mountedTools, setSelectedTools,
+            mountedTools, handleVisibleToolsChange,
+            (tool) => labelForGroup(
+                (bsConfig?.tools as AvailableToolGroup[] | undefined)?.find(group => group.id === tool.id) ?? tool,
+                localize,
+            ),
         );
         const hasMountedKbs = ((!!(selectedOrgKbs && selectedOrgKbs.length > 0) && !isLingsi) || mountedSkills.length > 0 || mountedTools.length > 0);
         const hasInlineAttachments = ((chatFiles && chatFiles.length > 0) || uploadingFiles.length > 0) && !isLingsi;
@@ -681,7 +700,6 @@ const AiChatInput = memo(
                             {/* Add files and knowledge spaces to the conversation context. */}
                             {!isLingsi && onSelectedOrgKbsChange && (
                                 <ChatResourceMenu
-                                    config={bsConfig}
                                     availableTools={agentMode ? bsConfig.tools : undefined}
                                     showTools={!!showToolPicker && agentMode}
                                     showWebSearch={!!showToolPicker && !agentMode}

@@ -50,6 +50,24 @@ async def test_public_workstation_config_requests_picker_metadata(monkeypatch):
     for name in ("get_linsight_config", "get_knowledge_space_config", "get_subscription_config"):
         monkeypatch.setattr(WorkStationService, name, AsyncMock(return_value=None))
     monkeypatch.setattr(CapabilityCatalogService, "picker_tools", AsyncMock(return_value=[]))
+    # Without DSH the picker lists every online chat model the user may see,
+    # labelled with its provider.
+    from bisheng.dsh.domain.services import model_catalog
+
+    monkeypatch.setattr(LLMService, "get_workbench_llm", AsyncMock(return_value=WorkbenchModelConfig()))
+    monkeypatch.setattr(
+        LLMService,
+        "aget_online_chat_models",
+        AsyncMock(
+            return_value=[
+                (
+                    SimpleNamespace(id=42, model_name="vendor", name="vendor"),
+                    SimpleNamespace(id=7, name="Provider", type="openai"),
+                )
+            ]
+        ),
+    )
+    monkeypatch.setattr(model_catalog, "read_visible_model_ids", AsyncMock(return_value={42}))
     monkeypatch.setattr(
         endpoint,
         "bisheng_settings",

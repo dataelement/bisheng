@@ -28,15 +28,14 @@ async def test_update_daily_chat_config_ignores_models_field(monkeypatch):
     )
     monkeypatch.setattr(
         WorkStationService,
-        "get_daily_chat_config",
-        AsyncMock(return_value=result_config),
+        "get_daily_chat_config_with_meta",
+        AsyncMock(return_value=(result_config.model_copy(update={"models": None}), False, 1, True, False)),
     )
 
     result = await WorkStationService.update_daily_chat_config(result_config)
 
     assert '"models": null' in saved["config_value"]
-    assert result.models == result_config.models
-    assert result.models[0].visual is True
+    assert result.models is None
 
 
 def test_apply_workbench_models_returns_minimal_config_when_only_models_exist():

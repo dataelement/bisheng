@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime
 
-from sqlalchemy import CHAR, Column, DateTime, Integer, Text, UniqueConstraint, delete, text, update
+from sqlalchemy import CHAR, Column, DateTime, Integer, Text, UniqueConstraint, text, update
 from sqlmodel import Field, col, select
 
 from bisheng.common.errcode.llm_tenant import (
@@ -186,10 +186,14 @@ class LLMDao:
             for model in models:
                 model.server_id = server.id
             session.add_all(models)
-            if models and settings.dsh.enabled:
-                from bisheng.dsh.domain.repositories.new_model_visibility import initialize_new_model_visibility
+            if models:
+                from bisheng.dsh.domain.repositories.new_model_visibility import (
+                    initialize_new_model_visibility,
+                    should_record_new_model_visibility,
+                )
 
-                await initialize_new_model_visibility(session, models, server.user_id)
+                if should_record_new_model_visibility(settings.dsh.enabled):
+                    await initialize_new_model_visibility(session, models, server.user_id)
             await session.commit()
             await session.refresh(server)
 
@@ -206,6 +210,7 @@ class LLMDao:
                 await ResourceShareService.enable_sharing(
                     "llm_server",
                     str(server.id),
+                    operator=operator,
                 )
             except Exception:
                 _LOG.exception("enable_sharing llm_server=%s failed", server.id)
@@ -230,9 +235,9 @@ class LLMDao:
             raise LLMModelSharedReadonlyError.http_exception()
 
         if share_to_children:
-            await ResourceShareService.enable_sharing("llm_server", str(server_id))
+            await ResourceShareService.enable_sharing("llm_server", str(server_id), operator=operator)
         else:
-            await ResourceShareService.disable_sharing("llm_server", str(server_id))
+            await ResourceShareService.disable_sharing("llm_server", str(server_id), operator=operator)
 
     @classmethod
     async def update_server_with_models(
@@ -247,8 +252,35 @@ class LLMDao:
         if operator is not None and getattr(server, "id", None):
             await cls._assert_root_writable(server.id, operator)
 
+        from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
+        from bisheng.llm.domain.repositories.model_deletion_repository import ModelDeletionRepository
+        from bisheng.llm.domain.repositories.model_provider_operation_repository import ModelProviderOperationRepository
+
         async with get_async_db_session() as session:
-            session.add(server)
+            await session.begin()
+            providers = ModelProviderOperationRepository()
+            current = await providers.alock_provider(session, server_id=server.id)
+            await providers.arequire_idle(session, server_id=server.id)
+            retained = tuple(model.id for model in models if model.id)
+            snapshot = await ModelDeletionRepository().alock_removal_targets(
+                session, server_id=server.id, retained_model_ids=retained
+            )
+            if set(snapshot.all_model_ids) != set(retained):
+                raise ResourceReferenceInvalidError(reason="model_removal_requires_owner_application")
+            if server.tenant_id != current.tenant_id:
+                raise LLMModelNotAccessibleError.http_exception()
+            for field in ("name", "description", "type", "limit_flag", "limit", "config"):
+                setattr(current, field, getattr(server, field))
+            # F016: the form omits unchanged prices; fill them from the rows locked above so a
+            # price edited since the form loaded is kept, or a stale revision is refused.
+            from bisheng.llm.domain.pricing.service import apply_pricing_on_save
+
+            stored = await session.exec(
+                select(LLMModel.id, LLMModel.config).where(
+                    LLMModel.server_id == current.id, LLMModel.id.in_(retained or (0,))
+                )
+            )
+            apply_pricing_on_save(current.type, models, {row[0]: row[1] for row in stored.all()})
 
             add_models = []
             update_models = []
@@ -256,28 +288,30 @@ class LLMDao:
                 if model.id:
                     update_models.append(model)
                 else:
+                    model.id = None
+                    model.server_id = current.id
                     add_models.append(model)
-            # Delete model
-            await session.exec(
-                delete(LLMModel).where(
-                    col(LLMModel.server_id) == server.id, col(LLMModel.id).not_in([model.id for model in update_models])
-                )
-            )
             # New models inherit their provider's owning tenant.
             for model in add_models:
                 model.tenant_id = server.tenant_id
             session.add_all(add_models)
-            if add_models and settings.dsh.enabled:
-                from bisheng.dsh.domain.repositories.new_model_visibility import initialize_new_model_visibility
-
-                await initialize_new_model_visibility(
-                    session, add_models, operator.user_id if operator else server.user_id
+            if add_models:
+                from bisheng.dsh.domain.repositories.new_model_visibility import (
+                    initialize_new_model_visibility,
+                    should_record_new_model_visibility,
                 )
+
+                if should_record_new_model_visibility(settings.dsh.enabled):
+                    await initialize_new_model_visibility(
+                        session, add_models, operator.user_id if operator else server.user_id
+                    )
             # Update data for existing models
             for one in update_models:
                 await session.exec(
                     update(LLMModel)
-                    .where(LLMModel.id == one.id)
+                    .where(
+                        LLMModel.id == one.id, LLMModel.server_id == current.id, LLMModel.tenant_id == current.tenant_id
+                    )
                     .values(
                         name=one.name,
                         description=one.description,
@@ -288,8 +322,8 @@ class LLMDao:
                 )
 
             await session.commit()
-            await session.refresh(server)
-            return server
+            await session.refresh(current)
+            return current
 
     @classmethod
     def get_all_model(cls) -> list[LLMModel]:
@@ -413,109 +447,81 @@ class LLMDao:
             return result.all()
 
     @classmethod
-    def update_model_status(
-        cls,
-        model_id: int,
-        status: int,
-        remark: str = "",
-        *,
-        tenant_id: int | None = None,
-        server_id: int | None = None,
-    ):
-        """Stamp a verdict; management probes bind their verified owner/parent."""
-        statement = update(LLMModel).where(col(LLMModel.id) == model_id)
-        if tenant_id is not None:
-            statement = statement.where(col(LLMModel.tenant_id) == tenant_id)
-        if server_id is not None:
-            statement = statement.where(col(LLMModel.server_id) == server_id)
+    def update_model_status(cls, model_id: int, status: int, remark: str = ""):
+        """Update model status and stamp when it was decided."""
+        from bisheng.llm.domain.repositories.model_provider_write_guard import check_idle_model_write, lock_idle_model
+
         with get_sync_db_session() as session:
-            session.exec(statement.values(status=status, remark=remark, status_update_time=datetime.now()))
+            session.begin()
+            tenant, server_id, transaction = lock_idle_model(session, model_id)
+            session.exec(
+                update(LLMModel)
+                .where(LLMModel.id == model_id, LLMModel.tenant_id == tenant, LLMModel.server_id == server_id)
+                .values(status=status, remark=remark, status_update_time=datetime.now())
+            )
+            check_idle_model_write(session, tenant, transaction)
             session.commit()
 
     @classmethod
     async def aupdate_model_status(cls, model_id: int, status: int, remark: str = ""):
         """Asynchronously update model status and stamp when it was decided."""
+        from bisheng.llm.domain.repositories.model_provider_write_guard import alock_idle_model, check_idle_model_write
+
         async with get_async_db_session() as session:
+            await session.begin()
+            tenant, server_id, transaction = await alock_idle_model(session, model_id)
             await session.exec(
                 update(LLMModel)
-                .where(col(LLMModel.id) == model_id)
+                .where(LLMModel.id == model_id, LLMModel.tenant_id == tenant, LLMModel.server_id == server_id)
                 .values(status=status, remark=remark, status_update_time=datetime.now())
             )
+            check_idle_model_write(session, tenant, transaction)
             await session.commit()
 
     @classmethod
     def update_model_online(cls, model_id: int, online: bool):
         """Update model online status"""
+        from bisheng.llm.domain.repositories.model_provider_write_guard import check_idle_model_write, lock_idle_model
+
         with get_sync_db_session() as session:
-            session.exec(update(LLMModel).where(col(LLMModel.id) == model_id).values(online=online))
+            session.begin()
+            tenant, server_id, transaction = lock_idle_model(session, model_id)
+            session.exec(
+                update(LLMModel)
+                .where(LLMModel.id == model_id, LLMModel.tenant_id == tenant, LLMModel.server_id == server_id)
+                .values(online=online)
+            )
+            check_idle_model_write(session, tenant, transaction)
             session.commit()
 
     @classmethod
-    async def aupdate_model_online(cls, model_id: int, online: bool, *, tenant_id: int, server_id: int):
-        """Bind every management write to the verified model owner and parent.
+    async def aupdate_model_online(cls, model_id: int, online: bool):
+        """Asynchronous update model online status"""
+        from bisheng.llm.domain.repositories.model_provider_write_guard import alock_idle_model, check_idle_model_write
 
-        Bulk UPDATE does not receive automatic SELECT tenant filtering.
-        """
-        statement = update(LLMModel).where(
-            col(LLMModel.id) == model_id,
-            col(LLMModel.tenant_id) == tenant_id,
-            col(LLMModel.server_id) == server_id,
-        )
         async with get_async_db_session() as session:
-            await session.exec(statement.values(online=online))
+            await session.begin()
+            tenant, server_id, transaction = await alock_idle_model(session, model_id)
+            await session.exec(
+                update(LLMModel)
+                .where(LLMModel.id == model_id, LLMModel.tenant_id == tenant, LLMModel.server_id == server_id)
+                .values(online=online)
+            )
+            check_idle_model_write(session, tenant, transaction)
             await session.commit()
-
-    @classmethod
-    def delete_server_by_id(cls, server_id: int):
-        """According to serviceIDDelete Service Provider"""
-        with get_sync_db_session() as session:
-            session.exec(delete(LLMServer).where(col(LLMServer.id) == server_id))
-            session.exec(delete(LLMModel).where(col(LLMModel.server_id) == server_id))
-            session.commit()
 
     @classmethod
     async def adelete_server_by_id(cls, server_id: int, *, operator=None):
-        """Delete a server and cascade its models. When ``operator`` is
-        supplied, Root rows are super-admin-only (19801) and a missing
-        row raises 19802 so callers can distinguish absent from
-        forbidden. FGA sharing is revoked idempotently for Root rows
-        only — non-Root servers never had shares.
-        """
-        root_row = False
-        if operator is not None:
-            existing = await cls._assert_root_writable(server_id, operator)
-            if existing is None:
-                raise LLMModelNotAccessibleError.http_exception()
-            root_row = existing.tenant_id == _ROOT_TENANT_ID
+        """Legacy callers must enter the same real Owner confirmation flow."""
+        if operator is None:
+            raise LLMModelNotAccessibleError.http_exception()
+        existing = await cls._assert_root_writable(server_id, operator)
+        if existing is None:
+            raise LLMModelNotAccessibleError.http_exception()
+        from bisheng.llm.application.model_deletion import get_model_deletion_application
 
-        if root_row:
-            from bisheng.tenant.domain.services.resource_share_service import (
-                ResourceShareService,
-            )
-
-            try:
-                await ResourceShareService.disable_sharing("llm_server", str(server_id))
-            except Exception:
-                _LOG.exception("disable_sharing on delete llm_server=%s failed", server_id)
-
-        async with get_async_db_session() as session:
-            await session.exec(delete(LLMServer).where(col(LLMServer.id) == server_id))
-            await session.exec(delete(LLMModel).where(col(LLMModel.server_id) == server_id))
-            await session.commit()
-
-    @classmethod
-    def delete_model_by_ids(cls, model_ids: list[int]):
-        """According to the modelIDDelete model"""
-        with get_sync_db_session() as session:
-            session.exec(delete(LLMModel).where(col(LLMModel.id).in_(model_ids)))
-            session.commit()
-
-    @classmethod
-    async def adelete_model_by_ids(cls, model_ids: list[int]):
-        """According to the modelIDDelete model"""
-        async with get_async_db_session() as session:
-            await session.exec(delete(LLMModel).where(col(LLMModel.id).in_(model_ids)))
-            await session.commit()
+        application = await get_model_deletion_application()
+        return await application.adelete_server(identity=operator, server_id=server_id)
 
     @classmethod
     async def aget_shared_server_ids_for_leaf(cls, leaf_id: int, *, raise_on_error: bool = False) -> list[int]:

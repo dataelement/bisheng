@@ -1,0 +1,25 @@
+{
+  "id": "long-retro-detail",
+  "acs": [
+    "AC-20"
+  ],
+  "turns": [
+    {
+      "user": "记一下这次深度研究项目复盘：需求阶段没有对齐验收口径导致返工两轮；下次先写验收标准再开工；评审要拉上业务方",
+      "new_session": false,
+      "expect_write": true
+    }
+  ],
+  "question": {
+    "user": "上次深度研究项目复盘的教训是什么？",
+    "new_session": true,
+    "expect_write": false
+  },
+  "rules": {
+    "must_contain_any": [
+      "验收"
+    ]
+  },
+  "notes": "",
+  "requires_consolidation": false
+}

@@ -1,0 +1,577 @@
+pageType: evidence
+background:
+  type: solid
+  color: $paper
+notes: |
+  2020 至 2024 年，中国跨境电商进出口规模由 1.62 万亿元增至 2.71 万亿元，约增长 67%。2021 年公开资料存在 1.92 万亿元和修订后 1.98 万亿元两种口径，本页主动留空，不混用。
+  来源：https://dzswgf.mofcom.gov.cn/news/phone/182/2025/6/m-1750214318814.html
+  参考：https://images.mofcom.gov.cn/dzsws/202306/20230609104929992.pdf
+  参考：https://dzswgf.mofcom.gov.cn/news/43/2024/3/1711345064700.html
+elements:
+  - elementId: p03-top-rule
+    elementType: shape
+    bounds:
+      - 0
+      - 0
+      - 960
+      - 12
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $yellow
+      width: 0
+  - elementId: p03-kicker
+    elementType: text
+    bounds:
+      - 54
+      - 32
+      - 420
+      - 18
+    content:
+      style: $section
+      text: 01 / SCALE CHANGE
+  - elementId: p03-title
+    elementType: text
+    bounds:
+      - 52
+      - 58
+      - 850
+      - 42
+    content:
+      style: $pageTitle
+      text: 五年增长约 67%，2024 年规模升至 2.71 万亿元
+  - elementId: p03-metric-panel
+    elementType: shape
+    bounds:
+      - 54
+      - 132
+      - 250
+      - 330
+    shapeName: rect
+    fill:
+      type: solid
+      color: $graphite
+    border:
+      color: $graphite
+      width: 0
+  - elementId: p03-metric-code
+    elementType: text
+    bounds:
+      - 72
+      - 150
+      - 210
+      - 18
+    content:
+      text: ROUTE 2020 → 2024
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 10
+      color: $yellow
+      bold: true
+      letterSpacing: 1
+  - elementId: p03-metric-main
+    elementType: text
+    bounds:
+      - 70
+      - 184
+      - 214
+      - 72
+    content:
+      text: +67%
+      fontFamily:
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 54
+      color: $yellow
+      bold: true
+  - elementId: p03-metric-main-label
+    elementType: text
+    bounds:
+      - 72
+      - 252
+      - 206
+      - 42
+    content:
+      text: |-
+        2024 较 2020
+        规模增幅约 67%
+      fontFamily: *ref_0
+      fontSize: 13
+      color: $white
+      bold: true
+      lineHeight: 1.2
+  - elementId: p03-metric-divider
+    elementType: line
+    bounds:
+      - 72
+      - 316
+      - 202
+      - 1
+    viewBox:
+      - 202
+      - 1
+    points: 0,0 202,0
+    border:
+      width: 1
+      color: $steel
+  - elementId: p03-metric-yoy
+    elementType: text
+    bounds:
+      - 72
+      - 338
+      - 206
+      - 48
+    content:
+      text: |-
+        2024 同比
+        +14.0%
+      fontFamily: *ref_0
+      fontSize: 16
+      color: $white
+      bold: true
+      lineHeight: 1.18
+  - elementId: p03-metric-copy
+    elementType: text
+    bounds:
+      - 72
+      - 406
+      - 206
+      - 34
+    content:
+      text: 增长节奏波动，规模中枢持续上移。
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $steel
+      lineHeight: 1.2
+  - elementId: p03-chart-panel
+    elementType: shape
+    bounds:
+      - 330
+      - 132
+      - 576
+      - 330
+    shapeName: rect
+    fill:
+      type: solid
+      color: $surface
+    border:
+      color: $graphite
+      width: 1.2
+  - elementId: p03-chart-label
+    elementType: text
+    bounds:
+      - 350
+      - 148
+      - 300
+      - 18
+    content:
+      text: CROSS-BORDER E-COMMERCE SCALE / 万亿元
+      fontFamily: *ref_0
+      fontSize: 9
+      color: $slate
+      bold: true
+      letterSpacing: 0.8
+  - elementId: p03-axis-y
+    elementType: line
+    bounds:
+      - 364
+      - 180
+      - 1
+      - 236
+    viewBox:
+      - 1
+      - 236
+    points: 0,0 0,236
+    border:
+      width: 1
+      color: $graphite
+  - elementId: p03-axis-x
+    elementType: line
+    bounds:
+      - 364
+      - 416
+      - 510
+      - 1
+    viewBox:
+      - 510
+      - 1
+    points: 0,0 510,0
+    border:
+      width: 1
+      color: $graphite
+  - elementId: p03-grid-1
+    elementType: line
+    bounds:
+      - 364
+      - 336
+      - 510
+      - 1
+    viewBox:
+      - 510
+      - 1
+    points: 0,0 510,0
+    border:
+      width: 0.6
+      color: $grid
+      style: dash
+  - elementId: p03-grid-2
+    elementType: line
+    bounds:
+      - 364
+      - 256
+      - 510
+      - 1
+    viewBox:
+      - 510
+      - 1
+    points: 0,0 510,0
+    border:
+      width: 0.6
+      color: $grid
+      style: dash
+  - elementId: p03-grid-3
+    elementType: line
+    bounds:
+      - 364
+      - 176
+      - 510
+      - 1
+    viewBox:
+      - 510
+      - 1
+    points: 0,0 510,0
+    border:
+      width: 0.6
+      color: $grid
+      style: dash
+  - elementId: p03-bar-2020
+    elementType: shape
+    bounds:
+      - 386
+      - 279
+      - 70
+      - 137
+    shapeName: rect
+    fill:
+      type: solid
+      color: $steel
+    border:
+      color: $steel
+      width: 0
+  - elementId: p03-val-2020
+    elementType: text
+    bounds:
+      - 386
+      - 254
+      - 70
+      - 20
+    content:
+      text: '1.62'
+      fontFamily: *ref_0
+      fontSize: 12
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p03-year-2020
+    elementType: text
+    bounds:
+      - 382
+      - 424
+      - 78
+      - 18
+    content:
+      text: '2020'
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p03-yoy-2020
+    elementType: text
+    bounds:
+      - 382
+      - 442
+      - 78
+      - 14
+    content:
+      text: +25.7%
+      fontFamily: *ref_0
+      fontSize: 8
+      color: $slate
+      align:
+        - center
+        - middle
+  - elementId: p03-bar-2021
+    elementType: shape
+    bounds:
+      - 486
+      - 260
+      - 70
+      - 156
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#FFFFFF00'
+    border:
+      color: $risk
+      width: 1.5
+      style: dash
+  - elementId: p03-val-2021
+    elementType: text
+    bounds:
+      - 478
+      - 292
+      - 86
+      - 58
+    content:
+      text: |-
+        1.92 / 1.98
+        口径冲突
+        留空
+      fontFamily: *ref_0
+      fontSize: 9
+      color: $risk
+      bold: true
+      lineHeight: 1.15
+      align:
+        - center
+        - middle
+  - elementId: p03-year-2021
+    elementType: text
+    bounds:
+      - 482
+      - 424
+      - 78
+      - 18
+    content:
+      text: '2021'
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $risk
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p03-bar-2022
+    elementType: shape
+    bounds:
+      - 586
+      - 237
+      - 70
+      - 179
+    shapeName: rect
+    fill:
+      type: solid
+      color: $steel
+    border:
+      color: $steel
+      width: 0
+  - elementId: p03-val-2022
+    elementType: text
+    bounds:
+      - 586
+      - 212
+      - 70
+      - 20
+    content:
+      text: '2.11'
+      fontFamily: *ref_0
+      fontSize: 12
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p03-year-2022
+    elementType: text
+    bounds:
+      - 582
+      - 424
+      - 78
+      - 18
+    content:
+      text: '2022'
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p03-yoy-2022
+    elementType: text
+    bounds:
+      - 582
+      - 442
+      - 78
+      - 14
+    content:
+      text: +9.8%
+      fontFamily: *ref_0
+      fontSize: 8
+      color: $slate
+      align:
+        - center
+        - middle
+  - elementId: p03-bar-2023
+    elementType: shape
+    bounds:
+      - 686
+      - 214
+      - 70
+      - 202
+    shapeName: rect
+    fill:
+      type: solid
+      color: $steel
+    border:
+      color: $steel
+      width: 0
+  - elementId: p03-val-2023
+    elementType: text
+    bounds:
+      - 686
+      - 189
+      - 70
+      - 20
+    content:
+      text: '2.38'
+      fontFamily: *ref_0
+      fontSize: 12
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p03-year-2023
+    elementType: text
+    bounds:
+      - 682
+      - 424
+      - 78
+      - 18
+    content:
+      text: '2023'
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p03-yoy-2023
+    elementType: text
+    bounds:
+      - 682
+      - 442
+      - 78
+      - 14
+    content:
+      text: +15.6%
+      fontFamily: *ref_0
+      fontSize: 8
+      color: $slate
+      align:
+        - center
+        - middle
+  - elementId: p03-bar-2024
+    elementType: shape
+    bounds:
+      - 786
+      - 186
+      - 70
+      - 230
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $graphite
+      width: 1
+  - elementId: p03-val-2024
+    elementType: text
+    bounds:
+      - 786
+      - 161
+      - 70
+      - 20
+    content:
+      text: '2.71'
+      fontFamily: *ref_0
+      fontSize: 13
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p03-year-2024
+    elementType: text
+    bounds:
+      - 776
+      - 424
+      - 90
+      - 18
+    content:
+      text: 2024 更新
+      fontFamily: *ref_0
+      fontSize: 9
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p03-yoy-2024
+    elementType: text
+    bounds:
+      - 782
+      - 442
+      - 78
+      - 14
+    content:
+      text: +14.0%
+      fontFamily: *ref_0
+      fontSize: 8
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p03-footer
+    elementType: text
+    bounds:
+      - 54
+      - 492
+      - 760
+      - 24
+    content:
+      text: 注：2021 因公开口径 1.92 / 1.98 万亿元冲突而留空；2024 为更新统计。｜来源：海关总署、商务部
+      fontFamily: *ref_0
+      fontSize: 8
+      color: $slate
+  - elementId: p03-page
+    elementType: text
+    bounds:
+      - 882
+      - 504
+      - 28
+      - 16
+    content:
+      text: '03'
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      align:
+        - right
+        - top

@@ -3,6 +3,8 @@ import { KnowledgeSpaceContent } from "./index";
 import type { KnowledgeSpaceModel } from "./index";
 import type { KnowledgeSpaceContentProps } from "./knowledgeSpaceTypes";
 
+jest.mock("../hooks/useSpaceExitStatus", () => ({ useSpaceExitStatus: () => ({ canExit: false }) }));
+
 let mockNarrow = true;
 const mockNoop = () => undefined;
 const mockQueryClient = { invalidateQueries: jest.fn() };
@@ -14,6 +16,7 @@ jest.mock("recoil", () => ({
 jest.mock("../selectionStore", () => ({ knowledgeSelectedFilesState: {} }));
 jest.mock("~/pages/appChat/store/atoms", () => ({ bishengConfState: {} }));
 jest.mock("~/hooks", () => ({
+  useAuthContext: () => ({ user: { id: "test-user", role: "member" } }),
   useLocalize: () => (key: string) => key,
   usePrefersMobileLayout: () => mockNarrow,
   useScrollRevealRef: () => mockNoop,
@@ -25,6 +28,7 @@ jest.mock("~/Providers", () => ({
 }));
 jest.mock("@tanstack/react-query", () => ({
   useQueryClient: () => mockQueryClient,
+  useQueries: () => [],
 }));
 jest.mock("~/api/permission", () => ({
   getMyResourcePermissions: () => mockPermissions(),

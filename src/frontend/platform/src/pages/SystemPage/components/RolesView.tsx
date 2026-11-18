@@ -1,4 +1,4 @@
-import { Pagination, Button, Input, SearchInput } from '@bisheng/ui';
+import { Pagination, Button, Input, SearchInput, Select } from '@bisheng/ui';
 import { Switch } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 
@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 
 import { Label } from "@/components/bs-ui/label";
 import { usePaginationLocale } from "@/hooks/usePaginationLocale";
+import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import { ColumnResizeHandle } from "@/components/bs-ui/table/useResizableColumns";
 import { cname } from "@/components/bs-ui/utils";
@@ -52,6 +53,8 @@ export function RolesView({ controller }: RolesViewProps) {
     activeRole,
     roleName,
     setRoleName,
+    roleType,
+    setRoleType,
     departmentId,
     setDepartmentId,
     isPlatformAdmin,
@@ -74,6 +77,7 @@ export function RolesView({ controller }: RolesViewProps) {
     submitRole,
   } = controller;
   const paginationLocale = usePaginationLocale();
+  const selectLabels = useSelectLabels();
   return (
     <div className="relative h-full">
       <div className="h-full overflow-y-auto pb-10 pt-2">
@@ -178,6 +182,10 @@ export function RolesView({ controller }: RolesViewProps) {
                 <TableRow key={el.id}>
                   <TableCell {...rc.getTdProps(0)} className="font-medium">
                     {el.role_name}
+                    <div className="text-xs text-muted-foreground">
+                      {t(el.role_type === "global" ? "system.roleTypeShared" : "system.roleTypeTenant")}
+                      {el.tenant_id != null && ` · ${t("system.roleOwner", { id: el.tenant_id })}`}
+                    </div>
                   </TableCell>
                   <TableCell {...rc.getTdProps(1)} className="whitespace-normal break-words text-left">
                     {scopeLabel(el)}
@@ -260,6 +268,26 @@ export function RolesView({ controller }: RolesViewProps) {
             </div>
 
             <div>
+              <Label>{t("system.roleType")}</Label>
+              {!activeRole && isPlatformAdmin ? (
+                <Select
+                  {...selectLabels}
+                  aria-label={t("system.roleType")}
+                  className="mt-1"
+                  value={roleType}
+                  options={[
+                    { value: "tenant", label: t("system.roleTypeTenant") },
+                    { value: "global", label: t("system.roleTypeShared") },
+                  ]}
+                  onChange={(value) => setRoleType(value === "global" ? "global" : "tenant")}
+                />
+              ) : (
+                <p className="mt-1 text-sm">{t(activeRole?.role_type === "global" ? "system.roleTypeShared" : "system.roleTypeTenant")}</p>
+              )}
+              <p className="mt-1 text-xs text-muted-foreground">{t("system.roleTypeHint")}</p>
+            </div>
+
+            <div>
               <Label>{t("system.roleScope")}</Label>
               <p className="mt-1 text-xs text-muted-foreground">{t("system.roleScopeHint")}</p>
               <TreeDepartmentSelect
@@ -268,7 +296,7 @@ export function RolesView({ controller }: RolesViewProps) {
                 value={departmentId === "none" ? null : Number(departmentId)}
                 onChange={(id) => setDepartmentId(id == null ? "none" : String(id))}
                 allowNone={isPlatformAdmin}
-                noneLabel={t("system.scopeGlobalRole")}
+                noneLabel={t("system.scopeAllDepartments")}
                 placeholder={t("system.treeDepartmentSelectPlaceholder")}
                 emptyText={t("system.treeDepartmentSelectEmpty")}
               />

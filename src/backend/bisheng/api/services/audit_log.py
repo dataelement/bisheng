@@ -409,6 +409,23 @@ class AuditLogService:
         )
 
     @classmethod
+    async def get_audit_scope(cls, login_user: UserPayload) -> dict:
+        """The tenant and departments this caller is allowed to read.
+
+        The same resolution as the list. A later organisation or tenant
+        filter can only narrow it, so the page can keep this sentence up
+        while the filters change.
+        """
+        tenant_scope = cls._get_audit_tenant_scope(login_user)
+        dept_scope = await cls._resolve_dept_scope(login_user, tenant_scope)
+        tenant_name = None
+        if tenant_scope is not None:
+            tenants = await TenantDao.aget_by_ids([tenant_scope])
+            tenant_name = tenants[0].tenant_name if tenants else None
+        described = await AuditDeptScopeService.describe(dept_scope)
+        return {"tenant_id": tenant_scope, "tenant_name": tenant_name, **described}
+
+    @classmethod
     async def get_all_operators(cls, login_user: UserPayload) -> list[dict]:
         """Operator candidates, limited to the rows the caller may list (AC-18)."""
         tenant_scope = cls._get_audit_tenant_scope(login_user)
@@ -507,13 +524,13 @@ class AuditLogService:
         await AuditLogDao.ainsert_audit_logs([audit_log])
 
     @classmethod
-    def create_chat_assistant(cls, user: UserPayload, ip_address: str, assistant_id: str):
+    def create_chat_assistant(cls, user: UserPayload, ip_address: str, assistant_id: str, assistant_info=None):
         """
         New Audit Log for Assistant Session
         """
         logger.info(f"act=create_chat_assistant user={user.user_name} ip={ip_address} assistant={assistant_id}")
         # Getting Assistant Details
-        assistant_info = AssistantDao.get_one_assistant(assistant_id)
+        assistant_info = assistant_info or AssistantDao.get_one_assistant(assistant_id)
         cls._chat_log(
             user,
             ip_address,

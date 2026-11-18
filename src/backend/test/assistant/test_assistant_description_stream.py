@@ -33,16 +33,21 @@ def stubbed(monkeypatch):
         row = rows.get(assistant_id)
         return SimpleNamespace(**vars(row)) if row else None
 
-    def update_assistant(data):
-        rows[data.id] = data
-        saved.append(data.desc)
+    async def persist_changes(assistant_id, _user, *, changes, condition):
+        data = rows[assistant_id]
+        if condition(data):
+            for field, value in changes.items():
+                setattr(data, field, value)
+            saved.append(data.desc)
         return data
 
     async def allow(*_args, **_kwargs):
         return None
 
     monkeypatch.setattr(assistant_module.AssistantDao, "aget_one_assistant", aget_one_assistant)
-    monkeypatch.setattr(assistant_module.AssistantDao, "update_assistant", update_assistant)
+    # These cases isolate streamed text/prefix semantics. The transaction and
+    # reference fence are exercised against actual SQL in test_as_bindings.py.
+    monkeypatch.setattr(AssistantService, "_persist_assistant_changes", persist_changes)
     monkeypatch.setattr(AssistantService, "check_update_permission_async", allow)
     monkeypatch.setattr(assistant_module, "AssistantAgent", _FakeAgent)
     return rows, saved

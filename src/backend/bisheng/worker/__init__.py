@@ -25,6 +25,7 @@ from bisheng.worker.knowledge.knowledge_chat_history_retention import (
     rehome_knowledge_chat_sessions as rehome_knowledge_chat_sessions,
 )
 from bisheng.worker.knowledge.move_worker import migrate_file_vectors
+from bisheng.worker.knowledge.processing_jobs import dispatch_pending_processing_jobs, execute_processing_job
 from bisheng.worker.knowledge.qa import copy_qa_knowledge_celery, insert_qa_celery, rebuild_qa_knowledge_celery
 from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery, rebuild_knowledge_file_chunk
 from bisheng.worker.knowledge.scheduler import (
@@ -34,6 +35,13 @@ from bisheng.worker.knowledge.scheduler import (
 from bisheng.worker.knowledge.space_delete import dispatch_pending_deletes, purge_space_delete
 from bisheng.worker.knowledge.stale_projection_reconciler import (
     reconcile_stale_parent_projections as reconcile_stale_parent_projections,
+)
+from bisheng.worker.memory.tasks import (
+    cleanup_memory_turns,
+    consolidate_memory_user,
+    flush_memory_metrics,
+    reconcile_memory,
+    scan_memory_sessions,
 )
 from bisheng.worker.linsight.personal_skill_sweep import (
     dispatch_personal_skill_orphan_sweep,
@@ -65,8 +73,10 @@ __all__ = [
     "copy_qa_knowledge_celery",
     "dispatch_information_article_poll",
     "dispatch_information_subscription_reconcile",
+    "dispatch_pending_processing_jobs",
     "dispatch_personal_skill_orphan_sweep",
     "execute_approval_outbox",
+    "execute_processing_job",
     "execute_workflow",
     "file_copy_celery",
     "insert_qa_celery",

@@ -263,10 +263,10 @@
     },
     "dalle_image_generator": {
       "params": {
-        "query": "Description about image."
+        "query": "要生成的图片描述"
       },
-      "desc": "根据提示词生成图像。",
-      "name": "Dalle3绘画"
+      "desc": "根据提示词，使用配置的服务和模型生成图像。",
+      "name": "图像生成"
     },
     "web_search": {
       "params": {
@@ -321,6 +321,13 @@
       },
       "desc": "可以通过公司名称或ID获取企业股东信息，股东信息包括股东名、出资比例、出资金额、股东总数等字段的详细信息",
       "name": "企业股东"
+    },
+    "image_generation": {
+      "params": {
+        "query": "要生成的图片描述"
+      },
+      "desc": "根据提示词，使用配置的服务和模型生成图像。",
+      "name": "图像生成"
     }
   },
   "invalidEmailMessage": "请输入有效的邮箱地址",
@@ -391,8 +398,8 @@
       "name": "企业微信"
     },
     "Dalle3绘画": {
-      "desc": "OpenAI 文生图模型",
-      "name": "Dalle3绘画"
+      "name": "图像生成",
+      "desc": "根据提示词，使用配置的服务和模型生成图像。"
     },
     "Jina AI": {
       "desc": "将目标网址（支持 PDF）内容转换为大模型可处理的 Markdown 格式",
@@ -413,6 +420,10 @@
     "SiliconFlow": {
       "desc": "基于文本提示生成高质量图像，支持 Flux 和 Stable Diffusion 模型",
       "name": "SiliconFlow"
+    },
+    "图像生成": {
+      "name": "图像生成",
+      "desc": "根据提示词，使用配置的服务和模型生成图像。"
     }
   },
   "azureEndpointPlaceholder": "格式示例：https://xxx.openai.azure.com/",
@@ -443,5 +454,14 @@
   "enterApiKey": "请输入 API Key",
   "encryptMethodSslLabel": "SSL 加密",
   "uploadFile": "上传文件",
-  "sandboxTestFailed": "测试没有完成。"
+  "sandboxTestFailed": "测试没有完成。",
+  "imageGeneration": {
+    "openai_api_base": "API 地址",
+    "openai_api_key": "API Key",
+    "model": "模型",
+    "openai_proxy": "代理（可选）",
+    "invalidAddress": "请输入不含凭据、查询参数或片段的 HTTP(S) API 地址。",
+    "enterNewKey": "更换服务域名后，请重新填写 API Key。",
+    "reconfigureAzure": "Azure 接口已移除，请重新填写兼容服务的地址、API Key 和模型。"
+  }
 }

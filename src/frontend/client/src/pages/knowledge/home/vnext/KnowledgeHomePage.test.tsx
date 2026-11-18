@@ -20,6 +20,8 @@ jest.mock('@bisheng/ui', () => ({
 }));
 
 const mockCreatorInfo = jest.fn();
+const mockExitStatus = jest.fn();
+jest.mock('~/api/knowledgeSpaceExit', () => ({ resolveSpaceExitScope: async () => '42', getSpaceExitStatus: (...args: unknown[]) => mockExitStatus(...args) }));
 const mockPin = jest.fn();
 const mockDelete = jest.fn();
 const mockUpdate = jest.fn();
@@ -57,6 +59,7 @@ jest.mock('../../hooks/useKnowledgeSpacePermissions', () => ({ useKnowledgeSpace
 }) }));
 jest.mock('../../hooks/useSpaceActions', () => ({ useSpaceActions: () => ({
   handleUpdateSpace: mockUpdate, handlePinSpace: mockPin, handleDeleteSpace: mockDelete, handleLeaveSpace: mockLeave,
+  deletion: { view: null },
 }) }));
 
 function row(id: string, name: string, date = '2026-01-01'): KnowledgeSpace {
@@ -75,8 +78,11 @@ function mount(path = '/knowledge') {
 
 beforeEach(() => {
   window.localStorage.clear();
+  mockExitStatus.mockReset();
+  mockExitStatus.mockImplementation(async (id: string) => ({ can_exit: id === '2', reason: id === '2' ? null : 'creator' }));
   mockData = { mine: [row('1', 'Alpha')], joined: [row('2', 'Beta', '2026-02-01'), row('3', 'Department')], department: [row('3', 'Department')] };
   mockPermissions = {}; mockLoading = false; mockError = null; mockPermissionLoading = false;
+  mockLeave.mockReset(); mockLeave.mockResolvedValue(undefined); mockConfirm.mockReset();
   mockUpdate.mockReset(); mockUpdate.mockResolvedValue(undefined); mockPin.mockResolvedValue(undefined); mockConfirm.mockResolvedValue(true);
 });
 
@@ -208,6 +214,28 @@ it('supports arrow-key category selection and preserves focus', async () => {
   });
 });
 
+it('keeps full category counts and exposes later cards when tabbing through a large list', () => {
+  mockData = {
+    mine: Array.from({ length: 100 }, (_, index) => row(String(index + 1), `Space ${index + 1}`)),
+    joined: [],
+    department: [row('101', 'Department')],
+  };
+  mount();
+  expect(screen.getByRole('tab', { name: 'com_knowledge.home_next.all 101', selected: true })).toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Space 49' })).not.toBeInTheDocument();
+
+  const lastLink = screen.getByRole('link', { name: 'Space 48' });
+  act(() => lastLink.focus());
+  expect(lastLink).toHaveFocus();
+  expect(screen.getByRole('link', { name: 'Space 49' })).toBeInTheDocument();
+
+  fireEvent.mouseDown(screen.getByRole('tab', { name: 'com_knowledge.home_next.department 1' }));
+  expect(screen.getAllByRole('article')).toHaveLength(1);
+  fireEvent.mouseDown(screen.getByRole('tab', { name: 'com_knowledge.home_next.all 101' }));
+  expect(screen.getByRole('link', { name: 'Space 48' })).toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Space 49' })).not.toBeInTheDocument();
+});
+
 it('keeps latest pin first through sort changes, unpin and re-pin', async () => {
   mockPin.mockImplementation(async (id: string, isPinned: boolean) => {
     const update = (list: KnowledgeSpace[]) => list.map((space) => space.id === id ? { ...space, isPinned } : space);
@@ -295,17 +323,19 @@ it('resolves permissions when opening the portaled menu and hides unauthorized e
   expect(screen.queryByRole('menuitem', { name: 'com_knowledge.delete_space' })).not.toBeInTheDocument();
 });
 
-it('confirms destructive operations and dispatches deletion only with the permission', async () => {
+it('hands destructive deletion to the confirmation owner only with the permission', async () => {
   mockPermissions = { '1': ['delete', 'edit'] };
   mount();
   const card = screen.getAllByRole('article').find((node) => within(node).queryByRole('link', { name: 'Alpha' }))!;
   fireEvent.keyDown(within(card).getByRole('button', { name: 'com_knowledge.home_next.more' }), { key: 'Enter' });
   const menu = await screen.findByRole('menu');
-  expect(within(menu).getAllByRole('menuitem')).toHaveLength(2);
+  await waitFor(() => expect(within(menu).getAllByRole('menuitem')).toHaveLength(2));
   expect(within(menu).queryByRole('menuitem', { name: 'com_knowledge.pin_space' })).not.toBeInTheDocument();
-  fireEvent.click(within(menu).getByRole('menuitem', { name: 'com_knowledge.delete_space' }));
+  const deleteAction = within(menu).getByRole('menuitem', { name: 'com_knowledge.delete_space' });
+  expect(deleteAction).toHaveClass('text-danger');
+  fireEvent.click(deleteAction);
   await waitFor(() => expect(mockDelete).toHaveBeenCalledWith('1'));
-  expect(mockConfirm).toHaveBeenCalledWith(expect.objectContaining({ variant: 'destructive' }));
+  expect(mockConfirm).not.toHaveBeenCalled();
 });
 
 it('keeps creation and discovery disabled until the plugin gate resolves', () => {
@@ -323,18 +353,19 @@ it('shows a permission loading row instead of privileged actions', async () => {
   expect(screen.queryByRole('menuitem', { name: 'com_knowledge.delete_space' })).not.toBeInTheDocument();
 });
 
-it('exposes only permitted settings in the joined-space menu', async () => {
+it('exposes permitted settings and confirmed exit in the joined-space menu', async () => {
   mockPermissions = { '2': ['edit', 'manage_permission'] };
   mount();
   const card = screen.getAllByRole('article').find((node) => within(node).queryByRole('link', { name: 'Beta' }))!;
   fireEvent.keyDown(within(card).getByRole('button', { name: 'com_knowledge.home_next.more' }), { key: 'Enter' });
   const menu = await screen.findByRole('menu');
-  expect(within(menu).getAllByRole('menuitem')).toHaveLength(1);
+  await waitFor(() => expect(within(menu).getAllByRole('menuitem')).toHaveLength(2));
   expect(within(menu).getByRole('menuitem', { name: 'com_knowledge.space_settings' })).not.toHaveAttribute('aria-disabled', 'true');
   expect(within(menu).queryByRole('menuitem', { name: 'com_knowledge.pin_space' })).not.toBeInTheDocument();
   expect(within(menu).getByRole('menuitem', { name: 'com_knowledge.space_settings' })).toBeInTheDocument();
-  expect(within(menu).queryByRole('menuitem', { name: 'com_knowledge.exit_space_short' })).not.toBeInTheDocument();
-  expect(mockLeave).not.toHaveBeenCalled();
+  fireEvent.click(within(menu).getByRole('menuitem', { name: 'com_knowledge.exit_space_short' }));
+  await waitFor(() => expect(mockLeave).toHaveBeenCalledWith('2'));
+  expect(mockConfirm).toHaveBeenCalledWith(expect.objectContaining({ description: 'com_knowledge.confirm_exit_space' }));
 });
 
 it('unpins from the card button without entering the space', async () => {
@@ -366,4 +397,64 @@ it('opens existing space settings instead of renaming inline', async () => {
   expect(callbacks.onSpaceSelect).not.toHaveBeenCalled();
   expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
   expect(mockUpdate).not.toHaveBeenCalled();
+});
+
+
+it('does not leave when the exit confirmation is cancelled', async () => {
+  mockConfirm.mockResolvedValue(false);
+  mount();
+  const card = screen.getAllByRole('article').find((node) => within(node).queryByRole('link', { name: 'Beta' }))!;
+  fireEvent.keyDown(within(card).getByRole('button', { name: 'com_knowledge.home_next.more' }), { key: 'Enter' });
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'com_knowledge.exit_space_short' }));
+  await waitFor(() => expect(mockConfirm).toHaveBeenCalled());
+  expect(mockLeave).not.toHaveBeenCalled();
+});
+
+it.each(['Alpha', 'Department'])('does not offer exit for %s', async (name) => {
+  mount();
+  const card = screen.getAllByRole('article').find((node) => within(node).queryByRole('link', { name }))!;
+  fireEvent.keyDown(within(card).getByRole('button', { name: 'com_knowledge.home_next.more' }), { key: 'Enter' });
+  const menu = await screen.findByRole('menu');
+  expect(within(menu).queryByRole('menuitem', { name: 'com_knowledge.exit_space_short' })).not.toBeInTheDocument();
+});
+
+it('offers exit rather than deleting a joined space even with delete permission', async () => {
+  mockPermissions = { '2': ['delete'] };
+  mount();
+  const card = screen.getAllByRole('article').find((node) => within(node).queryByRole('link', { name: 'Beta' }))!;
+  fireEvent.keyDown(within(card).getByRole('button', { name: 'com_knowledge.home_next.more' }), { key: 'Enter' });
+  const menu = await screen.findByRole('menu');
+  expect(await within(menu).findByRole('menuitem', { name: 'com_knowledge.exit_space_short' })).toBeInTheDocument();
+  expect(within(menu).queryByRole('menuitem', { name: 'com_knowledge.delete_space' })).not.toBeInTheDocument();
+});
+
+it.each(['organization_grant', 'creator', 'no_personal_grant'])('hides exit for a joined card denied by %s', async (reason) => {
+  mockExitStatus.mockResolvedValue({ can_exit: false, reason });
+  mockPermissions = { '2': ['delete'] };
+  mount();
+  expect(mockExitStatus).not.toHaveBeenCalled();
+  const card = screen.getAllByRole('article').find((node) => within(node).queryByRole('link', { name: 'Beta' }))!;
+  fireEvent.keyDown(within(card).getByRole('button', { name: 'com_knowledge.home_next.more' }), { key: 'Enter' });
+  await waitFor(() => expect(mockExitStatus).toHaveBeenCalledWith('2'));
+  await waitFor(() => expect(screen.queryByRole('menuitem', { name: 'com_knowledge.loading' })).not.toBeInTheDocument());
+  expect(screen.queryByRole('menuitem', { name: 'com_knowledge.exit_space_short' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('menuitem', { name: 'com_knowledge.delete_space' })).not.toBeInTheDocument();
+});
+
+it('keeps exit hidden while the server status is unresolved', async () => {
+  mockExitStatus.mockImplementation(() => new Promise(() => {}));
+  mount();
+  const card = screen.getAllByRole('article').find((node) => within(node).queryByRole('link', { name: 'Beta' }))!;
+  fireEvent.keyDown(within(card).getByRole('button', { name: 'com_knowledge.home_next.more' }), { key: 'Enter' });
+  expect(await screen.findByRole('menuitem', { name: 'com_knowledge.loading' })).toHaveAttribute('aria-disabled', 'true');
+  expect(screen.queryByRole('menuitem', { name: 'com_knowledge.exit_space_short' })).not.toBeInTheDocument();
+});
+
+it('executes server-authorized personal exit independently of the department category', async () => {
+  mockExitStatus.mockResolvedValue({ can_exit: true, reason: null });
+  mount();
+  const card = screen.getAllByRole('article').find((node) => within(node).queryByRole('link', { name: 'Department' }))!;
+  fireEvent.keyDown(within(card).getByRole('button', { name: 'com_knowledge.home_next.more' }), { key: 'Enter' });
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'com_knowledge.exit_space_short' }));
+  await waitFor(() => expect(mockLeave).toHaveBeenCalledWith('3'));
 });

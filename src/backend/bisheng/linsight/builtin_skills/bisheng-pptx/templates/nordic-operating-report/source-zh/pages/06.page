@@ -1,0 +1,437 @@
+pageType: process
+background:
+  type: solid
+  color: $navy
+notes: |
+  中国企业建设的海外仓超过 2500 个，总面积超过 3000 万平方米。按两个下限值计算，单仓平均面积超过约 1.2 万平方米，仅作数量级参考。2024 年国际货邮运输量同比增长 29.3%。
+  海外仓连接分拣、配送、退换货、售后、库存资金与当地合规，是本地经营基础设施而非单一仓储节点。
+elements:
+  - elementId: wh-cyan-rail
+    elementType: shape
+    bounds:
+      - 0
+      - 0
+      - 14
+      - 540
+    shapeName: rect
+    fill:
+      type: solid
+      color: $cyan
+    border:
+      color: $cyan
+      width: 0
+  - elementId: wh-top-rule
+    elementType: line
+    bounds:
+      - 52
+      - 46
+      - 856
+      - 1
+    viewBox:
+      - 856
+      - 1
+    points: 0,0 856,0
+    border:
+      color: $mist
+      width: 0.8
+  - elementId: wh-flow-line
+    elementType: line
+    bounds:
+      - 94
+      - 302
+      - 732
+      - 1
+    viewBox:
+      - 732
+      - 1
+    points: 0,0 732,0
+    border:
+      color: $mist
+      width: 1.4
+    arrow:
+      - null
+      - triangle
+  - elementId: wh-node-1
+    elementType: shape
+    bounds:
+      - 80
+      - 288
+      - 28
+      - 28
+    shapeName: ellipse
+    fill:
+      type: solid
+      color: $cyan
+    border:
+      color: $white
+      width: 1
+  - elementId: wh-node-2
+    elementType: shape
+    bounds:
+      - 218
+      - 282
+      - 40
+      - 40
+    shapeName: rect
+    fill:
+      type: solid
+      color: $paper
+    border:
+      color: $white
+      width: 1
+  - elementId: wh-node-3
+    elementType: shape
+    bounds:
+      - 372
+      - 286
+      - 32
+      - 32
+    shapeName: rect
+    fill:
+      type: solid
+      color: $mist
+    border:
+      color: $white
+      width: 1
+  - elementId: wh-node-4
+    elementType: shape
+    bounds:
+      - 516
+      - 288
+      - 28
+      - 28
+    shapeName: ellipse
+    fill:
+      type: solid
+      color: $cyan
+    border:
+      color: $white
+      width: 1
+  - elementId: wh-node-5
+    elementType: shape
+    bounds:
+      - 654
+      - 286
+      - 32
+      - 32
+    shapeName: rect
+    fill:
+      type: solid
+      color: $clay
+    border:
+      color: $white
+      width: 1
+  - elementId: wh-node-6
+    elementType: shape
+    bounds:
+      - 810
+      - 282
+      - 40
+      - 40
+    shapeName: rect
+    fill:
+      type: solid
+      color: $paper
+    border:
+      color: $white
+      width: 1
+  - elementId: wh-control-band
+    elementType: shape
+    bounds:
+      - 52
+      - 412
+      - 856
+      - 70
+    shapeName: rect
+    fill:
+      type: solid
+      color: $paper
+    border:
+      color: $paper
+      width: 0
+  - elementId: wh-control-accent
+    elementType: shape
+    bounds:
+      - 52
+      - 412
+      - 16
+      - 70
+    shapeName: rect
+    fill:
+      type: solid
+      color: $clay
+    border:
+      color: $clay
+      width: 0
+  - elementId: wh-kicker
+    elementType: text
+    bounds:
+      - 52
+      - 20
+      - 520
+      - 18
+    content:
+      text: FULFILMENT INFRASTRUCTURE / LOCAL OPERATING LOOP
+      fontFamily: &ref_1
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 8.5
+      bold: true
+      letterSpacing: 1.1
+      color: $mist
+  - elementId: wh-title
+    elementType: text
+    bounds:
+      - 52
+      - 76
+      - 730
+      - 46
+    content:
+      text: 海外仓改变的不是距离，而是经营闭环
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 32
+      bold: true
+      color: $white
+  - elementId: wh-m1
+    elementType: text
+    bounds:
+      - 52
+      - 152
+      - 250
+      - 52
+    content:
+      text: 2500+
+      fontFamily: *ref_0
+      fontSize: 42
+      bold: true
+      color: $cyan
+  - elementId: wh-m1-l
+    elementType: text
+    bounds:
+      - 52
+      - 208
+      - 250
+      - 24
+    content:
+      text: 中国企业建设海外仓
+      fontFamily: *ref_1
+      fontSize: 9
+      color: $mist
+  - elementId: wh-m2
+    elementType: text
+    bounds:
+      - 360
+      - 152
+      - 250
+      - 52
+    content:
+      text: 3000 万㎡+
+      fontFamily: *ref_0
+      fontSize: 30
+      bold: true
+      color: $white
+  - elementId: wh-m2-l
+    elementType: text
+    bounds:
+      - 360
+      - 208
+      - 250
+      - 24
+    content:
+      text: 海外仓总面积
+      fontFamily: *ref_1
+      fontSize: 9
+      color: $mist
+  - elementId: wh-m3
+    elementType: text
+    bounds:
+      - 680
+      - 152
+      - 228
+      - 52
+    content:
+      text: +29.3%
+      fontFamily: *ref_0
+      fontSize: 38
+      bold: true
+      color: $clay
+      align:
+        - right
+        - top
+  - elementId: wh-m3-l
+    elementType: text
+    bounds:
+      - 680
+      - 208
+      - 228
+      - 24
+    content:
+      text: 2024 国际货邮运输量
+      fontFamily: *ref_1
+      fontSize: 9
+      color: $mist
+      align:
+        - right
+        - top
+  - elementId: wh-label-1
+    elementType: text
+    bounds:
+      - 54
+      - 334
+      - 82
+      - 44
+    content:
+      text: 入库<br>需求前置
+      fontFamily: *ref_1
+      fontSize: 9.5
+      bold: true
+      lineHeight: 1.3
+      color: $white
+      align:
+        - center
+        - top
+  - elementId: wh-label-2
+    elementType: text
+    bounds:
+      - 190
+      - 334
+      - 96
+      - 44
+    content:
+      text: 仓储<br>库存可用率
+      fontFamily: *ref_1
+      fontSize: 9.5
+      bold: true
+      lineHeight: 1.3
+      color: $white
+      align:
+        - center
+        - top
+  - elementId: wh-label-3
+    elementType: text
+    bounds:
+      - 342
+      - 334
+      - 94
+      - 44
+    content:
+      text: 分拣<br>订单响应
+      fontFamily: *ref_1
+      fontSize: 9.5
+      bold: true
+      lineHeight: 1.3
+      color: $white
+      align:
+        - center
+        - top
+  - elementId: wh-label-4
+    elementType: text
+    bounds:
+      - 484
+      - 334
+      - 92
+      - 44
+    content:
+      text: 配送<br>时效承诺
+      fontFamily: *ref_1
+      fontSize: 9.5
+      bold: true
+      lineHeight: 1.3
+      color: $white
+      align:
+        - center
+        - top
+  - elementId: wh-label-5
+    elementType: text
+    bounds:
+      - 624
+      - 334
+      - 92
+      - 44
+    content:
+      text: 退换货<br>逆向物流
+      fontFamily: *ref_1
+      fontSize: 9.5
+      bold: true
+      lineHeight: 1.3
+      color: $white
+      align:
+        - center
+        - top
+  - elementId: wh-label-6
+    elementType: text
+    bounds:
+      - 782
+      - 334
+      - 98
+      - 44
+    content:
+      text: 售后合规<br>客户闭环
+      fontFamily: *ref_1
+      fontSize: 9.5
+      bold: true
+      lineHeight: 1.3
+      color: $white
+      align:
+        - center
+        - top
+  - elementId: wh-control-title
+    elementType: text
+    bounds:
+      - 84
+      - 427
+      - 160
+      - 22
+    content:
+      text: 库存资金是主约束
+      fontFamily: *ref_1
+      fontSize: 13
+      bold: true
+      color: $ink
+  - elementId: wh-control-copy
+    elementType: text
+    bounds:
+      - 260
+      - 426
+      - 628
+      - 36
+    content:
+      text: 仓网前置把跨境物流问题转化为本地库存问题：补货频率、滞销损失、退货处理与现金安全垫必须进入同一套经营节奏。
+      fontFamily: *ref_1
+      fontSize: 9.5
+      lineHeight: 1.35
+      color: $ink
+  - elementId: wh-source
+    elementType: text
+    bounds:
+      - 52
+      - 510
+      - 760
+      - 14
+    content:
+      text: 来源：商务部公开数据｜单仓平均面积为下限值数量级参考，根据公开披露数据计算。
+      fontFamily: *ref_1
+      fontSize: 7.5
+      color: $mist
+  - elementId: wh-page
+    elementType: text
+    bounds:
+      - 862
+      - 510
+      - 46
+      - 14
+    content:
+      text: 16—06
+      fontFamily: *ref_1
+      fontSize: 8
+      bold: true
+      color: $mist
+      align:
+        - right
+        - bottom

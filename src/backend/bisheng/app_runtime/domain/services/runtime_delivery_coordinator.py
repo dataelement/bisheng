@@ -448,7 +448,7 @@ class RuntimeDeliveryCoordinator:
 
         return await stop_preview(session_id, reason="manual", coordinator=self)
 
-    async def recover(self, app, route, *, running, observation):
+    async def recover(self, app, route, *, running, observation=None, retry_from=None):
         from bisheng.app_publish.domain.schemas.app_manifest import egress_domains_of
         from bisheng.app_runtime.domain.services.app_state_service import AppStateService
 
@@ -464,7 +464,19 @@ class RuntimeDeliveryCoordinator:
             and previous.status in {"failed", "cancelled", "timed_out"}
         ):
             return
-        attempt = (previous.payload.get("recovery_attempt", 0) if previous else 0) + 1
+        if retry_from is not None and (previous is None or previous.id != retry_from.id):
+            return
+        if retry_from is not None and previous.status not in {"failed", "timed_out"}:
+            return
+        if retry_from is not None:
+            retry_at = (previous.failure or {}).get("recovery_retry_at")
+            try:
+                retry_due = datetime.fromisoformat(retry_at) <= datetime.utcnow()
+            except (TypeError, ValueError):
+                retry_due = False
+            if (previous.failure or {}).get("recovery_retry_status") != "scheduled" or not retry_due:
+                return
+        attempt = int(previous.payload.get("recovery_attempt", 0)) + 1 if retry_from is not None else 1
         if attempt > 3:
             return
         version = await AppStateService._load_version(app.id, route.version_id)
@@ -526,10 +538,15 @@ class RuntimeDeliveryCoordinator:
             origin = await self.repo.get(RuntimeOperation, current_route.operation_id, lock=True)
             if origin is None:
                 return
-            payload["authorization_context"] = RuntimeAuthorizationService.capture_system(
-                locked, current_route, origin, delivery, observation
-            )
-            if not running:
+            if retry_from is None:
+                payload["authorization_context"] = RuntimeAuthorizationService.capture_system(
+                    locked, current_route, origin, delivery, observation or {}
+                )
+            else:
+                payload["authorization_context"] = RuntimeAuthorizationService.capture_system_retry(
+                    locked, current_route, current_previous, delivery
+                )
+            if not running and retry_from is None:
                 await self.repo.release(current_route.operation_id, stopped=True)
             op = await self.submit(
                 app,

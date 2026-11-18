@@ -1,0 +1,78 @@
+.filterContainer {
+  container: audit-filters / inline-size;
+}
+
+.filterGrid,
+.tenantFilter {
+  --filter-column-max: 176px;
+}
+
+.filterGrid {
+  --filter-gap: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--filter-gap);
+}
+
+.filterContainer .filterGrid > * {
+  min-width: 0;
+  width: 100%;
+}
+
+.filterGrid > :not(.filterActions) {
+  max-width: var(--filter-column-max);
+}
+
+.filterGrid > .dateRange {
+  max-width: calc(2 * var(--filter-column-max) + var(--filter-gap));
+}
+
+.tenantFilter {
+  width: min(100%, var(--filter-column-max));
+}
+
+.filterActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  align-self: start;
+  grid-column: -2 / -1;
+}
+
+/* Each column needs at least 160px plus the gap to the previous column. */
+@container audit-filters (min-width: 332px) {
+  .filterGrid {
+    --filter-columns: 2;
+    --filter-column-width: min(var(--filter-column-max), (100% - (var(--filter-columns) - 1) * var(--filter-gap)) / var(--filter-columns));
+    /* The last track takes any extra space so the actions reach the right edge. */
+    grid-template-columns: repeat(calc(var(--filter-columns) - 1), var(--filter-column-width)) minmax(0, 1fr);
+  }
+
+  .dateRange {
+    grid-column: span 2;
+  }
+}
+
+@container audit-filters (min-width: 504px) {
+  .filterGrid {
+    --filter-columns: 3;
+  }
+}
+
+@container audit-filters (min-width: 676px) {
+  .filterGrid {
+    --filter-columns: 4;
+  }
+}
+
+@container audit-filters (min-width: 848px) {
+  .filterGrid {
+    --filter-columns: 5;
+  }
+
+  /* Keep the buttons on the second row when a view has four filters or fewer. */
+  .filterActions:nth-child(-n + 5) {
+    grid-row: 2;
+  }
+}

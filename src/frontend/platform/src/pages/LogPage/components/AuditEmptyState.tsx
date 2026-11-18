@@ -5,9 +5,9 @@ import { useTranslation } from 'react-i18next'
 export function AuditEmptyState() {
   const { t } = useTranslation()
   return (
-    <div role="status" className="flex min-h-[320px] flex-1 flex-col">
+    <div role="status" className="flex flex-1 flex-col">
       <StateView
-        className="h-auto flex-1"
+        className="h-auto min-h-fit flex-1 py-2"
         image={<EmptyStateIllustration />}
         title={t('log.emptyTitle')}
         description={t('log.emptyHint')}

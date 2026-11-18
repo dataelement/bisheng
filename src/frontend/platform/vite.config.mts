@@ -256,13 +256,30 @@ export default defineConfig(({ command, mode }) => {
   const proxyLog = env.VITE_PROXY_LOG === '1';
   const rewrite = (url: string) => app_env.BASE_URL && url.startsWith(app_env.BASE_URL) ? url.slice(app_env.BASE_URL.length) : url;
   const objectRewrite = (url: string) => rewrite(url).replace(/^\/object/, "");
-  const apiProxyConfig = createFrontendProxy(target, { rewrite, verbose: proxyLog });
+  const apiProxyConfig = createFrontendProxy(target, {
+    rewrite,
+    verbose: proxyLog,
+    legacyAdminScope: env.VITE_DEV_LEGACY_ADMIN_SCOPE === 'true',
+  });
   const gatewayProxyConfig = createFrontendProxy(gatewayTarget, { rewrite, verbose: proxyLog });
   const fileServiceProxyConfig = createFrontendProxy(fileServiceTarget, { rewrite: objectRewrite, verbose: proxyLog, minioEnvName: 'VITE_MINIO_PROXY_TARGET' });
   const proxyTargets: Record<string, ReturnType<typeof createFrontendProxy>> = {};
   // More specific than `/api/` and must be registered first, otherwise Vite's
   // prefix match sends `/api/license/status` to FastAPI (404 in open-source).
   proxyTargets[`${app_env.BASE_URL}/api/license`] = gatewayProxyConfig;
+  // MCP validates the public Host against the configured enterprise URL.
+  proxyTargets[`${app_env.BASE_URL}/api/v1/dsh/work/mcp`] = {
+    ...apiProxyConfig,
+    changeOrigin: false,
+  };
+  // Desktop embeds the client under the enterprise origin, as production nginx
+  // does. Opt in when running the two Vite apps separately for integration QA.
+  if (env.VITE_WORKSPACE_PROXY_TARGET) {
+    proxyTargets[`${app_env.BASE_URL}/workspace`] = createFrontendProxy(
+      env.VITE_WORKSPACE_PROXY_TARGET,
+      { rewrite, verbose: proxyLog },
+    );
+  }
   // This target must expose the app entry (nginx/gateway/app-proxy), not only
   // FastAPI. Keep the browser URL on the current origin, including WebSockets.
   proxyTargets[`${app_env.BASE_URL}/apps/`] = createFrontendProxy(

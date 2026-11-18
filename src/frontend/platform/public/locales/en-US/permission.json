@@ -211,7 +211,8 @@
     "inheritedFrom": "Inherited from",
     "parentFolder": "Parent folder",
     "parentKnowledgeSpace": "Parent knowledge space",
-    "parentResource": "Parent resource"
+    "parentResource": "Parent resource",
+    "visibility_only": "Visibility only — no content actions"
   },
   "scope": {
     "local": "Local",

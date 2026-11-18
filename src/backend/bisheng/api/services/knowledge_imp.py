@@ -24,7 +24,6 @@ from bisheng.common.errcode.knowledge import (
 from bisheng.common.schemas.telemetry.event_data_schema import FileParseEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
-from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage, get_minio_storage_sync
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
@@ -56,7 +55,7 @@ def put_images_to_minio(local_image_dir, knowledge_id, doc_id):
 
     minio_client = get_minio_storage_sync()
 
-    files = list(os.listdir(local_image_dir))
+    files = [f for f in os.listdir(local_image_dir)]
     for file_name in files:
         local_file_name = f"{local_image_dir}/{file_name}"
         object_name = f"{KnowledgeUtils.get_knowledge_file_image_dir(doc_id, knowledge_id)}/{file_name}"
@@ -70,7 +69,7 @@ async def async_images_to_minio(local_image_dir, knowledge_id, doc_id):
 
     minio_client = await get_minio_storage()
 
-    files = list(os.listdir(local_image_dir))
+    files = [f for f in os.listdir(local_image_dir)]
     for file_name in files:
         local_file_name = f"{local_image_dir}/{file_name}"
         object_name = f"{KnowledgeUtils.get_knowledge_file_image_dir(doc_id, knowledge_id)}/{file_name}"
@@ -83,8 +82,8 @@ async def async_images_to_minio(local_image_dir, knowledge_id, doc_id):
 def process_file_task(
     knowledge: Knowledge,
     db_files: list[KnowledgeFile],
-    preview_cache_keys: list[str] | None = None,
-    callback_url: str | None = None,
+    preview_cache_keys: list[str] = None,
+    callback_url: str = None,
     enable_auto_tags: bool = False,
 ):
     """Working with Knowledge Files Tasks"""
@@ -115,11 +114,9 @@ def delete_vector_files(file_ids: list[int], knowledge: Knowledge) -> bool:
         return True
     logger.info(f"delete_files file_ids={file_ids} knowledge_id={knowledge.id}")
     logger.info("start init Milvus")
-    vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
-        0, knowledge=knowledge, embeddings=FakeEmbeddings()
-    )
+    vector_client = KnowledgeRag.init_knowledge_milvus_cleanup_sync(knowledge)
     logger.info("start init ES")
-    es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge)
+    es_client = KnowledgeRag.init_knowledge_es_cleanup_sync(knowledge)
     # Automatically close purchase order aftercollectionIf it does not exist, it will not
     if vector_client.col:
         vector_client.col.delete(expr=f"document_id in {file_ids}", timeout=10)
@@ -182,8 +179,8 @@ def delete_knowledge_file_vectors(file_ids: list[int], clear_minio: bool = True)
 def addEmbedding(
     knowledge_id: int,
     knowledge_files: list[KnowledgeFile],
-    callback: str | None = None,
-    preview_cache_keys: list[str] | None = None,
+    callback: str = None,
+    preview_cache_keys: list[str] = None,
     enable_auto_tags: bool = False,
 ):
     """Adding Files to Vector SumsesCunene"""
@@ -502,20 +499,12 @@ def add_qa(db_knowledge: Knowledge, data: QAKnowledgeUpsert) -> QAKnowledge:
     """Usetext ImportQAknowledge"""
     if db_knowledge.type != 1:
         raise Exception("knowledge type error")
-    if data.knowledge_id != db_knowledge.id:
-        from bisheng.common.errcode.http_error import NotFoundError
-
-        raise NotFoundError()
     try:
         # Similar question unified insertion
         questions = data.questions
         if questions:
             if data.id:
                 qa_db = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(data.id)
-                if not qa_db or qa_db.knowledge_id != db_knowledge.id or qa_db.tenant_id != db_knowledge.tenant_id:
-                    from bisheng.common.errcode.http_error import NotFoundError
-
-                    raise NotFoundError()
                 qa_db.questions = questions
                 qa_db.answers = data.answers
                 qa = QAKnoweldgeDao.update(qa_db)
@@ -604,14 +593,13 @@ async def list_qa_by_knowledge_id(
 def delete_vector_data(knowledge: Knowledge, file_ids: list[int]):
     """Delete vector data, Want to make a general purpose that can be dockedlangchainright of privacyvectorDB"""
     # for qa knowledge!!!
-    embeddings = FakeEmbeddings()
     # <g id="Bold">Medical Treatment:</g>vectordb
-    vectore_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=knowledge, embeddings=embeddings)
+    vectore_client = KnowledgeRag.init_knowledge_milvus_cleanup_sync(knowledge)
     res = vectore_client.col.delete(f"file_id in {file_ids}", timeout=10)
     logger.info(f"act=delete_vector file_id={file_ids} res={res}")
 
     # elastic
-    esvectore_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge)
+    esvectore_client = KnowledgeRag.init_knowledge_es_cleanup_sync(knowledge)
 
     if esvectore_client:
         res = esvectore_client.client.delete_by_query(

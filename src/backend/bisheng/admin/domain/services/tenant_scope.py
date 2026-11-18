@@ -63,7 +63,9 @@ class TenantScopeService:
         raise AdminScopeUnavailableError()
 
     @classmethod
-    async def get_scope(cls, user_id: int, *, is_super: bool | None = None, for_write: bool = False) -> dict:
+    async def get_scope(
+        cls, user_id: int, *, is_super: bool | None = None, for_write: bool = False, require_selection: bool = False
+    ) -> dict:
         if is_super is None:
             from bisheng.utils.http_middleware import _check_is_global_super
 
@@ -82,6 +84,8 @@ class TenantScopeService:
                 logger.opt(exception=True).warning("Management tenant selection unavailable")
                 if for_write:
                     raise AdminScopeUnavailableError() from exc
+        if is_super and require_selection:
+            raise AdminScopeTenantRequiredError()
         own_tenant = await cls._own_tenant(user_id)
         return {"scope_tenant_id": own_tenant, "expires_at": None, "source": "own"}
 
@@ -98,19 +102,25 @@ class TenantScopeService:
         redis = await get_redis_client()
         await redis.aset(_redis_key(user_id), str(tenant_id), expiration=ttl)
         ctx = dict(request_context or {})
-        await AuditLogDao.ainsert_v2(
-            tenant_id=tenant_id,
-            operator_id=user_id,
-            operator_tenant_id=own_tenant,
-            action=TenantAuditAction.ADMIN_SCOPE_SWITCH.value,
-            metadata={
-                "from_scope": previous["scope_tenant_id"],
-                "to_scope": tenant_id,
-                "ip": ctx.get("ip"),
-                "user_agent": ctx.get("ua"),
-            },
-            ip_address=ctx.get("ip"),
-        )
+        try:
+            await AuditLogDao.ainsert_v2(
+                tenant_id=tenant_id,
+                operator_id=user_id,
+                operator_tenant_id=own_tenant,
+                action=TenantAuditAction.ADMIN_SCOPE_SWITCH.value,
+                metadata={
+                    "from_scope": previous["scope_tenant_id"],
+                    "to_scope": tenant_id,
+                    "ip": ctx.get("ip"),
+                    "user_agent": ctx.get("ua"),
+                },
+                ip_address=ctx.get("ip"),
+            )
+        except Exception as exc:
+            logger.opt(exception=True).error(
+                "Management preference changed but audit unconfirmed: user={} target={}", user_id, tenant_id
+            )
+            raise AdminScopeUnavailableError() from exc
         return {"scope_tenant_id": tenant_id, "expires_at": _iso_expiry(ttl), "source": "selected"}
 
     # ------------------------------------------------------------------

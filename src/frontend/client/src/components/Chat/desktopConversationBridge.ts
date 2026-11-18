@@ -30,12 +30,28 @@ export function resendConversationActivity(): void {
   if (lastReport !== undefined) flush(true);
 }
 
+// Same activity for in-page readers (on every channel): a finished turn has just been charged.
+const activityListeners = new Set<() => void>();
+
+/** Run `listener` whenever a chat turn starts or finishes anywhere in this document. */
+export function subscribeConversationActivity(listener: () => void): () => void {
+  activityListeners.add(listener);
+  return () => {
+    activityListeners.delete(listener);
+  };
+}
+
+function notifyActivity(): void {
+  activityListeners.forEach((listener) => listener());
+}
+
 /** Publish one chat instance's running conversations to the desktop host. */
 export function useDesktopConversationActivity(owner: string, conversationIds: readonly string[]): void {
   const key = [...new Set(conversationIds)].sort().join(",");
   useEffect(() => {
     activityByOwner.set(owner, key ? key.split(",") : []);
     flush();
+    notifyActivity();
   }, [owner, key]);
   useEffect(() => () => {
     activityByOwner.delete(owner);
@@ -59,5 +75,6 @@ export function useDesktopConversationRenamed(onRenamed: (conversationId: string
 /** Test seam: module state outlives a single render tree. */
 export function resetDesktopConversationBridge(): void {
   activityByOwner.clear();
+  activityListeners.clear();
   lastReport = undefined;
 }

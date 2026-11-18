@@ -4,6 +4,7 @@ import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import Subscription from './index';
 
 let mockMobile = true;
+let mockHostHeader = false;
 let mockEmpty = false;
 let mockLoading = false;
 let mockError: Error | null = null;
@@ -16,6 +17,10 @@ const localize = (key: string) => key;
 const noop = () => undefined;
 
 jest.mock('~/hooks', () => ({ useLocalize: () => localize, usePrefersMobileLayout: () => mockMobile, useWorkbenchMenuNames: () => ({ channel: 'Subscription' }) }));
+jest.mock('~/hooks/useClientEnvironment', () => ({
+  ...jest.requireActual('~/hooks/useClientEnvironment'),
+  useClientEnvironment: () => ({ channel: 'web', capabilities: { hasHostChatHeader: mockHostHeader } }),
+}));
 jest.mock('~/hooks/AuthContext', () => ({ useAuthContext: () => ({ user: mockUser, isUserLoading: false }) }));
 jest.mock('~/Providers', () => ({ useToastContext: () => ({ showToast: mockToast }) }));
 jest.mock('~/hooks/useEffectiveQuota', () => ({ useEffectiveQuota: () => ({ isOverQuota: () => false }) }));
@@ -55,7 +60,7 @@ function Harness() {
 function renderPage(path = '/channel') {
   return render(<MemoryRouter initialEntries={[path]}><Harness /></MemoryRouter>);
 }
-beforeEach(() => { mockMobile = true; mockEmpty = false; mockLoading = false; mockError = null; });
+beforeEach(() => { mockHostHeader = false; mockMobile = true; mockEmpty = false; mockLoading = false; mockError = null; });
 
 it('lands on the mobile home without auto-selecting, opens a channel and returns home', async () => {
   renderPage();
@@ -115,4 +120,21 @@ it('preserves the desktop home and its create action', () => {
   expect(screen.getByRole('heading', { name: 'Subscription' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /Channel one/ })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'com_nav_open_sidebar' })).not.toBeInTheDocument();
+});
+
+it('keeps channel actions while omitting the native-owned home header', async () => {
+  mockHostHeader = true;
+  renderPage();
+  expect(screen.queryByRole('heading', { name: 'Subscription' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'com_nav_open_sidebar' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /Channel one/ }));
+  expect(await screen.findByRole('heading', { name: 'Channel one articles' })).toBeVisible();
+});
+
+it('omits the native-owned header while channels are loading', () => {
+  mockHostHeader = true;
+  mockLoading = true;
+  renderPage();
+  expect(screen.getByText('Loading')).toBeVisible();
+  expect(screen.queryByRole('heading', { name: 'Subscription' })).not.toBeInTheDocument();
 });

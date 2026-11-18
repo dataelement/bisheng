@@ -2,6 +2,54 @@
 
 This directory contains manual maintenance and migration scripts for the backend.
 
+## Single-version document path recovery
+
+Run `python scripts/repair_knowledge_document_path.py --tenant-id T --space-id S --file-id F`
+to preview a legacy logical-document/physical-file path mismatch. This command only accepts
+one primary version, an idle space/file, a valid folder chain and a CURRENT permission parent
+that already agrees with the physical file. It never moves files, rewrites indexes or grants access.
+Apply the inspected plan using `--apply --expected-digest HASH --backup /private/new-backup.json`.
+The backup must be new and is saved with mode 0600 before writing; changed facts reject the apply.
+Multi-version, ambiguous or permission-inconsistent data requires a separate recovery plan.
+
+## Redis usage and Linsight processing indexes
+
+`backfill_redis_processing_indexes.py` is the explicit upgrade step for old DSH
+usage streams and Linsight checkpoints. Normal consumers, including their first
+invocation, never enumerate the Redis DB. From `src/backend`, export the same
+`config` as the target service and use the new image/code for this command:
+
+1. Close ingress and stop all old API, Celery Workers, Beat and Linsight Workers.
+   Keep Redis and the configured infrastructure available. Do not clear event
+   streams, broker queues, consumer groups, request ledgers or checkpoint data.
+2. Preview, apply, then verify while all producers/consumers remain stopped:
+
+```bash
+python scripts/backfill_redis_processing_indexes.py
+python scripts/backfill_redis_processing_indexes.py --apply --services-stopped
+python scripts/backfill_redis_processing_indexes.py --verify
+```
+
+3. Require `ready: true` and exit code 0 before starting new consumers. On error,
+   keep the services stopped, investigate and repeat the command; partial index
+   additions are safe to repeat. Never discard events to bypass a migration error.
+4. Start the new Celery Worker and Beat to drain the registered usage backlog.
+   Confirm pending work has cleared and SQL projection is correct before starting
+   Linsight/API and reopening traffic. Do not run old and new code together.
+
+The default inventories and checks indexes without writing them; `--verify`
+returns nonzero for incomplete coverage. Apply refuses to run without the stopped
+service confirmation. The command initializes/closes service infrastructure
+clients. It registers every retained usage stream, schedules pending/unread work
+and invalidates old scheduling owners only. Payloads, stream IDs, group offsets,
+ACKs, request ledgers, counters, SQL and checkpoint TTLs are preserved. Drained
+streams are indexed for inspection without being unnecessarily queued again.
+Checkpoint completeness markers are published only after indexing old writes.
+Run against every service Redis DB being upgraded; usage migration is enabled
+when that service's DSH setting is enabled. Redis data/index restores require the
+same stopped-service verification. Fresh installs maintain indexes from their
+first writes and need no legacy scan.
+
 ## Built-in knowledge retrieval tool
 
 `register_work_knowledge_tool.py` completes the Work knowledge-search upgrade in
@@ -151,6 +199,29 @@ column is absent from the DM catalog, and exit `4` means the diagnostic itself
 failed.
 
 ## Model Configuration Upgrade
+
+### `backfill_model_pricing.py`
+
+F016 upgrade step: gives every existing LLM model a price (`llm_model.config.pricing`) with the
+same rule as saving a model in the admin UI — the built-in catalog price when the provider type and
+model name match, otherwise 0 (free) — then gates the upgrade. Existing prices are never touched.
+Run it after `alembic upgrade head` while the service is still stopped; the full sequence is in
+`features/v3.1.0-beta1/016-credit-pricing/runbook.md`.
+
+```bash
+cd src/backend/
+bash scripts/backfill_model_pricing.sh          # dry run: list what each model would get
+bash scripts/backfill_model_pricing.sh apply    # write prices for models that have none
+bash scripts/backfill_model_pricing.sh check    # gate: exit 0 passed, 2 something is missing
+```
+
+Models marked `default 0 (free)` in the dry run include paid cloud models whose names the catalog
+does not know (for example Volcengine Ark endpoint IDs); they stay free until an admin sets a price.
+
+Skipping the step does not stop conversations: a model without a price is billed as free (0 credits,
+with a warning log) and shows "price missing" in the admin table until it is backfilled or priced.
+An invalid stored price (fails the price schema) is treated the same way: the dry run lists it as
+`replace invalid` with its old value, `apply` replaces it, and `check` fails until it is fixed.
 
 ### `migrate_model_token_configs.py`
 
@@ -1445,6 +1516,15 @@ check. Only missing digests are filled; original names and bodies remain unchang
 Historical exact-name lookup is incomplete until this operation finishes. No fuzzy
 query fallback or automatic startup backfill is performed.
 
+## 启用 DSH 前补齐模型可见范围
+
+不部署 DSH 时，没有可见范围记录的对话模型默认全员可见；启用 DSH 后，没有记录的模型对所有人不可见。启用 DSH 之前，对每个租户运行一次，为缺少记录的对话模型（本租户及 Root 共享、含已下线）补一条「全员可见」记录；只新增，不改已有记录。
+
+```bash
+python scripts/backfill_model_visibility_everyone.py --tenant-id 1                              # 预览
+python scripts/backfill_model_visibility_everyone.py --tenant-id 1 --apply --actor-user-id 1    # 写入
+```
+
 ## DSH audit presentation preparation
 
 Run from `src/backend/` using the live service config. `python scripts/backfill_dsh_audit_presentation.py --tenant-id 1` previews one bounded batch; add `--apply --max-batches 20` to prepare historical presentation statuses and mark conversation projection. Resume with the reported `--after-request-id`, then rerun from the start to catch late rows. The independent audit inspection task projects groups; no model bodies, policy or keys are changed.
@@ -1521,3 +1601,137 @@ establish those guarantees.
 ## 工具与技能全员授权升级（f048-v6）
 
 `migrate_capability_authorization.py` 将现有内置工具及企业技能的全员可用状态转换为所属租户成员的可撤销 Grant。默认 dry-run，apply 需要 Store 确认与操作人；在发布授权模型后、业务进程停止期间执行。重复执行保留管理员的撤销结果。完整顺序见 [升级说明](../../../features/local/tools-skills-authorization/upgrade.md)。
+
+### F009 managed tenant inventory (read-only)
+
+From `src/backend/`: `python scripts/managed_tenant_preflight.py --tenant-id <T> [--user-id <id>] [--limit 100]`. Lists current role eligibility differences and pending resource/copy associations within the specified scope. There is no apply mode. Historical READY defaults are not proof of complete permission projections; verify against the existing permission inventory before rollout. Resolve pending/uncertain copies manually before downgrading the four columns.
+
+## F118 knowledge-space unification
+
+Existing channel sync selections with the old picker's `new-folder-<digits>`
+folder ID retain their original SQL configuration. M2 logs the channel/sync IDs
+requiring manual rebind, skips only that invalid folder reference, and keeps
+space/other real references. The selected invalid sync item cannot deliver to
+the space root; users must remove or rebind it in the channel configuration.
+Other malformed IDs and explicitly saved new selections remain strict.
+
+### Historical preparation before a new M2 freeze
+
+`prepare_f118_history.py` backs and cleans proven orphan files/documents/versions,
+invalid tags/members, repairs parent ownership/depth and unmapped empty-resource
+embedding names, and purges invalid derived permissions. Exact orphan MinIO
+objects and ES/Milvus slices are backed before deletion; live index bindings,
+shared stores, audit, roles and queues remain. Operators stop every writer/consumer.
+
+```bash
+cd src/backend
+export config=config.yaml
+export PYTHONPATH=./
+python scripts/prepare_f118_history.py --plan /secure/upgrade/f118-history.json
+python scripts/prepare_f118_history.py --plan /secure/upgrade/f118-history.json --apply --operator-id 7
+```
+
+Preview saves a private, checksummed selected-row/FGA backup and plan using
+exclusive creation. Apply and retries read exactly that plan; never overwrite
+it with a new baseline. The adjacent `.events.jsonl` retains execution events.
+An active frozen Run is rejected. Missing/ambiguous parents, changed facts,
+unknown types or remaining downstreams are reported, never guessed away.
+Apply returns permission operation IDs; exit 2 means selected repairs completed
+but blocked items remain, and exit 3 means an error requiring the same plan to
+be inspected/resumed. Preview exit 0 does not certify migration readiness.
+SQL evidence is saved before physical inspection in `.candidates.json`; exact
+payload backups use `.payloads/`. Missing original bindings/file identities stop
+cleanup; no whole-index deletion or guessed replacement is allowed. This selected
+evidence does not replace a full environment backup. See
+[implemented rules and complete flow](../../../docs/reviews/f118-confirmed-rules-implementation-20261113.md).
+
+### Formal stopped-service migration
+
+Run from `src/backend` after the operator has stopped all business writers and
+created the immutable backup/schema evidence artifacts. Use the same `config`
+as the service. For a new Run, default preview executes the same complete
+SQL/permission/six-source inventory and plan validation as fresh M2, without
+SQL/FGA/MinIO writes or freezing a Run. Private local scratch pages are removed
+on success or failure. Output is `validation_scope=current_inventory`,
+`preflight_complete=true`, `frozen=false`, `ready=false`; passing preflight is
+not a completed migration or permission publication.
+
+The supplied backup/schema artifacts must belong to this Run/environment/writer
+and the current tenant inventory. Materials for an earlier 30-tenant scope
+cannot be reused as evidence for a new 31-tenant scope. If another process
+freezes this Run between the CLI lookup and scanning, fresh preview stops
+instead of reporting the frozen graph as a complete current-data scan.
+
+For an existing frozen Run, preview validates its original graph and reports
+`validation_scope=frozen_run`, `preflight_complete=false`. `--resume` requires
+that original Run; it does not rescan or replace its baseline. An old Run's
+tenant inventory mismatch remains a recovery/review blocker, not proof that a
+new inventory has failed.
+
+New inventories do not inspect Redis broker/queued-task contents or make unrelated
+full Role/UserRole eligibility cleanup a prerequisite. Space membership roles
+and permission-source subjects still participate in their exact migration checks;
+the command does not copy or rebind tenant roles. It still rejects uncommitted business delete cutovers/tombstones;
+these checks do not detect Celery consumption or whether services are stopped.
+Normal resources preserve the SQL `index_name`/`collection_name` bindings without
+ES/Milvus existence, schema or count queries, or per-file MinIO stat. Physical
+store health and SQL/vector inconsistencies are separate diagnostics. The
+historical preparation above still requires exact payload backup/deletion when
+an approved orphan cleanup needs it; missing cleanup evidence remains blocking.
+MinIO reads of backup/schema and frozen migration artifacts remain necessary.
+
+```bash
+python scripts/unify_knowledge_spaces.py --run-id maintenance-1 --environment production \
+  --backup-ref '{"object_key":"f118/unification/maintenance-1/verification/<hash>.json","sha256":"<hash>"}' \
+  --schema-ref '{"object_key":"f118/unification/maintenance-1/verification/<schema-hash>.json","sha256":"<schema-hash>"}'
+```
+
+Add `--apply --operator-id 7` for the actual M2 freeze, original SQL conversion,
+permission publication, six-source backfill, full reconciliation and persisted
+Coverage certificate. After interruption, repeat the identical arguments with
+`--apply --resume`; this requires the same already-frozen Run and never rebuilds
+its baseline. Old frozen artifacts retain their original codec and evidence
+checks; missing required legacy facts remain blocking rather than being invented
+or bypassed by rewriting the baseline. Output
+contains the Run/hashes, tenant scope, six-source proofs and the immutable plan
+reference containing the invalid-slot inventory. Nonzero exit preserves the
+checkpoint and never restarts services. Enable business traffic only after the
+operator has accepted the overall upgrade verification and real environment
+checks; a local component test is not that acceptance.
+
+F118 deliberately uses a narrow context assembly rather than the general
+`initialize_app_context` convention: the eager general initializer constructs
+`MinioStorage` and may initialize buckets/policies. The command registers the
+original DB/Redis managers from the live service settings and closes each owned
+manager explicitly; its owned raw MinIO artifact and permission
+adapters never invoke the API startup, default seeds or bucket/policy writers.
+This feature-specific exception preserves the frozen read-only inventory
+contract and does not change general script initialization. The migration
+runtime does not open ES/Milvus clients. Current query order, comparison rules,
+conversion and publication boundaries are shown in the
+[complete current flow](../../../docs/reviews/f118-migration-current-flow-20261113.md).
+
+## 中间件凭据维护（v3.1.0-beta2）
+
+部署密钥不在源码中。配置准备/原生改密/备份恢复见 [凭据运维手册](../../../docker/中间件凭据运维手册.html)。以下从 src/backend 执行，使用与服务相同的 config 和 BS_SECRET_KEYS_FILE。
+
+- `rewrap_credentials.sh` / `rewrap_credentials.py`：组织同步与沙箱页令牌的独立重加密；默认 dry-run，显式 --all-tenants，--apply 前 fsync 密文备份，失败按 journal resume，不修改真实中间件密码。
+  ```bash
+  bash scripts/rewrap_credentials.sh --all-tenants --backup-dir /secure/bisheng/rewrap/run-a
+  bash scripts/rewrap_credentials.sh --all-tenants --backup-dir /secure/bisheng/rewrap/run-a --apply
+  bash scripts/rewrap_credentials.sh --all-tenants --resume /secure/bisheng/rewrap/run-a --apply
+  ```
+- `check_image_secrets.py`：离线检查实际交付源码与 Docker-save 所有镜像层，不提取档案、不连接服务；缺档案/格式不支持非零退出。可通过 --keyring 传受控文件做已知 key 匹配，不把 key 写参数。
+  ```bash
+  python scripts/check_image_secrets.py --source-root . --image-archive /secure/release/backend.tar
+  ```
+
+
+中间件逐项改密使用原部署入口 `bash docker/install.sh` / `bash scripts/deploy.sh install` 内部编排。容器内管理接口为 `python -m bisheng.core.config.credential_tool rotation`，独立SDK位于 `bisheng/core/config/credential_rotation_native.py`，不初始化全应用上下文，不持有Docker权限；正常运维无需手动执行内部子命令。实际验收范围见特性003的验证记录。
+
+
+### 中间件凭据 v2（2026-11-14）
+
+仍执行原部署入口，不要求运维手动调用加解密、重新加密或权限修改工具。首次隐藏输入；重部署逐项选择是否改密，默认保留。v2 输入、原生配置包、历史和恢复材料加密；主密钥外置并限制访问，运行所需明文只在经过检查的内存文件系统或进程内存中使用。受管 v1 转换失败时保留现场，再次执行原命令恢复。未经验证的旧原生布局不得绕过拒绝检查。
+
+Milvus 原生内部消息 Base64 凭据为用户确认的明确例外，部署器生成材料仍加密。DM、正式发布镜像及主机重启尚待验收，不能将本地覆盖镜像的通过结果扩展到所有部署形态。参见 [HTML 运维手册](../../../docker/中间件凭据运维手册.html)。

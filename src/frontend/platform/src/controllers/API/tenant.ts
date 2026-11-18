@@ -1,6 +1,7 @@
 import axios from "@/controllers/request"
 import {
   Tenant,
+  TenantAdminUser,
   TenantCreateForm,
   TenantDetail,
   TenantQuota,
@@ -64,7 +65,7 @@ export async function setTenantQuotaApi(
 
 export async function listTenantAdminsApi(
   tenantId: number
-): Promise<{ user_ids: number[] }> {
+): Promise<{ user_ids: number[]; users?: TenantAdminUser[] }> {
   return await axios.get(`/api/v1/tenants/${tenantId}/admins`)
 }
 

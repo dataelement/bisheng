@@ -231,7 +231,10 @@ class DashboardService(BaseModel):
 
         await self.delete_dashboard_hook(dashboard)
 
-        return await DashboardDao.delete_one(dashboard_id)
+        result = await DashboardDao.delete_one(dashboard_id)
+        if result:
+            await adapter.cleanup_deleted(record=record, actor=await resolve_permission_actor(self.login_user))
+        return result
 
     async def delete_dashboard_hook(self, dashboard: Dashboard):
         """

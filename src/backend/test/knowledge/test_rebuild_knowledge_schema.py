@@ -16,7 +16,7 @@ def test_rebuild_uses_explicit_milvus_metadata_schema(monkeypatch):
     monkeypatch.setattr(
         rebuild_knowledge_worker.KnowledgeRag,
         "init_knowledge_es_vectorstore_sync",
-        lambda knowledge: es_client,
+        lambda knowledge, **scope: es_client,
     )
     monkeypatch.setattr(
         rebuild_knowledge_worker.LLMService,
@@ -34,6 +34,9 @@ def test_rebuild_uses_explicit_milvus_metadata_schema(monkeypatch):
         files=[],
         new_model_id=884,
         invoke_user_id=1,
+        operation_id="rebuild-metadata-schema",
+        expected_model_config_revision=1,
+        expected_index_generation="generation-1",
     )
 
     assert result == ([], [])
@@ -42,4 +45,8 @@ def test_rebuild_uses_explicit_milvus_metadata_schema(monkeypatch):
         knowledge=knowledge,
         embeddings=embeddings,
         metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA,
+        model_slot="model_transition.pending_model_id",
+        expected_operation_id="rebuild-metadata-schema",
+        expected_model_config_revision=1,
+        expected_index_generation="generation-1",
     )

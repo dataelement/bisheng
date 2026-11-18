@@ -1,0 +1,443 @@
+pageType: evidence
+background:
+  type: solid
+  color: $paper
+notes: |
+  2024 年出口目的地前三位为美国 36.2%、英国 11.7%、德国 5.7%，合计 53.6%。进口来源地前三位为美国 15.8%、日本 10.5%、德国 9.8%，合计 36.1%。
+  出口货源主要来自广东、浙江、福建、江苏、山东；进口目的地主要是广东、江苏、浙江、上海、北京。市场集中度与区域集中度都应进入风险判断。
+elements:
+  - elementId: market-cyan-rail
+    elementType: shape
+    bounds:
+      - 0
+      - 0
+      - 10
+      - 540
+    shapeName: rect
+    fill:
+      type: solid
+      color: $cyan
+    border:
+      color: $cyan
+      width: 0
+  - elementId: market-title-rule
+    elementType: line
+    bounds:
+      - 46
+      - 118
+      - 868
+      - 1
+    viewBox:
+      - 868
+      - 1
+    points: 0,0 868,0
+    border:
+      color: $rule
+      width: 0.9
+  - elementId: market-mid-rule
+    elementType: line
+    bounds:
+      - 480
+      - 146
+      - 1
+      - 264
+    viewBox:
+      - 1
+      - 264
+    points: 0,0 0,264
+    border:
+      color: $rule
+      width: 0.8
+  - elementId: market-risk-field
+    elementType: shape
+    bounds:
+      - 46
+      - 426
+      - 868
+      - 58
+    shapeName: rect
+    fill:
+      type: solid
+      color: $clay
+    border:
+      color: $clay
+      width: 0
+  - elementId: market-exp-us
+    elementType: shape
+    bounds:
+      - 118
+      - 206
+      - 286
+      - 22
+    shapeName: rect
+    fill:
+      type: solid
+      color: $navy
+    border:
+      color: $navy
+      width: 0
+  - elementId: market-exp-uk
+    elementType: shape
+    bounds:
+      - 118
+      - 264
+      - 92
+      - 22
+    shapeName: rect
+    fill:
+      type: solid
+      color: $cyan
+    border:
+      color: $cyan
+      width: 0
+  - elementId: market-exp-de
+    elementType: shape
+    bounds:
+      - 118
+      - 322
+      - 45
+      - 22
+    shapeName: rect
+    fill:
+      type: solid
+      color: $mist
+    border:
+      color: $navy
+      width: 0.8
+  - elementId: market-imp-us
+    elementType: shape
+    bounds:
+      - 586
+      - 206
+      - 125
+      - 22
+    shapeName: rect
+    fill:
+      type: solid
+      color: $navy
+    border:
+      color: $navy
+      width: 0
+  - elementId: market-imp-jp
+    elementType: shape
+    bounds:
+      - 586
+      - 264
+      - 83
+      - 22
+    shapeName: rect
+    fill:
+      type: solid
+      color: $cyan
+    border:
+      color: $cyan
+      width: 0
+  - elementId: market-imp-de
+    elementType: shape
+    bounds:
+      - 586
+      - 322
+      - 77
+      - 22
+    shapeName: rect
+    fill:
+      type: solid
+      color: $mist
+    border:
+      color: $navy
+      width: 0.8
+  - elementId: market-kicker
+    elementType: text
+    bounds:
+      - 46
+      - 24
+      - 500
+      - 16
+    content:
+      text: MARKET CONCENTRATION / 2024
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 8
+      bold: true
+      letterSpacing: 1.05
+      color: $muted
+  - elementId: market-title
+    elementType: text
+    bounds:
+      - 46
+      - 52
+      - 850
+      - 42
+    content:
+      style: $title
+      text: 出口前三市场占 53.6%，集中度必须进入增长决策
+  - elementId: market-left-head
+    elementType: text
+    bounds:
+      - 46
+      - 142
+      - 388
+      - 36
+    content:
+      text: '出口目的地<br><span style="font-size: 10px">TOP 3 = 53.6%</span>'
+      fontFamily: *ref_0
+      fontSize: 14
+      bold: true
+      lineHeight: 1.25
+      color: $ink
+  - elementId: market-right-head
+    elementType: text
+    bounds:
+      - 520
+      - 142
+      - 388
+      - 36
+    content:
+      text: '进口来源地<br><span style="font-size: 10px">TOP 3 = 36.1%</span>'
+      fontFamily: *ref_0
+      fontSize: 14
+      bold: true
+      lineHeight: 1.25
+      color: $ink
+  - elementId: market-exp-us-l
+    elementType: text
+    bounds:
+      - 46
+      - 204
+      - 64
+      - 24
+    content:
+      text: 美国
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      color: $ink
+  - elementId: market-exp-us-v
+    elementType: text
+    bounds:
+      - 414
+      - 204
+      - 48
+      - 24
+    content:
+      text: 36.2%
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      color: $ink
+      align:
+        - right
+        - middle
+  - elementId: market-exp-uk-l
+    elementType: text
+    bounds:
+      - 46
+      - 262
+      - 64
+      - 24
+    content:
+      text: 英国
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      color: $ink
+  - elementId: market-exp-uk-v
+    elementType: text
+    bounds:
+      - 414
+      - 262
+      - 48
+      - 24
+    content:
+      text: 11.7%
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      color: $ink
+      align:
+        - right
+        - middle
+  - elementId: market-exp-de-l
+    elementType: text
+    bounds:
+      - 46
+      - 320
+      - 64
+      - 24
+    content:
+      text: 德国
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      color: $ink
+  - elementId: market-exp-de-v
+    elementType: text
+    bounds:
+      - 414
+      - 320
+      - 48
+      - 24
+    content:
+      text: 5.7%
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      color: $ink
+      align:
+        - right
+        - middle
+  - elementId: market-imp-us-l
+    elementType: text
+    bounds:
+      - 520
+      - 204
+      - 58
+      - 24
+    content:
+      text: 美国
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      color: $ink
+  - elementId: market-imp-us-v
+    elementType: text
+    bounds:
+      - 852
+      - 204
+      - 56
+      - 24
+    content:
+      text: 15.8%
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      color: $ink
+      align:
+        - right
+        - middle
+  - elementId: market-imp-jp-l
+    elementType: text
+    bounds:
+      - 520
+      - 262
+      - 58
+      - 24
+    content:
+      text: 日本
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      color: $ink
+  - elementId: market-imp-jp-v
+    elementType: text
+    bounds:
+      - 852
+      - 262
+      - 56
+      - 24
+    content:
+      text: 10.5%
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      color: $ink
+      align:
+        - right
+        - middle
+  - elementId: market-imp-de-l
+    elementType: text
+    bounds:
+      - 520
+      - 320
+      - 58
+      - 24
+    content:
+      text: 德国
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      color: $ink
+  - elementId: market-imp-de-v
+    elementType: text
+    bounds:
+      - 852
+      - 320
+      - 56
+      - 24
+    content:
+      text: 9.8%
+      fontFamily: *ref_0
+      fontSize: 10
+      bold: true
+      color: $ink
+      align:
+        - right
+        - middle
+  - elementId: market-region-a
+    elementType: text
+    bounds:
+      - 46
+      - 374
+      - 398
+      - 30
+    content:
+      text: 出口货源：广东、浙江、福建、江苏、山东
+      fontFamily: *ref_0
+      fontSize: 9
+      color: $muted
+  - elementId: market-region-b
+    elementType: text
+    bounds:
+      - 520
+      - 374
+      - 388
+      - 30
+    content:
+      text: 进口目的地：广东、江苏、浙江、上海、北京
+      fontFamily: *ref_0
+      fontSize: 9
+      color: $muted
+  - elementId: market-risk
+    elementType: text
+    bounds:
+      - 62
+      - 440
+      - 836
+      - 30
+    content:
+      text: 风险判断｜市场集中度决定需求冲击暴露，区域集中度决定供给与通关冲击暴露；两者必须同时进入国家 × 品类组合。
+      fontFamily: *ref_0
+      fontSize: 11
+      bold: true
+      color: $ink
+  - elementId: market-source
+    elementType: text
+    bounds:
+      - 46
+      - 506
+      - 790
+      - 14
+    content:
+      text: 来源：海关总署 2024 更新统计与公开结构数据。
+      fontFamily: *ref_0
+      fontSize: 7.6
+      color: $muted
+  - elementId: market-page
+    elementType: text
+    bounds:
+      - 868
+      - 506
+      - 46
+      - 14
+    content:
+      text: 16—05
+      fontFamily: *ref_0
+      fontSize: 8
+      bold: true
+      color: $ink
+      align:
+        - right
+        - bottom

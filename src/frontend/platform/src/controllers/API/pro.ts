@@ -30,49 +30,6 @@ export const getSensitiveApi = async (resourceId, resourceType): Promise<any> =>
 };
 
 /**
- * 获取资源组流量
- */
-export const getGroupFlowsApi = async (page: number, pageSize: number, resourceType: string, groupId: number, name: string): Promise<any> => {
-    if (!groupId) return Promise.resolve([{ data: [], total: 0 }]);
-    return await axios.get(`/api/resource/groupFlows`, {
-        params: {
-            name,
-            page,
-            pageSize,
-            resourceType,
-            groupId
-        }
-    });
-};
-
-
-/**
- * 保存组信息
- */
-export const saveGroupApi = async (data: any): Promise<any> => {
-    const { id,
-        groupLimit: group_limit,
-        adminUser: admin_user,
-        adminUserId: admin_user_id,
-        groupName: group_name,
-        assistant,
-        workFlows,
-        skill } = data;
-    // const {resourceId, groupId, resourceLimit} = assistant
-
-    return await axios.post(`/api/group/save`, {
-        id,
-        group_limit,
-        admin_user,
-        admin_user_id,
-        group_name,
-        assistant,
-        skill,
-        work_flows: workFlows
-    });
-};
-
-/**
  * Department traffic control APIs
  */
 export const getDepartmentLimitDetailApi = async (deptId: number): Promise<any> => {
@@ -104,11 +61,6 @@ export const saveDepartmentLimitApi = async (data: {
         work_flows: data.workFlows
     });
 };
-
-// 用户组列表
-export function getUserGroupsProApi() {
-    return axios.get(`/api/group/list`);
-}
 
 // GET sso URL (silent: suppress global error toast when service is unavailable)
 export function getSSOurlApi() {

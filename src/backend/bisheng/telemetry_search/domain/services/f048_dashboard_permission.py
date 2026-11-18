@@ -94,6 +94,8 @@ class DashboardPermissionPort(Protocol):
 
     async def project_delete(self, **kwargs): ...
 
+    async def cleanup_deleted(self, **kwargs): ...
+
 
 class F048DashboardPermissionAdapter:
     """Validate dashboard facts before invoking the permission facade."""
@@ -177,6 +179,9 @@ class F048DashboardPermissionAdapter:
             actor=actor,
             target=self._record_target(record, actor),
         )
+
+    async def cleanup_deleted(self, *, record, actor):
+        return await self._permission.cleanup_deleted(actor=actor, target=self._record_target(record, actor))
 
     async def project_copy(
         self,

@@ -48,6 +48,7 @@ from runtime_manager.egress import (
     Destination,
     EgressPolicyStore,
     build_destinations,
+    build_package_sources,
     build_proxy_buildargs,
     decide,
     detect_firewall_backend,
@@ -185,6 +186,23 @@ def test_build_phase_allows_the_package_index_and_the_platform_and_nothing_else(
     assert decide(destinations, "platform.example.com", 7860).allowed
     # A manifest cannot widen a build: the whole point of AC-16's build sentence.
     assert not decide(destinations, "api.openai.com", 443).allowed
+
+
+def test_official_pypi_build_source_includes_its_wheel_download_host(egress_config: Config):
+    config = egress_config.with_overrides(build_index_url="https://pypi.org/simple")
+    assert build_package_sources(config) == (
+        "https://pypi.org/simple",
+        "https://files.pythonhosted.org",
+    )
+    destinations = build_destinations(config)
+    assert decide(destinations, "pypi.org", 443).allowed
+    assert decide(destinations, "files.pythonhosted.org", 443).allowed
+
+
+def test_private_python_index_does_not_open_public_pypi_file_host(egress_config: Config):
+    config = egress_config.with_overrides(build_index_url="https://packages.example.com/simple")
+    assert "https://files.pythonhosted.org" not in build_package_sources(config)
+    assert not decide(build_destinations(config), "files.pythonhosted.org", 443).allowed
 
 
 def test_run_phase_allows_the_platform_the_manager_and_the_declared_domains(egress_config: Config):

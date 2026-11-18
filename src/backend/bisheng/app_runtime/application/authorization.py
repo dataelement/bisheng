@@ -8,6 +8,11 @@ async def authorize_app(identity, app_id: str, operation: AppOperation | str, *,
     await AppAuthorizationService.authorize_app(identity, app_id, operation, resume=resume)
 
 
+async def authorize_loaded_app(identity, app, operation: AppOperation | str, *, resume: bool = False) -> None:
+    """Authorize caller-owned current facts without reloading in another Session."""
+    await AppAuthorizationService.authorize_loaded_app(identity, app, operation, resume=resume)
+
+
 async def management_actions(identity, loaded_apps) -> dict[str, frozenset[str]]:
     return await AppAuthorizationService.management_actions(identity, loaded_apps)
 

@@ -3,9 +3,20 @@ const notices = vi.hoisted(() => vi.fn());
 vi.mock('@bisheng/ui', () => ({ notification: { open: notices } }));
 beforeEach(() => { vi.resetModules(); localStorage.clear(); sessionStorage.clear(); notices.mockClear(); });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+it('keeps an auxiliary business 404 inspectable without replacing the page', async () => {
+  const current = { href: 'http://localhost/models', origin: 'http://localhost' };
+  vi.stubGlobal('location', current);
+  const { default: request } = await setup({ status_code: 404, status_message: 'Not found', data: { resource_id: 'flow-a' } });
+  const error = await request.get('/api/v1/guest-link/workflow/flow-a').catch(cause => cause);
+  expect(current.href).toBe('http://localhost/models');
+  expect(error).toMatchObject({ status_code: 404, presentation: 'toast', data: { resource_id: 'flow-a' } });
+  expect(notices).toHaveBeenCalledTimes(1);
+});
 async function setup(envelope: unknown) {
   const module = await import('./request');
-  module.default.defaults.adapter = async config => ({ config, status: 200, statusText: 'OK', headers: {}, data: envelope });
+  module.default.defaults.adapter = async config => ({ config, status: 200, statusText: 'OK', headers: {},
+    data: config.url?.startsWith('/api/v1/admin/request-scope')
+      ? {status_code: 200, data: {scope_tenant_id: 60, source: 'selected'}} : envelope });
   return module;
 }
 it('keeps password-expiration evidence for the login interaction without a generic notice', async () => {

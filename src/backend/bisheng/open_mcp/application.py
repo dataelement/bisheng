@@ -14,10 +14,12 @@ from fastapi import BackgroundTasks, HTTPException
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 
-from bisheng.api.v1.schemas import ExcelRule, KnowledgeFileOne, KnowledgeFileProcess
+from bisheng.api.v1.schemas import ExcelRule, FileProcessBase, KnowledgeFileOne, KnowledgeFileProcess
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.errcode.knowledge import KnowledgeTypeNotSupportedError
 from bisheng.core.database import get_async_db_session
+from bisheng.knowledge.application.file_processing_adapter import capture_legacy_processing_overrides
+from bisheng.knowledge.application.space_upload import SpaceUploadApplication
 from bisheng.knowledge.domain.models.knowledge import (
     AuthTypeEnum,
     KnowledgeCreate,
@@ -76,11 +78,28 @@ def _space_service(request: Request, login_user, version_repo, doc_repo) -> Know
     service = KnowledgeSpaceService(request=request, login_user=login_user)
     service.version_repo = version_repo
     service.doc_repo = doc_repo
+    from bisheng.knowledge.application.knowledge_deletion import get_deletion_application
+
+    service.deletion_application_factory = get_deletion_application
+    service.upload_application_factory = lambda: SpaceUploadApplication(
+        login_user=login_user,
+        session_factory=get_async_db_session,
+        admit_upload=service._require_action,
+        make_permission_record=service._new_file_permission_record,
+        actor_provider=service._permission_actor,
+    )
     return service
 
 
 async def list_knowledge(*, request: Request, command, version_repo, doc_repo):
     login_user = await get_open_api_operator_async()
+    if command.resource_type == KnowledgeTypeEnum.NORMAL.value:
+        from bisheng.knowledge.application.legacy_documents import LegacyDocumentsApplication
+
+        return await LegacyDocumentsApplication().alist(
+            identity=login_user, name=command.name, sort_by=command.sort_by,
+            page_size=command.page_size, cursor=command.cursor,
+        )
     if command.resource_type in _KB_TYPES:
         return await KnowledgeService.get_knowledge(
             request,
@@ -110,6 +129,14 @@ async def create_knowledge(*, request: Request, command, version_repo, doc_repo)
         auth_type=AuthTypeEnum(command.auth_type),
         is_released=command.is_released,
     )
+    if command.resource_type == KnowledgeTypeEnum.NORMAL.value:
+        from bisheng.knowledge.application.legacy_documents import LegacyDocumentsApplication
+
+        knowledge.auth_type = AuthTypeEnum.PUBLIC
+        knowledge.is_released = False
+        return await LegacyDocumentsApplication().acreate(
+            request=request, identity=login_user, command=knowledge, entry_kind="open_api",
+        )
     if command.resource_type in _KB_TYPES:
         knowledge.auth_type = AuthTypeEnum.PUBLIC
         knowledge.is_released = False
@@ -122,6 +149,7 @@ async def create_knowledge(*, request: Request, command, version_repo, doc_repo)
             description=knowledge.description,
             auth_type=knowledge.auth_type,
             is_released=knowledge.is_released,
+            entry_kind="open_api",
         )
         return KnowledgeRead(
             **created.model_dump(),
@@ -271,10 +299,14 @@ async def upload_knowledge_file(*, request: Request, command, path: str, file_na
     if not row:
         raise NotFoundError.http_exception()
     if row.type == KnowledgeTypeEnum.SPACE.value:
+        # MCP defaults are schema defaults, not caller overrides of saved rules.
+        explicit = command.model_dump(include=set(FileProcessBase.model_fields), exclude_unset=True, exclude_none=True)
+        overrides = capture_legacy_processing_overrides(FileProcessBase(**explicit))
         results = await _space_service(request, login_user, version_repo, doc_repo).add_file(
             knowledge_id=command.knowledge_id,
             file_path=[path],
             parent_id=command.parent_id,
+            processing_overrides=overrides if overrides.document is not None or overrides.table is not None else None,
         )
         return results[0]
     if row.type not in _KB_TYPES:
@@ -352,7 +384,9 @@ async def list_knowledge_files(*, request: Request, command, version_repo, doc_r
 
 async def delete_knowledge_files(*, request: Request, file_ids: list[int]) -> None:
     login_user = get_open_api_operator()
-    await run_in_threadpool(KnowledgeService.delete_knowledge_file, request, login_user, file_ids)
+    from bisheng.knowledge.application.deletion_compatibility import delete_legacy_files
+
+    await delete_legacy_files(request=request, identity=login_user, file_ids=file_ids)
 
 
 __all__ = [

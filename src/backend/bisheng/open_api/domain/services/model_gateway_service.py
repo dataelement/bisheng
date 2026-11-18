@@ -63,6 +63,7 @@ from bisheng.open_api.domain.schemas.model_gateway import (
 from bisheng.open_api.domain.services.model_call_record_writer import model_call_record_writer
 from bisheng.open_api.domain.services.model_range_policy import (
     ResolvedSubject,
+    assert_hosted_model_binding,
     resolve_range_and_subject,
 )
 from bisheng.open_api.domain.services.openai_codec import (
@@ -171,6 +172,7 @@ class ModelGatewayService:
         cls._attach_model(record, resolved)
 
         try:
+            await assert_hosted_model_binding(principal, req.model, resolved)
             llm = await cls._instantiate(principal, resolved, req)
         except ModelFaceError as exc:
             # The name resolved a moment ago, so a failure here is either "the

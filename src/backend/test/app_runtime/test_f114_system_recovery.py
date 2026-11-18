@@ -110,6 +110,153 @@ async def test_only_own_precise_maintenance_transition_is_accepted(recovery):
         await policy.validate_system(context, app, op, repo)
 
 
+async def test_failed_recovery_retry_inherits_exact_maintenance_proof(recovery):
+    policy, app, route, old, first, context, repo = recovery
+    before = policy.route_snapshot(route)
+    route.status = "maintenance"
+    route.route_epoch += 1
+    after = policy.route_snapshot(route)
+    first.status = "failed"
+    first.cleanup_status = "complete"
+    first.version_id = "approved"
+    first.request_digest = "b" * 64
+    first.payload.update(
+        {
+            "authorization_context": context,
+            "recovery_attempt": 1,
+            "maintenance_transition": {
+                "operation_id": first.id,
+                "generation": first.generation,
+                "owner_epoch": first.owner_epoch,
+                "fact_sequence": 9,
+                "before": before,
+                "after": after,
+            },
+        }
+    )
+    retry_context = policy.capture_system_retry(
+        app,
+        route,
+        first,
+        SimpleNamespace(
+            **{
+                "content": first.payload["resolved_delivery"],
+                "delivery_digest": context["source"]["delivery_digest"],
+            }
+        ),
+    )
+    retry = SimpleNamespace(
+        id="retry",
+        tenant_id=3,
+        app_id=app.id,
+        version_id="approved",
+        node_id="node",
+        generation=3,
+        owner_epoch=1,
+        kind="deploy",
+        payload={
+            "resolved_delivery": first.payload["resolved_delivery"],
+            "authorization_context": retry_context,
+            "recovery_attempt": 2,
+        },
+    )
+
+    async def get(model, key, **_):
+        if key == old.id:
+            return old
+        if key == first.id:
+            return first
+        return None
+
+    original_find = repo.find.side_effect
+
+    async def find(model, **kwargs):
+        from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeExecutionFact
+
+        if model is RuntimeExecutionFact:
+            return [SimpleNamespace(phase="maintenance", node_id="node", generation=3, owner_epoch=1)]
+        return await original_find(model, **kwargs)
+
+    repo.get = AsyncMock(side_effect=get)
+    repo.find = AsyncMock(side_effect=find)
+    await policy.validate_system(retry_context, app, retry, repo)
+    retry.payload["maintenance_transition"] = {
+        "operation_id": retry.id,
+        "generation": retry.generation,
+        "owner_epoch": retry.owner_epoch,
+        "fact_sequence": 9,
+        "before": after,
+        "after": after,
+    }
+    await policy.validate_system(retry_context, app, retry, repo)
+
+    first.status = "completed"
+    with pytest.raises(PermissionDeniedError):
+        await policy.validate_system(retry_context, app, retry, repo)
+
+
+async def test_pre_maintenance_failure_retries_from_original_serving_proof(recovery):
+    policy, app, route, old, first, context, repo = recovery
+    before = policy.route_snapshot(route)
+    first.status = "failed"
+    first.cleanup_status = "complete"
+    first.version_id = "approved"
+    first.request_digest = "b" * 64
+    first.payload.update({"authorization_context": context, "recovery_attempt": 1})
+    delivery = SimpleNamespace(
+        content=first.payload["resolved_delivery"], delivery_digest=context["source"]["delivery_digest"]
+    )
+    retry_context = policy.capture_system_retry(app, route, first, delivery)
+    assert retry_context["retry"]["maintenance_inherited"] is False
+    retry = SimpleNamespace(
+        id="retry",
+        tenant_id=3,
+        app_id=app.id,
+        version_id="approved",
+        node_id="node",
+        generation=3,
+        owner_epoch=1,
+        kind="deploy",
+        payload={
+            "resolved_delivery": delivery.content,
+            "authorization_context": retry_context,
+            "recovery_attempt": 2,
+        },
+    )
+
+    async def get(model, key, **_):
+        if key == old.id:
+            return old
+        if key == first.id:
+            return first
+        return None
+
+    repo.get = AsyncMock(side_effect=get)
+    await policy.validate_system(retry_context, app, retry, repo)
+
+    route.status = "maintenance"
+    route.route_epoch += 1
+    retry.payload["maintenance_transition"] = {
+        "operation_id": retry.id,
+        "generation": retry.generation,
+        "owner_epoch": retry.owner_epoch,
+        "fact_sequence": 9,
+        "before": before,
+        "after": policy.route_snapshot(route),
+    }
+    original_find = repo.find.side_effect
+
+    async def find(model, **kwargs):
+        from bisheng.app_runtime.domain.models.runtime_delivery import RuntimeExecutionFact
+
+        if model is RuntimeExecutionFact:
+            return [SimpleNamespace(phase="maintenance", node_id="node", generation=3, owner_epoch=1)]
+        return await original_find(model, **kwargs)
+
+    repo.find = AsyncMock(side_effect=find)
+    await policy.validate_system(retry_context, app, retry, repo)
+
+
 @pytest.mark.parametrize("change", ["stop", "version", "delivery", "route", "source"])
 async def test_superseded_or_unproven_recovery_is_denied(recovery, change):
     policy, app, route, old, op, context, repo = recovery

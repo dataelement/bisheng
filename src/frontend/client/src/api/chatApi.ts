@@ -7,6 +7,7 @@ import { hydrateStreamChatCitations } from './hydrateStreamChatCitations';
  */
 import { isApiError, normalizeApiError } from "@bisheng/api-client";
 import { readCitationFailure } from "~/api/citationFailure";
+import type { MemoryFlags } from "~/api/memory";
 import http from "~/api/request";
 import { normalizeHistoryMediaFiles } from "~/utils/mediaAttachmentUtils";
 import { getShareTokenFromPath } from "~/utils/shareToken";
@@ -120,6 +121,8 @@ export interface ChatMessage {
     /** raw upstream text (provider message, parser error, offending filename) kept
         behind the card's "view details" disclosure. */
     errorDetail?: string;
+    /** support reference when the failure has no dependency failure_id */
+    referenceId?: string;
     failureInfo?: FailureInfo;
     unfinished?: boolean;
     isCreatedByUser?: boolean;
@@ -153,6 +156,8 @@ export interface ChatMessage {
      * legacy fields in `mapAgentResponseItem`.
      */
     events?: AgentEvent[];
+    /** F132: memory notice / attribution flags of this answer (owner only). */
+    memory?: MemoryFlags;
 }
 
 export interface ContentPart {
@@ -229,7 +234,17 @@ export async function getAgentMessages(
     const headers = shareToken ? { 'share-token': shareToken } : undefined;
     const res = await http.get(API.agentMessages(conversationId), headers ? { headers } : undefined);
     const rows: any[] = res?.data ?? res ?? [];
-    return rows.map(mapAgentResponseItem);
+    // Linear agent history has no persisted parent IDs. Rebuild the links the
+    // retry action uses to find the original question after a history reload.
+    let previousMessageId = "";
+    let questionMessageId = "";
+    return rows.map((row) => {
+        const message = mapAgentResponseItem(row);
+        message.parentMessageId = message.isCreatedByUser ? previousMessageId : questionMessageId;
+        if (message.isCreatedByUser) questionMessageId = message.messageId;
+        previousMessageId = message.messageId;
+        return message;
+    });
 }
 
 /**

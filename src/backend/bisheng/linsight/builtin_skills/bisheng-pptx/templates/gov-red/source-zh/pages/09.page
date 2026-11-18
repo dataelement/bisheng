@@ -1,0 +1,420 @@
+pageType: comparison
+background:
+  type: solid
+  color: $white
+elements:
+- elementId: top-band
+  elementType: shape
+  bounds:
+  - 0
+  - 0
+  - 960
+  - 8
+  shapeName: rect
+  fill:
+    type: solid
+    color: $red
+  border:
+    color: $red
+    width: 0
+- elementId: top-gold
+  elementType: shape
+  bounds:
+  - 0
+  - 8
+  - 960
+  - 2
+  shapeName: rect
+  fill:
+    type: solid
+    color: $gold
+  border:
+    color: $gold
+    width: 0
+- elementId: kicker
+  elementType: text
+  bounds:
+  - 48
+  - 28
+  - 600
+  - 16
+  content:
+    text: 三、存在的问题与不足
+    style: $kicker
+- elementId: title
+  elementType: text
+  bounds:
+  - 48
+  - 46
+  - 864
+  - 36
+  content:
+    text: 成绩来之不易，短板同样需要正视
+    style: $title
+- elementId: title-mark
+  elementType: shape
+  bounds:
+  - 48
+  - 88
+  - 56
+  - 3
+  shapeName: rect
+  fill:
+    type: solid
+    color: $gold
+  border:
+    color: $gold
+    width: 0
+- elementId: footer-rule
+  elementType: line
+  bounds:
+  - 48
+  - 502
+  - 864
+  - 1
+  viewBox:
+  - 864
+  - 1
+  points: 0,0 864,0
+  border:
+    color: $rule
+    width: 0.8
+- elementId: footer-org
+  elementType: text
+  bounds:
+  - 48
+  - 508
+  - 500
+  - 16
+  content:
+    text: 示例单位 · 2026 年度工作汇报
+    style: $meta
+- elementId: footer-no
+  elementType: text
+  bounds:
+  - 852
+  - 508
+  - 60
+  - 16
+  content:
+    text: '09'
+    style: $meta
+    align:
+    - right
+    - top
+- elementId: col-head-1
+  elementType: shape
+  bounds:
+  - 48.0
+  - 114
+  - 420.0
+  - 40
+  shapeName: rect
+  fill:
+    type: solid
+    color: $red
+  border:
+    color: $red
+    width: 0
+- elementId: col-head-text-1
+  elementType: text
+  bounds:
+  - 68.0
+  - 122
+  - 380.0
+  - 26
+  content:
+    text: 主要成绩
+    style: $lead
+    fontSize: 17
+    color: $white
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: col-1-no-1
+  elementType: text
+  bounds:
+  - 52.0
+  - 172
+  - 36
+  - 32
+  content:
+    text: '1'
+    style: $title
+    fontSize: 22
+    color: $red
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: col-1-text-1
+  elementType: text
+  bounds:
+  - 92.0
+  - 174
+  - 368.0
+  - 72
+  content:
+    text: 党建引领作用进一步发挥，基层党组织标准化建设达标率 100%
+    style: $body
+    fontSize: 14
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: col-1-rule-1
+  elementType: line
+  bounds:
+  - 48.0
+  - 258
+  - 420.0
+  - 1
+  viewBox:
+  - 420.0
+  - 1
+  points: 0,0 420.0,0
+  border:
+    color: $rule
+    width: 0.8
+- elementId: col-1-no-2
+  elementType: text
+  bounds:
+  - 52.0
+  - 272
+  - 36
+  - 32
+  content:
+    text: '2'
+    style: $title
+    fontSize: 22
+    color: $red
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: col-1-text-2
+  elementType: text
+  bounds:
+  - 92.0
+  - 274
+  - 368.0
+  - 72
+  content:
+    text: 经营效益稳步提升，利润增速连续两年高于收入增速
+    style: $body
+    fontSize: 14
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: col-1-rule-2
+  elementType: line
+  bounds:
+  - 48.0
+  - 358
+  - 420.0
+  - 1
+  viewBox:
+  - 420.0
+  - 1
+  points: 0,0 420.0,0
+  border:
+    color: $rule
+    width: 0.8
+- elementId: col-1-no-3
+  elementType: text
+  bounds:
+  - 52.0
+  - 372
+  - 36
+  - 32
+  content:
+    text: '3'
+    style: $title
+    fontSize: 22
+    color: $red
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: col-1-text-3
+  elementType: text
+  bounds:
+  - 92.0
+  - 374
+  - 368.0
+  - 72
+  content:
+    text: 科技创新取得突破，获省部级科技奖励 6 项
+    style: $body
+    fontSize: 14
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: col-1-rule-3
+  elementType: line
+  bounds:
+  - 48.0
+  - 458
+  - 420.0
+  - 1
+  viewBox:
+  - 420.0
+  - 1
+  points: 0,0 420.0,0
+  border:
+    color: $rule
+    width: 0.8
+- elementId: col-head-2
+  elementType: shape
+  bounds:
+  - 492.0
+  - 114
+  - 420.0
+  - 40
+  shapeName: rect
+  fill:
+    type: solid
+    color: $muted
+  border:
+    color: $muted
+    width: 0
+- elementId: col-head-text-2
+  elementType: text
+  bounds:
+  - 512.0
+  - 122
+  - 380.0
+  - 26
+  content:
+    text: 存在不足
+    style: $lead
+    fontSize: 17
+    color: $white
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: col-2-no-1
+  elementType: text
+  bounds:
+  - 496.0
+  - 172
+  - 36
+  - 32
+  content:
+    text: '1'
+    style: $title
+    fontSize: 22
+    color: $muted
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: col-2-text-1
+  elementType: text
+  bounds:
+  - 536.0
+  - 174
+  - 368.0
+  - 72
+  content:
+    text: 新兴业务盈利能力偏弱，毛利率低于传统业务
+    style: $body
+    fontSize: 14
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: col-2-rule-1
+  elementType: line
+  bounds:
+  - 492.0
+  - 258
+  - 420.0
+  - 1
+  viewBox:
+  - 420.0
+  - 1
+  points: 0,0 420.0,0
+  border:
+    color: $rule
+    width: 0.8
+- elementId: col-2-no-2
+  elementType: text
+  bounds:
+  - 496.0
+  - 272
+  - 36
+  - 32
+  content:
+    text: '2'
+    style: $title
+    fontSize: 22
+    color: $muted
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: col-2-text-2
+  elementType: text
+  bounds:
+  - 536.0
+  - 274
+  - 368.0
+  - 72
+  content:
+    text: 数字化转型进度不均衡，部分二级单位推进偏慢
+    style: $body
+    fontSize: 14
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: col-2-rule-2
+  elementType: line
+  bounds:
+  - 492.0
+  - 358
+  - 420.0
+  - 1
+  viewBox:
+  - 420.0
+  - 1
+  points: 0,0 420.0,0
+  border:
+    color: $rule
+    width: 0.8
+- elementId: col-2-no-3
+  elementType: text
+  bounds:
+  - 496.0
+  - 372
+  - 36
+  - 32
+  content:
+    text: '3'
+    style: $title
+    fontSize: 22
+    color: $muted
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: col-2-text-3
+  elementType: text
+  bounds:
+  - 536.0
+  - 374
+  - 368.0
+  - 72
+  content:
+    text: 高端人才结构性短缺，关键岗位后备不足
+    style: $body
+    fontSize: 14
+    fontFamily:
+      latin: Arial
+      ea: Microsoft YaHei
+- elementId: col-2-rule-3
+  elementType: line
+  bounds:
+  - 492.0
+  - 458
+  - 420.0
+  - 1
+  viewBox:
+  - 420.0
+  - 1
+  points: 0,0 420.0,0
+  border:
+    color: $rule
+    width: 0.8

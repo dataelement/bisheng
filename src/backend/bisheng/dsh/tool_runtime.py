@@ -21,5 +21,4 @@ async def get_tool_service(runtime: DshRuntime = Depends(get_runtime)):
         SavedToolService(),
         leases,
         limits,
-        activity_recorder=runtime.sessions.record_activity,
     )

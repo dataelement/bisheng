@@ -2,6 +2,8 @@ import { useMemo } from 'react';
 import { useChatProjects } from '~/hooks/useChatProjects';
 
 export const PROJECT_NAME_MAX_LENGTH = 30;
+const LEGACY_PROJECT_LIMIT = 100;
+const LEGACY_MEMBERSHIP_LIMIT = 2000;
 
 /** Selector over the server cache, never another writable project store. */
 export function useProjectMemberships(): Record<string, string> {
@@ -37,5 +39,10 @@ export function readLegacyProjects(): {
     if (/^[A-Za-z0-9_-]{1,255}$/.test(chat_id) && chat_id !== 'new' && typeof legacy_project_id === 'string' && legacy_project_id.length > 0 && legacy_project_id.length <= 255) return [{ chat_id, legacy_project_id }];
     invalid.push({ id: chat_id, status: 'invalid_local_data' }); return [];
   });
-  return { projects, memberships, skipped: invalid.length, invalid };
+  // One import request carries the whole record; the server caps it at 100 / 2000.
+  for (const extra of projects.slice(LEGACY_PROJECT_LIMIT)) invalid.push({ id: extra.legacy_id, status: 'invalid_local_data' });
+  const kept = new Set(projects.slice(0, LEGACY_PROJECT_LIMIT).map(project => project.legacy_id));
+  const keptMembers = memberships.filter(member => kept.has(member.legacy_project_id));
+  for (const extra of keptMembers.slice(LEGACY_MEMBERSHIP_LIMIT)) invalid.push({ id: extra.chat_id, status: 'invalid_local_data' });
+  return { projects: projects.slice(0, LEGACY_PROJECT_LIMIT), memberships: keptMembers.slice(0, LEGACY_MEMBERSHIP_LIMIT), skipped: invalid.length, invalid };
 }

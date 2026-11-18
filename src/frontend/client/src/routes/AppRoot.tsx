@@ -60,7 +60,9 @@ export default function AppRoot() {
     location.pathname,
   );
 
-  const isAppSurface = location.pathname.includes("/app/");
+  const isCompactAppSurface =
+    isAppChatCompact && location.pathname.includes("/app/");
+  const showCompactAppHeader = isCompactAppSurface && !hasHostChatHeader;
   const scrollLockPrevRef = useRef<{ body: string; html: string } | null>(null);
 
   type AppSurfaceLocationState = { appSurfaceReturn?: string };
@@ -206,7 +208,7 @@ export default function AppRoot() {
           )}
 
           {/* Floating toggle button - lives outside the clipped sidebar */}
-          {!isTabletOrMobile && !(isAppSurface && isAppChatCompact) && (
+          {!isTabletOrMobile && !isCompactAppSurface && (
             <NavToggle
               navVisible={sidebarVisible}
               onToggle={toggleSidebar}
@@ -218,7 +220,7 @@ export default function AppRoot() {
           )}
 
           {/* When the wide sidebar closes, retain back only; MobileNav owns the menu. */}
-          {!sidebarVisible && !(isAppSurface && isAppChatCompact) && (
+          {!hasHostChatHeader && !sidebarVisible && !isCompactAppSurface && (
             <div className="absolute left-3 top-3 z-[40] flex items-center gap-2 transition-all duration-300">
               <button
                 type="button"
@@ -233,7 +235,7 @@ export default function AppRoot() {
 
           {/* Chat panel (routed) */}
           <div className="relative flex h-full max-w-full min-w-0 flex-1 flex-col overflow-hidden">
-            {isAppSurface && isAppChatCompact && !mobileNavHidden && (
+            {showCompactAppHeader && !mobileNavHidden && (
               <div className="shrink-0 overflow-hidden rounded-t-xl bg-white">
                 <MobileNav
                   variant="chat"
@@ -261,7 +263,7 @@ export default function AppRoot() {
                 />
               </div>
             )}
-            {isAppSurface && isAppChatCompact && !hasHostChatHeader && (
+            {showCompactAppHeader && (
               <MobileAppHistoryDropdown
                 open={appHistoryOpen}
                 onClose={() => setAppHistoryOpen(false)}

@@ -1,12 +1,11 @@
 """AC-03: production workbench entries bind through the real Owner and SQL.
 
 Only model/storage/telemetry boundaries are replaced. Session creation, project
-membership, revision and receipt transactions all use the isolated SQL fixture.
+membership transactions use the isolated SQL fixture.
 """
 
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
-from uuid import uuid4
 
 import pytest
 from sqlmodel import select
@@ -26,12 +25,10 @@ class SessionBindingObserved(Exception):
 
 def prepare_owner_boundaries(monkeypatch):
     from bisheng.chat_session.domain import chat
-    from bisheng.chat_session.domain.services import project_events
     from bisheng.database.models import org_snapshot
 
     monkeypatch.setattr(chat.UserGroupDao, "aget_user_group", AsyncMock(return_value=[]))
     monkeypatch.setattr(org_snapshot, "astamp_session", AsyncMock())
-    monkeypatch.setattr(project_events, "publish_project_change", AsyncMock(return_value="live"))
 
 
 @pytest.mark.parametrize("entry", ["initialize_chat", "_agent_initialize_chat"])
@@ -66,9 +63,7 @@ async def test_real_daily_entries_commit_project_binding_before_readback(repo, m
         raise SessionBindingObserved()
 
     monkeypatch.setattr(chat_service.MessageSessionDao, "async_get_one", read_committed)
-    data = APIChatCompletion(
-        clientTimestamp="1", model="model", text="Hello", project_id=project_id, project_request_id=uuid4()
-    )
+    data = APIChatCompletion(clientTimestamp="1", model="model", text="Hello", project_id=project_id)
     with pytest.raises(SessionBindingObserved):
         await getattr(chat_service, entry)(data, SimpleNamespace(user_id=actor.user_id, tenant_id=actor.tenant_id))
     assert len(observed) == 1
@@ -108,7 +103,6 @@ async def test_real_task_submit_commits_project_binding_before_enqueue(repo, mon
         text="Hello",
         task_mode=True,
         project_id=project_id,
-        project_request_id=uuid4(),
     )
     session, version = await task_submit_service.submit_task_turn(
         data, SimpleNamespace(user_id=actor.user_id, tenant_id=actor.tenant_id)

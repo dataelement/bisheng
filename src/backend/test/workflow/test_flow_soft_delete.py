@@ -245,28 +245,87 @@ async def test_delete_endpoint_preserves_auth_order_and_final_state(store, monke
     from bisheng.api.services import flow as service
     from bisheng.api.v1 import flows as endpoint
     from bisheng.common.errcode.http_error import UnAuthorizedError
+    from bisheng.resource_reference.application.contracts import SourceKey
+    from bisheng.resource_reference.application.target_verification import ReferenceTargetVerifier
+    from bisheng.resource_reference.application.write_runtime import ReferenceBindingRuntime
+    from bisheng.resource_reference.domain.repositories.reference_repository import ReferenceRepository
+    from bisheng.workflow.domain.repositories.workflow_version_repository import WorkflowVersionRepository
+    from bisheng.workflow.domain.services.reference_extractor import WORKFLOW_REFERENCE_EXTRACTOR_VERSION
+    from test.knowledge_unification.test_ref_repo import TABLES
 
-    project = AsyncMock(side_effect=None if permission_allowed else UnAuthorizedError())
-    cleanup = Mock()
+    for table in TABLES:
+        table.create(store)
+    async_engine = create_async_engine(str(store.url).replace("sqlite:", "sqlite+aiosqlite:"))
+
+    @asynccontextmanager
+    async def session_factory():
+        async with AsyncSession(async_engine, expire_on_commit=False) as session:
+            yield session
+
+    # The real live definition has zero targets. No target Owner or receipt is
+    # fabricated; this fixture models its already-completed upgrade indexing.
+    verifier = ReferenceTargetVerifier({})
+    runtime = ReferenceBindingRuntime(ReferenceRepository(verifier=verifier), verifier)
+    async with session_factory() as session, session.begin():
+        prepared = await runtime.aprepare_source_bindings(
+            session,
+            SourceKey(1, "workflow_version", "live", "1"),
+            (),
+            extractor_version=WORKFLOW_REFERENCE_EXTRACTOR_VERSION,
+            lock_source_root=lambda sql: WorkflowVersionRepository.alock_root(sql, "live", 1),
+            new_source=True,
+        )
+        await runtime.aapply_source_bindings(session, prepared)
+
+    events = []
+
+    async def authorize(*args, **kwargs):
+        events.append("authorize")
+        if not permission_allowed:
+            raise UnAuthorizedError()
+
+    async def project_existing(*args):
+        events.append("project")
+        assert FlowDao.get_flow_by_id("live") is not None
+        return SimpleNamespace(cleanup_deleted=AsyncMock()), object(), object()
+
+    def cleanup_committed(*args):
+        events.append("cleanup")
+        assert FlowDao.get_flow_by_id("live") is None
+
+    project = AsyncMock(side_effect=project_existing)
+    cleanup = Mock(side_effect=cleanup_committed)
+    monkeypatch.setattr(service, "get_async_db_session", session_factory)
+    monkeypatch.setattr(service, "get_reference_binding_runtime", AsyncMock(return_value=runtime))
+    monkeypatch.setattr(service, "require_business_action", AsyncMock(side_effect=authorize))
     monkeypatch.setattr(service.FlowService, "project_flow_delete", project)
     monkeypatch.setattr(service.FlowService, "delete_flow_hook", cleanup)
-    monkeypatch.setattr(endpoint.telemetry_service, "log_event_sync", Mock())
-    user = SimpleNamespace(user_id=1)
-    if not permission_allowed:
-        with pytest.raises(UnAuthorizedError):
+    monkeypatch.setattr(service.telemetry_service, "log_event", AsyncMock())
+    user = SimpleNamespace(user_id=1, tenant_id=1)
+    try:
+        if not permission_allowed:
+            with pytest.raises(UnAuthorizedError):
+                await endpoint.delete_flow(request=object(), flow_id="live", login_user=user)
+            assert FlowDao.get_flow_by_id("live") is not None
+            cleanup.assert_not_called()
+            project.assert_not_awaited()
+            assert events == ["authorize"]
+            return
+        result = await endpoint.delete_flow(request=object(), flow_id="live", login_user=user)
+        assert result.status_code == 200
+        assert FlowDao.get_flow_by_id("live") is None
+        cleanup.assert_called_once()
+        with Session(store) as session:
+            assert session.get(Flow, "live").is_delete == 1
+            assert session.get(FlowVersion, 1).is_delete == 1
+        with pytest.raises(NotFoundError):
+            await service.FlowService.get_one_flow(user, "live")
+        with pytest.raises(NotFoundError):
             await endpoint.delete_flow(request=object(), flow_id="live", login_user=user)
-        assert FlowDao.get_flow_by_id("live") is not None
-        cleanup.assert_not_called()
-        return
-    result = await endpoint.delete_flow(request=object(), flow_id="live", login_user=user)
-    assert result.status_code == 200
-    assert FlowDao.get_flow_by_id("live") is None
-    cleanup.assert_called_once()
-    with pytest.raises(NotFoundError):
-        await service.FlowService.get_one_flow(user, "live")
-    with pytest.raises(NotFoundError):
-        await endpoint.delete_flow(request=object(), flow_id="live", login_user=user)
-    assert project.await_count == 1
+        assert project.await_count == 1
+        assert events == ["authorize", "project", "cleanup"]
+    finally:
+        await async_engine.dispose()
 
 
 async def test_migration_defaults_existing_rows_and_is_idempotent(tmp_path, monkeypatch):

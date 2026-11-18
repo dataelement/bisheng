@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Body, Depends, Request
+from typing import Literal
+
+from fastapi import APIRouter, Body, Depends, Query, Request
 
 from bisheng.api.v1.schemas import (
     KnowledgeSpaceConfig,
@@ -18,12 +20,17 @@ router = APIRouter()
 
 
 @router.get("/config", summary="Get workbench configuration", response_model=UnifiedResponseModel)
-async def get_config(request: Request, login_user=LoginUserDep):
+async def get_config(
+    request: Request,
+    login_user=LoginUserDep,
+    purpose: Literal["navigation"] | None = Query(default=None),
+):
+    if purpose == "navigation":
+        return resp_200(data=await WorkStationService.get_navigation_config())
     ret = await WorkStationService.get_daily_chat_config(for_picker=True)
-    if bisheng_settings.dsh.enabled:
-        from bisheng.dsh.domain.services.model_catalog import authorized_workbench_models
+    from bisheng.dsh.domain.services.model_catalog import workbench_models_for_display
 
-        ret.models = await authorized_workbench_models(login_user.user_id)
+    ret.models = await workbench_models_for_display(login_user)
     linsight_config = await WorkStationService.get_linsight_config()
     # `enable_etl4lm` historically gated the frontend on `etl4lm.url` alone, but the
     # parse pipeline now supports mineru / paddle_ocr as alternative providers that
@@ -31,6 +38,13 @@ async def get_config(request: Request, login_user=LoginUserDep):
     # follows whichever loader_provider is actually selected and configured.
     knowledge_conf = await bisheng_settings.async_get_knowledge()
     ret = ret.model_dump(exclude_unset=True) if ret else {}
+    if bisheng_settings.dsh.enabled and ret.get("models"):
+        from bisheng.dsh.domain.services.pricing import workbench_pricing_hints
+
+        # F016: response-only field; WSModel is also the stored config, so it never carries it.
+        hints = await workbench_pricing_hints([str(item.get("id")) for item in ret["models"]])
+        for item in ret["models"]:
+            item["pricing_hint"] = hints.get(str(item.get("id")))
     from bisheng.dsh.domain.services.capability_catalog import CapabilityCatalogService
 
     ret["tools"] = await CapabilityCatalogService(login_user).picker_tools(configured_tools=ret.get("tools") or [])
