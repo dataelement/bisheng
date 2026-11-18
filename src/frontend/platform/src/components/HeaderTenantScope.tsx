@@ -1,4 +1,4 @@
-import { notification, Select } from '@bisheng/ui';
+import { notification, Select, type SelectOption } from '@bisheng/ui';
 // One persisted management view across all platform modules.
 
 import { useEffect, useId, useMemo, useState } from "react"
@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next"
 import { useQueryClient } from "@tanstack/react-query"
 
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels"
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState"
 import { getTenantsApi } from "@/controllers/API/tenant"
 import { useAdminScope } from "@/hooks/useAdminScope"
 import { Tenant } from "@/types/api/tenant"
@@ -87,7 +88,7 @@ function SuperAdminScopeSwitcher({
     }
 
     const options = useMemo(() => {
-        const list = [
+        const list: SelectOption[] = [
             ...tenants
                 .filter((row) => row.id != null && String(row.id) !== "" && Number.isSafeInteger(row.id) && row.id > 0 && row.status === "active")
                 .map((row) => ({
@@ -100,7 +101,7 @@ function SuperAdminScopeSwitcher({
         // (yet): keep a readable label in the trigger instead of a bare id.
         const current = scope.scope_tenant_id
         if (current !== null && !list.some((option) => option.value === current)) {
-            list.push({ value: current, label: t("tenant.adminScope.loading"), disabled: true })
+            list.push({ value: current, label: "", icon: <LoadingState size="inline" label={t("tenant.adminScope.loading")} />, disabled: true })
         }
         return list
     }, [tenants, scope.scope_tenant_id, t])
@@ -113,7 +114,7 @@ function SuperAdminScopeSwitcher({
             <Select
                 {...selectLabels}
                 aria-labelledby={labelId}
-                className="w-48"
+                className="w-36"
                 options={options}
                 value={scope.scope_tenant_id ?? undefined}
                 loading={tenantsLoading}

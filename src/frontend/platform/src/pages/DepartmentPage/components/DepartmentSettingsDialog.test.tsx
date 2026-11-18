@@ -159,7 +159,7 @@ it("keeps failed traffic edits, reports partial success, and retries without res
   fireEvent.click(screen.getByRole("button", { name: "save" }));
   await screen.findByText("bs:organization.partialSave");
   expect(callbacks.onClose).not.toHaveBeenCalled();
-  expect(screen.getByRole("spinbutton")).toHaveValue(12);
+  expect(screen.getByRole("spinbutton")).toHaveValue("12");
   expect(mocks.error).toHaveBeenCalledWith(failure);
   expect(mocks.notify).not.toHaveBeenCalledWith(
     expect.objectContaining({ type: "success" })
@@ -192,4 +192,24 @@ it("locks the form while saving so edits cannot be lost on successful close", as
   expect(screen.getByDisplayValue("Product renamed")).toBeDisabled();
   await act(async () => finish({}));
   await waitFor(() => expect(callbacks.onClose).toHaveBeenCalledOnce());
+});
+
+it("opens the traffic tab and blocks saving when a limit draft is invalid", async () => {
+  const callbacks = await editBoth();
+  fireEvent.mouseDown(
+    screen.getByRole("tab", { name: "bs:department.trafficControl" }),
+    { button: 0, ctrlKey: false }
+  );
+  const input = screen.getByRole("spinbutton");
+  fireEvent.change(input, { target: { value: "" } });
+  fireEvent.mouseDown(
+    screen.getByRole("tab", { name: "bs:department.sectionBasic" }),
+    { button: 0, ctrlKey: false }
+  );
+  fireEvent.click(screen.getByRole("button", { name: "save" }));
+  expect(mocks.update).not.toHaveBeenCalled();
+  expect(mocks.saveTraffic).not.toHaveBeenCalled();
+  expect(callbacks.onClose).not.toHaveBeenCalled();
+  expect(screen.getByRole("tab", { name: "bs:department.trafficControl" })).toHaveAttribute("aria-selected", "true");
+  await waitFor(() => expect(input).toHaveFocus());
 });
