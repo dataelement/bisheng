@@ -135,6 +135,12 @@ it("keeps copy behind creation eligibility and permission management behind its 
   setup(false);
   expect(screen.queryByRole("menuitem")).toBeNull();
 });
+it("withholds copy, delete and permission management from a visible-only creator", () => {
+  mocks.actions = { "7": ["visible"] };
+  setup();
+  expect(screen.queryByRole("menuitem")).toBeNull();
+  expect(mocks.open).not.toHaveBeenCalled();
+});
 it("opens permission management and the existing reference-aware deletion for the selected space", async () => {
   mocks.actions = { "7": ["delete", "manage_permission"] };
   const view = setup();

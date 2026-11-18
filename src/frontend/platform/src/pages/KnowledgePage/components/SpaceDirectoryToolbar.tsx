@@ -48,6 +48,7 @@ export function SpaceDirectoryToolbar({
   const { t } = useTranslation("knowledge");
   const navigate = useNavigate();
   const [params] = useSearchParams();
+  const hasBatchActions = Boolean(onMove || onBatchDownload || onBatchTag || onBatchRetry || onReferences || onDeleteSelected);
   const handleUpload = () => {
     if (!canUpload) return;
     const next = new URLSearchParams(params);
@@ -61,7 +62,7 @@ export function SpaceDirectoryToolbar({
   if (toolbarTarget !== undefined) {
     const controls = (
       <div className="flex flex-wrap items-center gap-3">
-        <Dropdown
+        {hasBatchActions && <Dropdown
           align="end"
           menu={
             <>
@@ -110,7 +111,7 @@ export function SpaceDirectoryToolbar({
             {selectedCount > 0 ? ` (${selectedCount})` : ""}
             <Outlined.Down />
           </Button>
-        </Dropdown>
+        </Dropdown>}
         {(canCreateFolder || canUpload) && (
           <Dropdown
             align="end"
@@ -150,21 +151,21 @@ export function SpaceDirectoryToolbar({
     <div className="flex flex-wrap items-center justify-end gap-3">
       {selectedCount > 0 && (
         <>
-          <Button variant="outlined" onClick={onMove}>
+          {onMove && <Button variant="outlined" onClick={onMove}>
             {t("move.title")}
-          </Button>
-          <Button variant="outlined" onClick={onBatchDownload}>
+          </Button>}
+          {onBatchDownload && <Button variant="outlined" onClick={onBatchDownload}>
             {t("batch.download")}
-          </Button>
-          <Button variant="outlined" onClick={onBatchTag}>
+          </Button>}
+          {onBatchTag && <Button variant="outlined" onClick={onBatchTag}>
             {t("batch.tag")}
-          </Button>
-          <Button variant="outlined" onClick={onBatchRetry}>
+          </Button>}
+          {onBatchRetry && <Button variant="outlined" onClick={onBatchRetry}>
             {t("batch.retry")}
-          </Button>
+          </Button>}
         </>
       )}
-      {selectedCount > 0 && (
+      {selectedCount > 0 && onDeleteSelected && (
         <Button color="danger" variant="outlined" onClick={onDeleteSelected}>
           {t("deletion.selected")} ({selectedCount})
         </Button>

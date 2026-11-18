@@ -157,15 +157,61 @@ async function confirmLast() {
     await confirmation.onOk(vi.fn());
   });
 }
-beforeEach(() => vi.resetAllMocks());
+beforeEach(() => {
+  vi.resetAllMocks();
+  mocks.get.mockResolvedValue({ actions: ["visible", "edit", "upload_file", "delete"] });
+});
 afterEach(() => {
   cleanup();
   clients.forEach((client) => client.clear());
   clients.length = 0;
 });
 
+it.each(["visible", "error", "pending"])("keeps version history readable without mutation entries when permission is %s", async state => {
+  if (state === "error") mocks.get.mockRejectedValue({ status_code: 25008 });
+  else if (state === "pending") mocks.get.mockReturnValue(new Promise(() => undefined));
+  else mocks.get.mockResolvedValue({ actions: ["visible"] });
+  const ports = api();
+  mount(<SpaceVersionHistorySheet scope={scope} spaceId={7} parentId={9} fileId={12} open onOpenChange={vi.fn()} api={ports} />);
+  expect(await screen.findByText("old.md")).toBeVisible();
+  for (const name of ["versions.new_version", "versions.merge", "versions.set_primary", "versions.delete_history"]) {
+    expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+  }
+  expect(ports.deleteSpaceFileVersion).not.toHaveBeenCalled();
+  expect(ports.setSpacePrimaryVersion).not.toHaveBeenCalled();
+});
+
+it("checks upload on the current folder and delete on the historical physical file", async () => {
+  mocks.get.mockImplementation(async (url: string) => ({ actions:
+    url.includes("knowledge_space/7/") ? ["visible", "edit"] : ["visible"],
+  }));
+  const ports = api();
+  mount(<SpaceVersionHistorySheet scope={scope} spaceId={7} parentId={9} fileId={12} open onOpenChange={vi.fn()} api={ports} />);
+  expect(await screen.findByRole("button", { name: "versions.set_primary" })).toBeVisible();
+  await waitFor(() => expect(mocks.get).toHaveBeenCalledWith(expect.stringContaining("knowledge_file/11/my-permissions")));
+  expect(mocks.get).toHaveBeenCalledWith(expect.stringContaining("folder/9/my-permissions"));
+  expect(screen.queryByRole("button", { name: "versions.new_version" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "versions.delete_history" })).not.toBeInTheDocument();
+});
+
+it("ignores late version management grants from a retired tenant view", async () => {
+  let resolve!: (value: { actions: string[] }) => void;
+  mocks.get.mockReturnValue(new Promise<{ actions: string[] }>(done => { resolve = done; }));
+  const ports = api();
+  const content = (target = scope) => <SpaceVersionHistorySheet scope={target} spaceId={7} parentId={9} fileId={12} open onOpenChange={vi.fn()} api={ports} />;
+  const view = mount(content());
+  await screen.findByText("old.md");
+  mocks.get.mockResolvedValue({ actions: ["visible"] });
+  view.update(content({ ...scope, tenantId: 202, managementTenantId: 202 }));
+  await act(async () => { resolve({ actions: ["visible", "edit", "upload_file", "delete"] }); });
+  await screen.findByText("old.md");
+  for (const name of ["versions.new_version", "versions.merge", "versions.set_primary", "versions.delete_history"]) {
+    expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+  }
+});
+
 it("opens version management for a parsed single-version file only with space edit and the feature flag", async () => {
-  mocks.get.mockImplementation(async (url: string) => url.endsWith("/my-permissions") ? { actions: ["edit"] } : history());
+  mocks.get.mockImplementation(async (url: string) => url.endsWith("/my-permissions") ? { actions: ["edit", "upload_file"] } : history());
   const row = (
     <table>
       <tbody>
@@ -212,7 +258,7 @@ it("opens version management for a parsed single-version file only with space ed
   ).not.toBeInTheDocument();
 });
 
-it("runs the actual historical version endpoints and rereads history, without adding an edit/role gate", async () => {
+it("runs permitted historical version endpoints and rereads history", async () => {
   const ports = api();
   mount(
     <SpaceVersionHistorySheet

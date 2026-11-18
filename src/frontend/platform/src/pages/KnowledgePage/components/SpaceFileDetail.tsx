@@ -154,7 +154,7 @@ export function SpaceFileDetail({ scope, spaceId, fileId, initialFile, onBack, o
             )}
             <span className="min-w-0">{notice}</span>
           </span>
-          {failedAttempt && (
+          {failedAttempt && model.canProcess && (
             <Button
               variant="outlined"
               color="default"

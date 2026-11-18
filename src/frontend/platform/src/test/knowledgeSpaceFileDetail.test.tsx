@@ -153,6 +153,15 @@ afterEach(() => {
   clients.splice(0).forEach((client) => client.clear());
 });
 
+it("keeps failed-file content readable without showing reprocess to a visible-only user", async () => {
+  mock.info.mockResolvedValue({ ...info, status: 3, retrievable: false });
+  mock.permission.mockResolvedValue({ actions: ["visible"] });
+  render(setup().draw());
+  expect(await screen.findByText("f118.content_notice_failed_retained")).toBeVisible();
+  expect(screen.queryByRole("button", { name: "f118.processing_kind_file_reprocess" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "segment.adjustStrategy" })).not.toBeInTheDocument();
+});
+
 it("restores original preview and editable chunks using the physical file id, including index zero", async () => {
   const f = setup();
   render(f.draw());

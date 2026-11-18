@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { useContext, type ReactNode } from "react";
@@ -41,11 +41,11 @@ function Environment({ enabled, children }: { enabled: boolean; children: ReactN
   const defaults = useContext(locationContext);
   return <locationContext.Provider value={{ ...defaults, appConfig: { versionManagementEnabled: enabled } }}>{children}</locationContext.Provider>;
 }
-function mount(presentation?: "workspace", enabled = false) {
+function mount(presentation?: "workspace", enabled = false, toolbarTarget?: HTMLDivElement) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   clients.push(client);
   const draw = (currentScope = scope) => <QueryClientProvider client={client}><MemoryRouter>
-    <Environment enabled={enabled}><Files scope={currentScope} spaceId={7} presentation={presentation} /></Environment>
+    <Environment enabled={enabled}><Files scope={currentScope} spaceId={7} presentation={presentation} toolbarTarget={toolbarTarget} /></Environment>
   </MemoryRouter></QueryClientProvider>;
   const result = render(draw());
   return { ...result, update: (currentScope: KnowledgeQueryScope) => result.rerender(draw(currentScope)) };
@@ -122,6 +122,85 @@ it("withholds privileged row actions without the corresponding server actions", 
   const opened = await menu();
   for (const name of ["managePermission", "editTag", "move.title", "retry", "rename"]) {
     expect(within(opened).queryByRole("menuitem", { name })).not.toBeInTheDocument();
+  }
+});
+
+it.each([0, 1])("hides every mutating batch entry for a visible-only type %s", async fileType => {
+  actions = ["visible"];
+  rows = [file(11, { file_type: fileType, status: 3, has_failed_files: true })];
+  mount("workspace");
+  fireEvent.click(await screen.findByRole("checkbox", { name: "deletion.select file-11.pdf" }));
+  await waitFor(() => expect(mocks.permissions).toHaveBeenCalledWith(fileType === 0 ? "folder" : "knowledge_file", "11"));
+  for (const name of ["move.title", "batch.download", "batch.tag", "batch.retry", "deletion.selected (1)", "deletion.references"]) {
+    expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+  }
+  expect(mocks.batch).not.toHaveBeenCalled();
+});
+
+it.each([
+  { held: ["download"], shown: "batch.download" },
+  { held: ["move"], shown: "move.title" },
+  { held: ["delete"], shown: "deletion.selected (1)" },
+  { held: ["rename"], shown: "batch.tag" },
+])("shows only the batch actions granted by $held", async ({ held, shown }) => {
+  actions = ["visible", ...held];
+  mount("workspace");
+  fireEvent.click(await screen.findByRole("checkbox", { name: "deletion.select file-11.pdf" }));
+  expect(await screen.findByRole("button", { name: shown })).toBeVisible();
+  for (const name of ["move.title", "batch.download", "batch.tag", "deletion.selected (1)"]) {
+    if (name !== shown) expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+  }
+  expect(screen.queryByRole("button", { name: "batch.retry" })).not.toBeInTheDocument();
+});
+
+it("allows the permitted part of a mixed selection to reach the existing batch review", async () => {
+  rows = [file(), file(12)];
+  mocks.permissions.mockImplementation(async (type: string, id: string) => ({ actions:
+    type === "knowledge_space" ? rootActions : id === "11" ? ["visible", "download"] : ["visible"],
+  }));
+  mount("workspace");
+  for (const id of [11, 12]) fireEvent.click(await screen.findByRole("checkbox", { name: `deletion.select file-${id}.pdf` }));
+  fireEvent.click(await screen.findByRole("button", { name: "batch.download" }));
+  expect(mocks.batch).toHaveBeenCalledWith(expect.objectContaining({ operation: "download", items: [
+    { id: 11, type: "file", name: "file-11.pdf" }, { id: 12, type: "file", name: "file-12.pdf" },
+  ] }));
+});
+
+it("hides an empty batch dropdown and ignores permissions returned after a tenant switch", async () => {
+  let resolve!: (value: { actions: string[] }) => void;
+  const pending = new Promise<{ actions: string[] }>(done => { resolve = done; });
+  mocks.permissions.mockImplementation((type: string) => type === "knowledge_space" ? Promise.resolve({ actions: [] }) : pending);
+  const target = document.createElement("div");
+  document.body.append(target);
+  try {
+    const view = mount("workspace", false, target);
+    fireEvent.click(await screen.findByRole("checkbox", { name: "deletion.select file-11.pdf" }));
+    await waitFor(() => expect(mocks.permissions).toHaveBeenCalledWith("knowledge_file", "11"));
+    expect(screen.queryByRole("button", { name: /detail.batch/ })).not.toBeInTheDocument();
+    view.update({ ...scope, tenantId: 202, managementTenantId: 202 });
+    await act(async () => { resolve({ actions: ["delete", "move", "rename"] }); });
+    expect(screen.queryByRole("button", { name: /detail.batch/ })).not.toBeInTheDocument();
+    expect(mocks.batch).not.toHaveBeenCalled();
+  } finally {
+    target.remove();
+  }
+});
+
+it("filters the workspace batch dropdown by the selected resource actions", async () => {
+  actions = ["visible", "delete"];
+  const target = document.createElement("div");
+  document.body.append(target);
+  try {
+    mount("workspace", false, target);
+    fireEvent.click(await screen.findByRole("checkbox", { name: "deletion.select file-11.pdf" }));
+    fireEvent.keyDown(await screen.findByRole("button", { name: "detail.batch (1)" }), { key: "Enter" });
+    const opened = await screen.findByRole("menu");
+    expect(within(opened).getByRole("menuitem", { name: "deletion.selected" })).toBeVisible();
+    for (const name of ["move.title", "batch.download", "batch.tag", "batch.retry"]) {
+      expect(within(opened).queryByRole("menuitem", { name })).not.toBeInTheDocument();
+    }
+  } finally {
+    target.remove();
   }
 });
 
