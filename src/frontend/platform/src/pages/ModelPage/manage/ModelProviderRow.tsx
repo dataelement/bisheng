@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { showApiError } from "@/controllers/request";
 import { Outlined } from "bisheng-icons";
 import { Button, Switch, Tag, Tooltip, TooltipProvider } from '@bisheng/ui'
@@ -84,7 +85,7 @@ function ModelRow({ model, canEdit, probing, onToggle, onVerify }: ModelRowProps
         <TableCell>
             <div className="flex items-center gap-2">
                 {probing && model.status === 2
-                    ? <span className="inline-flex items-center gap-1 text-text-3"><Outlined.Loading className="animate-spin size-3" />{t('model.modelStatusChecking')}</span>
+                    ? <span className="inline-flex items-center gap-1 text-text-3"><LoadingState size="inline" />{t('model.modelStatusChecking')}</span>
                     : <Tag size="small" dot color={model.status === 0 ? 'success' : model.status === 1 ? 'warning' : 'default'}>
                         {t(model.status === 0 ? 'model.available' : model.status === 1 ? 'model.abnormal' : 'model.unknown')}
                     </Tag>}
