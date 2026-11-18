@@ -100,6 +100,13 @@ case ",$(env_get "$ENV_FILE" COMPOSE_PROFILES)," in
     fi
     ;;
 esac
+# Credential preparation requires every !env binding of the shipped config to
+# exist in .env. An .env from an older release can lack newer keys; add those
+# empty, the same as .env.example (values above are kept).
+while IFS= read -r key; do
+  grep -qE "^[[:space:]]*(export[[:space:]]+)?${key}[[:space:]]*=" "$ENV_FILE" || env_set "$ENV_FILE" "$key" ""
+done < <(grep -vE '^[[:space:]]*#' "${SCRIPT_DIR}/bisheng/config/config.yaml" \
+  | grep -oE '!env \$\{[A-Za-z_][A-Za-z0-9_]*\}' | sed -E 's/^!env \$\{(.*)\}$/\1/' | sort -u)
 # Existing advanced path options stay compatible; normal deployment needs none.
 BUNDLE=${BUNDLE:-$(env_get "$ENV_FILE" BISHENG_CREDENTIALS_DIR)}
 KEY_FILE=${KEY_FILE:-$(env_get "$ENV_FILE" BISHENG_SECRET_KEYS_FILE)}
