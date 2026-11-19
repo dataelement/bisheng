@@ -330,18 +330,24 @@ class PermissionPublicationApplication:
                 count = checkpoint["processed_count"] if checkpoint else 0
                 seed, ordinal = _checksum(meta), 0
                 plans = await inputs.aplans(tenant)
+                pending = []
                 for plan in plans:
                     ordinal += 1
                     seed = _checksum((seed, plan.checksum))
                     if ordinal <= count:
                         continue
+                    pending.append(plan)
+                    if len(pending) < 100 and ordinal != len(plans):
+                        continue
+                    batch = tuple(pending)
 
-                    async def apply(session, plan=plan):
-                        return await repository.aapply_resource(session, plan=plan)
+                    async def apply(session, batch=batch):
+                        return await repository.aapply_resources(session, plans=batch)
 
                     value = self._value(meta, ordinal, complete=ordinal == len(plans), digest=seed)
                     await self._commit(frozen, "permission_namespace", checkpoint, value, apply)
                     checkpoint = value
+                    pending.clear()
                 if not plans and checkpoint is None:
                     await self._commit(
                         frozen, "permission_namespace", None, self._value(meta, 0, complete=True, digest=seed)

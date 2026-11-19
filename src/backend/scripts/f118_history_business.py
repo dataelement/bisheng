@@ -5,12 +5,33 @@ by that CLI. Physical deletion is a separate, verified port and precedes the
 single SQL repair transaction. No resource, model or authorization is invented.
 """
 
+import json
 import re
 from collections import defaultdict
 from copy import deepcopy
+from hashlib import sha256
+from itertools import chain
 
 from sqlalchemy import delete, update
 from sqlmodel import select
+
+from scripts.f118_history_snapshot import SnapshotRows, SnapshotStore
+
+PAGE_SIZE = 200
+
+
+def row_index(rows):
+    return rows.by_id() if isinstance(rows, SnapshotRows) else {row["id"]: row for row in rows}
+
+
+def group_index(rows, fields):
+    if isinstance(rows, SnapshotRows):
+        return rows.grouped(fields)
+    result = defaultdict(list)
+    for row in rows:
+        key = row[fields[0]] if len(fields) == 1 else tuple(row[field] for field in fields)
+        result[key].append(row)
+    return result
 
 
 def models():
@@ -53,12 +74,21 @@ async def read(session, *, lock=False):
     from bisheng.llm.domain.models.llm_server import LLMModel
     from scripts.prepare_f118_history import canonical
 
-    result = {}
+    result, store = {}, SnapshotStore()
     for name, model in models().items():
-        query = select(model).order_by(model.id)
-        if lock:
-            query = query.with_for_update()
-        result[name] = [canonical(row.model_dump()) for row in (await session.exec(query)).all()]
+        after = None
+        while True:
+            query = select(model).order_by(model.id).limit(PAGE_SIZE)
+            if after is not None:
+                query = query.where(model.id > after)
+            if lock:
+                query = query.with_for_update()
+            rows = (await session.exec(query)).all()
+            store.append(name, [canonical(row.model_dump()) for row in rows])
+            if len(rows) < PAGE_SIZE:
+                break
+            after = rows[-1].id
+        result[name] = store.rows(name)
     catalog = (await session.exec(select(LLMModel.name, LLMModel.model_name).order_by(LLMModel.id))).all()
     result["_model_names"] = sorted({v for row in catalog for v in row if v})
     configs = (await session.exec(select(Config.value).where(Config.key == "initdb_config"))).all()
@@ -71,31 +101,60 @@ async def read(session, *, lock=False):
 
 
 def state_digest(snapshot):
-    from scripts.prepare_f118_history import checksum
+    # Preserve the schema-1 canonical digest byte for byte, without cloning or
+    # encoding the full inventory. Only these two historical counters are mutable.
+    encoder = json.JSONEncoder(ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    result = sha256()
 
-    value = deepcopy(snapshot)
-    # The following original history phase legitimately repairs these counters.
-    for table in ("knowledgefile", "knowledge_document"):
-        for row in value[table]:
-            row.pop("level", None)
-            row.pop("update_time", None)
-    return checksum(value)
+    def add(value):
+        result.update(value.encode())
+
+    add("{")
+    for index, table in enumerate(sorted(snapshot)):
+        add(("," if index else "") + encoder.encode(table) + ":")
+        if table.startswith("_"):
+            for fragment in encoder.iterencode(snapshot[table]):
+                add(fragment)
+            continue
+        add("[")
+        for position, row in enumerate(snapshot[table]):
+            if table in {"knowledgefile", "knowledge_document"}:
+                row = {key: value for key, value in row.items() if key not in {"level", "update_time"}}
+            if position:
+                add(",")
+            for fragment in encoder.iterencode(row):
+                add(fragment)
+        add("]")
+    add("}")
+    return result.hexdigest()
 
 
 def build(snapshot, *, permission_modes=(), model_names=(), legacy_embedding_names=()):
     """Compile exact selected before rows and the expected complete SQL after."""
     from scripts.prepare_f118_history import folder_path
 
-    original, after = deepcopy(snapshot), deepcopy(snapshot)
     plan = {"deletes": [], "updates": [], "physical": [], "blocked": []}
-    roots = {r["id"]: r for r in snapshot["knowledge"]}
-    files = {r["id"]: r for r in snapshot["knowledgefile"]}
-    docs = {r["id"]: r for r in snapshot["knowledge_document"]}
-    modes = defaultdict(list)
-    for row in permission_modes:
-        modes[row["resource_type"], row["resource_id"]].append(row)
+    roots = row_index(snapshot["knowledge"])
+    files = row_index(snapshot["knowledgefile"])
+    docs = row_index(snapshot["knowledge_document"])
+    modes = group_index(permission_modes, ("resource_type", "resource_id"))
     references = snapshot["business_resource_reference"]
     removed = defaultdict(set)
+    root_ids = {str(ident) for ident in roots}
+    updates = {}
+    references_by_file = group_index(references, ("target_type", "target_id"))
+    links_by_tag = group_index(snapshot["taglink"], ("tag_id",))
+    registrations = set()
+    deleted_bindings = defaultdict(list)
+    for ref in chain(snapshot["business_reference_set"], references):
+        if ref["source_type"] == "workflow_version":
+            registrations.add((ref["tenant_id"], ref["source_id"]))
+    for job in snapshot["knowledge_space_delete_job"]:
+        manifest = job.get("manifest") or {}
+        owner = manifest.get("knowledge") or {}
+        if owner.get("id") == job["space_id"] and owner.get("tenant_id") == job["tenant_id"]:
+            for ident in manifest.get("rows", ()):
+                deleted_bindings[(job["space_id"], job["tenant_id"], ident)].append(owner)
 
     def reject(table, row, reason):
         plan["blocked"].append({"table": table, "id": row["id"], "reason": reason})
@@ -106,17 +165,20 @@ def build(snapshot, *, permission_modes=(), model_names=(), legacy_embedding_nam
             removed[table].add(row["id"])
 
     def change(table, row, values, reason):
-        for item in plan["updates"]:
-            if item["table"] == table and item["before"]["id"] == row["id"]:
-                if any(k in item["values"] and item["values"][k] != v for k, v in values.items()):
-                    reject(table, row, "conflicting_repair_values")
-                    return
-                item["values"].update(values)
+        key = (table, row["id"])
+        if key in updates:
+            item = updates[key]
+            if any(k in item["values"] and item["values"][k] != v for k, v in values.items()):
+                reject(table, row, "conflicting_repair_values")
                 return
-        plan["updates"].append({"table": table, "before": deepcopy(row), "values": values, "reason": reason})
+            item["values"].update(values)
+            return
+        item = {"table": table, "before": deepcopy(row), "values": values, "reason": reason}
+        updates[key] = item
+        plan["updates"].append(item)
 
     def file_references(ident):
-        return [r for r in references if r["target_type"] == "knowledge_file" and r["target_id"] == str(ident)]
+        return references_by_file.get(("knowledge_file", str(ident)), ())
 
     for ident, row in files.items():
         root = roots.get(row["knowledge_id"])
@@ -141,18 +203,7 @@ def build(snapshot, *, permission_modes=(), model_names=(), legacy_embedding_nam
                 continue
             binding = root
             if binding is None:
-                candidates = []
-                for job in snapshot["knowledge_space_delete_job"]:
-                    manifest = job.get("manifest") or {}
-                    owner = manifest.get("knowledge") or {}
-                    if (
-                        job["space_id"] == row["knowledge_id"]
-                        and job["tenant_id"] == row["tenant_id"]
-                        and ident in manifest.get("rows", ())
-                        and owner.get("id") == row["knowledge_id"]
-                        and owner.get("tenant_id") == row["tenant_id"]
-                    ):
-                        candidates.append(owner)
+                candidates = deleted_bindings.get((row["knowledge_id"], row["tenant_id"], ident), ())
                 signatures = {(r.get("index_name"), r.get("collection_name"), r.get("type")) for r in candidates}
                 if len(signatures) == 1:
                     binding = candidates[0]
@@ -216,13 +267,13 @@ def build(snapshot, *, permission_modes=(), model_names=(), legacy_embedding_nam
         elif row["primary_version_id"] in removed["knowledge_document_version"]:
             reject("knowledge_document", row, "remaining_versions_require_primary_decision")
 
-    tags = {r["id"]: r for r in snapshot["tag"]}
+    tags = row_index(snapshot["tag"])
     corrected_files = {
         item["before"]["id"]: item["values"]["tenant_id"]
         for item in plan["updates"]
         if item["table"] == "knowledgefile"
     }
-    surviving_links = defaultdict(list)
+    surviving_tags = set()
     for row in snapshot["taglink"]:
         tag = tags.get(row["tag_id"])
         numeric_file = row["resource_id"].isascii() and row["resource_id"].isdecimal()
@@ -230,7 +281,7 @@ def build(snapshot, *, permission_modes=(), model_names=(), legacy_embedding_nam
         missing_tag_parent = (
             tag is not None
             and tag["business_type"] in {"knowledge", "knowledge_space"}
-            and tag["business_id"] not in {str(k) for k in roots}
+            and tag["business_id"] not in root_ids
         )
         if tag is None or (
             row["resource_type"] in {8, 9}
@@ -241,7 +292,7 @@ def build(snapshot, *, permission_modes=(), model_names=(), legacy_embedding_nam
             if file is not None and file["id"] in corrected_files and row["resource_type"] in {8, 9}:
                 tenant = corrected_files[file["id"]]
                 if tag["tenant_id"] != tenant:
-                    siblings = [link for link in snapshot["taglink"] if link["tag_id"] == tag["id"]]
+                    siblings = links_by_tag[tag["id"]]
                     if (
                         tag["business_type"] not in {"knowledge", "knowledge_space"}
                         or tag["business_id"] != str(file["knowledge_id"])
@@ -257,30 +308,23 @@ def build(snapshot, *, permission_modes=(), model_names=(), legacy_embedding_nam
                         change("tag", tag, {"tenant_id": tenant}, "container_owner")
                 if row["tenant_id"] != tenant:
                     change("taglink", row, {"tenant_id": tenant}, "target_file_owner")
-            surviving_links[row["tag_id"]].append(row)
+            surviving_tags.add(row["tag_id"])
     for row in tags.values():
-        if row["business_type"] in {"knowledge", "knowledge_space"} and row["business_id"] not in {
-            str(k) for k in roots
-        }:
-            if surviving_links[row["id"]]:
+        if row["business_type"] in {"knowledge", "knowledge_space"} and row["business_id"] not in root_ids:
+            if row["id"] in surviving_tags:
                 reject("tag", row, "orphan_tag_has_surviving_links")
             else:
                 remove("tag", row, "missing_tag_container")
     for row in snapshot["space_channel_member"]:
-        if row["business_type"] == "space" and row["business_id"] not in {str(k) for k in roots}:
+        if row["business_type"] == "space" and row["business_id"] not in root_ids:
             remove("space_channel_member", row, "missing_member_space")
 
-    flows = {r["id"]: r for r in snapshot["flow"]}
+    flows = row_index(snapshot["flow"])
     for row in snapshot["flowversion"]:
         parent = flows.get(row["flow_id"])
         if parent is None or parent["flow_type"] != 10 or row["tenant_id"] == parent["tenant_id"]:
             continue
-        indexed = any(
-            r["tenant_id"] == row["tenant_id"]
-            and r["source_type"] == "workflow_version"
-            and r["source_id"] == row["flow_id"]
-            for r in (*snapshot["business_reference_set"], *references)
-        )
+        indexed = (row["tenant_id"], row["flow_id"]) in registrations
         if indexed or any(m["tenant_id"] == row["tenant_id"] for m in modes["workflow", row["flow_id"]]):
             reject("flowversion", row, "version_owner_has_existing_registration")
         else:
@@ -292,6 +336,9 @@ def build(snapshot, *, permission_modes=(), model_names=(), legacy_embedding_nam
         | set(snapshot.get("_model_names", ()))
         | set(snapshot.get("_legacy_embedding_names", ()))
     )
+    populated_roots = {row["knowledge_id"] for row in files.values() if row["id"] not in removed["knowledgefile"]} | {
+        row["knowledge_id"] for row in snapshot["qaknowledge"]
+    }
     for row in roots.values():
         model = row.get("model")
         if not model or (isinstance(model, str) and model.isascii() and model.isdecimal() and int(model) > 0):
@@ -301,21 +348,28 @@ def build(snapshot, *, permission_modes=(), model_names=(), legacy_embedding_nam
         if isinstance(model, str) and re.fullmatch(r"[+-]?[0-9]+", model.strip()):
             reject("knowledge", row, "invalid_numeric_embedding_requires_resolution")
             continue
-        remaining = any(
-            f["knowledge_id"] == row["id"] and f["id"] not in removed["knowledgefile"] for f in files.values()
-        ) or any(item["knowledge_id"] == row["id"] for item in snapshot["qaknowledge"])
+        remaining = row["id"] in populated_roots
         if not isinstance(model, str) or model in names or remaining or row.get("model_transition"):
             reject("knowledge", row, "legacy_embedding_requires_explicit_resolution")
         else:
             change("knowledge", row, {"model": None}, "unmapped_legacy_embedding")
 
-    for item in plan["updates"]:
-        for row in after[item["table"]]:
-            if row["id"] == item["before"]["id"]:
-                row.update(item["values"])
-    for table, ids in removed.items():
-        after[table] = [r for r in after[table] if r["id"] not in ids]
-    plan.update(before_digest=state_digest(original), after_digest=state_digest(after))
+    by_table = defaultdict(dict)
+    for (table, ident), item in updates.items():
+        by_table[table][ident] = item["values"]
+    after = {
+        table: rows.overlay(by_table[table], removed[table])
+        if isinstance(rows, SnapshotRows)
+        else [
+            {**row, **updates[(table, row["id"])]["values"]} if (table, row["id"]) in updates else row
+            for row in rows
+            if row["id"] not in removed[table]
+        ]
+        if not table.startswith("_")
+        else rows
+        for table, rows in snapshot.items()
+    }
+    plan.update(before_digest=state_digest(snapshot), after_digest=state_digest(after))
     return plan, after
 
 
@@ -323,6 +377,14 @@ async def apply(session, plan):
     """The caller owns one native transaction and the no-active-freeze guard."""
     from scripts.prepare_f118_history import blocked
 
+    # No-op/replay still validates the complete current digest, but acquires no
+    # write locks. Real repairs retain the original full-scope locked recheck.
+    current = await read(session)
+    digest = state_digest(current)
+    if digest == plan["after_digest"]:
+        return
+    if digest != plan["before_digest"]:
+        blocked("business_scope_changed")
     current = await read(session, lock=True)
     digest = state_digest(current)
     if digest == plan["after_digest"]:

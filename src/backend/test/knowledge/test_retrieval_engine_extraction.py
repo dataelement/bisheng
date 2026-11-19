@@ -9,7 +9,7 @@ these tests pin the two things that would silently break the arrangement:
 
 * the engine constructs and filters **without a ``Request``** (session
   decoupling, AC-19, design 坑 4), and
-* the chat service still produces exactly what the engine produces, including
+* the chat service still produces exactly what the single-library engine produces, including
   the ``document_update_time`` hydration and the permission-outage behaviour.
 """
 
@@ -208,7 +208,9 @@ async def test_permission_unavailable_propagates_unchanged(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-async def test_chat_service_aretrieve_chunks_delegates_to_engine(monkeypatch):
+@pytest.mark.parametrize("kb_id", [1, 2])
+async def test_chat_service_aretrieve_chunks_delegates_to_engine(monkeypatch, kb_id):
+    """Single-library delegation stays equal; open multi-library ranking is global."""
     space = _knowledge(1, KnowledgeTypeEnum.SPACE.value)
     library = _knowledge(2, KnowledgeTypeEnum.NORMAL.value)
     rows = {1: space, 2: library}
@@ -229,16 +231,16 @@ async def test_chat_service_aretrieve_chunks_delegates_to_engine(monkeypatch):
     svc.version_repo = MagicMock()
     svc._require_space_view_permission = AsyncMock()
 
-    via_chat = await svc.aretrieve_chunks(query="q", knowledge_base_ids=[1, 2])
+    via_chat = await svc.aretrieve_chunks(query="q", knowledge_base_ids=[kb_id])
 
     engine = RetrievalEngine(_login_user(), version_repo=svc.version_repo)
-    via_engine = await engine.retrieve_many([space, library], query="q", tag_filters=None, max_content=15000)
+    via_engine = await engine.retrieve_many([rows[kb_id]], query="q", tag_filters=None, max_content=15000)
     await engine.attach_document_update_time(via_engine)
 
     assert [(kb_id, doc.page_content) for kb_id, doc in via_chat] == [
         (kb_id, doc.page_content) for kb_id, doc in via_engine
     ]
-    assert [doc.metadata["document_update_time"] for _, doc in via_chat] == ["", ""]
+    assert [doc.metadata["document_update_time"] for _, doc in via_chat] == [""]
 
 
 async def test_chat_service_empty_ids_still_400():

@@ -1,5 +1,7 @@
 # Code Review Report
 
+> 本文记录 `065914f440` 的当时验证结果。后续复核确认遗漏了“空间其他已有标签候选”和“可见但无操作权限时的名称”场景，旧结论中的候选完整性及名称隐藏规则已由 [补充修复审查](./tag-candidates-and-visible-names-review-20261119.md) 纠正。
+
 **Feature**: 文件可修改、空间不可编辑时的标签权限提示
 **Base branch**: `origin/feat/3.1.0-beta1`，基线 `c3319b0550`
 **Branch**: `codex/3.1.0-beta1/bugfixes-20261119`
