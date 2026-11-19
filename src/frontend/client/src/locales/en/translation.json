@@ -3078,7 +3078,26 @@
     "preview": "Preview",
     "source": "Source",
     "closeResearch": "Turn off deep research",
-    "welcome": "Let's Create Together"
+    "welcome": "Let's Create Together",
+    "welcomeExamples": {
+      "heading": "Start with an example",
+      "keepAttachments": "This draft contains attachments or references. Turn off deep research manually after reviewing them.",
+      "next": "Try another set",
+      "researchUnavailable": "Deep research is unavailable for this account.",
+      "titles": {
+        "confirm-event": "Draft an event confirmation email",
+        "ai-brief": "Catch up on AI news",
+        "enterprise-agents": "Research enterprise AI agents",
+        "headphones": "Compare noise-canceling headphones",
+        "commercial-space": "Research commercial space revenue",
+        "booking-scope": "Scope an appointment tracker",
+        "support-feedback": "Organize customer feedback",
+        "team-event": "Compare team event options",
+        "museum-collections": "Compare digital museum collections",
+        "urban-cooling": "Research urban cooling measures"
+      },
+      "unavailable": "The prompt could not be added. Make sure the composer is editable and try again."
+    }
   },
   "chat.sidebar.title": "Chat",
   "chat.sidebar.newConversation": "New conversation",

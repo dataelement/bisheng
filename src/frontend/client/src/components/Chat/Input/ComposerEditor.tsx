@@ -42,6 +42,25 @@ export function readComposerDocument(root: HTMLElement) {
     return { text: visit(root), keys };
 }
 
+export function insertComposerPrompt(root: HTMLElement, prompt: string): boolean {
+    const selection = root.ownerDocument.getSelection();
+    if (!selection || typeof root.ownerDocument.execCommand !== 'function') return false;
+    const { text, keys } = readComposerDocument(root);
+    const hasReferences = keys.length > 0;
+    if (!hasReferences && text === prompt) {
+        root.focus({ preventScroll: true });
+        return true;
+    }
+    const range = root.ownerDocument.createRange();
+    root.focus({ preventScroll: true });
+    range.selectNodeContents(root);
+    if (hasReferences) range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    // Use the same native edit transaction as paste so input events and undo still work.
+    return root.ownerDocument.execCommand('insertText', false, hasReferences && text ? `\n\n${prompt}` : prompt);
+}
+
 const referenceIcons = { skill: Outlined.Skill, tool: Outlined.Hammer, space: Outlined.FolderClose };
 const iconMarkup = new Map<ComposerReference['kind'], string>();
 

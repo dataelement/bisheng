@@ -3007,7 +3007,26 @@
     "preview": "预览",
     "source": "源文件",
     "closeResearch": "关闭深度研究",
-    "welcome": "来一起创造"
+    "welcome": "来一起创造",
+    "welcomeExamples": {
+      "heading": "从一个案例开始",
+      "keepAttachments": "当前草稿含有附件或引用，请先确认要退出深度研究。",
+      "next": "切换一批",
+      "researchUnavailable": "当前账号无法使用深度研究。",
+      "titles": {
+        "confirm-event": "写一封方案确认邮件",
+        "ai-brief": "看看今天的 AI 动态",
+        "enterprise-agents": "调研企业智能体应用",
+        "headphones": "对比高端降噪耳机",
+        "commercial-space": "研究商业航天的商业模式",
+        "booking-scope": "梳理预约登记需求",
+        "support-feedback": "归并客服反馈",
+        "team-event": "比较团队交流会方案",
+        "museum-collections": "研究博物馆数字馆藏",
+        "urban-cooling": "研究城市降温措施"
+      },
+      "unavailable": "暂时无法填入，请确认输入框可编辑后重试。"
+    }
   },
   "chat.sidebar.title": "聊天",
   "chat.sidebar.newConversation": "新会话",
