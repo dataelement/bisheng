@@ -98,10 +98,7 @@ class KnowledgeBatchApplication:
                 and (
                     command.operation == "download"
                     or (command.operation == "tag" and file_type == 1)
-                    or (
-                        command.operation == "retry"
-                        and (row["id"] in selected or row["status"] in (3, 6, 7))
-                    )
+                    or (command.operation == "retry" and (row["id"] in selected or row["status"] in (3, 6, 7)))
                 )
             ]
             for offset in range(0, len(ids), 200):
@@ -111,14 +108,14 @@ class KnowledgeBatchApplication:
                 )
                 self._check(pin)
                 allowed.update(int(ident) for ident, codes in result.items() if action in codes)
+        tag_creation_denied = False
         if set(command.new_tag_names) - {row["name"] for row in scope["tags"]}:
             result = await self.permissions(
                 actual, resource_type="knowledge_space", resource_ids=[scope["root"]["id"]], actions=("edit",)
             )
             self._check(pin)
-            if "edit" not in result.get(str(scope["root"]["id"]), ()):
-                allowed.clear()
-        return classify(scope, command, allowed)
+            tag_creation_denied = "edit" not in result.get(str(scope["root"]["id"]), ())
+        return classify(scope, command, allowed, tag_creation_denied=tag_creation_denied)
 
     async def ainspect(self, *, identity, space_id, command):
         command = BatchCommand.model_validate(command.model_dump(mode="json", exclude_defaults=True))

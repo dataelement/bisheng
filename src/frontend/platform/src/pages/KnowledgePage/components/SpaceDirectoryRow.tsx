@@ -14,6 +14,7 @@ import { useContext, useMemo, useState } from "react";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
 import { FileAbnormalStatusCell } from "./FileAbnormalStatusCell";
 import KnowledgeTagSelect from "./tags/KnowledgeTagSelect";
+import { useSpaceTagPermission } from "../hooks/useSpaceTagPermission";
 import { SpaceRowVersionMenu } from "./SpaceRowVersionMenu";
 import { useTranslation } from "react-i18next";
 import { TableCell, TableRow } from "@/components/bs-ui/table";
@@ -121,6 +122,7 @@ export function SpaceDirectoryRow({
   };
   const [permission, setPermission] = useState<typeof epoch | null>(null);
   const [tagsEditor, setTagsEditor] = useState<typeof epoch | null>(null);
+  const tagPermission = useSpaceTagPermission(scope, spaceId, tagsEditor === epoch);
   const menuReady = !loading && !error;
   const canRename = menuReady && actions.includes("rename");
   const canManagePermission =
@@ -314,6 +316,7 @@ export function SpaceDirectoryRow({
       )}
       {tagsEditor === epoch && (
         <KnowledgeTagSelect
+          spaceTagPermission={tagPermission}
           isSpace
           knowledgeId={spaceId}
           fileIds={[item.id]}

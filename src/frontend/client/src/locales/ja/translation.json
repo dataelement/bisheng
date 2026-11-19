@@ -1904,7 +1904,8 @@
       "draft_notice": "新しいタグは最終確認後に作成されます。",
       "tags_load_failed": "スペースのタグ一覧が利用できません。元の権限制限が適用されます。",
       "invalid_name": "元の文字数制限内でタグ名を入力してください。",
-      "select_first": "ファイルまたはフォルダーを選択してください"
+      "select_first": "ファイルまたはフォルダーを選択してください",
+      "reason_space_tag_permission_required": "このファイルのタグは編集できますが、新しいタグの作成にはスペースの編集権限が必要です。既存のタグを選ぶか、管理者にお問い合わせください。"
     },
     "processing_jobs": {
       "title": "処理タスク",
@@ -1937,6 +1938,9 @@
       "state_failed": "失敗",
       "state_obsolete": "設定が変更されたため、このタスクは期限切れです",
       "state_pending": "待機中"
+    },
+    "tag_permissions": {
+      "space_required": "既存のタグは選択できます。スペースのタグの作成・削除にはスペースの編集権限が必要です。管理者にお問い合わせください。"
     }
   },
   "com_subscription": {

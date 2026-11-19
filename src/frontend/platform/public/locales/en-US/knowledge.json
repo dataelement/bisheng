@@ -451,7 +451,11 @@
     "tagEditor": {
         "addPlaceholder": "Enter a tag and press Enter to save",
         "existingTags": "Existing tags",
-        "emptyTags": "No tags"
+        "emptyTags": "No tags",
+        "checkingPermission": "Checking space tag management permission…",
+        "permissionUnavailable": "Space tag management permission could not be checked. You can still select existing tags. Please retry.",
+        "deleteTag": "Delete space tag: {{name}}",
+        "spacePermissionRequired": "You can select existing tags. Creating or deleting space tags requires space edit permission. Contact the space administrator."
     },
     "f118": {
         "specialized_processing_rules": "This file uses its dedicated parsing and splitting rules. No document or table settings are needed.",
@@ -741,7 +745,8 @@
         "draft_notice": "New tags are created only after confirmation.",
         "tags_load_failed": "The space tag list is unavailable. Existing permission restrictions still apply.",
         "invalid_name": "Use a tag name within the existing length limit.",
-        "select_first": "Select files or folders first"
+        "select_first": "Select files or folders first",
+        "reason_space_tag_permission_required": "You can edit this file’s tags, but creating a tag requires space edit permission. Choose an existing tag or contact the space administrator."
     },
     "move": {
         "checking": "Checking move conditions…",

@@ -581,6 +581,7 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
       <KnowledgeDeletionDialog operation={deletion} />
       <BatchOperationDialog operation={batch} />
       <BatchTagDraftDialog
+        scope={scope}
         spaceId={spaceId}
         availableTags={selectedRows.flatMap((item) => item.tags ?? [])}
         open={batchTagsOpen && selectedActions.canTag}

@@ -66,6 +66,7 @@ function mount(batch = false) {
       client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
     >
       <EditTagsModal
+        canManageSpaceTags
         isOpen
         spaceId="3"
         availableTags={batch ? [{ id: 1, name: "Report" }] : undefined}

@@ -245,3 +245,28 @@ async def test_processing_without_original_is_reported_but_processing_with_origi
     assert download.invalid_items[0].reason == "processing"
     tag = await app.ainspect(identity=batch.user, space_id=1, command=command("tag", ("file", 30), ("file", 31)))
     assert not tag.can_execute and {item.reason for item in tag.invalid_items} == {"processing"}
+
+
+async def test_new_tag_denial_preserves_editable_file_names_and_distinguishes_file_denial(batch, monkeypatch):
+    batch.user.is_global_super = False
+    actor = PermissionActor(user_id=7, current_tenant_id=101, super_admin=False)
+    monkeypatch.setattr(processing_identity, "resolve_permission_actor", AsyncMock(return_value=actor))
+    batch.denied.update({1, 31})
+    app = batch.application()
+    plan = await app.aprecheck(
+        identity=batch.user,
+        space_id=1,
+        command=command("tag", ("file", 30), ("file", 31), new_tag_names=["requires-space-edit"]),
+    )
+    assert not plan.can_execute and not plan.valid_items and not plan.requires_skip_confirmation
+    by_id = {item.id: item for item in plan.invalid_items}
+    assert by_id[30].reason == "space_tag_permission_required"
+    assert by_id[30].name
+    assert by_id[31].reason == "no_permission"
+    assert by_id[31].name is None
+    assert ("knowledge_space", (1,), ("edit",)) in batch.calls
+    with pytest.raises(KnowledgeOperationPlanChangedError):
+        await app.aconfirm(identity=batch.user, space_id=1, operation="tag", request=confirmation(plan))
+    async with batch.db.sessions() as session:
+        assert not (await session.execute(select(Tag))).scalars().all()
+        assert not (await session.execute(select(TagLink))).scalars().all()
