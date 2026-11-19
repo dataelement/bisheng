@@ -6,7 +6,7 @@ export type ModelVisibility = {
     version: number
     everyone: boolean
     subjects: PolicySubject[]
-    users?: { value: number; label: string }[]
+    users?: { value: number; label: string; avatar?: string | null }[]
 }
 export type CreditRule = {
     subject_type: PolicySubject['kind']

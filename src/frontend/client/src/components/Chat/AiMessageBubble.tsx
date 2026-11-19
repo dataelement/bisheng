@@ -16,7 +16,9 @@ import CitationReferencesDrawer, { type CitationReferencesDesktopPayload } from 
 import SearchWebUrls from "~/components/Chat/Messages/Content/SearchWebUrls";
 import { TaskTurnPanel } from "~/components/Linsight/Execution/TaskTurnPanel";
 import type { ArtifactFile } from "~/components/Linsight/Artifacts/artifactUtils";
-import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
+import { UserAvatar } from "@bisheng/ui";
+import { useShareContext } from "~/Providers/ShareContext";
+import { resolveChatAuthor } from "~/utils/chatAuthor";
 import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
 import { ChatErrorCard, isTransientErrorType } from "~/components/ChatErrorCard";
 import { MessageFeedbackButtons } from "~/components/Chat/MessageFeedbackButtons";
@@ -344,6 +346,8 @@ function UserBubble({
     onPreviewFile?: (file: ArtifactFile) => void;
 }) {
     const { user } = useAuthContext();
+    const { isSharedConvo } = useShareContext();
+    const author = resolveChatAuthor(message, isSharedConvo ? undefined : user);
 
     // F028: render selection checkbox at the left margin when selection mode
     // is active for this conversation. ``mr-auto`` keeps the user bubble
@@ -379,14 +383,12 @@ function UserBubble({
                 <div className="flex min-w-0 gap-3">
                     {/* Avatar (hidden by style only) */}
                     <div className="hidden shrink-0 flex justify-center">
-                        <Avatar className="w-6 h-6 text-xs">
-                            {user?.avatar ? <AvatarImage src={user?.avatar} alt="User" /> : <AvatarName name={user?.username} />}
-                        </Avatar>
+                        <UserAvatar className="size-6" fallbackClassName="text-caption" name={author.name} src={author.avatar} />
                     </div>
                     {/* Content */}
                     <div className="flex-1 min-w-0">
                         {/* Name (hidden by style only) */}
-                        <div className="hidden rc-name select-none font-semibold text-base">{user?.username}</div>
+                        <div className="hidden rc-name select-none font-semibold text-base">{author.name}</div>
                         <div
                             className={cn(
                                 // w-fit: the text bubble hugs its own content and stays

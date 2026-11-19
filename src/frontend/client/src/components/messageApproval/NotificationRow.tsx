@@ -1,8 +1,10 @@
 import { HoverCard, HoverCardTrigger, HoverCardContent, HoverCardPortal } from '~/components/ui/HoverCard';
+import { resolveUserAvatarUrl } from "@bisheng/identity";
 import { Badge } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
 import { useState } from "react";
 import type { MessageItem } from "~/api/message";
-import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
+import { UserAvatar } from "~/components/ui/Avatar";
 
 import useLocalize, { type TranslationKeys } from "~/hooks/useLocalize";
 import { cn } from "~/utils";
@@ -53,7 +55,10 @@ export function NotificationRow({
   const id = Number(notification.id);
   const userPart = notification.content?.find((c) => c?.type === "user");
   const userMeta = userPart?.metadata ?? {};
-  const userName = String(notification.sender_name || userPart?.content || "").replace(/^@/, "");
+  const isSystemSender = notification.sender === 0;
+  const userName = notification.sender_name || String(userPart?.content || "").replace(/^@/, "");
+  const userMention = userName.startsWith("@") ? userName : `@${userName}`;
+  const systemName = isSystemSender ? userName || localize("com_system_notice.title") : "";
   const groupNamesRaw =
     userMeta?.group_names ?? userMeta?.groupNames ?? userMeta?.group_name ?? userMeta?.groupName ?? [];
   const groupNames = Array.isArray(groupNamesRaw)
@@ -63,7 +68,11 @@ export function NotificationRow({
         .map((g) => g.trim())
         .filter(Boolean);
   const userGroup = groupNames.join("、");
-  const userAvatar = userMeta?.avatar || userMeta?.user_avatar || "";
+  const legacyAvatar: unknown = userMeta.avatar || userMeta.user_avatar;
+  const avatar = notification.sender_avatar === undefined && typeof legacyAvatar === "string"
+    ? legacyAvatar
+    : notification.sender_avatar;
+  const userAvatar = resolveUserAvatarUrl(avatar, __APP_ENV__.BASE_URL);
 
   const actionCode = getSystemTextCode(notification);
   const targetName = getTargetName(notification);
@@ -147,7 +156,7 @@ export function NotificationRow({
   /**
    * Clicking anywhere on the row marks it read. A notification that has nowhere to jump
    * (a plain announcement, or one whose object is gone) is still something the user just
-   * read, so it must leave 未读 like any other — read state is about "have I seen this",
+   * read, so it must leave the unread list like any other — read state is about "have I seen this",
    * not about whether a jump happened.
    */
   const handleRowClick = () => {
@@ -189,16 +198,31 @@ export function NotificationRow({
     >
       {/* Avatar, text+time column and the unread dot are all top-aligned. */}
       <div className="flex items-start gap-2">
-        <HoverCard openDelay={100} closeDelay={100} ><HoverCardTrigger asChild><div tabIndex={0} className="shrink-0"  ><Avatar className="h-6 w-6 shrink-0">
-            {userAvatar ? <AvatarImage src={userAvatar} alt={userName} /> : <AvatarName name={userName} className="text-[10px]" />}
-          </Avatar></div></HoverCardTrigger><HoverCardPortal><HoverCardContent side="left" className="box-border flex h-[64px] w-[151px] flex-col justify-center overflow-hidden rounded-lg border border-solid border-border-base bg-white p-0 opacity-100 shadow-[0_4px_12px_rgba(0,0,0,0.08)] z-[100]">{<div className="flex h-full w-full flex-col justify-center px-3 py-2">
-              <div className="truncate text-[14px] font-normal leading-tight text-text-1">{userName}</div>
-              {userGroup ? (
-                <div className="mt-0.5 line-clamp-2 text-left text-[12px] font-normal leading-tight text-[#A9AEB8]">
-                  {userGroup}
-                </div>
-              ) : null}
-            </div>}</HoverCardContent></HoverCardPortal></HoverCard>
+        <HoverCard openDelay={100} closeDelay={100}>
+          <HoverCardTrigger asChild>
+            <div tabIndex={0} className="shrink-0">
+              {isSystemSender ? (
+                <span className="flex size-6 items-center justify-center rounded-full bg-fill-2 text-text-2">
+                  <Outlined.Bell aria-hidden="true" className="size-4" />
+                </span>
+              ) : (
+                <UserAvatar name={userName} src={userAvatar} className="size-6" fallbackClassName="text-caption-sm" />
+              )}
+            </div>
+          </HoverCardTrigger>
+          <HoverCardPortal>
+            <HoverCardContent side="left" className="box-border flex h-[64px] w-[151px] flex-col justify-center overflow-hidden rounded-lg border border-solid border-border-base bg-white p-0 opacity-100 shadow-[0_4px_12px_rgba(0,0,0,0.08)] z-[100]">
+              <div className="flex h-full w-full flex-col justify-center px-3 py-2">
+                <div className="truncate text-[14px] font-normal leading-tight text-text-1">{systemName || userName}</div>
+                {userGroup ? (
+                  <div className="mt-0.5 line-clamp-2 text-left text-[12px] font-normal leading-tight text-[#A9AEB8]">
+                    {userGroup}
+                  </div>
+                ) : null}
+              </div>
+            </HoverCardContent>
+          </HoverCardPortal>
+        </HoverCard>
 
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div
@@ -208,7 +232,7 @@ export function NotificationRow({
               canOpenApprovalCenter && "transition-colors group-hover:text-blue-500",
             )}
           >
-            <span className="shrink-0 hover:text-blue-500">@{userName}</span>
+            <span className="shrink-0 hover:text-blue-500">{isSystemSender ? systemName : userMention}</span>
             <span className="min-w-0">
               {!targetSplitMatch && canNavigateTarget && targetSpan}
               {textPrefix}
@@ -230,9 +254,7 @@ export function NotificationRow({
           <span className="text-[12px] tabular-nums text-text-3">{formatTime(notification.create_time)}</span>
         </div>
 
-        {/* Unread marker on the right — read rows render nothing here. The
-            hostless dot form (组件-Badge徽标.md §2): 6px, danger, no host to
-            hang off, `mt-2` drops it onto the first text line. */}
+        {/* The standalone unread dot aligns with the first line of text. */}
         {unread && <Badge dot className="mt-2 shrink-0" />}
       </div>
 

@@ -56,7 +56,7 @@ type Actions = {
 
 
 
-export const createMessageStore = () => {
+export const createMessageStore = (readAuthorId?: () => number | undefined) => {
 const store = createStore<State & Actions>((set, get) => ({
     eventTarget: new EventTarget(),
     historyGeneration: 0,
@@ -111,6 +111,7 @@ const store = createStore<State & Actions>((set, get) => ({
                 [...state.messages, {
                     ...bsMsgItem,
                     category: 'question',
+                    user_id: readAuthorId?.() ?? bsMsgItem.user_id,
                     message_id: generateUUID(8),
                     message: msg,
                     create_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')

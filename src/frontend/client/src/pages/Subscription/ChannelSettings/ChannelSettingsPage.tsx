@@ -107,6 +107,7 @@ export function ChannelSettingsPage() {
       subjectType: "user",
       subjectId: Number.isFinite(numericUserId) ? numericUserId : -1,
       subjectName: user.name || user.username || user.email,
+      avatar: user.avatar,
       modelKey: ownerModel?.id ?? "owner",
       modelName: ownerModel?.name ?? localize("com_permission.level_owner"),
       modelLevel: ownerModel?.level ?? 4,

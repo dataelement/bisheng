@@ -151,7 +151,7 @@ const MessageRender = memo(
           <div>
             <div className="pt-0.5">
               <div className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full">
-                <MessageIcon iconData={iconData} name={messageLabel} assistant={assistant} />
+                <MessageIcon iconData={iconData} message={msg} assistant={assistant} />
               </div>
             </div>
           </div>

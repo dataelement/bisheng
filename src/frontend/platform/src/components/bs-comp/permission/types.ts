@@ -21,6 +21,7 @@ export interface SelectedSubject {
   type: SubjectType
   id: number
   name: string
+  avatar?: string | null
   externalId?: string | null
   departmentPath?: string
   departmentTreePath?: string

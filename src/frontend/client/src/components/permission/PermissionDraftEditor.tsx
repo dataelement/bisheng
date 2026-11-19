@@ -10,6 +10,7 @@ import {
 import type { PermissionDraftRow } from "./usePermissionDraft";
 import { SourceBadge } from "./SourceBadge";
 import { PermissionModelStatus } from "./PermissionModelStatus";
+import { PermissionSubjectAvatar } from "./PermissionSubjectAvatar";
 
 export interface PermissionDraftEditorCapabilities {
   canChangeRelation: boolean;
@@ -92,13 +93,18 @@ export function PermissionDraftEditor({
         return (
           <div key={rowKey} className="flex min-h-11 items-center gap-3 py-2">
             <div className="flex min-w-0 flex-1 items-center gap-2">
-              <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-fill-4 text-caption text-white">
-                {row.subjectName.trim().slice(0, 1).toUpperCase()}
-              </span>
+              <PermissionSubjectAvatar
+                type={row.subjectType}
+                subjectId={row.subjectId}
+                name={row.subjectName}
+                avatar={row.avatar}
+                className="size-6"
+                fallbackClassName="text-caption"
+              />
               {/* Name and its meta (source tag, read-only note) sit on one line:
                   the name truncates, the meta keeps its width. */}
               <div className="flex min-w-0 flex-1 items-center gap-2">
-                <div className="min-w-0 truncate text-body text-text-1">{row.subjectName}</div>
+                <div className="min-w-0 truncate text-body text-text-1">{row.subjectName || row.subjectId}</div>
                 {(row.externalId || row.departmentPath) && <SubjectIdentity type={row.subjectType} externalId={row.externalId} path={row.departmentPath} />}
                 {hasMeta && (
                   <div className="flex shrink-0 flex-wrap items-center gap-1.5 text-caption text-text-3">

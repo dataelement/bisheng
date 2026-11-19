@@ -38,6 +38,7 @@ from bisheng.tenant.domain.schemas.tenant_schema import (
     TenantUserAdd,
     UserTenantItem,
 )
+from bisheng.user.application.avatar import read_visible_user_avatar_urls
 
 logger = logging.getLogger(__name__)
 
@@ -655,7 +656,13 @@ class TenantService:
             page_size=page_size,
             keyword=keyword,
         )
-        return {"data": users, "total": total}
+        avatars = await read_visible_user_avatar_urls(
+            (tenant_id, user["user_id"]) for user in users if user.get("avatar")
+        )
+        return {
+            "data": [{**user, "avatar": avatars.get((tenant_id, user["user_id"]))} for user in users],
+            "total": total,
+        }
 
     # ── User-facing: tenant selection & switching ──────────────
 

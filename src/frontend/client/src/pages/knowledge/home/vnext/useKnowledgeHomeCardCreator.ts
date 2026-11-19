@@ -36,5 +36,9 @@ export function useKnowledgeHomeCardCreator(space: KnowledgeSpace) {
     refetchOnWindowFocus: false,
   });
 
-  return { cardRef, creator: creator || creatorInfo.data?.creator?.trim() };
+  return {
+    cardRef,
+    creator: creator || creatorInfo.data?.creator?.trim(),
+    creatorAvatar: space.creatorAvatar || creatorInfo.data?.creatorAvatar,
+  };
 }

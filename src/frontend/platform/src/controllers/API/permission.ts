@@ -170,6 +170,7 @@ export interface PermissionGrantSubject {
   type: PermissionSubjectKind
   id: string
   name: string | null
+  avatar?: string | null
 }
 
 export interface PermissionGrantSource {
@@ -419,6 +420,7 @@ export async function checkResourceActionApi(
  */
 
 export interface GrantSubjectUser {
+  avatar?: string | null
   external_id?: string | null
   department_path?: string | null
   primary_department_path?: string | null

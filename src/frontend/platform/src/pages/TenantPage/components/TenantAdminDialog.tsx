@@ -1,5 +1,5 @@
-import { Pagination, Button, SearchInput, notification } from '@bisheng/ui';
-import { Tag } from "@bisheng/ui";
+import { resolveUserAvatarUrl } from '@bisheng/identity';
+import { Pagination, Button, SearchInput, Tag, UserAvatar, notification } from '@bisheng/ui';
 import { useSubjectTable } from "@/components/bs-comp/selectComponent/useSubjectTable";
 import { SubjectSearchStatus } from "@/components/bs-comp/selectComponent/SubjectSearchStatus";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
@@ -23,14 +23,6 @@ interface Props {
   onChanged?: () => void;
 }
 
-function Initial({ name }: { name: string }) {
-  return (
-    <div className="w-6 h-6 shrink-0 rounded-full bg-primary/10 flex items-center justify-center text-xs">
-      {name?.charAt(0)}
-    </div>
-  );
-}
-
 /**
  * Dedicated Child Admin manager. Grants/revokes take effect per click, so the
  * dialog has no confirm/cancel pair — only Close.
@@ -42,9 +34,7 @@ export function TenantAdminDialog({ tenant, onClose, onChanged }: Props) {
   const [pendingId, setPendingId] = useState<number | null>(null);
   const adminIds = new Set(admins.map((a) => a.user_id));
 
-  const { page, pageSize, data: members, total, setPage, subjectSearch } = useSubjectTable<
-    TenantUser & { external_id?: string | null }
-  >({ pageSize: 5 }, (param, signal) =>
+  const { page, pageSize, data: members, total, setPage, subjectSearch } = useSubjectTable<TenantUser>({ pageSize: 5 }, (param, signal) =>
     getTenantUsersApi(tenant.id, { page: param.page, page_size: param.pageSize, keyword: param.keyword }, { signal }),
   );
 
@@ -109,7 +99,8 @@ export function TenantAdminDialog({ tenant, onClose, onChanged }: Props) {
                 {admins.map((admin) => (
                   <li key={admin.user_id} className="flex items-center justify-between px-3 py-2">
                     <div className="flex items-center gap-2 min-w-0">
-                      <Initial name={admin.user_name} />
+                      <UserAvatar className="size-6" fallbackClassName="text-xs" name={admin.user_name}
+                        src={resolveUserAvatarUrl(admin.avatar, __APP_ENV__.BASE_URL)} />
                       <span className="truncate">{admin.user_name}</span>
                     </div>
                     <Button type="button" size="small" variant="link" color="danger" onClick={() => handleRevoke(admin)}>
@@ -144,7 +135,8 @@ export function TenantAdminDialog({ tenant, onClose, onChanged }: Props) {
                 return (
                   <li key={user.user_id} className="flex items-center justify-between px-3 py-2 rounded-md hover:bg-muted/50">
                     <div className="flex items-center gap-2 min-w-0">
-                      <Initial name={user.user_name} />
+                      <UserAvatar className="size-6" fallbackClassName="text-xs" name={user.user_name}
+                        src={resolveUserAvatarUrl(user.avatar, __APP_ENV__.BASE_URL)} />
                       <span className="truncate">{user.user_name}</span>
                       {user.external_id && (
                         <span className="text-xs text-muted-foreground truncate">{user.external_id}</span>

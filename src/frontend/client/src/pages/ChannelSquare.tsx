@@ -35,8 +35,7 @@ interface SquareChannel {
   id: string;
   title: string;
   description: string;
-  creator: string;
-  creatorAvatars?: string[];
+  sourceIcons?: string[];
   articleCount: number;
   subscriberCount: number;
   status: SquareStatus;
@@ -264,7 +263,7 @@ function ChannelSquare({
             const sourceInfos: any[] = Array.isArray(item.source_infos)
               ? item.source_infos
               : [];
-            const avatars = sourceInfos
+            const sourceIcons = sourceInfos
               .map((s) => s.source_icon)
               .filter(Boolean)
               .slice(0, 3);
@@ -275,8 +274,7 @@ function ChannelSquare({
               description:
                 String(item.description ?? item.desc ?? "") ||
                 noDescriptionText,
-              creator: String(item.creator ?? item.creator_name ?? ""),
-              creatorAvatars: avatars,
+              sourceIcons,
               articleCount: Number(
                 item.article_count ?? item.articleCount ?? 0,
               ),
@@ -495,8 +493,7 @@ function ChannelSquare({
                     key={channel.id}
                     title={channel.title}
                     description={channel.description}
-                    creator={channel.creator}
-                    creatorAvatars={channel.creatorAvatars}
+                    sourceIcons={channel.sourceIcons}
                     articleCount={channel.articleCount}
                     subscriberCount={channel.subscriberCount}
                     status={channel.status}
