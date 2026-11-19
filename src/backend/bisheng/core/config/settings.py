@@ -158,14 +158,19 @@ class ObjectStore(BaseModel):
 
 
 class PlatformAgentConf(BaseModel):
-    """平台 Agent 默认提供 Mock。真实来源由服务端显式设置。"""
+    """昆联平台 Agent 节点配置，默认对接真实资源目录。"""
 
     model_config = ConfigDict(extra="forbid")
 
-    mode: Literal["disabled", "mock", "real"] = "mock"
+    mode: Literal["disabled", "mock", "real"] = "real"
     connection_id: str = Field(default="kunlian", min_length=1, max_length=128)
-    policy_revision: str = Field(default="mock-v1", min_length=1, max_length=128)
+    policy_revision: str = Field(default="real-v1", min_length=1, max_length=128)
     mock_subjects: dict[str, Literal["A", "B", "C"]] = Field(default_factory=dict)
+    resource_base_url: str = ""
+    oidc_token_url: str = ""
+    resource_audience: str = Field(default="moduvela-platform-resources", min_length=1, max_length=256)
+    list_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
+    max_list_payload_bytes: int = Field(default=2 * 1024 * 1024, strict=True, ge=1024, le=16777216)
     invoke_timeout_seconds: float = Field(default=5, gt=0, le=300)
     max_payload_bytes: int = Field(default=1048576, strict=True, ge=1024, le=16777216)
     base_url: str | None = None

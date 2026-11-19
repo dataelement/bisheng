@@ -23,6 +23,16 @@ class AgentContract(BaseModel):
 class AgentReference(AgentContract):
     agent_id: str = Field(min_length=1, max_length=256)
     version_id: str = Field(min_length=1, max_length=256)
+    call_id: str | None = Field(default=None, max_length=512)
+    name: str | None = Field(default=None, max_length=256)
+    version: str | None = Field(default=None, max_length=128)
+
+    def same_identity(self, other: "AgentReference") -> bool:
+        return self.agent_id == other.agent_id and self.version_id == other.version_id
+
+    def model_dump(self, *args, **kwargs):
+        kwargs.setdefault("exclude_none", True)
+        return super().model_dump(*args, **kwargs)
 
 
 class AgentVersion(AgentContract):
@@ -30,6 +40,10 @@ class AgentVersion(AgentContract):
     name: str
     input_schema: dict
     output_schema: dict
+    call_id: str | None = None
+    version: str | None = None
+    description: str = ""
+    status: str = ""
     available: bool = True
     can_use: bool = True
     supports_async: bool = False
@@ -84,6 +98,29 @@ class AgentInvokeResult(AgentContract):
     agent_run_id: str | None = Field(default=None, max_length=256)
 
 
+class PlatformAgentResourceItem(AgentContract):
+    """昆联已发布 Agent 列表单条版本记录（平铺项）。"""
+
+    resource_type: str = "agent"
+    resource_id: str
+    version_id: str
+    name: str
+    description: str = ""
+    version: str = ""
+    status: str = ""
+    allowed_actions: list[str] = Field(default_factory=list)
+    call_id: str = ""
+
+
+class PlatformAgentListPage(AgentContract):
+    """昆联已发布 Agent 原始分页结果。"""
+
+    items: list[PlatformAgentResourceItem]
+    page_size: int = 20
+    has_more: bool = False
+    next_cursor: str | None = None
+
+
 @dataclass(frozen=True)
 class VerifiedAgentActor:
     """仅由通过本地业务授权的应用入口构造。不解析请求中的身份字段。"""
@@ -91,6 +128,7 @@ class VerifiedAgentActor:
     user_id: int
     tenant_id: int
     token_version: int = 0
+    session_reference: str | None = None
 
 
 @dataclass(frozen=True)

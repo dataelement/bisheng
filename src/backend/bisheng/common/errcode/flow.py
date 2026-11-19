@@ -169,6 +169,24 @@ class PlatformAgentDisabledError(PlatformAgentError):
     http_status = 503
 
 
+class PlatformAgentTokenError(PlatformAgentError):
+    Code: int = 10587
+    Msg: str = "Kunlian session or resource token is invalid or expired"
+    http_status = 401
+
+
+class PlatformAgentRateLimitError(PlatformAgentError):
+    Code: int = 10588
+    Msg: str = "Platform Agent rate limit exceeded"
+    http_status = 429
+
+
+class PlatformAgentBadRequestError(PlatformAgentError):
+    Code: int = 10589
+    Msg: str = "Invalid platform Agent query parameters or cursor"
+    http_status = 400
+
+
 class PlatformKnowledgeError(BaseErrorCode):
     """昆联检索公开错误。底层异常由调用方转换。"""
 

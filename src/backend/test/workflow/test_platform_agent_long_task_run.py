@@ -22,7 +22,7 @@ def long_run(long_agent_store, long_remote, monkeypatch):
         now[0] += delay
 
     service = domain.PlatformAgentService(
-        config=PlatformAgentConf(), repository=repo, provider=provider, long_pause=advance, enable_long_tasks=True
+        config=PlatformAgentConf(mode="mock"), repository=repo, provider=provider, long_pause=advance, enable_long_tasks=True
     )
     node = node_data()
     node["group_params"][0]["params"].append({"key": "execution_mode", "value": "async"})

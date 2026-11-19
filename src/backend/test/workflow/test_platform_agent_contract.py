@@ -28,10 +28,17 @@ def mock_settings(**changes):
 
 @pytest.mark.parametrize(
     "workflow",
-    [{}, {"max_steps": 75}, {"platform_agent": {"policy_revision": "custom"}}, {"platform_agent": {"mode": "mock"}}],
+    [{}, {"max_steps": 75}, {"platform_agent": {"policy_revision": "custom"}}],
 )
-async def test_default_configuration_shows_mock_agents_and_invokes_without_subject_setup(workflow):
+async def test_default_configuration_defaults_to_real_mode_and_requires_resource_url(workflow):
     config = WorkflowConf.model_validate(workflow).platform_agent
+    assert config.mode == "real"
+    with pytest.raises(PlatformAgentNotReadyError):
+        build_provider(config)
+
+
+async def test_explicit_mock_mode_configuration_shows_mock_agents_and_invokes():
+    config = WorkflowConf.model_validate({"platform_agent": {"mode": "mock"}}).platform_agent
     assert config.mode == "mock"
     provider = build_provider(config)
     actor = VerifiedAgentActor(12, 7)

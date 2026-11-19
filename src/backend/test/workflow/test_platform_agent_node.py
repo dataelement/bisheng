@@ -188,7 +188,7 @@ async def test_example_graph_runs_through_the_real_graph_engine(agent_store, mon
     monkeypatch.setattr(start.UserDepartmentDao, "get_user_primary_department", lambda _: None)
     monkeypatch.setattr(output, "get_minio_storage_sync", lambda: Mock())
     monkeypatch.setattr(domain, "require_business_action", AsyncMock())
-    service = domain.PlatformAgentService(config=PlatformAgentConf(), repository=repo)
+    service = domain.PlatformAgentService(config=PlatformAgentConf(mode="mock"), repository=repo)
     execution, dispatch_id = await service.admit(
         SimpleNamespace(user_id=12, tenant_id=7), "f" * 32, "example", graph, "DEBUG"
     )

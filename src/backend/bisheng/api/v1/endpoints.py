@@ -110,8 +110,15 @@ def get_env():
         # Lets the builder mark a Code node as disabled up front, instead of the
         # author finding out when the workflow fails at run time.
         workflow_code_node_enabled = workflow_conf.code_node_enabled
-        platform_agent_mode = workflow_conf.platform_agent.mode
-        platform_agent_revision = workflow_conf.platform_agent.policy_revision
+        platform_agent_conf = workflow_conf.platform_agent
+        platform_agent_mode = platform_agent_conf.mode
+        platform_agent_revision = platform_agent_conf.policy_revision
+        platform_agent_base_url = platform_agent_conf.resource_base_url.strip() or (
+            workflow_conf.platform_llm.resource_base_url.strip() if workflow_conf.platform_llm.enabled else ""
+        )
+        platform_agent_enabled = (
+            bool(platform_agent_base_url) if platform_agent_mode == "real" else platform_agent_mode == "mock"
+        )
         knowledge = workflow_conf.platform_knowledge
         knowledge_mode, knowledge_revision, knowledge_connection = (
             knowledge.mode,
@@ -127,6 +134,7 @@ def get_env():
         workflow_code_node_enabled = False
         platform_agent_mode = "disabled"
         platform_agent_revision = ""
+        platform_agent_enabled = False
         knowledge_mode, knowledge_revision, knowledge_connection = "disabled", "", ""
         platform_llm_enabled = False
     env["workflow"] = {
@@ -136,7 +144,7 @@ def get_env():
         "platform_knowledge_mode": knowledge_mode,
         "platform_knowledge_policy_revision": knowledge_revision,
         "platform_knowledge_connection_id": knowledge_connection,
-        "platform_agent_enabled": platform_agent_mode == "mock",
+        "platform_agent_enabled": platform_agent_enabled,
         "platform_agent_mode": platform_agent_mode,
         "platform_agent_policy_revision": platform_agent_revision,
         "platform_llm_enabled": platform_llm_enabled,

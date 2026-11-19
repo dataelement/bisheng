@@ -41,10 +41,25 @@ class QueuedExecutionRejected(Exception):
         self.reason = reason
 
 
+def _resolve_platform_agent_conf():
+    wf_conf = settings.get_workflow_conf()
+    agent_conf = wf_conf.platform_agent
+    if agent_conf.mode != "real":
+        return agent_conf
+    updates = {}
+    llm_conf = wf_conf.platform_llm
+    if not agent_conf.resource_base_url.strip() and llm_conf.enabled and llm_conf.resource_base_url.strip():
+        updates["resource_base_url"] = llm_conf.resource_base_url
+    if not agent_conf.oidc_token_url.strip() and llm_conf.oidc_token_url.strip():
+        updates["oidc_token_url"] = llm_conf.oidc_token_url
+    return agent_conf.model_copy(update=updates) if updates else agent_conf
+
+
 def get_service():
+    resolved = _resolve_platform_agent_conf()
     return PlatformAgentService(
-        config=settings.get_workflow_conf().platform_agent,
-        config_source=lambda: settings.get_workflow_conf().platform_agent,
+        config=resolved,
+        config_source=_resolve_platform_agent_conf,
     )
 
 

@@ -10,7 +10,7 @@ from test.workflow.test_platform_agent_node import node_data
 
 def interactive_provider(long_remote, *, clock=None):
     return MockPlatformAgentProvider(
-        PlatformAgentConf(),
+        PlatformAgentConf(mode="mock"),
         ledger=long_remote.ledger,
         clock=clock or (lambda: long_remote.clock[0]),
         enable_interactions=True,

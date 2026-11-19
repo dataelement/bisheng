@@ -31,6 +31,12 @@ export function PlatformModelSelectItem({ workflowId, reference, required = true
     const labels = useSelectLabels();
     const { user } = useContext(userContext);
     const [search, setSearch] = useState('');
+    // Parameter.tsx 通过原地修改 item.value 保存值且不触发重渲染，需本地状态保证点选后立即回显
+    const [currentReference, setCurrentReference] = useState<PlatformModelReference | null>(reference);
+
+    useEffect(() => {
+        setCurrentReference(reference);
+    }, [reference]);
 
     const capability = useQuery({
         queryKey: ['platform-llm-capabilities'],
@@ -68,25 +74,25 @@ export function PlatformModelSelectItem({ workflowId, reference, required = true
             modelMap.set(key, row);
         }
         // 保留已保存的固定版本引用，列表刷新时不静默改绑其他版本
-        if (reference?.resource_id && reference.version_id && reference.call_id) {
-            const savedKey = modelOptionKey(reference);
+        if (currentReference?.resource_id && currentReference.version_id && currentReference.call_id) {
+            const savedKey = modelOptionKey(currentReference);
             if (!optionMap.has(savedKey)) {
-                optionMap.set(savedKey, formatModelLabel(reference));
+                optionMap.set(savedKey, formatModelLabel(currentReference));
             }
         }
         return {
             options: [...optionMap].map(([value, label]) => ({ value, label })),
             itemByKey: modelMap,
         };
-    }, [rows, reference]);
+    }, [rows, currentReference]);
 
-    const selectedKey = reference?.resource_id && reference.version_id ? modelOptionKey(reference) : null;
+    const selectedKey = currentReference?.resource_id && currentReference.version_id ? modelOptionKey(currentReference) : null;
     const validSelection = Boolean(
-        reference?.resource_id
-        && reference.version_id
-        && reference.call_id
-        && reference.version_id.toLowerCase() !== 'latest'
-        && reference.call_id.toLowerCase() !== 'latest',
+        currentReference?.resource_id
+        && currentReference.version_id
+        && currentReference.call_id
+        && currentReference.version_id.toLowerCase() !== 'latest'
+        && currentReference.call_id.toLowerCase() !== 'latest',
     );
 
     useEffect(() => {
@@ -128,24 +134,27 @@ export function PlatformModelSelectItem({ workflowId, reference, required = true
                 disabled={!enabled}
                 onChange={value => {
                     if (!value) {
+                        setCurrentReference(null);
                         onChange(null);
                         return;
                     }
                     const picked = itemByKey.get(String(value));
                     if (picked) {
-                        onChange({
+                        const next: PlatformModelReference = {
                             resource_id: picked.resource_id,
                             version_id: picked.version_id,
                             call_id: picked.call_id,
                             name: picked.name,
                             version: picked.version,
-                        });
+                        };
+                        setCurrentReference(next);
+                        onChange(next);
                     }
                 }}
             />
-            {reference?.version_id && (
+            {currentReference?.version_id && (
                 <p className="text-xs text-muted-foreground break-all">
-                    {t('platformLlm.pinnedVersion')}: {reference.version || reference.version_id}
+                    {t('platformLlm.pinnedVersion')}: {currentReference.version || currentReference.version_id}
                 </p>
             )}
             {directory.hasNextPage && enabled && (

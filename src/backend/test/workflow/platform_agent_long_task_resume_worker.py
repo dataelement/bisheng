@@ -37,7 +37,7 @@ def main(database, ledger_path, broker, ready_path, clock="1000", notification="
 
     engine = create_engine(f"sqlite:///{database}")
     repo = PlatformAgentRepository(lambda: Session(engine), clock=lambda: float(clock))
-    config = PlatformAgentConf()
+    config = PlatformAgentConf(mode="mock")
     provider = MockPlatformAgentProvider(config, ledger=FileLedger(ledger_path), clock=repo.clock)
 
     async def authorize(user, **kwargs):

@@ -1,6 +1,6 @@
 """资源接口只接受业务目标与配置。不接受身份、凭据或模式覆盖。"""
 
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Body, Depends, Query
 from fastapi.responses import JSONResponse
 
 from bisheng.api.v1.schemas import resp_200
@@ -33,9 +33,21 @@ async def _respond(operation):
 
 @router.get("")
 async def list_agents(
-    workflow_id: str, cursor: str | None = None, login_user: UserPayload = Depends(UserPayload.get_login_user)
+    workflow_id: str,
+    cursor: str | None = Query(None, max_length=8192),
+    page_size: int = Query(20, ge=1, le=100),
+    search: str | None = Query(None, max_length=256),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
-    return await _respond(lambda: platform_agent.get_service().list_agents(login_user, workflow_id, cursor))
+    return await _respond(
+        lambda: platform_agent.get_service().list_agents(
+            login_user,
+            workflow_id,
+            cursor,
+            page_size=page_size,
+            search=search,
+        )
+    )
 
 
 @router.get("/{agent_id}/versions/{version_id}")

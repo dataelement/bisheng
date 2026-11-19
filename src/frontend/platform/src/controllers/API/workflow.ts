@@ -12,8 +12,14 @@ export async function getPlatformAgentCapabilities(): Promise<PlatformAgentCapab
     return { ...env.workflow, multi_tenant_enabled: env.multi_tenant_enabled };
 }
 
-export async function getPlatformAgents(workflowId: string, cursor?: string): Promise<PlatformAgentPage> {
-    return await axios.get('/api/v1/workflow/platform-agents', { params: { workflow_id: workflowId, cursor } });
+export async function getPlatformAgents(
+    workflowId: string,
+    options?: string | { cursor?: string; page_size?: number; search?: string },
+): Promise<PlatformAgentPage> {
+    const params = typeof options === 'string'
+        ? { workflow_id: workflowId, cursor: options }
+        : { workflow_id: workflowId, ...(options ?? {}) };
+    return await axios.get('/api/v1/workflow/platform-agents', { params });
 }
 
 export async function getPlatformAgentVersion(workflowId: string, agentId: string, versionId: string): Promise<PlatformAgentVersion> {

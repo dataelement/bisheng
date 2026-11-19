@@ -48,7 +48,7 @@ def main(database, ledger_path, envelope_text):
     clock = [float(envelope["clock"])]
     engine = create_engine(f"sqlite:///{database}")
     repo = PlatformAgentRepository(lambda: Session(engine), clock=lambda: clock[0])
-    config = PlatformAgentConf()
+    config = PlatformAgentConf(mode="mock")
     ledger = FileLedger(ledger_path)
     provider = MockPlatformAgentProvider(config, ledger=ledger, clock=repo.clock, enable_interactions=True)
     provider_calls = []

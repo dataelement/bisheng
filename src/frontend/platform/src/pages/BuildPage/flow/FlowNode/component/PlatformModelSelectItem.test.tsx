@@ -96,6 +96,8 @@ describe('PlatformModelSelectItem', () => {
             name: 'DeepSeek-V3',
             version: '1.0.0',
         });
+        expect(screen.getByLabelText('model-select')).toHaveValue('model-1::ver-101');
+        expect(screen.getByText(/platformLlm\.pinnedVersion/)).toHaveTextContent('platformLlm.pinnedVersion: 1.0.0');
     });
 
     it('shows token error alert instead of empty list on 10581', async () => {

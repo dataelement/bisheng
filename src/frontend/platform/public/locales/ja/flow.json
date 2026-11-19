@@ -749,6 +749,10 @@
     "jsonHint": "JSON 値。例: 0、false、null、[]、{}",
     "chooseVariable": "前のノードの変数を選択",
     "queryFailed": "リソースの取得に失敗しました。再試行してください。",
+    "searchPlaceholder": "Agent 名で検索",
+    "tokenInvalid": "昆聯のセッションまたはトークンが無効です。再ログインしてください。",
+    "permissionDenied": "昆聯 Agent 一覧へのアクセス権限がありません。",
+    "rateLimited": "昆聯プラットフォームへのリクエストが多すぎます。しばらくしてから再試行してください。",
     "removeBinding": "マッピングを削除",
     "obsoleteInput": "このバージョンでは使用できない入力です。マッピングを削除してください。",
     "identityNotReady": "テナント情報を取得できていません。ページを更新するか再度ログインしてください。"

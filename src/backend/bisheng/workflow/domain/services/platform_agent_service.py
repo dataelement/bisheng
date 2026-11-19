@@ -1,6 +1,7 @@
 """平台 Agent 的统一授权、资源校验和运行编排。"""
 
 import asyncio
+import inspect
 import json
 import re
 import time
@@ -46,6 +47,15 @@ from bisheng.workflow.domain.schemas.platform_agent import (
 )
 
 _MOCK_LONG_SLOTS = WeakKeyDictionary()
+
+
+def _session_reference_from_user(login_user) -> str | None:
+    ref = getattr(login_user, "_runtime_credential_reference", None)
+    if isinstance(ref, dict) and ref.get("kind") == "kunlian_session":
+        value = ref.get("reference")
+        if isinstance(value, str) and value:
+            return value
+    return None
 
 
 class PlatformAgentService:
@@ -117,11 +127,28 @@ class PlatformAgentService:
         if facts.get("state") != "active" or facts.get("tenant_id") != login_user.tenant_id:
             raise UnAuthorizedError()
         await require_business_action(login_user, resource_type="workflow", resource_id=workflow_id, action=action)
-        return VerifiedAgentActor(int(login_user.user_id), int(login_user.tenant_id), facts["token_version"])
+        return VerifiedAgentActor(
+            int(login_user.user_id),
+            int(login_user.tenant_id),
+            facts["token_version"],
+            session_reference=_session_reference_from_user(login_user),
+        )
 
-    async def list_agents(self, login_user, workflow_id, cursor=None):
+    async def list_agents(
+        self,
+        login_user,
+        workflow_id,
+        cursor=None,
+        *,
+        page_size: int = 20,
+        search: str | None = None,
+    ):
         actor = await self.authorize(login_user, workflow_id)
-        return await self.provider.list_agents(actor, cursor)
+        provider = self.provider
+        params = inspect.signature(provider.list_agents).parameters
+        if "page_size" in params or "search" in params:
+            return await provider.list_agents(actor, cursor, page_size=page_size, search=search)
+        return await provider.list_agents(actor, cursor)
 
     async def get_version(self, login_user, workflow_id, agent_id, version_id):
         actor = await self.authorize(login_user, workflow_id)
@@ -149,7 +176,7 @@ class PlatformAgentService:
                 if configuration.agent_ref is None or not node.get("id") or node["id"] in materials:
                     raise PlatformAgentConfigurationError()
                 version = await self.provider.get_version(actor, configuration.agent_ref)
-                if version.ref != configuration.agent_ref:
+                if not version.ref.same_identity(configuration.agent_ref):
                     raise PlatformAgentVersionError()
                 if configuration.allow_interaction:
                     if not (
@@ -188,7 +215,7 @@ class PlatformAgentService:
                 if all(binding.source == "constant" for binding in configuration.input_bindings.values()):
                     resolve_inputs(configuration.input_bindings, version.input_schema, lambda _: None)
                 materials[node["id"]] = {
-                    "ref": version.ref.model_dump(),
+                    "ref": version.ref.model_dump(exclude_none=True),
                     "schema_digest": canonical_digest([version.input_schema, version.output_schema]),
                     "input_schema": deepcopy(version.input_schema),
                     "output_schema": deepcopy(version.output_schema),
@@ -406,7 +433,7 @@ class PlatformAgentService:
                     raise PlatformAgentConfigurationError()
                 provider = self.provider
                 version = await provider.get_version(actor, configuration.agent_ref)
-                if version.ref != configuration.agent_ref:
+                if not version.ref.same_identity(configuration.agent_ref):
                     raise PlatformAgentVersionError()
                 await provider.check_use(actor, configuration.agent_ref)
                 validate_schema(version.output_schema)

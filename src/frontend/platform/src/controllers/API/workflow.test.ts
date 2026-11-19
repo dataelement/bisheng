@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import axios from '../request';
-import { createWorkflowApi, getPlatformAgentCapabilities, saveWorkflow, updateVersion } from './workflow';
+import { createWorkflowApi, getPlatformAgentCapabilities, getPlatformAgents, saveWorkflow, updateVersion } from './workflow';
 
 vi.mock('../request', () => ({ default: { get: vi.fn(), post: vi.fn(), put: vi.fn() } }));
 
@@ -8,9 +8,17 @@ describe('platform Agent capabilities', () => {
     afterEach(() => vi.clearAllMocks());
 
     it.each([true, false, undefined])('preserves the server tenant-mode flag: %s', async multiTenant => {
-        vi.mocked(axios.get).mockResolvedValue({ workflow: { platform_agent_enabled: true, platform_agent_mode: 'mock', platform_agent_policy_revision: 'v1' }, multi_tenant_enabled: multiTenant });
-        expect(await getPlatformAgentCapabilities()).toEqual({ platform_agent_enabled: true, platform_agent_mode: 'mock', platform_agent_policy_revision: 'v1', multi_tenant_enabled: multiTenant });
+        vi.mocked(axios.get).mockResolvedValue({ workflow: { platform_agent_enabled: true, platform_agent_mode: 'real', platform_agent_policy_revision: 'real-v1' }, multi_tenant_enabled: multiTenant });
+        expect(await getPlatformAgentCapabilities()).toEqual({ platform_agent_enabled: true, platform_agent_mode: 'real', platform_agent_policy_revision: 'real-v1', multi_tenant_enabled: multiTenant });
         expect(axios.get).toHaveBeenCalledWith('/api/v1/env');
+    });
+
+    it('forwards cursor, page_size and search to platform-agents list endpoint', async () => {
+        vi.mocked(axios.get).mockResolvedValue({ data: [], items: [], has_more: false, next_cursor: null, provider_mode: 'real', policy_revision: 'real-v1' });
+        await getPlatformAgents('flow-1', { page_size: 20, search: 'finance', cursor: 'c1' });
+        expect(axios.get).toHaveBeenCalledWith('/api/v1/workflow/platform-agents', {
+            params: { workflow_id: 'flow-1', page_size: 20, search: 'finance', cursor: 'c1' },
+        });
     });
 });
 

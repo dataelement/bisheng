@@ -749,6 +749,10 @@
     "jsonHint": "JSON 值，例如 0、false、null、[] 或 {}",
     "chooseVariable": "选择上游变量",
     "queryFailed": "资源查询失败，请重试。",
+    "searchPlaceholder": "按 Agent 名称搜索",
+    "tokenInvalid": "昆联登录态或资源令牌已失效，请重新登录。",
+    "permissionDenied": "当前账号无权访问昆联 Agent 目录。",
+    "rateLimited": "昆联平台请求过于频繁，请稍后再试。",
     "removeBinding": "移除映射",
     "obsoleteInput": "当前版本不再接受此输入，请移除映射。",
     "identityNotReady": "当前用户的租户信息未就绪，请刷新页面或重新登录。"

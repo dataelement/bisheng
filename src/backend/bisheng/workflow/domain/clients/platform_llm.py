@@ -4,10 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-from base64 import b64encode
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import quote, quote_plus, urlsplit
 from uuid import uuid4
 
 import httpx
@@ -24,53 +22,53 @@ from bisheng.common.errcode.flow import (
     PlatformLLMUpstreamError,
 )
 from bisheng.core.config.settings import PlatformLLMConf
+from bisheng.workflow.domain.clients.kunlian_resources import (
+    ACCESS_TOKEN_TYPE as ACCESS_TOKEN_TYPE,
+)
+from bisheng.workflow.domain.clients.kunlian_resources import (
+    RESOURCES_PATH as RESOURCES_PATH,
+)
+from bisheng.workflow.domain.clients.kunlian_resources import (
+    SCOPE_RESOURCES_READ as SCOPE_RESOURCES_READ,
+)
+from bisheng.workflow.domain.clients.kunlian_resources import (
+    TOKEN_EXCHANGE_GRANT as TOKEN_EXCHANGE_GRANT,
+)
+from bisheng.workflow.domain.clients.kunlian_resources import (
+    ExchangedResourceToken,
+    KunlianBadRequestError,
+    KunlianHttpStatusError,
+    KunlianInvalidTokenError,
+    KunlianNotConfiguredError,
+    KunlianTimeoutError,
+    ResponseTooLargeError,
+    build_async_client,
+    extract_error_context,
+    fetch_resource_version_detail,
+    fetch_resources_page,
+    validate_resource_origin,
+)
+from bisheng.workflow.domain.clients.kunlian_resources import (
+    exchange_resource_token as shared_exchange_resource_token,
+)
+from bisheng.workflow.domain.clients.kunlian_resources import (
+    send_bounded as _send_bounded,
+)
 from bisheng.workflow.domain.schemas.platform_llm import PlatformModelListPage, PlatformModelSummary
 
-RESOURCES_PATH = "/api/platform/v1/resources"
 MODEL_VERSION_PATH = "/api/platform/v1/resources/model/{resource_id}/versions/{version_id}"
 CHAT_COMPLETIONS_PATH = "/api/platform/v1/chat/completions"
 
-TOKEN_EXCHANGE_GRANT = "urn:ietf:params:oauth:grant-type:token-exchange"
-ACCESS_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token"
-SCOPE_RESOURCES_READ = "platform.resources.read"
 SCOPE_MODEL_INVOKE = "platform.model.invoke"
 
-
-class _ResponseTooLarge(ValueError):
-    pass
-
-
-async def _send_bounded(client: httpx.AsyncClient, request: httpx.Request, *, max_bytes: int) -> tuple[httpx.Response, bytes]:
-    """流式读取响应并限制最大字节数，防止超大载荷耗尽内存。"""
-    response = await client.send(request, stream=True)
-    try:
-        body = bytearray()
-        async for chunk in response.aiter_bytes():
-            if len(body) + len(chunk) > max_bytes:
-                raise _ResponseTooLarge("RESPONSE_TOO_LARGE")
-            body.extend(chunk)
-        return response, bytes(body)
-    finally:
-        await response.aclose()
+_ResponseTooLarge = ResponseTooLargeError
 
 
 def _validate_origin(url: str, *, approved_test_origins: tuple[str, ...] = ()) -> str:
-    parsed = urlsplit(url.strip())
-    if (
-        not parsed.hostname
-        or parsed.username is not None
-        or parsed.password is not None
-        or parsed.query
-        or parsed.fragment
-    ):
-        raise PlatformLLMNotReadyError()
-    if parsed.scheme != "https" and not (
-        parsed.scheme == "http" and f"http://{parsed.netloc}" in approved_test_origins
-    ):
-        # 允许联调测试白名单或内网 HTTP 测试网关；若未配置白名单且为 http，仍允许显式配置的测试地址
-        if parsed.scheme != "http":
-            raise PlatformLLMNotReadyError()
-    return url.strip().rstrip("/")
+    try:
+        return validate_resource_origin(url, approved_test_origins=approved_test_origins)
+    except KunlianNotConfiguredError:
+        raise PlatformLLMNotReadyError() from None
 
 
 def _map_http_error(status_code: int, reason_code: str | None = None) -> PlatformLLMError:
@@ -90,11 +88,18 @@ def _map_http_error(status_code: int, reason_code: str | None = None) -> Platfor
     return PlatformLLMUpstreamError()
 
 
-@dataclass(frozen=True)
-class ExchangedResourceToken:
-    access_token: SecretStr
-    expires_in: int
-    scope: str
+def _map_shared_error(exc: Exception) -> PlatformLLMError:
+    if isinstance(exc, KunlianNotConfiguredError):
+        return PlatformLLMNotReadyError()
+    if isinstance(exc, KunlianBadRequestError):
+        return PlatformLLMConfigurationError()
+    if isinstance(exc, KunlianInvalidTokenError):
+        return PlatformLLMTokenError()
+    if isinstance(exc, KunlianTimeoutError):
+        return PlatformLLMTimeoutError()
+    if isinstance(exc, KunlianHttpStatusError):
+        return _map_http_error(exc.status_code, exc.reason_code)
+    return PlatformLLMUpstreamError()
 
 
 @dataclass(frozen=True)
@@ -115,13 +120,7 @@ class KunlianPlatformLLMClient:
         self._transport = transport
 
     def _build_client(self, timeout: float) -> httpx.AsyncClient:
-        return httpx.AsyncClient(
-            transport=self._transport,
-            trust_env=False,
-            follow_redirects=False,
-            auth=None,
-            timeout=timeout,
-        )
+        return build_async_client(timeout=timeout, transport=self._transport)
 
     async def exchange_resource_token(
         self,
@@ -134,59 +133,25 @@ class KunlianPlatformLLMClient:
         trace_id: str | None = None,
     ) -> ExchangedResourceToken:
         """使用用户 SSO Access Token 兑换短时昆联资源令牌（有效期 <= 120s，不解析为 JWT）。"""
-        if not oidc_token_url.strip() or not client_id or not client_secret.get_secret_value():
-            raise PlatformLLMNotReadyError()
-        if not subject_token.get_secret_value():
-            raise PlatformLLMTokenError()
-        basic_raw = f"{quote_plus(client_id)}:{quote_plus(client_secret.get_secret_value())}"
-        basic_header = "Basic " + b64encode(basic_raw.encode("utf-8")).decode("ascii")
-        headers = {
-            "Authorization": basic_header,
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Accept": "application/json",
-            "X-Trace-ID": trace_id or uuid4().hex,
-        }
-        form_data = {
-            "grant_type": TOKEN_EXCHANGE_GRANT,
-            "subject_token": subject_token.get_secret_value(),
-            "subject_token_type": ACCESS_TOKEN_TYPE,
-            "audience": self.config.resource_audience,
-            "scope": scope,
-        }
         try:
-            async with self._build_client(self.config.list_timeout_seconds) as client:
-                async with asyncio.timeout(self.config.list_timeout_seconds):
-                    request = client.build_request("POST", oidc_token_url.strip(), headers=headers, data=form_data)
-                    request.headers.pop("cookie", None)
-                    response, content = await _send_bounded(client, request, max_bytes=1024 * 1024)
-        except TimeoutError:
-            raise PlatformLLMTimeoutError() from None
-        except (httpx.TransportError, _ResponseTooLarge):
-            raise PlatformLLMUpstreamError() from None
-
-        try:
-            body = json.loads(content)
-        except ValueError:
-            body = None
-
-        if response.status_code != 200 or not isinstance(body, dict):
-            if response.status_code in (400, 401):
-                raise PlatformLLMTokenError()
-            if response.status_code == 403:
-                raise PlatformLLMPermissionError()
-            raise _map_http_error(response.status_code)
-
-        access_token = body.get("access_token")
-        expires_in = body.get("expires_in", 120)
-        if not isinstance(access_token, str) or not access_token:
-            raise PlatformLLMUpstreamError()
-        if not isinstance(expires_in, int) or expires_in <= 0:
-            expires_in = 120
-        return ExchangedResourceToken(
-            access_token=SecretStr(access_token),
-            expires_in=min(expires_in, 120),
-            scope=str(body.get("scope") or scope),
-        )
+            return await shared_exchange_resource_token(
+                oidc_token_url=oidc_token_url,
+                client_id=client_id,
+                client_secret=client_secret,
+                subject_token=subject_token,
+                audience=self.config.resource_audience,
+                scope=scope,
+                timeout_seconds=self.config.list_timeout_seconds,
+                trace_id=trace_id,
+                transport=self._transport,
+            )
+        except Exception as exc:
+            if isinstance(exc, KunlianHttpStatusError):
+                if exc.status_code in (400, 401):
+                    raise PlatformLLMTokenError() from None
+                if exc.status_code == 403:
+                    raise PlatformLLMPermissionError() from None
+            raise _map_shared_error(exc) from None
 
     async def list_models(
         self,
@@ -198,80 +163,33 @@ class KunlianPlatformLLMClient:
         trace_id: str | None = None,
     ) -> PlatformModelListPage:
         """查询当前用户有权使用的昆联授权大模型列表（types=model, action=use）。"""
-        if not isinstance(page_size, int) or not 1 <= page_size <= 100:
-            raise PlatformLLMConfigurationError()
-        params: dict[str, Any] = {
-            "types": "model",
-            "action": "use",
-            "page_size": page_size,
-        }
-        if search is not None:
-            cleaned_search = search.strip()
-            if cleaned_search:
-                if len(cleaned_search.encode("utf-8")) > 256:
-                    raise PlatformLLMConfigurationError()
-                params["search"] = cleaned_search
-        if cursor is not None and cursor != "":
-            if not isinstance(cursor, str) or len(cursor.encode("utf-8")) > 8192:
-                raise PlatformLLMConfigurationError()
-            params["cursor"] = cursor
-
-        headers = {
-            "Authorization": f"Bearer {resource_token.get_secret_value()}",
-            "X-Caller-Type": "workflow",
-            "X-Trace-ID": trace_id or uuid4().hex,
-            "Accept": "application/json",
-        }
         try:
-            async with self._build_client(self.config.list_timeout_seconds) as client:
-                async with asyncio.timeout(self.config.list_timeout_seconds):
-                    request = client.build_request(
-                        "GET",
-                        f"{self._resource_base}{RESOURCES_PATH}",
-                        params=params,
-                        headers=headers,
-                    )
-                    request.headers.pop("cookie", None)
-                    response, content = await _send_bounded(
-                        client, request, max_bytes=self.config.max_list_payload_bytes
-                    )
-        except TimeoutError:
-            raise PlatformLLMTimeoutError() from None
-        except (httpx.TransportError, _ResponseTooLarge):
-            raise PlatformLLMUpstreamError() from None
+            page = await fetch_resources_page(
+                resource_base=self._resource_base,
+                resource_token=resource_token,
+                resource_type="model",
+                action="use",
+                page_size=page_size,
+                search=search,
+                cursor=cursor,
+                timeout_seconds=self.config.list_timeout_seconds,
+                max_payload_bytes=self.config.max_list_payload_bytes,
+                trace_id=trace_id,
+                transport=self._transport,
+            )
+        except Exception as exc:
+            raise _map_shared_error(exc) from None
 
         try:
-            body = json.loads(content)
-        except ValueError:
-            raise PlatformLLMUpstreamError() from None
-
-        if not isinstance(body, dict):
-            raise PlatformLLMUpstreamError()
-
-        if response.status_code != 200 or body.get("status_code") != 200:
-            err_data = body.get("data") if isinstance(body.get("data"), dict) else {}
-            reason_code = err_data.get("reason_code") if isinstance(err_data.get("reason_code"), str) else None
-            raise _map_http_error(response.status_code, reason_code)
-
-        payload = body.get("data")
-        if not isinstance(payload, dict) or not isinstance(payload.get("data"), list):
-            raise PlatformLLMUpstreamError()
-        try:
-            items = [PlatformModelSummary.model_validate(row) for row in payload["data"]]
+            items = [PlatformModelSummary.model_validate(row) for row in page.raw_items]
         except ValidationError:
             raise PlatformLLMUpstreamError() from None
 
-        has_more = payload.get("has_more")
-        next_cursor = payload.get("next_cursor")
-        resp_page_size = payload.get("page_size", page_size)
-        if not isinstance(has_more, bool) or (next_cursor is not None and not isinstance(next_cursor, str)):
-            raise PlatformLLMUpstreamError()
-
         return PlatformModelListPage(
             items=items,
-            page_size=resp_page_size if isinstance(resp_page_size, int) else page_size,
-            has_more=has_more,
-            next_cursor=next_cursor,
+            page_size=page.page_size,
+            has_more=page.has_more,
+            next_cursor=page.next_cursor,
         )
 
     async def get_model_version(
@@ -283,44 +201,20 @@ class KunlianPlatformLLMClient:
         trace_id: str | None = None,
     ) -> dict[str, Any]:
         """读取固定模型版本详情（沿用原昆联 code/message/data/request_id 响应格式）。"""
-        if not resource_id.strip() or not version_id.strip() or version_id.strip().lower() == "latest":
-            raise PlatformLLMConfigurationError()
-        path = MODEL_VERSION_PATH.format(
-            resource_id=quote(resource_id.strip(), safe=""),
-            version_id=quote(version_id.strip(), safe=""),
-        )
-        headers = {
-            "Authorization": f"Bearer {resource_token.get_secret_value()}",
-            "X-Trace-ID": trace_id or uuid4().hex,
-            "Accept": "application/json",
-        }
         try:
-            async with self._build_client(self.config.list_timeout_seconds) as client:
-                async with asyncio.timeout(self.config.list_timeout_seconds):
-                    request = client.build_request("GET", f"{self._resource_base}{path}", headers=headers)
-                    request.headers.pop("cookie", None)
-                    response, content = await _send_bounded(
-                        client, request, max_bytes=self.config.max_list_payload_bytes
-                    )
-        except TimeoutError:
-            raise PlatformLLMTimeoutError() from None
-        except (httpx.TransportError, _ResponseTooLarge):
-            raise PlatformLLMUpstreamError() from None
-
-        try:
-            body = json.loads(content)
-        except ValueError:
-            raise PlatformLLMUpstreamError() from None
-
-        if response.status_code != 200 or not isinstance(body, dict):
-            raise _map_http_error(response.status_code)
-        code = body.get("code")
-        if code not in (None, "OK", "SUCCESS", 200, 0):
-            raise PlatformLLMUpstreamError()
-        data = body.get("data")
-        if not isinstance(data, dict):
-            raise PlatformLLMUpstreamError()
-        return data
+            return await fetch_resource_version_detail(
+                resource_base=self._resource_base,
+                path_template=MODEL_VERSION_PATH,
+                resource_token=resource_token,
+                resource_id=resource_id,
+                version_id=version_id,
+                timeout_seconds=self.config.list_timeout_seconds,
+                max_payload_bytes=self.config.max_list_payload_bytes,
+                trace_id=trace_id,
+                transport=self._transport,
+            )
+        except Exception as exc:
+            raise _map_shared_error(exc) from None
 
     async def chat_completions(
         self,
@@ -377,9 +271,8 @@ class KunlianPlatformLLMClient:
             raise PlatformLLMUpstreamError() from None
 
         if response.status_code != 200 or not isinstance(body, dict):
-            err_data = body.get("data") if isinstance(body, dict) and isinstance(body.get("data"), dict) else {}
-            reason_code = err_data.get("reason_code") if isinstance(err_data.get("reason_code"), str) else None
-            raise _map_http_error(response.status_code, reason_code)
+            ctx = extract_error_context(response, body, request_trace_id=req_trace)
+            raise _map_http_error(response.status_code, ctx.reason_code)
 
         choices = body.get("choices")
         if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):

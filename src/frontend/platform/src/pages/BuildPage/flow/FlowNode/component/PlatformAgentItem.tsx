@@ -1,12 +1,21 @@
 import { Button, Checkbox, Input, Select, Textarea } from '@bisheng/ui';
+import { isApiError } from '@bisheng/api-client';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { useContext, useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSelectLabels } from '@/components/bs-comp/formFields/useSelectLabels';
 import { userContext } from '@/contexts/userContext';
 import { getPlatformAgentCapabilities, getPlatformAgents, getPlatformAgentVersion, validatePlatformAgents } from '@/controllers/API/workflow';
 import { showApiError } from '@/controllers/request';
-import type { PlatformAgentBinding, PlatformAgentBindings, PlatformAgentExecutionMode, PlatformAgentReference, PlatformAgentSchema } from '@/types/flow';
+import type {
+    PlatformAgentBinding,
+    PlatformAgentBindings,
+    PlatformAgentDirectoryItem,
+    PlatformAgentExecutionMode,
+    PlatformAgentReference,
+    PlatformAgentSchema,
+    PlatformAgentVersionItem,
+} from '@/types/flow';
 import SelectVar from './SelectVar';
 
 interface Props {
@@ -68,6 +77,42 @@ function BindingField({ nodeId, name, schema, binding, onChange, onInvalid, onRe
     </div>;
 }
 
+function formatVersionLabel(item: Pick<PlatformAgentVersionItem, 'version_id' | 'version'>): string {
+    return item.version && item.version !== item.version_id ? `${item.version} (${item.version_id})` : item.version_id;
+}
+
+function mergeAgentPages(pages?: { data: PlatformAgentDirectoryItem[] }[]): PlatformAgentDirectoryItem[] {
+    if (!pages?.length) return [];
+    const byId = new Map<string, PlatformAgentDirectoryItem>();
+    for (const page of pages) {
+        for (const row of page.data ?? []) {
+            if (typeof row.agent_id !== 'string' || !row.agent_id) continue;
+            let entry = byId.get(row.agent_id);
+            if (!entry) {
+                entry = {
+                    agent_id: row.agent_id,
+                    name: row.name || row.agent_id,
+                    description: row.description,
+                    versions: [],
+                    version_items: [],
+                };
+                byId.set(row.agent_id, entry);
+            }
+            const rawItems: PlatformAgentVersionItem[] = row.version_items?.length
+                ? row.version_items
+                : (row.versions ?? []).map(version_id => ({ version_id }));
+            for (const item of rawItems) {
+                if (typeof item.version_id !== 'string' || !item.version_id) continue;
+                if (!entry.versions.includes(item.version_id)) {
+                    entry.versions.push(item.version_id);
+                    entry.version_items!.push(item);
+                }
+            }
+        }
+    }
+    return [...byId.values()];
+}
+
 export function PlatformAgentItem({ workflowId, nodeId, reference, bindings, executionMode = 'sync', allowInteraction = false,
     onOptionsChange, workflowGraph, onChange, onValidate }: Props) {
     const { t } = useTranslation('flow');
@@ -76,28 +121,66 @@ export function PlatformAgentItem({ workflowId, nodeId, reference, bindings, exe
     const tenantId = user?.tenant_id ?? user?.leaf_tenant_id;
     const identity = [user?.tenant_id, user?.leaf_tenant_id, user?.user_id];
     const enabled = Boolean(user?.user_id && workflowId);
+    const [search, setSearch] = useState('');
+    const [currentReference, setCurrentReference] = useState<PlatformAgentReference | null>(reference);
+    useEffect(() => {
+        setCurrentReference(reference);
+    }, [reference]);
     const [invalidFields, setInvalidFields] = useState<Record<string, boolean>>({});
     const [changed, setChanged] = useState(false);
-    const callbacks = useRef({ onChange, onValidate, reference, bindings });
-    callbacks.current = { onChange, onValidate, reference, bindings };
+    const callbacks = useRef({ onChange, onValidate, reference: currentReference, bindings });
+    callbacks.current = { onChange, onValidate, reference: currentReference, bindings };
     const capability = useQuery({ queryKey: ['platform-agent-capabilities', ...identity], queryFn: getPlatformAgentCapabilities, enabled, cacheTime: 0 });
     const singleTenant = capability.data?.multi_tenant_enabled === false;
     const tenantReady = (typeof tenantId === 'number' && tenantId > 0) || (tenantId == null && singleTenant);
     const canLoadAgents = enabled && tenantReady && capability.data?.platform_agent_enabled === true;
     const scope = ['platform-agent', tenantId ?? (singleTenant ? 'single-tenant' : null), user?.user_id, workflowId, capability.data?.platform_agent_mode, capability.data?.platform_agent_policy_revision];
-    const directory = useInfiniteQuery({ queryKey: [...scope, 'directory'], queryFn: ({ pageParam }) => getPlatformAgents(workflowId, pageParam as string | undefined),
-        getNextPageParam: page => page.next_cursor || undefined, enabled: canLoadAgents, cacheTime: 0 });
-    const resources = directory.data?.pages.flatMap(page => page.data).filter(row => typeof row.agent_id === 'string' && row.agent_id.length > 0) ?? [];
-    const selected = resources.find(row => row.agent_id === reference?.agent_id);
-    const version = useQuery({ queryKey: [...scope, 'version', reference?.agent_id, reference?.version_id],
-        queryFn: () => getPlatformAgentVersion(workflowId, reference!.agent_id, reference!.version_id),
-        enabled: canLoadAgents && Boolean(reference?.agent_id && reference.version_id), cacheTime: 0, staleTime: 0 });
+    const directory = useInfiniteQuery({
+        queryKey: [...scope, 'directory', search.trim()],
+        queryFn: ({ pageParam }) => getPlatformAgents(workflowId, {
+            page_size: 20,
+            search: search.trim() || undefined,
+            cursor: pageParam as string | undefined,
+        }),
+        getNextPageParam: page => (page.has_more && page.next_cursor ? page.next_cursor : undefined),
+        enabled: canLoadAgents,
+        cacheTime: 0,
+        retry: false,
+    });
+    const resources = useMemo(() => mergeAgentPages(directory.data?.pages), [directory.data?.pages]);
+    const agentOptions = useMemo(() => {
+        const optionMap = new Map<string, string>(resources.map(row => [row.agent_id, row.name]));
+        if (currentReference?.agent_id && !optionMap.has(currentReference.agent_id)) {
+            optionMap.set(currentReference.agent_id, currentReference.name || currentReference.agent_id);
+        }
+        return [...optionMap].map(([value, label]) => ({ value, label }));
+    }, [resources, currentReference]);
+    const selected = resources.find(row => row.agent_id === currentReference?.agent_id);
+    const versionOptions = useMemo(() => {
+        const optionMap = new Map<string, string>();
+        const list = selected?.version_items ?? [];
+        for (const item of list) {
+            if (typeof item.version_id === 'string' && item.version_id) {
+                optionMap.set(item.version_id, formatVersionLabel(item));
+            }
+        }
+        if (currentReference?.version_id && !optionMap.has(currentReference.version_id)) {
+            optionMap.set(
+                currentReference.version_id,
+                formatVersionLabel({ version_id: currentReference.version_id, version: currentReference.version }),
+            );
+        }
+        return [...optionMap].map(([value, label]) => ({ value, label }));
+    }, [selected, currentReference]);
+    const version = useQuery({ queryKey: [...scope, 'version', currentReference?.agent_id, currentReference?.version_id],
+        queryFn: () => getPlatformAgentVersion(workflowId, currentReference!.agent_id, currentReference!.version_id),
+        enabled: canLoadAgents && Boolean(currentReference?.agent_id && currentReference.version_id), cacheTime: 0, staleTime: 0 });
     const canRunAsync = version.data?.supports_async === true && version.data.long_tasks_available === true;
     const canInteract = canRunAsync && executionMode === 'async' && capability.data?.platform_agent_mode === 'mock'
         && version.data?.interaction_available === true && version.data.supports_interaction === true
         && version.data.available === true && version.data.can_use === true;
     const graph = { nodes: [{ id: nodeId, data: { id: nodeId, type: 'platform_agent', group_params: [{ params: [
-        { key: 'agent_ref', value: reference }, { key: 'input_bindings', value: bindings },
+        { key: 'agent_ref', value: currentReference }, { key: 'input_bindings', value: bindings },
         ...(executionMode === 'async' ? [{ key: 'execution_mode', value: 'async' }] : []),
         ...(allowInteraction ? [{ key: 'allow_interaction', value: true }] : []),
     ] }] } }], edges: [] };
@@ -108,23 +191,61 @@ export function PlatformAgentItem({ workflowId, nodeId, reference, bindings, exe
     useEffect(() => {
         callbacks.current.onValidate(() => {
             if (allowInteraction && !canInteract) return t('platformAgent.interactionUnsupported');
-            return reference?.agent_id && reference.version_id && version.data?.available && version.data.can_use
+            return currentReference?.agent_id && currentReference.version_id && version.data?.available && version.data.can_use
                 && validation.data?.valid && !Object.values(invalidFields).some(Boolean) ? false : t('platformAgent.invalidConfiguration');
         });
-    }, [reference, version.data, validation.data, invalidFields, allowInteraction, canInteract, t]);
+    }, [currentReference, version.data, validation.data, invalidFields, allowInteraction, canInteract, t]);
     useEffect(() => { if (version.data) callbacks.current.onChange(callbacks.current.reference, callbacks.current.bindings, version.data.output_schema); }, [version.data]);
+    const directoryErrorCode = isApiError(directory.error) ? directory.error.status_code : null;
+    const directoryErrorMessage = directoryErrorCode === 10587
+        ? t('platformAgent.tokenInvalid')
+        : directoryErrorCode === 10555
+            ? t('platformAgent.permissionDenied')
+            : directoryErrorCode === 10588
+                ? t('platformAgent.rateLimited')
+                : t('platformAgent.queryFailed');
     return <div className="nowheel nodrag space-y-3">
-        {capability.data?.platform_agent_mode === 'mock' && <p className="bisheng-label">{t('platformAgent.mock')}</p>}
         {enabled && capability.data?.platform_agent_enabled && !tenantReady && <p role="alert">{t('platformAgent.identityNotReady')}</p>}
+        <Input
+            aria-label={t('platformAgent.searchPlaceholder')}
+            placeholder={t('platformAgent.searchPlaceholder')}
+            value={search}
+            disabled={!canLoadAgents}
+            onChange={event => setSearch(event.target.value)}
+        />
         <Select {...labels} aria-label={t('platformAgent.agent')} placeholder={t('platformAgent.chooseAgent')}
-            options={resources.map(row => ({ value: row.agent_id, label: row.name }))} value={reference?.agent_id ?? null}
-            loading={directory.isInitialLoading} onChange={value => { setChanged(Boolean(reference)); onChange(value ? { agent_id: String(value), version_id: '' } : null, bindings); }} />
+            options={agentOptions} value={currentReference?.agent_id ?? null}
+            loading={directory.isInitialLoading} onChange={value => {
+                setChanged(Boolean(currentReference));
+                const nextAgentId = value ? String(value) : '';
+                const picked = resources.find(row => row.agent_id === nextAgentId);
+                const nextRef: PlatformAgentReference | null = nextAgentId
+                    ? { agent_id: nextAgentId, version_id: '', ...(picked?.name ? { name: picked.name } : {}) }
+                    : null;
+                setCurrentReference(nextRef);
+                onChange(nextRef, bindings);
+            }} />
         {directory.hasNextPage && <Button onClick={() => { void directory.fetchNextPage().catch(showApiError); }}>{t('platformAgent.loadMore')}</Button>}
-        {directory.error ? <p role="alert">{t('platformAgent.queryFailed')}</p> : directory.data && !directory.isInitialLoading && resources.length === 0 && <p>{t('platformAgent.empty')}</p>}
+        {directory.error ? <p role="alert">{directoryErrorMessage}</p> : directory.data && !directory.isInitialLoading && resources.length === 0 && <p>{t('platformAgent.empty')}</p>}
         <Select {...labels} aria-label={t('platformAgent.version')} placeholder={t('platformAgent.chooseVersion')}
-            options={(selected?.versions ?? []).filter(value => typeof value === 'string' && value.length > 0).map(value => ({ value, label: value }))}
-            value={reference?.version_id || null} onChange={value => { if (!reference || !value) return; setChanged(true); setInvalidFields({}); onChange({ ...reference, version_id: String(value) }, bindings); }} />
-        {reference && <p className="text-sm">{reference.agent_id} / {reference.version_id}</p>}
+            options={versionOptions}
+            value={currentReference?.version_id || null} onChange={value => {
+                if (!currentReference || !value) return;
+                const versionId = String(value);
+                const pickedVer = selected?.version_items?.find(item => item.version_id === versionId);
+                const nextRef: PlatformAgentReference = {
+                    ...currentReference,
+                    version_id: versionId,
+                    ...(pickedVer?.call_id ? { call_id: pickedVer.call_id } : {}),
+                    ...(pickedVer?.name || selected?.name ? { name: pickedVer?.name || selected?.name } : {}),
+                    ...(pickedVer?.version ? { version: pickedVer.version } : {}),
+                };
+                setChanged(true);
+                setInvalidFields({});
+                setCurrentReference(nextRef);
+                onChange(nextRef, bindings);
+            }} />
+        {currentReference && <p className="text-sm">{currentReference.name || currentReference.agent_id} / {currentReference.version || currentReference.version_id}</p>}
         {changed && <p role="status">{t('platformAgent.versionChanged')}</p>}
         {onOptionsChange && version.data && <div className="space-y-2">
             {(canRunAsync || executionMode === 'async') && <Select {...labels} aria-label={t('platformAgent.executionMode')}
@@ -143,10 +264,10 @@ export function PlatformAgentItem({ workflowId, nodeId, reference, bindings, exe
                 : <p>{t('platformAgent.interactionHint')}</p>}
         </div>}
         {version.data && <>
-            {[...new Set([...Object.keys(version.data.input_schema.properties ?? {}), ...Object.keys(bindings)])].map(name => <BindingField nodeId={nodeId} key={`${reference?.agent_id}:${reference?.version_id}:${name}`} name={name} schema={version.data!.input_schema.properties?.[name] ?? {}} binding={bindings[name]}
+            {[...new Set([...Object.keys(version.data.input_schema.properties ?? {}), ...Object.keys(bindings)])].map(name => <BindingField nodeId={nodeId} key={`${currentReference?.agent_id}:${currentReference?.version_id}:${name}`} name={name} schema={version.data!.input_schema.properties?.[name] ?? {}} binding={bindings[name]}
                 obsolete={!(name in (version.data!.input_schema.properties ?? {})) && version.data!.input_schema.additionalProperties === false}
-                onRemove={() => { const next = { ...bindings }; delete next[name]; setInvalidFields(previous => ({ ...previous, [name]: false })); onChange(reference, next); }}
-                onChange={binding => onChange(reference, { ...bindings, [name]: binding })} onInvalid={invalid => setInvalidFields(previous => ({ ...previous, [name]: invalid }))} />)}
+                onRemove={() => { const next = { ...bindings }; delete next[name]; setInvalidFields(previous => ({ ...previous, [name]: false })); onChange(currentReference, next); }}
+                onChange={binding => onChange(currentReference, { ...bindings, [name]: binding })} onInvalid={invalid => setInvalidFields(previous => ({ ...previous, [name]: invalid }))} />)}
             <p className="bisheng-label">{t('platformAgent.outputSchema')}</p>
             <pre className="whitespace-pre-wrap break-all text-xs">{JSON.stringify(version.data.output_schema, null, 2)}</pre>
         </>}

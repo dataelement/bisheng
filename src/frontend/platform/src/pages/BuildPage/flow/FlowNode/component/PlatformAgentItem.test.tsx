@@ -1,16 +1,17 @@
 /** 覆盖 AC: AC-01, AC-02, AC-03, AC-04, AC-05, AC-20, AC-23。 */
+import { ApiError } from '@bisheng/api-client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useContext, useState } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PlatformAgentItem } from './PlatformAgentItem';
 import type { PlatformAgentBindings, PlatformAgentReference } from '@/types/flow';
 import { userContext } from '@/contexts/userContext';
 import { getPlatformAgentCapabilities, getPlatformAgents, getPlatformAgentVersion, validatePlatformAgents } from '@/controllers/API/workflow';
 
 vi.mock('@/controllers/API/workflow', () => ({
-    getPlatformAgentCapabilities: vi.fn(async () => ({ platform_agent_enabled: true, platform_agent_mode: 'mock', platform_agent_policy_revision: 'v1' })),
-    getPlatformAgents: vi.fn(async () => ({ data: [{ agent_id: '', name: 'invalid', versions: [] }, { agent_id: 'echo', name: 'Echo', versions: ['v1', 'v2'] }], has_more: false })),
+    getPlatformAgentCapabilities: vi.fn(async () => ({ platform_agent_enabled: true, platform_agent_mode: 'real', platform_agent_policy_revision: 'real-v1' })),
+    getPlatformAgents: vi.fn(async () => ({ data: [{ agent_id: '', name: 'invalid', versions: [] }, { agent_id: 'echo', name: 'Echo', versions: ['v1', 'v2'] }], has_more: false, next_cursor: null, provider_mode: 'real', policy_revision: 'real-v1' })),
     getPlatformAgentVersion: vi.fn(async (_workflow, agent, version) => ({ ref: { agent_id: agent, version_id: version }, available: true, can_use: true, input_schema: { type: 'object', properties: { value: {} } }, output_schema: { type: 'object' } })),
     validatePlatformAgents: vi.fn(async () => ({ valid: true, issues: [] })),
 }));
@@ -28,6 +29,13 @@ vi.mock('@bisheng/ui', () => ({
 }));
 
 describe('PlatformAgentItem', () => {
+    beforeEach(() => {
+        vi.mocked(getPlatformAgentCapabilities).mockResolvedValue({
+            platform_agent_enabled: true,
+            platform_agent_mode: 'real',
+            platform_agent_policy_revision: 'real-v1',
+        });
+    });
     afterEach(() => { cleanup(); vi.clearAllMocks(); });
     it.each([
         { available: true, supported: true, mode: 'async', enabled: true },
@@ -35,6 +43,11 @@ describe('PlatformAgentItem', () => {
         { available: true, supported: false, mode: 'async', enabled: false },
         { available: true, supported: true, mode: 'sync', enabled: false },
     ] as const)('gates interaction on isolation, pinned version and async mode: $available $supported $mode', async ({ available, supported, mode, enabled }) => {
+        vi.mocked(getPlatformAgentCapabilities).mockResolvedValue({
+            platform_agent_enabled: true,
+            platform_agent_mode: 'mock',
+            platform_agent_policy_revision: 'v1',
+        });
         const optionsChanged = vi.fn();
         let validate = () => false as string | false;
         vi.mocked(getPlatformAgentVersion).mockImplementationOnce(async () => ({
@@ -86,7 +99,7 @@ describe('PlatformAgentItem', () => {
         fireEvent.change(screen.getByLabelText('platformAgent.agent'), { target: { value: 'echo' } });
         fireEvent.change(screen.getByLabelText('platformAgent.version'), { target: { value: 'v1' } });
         await screen.findByLabelText('value');
-        expect(getPlatformAgents).toHaveBeenCalledWith('flow', undefined);
+        expect(getPlatformAgents).toHaveBeenCalledWith('flow', { page_size: 20, search: undefined, cursor: undefined });
         expect(getPlatformAgentVersion).toHaveBeenCalledWith('flow', 'echo', 'v1');
     });
 
@@ -101,7 +114,7 @@ describe('PlatformAgentItem', () => {
         expect(getPlatformAgents).not.toHaveBeenCalled();
     });
 
-    it('keeps draft version and JSON values and identifies simulated data', async () => {
+    it('keeps draft version and JSON values without mock banner in real mode', async () => {
         let latest: PlatformAgentBindings = {};
         function Harness() {
             const [ref, setRef] = useState<PlatformAgentReference | null>({ agent_id: 'echo', version_id: 'v1' });
@@ -109,7 +122,7 @@ describe('PlatformAgentItem', () => {
             return <PlatformAgentItem workflowId="flow" nodeId="platform_agent_1" reference={ref} bindings={bindings} onChange={(next, values) => { latest = values; setRef(next); setBindings(values); }} onValidate={() => {}} />;
         }
         render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><Harness /></QueryClientProvider>);
-        expect(await screen.findByText('platformAgent.mock')).toBeInTheDocument();
+        expect(screen.queryByText('platformAgent.mock')).not.toBeInTheDocument();
         expect(await screen.findByLabelText('value')).toHaveValue('0');
         expect(screen.queryByText('invalid')).not.toBeInTheDocument();
         fireEvent.change(screen.getByLabelText('value'), { target: { value: 'false' } });
@@ -158,5 +171,80 @@ describe('PlatformAgentItem', () => {
         render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><PlatformAgentItem workflowId="flow" nodeId="platform_agent_1" reference={null} bindings={{}} onChange={() => {}} onValidate={() => {}} /></QueryClientProvider>);
         expect(await screen.findByText('platformAgent.queryFailed')).toBeInTheDocument();
         expect(screen.queryByText('platformAgent.empty')).not.toBeInTheDocument();
+    });
+
+    it('merges multi-page real agent versions, handles empty has_more pages, filters by search, and preserves call_id/name/version', async () => {
+        vi.mocked(getPlatformAgents)
+            .mockResolvedValueOnce({
+                data: [{
+                    agent_id: 'agent-1',
+                    name: 'Finance Assistant',
+                    versions: ['ver-1'],
+                    version_items: [{ version_id: 'ver-1', version: '1.0.0', call_id: 'agent:agent-1:ver-1', name: 'Finance Assistant' }],
+                }],
+                next_cursor: 'c1',
+                has_more: true,
+                provider_mode: 'real',
+                policy_revision: 'real-v1',
+            })
+            .mockResolvedValueOnce({
+                data: [],
+                next_cursor: 'c2',
+                has_more: true,
+                provider_mode: 'real',
+                policy_revision: 'real-v1',
+            })
+            .mockResolvedValueOnce({
+                data: [{
+                    agent_id: 'agent-1',
+                    name: 'Finance Assistant',
+                    versions: ['ver-2'],
+                    version_items: [{ version_id: 'ver-2', version: '2.0.0', call_id: 'agent:agent-1:ver-2', name: 'Finance Assistant' }],
+                }],
+                next_cursor: null,
+                has_more: false,
+                provider_mode: 'real',
+                policy_revision: 'real-v1',
+            });
+        let latestRef: PlatformAgentReference | null = null;
+        render(
+            <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+                <PlatformAgentItem
+                    workflowId="flow"
+                    nodeId="platform_agent_1"
+                    reference={null}
+                    bindings={{}}
+                    onChange={next => { latestRef = next; }}
+                    onValidate={() => {}}
+                />
+            </QueryClientProvider>,
+        );
+        expect(await screen.findByRole('option', { name: 'Finance Assistant' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'platformAgent.loadMore' }));
+        await waitFor(() => expect(getPlatformAgents).toHaveBeenNthCalledWith(2, 'flow', { page_size: 20, search: undefined, cursor: 'c1' }));
+        expect(screen.getByRole('button', { name: 'platformAgent.loadMore' })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'platformAgent.loadMore' }));
+        await waitFor(() => expect(getPlatformAgents).toHaveBeenNthCalledWith(3, 'flow', { page_size: 20, search: undefined, cursor: 'c2' }));
+        fireEvent.change(screen.getByLabelText('platformAgent.agent'), { target: { value: 'agent-1' } });
+        expect(await screen.findByRole('option', { name: '1.0.0 (ver-1)' })).toBeInTheDocument();
+        expect(screen.getByRole('option', { name: '2.0.0 (ver-2)' })).toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText('platformAgent.version'), { target: { value: 'ver-2' } });
+        expect(latestRef).toEqual({
+            agent_id: 'agent-1',
+            version_id: 'ver-2',
+            call_id: 'agent:agent-1:ver-2',
+            name: 'Finance Assistant',
+            version: '2.0.0',
+        });
+        fireEvent.change(screen.getByLabelText('platformAgent.searchPlaceholder'), { target: { value: 'finance' } });
+        await waitFor(() => expect(getPlatformAgents).toHaveBeenLastCalledWith('flow', { page_size: 20, search: 'finance', cursor: undefined }));
+    });
+
+    it('maps 10587 token error from Kunlian catalog query to specific alert', async () => {
+        vi.mocked(getPlatformAgents).mockRejectedValueOnce(
+            new ApiError(null, { message: 'Token invalid', envelope: { status_code: 10587 } }),
+        );
+        render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><PlatformAgentItem workflowId="flow" nodeId="platform_agent_1" reference={null} bindings={{}} onChange={() => {}} onValidate={() => {}} /></QueryClientProvider>);
+        expect(await screen.findByText('platformAgent.tokenInvalid')).toBeInTheDocument();
     });
 });

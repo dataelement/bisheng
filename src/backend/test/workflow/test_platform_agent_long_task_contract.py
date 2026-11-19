@@ -30,7 +30,7 @@ def long_remote():
     return SimpleNamespace(
         clock=clock,
         ledger=ledger,
-        provider=lambda: MockPlatformAgentProvider(PlatformAgentConf(), ledger=ledger, clock=lambda: clock[0]),
+        provider=lambda: MockPlatformAgentProvider(PlatformAgentConf(mode="mock"), ledger=ledger, clock=lambda: clock[0]),
     )
 
 

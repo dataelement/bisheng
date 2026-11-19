@@ -2,13 +2,16 @@ import { Edge, Node, ReactFlowJsonObject, Viewport, XYPosition } from "@xyflow/r
 import type { ChatCitation } from "@/controllers/API";
 import { APIClassType } from "../api/index";
 
-export type PlatformAgentReference = { agent_id: string; version_id: string };
+export type PlatformAgentReference = { agent_id: string; version_id: string; call_id?: string; name?: string; version?: string };
 export type PlatformAgentBinding = { source: 'constant'; value?: unknown } | { source: 'variable'; variable: string };
 export type PlatformAgentBindings = Record<string, PlatformAgentBinding>;
 export type PlatformAgentSchema = { type?: string; properties?: Record<string, PlatformAgentSchema>; required?: string[]; items?: PlatformAgentSchema; [key: string]: unknown };
 export type PlatformAgentExecutionMode = 'sync' | 'async';
-export type PlatformAgentVersion = { ref: PlatformAgentReference; input_schema: PlatformAgentSchema; output_schema: PlatformAgentSchema; available: boolean; can_use: boolean; provider_mode: string; policy_revision: string; supports_async?: boolean; supports_interaction?: boolean; long_tasks_available?: boolean; interaction_available?: boolean };
-export type PlatformAgentPage = { data: { agent_id: string; name: string; versions: string[] }[]; next_cursor: string | null; has_more: boolean; provider_mode: string; policy_revision: string };
+export type PlatformAgentVersionItem = { version_id: string; version?: string; call_id?: string; name?: string; description?: string; status?: string; allowed_actions?: string[] };
+export type PlatformAgentDirectoryItem = { agent_id: string; name: string; description?: string; versions: string[]; version_items?: PlatformAgentVersionItem[] };
+export type PlatformAgentResourceItem = { resource_type: string; resource_id: string; version_id: string; name: string; description?: string; version?: string; status?: string; allowed_actions?: string[]; call_id?: string };
+export type PlatformAgentVersion = { ref: PlatformAgentReference; name?: string; call_id?: string | null; version?: string | null; description?: string; status?: string; input_schema: PlatformAgentSchema; output_schema: PlatformAgentSchema; available: boolean; can_use: boolean; provider_mode: string; policy_revision: string; supports_async?: boolean; supports_interaction?: boolean; long_tasks_available?: boolean; interaction_available?: boolean };
+export type PlatformAgentPage = { data: PlatformAgentDirectoryItem[]; items?: PlatformAgentResourceItem[]; page_size?: number; next_cursor: string | null; has_more: boolean; provider_mode: string; policy_revision: string };
 export type PlatformAgentCapabilities = { platform_agent_enabled: boolean; platform_agent_mode: string; platform_agent_policy_revision: string; multi_tenant_enabled?: boolean };
 export type PlatformAgentValidation = { valid: boolean; issues: { node_id: string; field: string; code: number }[] };
 

@@ -749,6 +749,10 @@
     "jsonHint": "JSON value, e.g. 0, false, null, [] or {}",
     "chooseVariable": "Choose an upstream variable",
     "queryFailed": "Resource query failed. Try again.",
+    "searchPlaceholder": "Search by Agent name",
+    "tokenInvalid": "Kunlian session or resource token expired. Please sign in again.",
+    "permissionDenied": "You do not have permission to access Kunlian Agent catalog.",
+    "rateLimited": "Too many requests to Kunlian platform. Please try again later.",
     "removeBinding": "Remove mapping",
     "obsoleteInput": "This version no longer accepts this input. Remove its mapping.",
     "identityNotReady": "Your tenant information is not ready. Refresh the page or sign in again."
