@@ -877,6 +877,11 @@
         "publish_hint": "Show this space in the square so others can search for or view it"
     },
     "space_copy_ui": {
+        "partial_failed": "Copy partially failed",
+        "failure_counts": "{{completed}} copied · {{failed}} failed",
+        "view_details": "View details",
+        "failure_details": "Processing failure details",
+        "no_failure_details": "No failure details to display",
         "phase_preparing": "Preparing the copy",
         "in_progress": "Copying",
         "failed": "Copy failed",
