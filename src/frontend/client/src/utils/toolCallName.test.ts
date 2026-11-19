@@ -6,7 +6,7 @@ test.each(['dalle_image_generator', 'image_generation', 'DALLE_IMAGE_GENERATOR']
   },
 );
 
-test.each(['image_generation', 'web_search', 'Custom drawing tool', ''])(
+test.each(['image_generator', 'web_search', 'Custom drawing tool', ''])(
   'preserves other execution names: %s', (name) => {
     expect(toolCallDisplayName(name)).toBe(name);
   },

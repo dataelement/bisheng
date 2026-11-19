@@ -20,7 +20,9 @@
 
 - type: image_generation
   # 5. 使用 OpenAI 兼容 Images 接口生成图像的工具
+  openai_api_base:
   openai_api_key: 
+  model:
   openai_proxy:
 
 - type: get_current_time

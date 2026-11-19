@@ -275,8 +275,8 @@ test('cached tool names use display labels without changing execution metadata',
 
 test('reference label changes update existing tokens without replacing them or prompt text', () => {
     const props = { value: 'Draw a cat', onChange: jest.fn(), onReferencesChange: jest.fn(), onKeyDown: () => {}, placeholder: 'Write' };
-    const { rerender } = render(<ComposerEditor {...props} references={[{ key: 'tool:4', kind: 'tool', label: 'Image generation' }]} />);
-    const token = screen.getByText('Image generation').closest('[data-composer-reference]');
+    const { rerender } = render(<ComposerEditor {...props} references={[{ key: 'tool:4', kind: 'tool', label: 'Dalle3 drawing' }]} />);
+    const token = screen.getByText('Dalle3 drawing').closest('[data-composer-reference]');
     rerender(<ComposerEditor {...props} references={[{ key: 'tool:4', kind: 'tool', label: 'Image generation' }]} />);
     expect(screen.getByText('Image generation').closest('[data-composer-reference]')).toBe(token);
     expect(token).toHaveAttribute('title', 'Image generation');
