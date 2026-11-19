@@ -19,6 +19,7 @@ import type { ProcessingItemRead, ProcessingJobRead } from "@/controllers/API/kn
 import { SpaceProcessingProgress } from "@/pages/KnowledgePage/components/SpaceProcessingProgress";
 
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { showApiError } from "@/controllers/request";
 vi.mock("@/components/bs-ui/alertDialog/useConfirm", () => ({
   bsConfirm: vi.fn(),
 }));
@@ -263,8 +264,9 @@ it("requires explicit confirmation before refreshing failed copy inputs", async 
   expect(bsConfirm).toHaveBeenCalledWith(
     expect.objectContaining({ desc: "f118.copy_refresh_source_notice" }),
   );
+  const close = vi.fn();
   await act(async () => {
-    await vi.mocked(bsConfirm).mock.calls.at(-1)![0].onOk?.(vi.fn());
+    await vi.mocked(bsConfirm).mock.calls.at(-1)![0].onOk?.(close);
   });
   await waitFor(() =>
     expect(retryProcessing).toHaveBeenCalledWith(
@@ -277,6 +279,104 @@ it("requires explicit confirmation before refreshing failed copy inputs", async 
       "space_copy",
     ),
   );
+  expect(close).toHaveBeenCalledOnce();
+});
+
+it("closes the copy refresh dialog when the job can no longer be retried", async () => {
+  const failed = {
+    id: "copy-7",
+    space_id: 7,
+    kind: "space_copy" as const,
+    state: "failed" as const,
+    revision: 5,
+    accepted_at: "2026-11-18T07:00:00Z",
+    started_at: null,
+    finished_at: null,
+    total_count: 17,
+    succeeded_count: 1,
+    failed_count: 0,
+    pending_count: 16,
+    hidden_item_count: 0,
+    retryable: true,
+    obsolete_reason: null,
+    error_code: null,
+  };
+  let current: ProcessingJobRead = failed;
+  vi.mocked(readProcessingJob).mockReset().mockImplementation(async () => current);
+  vi.mocked(readProcessingItems).mockResolvedValue({ data: [], total: 0 });
+  vi.mocked(retryProcessing).mockReset();
+  render(
+    <QueryClientProvider client={client}>
+      <SpaceProcessingProgress
+        spaceId={7}
+        jobId="copy-7"
+        kind="space_copy"
+        scope={{
+          identityKey: "user:5",
+          tenantId: 60,
+          managementTenantId: 60,
+          view: "ordinary",
+        }}
+      />
+    </QueryClientProvider>,
+  );
+  fireEvent.click(
+    await screen.findByRole("button", { name: "f118.copy_refresh_source" }),
+  );
+  current = { ...failed, state: "running", revision: 6, retryable: false };
+  const close = vi.fn();
+  await act(async () => {
+    await vi.mocked(bsConfirm).mock.calls.at(-1)![0].onOk?.(close);
+  });
+  expect(retryProcessing).not.toHaveBeenCalled();
+  expect(close).toHaveBeenCalledOnce();
+});
+
+it("closes the copy refresh dialog after a rejected retry", async () => {
+  vi.mocked(readProcessingJob).mockReset().mockResolvedValue({
+    id: "copy-7",
+    space_id: 7,
+    kind: "space_copy",
+    state: "failed",
+    revision: 5,
+    accepted_at: "2026-11-18T07:00:00Z",
+    started_at: null,
+    finished_at: null,
+    total_count: 1,
+    succeeded_count: 0,
+    failed_count: 1,
+    pending_count: 0,
+    hidden_item_count: 0,
+    retryable: true,
+    obsolete_reason: null,
+    error_code: null,
+  });
+  vi.mocked(readProcessingItems).mockResolvedValue({ data: [], total: 0 });
+  vi.mocked(retryProcessing).mockReset().mockRejectedValue(new Error("18084"));
+  render(
+    <QueryClientProvider client={client}>
+      <SpaceProcessingProgress
+        spaceId={7}
+        jobId="copy-7"
+        kind="space_copy"
+        scope={{
+          identityKey: "user:5",
+          tenantId: 60,
+          managementTenantId: 60,
+          view: "ordinary",
+        }}
+      />
+    </QueryClientProvider>,
+  );
+  fireEvent.click(
+    await screen.findByRole("button", { name: "f118.copy_refresh_source" }),
+  );
+  const close = vi.fn();
+  await act(async () => {
+    await vi.mocked(bsConfirm).mock.calls.at(-1)![0].onOk?.(close);
+  });
+  expect(showApiError).toHaveBeenCalled();
+  expect(close).toHaveBeenCalledOnce();
 });
 
 it("filters history items on the server from later pages and recovers an empty selection", async () => {

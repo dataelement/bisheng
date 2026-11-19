@@ -134,14 +134,17 @@ export function SpaceProcessingProgress({
     }, 2000);
     return () => window.clearInterval(timer);
   }, [metadata, state, hasFailures, refreshJob, refreshItems]);
-  const handleRetry = async (refreshSource = false) => {
-    if (!jobData?.retryable || busy) return;
+  const handleRetry = async (
+    refreshSource = false,
+    source: typeof jobData = jobData,
+  ) => {
+    if (!source?.retryable || busy) return;
     const request =
-      retry?.revision === jobData.revision &&
+      retry?.revision === source.revision &&
       retry.refreshSource === refreshSource
         ? retry
         : {
-            revision: jobData.revision,
+            revision: source.revision,
             key: createOperationId(),
             refreshSource,
           };
@@ -274,7 +277,16 @@ export function SpaceProcessingProgress({
                 bsConfirm({
                   title: t("f118.copy_refresh_source"),
                   desc: t("f118.copy_refresh_source_notice"),
-                  onOk: () => handleRetry(true),
+                  onOk: async (next) => {
+                    try {
+                      const latest = (await job.refetch()).data;
+                      await handleRetry(true, latest);
+                    } catch (error) {
+                      showApiError(error);
+                    } finally {
+                      next();
+                    }
+                  },
                 })
               }
             >
