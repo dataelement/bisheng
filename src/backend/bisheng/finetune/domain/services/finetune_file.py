@@ -113,16 +113,30 @@ class FinetuneFileService(BaseModel):
         return file_info
 
     @classmethod
+    async def validate_training_files(
+        cls, train_data: list[dict] | None, preset_data: list[dict] | None, user: UserPayload
+    ) -> None:
+        # Validate the entire input before any URL is signed or remote job is started.
+        for item in train_data or []:
+            cls.validate_personal_file(item.get("url", ""), user)
+        for item in preset_data or []:
+            dataset = await PresetTrainDao.find_by_url(item.get("url", ""))
+            if dataset is None or (item.get("id") is not None and item["id"] != dataset.id):
+                raise TrainFileNotExistError()
+
+    @classmethod
+    def validate_personal_file(cls, file_url: str, user: UserPayload) -> None:
+        prefix = cls._personal_prefix(user)
+        if not file_url.startswith(prefix) or not re.fullmatch(
+            r"[0-9a-f]{32}\.[a-zA-Z0-9]{1,10}", file_url[len(prefix) :]
+        ):
+            raise TrainFileNotExistError()
+
+    @classmethod
     async def get_download_url(cls, file_url: str, user: UserPayload) -> str:
         dataset = await PresetTrainDao.find_by_url(file_url)
         if dataset is None:
-            # Ephemeral training uploads have no dataset row. Only new,
-            # tenant/person-bound keys provide ownership proof for this path.
-            prefix = cls._personal_prefix(user)
-            if not file_url.startswith(prefix) or not re.fullmatch(
-                r"[0-9a-f]{32}\.[a-zA-Z0-9]{1,10}", file_url[len(prefix) :]
-            ):
-                raise TrainFileNotExistError()
+            cls.validate_personal_file(file_url, user)
         minio = await get_minio_storage()
         return await minio.get_share_link(dataset.url if dataset else file_url, clear_host=False)
 

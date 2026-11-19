@@ -2131,21 +2131,8 @@
       "count": 1
     }
   },
-  "src/pages/ModelPage/components/CreateTask.tsx": {
-    "no-console": {
-      "count": 1
-    }
-  },
   "src/pages/ModelPage/components/CreateTaskList.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "src/pages/ModelPage/components/FinetuneDetail.tsx": {
-    "no-console": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
       "count": 1
     }
   },

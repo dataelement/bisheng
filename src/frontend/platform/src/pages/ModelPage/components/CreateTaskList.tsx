@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { showApiError } from "@/controllers/request";
 import { isNumberDraftWithinBounds } from '@/utils/fieldValidation';
 import { Button, Input } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
@@ -30,7 +31,7 @@ export default function CreateTaskList({ onChange }) {
     const [isCustom, setIsCustom] = useState(false)
 
     const handleDownloadFile = async (data) => {
-        const res = await getFileUrlApi(data.dataSource)
+        const res = await getFileUrlApi(data.dataSource, true)
         setDownloadMap(map => ({ ...map, [data.id]: true }))
         await downloadFile(checkSassUrl(res.url), data.name)
         setDownloadMap(map => ({ ...map, [data.id]: false }))
@@ -111,7 +112,7 @@ export function usePresetList(onChange) {
     const [prsetList, setPrsetList] = useState([]);
 
     useEffect(() => {
-        getPresetFileApi({ page_size: 400, page_num: 1, keyword: '' }).then(res => setPrsetList(res.data));
+        getPresetFileApi({ page_size: 400, page_num: 1, keyword: '' }, true).then(res => setPrsetList(res.data)).catch(showApiError);
     }, []);
 
     const handleChangePrsetList = (id, key, val) => {

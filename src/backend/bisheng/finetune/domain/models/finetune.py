@@ -7,7 +7,7 @@ from sqlalchemy import Integer, Select
 from sqlmodel import Column, DateTime, Field, col, func, select, text, update
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.context.tenant import strict_tenant_filter
+from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter
 from bisheng.core.database import get_async_db_session
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType, LargeText
 from bisheng.utils import generate_uuid
@@ -216,18 +216,26 @@ class FinetuneDao(FinetuneBase):
     async def find_job_by_model_name(cls, model_name: str) -> Finetune | None:
         async with get_async_db_session() as session:
             statement = select(Finetune).where(Finetune.model_name == model_name)
-            return (await session.exec(statement)).first()
+            with strict_tenant_filter():
+                return (await session.exec(statement)).first()
 
     @classmethod
     async def find_job_by_model_id(cls, model_id: int) -> Finetune | None:
         async with get_async_db_session() as session:
             statement = select(Finetune).where(Finetune.model_id == model_id)
-            return (await session.exec(statement)).first()
+            with strict_tenant_filter():
+                return (await session.exec(statement)).first()
 
     @classmethod
     async def change_status(cls, job_id: str, old_status: int, status: int) -> bool:
         update_statement = (
-            update(Finetune).where(col(Finetune.id) == job_id, col(Finetune.status) == old_status).values(status=status)
+            update(Finetune)
+            .where(
+                Finetune.tenant_id == get_current_tenant_id(),
+                col(Finetune.id) == job_id,
+                col(Finetune.status) == old_status,
+            )
+            .values(status=status)
         )
         async with get_async_db_session() as session:
             update_ret = await session.exec(update_statement)
