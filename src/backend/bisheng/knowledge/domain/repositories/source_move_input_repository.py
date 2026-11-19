@@ -138,7 +138,7 @@ class SourceMoveInputRepository:
         with session.no_autoflush, strict_tenant_filter():
             bound = (
                 await session.execute(
-                    select(plan.c.parameters, job.c.parameters, job.c.scope_manifest)
+                    select(plan.c.parameters, plan.c.target_manifest, job.c.parameters, job.c.scope_manifest)
                     .select_from(plan.join(job, and_(job.c.id == plan.c.operation_id, job.c.tenant_id == tenant)))
                     .where(
                         plan.c.tenant_id == tenant,
@@ -151,13 +151,18 @@ class SourceMoveInputRepository:
             ).one_or_none()
             if bound is None:
                 return False
-            scope, acceptance, manifest = bound
+            scope, targets, acceptance, manifest = bound
             if not isinstance(acceptance, dict) or not isinstance(scope, dict) or not isinstance(manifest, list):
                 return False
             if (
                 acceptance.get("scope_digest") != _digest(scope)
                 or acceptance.get("confirmation_id") != row["id"]
                 or acceptance.get("operation_id") != row["job_id"]
+                or acceptance.get("move_schema") != 1
+                or scope.get("move_schema") != 1
+                or acceptance.get("source_space_id") != space_id
+                or acceptance.get("destination_space_id") != row["space_id"]
+                or acceptance.get("index_item_count") != len(manifest)
                 or scope.get("source_space_id") != space_id
                 or scope.get("destination_space_id") != row["space_id"]
                 or not isinstance(scope.get("files"), list)
@@ -169,6 +174,26 @@ class SourceMoveInputRepository:
                 return False
             ids = [entry.get("file_id") if isinstance(entry, dict) else None for entry in scope["files"]]
             if any(type(i) is not int or i <= 0 for i in ids) or len(set(ids)) != len(ids) or file_id in ids:
+                return False
+            logical_ids = set(ids)
+            if not isinstance(targets, list) or not isinstance(scope.get("leaves"), list):
+                return False
+            if len(targets) != len(scope["leaves"]) or any(not isinstance(leaf, dict) for leaf in scope["leaves"]):
+                return False
+            # The plan manifest is frozen separately from the expanded logical files.
+            # Do not rely on one representation if the other contradicts it.
+            frozen = {_digest(target) for target in targets}
+            leaves = {_digest(leaf.get("target")) for leaf in scope["leaves"]}
+            if (
+                frozen != leaves
+                or len(frozen) != len(targets)
+                or any(
+                    not isinstance(target, dict)
+                    or type(target.get("file_id")) is not int
+                    or target["file_id"] not in logical_ids
+                    for target in targets
+                )
+            ):
                 return False
             # Logical scope includes skipped versions and folder descendants. An empty
             # or truncated physical ledger alone cannot prove that an input is unrelated.
