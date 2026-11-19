@@ -23,7 +23,7 @@ from bisheng.database.models.audit_log import AuditLog, AuditLogDao, EventType, 
 from bisheng.database.models.department import DepartmentDao
 from bisheng.database.models.flow import Flow, FlowDao, FlowType
 from bisheng.database.models.group import Group
-from bisheng.database.models.group_resource import ResourceTypeEnum
+from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.role import Role
 from bisheng.database.models.session import MessageSession, MessageSessionDao
