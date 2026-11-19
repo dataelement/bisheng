@@ -322,12 +322,12 @@ test('saved choices drop children removed from the configured tool group', async
 });
 
 test.each(['dalle_image_generator', 'image_generation'])('image tool %s uses the shared display name', async (toolKey) => {
-  const imageTools = [{ id: 4, name: 'Dalle3 drawing', is_preset: 1,
+  const imageTools = [{ id: 4, name: 'Image generation', is_preset: 1,
     children: [{ id: 4, tool_key: toolKey }] }];
   render(<RecoilRoot><ChatResourceMenu value={[]} onChange={jest.fn()}
     availableTools={imageTools} showTools /></RecoilRoot>);
   await openMenu();
   await openTools();
-  expect(screen.getByRole('menuitemcheckbox', { name: 'tool:tools.dalle_image_generator.name' })).toBeInTheDocument();
-  expect(screen.queryByText('Dalle3 drawing')).toBeNull();
+  expect(screen.getByRole('menuitemcheckbox', { name: 'tool:tools.image_generation.name' })).toBeInTheDocument();
+  expect(screen.queryByText('Image generation')).toBeNull();
 });

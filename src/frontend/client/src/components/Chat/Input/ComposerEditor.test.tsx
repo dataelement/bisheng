@@ -258,7 +258,7 @@ test('deleting and restoring the tag DOM token preserves its space and tag metad
 });
 
 test('cached tool names use display labels without changing execution metadata', () => {
-    const cached = [{ id: 4, name: 'Dalle3 drawing', children: [{ id: 4, tool_key: 'dalle_image_generator' }] }];
+    const cached = [{ id: 4, name: 'Image generation', children: [{ id: 4, tool_key: 'dalle_image_generator' }] }];
     const update = jest.fn();
     function CachedToolHarness() {
         const binding = useComposerReferences([], [], () => {}, undefined, cached, update, () => 'Image generation');
@@ -267,7 +267,7 @@ test('cached tool names use display labels without changing execution metadata',
     render(<CachedToolHarness />);
     const editor = screen.getByRole('textbox');
     expect(editor).toContainElement(screen.getByText('Image generation'));
-    expect(screen.queryByText('Dalle3 drawing')).toBeNull();
+    expect(screen.queryByText('Image generation')).toBeNull();
     expect(readComposerDocument(editor)).toEqual({ text: 'Draw a cat', keys: ['tool:4'] });
     expect(cached[0].children[0].tool_key).toBe('dalle_image_generator');
     expect(update).not.toHaveBeenCalled();
@@ -275,8 +275,8 @@ test('cached tool names use display labels without changing execution metadata',
 
 test('reference label changes update existing tokens without replacing them or prompt text', () => {
     const props = { value: 'Draw a cat', onChange: jest.fn(), onReferencesChange: jest.fn(), onKeyDown: () => {}, placeholder: 'Write' };
-    const { rerender } = render(<ComposerEditor {...props} references={[{ key: 'tool:4', kind: 'tool', label: 'Dalle3 drawing' }]} />);
-    const token = screen.getByText('Dalle3 drawing').closest('[data-composer-reference]');
+    const { rerender } = render(<ComposerEditor {...props} references={[{ key: 'tool:4', kind: 'tool', label: 'Image generation' }]} />);
+    const token = screen.getByText('Image generation').closest('[data-composer-reference]');
     rerender(<ComposerEditor {...props} references={[{ key: 'tool:4', kind: 'tool', label: 'Image generation' }]} />);
     expect(screen.getByText('Image generation').closest('[data-composer-reference]')).toBe(token);
     expect(token).toHaveAttribute('title', 'Image generation');

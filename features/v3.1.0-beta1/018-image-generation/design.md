@@ -30,7 +30,7 @@ DSH 当前生成函数只接收第一张 Base64 图片并保存到本地工作�
 ### 当前实现
 
 - `gpts/load_tools.py` 为新旧工具键注册同一 Images 工厂；model、上传回调及旧协议识别字段均登记为可选参数。历史默认 `dall-e-3` 仅用于兼容。
-- `ImageGeneration.tsx` 替换 `Dalle3.tsx`，提供地址、Key、模型和代理；ToolSet 按新旧工具键分发，名称翻译保留旧键。
+- `ImageGeneration.tsx` 替换 `image_generation.tsx`，提供地址、Key、模型和代理；ToolSet 按新旧工具键分发，名称翻译保留旧键。
 - `ToolServices.update_tool_config` 复用 Key 掩码合并后规范化图像配置，无效配置使用工具错误码 15033；ToolExecutor 每次图像调用先走现有执行权限检查，再创建局部实例。
 - MinIO 已支持 bytes 上传和签名链接；上传时需要调用方使用既有租户前缀能力，不会自动补前缀。
 
@@ -60,7 +60,7 @@ DSH 当前生成函数只接收第一张 Base64 图片并保存到本地工作�
 
 - 运行逻辑集中到新 `gpts/tools/image_generation/tool.py`，替换旧 DALL-E 工具和 Azure wrapper；新旧工具键共用同一工厂。旧键保留原调用名，新键使用 `image_generation`。
 - 现有 load_tools、ToolServices、ToolExecutor 只增加必要接入；模型列表/详情继续用既有 JsonFieldMasker，包括历史图像子项 extra 的脱敏。配置无效复用工具模块错误机制，不新增错误体系。
-- `Dalle3.tsx` 改名为 `ImageGeneration.tsx`，现有 ToolSet 和工具列表按新旧 tool_key 识别。原应用无需重新添加工具；保存失败保留草稿。
+- `image_generation.tsx` 改名为 `ImageGeneration.tsx`，现有 ToolSet 和工具列表按新旧 tool_key 识别。原应用无需重新添加工具；保存失败保留草稿。
 - 新安装种子使用新键，现有 DB ID/旧键不迁移；新旧翻译键都显示“图像生成”。修改共享 locale 源文件后构建产物，不逐份手工维护。
 
 ## 5. 已知坑

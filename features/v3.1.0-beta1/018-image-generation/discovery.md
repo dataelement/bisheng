@@ -4,7 +4,7 @@
 
 ## 已确认需求
 
-- 将 Dalle3 绘画重构为通用 `image_generation` 工具。
+- 将 image_generation 绘画重构为通用 `image_generation` 工具。
 - 管理员可以替换 provider 和模型。
 - 只支持 OpenAI 兼容图片接口（自定义 Base URL 和模型），去掉 Azure。
 - 遵循本轮用户对小功能的要求：优先复用现有配置、工具加载和存储能力，保持文件和核心测试数量精简。
@@ -13,8 +13,8 @@
 
 - `src/backend/bisheng_langchain/gpts/load_tools.py` 的 `_get_dalle_image_generator` 将 OpenAI 模型写死为 `dall-e-3`，根据 `azure_endpoint` 判断 Azure，注册键为 `dalle_image_generator`。
 - `src/backend/bisheng_langchain/gpts/tools/dalle_image_generator/tool.py` 的工具输入为 `query`，直接返回旧 LangChain DALL-E wrapper 的输出。
-- `src/frontend/platform/src/pages/BuildPage/tools/builtInTool/Dalle3.tsx` 只有 OpenAI/Azure 配置，未提供模型输入；保存时也未持久化显式 provider 字段。
-- `ToolSet.tsx` 根据 `Dalle3绘画` 名称选择设置表单；预置工具数据及翻译仍有旧名称/键。
+- `src/frontend/platform/src/pages/BuildPage/tools/builtInTool/image_generation.tsx` 只有 OpenAI/Azure 配置，未提供模型输入；保存时也未持久化显式 provider 字段。
+- `ToolSet.tsx` 根据 `图像生成` 名称选择设置表单；预置工具数据及翻译仍有旧名称/键。
 - 因此仅在 UI 增加模型输入不足以完成重构，须同时处理加载、配置、显示及历史兼容。
 
 ## 已确认的产品范围

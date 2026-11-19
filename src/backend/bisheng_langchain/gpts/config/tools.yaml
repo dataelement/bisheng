@@ -18,7 +18,7 @@
     MINIO_ENDPOINT: 192.168.106.116:9000
     SCHEMA: false
 
-- type: dalle_image_generator
+- type: image_generation
   # 5. 使用OpenAI的DALL-E模型生成图像的工具
   openai_api_key: 
   openai_proxy:

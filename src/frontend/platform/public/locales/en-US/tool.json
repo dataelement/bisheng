@@ -397,7 +397,7 @@
       "desc": "Send messages to WeCom groups via robots",
       "name": "WeCom"
     },
-    "Dalle3绘画": {
+    "图像生成": {
       "name": "Image generation",
       "desc": "Generate images from a prompt using the configured service and model."
     },
