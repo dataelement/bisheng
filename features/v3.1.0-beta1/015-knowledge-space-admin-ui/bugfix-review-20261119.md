@@ -37,3 +37,11 @@
 没有部署到 116，没有进行真实 OpenFGA 权限矩阵或浏览器端联调验收。上述为本地服务/组件回归与静态质量检查，不代表线上验收。
 
 ## Overall: PASS
+
+## 同日补充：下载入口去重
+
+按用户确认，仅删除 Platform `SpaceDirectoryRow` 三点菜单中重复的下载项；行上的下载按钮、权限检查、下载回调及 API 保留。共享组件同时覆盖列表和卡片展示，设计现状已同步。
+
+按七维清单复核，未发现本次新增的权限、并发、信息泄漏、边界或代码风格问题。现有列表回归 31 项通过；连同文件 API 契约选择共 48 passed / 1 failed。使用临时 Vitest 加载插件恢复基线 `3ed7364d4a` 的唯一修改组件、对相同选择重跑，仍为 48 passed / 1 failed；失败均为 folder-parent 请求 spy 期望一个参数、实际额外传 `undefined` 的原有断言。下载接口用例通过，无新增失败。未新增测试文件。
+
+完整 `pnpm lint`、`pnpm typecheck`、arch-guard 和 diff whitespace 检查通过。没有真实浏览器或部署验收。本次审查结论：**PASS_WITH_WARNINGS**（已有接口断言失败）。
