@@ -50,6 +50,7 @@ async def web(datasets, monkeypatch):
     web = datasets
     web.user.user_name = "ordinary dataset operator"
     web.menu = True
+    web.model_menu = False
     web.tenant_admin = False
     web.objects = Objects()
     web.app.dependency_overrides[UserPayload.get_login_user] = lambda: web.user
@@ -60,8 +61,8 @@ async def web(datasets, monkeypatch):
     web.app.dependency_overrides[UserPayload.get_tenant_admin_user] = model_gate
 
     async def menu(user_id, key):
-        assert user_id == web.user.user_id and key == "dataset"
-        if not web.menu:
+        assert user_id == web.user.user_id and key in {"dataset", "model"}
+        if not (web.menu if key == "dataset" else web.model_menu):
             raise UnAuthorizedError.http_exception()
 
     web.menu_check = AsyncMock(side_effect=menu)
@@ -177,9 +178,9 @@ async def test_upload_from_old_tenant_cannot_be_used_after_reassignment(web):
 
 
 @pytest.mark.parametrize("path", ["/job", "/gpu", "/server/filters", "/model/list?server_id=1"])
-async def test_dataset_menu_does_not_grant_model_management(web, path):
+async def test_dataset_menu_does_not_grant_finetune_tasks(web, path):
     response = await web.client.get("/api/v1/finetune" + path)
-    assert response.json()["status_code"] == 19801
+    assert response.status_code == 403
 
 
 @pytest.fixture
@@ -308,7 +309,7 @@ async def test_unknown_or_foreign_personal_uploads_are_not_signed(web, url):
 
 
 async def test_personal_model_uploads_stay_downloadable_only_in_their_original_scope(web):
-    web.app.dependency_overrides[UserPayload.get_tenant_admin_user] = lambda: web.user
+    web.model_menu = True
     uploaded = result(await web.client.post("/api/v1/finetune/job/file", files={"files": ("training.json", b"[]")}))[0]
     assert "/60/849/" in uploaded["url"]
     result(await web.client.get("/api/v1/finetune/job/file/download", params={"file_url": uploaded["url"]}))
