@@ -174,6 +174,7 @@ async def apply_repairs(plan, *, sessions, client, runtime, operator_id):
 
     receipts = []
     repository = ProjectionRepository(sessions)
+    identity = checksum(plan)[:32] if plan.get("initializations") else None
     for item in plan.get("initializations", ()):
         row = item["file"]
         mode = {
@@ -185,7 +186,7 @@ async def apply_repairs(plan, *, sessions, client, runtime, operator_id):
             "parent_id": str(row["knowledge_id"]),
         }
         target = target_for(mode)
-        key = f"history-initialize:{checksum(plan)[:32]}:{row['id']}"
+        key = f"history-initialize:{identity}:{row['id']}"
         with tenant_execution_scope(row["tenant_id"]):
             existing = await repository.aget_operation_by_idempotency(key)
             async with global_session(sessions) as session:

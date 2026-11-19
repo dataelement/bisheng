@@ -238,6 +238,36 @@ async def test_unknown_result_after_native_initialization_resumes_same_receipt(h
         assert len(operations) == 1 and operations[0].status == "FINALIZED"
 
 
+async def test_many_initializations_hash_complete_frozen_plan_only_once(history, monkeypatch):
+    await seed(history)
+    async with script.global_session(history.sessions) as session:
+        session.add(
+            KnowledgeFile(
+                id=92,
+                tenant_id=101,
+                knowledge_id=10,
+                user_id=7,
+                file_name="second-successful",
+                file_type=1,
+                status=2,
+                file_level_path="",
+            )
+        )
+    plan = await script.capture(history.sessions, history.fga)
+    assert len(plan["initializations"]) == 2
+    original, calls = script.checksum, []
+
+    def checksum(value):
+        calls.append(id(value))
+        return original(value)
+
+    monkeypatch.setattr(script, "checksum", checksum)
+    await permissions.apply_repairs(
+        plan, sessions=history.sessions, client=history.fga, runtime=history.runtime, operator_id=7
+    )
+    assert calls == [id(plan)]
+
+
 @pytest.mark.parametrize("count", [200, 400])
 async def test_global_absence_proofs_use_four_queries_per_bounded_batch(history, count):
     statements = []
