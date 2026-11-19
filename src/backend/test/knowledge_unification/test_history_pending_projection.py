@@ -162,14 +162,18 @@ async def seed_builtin(history, status="FAILED_CLOSED", ident=8000):
 
 
 @pytest.mark.parametrize("status", ["FAILED_CLOSED", "COMMITTED"])
-async def test_after_only_native_finalize_and_resume_has_no_fga_writes(history, status):
+async def test_after_only_native_finalize_and_resume_has_no_fga_writes(history, status, tmp_path):
     pin = await seed_builtin(history, status)
     items = await permissions.capture_builtin_finalizations(history.sessions, history.fga, pin)
     assert len(items) == 1 and items[0]["preview"]["observed_state"] == "AFTER"
     writes = history.fga.writes
+    path = tmp_path / "plan.json"
+    plan = {"schema": 3, "pin": pin, "builtin_finalizations": items}
+    script.save_plan(path, plan)
+    assert script.load_plan(path) == plan and path.stat().st_mode & 0o777 == 0o600
     for _ in range(2):
         assert await permissions.apply_builtin_finalizations(
-            {"pin": pin, "builtin_finalizations": items}, sessions=history.sessions, runtime=history.runtime
+            script.load_plan(path), sessions=history.sessions, runtime=history.runtime
         ) == [8000]
     assert history.fga.writes == writes
     assert not await permissions.capture_builtin_finalizations(history.sessions, history.fga, pin)

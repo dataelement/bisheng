@@ -430,7 +430,7 @@ async def builtin_finalization_fact(sessions, service, mode, pin):
         if preview.observed_state != "AFTER" or preview.correction_deltas:
             blocked("builtin_finalization_requires_graph_mutation")
         fact.update(mode=mode, sql=sql, preview=asdict(preview))
-    return operation, fact
+    return operation, canonical(fact)
 
 
 async def capture_builtin_finalizations(sessions, client, pin):
