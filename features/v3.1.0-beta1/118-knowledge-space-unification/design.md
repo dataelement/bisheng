@@ -56,6 +56,8 @@
 
 ## 3. 关键方案选择
 
+2026-11-19 升级操作收敛（AC-129–134）：DBA 完成一致备份并通知升级负责人，脚本不接收或校验外部备份/schema 证明。新 Run 直接盘点实际结构、全租户业务/权限/引用并冻结自己的快照、计划和 checkpoint；选中行及孤儿内容的精确备份仍保留。未选择自动伪造描述符或把全量备份封装为迁移凭据：它们无法证明备份可恢复，且增加人工操作。只有将来明确要求自动备份/恢复编排时才重审这项职责；当前脚本不启停服务、不检测停服。
+
 2026-11-19 迁移性能修复：历史准备保留完整 schema-1 摘要，用主键分页、私有临时 SQLite 索引及流式编码替代全量 payload 复制；权限 namespace 每至多 100 个完整资源计划原子提交并推进原累计前缀 checkpoint。未选择全内存缓存或抽样替代完整性校验。真实修复保留加锁复核，旧单资源前缀可续跑，提交结果未知仍恢复原 Run。若单批关联来源/选中修复计划超过维护机容量，或需要在线迁移，再单独重审分片/持久计划协议；当前停服及冻结合同不变。
 
 2026-11-18 模型共享读取兼容：OpenFGA 无条件 tuple 的 `condition` 可缺省或为 `null`；共享 owner 仅接受这两种精确字段形状，拒绝真实条件和未知字段，不在通用客户端剥离 condition。若未来引入有条件的共享模型，必须先定义条件授权合同，再重新评估此限制。已知坑及验证见[空 condition 热修复记录](../../../docs/reviews/2026-11-18-model-sharing-null-condition-fix.md)。
@@ -582,12 +584,20 @@ flowchart TD
 - 只把存量 NORMAL 转为 SPACE，原 `knowledge.id`、file ID、owner、tenant、model、collection_name、index_name 和文件对象地址不改；已有 SPACE 保持。
 - 缺少逻辑文档/版本的文件补 V1 主版本，建立前先按 file 查已有版本关联；重复 run 命中已有映射。损坏或多重关联先进入异常，不能简单重复插入。
 - 标签业务类型与关联归属按已有空间体系转换，保留标签内容；实际枚举和值在执行前 inventory，避免假设库文件 tag 与空间文件 tag 完全一致。
-- 资源转换不调用解析/embedding，不重写正常资源ES/Milvus数据或替换索引绑定。新M2以SQL业务事实、权限和引用为迁移依据；普通资源不查询ES/Milvus的存在性、结构或数量，也不对正常文件逐个MinIO stat。底层检索服务健康与SQL/向量生命周期差异由独立诊断处理，不作为本轮迁移门槛。对象存储仍承载正式迁移证据及备份/schema材料。
+- 资源转换不调用解析/embedding，不重写正常资源ES/Milvus数据或替换索引绑定。新M2以SQL业务事实、权限和引用为迁移依据；普通资源不查询ES/Milvus的存在性、结构或数量，也不对正常文件逐个MinIO stat。底层检索服务健康与SQL/向量生命周期差异由独立诊断处理，不作为本轮迁移门槛。对象存储仍承载正式迁移快照、计划和检查点引用；不再要求 DBA 备份/schema 证明对象。
 - **新旧物理盘点合同**：新baseline/plan metadata均显式写`physical_inventory_policy=bindings_only`，资源记录仍冻结原`index_name/collection_name`并由SQL转换重验；不生成虚假的physical事实或“已验证底层一致”证明。解码时两根策略必须一致，新策略拒绝任何physical叶页（包括空页）。旧metadata无该字段时沿原完整physical记录及`physical_index_retention`合同校验，不重写原基线、不要求重连底层存储；原旧索引零SQL文件证明仍在M3消费前核对。
 - **历史孤儿精确清理独立保留**：M2前准备脚本仅在已有可靠原绑定、无有效或不明下游且选中清理的文件集合非空时，备份并精确删除对象与索引切片；无法证明范围仍阻断，不删除整个共享索引/集合。取消正常资源全库盘点不等于跳过该删除范围校验。
-- **真正的只读预检**：新Run默认preview调用与正式M2相同的业务/权限/引用盘点和完整分页图验证；临时页使用0700本地一次性目录、0600文件和原canonical/hash校验，结束或失败即删除，不写MinIO页、不冻结SQL Run、不写FGA。成功输出`validation_scope=current_inventory/preflight_complete=true/frozen=false/ready=false`，不暴露临时descriptor。备份/schema材料仍必须与当次环境、writer和当前租户集合一致；预览与正式执行之间必须重新扫描，不能把临时页作为apply或resume的凭据。
+- **真正的只读预检**：新Run默认preview调用与正式M2相同的业务/权限/引用盘点和完整分页图验证；临时页使用0700本地一次性目录、0600文件和原canonical/hash校验，结束或失败即删除，不写MinIO页、不冻结SQL Run、不写FGA。成功输出`validation_scope=current_inventory/preflight_complete=true/frozen=false/ready=false`，不暴露临时descriptor。预检仍核对实际结构、环境、writer和当前租户集合；不读取外部 DBA 备份/schema 证明。预览与正式执行之间必须重新扫描，不能把临时页作为apply或resume的凭据。
 - 已有冻结Run的preview仍读取原不可变图，输出`validation_scope=frozen_run/preflight_complete=false`；迁移中的原租户集合一致规则不放宽。fresh扫描第二事务若发现同名Run已被并发冻结，明确拒绝，不将历史复核冒充当前全扫描。116当前已迁移，现状扫描不能替代旧版快照的转换演练。
 - `is_released=false`，不新增全员可见，不调用会删除授权的普通 `clear_space_authorization_for_private`。`auth_type` 的目标值根据实际授权计划决定，不能仅写 PRIVATE 即认为完成权限迁移。
+
+#### 外部备份职责与新旧 Run 输入（2026-11-19）
+
+- CLI 必填仍为 Run 和环境，writer 默认 `f118-v1`；连接由原服务配置决定。新 Run 不接收 `--backup-ref/--schema-ref`，不要求本地 `f118-inputs.json`，实际 schema 预检与业务/权限/引用校验保留。
+- 新 baseline/plan 根同时记录 `external_material_policy=not_required`，历史字段 `backup_ref/schema_ref` 同时为 `null`。codec 仅在该显式策略下接受空值，未知策略、策略与非空描述符混合、旧格式直接改成空值均拒绝；两根策略必须一致。内部旧调用若明确提供一对历史描述符，保留原字节格式作兼容身份字段，不再把其指向对象当作备份证明读取。
+- 原冻结 Run 不改字节、哈希或检查点。图读取器先从原哈希校验的 plan 根读取历史字段，调用者省略时沿用原值；显式提供旧参数只作为原字段断言，变化即拒绝。后续完整读取 baseline/plan 图，继续核对环境、writer、租户摘要、基线引用、权限 pin 和所有迁移事实；外部 DBA 证明对象不再读验。CLI 新 Run 显式传入旧证明参数会拒绝，提示其仅属于已有 Run 的兼容入口。
+- 断点恢复沿原 Run、原环境、writer、操作者和 checkpoint；冻结前失败不带 `--resume`，冻结后使用 `--apply --resume`。不新增 SQL 表、迁移 revision、外部依赖或自动初始化行为，不改变批量提交/锁/事务次序。
+- 已知坑：只删 CLI 必填会在 codec 和冻结图读验处失败；给旧 Run 补新策略会改变原哈希。处理点为 `unification_inventory_codec._validate`、`UnificationInventoryApplication.aiter_frozen_pages`，不能靠伪造描述符、重新 freeze 或重置台账兼容。
 
 ### 7.3 SQL 授权与 FGA 的同步转换
 
@@ -1232,3 +1242,7 @@ Mode编译只迁移原before已存在的技术标记，permission_enabled/custom
 ### 修订历史：2026-11-19 迁移性能修复
 
 经用户确认脚本规模审查规则后，修复历史准备的逐项存在性/明细查询、重复扫描与 payload 复制、空操作加锁，以及权限 namespace 的逐资源事务和制品上传即时重复回读。同步 §3/4/5、脚本 README 与脚本目录 AGENTS。schema-1 摘要和 Run 恢复格式保持兼容；详细量测及现存边界见[修复审查记录](../../../docs/reviews/v310b1-migration-performance-fix-20261119.md)。
+
+### 修订历史：2026-11-19 升级备份证明取消
+
+按用户“DBA备份通知即可、脚本按停服步骤完成升级”及“修改脚本”的要求，同步 §3、§7.2、CLI、原生盘点、冻结图解码和操作文档。新 Run 无外部 DBA 证明；旧 Run 从原图读取身份字段，保留实际数据/结构校验及检查点。实现验证和未执行的真实中间件演练见[本轮记录](../../../docs/reviews/f118-upgrade-without-dba-evidence-20261119.md)。

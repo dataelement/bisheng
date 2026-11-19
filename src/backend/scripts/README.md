@@ -1693,7 +1693,8 @@ digest without requesting write locks. Real repairs retain the locked recheck.
 ### Formal stopped-service migration
 
 Run from `src/backend` after the operator has stopped all business writers and
-created the immutable backup/schema evidence artifacts. Use the same `config`
+received DBA confirmation that the consistent backup is complete. No backup/schema
+evidence descriptors or `f118-inputs.json` are required. Use the same `config`
 as the service. For a new Run, default preview executes the same complete
 SQL/permission/six-source inventory and plan validation as fresh M2, without
 SQL/FGA/MinIO writes or freezing a Run. Private local scratch pages are removed
@@ -1701,11 +1702,11 @@ on success or failure. Output is `validation_scope=current_inventory`,
 `preflight_complete=true`, `frozen=false`, `ready=false`; passing preflight is
 not a completed migration or permission publication.
 
-The supplied backup/schema artifacts must belong to this Run/environment/writer
-and the current tenant inventory. Materials for an earlier 30-tenant scope
-cannot be reused as evidence for a new 31-tenant scope. If another process
-freezes this Run between the CLI lookup and scanning, fresh preview stops
-instead of reporting the frozen graph as a complete current-data scan.
+DBA/operations own the actual backup and restore verification; this script does
+not inspect or attest it. Actual schema, tenant, business, permission and reference
+checks remain mandatory. If another process freezes this Run between the CLI
+lookup and scanning, fresh preview stops instead of reporting the frozen graph
+as a complete current-data scan.
 
 For an existing frozen Run, preview validates its original graph and reports
 `validation_scope=frozen_run`, `preflight_complete=false`. `--resume` requires
@@ -1723,21 +1724,23 @@ ES/Milvus existence, schema or count queries, or per-file MinIO stat. Physical
 store health and SQL/vector inconsistencies are separate diagnostics. The
 historical preparation above still requires exact payload backup/deletion when
 an approved orphan cleanup needs it; missing cleanup evidence remains blocking.
-MinIO reads of backup/schema and frozen migration artifacts remain necessary.
+MinIO reads of frozen migration artifacts remain necessary. New metadata records
+`external_material_policy=not_required` with null legacy backup/schema fields; no
+DBA evidence objects are created or fetched.
 
 ```bash
-python scripts/unify_knowledge_spaces.py --run-id maintenance-1 --environment production \
-  --backup-ref '{"object_key":"f118/unification/maintenance-1/verification/<hash>.json","sha256":"<hash>"}' \
-  --schema-ref '{"object_key":"f118/unification/maintenance-1/verification/<schema-hash>.json","sha256":"<schema-hash>"}'
+python scripts/unify_knowledge_spaces.py --run-id maintenance-1 --environment production
 ```
 
 Add `--apply --operator-id 7` for the actual M2 freeze, original SQL conversion,
 permission publication, six-source backfill, full reconciliation and persisted
 Coverage certificate. After interruption, repeat the identical arguments with
 `--apply --resume`; this requires the same already-frozen Run and never rebuilds
-its baseline. Old frozen artifacts retain their original codec and evidence
-checks; missing required legacy facts remain blocking rather than being invented
-or bypassed by rewriting the baseline. Output
+its baseline. Old frozen metadata is read internally, without resupplying DBA
+proofs; its original graph hashes, tenant scope, business facts and checkpoints
+remain mandatory. Legacy `--backup-ref/--schema-ref` flags assert original fields
+only for an existing frozen Run; fresh Runs reject them. DBA evidence objects
+are no longer read, including during recovery. Output
 contains the Run/hashes, tenant scope, six-source proofs and the immutable plan
 reference containing the invalid-slot inventory. Nonzero exit preserves the
 checkpoint and never restarts services. Enable business traffic only after the

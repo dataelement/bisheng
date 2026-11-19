@@ -127,7 +127,7 @@ class UnificationSQLConversionApplication:
         physical, retained = {}, {tenant: [] for tenant in frozen.tenant_ids}
         structural = {tenant: [] for tenant in frozen.tenant_ids}
         # Exhaust the entire verified graph, including late non-SQL leaves and
-        # backup/schema materials, before opening any business-write transaction.
+        # original frozen metadata, before opening any business-write transaction.
         async for page in self.reader.aiter_frozen_pages(
             frozen, environment=environment, backup_ref=backup_ref, schema_ref=schema_ref
         ):

@@ -234,34 +234,6 @@ class UnificationInventoryApplication:
         self.permissions = PermissionMigrationSnapshotRepository()
         self.preflight = UnificationPreflight(permissions=self.permissions, inventory=self.raw)
 
-    async def _materials(
-        self, *, run_id, writer_contract_version, environment, tenant_ids, backup_ref, schema_ref, current
-    ):
-        for material_kind, descriptor in (("backup", backup_ref), ("schema", schema_ref)):
-            content = await self.store.aload_canonical(descriptor, run_id=run_id, kind="verification")
-            current()
-            page = decode_inventory_page(
-                content,
-                run_id=run_id,
-                section="evidence",
-                scope="global",
-                tenant_id=None,
-                page_index=0,
-                kind="verification",
-            )
-            if not page.records:
-                _blocked("material_manifest_empty")
-            for record in page.records:
-                data = record.data
-                if (
-                    record.record_type != "evidence_material"
-                    or data["material_kind"] != material_kind
-                    or data["environment"] != environment
-                    or data["writer_contract_version"] != writer_contract_version
-                    or data["tenant_inventory_digest"] != digest(tenant_ids)
-                ):
-                    _blocked("material_manifest_identity")
-
     async def _verify_frozen(self, result, *, environment, backup_ref, schema_ref, current, permission_planner=None):
         async for _ in self.aiter_frozen_pages(
             result,
@@ -297,7 +269,6 @@ class UnificationInventoryApplication:
         tenants = frozenset(result.tenant_ids)
         structural = StructuralRetentionInventoryVerifier()
         current = current if current is not None else lambda: None
-        backup_ref, schema_ref = _descriptor(backup_ref), _descriptor(schema_ref)
         baseline, plan = _descriptor(result.baseline_ref), _descriptor(result.plan_ref)
         current()
         plan_root_content = await self.store.aload_canonical(plan, run_id=result.run_id, kind="plan")
@@ -314,6 +285,13 @@ class UnificationInventoryApplication:
         metadata = [record.data for record in plan_root.records if record.record_type == "run"]
         if len(metadata) != 1:
             _blocked("manifest_metadata")
+        # Omitted assertions recover the original opaque fields from the
+        # hash-verified plan, including old Runs. Never recreate DBA evidence
+        # or reclassify an old Run under the new policy. The baseline below
+        # must agree with this same identity and the original ledger hashes.
+        material_policy = metadata[0].get("external_material_policy")
+        backup_ref = metadata[0]["backup_ref"] if backup_ref is None else _descriptor(backup_ref)
+        schema_ref = metadata[0]["schema_ref"] if schema_ref is None else _descriptor(schema_ref)
         preparation_policy = metadata[0].get("preparation_policy_version", 1)
         physical_policy = metadata[0].get("physical_inventory_policy", "legacy_physical")
         physical = PhysicalRetentionInventoryVerifier(policy=physical_policy)
@@ -401,6 +379,8 @@ class UnificationInventoryApplication:
                         _blocked("frozen_policy_changed")
                     if value.get("physical_inventory_policy", "legacy_physical") != physical_policy:
                         _blocked("frozen_physical_policy_changed")
+                    if value.get("external_material_policy") != material_policy:
+                        _blocked("frozen_material_policy_changed")
                     expected = {
                         "writer_contract_version": result.writer_contract_version,
                         "environment": environment,
@@ -444,15 +424,6 @@ class UnificationInventoryApplication:
         permissions.finish()
         physical.finish()
         structural.finish()
-        await self._materials(
-            run_id=result.run_id,
-            writer_contract_version=result.writer_contract_version,
-            environment=environment,
-            tenant_ids=result.tenant_ids,
-            backup_ref=backup_ref,
-            schema_ref=schema_ref,
-            current=current,
-        )
 
     async def _tenant(self, session, pages, source_inventory, permission_planner, tenant, identity, planned_at):
         context = await source_inventory.aprepare_tenant_context(session, **identity)
@@ -593,8 +564,8 @@ class UnificationInventoryApplication:
         run_id,
         writer_contract_version,
         environment,
-        backup_ref,
-        schema_ref,
+        backup_ref=None,
+        schema_ref=None,
         freeze=True,
     ) -> FrozenGlobalInventoryResult:
         if type(freeze) is not bool:
@@ -624,7 +595,12 @@ class UnificationInventoryApplication:
         self.runs._identity(run_id, writer_contract_version)
         if type(environment) is not str or not environment or len(environment) > 128:
             _blocked("environment")
-        backup_ref, schema_ref = _descriptor(backup_ref), _descriptor(schema_ref)
+        if (backup_ref is None) != (schema_ref is None):
+            _blocked("material_descriptor_pair_required")
+        if backup_ref is not None:
+            # Backward-compatible internal callers can retain their opaque
+            # legacy metadata. These are no longer backup attestations.
+            backup_ref, schema_ref = _descriptor(backup_ref), _descriptor(schema_ref)
         transaction = TransactionIdentity.capture(session)
 
         def current():
@@ -652,14 +628,6 @@ class UnificationInventoryApplication:
             await self.raw.avalidate_history_prepared(session)
             if not callable(self.reader_factory) or not isinstance(self.store, UnificationArtifactStore):
                 raise ReferenceCoverageNotReadyError(reason="migration_required_native_ports_missing")
-            await self._materials(
-                **identity,
-                environment=environment,
-                tenant_ids=tenant_ids,
-                backup_ref=backup_ref,
-                schema_ref=schema_ref,
-                current=current,
-            )
             await self.raw.avalidate_global_orphans(session)
             await self.raw.avalidate_registered_source_tenants(session)
             await self.preflight.resources.avalidate_global_integrity(session)
@@ -715,6 +683,8 @@ class UnificationInventoryApplication:
                 "backup_ref": backup_ref,
                 "schema_ref": schema_ref,
             }
+            if backup_ref is None:
+                common["external_material_policy"] = "not_required"
             baseline = await pages.manifest(
                 "baseline",
                 record_from_values(
