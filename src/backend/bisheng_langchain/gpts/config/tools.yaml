@@ -19,7 +19,7 @@
     SCHEMA: false
 
 - type: image_generation
-  # 5. 使用OpenAI的DALL-E模型生成图像的工具
+  # 5. 使用 OpenAI 兼容 Images 接口生成图像的工具
   openai_api_key: 
   openai_proxy:
 

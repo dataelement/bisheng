@@ -397,9 +397,9 @@
       "desc": "企業WeChatボットでグループメッセージを送信するツール",
       "name": "企業WeChat"
     },
-    "图像生成": {
-      "name": "画像生成",
-      "desc": "設定したサービスとモデルで、プロンプトから画像を生成します。"
+    "Dalle3绘画": {
+      "name": "$t(tool:categories.图像生成.name)",
+      "desc": "$t(tool:categories.图像生成.desc)"
     },
     "Jina AI": {
       "desc": "指定されたウェブサイト（PDFをサポート）を大モデルが処理できるMarkdown形式に変換します",

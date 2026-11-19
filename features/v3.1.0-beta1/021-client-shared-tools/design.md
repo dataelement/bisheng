@@ -15,7 +15,7 @@ Small feature：前端增加既有功能的入口，不改变 API、持久化形
 
 打开入口 → GET `/api/v1/tool?is_preset=1&action=visible` → 精确匹配唯一分类 → 校验并解析 extra → 已有工具表单 → 搜索 PUT `/api/v1/tool/{id}/web-search/settings`（revision、providers、custom_secret）；绘图 POST `/api/v1/tool/config`（tool_id、extra）→ 成功后关闭。
 
-密钥掩码沿用工具列表响应和 `JsonFieldMasker.update_json_with_masked`，不增加密钥打印。移除 image_generation 表单既有密钥调试日志，使用 `lint:prune` 自动删除对应 no-console 豁免。
+密钥掩码沿用工具列表响应和 `JsonFieldMasker.update_json_with_masked`，不增加密钥打印。移除 Dalle3 表单既有密钥调试日志，使用 `lint:prune` 自动删除对应 no-console 豁免。
 
 缺失、重复、无效 JSON 均报错；JSON 解析错误转换成通用本地化提示，避免错误消息回显配置内容。
 
