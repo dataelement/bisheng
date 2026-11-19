@@ -9,6 +9,7 @@ import {
   Tooltip,
 } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
+import { History } from "lucide-react";
 import { useContext, useMemo, useState } from "react";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
 import { FileAbnormalStatusCell } from "./FileAbnormalStatusCell";
@@ -22,7 +23,7 @@ import type { KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
 import { formatStrTime } from "@/util/utils";
 import { StatusIndicator } from "./KnowledgeFileStatus";
 import { SpaceDirectoryIcon } from "./SpaceDirectoryIcon";
-import { SpaceVersionHistorySheet } from "./SpaceVersionHistorySheet";
+import { SpaceSimilarDocumentDialog } from "./SpaceSimilarDocumentDialog";
 import { SPACE_FILE_CHECKBOX_CLASS } from "./spaceFileSelectionStyles";
 
 interface SpaceDirectoryRowProps {
@@ -46,9 +47,13 @@ interface SpaceDirectoryRowProps {
   onMove?: () => void;
   onRetry?: () => void;
   onChanged?: () => Promise<unknown>;
+  onOpenVersionHistory?: () => void;
   canDownload?: boolean;
   onDownload: () => void;
 }
+
+type VersionDialog = "manage" | "similar";
+
 export function SpaceDirectoryRow({
   layout,
   scope,
@@ -70,6 +75,7 @@ export function SpaceDirectoryRow({
   onMove,
   onRetry,
   onChanged,
+  onOpenVersionHistory,
   canDownload = false,
   onDownload,
 }: SpaceDirectoryRowProps) {
@@ -104,10 +110,17 @@ export function SpaceDirectoryRow({
       item.has_similar,
     ],
   );
-  const [history, setHistory] = useState<{
-    epoch: typeof epoch;
-    panel: "merge" | "similar" | null;
+  const managementEligible = item.status === 2;
+  const versionEpoch = useMemo(() => ({ epoch, managementEligible }), [epoch, managementEligible]);
+  const [versionDialog, setVersionDialog] = useState<{
+    epoch: typeof versionEpoch;
+    kind: VersionDialog;
   } | null>(null);
+  const activeVersionDialog = epoch.enabled && versionDialog?.epoch === versionEpoch ? versionDialog.kind : null;
+  const handleOpenVersionDialog = (kind: VersionDialog) => setVersionDialog({ epoch: versionEpoch, kind });
+  const handleVersionDialogOpenChange = (next: boolean) => {
+    if (!next) setVersionDialog(null);
+  };
   const [permission, setPermission] = useState<typeof epoch | null>(null);
   const [tagsEditor, setTagsEditor] = useState<typeof epoch | null>(null);
   const menuReady = !loading && !error;
@@ -137,7 +150,7 @@ export function SpaceDirectoryRow({
       item={item}
       indicator
       enabled={historyEnabled}
-      onOpen={(panel) => setHistory({ epoch, panel })}
+      onOpen={handleOpenVersionDialog}
     />
   );
   const status = folder ? (
@@ -247,23 +260,21 @@ export function SpaceDirectoryRow({
                   {t("retry")}
                 </DropdownItem>
               )}
-              {historyEnabled &&
-                menuReady &&
-                item.is_multi_version === true && (
-                  <DropdownItem
-                    icon={<Outlined.History aria-hidden />}
-                    onSelect={() => setHistory({ epoch, panel: null })}
-                  >
-                    {t("f118.version_history")}
-                  </DropdownItem>
-                )}
               <SpaceRowVersionMenu
                 scope={scope}
                 spaceId={spaceId}
                 item={item}
                 enabled={historyEnabled && menuReady && open}
-                onOpen={(panel) => setHistory({ epoch, panel })}
+                onOpen={handleOpenVersionDialog}
               />
+              {historyEnabled && menuReady && item.is_multi_version === true && onOpenVersionHistory && (
+                <DropdownItem
+                  icon={<History aria-hidden />}
+                  onSelect={onOpenVersionHistory}
+                >
+                  {t("knowledge.version.history.title", { ns: "shared" })}
+                </DropdownItem>
+              )}
               {menuReady && actions.includes("delete") && (
                 <>
                   <DropdownItem
@@ -332,28 +343,28 @@ export function SpaceDirectoryRow({
           }}
         />
       )}
-      <SpaceVersionHistorySheet
-        scope={epoch.scope}
-        spaceId={epoch.spaceId}
-        parentId={epoch.parentId}
-        fileId={epoch.fileId}
-        file={{
-          id: item.id,
-          name: item.file_name,
-          version_no: item.version_no,
-          user_name: item.user_name,
-        }}
-        hasSimilar={
-          item.has_similar === true &&
-          item.is_multi_version !== true &&
-          item.status === 2
-        }
-        open={epoch.enabled && history?.epoch === epoch}
-        initialPanel={history?.epoch === epoch ? history.panel : null}
-        onOpenChange={(next) => {
-          if (!next) setHistory(null);
-        }}
-      />
+      {activeVersionDialog === "manage" && (
+        <SpaceSimilarDocumentDialog
+          scope={epoch.scope}
+          spaceId={epoch.spaceId}
+          fileId={epoch.fileId}
+          file={{
+            id: item.id,
+            name: item.file_name,
+            version_no: item.version_no,
+            user_name: item.user_name,
+          }}
+          onOpenChange={handleVersionDialogOpenChange}
+        />
+      )}
+      {activeVersionDialog === "similar" && (
+        <SpaceSimilarDocumentDialog
+          scope={epoch.scope}
+          spaceId={epoch.spaceId}
+          restrictToFileIds={[epoch.fileId]}
+          onOpenChange={handleVersionDialogOpenChange}
+        />
+      )}
     </>
   );
   const handleOpen = folder ? onOpen : onPreview;
