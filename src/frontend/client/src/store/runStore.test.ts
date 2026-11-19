@@ -1,5 +1,8 @@
 import {
     emptyConversationRunState,
+    reduceClearQueued,
+    reduceClearReplacedRuns,
+    reduceResync,
     reduceRunEvent,
     reduceSendResult,
     RunEvent,
@@ -108,17 +111,19 @@ describe('store/runStore', () => {
         expect(selectIsMessageQueued(CID, 42)(state())).toBe(false);
     });
 
-    it('resync replaces run', () => {
+    it('resync of the run on screen keeps its tool calls and adds only the thinking it missed', () => {
         apply({ type: 'run_started', run_id: 'r1', data: {} });
+        apply({ type: 'thinking', run_id: 'r1', data: { text: 'first ', call_id: 't1' } });
         apply({ type: 'text', run_id: 'r1', data: { text: 'partial' } });
-        apply({ type: 'tool_call', run_id: 'r1', data: { call_id: 't1', name: 'x', status: 'start' } });
+        apply({ type: 'tool_call', run_id: 'r1', data: { call_id: 'k1', name: 'x', status: 'start' } });
+        const before = selectRun(CID)(state())!;
         apply(
             {
                 type: 'resync',
                 run_id: 'r1',
                 data: {
                     text: 'full text',
-                    thinking: 'th',
+                    thinking: 'first second',
                     plan: [{ id: 'a', content: 'A', status: 'pending' }],
                     files: [
                         { file_id: 'f1', name: 'a.md', path: 'p/a.md' },
@@ -130,12 +135,83 @@ describe('store/runStore', () => {
         );
         const run = selectRun(CID)(state())!;
         expect(run.text).toBe('full text');
-        expect(run.thinking.map((s) => s.text)).toEqual(['th']);
-        expect(run.toolCalls).toEqual([]);
+        // The snapshot holds no tool calls: the ones already received stay, same objects.
+        expect(run.toolCalls).toBe(before.toolCalls);
+        expect(run.thinking[0]).toBe(before.thinking[0]);
+        expect(run.thinking.map((s) => [s.text, s.order])).toEqual([
+            ['first ', 0],
+            ['second', 2],
+        ]);
         expect(run.plan).toHaveLength(1);
         expect(run.files).toHaveLength(1);
         expect(run.status).toBe('running');
         expect(selectLastEventId(CID)(state())).toBe('1700000000999-0');
+        expect(state().conversations[CID].replacedRuns).toEqual([]);
+        expect(state().conversations[CID].resyncCount).toBe(1);
+        // Nothing was missed: the segments are left as they are.
+        const again = reduceResync(state().conversations[CID], 'r1', { text: 'full text', thinking: 'first second' });
+        expect(again.run!.thinking).toBe(run.thinking);
+    });
+
+    it('resync of another run starts from the snapshot alone and keeps the replaced run for the page', () => {
+        apply({ type: 'run_started', run_id: 'r1', data: {} });
+        apply({ type: 'text', run_id: 'r1', data: { text: 'old answer' } });
+        apply({ type: 'tool_call', run_id: 'r1', data: { call_id: 'k1', name: 'x', status: 'start' } });
+        state().applyResync(CID, 'r2', { text: 'new', thinking: 'th', plan: [], files: [] }, '1700000000999-0');
+        const conv = state().conversations[CID];
+        expect(conv.run).toMatchObject({ runId: 'r2', text: 'new', toolCalls: [] });
+        expect(conv.run!.thinking.map((s) => s.text)).toEqual(['th']);
+        expect(conv.retiredRunIds).toEqual(['r1']);
+        expect(conv.replacedRuns.map((r) => [r.runId, r.text, r.toolCalls.length])).toEqual([['r1', 'old answer', 1]]);
+    });
+
+    it('keeps the last state of a run that another run takes the place of', () => {
+        // A relay run starts right after the direct answer ended.
+        apply({ type: 'run_started', run_id: 'r1', data: {} });
+        apply({ type: 'text', run_id: 'r1', data: { text: 'answer' } });
+        apply({ type: 'run_finished', run_id: 'r1', data: {} });
+        apply({ type: 'run_started', run_id: 'r2', data: {} });
+        expect(state().conversations[CID].replacedRuns).toMatchObject([{ runId: 'r1', text: 'answer', status: 'finished' }]);
+        // A send starts a new run before the end of the current one was seen.
+        apply({ type: 'text', run_id: 'r2', data: { text: 'relay' } });
+        state().applySendResult(CID, { run_id: 'r3', disposition: 'started', message_id: 'm' });
+        expect(state().conversations[CID].replacedRuns.map((r) => [r.runId, r.text, r.status])).toEqual([
+            ['r1', 'answer', 'finished'],
+            ['r2', 'relay', 'running'],
+        ]);
+        // The run's own start, an answer to its question and its events replace nothing.
+        apply({ type: 'run_started', run_id: 'r3', data: {} });
+        apply({ type: 'text', run_id: 'r3', data: { text: 'x' } });
+        expect(state().conversations[CID].replacedRuns).toHaveLength(2);
+        state().clearReplacedRuns(CID);
+        expect(state().conversations[CID].replacedRuns).toEqual([]);
+        const cleared = state().conversations[CID];
+        expect(reduceClearReplacedRuns(cleared)).toBe(cleared);
+    });
+
+    it('clears the queued marks the history shows as read and leaves the others', () => {
+        state().applySendResult(CID, { run_id: 'r1', disposition: 'queued', message_id: 'm1' });
+        state().applySendResult(CID, { run_id: 'r1', disposition: 'queued', message_id: 'm2' });
+        const conv = state().conversations[CID];
+        expect(reduceClearQueued(conv, ['m1', 'unknown']).queuedMessages).toEqual({ m2: true });
+        expect(reduceClearQueued(conv, ['unknown'])).toBe(conv);
+        // A resync does not know which messages still wait: it leaves the marks.
+        state().applyResync(CID, 'r1', { text: '', thinking: '', plan: [], files: [] }, '5-1');
+        expect(state().conversations[CID].queuedMessages).toEqual({ m1: true, m2: true });
+        state().clearQueuedMessages(CID, ['m2']);
+        expect(selectIsMessageQueued(CID, 'm2')(state())).toBe(false);
+        expect(selectIsMessageQueued(CID, 'm1')(state())).toBe(true);
+    });
+
+    it('a text delta keeps the thinking and tool call arrays of the run', () => {
+        apply({ type: 'run_started', run_id: 'r1', data: {} });
+        apply({ type: 'thinking', run_id: 'r1', data: { text: 'th', call_id: 't1' } });
+        apply({ type: 'tool_call', run_id: 'r1', data: { call_id: 'k1', name: 'x', status: 'start' } });
+        const before = selectRun(CID)(state())!;
+        apply({ type: 'text', run_id: 'r1', data: { text: 'a' } });
+        const after = selectRun(CID)(state())!;
+        expect(after.thinking).toBe(before.thinking);
+        expect(after.toolCalls).toBe(before.toolCalls);
     });
 
     it('resync with a pending question waits for the answer', () => {

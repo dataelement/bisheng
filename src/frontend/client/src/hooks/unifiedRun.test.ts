@@ -11,7 +11,10 @@ import {
     mergeHistoryWithQueued,
     needsLiveRow,
     parseLegacySendFrames,
+    readQueuedIds,
     reconcileSentMessages,
+    runRowMarks,
+    settleReplacedRun,
     withLiveRun,
 } from './unifiedRun';
 
@@ -213,5 +216,91 @@ describe('history after a run', () => {
         const merged = mergeHistoryWithQueued(history, local, { m2: true });
         expect(merged.map((m) => m.messageId)).toEqual(['1', '2', 'm2']);
         expect(mergeHistoryWithQueued(history, local, {})).toBe(history);
+    });
+});
+
+describe('event log of a long answer', () => {
+    const events: Array<Record<string, unknown>> = [
+        { type: 'run_started' },
+        { type: 'thinking', data: { text: 'plan it', call_id: 't1' } },
+        { type: 'tool_call', data: { call_id: 'k1', name: 'search', status: 'start' } },
+        { type: 'thinking', data: { text: 'read', call_id: 't2' } },
+    ];
+    const next = (run: RunState, event: Record<string, unknown>, i: number): RunState =>
+        reduceRunEvent({ ...emptyConversationRunState(), run }, { run_id: 'r1', data: {}, ...event } as RunEvent, `2-${i}`)
+            .run as RunState;
+
+    it('a text delta returns the same list: nothing is rebuilt', () => {
+        const run = runOf(events);
+        const before = agentEventsOfRun(run);
+        const after = next(run, { type: 'text', data: { text: 'more' } }, 1);
+        expect(after).not.toBe(run);
+        expect(agentEventsOfRun(after)).toBe(before);
+        const rows = [user('q'), bot('run:r1', { liveRunId: 'r1', text: '' })];
+        expect(withLiveRun(rows, run)[1].events).toBe(withLiveRun(rows, after)[1].events);
+    });
+
+    it('a thinking delta or a tool call frame renews only the item it changes', () => {
+        const run = runOf(events);
+        const before = agentEventsOfRun(run);
+        const thought = next(run, { type: 'thinking', data: { text: ' it', call_id: 't2' } }, 1);
+        const afterThinking = agentEventsOfRun(thought);
+        expect(afterThinking[0]).toBe(before[0]);
+        expect(afterThinking[1]).toBe(before[1]);
+        expect(afterThinking[2]).toEqual({ type: 'thinking', content: 'read it' });
+        const called = next(thought, { type: 'tool_call', data: { call_id: 'k1', name: 'search', status: 'end', output: 'found' } }, 2);
+        const afterCall = agentEventsOfRun(called);
+        expect(afterCall[0]).toBe(before[0]);
+        expect(afterCall[2]).toBe(afterThinking[2]);
+        expect(afterCall[1]).toMatchObject({ tool_call_id: 'k1', results: 'found', inflight: false });
+    });
+
+    it('puts a thinking segment before a tool call of the same rank', () => {
+        const run = runOf(events);
+        const tied: RunState = {
+            ...run,
+            thinking: [{ key: 'resync:0', callId: null, namespace: null, text: 'all', order: 0 }],
+            toolCalls: run.toolCalls.map((call) => ({ ...call, order: 0 })),
+        };
+        expect(agentEventsOfRun(tied).map((e) => e.type)).toEqual(['thinking', 'tool_call']);
+    });
+});
+
+describe('a run another run took the place of', () => {
+    it('freezes with its content, as finished, and no tool call left running', () => {
+        const run = runOf([
+            { type: 'run_started' },
+            { type: 'text', data: { text: 'Answer' } },
+            { type: 'tool_call', data: { call_id: 'k1', name: 'search', status: 'start' } },
+        ]);
+        const settled = settleReplacedRun(run);
+        expect(settled.status).toBe('finished');
+        const rows = freezeLiveRun([user('q'), bot('run:r1', { liveRunId: 'r1', text: '' }), user('m2')], settled);
+        expect(rows[1].liveRunId).toBeUndefined();
+        expect(rows[1].text).toBe('Answer');
+        expect(rows[1].events).toMatchObject([{ tool_call_id: 'k1', inflight: false }]);
+        // A run that already ended is taken as it ended.
+        const stopped = runOf([{ type: 'run_started' }, { type: 'run_stopped' }]);
+        expect(settleReplacedRun(stopped)).toBe(stopped);
+    });
+});
+
+describe('queued marks against the stored rows', () => {
+    it('reads the "queued" mark of a history row', () => {
+        expect(runRowMarks({ run_id: 'r1', steer_message_id: 'm1', queued: true })).toEqual({ steerMessageId: 'm1', steerQueued: true });
+        expect(runRowMarks({ run_id: 'r1', steer_message_id: 'm1' })).toEqual({ steerMessageId: 'm1', steerQueued: false });
+        expect(runRowMarks({})).toEqual({});
+    });
+
+    it('names the marked messages whose stored row is no longer queued', () => {
+        const history = [
+            user('1'),
+            user('801', { steerMessageId: 'm1', steerQueued: false }),
+            user('802', { steerMessageId: 'm2', steerQueued: true }),
+            user('803', { steerMessageId: 'm4', steerQueued: false }),
+        ];
+        // m3 has no stored row; m4 is not marked.
+        expect(readQueuedIds(history, { m1: true, m2: true, m3: true })).toEqual(['m1']);
+        expect(readQueuedIds(history, null)).toEqual([]);
     });
 });

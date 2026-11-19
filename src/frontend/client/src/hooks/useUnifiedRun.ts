@@ -33,13 +33,16 @@ import {
     liveTaskRowCandidate,
     mergeHistoryWithQueued,
     needsLiveRow,
+    readQueuedIds,
     reconcileSentMessages,
     removeReturnedMessages,
+    settleReplacedRun,
     shownReturnedIds,
     withLiveRun,
 } from '~/hooks/unifiedRun';
-import { selectConversationRun, useRunStore } from '~/store/runStore';
+import { selectConversationRun, useRunStore, type RunState } from '~/store/runStore';
 import { unreadMessagesOf } from '~/store/runUnread';
+import { handedReturnedIds, rememberHandedReturnedIds } from '~/utils/returnedMessageLog';
 
 type MessagesUpdater = ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[]);
 
@@ -103,6 +106,11 @@ async function isRunRecordInProgress(conversationId: string, versionId: string):
     } catch {
         return false;
     }
+}
+
+/** Localized copy for the failure of a run; '' for a run that did not fail. */
+function failureTextOf(run: RunState): string {
+    return run.status === 'failed' ? translateApiErrorMessage({ status_code: run.error?.code ?? undefined }) : '';
 }
 
 const REJECTED: UnifiedSendResult = {
@@ -179,6 +187,11 @@ export function useUnifiedRun(options: UseUnifiedRunOptions) {
                         retry();
                         return;
                     }
+                    const store = useRunStore.getState();
+                    store.clearQueuedMessages(
+                        targetCid,
+                        readQueuedIds(history, store.conversations[targetCid]?.queuedMessages),
+                    );
                     setMessagesFor(targetCid, (prev) =>
                         // A newer send or run owns the list now; its own end reloads it.
                         prev.some((m) => m.liveRunId !== undefined) ? prev : composeHistory(targetCid, history, prev),
@@ -229,15 +242,51 @@ export function useUnifiedRun(options: UseUnifiedRunOptions) {
         // eslint-disable-next-line react-hooks/exhaustive-deps -- asked once per run, not on every delta
     }, [cid, bucketId, runId, active, isLoading, setMessagesFor]);
 
+    // Another run took the place of a run (a relay run after a direct answer,
+    // or a new run started by a send) before this page saw the old one end.
+    // The store no longer describes the old run's row, so the row is frozen
+    // with the last state the store kept for it. The new run owns the list
+    // from here; its own end reloads the history.
+    const replacedCount = conv?.replacedRuns.length ?? 0;
+    useEffect(() => {
+        if (!cid || replacedCount === 0 || bucketId !== cid) return;
+        const store = useRunStore.getState();
+        const replaced = store.conversations[cid]?.replacedRuns ?? [];
+        store.clearReplacedRuns(cid);
+        const ended = replaced.map(settleReplacedRun);
+        for (const old of ended) settledRunsRef.current.add(old.runId);
+        setMessagesFor(cid, (prev) => ended.reduce((rows, old) => freezeLiveRun(rows, old, failureTextOf(old)), prev));
+    }, [cid, bucketId, replacedCount, setMessagesFor]);
+
+    // A resync means events were missed, possibly the `steer_read` that clears
+    // a "queued" mark. The snapshot does not say which messages still wait;
+    // the stored rows do.
+    const resyncCount = conv?.resyncCount ?? 0;
+    useEffect(() => {
+        if (!cid || resyncCount === 0) return undefined;
+        if (Object.keys(useRunStore.getState().conversations[cid]?.queuedMessages ?? {}).length === 0) return undefined;
+        let current = true;
+        getAgentMessages(cid)
+            .then((history) => {
+                if (!current) return;
+                const store = useRunStore.getState();
+                store.clearQueuedMessages(cid, readQueuedIds(history, store.conversations[cid]?.queuedMessages));
+            })
+            .catch(() => {
+                /* the marks stay as they are; the history reload at the end of the run clears them */
+            });
+        return () => {
+            current = false;
+        };
+    }, [cid, resyncCount]);
+
     // The run ended: keep its final state on screen, then take the stored turn.
     const liveRowPresent = !!runId && hasLiveRow(messages, runId);
     useEffect(() => {
         if (!cid || !run || active || !liveRowPresent || bucketId !== cid) return;
         if (settledRunsRef.current.has(run.runId)) return;
         settledRunsRef.current.add(run.runId);
-        const errorText =
-            run.status === 'failed' ? translateApiErrorMessage({ status_code: run.error?.code ?? undefined }) : '';
-        setMessagesFor(cid, (prev) => freezeLiveRun(prev, run, errorText));
+        setMessagesFor(cid, (prev) => freezeLiveRun(prev, run, failureTextOf(run)));
         // A relay run that could not be created stored nothing and its questions
         // were deleted: the history would replace the failure row with the
         // previous turn, so the failure stays on screen as it is.
@@ -248,17 +297,17 @@ export function useUnifiedRun(options: UseUnifiedRunOptions) {
 
     // Unread messages given back (the user stopped the run, or a relay run
     // could not be created): their rows leave the list and their text goes to
-    // the input box. A returned message without a row here was handled in an
-    // earlier visit (the stream replays an ended run) and is dropped.
+    // the input box. The rows may already be gone (the server deletes them, so
+    // a history reload that came first shows none), which is why the text does
+    // not depend on them. A message this browser handed over before is skipped:
+    // the stream replays an ended run on every later visit.
     const returnedCount = conv?.returnedMessages.length ?? 0;
     useEffect(() => {
         if (!cid || returnedCount === 0 || isLoading || bucketId !== cid) return;
         const store = useRunStore.getState();
         const returned = store.conversations[cid]?.returnedMessages ?? [];
-        const shown = shownReturnedIds(
-            messagesRef.current,
-            returned.map((m) => m.message_id),
-        );
+        const ids = returned.map((m) => m.message_id);
+        const shown = shownReturnedIds(messagesRef.current, ids);
         if (shown.size > 0) {
             const ended = store.conversations[cid]?.run ?? null;
             // A relay run that failed before it was seen running has no row yet.
@@ -267,11 +316,13 @@ export function useUnifiedRun(options: UseUnifiedRunOptions) {
             setMessagesFor(cid, (prev) => {
                 const rows = removeReturnedMessages(prev, shown);
                 if (!failedRelay) return rows;
-                const errorText = translateApiErrorMessage({ status_code: failedRelay.error?.code ?? undefined });
-                return addEndedRunRow(rows, failedRelay, senderRef.current, errorText);
+                return addEndedRunRow(rows, failedRelay, senderRef.current, failureTextOf(failedRelay));
             });
         }
-        store.resolveReturnedMessages(cid, shown);
+        const handed = handedReturnedIds();
+        const fresh = new Set(ids.filter((id) => !handed.has(id)));
+        rememberHandedReturnedIds(fresh);
+        store.resolveReturnedMessages(cid, fresh);
     }, [cid, bucketId, returnedCount, isLoading, setMessagesFor]);
 
     const liveMessages = useMemo(

@@ -77,14 +77,14 @@ export function mergeReturnedText(returned: string, current: string): string {
 }
 
 /**
- * The page handled the waiting returned messages. Those whose row was on
- * screen (`shownIds`) hand their text to the input box (`draftReturn`); the
- * others belong to an earlier visit of the conversation (the event stream
- * replays an ended run) and are dropped.
+ * The page handled the waiting returned messages. Those this browser has not
+ * handed to the input box before (`freshIds`) hand their text over
+ * (`draftReturn`); the others were handed over in an earlier visit (the event
+ * stream replays an ended run for an hour) and are dropped.
  */
-export function reduceResolveReturned(conv: ConversationRunState, shownIds: ReadonlySet<string>): ConversationRunState {
+export function reduceResolveReturned(conv: ConversationRunState, freshIds: ReadonlySet<string>): ConversationRunState {
     if (conv.returnedMessages.length === 0) return conv;
-    const text = joinReturnedText(conv.returnedMessages.filter((m) => shownIds.has(m.message_id)));
+    const text = joinReturnedText(conv.returnedMessages.filter((m) => freshIds.has(m.message_id)));
     const draftReturn = text ? (conv.draftReturn ? `${conv.draftReturn}\n\n${text}` : text) : conv.draftReturn;
     return { ...conv, returnedMessages: [], draftReturn };
 }

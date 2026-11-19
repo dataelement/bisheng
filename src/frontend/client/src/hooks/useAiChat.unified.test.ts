@@ -269,6 +269,42 @@ describe("tenant switch on", () => {
     expect(mockShowToast).not.toHaveBeenCalled();
   });
 
+  it("regenerate sends the question again as a new run and opens no legacy stream", async () => {
+    mockGetAgentMessages.mockResolvedValue([row("101", true, "what is up"), { ...row("102", false, "busy"), parentMessageId: "101", error: true }]);
+    mockSendRunMessage.mockResolvedValue(sendAnswer({ run_id: "r1", disposition: "started", message_id: "103", conversation_id: "c9" }));
+    const { result } = renderChat("c9");
+    await waitFor(() => expect(result.current.messages).toHaveLength(2));
+    await act(async () => {
+      await result.current.regenerate("101");
+    });
+    expect(mockOpenedStreams).toHaveLength(0);
+    expect(mockSendRunMessage).toHaveBeenCalledTimes(1);
+    expect(mockSendRunMessage.mock.calls[0][0]).toMatchObject({ text: "what is up", conversationId: "c9", files: [], task_mode: false });
+    expect(mockSendRunMessage.mock.calls[0][0].isRegenerate).toBeUndefined();
+    expect(result.current.messages.map((m) => m.messageId)).toEqual(["101", "102", "103", "run:r1"]);
+    // The composer is not left behind a page-owned stream: the next message goes into the run.
+    mockSendRunMessage.mockResolvedValue(sendAnswer({ run_id: "r1", disposition: "queued", message_id: "m2", conversation_id: "c9" }));
+    emit("c9", { type: "run_started" });
+    let accepted: boolean | void = false;
+    await act(async () => {
+      accepted = await result.current.sendMessage("and then?");
+    });
+    expect(accepted).toBe(true);
+    expect(mockSendRunMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it("regenerate does nothing while a run is in progress", async () => {
+    mockGetAgentMessages.mockResolvedValue([row("101", true, "q"), { ...row("102", false, "a"), parentMessageId: "101" }]);
+    const { result } = renderChat("c9");
+    await waitFor(() => expect(result.current.messages).toHaveLength(2));
+    emit("c9", { type: "run_started" });
+    await act(async () => {
+      await result.current.regenerate("101");
+    });
+    expect(mockSendRunMessage).not.toHaveBeenCalled();
+    expect(mockOpenedStreams).toHaveLength(0);
+  });
+
   it("does not show a second answer for a turn the history already holds", async () => {
     mockGetAgentMessages.mockResolvedValue([row("101", true, "q"), row("102", false, "stored task row")]);
     const { result } = renderChat("c9");

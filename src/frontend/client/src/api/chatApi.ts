@@ -176,6 +176,8 @@ export interface ChatMessage {
     stopped?: boolean;
     /** F004: inbox id of a user message sent into a run (key of its "queued" mark). */
     steerMessageId?: string;
+    /** F004: with `steerMessageId` on a history row: the run has not read the message yet. */
+    steerQueued?: boolean;
 }
 
 export interface ContentPart {

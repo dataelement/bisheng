@@ -85,7 +85,10 @@ describe('stopped answer (item 2)', () => {
         // A run torn down without a terminal event stays an error row.
         expect(runRowMarks({ error: true, error_msg: 'stream interrupted' })).toEqual({});
         expect(runRowMarks({ status: 'stopped', error: true })).toEqual({});
-        expect(runRowMarks({ run_id: 'r1', steer_message_id: 'm1', queued: true })).toEqual({ steerMessageId: 'm1' });
+        expect(runRowMarks({ run_id: 'r1', steer_message_id: 'm1', queued: true })).toEqual({
+            steerMessageId: 'm1',
+            steerQueued: true,
+        });
         expect(runRowMarks(undefined)).toEqual({});
         expect(runRowMarks('{"status":"stopped"}')).toEqual({});
     });

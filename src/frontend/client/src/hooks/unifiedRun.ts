@@ -8,9 +8,12 @@
  * the history endpoint then replaces the whole list, so the persisted answer
  * takes the place of the live one and is never shown next to it.
  */
-import type { AgentEvent, ChatMessage } from '~/api/chatApi';
+import type { ChatMessage } from '~/api/chatApi';
 import type { RunSendResult, RunState } from '~/store/runStore';
 import { isUmbrellaFailureCode, parseFailureInfo } from '~/utils/failureInfo';
+import { agentEventsOfRun } from './runAgentEvents';
+
+export { agentEventsOfRun };
 
 // ---------------------------------------------------------------------------
 // Send response
@@ -135,41 +138,6 @@ export function isRunActive(run: RunState | null | undefined): boolean {
     return run?.status === 'running' || run?.status === 'waiting';
 }
 
-/** Thinking segments and tool calls of a run as the ordered event log the bubbles render. */
-export function agentEventsOfRun(run: RunState): AgentEvent[] {
-    const items: Array<{ order: number; event: AgentEvent }> = [];
-    for (const segment of run.thinking) {
-        items.push({ order: segment.order ?? 0, event: { type: 'thinking', content: segment.text } });
-    }
-    for (const call of run.toolCalls) {
-        const displayName = call.extraInfo?.display_name;
-        const args =
-            call.params && typeof call.params === 'object' && !Array.isArray(call.params)
-                ? (call.params as Record<string, unknown>)
-                : call.params == null
-                  ? undefined
-                  : { input: call.params };
-        items.push({
-            order: call.order ?? 0,
-            event: {
-                type: 'tool_call',
-                tool_call_id: call.callId,
-                tool_name: call.name,
-                ...(typeof displayName === 'string' && displayName ? { display_name: displayName } : {}),
-                tool_type: call.stepType,
-                ...(args ? { args } : {}),
-                ...(call.output != null ? { results: call.output } : {}),
-                inflight: call.status === 'running',
-            },
-        });
-    }
-    // Stable: equal ranks keep "thinking before tool call".
-    return items
-        .map((item, index) => ({ ...item, index }))
-        .sort((a, b) => a.order - b.order || a.index - b.index)
-        .map((item) => item.event);
-}
-
 /** The fields of the answer row that come from the run. */
 export function liveFieldsOfRun(run: RunState): Partial<ChatMessage> {
     const events = agentEventsOfRun(run);
@@ -221,8 +189,9 @@ export function stoppedFieldsOfRun(run: RunState): Partial<ChatMessage> {
 
 /**
  * Marks the unified runtime stores in a history row's `extra`: a stopped
- * answer (`status: "stopped"`, no `error`) and the inbox id of a message sent
- * into a run (`steer_message_id`).
+ * answer (`status: "stopped"`, no `error`), the inbox id of a message sent
+ * into a run (`steer_message_id`) and whether that message still waits in the
+ * inbox (`queued`; the backend removes it when the run reads the message).
  */
 export function runRowMarks(extra: unknown): Partial<ChatMessage> {
     const record = asRecord(extra);
@@ -230,7 +199,9 @@ export function runRowMarks(extra: unknown): Partial<ChatMessage> {
     const steerId = record.steer_message_id;
     return {
         ...(record.status === 'stopped' && !record.error ? { stopped: true } : {}),
-        ...(typeof steerId === 'string' && steerId ? { steerMessageId: steerId } : {}),
+        ...(typeof steerId === 'string' && steerId
+            ? { steerMessageId: steerId, steerQueued: record.queued === true }
+            : {}),
     };
 }
 
@@ -346,6 +317,23 @@ export function needsLiveRow(messages: ChatMessage[], run: RunState | null | und
 export function addLiveRow(messages: ChatMessage[], run: RunState, sender: string): ChatMessage[] {
     if (!needsLiveRow(messages, run)) return messages;
     return [...messages, newLiveRow(run.runId, messages[messages.length - 1], sender)];
+}
+
+/**
+ * State to freeze the row of a run another run took the place of. The backend
+ * starts a run only after the previous one ended, so a replaced run that still
+ * reads as active here ended without this page seeing its terminal event: it
+ * counts as finished and none of its tool calls is still running.
+ */
+export function settleReplacedRun(run: RunState): RunState {
+    if (!isRunActive(run)) return run;
+    return {
+        ...run,
+        status: 'finished',
+        pendingQuestion: null,
+        queuePosition: null,
+        toolCalls: run.toolCalls.map((call) => (call.status === 'running' ? { ...call, status: 'done' } : call)),
+    };
 }
 
 /** Whether the list holds the live row of this run. */
@@ -522,6 +510,27 @@ export function mergeHistoryWithQueued(
     const known = new Set(history.flatMap((m) => [String(m.messageId), queueIdOf(m)]));
     const waiting = local.filter((m) => m.isCreatedByUser && !!queued[queueIdOf(m)] && !known.has(queueIdOf(m)));
     return waiting.length ? [...history, ...waiting] : history;
+}
+
+/**
+ * Ids, among the messages the run store marks as queued, that a history
+ * response shows as read: the row of the message is stored and no longer
+ * carries the "queued" mark. Used after a `resync`, when the `steer_read`
+ * events that clear the marks may have been missed. A message without a
+ * stored row is left alone.
+ */
+export function readQueuedIds(
+    history: ChatMessage[],
+    queuedMessageIds: Record<string, unknown> | null | undefined,
+): string[] {
+    const queued = queuedMessageIds ?? {};
+    const read: string[] = [];
+    for (const row of history) {
+        if (row.isCreatedByUser && row.steerMessageId && !row.steerQueued && queued[row.steerMessageId]) {
+            read.push(row.steerMessageId);
+        }
+    }
+    return read;
 }
 
 // ---------------------------------------------------------------------------

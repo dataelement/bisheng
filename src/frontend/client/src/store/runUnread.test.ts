@@ -125,7 +125,7 @@ describe('relay run reads the queued messages', () => {
 });
 
 describe('resolving returned messages', () => {
-    it('hands the text of the messages that had a row to the input box and drops the others', () => {
+    it('hands the text of the messages not handed over before to the input box and drops the others', () => {
         const taken = reduceUnreadMessages(emptyConversationRunState(), [unread('m1', 'one'), unread('m2', 'two'), unread('m3', 'three')]);
         const resolved = reduceResolveReturned(taken, new Set(['m1', 'm3']));
         expect(resolved.draftReturn).toBe('one\n\nthree');

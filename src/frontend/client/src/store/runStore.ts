@@ -41,6 +41,7 @@ import {
 } from './runUnread';
 
 export * from './runEventTypes';
+export * from './runSelectors';
 export { planProgressOf, type PlanProgress, type RunAnswerFile, type RunUnreadMessage };
 
 // ---------------------------------------------------------------------------
@@ -95,6 +96,18 @@ export interface ConversationRunState {
     run: RunState | null;
     /** Runs replaced by a newer run of this conversation; their events are ignored. */
     retiredRunIds: string[];
+    /**
+     * Last state of the runs another run took the place of, until the page has
+     * frozen their answer rows (`clearReplacedRuns`). The current run no longer
+     * describes those rows, so their content has to come from here.
+     */
+    replacedRuns: RunState[];
+    /**
+     * Number of `resync` events applied. A resync means events were missed,
+     * `steer_read` possibly among them: the page then asks the history which
+     * messages still wait (`clearQueuedMessages`).
+     */
+    resyncCount: number;
     /** Messages sent while a run was busy and not yet read by the agent (AC-13/14). */
     queuedMessages: Record<string, true>;
     /** Cursor for `Last-Event-ID` on reconnect. */
@@ -108,11 +121,15 @@ export interface ConversationRunState {
 }
 
 const MAX_RETIRED_RUN_IDS = 20;
+/** The page clears the list as soon as it renders; the cap only bounds a conversation that is not on screen. */
+const MAX_REPLACED_RUNS = 4;
 
 export function emptyConversationRunState(): ConversationRunState {
     return {
         run: null,
         retiredRunIds: [],
+        replacedRuns: [],
+        resyncCount: 0,
         queuedMessages: {},
         lastEventId: null,
         returnedMessages: [],
@@ -144,6 +161,12 @@ function isActive(status: RunStatus | undefined): boolean {
 function retire(conv: ConversationRunState, runId: string | undefined): string[] {
     if (runId === undefined || conv.retiredRunIds.includes(runId)) return conv.retiredRunIds;
     return [...conv.retiredRunIds, runId].slice(-MAX_RETIRED_RUN_IDS);
+}
+
+/** `conv.run` gives way to another run: keep its last state for the page (`replacedRuns`). */
+function replacedBy(conv: ConversationRunState, nextRunId: string): RunState[] {
+    if (!conv.run || conv.run.runId === nextRunId) return conv.replacedRuns;
+    return [...conv.replacedRuns, conv.run].slice(-MAX_REPLACED_RUNS);
 }
 
 /** Compare two Redis Stream entry ids (`<ms>-<seq>`). Unparsable ids compare equal. */
@@ -260,16 +283,42 @@ function reduceIntoRun(run: RunState, event: RunEvent): RunState {
 }
 
 /**
- * Replace the current run with the accumulated state of a `resync` event.
- * `ended` says the run already wrote its terminal event, and `status` how. For
- * a run that has not ended, a pending question means it waits for the user,
- * otherwise it is running.
+ * Status of a run after a `resync`. `ended` says the run already wrote its
+ * terminal event, and `status` how. For a run that has not ended, a pending
+ * question means it waits for the user, otherwise it is running.
  */
 function resyncStatus(d: Partial<RunResyncData>): RunStatus {
     if (d.ended) return d.status === 'failed' || d.status === 'stopped' ? d.status : 'finished';
     return d.pending_question ? 'waiting' : 'running';
 }
 
+/**
+ * Thinking of a run after a resync. The snapshot holds the thinking of the
+ * whole run as one string, in arrival order. A reader that already follows the
+ * run received a prefix of it, so its segments stay and only the part it missed
+ * is added as one more segment. Without a local run the string is one segment.
+ */
+function resyncThinking(prev: RunState | null, full: string): ThinkingSegment[] {
+    const segment = (text: string, order: number): ThinkingSegment => ({
+        key: `resync:${order}`,
+        callId: null,
+        namespace: null,
+        text,
+        order,
+    });
+    const known = prev ? prev.thinking.reduce((n, s) => n + s.text.length, 0) : 0;
+    if (!prev || full.length < known) return full ? [segment(full, 0)] : [];
+    const missed = full.slice(known);
+    return missed ? [...prev.thinking, segment(missed, prev.thinking.length + prev.toolCalls.length)] : prev.thinking;
+}
+
+/**
+ * Take the accumulated state of a `resync` event as the state of run `runId`.
+ * The snapshot holds text, thinking, plan, files and the pending question; it
+ * does not hold tool calls. The tool calls this reader already received for the
+ * same run are therefore kept (the ones it missed stay unknown until the stored
+ * turn replaces the row). For another run, nothing local carries over.
+ */
 export function reduceResync(
     conv: ConversationRunState,
     runId: string,
@@ -277,11 +326,13 @@ export function reduceResync(
     entryId?: string | null,
 ): ConversationRunState {
     const d = data ?? {};
+    const prev = conv.run && conv.run.runId === runId ? conv.run : null;
     const run: RunState = {
         ...newRun(runId),
         status: resyncStatus(d),
         text: d.text ?? '',
-        thinking: d.thinking ? [{ key: 'resync', callId: null, namespace: null, text: d.thinking, order: 0 }] : [],
+        thinking: resyncThinking(prev, d.thinking ?? ''),
+        toolCalls: prev ? prev.toolCalls : [],
         plan: [...(d.plan ?? [])],
         files: dedupeFiles(d.files ?? []),
         pendingQuestion: d.ended ? null : (d.pending_question ?? null),
@@ -295,11 +346,13 @@ export function reduceResync(
         run.error = { unread_messages: returned } as RunFailedData;
     }
     const base = returned.length ? reduceUnreadMessages(conv, returned) : conv;
-    const replaced = conv.run && conv.run.runId !== runId ? retire(conv, conv.run.runId) : conv.retiredRunIds;
+    const retired = prev || !conv.run ? conv.retiredRunIds : retire(conv, conv.run.runId);
     return {
         ...base,
         run,
-        retiredRunIds: replaced.filter((id) => id !== runId),
+        retiredRunIds: retired.filter((id) => id !== runId),
+        replacedRuns: replacedBy(conv, runId),
+        resyncCount: conv.resyncCount + 1,
         lastEventId: entryId ?? conv.lastEventId,
     };
 }
@@ -367,6 +420,7 @@ export function reduceRunEvent(
             ...advanced,
             run: newRun(runId),
             retiredRunIds: retire(conv, conv.run?.runId).filter((id) => id !== runId),
+            replacedRuns: replacedBy(conv, runId),
         };
     }
 
@@ -380,7 +434,12 @@ export function reduceRunEvent(
         // a new run whose `run_started` was not seen is adopted.
         if (isActive(current.status)) return advanced;
         const adopted = reduceIntoRun(newRun(runId), ev);
-        return { ...advanced, run: adopted, retiredRunIds: retire(conv, current.runId) };
+        return {
+            ...advanced,
+            run: adopted,
+            retiredRunIds: retire(conv, current.runId),
+            replacedRuns: replacedBy(conv, runId),
+        };
     }
     if (!current) {
         return withRun(advanced, reduceIntoRun(newRun(runId), ev));
@@ -418,9 +477,26 @@ export function reduceSendResult(conv: ConversationRunState, result: RunSendResu
             ...conv,
             run: newRun(result.run_id),
             retiredRunIds: retire(conv, conv.run?.runId).filter((id) => id !== result.run_id),
+            replacedRuns: replacedBy(conv, result.run_id),
         };
     }
     return conv;
+}
+
+/** The page froze the answer rows of the replaced runs. */
+export function reduceClearReplacedRuns(conv: ConversationRunState): ConversationRunState {
+    return conv.replacedRuns.length ? { ...conv, replacedRuns: [] } : conv;
+}
+
+/** The history says these messages were read: they no longer wait in the inbox. */
+export function reduceClearQueued(conv: ConversationRunState, messageIds: Iterable<string>): ConversationRunState {
+    let queuedMessages: Record<string, true> | null = null;
+    for (const id of messageIds) {
+        if (!conv.queuedMessages[id]) continue;
+        queuedMessages ??= { ...conv.queuedMessages };
+        delete queuedMessages[id];
+    }
+    return queuedMessages ? { ...conv, queuedMessages } : conv;
 }
 
 // ---------------------------------------------------------------------------
@@ -431,7 +507,7 @@ export interface RunStoreState {
     conversations: Record<string, ConversationRunState>;
     /** Single entry point for stream events (SSE `id:` line → `entryId`). */
     applyEvent: (conversationId: string, event: RunEvent, entryId?: string | null) => void;
-    /** Replace the current run with an accumulated snapshot. */
+    /** Take an accumulated snapshot as the state of `runId`. */
     applyResync: (
         conversationId: string,
         runId: string,
@@ -441,9 +517,11 @@ export interface RunStoreState {
     applySendResult: (conversationId: string, result: RunSendResult) => void;
     /** `unread_messages` of a stop response (the `run_stopped` event may carry the same ones). */
     applyUnreadMessages: (conversationId: string, messages: RunUnreadMessage[]) => void;
-    /** The page removed the rows of the returned messages; `shownIds` had a row on screen. */
-    resolveReturnedMessages: (conversationId: string, shownIds: ReadonlySet<string>) => void;
+    /** The page handled the returned messages; the text of `freshIds` goes to the input box. */
+    resolveReturnedMessages: (conversationId: string, freshIds: ReadonlySet<string>) => void;
     clearDraftReturn: (conversationId: string) => void;
+    clearReplacedRuns: (conversationId: string) => void;
+    clearQueuedMessages: (conversationId: string, messageIds: Iterable<string>) => void;
     resetConversation: (conversationId: string) => void;
 }
 
@@ -468,9 +546,12 @@ export const useRunStore = create<RunStoreState>()((set) => ({
         set((s) => update(s, conversationId, (c) => reduceSendResult(c, result))),
     applyUnreadMessages: (conversationId, messages) =>
         set((s) => update(s, conversationId, (c) => reduceUnreadMessages(c, messages))),
-    resolveReturnedMessages: (conversationId, shownIds) =>
-        set((s) => update(s, conversationId, (c) => reduceResolveReturned(c, shownIds))),
+    resolveReturnedMessages: (conversationId, freshIds) =>
+        set((s) => update(s, conversationId, (c) => reduceResolveReturned(c, freshIds))),
     clearDraftReturn: (conversationId) => set((s) => update(s, conversationId, reduceClearDraftReturn)),
+    clearReplacedRuns: (conversationId) => set((s) => update(s, conversationId, reduceClearReplacedRuns)),
+    clearQueuedMessages: (conversationId, messageIds) =>
+        set((s) => update(s, conversationId, (c) => reduceClearQueued(c, messageIds))),
     resetConversation: (conversationId) =>
         set((s) => {
             if (!(conversationId in s.conversations)) return s;
@@ -479,46 +560,3 @@ export const useRunStore = create<RunStoreState>()((set) => ({
             return { conversations };
         }),
 }));
-
-// ---------------------------------------------------------------------------
-// Selectors
-// ---------------------------------------------------------------------------
-
-export const selectConversationRun =
-    (conversationId: string) =>
-    (state: RunStoreState): ConversationRunState | undefined =>
-        state.conversations[conversationId];
-
-export const selectRun =
-    (conversationId: string) =>
-    (state: RunStoreState): RunState | null =>
-        state.conversations[conversationId]?.run ?? null;
-
-/** True from `run_started` until a terminal event, including while waiting for an answer. */
-export const selectIsRunning =
-    (conversationId: string) =>
-    (state: RunStoreState): boolean =>
-        isActive(state.conversations[conversationId]?.run?.status);
-
-/**
- * Sending is accepted in every state (AC-12): idle starts a run, a running run
- * takes the message as a steer, a waiting run takes it as the answer.
- */
-export const selectCanSend: (conversationId: string) => (state: RunStoreState) => boolean = () => () => true;
-
-export const selectPlanProgress =
-    (conversationId: string) =>
-    (state: RunStoreState): PlanProgress =>
-        planProgressOf(state.conversations[conversationId]?.run?.plan);
-
-export const selectIsMessageQueued =
-    (conversationId: string, messageId: string | number | null | undefined) =>
-    (state: RunStoreState): boolean =>
-        messageId !== null &&
-        messageId !== undefined &&
-        Boolean(state.conversations[conversationId]?.queuedMessages[String(messageId)]);
-
-export const selectLastEventId =
-    (conversationId: string) =>
-    (state: RunStoreState): string | null =>
-        state.conversations[conversationId]?.lastEventId ?? null;

@@ -25,6 +25,7 @@ jest.mock('~/api/request', () => ({ __esModule: true, default: {}, translateApiE
 jest.mock('~/api/linsight', () => ({ getLinsightSessionVersionList: () => Promise.resolve([]) }));
 
 import { useRunStore, type RunEvent } from '~/store/runStore';
+import { handedReturnedIds, rememberHandedReturnedIds } from '~/utils/returnedMessageLog';
 import { useUnifiedRun } from './useUnifiedRun';
 
 const row = (id: string, isCreatedByUser: boolean, extra: Partial<ChatMessage> = {}): ChatMessage => ({
@@ -70,6 +71,7 @@ function renderPage(initial: ChatMessage[], options: { enabled?: boolean; isLoad
 
 beforeEach(() => {
     entry = 0;
+    localStorage.clear();
     mockFollow.mockReset();
     mockSend.mockReset();
     mockStop.mockReset();
@@ -159,6 +161,8 @@ describe('stop gives the unread messages back (item 6)', () => {
     });
 
     it('does not refill the input box when a later visit replays the ended run', () => {
+        // An earlier visit of this browser handed the text over.
+        rememberHandedReturnedIds(['m1']);
         const { result } = renderPage([row('q', true), row('a', false, { stopped: true })]);
         emit(
             { type: 'run_started' },
@@ -232,8 +236,27 @@ describe('a missed terminal event: the resync gives the unread messages back (it
         expect(conv().returnedMessages).toEqual([]);
     });
 
-    it('drops returned messages that have no row on this page', () => {
-        // A later visit: the history no longer holds the deleted question rows.
+    it('hands the text over even when the history reload already removed the rows', () => {
+        // The stop was not handled before the page was reloaded: the history no
+        // longer holds the deleted question rows, the stream replays the stop.
+        renderPage([row('q', true), row('a-stored', false, { stopped: true })]);
+        resync({ status: 'stopped', unread_messages: [unread('m1', 'one')] });
+        expect(conv().draftReturn).toBe('one');
+        expect(conv().returnedMessages).toEqual([]);
+        expect(handedReturnedIds().has('m1')).toBe(true);
+    });
+
+    it('hands the text over when the stop response arrived while another conversation was open', () => {
+        // The store took the messages; the history loaded on the way back has no rows for them.
+        act(() => useRunStore.getState().applyUnreadMessages('c1', [unread('m1', 'one'), unread('m2', 'two')]));
+        const { rerender } = renderPage([row('q', true), row('a-stored', false, { stopped: true })], { isLoading: true });
+        expect(conv().draftReturn).toBeNull();
+        rerender({ isLoading: false });
+        expect(conv().draftReturn).toBe('one\n\ntwo');
+    });
+
+    it('drops returned messages this browser handed over in an earlier visit', () => {
+        rememberHandedReturnedIds(['m1']);
         renderPage([row('q', true), row('a-stored', false, { stopped: true })]);
         resync({ status: 'stopped', unread_messages: [unread('m1', 'one')] });
         expect(conv().draftReturn).toBeNull();

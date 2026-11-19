@@ -1340,6 +1340,24 @@ export default function useAiChat(
     const regenerate = useCallback(
         async (parentMessageId: string) => {
             if (isStreaming || unified.isRunning) return;
+            if (unifiedEnabled) {
+                // F004: the unified runtime has no "regenerate": a conversation
+                // is one linear thread and every request stores a new question
+                // row. So this entry (also the "retry" of a failed answer)
+                // sends the question again through the normal send, which
+                // starts a new run with protocol 2. The legacy stream below
+                // would open a second, page-owned stream next to the run
+                // store: the composer stays open on the unified runtime but
+                // `sendMessage` refuses while that stream is going.
+                // Attachments are not sent again: the files of the earlier
+                // turn are already in the conversation's workspace.
+                const question = messagesRef.current.find(
+                    (m) => m.isCreatedByUser && m.messageId === parentMessageId,
+                );
+                const text = question?.text?.trim();
+                if (text) await sendMessage(text, null);
+                return;
+            }
             const projectDraft = captureProjectChatDraft(conversationId === "new" ? null : conversationId);
             const turnMessages = messagesRef.current;
             if (knowledgeAccessBlocked) {
@@ -1512,7 +1530,7 @@ export default function useAiChat(
             setIsStreaming(true);
             beginStream(turn.bucketId, submission);
         },
-        [knowledgeAccessBlocked, knowledgeAccessMessage, conversationId, activeBucketId, isStreaming, unified.isRunning, chatModel, selectedOrgKbs, setSelectedOrgKbs, bsConfig, adoptConversationId, searchType, selectedAgentTools, localize, showToast, ensureFlowLeaseId]
+        [knowledgeAccessBlocked, knowledgeAccessMessage, conversationId, activeBucketId, isStreaming, unified.isRunning, chatModel, selectedOrgKbs, setSelectedOrgKbs, bsConfig, adoptConversationId, searchType, selectedAgentTools, localize, showToast, ensureFlowLeaseId, unifiedEnabled, sendMessage]
     );
 
     return {
