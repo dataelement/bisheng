@@ -132,7 +132,12 @@ class WorkCapabilitiesService:
             result.append(
                 {
                     "name": name,
-                    "title": tool.name,
+                    # Normalize built-in image labels without changing persisted invocation identities.
+                    "title": (
+                        "图像生成"
+                        if tool.is_preset == 1 and tool.tool_key in {"dalle_image_generator", "image_generation"}
+                        else tool.name
+                    ),
                     "description": tool.desc or tool.name,
                     "inputSchema": schema,
                     "_meta": {"bisheng.tool_id": tool_id, "bisheng.schema_hash": version},
