@@ -1678,6 +1678,26 @@ unknown types or remaining downstreams are reported, never guessed away.
 Apply returns permission operation IDs; exit 2 means selected repairs completed
 but blocked items remain, and exit 3 means an error requiring the same plan to
 be inspected/resumed. Preview exit 0 does not certify migration readiness.
+
+For a historical deleted resource whose saved plan contains only one of the two
+`permission_enabled` technical markers, apply can automatically forward-recover
+its own `history-delete` operation if strict OpenFGA deletion leaves it
+`FAILED_CLOSED`. Recovery verifies the original ledger/checksums, tenant, version,
+business absence, downstreams, mirrors and Catalog Store/model pin. It delegates
+only the remaining marker deletes to the native checksum-bound recovery service,
+verifies the complete frozen AFTER state, then continues derived cleanup. It does
+not restore missing markers or recover unrelated permission failures. New graph
+relations, changed fences/versions, a corrupted ledger, or a healthy original pair
+that later became mixed still stop execution.
+
+To resume such a failure, use the **updated script with the same saved plan and
+original operator ID**, repeating the apply command above. No new plan or manual
+SQL/OpenFGA edit is required. Completed operations reuse their original receipts;
+interruption after correction or during SQL finalization/cleanup resumes through
+the original ledger. Keep the plan, events and payload backups until the upgrade
+is verified. If recovery is refused, the CLI reports a safe reason code and, when
+available, the operation ID/status; investigate rather than replacing the plan.
+
 SQL evidence is saved before physical inspection in `.candidates.json`; exact
 payload backups use `.payloads/`. Missing original bindings/file identities stop
 cleanup; no whole-index deletion or guessed replacement is allowed. This selected

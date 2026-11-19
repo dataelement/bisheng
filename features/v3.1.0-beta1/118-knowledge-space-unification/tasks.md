@@ -8672,3 +8672,12 @@ W3基础交付：T346原ModuleNotFound红→T344 DTO 8绿；T348原ModuleNotFoun
 - [ ] T1048：包含本轮修改的发行镜像，在隔离旧库的 MySQL/DM8 与真实 OpenFGA 完成完整升级、故障恢复和开服验收；本轮不在116执行 apply 或部署。
 
 本轮需求来源是用户要求“DBA完成备份通知即可、脚本按停服步骤完成升级”，并在需求草案审查后明确要求“修改脚本”。本轮覆盖及已知基线失败见[实施/审查记录](../../../docs/reviews/f118-upgrade-without-dba-evidence-20261119.md)。
+
+## 2026-11-20 历史删除投影受限恢复（AC-115/116）
+
+- [x] HISTORY-DELETE-RECOVERY：在历史准备 apply 中识别原快照已缺一类技术标记的自有失败操作，完整校验冻结台账、pin 及业务事实，委托现有恢复服务完成精确 DELETE、原围栏检查与 AFTER/finalize。
+- [x] HISTORY-DELETE-REPLAY：原生 SQL 台账及严格 FGA 原子删除模拟覆盖旧失败、同计划重跑、先完成资源保留、修正/SQL 收尾/清理中断、未知提交与拒绝非法恢复；新增 30 项通过。
+- [x] HISTORY-DELETE-DOCS：同步设计决策、已知坑、脚本 README 的原计划/原 operator 续跑方式及安全错误诊断；量测与审查记录见 [修复记录](../../../docs/reviews/f118-history-delete-recovery-20261120.md)。
+- [x] HISTORY-DELETE-VERIFY：扩展迁移/投影回归 1936 通过、1 项查询次数断言失败；原始 `b6c58466b2` 独立工作树复现该失败（预期 9，实际 6），无新增失败。最终格式、Ruff/F821、架构守卫、CLI 帮助及差异空白检查通过。
+
+现场边界：按用户要求，本轮不连接或修改 165 环境；本地验证不代替发行镜像的真实中间件演练。

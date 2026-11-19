@@ -142,9 +142,17 @@
 - **理由**：未改底层数据不应推导出“其健康必须先通过”；SQL/向量生命周期治理已明确暂缓。原preview无Run时直接返回会虚报检查范围，需要区分当前全扫描与旧图复核。
 - **重审条件**：后续单独立项物理数据迁移或SQL/向量治理时再定义专项准入、恢复和证据，不在普通迁移中恢复全库可读性门槛。细节见§7.2与AC-122/123。
 
+### D11：历史缺失技术标记只在维护清理中受限恢复（2026-11-20）
+
+- **选定**：历史准备脚本识别原快照已缺一类 `permission_enabled` 标记的自有删除操作，复用原生 checksum-bound 前向恢复，之后继续原派生 cleanup。原计划及 operator 不变，不修改通用权限运行时。
+- **理由**：严格原子 DELETE 会拒绝不存在的 tuple；补回缺失授权或对全部 FAILED_CLOSED 自动恢复均会扩大语义。冻结删除台账已表达业务终态，确认原业务不存在且原版本/操作围栏仍有效后，只删除剩余技术标记即可。
+- **重审条件**：一般权限变更、健康基线后出现混合状态或业务仍存在的恢复，应另审意图与授权，不套用历史硬删除适配。
+
 ## 4. 目标模块与数据流（拟议）
 
 2026-11-19 迁移职责：`prepare_f118_history` 组合业务快照、批量物理存在性与清理明细读取；`f118_history_snapshot` 只拥有临时磁盘行与索引，不作为迁移恢复权威；`f118_history_business` 生成兼容旧摘要的写时覆盖视图。权限 snapshot repository 批量读取完整旧/新资源桶，resource write repository 在同一 savepoint 校验并写入一批资源，publication owner 将该批与累计 checkpoint 同事务提交。临时文件容量、权限和清理见脚本 README，规模与恢复证据见[修复审查记录](../../../docs/reviews/v310b1-migration-performance-fix-20261119.md)。
+
+2026-11-20 历史删除异常路径：原 `project_delete` 失败 → 同计划台账与原快照缺标记证明 → SQL/图/pin 重验 → 原生恢复预览及 checksum 再验 → 原操作版本围栏下修正剩余标记 → AFTER 验证、SQL finalize → 原派生 cleanup。普通路径不增加恢复查询；中断仍按原操作台账续跑，计划 schema 与身份格式保持。
 
 2026-11-18 实现增量：model_availability 承担实际探测；Model Owner 在确认事务切模型/物理集合并登记 knowledge_vector_cleanup；rebuild_cleanup 经现有 Beat 分派等待 writer 后清理。copy_input_store 保存带 tenant/job/space/file/version 身份头、SHA256、字节数及分段数的 JSONL 输入；SpaceCopyOwner 保存输入检查点及目标修订，Worker 逐文件入库。
 
@@ -246,6 +254,8 @@ flowchart LR
 ## 5. 文件操作与异步恢复
 
 迁移已知坑（2026-11-19）：分页 SQL 若仍在内存累积完整 JSON、复制快照或逐资源提交，正常大库也会放大成本；反复扫描待删除链还会退化为乘积开销。历史准备采用磁盘 payload、一次构建的关联索引及队列传播；权限发布采用有界批量。磁盘快照不意味着全流程常量内存，根/图 ID、选中修复计划和正式发布的 tuple/namespace 仍随规模增长；不能据此跳过生产克隆演练。验证见修复记录中的 N/2N 计数、RSS、旧前缀与未知提交恢复测试。
+
+历史清理已知坑（2026-11-20）：OpenFGA 的原子 DELETE 包含不存在的 tuple 时会拒绝整批；历史 `permission_enabled` 两类技术主体只保留一类时，正常双标记删除会进入 MIXED/FAILED_CLOSED。`prepare_f118_history.project_history_delete` 只对同份计划、原生 RESOURCE_DELETE 台账与完整 checksum 完全匹配、原快照已缺一类标记的操作做受限前向恢复。恢复前重验硬删除、下游、镜像和 pin，借用现有 checksum-bound recovery 服务检查原版本/操作栅栏并仅删除尚存技术标记，再验证 AFTER 和完成 SQL 收尾。正常权限运行时继续 fail closed；健康基线后来混合、任意 WRITE 修正、计划外图变化或失去原栅栏均拒绝。选择维护脚本适配而非放宽通用权限恢复，保持 AC-115/116 删除边界、schema-1 计划字节与断点台账；若未来需修复一般权限操作，应另审业务意图及恢复授权。原生台账、严格原子删除模拟及恢复中断验证见 `test/knowledge_unification/test_history_delete_recovery.py`。
 
 ### 5.1 批量操作两阶段确认
 
@@ -1256,3 +1266,7 @@ Mode编译只迁移原before已存在的技术标记，permission_enabled/custom
 选择持久来源证明是为了保留原“仅实际创建租户事务签发空证明”的合同，并覆盖建表中断重试；不修改历史迁移、不在每次 API 启动补签既有租户。未来若安装器有统一持久安装事务，可再合并这个入口。验证覆盖新库、重复启动、旧库、版本历史、回滚与拒绝非空；166 独立 MySQL 测试库实际完成初始化→全历史 Alembic→API 租户初始化后仍 `ready=True,coverage_epoch=1`。DM8 真实执行仍由中央回归验证。
 
 同次 166 正式回填预检发现线上 Owner 对 `knowledge_space` 目标保存 `target_space_id=target_id`，原冻结解析器却仅允许文件父空间。`unification_reference_state._row` 现保留真实自指空间元数据，并拒绝空间 ID 不一致及模型携带空间元数据；文件父空间规则保持原状。采用兼容原事实读取而非清空 8 条正确绑定，冻结字段和指纹算法均不变。原生 SQL 的真实来源快照→目标事实→冻结→预检回归覆盖 self/NULL 接受和其他空间 ID 拒绝。
+
+### 修订历史：2026-11-20 历史删除技术标记缺失的受限恢复
+
+按用户确认的方案，历史准备 apply 对原快照已缺一类技术标记的自有删除操作接入现有前向恢复服务；同计划、同 operator、原生投影账本与版本栅栏保持，已完成操作不重写，恢复中断继续原账本。CLI 错误增加安全原因码及可用的操作编号/状态。SQL 业务修复、物理清理及正式 M2 流程不改；165 环境按用户要求不部署、不执行。验证与审查见 [修复记录](../../../docs/reviews/f118-history-delete-recovery-20261120.md)。

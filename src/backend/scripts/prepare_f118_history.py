@@ -11,7 +11,9 @@ orphan metadata and its backed-up file payloads, and purges deleted resources'
 derived permissions. Keeps audit, roles and live index bindings. Physical
 cleanup deletes only identified orphan objects/rows, never whole stores. Unknown
 ownership or unavailable physical identity is reported. Run BEFORE a new M2
-freeze; an active frozen migration is rejected.
+freeze; an active frozen migration is rejected. A historical delete whose saved
+snapshot already lacks one permission_enabled marker can forward-recover its
+own frozen projection; other failed-closed operations remain blocked.
 """
 
 from __future__ import annotations
@@ -34,10 +36,10 @@ if _BACKEND_ROOT not in sys.path:
 from scripts.f118_history_snapshot import snapshot_scope  # noqa: E402
 
 
-def blocked(reason):
+def blocked(reason, **details):
     from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 
-    raise KnowledgeOperationPlanConflictError(reason="history_prepare_" + reason)
+    raise KnowledgeOperationPlanConflictError(reason="history_prepare_" + reason, **details)
 
 
 def canonical(value):
@@ -774,6 +776,97 @@ def level_scope(model, before):
     return (model.id == before["id"], model.knowledge_id == before["knowledge_id"], owner)
 
 
+async def project_history_delete(*, plan, item, sessions, client, runtime, repository, actor, target, key):
+    """Forward-recover only a frozen history delete with pre-existing missing markers.
+
+    Ordinary permission mutations retain their fail-closed semantics. The native
+    recovery service owns correction, fence checks, verification and finalization;
+    this maintenance adapter only narrows which failures it may recover.
+    """
+    from loguru import logger
+
+    from bisheng.common.errcode.permission import PermissionProjectionFailedError
+    from bisheng.permission.domain.services.projection_plan import (
+        build_projection_operation,
+        normalize_projection_plan,
+        projection_request_checksum,
+    )
+    from bisheng.permission.domain.services.projection_service import restore_projection_plan
+    from bisheng.permission.domain.services.resource_lifecycle_policy import build_delete_plan
+
+    try:
+        return await runtime.project_delete(actor=actor, target=target, idempotency_key=key)
+    except PermissionProjectionFailedError as error:
+        operation = await repository.aget_operation_by_idempotency(key)
+        # Safe diagnostics only: provider messages can contain configuration or SQL.
+        error.kwargs.update(reason="history_prepare_delete_projection_failed")
+        if operation is None:
+            raise
+        error.kwargs.update(operation_id=operation.id, projection_status=operation.status)
+        if operation.status != "FAILED_CLOSED":
+            raise
+        details = {"operation_id": operation.id, "projection_status": operation.status}
+        expected = normalize_projection_plan(
+            build_delete_plan(
+                target,
+                store_id=plan["pin"]["store_id"],
+                model_id=plan["pin"]["model_id"],
+                operator_id=actor.user_id,
+                idempotency_key=key,
+            )
+        )
+        frozen = restore_projection_plan(operation, await repository.aget_operation_tuples(operation.id))
+        expected_operation, _ = build_projection_operation(
+            expected, request_checksum=projection_request_checksum(expected)
+        )
+        if (
+            frozen != expected
+            or operation.before_checksum != expected_operation.before_checksum
+            or operation.after_checksum != expected_operation.after_checksum
+        ):
+            blocked("delete_recovery_ledger_changed", **details)
+        marker_keys = {delta.key for delta in expected.deltas}
+        original_keys = {(row["user"], row["relation"], row["object"]) for row in item["tuples"]}
+        # A full pair that became MIXED is a different failure. An empty pair
+        # already satisfies AFTER and ordinary reconciliation handles it.
+        if len(marker_keys & original_keys) != 1:
+            raise
+
+        # Recheck after the failed attempt, before any recovery write. The frozen
+        # plan must still own a hard-deleted resource and an unchanged inventory.
+        async with global_session(sessions) as session:
+            await unfrozen(session)
+            if await read_pin(session) != plan["pin"]:
+                blocked("catalog_pin_changed", **details)
+            if not await hard_missing(session, item["mode"]) or await downstream(session, item["mode"]):
+                blocked("purge_business_or_downstream_changed", **details)
+            current, _ = await mirrors(session, item["mode"])
+            if stable_mirrors(current) != stable_mirrors(item["sql"]):
+                blocked("purge_mirrors_changed", **details)
+        for obj in item["objects"]:
+            rows = await client.read_tuples(object=obj, consistency="HIGHER_CONSISTENCY")
+            if {(row["user"], row["relation"], row["object"]) for row in rows} - original_keys:
+                blocked("purge_graph_changed", **details)
+        preview = await runtime._projection.inspect_failed_closed_recovery(operation.id)
+        if (
+            preview.observed_state not in {"MIXED", "AFTER"}
+            or preview.target_tuple_count != len(marker_keys)
+            or any(delta.action != "DELETE" or delta.key not in marker_keys for delta in preview.correction_deltas)
+        ):
+            blocked("delete_recovery_not_marker_only", **details)
+        logger.warning("Recovering historical delete projection operation={} scope={}", operation.id, frozen.scope_key)
+        try:
+            return await runtime._projection.recover_failed_closed_operation(
+                operation.id, confirmation_checksum=preview.confirmation_checksum
+            )
+        except Exception as recovery_error:
+            # Preserve the error type and traceback while reporting a safe,
+            # actionable reason even when the transport error contains secrets.
+            if hasattr(recovery_error, "kwargs"):
+                recovery_error.kwargs.update(reason="history_prepare_delete_recovery_failed", **details)
+            raise
+
+
 @snapshot_scope
 async def apply(plan, *, sessions, client, runtime, operator_id, physical=None):
     from dataclasses import replace
@@ -977,7 +1070,17 @@ async def apply(plan, *, sessions, client, runtime, operator_id, physical=None):
 
             if keys(actual) - keys(item["tuples"]) or (existing is None and keys(actual) != keys(item["tuples"])):
                 blocked("purge_graph_changed")
-            outcome = await runtime.project_delete(actor=actor, target=target, idempotency_key=key)
+            outcome = await project_history_delete(
+                plan=plan,
+                item=item,
+                sessions=sessions,
+                client=client,
+                runtime=runtime,
+                repository=repository,
+                actor=actor,
+                target=target,
+                key=key,
+            )
             receipts.append(outcome.operation_id)
             await DeletedResourceCleanup(runtime, repository=repository).run(
                 actor=actor, target=target, delete_idempotency_key=key
@@ -1206,9 +1309,16 @@ def main(argv=None):
         # Do not expose configuration/provider exception text or backup rows.
         failure = {
             "error_type": type(error).__name__,
-            "reason": getattr(error, "kwargs", {}).get("reason"),
+            "reason": getattr(error, "kwargs", {}).get("reason") or "history_prepare_execution_failed",
             "resume_same_plan": True,
         }
+        failure.update(
+            {
+                key: error.kwargs[key]
+                for key in ("operation_id", "projection_status")
+                if key in getattr(error, "kwargs", {})
+            }
+        )
         if args.apply:
             try:
                 record_event(args.plan, {"event": "apply_failed", **failure})
