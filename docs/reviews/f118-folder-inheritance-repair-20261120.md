@@ -14,19 +14,20 @@
 
 ## 验证
 
-新增 21 项原生 SQL 测试，FGA 传输严格拒绝重复 WRITE，恢复与 SQL/projection 逻辑未 mock。覆盖：
+新增 24 项原生 SQL 测试，FGA 传输严格拒绝重复 WRITE，恢复与 SQL/projection 逻辑未 mock。覆盖：
 
 - 显式选择、父子顺序、原文件字段和父权限保持、无新增 Grant、复跑无重复写。
 - PREPARED 未建立 mode、FGA 提交后、SQL finalize 后中断；部分 COMMIT 进入 FAILED_CLOSED 后原台账前向恢复。
 - 路径、租户、根类型、根 mode、外租户 mode、pin、FGA 新关系或条件改变时拒绝，且不覆盖后续模式修改。
 - 无显式继承确认时不初始化运行时；旧私有库文件保持，不能用继承修复入口为其补权限。
 - 原历史计划完成选中项但仍报告 blocked → 独立继承修复 → 新历史计划复核/apply ready 的完整链路，原文件字节保持。
+- 超过 200 租户时按索引 keyset 分页完成修复/复跑；第二页的外租户 mode 或 Grant 仍拒绝，不因分页遗漏。
 
-组合回归：`test_folder_inheritance_repair`、历史准备/业务/物理/恢复/性能、权限迁移、namespace、转换计划/仓库、结构保留及 F048 投影/SQL/恢复 CLI，**318 通过**（41.82 秒）。Ruff format/check/F821、架构守卫、CLI 帮助及 diff 空白检查通过。SQL 使用现有双库 ORM/类型，没有 DDL；真实 DM8 本轮未执行。
+组合回归：`test_folder_inheritance_repair`、历史准备/业务/物理/恢复/性能、权限迁移、namespace、转换计划/仓库、结构保留及 F048 投影/SQL/恢复 CLI，分页修复后 **321 通过**（41.57 秒）。Ruff format/check/F821、架构守卫、CLI 帮助及 diff 空白检查通过。SQL 使用现有双库 ORM/类型，没有 DDL；真实 DM8 本轮未执行。
 
 ### 查询成本
 
-选中最多 20 目录/200 祖先，父 tuple 最多 500；相关表各枚举最多 200 个 distinct tenant key。枚举使用 tenant-leading 索引，再按 tenant/resource/scope 索引取选中事实，包含外租户候选，不以当前租户过滤掩盖冲突。Grant/visible 只作 limit-1 存在性证明，journal 最多选中数+1；不加载整个授权表或所有来源 payload。超限明确拒绝，不抽样。
+选中最多 20 目录/200 祖先，父 tuple 最多 500；相关表通过 tenant-leading 索引按 tenant_id keyset 每页枚举 200 个 distinct key，再按 tenant/resource/scope 索引取选中事实。部署租户数没有 200 上限；各页共享选中结果条数上限，包含外租户候选，不以当前租户过滤掩盖冲突。Grant/visible 只作 limit-1 存在性证明，journal 最多选中数+1；不加载整个授权表或所有来源 payload，不抽样。
 
 本机原生 SQLite + 严格 FGA 传输，独立兄弟目录的完整 apply：
 

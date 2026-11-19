@@ -36,15 +36,23 @@ def require(condition, reason):
         history.blocked("inherit_repair_" + reason)
 
 
-async def tenant_keys(session, model):
-    """Use each table's tenant-leading index for cross-tenant absence proof."""
+async def scoped_rows(session, model, statement, limit):
+    """Page the tenant-leading index without imposing a deployment tenant cap."""
     from sqlmodel import select
 
-    ids = list((await session.exec(select(model.tenant_id).distinct().limit(201))).all())
-    # Enumerate, do not interpret unrelated legacy/global scope identities.
-    # Actual selected resource ownership is checked separately below.
-    require(len(ids) <= 200 and all(isinstance(i, int) for i in ids), "tenant_scope_limit")
-    return ids
+    rows, cursor = [], None
+    while True:
+        page = select(model.tenant_id).distinct().order_by(model.tenant_id).limit(200)
+        if cursor is not None:
+            page = page.where(model.tenant_id > cursor)
+        ids = list((await session.exec(page)).all())
+        require(all(type(ident) is int for ident in ids), "tenant_scope_identity")
+        if not ids:
+            return rows
+        rows.extend((await session.exec(statement.where(model.tenant_id.in_(ids)).limit(limit - len(rows)))).all())
+        if len(rows) >= limit or len(ids) < 200:
+            return rows
+        cursor = ids[-1]
 
 
 async def facts(sessions, tenant_id, knowledge_id, folder_ids):
@@ -96,26 +104,23 @@ async def facts(sessions, tenant_id, knowledge_id, folder_ids):
         scope_keys = {f"folder:{ident}" for ident in ids} | {f"{root_kind}:{root.id}"}
         # Scope IDs are globally unique. Foreign mirror/journal rows cannot be
         # hidden by a tenant filter or mistaken for an uninitialized folder.
-        mode_tenants = await tenant_keys(session, ResourcePermissionMode)
-        modes = (
-            await session.exec(
-                select(ResourcePermissionMode)
-                .where(
-                    ResourcePermissionMode.tenant_id.in_(mode_tenants),
+        modes = await scoped_rows(
+            session,
+            ResourcePermissionMode,
+            select(ResourcePermissionMode).where(
+                (
                     (
-                        (
-                            (ResourcePermissionMode.resource_type == "folder")
-                            & ResourcePermissionMode.resource_id.in_([str(i) for i in ids])
-                        )
-                        | (
-                            (ResourcePermissionMode.resource_type == root_kind)
-                            & (ResourcePermissionMode.resource_id == str(root.id))
-                        )
-                    ),
-                )
-                .limit(len(scope_keys) + 1)
-            )
-        ).all()
+                        (ResourcePermissionMode.resource_type == "folder")
+                        & ResourcePermissionMode.resource_id.in_([str(i) for i in ids])
+                    )
+                    | (
+                        (ResourcePermissionMode.resource_type == root_kind)
+                        & (ResourcePermissionMode.resource_id == str(root.id))
+                    )
+                ),
+            ),
+            len(scope_keys) + 1,
+        )
         mode_map = {f"{row.resource_type}:{row.resource_id}": history.canonical(row.model_dump()) for row in modes}
         require(len(mode_map) == len(modes) and all(row.tenant_id == tenant_id for row in modes), "foreign_mode")
         external = scope_keys - {f"folder:{ident}" for ident in folder_ids}
@@ -142,34 +147,27 @@ async def facts(sessions, tenant_id, knowledge_id, folder_ids):
                 and (mode["parent_type"], mode["parent_id"]) == parent,
                 "parent_mode",
             )
-        journal_tenants = await tenant_keys(session, PermissionProjectionOperation)
-        journals = (
-            await session.exec(
-                select(PermissionProjectionOperation)
-                .where(
-                    PermissionProjectionOperation.tenant_id.in_(journal_tenants),
-                    PermissionProjectionOperation.scope_type == "resource",
-                    PermissionProjectionOperation.scope_key.in_([f"folder:{i}" for i in folder_ids]),
-                )
-                .limit(len(folder_ids) + 1)
-            )
-        ).all()
+        journals = await scoped_rows(
+            session,
+            PermissionProjectionOperation,
+            select(PermissionProjectionOperation).where(
+                PermissionProjectionOperation.scope_type == "resource",
+                PermissionProjectionOperation.scope_key.in_([f"folder:{i}" for i in folder_ids]),
+            ),
+            len(folder_ids) + 1,
+        )
         require(len(journals) <= len(folder_ids), "foreign_journal")
         for model in (PermissionGrant, PermissionVisibleSourceProjection):
-            tenants = await tenant_keys(session, model)
-            if tenants:
-                existing = (
-                    await session.exec(
-                        select(model.id)
-                        .where(
-                            model.tenant_id.in_(tenants),
-                            model.resource_type == "folder",
-                            model.resource_id.in_([str(i) for i in folder_ids]),
-                        )
-                        .limit(1)
-                    )
-                ).first()
-                require(existing is None, "existing_authorization")
+            existing = await scoped_rows(
+                session,
+                model,
+                select(model.id).where(
+                    model.resource_type == "folder",
+                    model.resource_id.in_([str(i) for i in folder_ids]),
+                ),
+                1,
+            )
+            require(not existing, "existing_authorization")
         mirrors = {
             ident: ([mode_map[f"folder:{ident}"]] if f"folder:{ident}" in mode_map else []) for ident in folder_ids
         }

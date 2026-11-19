@@ -380,3 +380,57 @@ async def test_conditional_tuple_drift_is_not_certified_by_key_only(folders, mon
     with pytest.raises(KnowledgeOperationPlanConflictError):
         await apply(folders, plan)
     assert folders.fga.writes == writes
+
+
+async def seed_many_tenants(folders):
+    await folders.db.insert(
+        ResourcePermissionMode,
+        [
+            {
+                "id": 10000 + i,
+                "tenant_id": 1000 + i,
+                "resource_type": "folder",
+                "resource_id": str(10000 + i),
+                "mode": "CUSTOM",
+                "version": 1,
+                "projection_state": "CURRENT",
+            }
+            for i in range(208)
+        ],
+    )
+    await folders.db.insert(
+        PermissionGrant,
+        [
+            {
+                "id": 10000 + i,
+                "tenant_id": 1000 + i,
+                "resource_type": "folder",
+                "resource_id": str(10000 + i),
+                "model_key": "synthetic",
+            }
+            for i in range(208)
+        ],
+    )
+
+
+async def test_more_than_200_tenants_can_repair_and_replay_without_new_grants(folders):
+    await seed_many_tenants(folders)
+    plan = await capture(folders)
+    result = await apply(folders, plan)
+    writes = folders.fga.writes
+    assert result["ready"] and writes == 6
+    assert await apply(folders, plan) == result
+    assert folders.fga.writes == writes
+
+
+@pytest.mark.parametrize(
+    "model,reason", [(ResourcePermissionMode, "foreign_mode"), (PermissionGrant, "existing_authorization")]
+)
+async def test_second_tenant_page_conflict_is_not_hidden(folders, model, reason):
+    await seed_many_tenants(folders)
+    async with folders.db.engine.begin() as connection:
+        await connection.execute(sa.update(model).where(model.id == 10207).values(resource_id="52"))
+    with pytest.raises(KnowledgeOperationPlanConflictError) as raised:
+        await capture(folders)
+    assert raised.value.kwargs["reason"] == "history_prepare_inherit_repair_" + reason
+    assert folders.fga.writes == 0
