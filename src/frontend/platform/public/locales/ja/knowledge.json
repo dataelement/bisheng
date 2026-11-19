@@ -871,6 +871,11 @@
         "publish_hint": "広場に表示し、他のユーザーが検索・閲覧できるようにします"
     },
     "space_copy_ui": {
+        "partial_failed": "一部のコピーに失敗",
+        "failure_counts": "コピー済み {{completed}} 件 · 失敗 {{failed}} 件",
+        "view_details": "明細を表示",
+        "failure_details": "処理失敗の詳細",
+        "no_failure_details": "表示できる失敗明細はありません",
         "phase_preparing": "コピーを準備しています",
         "in_progress": "コピー中",
         "failed": "コピー失敗",

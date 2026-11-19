@@ -877,6 +877,11 @@
         "publish_hint": "开启后，该知识空间会展示在广场，他人可以搜索或查看"
     },
     "space_copy_ui": {
+        "partial_failed": "复制部分失败",
+        "failure_counts": "已复制 {{completed}} 项 · 失败 {{failed}} 项",
+        "view_details": "查看明细",
+        "failure_details": "处理失败明细",
+        "no_failure_details": "暂无可查看的失败明细",
         "phase_preparing": "正在准备复制",
         "in_progress": "复制中",
         "failed": "复制失败",

@@ -171,6 +171,7 @@ function useKnowledgeSpaceDetail(
   } = useKnowledgeSpaceHeader({
     selectedFiles,
     space,
+    currentFolderId,
     onDeleteFile,
     localize,
     showToast,

@@ -1,6 +1,6 @@
 import { useSpaceExitStatus } from "../hooks/useSpaceExitStatus";
 import type { UseKnowledgeSpaceHeaderOptions } from "./knowledgeSpaceTypes";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { KnowledgeFile, SpaceRole, VisibilityType } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
@@ -9,10 +9,11 @@ import {
   hasKnowledgeSpaceAction,
   useKnowledgeSpaceActions,
 } from "../hooks/useKnowledgeSpacePermissions";
-import { useVersionManagementEnabled } from "~/hooks";
+import { useAuthContext, useVersionManagementEnabled } from "~/hooks";
 export function useKnowledgeSpaceHeader({
   selectedFiles,
   space,
+  currentFolderId,
   onDeleteFile,
   localize,
   showToast,
@@ -42,14 +43,19 @@ export function useKnowledgeSpaceHeader({
   const canLeaveSpace = canExit;
   // ─── Version Management ──────────────────────────────────────────────
   const versionManagementEnabled = useVersionManagementEnabled();
+  const { user } = useAuthContext();
   const queryClient = useQueryClient();
   const spaceIdNum = Number(space.id);
+  const versionScopeKey = JSON.stringify([user?.id, user?.role, user?.tenant_id, space.id, currentFolderId, versionManagementEnabled]);
+  const versionEpoch = useMemo(() => ({ scopeKey: versionScopeKey }), [versionScopeKey]);
+  type VersionTarget = { epoch: typeof versionEpoch; file: KnowledgeFile } | null;
+  const [managementTarget, setManagementTarget] = useState<VersionTarget>(null);
+  const [historyTarget, setHistoryTarget] = useState<VersionTarget>(null);
+  const versionMgmtFile = managementTarget?.epoch === versionEpoch ? managementTarget.file : null;
+  const versionHistoryFile = historyTarget?.epoch === versionEpoch ? historyTarget.file : null;
+  const setVersionMgmtFile = (file: KnowledgeFile | null) => setManagementTarget(file ? { epoch: versionEpoch, file } : null);
+  const setVersionHistoryFile = (file: KnowledgeFile | null) => setHistoryTarget(file ? { epoch: versionEpoch, file } : null);
 
-  const [versionMgmtFile, setVersionMgmtFile] = useState<KnowledgeFile | null>(
-    null,
-  );
-  const [versionHistoryFile, setVersionHistoryFile] =
-    useState<KnowledgeFile | null>(null);
   const [similarDialogOpen, setSimilarDialogOpen] = useState(false);
   // File ids (KnowledgeFile.id) the similar-document dialog is scoped to — snapshotted
 

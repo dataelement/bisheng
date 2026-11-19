@@ -1,7 +1,7 @@
 import { DropdownItem } from "@bisheng/ui";
 import { useQuery } from "@tanstack/react-query";
 import { Outlined } from "bisheng-icons";
-import { FileSearch } from "lucide-react";
+import { FileSearch, GitBranch } from "lucide-react";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { getMyResourcePermissionsApi } from "@/controllers/API/permission";
@@ -15,7 +15,7 @@ interface SpaceRowVersionMenuProps {
   item: KnowledgeSpaceChild;
   enabled: boolean;
   indicator?: boolean;
-  onOpen: (panel: "merge" | "similar") => void;
+  onOpen: (dialog: "manage" | "similar") => void;
 }
 
 export function SpaceRowVersionMenu({ scope, spaceId, item, enabled, indicator = false, onOpen }: SpaceRowVersionMenuProps) {
@@ -37,7 +37,7 @@ export function SpaceRowVersionMenu({ scope, spaceId, item, enabled, indicator =
     <button
       type="button"
       className="flex h-5 shrink-0 items-center gap-1 rounded bg-[#FFF3E8] px-1.5 text-xs text-[#F76F44] hover:bg-[#FFE6D2]"
-      onClick={event => { event.stopPropagation(); onOpen("similar"); }}
+      onClick={event => { event.stopPropagation(); onOpen("manage"); }}
     >
       <FileSearch className="size-3" />
       {t("knowledge.version.pill_similar", { ns: "shared" })}
@@ -45,8 +45,8 @@ export function SpaceRowVersionMenu({ scope, spaceId, item, enabled, indicator =
   );
   return (
     <>
-      <DropdownItem icon={<Outlined.History aria-hidden />} onSelect={() => onOpen("merge")}>
-        {t("versions.manage")}
+      <DropdownItem icon={<GitBranch aria-hidden />} onSelect={() => onOpen("manage")}>
+        {t("knowledge.version.dialog_title", { ns: "shared" })}
       </DropdownItem>
       {similar && <DropdownItem icon={<Outlined.FileSearch aria-hidden />} onSelect={() => onOpen("similar")}>
         {t("versions.similar")}
