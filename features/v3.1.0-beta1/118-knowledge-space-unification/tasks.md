@@ -8689,3 +8689,12 @@ W3基础交付：T346原ModuleNotFound红→T344 DTO 8绿；T348原ModuleNotFoun
 - [x] PRIVATE-RETAIN：type=2 历史文件/文档在合法归属/父链检查后保留，不成为新 mode/层级修复对象；活动库仍严格校验。
 - [x] INHERIT-VERIFY：新增 21 项，相关组合 318 通过；N/2N SQL/事务/写请求计数线性，关键 MySQL 索引只读 EXPLAIN 通过；Ruff、架构守卫、CLI 帮助与差异检查通过。
 - [x] INHERIT-DOCS：脚本 README、D12 及 [审查记录](../../../docs/reviews/f118-folder-inheritance-repair-20261120.md) 说明权限意图、边界、串行执行及独立后续历史计划。
+
+## 2026-11-20 取消租户身份残留保留（AC-135～137）
+
+- [x] UNMOUNT-INTENT：用户确认保留原数据、冻结重验、仅迁移实际租户，旧 Run 不重分类。
+- [x] UNMOUNT-FACTS：原生只读 acquisition，精确审计、零绑定/挂载、原预置副本及工具子项、已迁出助手、原权限及 FINALIZED 操作闭合，分页计算原事实摘要。
+- [x] UNMOUNT-FROZEN：新 Run 封闭元数据及 baseline/plan 一致；首次写入前、权限中间状态和最终切换原事务重验，保留 FGA 端点键集合不变。
+- [x] UNMOUNT-TEST：新增 30 项原生回归通过，包括 SQL/FGA/最终切换取消后的原 Run 恢复；实际 MySQL 只读候选核对通过，185 SELECT、约 1.7 秒。
+- [ ] UNMOUNT-REVIEW：完成扩展迁移回归、基线差异与架构/静态审查，提交 beta1。
+- [ ] UNMOUNT-ROLLOUT：165 新代码全量预检→原身份首次冻结/执行→Redis 回填/verify→恢复既有服务；保留旧计划及运行日志。

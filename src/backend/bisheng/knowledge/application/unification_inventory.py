@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ReferenceCoverageNotReadyError
 from bisheng.core.context.tenant import tenant_execution_scope
+from bisheng.knowledge.application import unification_identity_retention as identity_retention
 from bisheng.knowledge.application.unification_artifacts import UnificationArtifactStore
 from bisheng.knowledge.application.unification_inventory_codec import (
     InventoryRecord,
@@ -290,6 +291,7 @@ class UnificationInventoryApplication:
         # or reclassify an old Run under the new policy. The baseline below
         # must agree with this same identity and the original ledger hashes.
         material_policy = metadata[0].get("external_material_policy")
+        retained_identity = identity_retention.metadata(metadata[0])
         backup_ref = metadata[0]["backup_ref"] if backup_ref is None else _descriptor(backup_ref)
         schema_ref = metadata[0]["schema_ref"] if schema_ref is None else _descriptor(schema_ref)
         preparation_policy = metadata[0].get("preparation_policy_version", 1)
@@ -381,6 +383,8 @@ class UnificationInventoryApplication:
                         _blocked("frozen_physical_policy_changed")
                     if value.get("external_material_policy") != material_policy:
                         _blocked("frozen_material_policy_changed")
+                    if identity_retention.metadata(value) != retained_identity:
+                        _blocked("frozen_identity_retention_changed")
                     expected = {
                         "writer_contract_version": result.writer_contract_version,
                         "environment": environment,
@@ -632,7 +636,7 @@ class UnificationInventoryApplication:
             await self.raw.avalidate_registered_source_tenants(session)
             await self.preflight.resources.avalidate_global_integrity(session)
             await self.preflight.controls.avalidate_global_integrity(session)
-            await self.permissions.avalidate_global_integrity(session)
+            retained_identity = await identity_retention.validate(session, repository=self.permissions)
             catalog = await self.permissions.aload_catalog_baseline(session, environment=environment)
             target_checksum = target_authorization_model_checksum()
             catalog_plan = build_catalog_retirement_plan(
@@ -683,6 +687,7 @@ class UnificationInventoryApplication:
                 "backup_ref": backup_ref,
                 "schema_ref": schema_ref,
             }
+            common.update(retained_identity.metadata() if retained_identity is not None else {})
             if backup_ref is None:
                 common["external_material_policy"] = "not_required"
             baseline = await pages.manifest(

@@ -406,6 +406,14 @@ class UnificationSQLConversionApplication:
             self.runs._identity(run_id, writer_contract_version)
             state["run_id"] = run_id
             frozen = await self._admit(run_id, writer_contract_version)
+            from bisheng.knowledge.application import unification_identity_retention as identity_retention
+
+            retained_metadata = await identity_retention.load_metadata(self.store, frozen)
+            if retained_metadata:
+                with tenant_execution_scope(1):
+                    async with self._session() as session, session.begin():
+                        await self._scope_run(session, frozen)
+                        await identity_retention.validate(session, expected=retained_metadata)
             members, totals, deferred, retained, structural = await self._plan(
                 frozen, environment=environment, backup_ref=backup_ref, schema_ref=schema_ref
             )

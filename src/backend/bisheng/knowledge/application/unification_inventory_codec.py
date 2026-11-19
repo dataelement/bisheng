@@ -142,6 +142,15 @@ def _validate(tag, data):
             _invalid()
     if tag == "permission_plan" and type(data) is dict and "restore_missing_markers" in data:
         schema = {**schema, "restore_missing_markers": "bool"}
+    if tag == "run" and type(data) is dict and any(key.startswith("unmounted_identity_") for key in data):
+        schema = {
+            **schema,
+            "unmounted_identity_policy": "str",
+            "unmounted_identity_count": "positive",
+            "unmounted_identity_digest": "hash",
+        }
+        if data.get("unmounted_identity_policy") != "preserve_unmounted_v1":
+            _invalid()
     if schema is None or type(data) is not dict or set(data) != set(schema):
         _invalid()
     for name, spec in schema.items():

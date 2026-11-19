@@ -84,11 +84,17 @@ class PermissionMigrationSnapshotRepository:
                 counts[int(row["resource_id"])] += 1
         return counts
 
-    async def avalidate_global_integrity(self, session):
+    async def avalidate_global_integrity(self, session, *, retained_tenant_ids=()):
         """One run-wide raw probe per original table, never per tenant."""
         self._scope(session)
         if not session.in_transaction():
             _blocked("native_transaction_required")
+        if (
+            type(retained_tenant_ids) is not tuple
+            or any(type(value) is not int or value <= 0 for value in retained_tenant_ids)
+            or len(set(retained_tenant_ids)) != len(retained_tenant_ids)
+        ):
+            _blocked("invalid_retention_scope")
         tenant = Tenant.__table__.alias("f118_permission_actual_tenant")
         queries = []
         for model in (
@@ -98,11 +104,13 @@ class PermissionMigrationSnapshotRepository:
             PermissionVisibleSourceProjection,
         ):
             table = model.__table__.alias("f118_original_" + model.__tablename__)
+            condition = or_(table.c.tenant_id.is_(None), tenant.c.id.is_(None))
+            for offset in range(0, len(retained_tenant_ids), 200):
+                condition &= or_(
+                    table.c.tenant_id.is_(None), table.c.tenant_id.not_in(retained_tenant_ids[offset : offset + 200])
+                )
             queries.append(
-                select(table.c.id)
-                .outerjoin(tenant, tenant.c.id == table.c.tenant_id)
-                .where(or_(table.c.tenant_id.is_(None), tenant.c.id.is_(None)))
-                .limit(1)
+                select(table.c.id).outerjoin(tenant, tenant.c.id == table.c.tenant_id).where(condition).limit(1)
             )
         assignee = PermissionGrantAssignee.__table__.alias("f118_global_assignee")
         grant = PermissionGrant.__table__.alias("f118_global_grant")
