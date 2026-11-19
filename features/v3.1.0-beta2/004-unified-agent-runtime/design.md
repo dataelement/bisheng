@@ -267,9 +267,26 @@
 | `file` | `{file_id, name, path, size, source}` |
 | `queued` | `{position}` |
 | `run_failed` | `{code, reason, detail, reference_id}`（沿用深度研究现有的报错卡结构） |
-| `resync` | `{text, thinking, plan, files, pending_question?}` |
+| `resync` | `{text, thinking, plan, files, pending_question?, ended, status, unread_messages}`。不含工具调用，也不含收件箱状态（§5 #27） |
 
 发送接口的协商头是 `X-BS-Run-Protocol: 2`。错误码：本设计不新增业务错误码；“已排队”是成功响应里的 `disposition`，失败沿用深度研究已有的错误码。实现中如发现确需新增，按 release-contract 的规则先核对占用再登记。
+
+运行相关的 Redis 键（同一会话的键都带 hash tag `{会话 id}`，K8）：
+
+| 键 | 类型 | 内容 | 过期 | 定义处 |
+|---|---|---|---|---|
+| `bisheng:run:state:{cid}` | Hash | 会话的运行状态：status、run_id、profile、lease_until | 7 天，每次写入续期 | `run_lease.py` |
+| `bisheng:run:stop:{run_id}` | String | 停止请求 | 1 小时 | `run_lease.py` |
+| `bisheng:run:inbox:{cid}` | List | 收件箱：运行期间发来的消息 | 7 天 | `run_dispatch.py` |
+| `bisheng:run:pending:{cid}` | Hash | 尚未被读取的消息 | 7 天 | `run_dispatch.py` |
+| `bisheng:run:pending_index` | ZSet | 有待处理消息的会话索引，供巡检恢复过期运行 | 不过期，条目随处理移除 | `run_dispatch.py` |
+| `bisheng:run:events:{cid}` | Stream | 事件流，`MAXLEN` 2000 | 运行中 24 小时；停在提问上 7 天加 1 小时；结束后 1 小时 | `run_event_stream.py` |
+| `bisheng:run:snapshot:{cid}` | Hash | 当前运行的快照，供 `resync` | 与事件流相同 | `run_event_stream.py` |
+| `bisheng:run:steer:{cid}` | Hash | 插话消息 id 到问题行 id 的绑定，及已读标记 | 7 天 | `run_message_persist.py` |
+| `bisheng:run:relay_read:{cid}` | Hash | 接力运行要标记为已读的消息 | 7 天 | `run_message_persist.py` |
+| `bisheng:run:direct:{cid}` | Hash | 最近一次 direct 运行的落库所需信息与 `answer_saved` 标记 | 7 天 | `run_message_persist.py` |
+| `bisheng:run:memory_turn:{run_id}` | String | 运行的记忆回合 id，供恢复时使用 | 7 天 | `direct_run_turn.py` |
+
 
 ### 4.4 没有单独决策的 AC 由谁承接
 
@@ -339,6 +356,14 @@
 | 20 | 事件订阅如果用 `XREAD BLOCK`，每个打开的会话页（含停在提问上的会话）会长期占住共享异步 Redis 连接池的一条连接；池上限 100，超限直接抛错而不排队 | 单个 API 进程约 100 个同时在线的会话页后，该进程所有 Redis 调用开始失败，续租失败使正在回答的运行被判失败。决策 13 默认开启后每个日常对话都走订阅 | `run_event_stream.py:read`：`follow=True` 改为每 `FOLLOW_POLL_SECONDS`（0.1 秒）非阻塞读一次，等待期间不占连接。回归：`test_run_event_stream.py::test_follow_never_holds_a_connection_in_a_blocking_read`。代价：事件到达浏览器最多晚 0.1 秒。未做压测 |
 | 21 | 深度研究的三条执行路径（新一轮、回答提问后的恢复、继续）里，原来只有新一轮会被停止打断；恢复与继续是裸的 `astream` 循环。同时看守协程一看到停止标记就退出，不再续租 | 用户回答澄清问题后再点停止，运行继续执行；30 秒后租约过期，下一条消息开出新运行，旧运行继续往新运行的事件流、线程、工作区里写，读走新运行的收件箱，结束时还向新运行的流写 `run_stopped` | `task_exec.py`：三条路径共用 `_run_until_terminated`（每 0.5 秒看一次终止标记，置位就取消流）与 `_stream_agent`。看守协程在停止后继续续租，直到运行写完终止事件并释放会话；只有租约丢失才提前退出。驱动锁按运行 id 比较后删除。租约丢失的运行不再读收件箱。回归：`test_planned_run_unified.py` 的 4 个 stop/lease 用例。后果：停止后的运行如果取消不掉，会话保持被占用，不会在 30 秒后自动放开 |
 | 22 | 深度研究把本轮附件从 `workspace/{svid}` 合并进会话工作区时，目标已有同名对象就跳过 | 同一会话第二次上传改过内容的同名文件，agent 读到的是第一次的版本，没有任何报错。旧链路每轮是新工作区，不会这样 | `workspace_backend.copy_workspace_prefix(replace_older=True)`：源对象的 `last_modified` 晚于目标才替换，两个时间都来自对象存储，不依赖节点时钟；只有 `_merge_run_uploads` 传 `True`，接管上一版本文件的调用仍然从不覆盖。直接回答的附件路径直接写会话工作区，没有这个问题。回归：`test_workspace_prefix.py` 的 4 个用例。残留：agent 在后一次附件解析之后、合并之前写了同名 `uploads/` 文件时，附件被跳过 |
+| 23 | planned 运行和接力运行在入队之前就用 4 小时的排队租约预占了会话。浏览器补发的 start-execute 不带 run_id | “预占成功到入队成功”之间任何一步失败，会话被一个不存在的运行占住 4 小时，期间发不了新消息 | 带 `run_id` 的 `submit_task_turn` 入队失败不再吞异常：版本标记失败，抛 11130，由 `_send` 与 worker 现有的 except 释放。`run_dispatch._release_reservation` 处理 `_enqueue`、`_handle_expired`、`_queue_position` 失败。释放用 `release` 而不是 finish 脚本，收件箱保留，下一条消息重新发起接力。回归：`test_run_dispatch.py`、`test_task_submit_service.py`、`test_unified_run_api.py` 各有用例 |
+| 24 | 事件流和快照按会话建 key，不按 run。接手的运行写 `run_started` 会清空流 | 失去租约的 direct 运行无条件写终止事件，会让接手运行的订阅者提前结束；什么都不写，则无人接手时浏览器一直等，已生成的文字不落库 | `RunLeaseService.reclaim`：状态仍是 running 且 run_id 是自己时才重新取得租约，只用于收尾。成功则 `DirectRunner._end_lost` 写 `run_failed`（11091，`lease_expired`），部分回答连同工具和文件落成失败行。失败则什么都不写，缓冲文字也丢弃（`EventWriter.discard`）。残留：从租约失效到被发现最长约 10 秒，这期间旧运行仍可能往已被接手的流里写事件。`DirectRunProjector.aclose` 没有生产调用方，接上它会在进程被取消时写出两行 |
+| 25 | planned 运行的 run_id 与会话版本的对应关系是：版本 id 等于 run_id，或 `api_meta["run_id"]` 等于 run_id。开放 API 与 `/workbench/*` 可以在运行停靠或排队期间给同一会话新增版本 | 按“会话最新版本”取记录时，回答提问会恢复错的运行，停止会终止别的入口的版本 | `run_send._enqueue_planned_resume` 与停止路径都用 `task_exec._find_run_record` 按 run_id 定位，找不到就报错。`submit_task_turn` 带 `run_id` 时在入队前把它写进 `api_meta`，排队中的运行也能找到 |
+| 26 | 等待回答的状态保留 7 天，事件流和快照原先 24 小时过期。快照里有四样东西不在 checkpoint 中：待回答的问题、direct 停靠前的文字和文件、`ask_user_answered` 的 call_id、planned 的计划行 id | 停靠超过 24 小时后，重开页面没有提问卡片，direct 停靠前的文字永久丢失；订阅端在“无流且运行未结束”时每 50ms 空转 | 追加事件的 Lua 在快照有 `pending_question` 时用 `PARKED_TTL_SECONDS`（7 天加 1 小时），回答或终止后回到原 TTL，只影响停在提问上的运行。`follow_run_events` 的无流等待改为从 50ms 退避到 1 秒。残留：升级前已停靠的运行不会被延长；排队很久的 planned 运行首个事件最多晚 1 秒 |
+| 27 | `run_finished` 与接力运行的 `run_started` 可能在同一渲染批次到达；`resync` 快照不含工具调用和收件箱状态 | 页面靠“看到运行结束”来冻结消息行时，旧行一直指向 live 运行，显示成空白加载气泡。重同步按快照重建会清掉已显示的工具行，排队标记不消失 | 前端 store 新增 `replacedRuns`，在运行被替换的四处保留旧运行的最后状态，页面据此冻结旧行。同一运行的 `resync` 保留本地工具行，thinking 只追加缺失的后缀。排队标记以历史行的 `extra.queued` 为准，在重同步后和运行结束后对账，只清不设。残留：断线期间错过的工具调用无法补回，要补需后端把工具调用写进快照 |
+| 28 | 已结束运行的事件流会重放 1 小时，停止时退回的未读消息每次重进页面都会再到达；服务端已删除这些问题行 | 按“列表里是否还有该行”判断是否退回输入框时，只要历史重载先发生，文字就被丢弃 | 前端用 localStorage 记录本浏览器已退回过的消息 id（键 `bs:run:returnedHandled`，最多 200 个）。残留：文字进输入框后刷新仍会丢（输入框草稿不持久化）；换浏览器在 1 小时内打开会再收到一次；localStorage 不可用时刷新后会重复填入 |
+| 29 | 后端没有“重新生成”语义：`isRegenerate` 无任何读取，每次请求都新插一条问题行 | 统一运行时下“重新生成”和失败卡片的“重试”如果仍走旧协议，会在运行 store 之外另开一条流，输入框看起来可用但按 Enter 无反应 | `useAiChat.regenerate` 在统一运行时下取原问题文字，走普通发送，效果是新增一条用户消息并开始新运行，不重新附带附件。是否需要真正的同级重新生成由产品决定（§8） |
+| 30 | 前端每个文本增量都重建全部思考段和工具调用的事件对象并排序 | 长回答时 CPU 占用随事件数增长，下游所有工具行都重渲染 | `hooks/runAgentEvents.ts`：文本增量直接返回上次的事件数组；思考增量或工具帧只为变化的一项新建对象；缓存是以 store 对象为键的 WeakMap，不保留历史帧。未做 CPU 实测对比 |
 
 ---
 
@@ -416,7 +441,7 @@
 | 3 | 前两种情形在前端切换后不再出现，不处理。敏感词拦截改为返回新协议的事件（未单独询问用户，按技术一致性处理） | 已实现（Wave 5） |
 | 4 | 同一会话已有运行时，开放 API 与 `/workbench/start-execute` 的再次提交改为排队，不返回“会话被占用” | 已实现（Wave 5） |
 | 5 | 旧终止接口同时调用 `RunLeaseService.request_stop`（缺陷修复，未单独询问用户） | 此前已实现（T050 的 `_request_unified_stop`）；本表原先的状态有误 |
-| 6 | 停止后不启动接力运行；未读消息的文字退回输入框 | 已实现（Wave 5） |
+| 6 | 停止后不启动接力运行；未读消息的文字退回输入框 | 已实现（Wave 5）。2026-11-19 起，是否已退回按本浏览器 localStorage 的记录判断（§5 #28） |
 | 7 | 运行中禁用上传附件与切换模型 | 已实现（Wave 5） |
 | 8 | 补三项：计划面板的“等你回答后继续”、停止后的输入框占位文案、停止请求失败的提示。提问卡片的位置与“跳过”按钮不改 | 已实现（Wave 5） |
 | 9 | 回答提问不扣深度研究邀请额度，回答路径不经过 `allowInviteSend()` | 已实现（Wave 5） |
@@ -491,6 +516,8 @@ Wave 1–4 留下、技术上已知、尚未处理的：
 
 - **待用户决定（决策 13 带来）**：旧通道（旧日常对话的 agent 循环、深度研究的非统一分支、前端的旧 SSE/WebSocket 处理）在默认配置下不再执行。按仓库“死代码要删除”的规则它应当删除，同时删除显式 `false` 回退；这样做之后就没有不改代码的回退手段。删除范围大，需单独立任务，并先按“追调用方 + 追前端入口”逐处核实。
 
+- **待用户决定**：统一运行时下的“重新生成”目前等于把原问题再发一次（§5 #29）。是否需要“同一问题下生成另一个回答”的语义，需要产品决定；要做就得后端先支持。
+
 - **真正的并行与后台任务**：等 async subagents 稳定、且许可证与部署成本可接受时再评估（决策 5）。
 - **统一落库结构**：见决策 8 的触发条件。
 - **界面直接编辑计划**：等“发消息改计划”的使用数据出来后再决定。
@@ -513,3 +540,4 @@ Wave 1–4 留下、技术上已知、尚未处理的：
 | 2026-11-19 | 新增决策 13：统一运行时默认开启，不做灰度，不提供管理界面开关 | 用户决定 |
 | 2026-11-19 | 代码审查（`/sdd-code-review`）后的修正：配置接口总是返回开关值；事件订阅改轮询（§5 #20）；接力失败事件脱敏；§4.3 补停止、文件下载地址、协议选择三行；更正坑 12 与待定事项 17 | 四路审查结论 NEEDS_FIX |
 | 2026-11-19 | §5 增 #21（恢复/继续路径可被停止打断）、#22（同名附件以较新的为准） | 代码审查的两个 HIGH |
+| 2026-11-19 | §5 增 #23–#30（排队租约释放、租约失效收尾、按 run_id 定位版本、停靠运行的流 TTL、运行替换与重同步、退回消息去重、重新生成、事件列表增量）；§4.3 补 `resync` 字段与 Redis 键表；新增 upgrade.md | 修复代码审查剩余的 9 个 MEDIUM |
