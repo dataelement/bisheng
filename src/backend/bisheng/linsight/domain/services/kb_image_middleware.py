@@ -41,6 +41,7 @@ from typing import Any
 
 from langchain.agents.middleware.types import AgentMiddleware
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+from langgraph.constants import TAG_NOSTREAM
 from langchain_core.tools import StructuredTool
 from loguru import logger
 
@@ -280,11 +281,15 @@ class KbImageViewMiddleware(AgentMiddleware):
             "",
         )
         try:
+            # TAG_NOSTREAM: this call runs inside the agent's ``model`` node, so
+            # without the tag LangGraph streams its tokens in ``stream_mode="messages"``
+            # and the unified mapper publishes the picture notes as answer text.
             reply = await self._vision_model.ainvoke(
                 [
                     SystemMessage(content=_VISION_OBSERVER_RULES),
                     HumanMessage(content=[{"type": "text", "text": f"用户的问题：{question}"}, *pixels.content]),
-                ]
+                ],
+                config={"tags": [TAG_NOSTREAM]},
             )
         except Exception:
             logger.opt(exception=True).warning("the image-reading model failed; the answer goes on without pixels")

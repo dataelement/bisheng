@@ -542,9 +542,11 @@ async def test_image_reading_model_describes_pictures_for_a_text_model(
     class _Vision:
         def __init__(self) -> None:
             self.requests: list[list[BaseMessage]] = []
+            self.configs: list[Any] = []
 
-        async def ainvoke(self, messages, **kwargs):
+        async def ainvoke(self, messages, config=None, **kwargs):
             self.requests.append(list(messages))
+            self.configs.append(config)
             return AIMessage(content="图中是逐季上升的折线。")
 
     vision = _Vision()
@@ -561,6 +563,8 @@ async def test_image_reading_model_describes_pictures_for_a_text_model(
     assert any(_image_blocks(m) for m in vision.requests[0])
     assert not any(_image_blocks(m) for m in model.inputs[2])
     assert any("图中是逐季上升的折线。" in _text(m) for m in model.inputs[2] if isinstance(m, HumanMessage))
+    # The call runs inside the model node: untagged, its tokens would stream out as answer text.
+    assert "nostream" in (vision.configs[0] or {}).get("tags", [])
 
 
 # --------------------------------------------------------------------------- #

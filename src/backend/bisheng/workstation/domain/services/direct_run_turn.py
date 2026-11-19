@@ -35,6 +35,7 @@ from bisheng.citation.domain.services.citation_prompt_helper import CitationRegi
 from bisheng.citation.domain.services.daily_citation_handles import HandleStreamConverter, markers_to_handles
 from bisheng.citation.domain.services.daily_citation_scope import DailyCitationScope
 from bisheng.linsight.domain.schemas import run_events
+from bisheng.linsight.domain.services.text_handle_rewriter import TextHandleRewriter
 from bisheng.memory.domain.services.redaction import is_memory_tool, redact_tool_event
 from bisheng.workstation.domain.services import daily_citation
 from bisheng.workstation.domain.services.daily_memory import DailyMemoryTurn
@@ -59,11 +60,9 @@ class DirectTurn:
         self.model: Any = None
         self.collector = CitationRegistryCollector()
         self.scope = DailyCitationScope(conversation_id)
-        self.converter = HandleStreamConverter(self.scope.handles)
+        self.text = TextHandleRewriter(self.scope.handles)
         self.memory: DailyMemoryTurn | None = None
         self.memory_wiring: Any = None
-        self._text_event: dict | None = None
-        self._text_pending = False
         self._prepared = False
 
     # ------------------------------------------------------------ preparation
@@ -121,31 +120,21 @@ class DirectTurn:
 
     # ---------------------------------------------------------------- events
 
+    @property
+    def converter(self) -> HandleStreamConverter:
+        """The handle converter of the answer text; its counts feed the citation audit."""
+        return self.text.converter
+
     def rewrite(self, event: dict) -> list[dict]:
         """The events to write in place of ``event`` (zero, one or two).
 
-        Main-answer text goes through the handle converter, which holds back a
-        tail that may still become ``[Sn]``. Any other event ends the text run:
-        the held tail is written first, as one more ``text`` event.
+        Main-answer text goes through the handle converter (``TextHandleRewriter``);
+        memory tool events lose their content.
         """
         data = event.get("data") or {}
-        if event.get("type") == run_events.TEXT and not data.get("namespace"):
-            self._text_event = event
-            self._text_pending = True
-            converted = self.converter.feed(str(data.get("text") or ""))
-            return [{**event, "data": {**data, "text": converted}}] if converted else []
-
-        out: list[dict] = []
-        if self._text_pending and self._text_event is not None:
-            self._text_pending = False
-            tail = self.converter.flush()
-            if tail:
-                template = self._text_event
-                out.append({**template, "data": {**(template.get("data") or {}), "text": tail}})
         if event.get("type") == run_events.TOOL_CALL and is_memory_tool(data.get("name")):
             event = {**event, "data": self._redacted_tool_call(data)}
-        out.append(event)
-        return out
+        return self.text.rewrite(event)
 
     @staticmethod
     def _redacted_tool_call(data: dict) -> dict:

@@ -49,6 +49,7 @@ from bisheng.linsight.domain.services.state_message_manager import (
     MessageEventType,
 )
 from bisheng.linsight.domain.services.stream_event_mapper import StreamEventMapper, UnifiedEventOutput
+from bisheng.linsight.domain.services.text_handle_rewriter import TextHandleRewriter
 from bisheng.linsight.domain.services.tool_loop_middleware import LinsightToolLoopError
 from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
 from bisheng.linsight.domain.services.workspace_backend import (
@@ -350,11 +351,24 @@ class _UnifiedRun:
         # T055: writes the ``file`` events of this execution; created with the
         # first workspace backend (``LinsightWorkflowTask._unified_file_relay``).
         self.file_relay = None
+        # ``[Sn]`` in the streamed answer becomes the citation marker before the
+        # text is written, as on the direct profile. Set once the citation scope of
+        # the execution exists (``bind_citation_scope``); None under the verbatim
+        # contract, where the model writes no handles.
+        self.text: TextHandleRewriter | None = None
+
+    def bind_citation_scope(self, scope) -> None:
+        if scope is not None and getattr(scope, "enabled", False):
+            self.text = TextHandleRewriter(scope.handles)
 
     async def emit(self, event: dict) -> None:
         # A run that lost the conversation must not write into its successor's stream.
         if self.lease_lost:
             return
+        for out in self.text.rewrite(event) if self.text is not None else [event]:
+            await self._write(out)
+
+    async def _write(self, event: dict) -> None:
         await self.writer.emit(event)
         if event.get("type") == "steer_read":
             # T043 (AC-14): this sink has no event hooks, and the run executes in
@@ -2125,6 +2139,9 @@ class LinsightWorkflowTask:
         await citation_scope.load()
         await citation_scope.pin_contract()
         self._citation_scope = citation_scope
+        unified = getattr(self, "_unified", None)
+        if unified is not None:
+            unified.bind_citation_scope(citation_scope)
         backend = self._workspace_backend(session_model, minio, citation_scope=citation_scope)
         # Directories already recorded by the pre-tool provision are left as they
         # are. skills_present stays true when that earlier copy filled the snapshot.
