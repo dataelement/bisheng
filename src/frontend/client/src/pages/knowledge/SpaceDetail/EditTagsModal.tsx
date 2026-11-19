@@ -1,3 +1,4 @@
+import { Alert } from "@bisheng/ui";
 import { useKnowledgeBatch } from "../hooks/useKnowledgeBatch";
 import { BatchOperationDialog } from "./BatchOperationDialog";
 import type { BatchItem, BatchResult } from "~/api/knowledgeBatch";
@@ -26,6 +27,7 @@ import { getFullWidthLength } from "~/utils";
 
 interface EditTagsModalProps {
   isOpen: boolean;
+  canManageSpaceTags?: boolean;
   onClose: (confirmClose: boolean) => void;
   /** Called after tags are saved successfully so parent can refresh */
   onSaved?: () => void;
@@ -43,6 +45,7 @@ interface EditTagsModalProps {
 
 export function EditTagsModal({
   isOpen,
+  canManageSpaceTags = false,
   onClose,
   onSaved,
   onBatchSaved,
@@ -131,6 +134,11 @@ export function EditTagsModal({
       return { ok: true, tagId: existing.id };
     }
 
+    if (!canManageSpaceTags) {
+      showToast({ message: localize("com_knowledge.tag_permissions.space_required"), status: "warning" });
+      return { ok: false };
+    }
+
     if (spaceTags.length >= 50) {
       showToast({
         message: localize("com_knowledge.space_tags_limit_exceeded"),
@@ -175,6 +183,7 @@ export function EditTagsModal({
 
   // Save: update file tags via API
   const handleSave = async () => {
+    if (pendingNames.length > 0 && !canManageSpaceTags) return;
     // First turn any un-entered input into a tag so Confirm captures it.
     const committed = await commitInput();
     if (!committed.ok) return; // validation/creation failed — let the user fix it
@@ -220,7 +229,7 @@ export function EditTagsModal({
   };
 
   const handleDeleteSpaceTag = async (tag: SpaceTag) => {
-    if (deletingTagId !== null) return;
+    if (!canManageSpaceTags || deletingTagId !== null) return;
     setDeletingTagId(tag.id);
     try {
       await deleteSpaceTagApi(spaceId, tag.id);
@@ -275,6 +284,7 @@ export function EditTagsModal({
           </DialogHeader>
 
           <div className="flex flex-1 flex-col gap-4 px-5 py-3 max-md:px-4 max-md:py-4">
+            {!canManageSpaceTags && <Alert type="info" live description={localize("com_knowledge.tag_permissions.space_required")} />}
             {/* Tags Input Box */}
             <div
               className="relative flex min-h-8 cursor-text flex-wrap items-center gap-1 rounded-lg border border-border-base bg-white px-3 py-[5px] pr-[40px] transition-[border-color,box-shadow] focus-within:border-[#ddd] focus-within:shadow-[0_0_0_2px_#f1f5f9]"
@@ -299,6 +309,7 @@ export function EditTagsModal({
               ))}
               <input
                 id="tag-input"
+                disabled={!canManageSpaceTags}
                 type="text"
                 autoComplete="off"
                 value={inputValue}
@@ -335,7 +346,9 @@ export function EditTagsModal({
                   return (
                     <span
                       key={tag.id}
-                      onClick={() => toggleTag(tag)}
+                      onClick={(event) => {
+                        if (!(event.target as Element).closest("button")) toggleTag(tag);
+                      }}
                       className={`group h-5 flex items-center justify-center gap-1 px-2 text-[12px] leading-5 rounded-sm transition-colors ${
                         isSelected
                           ? "text-blue-500 cursor-default bg-primary/10"
@@ -351,8 +364,8 @@ export function EditTagsModal({
                           e.stopPropagation();
                           void handleDeleteSpaceTag(tag);
                         }}
-                        disabled={deletingTagId === tag.id}
-                        title={localize("com_knowledge.delete")}
+                        disabled={!canManageSpaceTags || deletingTagId === tag.id}
+                        title={localize(canManageSpaceTags ? "com_knowledge.delete" : "com_knowledge.tag_permissions.space_required")}
                       >
                         <Trash2 className="size-3" />
                       </button>
@@ -389,7 +402,7 @@ export function EditTagsModal({
               variant="default"
               className="h-8 min-w-[60px] rounded-md px-4 font-normal max-md:flex-1"
               onClick={handleSave}
-              disabled={loading}
+              disabled={loading || (pendingNames.length > 0 && !canManageSpaceTags)}
             >
               {localize("com_knowledge.confirm")}
             </Button>

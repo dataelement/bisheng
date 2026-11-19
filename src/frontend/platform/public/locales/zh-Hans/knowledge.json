@@ -451,7 +451,11 @@
     "tagEditor": {
         "addPlaceholder": "请输入要添加的标签，回车保存",
         "existingTags": "已有标签",
-        "emptyTags": "暂无标签"
+        "emptyTags": "暂无标签",
+        "checkingPermission": "正在检查空间标签管理权限…",
+        "permissionUnavailable": "暂时无法确认空间标签管理权限。仍可选择已有标签，请重试。",
+        "deleteTag": "删除空间标签：{{name}}",
+        "spacePermissionRequired": "当前账号没有空间编辑权限，可选用已有标签；如需新建或删除空间标签，请联系空间管理员。"
     },
     "f118": {
         "specialized_processing_rules": "此类型文件沿用专用解析与切分规则，无需设置文档或表格参数。",
@@ -741,7 +745,8 @@
         "draft_notice": "新标签仅在最终确认后创建。",
         "tags_load_failed": "空间标签列表暂不可用，原权限限制仍适用。",
         "invalid_name": "标签名称请遵守原长度限制。",
-        "select_first": "请先选择文件或文件夹"
+        "select_first": "请先选择文件或文件夹",
+        "reason_space_tag_permission_required": "有文件标签修改权限，但新建标签需要空间编辑权限。请改用已有标签，或联系空间管理员。"
     },
     "move": {
         "checking": "正在检查移动条件…",

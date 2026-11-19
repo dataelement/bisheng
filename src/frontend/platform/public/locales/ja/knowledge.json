@@ -445,7 +445,11 @@
     "tagEditor": {
         "addPlaceholder": "タグを入力して Enter キーで保存",
         "existingTags": "既存のタグ",
-        "emptyTags": "タグはありません"
+        "emptyTags": "タグはありません",
+        "checkingPermission": "スペースのタグ管理権限を確認しています…",
+        "permissionUnavailable": "スペースのタグ管理権限を確認できませんでした。既存のタグは選択できます。再試行してください。",
+        "deleteTag": "スペースのタグを削除：{{name}}",
+        "spacePermissionRequired": "既存のタグは選択できます。スペースのタグの作成・削除にはスペースの編集権限が必要です。管理者にお問い合わせください。"
     },
     "f118": {
         "specialized_processing_rules": "この種類のファイルは専用の解析・分割ルールを使用します。文書や表の設定は不要です。",
@@ -735,7 +739,8 @@
         "draft_notice": "新しいタグは最終確認後に作成されます。",
         "tags_load_failed": "スペースのタグ一覧が利用できません。元の権限制限が適用されます。",
         "invalid_name": "元の文字数制限内でタグ名を入力してください。",
-        "select_first": "ファイルまたはフォルダーを選択してください"
+        "select_first": "ファイルまたはフォルダーを選択してください",
+        "reason_space_tag_permission_required": "このファイルのタグは編集できますが、新しいタグの作成にはスペースの編集権限が必要です。既存のタグを選ぶか、管理者にお問い合わせください。"
     },
     "move": {
         "checking": "移動条件を確認しています…",

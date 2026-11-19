@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { EditTagsModal } from "./EditTagsModal";
-import { addSpaceTagApi, getSpaceTagsApi } from "~/api/knowledge";
+import { addSpaceTagApi, deleteSpaceTagApi, getSpaceTagsApi } from "~/api/knowledge";
 const mockOpen = jest.fn(),
   mockClose = jest.fn();
 jest.mock("../hooks/useKnowledgeBatch", () => ({
@@ -24,10 +24,11 @@ jest.mock("~/components/ui", () => ({
   ...jest.requireActual("~/components/ui/dialog"),
   ...jest.requireActual("~/components/ui/button"),
 }));
-function mount() {
+function mount(canManageSpaceTags = true) {
   return render(
     <QueryClientProvider client={new QueryClient()}>
       <EditTagsModal
+        canManageSpaceTags={canManageSpaceTags}
         isOpen
         spaceId="3"
         fileIds={["7", "8"]}
@@ -70,4 +71,23 @@ it("passes the complete typed selection and local draft only to confirmation rev
   );
   expect(addSpaceTagApi).not.toHaveBeenCalled();
   expect(mockClose).not.toHaveBeenCalled();
+});
+
+
+it("explains restricted space actions while allowing existing file tag assignments", async () => {
+  mockOpen.mockResolvedValue(null);
+  mount(false);
+  expect(screen.getByText("com_knowledge.tag_permissions.space_required")).toBeVisible();
+  expect(screen.getByRole("textbox")).toBeDisabled();
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "new" } });
+  fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+  expect(addSpaceTagApi).not.toHaveBeenCalled();
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "" } });
+  fireEvent.click(screen.getByText("known"));
+  const remove = screen.getByTitle("com_knowledge.tag_permissions.space_required");
+  expect(remove).toBeDisabled();
+  fireEvent.click(remove);
+  expect(deleteSpaceTagApi).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "com_knowledge.confirm" }));
+  await waitFor(() => expect(mockOpen).toHaveBeenCalledWith(expect.objectContaining({ tag_ids: [11], new_tag_names: [] })));
 });
