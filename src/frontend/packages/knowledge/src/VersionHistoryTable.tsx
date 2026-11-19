@@ -1,4 +1,4 @@
-import { Tag, Tooltip } from '@bisheng/ui';
+import { Tooltip } from '@bisheng/ui';
 import cn from '@bisheng/ui/cn';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -94,7 +94,6 @@ export interface VersionHistoryTableRow {
 
 interface VersionHistoryTableProps {
   rows: readonly VersionHistoryTableRow[];
-  compact?: boolean;
 }
 
 const columns = [
@@ -107,40 +106,8 @@ const columns = [
   { label: 'actions', width: 'w-[162px]', padding: 'px-4' },
 ] as const;
 
-export function VersionHistoryTable({ rows, compact = false }: VersionHistoryTableProps) {
+export function VersionHistoryTable({ rows }: VersionHistoryTableProps) {
   const { t } = useTranslation('shared', { keyPrefix: 'knowledge.version.history' });
-  if (compact) {
-    return (
-      <ol className="divide-y divide-border-base border-t border-border-base">
-        {rows.map(row => (
-          <li key={row.id} className="space-y-3 py-4 last:pb-0">
-            <div className="flex flex-wrap items-center gap-2 text-sm text-text-1">
-              <span className="font-medium">V{row.versionNumber}</span>
-              {row.isPrimary && <Tag size="small" color="brand">{t('primary_badge')}</Tag>}
-              {row.status}
-            </div>
-            <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm [overflow-wrap:anywhere]">
-              <div className="col-span-2 min-w-0">
-                <dt className={styles.fieldLabel}>{t('columns.filename')}</dt>
-                <dd>{row.fileName}</dd>
-              </div>
-              {[
-                { label: 'file_code', value: row.fileCode },
-                { label: 'uploader', value: row.uploader },
-                { label: 'upload_time', value: row.uploadedAt?.replace('T', ' ') },
-              ].map(({ label, value }) => (
-                <div key={label} className="min-w-0">
-                  <dt className={styles.fieldLabel}>{t(`columns.${label}`)}</dt>
-                  <dd>{value || '—'}</dd>
-                </div>
-              ))}
-            </dl>
-            <div className="flex flex-wrap items-center gap-2">{row.actions}</div>
-          </li>
-        ))}
-      </ol>
-    );
-  }
   return (
     <div className={`overflow-x-auto ${styles.historyList}`}>
       <table className="w-full min-w-[760px] table-fixed border-collapse text-sm">

@@ -107,6 +107,7 @@ afterEach(() => {
 it("renders only actual visible history facts without synthesizing hidden primary or nullable metadata", async () => {
   const view = mount();
   const dialog = await screen.findByRole("dialog", { name: "knowledge.version.history.title" });
+  expect(dialog).toHaveClass("left-1/2", "top-1/2", "max-w-[min(860px,90vw)]");
   expect(await within(dialog).findByText("Visible history")).toBeVisible();
   const table = within(dialog).getByRole("table");
   expect(within(table).getAllByRole("columnheader")).toHaveLength(7);
