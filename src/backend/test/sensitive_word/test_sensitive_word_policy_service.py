@@ -77,6 +77,43 @@ def test_check_text_uses_builtin_and_custom_words(monkeypatch):
     assert {hit.word for hit in result.hits} == {"内置词", "自定义词"}
 
 
+@pytest.mark.parametrize(
+    ("text", "expected_hits"),
+    [
+        ("请按参考答案格式整理公务员答案解析和考试答案讲解。", set()),
+        ("采用去中央化架构。附上论文代码和通信接收器说明。", set()),
+        ("请介绍足球玩法并提供庭审直播的链接。", set()),
+        ("請上傳學歷資料、学位證和资格證。", set()),
+        ("这份普通嘌呤饮食表用于本周健康检查。", set()),
+        ("玻璃烧瓶的清洗步骤将在三秒倒计时结束后显示。", set()),
+        ("等人手术完成以后再联系。", set()),
+        ("请查看证件办理流程、办理证件须知和制作证件照的要求。", set()),
+        ("请核对发票代收和代办发票报销的流程。", set()),
+        ("服务支持上门激活。", set()),
+        ("用手机跟踪本人设备、用手机监控温室湿度、用手机追剧。", set()),
+        ("窗口活动結束後請把紅片與黃片分開。", set()),
+        ("CNM", {"cnm"}),
+        ("有人说口活好。还有人说口活真好。", {"口活好", "口活真好"}),
+        ("想看黃片。發我幾部黃片。", {"看黃片", "幾部黃片"}),
+        ("代辦假學歷、低價代開假發票", {"代辦假學歷", "代開假發票"}),
+        ("代办假发票、制作假证件", {"代办假发票", "制作假证件"}),
+        ("兜售考试答案、卖考试答案", {"兜售考试答案", "卖考试答案"}),
+    ],
+)
+def test_builtin_dictionary_distinguishes_normal_and_blocked_phrases(monkeypatch, text, expected_hits):
+    monkeypatch.setattr(
+        "bisheng.sensitive_word.domain.models.sensitive_word_policy.SensitiveWordPolicyDao.get_policy",
+        lambda **kwargs: _policy(words_types=["builtin"]),
+    )
+    result = SensitiveWordPolicyService.check_text(
+        tenant_id=1,
+        business_type=SensitiveWordBusinessType.KNOWLEDGE_SPACE_FILE_PARSE,
+        text=text,
+    )
+    assert result.enabled is True
+    assert {hit.word for hit in result.hits} == expected_hits
+
+
 def test_disabled_or_empty_policy_is_not_effective(monkeypatch):
     monkeypatch.setattr(
         "bisheng.sensitive_word.domain.models.sensitive_word_policy.SensitiveWordPolicyDao.get_policy",
