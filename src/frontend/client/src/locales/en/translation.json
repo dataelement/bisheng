@@ -1370,9 +1370,8 @@
     "explore_more": "Explore more apps",
     "explore_plaza": "Visit the App Marketplace to <cta>explore more apps<arrow /></cta>",
     "recent_apps_hint": "Your recently used apps are all here～",
-    "service_maintenance_title": "Oops, we hit a small hiccup",
-    "service_maintenance": "Hang tight for a moment — we'll be back to normal shortly.",
-    "refresh": "Refresh to retry",
+    "service_maintenance_title": "Service temporarily unavailable",
+    "service_maintenance": "Please try again in a moment",
     "unknown_name": "Unknown app",
     "featured": "Featured",
     "history_deleted": "Conversation history deleted"

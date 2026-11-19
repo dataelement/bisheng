@@ -5,6 +5,7 @@ import {
   knowledgeQueryKeys,
   type KnowledgeQueryScope,
 } from "@/controllers/hooks/knowledge";
+import { isSpaceDeletionActive } from "@/store/knowledgeSpaceDeletion";
 import { showApiError } from "@/controllers/request";
 
 export function useSpaceCopyTasks(scope: KnowledgeQueryScope) {
@@ -22,7 +23,7 @@ export function useSpaceCopyTasks(scope: KnowledgeQueryScope) {
   const scopeIdentity = JSON.stringify(scopeKey);
   useEffect(() => {
     if (!query.data) return;
-    const states = new Map((query.data ?? []).map(task => [task.id, `${task.job_id}:${task.phase}:${task.job_state}`]));
+    const states = new Map((query.data ?? []).map(task => [task.id, `${task.job_id}:${task.state}:${task.phase}:${task.job_state}`]));
     const prior = previous.current?.scope === scopeIdentity ? previous.current.states : undefined;
     const changed = new Set([...states.keys(), ...(prior?.keys() ?? [])].filter(id => states.get(id) !== prior?.get(id)));
     if (prior && changed.size > 0) {
@@ -30,12 +31,16 @@ export function useSpaceCopyTasks(scope: KnowledgeQueryScope) {
         queryKey: scopeKey,
         predicate: ({ queryKey }) => {
           const [kind, spaceId] = queryKey.slice(scopeKey.length);
-          return kind === "space" ? changed.has(Number(spaceId)) : ["visible-list", "admin-list", "navigation-catalog", "navigation-sections"].includes(String(kind));
+          if (kind === "space") {
+            const id = Number(spaceId);
+            return states.has(id) && changed.has(id) && !isSpaceDeletionActive(scope, id);
+          }
+          return ["visible-list", "admin-list", "navigation-catalog", "navigation-sections"].includes(String(kind));
         },
       });
     }
     previous.current = { scope: scopeIdentity, states };
-  }, [client, scopeKey, scopeIdentity, query.data]);
+  }, [client, scope, scopeKey, scopeIdentity, query.data]);
   useEffect(() => {
     if (query.error) showApiError(query.error);
   }, [query.error]);

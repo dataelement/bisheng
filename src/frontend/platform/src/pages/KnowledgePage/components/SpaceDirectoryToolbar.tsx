@@ -17,6 +17,7 @@ interface SpaceDirectoryToolbarProps {
   onCreateFolder: () => void;
   canUpload: boolean;
   onWebLink?: () => void;
+  onProcessSimilar?: () => void;
   onBatchDownload?: () => void;
   onBatchRetry?: () => void;
   onBatchTag?: () => void;
@@ -37,6 +38,7 @@ export function SpaceDirectoryToolbar({
   onCreateFolder,
   canUpload,
   onWebLink,
+  onProcessSimilar,
   onBatchDownload,
   onBatchRetry,
   onBatchTag,
@@ -48,7 +50,8 @@ export function SpaceDirectoryToolbar({
   const { t } = useTranslation("knowledge");
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const hasBatchActions = Boolean(onMove || onBatchDownload || onBatchTag || onBatchRetry || onReferences || onDeleteSelected);
+  const hasBatchActions = Boolean(onProcessSimilar || onMove || onBatchDownload || onBatchTag || onBatchRetry || onReferences || onDeleteSelected);
+  const processSimilarLabel = t("knowledge.version.header_process_similar_label", { ns: "shared" });
   const handleUpload = () => {
     if (!canUpload) return;
     const next = new URLSearchParams(params);
@@ -67,6 +70,7 @@ export function SpaceDirectoryToolbar({
             align="end"
             menu={
               <>
+                {onProcessSimilar && <DropdownItem onSelect={onProcessSimilar}>{processSimilarLabel}</DropdownItem>}
                 {onMove && (
                   <DropdownItem onSelect={onMove}>{t("move.title")}</DropdownItem>
                 )}
@@ -139,6 +143,7 @@ export function SpaceDirectoryToolbar({
     <div className="flex flex-wrap items-center justify-end gap-3">
       {selectedCount > 0 && (
         <>
+          {onProcessSimilar && <Button variant="outlined" onClick={onProcessSimilar}>{processSimilarLabel}</Button>}
           {onMove && <Button variant="outlined" onClick={onMove}>
             {t("move.title")}
           </Button>}

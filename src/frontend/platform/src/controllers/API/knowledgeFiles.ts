@@ -97,8 +97,10 @@ export async function getSpaceFilePreview(
 export async function getSpaceFileDownload(
   spaceId: number,
   fileId: number,
+  signal?: AbortSignal,
 ): Promise<SpaceFileUrls> {
-  return axios.get(`${itemPath(spaceId, "files", fileId)}/download`);
+  const path = `${itemPath(spaceId, "files", fileId)}/download`;
+  return signal ? axios.get(path, { signal }) : axios.get(path);
 }
 export async function searchSpaceChildren(
   spaceId: number,

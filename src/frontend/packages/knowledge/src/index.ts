@@ -3,6 +3,8 @@ export type { VersionManagementDialogProps } from './VersionManagementDialog';
 export { versionDialogStyles } from './versionDialogStyles';
 export { VersionHistoryAction, VersionHistoryStatusBadge, VersionHistorySummary, VersionHistoryTable } from './VersionHistoryTable';
 export type { VersionHistoryTableRow } from './VersionHistoryTable';
+export { VersionHistoryDialog } from './VersionHistoryDialog';
+export type { VersionHistoryData, VersionHistoryDialogProps, VersionHistoryEntry } from './VersionHistoryDialog';
 export { RelateDocumentPanel } from './RelateDocumentPanel';
 export type { RelateDocumentPanelProps } from './RelateDocumentPanel';
 export { SimilarDocumentDialog } from './SimilarDocumentDialog';
