@@ -1287,3 +1287,6 @@ Mode编译只迁移原before已存在的技术标记，permission_enabled/custom
 # 2026-11-20 补充：失效创建者（AC-141）
 
 保留 `historical_resource_creator_retention` 原资源指纹及缺账号事实。NORMAL 的成员指令新增 `retain_missing`：空模板摘要、无新增成员主键和时间；原成员集合冻结且完整保持，创建者 ID 不变。冻结 verifier 要求缺账号事实和原资源逐项闭合；原 SQL Writer 在 apply/verify 以有界批次重验全局账号缺失，成员集合前后摘要相等。续跑前原生重新读取身份，资源类型仅允许原类型及既定 0→3 转换。六类来源保留仍仅限同一 Knowledge 身份，不借此解释其他来源的缺创建者。文件/QA/标签作者为原审计元数据，不参与该成员指令。已有授权与目录迁移合同保持。
+# 2026-11-20 补充：原始文件定位字段（AC-142）
+
+`file`/`rootless_file` 中的原对象定位字段是历史 SQL 标量，受字符串长度/NUL 规则和整行摘要约束；不能与 `physical_object.object_key` 或制品 descriptor 的存储能力混用。bindings-only 盘点保留旧 URL 原值、输出不含 URL 的提示，不验证外部地址可达性。物理端口、制品 key 和在线输入规则不变；不把迁移编码器作为对象获取授权。

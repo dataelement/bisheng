@@ -231,10 +231,9 @@ def _validate(tag, data):
         _invalid()
     if tag == "evidence_material" and data["material_kind"] not in {"backup", "schema"}:
         _invalid()
-    if tag in {"file", "rootless_file"}:
-        for name in ("object_name", "preview_file_object_name", "bbox_object_name", "html_snapshot_object_name"):
-            if data[name] not in (None, ""):
-                _value(data[name], "key")
+    # Original file locators are bounded historical strings, not storage
+    # capabilities. Binding-only inventories preserve them without IO. Actual
+    # physical_object and artifact descriptors retain their strict key gates.
     if tag == "manifest_entry":
         _identity("manifest", data["section"], data["scope"], data["tenant_id"], data["page_index"], "baseline")
 

@@ -1750,6 +1750,12 @@ stopped-service migration below. Historical Alembic revisions are unchanged.
 
 ### Formal stopped-service migration
 
+Original file locator columns are retained SQL strings, including historical
+URL-shaped values. Binding-only inventory preserves them and warns without
+fetching external contents. Actual physical object operations and migration
+artifact descriptors still require strict storage keys; no new upload input or
+download authorization is relaxed by this compatibility.
+
 Historical resource creators whose positive original IDs no longer exist are
 retained with an explicit warning and frozen identity proof. NORMAL conversion
 preserves the complete original member set (`retain_missing`) and does not create

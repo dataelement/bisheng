@@ -29,6 +29,25 @@ async def missing_owner(database):
         )
 
 
+async def legacy_locator(database):
+    async with database.engine.begin() as connection:
+        await connection.execute(
+            sa.update(resources.KnowledgeFile)
+            .where(resources.KnowledgeFile.id == 1)
+            .values(object_name="https://legacy.invalid/original")
+        )
+
+
+@pytest.mark.parametrize("published_input", [{"reference_seed": legacy_locator}], indirect=True)
+async def test_original_url_locator_full_migration_preserves_value_without_fetch(published_input):
+    value = published_input
+    result = await original.reference_tests.app(value).arun_references(**value.input, operator_id=7)
+    assert result.complete
+    async with value.sessions() as session, session.begin():
+        assert (await production_coverage_factory(session).arequire_global_ready()).verified_tenant_ids
+        assert (await session.get(resources.KnowledgeFile, 1)).object_name == "https://legacy.invalid/original"
+
+
 @pytest.mark.parametrize("published_input", [{"reference_seed": missing_owner}], indirect=True)
 async def test_missing_original_creator_full_migration_and_completed_resume(published_input):
     value = published_input

@@ -402,6 +402,11 @@ class UnificationPreflight:
                                 ),
                             )
                     elif method == "files":
+                        if row.object_name and "://" in row.object_name:
+                            logger.warning(
+                                "F118 retains historical file {} locator unchanged; no external object is fetched",
+                                row.id,
+                            )
                         if row.file_type not in {0, 1} or row.knowledge_id not in spaces:
                             _blocked("invalid_file_parent")
                         files[row.id] = {**data}
