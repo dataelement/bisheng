@@ -32,7 +32,7 @@ export function SpaceRowVersionMenu({ scope, spaceId, item, enabled, indicator =
   useEffect(() => {
     if (eligible && permission.error) showApiError(permission.error);
   }, [eligible, permission.error]);
-  if (!eligible || permission.isError || !permission.data?.actions?.includes(indicator ? "manage_permission" : "edit")) return null;
+  if (!eligible || permission.isError || !permission.data?.actions?.includes("edit")) return null;
   if (indicator) return (
     <button
       type="button"

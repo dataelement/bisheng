@@ -386,7 +386,7 @@ function useKnowledgeSpaceDetail(
   const { batchActions, inlineActions, overflowActions } = getKnowledgeBatchActions({
     selectedFiles,
     isAdmin,
-    canManageMembers,
+    canEditSpace,
     versionManagementEnabled,
     handleProcessSimilar,
     handleManagePermission,

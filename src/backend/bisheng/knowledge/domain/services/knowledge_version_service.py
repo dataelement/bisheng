@@ -28,6 +28,7 @@ from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository 
     KnowledgeFileRepository,
 )
 from bisheng.knowledge.domain.services.knowledge_processing_guard import require_space_processing_idle
+from bisheng.permission.application.business_authorization import require_business_action
 
 
 class KnowledgeVersionService:
@@ -227,6 +228,10 @@ class KnowledgeVersionService:
         kf = await self.knowledge_file_repo.find_by_id(knowledge_file_id)
         if kf is None:
             raise HTTPException(status_code=404, detail="file not found")
+
+        await require_business_action(
+            self.login_user, resource_type="knowledge_space", resource_id=kf.knowledge_id, action="edit"
+        )
 
         if kf.similar_status != 2:
             kf.similar_status = 2
