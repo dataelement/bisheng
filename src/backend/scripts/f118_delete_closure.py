@@ -102,7 +102,7 @@ async def capture(sessions, client, *, pin, excluded=frozenset(), parents=(), up
                 .where(
                     ResourcePermissionMode.projection_state == "CURRENT",
                     PermissionProjectionOperation.operation_type == "RESOURCE_DELETE",
-                    PermissionProjectionOperation.status == "FINALIZED",
+                    PermissionProjectionOperation.status.in_(("FINALIZED", "FAILED_CLOSED")),
                 )
                 .order_by(ResourcePermissionMode.id)
                 .limit(200)
@@ -126,12 +126,48 @@ async def capture(sessions, client, *, pin, excluded=frozenset(), parents=(), up
                         if live[row["resource_type"], row["resource_id"]]
                         and (row["resource_type"], row["resource_id"]) not in excluded
                     }
-                    facts = await load_facts(session, candidates=candidates) if candidates else ()
+                    operations = (
+                        {
+                            row.id: row
+                            for row in (
+                                await session.exec(
+                                    select(PermissionProjectionOperation).where(
+                                        PermissionProjectionOperation.id.in_(
+                                            [value[0] for value in candidates.values()]
+                                        ),
+                                        PermissionProjectionOperation.tenant_id == tenant,
+                                    )
+                                )
+                            ).all()
+                        }
+                        if candidates
+                        else {}
+                    )
+                    facts = []
+                    for status in ("FINALIZED", "FAILED_CLOSED"):
+                        chosen = {}
+                        for key, (operation_id, version) in candidates.items():
+                            operation = operations[operation_id]
+                            if operation.status == status:
+                                require(
+                                    version
+                                    == (
+                                        operation.target_version
+                                        if status == "FINALIZED"
+                                        else operation.expected_version
+                                    ),
+                                    "original_fence_changed",
+                                )
+                                chosen[key] = (operation_id, operation.target_version)
+                        if chosen:
+                            facts.extend(await load_facts(session, candidates=chosen, operation_status=status))
             by_key = {(row["resource_type"], row["resource_id"]): row for row in batch}
             for fact in facts:
                 require(fact.store_id == pin["store_id"], "original_store_changed")
-                retained.append(asdict(fact))
                 mode = by_key[fact.resource_type, fact.resource_id]
+                source_status = "FINALIZED" if mode["version"] == fact.target_version else "FAILED_CLOSED"
+                if source_status == "FINALIZED":
+                    retained.append(asdict(fact))
                 value = await selected(sessions, mode)
                 require(value["pin"] == pin and value["mode"] == mode, "capture_changed")
                 scope = f"{fact.resource_type}:{fact.resource_id}"
@@ -139,12 +175,17 @@ async def capture(sessions, client, *, pin, excluded=frozenset(), parents=(), up
                 require(all(not row.get("condition") for row in rows), "conditional_graph")
                 enabled = [row for row in rows if row["relation"] == "permission_enabled"]
                 require(
-                    all(row["user"] == "service_account:*" and row["object"] == scope for row in enabled),
+                    all(
+                        row["user"]
+                        in ({"service_account:*"} if source_status == "FINALIZED" else {"user:*", "service_account:*"})
+                        and row["object"] == scope
+                        for row in enabled
+                    ),
                     "user_access_reappeared",
                 )
                 parent = parent_map.get(mode["id"])
-                if enabled or parent is not None:
-                    require(len(enabled) <= 1, "duplicate_marker")
+                if enabled or parent is not None or source_status == "FAILED_CLOSED":
+                    require(len(enabled) <= (1 if source_status == "FINALIZED" else 2), "duplicate_marker")
                     parent_deletes = parent["deletes"] if parent else []
                     require(len(parent_deletes) <= 88, "atomic_scope_limit")
                     choices = [value["business"]]
@@ -163,6 +204,7 @@ async def capture(sessions, client, *, pin, excluded=frozenset(), parents=(), up
                         {
                             "mode": mode,
                             "source": asdict(fact),
+                            "source_status": source_status,
                             "tuples": rows,
                             "business_digests": sorted(
                                 {checksum({k: v for k, v in row.items() if k != "update_time"}) for row in choices}
@@ -235,6 +277,7 @@ async def verify(plan, item, *, sessions, client, expected, repository):
                 candidates={
                     (source["resource_type"], source["resource_id"]): (source["operation_id"], source["target_version"])
                 },
+                operation_status=item.get("source_status", "FINALIZED"),
             )
     require(len(facts) == 1 and asdict(facts[0]) == source, "original_receipt_changed")
     operation = await repository.aget_operation_by_idempotency(expected.idempotency_key)

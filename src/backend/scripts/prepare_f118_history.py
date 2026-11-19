@@ -71,7 +71,7 @@ def load_plan(path):
     if (
         set(payload) != {"plan", "sha256"}
         or checksum(payload["plan"]) != payload["sha256"]
-        or payload["plan"].get("schema") not in {1, 2}
+        or payload["plan"].get("schema") not in {1, 2, 3}
     ):
         blocked("backup_verification_failed")
     return payload["plan"]
@@ -778,6 +778,11 @@ async def capture(sessions, client):
     result["parents"] = [item for item in result["parents"] if item["mode"]["id"] not in folded]
     if result["delete_closures"]:
         result["schema"] = 2  # Older scripts must reject instead of ignoring these repairs.
+    result["builtin_finalizations"] = await permissions.capture_builtin_finalizations(sessions, client, result["pin"])
+    if result["builtin_finalizations"] or any(
+        item.get("source_status") == "FAILED_CLOSED" for item in result["delete_closures"]
+    ):
+        result["schema"] = 3
     return canonical(result)
 
 
@@ -972,7 +977,7 @@ async def apply(plan, *, sessions, client, runtime, operator_id, physical=None):
 
     if plan.get("blocked") or plan.get("business", {}).get("blocked"):
         blocked("plan_has_unresolved_candidates")
-    if plan.get("purpose") == "f118-delete-closures" and any(
+    if plan.get("purpose") in {"f118-delete-closures", "f118-projection-repairs"} and any(
         plan.get(key) for key in ("levels", "parents", "purges", "initializations", "recoveries", "business")
     ):
         blocked("delete_closure_plan_scope")
@@ -1103,6 +1108,7 @@ async def apply(plan, *, sessions, client, runtime, operator_id, physical=None):
             plan, sessions=sessions, client=client, runtime=runtime, operator_id=operator_id
         )
     )
+    receipts.extend(await permissions.apply_builtin_finalizations(plan, sessions=sessions, runtime=runtime))
     for item in plan["parents"]:
         mode = item["mode"]
         with tenant_execution_scope(mode["tenant_id"]):
@@ -1226,6 +1232,7 @@ async def apply(plan, *, sessions, client, runtime, operator_id, physical=None):
         "purges": len(plan["purges"]),
         "initializations": len(plan.get("initializations", ())),
         "recoveries": len(plan.get("recoveries", ())),
+        "builtin_finalizations": len(plan.get("builtin_finalizations", ())),
         "delete_closures": len(plan.get("delete_closures", ())),
         "permission_delete_retained": len(plan.get("permission_delete_retained", ())),
         "retained": len(retained_files),
@@ -1237,7 +1244,7 @@ async def apply(plan, *, sessions, client, runtime, operator_id, physical=None):
         "preparation_complete": not plan["blocked"],
         "validation_scope": "delete_closures_only"
         if plan.get("purpose") == "f118-delete-closures"
-        else "history_preparation",
+        else ("projection_repairs_only" if plan.get("purpose") == "f118-projection-repairs" else "history_preparation"),
     }
 
 
@@ -1292,7 +1299,7 @@ async def arun(args):
         )
         stack.push_async_callback(client.close)
         if not args.apply:
-            if getattr(args, "delete_closures_only", False):
+            if getattr(args, "delete_closures_only", False) or getattr(args, "projection_repairs_only", False):
                 from scripts import f118_delete_closure
 
                 closures, retained = await f118_delete_closure.capture(get_async_db_session, client, pin=pin)
@@ -1311,6 +1318,16 @@ async def arun(args):
                     "delete_closures": closures,
                     "permission_delete_retained": retained,
                 }
+                if getattr(args, "projection_repairs_only", False):
+                    from scripts import f118_history_permissions as permissions
+
+                    plan.update(
+                        schema=3,
+                        purpose="f118-projection-repairs",
+                        builtin_finalizations=await permissions.capture_builtin_finalizations(
+                            get_async_db_session, client, pin
+                        ),
+                    )
                 saved_checksum = save_plan(args.plan, plan)
                 return {
                     "mode": "preview",
@@ -1318,7 +1335,10 @@ async def arun(args):
                     "sha256": saved_checksum,
                     "delete_closures": len(closures),
                     "permission_delete_retained": len(retained),
-                    "validation_scope": "delete_closures_only",
+                    "builtin_finalizations": len(plan.get("builtin_finalizations", ())),
+                    "validation_scope": "projection_repairs_only"
+                    if getattr(args, "projection_repairs_only", False)
+                    else "delete_closures_only",
                     "blocked": [],
                     "ready": False,
                 }
@@ -1360,6 +1380,7 @@ async def arun(args):
                 "plan": str(args.plan),
                 "sha256": saved_checksum,
                 **{key: len(plan[key]) for key in ("levels", "parents", "purges", "initializations", "recoveries")},
+                "builtin_finalizations": len(plan.get("builtin_finalizations", ())),
                 "delete_closures": len(plan.get("delete_closures", ())),
                 "permission_delete_retained": len(plan.get("permission_delete_retained", ())),
                 "business_deletes": len(plan["business"]["deletes"]),
@@ -1371,6 +1392,8 @@ async def arun(args):
         plan = load_plan(args.plan)
         if getattr(args, "delete_closures_only", False) and plan.get("purpose") != "f118-delete-closures":
             blocked("delete_closure_plan_purpose")
+        if getattr(args, "projection_repairs_only", False) and plan.get("purpose") != "f118-projection-repairs":
+            blocked("projection_repair_plan_purpose")
         if plan["pin"] != pin:
             blocked("backup_or_pin_changed")
         physical = None
@@ -1457,6 +1480,11 @@ def main(argv=None):
         "--delete-closures-only",
         action="store_true",
         help="preview only deterministic residual delete-marker closures before M2; keep all payloads",
+    )
+    parser.add_argument(
+        "--projection-repairs-only",
+        action="store_true",
+        help="preview native delete closure and AFTER-only builtin CREATE finalization before M2",
     )
     args = parser.parse_args(argv)
     if args.apply and (args.operator_id is None or args.operator_id <= 0):

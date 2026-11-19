@@ -10,7 +10,7 @@ from dataclasses import dataclass, field, fields
 from datetime import datetime
 from typing import Generic, TypeVar
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bisheng.channel.domain.models.channel import Channel
@@ -425,6 +425,37 @@ class UnificationInventoryRepository:
             Flow.flow_type == FlowType.WORKFLOW.value
         )
         return await self._page(session, Flow, WorkflowRootRow, after_id, limit, str, statement=query)
+
+    async def aload_workflow_roots(self, session, *, root_ids):
+        """Exact bounded original roots for missing-author retention rechecks."""
+        _scope(session)
+        if type(root_ids) is not tuple or not 1 <= len(root_ids) <= 200 or len(set(root_ids)) != len(root_ids):
+            _blocked("workflow_retention_root_batch")
+        rows = await self._read(
+            session,
+            select(*_columns(Flow, WorkflowRootRow, {"data_json": Flow.data}))
+            .where(Flow.id.in_(root_ids), Flow.tenant_id == _scope(session), Flow.flow_type == FlowType.WORKFLOW.value)
+            .order_by(Flow.id),
+        )
+        return tuple(_row(WorkflowRootRow, row) for row in rows)
+
+    async def acount_workflow_retained_versions(self, session, *, root_ids):
+        _scope(session)
+        if type(root_ids) is not tuple or not 1 <= len(root_ids) <= 200 or len(set(root_ids)) != len(root_ids):
+            _blocked("workflow_retention_version_batch")
+        rows = await self._read(
+            session,
+            select(FlowVersion.flow_id, func.count().label("count"))
+            .where(
+                FlowVersion.flow_id.in_(root_ids),
+                FlowVersion.tenant_id == _scope(session),
+                or_(FlowVersion.is_delete.is_(None), FlowVersion.is_delete != 1),
+            )
+            .group_by(FlowVersion.flow_id),
+        )
+        counts = dict.fromkeys(root_ids, 0)
+        counts.update((row["flow_id"], row["count"]) for row in rows)
+        return counts
 
     async def alist_workflow_versions(self, session, *, after_id=None, limit=200) -> InventoryPage[WorkflowVersionRow]:
         parent = Flow.__table__.alias("inventory_workflow_parent")

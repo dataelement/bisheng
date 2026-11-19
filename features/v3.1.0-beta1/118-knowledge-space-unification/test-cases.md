@@ -585,3 +585,6 @@ TC-KSU-141 对应 AC-95、AC-99；TC-KSU-142 对应 AC-96；TC-KSU-143 对应 AC
 | TC-MIGDEF-009 | 原创建者缺失保留 | P0 | 旧知识库、创建者全局不存在、原成员可闭合 | 正式迁移、验证及续跑；冻结后另造账号重现 | 原 ID/权限不变，无占位账号/新增成员；正常升级完成，账号重现拒绝 | 待执行 | AC-141 |
 | TC-MIGDEF-010 | 原文件 URL 定位值保留 | P0 | 旧文件 object_name 为 URL | 正式迁移、校验；对物理对象及制品构造同类值 | 原 SQL/指纹不变，无外部抓取；实际对象/制品键仍拒绝 URL | 待执行 | AC-142 |
 | TC-MIGDEF-011 | 删除权限旧数据保留 | P0 | 原 DELETE 已 FINALIZED，业务行仍在，残留 service_account marker | 历史准备、正式迁移及续跑；注入用户 marker/账本漂移 | 原生关闭残留权限、业务内容不删；完整 Coverage 通过；未知权限/漂移拒绝 | 待执行 | AC-143 |
+
+| TC-MIGDEF-012 | 工作流原创建者保留 | P0 | 原账号缺失、活跃工作流含版本 | 完整迁移/续跑并注入账号重现、配置/版本漂移 | 原作者不变，无新账号/授权；精确冻结证明及 Coverage 完整核验 | 待执行 | AC-144 |
+| TC-MIGDEF-013 | 失败删除及已达 AFTER 创建收尾 | P0 | 旧 pin DELETE 失败/原 CURRENT-before；当前 pin builtin CREATE 已 AFTER | 默认准备、续跑；注入 pin/围栏/账本/图变化 | 新原生删除回执闭合，旧失败记录/内容保留；CREATE 仅 native finalize 无图写；漂移拒绝 | 待执行 | AC-145 |

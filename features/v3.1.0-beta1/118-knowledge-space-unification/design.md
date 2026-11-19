@@ -1295,3 +1295,9 @@ Mode编译只迁移原before已存在的技术标记，permission_enabled/custom
 权限删除的原生 FINALIZED 账本仅证明权限关闭，不伪装业务行物理消失。历史准备读取 <=200 条自有当前 DELETE 操作和有界 tuple 页，复原校验 request/before/after 摘要；确认原用户启用标记缺失、原始业务指纹、SQL mode/Grant/来源和完整对象关系。残留 service_account 标记用原生 RESOURCE_DELETE 预留、版本围栏、投影及 finalizer 关闭；缺失的旧 user 标记通过原生 checksum-bound FAILED_CLOSED 恢复处理，不直接修改状态。已证明冗余 parent DELETE 合入同一自有对象的删除投影，避免后续父边修复覆盖关闭意图。新清理计划使用 schema 2，旧脚本拒绝而非忽略；旧 schema 1 计划仍可原样续跑。
 
 M2 控制页保存 `retained_permission_delete`，绑定原 mode/版本、operation、Store/model 和原生校验和；冻结 verifier 要求实际业务行仍在、两个主体均无 permission_enabled、marker restore 为 false。同 Store 的完整目标图验证确保新 namespace 仍关闭；M3、续跑及 Coverage 前重读原生账本/业务身份。原生恢复成功可保留 PENDING tuple 明细，最终操作及真实 AFTER 图才是证明，不手改明细状态。已存在业务行仍被完整盘点、转换及登记来源；保留不会生成新的人员/全员 Grant 或重新启用权限。
+
+### 2026-11-20 补充：工作流审计创建者与未完成投影（AC-144–145）
+
+工作流 creator retention 使用实际全局缺失事实，控制页冻结根/版本/生命周期摘要，原来源清单仍完整登记；原生复核按 200 根批次读取根、版本数及账号，不能产生新授权。历史 DELETE 的 FAILED_CLOSED 原账本仅由维护捕获器读取，默认 M2 保留证明仍只接受 FINALIZED。仅精确 CURRENT/expected fence 可生成当前 pin 的新 DELETE；原失败账本永不改写，业务完整对象图/SQL 意图按预览及续跑校验。
+
+内置技能 RESOURCE_CREATE 必须是 source=builtin、owner=0、created_by=NULL 且有原内容定位摘要；原 operation 与 CURRENT pin/tenant/scope/fence 精确匹配，原生账本实际 AFTER 且无 correction。冻结 mode/SQL镜像/原生回执/技能摘要，apply 全集复核后逐项原生收尾，完成后重复执行不写 FGA。其他不完整操作不自动推断。计划 schema 3 防止旧脚本忽略新收尾字段；已有 schema 1/2 计划仍可续跑。`--projection-repairs-only` 是已做完历史准备后的有界补充入口，不签发迁移 Ready。候选 mode 200 条游标分页，按原生操作读取固定范围，无用户×资源扫描。

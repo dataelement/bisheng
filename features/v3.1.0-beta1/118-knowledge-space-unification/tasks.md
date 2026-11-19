@@ -8694,3 +8694,6 @@ W3基础交付：T346原ModuleNotFound红→T344 DTO 8绿；T348原ModuleNotFoun
 - [x] MIG-DEFAULT-8：AC-141；失效创建者闭合保留、成员零新增、原生 apply/verify 身份重验；完整迁移、续跑、账号重现拒绝及 200/400 资源有界查询测试。
 - [x] MIG-DEFAULT-9：AC-142；原文件定位标量与实际存储键分离，原值不改、不发起外部读取；编码器及完整迁移回归。
 - [x] MIG-DEFAULT-10：AC-143；已关闭权限/保留 payload 的闭合证明，残留服务账号 marker 原生关闭、冗余父边合并，schema-2 原计划续跑及提交未知恢复；完整 M2→M4/覆盖及晚期漂移拒绝验证。
+
+- [x] MIG-DEFAULT-11：AC-144；工作流缺失审计创建者同根证明、版本数/账号/配置原生复核，完整迁移及完成续跑、200/400 根查询成本验证。
+- [x] MIG-DEFAULT-12：AC-145；失败 DELETE 当前 pin 新回执、原账本保留；builtin AFTER-only 原生收尾，schema 3/补充入口，漂移及幂等回归。

@@ -75,6 +75,9 @@ _SCHEMAS = {
     "retained_permission_delete": _spec(
         "tenant_id:positive resource_type:str resource_id:str operation_id:positive target_version:positive store_id:str model_id:str request_checksum:hash before_checksum:hash after_checksum:hash reason:str"
     ),
+    "workflow_creator_retention": _spec(
+        "tenant_id:positive source_id:str creator_user_id:positive retained_version_count:nonnegative configuration_digest:hash business_revision_digest:hash lifecycle_digest:hash reason:str"
+    ),
     "stranded_file_retention": _spec(
         "tenant_id:positive space_id:positive file_id:positive missing_parent_id:positive sql_permission_count:nonnegative fga_tuple_count:nonnegative reason:str resource_digest:hash file_digest:hash ancestor_digest:hash"
     ),

@@ -33,11 +33,13 @@ class RetainedPermissionDelete:
     reason: str = REASON
 
 
-async def load_facts(session, *, candidates):
+async def load_facts(session, *, candidates, operation_status="FINALIZED"):
     """Bounded native reads per <=200 receipts; no SQL/FGA writes."""
     from bisheng.knowledge.domain.repositories.unification_inventory_repository import _scope
 
     tenant = _scope(session)
+    if operation_status not in {"FINALIZED", "FAILED_CLOSED"}:
+        blocked("unsupported_receipt_state")
     if not candidates or len(candidates) > 200:
         blocked("invalid_batch")
     ids = tuple(sorted({value[0] for value in candidates.values()}))
@@ -78,7 +80,7 @@ async def load_facts(session, *, candidates):
     for (kind, ident), (operation_id, version) in candidates.items():
         operation, rows = by_id[operation_id], groups[operation_id]
         if (
-            operation.status != "FINALIZED"
+            operation.status != operation_status
             or operation.operation_type != "RESOURCE_DELETE"
             or operation.scope_type != "resource"
             or operation.scope_key != f"{kind}:{ident}"

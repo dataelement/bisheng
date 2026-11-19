@@ -372,3 +372,128 @@ async def apply_repairs(plan, *, sessions, client, runtime, operator_id):
                 await verify_business(session, item)
             receipts.append(outcome.operation_id)
     return receipts
+
+
+async def builtin_finalization_fact(sessions, service, mode, pin):
+    """A native AFTER proof permits SQL finalization, never a tuple correction."""
+    from bisheng.linsight.domain.models.linsight_skill import LinsightSkill
+    from scripts.prepare_f118_history import blocked, canonical, checksum, global_session, mirrors, read_pin, unfrozen
+
+    async with global_session(sessions) as session:
+        await unfrozen(session)
+        if await read_pin(session) != pin:
+            blocked("builtin_finalization_pin_changed")
+        current = await session.get(ResourcePermissionMode, mode["id"])
+        operation = await session.get(PermissionProjectionOperation, mode["operation_id"])
+        skill = await session.get(LinsightSkill, int(mode["resource_id"]))
+        if (
+            current is None
+            or operation is None
+            or skill is None
+            or current.tenant_id != mode["tenant_id"]
+            or skill.tenant_id != mode["tenant_id"]
+            or current.resource_type != "linsight_skill"
+            or current.resource_id != mode["resource_id"]
+            or current.operation_id != operation.id
+            or (operation.store_id, operation.model_id) != (pin["store_id"], pin["model_id"])
+            or operation.scope_type != "resource"
+            or operation.scope_key != f"linsight_skill:{skill.id}"
+            or operation.operation_type != "RESOURCE_CREATE"
+            or operation.tenant_id != mode["tenant_id"]
+            or operation.target_version != operation.expected_version + 1
+            or skill.source != "builtin"
+            or skill.owner_user_id != 0
+            or skill.created_by is not None
+            or not skill.content_hash
+            or not skill.object_path
+        ):
+            blocked("builtin_finalization_original_intent_changed")
+        sql, _ = await mirrors(session, mode)
+        fact = {"ledger": ledger_identity(operation), "business_digest": checksum(canonical(skill.model_dump()))}
+        if operation.status == "FINALIZED":
+            if current.projection_state != "CURRENT" or current.version != operation.target_version:
+                blocked("builtin_finalization_completed_fence_changed")
+        elif (
+            operation.status not in {"FAILED_CLOSED", "COMMITTED"}
+            or current.projection_state != "FAILED_CLOSED"
+            or current.version != operation.expected_version
+            or canonical(current.model_dump()) != mode
+            or not sql["permission_visible_source_projection"]
+            or any(row["state"] != "PENDING" for row in sql["permission_visible_source_projection"])
+        ):
+            blocked("builtin_finalization_original_fence_changed")
+    _, frozen = await service._load_operation_plan(operation.id)
+    if not await service._is_after(frozen.deltas):
+        blocked("builtin_finalization_not_after")
+    if operation.status != "FINALIZED":
+        preview = await service.inspect_failed_closed_recovery(operation.id)
+        if preview.observed_state != "AFTER" or preview.correction_deltas:
+            blocked("builtin_finalization_requires_graph_mutation")
+        fact.update(mode=mode, sql=sql, preview=asdict(preview))
+    return operation, fact
+
+
+async def capture_builtin_finalizations(sessions, client, pin):
+    from bisheng.core.context.tenant import tenant_execution_scope
+    from scripts.prepare_f118_history import canonical, global_session
+
+    result, cursor = [], 0
+    service = inspector(sessions, client)
+    while True:
+        async with global_session(sessions) as session:
+            page = (
+                await session.exec(
+                    select(ResourcePermissionMode)
+                    .join(
+                        PermissionProjectionOperation,
+                        PermissionProjectionOperation.id == ResourcePermissionMode.operation_id,
+                    )
+                    .where(
+                        ResourcePermissionMode.id > cursor,
+                        ResourcePermissionMode.resource_type == "linsight_skill",
+                        ResourcePermissionMode.projection_state == "FAILED_CLOSED",
+                        PermissionProjectionOperation.operation_type == "RESOURCE_CREATE",
+                        PermissionProjectionOperation.status.in_(("FAILED_CLOSED", "COMMITTED")),
+                    )
+                    .order_by(ResourcePermissionMode.id)
+                    .limit(200)
+                )
+            ).all()
+            modes = [canonical(row.model_dump()) for row in page]
+        for mode in modes:
+            with tenant_execution_scope(mode["tenant_id"]):
+                _, fact = await builtin_finalization_fact(sessions, service, mode, pin)
+                result.append(fact)
+        if len(modes) < 200:
+            return result
+        cursor = modes[-1]["id"]
+
+
+async def apply_builtin_finalizations(plan, *, sessions, runtime):
+    from bisheng.core.context.tenant import tenant_execution_scope
+    from scripts.prepare_f118_history import blocked
+
+    receipts = []
+    # Validate all selected intents before the first native finalizer.
+    for apply in (False, True):
+        for item in plan.get("builtin_finalizations", ()):
+            with tenant_execution_scope(item["mode"]["tenant_id"]):
+                operation, actual = await builtin_finalization_fact(
+                    sessions, runtime._projection, item["mode"], plan["pin"]
+                )
+                if any(actual[key] != item[key] for key in ("ledger", "business_digest")):
+                    blocked("builtin_finalization_evidence_changed")
+                if operation.status != "FINALIZED" and actual != item:
+                    blocked("builtin_finalization_preview_changed")
+                if apply:
+                    if operation.status != "FINALIZED":
+                        await runtime._projection.recover_failed_closed_operation(
+                            operation.id, confirmation_checksum=actual["preview"]["confirmation_checksum"]
+                        )
+                        operation, _ = await builtin_finalization_fact(
+                            sessions, runtime._projection, item["mode"], plan["pin"]
+                        )
+                    if operation.status != "FINALIZED":
+                        blocked("builtin_finalization_not_completed")
+                    receipts.append(operation.id)
+    return receipts

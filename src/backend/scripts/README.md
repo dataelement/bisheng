@@ -1858,3 +1858,12 @@ contract and does not change general script initialization. The migration
 runtime does not open ES/Milvus clients. Current query order, comparison rules,
 conversion and publication boundaries are shown in the
 [complete current flow](../../../docs/reviews/f118-migration-current-flow-20261113.md).
+
+#### 已完成历史准备后的投影补充
+
+默认 `prepare_f118_history.py` 预览也包含有原账本和围栏证明的失败删除闭合、无需图修改的 builtin CREATE 收尾。保留原失败记录和业务内容，未知状态继续阻断。若主历史准备已经完成，可生成独立补充计划（不代表完整迁移 Ready）：
+
+```bash
+python scripts/prepare_f118_history.py --projection-repairs-only --plan /private/upgrade/projection-repairs.json
+python scripts/prepare_f118_history.py --projection-repairs-only --plan /private/upgrade/projection-repairs.json --apply --operator-id 1
+```

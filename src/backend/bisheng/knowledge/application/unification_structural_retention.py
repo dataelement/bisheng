@@ -16,9 +16,47 @@ FILE_RETENTION = "stranded_file_retention"
 ROOTLESS_FILE_RETENTION = "rootless_file_retention"
 HISTORICAL_CREATOR_RETENTION = "historical_resource_creator_retention"
 DELETE_RETENTION = "retained_permission_delete"
+WORKFLOW_CREATOR_RETENTION = "workflow_creator_retention"
 RETENTIONS = frozenset(
-    {CREATOR_RETENTION, FILE_RETENTION, ROOTLESS_FILE_RETENTION, HISTORICAL_CREATOR_RETENTION, DELETE_RETENTION}
+    {
+        CREATOR_RETENTION,
+        FILE_RETENTION,
+        ROOTLESS_FILE_RETENTION,
+        HISTORICAL_CREATOR_RETENTION,
+        DELETE_RETENTION,
+        WORKFLOW_CREATOR_RETENTION,
+    }
 )
+
+
+def workflow_creator_retention(root, creator):
+    from bisheng.knowledge.application.unification_sources import RootInventoryRecord
+
+    if (
+        type(root) is not RootInventoryRecord
+        or root.root_key.source_type.value != "workflow_version"
+        or type(root.creator_id) is not int
+        or root.creator_id <= 0
+        or creator != {"user_id": root.creator_id, "exists": False, "delete": None}
+        or type(root.retained_version_count) is not int
+        or root.retained_version_count < 0
+        or len(root.lifecycle) != 3
+        or root.lifecycle[0] != 10
+        or root.lifecycle[2] != 0
+        or root.configuration_digest != root.business_revision_digest
+    ):
+        blocked("workflow_creator_identity")
+    return record_from_values(
+        WORKFLOW_CREATOR_RETENTION,
+        tenant_id=root.root_key.tenant_id,
+        source_id=root.root_key.source_id,
+        creator_user_id=root.creator_id,
+        retained_version_count=root.retained_version_count,
+        configuration_digest=root.configuration_digest,
+        business_revision_digest=root.business_revision_digest,
+        lifecycle_digest=digest(root.lifecycle),
+        reason="preserve_original_workflow_missing_creator",
+    )
 
 
 def historical_creator_retention(*, resource, creator, managed_file_count):
@@ -170,7 +208,8 @@ class StructuralRetentionInventoryVerifier:
     def __init__(self):
         self.resources, self.files, self.creators = {}, {}, {}
         self.rootless_files = {}
-        self.proofs = {tag: {} for tag in RETENTIONS - {DELETE_RETENTION}}
+        self.proofs = {tag: {} for tag in RETENTIONS - {DELETE_RETENTION, WORKFLOW_CREATOR_RETENTION}}
+        self.workflow_creator_proofs = {}
         self.delete_proofs, self.mode_identities, self.marker_policy = {}, {}, {}
         self.enabled_objects, self.store_id = set(), None
         self.permissions, self.fga = Counter(), set()
@@ -197,7 +236,14 @@ class StructuralRetentionInventoryVerifier:
 
     def observe(self, *, kind, section, tenant_id, record):
         tag, value = record.record_type, record.data
-        if tag == DELETE_RETENTION:
+        if tag == WORKFLOW_CREATOR_RETENTION:
+            if (kind, section) != ("plan", "control") or value["tenant_id"] != tenant_id:
+                blocked("workflow_creator_proof_scope")
+            key = tenant_id, value["source_id"]
+            if key in self.workflow_creator_proofs:
+                blocked("duplicate_workflow_creator_proof")
+            self.workflow_creator_proofs[key] = value
+        elif tag == DELETE_RETENTION:
             if (kind, section) != ("plan", "control") or value["tenant_id"] != tenant_id:
                 blocked("delete_proof_scope")
             key = tenant_id, value["resource_type"], value["resource_id"]
@@ -331,6 +377,17 @@ class StructuralRetentionInventoryVerifier:
             ):
                 blocked("historical_creator_proof_changed")
             explained_creators.add((key[0], proof["creator_user_id"]))
+        from bisheng.resource_reference.application.contracts import SourceRootKey, SourceType
+
+        workflow_roots = set()
+        for (tenant, ident), proof in self.workflow_creator_proofs.items():
+            key = SourceRootKey(tenant, SourceType.WORKFLOW_VERSION, ident)
+            root = self.source_roots.get(key)
+            creator = self.creators.get((tenant, proof["creator_user_id"]))
+            if workflow_creator_retention(root, creator).data != proof:
+                blocked("workflow_creator_proof_changed")
+            explained_creators.add((tenant, proof["creator_user_id"]))
+            workflow_roots.add(key)
         invalid_assistants = {
             key
             for key, root in self.source_roots.items()
@@ -350,6 +407,7 @@ class StructuralRetentionInventoryVerifier:
             if (
                 (source.tenant_id, creator) in missing_creators
                 and source not in invalid_assistants
+                and source not in workflow_roots
                 and (
                     source.source_type.value != "knowledge"
                     or not source.source_id.isdecimal()
@@ -400,6 +458,37 @@ async def validate_native_retentions(session, proofs, *, resources, controls, pe
     tenant = get_current_tenant_id()
     if any(proof["tenant_id"] != tenant for proof in proofs):
         blocked("live_tenant_changed")
+    from bisheng.knowledge.application.unification_sources import _digest
+    from bisheng.knowledge.domain.repositories.unification_inventory_repository import UnificationInventoryRepository
+
+    workflow = tuple(p for p in proofs if p.get("reason") == "preserve_original_workflow_missing_creator")
+    workflow_repository = UnificationInventoryRepository()
+    for offset in range(0, len(workflow), 200):
+        batch = workflow[offset : offset + 200]
+        ids = tuple(sorted({p["source_id"] for p in batch}))
+        roots = {r.id: r for r in await workflow_repository.aload_workflow_roots(session, root_ids=ids)}
+        counts = await workflow_repository.acount_workflow_retained_versions(session, root_ids=ids)
+        creators = {
+            r.user_id: r
+            for r in await controls.ainspect_users(
+                session, user_ids=tuple(sorted({p["creator_user_id"] for p in batch}))
+            )
+        }
+        for proof in batch:
+            root, creator = roots.get(proof["source_id"]), creators.get(proof["creator_user_id"])
+            if (
+                root is None
+                or root.user_id != proof["creator_user_id"]
+                or root.is_delete != 0
+                or creator is None
+                or creator.exists is not False
+                or counts[root.id] != proof["retained_version_count"]
+                or _digest(asdict(root)) != proof["configuration_digest"]
+                or proof["configuration_digest"] != proof["business_revision_digest"]
+                or digest((root.flow_type, root.status, root.is_delete)) != proof["lifecycle_digest"]
+            ):
+                blocked("workflow_creator_live_proof_changed")
+    proofs = tuple(p for p in proofs if p.get("reason") != "preserve_original_workflow_missing_creator")
     from bisheng.knowledge.domain.repositories.unification_delete_retention_repository import REASON, validate_facts
 
     deleted = tuple(p for p in proofs if p.get("reason") == REASON)

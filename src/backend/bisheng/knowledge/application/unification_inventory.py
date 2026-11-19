@@ -93,6 +93,7 @@ _SECTIONS = {
         "rootless_file_retention",
         "historical_resource_creator_retention",
         "retained_permission_delete",
+        "workflow_creator_retention",
     },
     "permission": {"resource_mode", "grant", "assignee", "visible_source"},
     "permission_namespace": {
@@ -490,7 +491,7 @@ class UnificationInventoryApplication:
             await pages.add(section, tenant, record, kind=kind)
         memberships.finish()
         header, refs = None, []
-        creators = {}
+        creators, creator_records = {}, {}
         source_headers = {}
         pending_creators = {}
         batch = []
@@ -529,12 +530,25 @@ class UnificationInventoryApplication:
                     session, user_ids=wanted[offset : offset + 200]
                 ):
                     creators[fact.user_id] = fact.exists
+                    creator_records[fact.user_id] = fact
                     await pages.add("control", tenant, record_from_row(fact))
             for row in items:
                 if type(row) is RootInventoryRecord and row.creator_id is not None:
                     if row.creator_id not in creators:
                         _blocked("source_creator_fact_missing")
-                    if not creators[row.creator_id] and not retained(row):
+                    if not creators[row.creator_id] and row.root_key.source_type.value == "workflow_version":
+                        from bisheng.knowledge.application.unification_structural_retention import (
+                            workflow_creator_retention,
+                        )
+
+                        proof = workflow_creator_retention(row, record_from_row(creator_records[row.creator_id]).data)
+                        await pages.add("control", tenant, proof, kind="plan")
+                        logger.warning(
+                            "F118 retains workflow {} missing creator {}; no account or grant is created",
+                            row.root_key.source_id,
+                            row.creator_id,
+                        )
+                    elif not creators[row.creator_id] and not retained(row):
                         if (
                             row.root_key.source_type.value == "assistant"
                             and row.retained_version_count == 1
