@@ -71,7 +71,7 @@ def load_plan(path):
     if (
         set(payload) != {"plan", "sha256"}
         or checksum(payload["plan"]) != payload["sha256"]
-        or payload["plan"].get("schema") != 1
+        or payload["plan"].get("schema") not in {1, 2}
     ):
         blocked("backup_verification_failed")
     return payload["plan"]
@@ -757,6 +757,27 @@ async def capture(sessions, client):
         if "objects" in item:
             item["tuples"] = [row for obj in item["objects"] for row in keys_by_object.get(obj, ())]
             item["incoming"] = [key for obj in item["objects"] for key in incoming_by_subject.get(obj, ())]
+    from scripts import f118_delete_closure
+
+    excluded_deletes = {(item["mode"]["resource_type"], item["mode"]["resource_id"]) for item in result["purges"]}
+    excluded_deletes.update(
+        ("folder" if item["before"]["file_type"] == 0 else "knowledge_file", str(item["before"]["id"]))
+        for item in result.get("business", {}).get("deletes", ())
+        if item["table"] == "knowledgefile"
+    )
+    result["delete_closures"], result["permission_delete_retained"] = await f118_delete_closure.capture(
+        sessions,
+        client,
+        pin=result["pin"],
+        excluded=excluded_deletes,
+        parents=result["parents"],
+        updates=result.get("business", {}).get("updates", ()),
+        levels=result["levels"],
+    )
+    folded = {item["mode"]["id"] for item in result["delete_closures"]}
+    result["parents"] = [item for item in result["parents"] if item["mode"]["id"] not in folded]
+    if result["delete_closures"]:
+        result["schema"] = 2  # Older scripts must reject instead of ignoring these repairs.
     return canonical(result)
 
 
@@ -951,6 +972,10 @@ async def apply(plan, *, sessions, client, runtime, operator_id, physical=None):
 
     if plan.get("blocked") or plan.get("business", {}).get("blocked"):
         blocked("plan_has_unresolved_candidates")
+    if plan.get("purpose") == "f118-delete-closures" and any(
+        plan.get(key) for key in ("levels", "parents", "purges", "initializations", "recoveries", "business")
+    ):
+        blocked("delete_closure_plan_scope")
     deleted_files = {
         ("folder" if item["before"]["file_type"] == 0 else "knowledge_file", str(item["before"]["id"]))
         for item in plan.get("business", {}).get("deletes", ())
@@ -1070,6 +1095,13 @@ async def apply(plan, *, sessions, client, runtime, operator_id, physical=None):
     identity = checksum(plan)[:32]
     receipts = await permissions.apply_repairs(
         plan, sessions=sessions, client=client, runtime=runtime, operator_id=operator_id
+    )
+    from scripts import f118_delete_closure
+
+    receipts.extend(
+        await f118_delete_closure.apply(
+            plan, sessions=sessions, client=client, runtime=runtime, operator_id=operator_id
+        )
     )
     for item in plan["parents"]:
         mode = item["mode"]
@@ -1194,6 +1226,8 @@ async def apply(plan, *, sessions, client, runtime, operator_id, physical=None):
         "purges": len(plan["purges"]),
         "initializations": len(plan.get("initializations", ())),
         "recoveries": len(plan.get("recoveries", ())),
+        "delete_closures": len(plan.get("delete_closures", ())),
+        "permission_delete_retained": len(plan.get("permission_delete_retained", ())),
         "retained": len(retained_files),
         "warnings": warning_summary(plan),
         "business_deletes": len(plan.get("business", {}).get("deletes", ())),
@@ -1201,6 +1235,9 @@ async def apply(plan, *, sessions, client, runtime, operator_id, physical=None):
         "blocked": plan["blocked"],
         "permission_operation_ids": receipts,
         "preparation_complete": not plan["blocked"],
+        "validation_scope": "delete_closures_only"
+        if plan.get("purpose") == "f118-delete-closures"
+        else "history_preparation",
     }
 
 
@@ -1255,6 +1292,36 @@ async def arun(args):
         )
         stack.push_async_callback(client.close)
         if not args.apply:
+            if getattr(args, "delete_closures_only", False):
+                from scripts import f118_delete_closure
+
+                closures, retained = await f118_delete_closure.capture(get_async_db_session, client, pin=pin)
+                plan = {
+                    "schema": 2,
+                    "purpose": "f118-delete-closures",
+                    "pin": pin,
+                    "levels": [],
+                    "parents": [],
+                    "purges": [],
+                    "blocked": [],
+                    "initializations": [],
+                    "recoveries": [],
+                    "retained_evidence": [],
+                    "business": {},
+                    "delete_closures": closures,
+                    "permission_delete_retained": retained,
+                }
+                saved_checksum = save_plan(args.plan, plan)
+                return {
+                    "mode": "preview",
+                    "plan": str(args.plan),
+                    "sha256": saved_checksum,
+                    "delete_closures": len(closures),
+                    "permission_delete_retained": len(retained),
+                    "validation_scope": "delete_closures_only",
+                    "blocked": [],
+                    "ready": False,
+                }
             plan = await capture(get_async_db_session, client)
             if plan["business"]["physical"]:
                 # Preserve selected SQL evidence even if physical inspection
@@ -1293,6 +1360,8 @@ async def arun(args):
                 "plan": str(args.plan),
                 "sha256": saved_checksum,
                 **{key: len(plan[key]) for key in ("levels", "parents", "purges", "initializations", "recoveries")},
+                "delete_closures": len(plan.get("delete_closures", ())),
+                "permission_delete_retained": len(plan.get("permission_delete_retained", ())),
                 "business_deletes": len(plan["business"]["deletes"]),
                 "business_updates": len(plan["business"]["updates"]),
                 "orphan_payloads": len(plan["business"]["physical"]),
@@ -1300,6 +1369,8 @@ async def arun(args):
                 "warnings": warning_summary(plan),
             }
         plan = load_plan(args.plan)
+        if getattr(args, "delete_closures_only", False) and plan.get("purpose") != "f118-delete-closures":
+            blocked("delete_closure_plan_purpose")
         if plan["pin"] != pin:
             blocked("backup_or_pin_changed")
         physical = None
@@ -1382,6 +1453,11 @@ def main(argv=None):
     parser.add_argument("--plan", required=True, type=Path)
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--operator-id", type=int)
+    parser.add_argument(
+        "--delete-closures-only",
+        action="store_true",
+        help="preview only deterministic residual delete-marker closures before M2; keep all payloads",
+    )
     args = parser.parse_args(argv)
     if args.apply and (args.operator_id is None or args.operator_id <= 0):
         parser.error("--apply requires a positive --operator-id")

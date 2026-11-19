@@ -1750,6 +1750,25 @@ stopped-service migration below. Historical Alembic revisions are unchanged.
 
 ### Formal stopped-service migration
 
+Historical finalized knowledge-resource DELETE receipts may coexist with retained
+business rows. History preparation automatically closes a residual service-account
+enable marker when the original user marker is absent and the complete native
+receipt, mode, payload and object graph match. It preserves payloads and Grants;
+the formal inventory freezes a disabled-state proof and never restores enable
+markers for those scopes. Unknown user access or changed authority still blocks.
+New closure plans use schema 2, and old schema-1 plans remain readable unchanged.
+
+If the earlier history preparation already completed and M2 has not frozen,
+the same formal helper can preview only this class without rescanning payloads:
+
+```bash
+python scripts/prepare_f118_history.py --plan /secure/upgrade/delete-closures.json --delete-closures-only
+python scripts/prepare_f118_history.py --plan /secure/upgrade/delete-closures.json --apply --operator-id 7
+```
+
+Keep the new plan and receipts; interrupted execution resumes that exact plan.
+This mode does not certify other history preparation or a complete platform upgrade.
+
 Original file locator columns are retained SQL strings, including historical
 URL-shaped values. Binding-only inventory preserves them and warns without
 fetching external contents. Actual physical object operations and migration

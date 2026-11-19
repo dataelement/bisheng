@@ -15,7 +15,10 @@ CREATOR_RETENTION = "existing_space_creator_retention"
 FILE_RETENTION = "stranded_file_retention"
 ROOTLESS_FILE_RETENTION = "rootless_file_retention"
 HISTORICAL_CREATOR_RETENTION = "historical_resource_creator_retention"
-RETENTIONS = frozenset({CREATOR_RETENTION, FILE_RETENTION, ROOTLESS_FILE_RETENTION, HISTORICAL_CREATOR_RETENTION})
+DELETE_RETENTION = "retained_permission_delete"
+RETENTIONS = frozenset(
+    {CREATOR_RETENTION, FILE_RETENTION, ROOTLESS_FILE_RETENTION, HISTORICAL_CREATOR_RETENTION, DELETE_RETENTION}
+)
 
 
 def historical_creator_retention(*, resource, creator, managed_file_count):
@@ -167,7 +170,9 @@ class StructuralRetentionInventoryVerifier:
     def __init__(self):
         self.resources, self.files, self.creators = {}, {}, {}
         self.rootless_files = {}
-        self.proofs = {tag: {} for tag in RETENTIONS}
+        self.proofs = {tag: {} for tag in RETENTIONS - {DELETE_RETENTION}}
+        self.delete_proofs, self.mode_identities, self.marker_policy = {}, {}, {}
+        self.enabled_objects, self.store_id = set(), None
         self.permissions, self.fga = Counter(), set()
         self.sources = []
         self.source_roots, self.source_headers = {}, {}
@@ -192,7 +197,20 @@ class StructuralRetentionInventoryVerifier:
 
     def observe(self, *, kind, section, tenant_id, record):
         tag, value = record.record_type, record.data
-        if tag in RETENTIONS:
+        if tag == DELETE_RETENTION:
+            if (kind, section) != ("plan", "control") or value["tenant_id"] != tenant_id:
+                blocked("delete_proof_scope")
+            key = tenant_id, value["resource_type"], value["resource_id"]
+            if key in self.delete_proofs:
+                blocked("duplicate_delete_proof")
+            self.delete_proofs[key] = value
+        elif tag == "permission_plan":
+            if (kind, section) != ("plan", "conversion") or value["tenant_id"] != tenant_id:
+                blocked("delete_marker_plan_scope")
+            self.marker_policy[tenant_id, value["resource_type"], value["resource_id"]] = value.get(
+                "restore_missing_markers"
+            )
+        elif tag in RETENTIONS:
             if (kind, section) != ("plan", "control") or value["tenant_id"] != tenant_id:
                 blocked("proof_scope")
             ident = value["space_id"] if tag in {CREATOR_RETENTION, HISTORICAL_CREATOR_RETENTION} else value["file_id"]
@@ -226,13 +244,48 @@ class StructuralRetentionInventoryVerifier:
             elif tag in {"resource_mode", "grant", "visible_source"}:
                 row = value["source"] if tag == "visible_source" else value
                 self.permissions[row["tenant_id"], row["resource_type"], row["resource_id"]] += 1
+                if tag == "resource_mode":
+                    self.mode_identities[row["tenant_id"], row["resource_type"], row["resource_id"]] = (
+                        row["operation_id"],
+                        row["version"],
+                        row["projection_state"],
+                    )
+            elif tag == "authorization":
+                self.store_id = value["store_id"]
             elif tag == "fga_tuple":
                 if section != "fga" or tenant_id is not None:
                     blocked("fga_scope")
                 self.fga.add(value["object"])
                 self.fga.add(value["user"].split("#", 1)[0])
+                if value["relation"] == "permission_enabled":
+                    self.enabled_objects.add(value["object"])
 
     def finish(self):
+        from bisheng.knowledge.domain.repositories.unification_delete_retention_repository import KINDS, REASON
+
+        for key, proof in self.delete_proofs.items():
+            tenant, resource_type, ident = key
+            if resource_type not in KINDS or not ident.isdecimal() or str(int(ident)) != ident:
+                blocked("delete_identity")
+            physical_key = tenant, int(ident)
+            row = (
+                self.resources.get(physical_key)
+                if resource_type in {"knowledge_library", "knowledge_space"}
+                else self.files.get(physical_key)
+            )
+            if (
+                row is None
+                or (
+                    resource_type in {"folder", "knowledge_file"}
+                    and row["file_type"] != int(resource_type == "knowledge_file")
+                )
+                or proof["reason"] != REASON
+                or proof["store_id"] != self.store_id
+                or self.mode_identities.get(key) != (proof["operation_id"], proof["target_version"], "CURRENT")
+                or self.marker_policy.get(key) is not False
+                or f"{resource_type}:{ident}" in self.enabled_objects
+            ):
+                blocked("delete_not_closed")
         rootless_proofs = self.proofs[ROOTLESS_FILE_RETENTION]
         if set(rootless_proofs) != set(self.rootless_files):
             blocked("rootless_file_proof_set")
@@ -347,6 +400,12 @@ async def validate_native_retentions(session, proofs, *, resources, controls, pe
     tenant = get_current_tenant_id()
     if any(proof["tenant_id"] != tenant for proof in proofs):
         blocked("live_tenant_changed")
+    from bisheng.knowledge.domain.repositories.unification_delete_retention_repository import REASON, validate_facts
+
+    deleted = tuple(p for p in proofs if p.get("reason") == REASON)
+    if deleted:
+        await validate_facts(session, deleted)
+    proofs = tuple(p for p in proofs if p.get("reason") != REASON)
     historical = tuple(
         p for p in proofs if p.get("reason") == "preserve_original_missing_creator_without_new_membership"
     )

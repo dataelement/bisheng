@@ -1290,3 +1290,8 @@ Mode编译只迁移原before已存在的技术标记，permission_enabled/custom
 # 2026-11-20 补充：原始文件定位字段（AC-142）
 
 `file`/`rootless_file` 中的原对象定位字段是历史 SQL 标量，受字符串长度/NUL 规则和整行摘要约束；不能与 `physical_object.object_key` 或制品 descriptor 的存储能力混用。bindings-only 盘点保留旧 URL 原值、输出不含 URL 的提示，不验证外部地址可达性。物理端口、制品 key 和在线输入规则不变；不把迁移编码器作为对象获取授权。
+### 2026-11-20 补充：保留已删除权限的历史业务行（AC-143）
+
+权限删除的原生 FINALIZED 账本仅证明权限关闭，不伪装业务行物理消失。历史准备读取 <=200 条自有当前 DELETE 操作和有界 tuple 页，复原校验 request/before/after 摘要；确认原用户启用标记缺失、原始业务指纹、SQL mode/Grant/来源和完整对象关系。残留 service_account 标记用原生 RESOURCE_DELETE 预留、版本围栏、投影及 finalizer 关闭；缺失的旧 user 标记通过原生 checksum-bound FAILED_CLOSED 恢复处理，不直接修改状态。已证明冗余 parent DELETE 合入同一自有对象的删除投影，避免后续父边修复覆盖关闭意图。新清理计划使用 schema 2，旧脚本拒绝而非忽略；旧 schema 1 计划仍可原样续跑。
+
+M2 控制页保存 `retained_permission_delete`，绑定原 mode/版本、operation、Store/model 和原生校验和；冻结 verifier 要求实际业务行仍在、两个主体均无 permission_enabled、marker restore 为 false。同 Store 的完整目标图验证确保新 namespace 仍关闭；M3、续跑及 Coverage 前重读原生账本/业务身份。原生恢复成功可保留 PENDING tuple 明细，最终操作及真实 AFTER 图才是证明，不手改明细状态。已存在业务行仍被完整盘点、转换及登记来源；保留不会生成新的人员/全员 Grant 或重新启用权限。

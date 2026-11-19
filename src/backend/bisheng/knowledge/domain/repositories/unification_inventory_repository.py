@@ -232,8 +232,14 @@ def _row(row_type, row):
 
 
 class UnificationInventoryRepository:
-    async def ainspect_permission_resource_liveness(self, session, *, resources, operations=None):
-        """Freeze business liveness; CURRENT mode alone is not existence proof."""
+    async def ainspect_permission_resource_liveness(
+        self, session, *, resources, operations=None, retained_deletes=None
+    ):
+        """Marker restore eligibility; physical rows alone do not enable deleted permissions.
+
+        Only a caller collecting closed native receipt facts may retain an
+        original finalized DELETE while its business payload remains present.
+        """
         _scope(session)
         from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
         from bisheng.linsight.domain.models.linsight_skill import LinsightSkill
@@ -309,6 +315,7 @@ class UnificationInventoryRepository:
                 ),
             )
             by_id = {row["id"]: row for row in rows}
+            retained = {}
             for key, (ident, version) in operations.items():
                 operation = by_id.get(ident)
                 if (
@@ -319,7 +326,14 @@ class UnificationInventoryRepository:
                 ):
                     _blocked("business_marker_operation_not_finalized")
                 if operation["operation_type"] in {"RESOURCE_DELETE", "RESOURCE_DELETE_PURGE"} and result[key]:
-                    _blocked("business_delete_not_committed")
+                    if type(retained_deletes) is not list or operation["operation_type"] != "RESOURCE_DELETE":
+                        _blocked("business_delete_not_committed")
+                    retained[key] = (ident, version)
+            if retained:
+                from bisheng.knowledge.domain.repositories.unification_delete_retention_repository import load_facts
+
+                retained_deletes.extend(await load_facts(session, candidates=retained))
+                result.update(dict.fromkeys(retained, False))
         return result
 
     async def avalidate_history_prepared(self, session):

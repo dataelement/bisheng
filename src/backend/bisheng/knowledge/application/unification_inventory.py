@@ -8,8 +8,9 @@ business data or certifies Coverage. Backups remain an operational prerequisite.
 
 from collections import defaultdict
 from copy import copy
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ReferenceCoverageNotReadyError
@@ -91,6 +92,7 @@ _SECTIONS = {
         "rootless_file",
         "rootless_file_retention",
         "historical_resource_creator_retention",
+        "retained_permission_delete",
     },
     "permission": {"resource_mode", "grant", "assignee", "visible_source"},
     "permission_namespace": {
@@ -445,11 +447,25 @@ class UnificationInventoryApplication:
                         data["version"],
                     )
             if len(liveness_pending) == 200 or (record.record_type == "permission_plan" and liveness_pending):
+                retained_deletes = []
                 liveness.update(
                     await self.raw.ainspect_permission_resource_liveness(
-                        session, resources=tuple(liveness_pending), operations=liveness_operations
+                        session,
+                        resources=tuple(liveness_pending),
+                        operations=liveness_operations,
+                        retained_deletes=retained_deletes,
                     )
                 )
+                for fact in retained_deletes:
+                    logger.warning(
+                        "F118 retains payload for {}:{} with finalized delete {}; permissions remain disabled",
+                        fact.resource_type,
+                        fact.resource_id,
+                        fact.operation_id,
+                    )
+                    await pages.add(
+                        "control", tenant, record_from_values("retained_permission_delete", **asdict(fact)), kind="plan"
+                    )
                 liveness_pending.clear()
                 liveness_operations.clear()
             if record.record_type == "permission_plan":
