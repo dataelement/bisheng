@@ -59,11 +59,13 @@ async def datasets(tmp_path, monkeypatch, isolated_tenant_filter):
     monkeypatch.setattr(request_admission, "request_target", selection)
     app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None)
     app.dependency_overrides[UserPayload.get_tenant_admin_user] = lambda: user
+    app.dependency_overrides[UserPayload.get_login_user] = lambda: user
+    monkeypatch.setattr(UserPayload, "assert_effective_web_menu_contains", AsyncMock())
     inherit_scope(router, RequestScope.TENANT)
     app.include_router(router, prefix="/api/v1")
     request_admission.install_request_admission(app)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        yield SimpleNamespace(client=client, user=user, selected=selected)
+        yield SimpleNamespace(client=client, user=user, selected=selected, app=app, sessions=sessions)
     await engine.dispose()
 
 
@@ -107,6 +109,8 @@ async def test_dataset_queries_ignore_a_wider_legacy_visibility_set(datasets, te
             all_rows = await model.PresetTrainDao.find_all()
             foreign = 70 if tenant == 1 else 1
             assert await model.PresetTrainDao.find_one(f"{foreign}-0") is None
+            assert await model.PresetTrainDao.find_by_url(f"dataset/{foreign}/0.json") is None
+            assert (await model.PresetTrainDao.find_by_url(f"dataset/{tenant}/0.json")).tenant_id == tenant
         finally:
             visible_tenant_ids.reset(token)
     assert count == 3 and len(rows) == 1 and rows[0].tenant_id == tenant

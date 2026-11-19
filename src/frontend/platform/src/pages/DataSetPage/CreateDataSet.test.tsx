@@ -8,6 +8,8 @@ import CreateDataSet from './CreateDataSet'
 const mock = vi.hoisted(() => ({ create: vi.fn(), message: vi.fn(), read: vi.fn(), error: vi.fn() }))
 vi.mock('@/controllers/API', () => ({ readFileLibDatabase: mock.read }))
 vi.mock('@/controllers/API/finetune', () => ({ createDatasetApi: mock.create }))
+vi.mock('@/hooks/useKnowledgePageScope', () => ({ useKnowledgePageScope: () => ({ scopes: { ordinary: { identityKey: 'user:7', tenantId: 60, managementTenantId: 60, view: 'ordinary' } } }) }))
+vi.mock('@/controllers/managementScope', () => ({ managementRequestScope: () => 60 }))
 vi.mock('@/controllers/request', () => ({ captureAndAlertRequestErrorHoc: (p: Promise<unknown>) => p.catch(() => false), showApiError: mock.error }))
 vi.mock('@bisheng/ui', async () => {
 const actual = await vi.importActual<typeof import('@bisheng/ui')>('@bisheng/ui');
@@ -15,7 +17,7 @@ const previous = await (() => ({ useToast: () => ({ message: mock.message }) }))
 const hooks = Reflect.get(previous, 'useToast')?.() ?? {};
 return { ...actual, notification: { ...actual.notification, open: Reflect.get(previous, 'toast') ?? Reflect.get(hooks, 'toast') ?? actual.notification.open }, toast: { ...actual.toast, show: Reflect.get(previous, 'message') ?? Reflect.get(hooks, 'message') ?? actual.toast.show } };
 })
-vi.mock('@/components/bs-ui/upload/simple', () => ({ default: ({ onSuccess }: { onSuccess: (name: string, url: string) => void }) => <button onClick={() => onSuccess('sample.json', 'uploads/sample.json')}>Upload fixture</button> }))
+vi.mock('@/components/bs-ui/upload/simple', () => ({ default: ({ onSuccess, uploadUrl }: { onSuccess: (name: string, url: string) => void; uploadUrl: string }) => <button data-upload-url={uploadUrl} onClick={() => onSuccess('sample.json', 'uploads/sample.json')}>Upload fixture</button> }))
 vi.mock('@/util/utils', () => ({ downloadFile: vi.fn() }))
 afterEach(cleanup)
 beforeEach(() => {
@@ -33,6 +35,7 @@ function setup() {
 it('submits a local file using the existing dataset request schema', async () => {
     const { onChange } = setup()
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Dataset' } })
+    expect(screen.getByText('Upload fixture')).toHaveAttribute('data-upload-url', '/api/v1/finetune/job/file/preset/upload')
     fireEvent.click(screen.getByText('Upload fixture'))
     fireEvent.click(screen.getByRole('button', { name: 'confirm' }))
     await waitFor(() => expect(mock.create).toHaveBeenCalledWith({ name: 'Dataset', files: 'uploads/sample.json', qa_list: [] }))
@@ -55,7 +58,7 @@ it('clears a previous file when switching to QA and submits only selected librar
 
 it('loads further QA pages and preserves selections when searching', async () => {
     mock.read.mockResolvedValueOnce({ data: [{ id: 'qa-1', name: 'First QA' }], next_cursor: 'page-2' })
-        .mockResolvedValueOnce({ data: [{ id: 'qa-1', name: 'First QA' }, { id: 'qa-2', name: 'Second QA' }], next_cursor: null })
+        .mockResolvedValueOnce({ data: [{ id: 'qa-2', name: 'Second QA' }], next_cursor: null })
         .mockResolvedValueOnce({ data: [{ id: 'qa-3', name: 'Search QA' }], next_cursor: null })
     setup()
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'QA dataset' } })
@@ -73,12 +76,12 @@ it('loads further QA pages and preserves selections when searching', async () =>
     fireEvent.scroll(panel)
     await screen.findByRole('option', { name: 'Second QA' })
     expect(screen.getAllByRole('option', { name: 'First QA' })).toHaveLength(1)
-    expect(mock.read).toHaveBeenNthCalledWith(2, { cursor: 'page-2', pageSize: 60, name: '', type: 1, action: 'use' })
+    expect(mock.read).toHaveBeenNthCalledWith(2, { cursor: 'page-2', pageSize: 60, name: '', type: 1, action: 'visible' })
     fireEvent.click(screen.getByRole('option', { name: 'Second QA' }))
 
     fireEvent.change(select, { target: { value: 'Search' } })
     fireEvent.click(await screen.findByRole('option', { name: 'Search QA' }))
-    expect(mock.read).toHaveBeenLastCalledWith({ cursor: null, pageSize: 60, name: 'Search', type: 1, action: 'use' })
+    expect(mock.read).toHaveBeenLastCalledWith({ cursor: null, pageSize: 60, name: 'Search', type: 1, action: 'visible' })
     fireEvent.keyDown(select, { key: 'Escape' })
     fireEvent.click(screen.getByRole('button', { name: 'confirm' }))
     await waitFor(() => expect(mock.create).toHaveBeenCalledWith({ name: 'QA dataset', files: '', qa_list: ['qa-1', 'qa-2', 'qa-3'] }))
