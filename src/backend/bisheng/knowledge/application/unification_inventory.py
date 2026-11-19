@@ -146,9 +146,7 @@ class _Pages:
     async def _put(self, content, kind):
         self.current()
         descriptor = await self.store.aput_canonical(run_id=self.run_id, kind=kind, content=content)
-        self.current()
-        if await self.store.aload_canonical(descriptor, run_id=self.run_id, kind=kind) != content:
-            _blocked("uploaded_content_changed")
+        # aput_canonical already reads back and verifies the exact hash/envelope.
         self.current()
         return descriptor
 

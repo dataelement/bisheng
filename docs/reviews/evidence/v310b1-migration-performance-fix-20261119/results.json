@@ -1,0 +1,244 @@
+{
+  "fix_base": "065914f440336e66a2ab28dcb6f6a6f571de93c0",
+  "initial_review_base": "c3319b055033da7a2f4466cb2a0c9f6e94db63d3",
+  "scope_notes": [
+    "SQLite with mocked FGA/artifact transport; not production timings.",
+    "Publication timing excludes fixture M2 and M4; 802-root before/after ran concurrently, so wall-clock comparisons are illustrative.",
+    "RSS probe is a separate complete-history-digest process, not the whole migration peak.",
+    "The 065914f440 source and c3319b0550 source for the six modified existing production Python files are identical."
+  ],
+  "cpu_after": {
+    "cpu": [
+      {
+        "spaces": 1000,
+        "members": 1000,
+        "seconds": 0.0206
+      },
+      {
+        "spaces": 2000,
+        "members": 2000,
+        "seconds": 0.0249
+      },
+      {
+        "spaces": 4000,
+        "members": 4000,
+        "seconds": 0.0505
+      },
+      {
+        "spaces": 8000,
+        "members": 8000,
+        "seconds": 0.1001
+      }
+    ],
+    "id_conversions": [
+      {
+        "spaces": 100,
+        "members": 100,
+        "str_calls": 100
+      },
+      {
+        "spaces": 200,
+        "members": 200,
+        "str_calls": 200
+      }
+    ]
+  },
+  "history_digest": [
+    {
+      "stage": "before",
+      "rows": 1000,
+      "row_payload_bytes": 65536,
+      "disk": false,
+      "digest": "18c36f0389fb1fa62b71d0286ec397e3c5b6a073c01176fd093b58c5ad2257b6",
+      "digest_python_peak_bytes": 131717961,
+      "process_peak_rss_bytes": 350273536,
+      "digest_seconds": 0.198
+    },
+    {
+      "stage": "before",
+      "rows": 2000,
+      "row_payload_bytes": 65536,
+      "disk": false,
+      "digest": "b84068c65aff2b8551b90c934c6fa47ff577a0337c00aa05b4181d0fefce3f82",
+      "digest_python_peak_bytes": 263317129,
+      "process_peak_rss_bytes": 647397376,
+      "digest_seconds": 0.373
+    },
+    {
+      "stage": "after",
+      "rows": 1000,
+      "row_payload_bytes": 65536,
+      "disk": true,
+      "digest": "18c36f0389fb1fa62b71d0286ec397e3c5b6a073c01176fd093b58c5ad2257b6",
+      "digest_python_peak_bytes": 336870,
+      "process_peak_rss_bytes": 62586880,
+      "digest_seconds": 0.225
+    },
+    {
+      "stage": "after",
+      "rows": 2000,
+      "row_payload_bytes": 65536,
+      "disk": true,
+      "digest": "b84068c65aff2b8551b90c934c6fa47ff577a0337c00aa05b4181d0fefce3f82",
+      "digest_python_peak_bytes": 351515,
+      "process_peak_rss_bytes": 62390272,
+      "digest_seconds": 0.4527
+    }
+  ],
+  "publication": [
+    {
+      "stage": "before",
+      "roots": 401,
+      "select": 3763,
+      "dml": 1712,
+      "full_store_scans": 3,
+      "fga_batches": 39,
+      "peak_bytes": 24072111,
+      "elapsed_seconds": 18.042
+    },
+    {
+      "stage": "after",
+      "roots": 401,
+      "select": 595,
+      "dml": 920,
+      "max_in": 198,
+      "max_bulk": 100,
+      "max_bind": 405,
+      "derive": {
+        "actions": 22,
+        "models": 10
+      },
+      "full_store_scans": 3,
+      "fga_batches": 39,
+      "peak_bytes": 24797053,
+      "elapsed_seconds": 10.907
+    },
+    {
+      "stage": "before",
+      "roots": 802,
+      "select": 7155,
+      "dml": 3388,
+      "max_in": 198,
+      "max_bulk": 51,
+      "max_bind": 202,
+      "derive": {
+        "actions": 22,
+        "models": 10
+      },
+      "full_store_scans": 3,
+      "fga_batches": 74,
+      "peak_bytes": 33215738,
+      "elapsed_seconds": 36.399
+    },
+    {
+      "stage": "after",
+      "roots": 802,
+      "select": 811,
+      "dml": 1802,
+      "max_in": 198,
+      "max_bulk": 100,
+      "max_bind": 405,
+      "derive": {
+        "actions": 22,
+        "models": 10
+      },
+      "full_store_scans": 3,
+      "fga_batches": 74,
+      "peak_bytes": 35013314,
+      "elapsed_seconds": 22.601
+    }
+  ],
+  "capture": [
+    {
+      "capture_modes": 100,
+      "all_missing": false,
+      "selects": 23
+    },
+    {
+      "capture_modes": 200,
+      "all_missing": false,
+      "selects": 26
+    },
+    {
+      "capture_modes": 100,
+      "all_missing": true,
+      "selects": 29
+    },
+    {
+      "capture_modes": 200,
+      "all_missing": true,
+      "selects": 37
+    }
+  ],
+  "tests": {
+    "migration_permission": {
+      "passed": 2161,
+      "failed": 1,
+      "baseline_failure_reproduced": true
+    },
+    "history": {
+      "passed": 74
+    },
+    "resource_batches": {
+      "passed": 8
+    },
+    "publication_scale_current": {
+      "passed": 2,
+      "root_counts": [
+        401,
+        802
+      ]
+    },
+    "baseline_failure": "test_migration_inventory_application.py::test_full_m2_keeps_original_default_sources_and_freezes_safe_after_commands: actual default-source query count 6 vs expected 9, also fails on unchanged 065914f440",
+    "main_workspace_new_tests": {
+      "passed": 31
+    },
+    "main_workspace_final_history": {
+      "passed": 74
+    }
+  },
+  "rereview": {
+    "initial_source_base": "065914f440336e66a2ab28dcb6f6a6f571de93c0",
+    "integrated_beta1_base": "c1928c2e3ebceac5e19aaaaf0b010741b4e82001",
+    "production_logic_changed_during_rereview": false,
+    "full_regression": {
+      "modules": 88,
+      "passed": 2249,
+      "failed": 1,
+      "failure_matches_unchanged_base": true
+    },
+    "batch_and_original_publication_recovery": {
+      "passed": 50
+    },
+    "original_checkpoint_prefixes": [
+      1,
+      99,
+      100,
+      101
+    ],
+    "unknown_batch_commit_prefixes": [
+      100,
+      200
+    ],
+    "commit_faults": [
+      "before_commit",
+      "after_commit_ack_lost",
+      "after_commit_cancelled"
+    ],
+    "legacy_implementation_equivalence": {
+      "passed": 6,
+      "baseline_archive_commit": "065914f440336e66a2ab28dcb6f6a6f571de93c0"
+    },
+    "static": {
+      "ruff_check": true,
+      "ruff_format_check": true,
+      "arch_guard": true,
+      "diff_check": true
+    },
+    "integration_note": "Latest beta1 changes have no overlap with this F118 migration implementation or its fixtures.",
+    "integrated_regression": {
+      "passed": 63,
+      "failed": 0
+    }
+  }
+}

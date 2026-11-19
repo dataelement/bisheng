@@ -1679,6 +1679,17 @@ cleanup; no whole-index deletion or guessed replacement is allowed. This selecte
 evidence does not replace a full environment backup. See
 [implemented rules and complete flow](../../../docs/reviews/f118-confirmed-rules-implementation-20261113.md).
 
+Historical preparation reads business rows and permission modes in primary-key
+pages of 200. Its internal `f118_history_snapshot.py` helper stores complete row
+payloads and lookup indexes in private, disposable SQLite files; invoke the
+maintenance command above, not that helper. Set `TMPDIR` to a local disk with
+space for the complete JSON inventory and indexes. Actual repair can retain
+several snapshots simultaneously. Normal exit, exceptions and async cancellation
+remove them; a force-killed process can leave private temporary directories for
+operator cleanup. These files are not recovery evidence; retain the original
+plan/events/payload backups. No-op/replayed business repairs compare the complete
+digest without requesting write locks. Real repairs retain the locked recheck.
+
 ### Formal stopped-service migration
 
 Run from `src/backend` after the operator has stopped all business writers and
@@ -1732,6 +1743,14 @@ reference containing the invalid-slot inventory. Nonzero exit preserves the
 checkpoint and never restarts services. Enable business traffic only after the
 operator has accepted the overall upgrade verification and real environment
 checks; a local component test is not that acceptance.
+
+Permission namespace conversion commits at most 100 complete resource plans and
+their cumulative checkpoint in one transaction. Before/after reads keep every
+Grant, Assignee and VisibleSource, including inactive facts and foreign-assignee
+rejection. An old single-resource prefix remains resumable; an unknown commit
+result still requires the original Run. Artifact upload performs one verified
+readback; later frozen-graph and SQL/FGA phase checks remain. See
+[performance repair and measured limits](../../../docs/reviews/v310b1-migration-performance-fix-20261119.md).
 
 F118 deliberately uses a narrow context assembly rather than the general
 `initialize_app_context` convention: the eager general initializer constructs

@@ -1,0 +1,7 @@
+{
+  "tuples": 1000,
+  "owned_objects": 500,
+  "set_union_calls": 2000,
+  "union_input_elements": 1000000,
+  "method": "exact capture AsyncFor AST, synthetic stream"
+}
