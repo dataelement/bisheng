@@ -1,6 +1,6 @@
 # 116 删除空间期间的刷新竞态修复
 
-日期：2026-11-19（Asia/Taipei）。用户先授权只读排查，确认原因后要求修复。修复基于最新 beta1 c25b47d533，在既有 codex/3.1.0-beta1/bugfixes-20261118 独立 worktree 完成。
+日期：2026-11-19（Asia/Taipei）。用户先授权只读排查，确认原因后要求修复。修复从 beta1 c25b47d533 开始，交付前合入最新 fb35bcae1d（复制失败详情/重试进度与共享版本组件），在既有 codex/3.1.0-beta1/bugfixes-20261118 独立 worktree 完成。
 
 ## 问题及真实证据
 
@@ -31,10 +31,10 @@ Zustand 中的记录仅控制当前页生命周期，不做持久删除事实、
 ## 回归与质量检查
 
 - 删除 Hook、两处真实交互入口、复制刷新、侧栏操作、工作台路由及删除对话框 6 文件专项 **70 passed**；覆盖延迟 ACK、丢失 ACK 与自动原任务查询、作用域切换/迟到 ACK、文件级删除不暂停整空间、目标暂停而其他复制任务可刷新。
-- 加入完整 f118SpaceDetail 组合为 **105 passed / 1 failed**。唯一失败为已有的 recovers the original copy from a detail page whose target permissions are not initialized，断言旧按钮结构但当前界面已是表格。干净 c25b47d533 基线同文件为 **35 passed / 同一条失败**，本轮未修改该测试或其任务表格实现，不计为新回归。
+- 合入最新 fb35bcae1d 后，加入完整 f118SpaceDetail 的组合为 **108 passed（7 文件）**；干净最新基线 f118SpaceDetail 为 **38 passed**。本次专项仍为 70 项，合并后的原生复制恢复交互也已通过。
 - pnpm lint（整个 frontend workspace）通过；Platform strict typecheck 通过。
 - pnpm check-i18n、architecture guard、git diff --check 通过；5 条新增 QA 用例均为八列结构。
-- 整个 frontend typecheck 在 Client 报 14 条类型导出错误，涉及既有 DSH browser config 与 UI 声明导出；干净 c25b47d533 基线相同的 14 条。归一化路径后逐条相同，无新增错误；未修改无关客户端代码或依赖声明。
+- 整个 frontend typecheck 在 Client 报 14 条类型导出错误，涉及既有 DSH browser config 与 UI 声明导出；干净 c25b47d533 及最新 fb35bcae1d 基线相同的 14 条。归一化路径后逐条相同，无新增错误；未修改无关客户端代码或依赖声明。
 
 ## 合入前七维自审
 
@@ -46,8 +46,8 @@ Zustand 中的记录仅控制当前页生命周期，不做持久删除事实、
 | 权限与认证 | PASS | 新状态按身份/租户/管理域/视图隔离；不修改服务端鉴权 |
 | 并发安全 | PASS | 保留原确认和 busy 排他，查询原任务，不重复创建删除 |
 | 信息泄漏 | PASS | 无凭据、无跨租户数据或新增接口；状态只含资源/操作标识 |
-| 测试覆盖 | PASS | 两处真实入口及共享 Hook/Query 的竞态组合；既有失败单独做基线对照 |
+| 测试覆盖 | PASS | 两处真实入口及共享 Hook/Query 的竞态组合；合并后 108 项通过 |
 | 代码风格 | PASS | Zustand 只存 UI 状态，不发 HTTP；沿原 API 包装和 Query 缓存 |
 | 文档同步 | PASS | design §6.12、修订记录、tasks 及八列回归用例同步 |
 
-结论 PASS_WITH_WARNINGS：遗留测试与 Client 类型检查问题已确认同基线，保留说明。116 需正常构建部署前端后，再做真实浏览器验收；本轮没有向 116 写数据或部署构建。
+结论 PASS_WITH_WARNINGS：Client 的 14 条类型检查错误已确认同最新基线，保留说明；本次相关测试无失败。116 需正常构建部署前端后，再做真实浏览器验收；本轮没有向 116 写数据或部署构建。
