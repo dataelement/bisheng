@@ -271,6 +271,11 @@ python scripts/migrate_model_token_configs.py --all-tenants
 python scripts/migrate_model_token_configs.py --tenant-id 1
 ```
 
+The CLI explicitly registers and initializes only its own database manager in
+the shared application context, using the service settings. It closes that
+manager in the same event loop on success, failure or cancellation; it does
+not start the FastAPI lifespan or initialize unrelated storage clients.
+
 Dry-run is the default. After draining model calls and stopping API/Worker/
 Linsight configuration writers, use the new backend runtime and a fresh private
 backup path to apply. Complete the target schema upgrade first:
