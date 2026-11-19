@@ -159,3 +159,48 @@ async def test_native_receipt_verification_uses_two_reads_per_bounded_batch(comp
                 facts.extend(await load_facts(session, candidates=candidates))
             assert len(facts) == count and all(asdict(f)["reason"] for f in facts)
         assert len(complete.queries) == count // 200 * 2
+
+
+async def seed_closed_empty_root(database):
+    await database.insert(resources.Knowledge, [resources.resource(15000, model=None)])
+    async with database.engine.begin() as connection:
+        await connection.run_sync(lambda c: Tuple.__table__.create(c, checkfirst=True))
+    with tenant_execution_scope(101):
+        async with AsyncSession(database.engine) as session, session.begin():
+            pin = (
+                await PermissionMigrationSnapshotRepository().aload_catalog_baseline(session, environment="test")
+            ).authorization
+            operation, rows = receipt(
+                9500, "knowledge_library", "15000", 0, store_id=pin.store_id, model_id=pin.model_id
+            )
+            session.add_all(
+                [
+                    operation,
+                    *rows,
+                    Mode(
+                        id=15000,
+                        tenant_id=101,
+                        resource_type="knowledge_library",
+                        resource_id="15000",
+                        mode="CUSTOM",
+                        version=1,
+                        projection_state="CURRENT",
+                        operation_id=9500,
+                    ),
+                ]
+            )
+
+
+@pytest.mark.parametrize("published_input", [{"reference_seed": seed_closed_empty_root}], indirect=True)
+async def test_closed_empty_root_normal_conversion_and_completed_coverage_keep_access_disabled(published_input):
+    value = published_input
+    result = await original.reference_tests.app(value).arun_references(**value.input, operator_id=7)
+    assert (
+        result.complete
+        and await original.reference_tests.app(value).arun_references(**value.input, operator_id=7) == result
+    )
+    assert not any(obj in {"knowledge_library:15000", "knowledge_space:15000"} for _, _, obj in value.store.tuples)
+    async with value.sessions() as session, session.begin():
+        row = await session.get(resources.Knowledge, 15000)
+        assert row.type == 3 and row.user_id == 7
+        assert (await production_coverage_factory(session).arequire_global_ready()).verified_tenant_ids

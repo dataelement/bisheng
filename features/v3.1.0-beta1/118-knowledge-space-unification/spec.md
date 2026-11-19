@@ -425,3 +425,5 @@ Q-06：停服后正式盘点、预检并在转换写入前冻结基线，基线�
 
 - **AC-144** — 旧工作流的原创建者物理不存在时，保留原 ID、版本及权限，不创建账号或转移所有权。冻结同一活跃 workflow 根的配置、生命周期、版本数及缺失 CreatorFact，M3/续跑/Coverage 重新校验；不得借用其他根证明或跳过原完整来源校验。
 - **AC-145** — 原生 RESOURCE_DELETE 失败但当前 mode 仍精确绑定原 expected-version/CURRENT 时，可在同 Store 当前 pin 下通过新原生删除回执闭合原删除意图；保留原失败账本和业务数据，不重写原状态。默认历史准备同时可收尾 CURRENT pin、原围栏精确匹配且实际完整 AFTER、无需任何 tuple 修正的内置技能创建；只运行原生恢复/finalizer。未知意图、跨租户/pin/围栏/业务/图漂移继续阻断。
+
+- **AC-146** — 旧 NORMAL 根缺 mode，且文件/QA/文档、双命名空间 SQL 授权/原生操作/子 mode、完整 Store 对象及入向关系全部为空时，可通过原生 owner-state（无 Grant）和原生 DELETE 回执登记关闭的 CUSTOM/CURRENT mode。原业务行及作者不变，正常转换及完整 Coverage 仍校验，不能恢复 enable 或新增授权；非空/未知事实及漂移继续阻断。

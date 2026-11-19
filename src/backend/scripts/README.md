@@ -1867,3 +1867,5 @@ conversion and publication boundaries are shown in the
 python scripts/prepare_f118_history.py --projection-repairs-only --plan /private/upgrade/projection-repairs.json
 python scripts/prepare_f118_history.py --projection-repairs-only --plan /private/upgrade/projection-repairs.json --apply --operator-id 1
 ```
+
+`f118_empty_root.py` 是上述准备 CLI 的内部辅助，无独立写入口。默认及 `--projection-repairs-only` 可处理无 payload/SQL 授权/完整图关系的空 NORMAL 根缺 mode：原生登记关闭的 CUSTOM mode，无 Grant、无 enable WRITE，保留原根/作者。非空或未知授权仍阻断；schema 4 保留原计划续跑。

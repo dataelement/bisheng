@@ -71,7 +71,7 @@ def load_plan(path):
     if (
         set(payload) != {"plan", "sha256"}
         or checksum(payload["plan"]) != payload["sha256"]
-        or payload["plan"].get("schema") not in {1, 2, 3}
+        or payload["plan"].get("schema") not in {1, 2, 3, 4}
     ):
         blocked("backup_verification_failed")
     return payload["plan"]
@@ -678,6 +678,11 @@ async def capture(sessions, client):
     isolated_objects.update(
         f"{kind}:{item['file']['id']}" for item in result["initializations"] for kind in ("knowledge_file", "folder")
     )
+    from scripts import f118_empty_root
+
+    empty_roots = await f118_empty_root.candidates(sessions, result["pin"])
+    empty_root_objects = f118_empty_root.objects(empty_roots)
+    isolated_objects.update(empty_root_objects)
     keys_by_object, incoming_by_subject = {}, defaultdict(list)
     selected_objects = owned | orphan_objects | isolated_objects
     async for row in client.iter_tuples(consistency="HIGHER_CONSISTENCY"):
@@ -686,6 +691,9 @@ async def capture(sessions, client):
         subject = row["user"].partition("#")[0]
         if subject in selected_objects:
             incoming_by_subject[subject].append((row["user"], row["relation"], row["object"]))
+    if any(keys_by_object.get(obj) or incoming_by_subject.get(obj) for obj in empty_root_objects):
+        blocked("empty_root_graph_present")
+    result["empty_root_initializations"] = empty_roots
     for obj in orphan_objects - owned:
         if keys_by_object.get(obj) or incoming_by_subject.get(obj):
             detail = {
@@ -783,6 +791,8 @@ async def capture(sessions, client):
         item.get("source_status") == "FAILED_CLOSED" for item in result["delete_closures"]
     ):
         result["schema"] = 3
+    if empty_roots:
+        result["schema"] = 4
     return canonical(result)
 
 
@@ -1109,6 +1119,11 @@ async def apply(plan, *, sessions, client, runtime, operator_id, physical=None):
         )
     )
     receipts.extend(await permissions.apply_builtin_finalizations(plan, sessions=sessions, runtime=runtime))
+    from scripts import f118_empty_root
+
+    receipts.extend(
+        await f118_empty_root.apply(plan, sessions=sessions, client=client, runtime=runtime, operator_id=operator_id)
+    )
     for item in plan["parents"]:
         mode = item["mode"]
         with tenant_execution_scope(mode["tenant_id"]):
@@ -1232,6 +1247,7 @@ async def apply(plan, *, sessions, client, runtime, operator_id, physical=None):
         "purges": len(plan["purges"]),
         "initializations": len(plan.get("initializations", ())),
         "recoveries": len(plan.get("recoveries", ())),
+        "empty_root_initializations": len(plan.get("empty_root_initializations", ())),
         "builtin_finalizations": len(plan.get("builtin_finalizations", ())),
         "delete_closures": len(plan.get("delete_closures", ())),
         "permission_delete_retained": len(plan.get("permission_delete_retained", ())),
@@ -1319,10 +1335,12 @@ async def arun(args):
                     "permission_delete_retained": retained,
                 }
                 if getattr(args, "projection_repairs_only", False):
+                    from scripts import f118_empty_root
                     from scripts import f118_history_permissions as permissions
 
                     plan.update(
-                        schema=3,
+                        schema=4,
+                        empty_root_initializations=await f118_empty_root.capture(get_async_db_session, client, pin),
                         purpose="f118-projection-repairs",
                         builtin_finalizations=await permissions.capture_builtin_finalizations(
                             get_async_db_session, client, pin
@@ -1335,6 +1353,7 @@ async def arun(args):
                     "sha256": saved_checksum,
                     "delete_closures": len(closures),
                     "permission_delete_retained": len(retained),
+                    "empty_root_initializations": len(plan.get("empty_root_initializations", ())),
                     "builtin_finalizations": len(plan.get("builtin_finalizations", ())),
                     "validation_scope": "projection_repairs_only"
                     if getattr(args, "projection_repairs_only", False)
@@ -1380,6 +1399,7 @@ async def arun(args):
                 "plan": str(args.plan),
                 "sha256": saved_checksum,
                 **{key: len(plan[key]) for key in ("levels", "parents", "purges", "initializations", "recoveries")},
+                "empty_root_initializations": len(plan.get("empty_root_initializations", ())),
                 "builtin_finalizations": len(plan.get("builtin_finalizations", ())),
                 "delete_closures": len(plan.get("delete_closures", ())),
                 "permission_delete_retained": len(plan.get("permission_delete_retained", ())),

@@ -1301,3 +1301,7 @@ M2 控制页保存 `retained_permission_delete`，绑定原 mode/版本、operat
 工作流 creator retention 使用实际全局缺失事实，控制页冻结根/版本/生命周期摘要，原来源清单仍完整登记；原生复核按 200 根批次读取根、版本数及账号，不能产生新授权。历史 DELETE 的 FAILED_CLOSED 原账本仅由维护捕获器读取，默认 M2 保留证明仍只接受 FINALIZED。仅精确 CURRENT/expected fence 可生成当前 pin 的新 DELETE；原失败账本永不改写，业务完整对象图/SQL 意图按预览及续跑校验。
 
 内置技能 RESOURCE_CREATE 必须是 source=builtin、owner=0、created_by=NULL 且有原内容定位摘要；原 operation 与 CURRENT pin/tenant/scope/fence 精确匹配，原生账本实际 AFTER 且无 correction。冻结 mode/SQL镜像/原生回执/技能摘要，apply 全集复核后逐项原生收尾，完成后重复执行不写 FGA。其他不完整操作不自动推断。计划 schema 3 防止旧脚本忽略新收尾字段；已有 schema 1/2 计划仍可续跑。`--projection-repairs-only` 是已做完历史准备后的有界补充入口，不签发迁移 Ready。候选 mode 200 条游标分页，按原生操作读取固定范围，无用户×资源扫描。
+
+### 空根缺 mode 的关闭初始化（AC-146）
+
+内部 f118_empty_root 按 200 根游标寻找无 payload 的旧 NORMAL；全局检查两个命名空间 mode/Grant/visible source/原操作及子 mode 均不存在，冻结原业务整行。默认准备复用完整 Store 遍历，补充入口仅对存在的候选单独遍历，证明对象/入向边为空。apply 全集重读业务/pin/SQL/完整图；原生预留 DELETE 后，用 owner-state 以 CUSTOM、无 owner_grant 创建 mode，计划动作全部 DELETE，无 enable WRITE/成员/Grant。原生 AFTER 对账及 finalizer 完成，支持 PREPARED/claim/最终回包丢失续跑。M2 复用 finalized-delete 保留证明，M3 正常根转换及完整来源/Coverage 不恢复访问。schema 4 防止旧版本忽略；非空或未知授权缺 mode 仍阻塞。

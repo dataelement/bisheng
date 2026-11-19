@@ -73,3 +73,9 @@ M2 控制页明确保留物理存在事实和原删除证明，强制 marker res
 另有失败 DELETE 的 CURRENT-before 原围栏和旧 model：不伪造原成功状态，校验原生删除账本后在 CURRENT pin 下用新原生投影闭合，原业务行及原失败操作保留。内置技能创建仅在原 pin/围栏、完整真实 AFTER、零 correction 时通过原生恢复完成 SQL finalizer；原始 mode/SQL 意图/业务摘要变化拒绝。预览、写前整集检查、逐项复核及原计划重放共用事实读取；未知提交允许原生恢复，不直接编辑 SQL。schema 3、补充入口的实际结果另列，不替代完整 Ready。
 
 最终本地组合 69 项通过（11.61 秒），包含主历史准备、闭合/原生 AFTER 收尾、工作流与删除保留。内置技能全流程 2/4 条：172/342 SQL、20/38 commits、16/32 实际 tuple 查询、0 FGA 写，含预览、apply/verify 与原计划续跑；无乘积扫描。Ruff、差异空白和架构守卫通过。生产结果仍以真实日志为准。
+
+### 空根缺 mode（AC-146）
+
+真实预检仅发现一个无文件、无 mode/Grant/原操作的旧普通根。正式修复在双命名空间 SQL、子 mode、文件/QA/文档及完整 Store 对象/入向边全空证明下，以原生 DELETE 预留及无 Grant 的 owner-state 创建关闭的 CUSTOM mode。原根只读，全部动作为 DELETE，没有 enable WRITE；原生 AFTER 收尾，M2→M4/Coverage 复用关闭根合同。非空或未知权限不适用。默认复用 Store 扫描，schema 4 补充入口不签发完整 Ready。
+
+空根关闭初始化及主历史准备/默认分类/原生收尾/完整关闭根迁移组合 74 项通过（11.42 秒），其中空根正常转换、完成续跑与真实 Coverage 通过。原生预留、claim、finalize 回包丢失均覆盖；payload/图/入向/foreign mode/pin/业务漂移在写前拒绝。2/4 条完整 preview/apply/verify/resume 分别 226/450 SQL、31/59 commits，完整 Store 遍历固定 5 次，图写入 0；默认 preview 复用既有遍历，无候选不遍历。真实生产耗时单列。

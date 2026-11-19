@@ -8697,3 +8697,5 @@ W3基础交付：T346原ModuleNotFound红→T344 DTO 8绿；T348原ModuleNotFoun
 
 - [x] MIG-DEFAULT-11：AC-144；工作流缺失审计创建者同根证明、版本数/账号/配置原生复核，完整迁移及完成续跑、200/400 根查询成本验证。
 - [x] MIG-DEFAULT-12：AC-145；失败 DELETE 当前 pin 新回执、原账本保留；builtin AFTER-only 原生收尾，schema 3/补充入口，漂移及幂等回归。
+
+- [x] MIG-DEFAULT-13：AC-146；空根原生关闭初始化、完整图/SQL 空证明、原计划 claim/最终回包丢失恢复、2/4 规模及关闭根完整迁移/Coverage 验证。
