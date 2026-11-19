@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import DataSetPage from './index';
 
-const mocks = vi.hoisted(() => ({ list: vi.fn(), remove: vi.fn(), downloadUrl: vi.fn(), download: vi.fn(), confirm: vi.fn(), user: { user_id: 7, tenant_id: 1 }, scope: 1 }));
+const mocks = vi.hoisted(() => ({ list: vi.fn(), remove: vi.fn(), downloadUrl: vi.fn(), download: vi.fn(), confirm: vi.fn(), user: { user_id: 7, tenant_id: 1, leaf_tenant_id: 1 }, scope: 1 }));
 vi.mock('@/contexts/userContext', async () => ({ userContext: (await import('react')).createContext({ user: mocks.user }) }));
 vi.mock('@/controllers/API/finetune', () => ({ getPresetFileApi: mocks.list, deleteDatasetApi: mocks.remove, getFileUrlApi: mocks.downloadUrl }));
 vi.mock('@/components/bs-comp/FileView', () => ({ checkSassUrl: (url: string) => url }));
@@ -13,6 +13,7 @@ vi.mock('@/util/utils', () => ({ downloadFile: mocks.download }));
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.scope = 1;
+  mocks.user.leaf_tenant_id = 1;
   mocks.list.mockImplementation(async () => ({ data: [{ id: String(mocks.scope), name: `dataset-${mocks.scope}`, create_time: '2026-11-19T00:00:00', update_time: '2026-11-19T00:00:00', user_name: 'Owner', url: `dataset/${mocks.scope}.json` }], total: 1 }));
 });
 
@@ -44,6 +45,16 @@ it('ignores an old signed download response after switching management views', a
   expect(mocks.download).not.toHaveBeenCalled();
 });
 afterEach(cleanup);
+
+it('retires the current dataset view when the same person changes home tenant', async () => {
+  const view = render(<DataSetPage />);
+  await screen.findByText('dataset-1');
+  mocks.scope = 60;
+  mocks.user.leaf_tenant_id = 60;
+  view.rerender(<DataSetPage />);
+  expect(screen.queryByText('dataset-1')).not.toBeInTheDocument();
+  await screen.findByText('dataset-60');
+});
 
 it('retires old rows and reloads after a management view changes without changing the login Home', async () => {
   render(<DataSetPage />);
