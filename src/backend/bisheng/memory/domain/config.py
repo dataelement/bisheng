@@ -17,7 +17,7 @@ class MemoryRuntimeConfig:
     resident_max_chars: int = 6000
     experience_max_items: int = 20
     experience_max_chars: int = 2000
-    quiet_minutes: int = 30
+    quiet_minutes: int = 480
     scan_interval_minutes: int = 5
     lock_ttl_minutes: int = 10
     default_timezone: str = "Asia/Shanghai"

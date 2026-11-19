@@ -199,8 +199,8 @@ memory:
   # 深度研究任务开始时带入的经验类条目上限
   experience_max_items: 20
   experience_max_chars: 2000
-  # 会话安静多久后整理（分钟）与扫描周期（分钟）
-  quiet_minutes: 30
+  # 会话安静多久后整理（分钟，默认 8 小时）与扫描周期（分钟）
+  quiet_minutes: 480
   scan_interval_minutes: 5
   # 整理锁的存活时间（分钟）
   lock_ttl_minutes: 10

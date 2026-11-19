@@ -46,7 +46,7 @@ def _seed(memory_db, chat_id, flow_type=15, flow_id="", messages=(), watermark=0
                 tenant_id=TENANT_A,
                 user_id=USER_1,
                 state="pending",
-                last_activity_at=datetime.now() - timedelta(hours=1),
+                last_activity_at=datetime.now() - timedelta(hours=9),
                 last_message_id=ids[-1],
                 watermark_message_id=ids[watermark - 1] if watermark else 0,
             )
