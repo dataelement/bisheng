@@ -22,7 +22,8 @@ interface DiscoverChannel {
     id: string;
     title: string;
     description: string;
-    sourceIcons: string[];
+    creator: string;
+    creatorAvatars: string[];
     articleCount: number;
     subscriberCount: number;
     status: DiscoverStatus;
@@ -57,7 +58,7 @@ const mapRecommendItem = (item: any): DiscoverChannel | null => {
     const rawId = item?.id ?? item?.channel_id;
     if (!rawId) return null;
     const sourceInfos: any[] = Array.isArray(item.source_infos) ? item.source_infos : [];
-    const sourceIcons = sourceInfos.map((s) => s.source_icon).filter(Boolean).slice(0, 3);
+    const avatars = sourceInfos.map((s) => s.source_icon).filter(Boolean).slice(0, 3);
     const subStatus = String(item.subscription_status ?? "");
     // `rejected` falls through to "join": a rejected application can be resubmitted.
     const status: DiscoverStatus =
@@ -68,7 +69,8 @@ const mapRecommendItem = (item: any): DiscoverChannel | null => {
         id: String(rawId),
         title: String(item.name ?? item.title ?? ""),
         description: String(item.description ?? item.desc ?? ""),
-        sourceIcons,
+        creator: String(item.creator ?? item.creator_name ?? ""),
+        creatorAvatars: avatars,
         articleCount: Number(item.article_count ?? 0),
         subscriberCount: Number(item.subscriber_count ?? 0),
         visibility: item.visibility as DiscoverChannel["visibility"],
@@ -309,7 +311,8 @@ export function ChannelDiscoveryHome({
                             <ChannelSquareCard
                                 title={channel.title}
                                 description={channel.description}
-                                sourceIcons={channel.sourceIcons}
+                                creator={channel.creator}
+                                creatorAvatars={channel.creatorAvatars}
                                 articleCount={channel.articleCount}
                                 subscriberCount={channel.subscriberCount}
                                 status={channel.status}

@@ -93,13 +93,19 @@ export async function saveAvatarUrlApi(avatar: string): Promise<any> {
 export async function uploadUserAvatarFileApi(file: File): Promise<{ avatar: string }> {
   const formData = new FormData();
   formData.append("file", file);
-
-  const response = await request.postMultiPart(`/api/v1/user/avatar`, formData) as {
-    avatar?: unknown;
-    data?: { avatar?: unknown; data?: { avatar?: unknown } };
-  } | null | undefined;
-  const avatar = response?.data?.avatar ?? response?.data?.data?.avatar ?? response?.avatar;
-  return { avatar: typeof avatar === "string" ? avatar : "" };
+  
+  const resp: any = await request.postMultiPart(`/api/v1/user/avatar`, formData);
+  // unify response shape:
+  // 1) { status_code, status_message, data: { avatar: "..." } }
+  // 2) { status_code, status_message, data: { data: { avatar: "..." } } } (fallback)
+  // 3) { avatar: "..." }
+  const data = resp?.data ?? resp ?? {};
+  const avatar =
+    data?.avatar ??
+    data?.data?.avatar ??
+    resp?.avatar ??
+    "";
+  return { avatar: String(avatar) };
 }
 
 /**

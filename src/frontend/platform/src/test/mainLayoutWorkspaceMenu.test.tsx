@@ -2,7 +2,7 @@ import MainLayout from "@/layout/MainLayout";
 import { darkContext } from "@/contexts/darkContext";
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
-import { fireEvent, render, screen } from "@/test/test-utils";
+import { render, screen } from "@/test/test-utils";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -101,7 +101,7 @@ const baseUser = {
   is_department_admin: false,
 };
 
-function renderLayout(webMenu: string[], avatar = baseUser.avatar) {
+function renderLayout(webMenu: string[]) {
   const setUser = vi.fn();
   const setDark = vi.fn();
 
@@ -125,7 +125,7 @@ function renderLayout(webMenu: string[], avatar = baseUser.avatar) {
       >
         <userContext.Provider
           value={{
-            user: { ...baseUser, web_menu: webMenu, avatar },
+            user: { ...baseUser, web_menu: webMenu },
             setUser,
             savedComponents: [],
             addSavedComponent: vi.fn(),
@@ -191,17 +191,6 @@ describe("MainLayout workspace entry", () => {
     expect(
       screen.queryByRole("menuitem", { name: "menu.workspace" }),
     ).not.toBeInTheDocument();
-  });
-
-  it("shows the account avatar and falls back to the nickname when the image fails", () => {
-    const avatar = "https://media.example/avatar.png?signature=custom";
-    renderLayout(["workstation"], avatar);
-
-    const image = screen.getAllByAltText("").find((element) => element.getAttribute("src") === avatar);
-    expect(image).toBeDefined();
-    fireEvent.error(image!);
-    expect(screen.getByText("T")).toBeInTheDocument();
-    expect(image).not.toBeInTheDocument();
   });
 });
 

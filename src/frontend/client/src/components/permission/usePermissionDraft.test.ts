@@ -30,19 +30,6 @@ describe("F048 permission draft", () => {
     }]);
   });
 
-  it("keeps a selected user's avatar out of the grant mutation", () => {
-    const row: PermissionDraftRow = {
-      subjectType: "user", subjectId: 7, subjectName: "Ada",
-      modelKey: "viewer", avatar: "/avatar/new.png",
-    };
-    const draft = permissionDraftReducer(createPermissionDraft(), { type: "add", row });
-
-    expect(draft.rows).toEqual([row]);
-    expect(getPermissionDraftDiff(draft).changes).toEqual([{
-      op: "ADD", model_key: "viewer", subject: { type: "user", id: "7" },
-    }]);
-  });
-
   it("builds versioned MOVE and REMOVE changes", () => {
     let draft = createPermissionDraft([localViewer], { resourceVersion: 9, catalogReleaseId: 42 });
     draft = permissionDraftReducer(draft, {

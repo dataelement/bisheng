@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { updateNicknameApi, uploadUserAvatarFileApi } from '~/api/user';
+import { updateNicknameApi } from '~/api/user';
 import type { TUser } from '~/types/chat';
 import { QueryKeys } from '~/types/chat';
 import { copyText } from '~/utils';
@@ -62,40 +62,5 @@ it('edits the nickname in place and updates the user and query caches', async ()
     expect(update(original)).toMatchObject({ id: '7', username: 'NewNickname', role: 'user', external_id: 'Case01' });
     const another = { ...original, id: '8', username: 'AnotherIdentity' };
     expect(update(another)).toBe(another);
-    client.clear();
-});
-
-it('updates the current avatar in both caches and preserves it if replacement fails', async () => {
-    const client = new QueryClient();
-    const original = { id: '7', username: 'Nickname', avatar: '/old.png' } as TUser;
-    const replacement = 'https://example.test/new.png';
-    jest.mocked(uploadUserAvatarFileApi)
-        .mockResolvedValueOnce({ avatar: replacement })
-        .mockResolvedValueOnce({ avatar: '' });
-    client.setQueryData([QueryKeys.user], original);
-
-    const { container } = render(
-        <QueryClientProvider client={client}>
-            <AccountSection userId="7" username="Nickname" avatarUrl={original.avatar} />
-        </QueryClientProvider>,
-    );
-    const input = container.querySelector('input[type="file"]')!;
-    const upload = () => fireEvent.change(input, { target: { files: [new File(['image'], 'avatar.png', { type: 'image/png' })] } });
-    upload();
-    await waitFor(() => expect(client.getQueryData<TUser>([QueryKeys.user])?.avatar).toBe(replacement));
-
-    const updateCurrentUser = mockSetUser.mock.calls[0][0] as (user: TUser) => TUser;
-    expect(updateCurrentUser(original).avatar).toBe(replacement);
-    const another = { ...original, id: '8' };
-    expect(updateCurrentUser(another)).toBe(another);
-
-    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
-    upload();
-    await waitFor(() => expect(mockToast).toHaveBeenCalledWith(expect.objectContaining({
-        message: 'com_account_info_toast_avatar_upload_failed',
-    })));
-    expect(client.getQueryData<TUser>([QueryKeys.user])?.avatar).toBe(replacement);
-    expect(mockSetUser).toHaveBeenCalledTimes(1);
-    consoleError.mockRestore();
     client.clear();
 });

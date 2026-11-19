@@ -8,7 +8,8 @@ import { useLocalize } from "~/hooks";
 interface ChannelSquareCardProps {
   title: string;
   description: string;
-  sourceIcons?: string[];
+  creator: string;
+  creatorAvatars?: string[];
   articleCount: number;
   subscriberCount: number;
   /** A rejected application is not a state of its own — it maps back to "join",
@@ -23,7 +24,8 @@ interface ChannelSquareCardProps {
 export function ChannelSquareCard({
   title,
   description,
-  sourceIcons,
+  creator,
+  creatorAvatars,
   articleCount,
   subscriberCount,
   status,
@@ -102,23 +104,23 @@ export function ChannelSquareCard({
           {description}
         </p>
 
-        {/* Sources and channel counts */}
+        {/* 创建者和统计信息 */}
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] leading-[18px] text-[#A9AEB8] touch-desktop:flex-nowrap touch-desktop:gap-2.5">
           {/* Source icons. A channel can legitimately have none (freshly created,
               or no favicon crawled) — render nothing rather than a placeholder
               image, and let a single dead icon degrade to its neutral circle,
               so neither case shows the browser's broken-image glyph. */}
-          {sourceIcons && sourceIcons.length > 0 && (
+          {creatorAvatars && creatorAvatars.length > 0 && (
             <div className="flex shrink-0 items-center gap-1.5">
               <div className="flex -space-x-3">
-                {sourceIcons.slice(0, 3).map((src, idx) => (
+                {creatorAvatars.slice(0, 3).map((src, idx) => (
                   <Avatar
                     key={idx}
                     className="h-5 w-5 border border-white bg-[#F2F3F5]"
                   >
                     <AvatarImage
                       src={src}
-                      alt=""
+                      alt={creator}
                       className="object-cover"
                       onError={(e) => {
                         e.currentTarget.style.visibility = "hidden";

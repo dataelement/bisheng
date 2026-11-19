@@ -4,8 +4,6 @@ import { getUsersApi } from '@/controllers/API/user'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { ModelAccessDialog } from './ModelAccessDialog'
 import { getModelVisibility, getPolicySubjects, saveModelVisibility } from '@/controllers/API/dshUnified'
-
-const avatar = '/object/public/avatar/21/photo.png'
 vi.mock('@/components/bs-icons/search', () => ({ SearchIcon: () => null }))
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
 vi.mock('@/controllers/API/dshUnified', () => ({ getModelVisibility: vi.fn(), getPolicySubjects: vi.fn(), saveModelVisibility: vi.fn() }))
@@ -13,7 +11,7 @@ vi.mock('@/controllers/API/user', () => ({ getUsersApi: vi.fn() }))
 vi.mock('@/utils/dshRequestError', () => ({ getDshRequestErrorKey: () => 'dsh.conflict' }))
 beforeEach(() => {
     vi.resetAllMocks()
-    vi.mocked(getUsersApi).mockResolvedValue({ data: [{ user_id: 21, user_name: 'Ada', avatar }] as never, total: 1 })
+    vi.mocked(getUsersApi).mockResolvedValue({ data: [{ user_id: 21, user_name: 'Ada' }] as never, total: 1 })
     vi.mocked(getModelVisibility).mockResolvedValue({ version: 3, everyone: false, subjects: [] })
     vi.mocked(getPolicySubjects).mockResolvedValue([{ kind: 'DEPARTMENT', id: 10, name: 'Engineering', depth: 0 }, { kind: 'ROLE', id: 10, name: 'Reviewer', depth: 0 }])
 })
@@ -24,7 +22,6 @@ it('saves visibility without sending a credit multiplier', async () => {
     await user.click(await screen.findByRole('button', { name: 'dialog.tabGrant' }))
     const dialog = screen.getByRole('dialog', { name: 'dialog.tabGrant - Model' })
     await user.click(await within(dialog).findByText('Ada'))
-    expect(within(dialog).getByAltText('')).toHaveAttribute('src', avatar)
     await user.click(within(dialog).getByRole('tab', { name: 'subject.department' }))
     await user.click(await within(dialog).findByText('Engineering'))
     await user.click(within(dialog).getByRole('tab', { name: 'dsh.unified.role' }))
@@ -32,14 +29,13 @@ it('saves visibility without sending a credit multiplier', async () => {
     await user.click(within(dialog).getByRole('button', { name: 'dsh.unified.addToDraft' }))
     expect(saveModelVisibility).not.toHaveBeenCalled()
     expect(screen.getByText('Ada')).toBeVisible()
-    expect(screen.getByAltText('')).toHaveAttribute('src', avatar)
     await user.click(screen.getByRole('tab', { name: 'subject.department' }))
     expect(screen.getByText('Engineering')).toBeVisible()
     await user.click(screen.getByRole('tab', { name: 'dsh.unified.role' }))
     expect(screen.getByText('Reviewer')).toBeVisible()
     await user.click(screen.getByRole('button', { name: 'dsh.unified.save' }))
     await waitFor(() => expect(saveModelVisibility).toHaveBeenCalledWith(7, {
-        version: 3, everyone: false, users: [{ value: 21, label: 'Ada', avatar }],
+        version: 3, everyone: false, users: [{ value: 21, label: 'Ada' }],
         subjects: [{ kind: 'USER', id: 21 }, { kind: 'DEPARTMENT', id: 10 }, { kind: 'ROLE', id: 10 }],
     }))
     await waitFor(() => expect(close).toHaveBeenCalledOnce())
@@ -79,12 +75,11 @@ it('everyone hides individual choices', async () => {
 
 it('preserves the selected-member draft when the all-members switch collapses and expands it', async () => {
     vi.mocked(getModelVisibility).mockResolvedValue({ version: 3, everyone: false,
-        subjects: [{ kind: 'USER', id: 21 }], users: [{ value: 21, label: 'Ada', avatar }] })
+        subjects: [{ kind: 'USER', id: 21 }], users: [{ value: 21, label: 'Ada' }] })
     const user = userEvent.setup()
     render(<ModelAccessDialog model={{ id: 7, name: 'Model' }} onClose={vi.fn()} />)
     const toggle = await screen.findByRole('switch', { name: 'model:model.currentTenantEveryone' })
     expect(screen.getByText('Ada')).toBeVisible()
-    expect(screen.getByAltText('')).toHaveAttribute('src', avatar)
     await user.click(toggle)
     expect(toggle).toBeChecked()
     expect(screen.queryByRole('region', { name: 'dsh.unified.selectedVisible' })).toBeNull()

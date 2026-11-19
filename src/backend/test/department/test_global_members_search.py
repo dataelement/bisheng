@@ -68,7 +68,6 @@ _DDL = [
         external_id VARCHAR(128),
         email VARCHAR(255),
         phone_number VARCHAR(64),
-        avatar VARCHAR(512),
         dept_id VARCHAR(64),
         password VARCHAR(255) NOT NULL DEFAULT 'hashed',
         "delete" INTEGER DEFAULT 0,
@@ -163,30 +162,6 @@ class TestGlobalMembersSearch:
         names = {r["user_name"] for r in res["data"]}
         assert names == {"lisa"}
         assert res["total"] == 1
-
-    async def test_visible_match_returns_the_signed_avatar(self, engine):
-        await _seed_dept(engine, did=10, dept_id="BS@d", name="Dept", path="/10/")
-        await _seed_user(engine, uid=7, name="alex", dept_int_id=10)
-        await _seed_user(engine, uid=8, name="alexandra", dept_int_id=10)
-        async with engine.begin() as conn:
-            await conn.execute(text("UPDATE user SET avatar = 'avatar/7/photo.png' WHERE user_id = 7"))
-        signed = "/object/bisheng/avatar/7/photo.png?signature=test"
-
-        async def visible_avatars(pairs):
-            assert list(pairs) == [(1, 7)]
-            return {(1, 7): signed}
-
-        with (
-            _session_patch(engine),
-            _visible_tree(10),
-            patch("bisheng.user.application.avatar.read_visible_user_avatar_urls", visible_avatars),
-        ):
-            result = await DepartmentService.aget_global_members_search("alex", 1, 20, _login)
-
-        by_id = {row["user_id"]: row for row in result["data"]}
-        assert by_id[7]["avatar"] == signed
-        assert "avatar" not in by_id[8]
-        assert all("_has_avatar" not in row for row in by_id.values())
 
     async def test_total_uses_single_window_count(self, engine):
         """Total reflects all matches across pages, from one query (window count)."""

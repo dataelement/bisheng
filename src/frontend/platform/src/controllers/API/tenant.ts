@@ -6,7 +6,6 @@ import {
   TenantDetail,
   TenantQuota,
   TenantUpdateForm,
-  TenantUser,
   UserTenantItem,
 } from "@/types/api/tenant"
 
@@ -92,7 +91,7 @@ export async function getTenantUsersApi(
   tenantId: number,
   params: { page: number; page_size: number; keyword?: string },
   config: { signal?: AbortSignal } = {},
-): Promise<{ data: TenantUser[]; total: number }> {
+): Promise<{ data: any[]; total: number }> {
   return await axios.get(`/api/v1/tenants/${tenantId}/users`, { params, signal: config.signal })
 }
 

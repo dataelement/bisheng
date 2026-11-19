@@ -71,7 +71,7 @@ async def test_detail_square_and_followed_share_effective_access(monkeypatch, st
     )
     members = SimpleNamespace(
         find_membership_split=AsyncMock(return_value=(None, membership)),
-        find_members_by_role=AsyncMock(return_value=[SimpleNamespace(user_id=channel.user_id)]),
+        find_members_by_role=AsyncMock(return_value=[]),
         count_channel_members=AsyncMock(return_value=1),
         find_channel_memberships=AsyncMock(return_value=[]),
     )
@@ -84,13 +84,6 @@ async def test_detail_square_and_followed_share_effective_access(monkeypatch, st
         channel_info_source_repository=SimpleNamespace(),
     )
     service._get_channel_actions = AsyncMock(return_value={"visible"} if visible or super_admin else set())
-    creator_pair = (channel.tenant_id, channel.user_id)
-    avatar = "/object/bucket/avatar/9/creator.png?signature=fresh"
-    avatar_lookup = AsyncMock(return_value={creator_pair: avatar})
-    monkeypatch.setattr(mod, "read_visible_user_avatar_urls", avatar_lookup)
-    monkeypatch.setattr(
-        mod.UserDao, "aget_user_by_ids", AsyncMock(return_value=[SimpleNamespace(user_id=9, user_name="Creator")])
-    )
     monkeypatch.setattr(mod.ArticleCountCache, "get_main_count", AsyncMock(return_value=22))
     monkeypatch.setattr(mod.ArticleCountCache, "get_main_counts", AsyncMock(return_value={channel.id: 22}))
     monkeypatch.setattr(mod.ArticleCountCache, "set_main_counts", AsyncMock())
@@ -111,9 +104,6 @@ async def test_detail_square_and_followed_share_effective_access(monkeypatch, st
     assert detail.subscription_status == square[0].subscription_status == expected
     assert ("visible" in detail.actions) == (visible or super_admin)
     assert [item.id for item in followed] == ([channel.id] if visible else [])
-    assert detail.creator_name == "Creator"
-    assert detail.creator_avatar == avatar
-    avatar_lookup.assert_awaited_once_with([creator_pair])
 
 
 async def test_approval_permission_failure_keeps_pending_and_retry_activates():

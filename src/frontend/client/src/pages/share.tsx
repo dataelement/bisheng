@@ -4,7 +4,6 @@ import { isApiError } from "@bisheng/api-client";
 import { Button } from "@bisheng/ui";
 import { showApiError } from "~/api/request";
 import { useLocalize } from "~/hooks";
-import { ShareContext } from "~/Providers/ShareContext";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getShareParamsApi } from "~/api";
@@ -104,10 +103,8 @@ export default function Share() {
     // then drive their own scroll areas (chat messages and the citation panel
     // scroll independently instead of together).
     return (
-        <ShareContext.Provider value={{ isSharedConvo: true }}>
-            <div className="flex h-[100dvh] w-full flex-col items-start gap-[10px] self-stretch overflow-hidden p-2">
-                {content}
-            </div>
-        </ShareContext.Provider>
+        <div className="flex h-[100dvh] w-full flex-col items-start gap-[10px] self-stretch overflow-hidden p-2">
+            {content}
+        </div>
     );
 };

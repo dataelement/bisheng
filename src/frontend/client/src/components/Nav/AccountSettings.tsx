@@ -2,11 +2,12 @@ import Cookies from 'js-cookie';
 import { FileText, GanttChartIcon, Globe, LogOut } from 'lucide-react';
 import { memo, useCallback, useState } from 'react';
 import { useRecoilState } from 'recoil';
-import { Dropdown, DropdownGroup, DropdownItem, DropdownSub, UserAvatar } from '@bisheng/ui';
-import { GearIcon } from '~/components/svg';
+import { Dropdown, DropdownGroup, DropdownItem, DropdownSub } from '@bisheng/ui';
+import { GearIcon, UserIcon } from '~/components/svg';
 import { useGetStartupConfig, useGetUserBalance } from '~/hooks/queries/data-provider';
 import { useLocalize } from '~/hooks';
 import { useAuthContext } from '~/hooks/AuthContext';
+import useAvatar from '~/hooks/Messages/useAvatar';
 import store from '~/store';
 import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
 import { canShowPlatformAdminEntry } from '~/utils/platformAccess';
@@ -41,6 +42,8 @@ function AccountSettings() {
   const [showFiles, setShowFiles] = useRecoilState(store.showFiles);
   const [showKnowledge, setShowKnowledge] = useRecoilState(store.showKnowledge);
 
+  const avatarSrc = useAvatar(user);
+  const name = user?.avatar ?? user?.username ?? '';
   const showAdminEntry = canShowPlatformAdminEntry({
     role: user?.role,
     plugins: user?.plugins,
@@ -90,7 +93,29 @@ function AccountSettings() {
       >
         <div className='cursor-pointer mt-text-sm mt-2 flex h-auto w-full items-center gap-2 rounded-xl p-2 text-sm transition-all duration-200 ease-in-out hover:bg-[#EBEFF8]'>
           <div className="-ml-0.9 -mt-0.8 h-8 w-8 flex-shrink-0">
-            <UserAvatar className="size-8" fallbackClassName="text-caption" name={user?.username} src={user?.avatar} />
+            <div className="relative flex">
+              {name.length === 0 ? (
+                <div
+                  style={{
+                    backgroundColor: 'rgb(121, 137, 255)',
+                    width: '32px',
+                    height: '32px',
+                    boxShadow: 'rgba(240, 246, 252, 0.1) 0px 0px 0px 1px',
+                  }}
+                  className="relative flex items-center justify-center rounded-full p-1 text-text-primary"
+                  aria-hidden="true"
+                >
+                  <UserIcon />
+                </div>
+              ) : (
+                <div className="w-8 h-8 min-w-6 text-white bg-primary rounded-full flex justify-center items-center text-xs">{(user?.name ?? user?.username ?? localize('com_nav_user')).substring(0, 2).toUpperCase()}</div>
+                // <img
+                //   className="rounded-full"
+                //   src={(user?.avatar ?? '') || avatarSrc}
+                //   alt={`${name}'s avatar`}
+                // />
+              )}
+            </div>
           </div>
           <div
             className="mt-2 grow overflow-hidden text-ellipsis whitespace-nowrap text-left text-text-primary"

@@ -15,7 +15,6 @@ jest.mock('~/hooks', () => ({
     useMediaQuery: () => false, usePrefersMobileLayout: () => false,
 }));
 jest.mock('~/hooks/usePrefersMobileLayout', () => ({ __esModule: true, default: () => false }));
-jest.mock('~/hooks/useSessionPresence', () => ({ useSessionPresence: () => ({ leaseId: null, ensureLeaseId: jest.fn() }) }));
 jest.mock('react-activation', () => ({ useUnactivate: jest.fn() }));
 jest.mock('~/Providers', () => ({ useToastContext: () => ({ showToast: jest.fn() }) }));
 jest.mock('~/api/apps', () => ({}));

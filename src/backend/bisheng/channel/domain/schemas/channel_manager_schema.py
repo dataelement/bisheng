@@ -213,7 +213,6 @@ class ChannelDetailResponse(BaseModel):
     latest_article_update_time: datetime | None = Field(None, description="Channel Latest Article Update Time")
     create_time: datetime | None = Field(None, description="Channel Creation Time")
     creator_name: str = Field(..., description="Channel Creator Name")
-    creator_avatar: str | None = Field(None, description="Current avatar URL of the channel creator")
     subscriber_count: int = Field(default=0, description="Number of subscribers")
     article_count: int = Field(default=0, description="Total number of articles in the main channel")
     # F040: per-sub-channel unread counts moved to GET /channel/manager/{id}/unread-counts

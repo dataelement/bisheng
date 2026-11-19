@@ -31,7 +31,6 @@ export function ModelPermissionRoster({ model, value, options, disabled, onChang
     const [adding, setAdding] = useState(false)
     const [selection, setSelection] = useState<SelectedSubject[]>([])
     const source = useMemo(() => modelDepartmentSource(options, String(model.id)), [options, model.id])
-    const usersById = new Map(value.users?.map(user => [user.value, user]))
     const tabs = [
         { value: 'user' as const, label: permission('subject.user') },
         { value: 'department' as const, label: permission('subject.department') },
@@ -39,7 +38,7 @@ export function ModelPermissionRoster({ model, value, options, disabled, onChang
     ]
     const searchLabel = (type: SubjectType) => t({ user: 'dsh.unified.searchUser', department: 'dsh.unified.searchDepartment', user_group: 'dsh.unified.searchRole' }[type])
     const subjectName = (kind: string, id: number) => kind === 'USER'
-        ? usersById.get(id)?.label ?? `#${id}`
+        ? value.users?.find(user => user.value === id)?.label ?? `#${id}`
         : options.find(option => option.kind === kind && option.id === id)?.name ?? `#${id}`
     const rows = value.subjects.filter(subject => subject.kind === modelSubjectKinds[tab]
         && subjectName(subject.kind, subject.id).toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()))
@@ -49,11 +48,11 @@ export function ModelPermissionRoster({ model, value, options, disabled, onChang
         for (const selected of selection.map(toModelSubject)) {
             if (!subjects.some(subject => subject.kind === selected.kind && subject.id === selected.id)) subjects.push(selected)
         }
-        const users = new Map(usersById)
+        const users = [...(value.users ?? [])]
         for (const selected of selection.filter(subject => subject.type === 'user')) {
-            users.set(selected.id, { value: selected.id, label: selected.name, avatar: selected.avatar })
+            if (!users.some(user => user.value === selected.id)) users.push({ value: selected.id, label: selected.name })
         }
-        onChange({ ...value, subjects, users: [...users.values()] })
+        onChange({ ...value, subjects, users })
         setAdding(false)
         setSelection([])
     }
@@ -73,7 +72,6 @@ export function ModelPermissionRoster({ model, value, options, disabled, onChang
                 <div className="min-h-0 flex-1 overflow-y-auto">
                     {rows.map(subject => <article key={subject.id} className="flex min-h-[58px] items-center gap-4 border-b border-[#F2F3F5] py-3 last:border-b-0">
                         <PermissionSubjectIdentity type={tab} name={subjectName(subject.kind, subject.id)}
-                            avatarName={usersById.get(subject.id)?.label ?? null} avatar={usersById.get(subject.id)?.avatar}
                             metadata={subject.kind === 'DEPARTMENT' ? permission('source.includeChildren') : undefined} />
                         <span className="text-sm text-muted-foreground">{t('dsh.unified.canUse')}</span>
                         <Button type="button" variant="text" iconOnly disabled={disabled}

@@ -1,9 +1,9 @@
 // @ts-strict-ignore
-import { resolveUserAvatarUrl } from '@bisheng/identity';
-import { Button, Tooltip, UserAvatar } from '@bisheng/ui';
+import { Button } from '@bisheng/ui';
 import { LoadingIcon } from "@/components/bs-icons/loading"
 import { Alert, AlertDescription } from "@/components/bs-ui/alert"
 
+import { Tooltip } from "@bisheng/ui"
 import { Outlined } from "bisheng-icons"
 import { getChatHistoryApi } from "@/controllers/API"
 import ResouceModal from "@/pages/ChatAppPage/components/ResouceModal"
@@ -23,7 +23,6 @@ interface Message {
     text: string;
     isCreatedByUser: boolean;
     user_name: string;
-    user_avatar?: string | null;
     source: number;
     generatedFiles: GeneratedFile[];
 }
@@ -99,11 +98,7 @@ export default function DailyChatDetail() {
     const title = messages.length > 0 ? messages[0].flow_name : ''
 
     useEffect(() => {
-        let active = true;
-        setMessages([]);
-        setLoading(true);
         getChatHistoryApi(cid).then((res: any) => {
-            if (!active) return;
             const items = Array.isArray(res) ? res : []
             const memoryPlaceholder = String(tRef.current('memory.operation'))
             const normalised = items.map((m: any) => ({
@@ -113,8 +108,7 @@ export default function DailyChatDetail() {
             }))
             setMessages(normalised)
             setLoading(false)
-        }).catch(() => { if (active) setLoading(false); });
-        return () => { active = false; };
+        }).catch(() => setLoading(false))
     }, [cid])
 
     const sourceRef = useRef(null)
@@ -150,8 +144,9 @@ export default function DailyChatDetail() {
                                 {/* avatar */}
                                 <div className="flex-shrink-0">
                                     {msg.isCreatedByUser ? (
-                                        <UserAvatar className="size-7" fallbackClassName="text-xs" name={msg.user_name}
-                                            src={resolveUserAvatarUrl(msg.user_avatar, __APP_ENV__.BASE_URL)} />
+                                        <div className="w-7 h-7 bg-red-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
+                                            {msg.user_name.slice(0, 2).toLocaleUpperCase()}
+                                        </div>
                                     ) : (
                                         <div className="w-7 h-7 rounded-full flex items-center justify-center bg-gray-100 dark:bg-zinc-800 overflow-hidden">
                                             {appConfig?.worksapceIcon

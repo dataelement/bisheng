@@ -1,7 +1,6 @@
 import { HeaderTenantScope } from "@/components/HeaderTenantScope";
 // @ts-strict-ignore
-import { resolveUserAvatarUrl } from '@bisheng/identity';
-import { Button, Dropdown, DropdownChevron, DropdownItem, DropdownSeparator, Select, UserAvatar } from '@bisheng/ui';
+import { Button, Dropdown, DropdownChevron, DropdownItem, DropdownSeparator, Select } from '@bisheng/ui';
 import { LoadingIcon } from "@/components/bs-icons/loading";
 
 import { GithubIcon } from "@/components/bs-icons";
@@ -201,11 +200,11 @@ export default function MainLayout() {
                         </div>
                         <Separator className="h-5 border-l border-[#dddddd]" orientation="vertical" />
                         <div className="flex items-center gap-x-2">
-                            <UserAvatar
-                                className="size-7"
-                                fallbackClassName="text-xs"
-                                name={u.user_name}
-                                src={resolveUserAvatarUrl(u.avatar, __APP_ENV__.BASE_URL)}
+                            {/* @ts-ignore */}
+                            <img
+                                className="h-7 w-7 rounded-2xl"
+                                src={__APP_ENV__.BASE_URL + (user.avatar || "/assets/user.png")}
+                                alt=""
                             />
                             <Dropdown
                                 trigger="hover"

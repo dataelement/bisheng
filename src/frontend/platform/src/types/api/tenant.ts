@@ -15,7 +15,6 @@ export interface Tenant {
 export interface TenantAdminUser {
   user_id: number
   user_name: string
-  avatar?: string | null
 }
 
 export interface TenantDetail extends Tenant {
@@ -65,7 +64,6 @@ export interface TenantUpdateForm {
 export interface TenantUser {
   user_id: number
   user_name: string
-  avatar?: string | null
-  external_id?: string | null
+  avatar: string | null
   join_time: string | null
 }

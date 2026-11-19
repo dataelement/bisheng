@@ -312,7 +312,7 @@ async def get_my_created_spaces(
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     spaces = await svc.get_my_created_spaces(order_by)
-    return resp_200(await svc.decorate_web_space_list_creators(spaces))
+    return resp_200(spaces)
 
 
 @router.get("/managed")
@@ -330,7 +330,7 @@ async def get_my_followed_spaces(
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     spaces = await svc.get_my_followed_spaces(order_by)
-    return resp_200(await svc.decorate_web_space_list_creators(spaces))
+    return resp_200(spaces)
 
 
 @router.get("/department")
@@ -344,7 +344,7 @@ async def get_my_department_spaces(
         login_user=login_user,
         order_by=order_by,
     )
-    return resp_200(await KnowledgeSpaceService.decorate_web_space_list_creators(spaces))
+    return resp_200(spaces)
 
 
 @router.get("/department/all")

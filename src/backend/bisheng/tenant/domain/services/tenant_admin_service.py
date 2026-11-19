@@ -29,7 +29,6 @@ from bisheng.permission.application import (
     PermissionSubject,
     get_permission_relation_api,
 )
-from bisheng.user.application.avatar import read_visible_user_avatar_urls
 
 
 class TenantAdminService:
@@ -106,10 +105,7 @@ class TenantAdminService:
 
     @classmethod
     async def list_tenant_admin_users(
-        cls,
-        tenant_ids: list[int],
-        *,
-        include_avatars: bool = False,
+        cls, tenant_ids: list[int],
     ) -> dict[int, list[dict] | None]:
         """Return ``{tenant_id: [{user_id, user_name}, ...]}`` for display.
 
@@ -139,12 +135,9 @@ class TenantAdminService:
         id_lists = await asyncio.gather(*(_ids(tid) for tid in tenant_ids))
         all_ids = sorted({uid for ids in id_lists if ids for uid in ids})
         names: dict[int, str] = {}
-        users_with_avatar = set()
         if all_ids:
             users = await UserDao.aget_user_by_ids(all_ids) or []
             names = {u.user_id: u.user_name for u in users}
-            if include_avatars:
-                users_with_avatar = {u.user_id for u in users if getattr(u, "avatar", None)}
 
         result: dict[int, list[dict] | None] = {}
         for tid, ids in zip(tenant_ids, id_lists, strict=True):
@@ -153,19 +146,9 @@ class TenantAdminService:
                 continue
             # Drop tuples whose user row is gone (deleted user): granting
             # flows never clean FGA, and a bare id is meaningless on screen.
-            result[tid] = [{"user_id": uid, "user_name": names[uid]} for uid in ids if uid in names]
-        if users_with_avatar:
-            avatars = await read_visible_user_avatar_urls(
-                (tid, user["user_id"])
-                for tid, users in result.items()
-                for user in users or ()
-                if user["user_id"] in users_with_avatar
-            )
-            for tid, users in result.items():
-                for user in users or ():
-                    avatar = avatars.get((tid, user["user_id"]))
-                    if avatar:
-                        user["avatar"] = avatar
+            result[tid] = [
+                {"user_id": uid, "user_name": names[uid]} for uid in ids if uid in names
+            ]
         return result
 
     # ── Internal helpers ────────────────────────────────────────

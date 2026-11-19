@@ -1,6 +1,6 @@
 """Organization-management search queries; caller supplies authorized scope."""
 
-from sqlalchemy import case, func, or_
+from sqlalchemy import func, or_
 from sqlmodel import col, select
 
 from bisheng.common.subject_search import normalize_keyword
@@ -67,7 +67,6 @@ class ManagementSearchRepository:
                         User.user_id,
                         User.user_name,
                         User.external_id,
-                        case((User.avatar.is_not(None), 1), else_=0).label("user_has_avatar"),
                         col(Department.id).label("dept_int_id"),
                         col(User.delete).label("user_deleted"),
                         func.count().over().label("match_total"),
@@ -113,7 +112,6 @@ class ManagementSearchRepository:
                     "primary_department_dept_id": d.dept_id,
                     "primary_department_path": _primary_dept_display_path(d),
                     "enabled": udel == 0,
-                    "_has_avatar": r.user_has_avatar,
                 }
             )
         return {"data": data, "total": int(total)}

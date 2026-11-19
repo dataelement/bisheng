@@ -18,12 +18,8 @@ from fastapi.testclient import TestClient
 from bisheng.common.errcode.knowledge_space import SpaceNotFoundError, SpacePermissionDeniedError
 from bisheng.common.models.space_channel_member import MembershipStatusEnum, UserRoleEnum
 from bisheng.knowledge.api.dependencies import get_knowledge_space_service
-from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeRead, KnowledgeState
-from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
-    KnowledgeSpaceInfoResp,
-    KnowledgeSpaceListItemResp,
-    SpaceSubscriptionStatusEnum,
-)
+from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeState
+from bisheng.knowledge.domain.schemas.knowledge_space_schema import KnowledgeSpaceInfoResp, SpaceSubscriptionStatusEnum
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 from bisheng.permission.domain.services.permission_action_service import PermissionActor
 from test.knowledge.test_knowledge_space_service import _make_login_user, _make_member, _make_space
@@ -40,34 +36,6 @@ STAGES = (
     "auto_tag",
     "rebuild",
 )
-
-
-async def test_web_space_lists_batch_creator_avatars_by_space_tenant(monkeypatch):
-    from bisheng.knowledge.domain.services import knowledge_space_service
-
-    avatar_url = "/object/bucket/avatar/9/new.png?signature=fresh"
-    seen = []
-
-    async def read_avatars(pairs):
-        seen.extend(pairs)
-        return {(7, 9): avatar_url}
-
-    find_creators = AsyncMock(return_value=[SimpleNamespace(user_id=9, user_name="Creator")])
-    monkeypatch.setattr(knowledge_space_service, "read_visible_user_avatar_urls", read_avatars)
-    monkeypatch.setattr(knowledge_space_service.UserDao, "aget_user_by_ids", find_creators)
-    created = KnowledgeSpaceListItemResp(id=101, name="Created", tenant_id=7, user_id=9, is_pinned=True)
-    joined = KnowledgeRead(id=102, name="Joined", tenant_id=8, user_id=9, copiable=True)
-    department = KnowledgeRead(id=103, name="Department", tenant_id=7, user_id=9)
-
-    result = await KnowledgeSpaceService.decorate_web_space_list_creators([created, joined, department])
-
-    find_creators.assert_awaited_once_with([9])
-    assert seen == [(7, 9), (8, 9), (7, 9)]
-    assert [row["avatar"] for row in result] == [avatar_url, None, avatar_url]
-    assert [row["user_name"] for row in result] == ["Creator", "Creator", "Creator"]
-    assert result[0]["is_pinned"] is True
-    assert result[1]["copiable"] is True
-    assert "avatar" not in created.model_dump()
 
 
 @pytest.fixture
@@ -102,7 +70,6 @@ def info_case():
             member_count=mock_async("SpaceChannelMemberDao.async_count_space_members", return_value=3),
             file_count=mock_async("KnowledgeFileDao.async_count_success_files_batch", return_value={303: 10001}),
             creator=mock_async("UserDao.aget_user", return_value=SimpleNamespace(user_name="creator")),
-            avatars=mock_async("read_visible_user_avatar_urls", return_value={}),
             find_member=mock_async("SpaceChannelMemberDao.async_find_member", return_value=member),
             runtime=mock_async("get_f048_runtime"),
             actions=stack.enter_context(patch.object(service, "_get_effective_actions", new_callable=AsyncMock)),
@@ -159,10 +126,6 @@ async def test_ac02_visible_overrides_old_application_in_info_and_square(info_ca
     info_case.member.status = status
     info_case.member.update_time = datetime.now()
     info_case.grant_visible.return_value = {"303": True}
-    info_case.space.tenant_id = info_case.actor.current_tenant_id
-    creator_pair = (info_case.space.tenant_id, info_case.space.user_id)
-    avatar = "/object/bucket/avatar/9/creator.png?signature=fresh"
-    info_case.avatars.return_value = {creator_pair: avatar}
 
     result = await info_case.service.get_space_info(303)
     with (
@@ -180,8 +143,6 @@ async def test_ac02_visible_overrides_old_application_in_info_and_square(info_ca
         assert item.subscription_status == SpaceSubscriptionStatusEnum.SUBSCRIBED
         assert item.is_followed is True
         assert item.is_pending is False
-        assert item.avatar == avatar
-    assert [list(call.args[0]) for call in info_case.avatars.await_args_list] == [[creator_pair], [creator_pair]]
     # Presentation does not change the approval/member record.
     assert info_case.member.status == status
 
@@ -381,16 +342,12 @@ def test_ac01_api_serializes_visible_hint_without_full_action_lookup(info_client
 def test_ac03_api_serializes_preview_without_visible_hint(info_client, info_case):
     info_case.check.return_value = False
     info_case.find_member.return_value = None
-    info_case.space.tenant_id = info_case.actor.current_tenant_id
-    avatar = "/object/bucket/avatar/9/creator.png?signature=fresh"
-    info_case.avatars.return_value = {(info_case.space.tenant_id, info_case.space.user_id): avatar}
 
     payload = info_client.get("/api/v1/knowledge/space/303/info").json()
 
     assert payload["status_code"] == 200
     assert payload["data"]["actions"] == []
     assert payload["data"]["subscription_status"] == "not_subscribed"
-    assert payload["data"]["avatar"] == avatar
 
 
 @pytest.mark.parametrize("missing", [False, True])

@@ -88,7 +88,6 @@ export function PermissionDraftPickerDialog({
       subjectType: subject.type,
       subjectId: subject.id,
       subjectName: subject.name,
-      avatar: subject.avatar,
       externalId: subject.externalId,
       departmentPath: subject.departmentPath,
       modelKey: activeModel.id,

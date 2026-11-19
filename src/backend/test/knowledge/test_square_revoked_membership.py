@@ -88,7 +88,10 @@ def context(monkeypatch):
     space = SimpleNamespace(**space_data, model_dump=lambda: space_data)
     worker = ModuleType("bisheng.worker")
     worker.rebuild_knowledge_celery = SimpleNamespace()
+    user_module = ModuleType("bisheng.user.domain.services.user")
+    user_module.UserService = SimpleNamespace(get_avatar_share_link=AsyncMock())
     monkeypatch.setitem(sys.modules, worker.__name__, worker)
+    monkeypatch.setitem(sys.modules, user_module.__name__, user_module)
     members = SimpleNamespace(
         async_find_member=AsyncMock(return_value=member), async_count_space_members=AsyncMock(return_value=2)
     )
@@ -120,7 +123,6 @@ def context(monkeypatch):
             aget_user=AsyncMock(return_value=SimpleNamespace(user_name="owner")),
             aget_user_by_ids=AsyncMock(return_value=[]),
         ),
-        "read_visible_user_avatar_urls": AsyncMock(return_value={}),
         "UserDepartmentDao": SimpleNamespace(aget_user_primary_department=AsyncMock(return_value=None)),
         "batch_check_business_visible": AsyncMock(return_value={"74": False}),
         "ApprovalGateRequest": lambda **kw: SimpleNamespace(**kw),
@@ -134,7 +136,6 @@ def context(monkeypatch):
         "_resolve_effective_subscription_status",
         "_exclude_failed_subscriptions",
         "_apply_subscription_flags",
-        "_space_creator_avatars",
         "get_space_info",
         "get_knowledge_square",
         "subscribe_space",

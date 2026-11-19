@@ -3,6 +3,7 @@ from typing import Literal
 from fastapi import APIRouter, Body, Depends
 
 from bisheng.api.services.audit_log import AuditLogService
+from bisheng.api.services.workstation import WorkstationMessage
 from bisheng.chat_session.domain.chat import ChatSessionService
 from bisheng.chat_session.utils import get_session_app_type
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
@@ -36,9 +37,7 @@ async def get_chat_message_public(
             )
         except UnAuthorizedError:
             raise UnAuthorizedError.http_exception()
-    history = await ChatSessionService.get_chat_history(
-        chat_id, flow_id, id, page_size, include_audit_avatars=session_info is not None
-    )
+    history = await ChatSessionService.get_chat_history(chat_id, flow_id, id, page_size)
     return resp_200(data=history)
 
 
@@ -51,7 +50,11 @@ async def get_chat_messages_by_conversation_id(
         await AuditLogService.assert_session_in_audit_scope(login_user, conversationId)
     except UnAuthorizedError:
         raise UnAuthorizedError.http_exception()
-    return resp_200(await ChatSessionService.get_audit_workstation_messages(conversationId))
+    messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id=conversationId, limit=1000)
+    if not messages:
+        raise NotFoundError()
+
+    return resp_200([await WorkstationMessage.from_chat_message(message) for message in messages])
 
 
 @router.get("/chat/{chat_id}/files/{file_id}/url")

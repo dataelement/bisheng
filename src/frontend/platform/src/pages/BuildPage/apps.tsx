@@ -157,7 +157,6 @@ const TypeNames = {
  */
 type AppListRow = FlowType & {
     flow_type?: number
-    user_id?: number
     /** F054 only — the five-state application state. */
     app_state?: string
     version_list?: { id: string | number }[]
@@ -458,7 +457,6 @@ export default function Apps() {
                                     description={item.description}
                                     checked={item.status === 2}
                                     user={item.user_name}
-                                    creatorId={item.user_id}
                                     currentUser={user}
                                     onClick={handleUiRequest(() => handleSetting(item))}
                                     // onSwitchClick={() => {

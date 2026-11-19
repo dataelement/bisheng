@@ -15,14 +15,15 @@ vi.mock("@/controllers/API/permission", () => ({
 
 vi.mock("@/components/bs-comp/permission/SubjectSearchUser", () => ({
   SubjectSearchUser: (props: {
+    value: Array<{ type: "user"; id: number; name: string }>
     onChange: (
-      value: Array<{ type: "user"; id: number; name: string; avatar: string }>,
+      value: Array<{ type: "user"; id: number; name: string }>,
     ) => void
   }) => (
     <button
       type="button"
       onClick={() =>
-        props.onChange([{ type: "user", id: 9, name: "Alice", avatar: "/object/public/avatar/9/alice.png" }])
+        props.onChange([{ type: "user", id: 9, name: "Alice" }])
       }
     >
       select-alice
@@ -135,7 +136,7 @@ describe("F118 server-issued pure visibility grants", () => {
     });
     expect(pureModel.level).toBe(3);
     expect(JSON.stringify(body)).not.toMatch(
-      /visibility_only|action_codes|"level"|"use"|"visible"|"avatar"/,
+      /visibility_only|action_codes|"level"|"use"|"visible"/,
     );
   });
 
@@ -467,7 +468,6 @@ describe("F048 PermissionGrantTab", () => {
     render(<PermissionGrantTab resourceType="workflow" resourceId="flow-1" context={context} legacyAddLayout showExistingAssignees={false} onSuccess={onSuccess} />)
     await screen.findByTestId("legacy-permission-grant-layout")
     fireEvent.click(screen.getByRole("button", { name: "select-alice" }))
-    expect(screen.getByAltText("")).toHaveAttribute("src", "/object/public/avatar/9/alice.png")
     await selectOption("grant.addModel", "Editor")
     fireEvent.click(screen.getByRole("button", { name: "grant.submit" }))
     await screen.findByRole("alert")

@@ -70,30 +70,6 @@ describe("SubjectSearchUser", () => {
     expect(mockedGrantSubjectUsers).not.toHaveBeenCalled();
   });
 
-  it("keeps avatars associated with selected and already granted users", async () => {
-    const carol = "/object/public/avatar/11/carol.png";
-    const alternate = "/object/public/avatar/12/carol.png";
-    const onChange = vi.fn();
-    mockedGrantSubjectUsers.mockResolvedValue({
-      data: [
-        { user_id: 11, user_name: "Carol", avatar: carol },
-        { user_id: 12, user_name: "Carol", avatar: alternate },
-      ],
-      total: 2,
-    });
-
-    render(<SubjectSearchUser value={[]} onChange={onChange} resourceType="knowledge_space" resourceId="88" disabledIds={[12]} />);
-
-    const [selectableAvatar, grantedAvatar] = await screen.findAllByAltText("");
-    expect(selectableAvatar).toHaveAttribute("src", carol);
-    expect(grantedAvatar).toHaveAttribute("src", alternate);
-    const [selectable, granted] = screen.getAllByRole("checkbox");
-    expect(granted).toBeChecked();
-    expect(granted).toBeDisabled();
-    fireEvent.click(selectable);
-    expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ id: 11, avatar: carol })]);
-  });
-
   it("sends the keyword to the server rather than filtering a loaded page", async () => {
     mockedGrantSubjectUsers.mockResolvedValue({
       data: [{ user_id: 8, user_name: "Alice", external_id: "alice-001" }],

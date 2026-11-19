@@ -23,7 +23,6 @@ import { useLocalize } from "~/hooks";
 import { useConfirm } from "~/Providers";
 import { canMutatePermissionAssignee } from "./assigneePolicy";
 import { PermissionEmptyState } from "./PermissionEmptyState";
-import { PermissionSubjectAvatar } from "./PermissionSubjectAvatar";
 import { SourceBadge } from "./SourceBadge";
 import { PermissionModelStatus } from "./PermissionModelStatus";
 
@@ -38,6 +37,12 @@ interface PermissionListTabProps {
   onMutationSuccess?: (result: MutateResourceGrantsResult) => void;
 }
 
+const SUBJECT_ICONS = {
+  user: Outlined.People,
+  department: Outlined.City,
+  user_group: Outlined.PeopleGroup,
+};
+
 const SUBJECT_SEARCH_EMPTY_KEYS = {
   user: "com_permission.empty_search",
   department: "com_permission.empty_search_departments",
@@ -48,6 +53,11 @@ function createMutationIdempotencyKey(): string {
   return `grant-mutate-${Date.now()}-${Math.random()
     .toString(36)
     .slice(2, 10)}`;
+}
+
+function getAvatarLabel(assignee: PermissionGrantAssignee): string {
+  const name = assignee.subject.name?.trim() || assignee.subject.id;
+  return (name.charAt(0) || "U").toUpperCase();
 }
 
 function getInheritedSourceLabel(
@@ -88,6 +98,7 @@ function RosterRow({
   onRemove,
 }: RosterRowProps) {
   const localize = useLocalize();
+  const SubjectIcon = SUBJECT_ICONS[assignee.subject.type];
   const editable = canMutatePermissionAssignee(assignee, context, models);
   const displayName =
     assignee.subject.name ||
@@ -103,14 +114,15 @@ function RosterRow({
       className="flex min-h-[58px] items-center gap-4 border-b border-[#F2F3F5] py-3 last:border-b-0"
     >
       <div className="flex min-w-0 flex-1 items-center gap-3">
-        <PermissionSubjectAvatar
-          type={assignee.subject.type}
-          subjectId={assignee.subject.id}
-          name={assignee.subject.name}
-          avatar={assignee.subject.avatar}
-          className="size-8"
-          fallbackClassName="text-body-sm"
-        />
+        {assignee.subject.type === "user" ? (
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#C9CDD4] text-sm font-semibold text-white">
+            {getAvatarLabel(assignee)}
+          </span>
+        ) : (
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-blue-500/[0.07] text-blue-500">
+            <SubjectIcon aria-hidden="true" className="size-4" />
+          </span>
+        )}
         <div className="min-w-0">
           <p className="truncate text-sm font-medium text-[#212121]">
             {displayName}

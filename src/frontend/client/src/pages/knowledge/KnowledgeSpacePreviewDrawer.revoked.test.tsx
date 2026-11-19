@@ -81,17 +81,6 @@ it('current effective access keeps joined and loads the synthetic file', async (
     expect(screen.getByRole('button', { name: 'com_knowledge.joined' })).toBeDisabled();
 });
 
-it('falls back to the creator initial if the avatar in the preview fails', async () => {
-    jest.mocked(getSpaceInfoApi).mockResolvedValue({ ...space, creatorAvatar: '/workspace/object/avatar.png' });
-    render(<KnowledgeSpacePreviewDrawer spaceId="74" open onOpenChange={jest.fn()} />);
-    const avatar = await screen.findByAltText('');
-
-    fireEvent.error(avatar);
-
-    expect(screen.getByText('O')).toHaveClass('bg-fill-4', 'text-white');
-    expect(screen.queryByAltText('')).not.toBeInTheDocument();
-});
-
 it.each(['pending', 'rejected'])('preserves the %s application state', async (status) => {
     jest.mocked(getSpaceInfoApi).mockResolvedValue({ ...space, isFollowed: false, subscriptionStatus: status, squareStatus: status as 'pending' | 'rejected' });
     render(<KnowledgeSpacePreviewDrawer spaceId="74" open onOpenChange={jest.fn()} />);

@@ -1,14 +1,16 @@
-import { Button, Checkbox, SearchInput, Tag } from "@bisheng/ui";
+import { Checkbox } from "@bisheng/ui";
+import { Button, SearchInput, Tag } from "@bisheng/ui";
 import { SubjectIdentity } from "./SubjectIdentity";
 import { useSubjectKeyword } from "./useSubjectKeyword";
 import { searchUsers } from "~/api/permission";
 import type { GrantUser, ResourceType, SelectedSubject } from "~/api/permission";
-import { PermissionSubjectAvatar } from "./PermissionSubjectAvatar";
+import { Outlined } from "bisheng-icons";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 import { PermissionEmptyState } from "./PermissionEmptyState";
 import {
+  PERMISSION_SUBJECT_ICON_CLASS,
   PERMISSION_SUBJECT_LIST_CLASS,
   PERMISSION_SUBJECT_ROW_CLASS,
   PERMISSION_SUBJECT_ROW_DISABLED_CLASS,
@@ -155,7 +157,6 @@ export function SubjectSearchUser({
           type: "user",
           id: user.user_id,
           name: user.user_name,
-          avatar: user.avatar,
           externalId: user.external_id,
           departmentPath: user.primary_department_path,
         },
@@ -248,15 +249,10 @@ export function SubjectSearchUser({
                       disabled={isDisabled}
                     />
                   </div>
+                  {/* Icon slot: 20×20 wrapper, 16×16 user icon — same column as the
+                    department tab's entity icon. */}
                   <div className={PERMISSION_SUBJECT_SLOT_CLASS}>
-                    <PermissionSubjectAvatar
-                      type="user"
-                      subjectId={user.user_id}
-                      name={user.user_name}
-                      avatar={user.avatar}
-                      className="size-5"
-                      fallbackClassName="text-caption-sm"
-                    />
+                    <Outlined.People className={PERMISSION_SUBJECT_ICON_CLASS} />
                   </div>
                   {/* Name column: username + user id (external_id) after it; the next
                     column shows only the org/department path. */}

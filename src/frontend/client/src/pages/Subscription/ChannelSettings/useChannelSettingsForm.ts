@@ -50,8 +50,7 @@ function toPermissionDraftRows(
   return entries.map((entry) => ({
     subjectType: entry.subject.type,
     subjectId: Number(entry.subject.id),
-    subjectName: entry.subject.name ?? "",
-    avatar: entry.subject.avatar,
+    subjectName: entry.subject.name || entry.subject.id,
     modelKey: entry.model.key,
     modelName: entry.model.name,
     modelActive: entry.model.active,

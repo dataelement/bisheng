@@ -8,21 +8,17 @@ import { useCurrentIdentityRefresh } from './useCurrentIdentityRefresh';
 vi.mock('@/controllers/API/user', () => ({ getUserInfo: vi.fn() }));
 afterEach(() => { cleanup(); vi.clearAllMocks(); focusManager.setFocused(undefined); });
 
-it.each([
-    { change: 'updated', avatar: '/object/public/avatar/7/new.png?signature=latest' },
-    { change: 'cleared', avatar: null },
-])('reads the current nickname and $change avatar on focus', async ({ avatar }) => {
+it('reads the current nickname on focus', async () => {
     const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const refreshed = vi.fn();
-    const identity = { user_id: 7, user_name: 'OldName', external_id: 'Case01', avatar: '/old.png' };
-    const updated = { ...identity, user_name: 'NewName', avatar };
-    vi.mocked(getUserInfo).mockResolvedValue(updated as Awaited<ReturnType<typeof getUserInfo>>);
+    const identity = { user_id: 7, user_name: 'OldName', external_id: 'Case01' };
+    vi.mocked(getUserInfo).mockResolvedValue({ ...identity, user_name: 'NewName' } as Awaited<ReturnType<typeof getUserInfo>>);
     renderHook(() => useCurrentIdentityRefresh(identity, refreshed), {
         wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={cache}>{children}</QueryClientProvider>,
     });
     expect(getUserInfo).not.toHaveBeenCalled();
     act(() => { focusManager.setFocused(false); focusManager.setFocused(true); });
-    await waitFor(() => expect(refreshed).toHaveBeenCalledWith(updated));
+    await waitFor(() => expect(refreshed).toHaveBeenCalledWith({ ...identity, user_name: 'NewName' }));
     expect(getUserInfo).toHaveBeenCalledTimes(1);
     cache.clear();
 });

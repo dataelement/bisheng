@@ -8,7 +8,7 @@ import {
 } from "@/controllers/API/permission"
 import { PermissionListTab } from "@/components/bs-comp/permission/PermissionListTab"
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
-import { fireEvent, render, screen, waitFor, within } from "@/test/test-utils"
+import { fireEvent, render, screen, waitFor } from "@/test/test-utils"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@/controllers/API/permission", () => ({
@@ -154,30 +154,6 @@ describe("F118 pure visibility source roster", () => {
 });
 
 describe("F048 PermissionListTab", () => {
-  it("uses each user’s avatar for direct and inherited grants with the same nickname", async () => {
-    const directAvatar = "/object/public/avatar/7/direct.png?signature=one";
-    const inheritedAvatar = "/object/public/avatar/8/inherited.png?signature=two";
-    vi.mocked(getResourcePermissionGrantsApi).mockResolvedValueOnce({
-      data: [
-        { ...directAssignee, subject: { ...directAssignee.subject, avatar: directAvatar } },
-        { ...departmentAssignee, scope: "INHERITED", subject: { ...departmentAssignee.subject, id: "8", avatar: inheritedAvatar } },
-      ],
-      page_size: 50,
-      has_more: false,
-      next_cursor: null,
-    });
-    render(<PermissionListTab resourceType="workflow" resourceId="flow-1" context={customContext} />);
-
-    const direct = within(await screen.findByTestId("permission-assignee-101"));
-    const inherited = within(await screen.findByTestId("permission-assignee-102"));
-    expect(direct.getByAltText("")).toHaveAttribute("src", directAvatar);
-    const inheritedImage = inherited.getByAltText("");
-    expect(inheritedImage).toHaveAttribute("src", inheritedAvatar);
-    fireEvent.error(inheritedImage);
-    expect(inherited.getByText("A")).toBeInTheDocument();
-    expect(direct.getByAltText("")).toHaveAttribute("src", directAvatar);
-  });
-
   it("searches the server roster beyond the currently loaded page", async () => {
     vi.mocked(getResourcePermissionGrantsApi).mockResolvedValueOnce({ data: [directAssignee], page_size: 50, has_more: true, next_cursor: "next" })
       .mockResolvedValueOnce({ data: [{ ...directAssignee, assignee_id: "999", subject: { type: "user", id: "99", name: "Later user" } }], page_size: 50, has_more: false, next_cursor: null });

@@ -144,7 +144,6 @@ export async function getDepartmentMembersApi(
 export interface GlobalMemberSearchRow {
   user_id: number
   user_name: string
-  avatar?: string | null
   external_id?: string | null
   primary_department_dept_id: string
   primary_department_path: string

@@ -5,7 +5,6 @@ export interface CurrentIdentity {
     user_id: number;
     user_name: string;
     external_id?: string | null;
-    avatar?: string | null;
 }
 
 export function useCurrentIdentityRefresh(
@@ -24,12 +23,7 @@ export function useCurrentIdentityRefresh(
         queryFn: async () => {
             const profile = await getUserInfo();
             if (profile.user_id !== userId) throw new Error('Current identity changed during profile refresh');
-            return {
-                user_id: profile.user_id,
-                user_name: profile.user_name,
-                external_id: profile.external_id ?? null,
-                avatar: profile.avatar ?? null,
-            };
+            return { user_id: profile.user_id, user_name: profile.user_name, external_id: profile.external_id ?? null };
         },
         onSuccess: onRefreshed,
     });

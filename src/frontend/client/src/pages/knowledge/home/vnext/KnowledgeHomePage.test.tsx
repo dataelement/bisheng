@@ -10,7 +10,6 @@ import { KnowledgeHomePage } from '../../KnowledgeHomePage';
 
 jest.mock('./componentMode', () => ({ USE_PRODUCT_COMPONENTS: false }));
 jest.mock('@bisheng/ui', () => ({
-  ...jest.requireActual('../../../../../../packages/ui/src/components/Avatar'),
   ...jest.requireActual('../../../../../../packages/ui/src/components/Tooltip/Tooltip.tsx'),
   ...jest.requireActual('../../../../../../packages/ui/src/components/Tabs/Tabs.tsx'),
   ...jest.requireActual('../../../../../../packages/ui/src/components/Button/Button.tsx'),
@@ -385,7 +384,6 @@ it('loads the actual creator from detail only when the list omits it', async () 
   mockCreatorInfo.mockResolvedValue({ ...mockData.mine[0], creator: 'Actual creator' });
   mount();
   expect(await screen.findByText('Actual creator')).toBeInTheDocument();
-  expect(screen.getByText('A')).toHaveClass('bg-fill-4', 'text-white');
   expect(mockCreatorInfo).toHaveBeenCalledWith('1');
 });
 

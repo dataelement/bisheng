@@ -1,7 +1,6 @@
 // @bisheng/ui public API — presentation-only components + design-system utils.
 // Contract (README): no state management, no HTTP, no i18n keys, no routing.
 export { default as cn } from './utils/cn';
-export * from './components/Avatar';
 export { LoadingIndicatorProvider, useLoadingIndicatorRenderer } from './providers/LoadingIndicatorProvider';
 export type { LoadingIndicatorProps, LoadingIndicatorRenderer } from './providers/LoadingIndicatorProvider';
 export { Button, buttonVariants } from './components/Button/Button';

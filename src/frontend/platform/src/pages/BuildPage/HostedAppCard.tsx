@@ -30,7 +30,7 @@ export interface HostedAppListItem {
   name: string
   description?: string
   logo?: string
-  user_name?: string | number
+  user_name?: string
   user_id?: number
   owner_active?: boolean
   /** Projected 2 (online) / 1 (everything else) so the shared switch works. */
@@ -188,7 +188,6 @@ export function HostedAppCard({
       title={item.name}
       description={item.description}
       user={item.user_name}
-      creatorId={item.user_id}
       currentUser={currentUser}
       isAdmin={isAdmin}
       checked={online}

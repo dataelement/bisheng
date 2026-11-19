@@ -1,5 +1,4 @@
-import { resolveUserAvatarUrl } from "@bisheng/identity"
-import { Tabs, UserAvatar } from "@bisheng/ui"
+import { Tabs } from "@bisheng/ui"
 import { Building2, Users } from "lucide-react"
 import type { ReactNode } from "react"
 import type { SubjectType } from "./types"
@@ -21,16 +20,13 @@ export function PermissionSubjectTabs({ tabs, value, onChange }: PermissionSubje
 interface PermissionSubjectIdentityProps {
   type: SubjectType
   name: string
-  avatar?: string | null
-  avatarName?: string | null
   metadata?: ReactNode
 }
 
-export function PermissionSubjectIdentity({ type, name, avatar, avatarName = name, metadata }: PermissionSubjectIdentityProps) {
+export function PermissionSubjectIdentity({ type, name, metadata }: PermissionSubjectIdentityProps) {
   const Icon = type === "department" ? Building2 : Users
   return <div className="flex min-w-0 flex-1 items-center gap-3">
-    {type === "user" ? <UserAvatar className="size-8" fallbackClassName="text-sm" name={avatarName}
-      src={resolveUserAvatarUrl(avatar, __APP_ENV__.BASE_URL)} />
+    {type === "user" ? <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#C9CDD4] text-sm font-semibold text-white">{(name.trim().charAt(0) || "U").toUpperCase()}</span>
       : <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"><Icon aria-hidden="true" className="size-4" /></span>}
     <div className="min-w-0">
       <p className="truncate text-sm font-medium text-[#212121]">{name}</p>

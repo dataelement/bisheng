@@ -2371,7 +2371,6 @@ class DepartmentService:
             {
                 "user_id": r.user_id,
                 "user_name": r.user_name,
-                "_has_avatar": r.user_has_avatar,
                 "person_id": _person_id_for_row(r),
                 "department_id": r.department_id,
                 "is_primary": r.is_primary,
@@ -2397,7 +2396,7 @@ class DepartmentService:
             }
             for r in rows
         ]
-        result = {"data": await cls._with_member_avatars(data), "total": total}
+        result = {"data": data, "total": total}
         if include_descendants:
             result["direct_total"] = direct_total
         return result
@@ -2450,25 +2449,9 @@ class DepartmentService:
                 raise DepartmentPermissionDeniedError()
             requested_root_path = requested_root.path
 
-        result = await ManagementSearchRepository.global_members(
+        return await ManagementSearchRepository.global_members(
             kw, page, limit, admin_paths=admin_paths, requested_root_path=requested_root_path
         )
-        return {**result, "data": await cls._with_member_avatars(result["data"])}
-
-    @staticmethod
-    async def _with_member_avatars(rows: list[dict]) -> list[dict]:
-        from bisheng.user.application.avatar import read_visible_user_avatar_urls
-
-        user_ids = [row["user_id"] for row in rows if row.pop("_has_avatar", False)]
-        tenant_id = get_current_tenant_id()
-        if tenant_id is None or not user_ids:
-            return rows
-        avatars = await read_visible_user_avatar_urls((tenant_id, user_id) for user_id in user_ids)
-        for row in rows:
-            avatar = avatars.get((tenant_id, row["user_id"]))
-            if avatar:
-                row["avatar"] = avatar
-        return rows
 
     @staticmethod
     async def _aget_ancestor_chain_ids(session, dept: Department) -> list[int]:

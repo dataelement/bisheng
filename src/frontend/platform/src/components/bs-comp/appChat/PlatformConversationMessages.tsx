@@ -1,12 +1,9 @@
 import { ConversationMessages, ConversationAttachments, CopyMessageAction } from '@bisheng/chat';
 import { asRecord, parsePayload, describeRun, createRunLabels, displayText, messagesForPresentation, selectQaPair, splitMessageContent, type ChatMessage, type ChatMode } from '@bisheng/chat/core';
-import { resolveUserAvatarUrl } from '@bisheng/identity';
-import { useContext, useRef, type ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, UserAvatar } from '@bisheng/ui';
+import { Button } from '@bisheng/ui';
 import { FlagIcon } from '@/components/bs-icons';
-import { userContext } from '@/contexts/userContext';
-import type { User } from '@/types/api/user';
 import { copyText } from '@/utils';
 import { PlatformChatMarkdown } from './PlatformChatMarkdown';
 import { checkSassUrl } from '@/components/bs-comp/FileView';
@@ -35,18 +32,10 @@ interface PlatformConversationMessagesProps {
 /** Authenticated host operations surround the same client-based message renderer. */
 export function PlatformConversationMessages({ mode, sessionKey, messages: rows, canExecute, canAnnotate, logo, title = '', runCatalog, userName = '', version, onMarkClick, onChoice }: PlatformConversationMessagesProps) {
     const { t } = useTranslation(['bs', 'shared']);
-    const { user }: { user: Partial<User> | null } = useContext(userContext);
     // F132 (AC-09): memory tool events show only a fixed placeholder
     const memoryLabel = String(t('memory.operation'));
     const messages = maskMemoryRuns(messagesForPresentation(rows, { mode, sessionKey }), memoryLabel);
     const sourceRef = useRef<{ openModal: (value: { chatId: string; messageId?: string; message: string }) => void }>(null);
-    const readAuthor = (message: ChatMessage) => {
-        const currentUser = canExecute && user?.user_id && Number(message.raw.user_id) === user.user_id ? user : null;
-        return {
-            name: displayText(message.raw.user_name) || currentUser?.user_name || userName,
-            avatar: typeof message.raw.user_avatar === 'string' ? message.raw.user_avatar : currentUser?.avatar,
-        };
-    };
     const handleMark = (message: ChatMessage) => {
         if (!canAnnotate || !message.sourceMessageId) return;
         const pair = selectQaPair(messages, message.key);
@@ -57,13 +46,8 @@ export function PlatformConversationMessages({ mode, sessionKey, messages: rows,
             labels={{ confirm: t('chat.confirm'), confirmed: t('chat.confirmed'), thinking: t('flow:thinking'), completed: t('flow:thoughtCompleted') }}
             slots={{
                 runPresentation: message => memoryRunPresentation(message, memoryLabel) ?? describeRun(message, runCatalog, createRunLabels(key => String(t(key)))),
-                title: message => message.kind === 'user' ? readAuthor(message).name : title,
-                avatar: message => {
-                    if (message.kind !== 'user') return logo;
-                    const { name, avatar } = readAuthor(message);
-                    return <UserAvatar className="size-6" fallbackClassName="text-xs" name={name}
-                        src={resolveUserAvatarUrl(avatar, __APP_ENV__.BASE_URL)} />;
-                },
+                title: message => message.kind === 'user' ? displayText(message.raw.user_name) || userName : title,
+                avatar: message => message.kind === 'user' ? <img className="w-6 h-6 min-w-6" src={__APP_ENV__.BASE_URL + '/assets/user.png'} alt="" /> : logo,
                 content: (text, message) => {
                     if (['divider', 'separator'].includes(message.category)) return text || t('chat.roundOver');
                     const { referenceText, webContent } = splitMessageContent(text);

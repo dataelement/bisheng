@@ -1,5 +1,4 @@
 // @ts-strict-ignore
-import { resolveUserAvatarUrl } from '@bisheng/identity';
 import type { AxiosResponse } from 'axios';
 import * as endpoints from './api-endpoints';
 import * as config from '~/types/chat/config';
@@ -176,7 +175,13 @@ export function getUser(): Promise<t.TUser> {
       external_id: res.data.external_id ?? null,
       "email": user_name,
       "emailVerified": true,
-      "avatar": resolveUserAvatarUrl(avatar, __APP_ENV__.BASE_URL) ?? "",
+      // Backend avatar is usually a path like "/bisheng/avatar/..jpg?...".
+      // Convert it to a front-end accessible URL using BASE_URL.
+      "avatar": avatar
+        ? String(avatar).startsWith("/")
+          ? `${__APP_ENV__.BASE_URL}${avatar}`
+          : `${__APP_ENV__.BASE_URL}/${avatar}`
+        : "",
       "provider": "local",
       "role": role,
       "plugins": wm,

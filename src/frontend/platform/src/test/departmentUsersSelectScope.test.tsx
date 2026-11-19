@@ -100,7 +100,7 @@ beforeEach(() => {
     Promise.resolve(
       deptId === "21"
         ? {
-            data: [{ user_id: 5, user_name: "Leaf User", person_id: "00005", avatar: "/object/public/avatar/5/leaf.png" }],
+            data: [{ user_id: 5, user_name: "Leaf User", person_id: "00005" }],
             total: 1,
           }
         : { data: [], total: 0 },
@@ -192,7 +192,6 @@ describe("DepartmentUsersSelect — rootDeptId scope", () => {
     openPicker()
 
     await screen.findByText("Leaf User")
-    expect(screen.getByAltText("")).toHaveAttribute("src", "/object/public/avatar/5/leaf.png")
     expect(mockedMembers).toHaveBeenCalledWith(
       "21",
       expect.objectContaining({ is_primary: 1 }),

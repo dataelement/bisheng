@@ -1,6 +1,5 @@
 // @ts-strict-ignore
 import { ConversationMessages, SuggestedQuestions } from "@bisheng/chat";
-import { UserAvatar } from "@bisheng/ui";
 import {
   messagesForPresentation,
   asRecord,
@@ -11,8 +10,8 @@ import {
 import { ClientChatMarkdown } from "./components/ClientChatMarkdown";
 import appStore from "~/store";
 import { MessageCheckbox } from "~/components/Chat/MessageSelection";
+import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { useAuthContext } from "~/hooks";
-import { resolveChatAuthor } from "~/utils/chatAuthor";
 import { ClientMessageFooter } from "./components/ClientMessageFooter";
 import { ClientMessageAttachments } from "./components/ClientMessageAttachments";
 import { ClientUserActions } from "./components/ClientUserActions";
@@ -38,6 +37,7 @@ import { useMessage } from "./useMessages";
 const _SELECTABLE_CATEGORIES = new Set(["question", "answer", "agent_answer", "output_msg", "stream_msg"]);
 
 type ChatMessagesProps = {
+  useName?: string;
   readOnly: any;
   title: string;
   logo: React.ReactNode;
@@ -49,6 +49,7 @@ type ChatMessagesProps = {
   selectionActive?: boolean;
 };
 export default function ChatMessages({
+  useName,
   readOnly,
   title,
   logo,
@@ -65,7 +66,6 @@ export default function ChatMessages({
   const latexParsing = useRecoilValue(appStore.LaTeXParsing);
   const localize = useLocalize();
   const { user } = useAuthContext();
-  const privateViewer = readOnly || isGuestMode ? undefined : user;
 
   // F028 selection messages — filtered to question + answer categories so
   // ``buildPairGroup`` (array-position adjacency) walks the right
@@ -135,14 +135,20 @@ export default function ChatMessages({
               const ids = memoryRunItemIds(message);
               return ids.length ? <MemorySearchHits itemIds={ids} /> : undefined;
             },
-            title: (message) => message.kind === "user"
-              ? resolveChatAuthor(message.raw, privateViewer).name ?? ""
-              : title,
-            avatar: (message) => {
-              if (message.kind !== "user") return logo;
-              const author = resolveChatAuthor(message.raw, privateViewer);
-              return <UserAvatar className="size-6" fallbackClassName="text-caption" name={author.name} src={author.avatar} />;
-            },
+            title: (message) =>
+              message.kind === "user" ? displayText(message.raw.user_name) || useName || "" : title,
+            avatar: (message) =>
+              message.kind === "user" ? (
+                <Avatar className="w-6 h-6 text-xs">
+                  {user?.avatar ? (
+                    <AvatarImage src={user.avatar} alt={user.username} />
+                  ) : (
+                    <AvatarName name={user?.username} />
+                  )}
+                </Avatar>
+              ) : (
+                logo
+              ),
             content: (text, message) =>
               ["divider", "separator"].includes(message.category) ? (
                 localize(text)

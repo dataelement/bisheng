@@ -44,4 +44,16 @@ async def owner_candidates(
     _admin: UserPayload = Depends(get_service_account_manager),
 ):
     people, total = await ServiceAccountService.owner_candidates(keyword=keyword, page=page, page_size=page_size)
-    return resp_200(data=PageData(data=people, total=total))
+    return resp_200(
+        data=PageData(
+            data=[
+                ServiceAccountOwnerCandidate(
+                    user_id=person.user_id,
+                    user_name=person.user_name,
+                    tenant_id=person.tenant_id,
+                )
+                for person in people
+            ],
+            total=total,
+        )
+    )

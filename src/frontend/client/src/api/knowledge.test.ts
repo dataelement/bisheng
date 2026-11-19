@@ -3,7 +3,6 @@ import {
     getDepartmentSpacesApi,
     getJoinedSpacesApi,
     getMineSpacesApi,
-    getSpaceInfoApi,
 } from "~/api/knowledge";
 
 jest.mock("~/api/request", () => ({
@@ -56,16 +55,5 @@ describe("knowledge space list entry mapping", () => {
 
         expect(mine[0].spaceKind).toBe("normal");
         expect(joined[0].spaceKind).toBe("normal");
-    });
-
-    it("preserves the signed creator avatar in space details", async () => {
-        jest.replaceProperty(__APP_ENV__, "BASE_URL", "/workspace");
-        const picture = "/object/bisheng/avatar/7/display.png?signature=a%2Bb";
-        mockedRequest.get.mockResolvedValueOnce({ data: { id: 4, user_name: "Alice", avatar: picture } });
-
-        await expect(getSpaceInfoApi("4")).resolves.toMatchObject({
-            creator: "Alice",
-            creatorAvatar: `/workspace${picture}`,
-        });
     });
 });

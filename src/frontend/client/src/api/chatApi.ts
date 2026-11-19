@@ -103,8 +103,6 @@ export interface ChatMessage {
     parentMessageId: string;
     conversationId: string;
     sender: "user" | "assistant" | string;
-    user_id?: string | number | null;
-    user_name?: string | null;
     text: string;
     clientTimestamp?: string;
     content?: ContentPart[];
@@ -276,8 +274,6 @@ function mapAgentResponseItem(row: any): ChatMessage {
         parentMessageId: "",
         conversationId: row.chat_id ?? "",
         sender: row.is_bot ? "assistant" : "user",
-        user_id: row.user_id,
-        user_name: row.user_name,
         text: "",
         isCreatedByUser: !row.is_bot,
         createdAt: row.create_time,
@@ -596,8 +592,6 @@ export function parseStreamHistoryItem(raw: StreamHistoryItem): ChatMessage {
         parentMessageId: "",
         conversationId: raw.chat_id || "",
         sender: raw.is_bot ? "AI" : "User",
-        user_id: raw.user_id,
-        user_name: raw.user_name,
         text: displayText,
         isCreatedByUser: !raw.is_bot,
         createdAt: raw.create_time,

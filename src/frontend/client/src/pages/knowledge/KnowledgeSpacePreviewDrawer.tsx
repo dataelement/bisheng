@@ -1,4 +1,4 @@
-import { Tooltip as SharedTooltip, UserAvatar } from '@bisheng/ui';
+import { Tooltip as SharedTooltip } from '@bisheng/ui';
 import { useCallback, useEffect, useRef, useState } from "react";
 import { EmptyStateIllustration, NoPermissionIllustration } from "~/components/illustrations";
 import { KnowledgePreviewNavigation } from "./KnowledgePreviewNavigation";
@@ -444,7 +444,9 @@ export function KnowledgeSpacePreviewDrawer({
                             )}
 
                             <div className="flex items-center gap-1.5 mb-3 mt-4">
-                                <UserAvatar className="size-6" fallbackClassName="text-caption" name={space.creator} src={space.creatorAvatar} />
+                                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white text-xs">
+                                    {space.creator?.[0] || "?"}
+                                </span>
                                 <span className="text-sm text-text-3">{space.creator}</span>
                             </div>
 

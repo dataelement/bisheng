@@ -2,7 +2,7 @@ import json
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, field_validator
 
 from bisheng.core.storage.browser_object_path import rewrite_current_browser_object_text
 from bisheng.database.models.message import ChatMessage, ChatMessageQuery
@@ -70,17 +70,16 @@ class SSEResponse(BaseModel):
 
 class ChatMessageHistoryResponse(ChatMessageQuery):
     user_name: str | None = None
-    user_avatar: str | None = Field(default=None, exclude_if=lambda value: value is None)
     flow_name: str | None = None
 
     @classmethod
     def from_chat_message_objs(
-        cls, chat_messages: list[ChatMessage], user_model: User | None, message_session: MessageSession
+        cls, chat_messages: list[ChatMessage], user_model: User, message_session: MessageSession
     ) -> list["ChatMessageHistoryResponse"]:
         return [
             cls.model_validate(obj).model_copy(
                 update={
-                    "user_name": user_model.user_name if user_model else None,
+                    "user_name": user_model.user_name,
                     "flow_name": message_session.flow_name,
                     "name": message_session.name,
                     "message": rewrite_current_browser_object_text(obj.message),

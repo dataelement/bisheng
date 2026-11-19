@@ -19,7 +19,6 @@ class NaturalPersonRecord:
     user_id: int
     user_name: str
     tenant_id: int
-    avatar: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,8 +92,7 @@ class OwnerRepository:
                     )
                 ).all()
         return [
-            NaturalPersonRecord(user_id=user.user_id, user_name=user.user_name, tenant_id=tid, avatar=user.avatar)
-            for user, tid in rows
+            NaturalPersonRecord(user_id=user.user_id, user_name=user.user_name, tenant_id=tid) for user, tid in rows
         ], int(total)
 
     @classmethod

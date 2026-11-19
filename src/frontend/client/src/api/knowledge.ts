@@ -1,5 +1,4 @@
 // @ts-strict-ignore
-import { resolveUserAvatarUrl } from "@bisheng/identity";
 import i18next from "i18next";
 import request from "./request";
 import { resolveKnowledgeParseFailureMessage } from "./knowledgeParseFailureMessage";
@@ -125,7 +124,6 @@ export interface KnowledgeSpace {
     autoTagCustomTags?: string[] | null;
 
     // Used only by the "square explore" UI
-    creatorAvatar?: string;
     isFollowed?: boolean;
     /** Effective permission ids the current user holds on the space (from /info). */
     permissionIds?: string[];
@@ -231,7 +229,6 @@ export interface RawKnowledgeSpace {
     name: string;
     description?: string;
     icon?: string;
-    avatar?: string | null;
     auth_type: string;           // "public" | "private"
     user_name?: string;
     user_id?: number;
@@ -356,7 +353,6 @@ export function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
         icon: raw.icon,
         visibility: (raw.auth_type as VisibilityType) || VisibilityType.PRIVATE,
         creator: raw.user_name || "",
-        creatorAvatar: resolveUserAvatarUrl(raw.avatar, __APP_ENV__.BASE_URL),
         creatorId: String(raw.user_id ?? ""),
         // Some endpoints (e.g. /info) return follower_num/file_num instead of member_count/file_count.
         memberCount: raw.member_count ?? raw.follower_num ?? 0,
@@ -931,7 +927,7 @@ export async function getSquareSpacesApi(params?: {
             const followerNum =
                 itemAny?.follower_num ?? rawAny?.follower_num ?? rawAny?.followerNum ?? itemAny?.followerNum ?? 0;
 
-            const avatar = itemAny?.avatar ?? rawAny?.avatar;
+            const iconOrAvatar = itemAny?.avatar ?? rawAny?.avatar ?? rawAny?.icon ?? itemAny?.icon ?? "";
 
             const createdAt = rawAny?.create_time ?? itemAny?.create_time ?? "";
             const updatedAt = rawAny?.update_time ?? itemAny?.update_time ?? "";
@@ -942,10 +938,9 @@ export async function getSquareSpacesApi(params?: {
                 id: safeId,
                 name: String(nameVal ?? ""),
                 description: descriptionVal !== undefined ? String(descriptionVal) : undefined,
-                icon: rawAny?.icon ?? itemAny?.icon,
+                icon: iconOrAvatar,
                 visibility,
                 creator,
-                creatorAvatar: resolveUserAvatarUrl(typeof avatar === "string" ? avatar : undefined, __APP_ENV__.BASE_URL),
                 creatorId: creatorIdVal !== undefined && creatorIdVal !== null ? String(creatorIdVal) : "",
                 memberCount: Number(followerNum ?? 0),
                 fileCount: Number(fileNum ?? 0),

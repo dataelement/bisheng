@@ -223,27 +223,3 @@ async def test_list_admin_users_resolves_names_and_marks_failures():
         6: None,
         8: [],
     }
-
-
-async def test_admin_avatar_query_is_limited_to_listed_users_in_the_managed_tenant():
-    permissions = MagicMock()
-    permissions.list_subject_ids = AsyncMock(return_value=("7", "8"))
-    people = [
-        SimpleNamespace(user_id=7, user_name="alice", avatar="avatar/7/current.png"),
-        SimpleNamespace(user_id=8, user_name="bob", avatar="avatar/8/current.png"),
-    ]
-    seen = []
-
-    async def avatars(pairs):
-        seen.extend(pairs)
-        return {(5, 7): "/object/bisheng/avatar/7/current.png"}
-
-    with (
-        _patch_permissions(permissions),
-        patch("bisheng.user.domain.models.user.UserDao.aget_user_by_ids", AsyncMock(return_value=people)),
-        patch("bisheng.tenant.domain.services.tenant_admin_service.read_visible_user_avatar_urls", avatars),
-    ):
-        result = await TenantAdminService.list_tenant_admin_users([5], include_avatars=True)
-
-    assert seen == [(5, 7), (5, 8)]
-    assert [user.get("avatar") for user in result[5]] == ["/object/bisheng/avatar/7/current.png", None]

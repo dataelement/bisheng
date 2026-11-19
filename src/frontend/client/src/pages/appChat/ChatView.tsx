@@ -7,7 +7,7 @@ import AppAvator from "~/components/Avator";
 import HeaderTitle from "~/components/Chat/HeaderTitle";
 import { useCitationReferencePanel } from "~/components/Chat/Messages/Content/useCitationReferencePanel";
 import { ExportFormatSheet, MessageSelectionToolbar } from "~/components/Chat/MessageSelection";
-import { useLocalize } from "~/hooks";
+import { useAuthContext, useLocalize } from "~/hooks";
 import {
   useExitSelectionOnChatChange,
   useMessageSelection,
@@ -39,6 +39,7 @@ import { generateUUID } from "~/utils";
 const _SELECTABLE_CATEGORIES = new Set(["question", "answer", "agent_answer", "output_msg", "stream_msg"]);
 
 export default function ChatView({ data, cid, v, readOnly, isGuestMode = false, canShareConversation = false }) {
+  const { user } = useAuthContext();
   // Department concurrency: the page lease backing this session page. Share
   // views (`readOnly`) and guest sessions do not count.
   const presence = useSessionPresence(cid, { disabled: Boolean(readOnly) || isGuestMode });
@@ -196,6 +197,7 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false, 
               <div className="flex min-h-0 flex-1 overflow-hidden">
                 <div className="relative mx-auto h-full min-h-0 w-full max-w-[800px] flex-1">
                   <ChatMessages
+                    useName={user?.username}
                     title={data.name}
                     logo={Logo}
                     readOnly={readOnly}

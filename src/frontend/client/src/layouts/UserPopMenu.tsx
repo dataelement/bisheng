@@ -2,8 +2,8 @@ import { Badge } from "@bisheng/ui";
 import type { ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { UserAvatar } from "~/components/ui/Avatar";
-import { useAuthContext, useLocalize, usePrefersMobileLayout } from "~/hooks";
+import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
+import { useAuthContext, usePrefersMobileLayout } from "~/hooks";
 import { useNotificationCount } from "~/hooks/useNotificationCount";
 import {
     createSettingsRouteState,
@@ -22,14 +22,15 @@ export interface UserPopMenuProps {
 }
 
 /**
- * Clicking the sidebar avatar opens the settings page, landing on whatever is
+ * Avatar entry in the sidebar. The old pop menu (设置 / 消息与审批 / 退出登录) is gone —
+ * clicking the avatar goes straight to the settings page, landing on whatever is
  * actually waiting on the user (pending approvals > unread notifications > account).
+ * 退出登录 moved into the 账号信息 section of that page.
  */
 export function UserPopMenu({ variant = "rail", onNavigate }: UserPopMenuProps) {
     const isDrawer = variant === "drawer";
     const navigate = useNavigate();
     const location = useLocation();
-    const localize = useLocalize();
 
     const { user } = useAuthContext();
     const { unreadCount, pendingApprovalCount } = useNotificationCount();
@@ -51,7 +52,16 @@ export function UserPopMenu({ variant = "rail", onNavigate }: UserPopMenuProps) 
         onNavigate?.();
     };
 
-    // The badge's circle mode insets the dot onto the avatar circumference.
+    // Avatar edits on the settings page flow back through the user query cache.
+    const avatarInner = user?.avatar ? (
+        <AvatarImage src={user.avatar} alt="User" />
+    ) : (
+        <AvatarName name={user?.username} className={cn(variant === "sidebar" && "text-caption")} />
+    );
+
+    // 组件-Badge徽标.md §2/§5 — the corner dot on a round host: the badge pulls
+    // itself onto the circumference (`circle`) and carries the 1px page-colored
+    // ring, so it stays legible on any avatar art without a hand-placed offset.
     const hasUnread = unreadCount > 0 || pendingApprovalCount > 0;
     const withUnreadDot = (avatar: ReactNode) => (
         <Badge dot={hasUnread} circle className="pointer-events-none">
@@ -67,7 +77,7 @@ export function UserPopMenu({ variant = "rail", onNavigate }: UserPopMenuProps) 
                 className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1 text-left outline-none transition-colors hover:bg-fill-1 focus-visible:bg-fill-1 coarse-pointer:min-h-11"
                 onClick={openSettings}
             >
-                {withUnreadDot(<UserAvatar className="size-6" fallbackClassName="text-caption" name={user?.username} src={user?.avatar} />)}
+                {withUnreadDot(<Avatar className="h-6 w-6">{avatarInner}</Avatar>)}
                 <span className="min-w-0 truncate text-body text-text-1">{displayName}</span>
             </button>
         );
@@ -84,7 +94,7 @@ export function UserPopMenu({ variant = "rail", onNavigate }: UserPopMenuProps) 
                 onClick={openSettings}
             >
                 <div className="relative shrink-0">
-                    {withUnreadDot(<UserAvatar className="size-9 border border-fill-2" name={user?.username} src={user?.avatar} />)}
+                    {withUnreadDot(<Avatar className="size-9 border border-fill-2">{avatarInner}</Avatar>)}
                 </div>
                 <div className="min-w-0 flex-1">
                     <p className="text-[14px] font-medium text-text-1 truncate">{displayName}</p>
@@ -97,12 +107,11 @@ export function UserPopMenu({ variant = "rail", onNavigate }: UserPopMenuProps) 
     return (
         <button
             type="button"
-            aria-label={localize("com_nav_settings")}
             className="relative size-10 cursor-pointer outline-none active:scale-95 transition-transform"
             onClick={openSettings}
         >
             {withUnreadDot(
-                <UserAvatar className="size-10 hover:opacity-90 transition-opacity" name={user?.username} src={user?.avatar} />,
+                <Avatar className="size-10 hover:opacity-90 transition-opacity">{avatarInner}</Avatar>,
             )}
         </button>
     );

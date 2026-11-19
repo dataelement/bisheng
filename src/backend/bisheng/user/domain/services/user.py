@@ -32,7 +32,6 @@ from bisheng.core.context.tenant import (
 )
 from bisheng.core.database import get_async_db_session
 from bisheng.core.logger import trace_id_var
-from bisheng.core.storage.browser_object_path import parse_browser_object_reference
 from bisheng.core.storage.minio.minio_manager import get_minio_storage, get_minio_storage_sync
 from bisheng.database.constants import AdminRole, DefaultRole
 from bisheng.database.models.department import DepartmentDao
@@ -203,13 +202,10 @@ class UserService:
 
         avatar = avatar.strip()
         path = urlsplit(avatar).path if "://" in avatar or avatar.startswith("/") else avatar.split("?", 1)[0]
-        reference = parse_browser_object_reference(f"/{path.lstrip('/')}", bucket or "", "")
-        if reference:
-            path = unquote(reference[1])
-        else:
-            path = unquote(path).lstrip("/")
-            if bucket and path.startswith(f"{bucket}/"):
-                path = path[len(bucket) + 1 :]
+        path = unquote(path).lstrip("/")
+
+        if bucket and path.startswith(f"{bucket}/"):
+            path = path[len(bucket) + 1 :]
 
         if path.startswith(AVATAR_OBJECT_PREFIX):
             return path
@@ -905,23 +901,22 @@ class UserService:
         if len(content) > MAX_AVATAR_SIZE:
             raise HTTPException(status_code=400, detail="File size exceeds limit. Maximum size: 10MB")
 
-        user = await UserDao.aget_user(user_id)
-        if user is None or user.delete != 0:
-            raise UserValidateError()
-
         # Generate object name for MinIO
         file_ext = ALLOWED_AVATAR_TYPES[file.content_type]
         object_name = f"avatar/{user_id}/{generate_uuid()}{file_ext}"
 
-        # Prepare the response before changing the profile. Signing does not require the object to exist.
+        # Upload to MinIO
         minio_client = await get_minio_storage()
-        avatar_url = await minio_client.get_share_link(object_name)
         await minio_client.put_object(
             object_name=object_name,
             file=content,
             content_type=file.content_type,
         )
 
-        user.avatar = object_name
-        await UserDao.aupdate_user(user)
-        return avatar_url
+        # Update user avatar in database
+        user = await UserDao.aget_user(user_id)
+        if user:
+            user.avatar = object_name
+            await UserDao.aupdate_user(user)
+
+        return await cls.get_avatar_share_link(object_name)

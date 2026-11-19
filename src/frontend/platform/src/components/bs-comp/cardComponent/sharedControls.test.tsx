@@ -4,22 +4,6 @@ import { afterEach,expect,it,vi } from 'vitest'
 import CardComponent from './index'
 
 afterEach(cleanup)
-it('uses the viewer’s portrait only when the card identifies them as its creator', () => {
-    const avatar = '/object/public/avatar/21/creator.png'
-    const props = {
-        id: 'app', data: { id: 'app' }, type: AppType.ASSISTANT, title: 'Assistant', description: '',
-        user: 'Ada', currentUser: { user_id: 21, avatar }, showSwitch: false,
-    }
-    const { rerender } = render(<CardComponent {...props} creatorId="21" />)
-    expect(screen.getByAltText('')).toHaveAttribute('src', avatar)
-    rerender(<CardComponent {...props} creatorId={22} />)
-    expect(screen.queryByAltText('')).not.toBeInTheDocument()
-    expect(screen.getByText('A')).toBeInTheDocument()
-    rerender(<CardComponent {...props} creatorId={22} user={22} />)
-    expect(screen.getByText('?')).toBeInTheDocument()
-    expect(screen.getByText('22')).toBeInTheDocument()
-})
-
 it('keeps application publish state unchanged when the server rejects the transition', async () => {
     const onCheckedChange = vi.fn().mockResolvedValue(false)
     const onOpen = vi.fn()

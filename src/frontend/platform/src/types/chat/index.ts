@@ -17,7 +17,6 @@ export type ChatMessageType = {
   source?: number;
   noAccess?: boolean;
   user_name: string;
-  user_id?: number;
   at?: string;
   /** 用户名 */
   sender?: string;

@@ -72,10 +72,6 @@ class PermissionSubjectDirectoryPort(Protocol):
         subjects: tuple[tuple[str, str], ...],
     ) -> dict[tuple[str, str], str]: ...
 
-    async def resource_user_avatar_urls(
-        self, target: VerifiedPermissionTarget, user_ids: tuple[int, ...]
-    ) -> dict[int, str]: ...
-
     async def resource_display_names(
         self,
         resources: tuple[tuple[str, str], ...],
@@ -482,13 +478,6 @@ class F048ResourcePermissionApi:
         names = await self._subjects.display_names(
             tuple(dict.fromkeys((row.subject_type, row.subject_id) for row in selected))
         )
-        user_ids = tuple(
-            dict.fromkeys(
-                int(row.subject_id) for row in selected if row.subject_type == "user" and row.subject_id.isdecimal()
-            )
-        )
-        avatar_urls = await self._subjects.resource_user_avatar_urls(target, user_ids) if user_ids else {}
-        avatars = {str(user_id): url for user_id, url in avatar_urls.items()}
         # The permission layer holds a resource's identity, never its label — the
         # roster used to render "knowledge_space:3377" at users. Resolved through
         # the business side, the same way subject names already are.
@@ -516,7 +505,6 @@ class F048ResourcePermissionApi:
                     "type": row.subject_type,
                     "id": row.subject_id,
                     "name": names.get((row.subject_type, row.subject_id)),
-                    **({"avatar": avatars.get(row.subject_id)} if row.subject_type == "user" else {}),
                 },
                 "model": {
                     "key": row.model_key,

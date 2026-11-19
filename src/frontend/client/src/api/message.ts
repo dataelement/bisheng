@@ -15,8 +15,7 @@ export interface MessageItem {
   id: number;
   content: MessageContentPart[];
   sender: number;
-  sender_name?: string | null;
-  sender_avatar?: string | null;
+  sender_name: string;
   message_type: string;
   action_code?: string;
   status: string;

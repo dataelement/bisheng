@@ -28,7 +28,6 @@ class DepartmentMemberRepository:
             UserDepartment.user_id,
             User.user_name,
             User.external_id.label("user_external_id"),
-            case((User.avatar.is_not(None), 1), else_=0).label("user_has_avatar"),
             UserDepartment.department_id,
             UserDepartment.is_primary,
             UserDepartment.source,

@@ -1,6 +1,5 @@
-import { resolveUserAvatarUrl } from "@bisheng/identity";
-import { Checkbox, UserAvatar } from "@bisheng/ui";
-import { Search } from "lucide-react";
+import { Checkbox } from "@bisheng/ui";
+import { Search, User as UserIcon } from "lucide-react";
 import { getGrantSubjectUsersApi, type GrantSubjectUser } from "@/controllers/API/permission";
 import { useTranslation } from "react-i18next";
 import { useSubjectSearch } from "../selectComponent/useSubjectSearch";
@@ -58,7 +57,6 @@ export function SubjectSearchUser({
               type: "user",
               id: user.user_id,
               name: user.user_name,
-              avatar: user.avatar,
               externalId: user.external_id ?? null,
               departmentPath: user.department_path ?? user.primary_department_path ?? undefined,
             },
@@ -105,12 +103,7 @@ export function SubjectSearchUser({
                 checked={selectedIds.has(user.user_id) || disabled.has(user.user_id)}
                 disabled={disabled.has(user.user_id)}
               />
-              <UserAvatar
-                className="size-4"
-                fallbackClassName="text-[10px]"
-                name={user.user_name}
-                src={resolveUserAvatarUrl(user.avatar, __APP_ENV__.BASE_URL)}
-              />
+              <UserIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm" title={user.user_name}>
                   {user.user_name}

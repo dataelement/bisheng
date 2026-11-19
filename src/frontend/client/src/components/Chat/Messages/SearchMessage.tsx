@@ -50,7 +50,7 @@ export default function Message({ message }: Pick<TMessageProps, 'message'>) {
               <div>
                 <div className="pt-0.5">
                   <div className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full">
-                    <Icon iconData={iconData} message={message} />
+                    <Icon iconData={iconData} />
                   </div>
                 </div>
               </div>

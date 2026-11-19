@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
 
 import pytest
 
@@ -538,38 +536,6 @@ async def test_roster_uses_bounded_sql_page_instead_of_full_explanation() -> Non
             "limit": 25,
         }
     ]
-
-
-async def test_roster_reads_user_avatars_in_the_verified_resource_tenant() -> None:
-    runtime = _Runtime()
-    (group,), _ = await runtime.list_permission_sources_page()
-    direct = replace(group, subject_type="user", subject_id="8", source_type="DIRECT", userset_relation=None)
-    inherited = replace(direct, source_id=92, inherited_from="knowledge_space:5")
-    unavailable = replace(direct, source_id=93, subject_id="10")
-    runtime.list_permission_sources_page = AsyncMock(return_value=((direct, inherited, unavailable), False))
-    subjects = _Subjects()
-    subjects.resource_user_avatar_urls = AsyncMock(
-        return_value={8: "/object/bisheng/avatar/8/current.png?signature=new"}
-    )
-    subjects.resource_display_names = AsyncMock(return_value={})
-    api = F048ResourcePermissionApi(resources=_Resources(), runtime=runtime, subjects=subjects)
-
-    result = await api.list_grants(
-        resource_type="workflow",
-        resource_id="wf-1",
-        actor=PermissionActor(user_id=7, current_tenant_id=5, super_admin=True),
-        cursor=None,
-        page_size=25,
-    )
-
-    subjects.resource_user_avatar_urls.assert_awaited_once_with(await _Resources().resolve(), (8, 10))
-    data = result["data"]
-    assert [row["subject"]["avatar"] for row in data] == [
-        "/object/bisheng/avatar/8/current.png?signature=new",
-        "/object/bisheng/avatar/8/current.png?signature=new",
-        None,
-    ]
-    assert data[1]["inherited_from"] == "knowledge_space:5"
 
 
 @pytest.mark.parametrize("keyword", ["", "Reviewers"])

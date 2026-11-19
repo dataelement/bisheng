@@ -2,11 +2,7 @@
 
 from __future__ import annotations
 
-from loguru import logger
-from sqlalchemy.exc import SQLAlchemyError
-
 from bisheng.common.errcode.permission import PermissionInvalidResourceError, PermissionSubjectUnavailableError
-from bisheng.core.context.base import ContextError
 from bisheng.database.models.department import (
     UserDepartmentDao,
 )
@@ -27,7 +23,6 @@ from bisheng.permission.domain.services.permission_action_service import (
 from bisheng.tenant.domain.repositories.grant_department_repository import GrantDepartmentRepository
 from bisheng.tenant.domain.repositories.grant_subject_search_repository import GrantSubjectSearchRepository
 from bisheng.tenant.domain.repositories.permission_subject_repository import PermissionSubjectRepository
-from bisheng.user.application.avatar import read_visible_user_avatar_urls
 from bisheng.user.application.runtime_identity import read_current_person_facts
 from bisheng.user.domain.models.user import UserDao
 
@@ -92,22 +87,6 @@ class TenantPermissionSubjectDirectory:
 
     async def candidate_users(self, scope, *, keyword: str, page: int, page_size: int):
         return await self._candidate_queries.users(scope, keyword=keyword, page=page, page_size=page_size)
-
-    async def user_avatar_urls(self, tenant_id: int, user_ids: tuple[int, ...]) -> dict[int, str]:
-        avatars = await read_visible_user_avatar_urls((tenant_id, user_id) for user_id in user_ids)
-        return {user_id: url for (_, user_id), url in avatars.items()}
-
-    async def resource_user_avatar_urls(self, target, user_ids: tuple[int, ...]) -> dict[int, str]:
-        try:
-            path = await grant_subject_service.resolve_department_space_path(target.resource_type, target.resource_id)
-            if path is not None:
-                scope = GrantSubjectScope(tenant_id=target.tenant_id, department_path=path)
-                user_ids = await self._candidate_queries.visible_user_ids(scope, user_ids)
-        except (ContextError, SQLAlchemyError) as error:
-            # No image is authorized when the department scope cannot be read.
-            logger.warning("Avatar department scope unavailable ({})", type(error).__name__)
-            return {}
-        return await self.user_avatar_urls(target.tenant_id, user_ids)
 
     async def count_candidate_users(self, scope, *, keyword: str):
         return await self._candidate_queries.count_users(scope, keyword=keyword)
