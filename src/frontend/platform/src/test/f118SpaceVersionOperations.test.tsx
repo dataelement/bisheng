@@ -244,6 +244,7 @@ it("opens version management for a parsed single-version file only with space ed
   fireEvent.click(
     await screen.findByRole("menuitem", { name: "versions.manage" }),
   );
+  expect(await screen.findByRole("dialog")).toHaveClass("left-1/2", "top-1/2", "max-w-[min(720px,90vw)]");
   expect(
     await screen.findByRole("button", { name: "versions.new_version" }),
   ).toBeVisible();

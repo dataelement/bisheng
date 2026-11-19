@@ -1,11 +1,11 @@
 import { ArrowLeft } from "lucide-react";
+import { Button, StateView } from "@bisheng/ui";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useToastContext } from "~/Providers";
 import { getChatOnlineApi, getUncategorized, recordUsedAppApi } from "~/api/apps";
 import { NotificationSeverity } from "~/common";
-import { Button } from "~/components/ui/Button";
 import { EmptyStateIllustration } from "~/components/illustrations";
 import { useLocalize, useMediaQuery } from "~/hooks";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
@@ -30,10 +30,10 @@ export default function ExplorePlaza() {
   const [agents, setAgents] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [loadError, setLoadError] = useState<"initial" | "append" | null>(null);
+  const [loadError, setLoadError] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  // --- 游标瀑布流加载状态 ---
+  // Cursor pagination state.
   const [hasMore, setHasMore] = useState(true);
   const cursorRef = useRef<string | null>(null);
   const loaderRef = useRef<HTMLDivElement>(null);
@@ -80,9 +80,12 @@ export default function ExplorePlaza() {
       // previous filter's apps with the new keyword sitting in the box.
       if (isAppend && (loading || loadingMore)) return;
       const seq = isAppend ? listSeqRef.current : ++listSeqRef.current;
-      setLoadError(null);
+      setLoadError(false);
       if (isAppend) setLoadingMore(true);
-      else setLoading(true);
+      else {
+        setLoading(true);
+        setLoadingMore(false);
+      }
       try {
         const keyword = query.trim();
         // Both All and keyword searches omit the tag filter.
@@ -93,6 +96,9 @@ export default function ExplorePlaza() {
 
         if (seq !== listSeqRef.current) return;
         const pageData = result.list || [];
+        if (result.hasMore && (!pageData.length || !result.nextCursor || result.nextCursor === cursor)) {
+          throw new Error("App pagination did not advance");
+        }
 
         const formattedResults = pageData.map((item: any) => ({
           ...item,
@@ -107,14 +113,17 @@ export default function ExplorePlaza() {
       } catch (error) {
         console.error("Failed to fetch agents:", error);
         if (seq !== listSeqRef.current) return;
-        setLoadError(isAppend ? "append" : "initial");
         if (!isAppend) setAgents([]);
+        // The observer must wait for an explicit retry after a failed page.
+        setLoadError(true);
+        setHasMore(false);
       } finally {
-        // The append lane owns `loadingMore` alone, so it always clears it.
-        // A superseded first page must NOT clear `loading` — the request
-        // that replaced it is still running and owns the spinner.
-        if (isAppend) setLoadingMore(false);
-        else if (seq === listSeqRef.current) setLoading(false);
+        // A response from an old filter cannot clear the current page's
+        // loading flags, including an append started after a new search.
+        if (seq === listSeqRef.current) {
+          if (isAppend) setLoadingMore(false);
+          else setLoading(false);
+        }
       }
     },
     [loading, loadingMore],
@@ -142,8 +151,8 @@ export default function ExplorePlaza() {
           target.isIntersecting &&
           !loading &&
           !loadingMore &&
-          hasMore &&
           !loadError &&
+          hasMore &&
           cursorRef.current !== null &&
           activeTabId !== null &&
           !loadMoreLockRef.current
@@ -160,7 +169,7 @@ export default function ExplorePlaza() {
     }
 
     return () => observer.disconnect();
-  }, [loading, loadingMore, hasMore, loadError, searchQuery, activeTabId, fetchAgents]);
+  }, [loading, loadingMore, loadError, hasMore, searchQuery, activeTabId, fetchAgents]);
 
   // Show the spinner while the navigation initializes the default tab.
   const showLoading = loading || activeTabId === null;
@@ -302,22 +311,29 @@ export default function ExplorePlaza() {
                   {localize("com_app_explore_loading_more")}
                 </span>
               </div>
-            ) : loadError ? (
-              <div className="flex flex-col items-center gap-2 text-sm text-text-3" role="alert">
-                <p>{localize("com_list_load_failed")}</p>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    if (activeTabId === null) return;
-                    const append = loadError === "append";
-                    void fetchAgents(searchQuery, activeTabId, append ? cursorRef.current : null, append);
-                  }}
-                >
-                  {localize("com_error_retry")}
-                </Button>
-              </div>
             ) : null}
-            {!loadError && !hasMore && agents.length > 0 && (
+            {!showLoading && !loadingMore && loadError && (
+              <div role="alert">
+                <StateView
+                  size="panel"
+                  title={localize("com_list_load_failed")}
+                  action={
+                    <Button
+                      color="default"
+                      variant="outlined"
+                      onClick={() => {
+                        if (activeTabId !== null) {
+                          void fetchAgents(searchQuery, activeTabId, cursorRef.current, cursorRef.current !== null);
+                        }
+                      }}
+                    >
+                      {localize("com_ui_retry")}
+                    </Button>
+                  }
+                />
+              </div>
+            )}
+            {!hasMore && !loadError && agents.length > 0 && (
               <p className="text-[#a9aeb8] text-[12px] font-['PingFang_SC'] mt-4">
                 {localize("com_app_explore_end_of_list")}
               </p>

@@ -167,7 +167,10 @@ it("leaves the deleted space before refreshing the catalog", async () => {
     .mockImplementation(async (filters) => {
       order.push("refresh");
       const predicate =
-        filters && typeof filters === "object" && "predicate" in filters
+        filters &&
+        typeof filters === "object" &&
+        "predicate" in filters &&
+        typeof filters.predicate === "function"
           ? filters.predicate
           : undefined;
       expect(predicate).toEqual(expect.any(Function));

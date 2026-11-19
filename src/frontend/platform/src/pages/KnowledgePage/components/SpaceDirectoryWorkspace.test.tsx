@@ -15,11 +15,12 @@ import Files, { type FilesProps } from "./Files";
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
+  post: vi.fn(),
   permissions: vi.fn(),
   error: vi.fn(),
 }));
 vi.mock("@/controllers/request", () => ({
-  default: { get: mocks.get },
+  default: { get: mocks.get, post: mocks.post },
   showApiError: mocks.error,
 }));
 vi.mock("@/controllers/API/permission", () => ({
@@ -133,6 +134,13 @@ beforeEach(() => {
     clear: vi.fn(() => values.clear()),
   });
   mocks.permissions.mockResolvedValue({ actions: ["visible"] });
+  mocks.post.mockImplementation(async (url: string) => {
+    if (url.endsWith("/batch/download/inspect")) return {
+      can_execute: false, check_complete: true, valid_items: [],
+      invalid_items: [{ id: 11, type: "file", reason: "permission_denied" }],
+    };
+    throw new Error(`Unexpected write ${url}`);
+  });
   mocks.get.mockImplementation(
     async (url: string, options?: { params?: { page?: number } }) => {
       if (url.endsWith("/children"))
@@ -296,6 +304,24 @@ it("shows header batch actions only while directory items are selected", async (
     expect(toolbar.queryByRole("button", { name: "detail.batch" })).toBeNull();
   } finally {
     toolbarTarget.remove();
+  }
+});
+
+it.each(["workspace", undefined] as const)("hides unavailable batch and download actions for manage-permission-only users in %s presentation", async (presentation) => {
+  mocks.permissions.mockResolvedValue({ actions: ["visible", "manage_permission"] });
+  const view = mount({ presentation });
+  fireEvent.click(await screen.findByRole("checkbox", { name: "deletion.select report.pdf" }));
+  await waitFor(() => expect(mocks.post).toHaveBeenCalledWith(
+    "/api/v1/knowledge/space/7/files/batch/download/inspect",
+    { items: [{ id: 11, type: "file" }] },
+  ));
+  await waitFor(() => expect(mocks.permissions.mock.calls.some(([kind, id]) => kind === "knowledge_file" && id === "11")).toBe(true));
+  expect(screen.queryByRole("button", { name: "detail.batch" })).not.toBeInTheDocument();
+  expect(view.container.querySelector('[aria-label="downloadOriginal"]')).toBeNull();
+  fireEvent.keyDown(screen.getByRole("button", { name: "more report.pdf" }), { key: "ArrowDown" });
+  expect(await screen.findByRole("menuitem", { name: "managePermission" })).toBeVisible();
+  for (const name of ["downloadOriginal", "editTag", "rename", "move", "delete"]) {
+    expect(screen.queryByRole("menuitem", { name })).not.toBeInTheDocument();
   }
 });
 

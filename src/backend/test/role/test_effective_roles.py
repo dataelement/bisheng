@@ -123,6 +123,19 @@ async def test_stale_home_is_rejected(policy_db):
         await load_effective_roles(77, expected_home_tenant_id=3)
 
 
+@pytest.mark.parametrize("old_home", [1, 3])
+async def test_login_rejects_a_token_issued_before_tenant_reassignment(policy_db, old_home):
+    from bisheng.common.dependencies.user_deps import UserPayload
+
+    # Current policy Home=2 comes from real membership rows. A Root/child
+    # token cannot select its former tenant, even if role bindings survived.
+    with management_scope(home=2, target=3):
+        with pytest.raises(RolePolicyUnavailableError):
+            await UserPayload.init_login_user(user_id=77, user_name="policy", tenant_id=old_home)
+        with pytest.raises(RolePolicyUnavailableError):
+            UserPayload.init_login_user_sync(user_id=77, user_name="policy", tenant_id=old_home)
+
+
 async def test_disabled_foreign_affiliation_does_not_change_home_policy(policy_db):
     """AC-05: even a disabled foreign tenant cannot take over home decisions."""
     from bisheng.role.application.effective_roles import load_effective_roles

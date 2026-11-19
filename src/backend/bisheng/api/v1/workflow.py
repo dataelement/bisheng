@@ -34,6 +34,7 @@ from bisheng.permission.application.business_authorization import (
 from bisheng.role.domain.services.quota_service import QuotaResourceType, require_quota
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
+from bisheng.user.application.runtime_identity import browser_message_identity_scope
 from bisheng.utils import generate_uuid
 from bisheng.workflow.application.browser_scope import browser_workflow_scope
 from bisheng.workflow.application.execution_port import BoundWorkflowExecutionPort
@@ -410,6 +411,7 @@ async def workflow_ws(
                 WorkType.WORKFLOW,
                 websocket,
                 conversation_persistence=ConversationPersistence(execution_user.user_id, user=execution_user),
+                message_admission=lambda: browser_message_identity_scope(execution_user),
                 flow_lease_id=flow_lease_id,
                 workflow_execution_port=BoundWorkflowExecutionPort(workflow_id, execution_user),
             )

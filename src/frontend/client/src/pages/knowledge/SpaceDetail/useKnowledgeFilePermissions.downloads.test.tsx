@@ -134,3 +134,49 @@ it('preserves authorized folder ZIP downloads through folder batch inspection', 
     await waitFor(() => expect(result.current.downloadEntryIds.has('9')).toBe(true));
     expect(request.postResponse).toHaveBeenCalledWith('/api/v1/knowledge/space/3/files/batch/download/inspect', { items: [{ id: 9, type: 'folder' }] });
 });
+
+it('rechecks a reopened file menu and hides actions while the new summary is pending', async () => {
+    jest.mocked(getMyResourcePermissions).mockResolvedValue({ actions: ['move', 'delete', 'rename', 'manage_permission'] } as never);
+    const { result } = mount();
+    await act(async () => { await result.current.ensureFilePermissions(file('11')); });
+    expect(result.current.deleteEntryIds.has('11')).toBe(true);
+    const pending = deferred<Awaited<ReturnType<typeof getMyResourcePermissions>>>();
+    jest.mocked(getMyResourcePermissions).mockReturnValue(pending.promise);
+    let reopening!: Promise<void>;
+    act(() => { reopening = result.current.ensureFilePermissions(file('11')); });
+    await waitFor(() => expect(result.current.pendingFileIds.has('11')).toBe(true));
+    expect(result.current.deleteEntryIds.has('11')).toBe(false);
+    await act(async () => { pending.resolve({ actions: ['manage_permission'] } as never); await reopening; });
+    await waitFor(() => expect(result.current.permissionEntryIds.has('11')).toBe(true));
+    expect(result.current.moveEntryIds.size + result.current.deleteEntryIds.size + result.current.renameEntryIds.size).toBe(0);
+});
+
+it.each(['folder', 'listing', 'identity'])('retires old file actions when the %s changes with the same row IDs', async kind => {
+    jest.mocked(getMyResourcePermissions).mockResolvedValue({ actions: ['move', 'delete', 'create_folder', 'upload_file'] } as never);
+    const initial: Options = { space, currentFolderId: undefined, displayFiles: [file('11')], downloadPages: [['11']], downloadEpoch: 1 };
+    const { result, rerender } = mount(initial);
+    await act(async () => { await result.current.ensureFilePermissions(file('11')); });
+    expect(result.current.deleteEntryIds.has('11')).toBe(true);
+    const pending = deferred<Awaited<ReturnType<typeof getMyResourcePermissions>>>();
+    jest.mocked(getMyResourcePermissions).mockReturnValue(pending.promise);
+    if (kind === 'identity') mockUser = { ...mockUser, tenant_id: 202 };
+    rerender({ ...initial, currentFolderId: kind === 'folder' ? '9' : undefined, downloadEpoch: kind === 'listing' ? 2 : 1 });
+    expect(result.current.moveEntryIds.size + result.current.deleteEntryIds.size).toBe(0);
+    expect(result.current.canCreateFolder || result.current.canUploadFile).toBe(false);
+    await act(async () => pending.resolve({ actions: ['visible'] } as never));
+});
+
+it('ignores a late menu grant after a folder A-B-A navigation', async () => {
+    const pending = deferred<Awaited<ReturnType<typeof getMyResourcePermissions>>>();
+    jest.mocked(getMyResourcePermissions).mockImplementation((kind) => kind === 'knowledge_file'
+        ? pending.promise : Promise.resolve({ actions: [] } as never));
+    const initial: Options = { space, currentFolderId: undefined, displayFiles: [file('11')], downloadPages: [['11']], downloadEpoch: 1 };
+    const { result, rerender } = mount(initial);
+    let opening!: Promise<void>;
+    act(() => { opening = result.current.ensureFilePermissions(file('11')); });
+    await waitFor(() => expect(result.current.pendingFileIds.has('11')).toBe(true));
+    rerender({ ...initial, currentFolderId: '9' });
+    rerender(initial);
+    await act(async () => { pending.resolve({ actions: ['delete', 'move'] } as never); await opening; });
+    expect(result.current.deleteEntryIds.size + result.current.moveEntryIds.size).toBe(0);
+});
