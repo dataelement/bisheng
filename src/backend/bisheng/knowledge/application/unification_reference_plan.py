@@ -286,6 +286,9 @@ class UnificationReferencePlanReader:
         for tenant in tuple(active):
             close(tenant)
         counts = Counter(_root(key) for key in sources)
+        from bisheng.knowledge.application.unification_workflow_retention import invalid_configuration
+
+        counts.update(_root(row.header.source_key) for row in retired if invalid_configuration(row.header))
         if (
             set(counts) - roots.keys()
             or roots.keys() & retired_roots

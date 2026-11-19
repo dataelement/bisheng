@@ -778,6 +778,15 @@ class UnificationInventoryRepository:
                     parent = row.flow_id if kind == SourceType.WORKFLOW_VERSION else row.app_id
                     versions.add(SourceKey(tenant, kind, parent, str(row.id)))
                     if parent in live and (kind != SourceType.WORKFLOW_VERSION or row.is_delete in (None, 0)):
+                        if kind == SourceType.WORKFLOW_VERSION:
+                            from bisheng.workflow.domain.services.reference_extractor import (
+                                unextractable_workflow_configuration,
+                            )
+
+                            if unextractable_workflow_configuration(
+                                row.data_json, flow_type=row.flow_type, is_delete=row.is_delete
+                            ):
+                                continue
                         sources.add(SourceKey(tenant, kind, parent, str(row.id)))
         for kind, method in (
             (SourceType.ASSISTANT, self.alist_assistants),

@@ -1305,3 +1305,7 @@ M2 控制页保存 `retained_permission_delete`，绑定原 mode/版本、operat
 ### 空根缺 mode 的关闭初始化（AC-146）
 
 内部 f118_empty_root 按 200 根游标寻找无 payload 的旧 NORMAL；全局检查两个命名空间 mode/Grant/visible source/原操作及子 mode 均不存在，冻结原业务整行。默认准备复用完整 Store 遍历，补充入口仅对存在的候选单独遍历，证明对象/入向边为空。apply 全集重读业务/pin/SQL/完整图；原生预留 DELETE 后，用 owner-state 以 CUSTOM、无 owner_grant 创建 mode，计划动作全部 DELETE，无 enable WRITE/成员/Grant。原生 AFTER 对账及 finalizer 完成，支持 PREPARED/claim/最终回包丢失续跑。M2 复用 finalized-delete 保留证明，M3 正常根转换及完整来源/Coverage 不恢复访问。schema 4 防止旧版本忽略；非空或未知授权缺 mode 仍阻塞。
+
+### 失效工作流配置保留（AC-147）
+
+迁移对已保存版本的严格引用提取器仅捕获 TypeError/ValueError，并产生 `retained_invalid_workflow_configuration` 生命周期事实，包含原 flow_type/is_current/is_delete、原数据摘要及父/版本整行修订摘要。版本仍计入原根保留数；不作为可用 source，不签发来源 ready head。完整 census 保留所有版本、根及显式隔离事实，排除的版本由同一纯提取器失败事实决定，原配置不改，不猜变量/占位 ID。M2 要求对应来源 head/raw rows/legacy 全空；父 root head 可独立存在并原样冻结。M3/M4/续跑原生读取并重验精确根、版本、原标记及解析失败，变得可解析/来源重现/已有索引等继续拒绝。运行时及所有新配置写入仍用原严格提取器，旧失效版本须显式修复后保存新版本才能执行。正常版本只提取一次；额外完整 census 对已分页读入的版本做一次纯解析，无远程目标/用户乘积。

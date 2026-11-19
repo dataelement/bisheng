@@ -1869,3 +1869,5 @@ python scripts/prepare_f118_history.py --projection-repairs-only --plan /private
 ```
 
 `f118_empty_root.py` 是上述准备 CLI 的内部辅助，无独立写入口。默认及 `--projection-repairs-only` 可处理无 payload/SQL 授权/完整图关系的空 NORMAL 根缺 mode：原生登记关闭的 CUSTOM mode，无 Grant、无 enable WRITE，保留原根/作者。非空或未知授权仍阻断；schema 4 保留原计划续跑。
+
+正式 `unify_knowledge_spaces.py` 默认保留无法提取引用且无既有来源索引/引用/legacy 证据的已保存工作流版本。原配置、作者及当前标记不改，日志逐版本提示；该失效版本不签发可执行来源 ready，需补齐真实模型/知识库 ID 后保存有效版本。其他来源仍完整核验，已有索引或运行期事实变化保持真正阻塞。

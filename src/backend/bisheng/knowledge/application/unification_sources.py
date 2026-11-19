@@ -357,7 +357,22 @@ class UnificationSourceInventory:
                     continue
                 origins = {}
                 if workflow:
-                    references = extract_workflow_version_references(payload["data"])
+                    from bisheng.knowledge.application.unification_workflow_retention import (
+                        invalid_workflow_configuration,
+                    )
+
+                    try:
+                        references = extract_workflow_version_references(payload["data"])
+                    except (TypeError, ValueError):
+                        # Keep the exact failed saved source as an audited,
+                        # unusable version; never guess targets or mark it ready.
+                        entries.append(invalid_workflow_configuration(key, roots[parent][3], row))
+                        counts[parent] += 1
+                        logger.warning(
+                            "F118 retains unextractable workflow version {}; original configuration stays unusable until explicit repair",
+                            row.id,
+                        )
+                        continue
                 else:
                     declaration = CapabilityDeclaration.model_validate(payload["capabilities"])
                     requests = extract_app_reference_requests(declaration)
@@ -642,8 +657,17 @@ class UnificationSourceInventory:
                     source_key=record.source_key,
                 )
                 current()
-                from bisheng.knowledge.application.unification_workflow_retention import invalid_root
+                from bisheng.knowledge.application.unification_workflow_retention import (
+                    invalid_configuration,
+                    invalid_root,
+                )
 
+                if invalid_configuration(record):
+                    from bisheng.knowledge.application.unification_reference_state import parse_retired
+
+                    proof = parse_retired(state)
+                    if proof["source_heads"] or proof["raw_count"] or proof["legacy"]:
+                        _blocked("invalid_workflow_configuration_has_index")
                 if invalid_root(record):
                     from bisheng.knowledge.application.unification_reference_state import parse_retired
 

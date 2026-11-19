@@ -590,3 +590,5 @@ TC-KSU-141 对应 AC-95、AC-99；TC-KSU-142 对应 AC-96；TC-KSU-143 对应 AC
 | TC-MIGDEF-013 | 失败删除及已达 AFTER 创建收尾 | P0 | 旧 pin DELETE 失败/原 CURRENT-before；当前 pin builtin CREATE 已 AFTER | 默认准备、续跑；注入 pin/围栏/账本/图变化 | 新原生删除回执闭合，旧失败记录/内容保留；CREATE 仅 native finalize 无图写；漂移拒绝 | 待执行 | AC-145 |
 
 | TC-MIGDEF-014 | 空普通根缺 mode | P0 | 原根无 payload、SQL 授权或完整图关系 | 默认/补充准备、原生收尾/续跑及完整迁移；注入 payload/图/foreign mode/pin 漂移 | 原业务/作者不变，无图写/Grant；关闭根正常转换及完整 Coverage 通过，漂移先拒绝 | 待执行 | AC-146 |
+
+| TC-MIGDEF-015 | 工作流无效占位/旧选择结构保留 | P0 | 已存版本无法提取引用，包含当前标记；来源索引为空 | 完整迁移/续跑；修复/标记/父变化及旧索引注入 | 原配置/标记不变，失效来源不签 ready，不猜 ID；其余来源完整覆盖，漂移和既有索引拒绝，新写/执行仍严格 | 待执行 | AC-147 |
