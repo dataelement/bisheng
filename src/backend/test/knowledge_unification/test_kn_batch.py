@@ -82,7 +82,7 @@ async def test_inspection_no_plan_and_rebuilding_download_allowed(batch):
     )
     assert [row.id for row in result.valid_items] == [30]
     assert result.invalid_items[0].reason == "not_found"
-    assert all(call[2] == ("download",) for call in batch.calls)
+    assert all(call[2] == ("download", "visible") for call in batch.calls)
     async with batch.db.sessions() as session:
         assert not (await session.execute(select(KnowledgeOperationPlan))).scalars().all()
     assert not batch.dispatches
@@ -194,7 +194,7 @@ async def test_download_explicit_io_failure_and_stable_server_key(batch):
     result = await app.aconfirm(identity=batch.user, space_id=1, operation="download", request=confirmation(plan))
     assert [row["state"] for row in result["items"]] == ["succeeded", "failed"]
     assert result["url"] == "/partial.zip" and keys[0].startswith("download/")
-    assert all(call[2] == ("download",) for call in batch.calls)
+    assert all(call[2] == ("download", "visible") for call in batch.calls)
 
 
 async def test_known_tag_ids_no_root_visible_or_edit(batch):
@@ -206,7 +206,7 @@ async def test_known_tag_ids_no_root_visible_or_edit(batch):
         identity=batch.user, space_id=1, command=command("tag", ("file", 30), ("file", 31), ("file", 61), tag_ids=[11])
     )
     assert {row.id for row in plan.valid_items} == {30, 31, 61}
-    assert all(call[2] == ("rename",) for call in batch.calls)
+    assert all(call[0] == "knowledge_file" and call[2] == ("rename", "visible") for call in batch.calls)
 
 
 async def test_late_tag_failure_rolls_back_tags_links_and_consumption(batch):
@@ -270,3 +270,77 @@ async def test_new_tag_denial_preserves_editable_file_names_and_distinguishes_fi
     async with batch.db.sessions() as session:
         assert not (await session.execute(select(Tag))).scalars().all()
         assert not (await session.execute(select(TagLink))).scalars().all()
+
+
+@pytest.mark.parametrize("operation", ["tag", "retry", "download"])
+@pytest.mark.parametrize("visible", [True, False])
+async def test_denied_action_names_follow_visibility_without_allowing_writes(batch, monkeypatch, operation, visible):
+    batch.user.is_global_super = False
+    actor = PermissionActor(user_id=7, current_tenant_id=101, super_admin=False)
+    monkeypatch.setattr(processing_identity, "resolve_permission_actor", AsyncMock(return_value=actor))
+    async with batch.db.sessions() as session, session.begin():
+        await session.execute(update(KnowledgeFile).where(KnowledgeFile.id == 30).values(status=3))
+        name = (await session.get(KnowledgeFile, 30)).file_name
+
+    async def permissions(identity, *, resource_type, resource_ids, actions):
+        assert not identity.is_global_super
+        return {str(ident): {"visible"} & set(actions) if visible else set() for ident in resource_ids}
+
+    app = batch.application()
+    app.permissions = permissions
+    for result in (
+        await app.ainspect(identity=batch.user, space_id=1, command=command(operation, ("file", 30))),
+        await app.aprecheck(identity=batch.user, space_id=1, command=command(operation, ("file", 30))),
+    ):
+        assert not result.can_execute and not result.valid_items
+        assert result.invalid_items[0].reason == "no_permission"
+        assert result.invalid_items[0].name == (name if visible else None)
+    with pytest.raises(KnowledgeOperationPlanChangedError):
+        await app.aconfirm(identity=batch.user, space_id=1, operation=operation, request=confirmation(result))
+    assert not batch.dispatches
+    async with batch.db.sessions() as session:
+        assert (await session.get(KnowledgeFile, 30)).status == 3
+        assert not (await session.execute(select(Tag))).scalars().all()
+        assert not (await session.execute(select(TagLink))).scalars().all()
+
+
+async def test_existing_space_tag_not_on_file_can_be_assigned_without_space_edit(batch, monkeypatch):
+    batch.user.is_global_super = False
+    actor = PermissionActor(user_id=7, current_tenant_id=101, super_admin=False)
+    monkeypatch.setattr(processing_identity, "resolve_permission_actor", AsyncMock(return_value=actor))
+    batch.denied.add(1)
+    async with batch.db.sessions() as session, session.begin():
+        session.add(
+            Tag(id=11, tenant_id=101, business_id="1", business_type="knowledge_space", name="existing", user_id=7)
+        )
+    app = batch.application()
+    plan = await app.aprecheck(identity=batch.user, space_id=1, command=command("tag", ("file", 30), tag_ids=[11]))
+    assert plan.can_execute and not plan.invalid_items
+    result = await app.aconfirm(identity=batch.user, space_id=1, operation="tag", request=confirmation(plan))
+    assert result["items"][0]["state"] == "succeeded"
+    assert all(call[0] == "knowledge_file" for call in batch.calls)
+    async with batch.db.sessions() as session:
+        assert len((await session.execute(select(Tag))).scalars().all()) == 1
+        assert len((await session.execute(select(TagLink))).scalars().all()) == 1
+
+
+@pytest.mark.parametrize("visible", [True, False])
+async def test_unsupported_folder_tag_name_uses_folder_visibility(batch, monkeypatch, visible):
+    batch.user.is_global_super = False
+    actor = PermissionActor(user_id=7, current_tenant_id=101, super_admin=False)
+    monkeypatch.setattr(processing_identity, "resolve_permission_actor", AsyncMock(return_value=actor))
+    async with batch.db.sessions() as session:
+        name = (await session.get(KnowledgeFile, 10)).file_name
+
+    async def permissions(identity, *, resource_type, resource_ids, actions):
+        return {
+            str(ident): {"visible"} & set(actions) if visible and resource_type == "folder" else set()
+            for ident in resource_ids
+        }
+
+    app = batch.application()
+    app.permissions = permissions
+    result = await app.ainspect(identity=batch.user, space_id=1, command=command("tag", ("folder", 10)))
+    assert not result.can_execute
+    assert result.invalid_items[0].reason == "unsupported"
+    assert result.invalid_items[0].name == (name if visible else None)

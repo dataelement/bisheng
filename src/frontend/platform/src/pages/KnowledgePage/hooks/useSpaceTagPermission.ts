@@ -4,6 +4,7 @@ import { knowledgeQueryKeys, type KnowledgeQueryScope } from "@/controllers/hook
 
 export interface SpaceTagPermission {
   status: "checking" | "allowed" | "restricted" | "unavailable";
+  canReadTags?: boolean;
   retry: () => void;
 }
 
@@ -19,6 +20,7 @@ export function useSpaceTagPermission(scope: KnowledgeQueryScope, spaceId: numbe
     keepPreviousData: false,
   });
   return {
+    canReadTags: open && !permission.isFetching && permission.isSuccess && permission.data.actions.includes("visible"),
     status: permission.isFetching || !open ? "checking"
       : permission.isError ? "unavailable"
       : permission.isSuccess ? (permission.data.actions.includes("edit") ? "allowed" : "restricted")

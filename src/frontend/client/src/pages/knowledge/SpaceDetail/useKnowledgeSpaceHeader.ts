@@ -40,6 +40,7 @@ export function useKnowledgeSpaceHeader({
     "manage_permission",
   );
   const canEditSpace = hasKnowledgeSpaceAction(spaceActions, space.id, "edit");
+  const canReadSpaceTags = hasKnowledgeSpaceAction(spaceActions, space.id, "visible");
   const canLeaveSpace = canExit;
   // ─── Version Management ──────────────────────────────────────────────
   const versionManagementEnabled = useVersionManagementEnabled();
@@ -105,6 +106,7 @@ export function useKnowledgeSpaceHeader({
     canDeleteSpace,
     canManageMembers,
     canEditSpace,
+    canReadSpaceTags,
     canLeaveSpace,
     versionManagementEnabled,
     queryClient,

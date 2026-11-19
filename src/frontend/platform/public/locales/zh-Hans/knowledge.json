@@ -743,7 +743,7 @@
         "new_tag": "新标签名称",
         "add_tag": "添加标签草稿",
         "draft_notice": "新标签仅在最终确认后创建。",
-        "tags_load_failed": "空间标签列表暂不可用，原权限限制仍适用。",
+        "tags_load_failed": "空间标签加载失败，可继续选择已显示的标签，或重试加载其他标签。",
         "invalid_name": "标签名称请遵守原长度限制。",
         "select_first": "请先选择文件或文件夹",
         "reason_space_tag_permission_required": "有文件标签修改权限，但新建标签需要空间编辑权限。请改用已有标签，或联系空间管理员。"

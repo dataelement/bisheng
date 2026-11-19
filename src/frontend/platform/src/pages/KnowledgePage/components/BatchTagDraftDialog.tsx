@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import type { KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
+import { useQuery } from "@tanstack/react-query";
+import { knowledgeQueryKeys, type KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
+import { getKnowledgeTagsApi } from "@/controllers/API/knowledgeTags";
 import { useSpaceTagPermission } from "../hooks/useSpaceTagPermission";
 import { SpaceTagPermissionNotice } from "./tags/SpaceTagPermissionNotice";
-import { Button, Checkbox, Input } from "@bisheng/ui";
+import { Alert, Button, Checkbox, Input } from "@bisheng/ui";
 import { useTranslation } from "react-i18next";
 import {
   Dialog,
@@ -30,7 +32,20 @@ export function BatchTagDraftDialog({
   const { t } = useTranslation("knowledge");
   const permission = useSpaceTagPermission(scope, spaceId, open);
   const canManageTags = permission.status === "allowed";
-  const [tags, setTags] = useState<{ id: number; name: string }[]>([]);
+  const catalog = useQuery({
+    queryKey: [...knowledgeQueryKeys.space(scope, spaceId), "batch-tag-candidates"],
+    queryFn: () => getKnowledgeTagsApi(spaceId, undefined, true),
+    enabled: open && permission.canReadTags === true,
+    cacheTime: 0,
+    staleTime: 0,
+    retry: false,
+    keepPreviousData: false,
+  });
+  // File-only grants must remain usable without reading the root tag dictionary.
+  const tags = [...new Map([
+    ...availableTags,
+    ...(permission.canReadTags ? catalog.data?.data ?? [] : []),
+  ].map((tag) => [tag.id, tag])).values()];
   const [ids, setIds] = useState<number[]>([]),
     [names, setNames] = useState<string[]>([]),
     [name, setName] = useState("");
@@ -39,7 +54,6 @@ export function BatchTagDraftDialog({
     setIds([]);
     setNames([]);
     setName("");
-    setTags([...new Map(availableTags.map((tag) => [tag.id, tag])).values()]);
     // Opening owns the tag draft; rerenders must not discard in-progress input.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, spaceId, scope.identityKey, scope.tenantId, scope.managementTenantId, scope.view]);
@@ -62,7 +76,10 @@ export function BatchTagDraftDialog({
         <DialogHeader>
           <DialogTitle>{t("batch.tag_title")}</DialogTitle>
         </DialogHeader>
-        <SpaceTagPermissionNotice permission={permission} />
+        {permission.canReadTags && catalog.isError ? <Alert type="info" live
+          description={t("batch.tags_load_failed")}
+          actions={[{ label: t("retry"), onClick: () => { void catalog.refetch(); } }]} />
+          : <SpaceTagPermissionNotice permission={permission} />}
         {canManageTags && <p>{t("batch.draft_notice")}</p>}
         <div className="max-h-60 overflow-y-auto space-y-2">
           {tags.map((tag) => (

@@ -743,7 +743,7 @@
         "new_tag": "New tag name",
         "add_tag": "Add draft tag",
         "draft_notice": "New tags are created only after confirmation.",
-        "tags_load_failed": "The space tag list is unavailable. Existing permission restrictions still apply.",
+        "tags_load_failed": "Space tags could not be loaded. You can select the tags already shown, or retry to load more.",
         "invalid_name": "Use a tag name within the existing length limit.",
         "select_first": "Select files or folders first",
         "reason_space_tag_permission_required": "You can edit this file’s tags, but creating a tag requires space edit permission. Choose an existing tag or contact the space administrator."
