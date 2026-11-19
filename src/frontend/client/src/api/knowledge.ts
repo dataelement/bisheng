@@ -1729,10 +1729,12 @@ export interface KnowledgeFilePreview {
 
 export async function getFilePreviewApi(
     space_id: string,
-    file_id: string
+    file_id: string,
+    options?: { skip403Redirect: boolean; showError: boolean },
 ): Promise<KnowledgeFilePreview> {
+    const endpoint = `/api/v1/knowledge/space/${space_id}/files/${file_id}/preview`;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const res = await request.get<any>(`/api/v1/knowledge/space/${space_id}/files/${file_id}/preview`);
+    const res = await (options ? request.get<any>(endpoint, options) : request.get<any>(endpoint));
     const data = res?.data ?? res;
     return {
         original_url: data?.original_url ?? "",
@@ -1754,12 +1756,13 @@ export async function getFileDownloadApi(
     space_id: string,
     file_id: string,
     signal?: AbortSignal,
+    options?: { skip403Redirect: boolean; showError: boolean },
 ): Promise<{ original_url: string; preview_url: string }> {
     const endpoint = `/api/v1/knowledge/space/${space_id}/files/${file_id}/download`;
     type DownloadData = { original_url?: string; preview_url?: string };
     type DownloadResponse = DownloadData & { data?: DownloadData | null };
-    const res = signal
-        ? await request.get<DownloadResponse>(endpoint, { signal })
+    const res = signal || options
+        ? await request.get<DownloadResponse>(endpoint, { ...options, ...(signal ? { signal } : {}) })
         : await request.get<DownloadResponse>(endpoint);
     const data = res?.data ?? res;
     return {
