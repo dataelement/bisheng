@@ -138,8 +138,13 @@ TASK_MODE_MENU = WebMenuResource.LINSIGHT_TASK_MODE.value
 
 # How long one blocking read waits before the run state is checked again.
 FOLLOW_BLOCK_MS = 1000
-# Pause between two looks when the run has not written its first event yet.
+# First pause between two looks when the conversation is held by a run but the
+# Stream does not exist: the run has not written its first event yet (it waits
+# in the worker queue, possibly for hours), or the Stream of a parked run is
+# gone. The pause doubles up to ``NO_STREAM_POLL_MAX_SECONDS``, so a subscriber
+# that waits long costs one look a second instead of twenty.
 FIRST_EVENT_POLL_SECONDS = 0.05
+NO_STREAM_POLL_MAX_SECONDS = 1.0
 # SSE comment interval of the subscribe endpoint.
 HEARTBEAT_SECONDS = 15.0
 # How long the legacy stream waits for the projector to save the answer row.
@@ -224,8 +229,11 @@ async def follow_run_events(svc: RunServices, conversation_id: str, cursor: str 
     conversation right after a run ended is followed too.
     """
     cur = cursor
+    pause = FIRST_EVENT_POLL_SECONDS
     while True:
         async for event in svc.stream.read(conversation_id, cur, follow=True, block_ms=FOLLOW_BLOCK_MS, heartbeat=True):
+            # The Stream exists: the reader itself waits between two looks.
+            pause = FIRST_EVENT_POLL_SECONDS
             if event.get("type") == HEARTBEAT_TYPE:
                 if not await _run_active(svc, conversation_id):
                     return
@@ -240,7 +248,8 @@ async def follow_run_events(svc: RunServices, conversation_id: str, cursor: str 
                 yield event
             return
         yield {"type": HEARTBEAT_TYPE}
-        await asyncio.sleep(FIRST_EVENT_POLL_SECONDS)
+        await asyncio.sleep(pause)
+        pause = min(pause * 2, NO_STREAM_POLL_MAX_SECONDS)
 
 
 def event_frame(event: dict) -> str:
@@ -469,20 +478,27 @@ async def start_planned_relay(item: dict, messages: list[dict], *, redis: Any = 
     return version
 
 
-async def _enqueue_planned_resume(conversation_id: str, answer: str, tenant_id: int) -> Any:
-    """Wake the parked deep-research run of this conversation with the user's answer.
+async def _enqueue_planned_resume(conversation_id: str, run_id: str, answer: str, tenant_id: int) -> Any:
+    """Wake the parked deep-research run ``run_id`` of this conversation with the user's answer.
 
     Same queue item as ``/linsight/workbench/user-input``; the worker resumes
     from the item alone.
+
+    The run record is the one of the parked run (its id is the run id, or it
+    stores the run id), never "the newest record of the conversation": an entry
+    that does not go through the send entry (Open API, ``/workbench/*``) can add
+    a newer record while this run waits, and that record has no question to
+    answer. A parked run without a record is an error, not a reason to guess.
     """
-    from bisheng.linsight.domain.models.linsight_session_version import LinsightSessionVersionDao
+    from bisheng.core.cache.redis_manager import get_redis_client
+    from bisheng.linsight.domain import task_exec
     from bisheng.linsight.worker import LinsightQueue, encode_queue_item
 
-    versions = await LinsightSessionVersionDao.get_session_versions_by_session_id(conversation_id)
-    if not versions:
-        raise RuntimeError(f"conversation {conversation_id} waits for an answer but has no deep-research run")
-    version = versions[0]
-    from bisheng.core.cache.redis_manager import get_redis_client
+    version = await task_exec._find_run_record(conversation_id, run_id)
+    if version is None:
+        raise RuntimeError(
+            f"conversation {conversation_id} waits for an answer to run {run_id}, but that run has no run record"
+        )
 
     queue = LinsightQueue("queue", namespace="linsight", redis=await get_redis_client())
     await queue.put_head(encode_queue_item(version.id, resume=True, user_input=answer, tenant_id=tenant_id))
@@ -721,7 +737,7 @@ async def _send(request, data: APIChatCompletion, login_user: UserPayload, negot
 async def _start_planned(request, data, login_user, conversation, result, negotiated, memory_register, tenant_id):
     conversation_id = conversation.chat_id
     if result.kind == KIND_ANSWER:
-        version = await _enqueue_planned_resume(conversation_id, data.text or "", tenant_id)
+        version = await _enqueue_planned_resume(conversation_id, result.run_id, data.text or "", tenant_id)
     else:
 
         async def register(session, _version):
@@ -1080,29 +1096,15 @@ STOP_EXPIRED = "expired"
 async def _planned_run_record(conversation_id: str, run_id: str) -> Any:
     """The run record of the planned run that holds the conversation, or None.
 
-    A run that is still in the worker queue has not stored its run id in the
-    record yet; it is the newest record of the conversation.
+    The record's id is the run id, or the record stores the run id:
+    ``submit_task_turn`` writes it before the run is queued, so a run that is
+    still in the worker queue is found too. None = the record does not exist
+    (yet); the newest record of the conversation is never taken instead, because
+    it can belong to a run of another entry.
     """
     from bisheng.linsight.domain import task_exec
-    from bisheng.linsight.domain.models.linsight_session_version import (
-        LinsightSessionVersionDao,
-        SessionVersionStatusEnum,
-    )
 
-    record = await task_exec._find_run_record(conversation_id, run_id)
-    if record is not None:
-        return record
-    versions = await LinsightSessionVersionDao.get_session_versions_by_session_id(conversation_id)
-    # Only a record that has not ended can be the run in the queue; an ended one
-    # belongs to an earlier run and must not be touched.
-    active = (
-        SessionVersionStatusEnum.NOT_STARTED,
-        SessionVersionStatusEnum.IN_PROGRESS,
-        SessionVersionStatusEnum.WAITING_FOR_USER_INPUT,
-    )
-    if versions and versions[0].status in active:
-        return versions[0]
-    return None
+    return await task_exec._find_run_record(conversation_id, run_id)
 
 
 async def _terminate_planned_record(record: Any) -> None:

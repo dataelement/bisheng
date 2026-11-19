@@ -33,6 +33,15 @@ Pipeline of one execution
      Stream, the lease is parked ("waiting", AC-22). ``on_run_finished`` is NOT
      called: the run is not over. The answer starts a second execution of the
      same run with ``is_resume=True``.
+   - the lease is lost (a renew failed) -> ``_end_lost``. The event Stream is
+     keyed by conversation, not by run, so the run may write its terminal event
+     only while the conversation state still names it. ``RunLeaseService.reclaim``
+     decides that in one script: when it succeeds nobody has reported the run,
+     the run writes ``run_failed`` (reason ``lease_expired``; the hooks save the
+     partial answer as a failed row) and finishes as usual. When it fails,
+     another caller owns the conversation: that caller wrote ``run_failed`` and
+     saved the text from the snapshot (``mark_run_expired``), and this run
+     writes nothing more, not even its buffered text.
 
 State: nothing about a run is kept in process memory (C8). ``_TASKS`` only
 protects running coroutines from garbage collection.
@@ -103,7 +112,7 @@ from bisheng.linsight.domain.services import run_metrics
 from bisheng.linsight.domain.services.run_event_stream import EventWriter, RunEventStream
 from bisheng.workstation.domain.services import direct_attachments, direct_run_turn
 from bisheng.workstation.domain.services.direct_attachments import AttachmentIntake, AttachmentView
-from bisheng.workstation.domain.services.run_dispatch import RunDispatchService
+from bisheng.workstation.domain.services.run_dispatch import EXPIRED_REASON, RunDispatchService
 from bisheng.workstation.domain.services.run_lease import RENEW_INTERVAL_SECONDS, RunLeaseService
 
 PROFILE = "direct"
@@ -114,9 +123,14 @@ STATUS_FINISHED = "finished"
 STATUS_FAILED = "failed"
 STATUS_STOPPED = "stopped"
 STATUS_WAITING = "waiting"
-# Another caller took the conversation (the lease lapsed and the dispatcher
-# already emitted run_failed for this run). Nothing more is written.
+# A renew failed. Either another caller took the conversation (it emitted
+# run_failed for this run; nothing more is written), or nobody did and the run
+# ended itself with run_failed (``DirectRunOutcome.lease_reclaimed``).
 STATUS_LEASE_LOST = "lease_lost"
+# ``run_failed`` of a run that ended itself after its lease lapsed. Same code and
+# reason as ``task_exec.mark_run_expired`` writes for a run somebody else found dead.
+LEASE_LOST_ERROR_CODE = 11091
+LEASE_LOST_DETAIL = "The run could not renew its lease in time and was ended."
 # Internal result of ``_work``: the output scanner hit. The outcome of the run is
 # ``finished`` with ``content_safety=True``.
 _WORK_BLOCKED = "blocked"
@@ -194,6 +208,9 @@ class DirectRunOutcome:
     error: BaseException | None = None
     # The answer was replaced by the content-safety reply (status is "finished").
     content_safety: bool = False
+    # status "lease_lost" only: the state still named this run, so it wrote its
+    # own ``run_failed``. False = another caller owns the conversation.
+    lease_reclaimed: bool = False
 
 
 class _SafetyGate:
@@ -577,6 +594,7 @@ class DirectRunner:
             self._redis_of_lease(), ctx.conversation_id, ctx.run_id
         )
         metrics_token = run_metrics.activate(metrics)
+        outcome: DirectRunOutcome | None = None
         try:
             outcome = await self._execute(ctx, output, sink, gate)
         except asyncio.CancelledError:
@@ -594,6 +612,9 @@ class DirectRunner:
             # ``_execute`` did not reach its own cleanup.
             await self._cleanup_local(ctx)
         finally:
+            if outcome is not None and outcome.status == STATUS_LEASE_LOST and not outcome.lease_reclaimed:
+                # The Stream belongs to another run now: the buffered text is not written.
+                writer.discard()
             try:
                 await asyncio.shield(writer.aclose())
             except Exception:
@@ -615,8 +636,8 @@ class DirectRunner:
             try:
                 await self.dispatch.on_run_finished(ctx.conversation_id, ctx.run_id)
             except Exception:
-                # The inbox is kept; the relay lease lapses and the next access
-                # to the conversation recovers it (run_dispatch contract).
+                # The inbox is kept and the conversation is freed; the next message
+                # starts the relay run (run_dispatch contract).
                 logger.exception(
                     "direct run={} conversation={}: on_run_finished failed", ctx.run_id, ctx.conversation_id
                 )
@@ -640,7 +661,7 @@ class DirectRunner:
         gate = gate or _SafetyGate()
         if not await self.lease.renew(cid, run_id):
             logger.warning("direct run={} does not hold conversation={}; not executed", run_id, cid)
-            return DirectRunOutcome(STATUS_LEASE_LOST)
+            return await self._end_lost(ctx, sink)
 
         work = asyncio.create_task(self._work(ctx, output, sink, gate))
         watch = asyncio.create_task(self._watch(ctx))
@@ -684,14 +705,56 @@ class DirectRunner:
                 # no relay run (design §7 item 6).
                 await output.run_stopped("user", await self._discard_unread(ctx))
                 await self._cleanup_local(ctx)
-            # A lost lease: another execution of this conversation may already
-            # use the directory, so it is left alone.
-            return DirectRunOutcome(reason)
+                return DirectRunOutcome(reason)
+            return await self._end_lost(ctx, sink)
         finally:
             for task in (work, watch):
                 if not task.done():
                     task.cancel()
             await asyncio.gather(work, watch, return_exceptions=True)
+
+    async def _end_lost(self, ctx: DirectRunContext, sink: Callable[[dict], Awaitable[None]]) -> DirectRunOutcome:
+        """End a run whose renew failed (see "the lease is lost" in the module docstring).
+
+        The run writes ``run_failed`` only after ``reclaim`` proved that the
+        conversation state still names it. Otherwise nothing is written and the
+        local cache is left alone: another execution of this conversation may
+        already use the Stream and the directory.
+        """
+        cid, run_id = ctx.conversation_id, ctx.run_id
+        if not await self.lease.reclaim(cid, run_id):
+            logger.warning(
+                "direct run={} lost conversation={} to another caller; it writes no terminal event", run_id, cid
+            )
+            return DirectRunOutcome(STATUS_LEASE_LOST)
+        logger.warning(
+            "direct run={} conversation={}: the lease lapsed and nobody took the conversation; ending the run",
+            run_id,
+            cid,
+        )
+        snapshot = await self.stream.snapshot(cid)
+        if not ctx.is_resume and (snapshot is None or snapshot.get("run_id") != run_id):
+            # The run wrote nothing yet and the Stream still holds an earlier run:
+            # ``run_started`` clears it, as for every new run.
+            await sink(
+                run_events.make_event(
+                    run_events.RUN_STARTED,
+                    {"profile": PROFILE, "message_id": ctx.message_id, "relay": ctx.relay},
+                    run_id=run_id,
+                )
+            )
+        await self._settle_files(ctx, sink)
+        await sink(
+            run_events.make_event(
+                run_events.RUN_FAILED,
+                run_events.RunFailedData(
+                    code=LEASE_LOST_ERROR_CODE, reason=EXPIRED_REASON, detail=LEASE_LOST_DETAIL, reference_id=run_id
+                ),
+                run_id=run_id,
+            )
+        )
+        await self._cleanup_local(ctx)
+        return DirectRunOutcome(STATUS_LEASE_LOST, lease_reclaimed=True)
 
     async def _discard_unread(self, ctx: DirectRunContext) -> list[dict]:
         """The unread inbox of a run the user stopped, removed from the inbox.

@@ -870,7 +870,8 @@ class WorkStationService(BaseService):
 
         Reads the tenant's daily workstation config (child tenants without their own
         record inherit Root's, like every other field of that record). Missing record,
-        missing key, malformed value or a failed read all mean ``False``: the legacy path.
+        missing key, malformed value or a failed read all mean ``True`` (design decision 13);
+        only an explicitly stored JSON ``false`` selects the legacy path.
         """
         tenant_id = tenant_id or DEFAULT_TENANT_ID
         try:

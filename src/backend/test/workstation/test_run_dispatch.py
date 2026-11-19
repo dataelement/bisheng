@@ -340,9 +340,19 @@ async def test_finish_relay_enqueue_failure_is_raised(redis, clock):
 
     with pytest.raises(RuntimeError):
         await svc.on_run_finished(CID, first.run_id)
-    # Nothing is lost: the message is still in the inbox and the lapsed relay
-    # lease is recovered by the next access to the conversation.
+    # Nothing is lost: the message is still in the inbox ...
     assert [m["message_id"] for m in await inbox(redis)] == ["m-1"]
+    # ... and the conversation is not left reserved for a relay run nobody queued
+    # (the reservation would last QUEUED_LEASE_SECONDS).
+    state = await RunLeaseService(redis=redis, clock=clock).get_state(CID)
+    assert state.status == rl.STATUS_IDLE and state.run_id is None
+
+    # The next message starts the relay run for both messages once the queue is back.
+    rec = Recorder()
+    healthy = RunDispatchService(redis=redis, clock=clock, enqueue_relay=rec.enqueue)
+    nxt = await healthy.submit(CID, msg("again", message_id="m-2"))
+    assert nxt.kind == "relay" and [item["run_id"] for item in rec.relays] == [nxt.run_id]
+    assert [m["message_id"] for m in await inbox(redis)] == ["m-1", "m-2"]
 
 
 async def test_planned_queue_position(redis, clock, rec):
@@ -385,3 +395,56 @@ async def test_submit_requires_tenant_id(svc):
     del bad["tenant_id"]
     with pytest.raises(ValueError):
         await svc.submit(CID, bad)
+
+
+async def test_submit_relay_enqueue_failure_frees_the_conversation(redis, clock, lease):
+    """A relay run that cannot be queued must not keep the conversation for the queued lease."""
+
+    async def boom(item):
+        raise RuntimeError("queue down")
+
+    svc = RunDispatchService(redis=redis, clock=clock, enqueue_relay=boom)
+    # An unread message of a run that died without the finish script.
+    first = await svc.submit(CID, msg("hello"))
+    await svc.submit(CID, msg("more", message_id="m-1"))
+    assert await lease.release(CID, first.run_id)
+
+    with pytest.raises(RuntimeError):
+        await svc.submit(CID, msg("third", message_id="m-2"))
+
+    state = await lease.get_state(CID)
+    assert state.status == rl.STATUS_IDLE and state.run_id is None
+    assert [m["message_id"] for m in await inbox(redis)] == ["m-1", "m-2"]
+
+
+async def test_submit_frees_a_planned_reservation_when_the_queue_probe_fails(redis, clock, lease):
+    """The caller never learns the run id of a submit that raised, so submit gives the conversation back."""
+
+    async def probe(conversation_id, run_id, message):
+        raise RuntimeError("queue down")
+
+    svc = RunDispatchService(redis=redis, clock=clock, queue_position=probe)
+    with pytest.raises(RuntimeError):
+        await svc.submit(CID, msg("research", task_mode=True))
+
+    state = await lease.get_state(CID)
+    assert state.status == rl.STATUS_IDLE and state.run_id is None
+    # Without the release the conversation stayed "running" for QUEUED_LEASE_SECONDS.
+    healthy = RunDispatchService(redis=redis, clock=clock)
+    assert (await healthy.submit(CID, msg("research", task_mode=True))).kind == "new_run"
+
+
+async def test_submit_frees_the_reservation_when_the_expired_run_cannot_be_reported(redis, clock, lease):
+    async def broken_report(conversation_id, run_id):
+        raise RuntimeError("database down")
+
+    healthy = RunDispatchService(redis=redis, clock=clock)
+    await healthy.submit(CID, msg("hello"))
+    clock.advance(rl.LEASE_SECONDS + 1)
+
+    svc = RunDispatchService(redis=redis, clock=clock, on_run_expired=broken_report)
+    with pytest.raises(RuntimeError):
+        await svc.submit(CID, msg("research", task_mode=True))
+
+    state = await lease.get_state(CID)
+    assert state.status == rl.STATUS_IDLE and state.run_id is None

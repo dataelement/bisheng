@@ -627,3 +627,134 @@ async def test_blocked_input_without_the_header_keeps_the_old_frames(
     assert seen["legacy"] == ["内容不合规"]
     # The SSE helper writes the answer row itself.
     assert seen["answers"] == []
+
+
+# ------------------------------------------------- review M1 / M3 / M4
+
+
+async def test_task_mode_send_that_cannot_be_queued_frees_the_conversation(
+    world: _World, client: httpx.AsyncClient, monkeypatch
+):
+    """M1: a planned run holds the 4-hour queued lease before it is queued."""
+    from bisheng.common.errcode.linsight import LinsightStartTaskError
+
+    async def queue_down(data, login_user, **kwargs):
+        raise LinsightStartTaskError()
+
+    monkeypatch.setattr(run_send, "_submit_task_turn", queue_down)
+
+    resp = await client.post(f"{PREFIX}/chat/completions", json=_body(task_mode=True), headers=V2)
+
+    assert resp.json()["status_code"] == LinsightStartTaskError.Code
+    state = await world.state()
+    assert state.status == "idle" and state.run_id is None
+    # The next message starts a run instead of joining the inbox of a run that does not exist.
+    again = await client.post(f"{PREFIX}/chat/completions", json=_body(), headers=V2)
+    assert again.json()["data"]["disposition"] == "started"
+
+
+class _ResumeQueue:
+    items: list[dict] = []
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    async def put_head(self, item):
+        _ResumeQueue.items.append(item)
+
+
+def _versions(monkeypatch, versions: list) -> None:
+    """Run records of the conversation, newest first, as the DAO returns them."""
+    import bisheng.linsight.worker as worker_mod
+    from bisheng.core.cache import redis_manager
+    from bisheng.linsight.domain.models.linsight_session_version import LinsightSessionVersionDao
+
+    async def get_by_id(version_id):
+        return next((v for v in versions if v.id == version_id), None)
+
+    async def by_session(session_id):
+        return [v for v in versions if v.session_id == session_id]
+
+    monkeypatch.setattr(LinsightSessionVersionDao, "get_by_id", staticmethod(get_by_id))
+    monkeypatch.setattr(LinsightSessionVersionDao, "get_session_versions_by_session_id", staticmethod(by_session))
+    _ResumeQueue.items = []
+    monkeypatch.setattr(worker_mod, "LinsightQueue", _ResumeQueue)
+    monkeypatch.setattr(redis_manager, "get_redis_client", AsyncMock(return_value=object()))
+
+
+def _version(version_id: str, run_id: str | None = None, status: Any = None) -> Any:
+    return SimpleNamespace(
+        id=version_id, session_id=CID, api_meta={"run_id": run_id} if run_id else None, status=status, model="m1"
+    )
+
+
+async def _park_planned(world: _World) -> str:
+    result = await world.dispatch.submit(
+        CID, {"text": "研究一下", "task_mode": True, "user_id": OWNER, "tenant_id": TENANT}
+    )
+    assert await world.lease.park(CID, result.run_id)
+    return result.run_id
+
+
+async def test_answer_resumes_the_parked_run_not_the_newest_record(
+    world: _World, client: httpx.AsyncClient, monkeypatch
+):
+    """M3: another entry added a newer record while the run waited for its answer."""
+    run_id = await _park_planned(world)
+    _versions(monkeypatch, [_version("sv-newer-of-another-entry"), _version("sv-parked", run_id)])
+
+    resp = await client.post(f"{PREFIX}/chat/completions", json=_body(text="第一种"), headers=V2)
+
+    assert resp.json()["data"]["run_id"] == run_id
+    assert [item["session_version_id"] for item in _ResumeQueue.items] == ["sv-parked"]
+    assert _ResumeQueue.items[0]["resume"] is True and _ResumeQueue.items[0]["user_input"] == "第一种"
+
+
+async def test_answer_to_a_run_without_a_record_fails_and_keeps_the_question_open(
+    world: _World, client: httpx.AsyncClient, monkeypatch
+):
+    """M3: no fallback to the newest record; the run waits for the answer again."""
+    run_id = await _park_planned(world)
+    _versions(monkeypatch, [_version("sv-newer-of-another-entry")])
+
+    with pytest.raises(RuntimeError, match="has no run record"):
+        await client.post(f"{PREFIX}/chat/completions", json=_body(text="第一种"), headers=V2)
+
+    assert _ResumeQueue.items == []
+    state = await world.state()
+    assert (state.status, state.run_id) == ("waiting", run_id)
+
+
+async def test_stop_never_takes_the_newest_record_for_the_queued_run(world: _World, monkeypatch):
+    """M3 (same class): the record of the run is found by its run id or not at all."""
+    from bisheng.linsight.domain.models.linsight_session_version import SessionVersionStatusEnum
+
+    other = _version("sv-newer-of-another-entry", status=SessionVersionStatusEnum.NOT_STARTED)
+    mine = _version("sv-queued", "run-queued", status=SessionVersionStatusEnum.NOT_STARTED)
+    _versions(monkeypatch, [other, mine])
+
+    assert (await run_send._planned_run_record(CID, "run-queued")).id == "sv-queued"
+    assert await run_send._planned_run_record(CID, "run-without-record") is None
+
+
+async def test_follower_backs_off_while_a_held_conversation_has_no_stream(world: _World, monkeypatch):
+    """M4: a parked (or queued) run without a Stream must not be polled every 50 ms."""
+    await _park_planned(world)
+    assert not await world.redis.exists(f"bisheng:run:events:{{{CID}}}")
+    sleeps: list[float] = []
+    real_sleep = asyncio.sleep
+
+    async def record_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+        await real_sleep(0)
+
+    monkeypatch.setattr(run_send.asyncio, "sleep", record_sleep)
+    svc = await run_send.run_services()
+    beats = 0
+    async for event in run_send.follow_run_events(svc, CID):
+        assert event == {"type": "heartbeat"}
+        beats += 1
+        if beats == 8:
+            break
+
+    assert sleeps[:7] == [0.05, 0.1, 0.2, 0.4, 0.8, 1.0, 1.0]

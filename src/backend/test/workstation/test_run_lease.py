@@ -191,3 +191,33 @@ async def test_renew_loop_stops_when_lease_lost(svc, clock):
     lost = await svc.renew_loop(CID, "run-1", sleep=fake_sleep)
     assert lost is True
     assert sleeps == [rl.RENEW_INTERVAL_SECONDS] * 3
+
+
+async def test_reclaim_only_while_the_state_still_names_the_run(svc, clock):
+    """A lapsed run may end itself only when nobody declared it dead (F004 review M2)."""
+    await svc.acquire(CID, "run-1", "direct")
+    clock.advance(rl.LEASE_SECONDS + 1)
+    assert await svc.renew(CID, "run-1") is False
+
+    # Lapsed, but the state still says "running" for run-1: nobody took over.
+    assert await svc.reclaim(CID, "run-1") is True
+    assert await svc.is_lease_valid(CID)
+
+    # Another run took the lapsed conversation: run-1 gets nothing back.
+    clock.advance(rl.LEASE_SECONDS + 1)
+    assert (await svc.acquire(CID, "run-2", "direct")).expired_run_id == "run-1"
+    assert await svc.reclaim(CID, "run-1") is False
+    assert (await svc.get_state(CID)).run_id == "run-2"
+
+    # Neither a parked nor an idle conversation can be reclaimed.
+    assert await svc.park(CID, "run-2")
+    assert await svc.reclaim(CID, "run-2") is False
+    await svc.request_stop("run-2", CID)
+    assert await svc.reclaim(CID, "run-2") is False
+
+
+def test_parked_stream_outlives_the_waiting_state():
+    """The answer to a parked run needs the run's stream for as long as "waiting" lasts (review M4)."""
+    from bisheng.linsight.domain.services import run_event_stream
+
+    assert run_event_stream.PARKED_TTL_SECONDS >= rl.STATE_TTL_SECONDS

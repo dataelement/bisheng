@@ -36,6 +36,13 @@ Lua script may touch them together.
     RENEW_INTERVAL_SECONDS = 10.  A lapsed lease cannot be renewed: once
     expired, another caller may already have marked the run failed (决策 3).
 
+    Every caller that declares a lapsed run dead does it in a script that also
+    changes ``status`` / ``run_id`` (acquire, dispatch, claim).  So "status ==
+    running and run_id == mine" proves nobody has declared the run dead, even
+    after ``lease_until`` passed.  ``reclaim`` relies on that: a run that
+    notices its own lapsed lease takes a fresh one ONLY to write its terminal
+    event and finish; it does not go on executing.
+
 ``bisheng:run:stop:{<run_id>}`` -- STRING "1", TTL STOP_FLAG_TTL_SECONDS.
     Stop request for one run, polled once a second by the running coroutine
     (AC-29).  Keyed by run id because ``should_stop(run_id)`` has only the run
@@ -114,6 +121,18 @@ if st[1] ~= 'running' or st[2] ~= ARGV[1] or (tonumber(st[3] or '0') or 0) <= no
   return 0
 end
 redis.call('HSET', KEYS[1], 'lease_until', tostring(now + tonumber(ARGV[3])), 'updated_at', ARGV[2])
+redis.call('EXPIRE', KEYS[1], tonumber(ARGV[4]))
+return 1
+"""
+
+# KEYS[1]=state  ARGV: run_id, now_ms, lease_ms, state_ttl
+# Like renew, but a lapsed lease is accepted as long as the state still names this run.
+_RECLAIM_LUA = """
+local st = redis.call('HMGET', KEYS[1], 'status', 'run_id')
+if st[1] ~= 'running' or st[2] ~= ARGV[1] then
+  return 0
+end
+redis.call('HSET', KEYS[1], 'lease_until', tostring(tonumber(ARGV[2]) + tonumber(ARGV[3])), 'updated_at', ARGV[2])
 redis.call('EXPIRE', KEYS[1], tonumber(ARGV[4]))
 return 1
 """
@@ -250,6 +269,26 @@ class RunLeaseService:
         """Extend the lease by LEASE_SECONDS. False = the lease is lost."""
         res = await self._redis.eval(
             _RENEW_LUA,
+            1,
+            state_key(conversation_id),
+            run_id,
+            self._now_ms(),
+            LEASE_SECONDS * 1000,
+            STATE_TTL_SECONDS,
+        )
+        return int(res) == 1
+
+    async def reclaim(self, conversation_id: str, run_id: str) -> bool:
+        """Take a fresh lease for a run whose lease lapsed, if nobody declared it dead.
+
+        True: the state still said "running" for ``run_id``, so no other caller
+        took the conversation or reported the run; the run holds it again for
+        LEASE_SECONDS and may write its own terminal event. False: the
+        conversation is idle or belongs to another run, and this run must not
+        write anything. For ending a run only, never for continuing it.
+        """
+        res = await self._redis.eval(
+            _RECLAIM_LUA,
             1,
             state_key(conversation_id),
             run_id,

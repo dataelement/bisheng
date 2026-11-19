@@ -44,6 +44,15 @@ run that first waits in the worker queue (``planned``, and every relay run)
 gets ``QUEUED_LEASE_SECONDS``; the worker that picks it up calls ``renew`` and
 from then on keeps the normal 30 s lease.
 
+The queued lease is only safe while the run's item really is in the worker
+queue. Every step between the script that reserved the conversation and the
+item being queued therefore gives the reservation back when it fails
+(``_release_reservation``): a relay item that cannot be queued, an
+``on_run_expired`` or ``queue_position`` that raises inside ``submit``. The
+inbox is left as it is, so the next message starts the relay run again. The
+caller of ``submit`` does the same for a new run it cannot start
+(``on_run_finished``).
+
 Finish: the runner calls ``on_run_finished`` (not ``RunLeaseService.release``)
 when a run ends for any reason. One Lua script sets the conversation idle, or,
 when the inbox is not empty, hands the conversation straight to a relay run
@@ -342,16 +351,23 @@ class RunDispatchService:
         expired = _s(res[3]) or None
         inbox_length = int(res[4])
 
-        if expired:
-            await self._handle_expired(conversation_id, expired)
-
-        if branch == "started":
+        try:
+            if expired:
+                await self._handle_expired(conversation_id, expired)
             position = None
             events: list[dict] = []
-            if run_profile == PROFILE_PLANNED and self._queue_position is not None:
+            if branch == "started" and run_profile == PROFILE_PLANNED and self._queue_position is not None:
                 position = await self._queue_position(conversation_id, run_id, msg)
                 if position is not None:
                     events.append({"type": "queued", "run_id": run_id, "data": {"position": position}})
+        except BaseException:
+            if branch in ("started", "relay"):
+                # The script reserved the conversation for ``run_id`` and the caller
+                # never learns that id, so nobody else would give it back.
+                await self._release_reservation(conversation_id, run_id)
+            raise
+
+        if branch == "started":
             result = SubmitResult(
                 run_id=run_id,
                 disposition=DISPOSITION_STARTED,
@@ -454,8 +470,8 @@ class RunDispatchService:
 
         Pass ``run_id`` so a run that lost its lease to a newer run cannot reset
         that newer run's state (outcome ``stale``). Raises when the relay item
-        cannot be enqueued; the inbox is kept and the relay lease then lapses,
-        so the next access to the conversation recovers it.
+        cannot be enqueued; the inbox is kept and the conversation is freed, so
+        the next message starts the relay run.
         """
         res = await self._redis.eval(
             _FINISH_LUA,
@@ -526,7 +542,12 @@ class RunDispatchService:
             return None
         expired = _s(res[3]) or None
         if expired:
-            await self._handle_expired(conversation_id, expired)
+            try:
+                await self._handle_expired(conversation_id, expired)
+            except BaseException:
+                if branch == "relay":
+                    await self._release_reservation(conversation_id, _s(res[1]))
+                raise
         if branch == "idle":
             promoted = await self.promote_pending(conversation_id)
             if promoted is not None:
@@ -737,13 +758,43 @@ class RunDispatchService:
             )
         try:
             await self._enqueue_relay(item)
-        except Exception:
+        except BaseException:
             logger.exception(
-                "could not enqueue relay run={} of conversation={}; the inbox is kept and the relay lease will lapse",
+                "could not enqueue relay run={} of conversation={}; the inbox is kept and the conversation is freed",
                 item["run_id"],
                 conversation_id,
             )
+            await self._release_reservation(conversation_id, item["run_id"])
             raise
+
+    async def _release_reservation(self, conversation_id: str, run_id: str) -> None:
+        """Give back a conversation reserved for a run that was never handed to anyone.
+
+        The reservation of a queued run lasts ``QUEUED_LEASE_SECONDS``; left in
+        place it would turn every message of the next hours into an inbox entry
+        of a run that does not exist. ``release`` and not the finish script: the
+        inbox may hold unread messages, and finishing would reserve the
+        conversation for the same relay run again at once. Never raises: the
+        caller is already raising the error that led here.
+        """
+        from bisheng.workstation.domain.services.run_lease import RunLeaseService
+
+        try:
+            released = await RunLeaseService(self._redis, clock=self._clock).release(conversation_id, run_id)
+        except Exception:
+            logger.exception(
+                "could not release conversation={} reserved for run={}; the reservation lapses after {} s",
+                conversation_id,
+                run_id,
+                QUEUED_LEASE_SECONDS,
+            )
+            return
+        logger.warning(
+            "conversation={} reserved for run={} was given back before the run started (released={})",
+            conversation_id,
+            run_id,
+            released,
+        )
 
     async def _handle_expired(self, conversation_id: str, run_id: str) -> None:
         logger.warning("run={} on conversation={} lost its lease; marking it failed", run_id, conversation_id)

@@ -1084,8 +1084,10 @@ async def test_start_planned_relay_goes_through_the_send_path(monkeypatch: pytes
     from bisheng.workstation.domain.services import task_submit_service
 
     redis = fakeredis.aioredis.FakeRedis()
-    version = SimpleNamespace(id="sv-relay", session_id=CHAT, tenant_id=TENANT)
+    version = SimpleNamespace(id="sv-relay", session_id=CHAT, tenant_id=TENANT, api_meta=None)
     submit_calls: list[dict] = []
+    saved = AsyncMock()
+    monkeypatch.setattr(task_submit_service.LinsightSessionVersionDao, "insert_one", saved)
 
     async def submit_user_question(submit_obj, login_user, **kwargs):
         submit_calls.append({"question": submit_obj.question, "session_id": submit_obj.session_id, **kwargs})
@@ -1107,6 +1109,9 @@ async def test_start_planned_relay_goes_through_the_send_path(monkeypatch: pytes
     assert submit_calls[0]["question"] == "改成深度研究" and submit_calls[0]["session_id"] == CHAT
     assert submit_calls[0]["persist_user_turn"] is False
     enqueued.assert_awaited_once_with(version, run_id="run-relay")
+    # The record of the queued run is found by its run id (stop, answer).
+    saved.assert_awaited_once_with(version)
+    assert version.api_meta == {task_exec.RUN_ID_META_KEY: "run-relay"}
     assert await run_message_persist.take_relay_messages(redis, CHAT, "run-relay") == ["m-1"]
     # Taken once; another run id never sees it.
     assert await run_message_persist.take_relay_messages(redis, CHAT, "run-relay") == []

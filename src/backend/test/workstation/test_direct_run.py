@@ -796,3 +796,74 @@ async def test_terminal_event_is_written_when_the_hook_owner_fails(make_env):
     terminal = (await env.events())[-1]
     assert terminal["type"] == "run_finished" and "answer_files" not in terminal["data"]
     assert owner.seen[-1]["type"] == "run_finished"
+
+
+async def test_run_whose_lease_lapsed_unnoticed_ends_itself_with_run_failed(make_env):
+    """Review M2: nobody took the conversation, so nobody else writes the terminal event."""
+
+    async def lease_lapses(messages):
+        # E.g. Redis was unreachable for longer than the lease.
+        env.clock.now += rl.LEASE_SECONDS + 1
+        await asyncio.sleep(30)
+        raise AssertionError("the run was not cancelled")
+
+    env = make_env([_call("echo", {"text": "x"}, "c1", content="已经写出的部分回答"), lease_lapses], tools=[echo])
+    ctx = await env.submit("你好")
+
+    outcome = await env.run(ctx)
+
+    assert outcome.status == "lease_lost" and outcome.lease_reclaimed is True
+    events = await env.events()
+    terminal = events[-1]
+    assert terminal["type"] == "run_failed" and terminal["run_id"] == ctx.run_id
+    assert terminal["data"]["reason"] == "lease_expired"
+    assert terminal["data"]["code"] == 11091 and terminal["data"]["reference_id"] == ctx.run_id
+    assert [e["type"] for e in events].count("run_failed") == 1
+    # The hooks (the persistence projector) get the partial answer and the terminal event.
+    assert "已经写出的部分回答" in "".join(e["data"]["text"] for e in env.hook_events if e["type"] == "text")
+    assert env.hook_events[-1]["type"] == "run_failed"
+    assert (await env.stream.snapshot(CID))["text"] == "已经写出的部分回答"
+    # The run released the conversation itself.
+    assert env.finished == [(CID, ctx.run_id)]
+    assert (await env.state()).status == rl.STATUS_IDLE
+
+
+async def test_run_that_lost_the_conversation_mid_answer_leaves_the_new_holder_alone(make_env):
+    """Review M2: the stream is keyed by conversation, so a run that was taken over writes nothing."""
+    seen: dict[str, Any] = {}
+
+    async def taken_over(messages):
+        env.clock.now += rl.LEASE_SECONDS + 1
+        seen["newer"] = await env.dispatch.submit(CID, env.message("新的问题"))
+        await env.stream.append(CID, {"type": "run_started", "run_id": seen["newer"].run_id, "data": {}})
+        seen["before"] = await env.events()
+        await asyncio.sleep(30)
+        raise AssertionError("the run was not cancelled")
+
+    env = make_env([_call("echo", {"text": "x"}, "c1", content="已经写出的部分回答"), taken_over], tools=[echo])
+    ctx = await env.submit("你好")
+
+    outcome = await env.run(ctx)
+
+    assert outcome.status == "lease_lost" and outcome.lease_reclaimed is False
+    assert seen["newer"].expired_run_id == ctx.run_id
+    # Nothing was added to the stream of the run that holds the conversation now.
+    assert await env.events() == seen["before"]
+    assert (await env.stream.snapshot(CID))["run_id"] == seen["newer"].run_id
+    assert not any(e["type"] in ("run_failed", "run_stopped", "run_finished") for e in env.hook_events)
+    state = await env.state()
+    assert (state.status, state.run_id) == (rl.STATUS_RUNNING, seen["newer"].run_id)
+
+
+async def test_run_that_starts_after_its_lease_lapsed_reports_the_failure(make_env):
+    """The reservation lapsed before the coroutine ran, and nobody took the conversation."""
+    env = make_env([AIMessage(content="不应该被调用")])
+    ctx = await env.submit("你好")
+    env.clock.now += rl.LEASE_SECONDS + 1
+
+    outcome = await env.run(ctx)
+
+    assert outcome.status == "lease_lost" and outcome.lease_reclaimed is True
+    assert env.model.calls == 0
+    assert await env.types() == ["run_started", "run_failed"]
+    assert (await env.state()).status == rl.STATUS_IDLE

@@ -19,7 +19,7 @@ from loguru import logger
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
 from bisheng.chat_session.domain.session_subject import SessionSubject
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.linsight import LinsightUseUpError
+from bisheng.common.errcode.linsight import LinsightStartTaskError, LinsightUseUpError
 from bisheng.common.errcode.open_api import OpenApiTaskQueueUnavailableError
 from bisheng.common.services.config_service import settings
 from bisheng.database.models.session import MessageSession
@@ -60,7 +60,15 @@ async def submit_task_turn(
 
     ``run_id`` (F004): the run id the unified send entry reserved the
     conversation with; it travels in the queue item so the worker claims the
-    conversation under the same id. None everywhere else.
+    conversation under the same id, and it is stored on the run record
+    (``api_meta["run_id"]``) so the record of a run that is still in the queue
+    is found by its run id. None everywhere else.
+
+    With ``run_id`` an enqueue failure is never left to the browser: the
+    conversation is already reserved for this run with the long queued lease,
+    and a later start-execute carries no run id, so it would wait behind that
+    reservation. The version is marked failed and 11130 is raised; the caller
+    gives the conversation back.
 
     ``persist_user_turn=False`` (F004 relay run): the question rows of the
     messages already exist (they were written when the messages joined the
@@ -99,6 +107,14 @@ async def submit_task_turn(
         if consumed:
             await InviteCodeService.revoke_invite_code(user_id=login_user.user_id)
         raise
+    if run_id is not None:
+        # Before the run can be queued or stopped: ``task_exec._find_run_record``
+        # finds the record of a queued run by this (the worker stores the same key).
+        from bisheng.linsight.domain.task_exec import RUN_ID_META_KEY
+
+        meta = session_version.api_meta if isinstance(session_version.api_meta, dict) else {}
+        session_version.api_meta = {**meta, RUN_ID_META_KEY: run_id}
+        await LinsightSessionVersionDao.insert_one(session_version)
     if on_session_created is not None:
         await on_session_created(session, session_version)
 
@@ -126,7 +142,7 @@ async def submit_task_turn(
             session_version, **({"run_id": run_id} if run_id is not None else {})
         )
     except Exception as exc:
-        if not strict_enqueue:
+        if not strict_enqueue and run_id is None:
             logger.exception(
                 f"[TASK_SUBMIT] server-side enqueue failed chat_id={session_version.session_id} "
                 f"svid={session_version.id}; relying on client start-execute"
@@ -139,6 +155,9 @@ async def submit_task_turn(
         await _mark_enqueue_failed(session_version, linsight_execute_utils)
         if consumed:
             await InviteCodeService.revoke_invite_code(user_id=login_user.user_id)
+        if not strict_enqueue:
+            # F004 unified send / relay run: the caller releases the reservation.
+            raise LinsightStartTaskError() from exc
         raise OpenApiTaskQueueUnavailableError() from exc
 
     return session, session_version

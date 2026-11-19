@@ -357,3 +357,41 @@ async def test_update_snapshot_overrides_fields(redis):
     assert snap["text"] == "seed" and snap["plan"] == [{"id": "1"}] and snap["pending_question"] == {"call_id": "c"}
     await stream.update_snapshot(CID, pending_question=None)
     assert "pending_question" not in await stream.snapshot(CID)
+
+
+async def test_parked_run_keeps_its_stream_for_the_parked_ttl(redis):
+    """A pending question stretches the expiry; the answer or the end of the run puts it back."""
+    stream = RunEventStream(redis)
+    ek, sk = res.events_key(CID), res.snapshot_key(CID)
+    await stream.append(CID, _ev("run_started"))
+    await stream.append(CID, _ev("text", text="先问一句"))
+    for key in (ek, sk):
+        assert await redis.ttl(key) <= res.LIVE_TTL_SECONDS
+
+    await stream.append(CID, _ev("ask_user", call_id="c1", questions=[{"question": "要哪一种？"}]))
+    for key in (ek, sk):
+        assert res.LIVE_TTL_SECONDS < await redis.ttl(key) <= res.PARKED_TTL_SECONDS
+
+    # The answer resumes the run: an ordinary live run again.
+    await stream.append(CID, _ev("ask_user_answered", call_id="c1", answer="第一种"))
+    for key in (ek, sk):
+        assert res.ENDED_TTL_SECONDS < await redis.ttl(key) <= res.LIVE_TTL_SECONDS
+
+    # A parked run that is stopped ends like any other run.
+    await stream.append(CID, _ev("ask_user", call_id="c2", questions=[{"question": "再问一次"}]))
+    await stream.append(CID, _ev("run_stopped"))
+    for key in (ek, sk):
+        assert await redis.ttl(key) <= res.ENDED_TTL_SECONDS
+
+
+async def test_writer_discard_drops_buffered_text(redis):
+    stream = RunEventStream(redis)
+    writer = EventWriter(stream, CID, RUN, sleep=_never_sleep)
+    await writer.emit(_ev("run_started"))
+    await writer.emit(_ev("text", text="不该写出"))
+
+    writer.discard()
+    await writer.aclose()
+
+    assert [ev["type"] for ev in await _collect(stream)] == ["run_started"]
+    assert (await stream.snapshot(CID))["text"] == ""

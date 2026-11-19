@@ -26,6 +26,12 @@ Rules this module owns:
 * A terminal event (``run_finished`` / ``run_failed`` / ``run_stopped``) sets
   both keys to expire after ``ended_ttl_seconds`` (1 hour). While a run is live
   the keys carry a long safety TTL so a crashed writer cannot leak them.
+* While the snapshot holds a pending question (``ask_user`` was written and
+  nothing answered or ended it) both keys expire after ``parked_ttl_seconds``
+  instead: the run is parked, the conversation state keeps "waiting" for
+  ``run_lease.STATE_TTL_SECONDS``, and the answer needs the question, the text
+  and the files of the run for as long as it can still be given. The next
+  event of the run (``ask_user_answered``) puts the live TTL back.
 * ``EventWriter`` merges ``text`` / ``thinking`` events within a 50 ms window
   into one entry before they reach Redis.
 
@@ -49,6 +55,11 @@ SNAPSHOT_KEY = "bisheng:run:snapshot:{{{cid}}}"
 DEFAULT_MAXLEN = 2000
 ENDED_TTL_SECONDS = 3600
 LIVE_TTL_SECONDS = 24 * 3600
+# Expiry of the keys of a run parked on a question. It must not be shorter than
+# the "waiting" state of the conversation (``run_lease.STATE_TTL_SECONDS``, 7
+# days, written a moment AFTER the ``ask_user`` event), hence the extra hour.
+# Only parked runs pay for it: at most ``DEFAULT_MAXLEN`` entries each.
+PARKED_TTL_SECONDS = 7 * 24 * 3600 + 3600
 # How often a follower re-reads while it waits. Events are coalesced to one per
 # 50 ms upstream; 100 ms keeps the stream smooth at ~10 reads/s per open page.
 FOLLOW_POLL_SECONDS = 0.1
@@ -82,7 +93,8 @@ _OP_CLEAR_QUESTION = "clear_question"
 # KEYS[1] stream, KEYS[2] snapshot
 # ARGV: 1 maxlen, 2 type, 3 run_id, 4 data json, 5 ts, 6 live ttl, 7 ended ttl,
 #       8 is_terminal ('1'/'0'), 9 snapshot op, 10 op arg,
-#       11 unread_messages json of a terminal event ('' when it has none)
+#       11 unread_messages json of a terminal event ('' when it has none),
+#       12 parked ttl (the snapshot holds a pending question)
 _APPEND_LUA = """
 local stream, snap = KEYS[1], KEYS[2]
 local typ = ARGV[2]
@@ -122,6 +134,8 @@ end
 local ttl = ARGV[6]
 if redis.call('HEXISTS', snap, 'ended') == 1 then
   ttl = ARGV[7]
+elseif redis.call('HEXISTS', snap, 'pending_question') == 1 then
+  ttl = ARGV[12]
 end
 redis.call('EXPIRE', stream, ttl)
 redis.call('EXPIRE', snap, ttl)
@@ -218,6 +232,7 @@ class RunEventStream:
         maxlen: int = DEFAULT_MAXLEN,
         ended_ttl_seconds: int = ENDED_TTL_SECONDS,
         live_ttl_seconds: int = LIVE_TTL_SECONDS,
+        parked_ttl_seconds: int = PARKED_TTL_SECONDS,
         wall_clock: Callable[[], float] = time.time,
     ):
         if maxlen < 1:
@@ -226,6 +241,7 @@ class RunEventStream:
         self.maxlen = maxlen
         self.ended_ttl_seconds = ended_ttl_seconds
         self.live_ttl_seconds = live_ttl_seconds
+        self.parked_ttl_seconds = parked_ttl_seconds
         self._wall_clock = wall_clock
 
     async def _client(self) -> Any:
@@ -269,6 +285,7 @@ class RunEventStream:
             op,
             arg,
             _terminal_unread(typ, data),
+            str(self.parked_ttl_seconds),
         )
         return _s(entry_id)
 
@@ -565,6 +582,16 @@ class EventWriter:
 
     async def aclose(self) -> None:
         await self.flush()
+        self._cancel_timer()
+
+    def discard(self) -> None:
+        """Drop the buffered deltas without writing them.
+
+        For a run that lost the conversation: the Stream may already hold the
+        events of the run that took over, and a late flush would add this run's
+        text to that run's accumulated state.
+        """
+        self._buf_type, self._buf_parts, self._buf_segment = None, [], {}
         self._cancel_timer()
 
     async def _flush_locked(self) -> str | None:
