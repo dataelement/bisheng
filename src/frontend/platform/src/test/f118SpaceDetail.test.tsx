@@ -379,15 +379,15 @@ it("opens a failed copy directly and retries the same job before returning to it
   );
   expect(screen.getByText("f118.processing_hidden")).toBeVisible();
   expect(screen.getByText("f118.processing_task_id")).toBeVisible();
-  expect(
-    screen.getByRole("button", { name: "f118.copy_refresh_source" }),
-  ).toBeVisible();
+  const failure = within(failureTitle.closest("section")!);
+  const retry = failure.getByRole("button", { name: "retry" });
+  expect(failure.getAllByRole("button")).toEqual([retry]);
   expect(mocks.children).not.toHaveBeenCalled();
-  fireEvent.click(await screen.findByRole("button", { name: "retry" }));
+  fireEvent.click(retry);
   await waitFor(() =>
     expect(mocks.post).toHaveBeenCalledWith(
       "/api/v1/knowledge/space/7/processing-jobs/original-copy/retry",
-      { expected_job_revision: 1, idempotency_key: expect.any(String) },
+      { expected_job_revision: 1, idempotency_key: expect.any(String), refresh_source: true },
       { params: { kind: "space_copy" } },
     ),
   );

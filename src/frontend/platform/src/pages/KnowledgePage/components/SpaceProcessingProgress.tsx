@@ -5,7 +5,7 @@ import {
   Button,
   Pagination,
   StateView,
-  SystemErrorIllustration,
+  SystemMaintenanceIllustration,
   Tooltip,
 } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
@@ -118,6 +118,7 @@ export function SpaceProcessingProgress({
     state === "failed" || state === "partial_failed" || state === "obsolete";
   const copyFailurePage = showCopyFailurePage && (state === undefined || failedJob);
   const copyFailurePanel = copyDisclosure?.phase === "failed" && failedJob;
+  const directCopyRetry = copyFailurePage || copyFailurePanel;
   const copyJobOutOfSync =
     compactCopy && Boolean(jobData) && (copyDisclosure?.phase === "failed") !== failedJob;
   const canReadItems = showDetails && !copyJobOutOfSync;
@@ -252,7 +253,7 @@ export function SpaceProcessingProgress({
     </Button>
   );
   const handleRefreshSource = () => {
-    if (copyFailurePanel) {
+    if (directCopyRetry) {
       void handleRetry(true);
       return;
     }
@@ -275,11 +276,11 @@ export function SpaceProcessingProgress({
     <Button
       variant="outlined"
       size={copyFailurePanel ? "small" : "medium"}
-      color={copyFailurePage || copyFailurePanel ? "default" : "primary"}
+      color={directCopyRetry ? "default" : "primary"}
       disabled={busy}
       onClick={handleRefreshSource}
     >
-      {t(copyFailurePanel ? "retry" : "f118.copy_refresh_source")}
+      {t(directCopyRetry ? "retry" : "f118.copy_refresh_source")}
     </Button>
   );
   const retryReadAction = (
@@ -336,7 +337,7 @@ export function SpaceProcessingProgress({
       {copyFailurePage ? (
         <StateView
           className="h-auto flex-1 py-8"
-          image={<SystemErrorIllustration />}
+          image={<SystemMaintenanceIllustration />}
           title={
             state === "obsolete" || state === "partial_failed"
               ? status
@@ -364,16 +365,7 @@ export function SpaceProcessingProgress({
               t(progressReadFailed ? "detail.load_failed" : "detail.loading")
             )
           }
-          action={
-            retryAction ? (
-              <>
-                {refreshSourceAction}
-                {retryAction}
-              </>
-            ) : progressReadFailed ? (
-              retryReadAction
-            ) : undefined
-          }
+          action={refreshSourceAction || (progressReadFailed ? retryReadAction : undefined)}
         />
       ) : !metadata && job.isInitialLoading ? (
         <SpaceProcessingLoading className={fill ? "min-h-0 flex-1" : undefined} />

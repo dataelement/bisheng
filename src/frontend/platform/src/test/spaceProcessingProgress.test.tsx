@@ -217,8 +217,9 @@ it("polls metadata progress and requests only failed items when failures appear"
   );
 });
 
-it.each(["standard", "expanded", "collapsed"] as const)("retries with current source inputs in view %s", async (view) => {
-  const compact = view !== "standard";
+it.each(["standard", "page", "expanded", "collapsed"] as const)("retries with current source inputs in view %s", async (view) => {
+  const compact = view === "expanded" || view === "collapsed";
+  const direct = view !== "standard";
   vi.mocked(readProcessingJob).mockReset().mockResolvedValue({
     id: "copy-7",
     space_id: 7,
@@ -250,6 +251,7 @@ it.each(["standard", "expanded", "collapsed"] as const)("retries with current so
         spaceId={7}
         jobId="copy-7"
         kind="space_copy"
+        showCopyFailurePage={view === "page"}
         copyDisclosure={compact ? {
           phase: "failed",
           open: view === "expanded",
@@ -264,15 +266,15 @@ it.each(["standard", "expanded", "collapsed"] as const)("retries with current so
       />
     </QueryClientProvider>,
   );
-  const retryLabel = compact ? "retry" : "f118.copy_refresh_source";
+  const retryLabel = direct ? "retry" : "f118.copy_refresh_source";
   const retry = await screen.findByRole("button", { name: retryLabel });
-  if (compact) {
+  if (direct) {
     expect(screen.getAllByRole("button")).toEqual([retry]);
-    expect(retry).toHaveClass("h-6", "border-btn-gray-border");
+    expect(retry).toHaveClass(compact ? "h-6" : "h-8", "border-btn-gray-border");
   }
   const close = vi.fn();
   fireEvent.click(retry);
-  if (compact) {
+  if (direct) {
     expect(bsConfirm).not.toHaveBeenCalled();
   } else {
     expect(retryProcessing).not.toHaveBeenCalled();
