@@ -61,6 +61,37 @@ def _record(cls, row, **overrides):
 
 
 class PermissionMigrationSnapshotRepository:
+    async def ainspect_rootless_file_authorization(self, session, *, file_ids):
+        """Global absence proof for isolated IDs, never an authorization grant."""
+        self._scope(session)
+        if (
+            type(file_ids) is not tuple
+            or not 1 <= len(file_ids) <= 199
+            or any(type(v) is not int or v <= 0 for v in file_ids)
+            or len(set(file_ids)) != len(file_ids)
+        ):
+            _blocked("invalid_exact_file_ids")
+        occupied = set()
+        ids = tuple(map(str, file_ids))
+        with session.no_autoflush, strict_tenant_filter(), bypass_tenant_filter():
+            for model in (ResourcePermissionMode, PermissionGrant, PermissionVisibleSourceProjection):
+                rows = await session.execute(
+                    select(model.resource_id).where(
+                        model.resource_type.in_(("folder", "knowledge_file")), model.resource_id.in_(ids)
+                    )
+                )
+                occupied.update(int(row[0]) for row in rows)
+            rows = await session.execute(
+                select(PermissionProjectionOperation.scope_key).where(
+                    PermissionProjectionOperation.scope_type == "resource",
+                    PermissionProjectionOperation.scope_key.in_(
+                        tuple(f"{kind}:{ident}" for ident in ids for kind in ("folder", "knowledge_file"))
+                    ),
+                )
+            )
+            occupied.update(int(row[0].partition(":")[2]) for row in rows)
+        return frozenset(occupied)
+
     async def acount_file_authorization_rows(self, session, *, file_ids):
         tenant = self._scope(session)
         if (

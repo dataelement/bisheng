@@ -143,6 +143,13 @@ _SCHEMAS.update(
     }
 )
 
+# The full original FileRow remains covered by row_digest. It has no live
+# resource/permission conversion; its absent parent is separately rechecked.
+_SCHEMAS["rootless_file"] = dict(_SCHEMAS["file"])
+_SCHEMAS["rootless_file_retention"] = _spec(
+    "tenant_id:positive space_id:positive file_id:positive file_digest:hash reason:str"
+)
+
 _CONVERSION_COMMON = _spec(
     "schema_version:int run_id:str writer_contract_version:str tenant_id:positive command_key:hash operation:str"
 )

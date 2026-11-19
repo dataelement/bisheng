@@ -89,8 +89,9 @@ def _validate_progress(goal, total):
 
 
 class ReferenceMigration:
-    def __init__(self, application, frozen, plan, reader):
+    def __init__(self, application, frozen, plan, reader, *, environment):
         self.app, self.frozen, self.plan, self.reader = application, frozen, plan, reader
+        self.environment = environment
         self.sources, self.backfill = ReferenceAfterSources(), RegisteredReferenceBackfill()
         self.conversions, self.resources = {}, {}
         for command in plan.conversions:
@@ -539,6 +540,16 @@ class ReferenceMigration:
         for tenant in self.frozen.tenant_ids:
             with tenant_execution_scope(tenant):
                 proofs[tenant] = await self._tenant(tenant, verify_only=True)
+        if self.plan.rootless_retentions:
+            from collections import defaultdict
+
+            retained = defaultdict(list)
+            for tenant, proof in self.plan.rootless_retentions:
+                retained[tenant].append(proof)
+            # Final live SQL + complete Store proof immediately before issuing
+            # Coverage, including completed-Run verification/resume. Reuse the
+            # already verified frozen control pages; do not rescan the artifacts.
+            await self.app._verify_structural_retentions(self.frozen, retained, environment=self.environment)
         async with self.app._session() as session, session.begin():
             actual = await self.app._admit(self.frozen.run_id, self.frozen.writer_contract_version)
             if actual != self.frozen:
@@ -580,4 +591,4 @@ async def run_references(application, **inputs):
     frozen = await application._admit(inputs["run_id"], inputs["writer_contract_version"])
     reader = UnificationReferencePlanReader(inventory=application.reader, artifact_store=application.store)
     plan = await reader.aprepare(frozen, **{name: inputs[name] for name in ("environment", "backup_ref", "schema_ref")})
-    return await ReferenceMigration(application, frozen, plan, reader).arun()
+    return await ReferenceMigration(application, frozen, plan, reader, environment=inputs["environment"]).arun()

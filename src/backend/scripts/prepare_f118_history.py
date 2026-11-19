@@ -11,9 +11,13 @@ orphan metadata and its backed-up file payloads, and purges deleted resources'
 derived permissions. Keeps audit, roles and live index bindings. Physical
 cleanup deletes only identified orphan objects/rows, never whole stores. Unknown
 ownership or unavailable physical identity is reported. Run BEFORE a new M2
-freeze; an active frozen migration is rejected. A historical delete whose saved
-snapshot already lacks one permission_enabled marker can forward-recover its
-own frozen projection; other failed-closed operations remain blocked.
+freeze; an active frozen migration is rejected. Unreachable rootless history
+and old embedding names are preserved with warnings and formal M2 proofs.
+Proven empty successful NORMAL-file permissions initialize only INHERIT through
+the native ledger; intact FAILED_CLOSED GRANT_MUTATION operations forward-recover
+their original intent/fence. A historical delete whose saved snapshot already
+lacks one permission_enabled marker can recover its own frozen projection.
+Unknown ownership/authorization, changed evidence and failed native recovery stop.
 """
 
 from __future__ import annotations
@@ -448,6 +452,7 @@ async def capture(sessions, client):
     from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
     from bisheng.permission.domain.models import ResourcePermissionMode
     from scripts import f118_history_business as business
+    from scripts import f118_history_permissions as permissions
 
     async with global_session(sessions) as session:
         await unfrozen(session)
@@ -459,6 +464,8 @@ async def capture(sessions, client):
             "purges": [],
             "blocked": [],
             "retained_evidence": [],
+            "initializations": [],
+            "recoveries": [],
         }
         snapshot = await business.read(session)
         store = snapshot["knowledge"].store
@@ -486,6 +493,13 @@ async def capture(sessions, client):
         }
         ignored_files = frozenset(int(ident) for _, ident in retiring)
         mode_map = mode_rows.grouped(("resource_type", "resource_id"))
+        retained_files = [item["before"] for item in business_plan["retained"]]
+        retained_ids = {row["id"] for row in retained_files}
+        for ident in sorted(await permissions.absent_authorization(session, retained_files)):
+            detail = {"table": "knowledgefile", "id": ident, "reason": "retained_orphan_authorization_exists"}
+            result["blocked"].append(detail)
+            business_plan["blocked"].append(detail)
+        initializations, recoveries = [], []
         parent_buffer = []
         for model, rows in (
             (KnowledgeFile, files.values()),
@@ -495,6 +509,8 @@ async def capture(sessions, client):
             ),
         ):
             for row in rows:
+                if model is KnowledgeFile and row["id"] in retained_ids:
+                    continue
                 if model is KnowledgeDocument:
                     # Ownership comes from Knowledge; documents have no tenant column.
                     row["tenant_id"] = roots.get(row["knowledge_id"], {}).get("tenant_id")
@@ -527,6 +543,26 @@ async def capture(sessions, client):
                 mode = _ModeFact(**matched_modes[-1]) if matched_modes else None
                 root_kind = "knowledge_space" if roots[row["knowledge_id"]]["type"] == 3 else "knowledge_library"
                 parent = ("folder", str(path[-1])) if path else (root_kind, str(row["knowledge_id"]))
+                if mode is None:
+                    parent_modes = mode_map.get(parent, ())
+                    initializations.append(
+                        {
+                            "file": row,
+                            "root": roots[row["knowledge_id"]],
+                            "parent_mode": parent_modes[0] if len(parent_modes) == 1 else None,
+                        }
+                    )
+                    continue
+                if (
+                    mode.tenant_id == row["tenant_id"]
+                    and mode.projection_state == "FAILED_CLOSED"
+                    and (mode.parent_type, mode.parent_id) == parent
+                    and mode.operation_id is not None
+                ):
+                    recoveries.append(
+                        {"file": row, "root": roots[row["knowledge_id"]], "mode": canonical(mode.model_dump())}
+                    )
+                    continue
                 if (
                     mode is None
                     or mode.tenant_id != row["tenant_id"]
@@ -555,6 +591,13 @@ async def capture(sessions, client):
                     store.append("parent_candidates", parent_buffer)
                     parent_buffer.clear()
         store.append("parent_candidates", parent_buffer)
+        result["initializations"], rejected_initializations = await permissions.initialization_candidates(
+            session, initializations
+        )
+        result["blocked"].extend(
+            {"table": "knowledgefile", "id": ident, "reason": "permission_mode_missing_ambiguous_intent"}
+            for ident in rejected_initializations
+        )
         parent_rows = store.rows("parent_candidates")
         children_by_parent = defaultdict(set)
         for mode in modes:
@@ -631,8 +674,12 @@ async def capture(sessions, client):
         for item in result["business"]["deletes"]
         if item["table"] == "knowledgefile"
     }
+    isolated_objects = {f"{kind}:{row['id']}" for row in retained_files for kind in ("knowledge_file", "folder")}
+    isolated_objects.update(
+        f"{kind}:{item['file']['id']}" for item in result["initializations"] for kind in ("knowledge_file", "folder")
+    )
     keys_by_object, incoming_by_subject = {}, defaultdict(list)
-    selected_objects = owned | orphan_objects
+    selected_objects = owned | orphan_objects | isolated_objects
     async for row in client.iter_tuples(consistency="HIGHER_CONSISTENCY"):
         if row["object"] in selected_objects or (row["object"] in parents and row["relation"] == "parent"):
             keys_by_object.setdefault(row["object"], []).append(row)
@@ -648,6 +695,25 @@ async def capture(sessions, client):
             }
             result["business"]["blocked"].append(detail)
             result["blocked"].append(detail)
+    for obj in sorted(isolated_objects):
+        if keys_by_object.get(obj) or incoming_by_subject.get(obj):
+            detail = {
+                "table": "knowledgefile",
+                "id": int(obj.partition(":")[2]),
+                "reason": "historical_isolation_graph_conflict",
+            }
+            result["blocked"].append(detail)
+    result["recoveries"], rejected_recoveries = await permissions.capture_recoveries(
+        sessions, client, recoveries, result["pin"]
+    )
+    result["blocked"].extend(
+        {
+            "table": "resource_permission_mode",
+            "id": item["mode"]["id"],
+            "reason": "failed_closed_original_ledger_not_recoverable",
+        }
+        for item in rejected_recoveries
+    )
     selected = []
     for stored in parent_rows:
         item = stored["item"]
@@ -883,8 +949,8 @@ async def apply(plan, *, sessions, client, runtime, operator_id, physical=None):
     from bisheng.permission.domain.services.resource_lifecycle_policy import build_delete_plan
     from scripts import f118_history_business as business
 
-    if plan.get("business", {}).get("blocked"):
-        blocked("business_plan_has_unresolved_candidates")
+    if plan.get("blocked") or plan.get("business", {}).get("blocked"):
+        blocked("plan_has_unresolved_candidates")
     deleted_files = {
         ("folder" if item["before"]["file_type"] == 0 else "knowledge_file", str(item["before"]["id"]))
         for item in plan.get("business", {}).get("deletes", ())
@@ -958,6 +1024,13 @@ async def apply(plan, *, sessions, client, runtime, operator_id, physical=None):
     owned = {obj for item in plan["purges"] for obj in item["objects"]}
     expected_incoming = {tuple(key) for item in plan["purges"] for key in item["incoming"]}
     unowned_orphans = {f"{kind}:{ident}" for kind, ident in deleted_files - purged}
+    retained_files = [item["before"] for item in plan.get("business", {}).get("retained", ())]
+    from scripts import f118_history_permissions as permissions
+
+    async with global_session(sessions) as session:
+        if await permissions.absent_authorization(session, retained_files):
+            blocked("retained_orphan_authorization_changed")
+    unowned_orphans.update(f"{kind}:{row['id']}" for row in retained_files for kind in ("knowledge_file", "folder"))
     if owned or unowned_orphans:
         async for row in client.iter_tuples(consistency="HIGHER_CONSISTENCY"):
             if row["object"] in unowned_orphans or row["user"].partition("#")[0] in unowned_orphans:
@@ -994,7 +1067,10 @@ async def apply(plan, *, sessions, client, runtime, operator_id, physical=None):
                 and (row["user"], row["relation"], row["object"]) not in expected_incoming
             ):
                 blocked("purge_downstream_graph_changed")
-    identity, receipts = checksum(plan)[:32], []
+    identity = checksum(plan)[:32]
+    receipts = await permissions.apply_repairs(
+        plan, sessions=sessions, client=client, runtime=runtime, operator_id=operator_id
+    )
     for item in plan["parents"]:
         mode = item["mode"]
         with tenant_execution_scope(mode["tenant_id"]):
@@ -1116,6 +1192,10 @@ async def apply(plan, *, sessions, client, runtime, operator_id, physical=None):
         "levels": len(plan["levels"]),
         "parents": len(plan["parents"]),
         "purges": len(plan["purges"]),
+        "initializations": len(plan.get("initializations", ())),
+        "recoveries": len(plan.get("recoveries", ())),
+        "retained": len(retained_files),
+        "warnings": warning_summary(plan),
         "business_deletes": len(plan.get("business", {}).get("deletes", ())),
         "business_updates": len(plan.get("business", {}).get("updates", ())),
         "blocked": plan["blocked"],
@@ -1212,11 +1292,12 @@ async def arun(args):
                 "mode": "preview",
                 "plan": str(args.plan),
                 "sha256": saved_checksum,
-                **{key: len(plan[key]) for key in ("levels", "parents", "purges")},
+                **{key: len(plan[key]) for key in ("levels", "parents", "purges", "initializations", "recoveries")},
                 "business_deletes": len(plan["business"]["deletes"]),
                 "business_updates": len(plan["business"]["updates"]),
                 "orphan_payloads": len(plan["business"]["physical"]),
                 "blocked": plan["blocked"],
+                "warnings": warning_summary(plan),
             }
         plan = load_plan(args.plan)
         if plan["pin"] != pin:
@@ -1288,6 +1369,12 @@ async def arun(args):
                 physical=physical,
             ),
         }
+
+
+def warning_summary(plan):
+    from collections import Counter
+
+    return dict(Counter(item["reason"] for item in plan.get("business", {}).get("warnings", ())))
 
 
 def main(argv=None):

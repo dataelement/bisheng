@@ -47,8 +47,11 @@ from bisheng.knowledge.domain.repositories.unification_target_repository import 
     KnowledgeMigrationTargetRepository,
 )
 from bisheng.knowledge.domain.services.model_reference_extractor import (
-    KNOWLEDGE_MODEL_REFERENCE_EXTRACTOR_VERSION,
-    extract_knowledge_model_references,
+    KNOWLEDGE_MODEL_REFERENCE_EXTRACTOR_VERSION as KNOWLEDGE_MODEL_REFERENCE_EXTRACTOR_VERSION,
+)
+from bisheng.knowledge.domain.services.model_reference_extractor import (
+    LEGACY_KNOWLEDGE_MODEL_PREFIX,
+    knowledge_model_source_configuration,
 )
 from bisheng.llm.domain.repositories.migration_target_repository import (
     ModelMigrationTargetFact,
@@ -250,7 +253,7 @@ class UnificationSourceInventory:
             key, extractor, configuration, references, lifecycle, origins, revision = entry
             from bisheng.assistant.domain.services.reference_extractor import LEGACY_NAME_PREFIX
 
-            if extractor.startswith(LEGACY_NAME_PREFIX) and any(
+            if extractor.startswith((LEGACY_NAME_PREFIX, LEGACY_KNOWLEDGE_MODEL_PREFIX)) and any(
                 row["target_type"] == "model" for row in snapshots[key][2]
             ):
                 _blocked("legacy_assistant_existing_model_binding")
@@ -468,12 +471,12 @@ class UnificationSourceInventory:
                 yield RetiredInventoryRecord(root, None, lifecycle, digest, revision)
                 continue
             key = SourceKey(tenant, SourceType.KNOWLEDGE, str(row.id), "current")
-            refs = extract_knowledge_model_references(**configuration)
+            extractor, refs = knowledge_model_source_configuration(**configuration, retain_legacy=True)
             yield RootInventoryRecord(root, row.user_id, lifecycle, digest, 1, revision)
             entries.append(
                 (
                     key,
-                    KNOWLEDGE_MODEL_REFERENCE_EXTRACTOR_VERSION,
+                    extractor,
                     configuration,
                     normalize_references(refs),
                     lifecycle,

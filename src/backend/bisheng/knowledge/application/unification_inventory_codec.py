@@ -134,7 +134,7 @@ def _validate(tag, data):
     # The reference writer contract itself does not change in this repair.
     if tag == "run" and type(data) is dict and "preparation_policy_version" in data:
         schema = {**schema, "preparation_policy_version": "positive"}
-        if type(data["preparation_policy_version"]) is not int or data["preparation_policy_version"] != 2:
+        if type(data["preparation_policy_version"]) is not int or data["preparation_policy_version"] not in {2, 3}:
             _invalid()
     if tag == "run" and type(data) is dict and "physical_inventory_policy" in data:
         schema = {**schema, "physical_inventory_policy": "str"}
@@ -224,7 +224,7 @@ def _validate(tag, data):
         _invalid()
     if tag == "evidence_material" and data["material_kind"] not in {"backup", "schema"}:
         _invalid()
-    if tag == "file":
+    if tag in {"file", "rootless_file"}:
         for name in ("object_name", "preview_file_object_name", "bbox_object_name", "html_snapshot_object_name"):
             if data[name] not in (None, ""):
                 _value(data[name], "key")

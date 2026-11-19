@@ -11,7 +11,7 @@ from bisheng.knowledge.application.unification_permission_namespace import (
     namespace_plan_records,
 )
 from bisheng.knowledge.application.unification_sources import ReferenceInventoryRecord
-from bisheng.knowledge.application.unification_structural_retention import creator_retention
+from bisheng.knowledge.application.unification_structural_retention import creator_retention, rootless_file_retention
 from bisheng.knowledge.domain.repositories.unification_control_repository import (
     CreatorFact,
     UnificationControlRepository,
@@ -277,7 +277,9 @@ class UnificationPreflight:
             after = members.next_after
         return page.items, by_root, page.items[-1].knowledge_id
 
-    async def aiter_tenant(self, session, *, permission_planner: ResourceRetirementPlanner, planned_at):
+    async def aiter_tenant(
+        self, session, *, permission_planner: ResourceRetirementPlanner, planned_at, retain_rootless_files=False
+    ):
         tenant = get_current_tenant_id()
         namespace = PermissionNamespacePlan(permission_planner=permission_planner)
         catalog_plan = permission_planner.catalog_plan
@@ -321,6 +323,24 @@ class UnificationPreflight:
             "department_spaces",
         ):
             async for rows in self._pages(self.resources, "alist_" + method, session):
+                if method == "files" and retain_rootless_files:
+                    rootless = tuple(row for row in rows if row.knowledge_id not in spaces)
+                    if rootless:
+                        parents = tuple(sorted({row.knowledge_id for row in rootless}))
+                        if await self.resources.ainspect_existing_knowledge_ids(session, knowledge_ids=parents):
+                            _blocked("rootless_parent_exists_outside_tenant")
+                        ids = tuple(row.id for row in rootless)
+                        for start in range(0, len(ids), 199):
+                            if await self.permissions.ainspect_rootless_file_authorization(
+                                session, file_ids=ids[start : start + 199]
+                            ):
+                                _blocked("rootless_original_authorization_exists")
+                        for row in rootless:
+                            data = record_from_row(row).data
+                            proof = rootless_file_retention(data)
+                            yield "control", record_from_values("rootless_file", **data)
+                            yield "control", proof
+                        rows = tuple(row for row in rows if row.knowledge_id in spaces)
                 if method == "resources":
                     headers, member_rows, member_after = await self._membership_batch(session, rows, member_after)
                     existing = tuple(row.id for row in rows if row.type == 3)

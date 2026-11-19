@@ -88,6 +88,8 @@ _SECTIONS = {
         "space_member",
         "existing_space_creator_retention",
         "stranded_file_retention",
+        "rootless_file",
+        "rootless_file_retention",
     },
     "permission": {"resource_mode", "grant", "assignee", "visible_source"},
     "permission_namespace": {
@@ -431,7 +433,7 @@ class UnificationInventoryApplication:
         retained_creators = {}
         liveness, liveness_pending, liveness_operations = {}, [], {}
         async for section, record in self.preflight.aiter_tenant(
-            session, permission_planner=permission_planner, planned_at=planned_at
+            session, permission_planner=permission_planner, planned_at=planned_at, retain_rootless_files=True
         ):
             if record.record_type == "resource_mode":
                 data = record.data
@@ -630,7 +632,7 @@ class UnificationInventoryApplication:
                 raise ReferenceCoverageNotReadyError(reason="migration_required_native_ports_missing")
             await self.raw.avalidate_global_orphans(session)
             await self.raw.avalidate_registered_source_tenants(session)
-            await self.preflight.resources.avalidate_global_integrity(session)
+            await self.preflight.resources.avalidate_global_integrity(session, retain_rootless_files=True)
             await self.preflight.controls.avalidate_global_integrity(session)
             await self.permissions.avalidate_global_integrity(session)
             catalog = await self.permissions.aload_catalog_baseline(session, environment=environment)
@@ -674,7 +676,7 @@ class UnificationInventoryApplication:
             # broker/pidbox contents. Old frozen task pages remain readable.
             await pages.finish()
             common = {
-                "preparation_policy_version": 2,
+                "preparation_policy_version": 3,
                 "physical_inventory_policy": "bindings_only",
                 "writer_contract_version": writer_contract_version,
                 "environment": environment,

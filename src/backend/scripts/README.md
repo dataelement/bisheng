@@ -1673,11 +1673,32 @@ python scripts/prepare_f118_history.py --plan /secure/upgrade/f118-history.json 
 Preview saves a private, checksummed selected-row/FGA backup and plan using
 exclusive creation. Apply and retries read exactly that plan; never overwrite
 it with a new baseline. The adjacent `.events.jsonl` retains execution events.
-An active frozen Run is rejected. Missing/ambiguous parents, changed facts,
-unknown types or remaining downstreams are reported, never guessed away.
-Apply returns permission operation IDs; exit 2 means selected repairs completed
-but blocked items remain, and exit 3 means an error requiring the same plan to
-be inspected/resumed. Preview exit 0 does not certify migration readiness.
+An active frozen Run is rejected. Ambiguous ownership, changed facts, unknown
+types or remaining live downstreams stop apply before repair. Preview/apply
+classify deterministic repairs, retained historical invalidity and blockers;
+the ordinary commands above require no per-row SQL edits or force option.
+Apply returns permission operation IDs; exit 2 reports unresolved blockers,
+and exit 3 means an error requiring the same plan to be inspected/resumed.
+Preview exit 0 does not certify migration readiness.
+
+Flat historical files whose Knowledge parent is globally absent and whose SQL,
+FGA and saved references contain no authorization/live contribution are retained
+when the original physical index is unknown. Their full rows enter the immutable
+new M2 baseline and are checked again during conversion/resume/Coverage. No index
+is guessed and no physical data is deleted for these retained records. Populated
+Knowledge resources with old embedding names retain the raw name and original
+index, with a source fingerprint and a `legacy_embedding_preserved` warning.
+The source is invalid for model execution until explicitly reconfigured to a
+lawful model. New resource creation remains strict; there is no default fallback.
+
+Successful old NORMAL-library files lacking every permission mirror, FGA edge and
+historical operation can initialize only their original parent's INHERIT mode
+through a native RESOURCE_CREATE ledger. No personal or everyone Grant is added.
+An existing FAILED_CLOSED GRANT_MUTATION with an intact original ledger, matching
+Store/model and original version fence uses native checksum-bound forward recovery.
+Changed evidence or a failed native recovery stops execution. All newly supported
+repairs remain tied to the exact saved plan and operator on retry. Older frozen
+Run materials are not rewritten or assigned the new retention policy.
 
 For a historical deleted resource whose saved plan contains only one of the two
 `permission_enabled` technical markers, apply can automatically forward-recover

@@ -214,7 +214,9 @@ async def test_new_run_preview_reports_actual_data_blocker_instead_of_only_listi
     async with value.sessions() as session, session.begin():
         await session.execute(sa.delete(Run.__table__))
         await session.execute(
-            sa.update(KnowledgeFile.__table__).where(KnowledgeFile.id == 1).values(knowledge_id=999999)
+            # Rootless ordinary files are retained by the new closed policy;
+            # a rootless directory remains genuinely ambiguous and must block.
+            sa.update(KnowledgeFile.__table__).where(KnowledgeFile.id == 1).values(knowledge_id=999999, file_type=0)
         )
     value.store.enforce_closed = False
     objects_before = dict(value.artifacts.objects)

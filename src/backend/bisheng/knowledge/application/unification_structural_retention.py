@@ -13,7 +13,21 @@ from bisheng.knowledge.application.unification_inventory_codec import digest, re
 
 CREATOR_RETENTION = "existing_space_creator_retention"
 FILE_RETENTION = "stranded_file_retention"
-RETENTIONS = frozenset({CREATOR_RETENTION, FILE_RETENTION})
+ROOTLESS_FILE_RETENTION = "rootless_file_retention"
+RETENTIONS = frozenset({CREATOR_RETENTION, FILE_RETENTION, ROOTLESS_FILE_RETENTION})
+
+
+def rootless_file_retention(file):
+    if file["file_type"] != 1 or file["file_level_path"] not in (None, ""):
+        blocked("unknown_rootless_file_shape")
+    return record_from_values(
+        ROOTLESS_FILE_RETENTION,
+        tenant_id=file["tenant_id"],
+        space_id=file["knowledge_id"],
+        file_id=file["id"],
+        file_digest=file["row_digest"],
+        reason="preserve_original_file_with_absent_knowledge_parent",
+    )
 
 
 def retained_invalid_assistant_creator(root, source):
@@ -129,6 +143,7 @@ def _path(value):
 class StructuralRetentionInventoryVerifier:
     def __init__(self):
         self.resources, self.files, self.creators = {}, {}, {}
+        self.rootless_files = {}
         self.proofs = {tag: {} for tag in RETENTIONS}
         self.permissions, self.fga = Counter(), set()
         self.sources = []
@@ -163,7 +178,14 @@ class StructuralRetentionInventoryVerifier:
                 blocked("duplicate_proof")
             self.proofs[tag][key] = value
         elif kind == "baseline":
-            if tag in {"resource", "file"}:
+            if tag == "rootless_file":
+                if section != "control" or value["tenant_id"] != tenant_id:
+                    blocked("rootless_file_scope")
+                key = tenant_id, value["id"]
+                if key in self.rootless_files:
+                    blocked("duplicate_rootless_file")
+                self.rootless_files[key] = value
+            elif tag in {"resource", "file"}:
                 if section != "resources" or value["tenant_id"] != tenant_id:
                     blocked("resource_scope")
                 rows = self.resources if tag == "resource" else self.files
@@ -188,6 +210,27 @@ class StructuralRetentionInventoryVerifier:
                 self.fga.add(value["user"].split("#", 1)[0])
 
     def finish(self):
+        rootless_proofs = self.proofs[ROOTLESS_FILE_RETENTION]
+        if set(rootless_proofs) != set(self.rootless_files):
+            blocked("rootless_file_proof_set")
+        existing_roots = {row["id"] for row in self.resources.values()}
+        authorized_file_ids = {
+            ident
+            for (_, kind, ident), count in self.permissions.items()
+            if count and kind in {"folder", "knowledge_file"}
+        }
+        for key, file in self.rootless_files.items():
+            if (
+                key in self.files
+                or file["knowledge_id"] in existing_roots
+                or rootless_file_retention(file).data != rootless_proofs[key]
+                or self.permissions[key[0], "knowledge_file", str(key[1])]
+                or str(key[1]) in authorized_file_ids
+                or f"knowledge_file:{key[1]}" in self.fga
+                or f"folder:{key[1]}" in self.fga
+                or key[1] in self.file_reference_targets
+            ):
+                blocked("rootless_file_not_isolated")
         counts = Counter((v["tenant_id"], v["knowledge_id"]) for v in self.files.values())
         explained_creators = set()
         for key, proof in self.proofs[CREATOR_RETENTION].items():
@@ -269,6 +312,24 @@ async def validate_native_retentions(session, proofs, *, resources, controls, pe
     tenant = get_current_tenant_id()
     if any(proof["tenant_id"] != tenant for proof in proofs):
         blocked("live_tenant_changed")
+    rootless = tuple(p for p in proofs if p.get("reason") == "preserve_original_file_with_absent_knowledge_parent")
+    for offset in range(0, len(rootless), 199):
+        batch = rootless[offset : offset + 199]
+        file_ids = tuple(sorted(p["file_id"] for p in batch))
+        _, rows = await resources.aload_retention_rows(session, file_ids=file_ids)
+        by_id = {r.id: record_from_row(r).data for r in rows}
+        parents = tuple(sorted({p["space_id"] for p in batch}))
+        if await resources.ainspect_existing_knowledge_ids(session, knowledge_ids=parents):
+            blocked("rootless_parent_reappeared")
+        occupied = await permissions.ainspect_rootless_file_authorization(session, file_ids=file_ids)
+        for proof in batch:
+            if (
+                proof["file_id"] not in by_id
+                or proof["file_id"] in occupied
+                or rootless_file_retention(by_id[proof["file_id"]]).data != proof
+            ):
+                blocked("rootless_live_proof_changed")
+    proofs = tuple(p for p in proofs if p.get("reason") != "preserve_original_file_with_absent_knowledge_parent")
     resource_ids = tuple(sorted({p["space_id"] for p in proofs}))
     file_ids = tuple(sorted({p["file_id"] for p in proofs if "file_id" in p}))
     roots, files = {}, {}

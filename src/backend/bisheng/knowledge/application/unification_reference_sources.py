@@ -19,7 +19,7 @@ from bisheng.knowledge.application.unification_reference_state import (
 )
 from bisheng.knowledge.application.unification_sources import knowledge_business_revision_digest
 from bisheng.knowledge.domain.repositories.unification_inventory_repository import UnificationInventoryRepository
-from bisheng.knowledge.domain.services.model_reference_extractor import extract_knowledge_model_references
+from bisheng.knowledge.domain.services.model_reference_extractor import knowledge_model_source_configuration
 from bisheng.knowledge.domain.services.unification_fingerprints import digest
 from bisheng.llm.domain.services.default_reference_extractor import extract_model_default_references
 from bisheng.resource_reference.application.contracts import (
@@ -80,7 +80,9 @@ class ReferenceAfterSources:
                 "model": root.model,
                 "model_transition": json.loads(root.model_transition_json) if root.model_transition_json else None,
             }
-            references = extract_knowledge_model_references(**configuration)
+            extractor, references = knowledge_model_source_configuration(**configuration, retain_legacy=True)
+            if extractor != header.extractor_version:
+                blocked("legacy_knowledge_model_changed")
             revision = knowledge_business_revision_digest(root)
         else:
             lifecycle = (root.key,)
