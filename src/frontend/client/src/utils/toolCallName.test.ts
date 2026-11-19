@@ -1,8 +1,8 @@
 import { toolCallDisplayName } from './toolCallName';
 
 test.each(['dalle_image_generator', 'image_generation', 'DALLE_IMAGE_GENERATOR'])(
-  'image execution name %s displays as image_generator', (name) => {
-    expect(toolCallDisplayName(name)).toBe('image_generator');
+  'image execution name %s displays as image_generation', (name) => {
+    expect(toolCallDisplayName(name)).toBe('image_generation');
   },
 );
 
