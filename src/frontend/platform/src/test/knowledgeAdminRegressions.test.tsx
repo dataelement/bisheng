@@ -316,6 +316,15 @@ it("withholds privileged row actions without the corresponding server actions", 
   }
 });
 
+it.each([0, 1])("keeps delete but omits reference sources from the row menu for type %s", async (fileType) => {
+  actions = ["visible", "delete"];
+  rows = [file(11, { file_type: fileType })];
+  mount("workspace");
+  const opened = await menu();
+  expect(await within(opened).findByRole("menuitem", { name: "delete" })).toBeVisible();
+  expect(within(opened).queryByRole("menuitem", { name: "deletion.references" })).not.toBeInTheDocument();
+});
+
 it.each([0, 1])(
   "hides every mutating batch entry for a visible-only type %s",
   async (fileType) => {

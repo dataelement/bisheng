@@ -429,10 +429,6 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
           if (itemMenu?.actions.includes("delete") && isCurrent(itemMenu.token))
             void remove([item]);
         }}
-        onReferences={() => {
-          if (itemMenu?.actions.includes("delete") && isCurrent(itemMenu.token))
-            references([item]);
-        }}
         onRename={() => handleEdit(item)}
         onMove={() => setMove([{ id: item.id, type: item.file_type === 0 ? "folder" : "file" }])}
         onRetry={() => { void runBatch("retry", undefined, undefined, [item]); }}

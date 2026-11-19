@@ -39,7 +39,6 @@ interface SpaceDirectoryRowProps {
   selected?: boolean;
   onSelect?: (selected: boolean) => void;
   onDelete?: () => void;
-  onReferences?: () => void;
   onMenu: (open: boolean) => void;
   onOpen: () => void;
   onPreview: () => void;
@@ -67,7 +66,6 @@ export function SpaceDirectoryRow({
   selected,
   onSelect,
   onDelete,
-  onReferences,
   onMenu,
   onOpen,
   onPreview,
@@ -277,12 +275,6 @@ export function SpaceDirectoryRow({
               )}
               {menuReady && actions.includes("delete") && (
                 <>
-                  <DropdownItem
-                    icon={<Outlined.FileSearch aria-hidden />}
-                    onSelect={onReferences}
-                  >
-                    {t("deletion.references")}
-                  </DropdownItem>
                   <DropdownSeparator />
                   <DropdownItem
                     danger
