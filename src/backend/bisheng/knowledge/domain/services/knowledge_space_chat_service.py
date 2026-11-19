@@ -1,6 +1,7 @@
 import asyncio
 import json
 from collections.abc import AsyncIterator
+from copy import deepcopy
 from datetime import datetime
 from typing import Any
 from uuid import uuid4
@@ -9,6 +10,7 @@ from fastapi import HTTPException, Request
 from langchain_core.documents import Document
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.vectorstores import VectorStore
 from loguru import logger
 
 from bisheng.api.services.workstation import WorkStationService
@@ -31,6 +33,7 @@ from bisheng.common.errcode.knowledge import KnowledgeTypeNotSupportedError
 from bisheng.common.errcode.workstation import LLMRateLimitError
 from bisheng.common.utils.title_generator import generate_conversation_title_async
 from bisheng.core.prompts.manager import get_prompt_manager
+from bisheng.core.vectorstore.multi_retriever import MultiRetriever
 from bisheng.database.constants import MessageCategory
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.group_resource import ResourceTypeEnum
@@ -66,6 +69,23 @@ _background_tasks: set[asyncio.Task[Any]] = set()
 # ever applies to the first round of a conversation, and since the title starts
 # generating before retrieval it is normally ready well before the wait begins.
 SESSION_TITLE_WAIT_SECONDS = 2.0
+
+
+class _OpenApiRecallChannel(VectorStore):
+    """Feed a COFCO-projected score batch into the existing multi-KB retriever."""
+
+    def __init__(self, recall: asyncio.Task, channel: int):
+        self.recall, self.channel = recall, channel
+
+    async def asimilarity_search_with_relevance_scores(self, query, **kwargs):
+        return (await self.recall)[self.channel]
+
+    def similarity_search(self, query, k=4, **kwargs):
+        raise NotImplementedError("Async retrieval-only source")
+
+    @classmethod
+    def from_texts(cls, texts, embedding, metadatas=None, **kwargs):
+        raise NotImplementedError("Retrieval-only source")
 
 
 class KnowledgeSpaceChatService:
@@ -1002,24 +1022,160 @@ class KnowledgeSpaceChatService:
                     )
                 filters_by_kb[kb_id] = spec
 
-        per_kb_results = await asyncio.gather(
-            *(
-                self._aretrieve_chunks_dispatch(
-                    kb_id,
-                    query=query,
-                    tag_names=(filters_by_kb.get(kb_id) or {}).get("tags") or [],
-                    max_content=max_content,
-                )
-                for kb_id in knowledge_base_ids
+        target_ids = list(dict.fromkeys(knowledge_base_ids))
+        if len(target_ids) == 1:
+            kb_id = target_ids[0]
+            ranked = await self._aretrieve_chunks_dispatch(
+                kb_id,
+                query=query,
+                tag_names=(filters_by_kb.get(kb_id) or {}).get("tags") or [],
+                max_content=max_content,
             )
-        )
+        else:
+            ranked = await self._aretrieve_chunks_multi(target_ids, query, filters_by_kb, max_content)
 
-        flattened: list[tuple[int, Document]] = []
-        for chunks in per_kb_results:
-            flattened.extend(chunks)
-        flattened = flattened[:top_k]
-        await self._attach_document_update_time(flattened)
-        return flattened
+        ranked = ranked[:top_k]
+        await self._attach_document_update_time(ranked)
+        return ranked
+
+    async def _aretrieve_chunks_multi(
+        self, target_ids: list[int], query: str, filters_by_kb: dict[int, dict[str, Any]], max_content: int
+    ) -> list[tuple[int, Document]]:
+        """Keep this branch's gates/projections, then fuse two global rankings."""
+        from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+
+        visibility = self._visibility_service()
+        sources = []
+        # COFCO passes one version repository/AsyncSession to the chat service.
+        # Its business gates and index filters must be prepared sequentially.
+        for kb_id in target_ids:
+            kb = await KnowledgeDao.aquery_by_id(kb_id)
+            if not kb:
+                raise NotFoundError(msg=f"Knowledge resource {kb_id} not found")
+            tags = (filters_by_kb.get(kb_id) or {}).get("tags") or []
+            if kb.type == KnowledgeTypeEnum.SPACE.value:
+                await self._require_space_view_permission(kb_id)
+                file_ids = await self._resolve_kb_target_file_ids(kb_id, tags)
+            elif kb.type == KnowledgeTypeEnum.NORMAL.value:
+                await KnowledgeService.permission_service.ensure_knowledge_use_async(
+                    login_user=self.login_user, owner_user_id=kb.user_id, knowledge_id=kb_id
+                )
+                file_ids = await self._resolve_kb_file_ids_by_tags(kb_id, tags)
+            else:
+                raise KnowledgeTypeNotSupportedError()
+            if tags and not file_ids:
+                continue
+            index_filter = await visibility.build_index_prefilter(kb_id, file_ids)
+            if index_filter.is_empty:
+                continue
+            # These are the COFCO factories; no beta1 facade or F118 identity
+            # arguments are introduced into this older retrieval chain.
+            milvus = await KnowledgeRag.init_knowledge_milvus_vectorstore(self.login_user.user_id, knowledge=kb)
+            es = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=kb)
+            sources.append((kb_id, index_filter, milvus, es))
+        if not sources:
+            return []
+
+        projection_lock = asyncio.Lock()
+        recalls = [
+            asyncio.create_task(self._aretrieve_scored_kb(kb_id, index_filter, milvus, es, query, projection_lock))
+            for kb_id, index_filter, milvus, es in sources
+        ]
+        try:
+            multi = [
+                MultiRetriever(
+                    vectors=[_OpenApiRecallChannel(recall, channel) for recall in recalls],
+                    search_kwargs=[{} for _ in recalls],
+                )
+                for channel in (0, 1)
+            ]
+            vector_docs = await multi[0].ainvoke(query)
+            keyword_docs = await multi[1].ainvoke(query)
+        finally:
+            # Fail the complete request, without leaving tasks on a closing DB
+            # session when another KB's transport or permission check fails.
+            for recall in recalls:
+                if not recall.done():
+                    recall.cancel()
+            outcomes = await asyncio.gather(*recalls, return_exceptions=True)
+            for outcome in outcomes:
+                if isinstance(outcome, BaseException) and not isinstance(outcome, asyncio.CancelledError):
+                    logger.opt(exception=outcome).error("open_api multi-KB recall failed")
+
+        retriever = KnowledgeRetrieverTool(
+            vector_retriever=multi[0],
+            elastic_retriever=multi[1],
+            # Defer length limits until after global RRF; the API's budget is
+            # per KB, whereas the generic tool has one combined budget.
+            max_content=sum(len(doc.page_content) for doc in [*vector_docs, *keyword_docs]),
+            sort_by_source_and_index=False,
+        )
+        fused = retriever._rrf_rerank(vector_docs, keyword_docs, query)
+        lengths: dict[int, int] = {}
+        result: list[tuple[int, Document]] = []
+        for doc in fused:
+            kb_id = doc.metadata["knowledge_id"]
+            used = lengths.get(kb_id, 0)
+            if used > max_content:  # Same whole-chunk cutoff as KnowledgeRetrieverTool.
+                continue
+            lengths[kb_id] = used + len(doc.page_content)
+            result.append((kb_id, doc))
+        return result
+
+    async def _aretrieve_scored_kb(
+        self, kb_id: int, index_filter, milvus: VectorStore, es: VectorStore, query: str, projection_lock: asyncio.Lock
+    ) -> list[list[tuple[Document, float]]]:
+        """Preserve native scores through F029/F046 filters and OLD-name views."""
+        visibility = self._visibility_service()
+        conf = self._qa_filter_conf()
+        for attempt, multiplier in enumerate(
+            (conf.retrieval_initial_multiplier, conf.retrieval_expansion_multiplier), start=1
+        ):
+            vector_kwargs: dict[str, Any] = {"k": 100 * multiplier, "param": {"ef": 110}}
+            keyword_kwargs: dict[str, Any] = {"k": 100 * multiplier}
+            if index_filter.milvus_expr:
+                vector_kwargs["expr"] = index_filter.milvus_expr
+            if index_filter.es_filter:
+                keyword_kwargs["filter"] = deepcopy(index_filter.es_filter)
+            async with projection_lock:
+                projected_query = await visibility.project_mutation_retrieval_query(space_id=kb_id, query=query)
+            vector_rows = await milvus.asimilarity_search_with_relevance_scores(projected_query, **vector_kwargs)
+            keyword_rows = await es.asimilarity_search_with_relevance_scores(projected_query, **keyword_kwargs)
+            rows = [*vector_rows, *keyword_rows]
+            documents = [
+                doc.model_copy(update={"metadata": {**doc.metadata, "knowledge_id": kb_id}}) for doc, _ in rows
+            ]
+            async with projection_lock:
+                # F046 can expose the old file name/body while rename/move is
+                # pending. Project copies, keeping each native score paired.
+                documents = await visibility.project_mutation_retrieval_names(space_id=kb_id, documents=documents)
+                permitted = await visibility.post_filter_retrievable_files(
+                    kb_id,
+                    {
+                        int(doc.metadata["document_id"])
+                        for doc in documents
+                        if doc.metadata.get("document_id") is not None
+                    },
+                )
+            projected_rows = [(doc, score) for doc, (_, score) in zip(documents, rows, strict=True)]
+            split = len(vector_rows)
+            channels = [
+                [(doc, score) for doc, score in channel if int(doc.metadata.get("document_id", -1)) in permitted]
+                for channel in (projected_rows[:split], projected_rows[split:])
+            ]
+            logger.info(
+                "permission_filter | space_id={} strategy={} accessible_ids_size={} "
+                "prefilter_candidate_size={} retrieval_attempts={} post_filter_dropped_count={}",
+                kb_id,
+                index_filter.strategy,
+                index_filter.accessible_size,
+                len(rows),
+                attempt,
+                len(rows) - sum(map(len, channels)),
+            )
+            if any(channels):
+                break
+        return channels
 
     async def _attach_document_update_time(self, results: list[tuple[int, Document]]) -> None:
         """Annotate each chunk's metadata with its source file's latest update time.

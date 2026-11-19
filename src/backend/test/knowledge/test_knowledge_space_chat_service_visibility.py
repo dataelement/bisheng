@@ -32,6 +32,15 @@ def _make_doc(file_id: int, content: str = "") -> Document:
     return Document(page_content=content or f"chunk-{file_id}", metadata={"document_id": file_id})
 
 
+def _mock_visibility():
+    # COFCO's F046 hooks perform separate DB reads. Isolate those transports
+    # while retaining the permission/retry assertions in these F029 tests.
+    return MagicMock(
+        project_mutation_retrieval_query=AsyncMock(side_effect=lambda *, space_id, query: query),
+        project_mutation_retrieval_names=AsyncMock(side_effect=lambda *, space_id, documents: documents),
+    )
+
+
 def _make_service(*, is_admin: bool = False, user_id: int = 7) -> KnowledgeSpaceChatService:
     login_user = MagicMock()
     login_user.user_id = user_id
@@ -55,7 +64,7 @@ def _make_service(*, is_admin: bool = False, user_id: int = 7) -> KnowledgeSpace
 async def test_retrieve_and_filter_empty_strategy_skips_invocation(monkeypatch):
     """IndexFilter.strategy='empty' → returns [] without touching retriever."""
     svc = _make_service()
-    visibility = MagicMock()
+    visibility = _mock_visibility()
     visibility.build_index_prefilter = AsyncMock(return_value=IndexFilter(strategy="empty", accessible_size=0))
     visibility.post_filter_retrievable_files = AsyncMock()
     monkeypatch.setattr(svc, "_visibility_service", lambda: visibility)
@@ -79,7 +88,7 @@ async def test_retrieve_and_filter_empty_strategy_skips_invocation(monkeypatch):
 async def test_retrieve_and_filter_first_attempt_satisfies(monkeypatch):
     """First attempt returns docs all of which pass post-filter → no expansion."""
     svc = _make_service()
-    visibility = MagicMock()
+    visibility = _mock_visibility()
     visibility.build_index_prefilter = AsyncMock(
         return_value=IndexFilter(strategy="in", accessible_size=3, milvus_expr="document_id in [1, 2, 3]"),
     )
@@ -122,7 +131,7 @@ async def test_retrieve_and_filter_first_attempt_satisfies(monkeypatch):
 async def test_retrieve_and_filter_post_filter_drops_some(monkeypatch):
     """First attempt returns docs but only a subset passes post-filter."""
     svc = _make_service()
-    visibility = MagicMock()
+    visibility = _mock_visibility()
     visibility.build_index_prefilter = AsyncMock(return_value=IndexFilter(strategy="none", accessible_size=10))
     # Only file_ids 1 and 3 are permitted; 2 and 4 dropped.
     visibility.post_filter_retrievable_files = AsyncMock(return_value={1, 3})
@@ -158,7 +167,7 @@ async def test_retrieve_and_filter_post_filter_drops_some(monkeypatch):
 async def test_retrieve_and_filter_capped_at_two_attempts(monkeypatch):
     """AD-03: if both attempts produce 0 survivors, stop; no third attempt."""
     svc = _make_service()
-    visibility = MagicMock()
+    visibility = _mock_visibility()
     visibility.build_index_prefilter = AsyncMock(return_value=IndexFilter(strategy="none", accessible_size=100))
     visibility.post_filter_retrievable_files = AsyncMock(return_value=set())
     monkeypatch.setattr(svc, "_visibility_service", lambda: visibility)
@@ -195,7 +204,7 @@ async def test_retrieve_and_filter_capped_at_two_attempts(monkeypatch):
 async def test_retrieve_and_filter_expansion_succeeds_second_attempt(monkeypatch):
     """First attempt → 0 survivors; second attempt → survivors. Used."""
     svc = _make_service()
-    visibility = MagicMock()
+    visibility = _mock_visibility()
     visibility.build_index_prefilter = AsyncMock(
         return_value=IndexFilter(strategy="in", accessible_size=5, milvus_expr="document_id in [1,2,3,4,5]")
     )
@@ -245,7 +254,7 @@ async def test_retrieve_and_filter_logs_structured_fields(monkeypatch, caplog):
     """AC-27: each retrieval attempt writes the permission_filter log fields."""
 
     svc = _make_service()
-    visibility = MagicMock()
+    visibility = _mock_visibility()
     visibility.build_index_prefilter = AsyncMock(
         return_value=IndexFilter(strategy="in", accessible_size=2, milvus_expr="document_id in [1,2]")
     )

@@ -95,7 +95,7 @@ Content-Type: application/json
 
 #### `max_content` 的工作机制
 
-由底层 `KnowledgeRetrieverTool` 在 RRF 合并后按字符总长度截断。这是**单 KB 内**的限制，多 KB 调用每个库独立应用此上限。最终再用 `top_k` 全局截断。
+RRF 融合排序后，每个 KB 独立累计文本长度并应用此上限，最后按融合排名取前 `top_k` 条。沿用 `KnowledgeRetrieverTool` 的整块保留方式：累计长度超过上限后停止纳入该库的后续 chunk，跨过上限的整块仍会保留。
 
 ---
 
@@ -143,12 +143,12 @@ Content-Type: application/json
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| `data.chunks` | array | 检索到的 chunks，按 KB 顺序拼接后取 `top_k` 截断。**单库内**按 RRF 相关度排序；**跨库间**按 `knowledge_base_ids` 入参的顺序串接。 |
+| `data.chunks` | array | 检索到的 chunks。多库两路召回分别用已有 `MultiRetriever` 按原始分数跨库排序，再统一 RRF 融合去重、应用每库 `max_content` 后取前 `top_k` 条。库在入参中的位置不赋予结果优先级。 |
 | `data.total` | int | 实际返回的 chunks 数量（≤ `top_k`）。 |
 | `status_code` | int | 200 表示成功；非 200 见错误码表。 |
 | `status_message` | string | 状态描述。 |
 
-> 注意：当前版本不返回相关度 `score`。如下游需要重排/二次过滤，建议依赖返回顺序（同一 KB 内已按 RRF 排序）。
+> 注意：当前版本不返回相关度 `score`，返回顺序为 RRF 融合排名。下游可按需进一步重排。
 
 ---
 
@@ -282,22 +282,23 @@ def bisheng_retrieve(query: str, knowledge_base_ids: list[int], top_k: int = 10)
 
 ### 7.1 检索流程（内部实现）
 
-每个 KB 独立执行以下流程，最终结果合并：
+本中粮分支由 v2 端点直接调用 `KnowledgeSpaceChatService.aretrieve_chunks`，没有 beta1 的统一检索门面。单库沿用原路径，多库流程如下：
 
-1. 权限校验：default operator 是否对该 KB 有 view 权限。
+1. 按端点解析出的执行身份逐库校验：知识空间走原空间可见性门，文档库走库级 `use`；不存在或不支持的类型仍按既有错误拒绝。
 2. 解析过滤：tag 名（如有）→ tag id → file id 列表。无对应文件时该 KB 返回空。
-3. 构建过滤器：file id 列表 + 主版本过滤（排除已废弃的文档版本）→ Milvus expr + ES filter。
-4. 双路召回：Milvus 向量检索 + Elasticsearch 全文检索，各取 top 100。
-5. RRF 合并：两路结果按 Reciprocal Rank Fusion 融合排序。
-6. `max_content` 截断：从前往后累加 chunk 文本长度，超过阈值截断。
+3. 复用本分支 `build_index_prefilter`，保留标签、主版本和 F046 未发布/删除拦截，将过滤条件推入 Milvus / ES。
+4. 每库双路召回保留原始分数；检索前调用该库的 `project_mutation_retrieval_query`，召回后调用 `project_mutation_retrieval_names` 保留审批期的名称/正文投影，再经过 `post_filter_retrievable_files` 兜底过滤。
+5. 候选数沿用 `100 × knowledge_qa_filter.retrieval_initial_multiplier`；过滤后两路均为空的库最多按 `retrieval_expansion_multiplier` 扩量一次。
+6. 两路各自用 `MultiRetriever` 形成跨库分数排名，再交给 `KnowledgeRetrieverTool` 做一次 RRF 融合与文本去重。
+7. 按融合排名应用每库 `max_content`，再截取前 `top_k` 条，补齐文档更新时间。
 
-多 KB 间：使用 `asyncio.gather` 并发执行，按 `knowledge_base_ids` 顺序合并，最后 `top_k` 截断。
+多库搜索 I/O 可并发；使用请求级版本仓储的过滤与审批投影串行执行。任一库失败时整请求失败并取消、等待同级检索任务；权限服务故障仍由本分支端点映射为既有 503/26030。
 
 ### 7.2 性能注意
 
 - 单 KB 检索延迟约等于一次 Milvus query + 一次 ES query 的串行最大值。
 - 多 KB 是并发的，所以延迟不显著叠加。
-- `max_content` 不影响检索阶段的 candidate 数量（始终是 top 100），只决定最终保留的 chunk 数。
+- `max_content` 不影响候选数量，候选数由两轮检索倍率配置决定；它限制每个库最终保留的文本量。
 - `top_k` 大时建议同步调大 `max_content`，否则可能在 `max_content` 截断后就已经少于 `top_k` 个 chunk。
 
 ### 7.3 多租户
@@ -347,7 +348,7 @@ def bisheng_retrieve(query: str, knowledge_base_ids: list[int], top_k: int = 10)
 ## 10. FAQ
 
 **Q：能跨多个知识库返回结果时按全局相关度排序吗?**
-A：当前实现按 KB 顺序串接，未做跨库 score 归一化。如下游对全局排序有强需求，可在调用前把同一类知识库分组、或在自己侧再做一次重排。
+A：可以。cofco-1118 已修复逐库拼接后截断的问题，沿用已有多库工具分别对两路候选按分数跨库排序，再统一 RRF 并取 `top_k`。没有另加跨模型或 ES 索引的分数校准；需要更细排序时可在下游 rerank。
 
 **Q：top_k 设置成 50 但只返回了 10 条，是 bug 吗?**
 A：很可能是 `max_content` 提前截断了。调大 `max_content`，或检查知识库实际命中量。
