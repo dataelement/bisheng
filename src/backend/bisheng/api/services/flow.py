@@ -199,6 +199,16 @@ class FlowService(BaseService):
         if scope:
             RegistrationRepository().manage_offline_version(scope, flow_id, version_id)
             await cls.update_flow_hook(request, login_user, flow_info)
+            from bisheng.workflow.application.kunlian_snapshot_sync import notify_kunlian_workflow_snapshot_safe
+
+            await notify_kunlian_workflow_snapshot_safe(
+                tenant_id=flow_info.tenant_id or login_user.tenant_id,
+                user_id=login_user.user_id,
+                workflow_id=flow_id,
+                include_version=True,
+                current_version_id=version_info.id,
+                current_version_name=version_info.name,
+            )
             return resp_200()
 
         # Modify the version selected by the user for the current version
@@ -215,6 +225,16 @@ class FlowService(BaseService):
             return NotFoundVersionError.return_resp()
 
         await cls.update_flow_hook(request, login_user, flow_info)
+        from bisheng.workflow.application.kunlian_snapshot_sync import notify_kunlian_workflow_snapshot_safe
+
+        await notify_kunlian_workflow_snapshot_safe(
+            tenant_id=flow_info.tenant_id or login_user.tenant_id,
+            user_id=login_user.user_id,
+            workflow_id=flow_id,
+            include_version=True,
+            current_version_id=version_info.id,
+            current_version_name=version_info.name,
+        )
         return resp_200()
 
     @classmethod
@@ -273,6 +293,24 @@ class FlowService(BaseService):
         if not version_info:
             return NotFoundVersionError.return_resp()
         flow_info = await cls.judge_flow_write_permission(user, version_info.flow_id)
+        was_current = version_info.is_current == 1
+        old_version_name = version_info.name
+
+        async def _notify_if_current_name_changed(saved_version) -> None:
+            saved_name = (
+                saved_version.get("name") if isinstance(saved_version, dict) else getattr(saved_version, "name", None)
+            )
+            if was_current and saved_name and saved_name != old_version_name:
+                from bisheng.workflow.application.kunlian_snapshot_sync import notify_kunlian_workflow_snapshot_safe
+
+                await notify_kunlian_workflow_snapshot_safe(
+                    tenant_id=flow_info.tenant_id or user.tenant_id,
+                    user_id=user.user_id,
+                    workflow_id=flow_info.id,
+                    include_version=True,
+                    current_version_id=version_id,
+                    current_version_name=saved_name,
+                )
 
         from bisheng.workflow.application.kunlian_workflow_management import workflow_scope
         from bisheng.workflow.domain.repositories.kunlian_registration import RegistrationRepository
@@ -283,6 +321,7 @@ class FlowService(BaseService):
                 data=flow_version.data, name=flow_version.name, description=flow_version.description,
             )
             await cls.update_flow_hook(request, user, flow_info)
+            await _notify_if_current_name_changed(updated)
             return resp_200(data=updated)
 
         if version_info.is_current == 1 and flow_info.status == FlowStatus.ONLINE.value and flow_version.data:
@@ -297,6 +336,7 @@ class FlowService(BaseService):
                 version_id, data=flow_version.data, name=flow_version.name, description=flow_version.description
             )
             await cls.update_flow_hook(request, user, flow_info)
+            await _notify_if_current_name_changed(updated)
             return resp_200(data=updated)
 
         version_info.name = flow_version.name if flow_version.name else version_info.name
@@ -307,6 +347,7 @@ class FlowService(BaseService):
         flow_version = await FlowVersionDao.aupdate_version(version_info)
 
         await cls.update_flow_hook(request, user, flow_info)
+        await _notify_if_current_name_changed(flow_version)
         return resp_200(data=flow_version)
 
     @classmethod

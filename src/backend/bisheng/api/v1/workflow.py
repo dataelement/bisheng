@@ -638,6 +638,20 @@ async def update_flow(
         user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION, trace_id=trace_id_var.get()
     )
     await FlowService.update_flow_hook(request, login_user, db_flow)
+    if any(field in flow_data for field in ("name", "description", "status")):
+        from bisheng.workflow.application.kunlian_snapshot_sync import notify_kunlian_workflow_snapshot_safe
+
+        await notify_kunlian_workflow_snapshot_safe(
+            tenant_id=db_flow.tenant_id or login_user.tenant_id,
+            user_id=login_user.user_id,
+            workflow_id=db_flow.id,
+            include_name="name" in flow_data,
+            name=db_flow.name,
+            include_description="description" in flow_data,
+            description=db_flow.description,
+            include_status="status" in flow_data,
+            status=db_flow.status,
+        )
     return resp_200(db_flow)
 
 

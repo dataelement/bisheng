@@ -62,6 +62,10 @@ from bisheng.worker.telemetry.mid_table import (
 from bisheng.worker.tenant_reconcile.tasks import reconcile_user_tenant_assignments
 from bisheng.worker.test.test import add
 from bisheng.worker.workflow.kunlian_runtime import run as run_kunlian_workflow
+from bisheng.worker.workflow.kunlian_snapshot import (
+    deliver_workflow_snapshot,
+    reconcile_workflow_snapshots,
+)
 from bisheng.worker.workflow.tasks import continue_workflow, execute_workflow, stop_workflow
 
 register_dsh_tasks(bisheng_celery)
@@ -72,12 +76,14 @@ __all__ = [
     "cleanup_succeeded_failed_tuples",
     "continue_workflow",
     "copy_qa_knowledge_celery",
+    "deliver_workflow_snapshot",
     "dispatch_information_article_poll",
     "dispatch_information_subscription_reconcile",
     "dispatch_personal_skill_orphan_sweep",
     "dispatch_sync",
     "execute_approval_outbox",
     "execute_workflow",
+    "reconcile_workflow_snapshots",
     "file_copy_celery",
     "insert_qa_celery",
     "migrate_file_vectors",

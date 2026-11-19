@@ -1312,6 +1312,22 @@ class WorkFlowService(BaseService):
         from bisheng.workflow.application.kunlian_workflow_management import workflow_scope
 
         registration_scope = workflow_scope(getattr(db_flow, "tenant_id", None), flow_id, user=login_user)
+
+        async def _notify_status_snapshot() -> None:
+            from bisheng.workflow.application.kunlian_snapshot_sync import notify_kunlian_workflow_snapshot_safe
+
+            is_online = status == FlowStatus.ONLINE.value
+            await notify_kunlian_workflow_snapshot_safe(
+                tenant_id=getattr(db_flow, "tenant_id", None) or login_user.tenant_id,
+                user_id=login_user.user_id,
+                workflow_id=flow_id,
+                include_status=True,
+                status=status,
+                include_version=is_online,
+                current_version_id=version_info.id if is_online else None,
+                current_version_name=version_info.name if is_online else None,
+            )
+
         if status == FlowStatus.ONLINE.value:
             def validate(name, graph):
                 # F132: memory retriever nodes need the start-node switch on and a valid limit (AC-85, AC-80)
@@ -1335,6 +1351,7 @@ class WorkFlowService(BaseService):
                 await telemetry_service.log_event(
                     user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION, source=flow_id,
                 )
+                await _notify_status_snapshot()
                 return
 
             validate(db_flow.name, version_info.data)
@@ -1352,6 +1369,7 @@ class WorkFlowService(BaseService):
                     event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION,
                     trace_id=trace_id_var.get(),
                 )
+                await _notify_status_snapshot()
                 return
 
             if uses_platform_agent(version_info.data) or uses_platform_agent(db_flow.data):
@@ -1363,6 +1381,7 @@ class WorkFlowService(BaseService):
                     event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION,
                     trace_id=trace_id_var.get(),
                 )
+                await _notify_status_snapshot()
                 return
 
             await FlowVersionDao.change_current_version(flow_id, version_info)
@@ -1379,6 +1398,7 @@ class WorkFlowService(BaseService):
         await telemetry_service.log_event(
             user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION, trace_id=trace_id_var.get()
         )
+        await _notify_status_snapshot()
         return
 
     @classmethod
