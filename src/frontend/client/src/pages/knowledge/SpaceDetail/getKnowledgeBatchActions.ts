@@ -2,7 +2,7 @@ import type { GetKnowledgeBatchActionsOptions } from "./knowledgeSpaceTypes";
 import { Outlined } from "bisheng-icons";
 export function getKnowledgeBatchActions({
   selectedFiles,
-  canManageMembers,
+  canEditSpace,
   versionManagementEnabled,
   handleProcessSimilar,
   handleManagePermission,
@@ -52,7 +52,7 @@ export function getKnowledgeBatchActions({
       onClick: handleBatchRetry,
     },
     versionManagementEnabled &&
-      canManageMembers &&
+      canEditSpace &&
       hasSimilarSelected && {
         key: "similar",
         label: localize("com_knowledge.version.header_process_similar_label"),

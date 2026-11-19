@@ -202,7 +202,7 @@ export interface UseKnowledgeSelectionActionsOptions {
 export interface GetKnowledgeBatchActionsOptions {
   selectedFiles: Set<string>;
   isAdmin: boolean;
-  canManageMembers: boolean;
+  canEditSpace: boolean;
   versionManagementEnabled: boolean;
   handleProcessSimilar: () => void;
   handleManagePermission: (fileId: string) => void;

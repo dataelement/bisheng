@@ -76,8 +76,6 @@ interface FileCardProps {
   onOpenVersionManagement?: (file: KnowledgeFile) => void;
   /** Open the version-history sheet for this file. */
   onOpenVersionHistory?: (file: KnowledgeFile) => void;
-  /** Whether the current user can manage members (gates the "similar" pill). */
-  canManageMembers?: boolean;
   /** Space edit permission. Version mutations require it. */
   canManageVersions?: boolean;
   disableClickNavigate?: boolean;
@@ -124,7 +122,6 @@ export function FileCard({
   versionManagementEnabled = false,
   onOpenVersionManagement,
   onOpenVersionHistory,
-  canManageMembers = false,
   canManageVersions = false,
   disableClickNavigate = false,
   hideSelectionCheckbox = false,
@@ -295,7 +292,7 @@ export function FileCard({
   const renderSimilarTag = (overlay = false) => {
     if (!(
       versionManagementEnabled &&
-      canManageMembers &&
+      canManageVersions &&
       file.has_similar &&
       !file.is_multi_version &&
       file.status === FileStatus.SUCCESS

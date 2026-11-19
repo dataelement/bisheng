@@ -48,9 +48,6 @@ export function useDirectoryDeletion({
       await onDeleted();
     }
   };
-  const references = (items: KnowledgeSpaceChild[]) => {
-    void deletion.open({ spaceId, kind: "files", items: selections(items) }, true);
-  };
   return {
     deletion,
     selectedKeys,
@@ -58,6 +55,5 @@ export function useDirectoryDeletion({
     selectionError,
     handleSelection,
     remove,
-    references,
   };
 }
