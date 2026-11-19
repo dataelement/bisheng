@@ -443,7 +443,9 @@ async def test_consumed_copy_keeps_original_actor_and_frozen_defaults_across_fre
         assert (await session.get(Knowledge, first["knowledge"].id)).description != "A later description"
 
 
-@pytest.mark.parametrize("damage", [None, "source_ref", "source_fingerprint", "subject_id", "protected"])
+@pytest.mark.parametrize(
+    "damage", [None, "live_source_changed", "source_ref", "source_fingerprint", "subject_id", "protected"]
+)
 async def test_copy_normalizes_legacy_source_and_still_rejects_actual_target_tampering(copying, damage):
     from bisheng.common.errcode.permission import PermissionPublishNotReadyError
 
@@ -504,7 +506,29 @@ async def test_copy_normalizes_legacy_source_and_still_rejects_actual_target_tam
         ordinary = [row for row in rows if not row.protected]
         assert {row.source_ref for row in ordinary} == {"user:686", "142#member"}
         assert len([row for row in rows if row.protected]) == 1
-    if damage:
+    if damage == "live_source_changed":
+        async with ctx.sessions() as session, session.begin():
+            source_row = await session.get(PermissionGrantAssignee, 902)
+            source_row.state = "DELETED"
+            source_mode = (
+                (
+                    await session.execute(
+                        sa.select(ResourcePermissionMode).where(
+                            ResourcePermissionMode.resource_type == "knowledge_space",
+                            ResourcePermissionMode.resource_id == "40",
+                        )
+                    )
+                )
+                .scalars()
+                .one()
+            )
+            source_mode.version += 1
+        async with ctx.sessions() as session, session.begin():
+            (await session.get(Knowledge, sid)).state = 2
+        await owner.aensure_logical(sid, jid)
+        async with ctx.sessions() as session:
+            assert (await session.get(Knowledge, sid)).state == 1
+    elif damage:
         async with ctx.sessions() as session, session.begin():
             row = await session.get(PermissionGrantAssignee, ordinary[0].id)
             setattr(row, damage, True if damage == "protected" else "tampered")
@@ -516,6 +540,12 @@ async def test_copy_normalizes_legacy_source_and_still_rejects_actual_target_tam
             await copying.bridge.aexecute_or_resume(
                 source=source, target=target, mode=mode, actor=actor, owner_user_id=7
             )
+        async with ctx.sessions() as session, session.begin():
+            (await session.get(Knowledge, sid)).state = 2
+        with pytest.raises(PermissionPublishNotReadyError):
+            await owner.aensure_logical(sid, jid)
+        async with ctx.sessions() as session:
+            assert (await session.get(Knowledge, sid)).state == 2
     else:
         await owner.aensure_logical(sid, jid)
 
