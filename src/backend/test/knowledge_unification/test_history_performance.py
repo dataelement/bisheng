@@ -66,6 +66,22 @@ def test_disk_snapshot_and_streaming_hash_keep_legacy_plan_exactly(changed):
     assert snapshot == original
 
 
+@pytest.mark.parametrize("count", [200, 400])
+def test_nested_large_row_hash_preserves_original_canonical_bytes(count):
+    snapshot = {name: [] for name in business.models()}
+    snapshot.update(_model_names=["模型😀"], _legacy_embedding_names=["legacy"])
+    values = [None, True, False, -0.0, 0.1, 1e-300, 1e300, 9007199254740993, "汉字😀"]
+    snapshot["flow"] = [
+        {
+            "id": str(i),
+            "tenant_id": 1,
+            "data": {"nodes": [{"id": "n", "parameters": {"z": values, "a": [values] * 10}}]},
+        }
+        for i in range(count)
+    ]
+    assert business.state_digest(snapshot) == legacy_digest(snapshot)
+
+
 @pytest.mark.parametrize("failure", [None, RuntimeError, asyncio.CancelledError])
 async def test_scratch_is_private_and_removed_on_every_command_exit(failure):
     locations = []

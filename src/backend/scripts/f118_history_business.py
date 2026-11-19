@@ -122,8 +122,10 @@ def state_digest(snapshot):
                 row = {key: value for key, value in row.items() if key not in {"level", "update_time"}}
             if position:
                 add(",")
-            for fragment in encoder.iterencode(row):
-                add(fragment)
+            # Public encode() uses the C encoder instead of yielding every JSON
+            # primitive through Python. Still encode only one already-loaded row,
+            # never the complete inventory; schema-1 canonical bytes are identical.
+            add(encoder.encode(row))
         add("]")
     add("}")
     return result.hexdigest()
