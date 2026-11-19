@@ -30,6 +30,7 @@ export function KnowledgeSpaceOverlays({ model }: KnowledgeSpaceOverlaysProps) {
     editingTagsFileId,
     isBatchTagging,
     canEditSpace,
+    canReadSpaceTags,
     versionManagementEnabled,
     spaceIdNum,
     versionMgmtFile,
@@ -69,6 +70,7 @@ export function KnowledgeSpaceOverlays({ model }: KnowledgeSpaceOverlaysProps) {
       {/* Edit Tags Modal */}
       <EditTagsModal
         canManageSpaceTags={canEditSpace}
+        canReadSpaceTags={canReadSpaceTags}
         isOpen={!!editingTagsFileId || isBatchTagging}
         onClose={handleCloseEditTags}
         onSaved={handleTagsSaved}

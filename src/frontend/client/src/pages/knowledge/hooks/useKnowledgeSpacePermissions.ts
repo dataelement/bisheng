@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getMyResourcePermissions } from "~/api/permission";
 
 export const KNOWLEDGE_SPACE_ACTIONS = [
+    "visible",
     "edit",
     "delete",
     "share",

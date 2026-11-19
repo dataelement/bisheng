@@ -28,6 +28,7 @@ import { getFullWidthLength } from "~/utils";
 interface EditTagsModalProps {
   isOpen: boolean;
   canManageSpaceTags?: boolean;
+  canReadSpaceTags?: boolean;
   onClose: (confirmClose: boolean) => void;
   /** Called after tags are saved successfully so parent can refresh */
   onSaved?: () => void;
@@ -46,6 +47,7 @@ interface EditTagsModalProps {
 export function EditTagsModal({
   isOpen,
   canManageSpaceTags = false,
+  canReadSpaceTags = false,
   onClose,
   onSaved,
   onBatchSaved,
@@ -58,6 +60,8 @@ export function EditTagsModal({
 }: EditTagsModalProps) {
   const localize = useLocalize();
   const [spaceTags, setSpaceTags] = useState<SpaceTag[]>([]);
+  const [tagsLoadFailed, setTagsLoadFailed] = useState(false);
+  const [tagsLoadAttempt, setTagsLoadAttempt] = useState(0);
   // IDs of tags selected for this file
   const [selectedTagIds, setSelectedTagIds] = useState<Set<number>>(new Set());
   const [inputValue, setInputValue] = useState("");
@@ -76,10 +80,22 @@ export function EditTagsModal({
     setInputValue("");
     setPendingNames([]);
     setSelectedTagIds(new Set(initialTagIds));
-    if (isBatchMode)
-      setSpaceTags([...new Map((availableTags ?? []).map((tag) => [tag.id, tag])).values()]);
-    else getSpaceTagsApi(spaceId).then(setSpaceTags).catch(showApiError);
+    setSpaceTags([...new Map((availableTags ?? []).map((tag) => [tag.id, tag])).values()]);
   }, [isOpen, spaceId]);
+
+  useEffect(() => {
+    setTagsLoadFailed(false);
+    if (!isOpen || !spaceId || (isBatchMode && !canReadSpaceTags)) return;
+    let active = true;
+    void getSpaceTagsApi(spaceId).then((tags) => {
+      if (active) setSpaceTags((known) => [...new Map([...known, ...tags].map((tag) => [tag.id, tag])).values()]);
+    }).catch((error: unknown) => {
+      if (!active) return;
+      setTagsLoadFailed(true);
+      showApiError(error);
+    });
+    return () => { active = false; };
+  }, [isOpen, spaceId, isBatchMode, canReadSpaceTags, tagsLoadAttempt]);
 
   // Toggle a space tag selection
   const toggleTag = (tag: SpaceTag) => {
@@ -284,7 +300,9 @@ export function EditTagsModal({
           </DialogHeader>
 
           <div className="flex flex-1 flex-col gap-4 px-5 py-3 max-md:px-4 max-md:py-4">
-            {!canManageSpaceTags && <Alert type="info" live description={localize("com_knowledge.tag_permissions.space_required")} />}
+            {tagsLoadFailed ? <Alert type="info" live description={localize("com_knowledge.batch.tags_load_failed")}
+              actions={[{ label: localize("com_ui_retry"), onClick: () => setTagsLoadAttempt((old) => old + 1) }]} />
+              : !canManageSpaceTags && <Alert type="info" live description={localize("com_knowledge.tag_permissions.space_required")} />}
             {/* Tags Input Box */}
             <div
               className="relative flex min-h-8 cursor-text flex-wrap items-center gap-1 rounded-lg border border-border-base bg-white px-3 py-[5px] pr-[40px] transition-[border-color,box-shadow] focus-within:border-[#ddd] focus-within:shadow-[0_0_0_2px_#f1f5f9]"
