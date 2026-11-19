@@ -12,6 +12,7 @@ from bisheng.common.errcode.dsh import DshSessionRevokedError, DshUserDisabledEr
 from bisheng.core.context import tenant as tenant_context
 from bisheng.dsh.api.dependencies import get_runtime
 from bisheng.dsh.api.endpoints.models import router
+from bisheng.dsh.domain.repositories.identities import CurrentIdentityRecords
 from bisheng.dsh.domain.services.access import DshAccessService
 from bisheng.dsh.domain.services.identity import IdentityRecord, IdentityService
 from test.dsh.test_access import Keys, token
@@ -20,7 +21,11 @@ from test.dsh.test_access import Keys, token
 @pytest.fixture
 def profile_runtime():
     records = SimpleNamespace(
-        get=AsyncMock(return_value=IdentityRecord("2", "1001", "alice", "Alice", "Enterprise", 7, True, True, True))
+        get=AsyncMock(
+            return_value=IdentityRecord(
+                "2", "1001", "alice", "Alice", "Enterprise", 7, True, True, True, external_id="account.alice"
+            )
+        )
     )
     reader = AsyncMock(return_value="https://objects.example/avatar.png?signature=fresh")
     identity = IdentityService(None, records, None, avatar_reader=reader)
@@ -54,11 +59,18 @@ async def test_bearer_profile_reads_live_avatar_without_renewing_activity(profil
             for avatar in (None, "https://objects.example/new.png?signature=2", None):
                 reader.return_value = avatar
                 response = await client.get(
-                    "/api/v1/dsh/profile?tenant_id=999&user_id=999", headers={"Authorization": "Bearer " + token()}
+                    "/api/v1/dsh/profile?tenant_id=999&user_id=999&external_id=another",
+                    headers={"Authorization": "Bearer " + token()},
                 )
                 assert response.status_code == 200
                 assert response.json() == {
-                    "user": {"id": "1001", "username": "alice", "display_name": "Alice", "avatar": avatar},
+                    "user": {
+                        "id": "1001",
+                        "username": "alice",
+                        "display_name": "Alice",
+                        "external_id": "account.alice",
+                        "avatar": avatar,
+                    },
                     "tenant": {"id": "2", "name": "Enterprise"},
                 }
                 assert response.headers["cache-control"] == "no-store"
@@ -71,6 +83,81 @@ async def test_bearer_profile_reads_live_avatar_without_renewing_activity(profil
     finally:
         inherited_admin.var.reset(inherited_admin)
         inherited.var.reset(inherited)
+
+
+async def test_web_upload_is_shared_by_web_and_desktop_profiles(profile_runtime, monkeypatch):
+    from bisheng.database.models.department import DepartmentDao
+    from bisheng.database.models.tenant import TenantDao, UserTenantDao
+    from bisheng.database.models.user_group import UserGroupDao
+    from bisheng.user.api.user import router as user_router
+    from bisheng.user.domain.models.user import User, UserDao
+    from bisheng.user.domain.services import dsh_avatar
+    from bisheng.user.domain.services import user as user_service
+    from bisheng.utils import http_middleware
+
+    app, runtime, _, _ = profile_runtime
+    app.include_router(user_router, prefix="/api/v1")
+    person = User(user_id=1001, user_name="头像用户", external_id="account.alice")
+
+    def signed_link(name):
+        return f"/object/bisheng/{name}?signature=test"
+
+    storage = SimpleNamespace(
+        bucket="bisheng", get_share_link=AsyncMock(side_effect=signed_link), put_object=AsyncMock()
+    )
+    browser_user = SimpleNamespace(
+        user_id=person.user_id,
+        user_role=[],
+        _role_policy=None,
+        get_roles_web_menu=AsyncMock(return_value=("admin", [])),
+        compute_menu_approval_modes=AsyncMock(return_value=(False, False)),
+        is_admin=lambda: True,
+    )
+    app.dependency_overrides[user_service.LoginUser.get_login_user] = lambda: browser_user
+    monkeypatch.setattr(user_service.LoginUser, "user_entry_payload_for_read", AsyncMock(return_value={}))
+    monkeypatch.setattr(UserGroupDao, "aget_user_admin_group", AsyncMock(return_value=[]))
+    monkeypatch.setattr(DepartmentDao, "aget_user_admin_departments", AsyncMock(return_value=[]))
+    monkeypatch.setattr(http_middleware, "_check_is_global_super", AsyncMock(return_value=True))
+    monkeypatch.setattr(UserDao, "aget_user", AsyncMock(return_value=person))
+    monkeypatch.setattr(UserDao, "aupdate_user", AsyncMock())
+    monkeypatch.setattr(
+        UserTenantDao, "aget_active_user_tenant", AsyncMock(return_value=SimpleNamespace(tenant_id=2, status="active"))
+    )
+    monkeypatch.setattr(
+        TenantDao, "aget_by_id", AsyncMock(return_value=SimpleNamespace(tenant_name="Enterprise", status="active"))
+    )
+    monkeypatch.setattr(dsh_avatar, "current_runtime_person", AsyncMock(return_value=(person, 2)))
+    monkeypatch.setattr(user_service, "get_minio_storage", AsyncMock(return_value=storage))
+    runtime.identity.identities = CurrentIdentityRecords()
+    runtime.identity.avatar_reader = dsh_avatar.read_dsh_avatar
+
+    headers = {"Authorization": "Bearer " + token()}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://bisheng.example") as client:
+
+        async def assert_current_profile(expected_avatar):
+            web = await client.get("/api/v1/user/info")
+            desktop = await client.get("/api/v1/dsh/profile", headers=headers)
+            assert web.status_code == desktop.status_code == 200
+            assert web.json()["data"]["user_name"] == desktop.json()["user"]["display_name"] == person.user_name
+            assert web.json()["data"]["external_id"] == desktop.json()["user"]["external_id"] == "account.alice"
+            assert web.json()["data"]["avatar"] == desktop.json()["user"]["avatar"] == expected_avatar
+
+        await assert_current_profile(None)
+        person.user_name = "新昵称"
+        await assert_current_profile(None)
+        for photo in (b"first photo", b"second photo"):
+            previous = person.avatar
+            upload = await client.post("/api/v1/user/avatar", files={"file": ("avatar.png", photo, "image/png")})
+            assert upload.status_code == 200
+            assert person.avatar and person.avatar.startswith("avatar/1001/") and person.avatar != previous
+            assert upload.json()["data"]["avatar"] == signed_link(person.avatar)
+            await assert_current_profile(upload.json()["data"]["avatar"])
+
+        storage.get_share_link.side_effect = OSError("storage unavailable")
+        await assert_current_profile(None)
+        storage.get_share_link.side_effect = signed_link
+        await assert_current_profile(signed_link(person.avatar))
+    assert storage.put_object.await_count == 2
 
 
 @pytest.mark.parametrize(
@@ -110,7 +197,7 @@ async def test_check_never_signs_even_with_a_broken_avatar_reader(profile_runtim
     reader.side_effect = RuntimeError("signer unavailable")
     snapshot = await runtime.identity.check("2", "1001")
     assert snapshot.active and snapshot.profile_version == 7
-    assert "avatar" not in snapshot.user.model_dump()
+    assert snapshot.user.model_dump() == {"id": "1001", "username": "alice", "display_name": "Alice"}
     reader.assert_not_awaited()
     with pytest.raises(RuntimeError, match="signer unavailable"):
         await runtime.identity.profile("2", "1001")
@@ -141,6 +228,13 @@ async def test_profile_without_injected_reader_has_explicit_null_avatar(profile_
     identity = IdentityService(None, records, None)
     assert (await identity.profile("2", "1001"))["user"]["avatar"] is None
     reader.assert_not_awaited()
+
+
+@pytest.mark.parametrize("external_id", [None, ""])
+async def test_profile_preserves_missing_account_without_substituting_nickname(profile_runtime, external_id):
+    _, runtime, records, _ = profile_runtime
+    records.get.return_value = replace(records.get.return_value, external_id=external_id)
+    assert (await runtime.identity.profile("2", "1001"))["user"]["external_id"] == external_id
 
 
 async def test_build_runtime_injects_avatar_reader_into_shared_identity(monkeypatch):

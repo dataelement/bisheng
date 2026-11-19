@@ -16,4 +16,4 @@ async def read_dsh_avatar(tenant_id: str, user_id: str) -> str | None:
     # the full web user service only after the avatar read's identity checks pass.
     from bisheng.user.domain.services.user import UserService
 
-    return await UserService.get_avatar_share_link(user.avatar or None)
+    return await UserService.get_display_avatar_url(user.user_id, user.avatar)

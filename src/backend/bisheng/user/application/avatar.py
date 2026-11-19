@@ -4,24 +4,10 @@ import asyncio
 from collections.abc import Iterable
 
 from loguru import logger
-from minio.error import MinioException
 from sqlalchemy.exc import SQLAlchemyError
-from urllib3.exceptions import HTTPError
 
-from bisheng.common.errcode.storage import BrowserObjectBucketError
 from bisheng.core.context.base import ContextError
 from bisheng.user.application.runtime_identity import read_current_person_records
-
-
-async def _sign_avatar(user_id: int, avatar: str) -> str | None:
-    from bisheng.user.domain.services.user import UserService
-
-    try:
-        return await UserService.get_avatar_share_link(avatar)
-    except (BrowserObjectBucketError, ContextError, MinioException, HTTPError, OSError, ValueError) as error:
-        # A failed avatar link should not hide an otherwise visible message or roster entry.
-        logger.warning("Avatar link unavailable for user {} ({})", user_id, type(error).__name__)
-        return None
 
 
 async def read_visible_user_avatar_urls(identity_pairs: Iterable[tuple[int, int]]) -> dict[tuple[int, int], str]:
@@ -45,5 +31,11 @@ async def read_visible_user_avatar_urls(identity_pairs: Iterable[tuple[int, int]
         if avatar:
             avatars[tenant_id, user_id] = avatar
 
-    urls = await asyncio.gather(*(_sign_avatar(user_id, avatar) for (_, user_id), avatar in avatars.items()))
+    if not avatars:
+        return {}
+    from bisheng.user.domain.services.user import UserService
+
+    urls = await asyncio.gather(
+        *(UserService.get_display_avatar_url(user_id, avatar) for (_, user_id), avatar in avatars.items())
+    )
     return {pair: url for pair, url in zip(avatars, urls, strict=True) if url}

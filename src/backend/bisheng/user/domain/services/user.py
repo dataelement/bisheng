@@ -6,8 +6,11 @@ from urllib.parse import unquote, urlsplit
 import rsa
 from fastapi import Depends, HTTPException, Request, UploadFile
 from loguru import logger
+from minio.error import MinioException
+from urllib3.exceptions import HTTPError
 
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
+from bisheng.common.errcode.storage import BrowserObjectBucketError
 from bisheng.common.errcode.user import (
     AmbiguousAccountError,
     CaptchaError,
@@ -24,6 +27,7 @@ from bisheng.common.schemas.telemetry.event_data_schema import UserLoginEventDat
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
+from bisheng.core.context.base import ContextError
 from bisheng.core.context.tenant import (
     DEFAULT_TENANT_ID,
     bypass_tenant_filter,
@@ -238,10 +242,22 @@ class UserService:
         return await minio_client.get_share_link(object_name)
 
     @classmethod
+    async def get_display_avatar_url(cls, user_id: int | None, avatar: str | None) -> str | None:
+        avatar = (avatar or "").strip()
+        if not avatar:
+            return None
+        try:
+            return await cls.get_avatar_share_link(avatar)
+        except (BrowserObjectBucketError, ContextError, MinioException, HTTPError, OSError, ValueError) as error:
+            # Avatar storage can fail independently of the verified profile or roster.
+            logger.warning("Avatar link unavailable for user {} ({})", user_id, type(error).__name__)
+            return None
+
+    @classmethod
     async def build_user_read(cls, user: User, **kwargs) -> UserRead:
         user_data = user.model_dump()
         user_data.update(kwargs)
-        user_data["avatar"] = await cls.get_avatar_share_link(user_data.get("avatar"))
+        user_data["avatar"] = await cls.get_display_avatar_url(user.user_id, user_data.get("avatar"))
         return UserRead(**user_data)
 
     @classmethod
