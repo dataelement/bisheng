@@ -3,23 +3,20 @@ from loguru import logger
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import PageData, resp_200
-from bisheng.finetune.api.dependencies import get_dataset_user
+from bisheng.finetune.api.dependencies import get_dataset_user, get_finetune_user
 from bisheng.finetune.domain.models.finetune import Finetune, FinetuneChangeModelName, FinetuneList
 from bisheng.finetune.domain.services.finetune import FinetuneService
 from bisheng.finetune.domain.services.finetune_file import FinetuneFileService
 
 from ..schemas import FinetuneCreateReq
 
-# Model endpoints retain their explicit administrator dependencies; datasets
-# use the effective dataset menu rather than model-administrator identity.
+# Tasks use the model menu; datasets retain their own independent menu gate.
 router = APIRouter(prefix="/finetune", tags=["Finetune"])
 
 
 # create finetune job
 @router.post("/job")
-async def create_job(
-    *, finetune: FinetuneCreateReq, login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user)
-):
+async def create_job(*, finetune: FinetuneCreateReq, login_user: UserPayload = Depends(get_finetune_user)):
     # get login user
     finetune = Finetune(
         **finetune.model_dump(exclude={"method"}),
@@ -27,13 +24,13 @@ async def create_job(
         user_id=login_user.user_id,
         user_name=login_user.user_name,
     )
-    ret = await FinetuneService.create_job(finetune)
+    ret = await FinetuneService.create_job(finetune, login_user)
     return resp_200(ret)
 
 
 # Delete training task
 @router.delete("/job")
-async def delete_job(*, job_id: str, login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user)):
+async def delete_job(*, job_id: str, login_user: UserPayload = Depends(get_finetune_user)):
     # get login user
     await FinetuneService.delete_job(job_id, login_user)
     return resp_200(None)
@@ -41,7 +38,7 @@ async def delete_job(*, job_id: str, login_user: UserPayload = Depends(UserPaylo
 
 # Abort training mission
 @router.post("/job/cancel")
-async def cancel_job(*, job_id: str, login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user)):
+async def cancel_job(*, job_id: str, login_user: UserPayload = Depends(get_finetune_user)):
     # get login user
     ret = await FinetuneService.cancel_job(job_id, login_user)
     return resp_200(ret)
@@ -49,14 +46,14 @@ async def cancel_job(*, job_id: str, login_user: UserPayload = Depends(UserPaylo
 
 # Publish Training Tasks
 @router.post("/job/publish")
-async def publish_job(*, job_id: str, login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user)):
+async def publish_job(*, job_id: str, login_user: UserPayload = Depends(get_finetune_user)):
     # get login user
     ret = await FinetuneService.publish_job(job_id, login_user)
     return resp_200(ret)
 
 
 @router.post("/job/publish/cancel")
-async def cancel_publish_job(*, job_id: str, login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user)):
+async def cancel_publish_job(*, job_id: str, login_user: UserPayload = Depends(get_finetune_user)):
     # get login user
     ret = await FinetuneService.cancel_publish_job(job_id, login_user)
     return resp_200(ret)
@@ -75,7 +72,7 @@ async def get_job(
     model_name: str | None = Query(default="", description="Model Name,Fuzzy search"),
     page: int | None = Query(default=1, description="Page"),
     limit: int | None = Query(default=10, description="Listings Per Page"),
-    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
+    login_user: UserPayload = Depends(get_finetune_user),
 ):
     status_list = []
     if status.strip():
@@ -87,16 +84,14 @@ async def get_job(
 
 # Get the latest details of the task, this interface will synchronize the querySFT-backendThe side updates the task status to the latest
 @router.get("/job/info")
-async def get_job_info(*, job_id: str, login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user)):
+async def get_job_info(*, job_id: str, login_user: UserPayload = Depends(get_finetune_user)):
     # get login user
     ret = await FinetuneService.get_job_info(job_id)
     return resp_200(ret)
 
 
 @router.patch("/job/model")
-async def update_job(
-    *, req_data: FinetuneChangeModelName, login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user)
-):
+async def update_job(*, req_data: FinetuneChangeModelName, login_user: UserPayload = Depends(get_finetune_user)):
     # get login user
     ret = await FinetuneService.change_job_model_name(req_data)
     return resp_200(ret)
@@ -106,7 +101,7 @@ async def update_job(
 async def upload_file(
     *,
     files: list[UploadFile] = File(description="Training File List"),
-    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
+    login_user: UserPayload = Depends(get_finetune_user),
 ):
     try:
         ret = await FinetuneFileService.upload_file(files, False, login_user)
@@ -168,14 +163,14 @@ async def stage_dataset_file(*, file: UploadFile = File(...), login_user: UserPa
 
 
 @router.get("/server/filters")
-async def get_server_filters(*, login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user)):
+async def get_server_filters(*, login_user: UserPayload = Depends(get_finetune_user)):
     ret = await FinetuneService.get_server_filters()
     return resp_200(data=ret)
 
 
 @router.get("/model/list")
 async def get_model_list(
-    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
+    login_user: UserPayload = Depends(get_finetune_user),
     server_id: int = Query(..., description="ftService UniqueID"),
 ):
     """DapatkanftList of all models under the service"""
@@ -184,7 +179,27 @@ async def get_model_list(
 
 
 @router.get("/gpu")
-async def get_gpu_info(*, login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user)):
+async def get_gpu_info(*, login_user: UserPayload = Depends(get_finetune_user)):
     # get login user
     ret = await FinetuneService.get_gpu_info()
     return resp_200(data=ret)
+
+
+@router.get("/server/options")
+async def get_server_options(login_user: UserPayload = Depends(get_finetune_user)):
+    return resp_200(await FinetuneService.get_server_options())
+
+
+@router.get("/training-data")
+async def get_training_data(
+    page_size: int | None = None,
+    page_num: int | None = None,
+    keyword: str | None = None,
+    login_user: UserPayload = Depends(get_finetune_user),
+):
+    return resp_200(await FinetuneFileService.get_preset_file(keyword, page_size, page_num))
+
+
+@router.get("/training-data/download")
+async def download_training_data(file_url: str, login_user: UserPayload = Depends(get_finetune_user)):
+    return resp_200({"url": await FinetuneFileService.get_download_url(file_url, login_user)})

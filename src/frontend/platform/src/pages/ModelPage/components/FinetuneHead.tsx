@@ -12,7 +12,7 @@ import { useDebounce } from "../../../util/hook";
 interface IProps {
     onSearch: (searchkey) => void,
     onFilter: ({ type, rt }) => void,
-    rtClick: () => void,
+    rtClick?: () => void,
     onCreate: () => void,
 }
 export default function FinetuneHead({ onSearch, onFilter, rtClick, onCreate }: IProps) {
@@ -75,7 +75,7 @@ export default function FinetuneHead({ onSearch, onFilter, rtClick, onCreate }: 
         </div>
         <div className="flex flex-wrap items-center gap-4 mr-2">
             <Button onClick={onCreate}>{t('finetune.createTrainingTask')}</Button>
-            <Button onClick={rtClick} variant="solid" color="default">{t('finetune.rtServiceManagement')}</Button>
+            {rtClick && <Button onClick={rtClick} variant="solid" color="default">{t('finetune.rtServiceManagement')}</Button>}
         </div>
     </div>
 };

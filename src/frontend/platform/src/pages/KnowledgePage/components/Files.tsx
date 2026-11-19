@@ -367,7 +367,6 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
     selectionError,
     handleSelection,
     remove,
-    references,
   } = useDirectoryDeletion({
     spaceId,
     epoch,
@@ -428,10 +427,6 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
         onDelete={() => {
           if (itemMenu?.actions.includes("delete") && isCurrent(itemMenu.token))
             void remove([item]);
-        }}
-        onReferences={() => {
-          if (itemMenu?.actions.includes("delete") && isCurrent(itemMenu.token))
-            references([item]);
         }}
         onRename={() => handleEdit(item)}
         onMove={() => setMove([{ id: item.id, type: item.file_type === 0 ? "folder" : "file" }])}
@@ -528,7 +523,6 @@ function Directory({ scope, spaceId, parentId: initialParent, onOpenFolder, pres
         onDeleteSelected={selectedActions.canDelete ? () => {
           void remove(selectedRows);
         } : undefined}
-        onReferences={selectedActions.canDelete ? () => references(selectedRows) : undefined}
       />
       <SpaceDirectoryView
         workspace={workspace}

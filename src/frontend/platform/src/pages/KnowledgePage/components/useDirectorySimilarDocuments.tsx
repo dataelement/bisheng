@@ -30,14 +30,14 @@ export function useDirectorySimilarDocuments({ epoch, scope, spaceId, selectedRo
     retry: false,
     cacheTime: 0,
   });
-  const canManage = permission.isSuccess && permission.data.actions.includes("manage_permission");
-  const active = canManage ? selection : null;
+  const canEdit = permission.isSuccess && permission.data.actions.includes("edit");
+  const active = canEdit ? selection : null;
   useEffect(() => {
     if (opening && !active) setOpening(current => current === opening ? null : current);
   }, [opening, active]);
 
   return {
-    onProcessSimilar: enabled && canManage && hasPending
+    onProcessSimilar: enabled && canEdit && hasPending
       ? () => setOpening({ epoch: versionEpoch, fileIds: selectedFiles.map(row => row.id) })
       : undefined,
     overlay: active && (

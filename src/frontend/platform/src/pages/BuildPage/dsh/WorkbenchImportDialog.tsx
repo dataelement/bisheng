@@ -28,6 +28,12 @@ function canImport(entry: Entry): boolean {
 
 const MAX_FILE = 100 * 1024 * 1024;
 
+function formatFileSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+}
+
 function rejectionReason(code: string): string | undefined {
     const reason = code.toLowerCase().replace(/^workbench_/, "");
     return reason === "lower_version" ? "workbenchLowerVersion"
@@ -153,7 +159,7 @@ export function WorkbenchImportDialog({ tenant, onClose, onImported }: Workbench
         {!batch && <Input value={displayName} disabled={busy} maxLength={128} aria-label={t("workbenchDisplayName")}
             placeholder={t("workbenchDisplayName")} onChange={event => setDisplayName(event.target.value)} />}
         {selectionError && <p role="alert" className="text-sm text-red-600">{t(selectionError)}</p>}
-        {selectionError && files.map((file, index) => <p key={index}>{file.name} · {(file.size / 1048576).toFixed(1)} MiB</p>)}
+        {selectionError && files.map((file, index) => <p key={index}>{file.name} · {formatFileSize(file.size)}</p>)}
         {checking && <LoadingState label={t("previewing")} />}
         {batch && entries.length > 0 && <p role="status">{t("workbenchBatch.summary", {
             total: entries.length, ready, rejected: entries.filter(entry => entry.status === "rejected").length,
@@ -165,7 +171,7 @@ export function WorkbenchImportDialog({ tenant, onClose, onImported }: Workbench
             rejected: entries.filter(entry => entry.status === "rejected").length,
         })}</p>}
         {entries.map((entry, index) => <div key={index} className="space-y-2 text-sm">
-            <p>{entry.file.name} · {(entry.file.size / 1048576).toFixed(1)} MiB</p>
+            <p>{entry.file.name} · {formatFileSize(entry.file.size)}</p>
             {(batch || entry.task) && <p>{t("workbenchBatch.status." + entry.status)}</p>}
             {entry.localError && <p role="alert" className="text-sm text-red-600">{t(entry.localError)}</p>}
             {entry.failure !== undefined && <p role="alert" className="text-sm text-red-600 whitespace-pre-line">

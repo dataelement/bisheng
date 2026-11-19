@@ -294,30 +294,46 @@ it("mounts visible-only child content when root info fails and never enters lega
   expect(mocks.containerEdit).not.toHaveBeenCalled();
 });
 
-it("shows an initializing copy after a fresh page load without reading its files", async () => {
-  mocks.copies.mockResolvedValue([
-    {
-      id: 7,
-      name: "Background copy",
-      user_id: 7,
-      state: 0,
-      job_id: "original-copy",
-      job_state: "running",
-      phase: "initializing",
-      total_count: 10,
-      succeeded_count: 0,
-      failed_count: 0,
-    },
-  ]);
-  mount();
-  expect(
-    await screen.findByRole("heading", { name: "Background copy" }),
-  ).toBeVisible();
-  expect(screen.getByText("space_copy_ui.phase_initializing")).toBeVisible();
-  expect(screen.getByText("space_copy_ui.background_notice")).toBeVisible();
-  expect(mocks.info).not.toHaveBeenCalled();
-  expect(mocks.children).not.toHaveBeenCalled();
-});
+it.each(["preparing", "initializing", "copying"] as const)(
+  "shows a themed loading indicator for a %s copy without reading its files",
+  async (phase) => {
+    mocks.copies.mockResolvedValue([
+      {
+        id: 7,
+        name: "Background copy",
+        user_id: 7,
+        state: phase === "copying" ? 2 : 0,
+        job_id: "original-copy",
+        job_state: phase === "preparing" ? "accepted" : "running",
+        phase,
+        total_count: 10,
+        succeeded_count: 0,
+        failed_count: 0,
+      },
+    ]);
+    if (phase === "copying") {
+      const read = mocks.get.getMockImplementation()!;
+      mocks.get.mockImplementation((url: string, ...args: unknown[]) => {
+        if (url.endsWith("/processing-jobs/original-copy"))
+          return new Promise(() => undefined);
+        if (url.endsWith("/processing-jobs/original-copy/items"))
+          return { data: [], total: 0 };
+        return read(url, ...args);
+      });
+    }
+    mount();
+    const title = await screen.findByRole("heading", { name: "Background copy" });
+    expect(title).toBeVisible();
+    const copyPage = title.closest("section")!;
+    expect(within(copyPage).getByRole("status")).toHaveTextContent(`space_copy_ui.phase_${phase}`);
+    const spinners = copyPage.querySelectorAll(".bs-tick-spinner.text-primary");
+    expect(spinners).toHaveLength(1);
+    expect(spinners[0]).toBeVisible();
+    expect(within(copyPage).getByText("space_copy_ui.background_notice")).toBeVisible();
+    expect(mocks.info).not.toHaveBeenCalled();
+    expect(mocks.children).not.toHaveBeenCalled();
+  },
+);
 
 it("opens a failed copy directly and retries the same job before returning to its files", async () => {
   mocks.copies.mockResolvedValue([

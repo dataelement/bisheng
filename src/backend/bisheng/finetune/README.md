@@ -18,6 +18,35 @@
 
 普通数据集对象存于 `finetune/dataset/{tenant}/{id}.json`；暂存上传存于临时桶 `finetune/dataset-upload/{tenant}/{user}/{id}.json`。个人微调上传使用独立 `finetune/train_file/personal/{tenant}/{user}/{id}.{ext}`，不能作为缺失/已删除数据集的下载兜底。以上路径是服务端生成的存储分区，不采纳客户端 tenant/user 参数。
 
-模型/微调任务及服务管理仍要求 `get_tenant_admin_user`。公共父路由不再统一加此依赖；每个模型端点保留自己的管理员依赖，数据集端点使用 `get_dataset_user`。QA 内容动作仍走 permission application。
+模型管理、系统设置和 FT 服务管理要求 `get_tenant_admin_user`；微调任务使用 `get_finetune_user`，数据集管理使用 `get_dataset_user`。公共父路由不统一要求管理员。QA 内容动作仍走 permission application。
 
 代码入口：`api/dependencies.py`、`api/finetune.py`、`domain/services/finetune_file.py`、`domain/models/preset_train.py`。回归在 `test/finetune/`，实施与验收边界见[修复审查](../../../../docs/reviews/dataset-menu-permissions-20261119.md)。
+
+
+## 微调任务与模型管理权限（2026-11-19）
+
+普通用户持有当前有效 `model` 菜单即可操作当前租户的微调任务，包括列表、详情、创建、停止、重命名、删除、发布和取消发布，也可上传本人训练文件、读取本租户训练数据选项和 GPU 信息。不按创建者限制任务；用户变更租户后，原租户的任务、服务、基础模型及个人上传文件不可继续查询或操作。超管及当前租户管理员保留固有任务能力。
+
+FT 服务维护（`/api/v1/server/*`）仍仅超管或当前租户管理员可用。任务表单改用 `GET /api/v1/finetune/server/options`，只返回当前租户支持微调的服务 id/name，不返回服务端点或配置；基础模型选项只返回 id/model/sft_support。任务详情增加 `model_online`，普通用户查看已发布任务无需调用 FT 管理详情。
+
+`GET /api/v1/finetune/training-data` 与 `/training-data/download` 是训练任务的数据读取入口，按 `model` 菜单授权；沿用列表 `list/total` 兼容格式。它们只允许读取当前租户的数据集和当前租户/本人的个人上传文件，不授予数据集创建、删除或问答库导出能力。数据集页面仍按 `dataset` 菜单独立管理。
+
+创建任务先验证所有文件归属，再签名与启动远端任务。基础模型必须属于当前租户且关联所选服务；服务读取不再使用按 id 缓存的旧对象。任务、服务、基础模型及训练模型标记查询采用严格当前租户过滤；原生 UPDATE/DELETE 显式携带当前租户，不能借 Root 可见集合更新其他租户记录。
+
+模型目录页面对普通模型菜单用户始终只读（单租户、多租户一致）。添加、编辑、删除、上下线、探测、系统模型设置仍由管理员接口校验。训练任务的发布/取消发布仅处理该任务产物，不授予通用 LLM 模型配置权限。
+
+回归：`test/finetune/test_finetune_menu_api.py`（真实 HTTP 路由与 SQLite，外部训练/对象存储模拟），及前端 `ModelPage` 下权限测试。业务范围、基线失败与验收限制见 [本次修复记录](../../../../docs/reviews/finetune-model-menu-permissions-20261119.md)。
+
+
+## 任务放权后隔离复审（2026-11-19）
+
+业务准入规则不变，新增以下资源引用与传输约束：
+
+- 任务详情/停止/删除/发布/取消发布/改名必须重新证明任务和 FT 服务属于当前租户，任务保存的服务地址与现服务一致；已发布模型还须匹配任务的服务和名称。历史错引用不再按任务行的 tenant_id 单独放行，也不退回到客户端名称继续操作。
+- FT 协议没有租户字段，模型目录和模型名称操作由 FT 实例全局处理。同一个规范化 HTTP(S) origin 若登记给不同租户，任务操作拒绝，服务选项/GPU 读取跳过它；FT 服务管理仍只允许管理员，便于处理登记。比较忽略地址路径、主机大小写、默认端口和末尾点，同租户别名保留。FT 服务登记忽略客户端 tenant_id，归属固定为本次已验证租户。
+- 这项 origin 证明不能识别不同 DNS 别名、反向代理入口或不同主机背后的共享模型目录。FT 部署必须使用隔离的实例与模型存储；在 FT 自身支持服务端租户命名空间前，不把共享实例当作安全的多租户后端。重新支持共享需先扩展 FT 的鉴权、模型/文件命名空间及目录协议，不能仅放开本处检查。
+- 微调 extra_params 只接收已定义训练选项，发送校验归一后的值；不接收 output_dir、checkpoint、dataset_dir 等任意远端路径或附加选项。任务产物名称限定 1–50 位 ASCII 字母/数字/下划线/连字符，创建及改名在服务层校验，旧非法名称亦不传给 FT。
+- 训练文件引用和采样数先做类型及范围校验；个人上传仍验证租户/本人，预设集签名始终使用当前租户数据库返回的规范对象键。日志只读取当前任务自己的 finetune/log/{id}，不沿用指向其他对象的持久化 log_path。
+- 后台状态刷新按当前执行租户重新读取任务与地址，丢弃失效/外租户任务；详情读取刷新后最新数据。发布模型的数据库引用在 FT 删除/取消发布成功后才移除，外部失败时保留引用供同租户重试。
+
+不修改历史数据、FT 协议或数据库结构。旧记录不满足归属约束时拒绝操作，须由管理员核对修复。测试及复审边界见 [隔离复审记录](../../../../docs/reviews/finetune-tenant-isolation-review-20261119.md)。

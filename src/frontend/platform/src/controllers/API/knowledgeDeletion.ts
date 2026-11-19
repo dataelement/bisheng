@@ -72,6 +72,7 @@ export function precheckDeletion(
       : command.kind === "delete"
         ? { force }
         : undefined,
+    { showError: false },
   );
 }
 export function confirmDeletion(

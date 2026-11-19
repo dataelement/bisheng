@@ -5,6 +5,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi import HTTPException
 
+from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.knowledge_space import VersionManagementDisabledError
 from bisheng.common.errcode.permission import PermissionDeniedError
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
@@ -33,12 +35,15 @@ def enable_switch(monkeypatch):
     conf.version_management.simhash_similarity_threshold = 0.85
     mock_settings.async_get_knowledge = AsyncMock(return_value=conf)
     monkeypatch.setattr(kvs_mod, "bisheng_settings", mock_settings)
+    authorization = AsyncMock()
+    monkeypatch.setattr(kvs_mod, "require_business_action", authorization)
+    return authorization
 
 
 def _build_svc(session, reads=None):
     return KnowledgeVersionService(
         request=MagicMock(),
-        login_user=MagicMock(),
+        login_user=UserPayload(user_id=42, tenant_id=1, user_role=[]),
         doc_repo=KnowledgeDocumentRepositoryImpl(session),
         version_repo=KnowledgeDocumentVersionRepositoryImpl(session),
         knowledge_file_repo=KnowledgeFileRepositoryImpl(session),
@@ -184,6 +189,9 @@ async def test_dismiss_sets_status_to_2(enable_switch, async_db_session, monkeyp
     svc = _build_svc(async_db_session)
     result = await svc.dismiss_similar(knowledge_file_id=100)
     assert result.similar_status == 2
+    enable_switch.assert_awaited_once_with(
+        svc.login_user, resource_type="knowledge_space", resource_id=1, action="edit"
+    )
     kf = await svc.knowledge_file_repo.find_by_id(100)
     assert kf.similar_status == 2
 
@@ -213,7 +221,7 @@ async def test_dismiss_404_when_file_not_found(enable_switch, async_db_session):
 
 
 @pytest.mark.asyncio
-async def test_dismiss_403_when_switch_off(async_db_session, monkeypatch):
+async def test_dismiss_business_error_when_switch_off(async_db_session, monkeypatch):
     from bisheng.knowledge.domain.services import knowledge_version_service as kvs_mod
 
     mock_settings = MagicMock()
@@ -223,6 +231,32 @@ async def test_dismiss_403_when_switch_off(async_db_session, monkeypatch):
     monkeypatch.setattr(kvs_mod, "bisheng_settings", mock_settings)
 
     svc = _build_svc(async_db_session)
-    with pytest.raises(HTTPException) as ctx:
+    with pytest.raises(VersionManagementDisabledError):
         await svc.dismiss_similar(knowledge_file_id=1)
-    assert ctx.value.status_code == 403
+
+
+@pytest.mark.parametrize("similar_status", [1, 2])
+async def test_dismiss_denied_without_space_edit_before_write_or_audit(
+    enable_switch, async_db_session, monkeypatch, similar_status
+):
+    await _seed_file_with_doc(async_db_session, 100, knowledge_id=7, similar_status=similar_status)
+    enable_switch.side_effect = PermissionDeniedError()
+    audit = MagicMock()
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_audit_telemetry_service."
+        "KnowledgeAuditTelemetryService.audit_dismiss_similar_file",
+        audit,
+    )
+    svc = _build_svc(async_db_session)
+    update = AsyncMock(wraps=svc.knowledge_file_repo.update)
+    monkeypatch.setattr(svc.knowledge_file_repo, "update", update)
+
+    with pytest.raises(PermissionDeniedError):
+        await svc.dismiss_similar(100)
+
+    enable_switch.assert_awaited_once_with(
+        svc.login_user, resource_type="knowledge_space", resource_id=7, action="edit"
+    )
+    update.assert_not_awaited()
+    audit.assert_not_called()
+    assert (await svc.knowledge_file_repo.find_by_id(100)).similar_status == similar_status

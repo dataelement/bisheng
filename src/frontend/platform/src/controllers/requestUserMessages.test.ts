@@ -1,6 +1,7 @@
 import { afterEach, beforeAll, expect, it, vi } from 'vitest';
 import i18next from 'i18next';
 import messages from '../../public/locales/en-US/api_errors.json';
+import { f118 } from '../../public/locales/en-US/knowledge.json';
 import request, { showApiError } from './request';
 import { ApiError } from '@bisheng/api-client';
 const notices = vi.hoisted(() => vi.fn());
@@ -133,9 +134,15 @@ it.each([
  expect(error.message).not.toContain('PRIVATE');
 });
 
-it('requires safe registered operation keys and describes source input separately', () => {
- i18next.addResource('en', 'knowledge', 'f118.processing_conflict_source_input', 'Complete the source task input before copying.');
- expect(showApiError({status_code: 10999, data: {reason: 'source_space_move_input_required'}}).message).toBe('Complete the source task input before copying.');
+it.each([
+ ['source_file_move_input_required', f118.processing_conflict_source_file_input],
+ ['source_space_move_input_required', f118.processing_conflict_source_input],
+])('shows the localized source dependency for %s', (reason, expected) => {
+ i18next.addResourceBundle('en', 'knowledge', { f118 });
+ expect(showApiError({ status_code: 10999, data: { reason } }).message).toBe(expected);
+});
+
+it('requires safe registered operation keys', () => {
  for (const operation of ['constructor', '__proto__', 'PRIVATE', {}]) {
   expect(showApiError({status_code: 10999, data: {reason: 'unknown', blocking_operation: operation}}).message).toBe(messages['10999']);
  }

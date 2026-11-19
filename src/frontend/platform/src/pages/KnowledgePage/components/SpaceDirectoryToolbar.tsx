@@ -24,7 +24,6 @@ interface SpaceDirectoryToolbarProps {
   onMove?: () => void;
   selectedCount?: number;
   onDeleteSelected?: () => void;
-  onReferences?: () => void;
 }
 
 export function SpaceDirectoryToolbar({
@@ -45,12 +44,11 @@ export function SpaceDirectoryToolbar({
   onMove,
   selectedCount = 0,
   onDeleteSelected,
-  onReferences,
 }: SpaceDirectoryToolbarProps) {
   const { t } = useTranslation("knowledge");
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const hasBatchActions = Boolean(onProcessSimilar || onMove || onBatchDownload || onBatchTag || onBatchRetry || onReferences || onDeleteSelected);
+  const hasBatchActions = Boolean(onProcessSimilar || onMove || onBatchDownload || onBatchTag || onBatchRetry || onDeleteSelected);
   const processSimilarLabel = t("knowledge.version.header_process_similar_label", { ns: "shared" });
   const handleUpload = () => {
     if (!canUpload) return;
@@ -84,11 +82,6 @@ export function SpaceDirectoryToolbar({
                 )}
                 {onBatchRetry && (
                   <DropdownItem onSelect={onBatchRetry}>{t("batch.retry")}</DropdownItem>
-                )}
-                {onReferences && (
-                  <DropdownItem onSelect={onReferences}>
-                    {t("deletion.references")}
-                  </DropdownItem>
                 )}
                 {onDeleteSelected && (
                   <DropdownItem danger onSelect={onDeleteSelected}>
@@ -161,11 +154,6 @@ export function SpaceDirectoryToolbar({
       {selectedCount > 0 && onDeleteSelected && (
         <Button color="danger" variant="outlined" onClick={onDeleteSelected}>
           {t("deletion.selected")} ({selectedCount})
-        </Button>
-      )}
-      {onReferences && (
-        <Button variant="outlined" onClick={onReferences}>
-          {t("deletion.references")}
         </Button>
       )}
       {!compact && (

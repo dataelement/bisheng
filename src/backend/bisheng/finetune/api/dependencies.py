@@ -1,4 +1,4 @@
-"""Dataset capability is separate from model administration."""
+"""Menu capabilities for datasets and fine-tuning tasks, separate from administration."""
 
 from fastapi import Depends
 
@@ -15,4 +15,14 @@ async def get_dataset_user(user: UserPayload = Depends(UserPayload.get_login_use
     ):
         return user
     await UserPayload.assert_effective_web_menu_contains(user.user_id, "dataset")
+    return user
+
+
+async def get_finetune_user(user: UserPayload = Depends(UserPayload.get_login_user)) -> UserPayload:
+    tenant_id = get_current_tenant_id()
+    if user.is_global_super or (
+        tenant_id is not None and tenant_id != DEFAULT_TENANT_ID and await check_tenant_admin(user.user_id, tenant_id)
+    ):
+        return user
+    await UserPayload.assert_effective_web_menu_contains(user.user_id, "model")
     return user

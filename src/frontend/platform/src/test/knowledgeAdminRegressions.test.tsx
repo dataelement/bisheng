@@ -316,6 +316,15 @@ it("withholds privileged row actions without the corresponding server actions", 
   }
 });
 
+it.each([0, 1])("keeps delete but omits reference sources from the row menu for type %s", async (fileType) => {
+  actions = ["visible", "delete"];
+  rows = [file(11, { file_type: fileType })];
+  mount("workspace");
+  const opened = await menu();
+  expect(await within(opened).findByRole("menuitem", { name: "delete" })).toBeVisible();
+  expect(within(opened).queryByRole("menuitem", { name: "deletion.references" })).not.toBeInTheDocument();
+});
+
 it.each([0, 1])(
   "hides every mutating batch entry for a visible-only type %s",
   async (fileType) => {
@@ -479,6 +488,7 @@ it("filters the workspace batch dropdown by the selected resource actions", asyn
 });
 
 it("opens version management from the badge and keeps the separate similar-document entry", async () => {
+  rootActions = ["visible", "edit"];
   rows = [file(11, { has_similar: true, is_multi_version: false })];
   mount("workspace", true);
   fireEvent.click(
@@ -532,7 +542,7 @@ it("shows version numbers and history for multiple versions", async () => {
 it.each([false, true])(
   "withholds version management without a feature flag or space edit (flag=%s)",
   async (enabled) => {
-    rootActions = enabled ? ["visible"] : ["visible", "edit", "manage_permission"];
+    rootActions = enabled ? ["visible", "manage_permission"] : ["visible", "edit", "manage_permission"];
     rows = [file(11, { has_similar: true, is_multi_version: false })];
     mount("workspace", enabled);
     const opened = await menu();
@@ -544,3 +554,43 @@ it.each([false, true])(
     ).not.toBeInTheDocument();
   },
 );
+
+
+it.each([0, 1])("omits reference sources from both batch toolbar variants for type %s", async (fileType) => {
+  actions = ["visible", "delete"];
+  rows = [file(11, { file_type: fileType })];
+  const view = mount("workspace");
+  fireEvent.click(await screen.findByRole("checkbox", { name: "deletion.select file-11.pdf" }));
+  expect(await screen.findByRole("button", { name: "deletion.selected (1)" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "deletion.references" })).not.toBeInTheDocument();
+  view.unmount();
+
+  const target = document.createElement("div");
+  document.body.append(target);
+  try {
+    mount("workspace", false, target);
+    fireEvent.click(await screen.findByRole("checkbox", { name: "deletion.select file-11.pdf" }));
+    const trigger = await screen.findByRole("button", { name: "detail.batch" });
+    fireEvent.keyDown(trigger, { key: "Enter" });
+    const opened = await screen.findByRole("menu");
+    expect(within(opened).getByRole("menuitem", { name: "deletion.selected" })).toBeVisible();
+    expect(within(opened).queryByRole("menuitem", { name: "deletion.references" })).not.toBeInTheDocument();
+  } finally {
+    target.remove();
+  }
+});
+
+it.each([true, false])("requires edit instead of permission management for batch similar documents (edit=%s)", async (edit) => {
+  rootActions = ["visible", edit ? "edit" : "manage_permission"];
+  rows = [file(11, { has_similar: true, is_multi_version: false })];
+  mount("workspace", true);
+  fireEvent.click(await screen.findByRole("checkbox", { name: "deletion.select file-11.pdf" }));
+  await waitFor(() => expect(mocks.permissions).toHaveBeenCalledWith("knowledge_space", "7", expect.anything()));
+  const name = "knowledge.version.header_process_similar_label";
+  if (edit) {
+    fireEvent.click(await screen.findByRole("button", { name }));
+    expect(await screen.findByRole("dialog", { name: "similar-documents" })).toHaveTextContent("[11]");
+  } else {
+    expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+  }
+});
