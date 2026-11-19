@@ -7,6 +7,7 @@ import { Bot, Palette } from "lucide-react";
 import { useContext } from "react";
 import { useTranslation } from "react-i18next";
 import Config from "./components/Config";
+import { DocumentParse } from "./components/DocumentParse";
 import OrganizationAndMembers from "./components/OrganizationAndMembers";
 import OrgSync from "./components/OrgSync";
 import { PersonalToken } from "./components/PersonalToken";
@@ -185,6 +186,20 @@ export default function SystemPage() {
             icon: <Outlined.Layer aria-hidden="true" />,
             children: <div className="min-h-0 flex-1 overflow-hidden"><ResourceTierTab /></div>,
           }] : []),
+          ...(canAccessSystemConfig
+            ? [
+                {
+                  key: "documentParse",
+                  label: <> {t("system.docParseTab")} </>,
+                  icon: <Outlined.Setting aria-hidden="true" />,
+                  children: (
+                    <div className="min-h-0 flex-1 overflow-hidden">
+                      <DocumentParse />
+                    </div>
+                  ),
+                },
+              ]
+            : []),
           ...(canAccessSystemConfig
             ? [
                 {

@@ -171,6 +171,11 @@ services:
       BS_SANDBOX_CONF__ENDPOINTS: '["http://code-runner-1:8080","http://code-runner-2:8080"]'
       # Run local code execution under a throwaway uid; set LOCAL_ISOLATION=off in .env to disable.
       BS_SANDBOX_CONF__LOCAL_ISOLATION: ${LOCAL_ISOLATION:-uid}
+      # Document-parse provider tokens. The config file stores only the NAME of
+      # the variable (knowledges.paddle_ocr.api_key_env), so the secret itself
+      # arrives here and never enters git or the DB row. Set it in docker/.env.
+      PADDLE_OCR_TOKEN: '${PADDLE_OCR_TOKEN:-}'
+      MINERU_V4_API_KEY: '${MINERU_V4_API_KEY:-}'
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/config/config.yaml:/app/bisheng/config.yaml:ro
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/entrypoint.sh:/app/entrypoint.sh:ro
@@ -225,6 +230,10 @@ services:
       BS_SANDBOX_CONF__ENDPOINTS: '["http://code-runner-1:8080","http://code-runner-2:8080"]'
       # Run local code execution under a throwaway uid; set LOCAL_ISOLATION=off in .env to disable.
       BS_SANDBOX_CONF__LOCAL_ISOLATION: ${LOCAL_ISOLATION:-uid}
+      # Document-parse provider tokens; see the note on the backend service. The
+      # knowledge worker is the process that actually calls the OCR service.
+      PADDLE_OCR_TOKEN: '${PADDLE_OCR_TOKEN:-}'
+      MINERU_V4_API_KEY: '${MINERU_V4_API_KEY:-}'
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/config/config.yaml:/app/bisheng/config.yaml:ro
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/entrypoint.sh:/app/entrypoint.sh:ro

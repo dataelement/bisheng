@@ -307,6 +307,142 @@ class ConfigService(Settings):
         ]
 
     @staticmethod
+    def _split_trailing_comment(text: str) -> tuple[str, str]:
+        """Split ``key: value  # note`` into the value part and the comment.
+
+        Quote-aware so a ``#`` inside a URL or a quoted model name is not
+        mistaken for the start of a comment.
+        """
+        quote = None
+        i = 0
+        while i < len(text):
+            ch = text[i]
+            if quote:
+                if quote == '"' and ch == "\\":
+                    # Skip the escaped character too; otherwise `\"` closes the
+                    # string and the rest of the line (including a real comment)
+                    # is treated as value text.
+                    i += 2
+                    continue
+                if ch == quote:
+                    quote = None
+            elif ch in "\"'":
+                quote = ch
+            elif ch == "#" and (i == 0 or text[i - 1] in " \t"):
+                return text[:i].rstrip(), text[i:]
+            i += 1
+        return text.rstrip(), ""
+
+    @staticmethod
+    def _nested_block_range(lines: list[str], path: list[str]) -> tuple[int, int, str]:
+        """Locate the innermost block of ``path``; returns (start, end, child_indent).
+
+        ``start`` is the first line after the last path segment's key line,
+        ``end`` is exclusive, and ``child_indent`` is the indentation its direct
+        children use. Text-level because a yaml round-trip drops every comment.
+        """
+        start, end, indent = 0, len(lines), ""
+        for key in path:
+            prefix = f"{indent}{key}:"
+            anchor = next((i for i in range(start, end) if lines[i].startswith(prefix)), None)
+            if anchor is None:
+                raise ValueError(f"section {'.'.join(path)} not found in the stored configuration")
+            start = anchor + 1
+            end = anchor + 1
+            while end < len(lines):
+                line = lines[end]
+                if line.strip() and (len(line) - len(line.lstrip())) <= len(indent):
+                    break
+                end += 1
+            indent = ConfigService._section_child_indent(lines, anchor)
+        return start, end, indent
+
+    @staticmethod
+    def update_section_scalars(config_text: str, path: list[str], values: dict) -> str:
+        """Set scalar values under ``path`` in place, leaving every other byte alone.
+
+        Used by the structured settings forms: they must not rewrite the whole
+        document (that drops comments and any section the caller did not send).
+        Keys absent from the section are appended to it; existing keys keep their
+        trailing comment. Callers must validate the result by parsing it.
+        """
+        # A dotted key ("request_kwargs.backend") updates one child of a mapping
+        # instead of replacing the whole mapping, so sibling keys and the
+        # operator's comments inside that block survive.
+        nested = {}
+        flat = {}
+        for key, value in values.items():
+            head, dot, rest = key.partition(".")
+            if dot:
+                nested.setdefault((head, rest), value)
+            else:
+                flat[key] = value
+        if nested:
+            text = ConfigService.update_section_scalars(config_text, path, flat) if flat else config_text
+            for (head, rest), value in nested.items():
+                text = ConfigService.update_section_scalars(text, [*path, head], {rest: value})
+            return text
+        values = flat
+
+        lines = config_text.split("\n")
+        try:
+            start, end, indent = ConfigService._nested_block_range(lines, path)
+        except ValueError:
+            # A section missing from an older deployment: create it under its
+            # parent instead of failing the whole save.
+            if len(path) < 2:
+                raise
+            parent_start, parent_end, parent_indent = ConfigService._nested_block_range(lines, path[:-1])
+            insert_at = parent_end
+            while insert_at > parent_start and not lines[insert_at - 1].strip():
+                insert_at -= 1
+            lines[insert_at:insert_at] = [f"{parent_indent}{path[-1]}:"]
+            start, end, indent = ConfigService._nested_block_range(lines, path)
+        remaining = dict(values)
+        i = start
+        while i < end:
+            line = lines[i]
+            if not line.strip() or line.lstrip().startswith("#"):
+                i += 1
+                continue
+            if len(line) - len(line.lstrip()) != len(indent):
+                i += 1
+                continue
+            key = line.strip().split(":", 1)[0]
+            if key not in remaining:
+                i += 1
+                continue
+            value = remaining.pop(key)
+            _, comment = ConfigService._split_trailing_comment(line)
+            rendered = json.dumps(value, ensure_ascii=False)
+            lines[i] = f"{indent}{key}: {rendered}" + (f"  {comment}" if comment else "")
+            # A mapping-valued key (request_kwargs, headers, …) may currently own a
+            # nested block; leaving it behind after writing a one-line flow mapping
+            # produces invalid YAML, so the old children go with it.
+            drop_to = i + 1
+            while drop_to < len(lines):
+                following = lines[drop_to]
+                if not following.strip():
+                    break
+                if len(following) - len(following.lstrip()) > len(indent):
+                    drop_to += 1
+                    continue
+                break
+            if drop_to > i + 1:
+                del lines[i + 1 : drop_to]
+                end -= drop_to - (i + 1)
+            i += 1
+        if remaining:
+            # Insert before the section's trailing blank lines, keeping them as
+            # the separator before the next top-level key.
+            insert_at = end
+            while insert_at > start and not lines[insert_at - 1].strip():
+                insert_at -= 1
+            new_lines = [f"{indent}{k}: {json.dumps(v, ensure_ascii=False)}" for k, v in remaining.items()]
+            lines[insert_at:insert_at] = new_lines
+        return "\n".join(lines)
+
+    @staticmethod
     def merge_missing_config(file_config: str, db_config: str) -> tuple[str, list[str]]:
         """Add keys that exist in the shipped yaml but not in the stored config.
 

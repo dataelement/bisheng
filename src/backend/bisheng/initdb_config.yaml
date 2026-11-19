@@ -29,17 +29,25 @@ knowledges: # 知识库相关配置
     job_timeout_seconds: 1800
     poll_interval_seconds: 3
   paddle_ocr:
+    # 两种服务形态，传输方式不同，由 url 自动判别（service_mode: auto）：
+    #   1) 托管 jobs API（url 以 /jobs 结尾）—— multipart 提交 → 轮询 jobId → 取预签名结果地址。
+    #      必须填 model，且 token 只写变量名（api_key_env），真值放环境变量，勿提交到 git。
+    #   2) 自建 PP-StructureV3（/layout-parsing）—— 一次 JSON POST 直接返回结果，用 auth_token。
     # 文档地址 https://ai.baidu.com/ai-doc/AISTUDIO/Cmkz2m0ma
-    url: "https://xxx.aistudio-app.com/layout-parsing"
+    url: "https://paddleocr.aistudio-app.com/api/v2/ocr/jobs"
+    model: "PaddleOCR-VL-1.6"
+    api_key_env: "PADDLE_OCR_TOKEN"
+    # 自建形态才用得上；jobs 形态留空，token 走 api_key_env。
     auth_token: ''
     timeout: 60
     # 瞬时拥塞（如队列已满、限流、503）采用指数退避重试
     max_retries: 3
     retry_backoff: 1
-    headers:
-      x-api-key: "11"
-    request_kwargs:
-      useChartRecognition: false
+    # 轮询间隔与整体超时（仅 jobs 形态）
+    poll_interval_seconds: 3
+    job_timeout_seconds: 1800
+    headers: {}
+    request_kwargs: {}
   version_management:
     enabled: false
     simhash_similarity_threshold: 0.85

@@ -9,8 +9,10 @@ import requests
 from langchain_core.documents import Document
 from loguru import logger
 
+from bisheng.core.config.settings import PaddleOcrConf
 from bisheng.knowledge.rag.pipeline.loader.base import BaseBishengLoader
 from bisheng.knowledge.rag.pipeline.loader.mineru import html_table_to_md
+from bisheng.knowledge.rag.pipeline.loader.paddle_ocr_client import PaddleOcrJobsClient
 from bisheng.knowledge.rag.pipeline.types import TextBbox
 from bisheng.utils.exceptions import EtlException
 
@@ -62,6 +64,12 @@ class PaddleOcrLoader(BaseBishengLoader):
         request_kwargs: dict | None = None,
         max_retries: int = 3,
         retry_backoff: float = 1.0,
+        service_mode: str = "auto",
+        model: str = "",
+        api_key_env: str = "",
+        auth_token_enc: str = "",
+        poll_interval_seconds: float = 3,
+        job_timeout_seconds: float = 1800,
         *args,
         **kwargs,
     ):
@@ -84,6 +92,43 @@ class PaddleOcrLoader(BaseBishengLoader):
             self.headers = {
                 "Authorization": f"token {self.auth_token}",
             }
+
+        # The hosted jobs API and the self-hosted /layout-parsing service need
+        # different transports; PaddleOcrConf owns the decision so the config
+        # validation stays in one place.
+        self.config = PaddleOcrConf(
+            url=self.url,
+            timeout=timeout,
+            max_retries=self.max_retries,
+            retry_backoff=self.retry_backoff,
+            auth_token=auth_token or "",
+            headers=headers or {},
+            request_kwargs=self.request_kwargs,
+            service_mode=service_mode,
+            model=model,
+            api_key_env=api_key_env,
+            auth_token_enc=auth_token_enc,
+            poll_interval_seconds=poll_interval_seconds,
+            job_timeout_seconds=job_timeout_seconds,
+        )
+        self._jobs_client: PaddleOcrJobsClient | None = None
+
+    @property
+    def service_mode(self) -> str:
+        """Which PaddleOCR serving style this loader will talk to."""
+        return self.config.resolved_service_mode
+
+    def _jobs(self) -> PaddleOcrJobsClient:
+        """Jobs client, built on first use.
+
+        Deferred so a deployment that selects ``sync`` never touches the jobs
+        prerequisites (model name, token environment variable), and so a missing
+        token surfaces as a parse failure on the file rather than as a loader
+        construction error during pipeline setup.
+        """
+        if self._jobs_client is None:
+            self._jobs_client = PaddleOcrJobsClient(self.config)
+        return self._jobs_client
 
     @property
     def _detect_file_type(self) -> int:
@@ -534,26 +579,34 @@ class PaddleOcrLoader(BaseBishengLoader):
 
     def load(self) -> list[Document]:
         """Synchronously load and parse document using PaddleOCR API."""
-        try:
-            with open(self.file_path, "rb") as f:
-                b64_data = base64.b64encode(f.read()).decode("ascii")
-        except (OSError, FileNotFoundError, PermissionError) as e:
-            logger.error(f"Failed to read file {self.file_path}: {e}")
-            raise EtlException(f"Cannot read file: {e}")
+        if self.service_mode == "jobs":
+            # The jobs API takes the raw file as a multipart part, so there is no
+            # base64 round-trip to make; the client reads the file itself.
+            api_result = self._jobs().parse(self.file_path)
+        else:
+            try:
+                with open(self.file_path, "rb") as f:
+                    b64_data = base64.b64encode(f.read()).decode("ascii")
+            except (OSError, FileNotFoundError, PermissionError) as e:
+                logger.error(f"Failed to read file {self.file_path}: {e}")
+                raise EtlException(f"Cannot read file: {e}")
 
-        api_result = self._call_api_sync(b64_data)
+            api_result = self._call_api_sync(b64_data)
         layout_results = api_result.get("layoutParsingResults", [])
         return self._build_documents(layout_results)
 
     async def aload(self) -> list[Document]:
         """Asynchronously load and parse document using PaddleOCR API."""
-        try:
-            with open(self.file_path, "rb") as f:
-                b64_data = base64.b64encode(f.read()).decode("ascii")
-        except (OSError, FileNotFoundError, PermissionError) as e:
-            logger.error(f"Failed to read file {self.file_path}: {e}")
-            raise EtlException(f"Cannot read file: {e}")
+        if self.service_mode == "jobs":
+            api_result = await self._jobs().parse_async(self.file_path)
+        else:
+            try:
+                with open(self.file_path, "rb") as f:
+                    b64_data = base64.b64encode(f.read()).decode("ascii")
+            except (OSError, FileNotFoundError, PermissionError) as e:
+                logger.error(f"Failed to read file {self.file_path}: {e}")
+                raise EtlException(f"Cannot read file: {e}")
 
-        api_result = await self._call_api_async(b64_data)
+            api_result = await self._call_api_async(b64_data)
         layout_results = api_result.get("layoutParsingResults", [])
         return self._build_documents(layout_results)

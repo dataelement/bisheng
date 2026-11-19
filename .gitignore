@@ -282,6 +282,10 @@ docker/.generated/
 docker/data/*
 docker/mysql/data/*
 docker/office/bisheng/*.gz
+# Per-developer secrets for native-dev processes (see docker/.env.app.example).
+# Listed explicitly, not via .env*, because .env.example / .env.local /
+# .env.app.example are all tracked on purpose.
+docker/.env.app
 
 bisheng-sync.sh
 /deploy.sh
