@@ -291,7 +291,7 @@ export function SpaceProcessingProgress({
   const layout = copyFailurePage
     ? "flex flex-1 flex-col gap-4"
     : fill
-      ? "flex min-h-0 flex-1 flex-col gap-3 [&>p]:shrink-0 [&>button]:shrink-0 [&>button]:self-start"
+      ? "flex min-h-0 flex-1 flex-col gap-3 overflow-hidden [&>p]:shrink-0 [&>button]:shrink-0 [&>button]:self-start"
       : "space-y-3";
   const content = showDetails ? (
     <section className={layout} aria-live="polite">
@@ -449,6 +449,7 @@ export function SpaceProcessingProgress({
       {!history && !compactCopy && showItems && itemRows.length > 0 && (
         <KnowledgeDialogTable
           caption={t("f118.processing_items")}
+          scrollable={fill}
           showCaption={!onBack}
           columns={[
             { label: t("f118.processing_item") },

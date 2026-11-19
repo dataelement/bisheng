@@ -525,3 +525,74 @@ it("filters history items on the server from later pages and recovers an empty s
   expect(screen.queryByText("f118.processing_no_matching_items")).not.toBeInTheDocument();
   expect(screen.getByText("f118.processing_counts 20/1/0")).toBe(summary);
 });
+
+it("scrolls the copy item list so a failed row past the pane stays reachable", async () => {
+  vi.mocked(readProcessingJob).mockReset().mockResolvedValue({
+    id: "copy-7",
+    space_id: 7,
+    kind: "space_copy",
+    state: "partial_failed",
+    revision: 5,
+    accepted_at: "2026-11-18T07:00:00Z",
+    started_at: null,
+    finished_at: null,
+    total_count: 17,
+    succeeded_count: 16,
+    failed_count: 1,
+    pending_count: 0,
+    hidden_item_count: 0,
+    retryable: true,
+    obsolete_reason: null,
+    error_code: null,
+  });
+  const rows: ProcessingItemRead[] = [
+    ...Array.from({ length: 16 }, (_, index) => ({
+      id: `ok-${index + 1}`,
+      file_id: index + 1,
+      file_name: `done-${index + 1}.txt`,
+      document_id: index + 1,
+      version_id: index + 1,
+      step: "copy_completed",
+      state: "succeeded" as const,
+      attempt: 1,
+      error_code: null,
+      message: null,
+      retryable: false,
+    })),
+    {
+      id: "failed-17",
+      file_id: 17,
+      file_name: "failed-copy.pdf",
+      document_id: 17,
+      version_id: 17,
+      step: "copy_failed",
+      state: "failed",
+      attempt: 1,
+      error_code: 10998,
+      message: null,
+      failure_reason: "file_changed",
+      retryable: true,
+    },
+  ];
+  vi.mocked(readProcessingItems).mockResolvedValue({ data: rows, total: rows.length });
+  render(
+    <QueryClientProvider client={client}>
+      <SpaceProcessingProgress
+        fill
+        spaceId={7}
+        jobId="copy-7"
+        kind="space_copy"
+        scope={{
+          identityKey: "user:5",
+          tenantId: 60,
+          managementTenantId: 60,
+          view: "ordinary",
+        }}
+      />
+    </QueryClientProvider>,
+  );
+  const table = await screen.findByRole("table", { name: "f118.processing_items" });
+  expect(table.parentElement).toHaveClass("overflow-auto");
+  expect(within(table).getByRole("rowheader", { name: "failed-copy.pdf" })).toBeInTheDocument();
+  expect(within(table).getAllByRole("row")).toHaveLength(18);
+});
