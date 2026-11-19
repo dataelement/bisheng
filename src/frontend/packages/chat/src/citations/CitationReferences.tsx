@@ -359,6 +359,18 @@ export function CitationReferences({
   );
 
   const panelContent = isDesktopPreviewInline ? documentPreviewContent : referenceListContent;
+  // Inside the drawer tiers the preview must live in the same portaled layer as
+  // the reference list: the list is `z-[130]` on <body>, while this component's
+  // own subtree sits under the chat's `relative z-10` stacking context — a
+  // sibling preview (z-[120/121]) would render *behind* the open list and the
+  // tap would look like a no-op.
+  const documentPreviewOverlay = (
+    <CitationDocumentPreviewDrawer services={services} renderFile={renderFile} isNarrowLayout={isNarrowLayout} onMobileNavVisibility={onMobileNavVisibility}
+      preview={documentPreview}
+      onClose={() => {openTicket.current++;setDocumentPreview(null);}}
+      manageMobileNavVisibility={false}
+    />
+  );
 
   if (panelOnly) {
     return (
@@ -425,6 +437,7 @@ export function CitationReferences({
               aria-label={localize('com_message.source_panel_label')}
             >
               {panelContent}
+              {documentPreviewOverlay}
             </aside>
           ) : (
             <aside
@@ -437,17 +450,11 @@ export function CitationReferences({
               onPointerDown={(event) => event.stopPropagation()}
             >
               {panelContent}
+              {documentPreviewOverlay}
             </aside>
           ),
           document.body,
         )}
-      {!isDesktopInlinePanel && (
-        <CitationDocumentPreviewDrawer services={services} renderFile={renderFile} isNarrowLayout={isNarrowLayout} onMobileNavVisibility={onMobileNavVisibility}
-          preview={documentPreview}
-          onClose={() => {openTicket.current++;setDocumentPreview(null);}}
-          manageMobileNavVisibility={false}
-        />
-      )}
     </>
   );
 }
