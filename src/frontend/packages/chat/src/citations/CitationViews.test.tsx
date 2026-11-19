@@ -64,3 +64,12 @@ it.each(['close','unmount','scope'])('ignores a source request failure after %s'
  await act(async()=>fail(new Error('Old source failed')));
  expect(unavailable).not.toHaveBeenCalled();
 });
+it('mounts a cited document inside the open source panel instead of behind it',async()=>{
+ const api=services();
+ const view=render(<CitationReferences content={'knowledgeSearch_doc:a'} citations={[detail]} services={api} renderFile={renderFile} isNarrowLayout/>);
+ fireEvent.click(view.container.querySelector('[data-citation-references-trigger]')!);
+ fireEvent.click(await view.findByRole('button',{name:/test.*\.mp4/}));
+ const viewer=await view.findByTestId('viewer');
+ const panel=view.getByRole('complementary',{name:'shared:citations.com_message.source_panel_label'});
+ expect(panel.contains(viewer)).toBe(true);
+});
