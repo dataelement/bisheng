@@ -38,7 +38,7 @@ async def tasks(web, monkeypatch):
                         tenant_id=tenant,
                         server=f"FT-{tenant}",
                         endpoint="runtime",
-                        sft_endpoint="http://training.test",
+                        sft_endpoint=f"http://training-{tenant}.test",
                     )
                 )
                 session.add(
@@ -57,13 +57,14 @@ async def tasks(web, monkeypatch):
                         tenant_id=tenant,
                         server=tenant,
                         server_name=f"FT-{tenant}",
+                        rt_endpoint="runtime",
                         base_model_name="base",
                         model_id=tenant,
                         model_name=f"trained-{tenant}",
                         extra_params={"gpus": "0"},
                         user_id=849,
                         user_name="same historical creator",
-                        sft_endpoint="http://training.test",
+                        sft_endpoint=f"http://training-{tenant}.test",
                     )
                 )
                 session.add(sft_model.SftModel(tenant_id=tenant, model_name="same-name"))
@@ -71,6 +72,12 @@ async def tasks(web, monkeypatch):
     for router in (server_router, llm_api.router):
         inherit_scope(router, RequestScope.TENANT)
         web.app.include_router(router, prefix="/api/v1")
+    from bisheng.admin.application.request_admission import install_request_admission
+
+    install_request_admission(web.app)
+    monkeypatch.setattr(
+        service.SFTBackend, "_base_request", AsyncMock(side_effect=AssertionError("Unstubbed FT transport"))
+    )
     for name in ("create_job", "cancel_job", "delete_job", "publish_job", "cancel_publish_job", "change_model_name"):
         mock = AsyncMock(return_value=(True, {}))
         monkeypatch.setattr(service.SFTBackend, name, mock)
