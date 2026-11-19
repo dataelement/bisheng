@@ -1,7 +1,7 @@
 """Persist only the DSH instance key in the existing global configuration table."""
 
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import select
+from sqlmodel import col, select
 
 from bisheng.common.models.config import Config
 from bisheng.core.database import get_async_db_session
@@ -17,6 +17,12 @@ class DshSettingsRepository:
         async with get_async_db_session() as session:
             row = (await session.exec(select(Config).where(Config.key == self.key))).one_or_none()
             return row.value if row else None
+
+    @staticmethod
+    async def read_many(keys: list[str]) -> dict[str, str]:
+        async with get_async_db_session() as session:
+            rows = await session.exec(select(Config.key, Config.value).where(col(Config.key).in_(keys)))
+            return dict(rows.all())
 
     async def save(self, value: str) -> None:
         async with get_async_db_session() as session:

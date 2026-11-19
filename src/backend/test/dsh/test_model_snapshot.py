@@ -70,6 +70,43 @@ async def test_root_shared_allowed_only_via_current_canonical_authorization(mode
         await service.get_dsh_model_snapshot(42)
 
 
+async def test_catalog_batches_shared_models_and_rechecks_on_next_read(models, monkeypatch):
+    service, dao, model, server = models
+    root_models = [SimpleNamespace(id=i, tenant_id=1, server_id=9, online=True, model_type="llm") for i in (43, 44)]
+    rejected = [
+        SimpleNamespace(id=45, tenant_id=3, server_id=9, online=True, model_type="llm"),
+        SimpleNamespace(id=46, tenant_id=1, server_id=9, online=False, model_type="llm"),
+        SimpleNamespace(id=47, tenant_id=1, server_id=9, online=True, model_type="embedding"),
+        SimpleNamespace(id=48, tenant_id=2, server_id=9, online=True, model_type="llm"),
+        SimpleNamespace(id=49, tenant_id=1, server_id=10, online=True, model_type="llm"),
+    ]
+    root_server = SimpleNamespace(id=9, tenant_id=1)
+    read_models = AsyncMock(return_value=[model, *root_models, *rejected])
+    read_servers = AsyncMock(return_value=[server, root_server])
+    monkeypatch.setattr(dao, "aget_model_by_ids", read_models)
+    monkeypatch.setattr(dao, "aget_server_by_ids", read_servers)
+    dao.aget_shared_server_ids_for_leaf.return_value = [9, 10]
+    ids = [44, 43, 42, 45, 46, 47, 48, 49, 100]
+
+    result = await service.get_dsh_model_catalog_snapshots(ids)
+    assert list(result) == [44, 43, 42]
+    assert result[43] == (root_models[0], root_server)
+    read_models.assert_awaited_once_with(ids)
+    assert set(read_servers.await_args.args[0]) == {8, 9, 10}
+    read_servers.assert_awaited_once()
+    dao.aget_shared_server_ids_for_leaf.assert_awaited_once_with(2, raise_on_error=True)
+    dao.aget_model_by_id.assert_not_awaited()
+
+    dao.aget_shared_server_ids_for_leaf.return_value = []
+    assert list(await service.get_dsh_model_catalog_snapshots(ids)) == [42]
+
+    from bisheng.common.errcode.permission import PermissionServiceUnavailableError
+
+    dao.aget_shared_server_ids_for_leaf.side_effect = PermissionServiceUnavailableError()
+    with pytest.raises(PermissionServiceUnavailableError):
+        await service.get_dsh_model_catalog_snapshots(ids)
+
+
 def test_builder_uses_same_snapshot_without_cache_lookup(monkeypatch):
     from bisheng.llm.domain.llm.base import BishengBase
 

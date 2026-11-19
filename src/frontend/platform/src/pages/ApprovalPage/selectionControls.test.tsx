@@ -3,8 +3,37 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import { RouteDialog } from './RouteDialog';
 import { NodeDialog } from './NodeDialog';
+import { ApproverUserPicker } from './components/ApproverUserPicker';
+import { getUsersApi } from '@/controllers/API/user';
+import type { User } from '@/types/api/user';
 vi.mock('@/controllers/API/user', () => ({ getRolesApi: vi.fn(async () => []), getUsersApi: vi.fn(async () => ({ data: [], total: 0 })) }));
 afterEach(cleanup);
+
+it('appends approvers on scroll without replacing the visible rows', async () => {
+    const first = { user_id: 1, user_name: 'First user' } as User;
+    const next = { user_id: 2, user_name: 'Next user' } as User;
+    let finish!: (page: { data: User[]; total: number }) => void;
+    vi.mocked(getUsersApi)
+        .mockResolvedValueOnce({ data: [first], total: 2 })
+        .mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    render(<ApproverUserPicker value={[1]} names={['First user']} onChange={vi.fn()} />);
+
+    const row = (await screen.findByRole('checkbox', { name: 'First user' })).closest('label')!;
+    const list = row.parentElement!;
+    Object.defineProperties(list, {
+        clientHeight: { value: 200 },
+        scrollHeight: { value: 500 },
+        scrollTop: { value: 300, writable: true },
+    });
+    expect(screen.queryByRole('button', { name: 'subjectSearch.loadMore' })).not.toBeInTheDocument();
+    fireEvent.scroll(list);
+    expect(getUsersApi).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 }), expect.anything());
+    expect(row).toBeInTheDocument();
+    await act(async () => finish({ data: [next], total: 2 }));
+    expect(await screen.findByRole('checkbox', { name: 'Next user' })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'First user' })).toBeChecked();
+    expect(list.scrollTop).toBe(300);
+});
 
 it('clears a route condition without leaking the UI sentinel or changing its numeric flow id', async () => {
     const onConfirm = vi.fn();
