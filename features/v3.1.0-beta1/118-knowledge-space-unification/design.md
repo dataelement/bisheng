@@ -1246,3 +1246,13 @@ Mode编译只迁移原before已存在的技术标记，permission_enabled/custom
 ### 修订历史：2026-11-19 升级备份证明取消
 
 按用户“DBA备份通知即可、脚本按停服步骤完成升级”及“修改脚本”的要求，同步 §3、§7.2、CLI、原生盘点、冻结图解码和操作文档。新 Run 无外部 DBA 证明；旧 Run 从原图读取身份字段，保留实际数据/结构校验及检查点。实现验证和未执行的真实中间件演练见[本轮记录](../../../docs/reviews/f118-upgrade-without-dba-evidence-20261119.md)。
+
+### 修订历史：2026-11-19 首次安装覆盖初始化
+
+166 空库安装复现历史 F001 迁移先创建 Root、API `_init_default_tenant` 因租户已存在跳过原始创建事务的覆盖签发。保留已发布迁移，两个 entrypoint 在 Alembic 前调用 `scripts/initialize_installation.py --apply`；源码部署按同一顺序执行。
+
+`tenant.application.installation` 编排，`InstallationRepository` 承担数据库访问。仅全空 schema（可包含无版本记录的 Alembic 表）能取得全局 `installation_bootstrap(id=1,state=pending)` 来源证明。先提交证明，再创建当前模型表；最后锁住证明行，在同一事务创建实际新 Root、调用原 `bootstrap_created_root` 进行六类来源/索引/删除凭据空集验证、签发原格式 Coverage 并完成证明。MySQL/DM8 DDL 隐式提交后的中断可从 pending 续办；凭据失败回滚 Root 和 completed 状态。已有数据库不因空业务查询或缺账本被自动签发，仍走正式停服盘点回填。该全局安装证明不参与租户资源权限或在线业务拦截。
+
+选择持久来源证明是为了保留原“仅实际创建租户事务签发空证明”的合同，并覆盖建表中断重试；不修改历史迁移、不在每次 API 启动补签既有租户。未来若安装器有统一持久安装事务，可再合并这个入口。验证覆盖新库、重复启动、旧库、版本历史、回滚与拒绝非空；166 独立 MySQL 测试库实际完成初始化→全历史 Alembic→API 租户初始化后仍 `ready=True,coverage_epoch=1`。DM8 真实执行仍由中央回归验证。
+
+同次 166 正式回填预检发现线上 Owner 对 `knowledge_space` 目标保存 `target_space_id=target_id`，原冻结解析器却仅允许文件父空间。`unification_reference_state._row` 现保留真实自指空间元数据，并拒绝空间 ID 不一致及模型携带空间元数据；文件父空间规则保持原状。采用兼容原事实读取而非清空 8 条正确绑定，冻结字段和指纹算法均不变。原生 SQL 的真实来源快照→目标事实→冻结→预检回归覆盖 self/NULL 接受和其他空间 ID 拒绝。

@@ -1695,6 +1695,18 @@ operator cleanup. These files are not recovery evidence; retain the original
 plan/events/payload backups. No-op/replayed business repairs compare the complete
 digest without requesting write locks. Real repairs retain the locked recheck.
 
+### First installation before schema migration
+
+For a new installation, run `python scripts/initialize_installation.py --apply`
+from `src/backend/` with the service's config **before** `alembic upgrade head`.
+Both packaged entrypoints run this automatically. Source/systemd installations
+must use the same order. Without `--apply` the command is read-only.
+Only an empty database can acquire the durable pending installation marker.
+Interrupted schema creation is resumable; default Root, real empty Coverage and
+marker completion commit together before historical migrations can seed Root.
+Existing databases are left unchanged and missing Coverage requires the formal
+stopped-service migration below. Historical Alembic revisions are unchanged.
+
 ### Formal stopped-service migration
 
 Run from `src/backend` after the operator has stopped all business writers and

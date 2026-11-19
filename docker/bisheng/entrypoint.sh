@@ -40,6 +40,8 @@ start_min_worker(){
 }
 
 if [ "$start_mode" = "api" ]; then
+    echo "Preparing first-installation reference coverage..."
+    python scripts/initialize_installation.py --apply
     echo "Running database migrations..."
     # Fail fast on migration errors instead of starting the API on a stale,
     # half-migrated schema (which surfaces later as confusing "missing
