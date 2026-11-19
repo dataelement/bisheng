@@ -2,6 +2,7 @@ import { Tag } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import type { SpaceCopyTask } from "@/controllers/API/knowledgeCopy";
 import type { KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
 import { SpaceProcessingProgress } from "./SpaceProcessingProgress";
@@ -124,23 +125,23 @@ export function SpaceCopyStatus({
   }
   const failed = task.phase === "failed";
   return (
-    <section
-      className={failed ? "flex min-h-full flex-col gap-4 p-4" : "space-y-4 p-4"}
-      aria-live="polite"
-    >
+    <section className="flex min-h-full flex-col gap-4 p-4" aria-live="polite">
       <h1 className="break-words text-h4 text-text-1">{task.name}</h1>
       {!failed && (
-        <>
-          <p role="status">
+        <div className="flex min-h-48 flex-1 flex-col items-center justify-center px-4 py-8 text-center">
+          <div aria-hidden="true">
+            <LoadingIcon className="size-20 max-w-none [@media(max-height:479px)]:size-10" />
+          </div>
+          <p role="status" className="mt-4 text-body text-text-2">
             {t(`space_copy_ui.phase_${task.phase}`, {
               completed: task.succeeded_count,
               total: task.total_count,
             })}
           </p>
-          <p className="text-body-sm text-text-3">
+          <p className="mt-1 max-w-[400px] text-body-sm text-text-3">
             {t("space_copy_ui.background_notice")}
           </p>
-        </>
+        </div>
       )}
       {(task.phase === "copying" || failed) && (
         <SpaceProcessingProgress
@@ -150,6 +151,7 @@ export function SpaceCopyStatus({
           kind="space_copy"
           onCompleted={onCompleted}
           showCopyFailurePage={failed}
+          showLoadingIndicator={failed}
         />
       )}
     </section>

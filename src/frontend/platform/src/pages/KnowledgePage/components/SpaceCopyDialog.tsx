@@ -1,6 +1,5 @@
-import { Button, Input } from "@bisheng/ui";
+import { Alert, Button, Input } from "@bisheng/ui";
 import { isApiError } from "@bisheng/api-client";
-import { Outlined } from "bisheng-icons";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Dialog } from "@/components/bs-ui/dialog";
@@ -126,10 +125,7 @@ export function SpaceCopyDialog({
               <p className="font-medium">{t("space_copy_ui.scope_label")}</p>
               <p>{t("space_copy_ui.scope")}</p>
             </div>
-            <div className="flex gap-2 rounded-md bg-blue-500/[0.07] p-3 text-body-sm text-text-2">
-              <Outlined.Info className="size-4 shrink-0 text-blue-500" />
-              <p>{t("space_copy_ui.permissions")}</p>
-            </div>
+            <Alert type="info" className="mx-0 !mt-3" description={t("space_copy_ui.permissions")} />
             <p className="text-text-3">{t("space_copy_ui.independent")}</p>
           </div>
       </SpacePanelFrame>

@@ -49,6 +49,7 @@ interface SpaceProcessingProgressProps {
   onBack?: () => void;
   fill?: boolean;
   showCopyFailurePage?: boolean;
+  showLoadingIndicator?: boolean;
   copyDisclosure?: {
     open: boolean;
     phase: SpaceCopyTask["phase"];
@@ -65,6 +66,7 @@ export function SpaceProcessingProgress({
   onBack,
   fill = false,
   showCopyFailurePage = false,
+  showLoadingIndicator = true,
   copyDisclosure,
 }: SpaceProcessingProgressProps) {
   const { t } = useTranslation("knowledge");
@@ -368,7 +370,9 @@ export function SpaceProcessingProgress({
           action={refreshSourceAction || (progressReadFailed ? retryReadAction : undefined)}
         />
       ) : !metadata && job.isInitialLoading ? (
-        <SpaceProcessingLoading className={fill ? "min-h-0 flex-1" : undefined} />
+        showLoadingIndicator && (
+          <SpaceProcessingLoading className={fill ? "min-h-0 flex-1" : undefined} />
+        )
       ) : !jobData || copyJobOutOfSync ? (
         progressReadFailed ? (
           <>
@@ -376,7 +380,7 @@ export function SpaceProcessingProgress({
             {retryReadAction}
           </>
         ) : (
-          !metadata && <LoadingState label={t("detail.loading")} />
+          !metadata && showLoadingIndicator && <LoadingState label={t("detail.loading")} />
         )
       ) : !copyFailurePanel && (
         <>
