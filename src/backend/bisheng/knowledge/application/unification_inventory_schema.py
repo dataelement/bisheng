@@ -69,6 +69,9 @@ _SCHEMAS = {
     "existing_space_creator_retention": _spec(
         "tenant_id:positive space_id:positive creator_user_id:positive managed_file_count:nonnegative reason:str resource_digest:hash creator_digest:hash"
     ),
+    "historical_resource_creator_retention": _spec(
+        "tenant_id:positive space_id:positive creator_user_id:positive original_type:int managed_file_count:nonnegative reason:str resource_digest:hash"
+    ),
     "stranded_file_retention": _spec(
         "tenant_id:positive space_id:positive file_id:positive missing_parent_id:positive sql_permission_count:nonnegative fga_tuple_count:nonnegative reason:str resource_digest:hash file_digest:hash ancestor_digest:hash"
     ),

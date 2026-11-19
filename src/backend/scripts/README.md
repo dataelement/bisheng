@@ -1750,6 +1750,15 @@ stopped-service migration below. Historical Alembic revisions are unchanged.
 
 ### Formal stopped-service migration
 
+Historical resource creators whose positive original IDs no longer exist are
+retained with an explicit warning and frozen identity proof. NORMAL conversion
+preserves the complete original member set (`retain_missing`) and does not create
+an account, assign another owner, or insert membership for the missing account.
+Apply/verify/resume recheck global identity absence and the original file count;
+conflicting members or an account that reappears still block. File uploader and
+QA/tag author IDs remain unchanged audit metadata, without a new user-existence
+gate. This retention does not excuse a missing creator on unrelated sources.
+
 Run from `src/backend` after the operator has stopped all business writers and
 received DBA confirmation that the consistent backup is complete. No backup/schema
 evidence descriptors or `f118-inputs.json` are required. Use the same `config`

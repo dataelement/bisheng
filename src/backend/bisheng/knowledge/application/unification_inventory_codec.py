@@ -187,6 +187,13 @@ def _validate(tag, data):
                     _invalid()
                 if value.tzinfo is not None or value.microsecond or value.isoformat() != data["creator_planned_at"]:
                     _invalid()
+            elif data["membership_action"] == "retain_missing":
+                if (
+                    data["existing_creator_member_id"] is not None
+                    or data["creator_planned_at"] is not None
+                    or data["creator_template_digest"] != digest(None)
+                ):
+                    _invalid()
             elif data["membership_action"] == "keep":
                 if (
                     data["existing_creator_member_id"] is None

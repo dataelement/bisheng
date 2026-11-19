@@ -8691,3 +8691,4 @@ W3基础交付：T346原ModuleNotFound红→T344 DTO 8绿；T348原ModuleNotFoun
 - [x] MIG-DEFAULT-5：AC-135–AC-140；真实 SQL schema 与原生权限/引用运行时的端到端、负向和规模回归，Ruff、架构守卫及特性审查；范围和基线失败见[审查记录](../../../docs/reviews/f118-upgrade-default-classification-20261120.md)。
 - [ ] MIG-DEFAULT-6：AC-140；按用户后续要求，先拷贝带哈希清单的修复代码到生产维护容器验证，同配置且禁用维护容器健康检查；全部升级完成后再正式推送 GitHub 发布线。
 - [ ] MIG-DEFAULT-7：AC-140；通过正式脚本继续生产历史准备、M2→M4、Redis 回填、校验和开服；Gateway 按用户决定延期，不直接改业务数据绕过校验。
+- [x] MIG-DEFAULT-8：AC-141；失效创建者闭合保留、成员零新增、原生 apply/verify 身份重验；完整迁移、续跑、账号重现拒绝及 200/400 资源有界查询测试。

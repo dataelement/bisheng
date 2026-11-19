@@ -14,7 +14,30 @@ from bisheng.knowledge.application.unification_inventory_codec import digest, re
 CREATOR_RETENTION = "existing_space_creator_retention"
 FILE_RETENTION = "stranded_file_retention"
 ROOTLESS_FILE_RETENTION = "rootless_file_retention"
-RETENTIONS = frozenset({CREATOR_RETENTION, FILE_RETENTION, ROOTLESS_FILE_RETENTION})
+HISTORICAL_CREATOR_RETENTION = "historical_resource_creator_retention"
+RETENTIONS = frozenset({CREATOR_RETENTION, FILE_RETENTION, ROOTLESS_FILE_RETENTION, HISTORICAL_CREATOR_RETENTION})
+
+
+def historical_creator_retention(*, resource, creator, managed_file_count):
+    if (
+        resource["type"] not in {0, 1, 2, 3}
+        or type(resource["user_id"]) is not int
+        or resource["user_id"] <= 0
+        or type(managed_file_count) is not int
+        or managed_file_count < 0
+        or creator != {"user_id": resource["user_id"], "exists": False, "delete": None}
+    ):
+        blocked("historical_creator_identity_invalid")
+    return record_from_values(
+        HISTORICAL_CREATOR_RETENTION,
+        tenant_id=resource["tenant_id"],
+        space_id=resource["id"],
+        creator_user_id=resource["user_id"],
+        original_type=resource["type"],
+        managed_file_count=managed_file_count,
+        resource_digest=digest(resource),
+        reason="preserve_original_missing_creator_without_new_membership",
+    )
 
 
 def rootless_file_retention(file):
@@ -172,7 +195,7 @@ class StructuralRetentionInventoryVerifier:
         if tag in RETENTIONS:
             if (kind, section) != ("plan", "control") or value["tenant_id"] != tenant_id:
                 blocked("proof_scope")
-            ident = value["space_id"] if tag == CREATOR_RETENTION else value["file_id"]
+            ident = value["space_id"] if tag in {CREATOR_RETENTION, HISTORICAL_CREATOR_RETENTION} else value["file_id"]
             key = tenant_id, ident
             if key in self.proofs[tag]:
                 blocked("duplicate_proof")
@@ -245,6 +268,16 @@ class StructuralRetentionInventoryVerifier:
                 blocked("creator_proof_changed")
             explained_creators.add((key[0], resource["user_id"]))
         missing_creators = {key for key, value in self.creators.items() if value["exists"] is False}
+        for key, proof in self.proofs[HISTORICAL_CREATOR_RETENTION].items():
+            resource = self.resources.get(key)
+            creator = self.creators.get((key[0], proof["creator_user_id"]))
+            if (
+                resource is None
+                or historical_creator_retention(resource=resource, creator=creator, managed_file_count=counts[key]).data
+                != proof
+            ):
+                blocked("historical_creator_proof_changed")
+            explained_creators.add((key[0], proof["creator_user_id"]))
         invalid_assistants = {
             key
             for key, root in self.source_roots.items()
@@ -257,6 +290,9 @@ class StructuralRetentionInventoryVerifier:
         )
         if missing_creators != explained_creators:
             blocked("unexplained_missing_creator")
+        if self.proofs[CREATOR_RETENTION].keys() & self.proofs[HISTORICAL_CREATOR_RETENTION].keys():
+            blocked("duplicate_creator_explanation")
+        creator_proofs = self.proofs[CREATOR_RETENTION] | self.proofs[HISTORICAL_CREATOR_RETENTION]
         for source, creator in self.sources:
             if (
                 (source.tenant_id, creator) in missing_creators
@@ -264,9 +300,8 @@ class StructuralRetentionInventoryVerifier:
                 and (
                     source.source_type.value != "knowledge"
                     or not source.source_id.isdecimal()
-                    or (source.tenant_id, int(source.source_id)) not in self.proofs[CREATOR_RETENTION]
-                    or self.proofs[CREATOR_RETENTION][source.tenant_id, int(source.source_id)]["creator_user_id"]
-                    != creator
+                    or (source.tenant_id, int(source.source_id)) not in creator_proofs
+                    or creator_proofs[source.tenant_id, int(source.source_id)]["creator_user_id"] != creator
                 )
             ):
                 blocked("missing_creator_borrowed_by_other_source")
@@ -312,6 +347,32 @@ async def validate_native_retentions(session, proofs, *, resources, controls, pe
     tenant = get_current_tenant_id()
     if any(proof["tenant_id"] != tenant for proof in proofs):
         blocked("live_tenant_changed")
+    historical = tuple(
+        p for p in proofs if p.get("reason") == "preserve_original_missing_creator_without_new_membership"
+    )
+    for offset in range(0, len(historical), 199):
+        batch = historical[offset : offset + 199]
+        rows, _ = await resources.aload_retention_rows(session, resource_ids=tuple(p["space_id"] for p in batch))
+        roots = {r.id: r for r in rows}
+        counts = await resources.acount_resource_files(session, resource_ids=tuple(roots))
+        creators = {
+            r.user_id: r
+            for r in await controls.ainspect_users(
+                session, user_ids=tuple(sorted({p["creator_user_id"] for p in batch}))
+            )
+        }
+        for proof in batch:
+            root, creator = roots.get(proof["space_id"]), creators.get(proof["creator_user_id"])
+            if (
+                root is None
+                or root.user_id != proof["creator_user_id"]
+                or root.type not in ({0, 3} if proof["original_type"] == 0 else {proof["original_type"]})
+                or creator is None
+                or creator.exists is not False
+                or counts.get(proof["space_id"]) != proof["managed_file_count"]
+            ):
+                blocked("historical_creator_live_identity_changed")
+    proofs = tuple(p for p in proofs if p.get("reason") != "preserve_original_missing_creator_without_new_membership")
     rootless = tuple(p for p in proofs if p.get("reason") == "preserve_original_file_with_absent_knowledge_parent")
     for offset in range(0, len(rootless), 199):
         batch = rootless[offset : offset + 199]

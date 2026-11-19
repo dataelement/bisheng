@@ -90,6 +90,7 @@ _SECTIONS = {
         "stranded_file_retention",
         "rootless_file",
         "rootless_file_retention",
+        "historical_resource_creator_retention",
     },
     "permission": {"resource_mode", "grant", "assignee", "visible_source"},
     "permission_namespace": {
@@ -463,7 +464,7 @@ class UnificationInventoryApplication:
                 if section in {"conversion", "permission_namespace"} or record.record_type in RETENTIONS
                 else "baseline"
             )
-            if record.record_type == CREATOR_RETENTION:
+            if record.record_type in {CREATOR_RETENTION, "historical_resource_creator_retention"}:
                 retained_creators[record.data["space_id"]] = record.data["creator_user_id"]
             elif record.record_type == FILE_RETENTION:
                 await source_inventory.sharing_reader.aassert_no_file_tuples(
