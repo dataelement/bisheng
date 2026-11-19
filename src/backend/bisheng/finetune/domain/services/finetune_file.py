@@ -5,10 +5,10 @@ from urllib.parse import unquote, urlsplit
 
 from fastapi import UploadFile
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.finetune import TrainFileNotExistError
+from bisheng.common.errcode.finetune import InvalidExtraParamsError, TrainFileNotExistError
 from bisheng.common.errcode.tenant import NoTenantContextError
 from bisheng.common.schemas.api import PageList
 from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter
@@ -19,6 +19,7 @@ from bisheng.knowledge.domain.upload_file_size import validate_knowledge_upload_
 from bisheng.permission.application.business_authorization import require_business_action
 from bisheng.utils import generate_uuid
 
+from ..models.finetune import FinetuneTrainingFile
 from ..models.preset_train import PresetTrain, PresetTrainDao
 
 
@@ -116,19 +117,33 @@ class FinetuneFileService(BaseModel):
     async def validate_training_files(
         cls, train_data: list[dict] | None, preset_data: list[dict] | None, user: UserPayload
     ) -> None:
-        # Validate the entire input before any URL is signed or remote job is started.
-        for item in train_data or []:
-            cls.validate_personal_file(item.get("url", ""), user)
-        for item in preset_data or []:
-            dataset = await PresetTrainDao.find_by_url(item.get("url", ""))
-            if dataset is None or (item.get("id") is not None and item["id"] != dataset.id):
-                raise TrainFileNotExistError()
+        # Normalize the complete payload before signing any object or starting FT.
+        for items, is_preset in ((train_data, False), (preset_data, True)):
+            normalized = []
+            for item in items or []:
+                try:
+                    source = FinetuneTrainingFile.model_validate(item)
+                except ValidationError as exc:
+                    raise InvalidExtraParamsError() from exc
+                if is_preset:
+                    dataset = await PresetTrainDao.find_by_url(source.url)
+                    if dataset is None or (source.id is not None and source.id != dataset.id):
+                        raise TrainFileNotExistError()
+                    # Use the canonical stored key, including on case-insensitive DBs.
+                    source.url, source.id, source.name = dataset.url, dataset.id, dataset.name
+                else:
+                    cls.validate_personal_file(source.url, user)
+                normalized.append(source.model_dump(exclude_none=True))
+            if items is not None:
+                items[:] = normalized
 
     @classmethod
     def validate_personal_file(cls, file_url: str, user: UserPayload) -> None:
         prefix = cls._personal_prefix(user)
-        if not file_url.startswith(prefix) or not re.fullmatch(
-            r"[0-9a-f]{32}\.[a-zA-Z0-9]{1,10}", file_url[len(prefix) :]
+        if (
+            not isinstance(file_url, str)
+            or not file_url.startswith(prefix)
+            or not re.fullmatch(r"[0-9a-f]{32}\.[a-zA-Z0-9]{1,10}", file_url[len(prefix) :])
         ):
             raise TrainFileNotExistError()
 

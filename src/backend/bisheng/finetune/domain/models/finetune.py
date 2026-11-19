@@ -1,8 +1,9 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import Field as PydanticField
 from sqlalchemy import Integer, Select
 from sqlmodel import Column, DateTime, Field, col, func, select, text, update
 
@@ -142,14 +143,25 @@ class FinetuneChangeModelName(BaseModel):
     model_name: str
 
 
+class FinetuneTrainingFile(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str | None = None
+    name: str
+    url: str
+    num: int = PydanticField(default=0, ge=0)
+
+
 class FinetuneExtraParams(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
     gpus: str = Field(..., description="Needs to be usedGPUCard #")
     val_ratio: float = Field(0.1, ge=0, le=1, description="Proportion of validation sets")
     per_device_train_batch_size: int = Field(1, description="Batch size")
     learning_rate: float = Field(0.00005, ge=0, le=1, description='Learning rate <g x=1 id="1364"/>')
     num_train_epochs: int = Field(3, gt=0, description="Iteration rounds")
     max_seq_len: int = Field(8192, gt=0, description="Maximum List Length")
-    cpu_load: str = Field("false", description="Y/NcpuLoad")
+    cpu_load: Literal["false", "true"] = "false"
 
     @field_validator("per_device_train_batch_size", mode="before")
     @classmethod

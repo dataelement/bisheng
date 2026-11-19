@@ -1,6 +1,7 @@
 import asyncio
 import io
 import json
+import re
 from typing import Any
 
 from loguru import logger
@@ -24,6 +25,7 @@ from bisheng.common.errcode.finetune import (
 from bisheng.common.errcode.model_deploy import NotFoundModelError
 from bisheng.common.errcode.server import NoSftServerError
 from bisheng.common.schemas.api import UnifiedResponseModel
+from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.storage.minio.minio_manager import get_minio_storage, get_minio_storage_sync
 
 from ...utils import parse_gpus, parse_server_host
@@ -60,16 +62,68 @@ class FinetuneService:
     @classmethod
     def validate_params(cls, finetune: Finetune) -> UnifiedResponseModel | None:
         """Check request parameters, returningNoneIndicates check passed"""
+        cls.validate_model_name(finetune.model_name)
         # Individual Training Sets and Preset Training Sets Use at least one
         if not finetune.train_data and not finetune.preset_data:
             raise TrainDataNoneError()
         try:
             # Check Extra Parameter Values
-            FinetuneExtraParams(**finetune.extra_params.copy())
+            finetune.extra_params = FinetuneExtraParams.model_validate(finetune.extra_params).model_dump()
         except ValidationError as e:
-            logger.error(f"Finetune extra_params is invalid {e}")
-            raise InvalidExtraParamsError()
+            logger.warning("Invalid fine-tuning training options")
+            raise InvalidExtraParamsError() from e
         return None
+
+    @classmethod
+    def validate_model_name(cls, model_name: str) -> None:
+        if not isinstance(model_name, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,50}", model_name):
+            raise InvalidExtraParamsError()
+
+    @classmethod
+    async def _is_server_isolated(cls, server: Server) -> bool:
+        try:
+            host = parse_server_host(server.sft_endpoint)
+        except ValueError:
+            logger.warning("Invalid FT address for service {}", server.id)
+            return False
+        for tenant_id, endpoint in await ServerDao.find_sft_owners():
+            if tenant_id == get_current_tenant_id() or not endpoint:
+                continue
+            try:
+                foreign_host = parse_server_host(endpoint)
+            except ValueError:
+                logger.warning("Ignoring an invalid FT binding during ownership validation")
+                continue
+            if foreign_host == host:
+                logger.warning("FT service {} has ambiguous tenant ownership", server.id)
+                return False
+        return True
+
+    @classmethod
+    async def _get_job(cls, job_id: str) -> Finetune:
+        job = await FinetuneDao.find_job(job_id)
+        if job is None:
+            raise NotFoundJobError()
+        server = await cls.get_sft_server(job.server)
+        if server is None:
+            raise NotFoundJobError()
+        try:
+            same_host = parse_server_host(job.sft_endpoint) == parse_server_host(server.sft_endpoint)
+        except ValueError:
+            same_host = False
+        if not same_host or job.rt_endpoint != server.endpoint:
+            raise NotFoundJobError()
+        cls.validate_model_name(job.model_name)
+        if job.status == FinetuneStatus.PUBLISHED.value:
+            await cls._get_published_model(job)
+        return job
+
+    @classmethod
+    async def _get_published_model(cls, job: Finetune) -> ModelDeploy:
+        model = await ModelDeployDao.find_model(job.model_id)
+        if model is None or model.server != str(job.server) or model.model != job.model_name:
+            raise NotFoundModelError()
+        return model
 
     @classmethod
     def parse_command_params(cls, finetune: Finetune, base_model: ModelDeploy) -> dict:
@@ -142,10 +196,12 @@ class FinetuneService:
     async def get_sft_server(cls, server_id: int) -> Server | None:
         server = await cls.get_server(server_id)
         if not server:
-            logger.warning("not found rt server data by id: %s", server_id)
+            logger.warning("not found rt server data by id: {}", server_id)
             return None
         if not server.sft_endpoint:
-            logger.warning("not found sft endpoint by id: %s", server_id)
+            logger.warning("not found sft endpoint by id: {}", server_id)
+            return None
+        if not await cls._is_server_isolated(server):
             return None
         return server
 
@@ -205,9 +261,7 @@ class FinetuneService:
     @classmethod
     async def cancel_job(cls, job_id: str, user: UserPayload) -> Finetune:
         # ViewjobTask Information
-        finetune = await FinetuneDao.find_job(job_id)
-        if not finetune:
-            raise NotFoundJobError()
+        finetune = await cls._get_job(job_id)
 
         # Verify task status change
         new_status = FinetuneStatus.CANCEL.value
@@ -228,11 +282,11 @@ class FinetuneService:
     @classmethod
     async def delete_job(cls, job_id: str, user: UserPayload) -> Finetune:
         # ViewjobTask Information
-        finetune = await FinetuneDao.find_job(job_id)
-        if not finetune:
-            raise NotFoundJobError()
+        finetune = await cls._get_job(job_id)
 
-        model_name = await cls.delete_published_model(finetune)
+        model_name = finetune.model_name
+        if finetune.status == FinetuneStatus.PUBLISHED.value:
+            model_name = (await cls._get_published_model(finetune)).model
 
         # Call the interface to delete the training task
         logger.info(f"start delete sft job: {job_id}, user: {user.user_name}")
@@ -242,6 +296,7 @@ class FinetuneService:
         if not sft_ret[0]:
             logger.error(f"delete sft job error: job_id: {job_id}, err: {sft_ret[1]}")
             raise DeleteJobError()
+        await cls.delete_published_model(finetune)
         # Delete training task data
         logger.info("delete sft job data")
         # CleanedminioLog file on
@@ -266,8 +321,11 @@ class FinetuneService:
 
     @classmethod
     async def get_job_log(cls, finetune: Finetune) -> str | None:
+        expected_path = f"finetune/log/{finetune.id}"
+        if finetune.log_path.lstrip("/") != expected_path:
+            raise NotFoundJobError()
         minio_client = await get_minio_storage()
-        resp = await minio_client.get_object(object_name=finetune.log_path)
+        resp = await minio_client.get_object(object_name=expected_path)
         if resp is None:
             return None
         return resp.decode("utf-8")
@@ -282,9 +340,7 @@ class FinetuneService:
         if finetune.status != FinetuneStatus.PUBLISHED.value:
             return finetune.model_name
         # View published modelsID
-        published_model = await ModelDeployDao.find_model(finetune.model_id)
-        if not published_model:
-            return finetune.model_name
+        published_model = await cls._get_published_model(finetune)
 
         # Delete Published Model Data
         await ModelDeployDao.delete_model(published_model)
@@ -294,9 +350,7 @@ class FinetuneService:
     @classmethod
     async def publish_job(cls, job_id: str, user: UserPayload) -> Finetune:
         # ViewjobTask Information
-        finetune = await FinetuneDao.find_job(job_id)
-        if not finetune:
-            raise NotFoundJobError()
+        finetune = await cls._get_job(job_id)
         new_status = FinetuneStatus.PUBLISHED.value
         cls.validate_status(finetune, new_status)
 
@@ -337,13 +391,9 @@ class FinetuneService:
     @classmethod
     async def cancel_publish_job(cls, job_id: str, user: UserPayload) -> Finetune:
         # ViewjobTask Information
-        finetune = await FinetuneDao.find_job(job_id)
-        if not finetune:
-            raise NotFoundJobError()
+        finetune = await cls._get_job(job_id)
         new_status = FinetuneStatus.SUCCESS.value
         cls.validate_status(finetune, new_status)
-
-        await cls.delete_published_model(finetune)
 
         # RecallSFT-backendright of privacyAPIInterfaces
         logger.info(f"start cancel export sft job: {job_id}, user: {user.user_name}")
@@ -353,10 +403,8 @@ class FinetuneService:
         if not sft_ret[0]:
             logger.error(f"cancel export sft job error: job_id: {job_id}, err: {sft_ret[1]}")
             raise UnExportJobError()
+        await cls.delete_published_model(finetune)
         await SftModelDao.delete_sft_model(finetune.model_name)
-        # Delete published model information
-        logger.info(f"delete published model: {finetune.model_id}")
-        await ModelDeployDao.delete_model_by_id(finetune.model_id)
         logger.info("update finetune status")
         finetune.status = new_status
         finetune.model_id = 0
@@ -386,12 +434,11 @@ class FinetuneService:
     async def get_job_info(cls, job_id: str) -> dict[str, Any]:
         """Get real-time information on tasks in training"""
         # ViewjobTask Information
-        finetune = await FinetuneDao.find_job(job_id)
-        if not finetune:
-            raise NotFoundJobError()
+        finetune = await cls._get_job(job_id)
 
         # Sync Task Execution
         await cls.sync_job_status(finetune, finetune.sft_endpoint)
+        finetune = await cls._get_job(job_id)
 
         # Get log file
         log_data = None
@@ -433,7 +480,13 @@ class FinetuneService:
 
     @classmethod
     async def sync_job_status(cls, finetune: Finetune, sft_endpoint: str) -> bool:
-        """FROMSFT-backendService Synchronization Task Status"""
+        """Reload the task and its verified transport before background I/O."""
+        try:
+            finetune = await cls._get_job(finetune.id)
+        except (NotFoundJobError, NotFoundModelError, InvalidExtraParamsError):
+            logger.warning("Skipped unavailable fine-tuning job during status refresh")
+            return False
+        sft_endpoint = finetune.sft_endpoint
         if finetune.status != FinetuneStatus.TRAINING.value:
             return True
         logger.info(f"start sync job status: {finetune.id}")
@@ -480,9 +533,8 @@ class FinetuneService:
     @classmethod
     async def change_job_model_name(cls, req: FinetuneChangeModelName) -> Finetune:
         """Modify the model name of the training task"""
-        finetune = await FinetuneDao.find_job(req.id)
-        if not finetune:
-            raise NotFoundJobError()
+        cls.validate_model_name(req.model_name)
+        finetune = await cls._get_job(req.id)
 
         # Verify that the model name already exists
         await cls.verify_job_model_name(req.model_name)
@@ -503,10 +555,7 @@ class FinetuneService:
         # Unpublished training tasks do not require actionablemodel
         if finetune.status != FinetuneStatus.PUBLISHED.value:
             return True
-        published_model = await ModelDeployDao.find_model(finetune.model_id)
-        if not published_model:
-            logger.error(f"published model not found, job_id: {finetune.id}, model_id: {finetune.model_id}")
-            return False
+        published_model = await cls._get_published_model(finetune)
 
         # Call the interface to modify the name of the published model
         sft_ret = await SFTBackend.change_model_name(
@@ -569,7 +618,11 @@ class FinetuneService:
     @classmethod
     async def get_server_options(cls) -> list[dict]:
         servers = await ServerDao.find_all_server()
-        return [{"id": server.id, "server": server.server} for server in servers if server.sft_endpoint]
+        return [
+            {"id": server.id, "server": server.server}
+            for server in servers
+            if server.sft_endpoint and await cls._is_server_isolated(server)
+        ]
 
     @classmethod
     async def get_gpu_info(cls) -> list[dict]:
@@ -577,7 +630,7 @@ class FinetuneService:
         all_server = await ServerDao.find_all_server()
         res = []
         for server in all_server:
-            if not server.sft_endpoint:
+            if not server.sft_endpoint or not await cls._is_server_isolated(server):
                 continue
             sft_ret = await SFTBackend.get_gpu_info(parse_server_host(server.sft_endpoint))
             if not sft_ret[0]:
