@@ -26,7 +26,7 @@ type ErrorOptions = {
   showError?: boolean;
   /** When true, the interceptor will NOT auto-redirect on 403. The caller handles it. */
   skip403Redirect?: boolean;
-  /** When true, a 500 on this call does not cover the app with the maintenance overlay. */
+  /** When true, failures on this call do not trigger a service availability check. */
   skipMaintenance?: boolean;
 };
 
@@ -34,31 +34,34 @@ const customAxios = axios.create({
   baseURL: import.meta.env.BASE_URL,
 });
 
-/** Public, cheap endpoint served by the same backend (and gateway) as every API call. */
-const SERVICE_PROBE_PATH = "/api/v1/env";
-const SERVICE_PROBE_TIMEOUT_MS = 8000;
-let serviceProbe: Promise<void> | null = null;
+export const SERVICE_MAINTENANCE_EVENT = "bs:service-maintenance";
 
-/**
- * A 500 says one request failed, not that the service is down. Probe the
- * service once; only when the probe fails too, raise the full-screen
- * maintenance overlay. Concurrent 500s share one in-flight probe. The event
- * name mirrors SERVICE_MAINTENANCE_EVENT in SystemMaintenanceOverlay.tsx.
- */
-function reportServerFailure(): Promise<void> {
-  serviceProbe ??= customAxios
-    .get(SERVICE_PROBE_PATH, {
-      timeout: SERVICE_PROBE_TIMEOUT_MS,
-      skipMaintenance: true,
-      skip403Redirect: true,
-      showError: false,
-    } as AxiosRequestConfig)
+// Keep the public probe on the same gateway without auth redirects or recursive failure checks.
+const SERVICE_PROBE_PATH = "/api/v1/env";
+const serviceProbeTransport = axios.create({
+  baseURL: customAxios.defaults.baseURL,
+  timeout: 8000,
+  validateStatus: () => true,
+});
+let serviceProbe: Promise<boolean> | null = null;
+
+function isServerFailure(status: unknown): boolean {
+  return typeof status === "number" && status >= 500 && status < 600;
+}
+
+/** Confirm an outage with one shared probe across concurrent request failures and retries. */
+export function checkServiceAvailability(): Promise<boolean> {
+  serviceProbe ??= serviceProbeTransport
+    .get(SERVICE_PROBE_PATH)
     .then(
+      ({ status, data }) => status === 401 || status === 403 || (
+        status === 200 && isErrorEnvelope(data) && data.status_code === 200
+      ),
       () => false,
-      () => true,
     )
-    .then((serviceDown) => {
-      if (serviceDown) window.dispatchEvent(new CustomEvent("bs:service-maintenance"));
+    .then((reachable) => {
+      if (!reachable) window.dispatchEvent(new Event(SERVICE_MAINTENANCE_EVENT));
+      return reachable;
     })
     .finally(() => {
       serviceProbe = null;
@@ -66,9 +69,9 @@ function reportServerFailure(): Promise<void> {
   return serviceProbe;
 }
 
-/** Test seam: resolves once the in-flight service probe (if any) has settled. */
-export function serviceProbeSettled(): Promise<void> {
-  return serviceProbe ?? Promise.resolve();
+/** Resolves once the in-flight service probe, if any, has settled. */
+export async function serviceProbeSettled(): Promise<void> {
+  await serviceProbe;
 }
 
 const browserScope = new BrowserScopeSession();
@@ -325,12 +328,10 @@ customAxios.interceptors.response.use(
       return Promise.reject(err);
     }
 
-    // Business code 500 inside an HTTP 200: gateways wrap upstream 5xx this way,
-    // but the backend's resp_500 also uses it for ordinary endpoint errors. Only a
-    // failing service probe raises the overlay; the request itself keeps going
-    // through the normal business-error path so its caller can report it.
-    if (envelope?.status_code === 500 && !response.config.skipMaintenance) {
-      reportServerFailure();
+    // Gateways can wrap upstream 5xx in HTTP 200. Confirm availability separately
+    // so an endpoint failure keeps its existing caller-level handling.
+    if (isServerFailure(envelope?.status_code) && !response.config.skipMaintenance) {
+      void checkServiceAvailability();
     }
 
     // Legacy 403 default: redirect to /c/new?error=11403 unless the caller
@@ -368,14 +369,15 @@ customAxios.interceptors.response.use(
   },
   async (error) => {
     const originalRequest = error.config;
-    if (!error.response) {
-      return Promise.reject(error);
+    const transportFailed = !error.response && (
+      error.code === "ERR_NETWORK" || error.code === "ECONNABORTED" || error.code === "ETIMEDOUT"
+    );
+    if (!originalRequest?.skipMaintenance && (isServerFailure(error.response?.status) || transportFailed)) {
+      void checkServiceAvailability();
     }
 
-    // An HTTP 500 is first that one endpoint's failure: reject it to the caller,
-    // and let the service probe decide whether the whole service is down.
-    if (error.response.status === 500 && !originalRequest?.skipMaintenance) {
-      reportServerFailure();
+    if (!error.response) {
+      return Promise.reject(error);
     }
 
     if (originalRequest.url?.includes("/api/auth/2fa") === true) {
