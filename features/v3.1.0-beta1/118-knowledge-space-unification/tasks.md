@@ -8681,3 +8681,11 @@ W3基础交付：T346原ModuleNotFound红→T344 DTO 8绿；T348原ModuleNotFoun
 - [x] HISTORY-DELETE-VERIFY：扩展迁移/投影回归 1936 通过、1 项查询次数断言失败；原始 `b6c58466b2` 独立工作树复现该失败（预期 9，实际 6），无新增失败。最终格式、Ruff/F821、架构守卫、CLI 帮助及差异空白检查通过。
 
 现场边界：按用户要求，本轮不连接或修改 165 环境；本地验证不代替发行镜像的真实中间件演练。
+
+## 2026-11-20 显式目录继承与私有库保留（AC-115/116）
+
+- [x] INHERIT-INTENT：用户后续明确要求继续现场升级，并确认缺失目录应继承父库；旧私有库保留，不新增授权。此为后续操作范围，前轮只读/不部署边界不追溯改写。
+- [x] INHERIT-CLI：独立选中计划、原生 mode/投影围栏及 checksum 恢复，不生成 Creator/人员/角色 Grant，原计划不覆盖，父子按顺序补齐。
+- [x] PRIVATE-RETAIN：type=2 历史文件/文档在合法归属/父链检查后保留，不成为新 mode/层级修复对象；活动库仍严格校验。
+- [x] INHERIT-VERIFY：新增 21 项，相关组合 318 通过；N/2N SQL/事务/写请求计数线性，关键 MySQL 索引只读 EXPLAIN 通过；Ruff、架构守卫、CLI 帮助与差异检查通过。
+- [x] INHERIT-DOCS：脚本 README、D12 及 [审查记录](../../../docs/reviews/f118-folder-inheritance-repair-20261120.md) 说明权限意图、边界、串行执行及独立后续历史计划。

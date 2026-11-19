@@ -1662,6 +1662,11 @@ embedding names, and purges invalid derived permissions. Exact orphan MinIO
 objects and ES/Milvus slices are backed before deletion; live index bindings,
 shared stores, audit, roles and queues remain. Operators stop every writer/consumer.
 
+Retired PRIVATE libraries (`Knowledge.type=2`) retain their existing rows and
+permissions. History preparation does not require new permission modes or repair
+depth/parent projections for their files/documents. Valid ownership/parent-chain
+checks remain; this is not permission to discard malformed or foreign rows.
+
 ```bash
 cd src/backend
 export config=config.yaml
@@ -1714,6 +1719,51 @@ remove them; a force-killed process can leave private temporary directories for
 operator cleanup. These files are not recovery evidence; retain the original
 plan/events/payload backups. No-op/replayed business repairs compare the complete
 digest without requesting write locks. Real repairs retain the locked recheck.
+
+### `repair_f118_folder_inheritance.py`
+
+Use only when an operator has explicitly confirmed that selected legacy folders
+with **no mode, Grants, visible-source rows or FGA tuples** should inherit their
+canonical parent. This is an optional repair for a reported history-preparation
+blocker, not a required upgrade stage or a backup-proof workflow. Stop all
+writers/consumers and finish any running history apply first; an active frozen
+F118 Run refuses this repair.
+
+Example IDs below are synthetic; replace them with the reviewed tenant/library,
+folder and operator IDs. Preview saves a NEW private selected-row/pin/parent plan:
+
+```bash
+python scripts/repair_f118_folder_inheritance.py \
+  --plan /app/data/upgrade/3.1.0-beta1/folder-inherit.json \
+  --tenant-id 101 --knowledge-id 10 \
+  --folder-id 50 --folder-id 51 --folder-id 52 --operator-id 7
+
+python scripts/repair_f118_folder_inheritance.py \
+  --plan /app/data/upgrade/3.1.0-beta1/folder-inherit.json \
+  --apply --confirm-inherit
+```
+
+Apply and retries use the same saved plan and operator. The script writes only
+the native `HISTORICAL_INHERIT_REPAIR` operation, its fenced mode and five
+parent/INHERIT/permission-enabled tuples per selected folder. It does not infer
+creator ownership or add people/role Grants. Native projection verification and
+finalization establish CURRENT; no SQL status is forced. Parent folders complete
+before children. An uncertain/failed operation resumes its original journal;
+later grants, parent changes, foreign modes/journals or a changed pin refuse it.
+
+The selection is bounded to 20 folders and 200 ancestor IDs, with at most 200
+distinct tenant keys per relevant permission table and 500 tuples per external
+parent. Tenant-index enumeration plus selected ranges preserve cross-tenant
+absence checks without repeatedly scanning large permission tables or loading
+all Grant/source payloads. Scope-limit failures stop rather than sample data.
+
+Keep the original `f118-history.json`, events and payload backups unchanged.
+If that original apply completed its selected cleanup but returned blocked
+missing modes, complete this explicit repair, then preview history preparation
+into a **different** file such as `f118-history-after-inherit.json`. Review its
+blocked/selected list and apply that new plan. Require `blocked=[]` and
+`preparation_complete=true` before starting M2. Do not rewrite the old plan's
+blocked list/checksum or perform this repair while an old apply is still running.
 
 ### First installation before schema migration
 

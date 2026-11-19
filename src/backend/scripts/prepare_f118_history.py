@@ -510,6 +510,11 @@ async def capture(sessions, client):
                         {"table": model.__tablename__, "id": row["id"], "reason": "invalid_parent_chain"}
                     )
                     continue
+                # Retired PRIVATE libraries are preserved, not converted or
+                # exposed by F118. Their historical files need no new permission
+                # mode/parent projection (and must not acquire authorization).
+                if roots[row["knowledge_id"]]["type"] == 2:
+                    continue
                 if row["level"] != len(path):
                     result["levels"].append(
                         {
