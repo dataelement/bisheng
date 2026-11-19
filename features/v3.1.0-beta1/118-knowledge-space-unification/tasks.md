@@ -8695,6 +8695,6 @@ W3基础交付：T346原ModuleNotFound红→T344 DTO 8绿；T348原ModuleNotFoun
 - [x] UNMOUNT-INTENT：用户确认保留原数据、冻结重验、仅迁移实际租户，旧 Run 不重分类。
 - [x] UNMOUNT-FACTS：原生只读 acquisition，精确审计、零绑定/挂载、原预置副本及工具子项、已迁出助手、原权限及 FINALIZED 操作闭合，分页计算原事实摘要。
 - [x] UNMOUNT-FROZEN：新 Run 封闭元数据及 baseline/plan 一致；首次写入前、权限中间状态和最终切换原事务重验，保留 FGA 端点键集合不变。
-- [x] UNMOUNT-TEST：新增 30 项原生回归通过，包括 SQL/FGA/最终切换取消后的原 Run 恢复；实际 MySQL 只读候选核对通过，185 SELECT、约 1.7 秒。
-- [ ] UNMOUNT-REVIEW：完成扩展迁移回归、基线差异与架构/静态审查，提交 beta1。
+- [x] UNMOUNT-TEST：新增 31 项原生回归通过，包括 SQL/FGA/最终切换取消后的原 Run 恢复；实际 MySQL 只读候选核对通过，185 SELECT、约 1.7 秒。
+- [x] UNMOUNT-REVIEW：最新定向组合 67 通过；扩展 2385 通过、1 项基线计数失败独立复现；架构/静态及七维审查通过，`5af4ac2e1a` 已推送 beta1。
 - [ ] UNMOUNT-ROLLOUT：165 新代码全量预检→原身份首次冻结/执行→Redis 回填/verify→恢复既有服务；保留旧计划及运行日志。

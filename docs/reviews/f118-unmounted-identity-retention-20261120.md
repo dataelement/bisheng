@@ -16,7 +16,7 @@
 - 最新定向组合 **67 通过**：新增保留测试、原 CLI 和权限原始快照仓库；包含带真实原 Grant/model/主体键的原 M2→M3→权限→引用→Coverage 及重复执行不再写入。
 - 实际 MySQL 只读 acquisition：206 身份、3,708 预置类别、8,034 子项、3,709 组原 ACL 及其最终操作事实，185 SELECT，约 1.7 秒；SQL 事件钩子拒绝 DML/DDL。只记录数量/耗时，不导出原行或凭据。本轮没有执行 DM8。
 - 正常无孤儿路径保留原五条探针；空保留集合不扫描 before/staged/after。非空集合按 <=200 行主键/有限 Owner ID 批次读取、流式摘要，相关 scope 以集合查找，不逐项重扫原表或重复加载大载荷，不设置部署租户总数上限。
-- 扩展迁移回归执行中，包含 10,001 资源、10,001 tuple/source 和 1,001 模型规模。当前单个查询计数失败已在未改 `b6c58466b2` 基线复现：`test_full_m2_keeps_original_default_sources_and_freezes_safe_after_commands` 预期 9、实际 6。最终结果补记，不宣称扩展全绿。
+- 扩展迁移回归完成：**2385 通过、1 项基线失败**（970.84 秒），包含 10,001 资源、10,001 tuple/source 和 1,001 模型规模。该查询计数失败已在未改 `b6c58466b2` 基线复现：`test_full_m2_keeps_original_default_sources_and_freezes_safe_after_commands` 预期 9、实际 6。扩展不宣称全绿；最后增加的空集合零扫描快路径另外在最新 67 项定向组合中通过。
 - 整个 knowledge 测试目录还包含 API/中间件依赖；本地不可连接相应中间件，已停止该无效扩展。首个 API MySQL 连接失败也在未改基线复现，不把它算作本次新缺陷。
 - Ruff/F821、格式、架构守卫、diff 空白、六条 QA 用例八列校验通过。真实 MySQL 完整正式预检/转换及开服验证按现场阶段日志记录；原生传输测试不代替真实 OpenFGA 或真实非管理员验收。
 
