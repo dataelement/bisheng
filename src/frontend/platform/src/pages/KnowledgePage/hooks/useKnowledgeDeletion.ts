@@ -13,6 +13,8 @@ import {
   type DeletionStatus,
 } from "@/controllers/API/knowledgeDeletion";
 import { managementRequestScope } from "@/controllers/managementScope";
+import type { KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
+import { releaseSpaceDeletion, setSpaceDeletion } from "@/store/knowledgeSpaceDeletion";
 export type KnowledgeDeletionView = {
   command: DeleteCommand;
   readonly: boolean;
@@ -36,9 +38,10 @@ type Entry = {
   force: boolean;
   dispatched: boolean;
   result?: DeletePrecheck;
+  spaceScope?: KnowledgeQueryScope;
   settle: (success: boolean) => void;
 };
-export function useKnowledgeDeletion(scopeKey: string) {
+export function useKnowledgeDeletion(scopeKey: string, spaceScope?: KnowledgeQueryScope) {
   const latest = useRef(scopeKey);
   latest.current = scopeKey;
   const current = useRef<Entry | null>(null);
@@ -46,6 +49,10 @@ export function useKnowledgeDeletion(scopeKey: string) {
   const [view, setView] = useState<KnowledgeDeletionView | null>(null);
   const finish = useCallback((success = false) => {
     const entry = current.current;
+    if (entry?.spaceScope && entry.result) {
+      if (success) setSpaceDeletion(entry.spaceScope, entry.command.spaceId, entry.result.confirmation_id, "deleted");
+      else releaseSpaceDeletion(entry.spaceScope, entry.command.spaceId, entry.result.confirmation_id);
+    }
     current.current = null;
     busy.current = false;
     setView(null);
@@ -75,6 +82,8 @@ export function useKnowledgeDeletion(scopeKey: string) {
   }, [finish]);
   useEffect(
     () => () => {
+      const entry = current.current;
+      if (entry?.spaceScope && entry.result) releaseSpaceDeletion(entry.spaceScope, entry.command.spaceId, entry.result.confirmation_id);
       current.current?.settle(false);
       current.current = null;
     },
@@ -94,6 +103,7 @@ export function useKnowledgeDeletion(scopeKey: string) {
     const reason = data && typeof data === "object" && "reason" in data && typeof data.reason === "string" ? data.reason : undefined;
     const stale = code === 18087 || code === 18088 || code === 10996;
     if (code === 18087 || code === 18088 || (code === 10996 && !entry.dispatched)) {
+      if (entry.spaceScope && entry.result) releaseSpaceDeletion(entry.spaceScope, entry.command.spaceId, entry.result.confirmation_id);
       entry.result = undefined;
       entry.dispatched = false;
       entry.force = false;
@@ -179,6 +189,7 @@ export function useKnowledgeDeletion(scopeKey: string) {
         readonly,
         force: false,
         dispatched: false,
+        spaceScope: command.kind === "delete" && spaceScope ? { ...spaceScope } : undefined,
         settle: resolve,
       };
       current.current = entry;
@@ -208,6 +219,7 @@ export function useKnowledgeDeletion(scopeKey: string) {
       return;
     busy.current = true;
     entry.dispatched = true;
+    if (entry.spaceScope) setSpaceDeletion(entry.spaceScope, entry.command.spaceId, entry.result.confirmation_id, "deleting");
     setView((old) => old && { ...old, busy: true, dispatched: true, error: undefined });
     try {
       const result = await confirmDeletion(entry.command.spaceId, {
@@ -244,6 +256,13 @@ export function useKnowledgeDeletion(scopeKey: string) {
       }
     }
   };
+  const pollStatus = useRef(status);
+  pollStatus.current = status;
+  useEffect(() => {
+    if (!view?.dispatched) return;
+    const timer = window.setInterval(() => { void pollStatus.current(); }, 2000);
+    return () => window.clearInterval(timer);
+  }, [view?.dispatched]);
   const more = async () => {
     const entry = current.current;
     const cursor = view?.page?.next_cursor;

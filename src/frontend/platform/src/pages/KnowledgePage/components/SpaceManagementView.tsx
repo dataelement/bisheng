@@ -18,6 +18,7 @@ import {
 import { showApiError } from "@/controllers/request";
 import { isErrorEnvelope } from "@bisheng/api-client";
 import { useKnowledgeDeletion } from "../hooks/useKnowledgeDeletion";
+import { useSpaceDeletionActive } from "@/store/knowledgeSpaceDeletion";
 import { KnowledgeDeletionDialog } from "./KnowledgeDeletionDialog";
 import { SpaceMetadataPanel } from "./SpaceMetadataPanel";
 import { SpaceTaskRecordsDialog } from "./SpaceTaskRecordsDialog";
@@ -99,7 +100,8 @@ export function SpaceManagementView({
   const deletionScope = JSON.stringify([scope, spaceId]);
   const currentDeletionScope = useRef<string | null>(deletionScope);
   currentDeletionScope.current = deletionScope;
-  const deletion = useKnowledgeDeletion(deletionScope);
+  const deletion = useKnowledgeDeletion(deletionScope, scope);
+  const deleting = useSpaceDeletionActive(scope, spaceId);
   useEffect(() => {
     currentDeletionScope.current = deletionScope;
     return () => {
@@ -111,6 +113,7 @@ export function SpaceManagementView({
     queryFn: () =>
       getMyResourcePermissionsApi("knowledge_space", String(spaceId), { showError: false }),
     enabled:
+      !deleting &&
       Boolean(scope.identityKey) &&
       Number.isSafeInteger(spaceId) &&
       spaceId > 0,
@@ -119,9 +122,9 @@ export function SpaceManagementView({
     keepPreviousData: false,
   });
   useEffect(() => {
-    if (permission.error && !(isErrorEnvelope(permission.error) && permission.error.status_code === 25022))
+    if (!deleting && permission.error && !(isErrorEnvelope(permission.error) && permission.error.status_code === 25022))
       showApiError(permission.error);
-  }, [permission.error]);
+  }, [permission.error, deleting]);
   const canEdit = permission.data?.actions.includes("edit") === true;
   const canSeeSpace = permission.data?.actions.includes("visible") === true;
   const canManageMembers =
@@ -132,16 +135,16 @@ export function SpaceManagementView({
   const root = useQuery({
     queryKey: knowledgeQueryKeys.info(scope, spaceId),
     queryFn: () => knowledgeSpaceApi.getSpaceInfo(spaceId, { showError: false }),
-    enabled: !spaceInfo && canReadRoot,
+    enabled: !deleting && !spaceInfo && canReadRoot,
     cacheTime: 0,
     retry: false,
   });
   useEffect(() => {
-    if (root.error && !(isErrorEnvelope(root.error) && root.error.status_code === 18000))
+    if (!deleting && root.error && !(isErrorEnvelope(root.error) && root.error.status_code === 18000))
       showApiError(root.error);
-  }, [root.error]);
+  }, [root.error, deleting]);
   const rootInfo = spaceInfo ?? (canReadRoot && !root.isError ? root.data : undefined);
-  const canShowTaskRecords = Boolean(children) && parentId === null && Boolean(rootInfo);
+  const canShowTaskRecords = !deleting && Boolean(children) && parentId === null && Boolean(rootInfo);
   const processingJobs = useKnowledgeProcessingJobs(
     scope,
     spaceId,

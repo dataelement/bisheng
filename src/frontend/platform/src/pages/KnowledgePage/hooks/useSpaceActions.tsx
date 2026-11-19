@@ -48,7 +48,7 @@ export function useSpaceActions(
       current.current = null;
     };
   }, [scopeKey]);
-  const deletion = useKnowledgeDeletion(scopeKey);
+  const deletion = useKnowledgeDeletion(scopeKey, scope);
   const refresh = () =>
     client.invalidateQueries({ queryKey: knowledgeQueryKeys.scope(scope) });
   const load = (row: KnowledgeSpaceInfo, open: boolean) => {
