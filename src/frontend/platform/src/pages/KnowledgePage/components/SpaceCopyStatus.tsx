@@ -31,7 +31,7 @@ function SpaceCopyDisclosure({
       : "space_copy_ui.failed";
 
   return (
-    <div className="mx-4 my-3 shrink-0 rounded-lg border border-border-base">
+    <div className="mx-4 mb-3 shrink-0 rounded-lg border border-border-base">
       <SpaceProcessingProgress
         scope={scope}
         spaceId={task.id}
