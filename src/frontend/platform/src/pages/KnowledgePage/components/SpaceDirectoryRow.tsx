@@ -210,14 +210,6 @@ export function SpaceDirectoryRow({
                   {t("retry")}
                 </DropdownItem>
               )}
-              {menuReady && !folder && canDownload && (
-                <DropdownItem
-                  icon={<Outlined.Download aria-hidden />}
-                  onSelect={onDownload}
-                >
-                  {t("downloadOriginal")}
-                </DropdownItem>
-              )}
               {canManagePermission && (
                 <DropdownItem
                   icon={<Outlined.PeopleSafe aria-hidden />}
