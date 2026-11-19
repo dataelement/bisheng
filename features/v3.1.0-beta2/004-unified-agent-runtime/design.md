@@ -364,6 +364,8 @@
 | 28 | 已结束运行的事件流会重放 1 小时，停止时退回的未读消息每次重进页面都会再到达；服务端已删除这些问题行 | 按“列表里是否还有该行”判断是否退回输入框时，只要历史重载先发生，文字就被丢弃 | 前端用 localStorage 记录本浏览器已退回过的消息 id（键 `bs:run:returnedHandled`，最多 200 个）。残留：文字进输入框后刷新仍会丢（输入框草稿不持久化）；换浏览器在 1 小时内打开会再收到一次；localStorage 不可用时刷新后会重复填入 |
 | 29 | 后端没有“重新生成”语义：`isRegenerate` 无任何读取，每次请求都新插一条问题行 | 统一运行时下“重新生成”和失败卡片的“重试”如果仍走旧协议，会在运行 store 之外另开一条流，输入框看起来可用但按 Enter 无反应 | `useAiChat.regenerate` 在统一运行时下取原问题文字，走普通发送，效果是新增一条用户消息并开始新运行，不重新附带附件。是否需要真正的同级重新生成由产品决定（§8） |
 | 30 | 前端每个文本增量都重建全部思考段和工具调用的事件对象并排序 | 长回答时 CPU 占用随事件数增长，下游所有工具行都重渲染 | `hooks/runAgentEvents.ts`：文本增量直接返回上次的事件数组；思考增量或工具帧只为变化的一项新建对象；缓存是以 store 对象为键的 WeakMap，不保留历史帧。未做 CPU 实测对比 |
+| 31 | 深度研究的流式正文原来不经过句柄转换：直接回答在 `DirectTurn.rewrite` 里把 `[Sn]` 换成引用标记，深度研究的 `_UnifiedRun.emit` 把模型原文直接写进事件流 | 回答生成过程中用户看到 `[S1]` 原文，结束后换成存库的正式回答才变成角标。114 实测（2026-11-19，会话 `96757276…`）：句柄表有 S1–S5，17 个 `text` 事件里有 9 处 `[Sn]`、0 个标记 | 转换逻辑抽成 `text_handle_rewriter.TextHandleRewriter`，两种档位共用；`_UnifiedRun` 在 `_create_agent` 建好引用范围后 `bind_citation_scope`，逐字引用约定（scope 未启用）时不转换。回归 `test/linsight/test_text_handle_rewriter.py`；114 复测见 verification-final.md §7 |
+| 32 | 中间件在 `model` 节点里自己调用的模型（`KbImageViewMiddleware._describe` 的看图模型），其 token 同样出现在 `stream_mode="messages"` 里，统一映射器按主图正文发成 `text` | 主模型不能读图、配了看图模型时，看图模型对图片的描述会作为回答显示给用户。langchain 1.5 的摘要调用自带 `nostream` 标签，不受影响；`vision_llm.py` 用 `callbacks: []` 自行避开 | 该调用加 `tags=[TAG_NOSTREAM]`。原理用最小脚本验证（节点内未打标签的 `ainvoke` 会进入 messages 流，打标签后不会）；114 未配看图模型，未在环境中复现。回归 `test_unified_citation_image_memory.py::test_image_reading_model_describes_pictures_for_a_text_model` |
 
 ---
 
@@ -541,3 +543,4 @@ Wave 1–4 留下、技术上已知、尚未处理的：
 | 2026-11-19 | 代码审查（`/sdd-code-review`）后的修正：配置接口总是返回开关值；事件订阅改轮询（§5 #20）；接力失败事件脱敏；§4.3 补停止、文件下载地址、协议选择三行；更正坑 12 与待定事项 17 | 四路审查结论 NEEDS_FIX |
 | 2026-11-19 | §5 增 #21（恢复/继续路径可被停止打断）、#22（同名附件以较新的为准） | 代码审查的两个 HIGH |
 | 2026-11-19 | §5 增 #23–#30（排队租约释放、租约失效收尾、按 run_id 定位版本、停靠运行的流 TTL、运行替换与重同步、退回消息去重、重新生成、事件列表增量）；§4.3 补 `resync` 字段与 Redis 键表；新增 upgrade.md | 修复代码审查剩余的 9 个 MEDIUM |
+| 2026-11-19 | §5 增 #31（深度研究流式正文的 `[Sn]` 未转换）、#32（看图模型输出进入回答流）；verification-final.md 增 §7 | 用户要求把独立特性 F005 的两点补进 F004 |
