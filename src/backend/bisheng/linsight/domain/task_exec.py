@@ -84,10 +84,9 @@ class TaskAlreadyInProgressError(Exception):
     pass
 
 
-# Exclusive driver lock per session_version_id. SET NX EX in one roundtrip
-# (not asetNx, which is setnx+expire and can leave a TTL-less lock on crash).
+# Exclusive driver lock per session_version_id: a ``LEASE_SECONDS`` key the run
+# renews together with its conversation lease (``_unified_run_scope``).
 LINSIGHT_RUN_LOCK_KEY_PREFIX = "linsight:run_lock:"
-LINSIGHT_RUN_LOCK_TTL_SECONDS = 4 * 60 * 60
 
 
 class ConversationBusyError(TaskAlreadyInProgressError):
@@ -178,16 +177,6 @@ _INGEST_TERMINAL_PHASES = frozenset({"done", "failed", "aborted"})
 # Same contract, for the row saying a selected skill could not be loaded. Mirrored
 # in the client's execTypes.ts alongside the ingest row.
 _SKILL_LOAD_FAILED_STEP_NAME = "skill_load_failed"
-
-
-async def _unified_runtime_enabled(tenant_id: int | None) -> bool:
-    """Whether ``tenant_id`` is on the unified runtime (F004). Off means the legacy path.
-
-    Imported lazily: the workstation service module imports linsight modules.
-    """
-    from bisheng.workstation.domain.services.workstation_service import is_unified_runtime_enabled
-
-    return await is_unified_runtime_enabled(tenant_id)
 
 
 # ==================== Unified channel of a planned run (F004 T034) ====================
@@ -533,7 +522,7 @@ class LinsightWorkflowTask:
         # F132: long-term memory state of this run's round (begin at round start,
         # end once in the entry's finally; a no-op for unregistered / unattended runs).
         self._memory = LinsightMemoryRound()
-        # F004: set while this execution runs on the unified channel (tenant switch on).
+        # F004: set while this execution holds its run scope (``_unified_run_scope``).
         self._unified: _UnifiedRun | None = None
         # Run id the send entry gave this run (queue item ``run_id``); None = not given.
         self._run_id_hint: str | None = None
@@ -556,27 +545,19 @@ class LinsightWorkflowTask:
     async def _acquire_session_run_lock(self):
         """Hold the right to drive this run for the duration of the block.
 
-        Tenant on the unified runtime (F004): the conversation-level lease, see
-        ``_unified_run_scope``. Otherwise the legacy lock, unchanged.
+        The conversation-level lease plus the per-run driver lock, see
+        ``_unified_run_scope`` (F004).
         """
-        run = await self._open_unified_run()
-        if run is None:
-            async with self._legacy_session_run_lock():
-                yield
-            return
-        async with self._unified_run_scope(run):
+        async with self._unified_run_scope(await self._open_unified_run()):
             yield
 
     # ==================== Unified channel (F004 T034) ====================
 
-    async def _open_unified_run(self) -> "_UnifiedRun | None":
-        """The unified-channel handles of this execution, or None on the legacy path."""
-        if not await _unified_runtime_enabled(current_tenant_id.get()):
-            return None
+    async def _open_unified_run(self) -> "_UnifiedRun":
+        """The unified-channel handles of this execution."""
         session_model = await self._get_session_model(self.session_version_id)
-        conversation_id = getattr(session_model, "session_id", None)
-        if not conversation_id:
-            return None
+        # ``session_id`` is a NOT NULL column: every run record belongs to a conversation.
+        conversation_id = session_model.session_id
         from bisheng.workstation.domain.services.run_lease import RunLeaseService
 
         meta = session_model.api_meta if isinstance(session_model.api_meta, dict) else {}
@@ -806,7 +787,7 @@ class LinsightWorkflowTask:
             logger.warning("planned run={}: driver lock release failed: {}", run.run_id, e)
 
     async def _emit_unified_terminal(self, kind: str, error: BaseException | str | None = None) -> None:
-        """Write the terminal event of this run to the unified channel. No-op on the legacy path.
+        """Write the terminal event of this run to the unified channel. No-op outside the run scope.
 
         The run record is the authority on the outcome and is written by the
         caller; a failure to write the event is logged and does not change it.
@@ -909,45 +890,6 @@ class LinsightWorkflowTask:
         if run is None or run.output.mapper is not mapper:
             return mapper.normalize(mode, raw, namespace=namespace)
         return await run.output.feed(mode, raw, namespace)
-
-    @asynccontextmanager
-    async def _legacy_session_run_lock(self):
-        """Hold an exclusive driver lock for ``session_version_id``.
-
-        Uses a single Redis ``SET key NX EX ttl``. SET returning False means
-        another worker is already driving this session →
-        ``TaskAlreadyInProgressError``. Client construction / Redis outage
-        fails open (the queue already required Redis; dropping a dequeued turn
-        is worse than a rare dual start).
-        """
-        from bisheng.core.cache.redis_manager import get_redis_client
-
-        redis = None
-        acquired = False
-        lock_key = f"{LINSIGHT_RUN_LOCK_KEY_PREFIX}{self.session_version_id}"
-        try:
-            redis = await get_redis_client()
-            result = await redis.async_connection.set(
-                lock_key,
-                b"1",
-                nx=True,
-                ex=LINSIGHT_RUN_LOCK_TTL_SECONDS,
-            )
-            acquired = bool(result)
-        except Exception as e:
-            logger.warning("linsight run lock acquire failed ({}); proceeding without lock", e)
-            acquired = True
-            redis = None
-        if not acquired:
-            raise TaskAlreadyInProgressError("Task already in progress")
-        try:
-            yield
-        finally:
-            if redis is not None and acquired:
-                try:
-                    await redis.adelete(lock_key)
-                except Exception as e:
-                    logger.warning("linsight run lock release failed: {}", e)
 
     @asynccontextmanager
     async def _managed_execution(self):
@@ -1391,7 +1333,7 @@ class LinsightWorkflowTask:
                 "recursion_limit": _resolve_recursion_limit(settings.get_linsight_conf()),
             },
             # T038: on the unified channel the config also marks the first model
-            # request (None on the legacy path).
+            # request (None outside the run scope).
             run_metrics.current(),
         )
         # subgraphs=True so subagent (子图) events冒泡父流 with a namespace
@@ -1925,12 +1867,12 @@ class LinsightWorkflowTask:
             file_dir=self.file_dir,
             citation_scope=citation_scope,
             workspace_prefix=self._workspace_prefix(session_model),
-            # T055: None on the legacy path, so nothing changes there.
+            # T055: None outside the run scope.
             on_output_file=self._unified_file_relay(session_model),
         )
 
     def _unified_file_relay(self, session_model):
-        """The writer of this execution's ``file`` events, or None on the legacy path (T055)."""
+        """The writer of this execution's ``file`` events, or None outside the run scope (T055)."""
         run = getattr(self, "_unified", None)
         if run is None or run.terminal or run.lease_lost:
             return None
@@ -1972,20 +1914,15 @@ class LinsightWorkflowTask:
                 executor.workspace_prefix = self._workspace_prefix(session_model)
 
     async def _enter_conversation_thread(self, session_model: LinsightSessionVersion) -> None:
-        """New-turn path: put this run on the conversation thread when the tenant is on the unified runtime.
+        """New-turn path: put this run on the conversation thread.
 
         Only sets the field; the caller's next status write persists the record.
-        A record that already stores a thread id keeps it. With the switch off
-        nothing is stored and the thread stays ``session_version_id``.
+        A record that already stores a thread id keeps it.
         """
-        if has_stored_run_thread_id(session_model) or not session_model.session_id:
-            return
-        if not await _unified_runtime_enabled(session_model.tenant_id):
+        if has_stored_run_thread_id(session_model):
             return
         set_run_thread_id(session_model, session_model.session_id)
-        logger.info(
-            "Run {} uses the conversation thread {} (unified runtime)", session_model.id, session_model.session_id
-        )
+        logger.info("Run {} uses the conversation thread {}", session_model.id, session_model.session_id)
 
     async def _thread_has_checkpoint(self, thread_id: str) -> bool:
         from bisheng.linsight.domain.services.checkpointer import make_checkpointer
@@ -1995,15 +1932,12 @@ class LinsightWorkflowTask:
     async def _prepare_run_workspace(self, session_model: LinsightSessionVersion) -> None:
         """New-turn path: bring earlier files into this run's workspace.
 
-        Legacy thread: seed ``workspace/{svid}`` from the previous version (unchanged).
-        Conversation thread: the workspace is shared by every run of the conversation.
+        The run is on the conversation thread (``_enter_conversation_thread`` ran
+        before), whose workspace is shared by every run of the conversation.
         When the thread has no checkpoint (the conversation predates the unified
         runtime, or the checkpoint expired), mark the run for a history rebuild
         and take over the latest version's workspace.
         """
-        if not self._on_conversation_thread(session_model):
-            await self._seed_workspace_from_previous(session_model)
-            return
         self._thread_checkpoint_found = await self._thread_has_checkpoint(self._thread_id(session_model))
         # This run's uploads replace same-named files of earlier runs (``_merge_run_uploads``).
         # The takeover below runs after it and never overwrites, so these uploads
@@ -2017,14 +1951,14 @@ class LinsightWorkflowTask:
             if prev is not None:
                 await self._merge_into_workspace(session_model, self._workspace_prefix(prev))
         except Exception as e:
-            # Same contract as the legacy seed: a failure here never blocks the turn.
+            # Best-effort: a failure here never blocks the turn.
             logger.opt(exception=True).warning("latest-version workspace takeover skipped (non-fatal): {}", e)
 
     async def _merge_run_uploads(self, session_model: LinsightSessionVersion) -> None:
         """Merge the files ingested under ``workspace/{svid}`` into the conversation workspace.
 
         Attachment ingest still addresses the run's own prefix. No-op on the legacy
-        thread, where that prefix is the workspace. Best-effort, like the seed.
+        thread, where that prefix is the workspace. Best-effort.
 
         An attachment replaces a same-named file an earlier run left in the
         conversation workspace (``uploads/合同.md`` of run 1 against the edited
@@ -2168,7 +2102,7 @@ class LinsightWorkflowTask:
         )
 
     def _inbox_middleware(self):
-        """T041: the inbox middleware of this execution, or None on the legacy path."""
+        """T041: the inbox middleware of this execution, or None outside the run scope."""
         run = getattr(self, "_unified", None)
         if run is None:
             return None
@@ -2224,40 +2158,6 @@ class LinsightWorkflowTask:
             await self._emit_unified_steps([step])
         except Exception as e:
             logger.warning(f"Failed to push skill-load-failure step for {svid}: {e}")
-
-    async def _seed_workspace_from_previous(
-        self,
-        session_model: LinsightSessionVersion,
-        *,
-        src_prefix: str | None = None,
-        dst_prefix: str | None = None,
-    ) -> None:
-        """Cross-turn continuity: copy a source workspace's deliverables/sources
-        into this run's workspace (跨轮工作区延续).
-
-        F004: both ends are workspace prefixes. ``dst_prefix`` defaults to this
-        turn's legacy prefix ``workspace/{svid}``. ``src_prefix`` defaults to the
-        immediately-previous version's prefix (versions are ordered DESC; that
-        workspace is cumulative, so one copy carries the whole conversation).
-        Server-side copy of ``output/`` + ``uploads/`` + ``large_tool_results/`` so
-        ``read_file``/``ls`` transparently surface them. Best-effort — a failure
-        never blocks the turn; the first turn (no predecessor) no-ops.
-        """
-        try:
-            if dst_prefix is None:
-                dst_prefix = workspace_prefix_for(session_model.id)
-            if src_prefix is None:
-                versions = await LinsightSessionVersionDao.get_session_versions_by_session_id(session_model.session_id)
-                prev = next((v for v in versions if v.id != session_model.id), None)
-                if prev is None:
-                    return
-                src_prefix = workspace_prefix_for(prev.id)
-            minio = await get_minio_storage()
-            copied = await copy_workspace_prefix(minio, src_prefix=src_prefix, dst_prefix=dst_prefix)
-            if copied:
-                logger.info("Seeded {} file(s) from {} into {} (cross-turn continuity)", copied, src_prefix, dst_prefix)
-        except Exception as e:
-            logger.opt(exception=True).warning("workspace seed-from-previous skipped (non-fatal): {}", e)
 
     async def _sync_workspace_originals(self, session_model: LinsightSessionVersion) -> None:
         """Make workspace originals reachable by the code interpreter this turn.

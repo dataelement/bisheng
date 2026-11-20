@@ -91,10 +91,6 @@ async def world(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(run_send, "register_session", AsyncMock())
     monkeypatch.setattr(chat_endpoint.MemoryGate, "open", AsyncMock())
 
-    async def flag(_login_user, _subject):
-        return True
-
-    monkeypatch.setattr(chat_service, "_unified_runtime_on", flag)
     monkeypatch.setattr(
         chat_service.SensitiveWordPolicyService, "evaluate_workbench_user_text", staticmethod(lambda *_a, **_k: None)
     )

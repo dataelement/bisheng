@@ -136,17 +136,6 @@ async def test_strict_enqueue_failure_fails_the_version_and_raises_26068(io, mon
     assert persisted.await_count == 2
 
 
-async def test_lenient_enqueue_failure_still_returns_the_version(io, monkeypatch):
-    monkeypatch.setattr(linsight_execute_utils, "persist_task_turn_message", AsyncMock())
-    monkeypatch.setattr(
-        linsight_execute_utils, "enqueue_session_for_execution", AsyncMock(side_effect=RuntimeError("redis down"))
-    )
-
-    _session, version = await task_submit_service.submit_task_turn(_request(), _user())
-
-    assert version.status == SessionVersionStatusEnum.NOT_STARTED
-
-
 async def test_task_turn_is_persisted_before_enqueue(io, monkeypatch):
     order: list[str] = []
     monkeypatch.setattr(

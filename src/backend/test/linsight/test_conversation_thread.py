@@ -1,9 +1,8 @@
 """One LangGraph thread per conversation on the unified runtime (F004 T025, design decision 7).
 
-With the unified-runtime switch on for the tenant, a deep-research run uses
-``thread_id = conversation id`` and the workspace ``workspace/{conversation id}``.
-The thread id is stored on the run record; a record that stores nothing (written
-before F004, or by a tenant on the legacy path) keeps ``thread_id =
+A deep-research run uses ``thread_id = conversation id`` and the workspace
+``workspace/{conversation id}``. The thread id is stored on the run record; a
+record that stores nothing (written before F004) keeps ``thread_id =
 session_version_id``.
 
 The tests drive the REAL graph from ``create_linsight_agent`` with a scripted
@@ -135,7 +134,7 @@ def _version(svid: str, question: str = "q", **fields: Any) -> LinsightSessionVe
 class _Env:
     """Shared fakes of one test: checkpointer, object store, versions of the conversation."""
 
-    def __init__(self, monkeypatch: pytest.MonkeyPatch, tmp_path, *, unified: bool = True) -> None:
+    def __init__(self, monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
         from bisheng.core.config.settings import LinsightConf
 
         self.monkeypatch = monkeypatch
@@ -144,12 +143,10 @@ class _Env:
         self.store = _MemoryObjectStore()
         self.versions: list[LinsightSessionVersion] = []  # newest first, like the DAO
         self.chat_rows: list[Any] = []
-        self.switch = AsyncMock(return_value=unified)
 
         conf = SimpleNamespace(get_linsight_conf=lambda: LinsightConf())
         monkeypatch.setattr(agent_factory, "settings", conf)
         monkeypatch.setattr(task_exec, "settings", conf)
-        monkeypatch.setattr(task_exec, "_unified_runtime_enabled", self.switch)
         monkeypatch.setattr(task_exec, "get_minio_storage", AsyncMock(return_value=self.store))
         monkeypatch.setattr(
             "bisheng.linsight.domain.services.checkpointer.make_checkpointer", lambda *a, **k: self.saver
@@ -349,28 +346,3 @@ async def test_next_run_after_stop_sees_history(monkeypatch: pytest.MonkeyPatch,
     assert "前情回顾" not in _texts(model3.inputs[0])
     tool_ids = [m.tool_call_id for m in model3.inputs[0] if isinstance(m, ToolMessage)]
     assert tool_ids == ["c1", "c2"]
-
-
-async def test_flag_off_keeps_svid_thread(monkeypatch: pytest.MonkeyPatch, tmp_path):
-    env = _Env(monkeypatch, tmp_path, unified=False)
-    env.chat_rows = [
-        SimpleNamespace(is_bot=False, message="上一轮问题"),
-        SimpleNamespace(is_bot=True, message="上一轮回答"),
-    ]
-    old = _version("sv-old")
-    env.versions.append(old)
-    env.store.objects["workspace/sv-old/output/report.md"] = b"# old report"
-
-    new = _version("sv-new", "本轮问题")
-    task, agent, model = await env.start(new, [AIMessage("ok")])
-
-    assert new.api_meta is None
-    assert task._thread_id(new) == "sv-new"
-    assert task._workspace_prefix(new) == "workspace/sv-new"
-    # Legacy cross-turn seed: previous version -> this version.
-    assert env.store.objects["workspace/sv-new/output/report.md"] == b"# old report"
-    assert not any(key.startswith(f"workspace/{CHAT}/") for key in env.store.objects)
-
-    assert await task._execute_agent_tasks(agent, new) is True
-    assert "上一轮回答" in _texts(model.inputs[0])
-    assert await env.has_checkpoint("sv-new") and not await env.has_checkpoint(CHAT)

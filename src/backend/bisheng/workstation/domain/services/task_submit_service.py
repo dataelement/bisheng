@@ -1,6 +1,6 @@
 """Shared task-mode submit core (F073).
 
-Both the workbench SSE entry (``chat_service._task_mode_stream_completion``) and
+Both the workbench send entry (``run_send``) and
 the Open API JSON entry create a task turn the same way: session + version →
 task-turn row → enqueue. Keeping one implementation stops the two from drifting
 (the "persist before enqueue" race fix below was learned the hard way).
@@ -48,11 +48,10 @@ async def submit_task_turn(
 ) -> tuple[MessageSession, LinsightSessionVersion]:
     """Create the task turn and hand it to the linsight queue.
 
-    ``strict_enqueue=False`` (workbench): an enqueue failure is logged and the
-    browser's later start-execute is the fallback. ``strict_enqueue=True``
-    (Open API, no browser to fall back on): an enqueue failure marks the version
-    failed and raises 26068 (HTTP 503), so the caller never receives an id for a
-    task that will not run.
+    An enqueue failure marks the version failed and raises, so the caller never
+    receives an id for a task that will not run: 26068 (HTTP 503) with
+    ``strict_enqueue=True`` (Open API), 11130 otherwise (the unified send entry,
+    which then gives the conversation back).
 
     ``on_session_created`` (F132): awaited once the conversation exists and
     before the run is queued. Only the logged-in daily task-mode entry passes
@@ -62,13 +61,7 @@ async def submit_task_turn(
     conversation with; it travels in the queue item so the worker claims the
     conversation under the same id, and it is stored on the run record
     (``api_meta["run_id"]``) so the record of a run that is still in the queue
-    is found by its run id. None everywhere else.
-
-    With ``run_id`` an enqueue failure is never left to the browser: the
-    conversation is already reserved for this run with the long queued lease,
-    and a later start-execute carries no run id, so it would wait behind that
-    reservation. The version is marked failed and 11130 is raised; the caller
-    gives the conversation back.
+    is found by its run id. None for the Open API.
 
     ``persist_user_turn=False`` (F004 relay run): the question rows of the
     messages already exist (they were written when the messages joined the
@@ -142,12 +135,6 @@ async def submit_task_turn(
             session_version, **({"run_id": run_id} if run_id is not None else {})
         )
     except Exception as exc:
-        if not strict_enqueue and run_id is None:
-            logger.exception(
-                f"[TASK_SUBMIT] server-side enqueue failed chat_id={session_version.session_id} "
-                f"svid={session_version.id}; relying on client start-execute"
-            )
-            return session, session_version
         logger.exception(
             f"[TASK_SUBMIT] server-side enqueue failed chat_id={session_version.session_id} "
             f"svid={session_version.id}; marking the version failed"

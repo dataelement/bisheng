@@ -2,44 +2,27 @@
 
 Continue/resume used to have no mutual exclusion at all: two queue items for
 the same svid both wrote FINAL_RESULT onto the same ChatMessage row, and the
-later wrap-up erased a cited report. The Redis run lock is the ONLY mutex for
+later wrap-up erased a cited report. The Redis driver lock is the ONLY mutex for
 continue/resume — the DB status cannot be one, because /workbench/continue
 flips the row to IN_PROGRESS before it enqueues, so every follow-up turn
-arrives in that status.
+arrives in that status. The lock itself (taken in ``_unified_run_scope``) is
+covered by ``test_planned_run_unified.py``; this file covers the status handling.
 """
 
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-import bisheng.core.cache.redis_manager as redis_manager_mod
 from bisheng.linsight.domain import task_exec as te
 from bisheng.linsight.domain.models.linsight_session_version import (
     LinsightSessionVersion,
     SessionVersionStatusEnum,
 )
-from bisheng.linsight.domain.task_exec import (
-    LINSIGHT_RUN_LOCK_KEY_PREFIX,
-    LINSIGHT_RUN_LOCK_TTL_SECONDS,
-    LinsightWorkflowTask,
-    TaskAlreadyInProgressError,
-)
+from bisheng.linsight.domain.task_exec import LinsightWorkflowTask, TaskAlreadyInProgressError
 from test.linsight.test_deferred_ingest_worker import FakeStateManager
-
-
-@pytest.fixture(autouse=True)
-def _legacy_channel(monkeypatch):
-    """These cases cover the legacy channel, which since F004 decision 13 runs only
-    when a tenant's stored config says ``unified_runtime_enabled: false``."""
-
-    async def _off(_tenant_id):
-        return False
-
-    monkeypatch.setattr("bisheng.workstation.domain.services.workstation_service.is_unified_runtime_enabled", _off)
 
 
 def _session(*, status=SessionVersionStatusEnum.COMPLETED, svid: str = "svid-lock"):
@@ -70,54 +53,6 @@ def fail_open_lock(monkeypatch: pytest.MonkeyPatch):
         yield
 
     monkeypatch.setattr(LinsightWorkflowTask, "_acquire_session_run_lock", _open)
-
-
-@pytest.fixture
-def redis_lock(monkeypatch: pytest.MonkeyPatch):
-    client = SimpleNamespace(
-        async_connection=SimpleNamespace(set=AsyncMock(return_value=True)),
-        adelete=AsyncMock(),
-    )
-    monkeypatch.setattr(redis_manager_mod, "get_redis_client", AsyncMock(return_value=client))
-    return client
-
-
-async def test_run_lock_uses_set_nx_ex_and_releases(redis_lock):
-    task = LinsightWorkflowTask()
-    task.session_version_id = "sv-lock"
-    async with task._acquire_session_run_lock():
-        pass
-    redis_lock.async_connection.set.assert_awaited_once_with(
-        f"{LINSIGHT_RUN_LOCK_KEY_PREFIX}sv-lock",
-        b"1",
-        nx=True,
-        ex=LINSIGHT_RUN_LOCK_TTL_SECONDS,
-    )
-    redis_lock.adelete.assert_awaited_once_with(f"{LINSIGHT_RUN_LOCK_KEY_PREFIX}sv-lock")
-
-
-async def test_run_lock_rejects_when_already_held(redis_lock):
-    redis_lock.async_connection.set.return_value = False
-    task = LinsightWorkflowTask()
-    task.session_version_id = "sv-lock"
-    with pytest.raises(TaskAlreadyInProgressError):
-        async with task._acquire_session_run_lock():
-            raise AssertionError("second driver must not enter")
-    redis_lock.adelete.assert_not_awaited()
-
-
-async def test_run_lock_fail_open_when_redis_client_unavailable(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(
-        redis_manager_mod,
-        "get_redis_client",
-        AsyncMock(side_effect=RuntimeError("redis manager missing")),
-    )
-    task = LinsightWorkflowTask()
-    task.session_version_id = "sv-lock"
-    entered = False
-    async with task._acquire_session_run_lock():
-        entered = True
-    assert entered is True
 
 
 async def test_managed_resume_enters_in_progress_after_api_flip(monkeypatch: pytest.MonkeyPatch, fail_open_lock):

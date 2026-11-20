@@ -10,12 +10,10 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 from langchain_core.documents import Document
 from langchain_core.messages import ToolMessage
 from loguru import logger
 from redis.exceptions import ConnectionError as RedisConnectionError
-from starlette.responses import StreamingResponse
 
 ROOT = Path(__file__).resolve().parents[2] / "bisheng"
 SECRET = "redis://:private-password@internal-host:6379/0"
@@ -181,34 +179,3 @@ def test_daily_history_returns_the_redacted_detail_of_a_failed_answer():
     assert "detail" not in _public_extra({"detail": "left over"})
     leaked = _public_extra({"error": True, "detail": "open /opt/bisheng/conf/config.yaml token=abc at 10.0.0.8:3306"})
     assert leaked["detail"] == "open <path> token=*** at <host>"
-
-
-@pytest.mark.parametrize("wrapped", [False, True])
-async def test_unified_task_submit_failure_preserves_source_in_sse(monkeypatch, wrapped):
-    import sys
-    from types import ModuleType
-
-    from bisheng.common.errcode.base import BaseErrorCode
-    from bisheng.common.errcode.http_error import ServerError
-    from bisheng.common.errcode.linsight import LinsightStartTaskError
-
-    cause = RedisConnectionError(SECRET)
-    error = LinsightStartTaskError(exception=cause) if wrapped else cause
-    fake = ModuleType("bisheng.workstation.domain.services.task_submit_service")
-    fake.submit_task_turn = AsyncMock(side_effect=error)
-    monkeypatch.setitem(sys.modules, fake.__name__, fake)
-    ns = _namespace()
-    ns.update(
-        workbench_tenant_id=lambda user: 1,
-        SensitiveWordPolicyService=SimpleNamespace(evaluate_workbench_user_text=lambda *a: None),
-        BaseErrorCode=BaseErrorCode,
-        ServerError=ServerError,
-        StreamingResponse=StreamingResponse,
-    )
-    chat = _chat({"_task_mode_stream_completion"}, ns)
-    response = await chat._task_mode_stream_completion(None, SimpleNamespace(text="question"), SimpleNamespace())
-    chunks = [chunk async for chunk in response.body_iterator]
-    text = "".join(chunk.decode() if isinstance(chunk, bytes) else chunk for chunk in chunks)
-    assert SECRET not in text
-    payload = json.loads(text.split("data: ", 1)[1])
-    assert payload["data"]["failure_info"]["category"] == "database"

@@ -1944,7 +1944,7 @@ async def create_linsight_agent(
         inbox: F004 (design 决策 5). The ``InboxMiddleware`` of this run, built by
             the caller from the run's conversation, dispatch service and event
             sink. Mounted on the MAIN graph only, in both profiles, and never for
-            an unattended run. None (legacy path, tenant switch off) mounts nothing.
+            an unattended run. None mounts nothing.
         memory: F004 T059. The run's ``MemoryWiring`` from ``wire_memory``: its
             tools are bound on the main graph and its text is appended to the
             system message. Deep research still passes the tools inside ``tools``

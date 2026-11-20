@@ -259,15 +259,7 @@ async def test_stop_of_a_dead_run_reports_it(world: _World, client: httpx.AsyncC
 @pytest.fixture
 def linsight_endpoint(monkeypatch: pytest.MonkeyPatch):
     from bisheng.linsight.api.endpoints import linsight as endpoint
-    from bisheng.workstation.domain.services import workstation_service
 
-    switch = {"on": True}
-
-    async def enabled(tenant_id):
-        return switch["on"]
-
-    monkeypatch.setattr(workstation_service, "is_unified_runtime_enabled", enabled)
-    endpoint.switch = switch
     return endpoint
 
 
@@ -300,22 +292,6 @@ async def test_legacy_terminate_ignores_a_run_of_another_version(world: _World, 
 
     state = await world.state()
     assert state.status == rl.STATUS_WAITING and state.run_id == run_id
-
-
-async def test_legacy_terminate_with_the_switch_off_touches_nothing(
-    world: _World, linsight_endpoint, monkeypatch: pytest.MonkeyPatch
-):
-    run_id = await world.start(task_mode=True)
-    await world.park(run_id)
-    world.record = _version()
-    linsight_endpoint.switch["on"] = False
-    stop = AsyncMock()
-    monkeypatch.setattr(run_send, "stop_conversation_run", stop)
-
-    await linsight_endpoint._request_unified_stop(world.record)
-
-    stop.assert_not_awaited()
-    assert (await world.state()).status == rl.STATUS_WAITING
 
 
 async def test_legacy_terminate_survives_a_failing_unified_stop(

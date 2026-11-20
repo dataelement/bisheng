@@ -8,8 +8,7 @@ Three entry points share the helpers in this module:
 - ``assemble_tools`` is the unified function both runtime profiles (``direct``,
   ``planned``) call. It binds every tool either legacy entry point can bind.
 
-The two legacy entry points keep their return values and their error behaviour,
-so the legacy path is unchanged while the unified runtime flag is off.
+The two legacy entry points keep their return values and their error behaviour.
 
 The builders that live in ``chat_service`` and ``workbench_impl`` are resolved
 through those modules at call time. Both modules are imported lazily: they are

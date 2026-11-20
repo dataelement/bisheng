@@ -421,14 +421,14 @@ async def test_planned_run_announces_live_and_reconciles_final_files(monkeypatch
     assert [f["file_id"] for f in snapshot["files"]] == [report_id, sheet_id]
 
 
-async def test_planned_legacy_path_builds_backend_without_callback(monkeypatch, tmp_path):
-    env = _PlannedEnv(monkeypatch, tmp_path, unified=False)
+async def test_planned_backend_outside_the_run_scope_has_no_callback(monkeypatch, tmp_path):
+    env = _PlannedEnv(monkeypatch, tmp_path)
     task = env.task()
 
-    async with task._acquire_session_run_lock():
-        backend = task._workspace_backend(env.version, env.store)
-        executor = SimpleNamespace(workspace_prefix=f"workspace/{SVID}")
-        task._attach_file_events([SimpleNamespace(name="bisheng_code_interpreter", executor=executor)], env.version)
+    # No run scope is open (``_acquire_session_run_lock`` not entered): there is no event stream to write to.
+    backend = task._workspace_backend(env.version, env.store)
+    executor = SimpleNamespace(workspace_prefix=f"workspace/{SVID}")
+    task._attach_file_events([SimpleNamespace(name="bisheng_code_interpreter", executor=executor)], env.version)
 
     assert backend.on_output_file is None
     assert not hasattr(executor, "on_workspace_file")

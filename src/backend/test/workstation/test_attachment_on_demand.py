@@ -440,22 +440,11 @@ async def test_upload_starts_parsing(monkeypatch: pytest.MonkeyPatch, parse_stat
         downloads.append(path)
         return "/nonexistent/a.docx", "a.docx"
 
-    switch = {"on": False}
-
-    async def enabled(tenant_id: int | None) -> bool:
-        return switch["on"]
-
-    monkeypatch.setattr(direct_attachments, "_unified_runtime_enabled", enabled)
     monkeypatch.setattr(direct_attachments, "async_file_download", download)
     monkeypatch.setattr(LinsightWorkbenchImpl, "_parse_file", _fake_parser(store, gate))
 
-    # Switch off: the upload does nothing new.
-    assert await direct_attachments.start_upload_parsing(_upload_payload(DOCX), user_id=USER, tenant_id=TENANT) is False
-    assert parse_state == {} and downloads == [] and not direct_attachments._PARSE_TASKS
-
-    # Switch on: the state says "running" as soon as the upload returns.
-    switch["on"] = True
-    assert await direct_attachments.start_upload_parsing(_upload_payload(DOCX), user_id=USER, tenant_id=TENANT) is True
+    # The state says "running" as soon as the upload returns.
+    assert await direct_attachments.start_upload_parsing(_upload_payload(DOCX), user_id=USER) is True
     assert parse_state[DOCX["file_id"]]["parsing_status"] == "running"
     source = direct_attachments.WorkspaceAttachmentSource(object_store=lambda: _async(store), **LIMITS)
     ctx = DirectRunContext(conversation_id=CID, run_id="r1", tenant_id=TENANT, user_id=USER, files=[DOCX])

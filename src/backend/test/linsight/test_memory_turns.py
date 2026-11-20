@@ -39,17 +39,6 @@ from test.linsight._memory_doubles import (  # noqa: F401 - pytest fixtures
 )
 
 
-@pytest.fixture(autouse=True)
-def _legacy_channel(monkeypatch):
-    """These cases cover the legacy channel, which since F004 decision 13 runs only
-    when a tenant's stored config says ``unified_runtime_enabled: false``."""
-
-    async def _off(_tenant_id):
-        return False
-
-    monkeypatch.setattr("bisheng.workstation.domain.services.workstation_service.is_unified_runtime_enabled", _off)
-
-
 LOGIN = SimpleNamespace(user_id=USER_1, tenant_id=TENANT_A, user_name="u")
 
 
@@ -196,48 +185,6 @@ async def test_ac10_task_turn_registers_before_enqueue_only_when_hooked(monkeypa
     assert seen_at_enqueue[-1] is not None and seen_at_enqueue[-1].user_id == USER_1
 
 
-async def test_ac10_daily_task_mode_entry_passes_registration_hook(monkeypatch, memory_db):
-    """AC-10: the logged-in daily chat task-mode path hands the registration hook to the submit core."""
-    from bisheng.workstation.domain.services import chat_service
-    from bisheng.workstation.domain.services import task_submit_service as tss
-
-    seed_session(memory_db, registered=False)
-    captured: dict = {}
-
-    async def _fake_submit(data, login_user, **kwargs):
-        captured.update(kwargs)
-        session = SimpleNamespace(chat_id=CHAT, name="已有标题")
-        version = _version()
-        await kwargs["on_session_created"](session, version)
-        return session, version
-
-    monkeypatch.setattr(tss, "submit_task_turn", _fake_submit)
-    monkeypatch.setattr(chat_service, "workbench_tenant_id", lambda user: TENANT_A)
-    monkeypatch.setattr(chat_service.SensitiveWordPolicyService, "evaluate_workbench_user_text", lambda *a: None)
-    monkeypatch.setattr(chat_service.LLMService, "get_bisheng_llm", AsyncMock(return_value=SimpleNamespace()))
-    data = SimpleNamespace(text="查一下", conversationId=None, model="m", task_mode=True)
-
-    from bisheng.memory.domain.services.gate import MemoryGate
-
-    async def _register(chat_id):
-        await MemoryGate.open(chat_id, LOGIN)
-
-    # The logged-in daily endpoint injects memory_register (Wave 8); only then is a hook passed.
-    await chat_service._task_mode_stream_completion(None, data, LOGIN, memory_register=_register)
-
-    assert captured["on_session_created"] is not None
-    assert cursor_row(memory_db) is not None
-
-    captured.clear()
-    monkeypatch.setattr(
-        tss,
-        "submit_task_turn",
-        _fake_submit_no_hook := AsyncMock(return_value=(SimpleNamespace(chat_id=CHAT, name="已有标题"), _version())),
-    )
-    await chat_service._task_mode_stream_completion(None, data, LOGIN)
-    assert _fake_submit_no_hook.call_args.kwargs.get("on_session_created") is None
-
-
 # --------------------------------------------------------------------------- #
 # Rounds in the worker
 # --------------------------------------------------------------------------- #
@@ -290,7 +237,7 @@ def worker_env(monkeypatch, memory_services, memory_db):
         monkeypatch.setattr(task, "_managed_resume", _managed.__get__(task))
         monkeypatch.setattr(task, "_restore_tenant_context", AsyncMock(return_value=None))
         for name in (
-            "_seed_workspace_from_previous",
+            "_prepare_run_workspace",
             "_sync_workspace_originals",
             "_provision_session_skills",
             "_update_session_status",

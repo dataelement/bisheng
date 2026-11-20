@@ -2,8 +2,8 @@
 
 Three parts:
 
-``start_upload_parsing``     called by the daily upload endpoint. With the unified
-    runtime on for the tenant, parsing starts at upload. The state uses deep
+``start_upload_parsing``     called by the daily upload endpoint: parsing starts at
+    upload. The state uses deep
     research's key (``linsight_file:{file_id}``) and shape, so
     ``/linsight/workbench/file-parsing-status`` answers for these files too.
 ``WorkspaceAttachmentSource`` puts one attachment into the conversation workspace
@@ -76,12 +76,6 @@ async def _get_state(file_id: str) -> dict | None:
     return value if isinstance(value, dict) else None
 
 
-async def _unified_runtime_enabled(tenant_id: int | None) -> bool:
-    from bisheng.workstation.domain.services.workstation_service import is_unified_runtime_enabled
-
-    return await is_unified_runtime_enabled(tenant_id)
-
-
 def file_name_of(item: dict) -> str:
     return str(item.get("file_name") or item.get("filename") or item.get("name") or item.get("filepath") or "")
 
@@ -97,15 +91,13 @@ def file_id_of(item: dict) -> str:
 # ------------------------------------------------------------------ upload
 
 
-async def start_upload_parsing(payload: dict, *, user_id: int, tenant_id: int | None) -> bool:
-    """Start parsing an uploaded daily attachment. False (and no effect) when the switch is off.
+async def start_upload_parsing(payload: dict, *, user_id: int) -> bool:
+    """Start parsing an uploaded daily attachment. False when the payload names no file or the state write fails.
 
     Never raises: a failure here must not fail the upload. The run then finds no
     state and parses the file itself.
     """
     try:
-        if not await _unified_runtime_enabled(tenant_id):
-            return False
         file_id, filepath, name = str(payload.get("file_id") or ""), payload.get("filepath"), file_name_of(payload)
         if not file_id or not filepath:
             return False

@@ -519,11 +519,7 @@ async def user_input(
 
 
 async def _request_unified_stop(session_version_model) -> None:
-    """Ask the unified runtime to stop this run. Nothing happens for a tenant whose switch is off."""
-    from bisheng.workstation.domain.services.workstation_service import is_unified_runtime_enabled
-
-    if not await is_unified_runtime_enabled(session_version_model.tenant_id):
-        return
+    """Ask the unified runtime to stop this run."""
     from bisheng.workstation.domain.services import run_send
 
     try:

@@ -24,8 +24,9 @@ RUN_THREAD_ID_KEY = "thread_id"
 def get_run_thread_id(version) -> str:
     """The LangGraph thread id of this run record.
 
-    Records written before F004, and every record of a tenant that is not on the
-    unified runtime, store nothing: their thread id is the session version id.
+    Records written before F004 (and records written while a tenant had the
+    unified runtime switched off, before the switch was removed) store nothing:
+    their thread id is the session version id.
     """
     meta = getattr(version, "api_meta", None)
     stored = meta.get(RUN_THREAD_ID_KEY) if isinstance(meta, dict) else None

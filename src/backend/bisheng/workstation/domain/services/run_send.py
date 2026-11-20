@@ -1,8 +1,8 @@
 """F004 T032: the send entry and the event subscription of the unified runtime.
 
 Design: features/v3.1.0-beta2/004-unified-agent-runtime/design.md, 决策 3, 4, 9 and
-§4.3 / §4.4. ``chat_service.stream_chat_completion`` calls ``unified_send`` only
-when the tenant switch is on; with the switch off nothing in this module runs.
+§4.3 / §4.4. ``chat_service.stream_chat_completion`` calls ``unified_send`` for every
+request of the login-state endpoint; the Open API entry does not come here.
 
 Send (``POST /chat/completions``)
 ---------------------------------

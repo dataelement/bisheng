@@ -78,7 +78,6 @@ class _World:
         self.lease = RunLeaseService(redis)
         self.dispatch = RunDispatchService(redis, enqueue_relay=AsyncMock())
         self.user = SimpleNamespace(user_id=OWNER, user_name="owner", tenant_id=TENANT)
-        self.flag = True
         self.sessions: dict[str, Any] = {CID: SimpleNamespace(chat_id=CID, user_id=OWNER, name="已有会话")}
         self.question_rows: list[dict] = []
         self.answer_rows: list[Any] = []
@@ -110,10 +109,6 @@ async def world(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(run_send, "FOLLOW_BLOCK_MS", 20)
     monkeypatch.setattr(run_send, "PERSIST_WAIT_SECONDS", 2)
 
-    async def flag(_login_user, _subject):
-        return w.flag
-
-    monkeypatch.setattr(chat_service, "_unified_runtime_on", flag)
     monkeypatch.setattr(
         chat_service.SensitiveWordPolicyService, "evaluate_workbench_user_text", staticmethod(lambda *_a, **_k: None)
     )
@@ -470,49 +465,29 @@ async def test_task_mode_legacy_client_gets_the_handoff_frame(world: _World, cli
     ]
 
 
-async def test_flag_off_uses_legacy_path(world: _World, client: httpx.AsyncClient, monkeypatch):
-    world.flag = False
-    seen: list[tuple[str, Any]] = []
+async def test_open_api_subject_keeps_the_daily_agent_flow(world: _World, monkeypatch):
+    """The Open API entry (it passes ``session_subject``) does not come to the unified send entry."""
+    seen: list[Any] = []
 
-    def legacy(name):
-        async def handler(request, data, login_user, *args, **kwargs):
-            seen.append((name, data))
-            return StreamingResponse(
-                iter([f"data: {json.dumps({'legacy': name})}\n\n"]), media_type="text/event-stream"
-            )
+    async def daily(request, data, login_user, session_subject, **kwargs):
+        seen.append((data, session_subject, kwargs))
+        return "DAILY"
 
-        return handler
-
-    monkeypatch.setattr(chat_service, "_agent_stream_chat_completion", legacy("daily"))
-    monkeypatch.setattr(chat_service, "_task_mode_stream_completion", legacy("task"))
-    monkeypatch.setattr(
-        chat_service.DepartmentFlowService,
-        "hold_execution_lease",
-        lambda _user: _Held(),
-    )
+    monkeypatch.setattr(chat_service, "_agent_stream_chat_completion", daily)
     unified = AsyncMock()
     monkeypatch.setattr(run_send, "unified_send", unified)
+    subject = SimpleNamespace(storage_partition="sa:7")
+    data = chat_service.APIChatCompletion(**_body())
+    data.skills = ["morning-report"]
 
-    daily = await client.post(f"{PREFIX}/chat/completions", json=_body(), headers=V2)
-    task = await client.post(f"{PREFIX}/chat/completions", json=_body(task_mode=True))
+    result = await chat_service.stream_chat_completion(None, data, world.user, session_subject=subject)
 
-    assert _frames(daily.text)[0]["data"] == {"legacy": "daily"}
-    assert _frames(task.text)[0]["data"] == {"legacy": "task"}
-    assert [name for name, _ in seen] == ["daily", "task"]
-    assert seen[0][1].skills == []
+    assert result == "DAILY"
+    (call,) = seen
+    assert call[1] is subject and call[0].skills == []
     unified.assert_not_awaited()
     assert (await world.state()).status == "idle"
     assert world.started == [] and world.task_turns == []
-
-
-class _Held:
-    async def __aenter__(self):
-        from bisheng.department.domain.services.department_flow_service import SlotOutcome
-
-        return SlotOutcome.HELD, None
-
-    async def __aexit__(self, *exc):
-        return False
 
 
 async def test_sensitive_input_blocked_before_inbox(world: _World, client: httpx.AsyncClient, monkeypatch):

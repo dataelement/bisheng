@@ -1,12 +1,11 @@
-"""The Open API task-mode contract is the same with the unified runtime on and off (F004 T035).
+"""The Open API task-mode contract on the unified runtime (F004 T035).
 
 Spec AC-39: request format, response format and status meaning of the Open API
-deep-research endpoints do not change. Spec AC-23: an unattended (Open API) run
-never asks the user and never reads the conversation inbox.
+deep-research endpoints are the documented ones; F004 does not change them.
+Spec AC-23: an unattended (Open API) run never asks the user and never reads
+the conversation inbox.
 
-Every test produces the same answer twice, once for a tenant with the
-unified-runtime switch off and once with it on, and compares the two. The
-endpoint tests go through the real v2 router (admission, scope markers,
+The endpoint tests go through the real v2 router (admission, scope markers,
 exception handlers) and the real ``OpenTaskModeService``; only storage is
 faked. The run tests drive the REAL graph of ``create_linsight_agent`` with a
 scripted model through the worker's executor (``LinsightWorkflowTask``) with
@@ -40,12 +39,10 @@ from bisheng.open_endpoints.api.endpoints import workstation as endpoints
 from bisheng.workstation.domain.services import run_lease
 from bisheng.workstation.domain.services.run_dispatch import RunDispatchService
 from bisheng.workstation.domain.services.task_submit_service import submit_task_turn as REAL_SUBMIT_TASK_TURN
-from bisheng.workstation.domain.services.workstation_service import WorkStationService
 from test.linsight.test_planned_run_unified import CHAT, SVID, TODOS, TODOS_DONE, _call, _Env, _PlannedUnifiedModel
 from test.open_api.task_mode_support import sa_principal
 
 S = SessionVersionStatusEnum
-SWITCH_STATES = (False, True)
 TASK_BODY = {
     "run_mode": "task",
     "execution": "async",
@@ -63,18 +60,6 @@ OPEN_API_META = {"channel": "open_api_v2", "instructions": None, "credential_id"
 # ---------------------------------------------------------------------------
 # HTTP harness: the real v2 router and OpenTaskModeService, storage faked
 # ---------------------------------------------------------------------------
-
-
-@pytest.fixture
-def switch(monkeypatch: pytest.MonkeyPatch):
-    """Set the tenant's unified-runtime switch; returns the setter."""
-
-    def set_switch(on: bool) -> AsyncMock:
-        probe = AsyncMock(return_value=on)
-        monkeypatch.setattr(WorkStationService, "is_unified_runtime_enabled", probe)
-        return probe
-
-    return set_switch
 
 
 @pytest.fixture
@@ -189,7 +174,7 @@ def _shape(value: Any) -> Any:
 # ---------------------------------------------------------------------------
 
 
-async def test_submit_response_shape(app, switch, task_mode_seams, monkeypatch: pytest.MonkeyPatch):
+async def test_submit_response_shape(app, task_mode_seams, monkeypatch: pytest.MonkeyPatch):
     # The REAL submit core, faked below it: what it hands the worker is compared too.
     monkeypatch.setattr(
         "bisheng.workstation.domain.services.task_submit_service.submit_task_turn", REAL_SUBMIT_TASK_TURN
@@ -197,11 +182,9 @@ async def test_submit_response_shape(app, switch, task_mode_seams, monkeypatch: 
     monkeypatch.setattr(
         "bisheng.workstation.domain.services.task_submit_service._consume_task_invite", AsyncMock(return_value=False)
     )
-    created: list[dict] = []
     enqueued: list[LinsightSessionVersion] = []
 
     async def _submit_user_question(submit_obj, login_user, display_files=None, **kwargs):
-        created.append(kwargs)
         version = LinsightSessionVersion(
             id="svid-1",
             session_id="chat-1",
@@ -225,28 +208,15 @@ async def test_submit_response_shape(app, switch, task_mode_seams, monkeypatch: 
     dispatch_submit = AsyncMock(side_effect=AssertionError("the Open API went through RunDispatchService.submit"))
     monkeypatch.setattr(RunDispatchService, "submit", dispatch_submit)
 
-    answers = []
-    for on in SWITCH_STATES:
-        switch(on)
-        created.clear()
-        enqueued.clear()
-        response = await _call_api(app, "post", "/api/v2/workstation/chat/completions", TASK_BODY)
-        assert response.status_code == 200, response.text
-        (handed_over,) = enqueued
-        answers.append(
-            {
-                "body": response.json(),
-                "submit_kwargs": {key: value for key, value in created[0].items() if key != "session_subject"},
-                "api_meta": handed_over.api_meta,
-            }
-        )
+    response = await _call_api(app, "post", "/api/v2/workstation/chat/completions", TASK_BODY)
+    assert response.status_code == 200, response.text
+    (handed_over,) = enqueued
 
-    off, on = answers
-    assert on == off
-    assert set(off["body"]["data"]) == {"task_id", "status", "queue_position"}
-    assert off["body"]["data"] == {"task_id": "svid-1", "status": "queued", "queue_position": 3}
+    body = response.json()
+    assert set(body["data"]) == {"task_id", "status", "queue_position"}
+    assert body["data"] == {"task_id": "svid-1", "status": "queued", "queue_position": 3}
     # The worker sees an unattended run with no run id of the unified send entry.
-    assert off["api_meta"] == {
+    assert handed_over.api_meta == {
         "channel": "open_api_v2",
         "instructions": "只看第三章",
         "credential_id": 7,
@@ -256,54 +226,39 @@ async def test_submit_response_shape(app, switch, task_mode_seams, monkeypatch: 
 
 
 @pytest.mark.parametrize("status", list(S))
-async def test_task_status_values(app, switch, store, status):
+async def test_task_status_values(app, store, status):
     output = {"answer": "done", "final_files": []} if status == S.COMPLETED else {"error_type": "x"}
-    answers = []
-    for on in SWITCH_STATES:
-        switch(on)
-        store.version = _version(status, output=output)
-        store.todos = [
-            SimpleNamespace(id="svid-1", status=ExecuteTaskStatusEnum.IN_PROGRESS),
-            SimpleNamespace(id="t1", status=ExecuteTaskStatusEnum.SUCCESS),
-            SimpleNamespace(id="t2", status=ExecuteTaskStatusEnum.IN_PROGRESS),
-        ]
-        response = await _call_api(app, "get", "/api/v2/workstation/tasks/svid-1")
-        assert response.status_code == 200, response.text
-        answers.append(response.json())
-
-    off, on = answers
-    assert on == off
-    assert off["data"]["status"] in DOCUMENTED_STATUSES
+    store.version = _version(status, output=output)
+    store.todos = [
+        SimpleNamespace(id="svid-1", status=ExecuteTaskStatusEnum.IN_PROGRESS),
+        SimpleNamespace(id="t1", status=ExecuteTaskStatusEnum.SUCCESS),
+        SimpleNamespace(id="t2", status=ExecuteTaskStatusEnum.IN_PROGRESS),
+    ]
+    response = await _call_api(app, "get", "/api/v2/workstation/tasks/svid-1")
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["status"] in DOCUMENTED_STATUSES
 
 
-async def test_task_status_after_a_real_run(monkeypatch: pytest.MonkeyPatch, tmp_path, store, app, switch):
+async def test_task_status_after_a_real_run(monkeypatch: pytest.MonkeyPatch, tmp_path, store, app):
     """The record a real worker run leaves behind reads the same through the Open API."""
-    answers = []
-    for on in SWITCH_STATES:
-        switch(on)
-        run = await _run_open_api_task(monkeypatch, tmp_path / str(on), unified=on)
-        store.version = run.env.version
-        store.objects = {"linsight/final_result/sv-9001/f1.md": b"# report"}
-        store.todos = []
-        monkeypatch.setattr(
-            task_mode_service.MessageSessionDao,
-            "async_get_one",
-            AsyncMock(return_value=_sa_session().model_copy(update={"chat_id": CHAT})),
-        )
-        response = await _call_api(app, "get", f"/api/v2/workstation/tasks/{SVID}")
-        assert response.status_code == 200, response.text
-        data = response.json()["data"]
-        data.pop("created_at", None)
-        data.pop("updated_at", None)
-        answers.append((run.env.version.status, data))
+    run = await _run_open_api_task(monkeypatch, tmp_path)
+    store.version = run.env.version
+    store.objects = {"linsight/final_result/sv-9001/f1.md": b"# report"}
+    store.todos = []
+    monkeypatch.setattr(
+        task_mode_service.MessageSessionDao,
+        "async_get_one",
+        AsyncMock(return_value=_sa_session().model_copy(update={"chat_id": CHAT})),
+    )
+    response = await _call_api(app, "get", f"/api/v2/workstation/tasks/{SVID}")
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
 
-    off, on = answers
-    assert on == off
-    assert off[0] == S.COMPLETED and off[1]["status"] == "completed"
-    assert [item["file_id"] for item in off[1]["result"]["files"]] == ["f1"]
+    assert run.env.version.status == S.COMPLETED and data["status"] == "completed"
+    assert [item["file_id"] for item in data["result"]["files"]] == ["f1"]
 
 
-async def test_files_response_shape(app, switch, store):
+async def test_files_response_shape(app, store):
     output = {
         "answer": "see the report",
         "final_files": [
@@ -318,24 +273,12 @@ async def test_files_response_shape(app, switch, store):
         "phantom_deliverables": ["summary.pdf"],
     }
     store.objects = {"linsight/final_result/svid-1/f1.docx": b"docx-bytes", "linsight/final_result/svid-1/f2.md": b"#"}
-    answers = []
-    for on in SWITCH_STATES:
-        switch(on)
-        store.version = _version(S.COMPLETED, output=output)
-        view = await _call_api(app, "get", "/api/v2/workstation/tasks/svid-1")
-        download = await _call_api(app, "get", "/api/v2/workstation/tasks/svid-1/files/f1")
-        missing = await _call_api(app, "get", "/api/v2/workstation/tasks/svid-1/files/nope")
-        answers.append(
-            {
-                "view": view.json(),
-                "download": (download.status_code, download.content, download.headers["content-disposition"]),
-                "missing": (missing.status_code, missing.json()["status_code"]),
-            }
-        )
+    store.version = _version(S.COMPLETED, output=output)
+    view = (await _call_api(app, "get", "/api/v2/workstation/tasks/svid-1")).json()
+    download = await _call_api(app, "get", "/api/v2/workstation/tasks/svid-1/files/f1")
+    missing = await _call_api(app, "get", "/api/v2/workstation/tasks/svid-1/files/nope")
 
-    off, on = answers
-    assert on == off
-    result = off["view"]["data"]["result"]
+    result = view["data"]["result"]
     assert _shape(result["files"][0]) == {
         "file_id": "str",
         "file_name": "str",
@@ -345,29 +288,24 @@ async def test_files_response_shape(app, switch, store):
     }
     assert [(f["file_id"], f["size"], f["primary"]) for f in result["files"]] == [("f1", 10, True), ("f2", 1, False)]
     assert result["unavailable_deliverables"] == [{"file_name": "summary.pdf", "reason": "not_generated"}]
-    assert "/root/.cache" not in str(off["view"]) and "final_result" not in str(off["view"])
-    assert off["download"][0] == 200 and off["download"][1] == b"docx-bytes"
-    assert off["missing"][0] == 404
+    assert "/root/.cache" not in str(view) and "final_result" not in str(view)
+    assert download.status_code == 200 and download.content == b"docx-bytes"
+    assert "content-disposition" in download.headers
+    assert missing.status_code == 404
 
 
 @pytest.mark.parametrize("status", [S.NOT_STARTED, S.IN_PROGRESS, S.COMPLETED, S.TERMINATED])
-async def test_terminate(app, switch, store, status):
-    answers = []
-    for on in SWITCH_STATES:
-        switch(on)
-        store.version = _version(status, output={})
-        store.terminated.clear()
-        response = await _call_api(app, "post", "/api/v2/workstation/tasks/svid-1/terminate")
-        answers.append((response.status_code, response.json(), list(store.terminated)))
+async def test_terminate(app, store, status):
+    store.version = _version(status, output={})
+    store.terminated.clear()
+    response = await _call_api(app, "post", "/api/v2/workstation/tasks/svid-1/terminate")
 
-    off, on = answers
-    assert on == off
     if status in (S.NOT_STARTED, S.IN_PROGRESS):
-        assert off[0] == 200 and off[1]["data"]["status"] == "terminated"
-        assert off[2] == ["svid-1"]
+        assert response.status_code == 200 and response.json()["data"]["status"] == "terminated"
+        assert store.terminated == ["svid-1"]
     else:
-        # A finished task cannot be stopped: the same 409 with the same status code.
-        assert off[0] == 409 and off[2] == []
+        # A finished task cannot be stopped.
+        assert response.status_code == 409 and store.terminated == []
 
 
 # ---------------------------------------------------------------------------
@@ -384,10 +322,9 @@ UNATTENDED_SCRIPT = [
 ]
 
 
-async def _run_open_api_task(monkeypatch: pytest.MonkeyPatch, tmp_path, *, unified: bool) -> SimpleNamespace:
+async def _run_open_api_task(monkeypatch: pytest.MonkeyPatch, tmp_path) -> SimpleNamespace:
     """One worker execution of an Open API task, from claim to the completion handler."""
-    tmp_path.mkdir(parents=True, exist_ok=True)
-    env = _Env(monkeypatch, tmp_path, unified=unified)
+    env = _Env(monkeypatch, tmp_path)
     env.version.api_meta = dict(OPEN_API_META)
     final_files = [{"file_id": "f1", "file_name": "report.md", "file_url": "linsight/final_result/sv-9001/f1.md"}]
     monkeypatch.setattr(linsight_utils, "read_file_directory", AsyncMock(return_value=[]))
@@ -421,31 +358,27 @@ async def _run_open_api_task(monkeypatch: pytest.MonkeyPatch, tmp_path, *, unifi
 
 
 async def test_unattended_never_asks(monkeypatch: pytest.MonkeyPatch, tmp_path):
-    legacy = await _run_open_api_task(monkeypatch, tmp_path / "off", unified=False)
-    unified = await _run_open_api_task(monkeypatch, tmp_path / "on", unified=True)
+    run = await _run_open_api_task(monkeypatch, tmp_path)
 
-    for run in (legacy, unified):
-        # The model really asked; the graph had no ask_user to run and went on.
-        assert run.model.calls == len(UNATTENDED_SCRIPT)
-        assert run.task._waiting_for_input is False
-        assert run.env.version.status == S.COMPLETED
-        assert "need_user_input" not in run.env.state.types()
-        # Neither the tool nor an inbox middleware is part of the graph.
-        nodes = list(run.agent.get_graph().nodes)
-        assert not any("inbox" in str(node).lower() for node in nodes)
-        assert run.drained == []
+    # The model really asked; the graph had no ask_user to run and went on.
+    assert run.model.calls == len(UNATTENDED_SCRIPT)
+    assert run.task._waiting_for_input is False
+    assert run.env.version.status == S.COMPLETED
+    assert "need_user_input" not in run.env.state.types()
+    # Neither the tool nor an inbox middleware is part of the graph.
+    nodes = list(run.agent.get_graph().nodes)
+    assert not any("inbox" in str(node).lower() for node in nodes)
+    assert run.drained == []
 
     # The unified channel wrote no ask_user event and the conversation ended idle, not parked.
-    events = await unified.env.events()
+    events = await run.env.events()
     types = [event["type"] for event in events]
     assert types[0] == "run_started" and types[-1] == "run_finished"
     assert not any(kind.startswith("ask_user") for kind in types)
-    assert (await unified.env.lease.get_state(CHAT)).status == run_lease.STATUS_IDLE
-    assert unified.env.finished == [(CHAT, SVID)]
+    assert (await run.env.lease.get_state(CHAT)).status == run_lease.STATUS_IDLE
+    assert run.env.finished == [(CHAT, SVID)]
 
-    # The legacy push channel and the run record are the same with the switch on and off.
-    assert unified.env.state.types() == legacy.env.state.types()
-    assert unified.env.version.output_result["answer"] == legacy.env.version.output_result["answer"]
-    assert unified.env.version.output_result["final_files"] == legacy.env.version.output_result["final_files"]
-    # The switch-off run left no unified runtime state behind.
-    assert await legacy.env.run_keys() == []
+    # The legacy push channel and the run record carry the outcome the Open API reads.
+    assert run.env.state.types()[-2:] == ["task_end", "final_result"]
+    assert run.env.version.output_result["answer"] == "研究完成"
+    assert [item["file_id"] for item in run.env.version.output_result["final_files"]] == ["f1"]

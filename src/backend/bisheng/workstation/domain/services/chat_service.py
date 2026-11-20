@@ -2843,19 +2843,6 @@ def _department_limit_stream_response() -> StreamingResponse:
     )
 
 
-async def _unified_runtime_on(login_user: UserPayload, session_subject: SessionSubject | None) -> bool:
-    """Whether this request goes through the unified runtime (F004).
-
-    The Open API entry (it passes ``session_subject``) keeps today's path: its
-    contract is unchanged by F004 P1.
-    """
-    if session_subject is not None:
-        return False
-    from .workstation_service import is_unified_runtime_enabled
-
-    return await is_unified_runtime_enabled(workbench_tenant_id(login_user))
-
-
 async def stream_chat_completion(
     request: Request,
     data: APIChatCompletion,
@@ -2864,156 +2851,26 @@ async def stream_chat_completion(
     session_subject: SessionSubject | None = None,
     memory_register: MemoryRegister | None = None,
 ):
-    """v2.5 unified entry — every workstation chat request goes through the
-    LangGraph ReAct Agent flow. When `data.tools` is empty/None the agent
-    falls back to a plain `bisheng_llm.astream` branch (same new SSE format),
-    so callers don't need to opt in explicitly.
+    """The one entry of every workstation chat request.
 
-    F035 Track J: a single entry now serves both modes. ``data.task_mode`` routes
-    this turn to the linsight task kernel (the turn still belongs to the same
-    conversation/chat_id); otherwise the daily agent flow runs unchanged.
+    The login-state endpoint (no ``session_subject``) is served by the unified
+    runtime: ``run_send.unified_send`` handles daily chat and deep research
+    (``data.task_mode``) alike (F004).
 
-    ``memory_register`` (F132) is passed only by the login-state endpoint; the
-    open-API entry calls this function without it, so its turns never use
-    long-term memory (AC-10).
-
-    F004: a tenant whose unified-runtime switch is on is served by
-    ``run_send.unified_send``. With the switch off everything below is unchanged.
+    The Open API entry passes ``session_subject`` and keeps the daily agent flow
+    below; its contract is unchanged by F004. It always sends ``task_mode=False``
+    (``OpenDailyChatCompletionReq.to_internal``; an Open API task is submitted
+    through ``OpenTaskModeService.submit``) and passes no ``memory_register``,
+    so its turns never use long-term memory (F132 AC-10).
     """
-    if await _unified_runtime_on(login_user, session_subject):
+    if session_subject is None:
         from . import run_send
 
         return await run_send.unified_send(request, data, login_user, memory_register=memory_register)
-    if data.task_mode:
-        # The submit core inside ``_task_mode_stream_completion`` finishes before
-        # it returns the handoff stream, so the execution lease covers exactly
-        # this submit request and is released on return.
-        page_lease_id = lease_id_from_headers(getattr(request, "headers", None))
-        if page_lease_id is not None:
-            outcome, _ = await DepartmentFlowService.ensure_lease(login_user, page_lease_id)
-            if outcome is SlotOutcome.REJECTED:
-                return _department_limit_stream_response()
-            return await _task_mode_stream_completion(request, data, login_user, memory_register=memory_register)
-        async with DepartmentFlowService.hold_execution_lease(login_user) as (outcome, _lease):
-            if outcome is SlotOutcome.REJECTED:
-                return _department_limit_stream_response()
-            return await _task_mode_stream_completion(request, data, login_user, memory_register=memory_register)
     daily_data = data.model_copy(update={"skills": []})
     return await _agent_stream_chat_completion(
         request, daily_data, login_user, session_subject, memory_register=memory_register
     )
-
-
-async def _task_mode_stream_completion(
-    request: Request,
-    data: APIChatCompletion,
-    login_user: UserPayload,
-    *,
-    memory_register: MemoryRegister | None = None,
-):
-    """F035 Track J: task-mode entry — create the linsight session inside the
-    current conversation and hand off to the existing task stream.
-
-    Per-path streaming is reused: this endpoint only creates the session_version
-    (under the conversation's chat_id) and returns a handoff event carrying its
-    id over SSE; the frontend then drives start-execute + connects to the
-    existing ``task-message-stream`` WS. Keeps the linsight execution/streaming
-    infra untouched — only the submit ENTRY is unified.
-    """
-    tenant_id = workbench_tenant_id(login_user)
-    blocked = SensitiveWordPolicyService.evaluate_workbench_user_text(tenant_id, data.text or "")
-    if blocked:
-        logger.warning(
-            "workbench content safety hit tenant_id={} mode=input chat_id={}",
-            tenant_id,
-            data.conversationId or "",
-        )
-        try:
-            _ws_config, conversation, message, _llm, model_info, _is_new = await _agent_initialize_chat(
-                data, login_user, skip_llm=True
-            )
-        except (BaseErrorCode, ValueError) as exc:
-            error_response = exc if isinstance(exc, BaseErrorCode) else ServerError()
-            return StreamingResponse(
-                iter([FailureContextAdapter.public_sse_text(error_response, cause=exc)]),
-                media_type="text/event-stream",
-            )
-        except HTTPException:
-            raise
-        except Exception as exc:
-            logger.exception(f"Error in task-mode content-safety setup: {exc}")
-            return StreamingResponse(
-                iter([FailureContextAdapter.public_sse_text(ServerError(), cause=exc)]),
-                media_type="text/event-stream",
-            )
-        return _respond_blocked_workbench(conversation, message, model_info, data, blocked.auto_reply or "")
-
-    # F073: session + version + task-turn row + enqueue live in the shared
-    # submit core so the Open API entry cannot drift from this one. Enqueue
-    # failures stay best-effort here: the client's start-execute is the fallback.
-    from bisheng.workstation.domain.services.task_submit_service import submit_task_turn
-
-    # F132: a task turn entered from the daily entry is registered for long-term
-    # memory (design decision 6). Only the logged-in endpoint injects
-    # memory_register; the hook runs once the conversation exists and before the
-    # run is queued, so the worker's first resolve finds the registration.
-    async def _register(session, _version):
-        await register_session(memory_register, session.chat_id)
-
-    try:
-        _session, session_version = await submit_task_turn(
-            data, login_user, on_session_created=_register if memory_register is not None else None
-        )
-    except BaseErrorCode as exc:
-        return StreamingResponse(
-            iter([FailureContextAdapter.public_sse_text(exc)]),
-            media_type="text/event-stream",
-        )
-
-    except Exception as exc:
-        logger.exception("Task submission failed")
-        return StreamingResponse(
-            iter([FailureContextAdapter.public_sse_text(ServerError(), cause=exc)]),
-            media_type="text/event-stream",
-        )
-
-    # Generate the conversation title straight from the user's question (task
-    # mode has no "round complete" moment to hang it on). Reuse the daily-mode
-    # title helper: it names with the configured title model when one is set,
-    # else with the daily chat model (data.model) built below — never the
-    # linsight default model, so naming does not depend on that being configured.
-    logger.info(
-        f"[TASK_TITLE] entry chat_id={session_version.session_id} model={data.model!r} "
-        f"question={(data.text or '')[:40]!r}"
-    )
-    title_llm = await LLMService.get_bisheng_llm(
-        model_id=data.model,
-        app_id=ApplicationTypeEnum.DAILY_CHAT.value,
-        app_name=ApplicationTypeEnum.DAILY_CHAT.value,
-        app_type=ApplicationTypeEnum.DAILY_CHAT,
-        user_id=login_user.user_id,
-    )
-
-    # Naming must outlive the short handoff connection. Keep a strong reference
-    # just as in daily mode; the shared generator bounds the model call.
-    if _session.name in (None, "", "New Chat"):
-        title_task = asyncio.create_task(
-            gen_title(data.text or "", title_llm, session_version.session_id, login_user, request)
-        )
-        _BACKGROUND_TASKS.add(title_task)
-        title_task.add_done_callback(_BACKGROUND_TASKS.discard)
-
-    async def _handoff_event():
-        payload = {
-            "event": "linsight_task_handoff",
-            "data": {
-                "session_version_id": session_version.id,
-                "chat_id": session_version.session_id,
-            },
-        }
-        yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
-
-    return StreamingResponse(_handoff_event(), media_type="text/event-stream")
 
 
 def _to_linsight_submit(data: APIChatCompletion):

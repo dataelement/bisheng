@@ -1,7 +1,6 @@
 """The ``planned`` run on the unified channel (F004 T033/T034; design 决策 3, 4, 9).
 
-With the unified-runtime switch on for the tenant, a deep-research run executed
-by the Linsight worker
+A deep-research run executed by the Linsight worker
 
 * holds the conversation through the short lease of ``run_lease`` (renewed
   while it runs) instead of the fixed 4-hour run lock,
@@ -175,7 +174,7 @@ def _version(**fields: Any) -> LinsightSessionVersion:
 
 
 class _Env:
-    def __init__(self, monkeypatch: pytest.MonkeyPatch, tmp_path, *, unified: bool = True) -> None:
+    def __init__(self, monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
         from bisheng.core.config.settings import LinsightConf
 
         self.monkeypatch = monkeypatch
@@ -200,11 +199,10 @@ class _Env:
         conf = SimpleNamespace(get_linsight_conf=lambda: LinsightConf())
         monkeypatch.setattr(agent_factory, "settings", conf)
         monkeypatch.setattr(task_exec, "settings", conf)
-        monkeypatch.setattr(task_exec, "_unified_runtime_enabled", AsyncMock(return_value=unified))
         monkeypatch.setattr(task_exec, "_run_redis", AsyncMock(return_value=self.redis))
         monkeypatch.setattr(task_exec, "build_run_dispatch", self._build_dispatch)
         monkeypatch.setattr(task_exec, "get_minio_storage", AsyncMock(return_value=self.store))
-        # The legacy lock fails open without Redis (its documented behaviour).
+        # Nothing here may reach the process-wide Redis client: the run state is in ``self.redis``.
         monkeypatch.setattr(
             importlib.import_module("bisheng.core.cache.redis_manager"),
             "get_redis_client",
@@ -477,22 +475,22 @@ async def test_failure_writes_run_failed_before_the_conversation_is_released(mon
 
 
 async def test_legacy_ws_still_receives(monkeypatch: pytest.MonkeyPatch, tmp_path):
-    legacy = _Env(monkeypatch, tmp_path / "off", unified=False)
-    (tmp_path / "off").mkdir()
-    await legacy.run(SCRIPT)
-    # Switch off: nothing of the unified runtime is written.
-    assert await legacy.run_keys() == []
-    assert legacy.finished == []
-    assert legacy.version.api_meta is None
-
-    unified = _Env(monkeypatch, tmp_path / "on", unified=True)
-    (tmp_path / "on").mkdir()
+    unified = _Env(monkeypatch, tmp_path)
     await unified.run(SCRIPT)
     assert await unified.events()
 
-    # The legacy WebSocket list receives the same event types, in the same order.
-    assert unified.state.types() == legacy.state.types()
-    assert {"task_generate", "task_start", "task_end", "task_execute_step"} <= set(unified.state.types())
+    # The legacy WebSocket list (``task-message-stream``) still receives its event
+    # types, in this order: the two write_todos calls each push a step start and a
+    # step end; the first creates the task, the second completes it.
+    assert unified.state.types() == [
+        "task_execute_step",
+        "task_execute_step",
+        "task_generate",
+        "task_start",
+        "task_execute_step",
+        "task_execute_step",
+        "task_end",
+    ]
 
     def generated(env: _Env) -> list[list[str]]:
         return [
@@ -501,7 +499,7 @@ async def test_legacy_ws_still_receives(monkeypatch: pytest.MonkeyPatch, tmp_pat
             if message.event_type.value == "task_generate"
         ]
 
-    assert generated(unified) == generated(legacy)
+    assert generated(unified) == [["1. 收集资料"]]
 
 
 async def test_expired_run_marks_the_record_failed(monkeypatch: pytest.MonkeyPatch):
