@@ -1,7 +1,9 @@
 import { render, screen, waitFor } from '@/test/test-utils'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, it, vi } from 'vitest'
+import { bsConfirm } from '@/components/bs-ui/alertDialog/useConfirm'
 import { getCreditSettings, saveCreditSettings, type CreditSettings } from '@/controllers/API/modelPricing'
+import { act } from 'react'
 import { CreditSettingsPanel } from './CreditSettingsPanel'
 
 vi.mock('react-i18next', () => ({
@@ -9,6 +11,7 @@ vi.mock('react-i18next', () => ({
         t: (key: string, values?: Record<string, unknown>) => values ? `${key}(${Object.values(values).join('|')})` : key,
     }),
 }))
+vi.mock('@/components/bs-ui/alertDialog/useConfirm', () => ({ bsConfirm: vi.fn() }))
 vi.mock('@/controllers/API/modelPricing', () => ({
     getCreditSettings: vi.fn(),
     saveCreditSettings: vi.fn(),
@@ -27,37 +30,81 @@ beforeEach(() => {
 
 const creditField = () => screen.findByRole('textbox', { name: 'dsh.pricing.creditValue' })
 
-it('keeps the budget by default when the billing currency changes', async () => {
+it('picks the billing currency right after the credit value instead of in its own row', async () => {
+    render(<CreditSettingsPanel />)
+    const credit = await creditField()
+    const currency = screen.getByRole('radio', { name: 'dsh.pricing.currencyCNY' })
+    expect(currency).toBeChecked()
+    // Inside the credit value field itself, and no separate "billing currency" heading above it.
+    expect(credit.closest('div.space-y-1')).toContainElement(currency)
+    expect(screen.queryByText('dsh.pricing.currency')).toBeNull()
+})
+
+const confirmSwitch = () => {
+    const params = vi.mocked(bsConfirm).mock.calls.at(-1)![0]
+    act(() => { void params.onOk?.(() => undefined) })
+    return params
+}
+
+it('asks before switching the billing currency and keeps the number', async () => {
     const user = userEvent.setup()
     render(<CreditSettingsPanel />)
     expect(await creditField()).toHaveValue('0.01')
     expect(screen.getByRole('button', { name: 'dsh.pricing.save' })).toBeDisabled()
     await user.click(screen.getByRole('radio', { name: 'dsh.pricing.currencyUSD' }))
-    // 0.01 yuan at 7.2 yuan per dollar
-    expect(await creditField()).toHaveValue('0.001389')
-    expect(screen.getByRole('radio', { name: /dsh.pricing.keepBudget/ })).toBeChecked()
+    // Nothing changes until the administrator confirms.
+    expect(bsConfirm).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('radio', { name: 'dsh.pricing.currencyCNY' })).toBeChecked()
+    const params = confirmSwitch()
+    expect(params.variant).toBe('default')
+    expect(params.title).toBe('dsh.pricing.switchCurrencyTitle(dsh.pricing.currencyUSD)')
+    // value | from | to | rate | times: one credit becomes worth 7.2 times as much
+    expect(params.desc).toBe('dsh.pricing.switchCurrencyDesc(0.01|dsh.pricing.currencyCNY|dsh.pricing.currencyUSD|7.2|7.2)')
+    expect(params.okTxt).toBe('dsh.pricing.switchCurrencyOk')
+    expect(params.canelTxt).toBe('dsh.pricing.switchCurrencyCancel')
+    expect(screen.getByRole('radio', { name: 'dsh.pricing.currencyUSD' })).toBeChecked()
+    expect(await creditField()).toHaveValue('0.01')
     await user.click(screen.getByRole('button', { name: 'dsh.pricing.save' }))
     await waitFor(() => expect(saveCreditSettings).toHaveBeenCalledWith(expect.objectContaining({
-        version: 3, currency: 'USD', credit_value: '0.001389', usd_cny_rate: '7.2', base_model_id: 46,
+        version: 3, currency: 'USD', credit_value: '0.01', usd_cny_rate: '7.2', base_model_id: 46,
     })))
     expect(await screen.findByRole('status')).toHaveTextContent('dsh.pricing.saved')
 })
 
-it('can keep the number instead and follows a new rate while keeping the budget', async () => {
+it('stays on the current currency when the switch is not confirmed', async () => {
     const user = userEvent.setup()
     render(<CreditSettingsPanel />)
     await creditField()
     await user.click(screen.getByRole('radio', { name: 'dsh.pricing.currencyUSD' }))
-    const rate = screen.getByRole('textbox', { name: 'dsh.pricing.rate' })
-    await user.clear(rate)
-    await user.type(rate, '8')
-    expect(await creditField()).toHaveValue('0.00125')
-    await user.click(screen.getByRole('radio', { name: /dsh.pricing.keepNumber/ }))
-    expect(await creditField()).toHaveValue('0.01')
-    await user.click(screen.getByRole('button', { name: 'dsh.pricing.save' }))
-    await waitFor(() => expect(saveCreditSettings).toHaveBeenCalledWith(expect.objectContaining({
-        currency: 'USD', credit_value: '0.01', usd_cny_rate: '8',
-    })))
+    expect(bsConfirm).toHaveBeenCalledTimes(1)
+    // The confirmation closed through "Not now": onOk never runs.
+    expect(screen.getByRole('radio', { name: 'dsh.pricing.currencyCNY' })).toBeChecked()
+    expect(screen.getByRole('button', { name: 'dsh.pricing.save' })).toBeDisabled()
+    expect(saveCreditSettings).not.toHaveBeenCalled()
+})
+
+it('undoes an unsaved switch without asking again', async () => {
+    const user = userEvent.setup()
+    render(<CreditSettingsPanel />)
+    await creditField()
+    await user.click(screen.getByRole('radio', { name: 'dsh.pricing.currencyUSD' }))
+    confirmSwitch()
+    expect(screen.getByRole('radio', { name: 'dsh.pricing.currencyUSD' })).toBeChecked()
+    await user.click(screen.getByRole('radio', { name: 'dsh.pricing.currencyCNY' }))
+    // Back on the saved currency: no second confirmation and nothing left to save.
+    expect(bsConfirm).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('radio', { name: 'dsh.pricing.currencyCNY' })).toBeChecked()
+    expect(screen.getByRole('button', { name: 'dsh.pricing.save' })).toBeDisabled()
+})
+
+it('states the reverse factor when switching back to CNY', async () => {
+    vi.mocked(getCreditSettings).mockResolvedValue({ ...SAVED, currency: 'USD' })
+    const user = userEvent.setup()
+    render(<CreditSettingsPanel />)
+    await creditField()
+    await user.click(screen.getByRole('radio', { name: 'dsh.pricing.currencyCNY' }))
+    // 1 / 7.2 rounded to 4 decimals
+    expect(confirmSwitch().desc).toBe('dsh.pricing.switchCurrencyDesc(0.01|dsh.pricing.currencyUSD|dsh.pricing.currencyCNY|7.2|0.1389)')
 })
 
 it('blocks values outside the server range', async () => {
