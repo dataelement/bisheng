@@ -25,6 +25,7 @@ _LEGACY_DATASET_BINDINGS = {
         {"total_document_knowledge_base_count", "total_qa_knowledge_base_count"},
     ),
     "mid_session_run_dtl": ("mid_user_increment", {"new_user_count"}),
+    "mid_sessions_increment": ("mid_user_increment", {"total_user_count"}),
 }
 
 
