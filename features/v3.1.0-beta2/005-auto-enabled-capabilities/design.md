@@ -165,14 +165,20 @@
 2. **工具 id 按租户投影**。继承配置里的子工具 id 属于根租户，按 id 比较会在子租户失效。补入函数要用投影后的配置（`get_daily_chat_config` 已经做了投影），执行器的剔除用 `tool_key`。
 3. **浏览器里保存的旧选择**。客户端按账号保存工具选择（`agentToolDefaults.ts` 的 `applyToolDefaults`），代码执行器曾作为 `auto` 项写进去。工具改为自动启用后，`availableTools` 里没有它了。实现时要核对客户端是否已经按 `availableTools` 求交集；如果没有，旧选择会显示一个点不掉的标签。后端按 id 去重，所以不会重复挂载。技能选择（`SkillSelector`）同样处理。
 4. **超管验证会掩盖权限问题**。验证 AC-17 要用非管理员账号（backend AGENTS.md）。
-6. **沙箱 runner 的 copy-in 额度会被技能包占用**。总是挂载全部技能以后，配置了 runner 的部署每个会话都会把全部技能包（114 上是 30.7 MB）计入 copy-in 总量。默认上限 `max_copy_in_total_bytes` 是 512 MB，技能包约占 6%，默认配置下不会挤掉用户文件。如果某个部署调低了这个上限，超出部分会被跳过，可能包括用户上传的文件。深度研究今天已经是这样。本期不改，只记录；如果要改，就在 `_copy_in` 里跳过 `skills/` 下模型没读过 SKILL.md 的技能。
 5. **配置缓存**。配置写入后最长 100 秒内读到的可能还是旧值（Redis TTL）。验证时不要在这个时间窗内判断「没生效」。
+6. **沙箱 runner 的 copy-in 额度会被技能包占用**。总是挂载全部技能以后，配置了 runner 的部署每个会话都会把全部技能包（114 上是 30.7 MB）计入 copy-in 总量。默认上限 `max_copy_in_total_bytes` 是 512 MB，技能包约占 6%，默认配置下不会挤掉用户文件。如果某个部署调低了这个上限，超出部分会被跳过，可能包括用户上传的文件。深度研究今天已经是这样。本期不改，只记录；如果要改，就在 `_copy_in` 里跳过 `skills/` 下模型没读过 SKILL.md 的技能。
+7. **投影后的 `config.tools` 是 dict，不是 `ToolConfig`**。`get_daily_chat_config` 对继承配置做投影后，把工具组以普通 dict 写回 `config.tools`；根租户自己保存的配置读出来才是 `ToolConfig`。如果不知道：按属性取 `tool.auto_enabled` 会让子租户的每次发送都返回 500（114 实测）。处理位置：`WorkStationService.awith_auto_enabled_tools` 两种形态都接受；测试 `test_projected_config_groups_are_plain_dicts`。
+8. **能力中心列的是用户能用的全部工具，不是工作台的已选工具**。`CapabilityCatalogService.list` 读 `ToolServices.get_tool_list(action="use")`，与工作台配置无关，所以只在 `picker_tools` 过滤到不了它。如果不知道：自动启用的工具仍出现在侧边栏「工具与技能」里（114 实测）。处理位置：`list` 按 `aauto_enabled_tool_ids()` 跳过；测试 `test_an_auto_enabled_workbench_tool_is_not_listed`。
+9. **子租户用户的代码执行器在 F005 之前就不生效**。`GptsToolsDao.aget_tool_by_tool_key` 用无序 `.first()`，子租户的可见租户含根租户，拿到的是根租户那一行，用户的选择被当成「隐式」，权限检查失败后静默跳过。自动启用补入的是同样的请求，所以也不生效。不是本特性引入，修复在单独分支 `fix/3.1.0-beta1/child-tenant-code-interpreter`（让查询优先取当前租户的行）。合入前，验证工具类功能要用根租户账号。
+10. **技能的自动启用按租户存，不随配置继承**。根租户打开某个技能的自动启用，子租户的同名技能行不变（114 上租户 36 实测）。这是决策 3 的设计结果，验证时要在用户所在的租户里设置。
 
 ## 6. 对外契约与依赖
 
 ### 6.1 我提供给别人的（Outgoing）
 
 - `GET /workstation/config`（用户端）：`tools[]` 不再包含自动启用的组。字段不变。
+- `GET /dsh/capabilities`、`GET /linsight/skill/selectable`、`GET /linsight/skill/center`：不再包含自动启用的工具和技能。字段不变。`/linsight/skill/runtime/catalog` 与 `/skill/candidates` 照常包含。
+- `POST /workstation/chat/completions`（登录态）：请求的 `tools` 在服务端补入自动启用、且用户有使用权限的工具；开放 API 入口不补。
 - 平台的工作台配置读写：`tools[].auto_enabled` 新字段，缺省 False。
 - `PATCH /api/v1/linsight/skill/{name}/auto-enabled`，请求体 `{auto_enabled: bool}`，租户管理员权限，返回 `{ok: true}`；技能不存在时返回已有错误 `SkillNotFoundError`。路由里不含 `config` 字样。
 - 管理端技能列表 `GET /linsight/skill` 每项新增 `auto_enabled`。
@@ -217,6 +223,7 @@
 
 | 日期 | 内容 |
 |---|---|
+| 2026-11-20 | 实现完成并在 114 端到端验证。实测发现并修复两个缺陷（§5 坑 7、坑 8），记录子租户代码执行器的既有缺陷（坑 9）和技能按租户存的验证要点（坑 10）；§7.1 补实现后的准备耗时 |
 | 2026-11-20 | 决策 5 细化：挂载用复制不用硬链接（共用 inode 会让执行器代码改坏节点缓存）；`skills/` 的 ls/glob/grep 按快照列出；每次挂载重新复制快照里的全部条目。复制耗时实测 72–94 ms |
 | 2026-11-20 | 决策 5 改为直接回答总是挂载全部可用技能，技能挂载去掉 MinIO 写入，不做按需拷贝（用户确认）。 |
 | 2026-11-20 | 初稿。取证时发现能力中心（`/capabilities`）也是选择入口，并且工具也有个人停用；spec 补 AC-23，AC-10 / AC-11 的入口列表补上能力中心（待用户在 design 确认时一并确认） |
