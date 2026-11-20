@@ -264,6 +264,7 @@
 - T22 保存时只提交改过的价格（与加载时的价格逐项比较，币种也比），没改的价格不随请求发送，服务端保留原值；这样修改模型名称、密钥等不会因为别人刚改过价格而报 10813 冲突。`ModelConfig.tsx` 由 617 行降到 587 行（校验逻辑移到 `modelSavePayload.ts`）。
 - T23 价格弹框只读，按偏差记录中的决定实现；「去模型配置修改」做成弹框内的文字指引而不是直接跳转：用户可选模型表所在的「系统模型设置」页有未保存的显示名称等编辑，直接跳到服务提供方编辑页会丢失这些编辑，且跳转需要穿过三层组件传参。弹框在模型原价币种与计价币种不同时额外显示原价（新增文案 `dsh.pricing.originalPrice`）。
 - T24 切换计价币种时的「保持预算 / 保持数字」二选一做成币种下方的单选项，而不是弹窗（表单内选择不适合用二次确认弹窗，Modal 组件也未定稿）；默认保持预算，按当前汇率换算到 6 位小数。积分设置的版本冲突（26130）显示「设置已被他人修改」。
+- T24 改定（2026-11-20 产品）：去掉「保持预算 / 保持数字」二选一，切换计价币种时积分单价数字不变；币种从单独一行挪到积分单价输入框后面（两项用分段控制器）；切换前用 `bsConfirm` 普通档确认（说明每个积分对应金额变为原来的「汇率」倍或「1/汇率」倍、确认后仍需保存），取消不切换。删除文案 `dsh.pricing.switchCurrencyDesc / keepBudget / keepNumber`，新增 `switchCurrencyTitle / switchCurrencyDesc / switchCurrencyOk / switchCurrencyCancel`（三语）。
 - T25 删除 `ModelMultiplierInput` 及测试、`dshUnified` 的 `credit_multiplier` 字段与请求参数、三语文案 `dsh.unified.multiplier / multiplierHelp / multiplierInvalid / modelSettings`；`ModelAccessDialog` 本身未引用倍率，无需改动，只更新了它的测试。`ModelAccessDialog.test` 第一条用例改名后仍然失败，失败点与改动前相同（找不到 `subject.department` 按钮，界面已改为页签），不在本特性范围。
 - S6 回归：ModelPage + SystemPage/dsh 463 条，460 通过 / 3 失败（与基线同 3 条）；platform 全量 15 个文件 40 个失败，在干净的基线提交上逐条一致（仅改名的那条名称不同）；`pnpm typecheck` 通过；本次改动的 26 个文件 eslint 无问题；`pnpm check-i18n` 通过。页面未在真实环境中查看（本机后端不是本分支），留到 S9 联调。
 - S8 桌面在 bisheng-desktop 新 worktree `bisheng-desktop-f016/`、分支 `feat/v130-credit-pricing`（基于 origin/V1.3.0 9c410423，已去掉默认的上游跟踪以免误推集成分支），本地提交 85b6ab06，未推送。

@@ -4519,9 +4519,6 @@
       "rate": "汇率（1 美元兑人民币）",
       "rateHelp": "模型价格币种和计价币种不同时用于换算，填实际购汇汇率。",
       "rateInvalid": "请输入 0.01～100 之间的数字，最多 6 位小数。",
-      "switchCurrencyDesc": "积分单价要怎么处理？",
-      "keepBudget": "保持预算不变：积分单价按汇率换算为 {{value}} {{currency}}",
-      "keepNumber": "保持数字不变：积分单价仍为 {{value}} {{currency}}，同样的额度对应的金额会变化",
       "cancel": "取消",
       "save": "保存",
       "saving": "保存中…",
@@ -4531,7 +4528,11 @@
       "refresh": "刷新",
       "editPrice": "修改价格",
       "priceSaved": "价格已保存",
-      "saveFailed": "保存失败，请重试。"
+      "saveFailed": "保存失败，请重试。",
+      "switchCurrencyTitle": "切换为按{{currency}}计价？",
+      "switchCurrencyDesc": "积分单价的数字保持不变：1 积分 = {{value}} {{from}} 会变为 1 积分 = {{value}} {{to}}。按当前汇率（1 美元 = {{rate}} 人民币），每个积分对应的金额会变为原来的 {{times}} 倍，员工每月额度能用的量和每次调用扣的积分都会随之变化。确认后还需点「保存」才生效。",
+      "switchCurrencyOk": "确认切换",
+      "switchCurrencyCancel": "暂不切换"
     }
   },
   "request": {
