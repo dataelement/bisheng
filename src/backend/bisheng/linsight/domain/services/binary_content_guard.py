@@ -51,6 +51,7 @@ can make an image unsendable:
 
 from __future__ import annotations
 
+import os
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -85,6 +86,34 @@ _MOJIBAKE_RATIO = 0.05
 _MOJIBAKE_MIN_CHARS = 32
 
 
+_IMAGE_PATH_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".heic", ".heif"})
+
+# How the model should use an image when it cannot look at it. Users upload a
+# picture far more often to send, embed or edit it than to have it described,
+# and none of that needs vision: the path is enough.
+_IMAGE_USE_BY_PATH_ZH = (
+    "- 把图片作为附件发送、插入文档/表格/演示/报告、或做裁剪压缩等处理，不需要看图：直接使用该路径"
+    "（代码里用相对路径打开，markdown 里写 ![说明](路径)）。\n"
+)
+_IMAGE_USE_BY_PATH_EN = (
+    "To send it as an attachment, embed it in a document or report, or edit it, you do not need to "
+    "see it: use the path directly."
+)
+
+
+def _is_image_path(file_path: str) -> bool:
+    return os.path.splitext(file_path)[1].lower() in _IMAGE_PATH_SUFFIXES
+
+
+def _is_uploaded_path(file_path: str) -> bool:
+    return file_path.lstrip("/").startswith("uploads/")
+
+
+def _uploaded_image_text_hint(file_path: str) -> str:
+    stem = file_path.rsplit(".", 1)[0]
+    return f"- 图中识别出的文字在 `{stem}.md`（可能为空）。\n" if _is_uploaded_path(file_path) else ""
+
+
 def _binary_read_hint(file_path: str, has_code_interpreter: bool) -> str:
     """Actionable replacement for a binary ``read_file`` result.
 
@@ -95,6 +124,8 @@ def _binary_read_hint(file_path: str, has_code_interpreter: bool) -> str:
     ``has_code_interpreter`` gates the "open it with Python" route — pointing at
     a tool that is not bound this run just trades one dead end for another.
     """
+    if _is_image_path(file_path):
+        return _oversized_image_hint(file_path)
     stem = file_path.rsplit(".", 1)[0] if "." in file_path else file_path
     if has_code_interpreter:
         route_zh = (
@@ -118,6 +149,19 @@ def _binary_read_hint(file_path: str, has_code_interpreter: bool) -> str:
     )
 
 
+def _oversized_image_hint(file_path: str) -> str:
+    """An image ``read_file`` cannot inline (over the size ceiling, or a format
+    endpoints do not accept such as bmp)."""
+    return (
+        f"[System] `{file_path}` 是图片，但体积过大或格式不受支持，无法交给你查看。\n"
+        f"{_IMAGE_USE_BY_PATH_ZH}"
+        f"{_uploaded_image_text_hint(file_path)}"
+        f"- 不要再对该路径重复调用 read_file，结果不会变；不要凭猜测描述图片内容。\n"
+        f"[System] `{file_path}` is an image too large or in a format that cannot be shown to you. "
+        f"{_IMAGE_USE_BY_PATH_EN} Do not call read_file on this path again, and never guess at its contents."
+    )
+
+
 def _no_vision_hint(file_path: str, has_code_interpreter: bool) -> str:
     """Replacement for an image read when the run's model has no vision.
 
@@ -127,7 +171,12 @@ def _no_vision_hint(file_path: str, has_code_interpreter: bool) -> str:
     behaviour — the deliverable then carries "not visually verified" instead of an
     invented reading.
     """
-    if has_code_interpreter:
+    if _is_uploaded_path(file_path):
+        # A user's own upload has no "source file" to extract from: its text view
+        # is the OCR output, and most uses of it need only the path.
+        route_zh = _IMAGE_USE_BY_PATH_ZH + _uploaded_image_text_hint(file_path)
+        route_en = _IMAGE_USE_BY_PATH_EN
+    elif has_code_interpreter:
         route_zh = "- 若内容重要：用 bisheng_code_interpreter 从图片的来源文件中提取文字/数据（例如用 fitz 抽 PDF 那一页的文本）。\n"
         route_en = "If the content matters, extract it from the source file with bisheng_code_interpreter instead."
     else:

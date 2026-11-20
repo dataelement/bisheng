@@ -56,6 +56,8 @@
 
 ## 3. 关键方案选择
 
+2026-11-19 升级操作收敛（AC-129–134）：DBA 完成一致备份并通知升级负责人，脚本不接收或校验外部备份/schema 证明。新 Run 直接盘点实际结构、全租户业务/权限/引用并冻结自己的快照、计划和 checkpoint；选中行及孤儿内容的精确备份仍保留。未选择自动伪造描述符或把全量备份封装为迁移凭据：它们无法证明备份可恢复，且增加人工操作。只有将来明确要求自动备份/恢复编排时才重审这项职责；当前脚本不启停服务、不检测停服。
+
 2026-11-19 迁移性能修复：历史准备保留完整 schema-1 摘要，用主键分页、私有临时 SQLite 索引及流式编码替代全量 payload 复制；权限 namespace 每至多 100 个完整资源计划原子提交并推进原累计前缀 checkpoint。未选择全内存缓存或抽样替代完整性校验。真实修复保留加锁复核，旧单资源前缀可续跑，提交结果未知仍恢复原 Run。若单批关联来源/选中修复计划超过维护机容量，或需要在线迁移，再单独重审分片/持久计划协议；当前停服及冻结合同不变。
 
 2026-11-18 模型共享读取兼容：OpenFGA 无条件 tuple 的 `condition` 可缺省或为 `null`；共享 owner 仅接受这两种精确字段形状，拒绝真实条件和未知字段，不在通用客户端剥离 condition。若未来引入有条件的共享模型，必须先定义条件授权合同，再重新评估此限制。已知坑及验证见[空 condition 热修复记录](../../../docs/reviews/2026-11-18-model-sharing-null-condition-fix.md)。
@@ -140,9 +142,35 @@
 - **理由**：未改底层数据不应推导出“其健康必须先通过”；SQL/向量生命周期治理已明确暂缓。原preview无Run时直接返回会虚报检查范围，需要区分当前全扫描与旧图复核。
 - **重审条件**：后续单独立项物理数据迁移或SQL/向量治理时再定义专项准入、恢复和证据，不在普通迁移中恢复全库可读性门槛。细节见§7.2与AC-122/123。
 
+### D11：历史缺失技术标记只在维护清理中受限恢复（2026-11-20）
+
+- **选定**：历史准备脚本识别原快照已缺一类 `permission_enabled` 标记的自有删除操作，复用原生 checksum-bound 前向恢复，之后继续原派生 cleanup。原计划及 operator 不变，不修改通用权限运行时。
+- **理由**：严格原子 DELETE 会拒绝不存在的 tuple；补回缺失授权或对全部 FAILED_CLOSED 自动恢复均会扩大语义。冻结删除台账已表达业务终态，确认原业务不存在且原版本/操作围栏仍有效后，只删除剩余技术标记即可。
+- **重审条件**：一般权限变更、健康基线后出现混合状态或业务仍存在的恢复，应另审意图与授权，不套用历史硬删除适配。
+
+### D12：退役私有库保留，缺失目录继承须显式确认（2026-11-20）
+
+- **选定**：历史准备在验证父链/归属后保留 type=2 私有库的文件/文档，不为其补 mode、层级或 FGA 父边。正常库缺 mode 仍阻塞；仅在升级人员确认继承意图后，独立维护脚本对选中目录冻结小范围计划，通过原生投影和 control-state port 建立 INHERIT mode、父边及技术标记，不生成 CREATOR、人员/角色 Grant 或全局可见性。
+- **理由**：type=2 已退役且不属于普通文档库转空间范围，要求其逐文件新增权限会扩大语义；而正常库目录的继承意图不能从空 SQL/FGA 事实猜测。维护操作用独立 `HISTORICAL_INHERIT_REPAIR` 台账区别新建资源，不伪造创建人证明；保留原历史计划，在既定清理结束后通过独立后续计划重新复核阻塞。
+- **边界/重审条件**：仅小范围、空权限且父链可证明的已有目录；存在 Grant、可见来源、未知操作、外租户 mode 或冻结 Run 拒绝。需要批量补齐任意资源或推断失落的原授权时，另审来源与规模协议，不扩大本入口。
+
+### D13：取消身份残留只作冻结保留，不恢复租户或授权（2026-11-20）
+
+用户已确认[保留兼容方案](../../../docs/architecture/proposals/2026-11-20-f118-unmounted-identity-retention.md)，对应 AC-135～137。
+
+- **选定**：应用编排通过独立原生只读 repository 组合缺失 Tenant、精确 unmount 审计、零绑定/挂载、预置工具及子项、已迁出助手结构事实、原 ACL 和 FINALIZED 操作事实。仅 CURRENT/CUSTOM 原 scope、无有效租户同对象 mode、原 Grant 父关系闭合时可保留。全原行按 <=200 行主键分页摘要，Owner/控制事实批量读取；不复制大载荷到常驻索引，不修改原数据。
+- **冻结与恢复**：仅存在该集合的新 Run 增加 `unmounted_identity_policy=preserve_unmounted_v1`、正身份数及摘要，baseline/plan 同值。无字段的旧 Run 保留原严格校验。首次 M3 写入前、每次权限状态核对及最终 CURRENT 原生事务中重读比较；新增/修改/移除事实、身份恢复或出现绑定/挂载均拒绝，不能覆盖原材料。实际 Tenant/Coverage 集合不加入历史 ID。
+- **图边界**：保留原 resource 对象及稳定 Grant 对象端点，复用完整原 FGA 快照；对 staged/after 图额外检查这些端点相关键集合精确不变。禁止与有效 mode/转换目标冲突，不将助手旧权限收编到其当前业务租户，也不扩大或修复原失效授权。
+- **理由/备选**：直接删数据或重建身份会改变用户意图；只跳过初查不能通过恢复和最终校验，也不能检测漂移。冻结原集合并全过程重验既保持数据，又保留全局未知异常的拒绝行为。正常无孤儿路径仍使用原五条完整性探针，不进入附加事实读取。
+- **已知坑/重审**：取消身份会保留预置工具副本，不能据缺 Tenant 推导业务已删除；助手迁回 Root 后可能仍只有旧 mode，保留不等于授权恢复。活动 mode 冲突、其他资源类型或不明确的迁出意图另审，不扩成通用 orphan 忽略开关。实际数据库只读量测、完整恢复回归及现场阶段结果见本轮审查记录。
+
 ## 4. 目标模块与数据流（拟议）
 
+2026-11-20 取消身份保留数据流：M2 原完整性探针失败后，`unification_identity_retention` 编排 `UnificationIdentityRetentionRepository` 只读获取精确原事实，再调用权限原始完整性仓库排除仅本次已验证的身份集合；assignee 原父一致性仍全局检查。Repository 读取 AuditLog、Tenant/UserTenant、Department、预置工具/子项、迁出助手结构及原权限/操作字段，不依赖或调用这些 Owner 的业务写入 API。新 Run 的三个 `unmounted_identity_*` 标量写入两份原冻结根；恢复与最终发布从原根恢复摘要，原生事务重读校验，完整 Store 转换额外保留这些资源/Grant 端点的原键集合。没有新增在线入站、跨域写协议或外部证明参数。
+
 2026-11-19 迁移职责：`prepare_f118_history` 组合业务快照、批量物理存在性与清理明细读取；`f118_history_snapshot` 只拥有临时磁盘行与索引，不作为迁移恢复权威；`f118_history_business` 生成兼容旧摘要的写时覆盖视图。权限 snapshot repository 批量读取完整旧/新资源桶，resource write repository 在同一 savepoint 校验并写入一批资源，publication owner 将该批与累计 checkpoint 同事务提交。临时文件容量、权限和清理见脚本 README，规模与恢复证据见[修复审查记录](../../../docs/reviews/v310b1-migration-performance-fix-20261119.md)。
+
+2026-11-20 历史删除异常路径：原 `project_delete` 失败 → 同计划台账与原快照缺标记证明 → SQL/图/pin 重验 → 原生恢复预览及 checksum 再验 → 原操作版本围栏下修正剩余标记 → AFTER 验证、SQL finalize → 原派生 cleanup。普通路径不增加恢复查询；中断仍按原操作台账续跑，计划 schema 与身份格式保持。
 
 2026-11-18 实现增量：model_availability 承担实际探测；Model Owner 在确认事务切模型/物理集合并登记 knowledge_vector_cleanup；rebuild_cleanup 经现有 Beat 分派等待 writer 后清理。copy_input_store 保存带 tenant/job/space/file/version 身份头、SHA256、字节数及分段数的 JSONL 输入；SpaceCopyOwner 保存输入检查点及目标修订，Worker 逐文件入库。
 
@@ -244,6 +272,8 @@ flowchart LR
 ## 5. 文件操作与异步恢复
 
 迁移已知坑（2026-11-19）：分页 SQL 若仍在内存累积完整 JSON、复制快照或逐资源提交，正常大库也会放大成本；反复扫描待删除链还会退化为乘积开销。历史准备采用磁盘 payload、一次构建的关联索引及队列传播；权限发布采用有界批量。磁盘快照不意味着全流程常量内存，根/图 ID、选中修复计划和正式发布的 tuple/namespace 仍随规模增长；不能据此跳过生产克隆演练。验证见修复记录中的 N/2N 计数、RSS、旧前缀与未知提交恢复测试。
+
+历史清理已知坑（2026-11-20）：OpenFGA 的原子 DELETE 包含不存在的 tuple 时会拒绝整批；历史 `permission_enabled` 两类技术主体只保留一类时，正常双标记删除会进入 MIXED/FAILED_CLOSED。`prepare_f118_history.project_history_delete` 只对同份计划、原生 RESOURCE_DELETE 台账与完整 checksum 完全匹配、原快照已缺一类标记的操作做受限前向恢复。恢复前重验硬删除、下游、镜像和 pin，借用现有 checksum-bound recovery 服务检查原版本/操作栅栏并仅删除尚存技术标记，再验证 AFTER 和完成 SQL 收尾。正常权限运行时继续 fail closed；健康基线后来混合、任意 WRITE 修正、计划外图变化或失去原栅栏均拒绝。选择维护脚本适配而非放宽通用权限恢复，保持 AC-115/116 删除边界、schema-1 计划字节与断点台账；若未来需修复一般权限操作，应另审业务意图及恢复授权。原生台账、严格原子删除模拟及恢复中断验证见 `test/knowledge_unification/test_history_delete_recovery.py`。
 
 ### 5.1 批量操作两阶段确认
 
@@ -582,12 +612,20 @@ flowchart TD
 - 只把存量 NORMAL 转为 SPACE，原 `knowledge.id`、file ID、owner、tenant、model、collection_name、index_name 和文件对象地址不改；已有 SPACE 保持。
 - 缺少逻辑文档/版本的文件补 V1 主版本，建立前先按 file 查已有版本关联；重复 run 命中已有映射。损坏或多重关联先进入异常，不能简单重复插入。
 - 标签业务类型与关联归属按已有空间体系转换，保留标签内容；实际枚举和值在执行前 inventory，避免假设库文件 tag 与空间文件 tag 完全一致。
-- 资源转换不调用解析/embedding，不重写正常资源ES/Milvus数据或替换索引绑定。新M2以SQL业务事实、权限和引用为迁移依据；普通资源不查询ES/Milvus的存在性、结构或数量，也不对正常文件逐个MinIO stat。底层检索服务健康与SQL/向量生命周期差异由独立诊断处理，不作为本轮迁移门槛。对象存储仍承载正式迁移证据及备份/schema材料。
+- 资源转换不调用解析/embedding，不重写正常资源ES/Milvus数据或替换索引绑定。新M2以SQL业务事实、权限和引用为迁移依据；普通资源不查询ES/Milvus的存在性、结构或数量，也不对正常文件逐个MinIO stat。底层检索服务健康与SQL/向量生命周期差异由独立诊断处理，不作为本轮迁移门槛。对象存储仍承载正式迁移快照、计划和检查点引用；不再要求 DBA 备份/schema 证明对象。
 - **新旧物理盘点合同**：新baseline/plan metadata均显式写`physical_inventory_policy=bindings_only`，资源记录仍冻结原`index_name/collection_name`并由SQL转换重验；不生成虚假的physical事实或“已验证底层一致”证明。解码时两根策略必须一致，新策略拒绝任何physical叶页（包括空页）。旧metadata无该字段时沿原完整physical记录及`physical_index_retention`合同校验，不重写原基线、不要求重连底层存储；原旧索引零SQL文件证明仍在M3消费前核对。
 - **历史孤儿精确清理独立保留**：M2前准备脚本仅在已有可靠原绑定、无有效或不明下游且选中清理的文件集合非空时，备份并精确删除对象与索引切片；无法证明范围仍阻断，不删除整个共享索引/集合。取消正常资源全库盘点不等于跳过该删除范围校验。
-- **真正的只读预检**：新Run默认preview调用与正式M2相同的业务/权限/引用盘点和完整分页图验证；临时页使用0700本地一次性目录、0600文件和原canonical/hash校验，结束或失败即删除，不写MinIO页、不冻结SQL Run、不写FGA。成功输出`validation_scope=current_inventory/preflight_complete=true/frozen=false/ready=false`，不暴露临时descriptor。备份/schema材料仍必须与当次环境、writer和当前租户集合一致；预览与正式执行之间必须重新扫描，不能把临时页作为apply或resume的凭据。
+- **真正的只读预检**：新Run默认preview调用与正式M2相同的业务/权限/引用盘点和完整分页图验证；临时页使用0700本地一次性目录、0600文件和原canonical/hash校验，结束或失败即删除，不写MinIO页、不冻结SQL Run、不写FGA。成功输出`validation_scope=current_inventory/preflight_complete=true/frozen=false/ready=false`，不暴露临时descriptor。预检仍核对实际结构、环境、writer和当前租户集合；不读取外部 DBA 备份/schema 证明。预览与正式执行之间必须重新扫描，不能把临时页作为apply或resume的凭据。
 - 已有冻结Run的preview仍读取原不可变图，输出`validation_scope=frozen_run/preflight_complete=false`；迁移中的原租户集合一致规则不放宽。fresh扫描第二事务若发现同名Run已被并发冻结，明确拒绝，不将历史复核冒充当前全扫描。116当前已迁移，现状扫描不能替代旧版快照的转换演练。
 - `is_released=false`，不新增全员可见，不调用会删除授权的普通 `clear_space_authorization_for_private`。`auth_type` 的目标值根据实际授权计划决定，不能仅写 PRIVATE 即认为完成权限迁移。
+
+#### 外部备份职责与新旧 Run 输入（2026-11-19）
+
+- CLI 必填仍为 Run 和环境，writer 默认 `f118-v1`；连接由原服务配置决定。新 Run 不接收 `--backup-ref/--schema-ref`，不要求本地 `f118-inputs.json`，实际 schema 预检与业务/权限/引用校验保留。
+- 新 baseline/plan 根同时记录 `external_material_policy=not_required`，历史字段 `backup_ref/schema_ref` 同时为 `null`。codec 仅在该显式策略下接受空值，未知策略、策略与非空描述符混合、旧格式直接改成空值均拒绝；两根策略必须一致。内部旧调用若明确提供一对历史描述符，保留原字节格式作兼容身份字段，不再把其指向对象当作备份证明读取。
+- 原冻结 Run 不改字节、哈希或检查点。图读取器先从原哈希校验的 plan 根读取历史字段，调用者省略时沿用原值；显式提供旧参数只作为原字段断言，变化即拒绝。后续完整读取 baseline/plan 图，继续核对环境、writer、租户摘要、基线引用、权限 pin 和所有迁移事实；外部 DBA 证明对象不再读验。CLI 新 Run 显式传入旧证明参数会拒绝，提示其仅属于已有 Run 的兼容入口。
+- 断点恢复沿原 Run、原环境、writer、操作者和 checkpoint；冻结前失败不带 `--resume`，冻结后使用 `--apply --resume`。不新增 SQL 表、迁移 revision、外部依赖或自动初始化行为，不改变批量提交/锁/事务次序。
+- 已知坑：只删 CLI 必填会在 codec 和冻结图读验处失败；给旧 Run 补新策略会改变原哈希。处理点为 `unification_inventory_codec._validate`、`UnificationInventoryApplication.aiter_frozen_pages`，不能靠伪造描述符、重新 freeze 或重置台账兼容。
 
 ### 7.3 SQL 授权与 FGA 的同步转换
 
@@ -695,6 +733,7 @@ flowchart TD
 
 | 风险 / 已观察事实 | 后果 | 设计护栏 |
 | --- | --- | --- |
+| 取消租户身份保留预置副本，助手业务已迁出但旧权限仍在原 scope | 直接清理会破坏用户保留意图；仅忽略初查会遗漏漂移或在恢复/最终切换再次失败 | D13：精确审计/零绑定/原副本与 ACL 冻结摘要，首次写入及权限恢复/最终事务重验，保留 FGA 端点键；旧 Run 不重分类 |
 | 无Run的preview原先仅列租户；旧Run复核不等于当前全扫描 | 无数据校验也可能被误报为升级预检通过 | CLI明确scope/preflight_complete；fresh执行完整M2只读盘点；并发出现同名冻结Run时拒绝，成功不颁发READY |
 | 取消物理盘点后混用新旧证据或夹带空physical页 | 旧合同被降级，或伪造底层已核实的事实 | 独立物理策略，两root必须一致；缺字段走legacy完整集校验，新策略在section层禁止任何physical页 |
 
@@ -1232,3 +1271,29 @@ Mode编译只迁移原before已存在的技术标记，permission_enabled/custom
 ### 修订历史：2026-11-19 迁移性能修复
 
 经用户确认脚本规模审查规则后，修复历史准备的逐项存在性/明细查询、重复扫描与 payload 复制、空操作加锁，以及权限 namespace 的逐资源事务和制品上传即时重复回读。同步 §3/4/5、脚本 README 与脚本目录 AGENTS。schema-1 摘要和 Run 恢复格式保持兼容；详细量测及现存边界见[修复审查记录](../../../docs/reviews/v310b1-migration-performance-fix-20261119.md)。
+
+### 修订历史：2026-11-19 升级备份证明取消
+
+按用户“DBA备份通知即可、脚本按停服步骤完成升级”及“修改脚本”的要求，同步 §3、§7.2、CLI、原生盘点、冻结图解码和操作文档。新 Run 无外部 DBA 证明；旧 Run 从原图读取身份字段，保留实际数据/结构校验及检查点。实现验证和未执行的真实中间件演练见[本轮记录](../../../docs/reviews/f118-upgrade-without-dba-evidence-20261119.md)。
+
+### 修订历史：2026-11-19 首次安装覆盖初始化
+
+166 空库安装复现历史 F001 迁移先创建 Root、API `_init_default_tenant` 因租户已存在跳过原始创建事务的覆盖签发。保留已发布迁移，两个 entrypoint 在 Alembic 前调用 `scripts/initialize_installation.py --apply`；源码部署按同一顺序执行。
+
+`tenant.application.installation` 编排，`InstallationRepository` 承担数据库访问。仅全空 schema（可包含无版本记录的 Alembic 表）能取得全局 `installation_bootstrap(id=1,state=pending)` 来源证明。先提交证明，再创建当前模型表；最后锁住证明行，在同一事务创建实际新 Root、调用原 `bootstrap_created_root` 进行六类来源/索引/删除凭据空集验证、签发原格式 Coverage 并完成证明。MySQL/DM8 DDL 隐式提交后的中断可从 pending 续办；凭据失败回滚 Root 和 completed 状态。已有数据库不因空业务查询或缺账本被自动签发，仍走正式停服盘点回填。该全局安装证明不参与租户资源权限或在线业务拦截。
+
+选择持久来源证明是为了保留原“仅实际创建租户事务签发空证明”的合同，并覆盖建表中断重试；不修改历史迁移、不在每次 API 启动补签既有租户。未来若安装器有统一持久安装事务，可再合并这个入口。验证覆盖新库、重复启动、旧库、版本历史、回滚与拒绝非空；166 独立 MySQL 测试库实际完成初始化→全历史 Alembic→API 租户初始化后仍 `ready=True,coverage_epoch=1`。DM8 真实执行仍由中央回归验证。
+
+同次 166 正式回填预检发现线上 Owner 对 `knowledge_space` 目标保存 `target_space_id=target_id`，原冻结解析器却仅允许文件父空间。`unification_reference_state._row` 现保留真实自指空间元数据，并拒绝空间 ID 不一致及模型携带空间元数据；文件父空间规则保持原状。采用兼容原事实读取而非清空 8 条正确绑定，冻结字段和指纹算法均不变。原生 SQL 的真实来源快照→目标事实→冻结→预检回归覆盖 self/NULL 接受和其他空间 ID 拒绝。
+
+### 修订历史：2026-11-20 历史删除技术标记缺失的受限恢复
+
+按用户确认的方案，历史准备 apply 对原快照已缺一类技术标记的自有删除操作接入现有前向恢复服务；同计划、同 operator、原生投影账本与版本栅栏保持，已完成操作不重写，恢复中断继续原账本。CLI 错误增加安全原因码及可用的操作编号/状态。SQL 业务修复、物理清理及正式 M2 流程不改；165 环境按用户要求不部署、不执行。验证与审查见 [修复记录](../../../docs/reviews/f118-history-delete-recovery-20261120.md)。
+
+### 修订历史：2026-11-20 显式目录继承与私有库保留
+
+后续升级执行中发现历史准备将退役私有库文件也当作必须补 mode 的活动资源；用户确认缺失目录应继承父库，私有库保留且不新增授权。按 D12 增加选中目录原生投影修复入口与私有库保留回归，保留原历史计划及全部断点。独立修复和后续历史复核串行执行，正式 M2 合同不改。验证见 [修复审查记录](../../../docs/reviews/f118-folder-inheritance-repair-20261120.md)。
+
+## 2026-11-20 取消租户身份保留兼容
+
+用户明确保留原记录并确认受控兼容方案后，增加 D13 / AC-135～137。新 Run 显式冻结已分类保留集合的身份数量与原事实摘要；原 Run 不重解释，实际租户及 Coverage 清单不扩张。原生恢复、漂移拒绝和 FGA 键保持由新增测试覆盖；现场只读 acquisition 已在真实 MySQL 测得 185 SELECT、约 1.7 秒，真实开服验收与原生双库覆盖分开记录。

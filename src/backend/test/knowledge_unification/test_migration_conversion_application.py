@@ -125,7 +125,7 @@ async def test_actual_m2_to_domain_sql_completes_only_sql_and_keeps_all_original
     assert await snapshot(database) == after
 
 
-@pytest.mark.parametrize("bad", ["tail", "material", "new_tenant", "future_phase", "wrong_refs"])
+@pytest.mark.parametrize("bad", ["tail", "plan_root", "new_tenant", "future_phase", "wrong_refs"])
 async def test_complete_preflight_rejects_bad_tail_or_universe_before_any_business_dml(module, produced, bad):
     database, transport, _, _ = produced
     if bad == "tail":
@@ -133,8 +133,9 @@ async def test_complete_preflight_rejects_bad_tail_or_universe_before_any_busine
             key for key, value in reversed(tuple(transport.objects.items())) if b'"section":"conversion"' in value
         )
         transport.objects[key] = b"corrupt frozen tail"
-    elif bad == "material":
-        transport.objects[transport.inputs["schema_ref"]["object_key"]] = b"corrupt schema evidence"
+    elif bad == "plan_root":
+        frozen = produced[2]
+        transport.objects[frozen.plan_ref["object_key"]] = b"corrupt frozen plan root"
     else:
         async with database.engine.begin() as connection:
             if bad == "new_tenant":

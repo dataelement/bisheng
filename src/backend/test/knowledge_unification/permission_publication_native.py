@@ -446,6 +446,7 @@ async def published_input(complete, transport, monkeypatch, request):
         )
     if options.get("raw_edge"):
         store.tuples.add(tuple(options["raw_edge"]))
+    store.tuples.update(tuple(edge) for edge in options.get("raw_edges", ()))
     for edge in options.get("remove_raw_edges", ()):
         store.tuples.discard(tuple(edge))
     if getattr(request.node, "callspec", None) and request.node.callspec.params.get("corrupt") == "unknown_namespace":
