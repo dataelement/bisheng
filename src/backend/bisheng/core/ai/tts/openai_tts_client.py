@@ -42,7 +42,7 @@ class OpenAITTSClient(BaseTTSClient):
         )
 
         if response.response.status_code != 200:
-            raise Exception(
+            raise ValueError(
                 f"OpenAI TTS API ERROR，Code：{response.response.status_code}，Message：{response.response.text}")
 
         return response.content
