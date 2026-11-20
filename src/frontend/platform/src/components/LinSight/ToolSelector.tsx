@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
 import { useTranslation } from 'react-i18next';
 import { LoadingState } from '@/components/bs-icons/loading/LoadingState';
+import { ToolUsageSelect, toolUsageOf } from './ToolUsageSelect';
 
 
 type CheckboxState = 'checked' | 'unchecked' | 'indeterminate';
@@ -31,11 +32,9 @@ const ToolSelector = ({
   expandedItems,
   setManuallyExpandedItems,
   toggleGroup,
-  // Optional: when set, renders a "是否默认勾选" checkbox column in the selected
-  // panel (daily-mode variant). LinSight leaves it unset and behaves as before.
-  showDefaultChecked = false,
-  onDefaultCheckedChange,
-  defaultCheckedLabel,
+  // Optional: when set, every selected tool gets a usage select (F005: user picks /
+  // checked by default / always on). LinSight leaves it unset and behaves as before.
+  onUsageChange = undefined,
 }) => {
   const { t } = useTranslation()
   const [scrollToParentId, setScrollToParentId] = useState<string | null>(null);
@@ -241,10 +240,8 @@ const ToolSelector = ({
         <div className="flex-1 p-4">
           <div className="flex items-center justify-between">
             <h3 className="text-[16px] font-medium">{t('toolSelector.selectedTools')}</h3>
-            {showDefaultChecked && selectedTools.length > 0 && (
-              <span className="text-xs text-muted-foreground">
-                {defaultCheckedLabel || t('bench.defaultChecked')}
-              </span>
+            {onUsageChange && selectedTools.length > 0 && (
+              <span className="text-xs text-muted-foreground">{t('bench.toolUsage.title')}</span>
             )}
           </div>
 
@@ -286,19 +283,12 @@ const ToolSelector = ({
                               <SharedTooltipProvider ><SharedTooltip  content={<><p>{tool.name}</p></>} ><span className="truncate max-w-[240px]">{tool.is_preset === 1 ? t(`categories.${tool.name}.name`, { ns: 'tool', defaultValue: tool.name }) : tool.name}</span></SharedTooltip></SharedTooltipProvider>
                             </div>
                             <div className="flex items-center gap-3 ml-2">
-                              {showDefaultChecked && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onDefaultCheckedChange?.(tool.id, !tool.default_checked);
-                                  }}
-                                  className={`w-4 h-4 border rounded flex items-center justify-center ${
-                                    tool.default_checked ? 'bg-primary border-primary' : 'border-gray-300'
-                                  }`}
-                                >
-                                  {tool.default_checked && <Check className="w-3 h-3 text-white" />}
-                                </button>
+                              {onUsageChange && (
+                                <ToolUsageSelect
+                                  value={toolUsageOf(tool)}
+                                  toolName={tool.is_preset === 1 ? t(`categories.${tool.name}.name`, { ns: 'tool', defaultValue: tool.name }) : tool.name}
+                                  onChange={(usage) => onUsageChange(tool.id, usage)}
+                                />
                               )}
                               <button
                                 onClick={(e) => {
