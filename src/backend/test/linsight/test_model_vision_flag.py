@@ -1,7 +1,7 @@
 """The 视觉 checkbox has to reach the Linsight guards.
 
-``WSModel.visual`` is set per model in 系统模型设置 → 工作台模型 and was, until now,
-read only by daily chat (``chat_service._process_agent_files``). Linsight picks its
+``WSModel.visual`` is set per model in 系统模型设置 → 工作台模型 and was once read
+only by the legacy daily chat. Linsight picks its
 model from that SAME list, so the flag is resolvable there too — these tests pin the
 mapping, because a silent False turns image reads off platform-wide and a silent
 True hands a text-only endpoint a payload it answers with a 400.

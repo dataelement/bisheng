@@ -110,27 +110,35 @@ async def world(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(run_send, "PERSIST_WAIT_SECONDS", 2)
 
     monkeypatch.setattr(
-        chat_service.SensitiveWordPolicyService, "evaluate_workbench_user_text", staticmethod(lambda *_a, **_k: None)
+        run_send.SensitiveWordPolicyService, "evaluate_workbench_user_text", staticmethod(lambda *_a, **_k: None)
     )
 
     # -- database fakes at the helper boundary of run_send ---------------------
     async def get_session(cid):
         return w.sessions.get(cid)
 
-    async def open_conversation(data, login_user):
+    async def open_conversation(data, login_user, session_subject=None):
         cid = data.conversationId
         is_new = not cid
         if is_new:
             cid = f"new-{len(w.sessions)}"
-            w.sessions[cid] = SimpleNamespace(chat_id=cid, user_id=login_user.user_id, name="New Chat")
+            w.sessions[cid] = SimpleNamespace(
+                chat_id=cid, user_id=login_user.user_id, name="New Chat", subject=session_subject
+            )
         session = w.sessions.get(cid)
-        if session is None or session.user_id != login_user.user_id:
+        if session_subject is not None:
+            # ``ChatSessionService.get_subject_session``: a mismatch is HTTP 404.
+            if session is None or getattr(session, "subject", None) != session_subject:
+                raise HTTPException(status_code=404, detail="Not Found")
+        elif session is None or session.user_id != login_user.user_id:
             raise run_send.ConversationNotFoundError()
         return session, is_new
 
-    async def insert_question(data, login_user, cid, memory_register):
+    async def insert_question(data, login_user, cid, memory_register, storage_partition=None):
         row = SimpleNamespace(id=100 + len(w.question_rows), chat_id=cid)
-        w.question_rows.append({"id": row.id, "chat_id": cid, "text": data.text})
+        w.question_rows.append(
+            {"id": row.id, "chat_id": cid, "text": data.text, "storage_partition": storage_partition}
+        )
         return row
 
     async def model_name(data, login_user):
@@ -465,29 +473,134 @@ async def test_task_mode_legacy_client_gets_the_handoff_frame(world: _World, cli
     ]
 
 
-async def test_open_api_subject_keeps_the_daily_agent_flow(world: _World, monkeypatch):
-    """The Open API entry (it passes ``session_subject``) does not come to the unified send entry."""
-    seen: list[Any] = []
+# --------------------------------------------------------------- Open API (AC-39)
 
-    async def daily(request, data, login_user, session_subject, **kwargs):
-        seen.append((data, session_subject, kwargs))
-        return "DAILY"
+ANSWER_SCRIPT = [{"type": "text", "data": {"text": "回答"}}, {"type": "run_finished", "data": {}}]
 
-    monkeypatch.setattr(chat_service, "_agent_stream_chat_completion", daily)
-    unified = AsyncMock()
-    monkeypatch.setattr(run_send, "unified_send", unified)
-    subject = SimpleNamespace(storage_partition="sa:7")
-    data = chat_service.APIChatCompletion(**_body())
-    data.skills = ["morning-report"]
 
-    result = await chat_service.stream_chat_completion(None, data, world.user, session_subject=subject)
+async def _open_api_send(world: _World, subject: Any, **body: Any) -> list[dict]:
+    """Send through the Open API entry (it passes ``session_subject``) and read the SSE body."""
+    data = chat_service.APIChatCompletion(**_body(**body))
+    # An Open API caller cannot switch to the run protocol, even with the header.
+    request = SimpleNamespace(headers=V2)
+    resp = await chat_service.stream_chat_completion(request, data, world.user, session_subject=subject)
+    assert isinstance(resp, StreamingResponse)
+    chunks = [chunk async for chunk in resp.body_iterator]
+    return _frames("".join(c if isinstance(c, str) else c.decode() for c in chunks))
 
-    assert result == "DAILY"
-    (call,) = seen
-    assert call[1] is subject and call[0].skills == []
-    unified.assert_not_awaited()
+
+@pytest.fixture
+def subject(world: _World):
+    subject = SimpleNamespace(storage_partition="service-account/9/abc")
+    world.sessions[CID].subject = subject
+    return subject
+
+
+@pytest.fixture
+def no_department_limit(monkeypatch: pytest.MonkeyPatch):
+    from bisheng.department.domain.services.department_flow_service import DepartmentFlowService, SlotOutcome
+
+    lease = SimpleNamespace(lease_id="lease-1")
+    calls = {"released": []}
+
+    async def ensure(login_user, lease_id=None):
+        return SlotOutcome.HELD, lease
+
+    async def release(held):
+        calls["released"].append(held.lease_id)
+
+    monkeypatch.setattr(DepartmentFlowService, "ensure_lease", ensure)
+    monkeypatch.setattr(DepartmentFlowService, "release_lease", release)
+    return calls
+
+
+async def test_open_api_send_answers_this_message_in_the_old_frames(world: _World, subject, no_department_limit):
+    world.script = ANSWER_SCRIPT
+
+    frames = await _open_api_send(world, subject)
+
+    datas = [f["data"] for f in frames]
+    assert datas[-1]["final"] is True and datas[-1]["conversation"] == {"conversationId": CID}
+    end = next(d for d in datas if (d.get("category"), d.get("type")) == ("agent_answer", "end"))
+    assert end["message"]["msg"] == "回答"
+    (ctx,) = world.started
+    # Nobody can answer a question; files go to the subject's partition; the
+    # run takes over the department lease the request acquired.
+    assert ctx.unattended is True
+    assert ctx.storage_partition == "service-account/9/abc"
+    assert ctx.execution_lease_id == "lease-1"
+    assert ctx.skills == [] and ctx.memory_registered is False
+    assert world.question_rows[0]["storage_partition"] == "service-account/9/abc"
+    # Handed over to the run: the request does not release it.
+    assert no_department_limit["released"] == []
+
+
+async def test_open_api_send_waits_until_the_conversation_is_free(
+    world: _World, subject, no_department_limit, monkeypatch
+):
+    monkeypatch.setattr(run_send, "BUSY_POLL_SECONDS", 0.01)
+    held = await world.dispatch.submit(CID, {"text": "网页端的问题", "user_id": OWNER, "tenant_id": TENANT})
+    world.script = ANSWER_SCRIPT
+
+    async def finish_later():
+        await asyncio.sleep(0.05)
+        await world.dispatch.on_run_finished(CID, held.run_id)
+
+    releaser = asyncio.create_task(finish_later())
+    frames = await _open_api_send(world, subject, text="开放接口的问题")
+    await releaser
+
+    # The message never joined the inbox; it got a run and an answer of its own.
+    assert await world.inbox() == 0
+    assert [ctx.text for ctx in world.started] == ["开放接口的问题"]
+    assert any(f["data"].get("category") == "agent_answer" and f["data"].get("type") == "end" for f in frames)
+
+
+async def test_open_api_send_reports_a_conversation_that_stays_busy(
+    world: _World, subject, no_department_limit, monkeypatch
+):
+    monkeypatch.setattr(run_send, "BUSY_POLL_SECONDS", 0.01)
+    monkeypatch.setattr(run_send, "BUSY_WAIT_SECONDS", 0.05)
+    held = await world.dispatch.submit(CID, {"text": "网页端的问题", "user_id": OWNER, "tenant_id": TENANT})
+
+    frames = await _open_api_send(world, subject)
+
+    assert [f.get("event") for f in frames] == ["error"]
+    assert frames[0]["data"]["status_code"] == run_send.ConversationBusyError.Code
+    assert world.started == [] and world.question_rows == []
+    assert await world.inbox() == 0
+    assert (await world.state()).run_id == held.run_id
+    # No run took the department lease over, so the request released it.
+    assert no_department_limit["released"] == ["lease-1"]
+
+
+async def test_open_api_send_to_a_conversation_of_another_subject_is_404(world: _World, subject, no_department_limit):
+    other = SimpleNamespace(storage_partition="service-account/9/other")
+
+    with pytest.raises(HTTPException) as exc_info:
+        await _open_api_send(world, other)
+
+    assert exc_info.value.status_code == 404
+    assert world.started == [] and world.question_rows == []
+    assert no_department_limit["released"] == ["lease-1"]
+
+
+async def test_open_api_send_rejected_by_the_department_limit_is_one_error_frame(
+    world: _World, subject, monkeypatch
+):
+    from bisheng.department.domain.services.department_flow_service import DepartmentFlowService, SlotOutcome
+
+    async def rejected(login_user, lease_id=None):
+        return SlotOutcome.REJECTED, None
+
+    monkeypatch.setattr(DepartmentFlowService, "ensure_lease", rejected)
+
+    frames = await _open_api_send(world, subject)
+
+    assert [f.get("event") for f in frames] == ["error"]
+    assert frames[0]["data"]["status_code"] == run_send.DepartmentDailyChatConcurrentLimitError.Code
+    assert world.started == [] and world.question_rows == []
     assert (await world.state()).status == "idle"
-    assert world.started == [] and world.task_turns == []
 
 
 async def test_sensitive_input_blocked_before_inbox(world: _World, client: httpx.AsyncClient, monkeypatch):
@@ -495,11 +608,11 @@ async def test_sensitive_input_blocked_before_inbox(world: _World, client: httpx
     held = await world.dispatch.submit(CID, {"text": "先问一句", "user_id": OWNER, "tenant_id": TENANT})
     hit = SimpleNamespace(auto_reply="内容不合规")
     monkeypatch.setattr(
-        chat_service.SensitiveWordPolicyService, "evaluate_workbench_user_text", staticmethod(lambda *_a, **_k: hit)
+        run_send.SensitiveWordPolicyService, "evaluate_workbench_user_text", staticmethod(lambda *_a, **_k: hit)
     )
     blocked_calls: list[Any] = []
 
-    async def blocked_response(data, login_user, blocked, memory_register, negotiated=False):
+    async def blocked_response(data, login_user, blocked, memory_register, negotiated=False, session_subject=None):
         blocked_calls.append(blocked)
         return StreamingResponse(iter(['data: {"blocked": true}\n\n']), media_type="text/event-stream")
 
@@ -524,7 +637,7 @@ def _block_input(world: _World, monkeypatch, auto_reply: str = "内容不合规"
     seen: dict[str, Any] = {"init": [], "answers": [], "legacy": []}
     hit = SimpleNamespace(auto_reply=auto_reply)
     monkeypatch.setattr(
-        chat_service.SensitiveWordPolicyService, "evaluate_workbench_user_text", staticmethod(lambda *_a, **_k: hit)
+        run_send.SensitiveWordPolicyService, "evaluate_workbench_user_text", staticmethod(lambda *_a, **_k: hit)
     )
 
     async def initialize(data, login_user, session_subject=None, *, skip_llm=False, memory_register=None):

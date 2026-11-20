@@ -135,6 +135,8 @@ KIND_NEW_RUN = "new_run"
 KIND_STEER = "steer"
 KIND_ANSWER = "answer"
 KIND_RELAY = "relay"
+# Exclusive submit only (Open API): the conversation is not free; nothing was queued.
+KIND_BUSY = "busy"
 
 OUTCOME_IDLE = "idle"
 OUTCOME_RELAY = "relay"
@@ -316,7 +318,9 @@ class RunDispatchService:
             "ts": int(message.get("ts") or self._now_ms()),
         }
 
-    async def _eval_dispatch(self, conversation_id: str, mode: str, run_id: str, payload: str, profile: str) -> list:
+    async def _eval_dispatch(
+        self, conversation_id: str, mode: str, run_id: str, payload: str, profile: str, exclusive: bool = False
+    ) -> list:
         return await self._redis.eval(
             _DISPATCH_LUA,
             2,
@@ -331,9 +335,17 @@ class RunDispatchService:
             QUEUED_LEASE_SECONDS * 1000,
             STATE_TTL_SECONDS,
             INBOX_TTL_SECONDS,
+            "1" if exclusive else "0",
         )
 
-    async def submit(self, conversation_id: str, message: dict, *, on_queued: OnQueued | None = None) -> SubmitResult:
+    async def submit(
+        self,
+        conversation_id: str,
+        message: dict,
+        *,
+        on_queued: OnQueued | None = None,
+        exclusive: bool = False,
+    ) -> SubmitResult:
         """Decide what one sent message does. See the module docstring for the branches.
 
         Input safety checks (AC-38) are the caller's job and run BEFORE this.
@@ -341,11 +353,21 @@ class RunDispatchService:
         ``on_queued(result, message)`` is awaited when the message joined the
         inbox (disposition ``queued``), before ``steer_accepted`` is emitted: the
         caller writes the message's question row there (AC-13).
+
+        ``exclusive`` (Open API, AC-39): the message only starts a new run. When
+        a run holds or waits for the conversation, the result is ``busy`` and
+        nothing is stored; when unread inbox messages are left, their relay run
+        is started and the result is ``busy`` too. The caller retries later.
         """
         msg = self._normalize(message)
         profile = profile_of(msg)
         res = await self._eval_dispatch(
-            conversation_id, "submit", self._new_run_id(), json.dumps(msg, ensure_ascii=False), profile
+            conversation_id,
+            "submit",
+            self._new_run_id(),
+            json.dumps(msg, ensure_ascii=False),
+            profile,
+            exclusive=exclusive,
         )
         branch, run_id, run_profile = _s(res[0]), _s(res[1]), _s(res[2])
         expired = _s(res[3]) or None
@@ -397,6 +419,29 @@ class RunDispatchService:
                 inbox_length=inbox_length,
             )
             await self._on_message_queued(conversation_id, result, msg, on_queued)
+        elif branch == "busy":
+            result = SubmitResult(
+                run_id=run_id,
+                disposition=KIND_BUSY,
+                message_id=msg["message_id"],
+                kind=KIND_BUSY,
+                profile=run_profile,
+                inbox_length=inbox_length,
+            )
+        elif branch == "relay" and exclusive:
+            # The relay run answers the older messages; this message was not queued.
+            item = self._relay_item(conversation_id, run_id, run_profile, _s(res[5]))
+            await self._enqueue(conversation_id, item)
+            result = SubmitResult(
+                run_id=run_id,
+                disposition=KIND_BUSY,
+                message_id=msg["message_id"],
+                kind=KIND_BUSY,
+                profile=run_profile,
+                expired_run_id=expired,
+                inbox_length=inbox_length,
+                relay=item,
+            )
         elif branch == "relay":
             item = self._relay_item(conversation_id, run_id, run_profile, _s(res[5]))
             result = SubmitResult(

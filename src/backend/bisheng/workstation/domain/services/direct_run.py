@@ -110,6 +110,7 @@ from loguru import logger
 from bisheng.linsight.domain.schemas import run_events
 from bisheng.linsight.domain.services import run_metrics
 from bisheng.linsight.domain.services.run_event_stream import EventWriter, RunEventStream
+from bisheng.linsight.domain.services.unattended_run import OPEN_API_CHANNEL
 from bisheng.workstation.domain.services import direct_attachments, direct_run_turn
 from bisheng.workstation.domain.services.direct_attachments import AttachmentIntake, AttachmentView
 from bisheng.workstation.domain.services.run_dispatch import EXPIRED_REASON, RunDispatchService
@@ -137,6 +138,42 @@ _WORK_BLOCKED = "blocked"
 
 EventHook = Callable[[dict], Awaitable[None] | None]
 EventHookFactory = Callable[["DirectRunContext"], EventHook]
+
+
+async def workbench_system_prompt() -> str | None:
+    """The daily-chat system prompt the administrator saved on the workbench.
+
+    Prepared the way the legacy daily chat used it: ``{cur_date}`` is replaced
+    (plain ``replace``: admin prompts may hold ``{...}`` JSON), and a saved
+    "copy the id verbatim" citation section becomes the handle rules.
+    """
+    from datetime import datetime
+
+    from bisheng.citation.domain.services.daily_citation_handles import (
+        prompt_has_legacy_citation_wording,
+        replace_legacy_citation_rules,
+    )
+    from bisheng.workstation.domain.services.workstation_service import WorkStationService
+
+    config = await WorkStationService.aget_config()
+    prompt = (getattr(config, "systemPrompt", None) or "").strip() if config is not None else ""
+    if not prompt:
+        return None
+    prompt = prompt.replace("{cur_date}", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    if prompt_has_legacy_citation_wording(prompt):
+        prompt = replace_legacy_citation_rules(prompt)
+    return prompt
+
+
+async def log_daily_chat_telemetry(ctx: DirectRunContext, started_at: float) -> None:
+    """The application telemetry the legacy daily chat logged once per answered turn."""
+    from bisheng.workstation.domain.services.chat_service import log_telemetry_events
+
+    try:
+        await log_telemetry_events(str(ctx.user_id), ctx.conversation_id, started_at)
+    except Exception:
+        # Telemetry never fails a run; the answer is already saved.
+        logger.exception("direct run={}: could not log daily-chat telemetry", ctx.run_id)
 
 
 @dataclass
@@ -180,6 +217,15 @@ class DirectRunContext:
     # F132: the send request came through a login-state endpoint that registered
     # the conversation for long-term memory. False for a relay item (no request).
     memory_registered: bool = False
+    # Open API (AC-39): nobody can answer a question, so the run gets no
+    # ``ask_user`` tool and no inbox (``unattended_run``).
+    unattended: bool = False
+    # Object-storage partition of the caller's files (``SessionSubject.storage_partition``).
+    # None = the user's own partition.
+    storage_partition: str | None = None
+    # Execution lease that the send request took before the run started (Open
+    # API). The run renews it and releases it when it ends.
+    execution_lease_id: str | None = None
 
     def __post_init__(self) -> None:
         if isinstance(self.tenant_id, bool) or self.tenant_id is None or int(self.tenant_id) <= 0:
@@ -455,6 +501,8 @@ class DirectRunner:
                          raises to refuse the run.
     ``safety_scanner(ctx)``  output scanner of the run, or None when scanning is off.
     ``mark_violation(ctx)``  marks the conversation and the question row after a hit.
+    ``workbench_prompt()``  the administrator's daily-chat system prompt, or None.
+    ``log_telemetry(ctx, started_at)``  application telemetry of a finished or failed run.
 
     ``build_agent`` also receives ``backend=`` and ``skills_present=`` when it
     declares those parameters.
@@ -484,6 +532,8 @@ class DirectRunner:
         department_slot: Callable[[DirectRunContext], AbstractAsyncContextManager] | None = None,
         safety_scanner: Callable[[DirectRunContext], Any] | None = None,
         mark_violation: Callable[[DirectRunContext], Awaitable[None]] | None = None,
+        workbench_prompt: Callable[[], Awaitable[str | None]] | None = None,
+        log_telemetry: Callable[[DirectRunContext, float], Awaitable[None]] | None = None,
         stop_poll_seconds: float = STOP_POLL_SECONDS,
         recursion_limit: int | None = None,
     ):
@@ -508,6 +558,8 @@ class DirectRunner:
         self._department_slot = department_slot or self._default_department_slot
         self._safety_scanner = safety_scanner or self._default_safety_scanner
         self._mark_violation = mark_violation or self._default_mark_violation
+        self._workbench_prompt = workbench_prompt or workbench_system_prompt
+        self._log_telemetry = log_telemetry or log_daily_chat_telemetry
         self._stop_poll_seconds = stop_poll_seconds
         self._recursion_limit_override = recursion_limit
 
@@ -595,6 +647,7 @@ class DirectRunner:
         )
         metrics_token = run_metrics.activate(metrics)
         outcome: DirectRunOutcome | None = None
+        started_wall = time.time()
         try:
             outcome = await self._execute(ctx, output, sink, gate)
         except asyncio.CancelledError:
@@ -641,6 +694,8 @@ class DirectRunner:
                 logger.exception(
                     "direct run={} conversation={}: on_run_finished failed", ctx.run_id, ctx.conversation_id
                 )
+        if outcome.status in (STATUS_FINISHED, STATUS_FAILED):
+            await self._log_telemetry(ctx, started_wall)
         # After the conversation was handed on: measuring the checkpoint delays nobody.
         checkpoint_bytes = await run_metrics.checkpoint_size(self._get_checkpointer(), ctx.thread_id)
         run_metrics.emit_run_metric(metrics, outcome.status, checkpoint_bytes)
@@ -1249,7 +1304,7 @@ class DirectRunner:
             tenant_id=ctx.tenant_id,
             user_id=ctx.user_id,
             question=ctx.text,
-            api_meta=None,
+            api_meta={"channel": OPEN_API_CHANNEL} if ctx.unattended else None,
             skills=list(ctx.skills or []),
             skill_snapshot=None,
         )
@@ -1388,6 +1443,13 @@ class DirectRunner:
 
         # ``DepartmentFlowService`` reads only ``user_id`` of the login user.
         user = SimpleNamespace(user_id=ctx.user_id)
+        if ctx.execution_lease_id:
+            # Taken by the send request before the run started; released here.
+            async with DepartmentFlowService.hold_execution_lease(user, ctx.execution_lease_id) as (outcome, _lease):
+                if outcome is SlotOutcome.REJECTED:
+                    raise DepartmentDailyChatConcurrentLimitError()
+                yield
+            return
         if ctx.page_lease_id:
             outcome, _ = await DepartmentFlowService.ensure_lease(user, ctx.page_lease_id)
             if outcome is SlotOutcome.REJECTED:
@@ -1461,6 +1523,7 @@ class DirectRunner:
             # T059: citation rules and memory follow what the turn actually has.
             citation_scope=turn.scope if turn is not None else None,
             memory=turn.memory_wiring if turn is not None else None,
+            workbench_prompt=await self._workbench_prompt(),
         )
 
     def _default_attachment_source(self, ctx: DirectRunContext) -> Any:

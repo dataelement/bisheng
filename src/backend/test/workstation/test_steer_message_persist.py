@@ -92,7 +92,7 @@ async def world(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(chat_endpoint.MemoryGate, "open", AsyncMock())
 
     monkeypatch.setattr(
-        chat_service.SensitiveWordPolicyService, "evaluate_workbench_user_text", staticmethod(lambda *_a, **_k: None)
+        run_send.SensitiveWordPolicyService, "evaluate_workbench_user_text", staticmethod(lambda *_a, **_k: None)
     )
     monkeypatch.setattr(chat_service, "save_message_citations", AsyncMock())
     monkeypatch.setattr(chat_service, "_promote_generated_files", AsyncMock(return_value=[]))
@@ -100,7 +100,7 @@ async def world(monkeypatch: pytest.MonkeyPatch):
     async def get_session(cid):
         return w.sessions.get(cid)
 
-    async def open_conversation(data, login_user):
+    async def open_conversation(data, login_user, session_subject=None):
         return w.sessions[data.conversationId], False
 
     async def model_name(data, login_user):

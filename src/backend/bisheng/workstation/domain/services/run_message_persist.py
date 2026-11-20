@@ -280,7 +280,9 @@ async def remember_direct_run(
     tenant_id: int | None,
     sender: str,
     model_id: Any = None,
+    storage_partition: str | None = None,
 ) -> None:
+    """``storage_partition``: the caller's file partition (Open API); empty = the user's own."""
     key = direct_run_key(conversation_id)
     async with redis.pipeline(transaction=True) as pipe:
         pipe.delete(key)
@@ -292,6 +294,7 @@ async def remember_direct_run(
                 "tenant_id": str(tenant_id or ""),
                 "sender": sender or "",
                 "model_id": "" if model_id is None else str(model_id),
+                "storage_partition": storage_partition or "",
             },
         )
         pipe.expire(key, KEY_TTL_SECONDS)
@@ -309,6 +312,7 @@ async def direct_run_info(redis: Any, conversation_id: str) -> dict | None:
         "tenant_id": int(info["tenant_id"]) if info.get("tenant_id") else None,
         "sender": info.get("sender") or "",
         "model_id": info.get("model_id") or None,
+        "storage_partition": info.get("storage_partition") or None,
     }
 
 
@@ -339,9 +343,14 @@ async def relay_run_hooks(item: dict, *, redis: Any = None) -> tuple[list[EventH
         tenant_id=item.get("tenant_id"),
         sender=sender,
         model_id=model_id,
+        storage_partition=previous.get("storage_partition"),
     )
     projector = DirectRunProjector(
-        run_id=run_id, conversation_id=conversation_id, user_id=int(item["user_id"]), sender=sender
+        run_id=run_id,
+        conversation_id=conversation_id,
+        user_id=int(item["user_id"]),
+        sender=sender,
+        storage_partition=previous.get("storage_partition"),
     )
     return [projector.on_event, steer_read_hook(conversation_id, redis=redis)], model_id
 
@@ -384,7 +393,11 @@ async def _persist_from_snapshot(
             # The run saved its row and died before it released the conversation.
             return None
         projector = DirectRunProjector(
-            run_id=run_id, conversation_id=conversation_id, user_id=info["user_id"], sender=info["sender"]
+            run_id=run_id,
+            conversation_id=conversation_id,
+            user_id=info["user_id"],
+            sender=info["sender"],
+            storage_partition=info.get("storage_partition"),
         )
         if text:
             projector.final_msg = text

@@ -65,6 +65,13 @@ class ChatFileParseError(BaseErrorCode):
 # --- F028: Conversation export / import to knowledge space (12060-12079) ---
 
 
+class ConversationBusyError(BaseErrorCode):
+    """Open API: the conversation is still answering an earlier message and did not become free in time."""
+
+    Code: int = 12048
+    Msg: str = "The conversation is still answering an earlier message, please try again later"
+
+
 class ConversationMessageNotFoundError(BaseErrorCode):
     Code: int = 12060
     Msg: str = "消息不存在或已删除，请刷新会话"

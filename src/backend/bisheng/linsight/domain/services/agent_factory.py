@@ -478,6 +478,19 @@ def _to_unattended_prompt(template: str) -> str:
     return out
 
 
+def _with_workbench_prompt(prompt: str, workbench_prompt: str | None) -> str:
+    """Layer the administrator's daily-chat system prompt under the platform rules (direct profile)."""
+
+    if not workbench_prompt:
+        return prompt
+    return (
+        prompt
+        + "\n\n# 管理员设定的回答要求\n\n"
+        + "以下是管理员为日常对话配置的要求；与上文平台规则冲突时，以平台规则为准。\n\n"
+        + workbench_prompt
+    )
+
+
 def _with_caller_instructions(prompt: str, instructions: str | None) -> str:
     """Layer the Open API caller's business-context instructions under the platform rules."""
 
@@ -1910,6 +1923,7 @@ async def create_linsight_agent(
     profile: ProfileName = "planned",
     inbox: AgentMiddleware | None = None,
     memory: MemoryWiring | None = None,
+    workbench_prompt: str | None = None,
 ):
     """Build the deepagents-backed Linsight agent (design §2.1).
 
@@ -1931,6 +1945,9 @@ async def create_linsight_agent(
             retrieval tools so the completion audit knows which sources were seen.
         context_window_sink: mutable dict filled with the context window this run
             uses (F087), so the caller can log it when the task fails.
+        workbench_prompt: ``direct`` profile only. The daily-chat system prompt
+            the administrator configured on the workbench; appended under the
+            platform rules. Ignored for ``planned``.
         memory_prompt: F132 long-term memory text of this round (tool guidance,
             resident and experience blocks), fixed at round start. Appended only
             when the memory tools are actually bound (prompt <-> tool lockstep).
@@ -2259,7 +2276,12 @@ async def create_linsight_agent(
             # Main graph only: subagents keep their own prompt (see base_prompt.py).
             system_prompt=with_base_prompt(
                 _with_caller_instructions(
-                    _with_citation_rules(main_prompt, has_kb or has_web, handles=citation_handles, daily=not planned),
+                    _with_workbench_prompt(
+                        _with_citation_rules(
+                            main_prompt, has_kb or has_web, handles=citation_handles, daily=not planned
+                        ),
+                        None if planned else workbench_prompt,
+                    ),
                     caller_instructions(session_model),
                 ),
                 profile=profile,

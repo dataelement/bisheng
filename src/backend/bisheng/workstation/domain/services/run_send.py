@@ -2,7 +2,16 @@
 
 Design: features/v3.1.0-beta2/004-unified-agent-runtime/design.md, 决策 3, 4, 9 and
 §4.3 / §4.4. ``chat_service.stream_chat_completion`` calls ``unified_send`` for every
-request of the login-state endpoint; the Open API entry does not come here.
+request of the login-state endpoint and for Open API daily chat.
+
+Open API daily chat (``session_subject`` is set, AC-39) keeps its contract: the
+response is always today's SSE stream with the answer of THIS message. So its
+message never joins the inbox and never answers a waiting run: the send waits
+until the conversation is free (``BUSY_WAIT_SECONDS``) and then starts a new run,
+or fails with ``ConversationBusyError``. The run is unattended (no ``ask_user``),
+the conversation is stamped and checked with the subject, files use the
+subject's storage partition, and the department slot is taken before the
+response starts, as the legacy loop did.
 
 Send (``POST /chat/completions``)
 ---------------------------------
@@ -83,7 +92,12 @@ from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTe
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError
-from bisheng.common.errcode.workstation import ConversationNotFoundError, DepartmentDailyChatConcurrentLimitError
+from bisheng.chat_session.domain.session_subject import SessionSubject
+from bisheng.common.errcode.workstation import (
+    ConversationBusyError,
+    ConversationNotFoundError,
+    DepartmentDailyChatConcurrentLimitError,
+)
 from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.failure_context import FailureContextAdapter
@@ -116,6 +130,7 @@ from bisheng.workstation.domain.services.daily_memory import (
 from bisheng.workstation.domain.services.direct_run import DirectRunContext, start_direct_run
 from bisheng.workstation.domain.services.run_dispatch import (
     KIND_ANSWER,
+    KIND_BUSY,
     KIND_NEW_RUN,
     PROFILE_PLANNED,
     RunDispatchService,
@@ -151,6 +166,9 @@ HEARTBEAT_SECONDS = 15.0
 PERSIST_WAIT_SECONDS = 15.0
 
 _SSE = "text/event-stream"
+# Open API (AC-39): how long a send waits for a busy conversation to become free.
+BUSY_WAIT_SECONDS = 60.0
+BUSY_POLL_SECONDS = 0.5
 
 
 # --------------------------------------------------------------------------- #
@@ -289,11 +307,15 @@ async def subscribe_response(conversation_id: str, last_event_id: str | None) ->
 # --------------------------------------------------------------------------- #
 
 
-async def _open_conversation(data: APIChatCompletion, login_user: UserPayload) -> tuple[Any, bool]:
+async def _open_conversation(
+    data: APIChatCompletion, login_user: UserPayload, session_subject: SessionSubject | None = None
+) -> tuple[Any, bool]:
     """Fetch the conversation, or create it for a first message. Owner only.
 
     The conversation must exist before ``run_dispatch.submit``: its id is the key
-    of the run state.
+    of the run state. With ``session_subject`` (Open API) a new conversation is
+    stamped with the subject and an existing one must match it; a mismatch is
+    HTTP 404, as the legacy Open API loop answered.
     """
     conversation_id = data.conversationId
     is_new = not conversation_id
@@ -305,9 +327,15 @@ async def _open_conversation(data: APIChatCompletion, login_user: UserPayload) -
             flow_type=FlowType.WORKSTATION.value,
             user_id=login_user.user_id,
         )
+        if session_subject is not None:
+            new_session = session_subject.stamp(new_session)
         if data.project_id is not None:
             from bisheng.chat_session.domain.chat import ChatSessionService
 
+            if session_subject is not None:
+                from bisheng.common.errcode.chat import ProjectInputError
+
+                raise ProjectInputError()
             await ChatSessionService.create_owned_project_session(new_session, login_user, data.project_id)
         else:
             await MessageSessionDao.async_insert_one(new_session)
@@ -323,9 +351,14 @@ async def _open_conversation(data: APIChatCompletion, login_user: UserPayload) -
                 app_type=ApplicationTypeEnum.DAILY_CHAT,
             ),
         )
-    conversation = await MessageSessionDao.async_get_one(conversation_id)
-    if conversation is None or conversation.user_id != login_user.user_id:
-        raise ConversationNotFoundError()
+    if session_subject is not None:
+        from bisheng.chat_session.domain.chat import ChatSessionService
+
+        conversation = await ChatSessionService.get_subject_session(conversation_id, session_subject)
+    else:
+        conversation = await MessageSessionDao.async_get_one(conversation_id)
+        if conversation is None or conversation.user_id != login_user.user_id:
+            raise ConversationNotFoundError()
     if not is_new:
         await MessageSessionDao.touch_session(conversation_id)
     return conversation, is_new
@@ -350,12 +383,16 @@ def _question_row(data: Any, login_user: Any, conversation_id: str, extra: dict 
 
 
 async def _insert_question_row(
-    data: APIChatCompletion, login_user: UserPayload, conversation_id: str, memory_register: MemoryRegister | None
+    data: APIChatCompletion,
+    login_user: UserPayload,
+    conversation_id: str,
+    memory_register: MemoryRegister | None,
+    storage_partition: str | None = None,
 ) -> Any:
     """The question row daily chat writes today (``_agent_initialize_chat``), same order of steps."""
     # F132: registration precedes this turn's question row (AC-40 of F132).
     await register_session(memory_register, conversation_id)
-    await promote_chat_attachments(data.files, login_user.user_id)
+    await promote_chat_attachments(data.files, login_user.user_id, storage_partition=storage_partition)
     return await ChatMessageDao.ainsert_one(_question_row(data, login_user, conversation_id))
 
 
@@ -511,6 +548,7 @@ async def _blocked_response(
     blocked: Any,
     memory_register: MemoryRegister | None,
     negotiated: bool = False,
+    session_subject: SessionSubject | None = None,
 ) -> Any:
     """Answer to a blocked input: the turn is recorded with the auto-reply, no run starts.
 
@@ -519,7 +557,11 @@ async def _blocked_response(
     """
     try:
         _cfg, conversation, message, _llm, model_info, _new = await chat_service._agent_initialize_chat(
-            data, login_user, skip_llm=True, memory_register=None if data.task_mode else memory_register
+            data,
+            login_user,
+            session_subject,
+            skip_llm=True,
+            memory_register=None if data.task_mode else memory_register,
         )
     except (BaseErrorCode, ValueError) as exc:
         if negotiated:
@@ -610,9 +652,14 @@ async def unified_send(
     login_user: UserPayload,
     *,
     memory_register: MemoryRegister | None = None,
+    session_subject: SessionSubject | None = None,
 ):
-    """``POST /chat/completions`` of a tenant on the unified runtime."""
-    negotiated = wants_run_protocol(request)
+    """``POST /chat/completions`` on the unified runtime.
+
+    ``session_subject`` is set by the Open API daily-chat entry (see the module
+    docstring); that caller always gets today's SSE stream.
+    """
+    negotiated = wants_run_protocol(request) and session_subject is None
 
     # 1. AC-06: deep research needs its menu permission; a rejected request
     #    creates no conversation, no run and no inbox entry.
@@ -626,11 +673,13 @@ async def unified_send(
         logger.warning(
             "workbench content safety hit tenant_id={} mode=input chat_id={}", tenant_id, data.conversationId or ""
         )
-        return await _blocked_response(data, login_user, blocked, memory_register, negotiated)
+        return await _blocked_response(data, login_user, blocked, memory_register, negotiated, session_subject)
 
     try:
         if data.task_mode:
             return await _send_planned(request, data, login_user, negotiated, memory_register)
+        if session_subject is not None:
+            return await _send_open_api(request, data, login_user, session_subject)
         return await _send(request, data, login_user, negotiated, memory_register)
     except DepartmentDailyChatConcurrentLimitError:
         if negotiated:
@@ -662,11 +711,68 @@ async def _send_planned(request, data, login_user, negotiated, memory_register):
         return await _send(request, data, login_user, negotiated, memory_register)
 
 
-async def _send(request, data: APIChatCompletion, login_user: UserPayload, negotiated: bool, memory_register):
+async def _send_open_api(
+    request, data: APIChatCompletion, login_user: UserPayload, session_subject: SessionSubject
+) -> Any:
+    """Open API daily chat: the department slot is taken before the response starts.
+
+    A rejection is one error frame and no rows, as in the legacy Open API loop.
+    The run takes the lease over and releases it when it ends; every path that
+    does not start a run releases it here.
+    """
+    outcome, lease = await DepartmentFlowService.ensure_lease(login_user)
+    if outcome is SlotOutcome.REJECTED:
+        raise DepartmentDailyChatConcurrentLimitError()
+    handed_over = False
+    try:
+        response = await _send(
+            request,
+            data,
+            login_user,
+            False,
+            None,
+            session_subject=session_subject,
+            execution_lease_id=lease.lease_id if lease is not None else None,
+        )
+        handed_over = True
+        return response
+    finally:
+        if lease is not None and not handed_over:
+            await DepartmentFlowService.release_lease(lease)
+
+
+async def _submit_when_free(svc: RunServices, conversation_id: str, message: dict) -> SubmitResult:
+    """Exclusive submit (Open API): wait until the conversation is free, then start a run."""
+    deadline = time.monotonic() + BUSY_WAIT_SECONDS
+    while True:
+        result = await svc.dispatch.submit(conversation_id, message, exclusive=True)
+        if result.kind != KIND_BUSY:
+            return result
+        if time.monotonic() >= deadline:
+            logger.warning(
+                "open api send: conversation={} still held by run={} after {}s",
+                conversation_id,
+                result.run_id,
+                BUSY_WAIT_SECONDS,
+            )
+            raise ConversationBusyError()
+        await asyncio.sleep(BUSY_POLL_SECONDS)
+
+
+async def _send(
+    request,
+    data: APIChatCompletion,
+    login_user: UserPayload,
+    negotiated: bool,
+    memory_register,
+    *,
+    session_subject: SessionSubject | None = None,
+    execution_lease_id: str | None = None,
+):
     tenant_id = int(workbench_tenant_id(login_user) or DEFAULT_TENANT_ID)
     task_mode = data.task_mode is True
     sender = "" if task_mode else await _model_display_name(data, login_user)
-    conversation, _is_new = await _open_conversation(data, login_user)
+    conversation, _is_new = await _open_conversation(data, login_user, session_subject)
     conversation_id = conversation.chat_id
     # ``knowledge`` of a direct message is the resolved list the tool assembly
     # takes; a deep-research message keeps the raw selection for the task core.
@@ -683,21 +789,21 @@ async def _send(request, data: APIChatCompletion, login_user: UserPayload, negot
         # The run may already have read the message; then the mark is cleared here.
         await run_message_persist.bind_steer_row(svc.redis, conversation_id, queued.message_id, row.id, queued.run_id)
 
-    result = await svc.dispatch.submit(
-        conversation_id,
-        {
-            "text": data.text or "",
-            "task_mode": task_mode,
-            "tools": tools,
-            # T053: a direct run mounts the selected skills too (AC-45).
-            "skills": list(data.skills or []),
-            "knowledge": knowledge,
-            "files": data.files or [],
-            "user_id": login_user.user_id,
-            "tenant_id": tenant_id,
-        },
-        on_queued=save_queued,
-    )
+    message = {
+        "text": data.text or "",
+        "task_mode": task_mode,
+        "tools": tools,
+        # T053: a direct run mounts the selected skills too (AC-45).
+        "skills": list(data.skills or []),
+        "knowledge": knowledge,
+        "files": data.files or [],
+        "user_id": login_user.user_id,
+        "tenant_id": tenant_id,
+    }
+    if session_subject is not None:
+        result = await _submit_when_free(svc, conversation_id, message)
+    else:
+        result = await svc.dispatch.submit(conversation_id, message, on_queued=save_queued)
 
     if result.kind not in (KIND_NEW_RUN, KIND_ANSWER):
         # The message is in the inbox and its question row is written; the
@@ -724,6 +830,8 @@ async def _send(request, data: APIChatCompletion, login_user: UserPayload, negot
             tools=tools,
             knowledge=knowledge if isinstance(knowledge, list) else [],
             sender=sender,
+            session_subject=session_subject,
+            execution_lease_id=execution_lease_id,
         )
     except BaseException:
         if result.kind == KIND_ANSWER:
@@ -777,10 +885,13 @@ async def _start_direct(
     tools: list,
     knowledge: list,
     sender: str,
+    session_subject: SessionSubject | None = None,
+    execution_lease_id: str | None = None,
 ):
     conversation_id = conversation.chat_id
     is_resume = result.kind == KIND_ANSWER
-    question = await _insert_question_row(data, login_user, conversation_id, memory_register)
+    storage_partition = session_subject.storage_partition if session_subject is not None else None
+    question = await _insert_question_row(data, login_user, conversation_id, memory_register, storage_partition)
 
     persisted = asyncio.Event()
 
@@ -797,6 +908,7 @@ async def _start_direct(
         conversation_id=conversation_id,
         user_id=conversation.user_id,
         sender=sender,
+        storage_partition=storage_partition,
         # The sources this execution's tools registered (T059).
         citation_items=lambda: direct_run_turn.collected_citations(result.run_id),
         on_persisted=on_persisted,
@@ -832,6 +944,10 @@ async def _start_direct(
         is_resume=is_resume,
         answer=(data.text or "") if is_resume else None,
         initial_events=list(result.events),
+        # Open API (AC-39): nobody answers a question; files in the subject's partition.
+        unattended=session_subject is not None,
+        storage_partition=storage_partition,
+        execution_lease_id=execution_lease_id,
     )
     # What a process without this projector needs to write the run's answer row:
     # the worker (relay run), or whoever closes the run after this process died.
@@ -843,6 +959,7 @@ async def _start_direct(
         tenant_id=tenant_id,
         sender=sender,
         model_id=data.model,
+        storage_partition=storage_partition,
     )
     # The only attachment of these hooks: no process-wide hook factory is
     # registered in the API process, or every row would be written twice.

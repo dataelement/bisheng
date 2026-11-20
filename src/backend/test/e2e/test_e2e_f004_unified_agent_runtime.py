@@ -22,6 +22,10 @@ Covers (API behaviour only; the UI items are in e2e-checklist.md):
 - AC-35: deep research gives its first event within 3 seconds when a slot is free.
 - Design decision 13: the config response carries no ``unified_runtime_enabled``.
 - Design §4.3: a request without ``X-BS-Run-Protocol`` is answered with SSE frames.
+- AC-39 / design decision 14 (only with ``E2E_F004_PAT``, a personal access token
+  of the admin with scope ``chat:invoke``): Open API daily chat keeps its SSE
+  contract, a second message on a busy conversation gets its own answer, and an
+  unknown conversation is HTTP 404.
 """
 
 import asyncio
@@ -286,3 +290,103 @@ class TestE2EF004UnifiedAgentRuntime:
             f"{API_BASE}/workstation/conversations/{sent['conversation_id']}/files/any/url", headers=auth_headers(other)
         )
         assert_resp_error(resp, UNAUTHORIZED)
+
+
+# ──────── Open API daily chat (AC-39, design decision 14) ────────
+
+# A personal access token of the admin account (scope chat:invoke). Its daily
+# conversations belong to the admin, so the class teardown deletes them.
+OPEN_API_TOKEN = os.environ.get("E2E_F004_PAT", "")
+OPEN_API_BASE = API_BASE.replace("/api/v1", "/api/v2")
+OPEN_API_FRAMES = [
+    ("processing", "begin"),
+    ("question", "over"),
+    ("agent_answer", "end"),
+    ("processing", "close"),
+]
+
+
+def _sse_datas(text: str) -> list[dict]:
+    datas = []
+    for block in text.split("\n\n"):
+        for line in block.split("\n"):
+            if line.startswith("data: "):
+                datas.append(json.loads(line[len("data: ") :]))
+    return datas
+
+
+@pytest.mark.skipif(not OPEN_API_TOKEN, reason="E2E_F004_PAT is not set")
+class TestE2EF004OpenApiDailyChat:
+    """E2E: Open API daily chat on the unified runtime keeps its contract."""
+
+    conversations: list[str] = []
+
+    @pytest.fixture(autouse=True, scope="class")
+    async def setup_and_teardown(self):
+        cls = type(self)
+        cls.conversations = []
+        yield
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            token = await get_admin_token(client)
+            for conversation_id in cls.conversations:
+                await _stop(client, token, conversation_id)
+                resp = await client.delete(f"{API_BASE}/chat/{conversation_id}", headers=_owner_headers(token))
+                assert resp.status_code == 200, f"cleanup of {conversation_id} failed: {resp.text[:200]}"
+
+    @pytest.fixture
+    async def client(self):
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            yield client
+
+    async def _ask(self, client, text: str, conversation_id: str | None = None) -> tuple[httpx.Response, list[dict]]:
+        resp = await client.post(
+            f"{OPEN_API_BASE}/workstation/chat/completions",
+            json=_body(text, conversation_id),
+            # An Open API caller cannot switch protocols: the header changes nothing.
+            headers={"Authorization": f"Bearer {OPEN_API_TOKEN}", "X-BS-Run-Protocol": "2"},
+        )
+        datas = _sse_datas(resp.text) if resp.status_code == 200 else []
+        final = next((d for d in datas if d.get("final")), None)
+        if final:
+            cid = final["conversation"]["conversationId"]
+            if cid not in type(self).conversations:
+                type(self).conversations.append(cid)
+        return resp, datas
+
+    async def test_ac39_daily_chat_answers_in_the_sse_contract(self, client):
+        """AC-39: the request format and the SSE frame sequence are unchanged."""
+        resp, datas = await self._ask(client, "只回复两个字：收到")
+
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/event-stream")
+        shape = [(d.get("category"), d.get("type")) for d in datas if d.get("category")]
+        assert [s for s in shape if s in OPEN_API_FRAMES] == OPEN_API_FRAMES
+        assert ("agent_answer", "stream") in shape
+        assert datas[-1]["final"] is True and datas[-1]["conversation"]["conversationId"]
+        end = next(d for d in datas if (d.get("category"), d.get("type")) == ("agent_answer", "end"))
+        assert end["message"]["msg"]
+
+    async def test_ac39_second_message_on_a_busy_conversation_gets_its_own_answer(self, client):
+        """AC-39 / decision 14: a message sent while the conversation answers waits and is answered itself."""
+        _, first = await self._ask(client, "只回复两个字：开始")
+        conversation_id = first[-1]["conversation"]["conversationId"]
+
+        long_answer = asyncio.create_task(self._ask(client, LONG_QUESTION, conversation_id))
+        await asyncio.sleep(3)
+        resp, datas = await self._ask(client, "只回复两个字：第二", conversation_id)
+        (_, long_datas) = await long_answer
+
+        for frames in (long_datas, datas):
+            assert frames[-1]["final"] is True
+            assert any((d.get("category"), d.get("type")) == ("agent_answer", "end") for d in frames)
+        question = next(d for d in datas if (d.get("category"), d.get("type")) == ("question", "over"))
+        assert question["message"]["query"] == "只回复两个字：第二"
+
+    async def test_ac39_unknown_conversation_is_404(self, client):
+        """AC-39 (paired): a conversation the caller cannot see is HTTP 404, as before.
+
+        The foreign-owner case is covered by test_unified_run_api.py.
+        """
+        resp, _ = await self._ask(client, "你好", "0" * 32)
+
+        assert resp.status_code == 404

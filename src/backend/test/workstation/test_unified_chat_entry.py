@@ -1,10 +1,11 @@
 """The one chat entry: who serves a ``/chat/completions`` request.
 
-``stream_chat_completion`` is called by two endpoints. The login-state endpoint
-passes no ``session_subject``: the unified runtime (``run_send.unified_send``)
-serves daily chat and deep research alike (F004). The Open API endpoint passes
-its ``session_subject`` and keeps the daily agent flow; it never sends
-``task_mode=True`` (an Open API task goes through ``OpenTaskModeService``).
+``stream_chat_completion`` is called by two endpoints, and both are served by
+the unified runtime (``run_send.unified_send``, F004). The login-state endpoint
+passes no ``session_subject`` and gets daily chat and deep research alike. The
+Open API endpoint passes its ``session_subject``; its daily turn never mounts
+skills and never runs as deep research (an Open API task goes through
+``OpenTaskModeService``).
 
 Downstream handlers are patched; the unit under test is the routing decision,
 plus ``_to_linsight_submit`` (F035 Track J), the mapping the task submit core uses.
@@ -34,11 +35,9 @@ def _data(task_mode: bool) -> APIChatCompletion:
 def patch_handlers(monkeypatch: pytest.MonkeyPatch):
     from bisheng.workstation.domain.services import run_send
 
-    daily = AsyncMock(return_value="DAILY")
     unified = AsyncMock(return_value="UNIFIED")
-    monkeypatch.setattr(chat_service, "_agent_stream_chat_completion", daily)
     monkeypatch.setattr(run_send, "unified_send", unified)
-    return {"daily": daily, "unified": unified}
+    return {"unified": unified}
 
 
 @pytest.mark.parametrize("task_mode", [False, True])
@@ -50,23 +49,24 @@ async def test_login_state_request_goes_to_the_unified_send_entry(patch_handlers
     result = await chat_service.stream_chat_completion(MagicMock(), data, MagicMock(), memory_register=register)
 
     assert result == "UNIFIED"
-    patch_handlers["daily"].assert_not_awaited()
     call = patch_handlers["unified"].await_args
     # The request reaches the send entry as sent (skill selection included) with the memory hook.
     assert call.args[1] is data and call.args[1].skills == ["morning-report"]
     assert call.kwargs == {"memory_register": register}
 
 
-async def test_open_api_request_keeps_the_daily_agent_flow(patch_handlers):
+async def test_open_api_request_goes_to_the_unified_send_entry_with_its_subject(patch_handlers):
     subject = MagicMock(name="session_subject")
 
     result = await chat_service.stream_chat_completion(
         MagicMock(), _data(task_mode=False), MagicMock(), session_subject=subject
     )
 
-    assert result == "DAILY"
-    patch_handlers["unified"].assert_not_awaited()
-    assert patch_handlers["daily"].await_args.args[3] is subject
+    assert result == "UNIFIED"
+    call = patch_handlers["unified"].await_args
+    # No memory hook: an Open API turn never uses long-term memory (F132 AC-10).
+    assert call.kwargs == {"session_subject": subject}
+    assert call.args[1].task_mode is False
 
 
 def test_to_linsight_submit_maps_question_session_and_knowledge():
@@ -151,5 +151,5 @@ async def test_open_api_daily_turn_clears_stale_skill_selection(patch_handlers):
     data = _data(task_mode=False)
     data.skills = ["morning-report"]
     await chat_service.stream_chat_completion(MagicMock(), data, MagicMock(), session_subject=MagicMock())
-    assert patch_handlers["daily"].await_args.args[1].skills == []
+    assert patch_handlers["unified"].await_args.args[1].skills == []
     assert data.skills == ["morning-report"]

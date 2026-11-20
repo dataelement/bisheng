@@ -19,14 +19,17 @@
 -- ARGV[7] = queued_lease_ms  lease of a run handed to the worker queue (planned, relay)
 -- ARGV[8] = state TTL seconds
 -- ARGV[9] = inbox TTL seconds
+-- ARGV[10] = "1" = exclusive submit (Open API): the message never joins the
+--            inbox and never answers a waiting run; such a call gets "busy".
 -- Returns {branch, run_id, profile, expired_run_id, inbox_length, head_json}
---   branch: "started" | "queued" | "answer" | "relay" | "idle" | "noop"
+--   branch: "started" | "queued" | "answer" | "relay" | "idle" | "noop" | "busy"
 local st = redis.call('HMGET', KEYS[1], 'status', 'run_id', 'profile', 'lease_until')
 local status = st[1] or 'idle'
 local holder = st[2] or ''
 local profile = st[3] or ''
 local lease_until = tonumber(st[4] or '0') or 0
 local mode = ARGV[1]
+local exclusive = ARGV[10] == '1'
 local now = tonumber(ARGV[5])
 local expired = ''
 
@@ -60,6 +63,9 @@ if status == 'running' then
   if mode ~= 'submit' then
     return {'noop', holder, profile, '', redis.call('LLEN', KEYS[2]), ''}
   end
+  if exclusive then
+    return {'busy', holder, profile, '', redis.call('LLEN', KEYS[2]), ''}
+  end
   return {'queued', holder, profile, '', push_message(), ''}
 end
 
@@ -70,6 +76,9 @@ if status == 'waiting' then
   if mode ~= 'submit' then
     return {'noop', holder, profile, '', redis.call('LLEN', KEYS[2]), ''}
   end
+  if exclusive then
+    return {'busy', holder, profile, '', redis.call('LLEN', KEYS[2]), ''}
+  end
   hold(holder, profile, lease_ms_for(profile))
   return {'answer', holder, profile, '', redis.call('LLEN', KEYS[2]), ''}
 end
@@ -79,8 +88,9 @@ local unread = redis.call('LLEN', KEYS[2])
 if unread > 0 then
   -- Unread messages of a run that died (or was released without the finish
   -- script). They are older than this message, so this message joins the
-  -- inbox behind them and one relay run takes the whole inbox.
-  if mode == 'submit' then
+  -- inbox behind them and one relay run takes the whole inbox. An exclusive
+  -- message stays out of the inbox: the relay run starts and the caller waits.
+  if mode == 'submit' and not exclusive then
     unread = push_message()
   end
   local head = redis.call('LINDEX', KEYS[2], 0)

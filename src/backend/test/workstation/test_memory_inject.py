@@ -1,8 +1,4 @@
-"""Daily mode: resident memory and memory tools per turn (F132 T049).
-
-Covers AC-03, AC-10, AC-27, AC-28, AC-51, AC-61. The stream body of
-``_agent_stream_chat_completion`` runs for real; the model is a scripted fake.
-"""
+"""Daily mode: the chat entries register a conversation for long-term memory only on the login-state path (F132 T049, AC-10)."""
 
 from __future__ import annotations
 
@@ -10,33 +6,15 @@ import inspect
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
-from langchain_core.messages import SystemMessage
-
-from bisheng.memory.domain.ports import SCENE_ASSISTANT
-from bisheng.memory.domain.services import metrics as m
-from bisheng.memory.domain.services.resident import RESIDENT_HEADER
 from test.workstation.memory_support import (  # noqa: F401  (fixtures)
     CHAT_ID,
     USER_1,
     cursor,
-    disable_my_memory,
     login_user,
-    make_ctx,
     memory,
     memory_db,
     memory_runtime_config,
-    metric_total,
-    register,
-    run_turn,
-    stream_env,
 )
-
-MEMORY_TOOLS = {"memory_write", "memory_search"}
-
-
-async def _remember(memory, content="用户偏好用中文回答", scene="daily", chat_id="other-chat", type_="preference"):
-    return await memory.service.write(make_ctx(scene=scene, chat_id=chat_id), "remember", content=content, type=type_)
 
 
 # --------------------------------------------------------------------------- registration
@@ -112,132 +90,3 @@ async def test_ac10_initialize_registers_before_the_question_row(monkeypatch):
     order.clear()
     await chat_service._agent_initialize_chat(data, login_user(), skip_llm=True)
     assert [k for k, _ in order] == ["question"]
-
-
-# --------------------------------------------------------------------------- injection and tools
-async def test_ac51_ac28_enabled_turn_gets_resident_block_and_two_tools(memory, stream_env):
-    """AC-51, AC-28: an enabled turn carries the resident block in the system prompt and both memory tools."""
-    await _remember(memory)
-    chunks = await run_turn(stream_env)
-    assert stream_env.state.prompts, "tool branch expected: memory tools make the tool list non-empty"
-    prompt = stream_env.state.prompts[0]
-    assert prompt.startswith("你是助手。")
-    assert RESIDENT_HEADER in prompt and "用户偏好用中文回答" in prompt
-    assert MEMORY_TOOLS <= set(stream_env.state.tool_names[0])
-    assert any('"final": true' in c for c in chunks)
-
-
-async def test_ac03_item_written_in_another_scene_is_resident_in_a_new_daily_chat(memory, stream_env):
-    """AC-03: an item remembered inside an assistant shows up in the resident block of a fresh daily chat."""
-    await _remember(memory, content="用户在杭州工作", scene=SCENE_ASSISTANT, chat_id="assistant-chat", type_="fact")
-    await run_turn(stream_env)
-    assert "用户在杭州工作" in stream_env.state.prompts[0]
-
-
-async def test_ac10_service_called_without_register_has_no_memory(memory, stream_env):
-    """AC-10: the open-API path (service called directly, no register) neither injects nor offers tools,
-    even when the conversation was registered by a login-state turn earlier."""
-    await _remember(memory)
-    await register(memory.db)
-    await run_turn(stream_env, registered=False)
-    assert not stream_env.state.prompts  # no tools -> direct branch
-    sent = stream_env.state.llm_messages[0]
-    assert all(RESIDENT_HEADER not in str(getattr(msg, "content", "")) for msg in sent)
-
-
-async def test_ac27_my_memory_off_no_tools_no_resident(memory, stream_env):
-    """AC-27: with "my memory" off the model gets neither the memory tools nor the resident block."""
-    await _remember(memory)
-    await register(memory.db)
-    await disable_my_memory()
-    await run_turn(stream_env)
-    assert not stream_env.state.prompts
-    sent = stream_env.state.llm_messages[0]
-    assert all(RESIDENT_HEADER not in str(getattr(msg, "content", "")) for msg in sent)
-
-
-async def test_ac27_user_tools_keep_working_without_memory_tools(memory, stream_env):
-    """AC-27: memory off with user tools on: tool branch runs, the memory tools are absent."""
-    from langchain_core.tools import StructuredTool
-
-    async def _web(q: str) -> str:
-        return "ok"
-
-    stream_env.state.user_tools = [StructuredTool.from_function(coroutine=_web, name="web_search", description="d")]
-    await register(memory.db)
-    await disable_my_memory()
-    await run_turn(stream_env)
-    assert stream_env.state.tool_names[0] == ["web_search"]
-    assert RESIDENT_HEADER not in (stream_env.state.prompts[0] or "")
-
-
-async def test_ac51_direct_branch_also_gets_resident(memory, stream_env, monkeypatch):
-    """AC-51: the no-tools branch (here: memory tools failed to build) still carries the resident block."""
-    from bisheng.workstation.domain.services import daily_memory
-
-    def _boom(*_a, **_k):
-        raise RuntimeError("tool factory down")
-
-    monkeypatch.setattr(daily_memory, "build_memory_tools", _boom)
-    await _remember(memory)
-    chunks = await run_turn(stream_env)
-    assert not stream_env.state.prompts
-    system = [msg for msg in stream_env.state.llm_messages[0] if isinstance(msg, SystemMessage)]
-    assert system and RESIDENT_HEADER in system[0].content and "用户偏好用中文回答" in system[0].content
-    assert any('"final": true' in c for c in chunks)
-
-
-async def test_ac61_injection_failure_answer_completes_and_is_counted(memory, stream_env, monkeypatch):
-    """AC-61: resident injection failing does not stop the answer; one failure is counted."""
-
-    async def _fail(*_a, **_k):
-        raise ConnectionError("redis and db down")
-
-    monkeypatch.setattr(memory.metrics, "mark_read", AsyncMock())
-    from bisheng.memory.domain.services import factory
-
-    monkeypatch.setattr(factory.get_resident_service(), "resident", _fail)
-    await _remember(memory)
-    chunks = await run_turn(stream_env)
-    assert any('"final": true' in c for c in chunks)
-    from test.workstation.memory_support import answer_rows
-
-    assert len(answer_rows(stream_env.inserted)) == 1
-    assert RESIDENT_HEADER not in (stream_env.state.prompts[0] or "")
-    assert await metric_total(memory.kv, m.INJECT_FAILED) == 1
-
-
-@pytest.mark.parametrize("registered", [True, False])
-async def test_ac10_registration_failure_never_breaks_the_turn(memory, stream_env, monkeypatch, registered):
-    """AC-10/AC-61: a broken memory database never surfaces as a chat error."""
-    from bisheng.memory.domain.services.gate import MemoryGate
-
-    monkeypatch.setattr(MemoryGate, "open", AsyncMock(side_effect=RuntimeError("db down")))
-    monkeypatch.setattr(MemoryGate, "resolve", AsyncMock(side_effect=RuntimeError("db down")))
-    chunks = await run_turn(stream_env, registered=registered)
-    assert any('"final": true' in c for c in chunks)
-    assert not stream_env.state.prompts
-
-
-async def test_ac02_ac08_other_user_with_the_chat_id_gets_no_memory(memory, stream_env):
-    """AC-02 / AC-08: user 1's chat is registered; a turn by user 2 on that chat_id gets none of it."""
-    from types import SimpleNamespace
-    from unittest.mock import MagicMock
-
-    from bisheng.memory.domain.services.gate import MemoryGate
-
-    await _remember(memory)
-    await MemoryGate.open(CHAT_ID, login_user())  # the owner registers it
-    intruder = SimpleNamespace(user_id=USER_1 + 1, tenant_id=1, user_name="u102")
-
-    async def _register(chat_id):
-        await MemoryGate.open(chat_id, intruder)
-
-    response = await stream_env.chat_service._agent_stream_chat_completion(
-        MagicMock(), stream_env.data(), intruder, memory_register=_register
-    )
-    _ = [chunk async for chunk in response.body_iterator]
-    prompt = (stream_env.state.prompts or [""])[0]
-    assert RESIDENT_HEADER not in prompt and "用户偏好用中文回答" not in prompt
-    tools = set(stream_env.state.tool_names[0]) if stream_env.state.tool_names else set()
-    assert not MEMORY_TOOLS & tools

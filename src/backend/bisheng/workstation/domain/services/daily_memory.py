@@ -22,9 +22,8 @@ from bisheng.memory.domain.services import metrics as m
 from bisheng.memory.domain.services.activity import MemoryActivity
 from bisheng.memory.domain.services.factory import get_metrics, get_resident_service
 from bisheng.memory.domain.services.gate import MemoryGate
-from bisheng.memory.domain.services.redaction import is_memory_tool, redact_tool_event, split_reserved_tools
+from bisheng.memory.domain.services.redaction import is_memory_tool, redact_tool_event
 from bisheng.memory.domain.services.resident import SCENE_CLASS_CHAT, ResidentBlock
-from bisheng.memory.domain.services.tools import build_memory_tools
 from bisheng.memory.domain.services.turn_record import TurnRecordService
 
 MemoryRegister = Callable[[str], Awaitable[None]]
@@ -40,13 +39,6 @@ async def register_session(memory_register: MemoryRegister | None, chat_id: str 
         await memory_register(chat_id)
     except Exception:
         logger.exception("memory: registering daily chat {} failed", chat_id)
-
-
-def with_resident(sys_prompt: str | None, resident_text: str) -> str | None:
-    """Append the resident block after the system prompt (it is background, not instructions)."""
-    if not resident_text:
-        return sys_prompt
-    return f"{sys_prompt}\n\n{resident_text}" if sys_prompt else resident_text
 
 
 # ---- tool event redaction (decision 10): by tool name, whatever the turn's state ----
@@ -138,24 +130,11 @@ class DailyMemoryTurn:
             logger.exception("memory: writing the turn summary failed for chat {}", self.chat_id)
         return self.block.text if injected else ""
 
-    def tools(self, tools: list) -> list:
-        """The turn's tool list plus the two memory tools; ``memory_`` names are reserved."""
-        if not self.enabled:
-            return tools
-        try:
-            memory_tools = build_memory_tools(self.ctx)
-        except Exception:
-            logger.exception("memory: building memory tools failed for chat {}", self.chat_id)
-            return tools
-        kept, _dropped = split_reserved_tools(tools)
-        return [*kept, *memory_tools]
-
     def wiring(self, resident_text: str = ""):
         """Tools and system-message text for the unified agent factory, or None when memory is off.
 
         F004 T059: the tools and the text are built by ``agent_factory.wire_memory``,
-        the same function deep research uses (``LinsightMemoryRound``). The legacy
-        SSE stream keeps ``tools()`` and ``with_resident``.
+        the same function deep research uses (``LinsightMemoryRound``).
         """
         if not self.enabled:
             return None

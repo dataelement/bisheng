@@ -36,7 +36,7 @@ can make an image unsendable:
 
 - **Can this model see at all?** ``supports_vision`` is the admin-declared
   ``WSModel.visual`` flag behind the 视觉 checkbox in 系统模型设置 → 工作台模型
-  (daily chat already gates attachments on it, ``chat_service._process_agent_files``).
+  (daily chat already gates attachments on it).
   When it is off, an image is refused at the TOOL layer with an actionable hint —
   the model never receives a payload its endpoint would reject.
 - **Where is the model willing to see it?** deepagents' ``read_file`` returns an
