@@ -12,8 +12,6 @@ import httpx
 import pytest
 import sqlalchemy as sa
 from sqlmodel.ext.asyncio.session import AsyncSession
-from test.knowledge_unification import test_migration_inventory_application as m2
-from test.knowledge_unification.test_permission_floor_retirement_signing import legacy_catalog
 
 from bisheng.core.config.openfga import OpenFGAConf
 from bisheng.permission.application import control_state, sql_runtime
@@ -49,6 +47,8 @@ from bisheng.permission.domain.services.model_policy import CustomModelSelection
 from bisheng.permission.domain.services.visibility_projection_service import VisibilityProjectionCompiler
 from bisheng.permission.migration import f048_runtime_storage
 from bisheng.permission.migration import f118_plan as plans
+from test.knowledge_unification import test_migration_inventory_application as m2
+from test.knowledge_unification.test_permission_floor_retirement_signing import legacy_catalog
 
 raw_resource_native = m2.resource_native
 native = m2.native
@@ -488,6 +488,8 @@ async def published_input(complete, transport, monkeypatch, request):
 
     if options.get("reference_seed") is not None:
         await options["reference_seed"](complete)
+    if options.get("original_graph_seed") is not None:
+        await options["original_graph_seed"](complete, store)
     if options.get("existing_mode_graph_from_seed"):
         async with sessions() as session, session.begin():
             modes = await PermissionMigrationSnapshotRepository().alist_resource_modes(session)

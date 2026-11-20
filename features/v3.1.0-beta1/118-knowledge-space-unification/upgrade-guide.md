@@ -305,3 +305,6 @@ M2此前正确拒绝本次synthetic AppVersion的display/vendor名称混淆（26
 ## 2026-11-19 操作收敛
 
 正式操作以[3.1.0-beta1 升级指南](../../../docs/upgrades/v3.1.0-beta1.md)第五、六阶段为准；上文历史演练中的 DBA 证据封装命令不再执行。默认 preview、显式 apply 及冻结后同 Run resume 的区分不变，停服/一致备份由 DBA 与运维协调负责。普通资源转换、权限、引用和历史孤儿精确清理范围均不扩大。
+
+
+冻结后的默认权限发布还会核验原图残留：原 mode/Grant 为 CURRENT、原普通 assignee 明确 INACTIVE 且没有相同聚合边的 ACTIVE 贡献时，将该 assignee 边列入正式发布的 DELETE；原 Grant 明确 INACTIVE、全部来源均为已停用普通来源时，连同其准确 model/grant 边退役。候选必须来自冻结 SQL，整个 Grant 图组件不能含其他资源、userset 或未知关系。只通过原 Run 的正式发布和 ACK 检查点执行，不手工删图、不改历史账本、不重新冻结。旧 policy-1 Run 沿用原保留规则；缺失退役证据、保护主体或未知关系继续阻塞。
