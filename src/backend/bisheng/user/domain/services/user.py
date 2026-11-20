@@ -460,6 +460,10 @@ class UserService:
                 tenant_id=assigned_tenant_id,
             )
             await cls._ensure_user_guest_department_membership(db_user.user_id)
+            if settings.multi_tenant.enabled:
+                from bisheng.tenant.domain.services.user_tenant_sync_service import UserTenantSyncService
+
+                await UserTenantSyncService.sync_user(db_user.user_id)
             await cls.areconcile_first_user_dashboard_permissions(db_user.user_id)
             return db_user
         finally:
