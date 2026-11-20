@@ -8702,4 +8702,4 @@ W3基础交付：T346原ModuleNotFound红→T344 DTO 8绿；T348原ModuleNotFoun
 
 - [x] MIG-DEFAULT-14：AC-147；保存无效工作流配置的显式隔离、整行/标记/无索引证明、完整 M2→M4/Coverage/续跑、当前版本与有效旧 type1 共存、缺创建者组合、2/4 全程规模及新写严格拒绝。
 
-- [ ] MIG-DEFAULT-15：AC-135/140；冻结 SQL 明确 INACTIVE 的普通来源及空活动集 Grant 残留图分类，完整组件闭合、聚合 ACTIVE 贡献保留、旧 policy-1、原生 DELETE ACK 丢失续跑与完整 Coverage 回归。
+- [x] MIG-DEFAULT-15：AC-135/140；冻结 SQL 明确 INACTIVE 的普通来源及空活动集 Grant 残留图分类，完整组件闭合、聚合 ACTIVE 贡献保留、旧 policy-1、原生 DELETE ACK 丢失续跑与完整 Coverage 回归。
