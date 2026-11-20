@@ -2,6 +2,7 @@
 
 import json
 import re
+from copy import deepcopy
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from weakref import WeakKeyDictionary
@@ -83,10 +84,11 @@ class ConversionOutcome:
 
 
 class UnificationConversionRepository:
-    def __init__(self):
+    def __init__(self, *, read_only_resume=False):
         self._scopes = WeakKeyDictionary()
         self.runs = KnowledgeUnificationRunRepository()
         self.members = UnificationSpaceMembershipRepository()
+        self.read_only_resume = read_only_resume
 
     async def _read(self, session, query):
         tenant, transaction = raw._scope(session), TransactionIdentity.capture(session)
@@ -105,6 +107,14 @@ class UnificationConversionRepository:
             _blocked("run_missing")
         run = Run(**dict(rows[0]))
         self.runs._validate(run, run_id, writer_contract_version)
+        if self.read_only_resume and run.phase == "failed":
+            # aread_run already creates an unattached SQL scalar snapshot. Keep
+            # the original durable row/checkpoints intact; only this private
+            # read-only DTO exposes its validated effective phase.
+            run.checkpoints = deepcopy(run.checkpoints)
+            run.phase = run.checkpoints.pop("_failed_from_phase")
+            run.error_code = run.error_reason = None
+            self.runs._validate(run, run_id, writer_contract_version)
         return run
 
     async def _rows(self, session, model, columns, ids, *, lock=True):
@@ -144,7 +154,16 @@ class UnificationConversionRepository:
         return value
 
     async def alock_scope(
-        self, session, *, run_id, writer_contract_version, baseline_hash, plan_hash, commands, verification=False
+        self,
+        session,
+        *,
+        run_id,
+        writer_contract_version,
+        baseline_hash,
+        plan_hash,
+        commands,
+        verification=False,
+        _preview=False,
     ):
         _clean(session)
         tenant = raw._scope(session)
@@ -192,7 +211,7 @@ class UnificationConversionRepository:
             _blocked("duplicate_command")
         run = await self.aread_run(session, run_id=run_id, writer_contract_version=writer_contract_version, lock=True)
         current()
-        self._verification_phase(run, baseline_hash, plan_hash, verification)
+        self._verification_phase(run, baseline_hash, plan_hash, verification, preview=_preview)
         value = await self._load(session, commands, False, current=current)
         current()
         scope = LockedConversionScope(
@@ -204,10 +223,27 @@ class UnificationConversionRepository:
             seal=digest(asdict(scope)),
             checkpoint=digest(run.checkpoints.get("converting", {}).get("sql_conversion")),
             verification=verification,
+            preview=_preview,
         )
         self._scopes[scope] = value
         self._parents(scope, value)
         return scope
+
+    async def apreview_before(self, session, **kwargs):
+        """Native before validation with no write-capable scope escaping."""
+        scope = await self.alock_scope(session, **kwargs, verification=True, _preview=True)
+        try:
+            value = self._bound(session, scope)
+
+            def current():
+                _current(session, scope.tenant_id, value["transaction"])
+
+            value.update(await self._load(session, value["commands"], current=current))
+            self._parents(scope, value)
+            self._before(value)
+            await self._current_run(session, scope, value)
+        finally:
+            self._scopes.pop(scope, None)
 
     async def _load(self, session, commands, root_values=True, *, current):
         resources = {cmd.knowledge_id for cmd in commands if type(cmd) is ResourceConversionCommand}
@@ -473,8 +509,12 @@ class UnificationConversionRepository:
             _blocked("template_changed")
         return templates
 
-    def _verification_phase(self, run, baseline_hash, plan_hash, verification):
+    def _verification_phase(self, run, baseline_hash, plan_hash, verification, *, preview=False):
         self.runs._hashes(run, baseline_hash, plan_hash)
+        if preview and verification and run.phase == "baseline_frozen":
+            if run.checkpoints.get("converting", {}).get("sql_conversion") is not None:
+                _blocked("checkpoint_before_phase")
+            return
         if run.phase != "converting" and not (
             verification
             and run.phase in {"backfilling", "verifying", "verified", "completed"}
@@ -486,11 +526,15 @@ class UnificationConversionRepository:
         run = await self.aread_run(
             session, run_id=scope.run_id, writer_contract_version=scope.writer_contract_version, lock=True
         )
-        self._verification_phase(run, scope.baseline_hash, scope.plan_hash, value["verification"])
+        self._verification_phase(
+            run, scope.baseline_hash, scope.plan_hash, value["verification"], preview=value.get("preview", False)
+        )
         if digest(run.checkpoints.get("converting", {}).get("sql_conversion")) != value["checkpoint"]:
             _blocked("checkpoint_changed")
 
     async def aapply_and_read_after(self, session, *, scope):
+        if self.read_only_resume:
+            _blocked("readonly_resume_cannot_mutate")
         _clean(session)
         value = self._bound(session, scope)
         if value["verification"]:

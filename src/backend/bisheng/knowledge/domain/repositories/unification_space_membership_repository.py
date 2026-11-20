@@ -122,6 +122,30 @@ def _current(session, tenant, transaction):
 
 
 class UnificationSpaceMembershipRepository:
+    def __init__(self, *, fact_view=None):
+        self.fact_view = fact_view
+
+    def _project_members(self, rows):
+        if self.fact_view is None:
+            return rows
+        states = self.fact_view.states("space_channel_member", (row["id"] for row in rows))
+        # History removes dangling SPACE rows; it does not manufacture members
+        # or change identity/roles under the inventory reader.
+        if any(before is None or (after is not None and before != after) for before, after in states.values()):
+            _blocked("unsupported_history_member_change")
+        return self.fact_view.project_rows("space_channel_member", rows)
+
+    def _project_roots(self, rows):
+        if self.fact_view is None:
+            return rows
+        aliases = {"knowledge_id": "id", "knowledge_type": "type", "creator_user_id": "user_id"}
+        original = {row["knowledge_id"]: row for row in rows}
+        raw = tuple({aliases.get(key, key): value for key, value in row.items()} for row in rows)
+        return tuple(
+            {key: after[aliases.get(key, key)] for key in original[after["id"]]}
+            for after in self.fact_view.project_rows("knowledge", raw)
+        )
+
     async def _alock_conversion_sets(self, session, *, roots, commands, current):
         current()
         tenant, transaction = _scope(session), TransactionIdentity.capture(session)
@@ -342,9 +366,10 @@ class UnificationSpaceMembershipRepository:
             if after is not None:
                 query = query.where(member.id > after)
             rows = await self._global_read(session, query.order_by(member.id).limit(201), tenant, transaction)
-            selected = rows[:200]
-            if not selected:
+            raw_selected = rows[:200]
+            if not raw_selected:
                 return
+            selected = self._project_members(raw_selected)
             ids = []
             for row in selected:
                 value = row["business_id"]
@@ -365,6 +390,7 @@ class UnificationSpaceMembershipRepository:
                 tenant,
                 transaction,
             )
+            parents = self._project_roots(parents)
             if {row["knowledge_id"] for row in parents} != set(ids) or any(
                 not _positive(row["tenant_id"])
                 or row["original_tenant_id"] != row["tenant_id"]
@@ -375,7 +401,9 @@ class UnificationSpaceMembershipRepository:
                 _blocked("global_parent_invalid")
             if len(rows) <= 200:
                 return
-            after = selected[-1]["id"]
+            # An entirely deleted projected page is not EOF. Advance using the
+            # original bounded page so an invalid surviving tail is inspected.
+            after = raw_selected[-1]["id"]
 
     @staticmethod
     async def _read(session, statement, tenant, transaction):
@@ -402,11 +430,24 @@ class UnificationSpaceMembershipRepository:
         _bounds(after_id, limit)
         transaction = TransactionIdentity.capture(session)
         query = self._roots(tenant)
-        if after_id is not None:
-            query = query.where(Knowledge.__table__.c.id > after_id)
-        roots = await self._read(
-            session, query.order_by(Knowledge.__table__.c.id).limit(limit + 1), tenant, transaction
-        )
+        if self.fact_view is None:
+            if after_id is not None:
+                query = query.where(Knowledge.__table__.c.id > after_id)
+            roots = await self._read(
+                session, query.order_by(Knowledge.__table__.c.id).limit(limit + 1), tenant, transaction
+            )
+        else:
+            projected, cursor = [], after_id
+            while len(projected) <= limit:
+                page_query = query.where(Knowledge.__table__.c.id > cursor) if cursor is not None else query
+                raw = await self._read(
+                    session, page_query.order_by(Knowledge.__table__.c.id).limit(200), tenant, transaction
+                )
+                projected.extend(self._project_roots(raw))
+                if len(raw) < 200:
+                    break
+                cursor = raw[-1]["knowledge_id"]
+            roots = tuple(projected)
         selected = roots[:limit]
         if not selected:
             return InventoryPage((), None)
@@ -423,6 +464,12 @@ class UnificationSpaceMembershipRepository:
             transaction,
         )
         by_id = {row["business_id"]: row["member_count"] for row in counts}
+        if self.fact_view is not None:
+            deleted = self.fact_view.member_deletion_counts(tuple(str(row["knowledge_id"]) for row in selected))
+            for business_id, count in deleted.items():
+                if type(count) is not int or count < 0 or count > by_id.get(business_id, 0):
+                    _blocked("history_member_count_invalid")
+                by_id[business_id] -= count
         items = tuple(
             SpaceMembershipHeader(**row, member_count=by_id.get(str(row["knowledge_id"]), 0)) for row in selected
         )
@@ -454,6 +501,7 @@ class UnificationSpaceMembershipRepository:
             tenant,
             transaction,
         )
+        roots = self._project_roots(roots)
         if {row["knowledge_id"] for row in roots} != set(knowledge_ids):
             _blocked("original_root_missing_or_not_owned")
         by_id = {str(row["knowledge_id"]): row["knowledge_id"] for row in roots}
@@ -461,9 +509,22 @@ class UnificationSpaceMembershipRepository:
         query = select(*(member[name] for name in MEMBER_COLUMNS)).where(
             member.business_type == BusinessTypeEnum.SPACE, member.business_id.in_(tuple(by_id))
         )
-        if after_id is not None:
-            query = query.where(member.id > after_id)
-        rows = await self._read(session, query.order_by(member.id).limit(limit + 1), tenant, transaction)
+        if self.fact_view is None:
+            if after_id is not None:
+                query = query.where(member.id > after_id)
+            rows = await self._read(session, query.order_by(member.id).limit(limit + 1), tenant, transaction)
+        else:
+            # Fetch bounded raw pages until there is an after-view lookahead.
+            # Deleted prefixes/tails must not truncate the logical inventory.
+            selected, cursor = [], after_id
+            while len(selected) <= limit:
+                page_query = query.where(member.id > cursor) if cursor is not None else query
+                raw = await self._read(session, page_query.order_by(member.id).limit(200), tenant, transaction)
+                selected.extend(self._project_members(raw))
+                if len(raw) < 200:
+                    break
+                cursor = raw[-1]["id"]
+            rows = tuple(selected)
         items = tuple(
             SpaceMembershipRow(
                 tenant_id=tenant,

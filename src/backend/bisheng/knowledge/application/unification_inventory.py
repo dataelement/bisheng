@@ -7,6 +7,7 @@ business data or certifies Coverage. Backups remain an operational prerequisite.
 """
 
 from collections import defaultdict
+from contextlib import aclosing
 from copy import copy
 from dataclasses import asdict, dataclass, field
 
@@ -229,6 +230,7 @@ class UnificationInventoryApplication:
         physical_reader=None,
         queued_task_reader=None,
         broker_reader=None,
+        read_ports=None,
     ):
         # No eager clients/factories: general Storage and RAG constructors may
         # create buckets/policies/indexes or enforce unrelated online gates.
@@ -237,9 +239,14 @@ class UnificationInventoryApplication:
         # Accept legacy composition arguments without calling them. Ordinary
         # migration does not construct ES/Milvus clients or stat file objects.
         self.runs = KnowledgeUnificationRunRepository()
-        self.raw = UnificationInventoryRepository()
-        self.permissions = PermissionMigrationSnapshotRepository()
-        self.preflight = UnificationPreflight(permissions=self.permissions, inventory=self.raw)
+        self.read_ports = read_ports
+        self.raw = read_ports.inventory if read_ports is not None else UnificationInventoryRepository()
+        self.permissions = read_ports.permissions if read_ports is not None else PermissionMigrationSnapshotRepository()
+        self.preflight = (
+            read_ports.preflight
+            if read_ports is not None
+            else UnificationPreflight(permissions=self.permissions, inventory=self.raw)
+        )
 
     async def _verify_frozen(self, result, *, environment, backup_ref, schema_ref, current, permission_planner=None):
         async for _ in self.aiter_frozen_pages(
@@ -254,6 +261,45 @@ class UnificationInventoryApplication:
         return result
 
     async def aiter_frozen_pages(
+        self, result, *, environment, backup_ref, schema_ref, current=None, _permission_planner=None
+    ):
+        if current is not None and not callable(current):
+            _blocked("invalid_frozen_input")
+        execution = getattr(self.store, "verified_inputs", None)
+        bundle = None
+        if execution is not None:
+            key = execution.inventory_key(result, environment=environment, backup_ref=backup_ref, schema_ref=schema_ref)
+            bundle = execution.get_inventory(key)
+            if bundle is not None and bundle.sealed:
+                bundle.require_planner(_permission_planner)
+                async for page in bundle.iter_pages(FrozenInventoryPage):
+                    if current is not None:
+                        current()
+                    yield page
+                    if current is not None:
+                        current()
+                return
+            bundle = execution.begin_inventory(key)
+        try:
+            async for page in self._aiter_frozen_pages(
+                result,
+                environment=environment,
+                backup_ref=backup_ref,
+                schema_ref=schema_ref,
+                current=current,
+                _permission_planner=_permission_planner,
+                _plan_sink=bundle,
+            ):
+                if bundle is not None:
+                    bundle.append_page(page)
+                yield page
+            if bundle is not None:
+                bundle.seal()
+        finally:
+            if bundle is not None and not bundle.sealed:
+                bundle.abort()
+
+    async def _aiter_frozen_pages(
         self,
         result,
         *,
@@ -262,6 +308,7 @@ class UnificationInventoryApplication:
         schema_ref,
         current=None,
         _permission_planner=None,
+        _plan_sink=None,
     ):
         if (
             type(result) is not FrozenGlobalInventoryResult
@@ -298,6 +345,9 @@ class UnificationInventoryApplication:
         # must agree with this same identity and the original ledger hashes.
         material_policy = metadata[0].get("external_material_policy")
         retained_identity = identity_retention.metadata(metadata[0])
+        from bisheng.knowledge.application.unification_inventory_codec import flow_binding_metadata
+
+        flow_binding = flow_binding_metadata(metadata[0])
         backup_ref = metadata[0]["backup_ref"] if backup_ref is None else _descriptor(backup_ref)
         schema_ref = metadata[0]["schema_ref"] if schema_ref is None else _descriptor(schema_ref)
         preparation_policy = metadata[0].get("preparation_policy_version", 1)
@@ -309,6 +359,7 @@ class UnificationInventoryApplication:
             target_model_checksum=metadata[0]["authorization_model_checksum"],
             catalog_plan_checksum=metadata[0]["catalog_digest"],
             permission_planner=_permission_planner,
+            plan_sink=_plan_sink,
         )
         for kind, descriptor in (("baseline", baseline), ("plan", plan)):
             expected_baseline = None if kind == "baseline" else baseline
@@ -391,6 +442,8 @@ class UnificationInventoryApplication:
                         _blocked("frozen_material_policy_changed")
                     if identity_retention.metadata(value) != retained_identity:
                         _blocked("frozen_identity_retention_changed")
+                    if flow_binding_metadata(value) != flow_binding:
+                        _blocked("frozen_upgrade_flow_changed")
                     expected = {
                         "writer_contract_version": result.writer_contract_version,
                         "environment": environment,
@@ -604,6 +657,9 @@ class UnificationInventoryApplication:
         backup_ref=None,
         schema_ref=None,
         freeze=True,
+        planned_at=None,
+        retain_preview_artifacts=False,
+        flow_binding=None,
     ) -> FrozenGlobalInventoryResult:
         if type(freeze) is not bool:
             _blocked("freeze_mode")
@@ -614,8 +670,10 @@ class UnificationInventoryApplication:
             "backup_ref": backup_ref,
             "schema_ref": schema_ref,
             "freeze": freeze,
+            "planned_at": planned_at,
+            "flow_binding": flow_binding,
         }
-        if freeze:
+        if freeze or retain_preview_artifacts:
             return await self._arun(session, **inputs)
         # Reuse every native inventory/plan validator, swapping only the page
         # sink. Nothing can persist these descriptors or use them to resume.
@@ -625,11 +683,24 @@ class UnificationInventoryApplication:
             return await preview._arun(session, **inputs)
 
     async def _arun(
-        self, session: AsyncSession, *, run_id, writer_contract_version, environment, backup_ref, schema_ref, freeze
+        self,
+        session: AsyncSession,
+        *,
+        run_id,
+        writer_contract_version,
+        environment,
+        backup_ref,
+        schema_ref,
+        freeze,
+        planned_at=None,
+        flow_binding=None,
     ) -> FrozenGlobalInventoryResult:
         self.runs._global_scope(session)
         self.runs.assert_inventory_clean(session)
         self.runs._identity(run_id, writer_contract_version)
+        from bisheng.knowledge.application.unification_inventory_codec import flow_binding_metadata
+
+        flow_binding = flow_binding_metadata(flow_binding or {})
         if type(environment) is not str or not environment or len(environment) > 128:
             _blocked("environment")
         if (backup_ref is None) != (schema_ref is None):
@@ -654,10 +725,25 @@ class UnificationInventoryApplication:
             # Business cutover/tombstone consistency, not Celery consumption.
             await UnificationTaskRepository().avalidate_migration_idle(session)
             tenant_ids = await self.runs.alist_actual_tenant_ids(session)
-            existing = await self.runs.aget_global_freeze(session, **identity, tenant_ids=tenant_ids)
+            lookup = self.runs.aget_global_freeze if freeze else self.runs.aget_global_freeze_readonly
+            existing = await lookup(session, **identity, tenant_ids=tenant_ids)
             if existing is not None:
                 if not freeze:
                     _blocked("preview_requires_new_run")
+                if flow_binding:
+                    content = await self.store.aload_canonical(existing.plan_ref, run_id=run_id, kind="plan")
+                    page = decode_inventory_page(
+                        content,
+                        run_id=run_id,
+                        section="manifest",
+                        scope="global",
+                        tenant_id=None,
+                        page_index=0,
+                        kind="plan",
+                    )
+                    original = [row.data for row in page.records if row.record_type == "run"]
+                    if len(original) != 1 or flow_binding_metadata(original[0]) != flow_binding:
+                        _blocked("frozen_upgrade_flow_changed")
                 await self._verify_frozen(
                     existing, environment=environment, backup_ref=backup_ref, schema_ref=schema_ref, current=current
                 )
@@ -690,16 +776,24 @@ class UnificationInventoryApplication:
             async with self.reader_factory(catalog) as reader:
                 if not isinstance(reader, PinnedMigrationPermissionReader) or reader._pin != catalog.authorization:
                     _blocked("actual_pinned_reader_required")
-                async for fact in reader.aiter_original_tuples():
-                    if type(fact) is not OriginalTupleFact:
-                        _blocked("original_tuple_type")
-                    await pages.add(
-                        "fga",
-                        None,
-                        record_from_values("fga_tuple", user=fact.user, relation=fact.relation, object=fact.object),
-                    )
-                source_inventory = UnificationSourceInventory(repository=self.raw, sharing_reader=reader)
-                planned_at = unification_now().replace(microsecond=0)
+                from bisheng.knowledge.application.unification_tuple_sort import stable_original_tuples
+
+                async with aclosing(stable_original_tuples(reader.aiter_original_tuples(), current=current)) as facts:
+                    async for fact in facts:
+                        if type(fact) is not OriginalTupleFact:
+                            _blocked("original_tuple_type")
+                        await pages.add(
+                            "fga",
+                            None,
+                            record_from_values("fga_tuple", user=fact.user, relation=fact.relation, object=fact.object),
+                        )
+                source_args = {}
+                if self.read_ports is not None:
+                    source_args["knowledge_targets"] = self.read_ports.knowledge_targets
+                    if getattr(self.read_ports, "original_state", None) is not None:
+                        source_args["original_state"] = self.read_ports.original_state
+                source_inventory = UnificationSourceInventory(repository=self.raw, sharing_reader=reader, **source_args)
+                planned_at = planned_at if planned_at is not None else unification_now().replace(microsecond=0)
                 for tenant in tenant_ids:
                     with tenant_execution_scope(tenant):
                         await self._tenant(
@@ -721,6 +815,7 @@ class UnificationInventoryApplication:
                 "schema_ref": schema_ref,
             }
             common.update(retained_identity.metadata() if retained_identity is not None else {})
+            common.update(flow_binding)
             if backup_ref is None:
                 common["external_material_policy"] = "not_required"
             baseline = await pages.manifest(

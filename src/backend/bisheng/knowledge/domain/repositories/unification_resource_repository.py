@@ -373,6 +373,9 @@ class FileAncestorFact:
 
 
 class UnificationResourceRepository:
+    def __init__(self, *, fact_view=None):
+        self.fact_view = fact_view
+
     @staticmethod
     async def _read(session, statement, *, global_facts=False):
         _scope(session)
@@ -394,9 +397,15 @@ class UnificationResourceRepository:
         ):
             _blocked("invalid_page")
         query = select(*(getattr(model, name) for name in columns)) if statement is None else statement
-        if after_id is not None:
-            query = query.where(model.id > after_id)
-        rows = await self._read(session, query.order_by(model.id).limit(limit + 1))
+        if self.fact_view is not None:
+            rows = await self.fact_view.page_mappings(
+                session, model=model, statement=query, after=after_id, limit=limit + 1, read=self._read, tenant=tenant
+            )
+            rows = self.fact_view.project_resource_joins(row_type, rows)
+        else:
+            if after_id is not None:
+                query = query.where(model.id > after_id)
+            rows = await self._read(session, query.order_by(model.id).limit(limit + 1))
         for row in rows:
             owner = row.get("tenant_id", row.get("parent_tenant_id"))
             if owner != tenant:
@@ -509,6 +518,11 @@ class UnificationResourceRepository:
         counts = dict.fromkeys(resource_ids, 0)
         for row in rows:
             counts[row["knowledge_id"]] = row["file_count"]
+        if self.fact_view is not None:
+            for ident, difference in self.fact_view.file_count_changes(resource_ids, tenant=tenant).items():
+                counts[ident] += difference
+            if any(value < 0 for value in counts.values()):
+                _blocked("file_count_history_delta_invalid")
         return counts
 
     async def avalidate_retained_index_bindings(self, session: AsyncSession, *, bindings: tuple):
@@ -636,6 +650,9 @@ class UnificationResourceRepository:
         )
 
     async def _probe(self, session, statement, reason):
+        if self.fact_view is not None:
+            await self.fact_view.prepare(session)
+            statement = self.fact_view.exclude_affected_probe(statement)
         rows = await self._read(session, statement.limit(1), global_facts=True)
         if rows:
             _blocked(reason, id=rows[0]["id"])
@@ -777,6 +794,8 @@ class UnificationResourceRepository:
                 select(*(table.c[name] for name in ANCESTOR_COLUMNS)).where(table.c.id.in_(ids[offset : offset + 200])),
                 global_facts=True,
             )
+            if self.fact_view is not None:
+                rows = self.fact_view.project_rows("knowledgefile", rows)
             facts.update((row["id"], FileAncestorFact(**dict(row), exists=True)) for row in rows)
         return tuple(
             facts[ident] if ident in facts else FileAncestorFact(ident, False, None, None, None, None, None, None)

@@ -25,7 +25,9 @@ async def validate(session, *, expected=None, repository=None):
     except PermissionMigrationBlockedError as error:
         if error.kwargs.get("reason") != "f118_snapshot_global_original_orphan" or expected == {}:
             raise
-        snapshot = await UnificationIdentityRetentionRepository().acapture(session)
+        snapshot = await UnificationIdentityRetentionRepository(
+            fact_view=getattr(repository, "fact_view", None)
+        ).acapture(session)
         if expected is not None and snapshot.metadata() != expected:
             blocked("frozen_facts_changed")
         await repository.avalidate_global_integrity(session, retained_tenant_ids=snapshot.tenant_ids)

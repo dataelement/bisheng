@@ -603,3 +603,32 @@ TC-KSU-141 对应 AC-95、AC-99；TC-KSU-142 对应 AC-96；TC-KSU-143 对应 AC
 | TC-F118-REG-003 | 原子失败续跑 | P0 | 有待登记来源 | 1. 提交前注入失败。<br>2. 重试。 | 失败事务引用与进度均回滚；同计划续跑，不重复已提交前缀。 | 待执行 | — |
 | TC-F118-REG-004 | 有界差异 | P0 | 新来源已原生登记，托管应用或频道时间戳变化 | 1. 预览后执行。<br>2. 改配置或破坏索引再试。 | 精确证明允许差异；未知配置/索引变化拒绝，不改原计划。 | 待执行 | — |
 | TC-F118-REG-005 | 规模与进度 | P1 | N/2N 来源 | 1. 执行并统计事务/SQL及日志。 | 线性成本，显示阶段、处理数、总数和耗时。 | 待执行 | — |
+
+
+## 2026-11-20 统一迁移入口改造 QA 用例
+
+依据：用户已确认 spec AC-158～166，并明确要求按 design §16 完成开发。目标分支 codex/f118-upgrade-flow-20261120；实现基线 1a2f59a727。本轮实现及原生离线验证已完成，以下结果仅覆盖明示的本地证据，真实环境范围仍待执行。无新增 HTTP/UI，不把165旧脚本成功代填本组结果。
+
+数据：研发提供隔离 native SQL/模拟 transport 夹具，包含两个有效租户、孤儿保留、原生失败/删除回执、旧 registration/extension 及空来源。真实集成由独立 MySQL/DM8+OpenFGA+MinIO 克隆环境准备，禁止在165造异常或恢复旧库。操作身份为夹具实际有效用户，另设未知/已删除身份。具体克隆数据加载路径待研发确认；原有备份与计划只读保留，清理只作用本组隔离数据。
+
+### 具体测试用例
+
+| ID | 功能点 | 优先级 | 前置条件 | 步骤 | 预期结果 | 测试结果 | 结果说明 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| TC-MIG-FLOW-001 | 单入口完整迁移 | P0 | 隔离旧库含确定性修复与两个租户 | 1. 运行同入口 dry-run。<br>2. 运行同 Run apply。 | 1. 完整计划可执行。<br>2. 自动历史准备、转换、权限及完整引用收尾 ready=true，无需第二脚本。 | 本地通过；现场待执行 | test_upgrade_new_run：实际历史/SQL/权限/引用/Coverage；E2E同计划恢复 |
+| TC-MIG-FLOW-002 | 只读与未知拒绝 | P0 | 启用远端写拦截；另有跨租户或未知授权 | 1. 分别预检合法与异常数据。<br>2. 查看输入及报告。 | 1. SQL/FGA/Redis/远端制品零写。<br>2. 未检查或真阻塞不能成功退出。 | 本地通过；现场待执行 | 新Run零写、executor未知意图、E2E跨租户及未知租户子行拒绝 |
+| TC-MIG-FLOW-003 | 默认历史保留 | P0 | 孤儿、旧模型名、缺作者及失效版本 | 1. 预检。<br>2. 执行并核对身份/内容/权限。 | 1. 报告规则和处理项。<br>2. 失效原语义保留，不删除内容、造账号或补授权，不逐项询问。 | 本地通过；现场待执行 | test_history_upgrade_defaults、test_history_identity_retention_view及原准备规则回归；无安全配方的物理清理明确未检查 |
+| TC-MIG-FLOW-004 | 修复后的完整校验 | P0 | 原数据合法但修复后闭包出现冲突的独立样本 | 1. 执行预检。<br>2. 查看依赖范围。 | 1. 全部 dirty-after 校验发现新冲突。<br>2. 报告 BLOCK/未检查，不能只检查原违例后放行。 | 本地通过；现场待执行 | test_history_fact_view::test_dirty_after_is_checked_even_when_before_has_no_violation、反向权限关系及target/member闭包 |
+| TC-MIG-FLOW-005 | 同计划绑定 | P0 | 一份通过预检计划 | 1. 分别替换材料、改变pin/配置或删除计划。<br>2. 执行 apply。 | 1. 在任何业务写入前拒绝。<br>2. 不自动覆盖计划或换 Run。 | 本地通过；现场待执行 | test_upgrade_review_regressions坏flow/缺页/bootstrap零写；E2E重新寻址伪造summary三负例 |
+| TC-MIG-FLOW-006 | 环境与操作人 | P0 | 唯一匹配 CURRENT/ACTIVE，未知操作人 | 1. 不填环境预检。<br>2. 用错误环境或无效操作人执行。 | 1. 展示真实环境。<br>2. 不一致在写入前拒绝，不按机器用途猜标签。 | 本地通过；现场待执行 | E2E实际User与环境冲突；CLI正整数、active校验及completed断言 |
+| TC-MIG-FLOW-007 | 连续进度 | P1 | 长扫描/外部等待及恢复样本 | 1. 运行并观察终端/JSONL。<br>2. 注入等待和失败。 | 1. 约15秒显示阶段/单位/计数/提交/等待。<br>2. 错误立即显示游标和恢复方式，无凭据/内容或虚假总百分比。 | 本地通过；现场待执行 | test_upgrade_progress心跳/ACK/聚合/恢复速率；CLI取消脱敏、原退休checkpoint位置 |
+| TC-MIG-FLOW-008 | 不可变输入复用 | P1 | 大于内存热层的分页图 | 1. 单次完整运行各消费阶段。<br>2. 破坏缓存页并重试。 | 1. 不重复远端读取或编译等价输入；完整三类FGA证明保留。<br>2. 缓存重读或安全失败，不使用未封口计划。 | 本地通过；现场待执行 | test_migration_execution_inputs实际编译计数/磁盘逐出/上传真实回读；test_history_material_pages大于16MiB与尾页损坏 |
+| TC-MIG-FLOW-009 | 历史中断及共享恢复 | P0 | preparing 历史部分提交 | 1. 中断并移走本地材料副本。<br>2. 重复同一 apply。 | 1. 原回执及共享材料完整。<br>2. 从已提交 AFTER/未提交 BEFORE 继续，不重建原计划或重复效果。 | 本地通过；现场待执行 | test_upgrade_new_run的before_history、before_freeze两中断点全部本地材料丢失；FactView混合BEFORE/AFTER |
+| TC-MIG-FLOW-010 | SQL结果映射与未知提交 | P0 | 多批V1生成及结果tail | 1. 分别在COMMIT/结果页上传前后注入失联。<br>2. 重复 apply。 | 1. 原sql-v1游标保持。<br>2. 实际ID映射和前驱可恢复，无半批或重复V1。 | 本地通过；真实COMMIT待执行 | test_migration_stage_receipts结果tail/前驱/取消/未知ACK及legacy补证；SQLite不能证明真实网络提交边界 |
+| TC-MIG-FLOW-011 | 并发与失锁 | P0 | 两个执行者及FGA未闭合请求 | 1. 并发执行同 Run。<br>2. 丢失控制连接后接管。 | 1. 第二个写入者拒绝。<br>2. 未有请求终结证据不能推进新意图，保留真实不确定状态。 | 本地协议通过；真实锁待执行 | test_upgrade_executor、test_permission_publication_maintenance_guard旧token/未知请求；MySQL/DM8 NOWAIT与失连接管未实测 |
+| TC-MIG-FLOW-012 | 引用批量事务 | P0 | 跨多个root的连续来源和合法空来源 | 1. 批中失败、ACK丢失后恢复。<br>2. 核对明细和原序号/hash。 | 1. 全批回滚或全批提交可判定。<br>2. 批末原子游标，空来源真实登记，最终完整覆盖。 | 本地通过；现场待执行 | test_reference_upgrade_batches全批回滚/提交后ACK丢失，真实IDs及批末游标 |
+| TC-MIG-FLOW-013 | 原登记增量完整收尾 | P0 | 已登记旧 Run+extension/additions | 1. dry-run生成不可变补充候选。<br>2. 同一apply完整收尾。 | 1. 候选精确绑定原证明和当前状态。<br>2. 原材料/旧提交链不变，完整census后原生签证。 | 本地通过；现场待执行 | test_reference_reconciliation_materials与test_reference_upgrade_batches原registration证明/新增source/完整证书 |
+| TC-MIG-FLOW-014 | 已开服变化的边界 | P0 | 有证明与无证明的更新/退役各一组 | 1. 完整复核各组。<br>2. 在复核期间再次变更。 | 1. 仅有充分证据才走当前状态验证链。<br>2. 无证据/持续变化报告维护范围，不签混合时点证书。 | 本地通过；现场待执行 | 语义目录只排明确时间字段、原native证据分流、最终business/index/census漂移拒绝；SQL AFTER范围仍严格 |
+| TC-MIG-FLOW-015 | 规模与重复执行 | P1 | N/2N资源、成员、来源、tuple样本 | 1. 运行完整/无变更/恢复。<br>2. 对比计数及重复apply效果。 | 1. 查询/事务/编译无乘积级增长，日志随阶段时间而非资源刷屏。<br>2. 已完成项不重复效果，报告明确范围。 | 局部规模通过；生产规模待执行 | 引用N/2N、5MiB配置/5120引用及共享大历史页；阶段复用/重复apply零效果；尚无14万文件/160万tuple真实克隆窗口 |
+
+用例映射：001→AC-158、AC-159、AC-166；002/004/005→AC-159、AC-160、AC-164；003→AC-160；006→AC-161；007→AC-162、AC-166；008/015→AC-163、AC-164；009/010/011→AC-164；012/013/014→AC-165。设计依据均为§16。结果说明中的文件位于src/backend/test/knowledge_unification，E2E位于test/e2e/test_e2e_f118_upgrade_flow.py；测试命令/原始统计与限制见[实施验证记录](../../../docs/reviews/f118-upgrade-flow-implementation-20261120.md)。现场/真实双库用例保持待执行，不以离线夹具结果代填。

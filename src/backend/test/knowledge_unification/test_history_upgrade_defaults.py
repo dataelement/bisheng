@@ -261,7 +261,9 @@ async def test_many_initializations_hash_complete_frozen_plan_only_once(history,
         calls.append(id(value))
         return original(value)
 
-    monkeypatch.setattr(script, "checksum", checksum)
+    from bisheng.knowledge.domain.repositories import unification_history_repository as history_owner
+
+    monkeypatch.setattr(history_owner, "checksum", checksum)
     await permissions.apply_repairs(
         plan, sessions=history.sessions, client=history.fga, runtime=history.runtime, operator_id=7
     )

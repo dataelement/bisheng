@@ -62,6 +62,23 @@ _NAMESPACE_RECORDS = _NAMESPACE_GLOBAL | {
     "namespace_after_assignee",
     "namespace_after_visible_source",
 }
+FLOW_BINDING_SCHEMA = {
+    "upgrade_flow_policy": "str",
+    "upgrade_flow_ref": "descriptor",
+    "upgrade_history_sha256": "hash",
+    "upgrade_semantics_sha256": "hash",
+    "upgrade_history_after_ref": "descriptor",
+}
+
+
+def flow_binding_metadata(value):
+    selected = {key: value[key] for key in FLOW_BINDING_SCHEMA if key in value}
+    if selected:
+        if set(selected) != set(FLOW_BINDING_SCHEMA) or selected["upgrade_flow_policy"] != "unified_v1":
+            _invalid()
+        for key, spec in FLOW_BINDING_SCHEMA.items():
+            _value(selected[key], spec)
+    return selected
 
 
 def _descriptor(value):
@@ -120,6 +137,9 @@ def _value(value, spec):
 
 def _validate(tag, data):
     schema = _SCHEMAS.get(tag)
+    if tag == "run" and type(data) is dict and any(key.startswith("upgrade_") for key in data):
+        flow_binding_metadata(data)
+        schema = {**schema, **FLOW_BINDING_SCHEMA}
     # New Runs carry no DBA backup/schema attestations. Keep the legacy wire
     # shape strict: null descriptors are legal only under this explicit policy.
     if tag == "run" and type(data) is dict and "external_material_policy" in data:

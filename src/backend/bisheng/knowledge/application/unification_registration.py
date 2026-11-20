@@ -40,7 +40,7 @@ def ordered(keys):
     return sorted(keys, key=lambda k: (k.tenant_id, k.source_type.value, k.source_id, getattr(k, "source_version", "")))
 
 
-async def admit_completed(application, frozen, *, environment, operator_id):
+async def admit_completed(application, frozen, *, environment, operator_id, allow_verified=False):
     """Finite native ledger and CURRENT/pin admission, with no tuple scan/write."""
     if type(operator_id) is not int or operator_id < 0:
         blocked("registration_operator")
@@ -51,8 +51,13 @@ async def admit_completed(application, frozen, *, environment, operator_id):
                 row = await application._scope_run(session, frozen)
                 if (
                     row.error_code is not None
-                    or row.coverage_epoch is not None
-                    or row.phase not in {"converting", "backfilling"}
+                    or (row.coverage_epoch is not None and not allow_verified)
+                    or row.phase
+                    not in (
+                        {"converting", "backfilling", "verifying", "verified", "completed"}
+                        if allow_verified
+                        else {"converting", "backfilling"}
+                    )
                 ):
                     blocked("registration_run_phase")
                 cp = row.checkpoints.get("converting", {})
@@ -102,7 +107,7 @@ async def admit_completed(application, frozen, *, environment, operator_id):
     }
 
 
-async def added_fact(session, key, repository, index_repository):
+async def added_fact(session, key, repository, index_repository, *, business_snapshot=None, index_snapshot=None):
     """Retain a post-freeze source only when native registration matches truth."""
     from bisheng.channel.domain.services.reference_extractor import (
         CHANNEL_SYNC_REFERENCE_EXTRACTOR_VERSION,
@@ -113,7 +118,11 @@ async def added_fact(session, key, repository, index_repository):
         extract_workflow_version_references,
     )
 
-    root, version, children = await repository.aload_reference_source(session, source_key=key)
+    root, version, children = (
+        business_snapshot
+        if business_snapshot is not None
+        else await repository.aload_reference_source(session, source_key=key)
+    )
     if key.source_type == SourceType.WORKFLOW_VERSION:
         if root.is_delete != 0 or version.is_delete not in (None, 0):
             blocked("registration_added_source_retired")
@@ -124,7 +133,11 @@ async def added_fact(session, key, repository, index_repository):
         refs = extract_channel_sync_references(tuple(asdict(c) for c in children), skip_legacy_folders=True)
     else:
         blocked("registration_added_source_type")
-    head, source, rows = await index_repository.aload_raw_snapshot(session, source_key=key, for_update=False)
+    head, source, rows = (
+        index_snapshot
+        if index_snapshot is not None
+        else await index_repository.aload_raw_snapshot(session, source_key=key, for_update=False)
+    )
     actual_refs = tuple(ReferenceSpec(r["slot_key"], TargetKey(r["target_type"], r["target_id"])) for r in rows)
     expected_digest = reference_set_digest(tuple(refs))
     if (
@@ -185,6 +198,13 @@ async def differences(application, plan):
         )
         with tenant_execution_scope(tenant):
             async with application._session() as session, session.begin():
+                if tenant == plan.frozen.tenant_ids[0]:
+                    # Exact source pages cannot enumerate children with no
+                    # owner or rows under an unknown tenant. Reuse the native
+                    # global gates before any registration/upgrade effect.
+                    await repository.avalidate_global_orphans(session)
+                    await repository.avalidate_registered_source_tenants(session)
+                await repository.avalidate_tenant_orphans(session)
                 actual_roots, actual_sources, actual_versions = await repository.acensus_reference_sources(session)
                 extra = actual_sources - expected_sources
                 extra_roots = (
@@ -260,16 +280,17 @@ def overlay(plan, delta):
     return replace(plan, sources=tuple(entry(row) for row in plan.sources))
 
 
-async def run_registration(application, *, apply=False, **inputs):
-    started = time.monotonic()
-    frozen = await application._admit(inputs["run_id"], inputs["writer_contract_version"])
+async def prepare_registration(
+    application, *, frozen, reader, plan, apply=False, delta=None, allow_verified=False, **inputs
+):
     publication = await admit_completed(
-        application, frozen, environment=inputs["environment"], operator_id=inputs["operator_id"]
+        application,
+        frozen,
+        environment=inputs["environment"],
+        operator_id=inputs["operator_id"],
+        allow_verified=allow_verified,
     )
-    logger.info("reference_registration stage=read_plan prior_sql_permissions=completed_reused")
-    reader = registration_reader(application.store)
-    plan = await reader.aprepare(frozen, **{k: inputs[k] for k in ("environment", "backup_ref", "schema_ref")})
-    delta = await differences(application, plan)
+    delta = await differences(application, plan) if delta is None else delta
     # Validate all bounded app differences before the first write, including
     # actual configuration/lifecycle/reference membership, not just a new hash.
     overlaid = overlay(plan, delta)
@@ -336,6 +357,18 @@ async def run_registration(application, *, apply=False, **inputs):
                         "complete": True,
                     },
                 )
+    return migration, delta, descriptor, extension_ref
+
+
+async def run_registration(application, *, apply=False, **inputs):
+    started = time.monotonic()
+    frozen = await application._admit(inputs["run_id"], inputs["writer_contract_version"])
+    logger.info("reference_registration stage=read_plan prior_sql_permissions=completed_reused")
+    reader = registration_reader(application.store)
+    plan = await reader.aprepare(frozen, **{k: inputs[k] for k in ("environment", "backup_ref", "schema_ref")})
+    migration, delta, descriptor, extension_ref = await prepare_registration(
+        application, frozen=frozen, reader=reader, plan=plan, apply=apply, **inputs
+    )
     if apply:
         for tenant in frozen.tenant_ids:
             with tenant_execution_scope(tenant):

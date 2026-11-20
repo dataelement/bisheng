@@ -7,7 +7,7 @@
 **PRD**：[《3.1 beta1》§1.1–§1.8](https://dataelem.feishu.cn/wiki/RGvDwDbyDiNaRQk7DqfcqEPxnoh)\
 **调研基线**：本地 `feat/3.0.0`，`25e50eceeeb71989257e5ff38e35f5e011e59bae`。未查询线上数据、未验证远端部署；已有未提交的配置及 review 目录不属于本轮变更。
 
-**升级流程增量状态（2026-11-20）**：AC-158～166 已获用户确认；[§16 升级流程技术设计](#16-升级流程统一改造技术设计2026-11-20)已审查通过、待用户确认，尚未实现。代码核对基线为独立分支 `codex/f118-upgrade-flow-20261120` 的 `61af8928d7`。本轮迁移流程以 §16 为准，早期独立历史脚本及阶段参数的描述仅保留旧计划兼容意义；在线引用策略、权限与完整 Coverage 要求不变。
+**升级流程增量状态（2026-11-20）**：AC-158～166 已获用户确认；[§16 升级流程技术设计](#16-升级流程统一改造技术设计2026-11-20)已审查通过，用户现明确要求按 spec/design 开发，进入实施。代码核对基线为独立分支 `codex/f118-upgrade-flow-20261120` 的 `61af8928d7`。本轮迁移流程以 §16 为准，早期独立历史脚本及阶段参数的描述仅保留旧计划兼容意义；在线引用策略、权限与完整 Coverage 要求不变。
 
 ## 1. 目标、边界与交付形态
 
@@ -1356,11 +1356,11 @@ ReferenceMigration 增加仅登记内部模式：复用目标检查、Registered
 
 ### 16.1 目标、现状与边界
 
-**状态：设计候选，独立审查通过，待用户确认。** 对应已确认 AC-158～166；下文“新增/调整”均为拟实施合同，不是现行代码能力。基线 `61af8928d7` 已合流生产修复；四组离线定向基线为 63 项通过，不代表本轮实现或生产规模验证。
+**状态：已按确认设计实现并完成本地验证；未合入发行线、未部署。** 对应 AC-158～166；本节记录实际实现合同及明确容量/环境边界。基线 `61af8928d7` 已合流生产修复；四组63项仅为历史基线，本轮证据另见实施报告及七维审查；知识模块的既有全目录失败已单列对照，不报整体全绿。
 
 目标是同一 `unify_knowledge_spaces.py` 完成 dry-run、显式 apply 和自动恢复；确定性问题直接按计划处理，历史失效项保留并报告，真正冲突阻塞。引用登记、退役、完整复核及原生 Coverage 全部留在维护流程内。
 
-当前链路是两个脚本，正式入口再按 `run_references → arun_permissions → arun` 重走前置阶段。只读 inventory 的临时制品在返回时删除；完整图分类还会在 `F118PermissionTupleBuilder.finish` 才发现未分类关系。引用逐来源事务，完整入口不能消费仅登记时追加的全部证明。不能仅套一个 shell 把这些入口顺序执行。
+改造前链路是两个脚本，正式入口再按 `run_references → arun_permissions → arun` 重走前置阶段。原只读 inventory 的临时制品在返回时删除；完整图分类还会在 `F118PermissionTupleBuilder.finish` 才发现未分类关系。原引用逐来源事务，完整入口不能消费仅登记时追加的全部证明。这些问题由下述实现处理，不能仅套一个shell顺序调用旧入口。
 
 本轮不改在线来源读取/保存/执行、删除或租户创建策略；不新增全局业务 mutation epoch，不提供在线迁移或在线一致签证。遵循 [constitution](../../../docs/constitution.md) C1～C8 及 [release-contract](../release-contract.md)，不重定义其规则。运维停止所有业务写入者并保持维护；脚本不启停容器、不以 HTTP/队列探测推断已经停写。
 
@@ -1395,7 +1395,7 @@ apply：先只读识别原材料/Run/提交位置 → 按阶段核对当前期�
 
 ### 16.4 材料、身份与同计划执行
 
-普通接口拟为：
+普通接口：
 
 ```bash
 # src/backend/，业务同配置；新 Run 名只在首次指定
@@ -1406,7 +1406,7 @@ python scripts/unify_knowledge_spaces.py --run-id upgrade-site-a --apply --opera
 
 保留默认 preview；`--dry-run/--apply` 互斥。`--materials-dir` 可覆盖默认 `/app/data/upgrade/3.1.0-beta1/f118/<run-id>/`；未指定 environment 时只读解析唯一 CURRENT/ACTIVE 对应环境，显式参数只作一致性断言。旧 `--resume`、描述符断言和阶段模式保留兼容，不列入标准流程；单独阶段完成不返回默认 full 成功。
 
-本地 `flow.json` schema=1、kind=`new_run|frozen_resume`，只引用内容寻址的历史计划、预检报告、before/expected-after 语义目录，包含：Run/writer、flow/history/compiler 协议版本、实际环境、非敏感数据库连接身份指纹、租户集合摘要、schema 摘要、原 Catalog/pin、固定 `planned_at`、材料 SHA、处理策略、检查完整性及操作者绑定方式。数据库指纹只取规范化 dialect/host/port/database（SQLite 取实际库定位）后摘要，不含账号、密码或带凭据 URL。连接别名变化须明确报告，不自动跨环境找材料。
+本地 `flow.json` 是 `{run_id, flow_ref}` 指针；其引用的内容寻址 flow 对象为 schema=1、kind=`new_run|frozen_resume`，引用历史计划、预检报告、before/expected-after 语义目录，包含：Run/writer、flow/history/compiler 协议版本、实际环境、非敏感数据库连接身份指纹、租户集合摘要、schema 摘要、原 Catalog/pin、固定 `planned_at`、材料 SHA、处理策略、检查完整性及操作者绑定方式。数据库指纹只取规范化 dialect/host/port/database（SQLite 取实际库定位）后摘要，不含账号、密码或带凭据 URL。连接别名变化须明确报告，不自动跨环境找材料。
 
 所有原值/业务载荷仅留必要私有证据；目录 0700、文件 0600，文件按临时写入+fsync+原子改名发布，已有同 Run 计划不覆盖。输入 SHA 校验、schema/字段集校验和可执行结论缺一不可；失败的 candidate/report 不能改名当成功计划。共享断点仅存摘要及必要描述符，不能持久化进程内临时路径。
 
@@ -1422,7 +1422,9 @@ preparing checkpoint 仍恰为 `cursor/processed_count/digest/complete`；版本
 
 **新生成身份不能按原始字节硬比较**：纯效果用逻辑身份表示新 mode/operation/tuple；预览给这些明确新实体分配无冲突、有界的临时正整数以调用原验证器，并保存字段级逻辑映射。执行回执提供实际 ID，先把逻辑引用物化再用原生 checksum 函数重算，包含 `resource-purge:<operation_id>` 等派生键。只有计划列出的新身份、新建审计时间和新操作审计人可按映射规范化；已有 ID、版本、Owner、权限字段及原账本 checksum 一律严格。
 
-`planned_at` 固定复用预检值，避免 V1 模板/命令因重新取时钟而换摘要。dry-run 可不提供 operator；此时记录 `operator_binding=apply_time`，纯计划仅用不可持久化的审计占位值，不能造账号或赋予权限。apply 在写前核验真实正整数操作者并绑定到 preparing，随后新原生计划/账本按该人计算；原失败操作的原 operator/校验和保持。显式提供 operator 的预检则绑定其精确身份。
+`planned_at` 固定复用预检值，避免 V1 模板/命令因重新取时钟而换摘要。dry-run 可不提供 operator；此时 `operator_binding={mode:apply_time,operator_id:null}`，纯计划仅用不可持久化的审计占位值，不能造账号或赋予权限。apply 在写前核验真实、未删除的正整数用户，并将其与全部 preparing Run 的创建/新 attempt/原 flow descriptor **同一事务**绑定，避免创建 preparing 后尚未绑定材料的崩溃空档。随后新原生计划/账本按该人计算；原失败操作的原 operator/校验和保持。显式提供 operator 的预检使用 fixed 模式绑定其精确身份。
+
+新 capture 对 FGA 原始 tuple 使用私有 SQLite 复合键稳定排序，批量写入不超过 200，流式读取排序结果、重复严格拒绝；不依赖服务端返回顺序决定新材料 SHA，不改变旧冻结字节。历史 replay/semantic/after 材料超限时仅按已知字段路径拆为不超过 200 条且约 1MiB 的内容寻址页；目录绑定原 body SHA、完整路径、顺序、条数及各项摘要。恢复仍重建原生 dict，不能将分页声称为整个历史计划常量内存；超大不可拆原子值明确未检查。
 
 ### 16.5 修复后只读事实与诊断收集
 
@@ -1485,7 +1487,7 @@ FGA 原图先经真实 pin/model 验证并流式采集，再叠加原生纯效�
 | SQL 完整、权限未完整 | 回执+批量 current-after 验证通过后不重新执行 SQL 入口；允许原权限 before/staged/pending/after，交原权限恢复判断，不能要求此时生产 runtime 已 ready |
 | 权限完整、引用未完整 | 核对回执、SQL/namespace 目录、完整发布 commit、CURRENT/ACTIVE 实际 runtime pin、无 pending；跳过发布执行链，进入引用 |
 | 引用部分提交 | 按原 ordinal/批末 checkpoint 继续，最终仍完整核验 |
-| completed | 返回原完成报告；可显式 strict verify 做只读复核，不再写迁移 checkpoint 或重做效果 |
+| completed | 返回原 Coverage/Run/hash/proofs 结果及本次执行摘要；计数scope区分原计划与本次无效果重跑。显式strict verify只读复核；旧completed首次使用统一入口的候选保持本地，不进入executor/锁种子、绑定或远端上传，不再写checkpoint或重做效果 |
 
 预先上传的预期目录只含逻辑身份/自然键及预期语义，不伪造未来自增 ID。原 `sql_conversion.cursor` 的 `sql-v1:{count}:{hash}` 格式和 fold 完全不变；原进程内 SQLConversionBatchResult 不当作持久证据。新增独立四字段 `sql_results_v1`：每批与业务/原 SQL checkpoint 在同一事务保存本批受控“逻辑身份/自然键→实际 document/version 等 ID”映射、实际 outcome digest、对应原 SQL checkpoint 及已持久化前驱结果页 descriptor。该 key 的版本化 canonical cursor 只保存本批 tail，不累计整条链。
 
@@ -1513,7 +1515,9 @@ ACK 后在事务外上传并真实回读该批结果页；下一批覆盖 `sql_r
 
 ### 16.9 引用批处理、增量与完整收尾
 
-保留原来源/退役 ordinal、链式 fold 和 checkpoint 四字段。批次不跨租户，初始最多 100 来源且增加明细/字节预算；超大单来源单独流式处理，不能提交半个 source。不能直接复用仅支持同根和 Owner 授权协议不同的在线 BatchReferenceBindings。
+保留原来源/退役 ordinal、链式 fold 和 checkpoint 四字段。批次不跨租户，最多 100 来源，并按明细数量和序列化计划记录的字节预算分批。**实现容量取舍**：六类原生来源的配置/索引协议按完整单 source DTO 校验；超预算的单来源独立原子处理，仍会加载其完整配置与索引，不把“逐来源流”称作单来源常量内存，也不引入较旧协议更低的拒绝上限。16MiB 单制品协议上限保持，不能提交半个 source。此前设计的“超大单来源流式”措辞据真实 Owner 路径收窄为这一实际边界，外部 AC-163 的完整证明与工作量要求不变。不能直接复用在线 BatchReferenceBindings。
+
+初始批字节计量覆盖 frozen header 与 ReferenceInventoryRecord，并非业务 JSON 的总内存硬上限；最终尾检按真实业务 snapshot **加完整 raw index snapshot** 的 canonical 字节计量。正常批数量/明细/字节均受控；原生单来源配置及原单租户 collector/tuple set 的既有容量成本保留并实测。5MiB 配置、5,120 引用单来源已完成全流程及中断回滚/恢复验证，新增 Python 分配峰约 50～64MiB，不以此外推生产维护时间。
 
 新增原生批接口：`aload_raw_snapshots(...for_update=True)`、`aprepare_registered_batch(...)`、`aapply_registered_batch(...)`。Prepared 绑定同一 TransactionIdentity/Run/租户/期望 checkpoint，不能由 CLI JSON 直接构造。必须批量前读、差量写和完整 AFTER 回读；仅把现 `aprocess` 放到同一事务，仍保留每项前后查询，不能算查询优化。
 
@@ -1536,9 +1540,11 @@ Coverage 现 `_PROOF_FIELDS` 严格，扩展证明作为不可变对象绑定到
 
 最终全量验证以运维保持停写为前提：批次记录业务/索引/目标摘要和 root/source revision，签证前核对同一 verification manifest、实际租户、来源/版本全集及修订。再次变化的批次重验；持续变化或无法闭合则 ready=false 并报告范围。Run 互斥锁不能拦在线写，两遍分页摘要相同也不宣称任意并发下线性一致；本轮不提供在线签证。
 
+实际收尾在签证同一原生事务内按租户/业务根/索引根稳定顺序锁定并批读所有已观察来源及完整索引，逐事实摘要与先前验证结果比较，覆盖新增及退休来源，并再次 census 全集。此 O(root) 尾检与必要 current-after 是不同时间的证明，不作为可省掉的重复读取；业务写入者仍须保持停止。首次创建维护锁种子前额外执行一次完整只读准入，材料损坏、原始事实变化时不留种子；持锁后再核验防止准入间变化，已有种子不支付这一首次 bootstrap 额外成本。
+
 ### 16.10 模块、内部接口与依赖风险
 
-| 模块/接口（新项为拟议） | 提供与消费 | 不做什么/风险点 |
+| 模块/接口 | 提供与消费 | 不做什么/风险点 |
 | --- | --- | --- |
 | scripts/unify_knowledge_spaces.py | 参数、同配置资源生命周期、结果/退出码；调用统一 application | 不直接编排 SQL或启停服务；旧参数兼容不能假报 full 成功 |
 | 新 unification_upgrade application | dry-run/apply 阶段路由、材料绑定、原 Run 恢复、recorder | 不新增通用工作流引擎或第二个状态机 |
@@ -1575,6 +1581,6 @@ Coverage 现 `_PROOF_FIELDS` 严格，扩展证明作为不可变对象绑定到
 
 手动验证使用 §16.4 的两条命令，需新镜像维护容器、持久 data 卷、业务同 config、真实操作人、全部写入者停服及完成结构升级；先在脱敏克隆执行，核对报告、原生账本、完整 ready 与模型读取/工作流编辑/运行等业务抽检。schema 与其他功能迁移仍按独立升级指南执行；本设计不授权生产演练或部署。
 
-设计确认后再据此生成/复查八列 QA 用例并拆 tasks；实施先打通最小完整入口，再扩大历史分类和规模，完成 E2E、特性代码审查及发行线合流。当前已知短板是 tuple/collector 全量成本、真实双库/中间件演练尚未取得，引用辅助化下版本独立处理；不为消除这些边界擅自扩展在线协议。
+已按用户确认完成八列 QA 用例、任务拆分及本地实现；入口闭环、历史分类、故障恢复和规模验证见[实施验证记录](../../../docs/reviews/f118-upgrade-flow-implementation-20261120.md)及[七维审查](../../../docs/reviews/f118-upgrade-flow-code-review-20261120.md)。当前已知边界是 tuple/collector 全量成本、真实双库/中间件演练尚未取得；引用辅助化下版本独立处理，不扩展本轮在线协议。独立分支开发完成不代表已合入发行线或已部署165。
 
-修订记录：2026-11-20，在用户确认 AC-158～166 后形成升级流程设计候选；只更新设计、确认记录及审查证据，没有实施本轮迁移逻辑。
+修订记录：2026-11-20，用户确认 AC-158～166 与本设计后实施统一入口。原生闭环现包含历史 after 视图、生成身份精确映射、同事务 preparing 绑定、稳定 tuple 排序、共享历史分页、阶段准入与批引用完整收尾；已知容量取舍如上明确记录。真实 MySQL/DM8 行锁及真实中间件规模演练仍待集成环境，不以 SQLite/模拟 HTTP 结果代替。

@@ -118,8 +118,11 @@ class PermissionResourceSnapshot:
 class SqlPermissionControlState:
     """Own all permission-table reads/writes needed by online services."""
 
+    def __init__(self, *, session_factory=None):
+        self._session_factory = session_factory or (lambda: get_async_db_session())
+
     async def current_catalog(self) -> RuntimeCatalogSnapshot:
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             release_rows = list(
                 (
                     await session.execute(
@@ -247,7 +250,7 @@ class SqlPermissionControlState:
         *,
         for_update: bool = False,
     ) -> ResourcePermissionMode:
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             statement = select(ResourcePermissionMode).where(
                 ResourcePermissionMode.tenant_id == target.tenant_id,
                 ResourcePermissionMode.resource_type == target.resource_type,
@@ -276,7 +279,7 @@ class SqlPermissionControlState:
         must be CURRENT; any other state fails closed.
         """
 
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             statement = select(ResourcePermissionMode).where(
                 ResourcePermissionMode.tenant_id == tenant_id,
                 ResourcePermissionMode.resource_type == resource_type,
@@ -302,7 +305,7 @@ class SqlPermissionControlState:
         resource_type: str,
         resource_id: str,
     ) -> tuple[int, str]:
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             statement = select(ResourcePermissionMode).where(
                 ResourcePermissionMode.tenant_id == tenant_id,
                 ResourcePermissionMode.resource_type == resource_type,
@@ -334,7 +337,7 @@ class SqlPermissionControlState:
         tenant_ids = tuple(dict.fromkeys(tenant_id for tenant_id, _, _ in normalized))
         resource_types = tuple(dict.fromkeys(resource_type for _, resource_type, _ in normalized))
         resource_ids = tuple(dict.fromkeys(resource_id for _, _, resource_id in normalized))
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             statement = select(ResourcePermissionMode).where(
                 col(ResourcePermissionMode.tenant_id).in_(tenant_ids),
                 col(ResourcePermissionMode.resource_type).in_(resource_types),
@@ -400,7 +403,7 @@ class SqlPermissionControlState:
             )
             for tenant, resource_type, resource_id in keys
         )
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             with session.no_autoflush, strict_tenant_filter():
                 rows = list(
                     (
@@ -477,7 +480,7 @@ class SqlPermissionControlState:
         target: VerifiedPermissionTarget,
         models: tuple[GrantModelSnapshot, ...],
     ) -> tuple[GrantSnapshot, ...]:
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             grant_rows = list(
                 (
                     await session.execute(
@@ -554,7 +557,7 @@ class SqlPermissionControlState:
         The resource version fence and _upsert_assignee recheck this snapshot
         during prepare, before any OpenFGA write.
         """
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             row = (
                 (
                     await session.execute(
@@ -586,7 +589,7 @@ class SqlPermissionControlState:
     ) -> tuple[VisibleSourceProjectionDTO, ...]:
         """Load the complete active contribution set for one resource scope."""
 
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             rows = list(
                 (
                     await session.execute(
@@ -625,7 +628,7 @@ class SqlPermissionControlState:
     ) -> InheritedGrantSet | None:
         if target.parent_type is None or target.parent_id is None:
             return None
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             ancestor_mode = await self._nearest_custom_ancestor_mode(
                 session,
                 tenant_id=target.tenant_id,
@@ -711,7 +714,7 @@ class SqlPermissionControlState:
             return (), False
         fetch_limit = limit + 1
         inherited_mode: ResourcePermissionMode | None = None
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             local_rows = await self._source_rows(
                 session,
                 tenant_id=target.tenant_id,
@@ -890,8 +893,11 @@ class SqlPermissionControlState:
         target: VerifiedPermissionTarget,
         mode: str,
     ) -> ResourcePermissionMode:
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             async with session.begin():
+                from bisheng.permission.domain.services.maintenance_guard import acheck_transaction
+
+                await acheck_transaction(session)
                 await self._assert_catalog_writable(session)
                 return await self._ensure_mode_row_in_session(
                     session,
@@ -952,8 +958,11 @@ class SqlPermissionControlState:
             context,
             grant,
         )
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             async with session.begin():
+                from bisheng.permission.domain.services.maintenance_guard import acheck_transaction
+
+                await acheck_transaction(session)
                 await self._assert_catalog_writable(session)
                 mode_row = await self._ensure_mode_row_in_session(
                     session,
@@ -1001,8 +1010,11 @@ class SqlPermissionControlState:
         )
         if not projection_grants and visibility is None:
             return
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             async with session.begin():
+                from bisheng.permission.domain.services.maintenance_guard import acheck_transaction
+
+                await acheck_transaction(session)
                 mode = await self._owner_fence(session, context)
                 if (
                     mode.operation_id != outcome.operation_id
@@ -1058,8 +1070,11 @@ class SqlPermissionControlState:
         error: Exception,
     ) -> None:
         del error
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             async with session.begin():
+                from bisheng.permission.domain.services.maintenance_guard import acheck_transaction
+
+                await acheck_transaction(session)
                 mode_row = await self._owner_fence(session, context)
                 operation = await session.get(PermissionProjectionOperation, mode_row.operation_id)
                 if str(operation.status) != "FAILED_CLOSED" or mode_row.version not in {
@@ -1128,8 +1143,11 @@ class SqlPermissionControlState:
         operation_id: int,
     ) -> None:
         del idempotency_key
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             async with session.begin():
+                from bisheng.permission.domain.services.maintenance_guard import acheck_transaction
+
+                await acheck_transaction(session)
                 await self._assert_catalog_writable(
                     session,
                     expected_release_id=(context.current_catalog_release_id),
@@ -1186,8 +1204,11 @@ class SqlPermissionControlState:
         visibility: VisibilityProjectionCompilation | None,
         outcome: ProjectionOutcome,
     ) -> None:
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             async with session.begin():
+                from bisheng.permission.domain.services.maintenance_guard import acheck_transaction
+
+                await acheck_transaction(session)
                 mode = (
                     await session.exec(
                         select(ResourcePermissionMode)
@@ -1262,7 +1283,7 @@ class SqlPermissionControlState:
             candidates = tuple(dict.fromkeys(secrets.randbits(62) or 1 for _ in range(count)))
             if len(candidates) != count:
                 continue
-            async with get_async_db_session() as session:
+            async with self._session_factory() as session:
                 existing = set(
                     (
                         await session.execute(
@@ -1342,8 +1363,11 @@ class SqlPermissionControlState:
             grants=grants,
         )
         await self.finalize_grants(grant_context, grants, visibility, outcome)
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             async with session.begin():
+                from bisheng.permission.domain.services.maintenance_guard import acheck_transaction
+
+                await acheck_transaction(session)
                 await session.execute(
                     update(ResourcePermissionMode)
                     .where(
@@ -1366,8 +1390,11 @@ class SqlPermissionControlState:
         parent_id: str | None = None,
         expected_catalog_release_id: int | None = None,
     ) -> None:
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             async with session.begin():
+                from bisheng.permission.domain.services.maintenance_guard import acheck_transaction
+
+                await acheck_transaction(session)
                 await self._assert_catalog_writable(
                     session,
                     expected_release_id=expected_catalog_release_id,

@@ -129,9 +129,24 @@ class UnificationCoverageRepository:
         return (maximum or 0) + 1
 
     async def awrite_certificate(self, session, *, row, certificate, source_coverage):
+        from types import SimpleNamespace
+
         from sqlalchemy import update
 
+        from bisheng.knowledge.domain.repositories.unification_executor_repository import carry_executor_checkpoint
+        from bisheng.knowledge.domain.repositories.unification_run_repository import KnowledgeUnificationRunRepository
+
         context = CoverageContext(session)
+        # aadvance(verifying→verified) just carried the current attempt. The
+        # caller's census row predates that transition: reread the locked Run
+        # rather than closing an old checkpoint snapshot.
+        current = await KnowledgeUnificationRunRepository()._required(
+            session, row["run_id"], row["writer_contract_version"]
+        )
+        if current.id != row["id"] or current.phase != row["phase"]:
+            blocked("certificate_compare_failed")
+        terminal = SimpleNamespace(phase=current.phase, checkpoints=current.checkpoints)
+        carry_executor_checkpoint(terminal, "completed")
         with context.read():
             result = await session.execute(
                 update(Run.__table__)
@@ -144,6 +159,7 @@ class UnificationCoverageRepository:
                 )
                 .values(
                     phase="completed",
+                    checkpoints=terminal.checkpoints,
                     coverage_epoch=certificate["coverage_epoch"],
                     source_coverage=source_coverage,
                     verification_report={**row["verification_report"], "reference_coverage": certificate},

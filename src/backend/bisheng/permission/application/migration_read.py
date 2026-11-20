@@ -66,6 +66,7 @@ class PinnedMigrationPermissionReader:
         self._client = None
         self._entered = False
         self._tuple_inventory_started = False
+        self.history_view = None
 
     async def __aenter__(self):
         if self._entered:
@@ -133,6 +134,7 @@ class PinnedMigrationPermissionReader:
             raise _blocked("original_tuple_inventory_already_started")
         self._tuple_inventory_started = True
         client = self._client
+        observed_writes = set()
         try:
             async with aclosing(client.iter_tuples(consistency="HIGHER_CONSISTENCY")) as stream:
                 async for key in stream:
@@ -151,8 +153,17 @@ class PinnedMigrationPermissionReader:
                         )
                     ):
                         raise _blocked("original_tuple_key_invalid")
-                    yield OriginalTupleFact(key["user"], key["relation"], key["object"])
+                    triple = key["user"], key["relation"], key["object"]
+                    if self.history_view is not None:
+                        if triple in self.history_view.graph_deletes:
+                            continue
+                        observed_writes.add(triple)
+                    yield OriginalTupleFact(*triple)
             self._tuple_scope(client)
+            if self.history_view is not None:
+                for triple in sorted(self.history_view.graph_writes - observed_writes):
+                    self._tuple_scope(client)
+                    yield OriginalTupleFact(*triple)
         except PermissionMigrationBlockedError:
             raise
         except Exception as error:
@@ -176,6 +187,8 @@ class PinnedMigrationPermissionReader:
             raise _blocked("invalid_absent_file_ids")
         for ident in file_ids:
             rows = await self._client.read_tuples(object=f"knowledge_file:{ident}", consistency="HIGHER_CONSISTENCY")
+            if self.history_view is not None:
+                rows = self.history_view.apply_tuples(rows, object=f"knowledge_file:{ident}")
             self._tuple_scope()
             if get_current_tenant_id() != tenant_id or is_tenant_filter_bypassed():
                 raise _blocked("concrete_native_tenant_required")

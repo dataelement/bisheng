@@ -76,6 +76,33 @@ def codec():
     return importlib.import_module("bisheng.knowledge.application.unification_inventory_codec")
 
 
+@pytest.mark.parametrize("omit", [None, "upgrade_flow_ref", "upgrade_history_after_ref", "upgrade_semantics_sha256"])
+def test_unified_flow_metadata_is_a_closed_complete_group(codec, omit):
+    data = {
+        "writer_contract_version": "f118-v1",
+        "environment": "test",
+        "tenant_count": 1,
+        "tenant_inventory_digest": DIGEST,
+        "backup_ref": None,
+        "schema_ref": None,
+        "catalog_digest": DIGEST,
+        "authorization_model_checksum": DIGEST,
+        "baseline_ref": None,
+        "external_material_policy": "not_required",
+        "upgrade_flow_policy": "unified_v1",
+        "upgrade_flow_ref": DESCRIPTOR,
+        "upgrade_history_sha256": DIGEST,
+        "upgrade_semantics_sha256": DIGEST,
+        "upgrade_history_after_ref": DESCRIPTOR,
+    }
+    if omit:
+        del data[omit]
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            codec.record_from_values("run", **data)
+    else:
+        assert codec.record_from_values("run", **data).data == data
+
+
 def encode(codec, records=(), **changes):
     args = {
         "run_id": RUN,

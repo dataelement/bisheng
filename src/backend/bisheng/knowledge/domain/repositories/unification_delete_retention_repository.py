@@ -33,7 +33,7 @@ class RetainedPermissionDelete:
     reason: str = REASON
 
 
-async def load_facts(session, *, candidates, operation_status="FINALIZED"):
+async def load_facts(session, *, candidates, operation_status="FINALIZED", fact_view=None):
     """Bounded native reads per <=200 receipts; no SQL/FGA writes."""
     from bisheng.knowledge.domain.repositories.unification_inventory_repository import _scope
 
@@ -70,6 +70,25 @@ async def load_facts(session, *, candidates, operation_status="FINALIZED"):
             if len(page) <= 400:
                 break
             cursor = page[399].id
+    if fact_view is not None:
+        from bisheng.knowledge.domain.repositories.unification_history_view_repository import typed_values
+
+        operations = [
+            PermissionProjectionOperation.model_construct(**typed_values(PermissionProjectionOperation, row))
+            for row in await fact_view.exact_rows(session, PermissionProjectionOperation, ids, tenant=tenant)
+        ]
+        original = {row.id: row.model_dump() for row in tuples}
+        for before, after in fact_view.rows(PermissionProjectionTuple.__tablename__, tenant=tenant):
+            row = after or before
+            if row["operation_id"] in ids:
+                if after is None:
+                    original.pop(row["id"], None)
+                else:
+                    original[row["id"]] = after
+        tuples = [
+            PermissionProjectionTuple.model_construct(**typed_values(PermissionProjectionTuple, row))
+            for row in original.values()
+        ]
     if len(operations) != len(ids):
         blocked("incomplete_ledger")
     by_id = {row.id: row for row in operations}

@@ -11,7 +11,7 @@ from bisheng.knowledge.application.unification_coverage import production_covera
 from bisheng.knowledge.application.unification_registration import run_registration
 from bisheng.knowledge.domain.models.knowledge_unification_run import KnowledgeUnificationRun as Run
 from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet as Head
-from test.knowledge_unification.test_migration_cli import arguments, entry, runtime
+from test.knowledge_unification.test_migration_cli import arguments, entry, runtime, seed_cli_operator
 from test.knowledge_unification.test_migration_references_application import (
     complete as complete,
 )
@@ -106,6 +106,7 @@ async def test_uncompleted_permissions_and_wrong_operator_are_rejected(published
     assert caught.value.kwargs["reason"].endswith("publication_binding")
 
 
+@pytest.mark.parametrize("published_input", [{"reference_seed": seed_cli_operator}], indirect=True)
 async def test_cli_registration_requires_existing_resume_and_no_conflicting_stage(published_input):
     value = published_input
     await prepared(value)
@@ -414,9 +415,13 @@ async def test_channel_timestamp_extension_keeps_original_proof_and_committed_pr
     from datetime import datetime
 
     from bisheng.channel.domain.models.channel import Channel
+    from bisheng.knowledge.application.unification_references import ReferenceMigration
     from bisheng.resource_reference.domain.repositories.reference_backfill_repository import ReferenceBackfillRepository
 
     value = published_input
+    # Force an old one-source commit boundary; normal upgrades commit bounded
+    # batches atomically and must roll the workflow back with a failing channel.
+    monkeypatch.setattr(ReferenceMigration, "source_batch_limit", 1)
     application = await prepared(value)
     original_write = ReferenceBackfillRepository.awrite_registered_source
 

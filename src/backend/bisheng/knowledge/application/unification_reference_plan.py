@@ -94,6 +94,14 @@ class LocatedRetired:
 
 
 @dataclass(frozen=True, slots=True)
+class ReferenceReconciliation:
+    proof_refs: tuple = ()
+    registered_additions: tuple = ()
+    native_current: tuple = ()
+    semantic_projections: tuple = ()
+
+
+@dataclass(frozen=True, slots=True)
 class FrozenReferencePlan:
     frozen: FrozenGlobalInventoryResult
     pages: tuple[ReferencePageRef, ...]
@@ -102,6 +110,7 @@ class FrozenReferencePlan:
     retired: tuple[LocatedRetired, ...]
     conversions: tuple = ()
     rootless_retentions: tuple = ()
+    reconciliation: ReferenceReconciliation | None = None
 
 
 @dataclass(frozen=True, slots=True)

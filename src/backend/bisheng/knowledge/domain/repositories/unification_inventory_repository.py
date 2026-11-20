@@ -232,6 +232,18 @@ def _row(row_type, row):
 
 
 class UnificationInventoryRepository:
+    def __init__(self, *, fact_view=None):
+        self.fact_view = fact_view
+
+    async def aload_reference_sources(self, session, *, source_keys, for_update=False):
+        from bisheng.knowledge.domain.repositories.unification_reference_batch_repository import (
+            UnificationReferenceBatchRepository,
+        )
+
+        return await UnificationReferenceBatchRepository(fact_view=self.fact_view).aload_reference_sources(
+            session, source_keys=source_keys, for_update=for_update
+        )
+
     async def ainspect_permission_resource_liveness(
         self, session, *, resources, operations=None, retained_deletes=None
     ):
@@ -287,6 +299,8 @@ class UnificationInventoryRepository:
             rows = await self._read(
                 session, select(*columns).where(model.id.in_(identities), model.tenant_id == _scope(session))
             )
+            if self.fact_view is not None:
+                rows = await self.fact_view.exact_rows(session, model, tuple(identities), tenant=_scope(session))
             for row in rows:
                 result[kind, identities[row["id"]]] = (
                     not row.get("is_delete")
@@ -315,6 +329,13 @@ class UnificationInventoryRepository:
                 ),
             )
             by_id = {row["id"]: row for row in rows}
+            if self.fact_view is not None:
+                by_id = {
+                    row["id"]: row
+                    for row in await self.fact_view.exact_rows(
+                        session, PermissionProjectionOperation, tuple(sorted(ids)), tenant=_scope(session)
+                    )
+                }
             retained = {}
             for key, (ident, version) in operations.items():
                 operation = by_id.get(ident)
@@ -332,7 +353,7 @@ class UnificationInventoryRepository:
             if retained:
                 from bisheng.knowledge.domain.repositories.unification_delete_retention_repository import load_facts
 
-                retained_deletes.extend(await load_facts(session, candidates=retained))
+                retained_deletes.extend(await load_facts(session, candidates=retained, fact_view=self.fact_view))
                 result.update(dict.fromkeys(retained, False))
         return result
 
@@ -341,13 +362,17 @@ class UnificationInventoryRepository:
         from bisheng.core.context.tenant import bypass_tenant_filter
 
         _scope(session)
+        if self.fact_view is not None:
+            await self.fact_view.prepare(session)
+        query = (
+            select(FlowVersion.id)
+            .join(Flow, Flow.id == FlowVersion.flow_id)
+            .where(Flow.flow_type == 10, FlowVersion.tenant_id != Flow.tenant_id)
+        )
+        if self.fact_view is not None:
+            query = self.fact_view.exclude_affected_probe(query)
         with session.no_autoflush, bypass_tenant_filter():
-            mismatch = await session.execute(
-                select(FlowVersion.id)
-                .join(Flow, Flow.id == FlowVersion.flow_id)
-                .where(Flow.flow_type == 10, FlowVersion.tenant_id != Flow.tenant_id)
-                .limit(1)
-            )
+            mismatch = await session.execute(query.limit(1))
             if mismatch.first() is not None:
                 _blocked("workflow_owner_requires_history_preparation")
 
@@ -404,9 +429,21 @@ class UnificationInventoryRepository:
         tenant = _scope(session)
         _pagination(after_id, limit, kind)
         query = select(*_columns(model, row_type)) if statement is None else statement
-        if after_id is not None:
-            query = query.where(model.id > after_id)
-        rows = await self._read(session, query.order_by(model.id).limit(limit + 1))
+        if self.fact_view is not None:
+            rows = await self.fact_view.page_mappings(
+                session,
+                model=model,
+                statement=query,
+                after=after_id,
+                limit=limit + 1,
+                read=self._read,
+                tenant=tenant,
+                aliases={"data_json": "data", "model_transition_json": "model_transition"},
+            )
+        else:
+            if after_id is not None:
+                query = query.where(model.id > after_id)
+            rows = await self._read(session, query.order_by(model.id).limit(limit + 1))
         for row in rows:
             if "tenant_id" in row and row["tenant_id"] != tenant:
                 _blocked("tenant_mismatch")
@@ -685,6 +722,8 @@ class UnificationInventoryRepository:
         if type(source_key) is not SourceKey or source_key.tenant_id != tenant:
             _blocked("source_identity")
         key, kind = source_key, source_key.source_type
+        if self.fact_view is not None:
+            return (await self.aload_reference_sources(session, source_keys=(source_key,)))[source_key]
 
         async def one(model, cls, condition, overrides=None, parent=None):
             query = select(*_columns(model, cls, overrides)).where(condition)
@@ -859,6 +898,8 @@ class UnificationInventoryRepository:
     async def avalidate_registered_source_tenants(self, session):
         """One global native tenant-integrity gate for formal M2/M4 only."""
         _scope(session)
+        if self.fact_view is not None:
+            await self.fact_view.prepare(session)
         from bisheng.core.context.tenant import bypass_tenant_filter
         from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
         from bisheng.resource_reference.domain.models.business_resource_reference import BusinessResourceReference
@@ -886,6 +927,8 @@ class UnificationInventoryRepository:
                 .where(parent.c.id.is_(None))
                 .limit(1)
             )
+            if self.fact_view is not None:
+                query = self.fact_view.exclude_affected_probe(query)
             with session.no_autoflush, strict_tenant_filter(), bypass_tenant_filter():
                 if (await session.execute(query)).first() is not None:
                     _blocked("unregistered_source_or_index_tenant")
