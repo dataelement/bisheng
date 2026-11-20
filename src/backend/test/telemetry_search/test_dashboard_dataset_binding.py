@@ -5,7 +5,7 @@ import pytest
 
 from bisheng.common.errcode.telemetry import QueryMetricNotFoundError
 from bisheng.telemetry_search.domain.init_dataset import DASHBOARD_DATASET
-from bisheng.telemetry_search.domain.schemas.component import ComponentDataConfig
+from bisheng.telemetry_search.domain.schemas.component import ComponentDataConfig, TimeFilter
 from bisheng.telemetry_search.domain.services import component
 
 
@@ -49,6 +49,22 @@ async def test_legacy_chart_queries_its_original_metric_dataset(query_datasets, 
     await query.query_telemetry_data()
     assert [call.args[0].field for call in search.await_args_list] == metrics
     assert {call.kwargs["index_name"] for call in search.await_args_list} == {correct_dataset}
+
+
+async def test_legacy_total_users_card_queries_user_dataset_with_dashboard_time_filter(query_datasets):
+    _, search = query_datasets
+    search.return_value = [[42]]
+    query = component.DataQueryService(
+        dataset_code="mid_sessions_increment",
+        data_config=ComponentDataConfig(metrics=[{"fieldId": "total_user_count", "aggregation": "sum"}]),
+        time_filters=[TimeFilter(type="recent_days", mode="dynamic", recentDays=180)],
+    )
+
+    result = await query.query_telemetry_data()
+
+    search.assert_awaited_once()
+    assert search.await_args.kwargs["index_name"] == "mid_user_increment"
+    assert result.value == [[42]]
 
 
 async def test_unrecognized_metric_is_not_redirected(query_datasets):
