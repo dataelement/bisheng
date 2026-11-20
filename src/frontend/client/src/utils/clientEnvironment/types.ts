@@ -45,11 +45,19 @@ export type ClientEnvironment = Readonly<{
     hasNativePresentation: boolean;
     /** embed=mobile-app opts into a native host owning the entire chat header. */
     hasHostChatHeader: boolean;
+    /** hostBack=1 asks this page to draw a back button for the mobile app. */
+    hasHostBackButton: boolean;
   }>;
+}>;
+
+/** Optional channel injected by the mobile app into a knowledge-space file page. */
+export type BishengMobileHost = Readonly<{
+  postMessage?: (message: string) => void;
 }>;
 
 declare global {
   interface Window {
     dshChatPresentation?: DesktopPresentation;
+    BishengMobile?: BishengMobileHost;
   }
 }
