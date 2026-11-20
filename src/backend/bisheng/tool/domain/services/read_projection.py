@@ -43,14 +43,20 @@ def mask_configuration(value):
 
 
 def tool_read_view(model, *, include_configuration: bool):
-    """The editor may inspect config shape; use-only callers only need metadata."""
-    result = model.model_copy(deep=True)
-    result.api_key = MASK if result.api_key else result.api_key
-    result.extra = mask_configuration(result.extra) if include_configuration else "{}"
-    result.openapi_schema = mask_configuration(result.openapi_schema) if include_configuration else ""
-    for child in result.children or []:
-        child.extra = mask_configuration(child.extra) if include_configuration else None
-    return result
+    """The editor may inspect config shape; use-only callers only need metadata.
+
+    Build from ``model_dump`` rather than mutating a ``model_copy`` of a live
+    SQLAlchemy instance: assigning ``extra`` on a copied ORM graph can raise
+    ``ObjectDereferencedError`` once the parent has been garbage-collected.
+    """
+    data = model.model_dump()
+    data["api_key"] = MASK if data.get("api_key") else data.get("api_key")
+    data["extra"] = mask_configuration(data.get("extra")) if include_configuration else "{}"
+    data["openapi_schema"] = mask_configuration(data.get("openapi_schema")) if include_configuration else ""
+    for child in data.get("children") or []:
+        if isinstance(child, dict):
+            child["extra"] = mask_configuration(child.get("extra")) if include_configuration else None
+    return type(model).model_validate(data)
 
 
 def restore_masked_configuration(submitted, original):

@@ -37,6 +37,7 @@ def _authorized_legacy_version_fixture(request, monkeypatch):
     """
     if not request.node.path.stem.startswith("test_knowledge_version_service_"):
         return
+    request.getfixturevalue("tenant_context")(1)
     from sqlmodel import select
 
     from bisheng.knowledge.domain.models.knowledge import Knowledge

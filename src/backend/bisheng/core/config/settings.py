@@ -287,10 +287,9 @@ class WorkflowConf(BaseModel):
     code_node_enabled: bool = Field(
         default=False,
         description=(
-            "Whether workflows may run their Code node. Off unless an operator turns it on: "
-            "the node executes user-supplied Python with this process's privileges and there "
-            "is no execution sandbox yet, so while it is on, everyone who can edit a workflow "
-            "can run commands on the server."
+            "Whether workflows may run their Code node. Off unless an operator turns it on. "
+            "User code is not executed in this process: the backend-host local executor is rejected, "
+            "and a run uses only a configured external container or e2b interpreter."
         ),
     )
 
