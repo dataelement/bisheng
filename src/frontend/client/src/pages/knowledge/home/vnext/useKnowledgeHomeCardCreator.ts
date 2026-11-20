@@ -1,14 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getSpaceInfoApi, type KnowledgeSpace } from '~/api/knowledge';
+import { useAuthContext } from '~/hooks';
 import { isDemoId } from '~/mock/demo/ids';
 
 /** Resolve omitted creator names only after their card enters the viewport. */
 export function useKnowledgeHomeCardCreator(space: KnowledgeSpace) {
+  const { user } = useAuthContext();
   const cardRef = useRef<HTMLElement>(null);
   const [visible, setVisible] = useState(false);
-  const creator = space.creator?.trim();
-  const needsCreator = !creator && !!space.creatorId && !isDemoId(space.id);
+  const demo = isDemoId(space.id);
+  const currentCreator = !demo && user && space.creatorId && space.creatorId === String(user.id) ? user : undefined;
+  const creator = currentCreator?.username?.trim() || space.creator?.trim();
+  const needsCreator = !creator && !!space.creatorId && !demo;
 
   useEffect(() => {
     const card = cardRef.current;
@@ -39,6 +43,6 @@ export function useKnowledgeHomeCardCreator(space: KnowledgeSpace) {
   return {
     cardRef,
     creator: creator || creatorInfo.data?.creator?.trim(),
-    creatorAvatar: space.creatorAvatar || creatorInfo.data?.creatorAvatar,
+    creatorAvatar: currentCreator ? currentCreator.avatar : space.creatorAvatar || creatorInfo.data?.creatorAvatar,
   };
 }
