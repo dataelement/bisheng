@@ -10,10 +10,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { alertContext } from "../../contexts/alertContext";
 import { deleteTaskApi, getTasksApi } from "../../controllers/API/finetune";
 import { useDebounce, useTable } from "../../util/hook";
-import CreateTask from "./components/CreateTask";
-import FinetuneDetail, { BadgeView } from "./components/FinetuneDetail";
-import FinetuneHead from "./components/FinetuneHead";
-import RTConfig from "./components/RTConfig";
+import { CreateTask } from "./components/CreateTask";
+import { FinetuneDetail, BadgeView } from "./components/FinetuneDetail";
+import { FinetuneHead } from "./components/FinetuneHead";
+import { RTConfig } from "./components/RTConfig";
 import { CpuDetail } from "./cpuInfo";
 
 export const Finetune = () => {
@@ -35,6 +35,7 @@ function FinetuneContent() {
     }, [i18n]);
 
     const [rtOpen, setRTOpen] = useState(false)
+    const [servicesVersion, setServicesVersion] = useState(0)
     const [showCpu, setShowCpu] = useState({
         type: 'model',
         show: false
@@ -128,6 +129,7 @@ function FinetuneContent() {
             {
                 createOpen && <div>
                     <CreateTask
+                        servicesVersion={servicesVersion}
                         rtClick={canManageServices ? () => setRTOpen(true) : undefined}
                         gpuClick={() => setShowCpu({ type: 'finetune', show: true })}
                         onCancel={() => setCreateOpen(false)}
@@ -140,7 +142,7 @@ function FinetuneContent() {
             }
         </div>
         {/* FT services */}
-        {canManageServices && <RTConfig open={rtOpen} onChange={() => setRTOpen(false)}></RTConfig>}
+        {canManageServices && <RTConfig open={rtOpen} onChange={() => { setRTOpen(false); setServicesVersion(value => value + 1); }}></RTConfig>}
         {/* GPU usage */}
         <Dialog open={showCpu.show} onOpenChange={(show) => setShowCpu({ ...showCpu, show })}>
             <DialogContent className="sm:max-w-[80%]">

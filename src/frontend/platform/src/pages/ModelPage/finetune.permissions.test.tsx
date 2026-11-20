@@ -10,10 +10,10 @@ vi.mock('@/contexts/userContext', () => ({ userContext: createContext({ user: {}
 vi.mock('@/hooks/useKnowledgePageScope', () => ({ useKnowledgePageScope: () => ({ scopes: { ordinary: { identityKey: 'user:849', tenantId: mock.tenant, managementTenantId: mock.tenant } } }) }));
 vi.mock('@/util/hook', () => ({ useDebounce: (fn: unknown) => fn, useTable: () => ({ page: 1, pageSize: 10, data: [], total: 0 }) }));
 vi.mock('@/controllers/API/finetune', () => ({ getTasksApi: vi.fn(), deleteTaskApi: vi.fn() }));
-vi.mock('./components/FinetuneHead', () => ({ default: ({ rtClick, onCreate }: { rtClick?: () => void; onCreate: () => void }) => <><button onClick={onCreate}>Create task</button>{rtClick && <button onClick={rtClick}>Manage services</button>}</> }));
-vi.mock('./components/CreateTask', () => ({ default: ({ rtClick }: { rtClick?: () => void }) => <div>Task form{rtClick && <span>Form service management</span>}</div> }));
-vi.mock('./components/RTConfig', () => ({ default: () => { mock.serviceManagement(); return null; } }));
-vi.mock('./components/FinetuneDetail', () => ({ default: () => null, BadgeView: () => null }));
+vi.mock('./components/FinetuneHead', () => ({ FinetuneHead: ({ rtClick, onCreate }: { rtClick?: () => void; onCreate: () => void }) => <><button onClick={onCreate}>Create task</button>{rtClick && <button onClick={rtClick}>Manage services</button>}</> }));
+vi.mock('./components/CreateTask', () => ({ CreateTask: ({ rtClick }: { rtClick?: () => void }) => <div>Task form{rtClick && <span>Form service management</span>}</div> }));
+vi.mock('./components/RTConfig', () => ({ RTConfig: () => { mock.serviceManagement(); return null; } }));
+vi.mock('./components/FinetuneDetail', () => ({ FinetuneDetail: () => null, BadgeView: () => null }));
 vi.mock('./cpuInfo', () => ({ CpuDetail: () => null }));
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 

@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import FinetuneHead from './FinetuneHead'
+import { FinetuneHead } from './FinetuneHead'
 
 vi.mock('@/controllers/API', () => ({ getAllServicesApi: vi.fn().mockResolvedValue([
     { id: null, server_name: 'Invalid service' }, { id: '', server_name: 'Empty service' },

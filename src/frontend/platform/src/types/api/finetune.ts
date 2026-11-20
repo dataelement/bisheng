@@ -48,4 +48,5 @@ export interface FileItem {
     sampleSize: number;
     name: string;
     dataSource: string;
+    datasetReport?: Record<string, unknown>;
 }

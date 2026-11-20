@@ -1,31 +1,87 @@
-from fastapi import APIRouter, Body, Depends, File, Query, UploadFile
+from typing import Literal
+
+from fastapi import APIRouter, Body, Depends, File, Query, Request, UploadFile
+from fastapi.responses import Response
 from loguru import logger
+from pydantic import ValidationError
 
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.finetune import InvalidDatasetPackageError, InvalidExtraParamsError
 from bisheng.common.schemas.api import PageData, resp_200
 from bisheng.finetune.api.dependencies import get_dataset_user, get_finetune_user
 from bisheng.finetune.domain.models.finetune import Finetune, FinetuneChangeModelName, FinetuneList
+from bisheng.finetune.domain.services.datasets import DatasetService
 from bisheng.finetune.domain.services.finetune import FinetuneService
 from bisheng.finetune.domain.services.finetune_file import FinetuneFileService
 
-from ..schemas import FinetuneCreateReq
+from ..schemas import DatasetImportReq, FinetuneCreateReq, FinetuneInferenceReq, FinetunePreflightReq
 
 # Tasks use the model menu; datasets retain their own independent menu gate.
 router = APIRouter(prefix="/finetune", tags=["Finetune"])
 
 
+async def parse_create_job(request: Request) -> FinetuneCreateReq:
+    # The body may carry dataset source secrets; validation errors must not echo or log it.
+    raw = await request.body()
+    try:
+        return FinetuneCreateReq.model_validate_json(raw)
+    except ValidationError as exc:
+        errors = exc.errors(include_input=False, include_context=False, include_url=False)
+        messages = [f"{'.'.join(map(str, item['loc'])) or 'body'}: {item['msg']}" for item in errors[:5]]
+        raise InvalidExtraParamsError(msg="Invalid training request: " + "; ".join(messages)) from None
+
+
 # create finetune job
 @router.post("/job")
-async def create_job(*, finetune: FinetuneCreateReq, login_user: UserPayload = Depends(get_finetune_user)):
-    # get login user
+async def create_job(
+    *,
+    finetune: FinetuneCreateReq = Depends(parse_create_job),
+    login_user: UserPayload = Depends(get_finetune_user),
+):
+    credentials = finetune.dataset_credentials
+    request_data = finetune.model_dump(exclude={"method", "contract_version", "capability_id"})
+    if finetune.contract_version == 2:
+        # Legacy extra_params are validated strictly, so only contract v2 carries these markers.
+        request_data["extra_params"]["contract_version"] = 2
+        if finetune.capability_id:
+            request_data["extra_params"]["capability_id"] = finetune.capability_id
     finetune = Finetune(
-        **finetune.model_dump(exclude={"method"}),
-        method=finetune.method.value,
-        user_id=login_user.user_id,
-        user_name=login_user.user_name,
+        **request_data, method=finetune.method.value, user_id=login_user.user_id, user_name=login_user.user_name
     )
-    ret = await FinetuneService.create_job(finetune, login_user)
+    ret = await FinetuneService.create_job(finetune, login_user, credentials)
     return resp_200(ret)
+
+
+# Contract v2 task endpoints share the task gate: the current tenant's model menu.
+@router.get("/capabilities")
+async def get_capabilities(*, server_id: int, login_user: UserPayload = Depends(get_finetune_user)):
+    return resp_200(await FinetuneService.get_capabilities(server_id))
+
+
+@router.post("/preflight")
+async def preflight(*, request: FinetunePreflightReq, login_user: UserPayload = Depends(get_finetune_user)):
+    return resp_200(await FinetuneService.preflight(request))
+
+
+@router.post("/job/{job_id}/validate")
+async def validate_inference(
+    *, job_id: str, request: FinetuneInferenceReq, login_user: UserPayload = Depends(get_finetune_user)
+):
+    return resp_200(await FinetuneService.validate_inference(job_id, request))
+
+
+@router.post("/job/{job_id}/media")
+@router.post("/job/{job_id}/validate-media", include_in_schema=False)
+async def upload_validation_media(
+    *,
+    job_id: str,
+    file: UploadFile = File(...),
+    login_user: UserPayload = Depends(get_finetune_user),
+):
+    try:
+        return resp_200(await FinetuneService.upload_validation_media(job_id, file, login_user))
+    finally:
+        await file.close()
 
 
 # Delete training task
@@ -203,3 +259,55 @@ async def get_training_data(
 @router.get("/training-data/download")
 async def download_training_data(file_url: str, login_user: UserPayload = Depends(get_finetune_user)):
     return resp_200({"url": await FinetuneFileService.get_download_url(file_url, login_user)})
+
+
+# Training dataset versions for contract v2 tasks (tenant records; see DatasetService).
+@router.get("/datasets")
+async def list_datasets(
+    data_type: Literal["text", "image_text", "video_text"] | None = None,
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=20, ge=1, le=100),
+    login_user: UserPayload = Depends(get_finetune_user),
+):
+    return resp_200(await DatasetService.list_versions(data_type, page, limit))
+
+
+async def parse_dataset_import(request: Request) -> DatasetImportReq:
+    # The legacy global 422 handler echoes/logs validation inputs. Never send connection
+    # credentials to that path, including malformed requests missing a required field.
+    raw = bytearray()
+    async for chunk in request.stream():
+        raw.extend(chunk)
+        if len(raw) > 22 * 1024 * 1024:
+            raise InvalidDatasetPackageError(msg="Import request exceeds 22 MiB")
+    try:
+        return DatasetImportReq.model_validate_json(raw)
+    except ValidationError as exc:
+        errors = exc.errors(include_input=False, include_context=False, include_url=False)
+        messages = [f"{'.'.join(map(str, item['loc'])) or 'body'}: {item['msg']}" for item in errors[:5]]
+        raise InvalidDatasetPackageError(msg="Invalid import request: " + "; ".join(messages)) from None
+
+
+@router.post("/datasets/import")
+async def import_dataset(
+    request: DatasetImportReq = Depends(parse_dataset_import),
+    login_user: UserPayload = Depends(get_finetune_user),
+):
+    return resp_200(await DatasetService.import_version(request, login_user))
+
+
+@router.get("/datasets/{version_id}/preview")
+async def preview_dataset(version_id: str, login_user: UserPayload = Depends(get_finetune_user)):
+    return resp_200(await DatasetService.preview(version_id))
+
+
+@router.get("/datasets/{version_id}/media")
+async def preview_dataset_media(
+    version_id: str, path: str = Query(max_length=2048), login_user: UserPayload = Depends(get_finetune_user)
+):
+    content, content_type = await DatasetService.media(version_id, path)
+    return Response(
+        content,
+        media_type=content_type,
+        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
+    )
