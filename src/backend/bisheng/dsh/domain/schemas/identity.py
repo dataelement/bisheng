@@ -14,3 +14,4 @@ class IdentityRecord:
     active: bool
     tenant_active: bool
     natural_person: bool
+    external_id: str | None = None

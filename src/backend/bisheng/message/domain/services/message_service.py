@@ -26,6 +26,7 @@ from bisheng.message.domain.schemas.message_schema import (
 from bisheng.message.domain.services.approval_handler import ApprovalHandler
 from bisheng.message.domain.services.notification_content import infer_action_code
 from bisheng.notification.forwarder import maybe_forward_external
+from bisheng.user.application.avatar import read_visible_user_avatar_urls
 from bisheng.user.domain.models.user import UserDao
 
 logger = logging.getLogger(__name__)
@@ -166,12 +167,15 @@ class MessageService:
             read_message_ids=read_message_ids,
         )
 
-        # 5. Batch query sender user names
-        sender_ids = list({m.sender for m in messages})
+        # 5. Resolve sender display data for the messages already selected for this recipient.
+        sender_ids = list({msg.sender for msg in messages if msg.sender > 0})
         sender_map: dict[int, str] = {}
         if sender_ids:
             users = await UserDao.aget_user_by_ids(sender_ids)
             sender_map = {u.user_id: u.user_name for u in users}
+        sender_avatars = await read_visible_user_avatar_urls(
+            (msg.tenant_id, msg.sender) for msg in messages if msg.tenant_id is not None and msg.sender > 0
+        )
 
         # 6. Batch query group names for users referenced in message content
         content_user_ids = self._extract_content_user_ids(messages)
@@ -183,9 +187,12 @@ class MessageService:
             items.append(
                 MessageItemResponse(
                     id=msg.id,
-                    content=self._enrich_message_content_with_group_names(msg.content, user_group_name_map),
+                    content=self._build_message_display_content(msg.content, user_group_name_map),
                     sender=msg.sender,
                     sender_name=sender_map.get(msg.sender),
+                    sender_avatar=sender_avatars.get((msg.tenant_id, msg.sender))
+                    if msg.tenant_id is not None
+                    else None,
                     message_type=msg.message_type.value,
                     status=msg.status.value,
                     action_code=msg.action_code,
@@ -207,7 +214,9 @@ class MessageService:
                 if item.get("type") != "user":
                     continue
 
-                metadata = item.get("metadata") or {}
+                metadata = item.get("metadata")
+                if not isinstance(metadata, dict):
+                    continue
                 user_id = metadata.get("user_id")
                 if isinstance(user_id, int):
                     user_ids.add(user_id)
@@ -224,11 +233,11 @@ class MessageService:
         return {user_id: [group.group_name for group in groups] for user_id, groups in user_groups_map.items()}
 
     @staticmethod
-    def _enrich_message_content_with_group_names(
+    def _build_message_display_content(
         content: list[dict[str, Any]],
         user_group_name_map: dict[int, list[str]],
     ) -> list[dict[str, Any]]:
-        """Attach group_names into metadata for content items with type=user."""
+        """Decorate user content without returning legacy avatars from the stored snapshot."""
         enriched_content = []
         for item in content or []:
             if item.get("type") != "user":
@@ -241,13 +250,12 @@ class MessageService:
                 continue
 
             user_id = metadata.get("user_id")
-            if not isinstance(user_id, int):
-                enriched_content.append(item)
-                continue
-
             new_item = dict(item)
             new_metadata = dict(metadata)
-            new_metadata["group_names"] = user_group_name_map.get(user_id, [])
+            new_metadata.pop("avatar", None)
+            new_metadata.pop("user_avatar", None)
+            if isinstance(user_id, int):
+                new_metadata["group_names"] = user_group_name_map.get(user_id, [])
             new_item["metadata"] = new_metadata
             enriched_content.append(new_item)
 

@@ -105,6 +105,7 @@ class MessageItemResponse(BaseModel):
     content: list[Any] = Field(default_factory=list, description="Message content array")
     sender: int = Field(..., description="Sender user ID")
     sender_name: str | None = Field(default=None, description="Sender display name")
+    sender_avatar: str | None = Field(default=None, description="Current avatar URL visible in the message tenant")
     message_type: str = Field(..., description="Message type: notify or approve")
     status: str = Field(..., description="Message status")
     action_code: str | None = Field(default=None, description="Approval action code for handler routing")

@@ -30,6 +30,7 @@ class CurrentIdentityRecords:
                 tenant_active=bool(tenant and tenant.status == "active" and membership.status == "active"),
                 # Service accounts live in their own credential domain, never in this user lookup.
                 natural_person=True,
+                external_id=user.external_id,
             )
         except SQLAlchemyError:
             raise DshAuthorizationUnavailableError() from None

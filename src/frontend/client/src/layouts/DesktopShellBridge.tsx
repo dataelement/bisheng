@@ -1,6 +1,8 @@
 import { useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { useLocalize } from "~/hooks";
+import { QueryKeys } from "~/types/chat";
 import { workbenchBranding } from "~/components/Chat/workbenchBranding";
 import { useLocation } from "react-router-dom";
 import { useClientEnvironment } from "~/hooks/useClientEnvironment";
@@ -29,6 +31,7 @@ export function DesktopShellBridge() {
     channel,
     capabilities: { hasNativePresentation },
   } = useClientEnvironment();
+  const queryClient = useQueryClient();
   const { pathname, search } = useLocation();
   const { data: bsConfig } = useGetBsConfig();
   const localize = useLocalize();
@@ -56,6 +59,12 @@ export function DesktopShellBridge() {
     if (channel === "desktop")
       readDesktopPresentation().reportNavigation?.(JSON.parse(payload));
   }, [payload, channel, hasNativePresentation]);
+  useEffect(() => {
+    if (channel !== "desktop" || !hasNativePresentation) return;
+    return readDesktopPresentation().onProfileChanged?.(() => {
+      void queryClient.invalidateQueries({ queryKey: [QueryKeys.user], exact: true });
+    });
+  }, [channel, hasNativePresentation, queryClient]);
   // The host drops activity reported under a stale path, e.g. while /c/new becomes /c/<id>.
   useEffect(() => {
     resendConversationActivity();

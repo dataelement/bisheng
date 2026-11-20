@@ -114,7 +114,7 @@
   },
   "src/api/user.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 10
+      "count": 9
     }
   },
   "src/common/types.ts": {
@@ -944,7 +944,7 @@
   },
   "src/components/Nav/AccountSettings.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 5
+      "count": 4
     },
     "no-restricted-imports": {
       "count": 1
@@ -2106,10 +2106,10 @@
   },
   "src/pages/Subscription/ChannelPreviewDrawer.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 8
+      "count": 7
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 3
+      "count": 1
     },
     "react-hooks/exhaustive-deps": {
       "count": 1

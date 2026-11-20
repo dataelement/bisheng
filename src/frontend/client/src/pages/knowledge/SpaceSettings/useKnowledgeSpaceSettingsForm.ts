@@ -59,6 +59,7 @@ function permissionEntryToDraftRow(
     subjectType: entry.subject.type,
     subjectId: Number(entry.subject.id),
     subjectName: entry.subject.name ?? "",
+    avatar: entry.subject.avatar,
     modelKey: entry.model.key,
     modelName: entry.model.name,
     modelActive: entry.model.active,

@@ -1,8 +1,7 @@
 // @ts-strict-ignore
 import { useSelectLabels } from '@/components/bs-comp/formFields/useSelectLabels';
-import { Alert, Button, Select } from '@bisheng/ui';
-
-import { Checkbox } from '@bisheng/ui';
+import { resolveUserAvatarUrl } from '@bisheng/identity';
+import { Alert, Button, Checkbox, Select, UserAvatar } from '@bisheng/ui';
 import {
   getGrantablePermissionModelsApi,
   mutateResourceGrantsApi,
@@ -14,7 +13,7 @@ import {
 } from "@/controllers/API/permission"
 import { showApiError } from "@/controllers/request"
 import { LockKeyhole } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { Fragment, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { canMutatePermissionAssignee } from "./assigneePolicy"
 import { SourceBadge } from "./SourceBadge"
@@ -287,9 +286,13 @@ export function PermissionGrantTab({
   const subjectLabel = t(
     `subject.${subjectType === "user_group" ? "userGroup" : subjectType}`,
   )
-  const selectedSummaryText = selectedSubjects
-    .map((subject) => [subject.externalId ? `${subject.name} (${t(`subjectSearch.${subject.type}Id`, { ns: "bs" })}: ${subject.externalId})` : subject.name, subject.departmentPath].filter(Boolean).join(" / "))
-    .join("、")
+  const selectedSummary = selectedSubjects.map((subject) => ({
+    subject,
+    label: [
+      subject.externalId ? `${subject.name} (${t(`subjectSearch.${subject.type}Id`, { ns: "bs" })}: ${subject.externalId})` : subject.name,
+      subject.departmentPath,
+    ].filter(Boolean).join(" / "),
+  }))
   const subjectPicker = (
     <>
       {subjectType === "user" && (
@@ -363,8 +366,23 @@ export function PermissionGrantTab({
             <span className="shrink-0 text-[14px] font-normal leading-[22px] text-[#999999]">
               {`${t("action.grant")}${subjectLabel}:`}
             </span>
-            <span className="truncate text-[14px] leading-[22px] text-[#4E5969]" title={selectedSummaryText}>
-              {selectedSummaryText}
+            <span className="truncate text-[14px] leading-[22px] text-[#4E5969]" title={selectedSummary.map(({ label }) => label).join("、")}>
+              {selectedSummary.map(({ subject, label }, index) => (
+                <Fragment key={subject.id}>
+                  {index > 0 && "、"}
+                  <span className="inline-flex items-center gap-1 align-middle">
+                    {subject.type === "user" && (
+                      <UserAvatar
+                        className="size-4"
+                        fallbackClassName="text-[10px]"
+                        name={subject.name}
+                        src={resolveUserAvatarUrl(subject.avatar, __APP_ENV__.BASE_URL)}
+                      />
+                    )}
+                    {label}
+                  </span>
+                </Fragment>
+              ))}
             </span>
           </div>
 

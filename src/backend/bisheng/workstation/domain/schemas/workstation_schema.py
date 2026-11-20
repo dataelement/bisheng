@@ -2,7 +2,7 @@ import json
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from bisheng.database.models.message import ChatMessage
 from bisheng.database.models.session import MessageSession, MessageSessionDao
@@ -17,6 +17,7 @@ class WorkstationMessage(BaseModel):
     model: str | None
     parentMessageId: str | None
     user_name: str | None
+    user_avatar: str | None = Field(default=None, exclude_if=lambda value: value is None)
     sender: str
     text: str
     updateAt: datetime
@@ -51,7 +52,7 @@ class WorkstationMessage(BaseModel):
         return str(value)
 
     @classmethod
-    async def from_chat_message(cls, message: ChatMessage):
+    async def from_chat_message(cls, message: ChatMessage, *, user_avatar: str | None = None):
         files = json.loads(message.files) if message.files else []
         extra = json.loads(message.extra) if message.extra else {}
         user_model = await UserDao.aget_user(message.user_id)
@@ -66,7 +67,8 @@ class WorkstationMessage(BaseModel):
             parentMessageId=extra.get("parentMessageId"),
             error=extra.get("error", False),
             unfinished=extra.get("unfinished", False),
-            user_name=user_model.user_name,
+            user_name=user_model.user_name if user_model else None,
+            user_avatar=user_avatar,
             sender=message.sender,
             text=message.message,
             files=files,

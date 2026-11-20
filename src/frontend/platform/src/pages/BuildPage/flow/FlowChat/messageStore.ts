@@ -56,7 +56,7 @@ type Actions = {
 
 
 
-export const createMessageStore = () => {
+export const createMessageStore = (readAuthorId?: () => number | undefined) => {
 const store = createStore<State & Actions>((set, get) => ({
     eventTarget: new EventTarget(),
     historyGeneration: 0,
@@ -111,6 +111,7 @@ const store = createStore<State & Actions>((set, get) => ({
                 [...state.messages, {
                     ...bsMsgItem,
                     category: 'question',
+                    user_id: readAuthorId?.() ?? bsMsgItem.user_id,
                     message_id: generateUUID(8),
                     message: msg,
                     create_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss')
@@ -155,7 +156,6 @@ const store = createStore<State & Actions>((set, get) => ({
     overWsMsg(data) {
         // 删除所有未结束消息
         if (data.type === 'end_cover' && data.message) {
-            console.log('触发安全审计,删除所有未结束消息 :>> ');
             data.category = "stream_msg"
             data.type = 'over'
             data.message_id = generateUUID(8)

@@ -329,6 +329,7 @@ export async function checkResourceAction(
 export interface GrantUser {
   user_id: number;
   user_name: string;
+  avatar?: string | null;
   external_id?: string | null;
   primary_department_path?: string | null;
 }

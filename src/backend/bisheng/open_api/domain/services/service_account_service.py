@@ -39,8 +39,10 @@ from bisheng.open_api.domain.schemas.service_account import (
     ServiceAccountPage,
     ServiceAccountUpdate,
 )
+from bisheng.open_api.domain.schemas.service_account_scope import ServiceAccountOwnerCandidate
 from bisheng.open_api.domain.services.credential_service import CredentialService
 from bisheng.open_api.domain.services.service_account_scope_service import ServiceAccountScopeService
+from bisheng.user.application.avatar import read_visible_user_avatar_urls
 
 AUDIT_TARGET_TYPE = "service_account"
 
@@ -57,7 +59,19 @@ class ServiceAccountService:
         tenant_id = ServiceAccountScopeService.admitted_tenant()
         if tenant_id is None:
             raise ServiceAccountManagementScopeChangedError()
-        return await OwnerRepository.list_management_owners(tenant_id, keyword=keyword, page=page, page_size=page_size)
+        owners, total = await OwnerRepository.list_management_owners(
+            tenant_id, keyword=keyword, page=page, page_size=page_size
+        )
+        avatars = await read_visible_user_avatar_urls((tenant_id, owner.user_id) for owner in owners if owner.avatar)
+        return [
+            ServiceAccountOwnerCandidate(
+                user_id=owner.user_id,
+                user_name=owner.user_name,
+                tenant_id=owner.tenant_id,
+                avatar=avatars.get((tenant_id, owner.user_id)),
+            )
+            for owner in owners
+        ], total
 
     @classmethod
     async def get_row(cls, service_account_id: int, *, include_deleted: bool = False) -> ServiceAccount:

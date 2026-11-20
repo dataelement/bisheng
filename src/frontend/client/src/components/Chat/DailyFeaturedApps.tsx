@@ -60,8 +60,8 @@ export function DailyFeaturedApps({ t }: DailyFeaturedAppsProps) {
 
   return (
     <div className="relative z-10 w-full pb-24">
-      <div className="flex justify-between items-center mb-3 text-sm text-gray-500 max-w-[800px] mx-auto px-4">
-        <h2 className="text-sm text-gray-400">{t("dshChat.recommendedApps")}</h2>
+      <div className="chat-welcome-apps-header">
+        <h3 className="chat-welcome-section-title">{t("dshChat.recommendedApps")}</h3>
       </div>
       <div className="relative max-w-[800px] mx-auto px-4">
         <div className="pr-1">

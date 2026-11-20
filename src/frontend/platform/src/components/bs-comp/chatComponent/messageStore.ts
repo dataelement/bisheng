@@ -51,7 +51,7 @@ type Actions = {
 
 const runLogsTypes = ['tool', 'flow', 'knowledge']
 
-export const createMessageStore = () => {
+export const createMessageStore = (readAuthorId?: () => number | undefined) => {
 const store = createStore<State & Actions>((set, get) => ({
     eventTarget: new EventTarget(),
     historyGeneration: 0,
@@ -97,6 +97,7 @@ const store = createStore<State & Actions>((set, get) => ({
             messages:
                 [...state.messages, {
                     isSend: true,
+                    user_id: readAuthorId?.(),
                     message: inputs,
                     chatKey: inputKey,
                     thought: '',

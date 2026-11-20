@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Camera } from "lucide-react";
 import { Outlined } from 'bisheng-icons';
+import { resolveUserAvatarUrl } from '@bisheng/identity';
 import { useQueryClient } from "@tanstack/react-query";
 import { Button, Tooltip } from '@bisheng/ui';
 import { uploadUserAvatarFileApi, type NicknameProfile } from "~/api/user";
 import { NotificationSeverity } from "~/common";
-import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
+import { UserAvatar } from "~/components/ui/Avatar";
 import { useLocalize } from "~/hooks";
 import { useToastContext } from "~/Providers";
 // Moved verbatim from the retired AccountInfoDialog — store.user is a frozen legacy atom (ledger #5), no new atoms added.
@@ -23,14 +24,14 @@ const accountFieldLabelClassName = 'mb-1 text-[14px] text-[#86909c]';
 const inlineActionClassName = '-ms-[0.3125rem] shrink-0 text-text-3';
 
 export interface AccountSectionProps {
+    userId?: string;
     username: string;
     account?: string | null;
     avatarUrl: string;
-    onAvatarUpdated?: (url: string) => void;
 }
 
 /** Basic info (avatar + username) and security settings (password), formerly AccountInfoDialog. */
-export function AccountSection({ username, account, avatarUrl, onAvatarUpdated }: AccountSectionProps) {
+export function AccountSection({ userId, username, account, avatarUrl }: AccountSectionProps) {
     const localize = useLocalize();
     const editNicknameLabel = localize('accountIdentity.editNickname');
     const copyAccountLabel = localize('accountIdentity.copyAccount');
@@ -40,7 +41,7 @@ export function AccountSection({ username, account, avatarUrl, onAvatarUpdated }
     const [isEditing, setIsEditing] = useState(false);
     const [isEditingNickname, setIsEditingNickname] = useState(false);
     const [currentNickname, setCurrentNickname] = useState(username);
-    const [currentAvatarUrl, setCurrentAvatarUrl] = useState(avatarUrl);
+    const [uploadingAvatar, setUploadingAvatar] = useState(false);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     const handleCopyAccount = async () => {
         if (!account) return;
@@ -68,14 +69,10 @@ export function AccountSection({ username, account, avatarUrl, onAvatarUpdated }
         showToast({ message: localize('accountIdentity.nicknameSaved'), severity: NotificationSeverity.SUCCESS });
     };
 
-    // Keep the in-dialog avatar in sync when the caller updates it
-    useEffect(() => {
-        setCurrentAvatarUrl(avatarUrl);
-    }, [avatarUrl]);
-
     const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
+        const input = e.currentTarget;
+        const file = input.files?.[0];
+        if (!file || userId == null || uploadingAvatar) return;
 
         const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
         if (!allowedTypes.includes(file.type)) {
@@ -83,23 +80,24 @@ export function AccountSection({ username, account, avatarUrl, onAvatarUpdated }
                 message: localize("com_account_info_toast_images_only"),
                 severity: NotificationSeverity.WARNING,
             });
-            e.target.value = "";
+            input.value = "";
             return;
         }
 
-        let viewUrl: string | null = null;
+        setUploadingAvatar(true);
         try {
-            // Directly upload to backend so it returns a valid avatar URL.
             const { avatar } = await uploadUserAvatarFileApi(file);
-            if (!avatar) {
+            const viewUrl = resolveUserAvatarUrl(avatar, __APP_ENV__.BASE_URL);
+            if (!viewUrl) {
                 throw new Error("missing avatar url in response");
             }
-            viewUrl = avatar.startsWith("/")
-                ? `${__APP_ENV__.BASE_URL}${avatar}`
-                : `${__APP_ENV__.BASE_URL}/${avatar}`;
-
-            setCurrentAvatarUrl(viewUrl);
-            onAvatarUpdated?.(viewUrl);
+            const update = (previous: TUser | undefined) =>
+                previous && String(previous.id) === String(userId)
+                    ? { ...previous, avatar: viewUrl }
+                    : previous;
+            setUser(update);
+            queryClient.setQueryData<TUser>([QueryKeys.user], update);
+            void queryClient.invalidateQueries({ queryKey: [QueryKeys.user], exact: true });
             showToast({
                 message: localize("com_account_info_toast_avatar_updated"),
                 severity: NotificationSeverity.SUCCESS,
@@ -110,20 +108,9 @@ export function AccountSection({ username, account, avatarUrl, onAvatarUpdated }
                 message: localize("com_account_info_toast_avatar_upload_failed"),
                 severity: NotificationSeverity.WARNING,
             });
-        }
-        // Update global user cache immediately (AuthContext uses QueryKeys.user).
-        // Don't fail the whole upload flow if state/query cache update throws.
-        try {
-            if (viewUrl && typeof viewUrl === "string") {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                setUser((prev: any) => (prev ? ({ ...prev, avatar: viewUrl } as any) : prev));
-            }
-            queryClient.invalidateQueries([QueryKeys.user]);
-        } catch (err) {
-            console.error("avatar sync to global state failed", err);
         } finally {
-            // Allow picking the same file again
-            e.target.value = "";
+            input.value = "";
+            setUploadingAvatar(false);
         }
     };
 
@@ -143,11 +130,10 @@ export function AccountSection({ username, account, avatarUrl, onAvatarUpdated }
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
                         title={localize("com_account_info_change_avatar")}
+                        disabled={userId == null || uploadingAvatar}
                         className="group relative shrink-0 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
                     >
-                        <Avatar className="size-14 ring-1 ring-[#f2f3f5]">
-                            {currentAvatarUrl ? <AvatarImage src={currentAvatarUrl} alt="User" /> : <AvatarName name={currentNickname} />}
-                        </Avatar>
+                        <UserAvatar className="size-14 ring-1 ring-[#f2f3f5]" src={avatarUrl} name={currentNickname} />
                         <div className="absolute inset-0 flex items-center justify-center rounded-full bg-[rgba(0,0,0,0.55)] opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
                             <Camera className="size-6 text-white" aria-hidden />
                         </div>

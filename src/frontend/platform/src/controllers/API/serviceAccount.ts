@@ -34,6 +34,7 @@ export interface ServiceAccountOwnerCandidate {
   user_id: number;
   user_name: string;
   tenant_id: number;
+  avatar?: string | null;
 }
 
 async function scopedRequest<T>(

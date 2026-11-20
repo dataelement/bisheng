@@ -1,3 +1,4 @@
+import { resolveUserAvatarUrl } from "@bisheng/identity";
 import request from "./request";
 import { mapInitialPermissionResult } from "./permission";
 import type {
@@ -178,6 +179,7 @@ export interface ChannelDetailResponse {
     latest_article_update_time?: string;
     create_time?: string;
     creator_name: string;
+    creator_avatar?: string | null;
     subscriber_count: number;
     subscription_status: string;
     actions?: ChannelAction[];
@@ -657,13 +659,16 @@ export async function getChannelMembersApi(params: {
     // 标准返回: { status_code, status_message, data: { data: [], total } }
     const payload = res?.status_code ? res.data : (res?.data ?? res);
     return {
-        data: (payload?.data ?? payload?.members ?? []).map((m: any) => ({
-            user_id: Number(m.user_id),
-            user_name: String(m.user_name ?? ""),
-            avatar: m.avatar ?? m.icon,
-            role: (m.user_role ?? m.role ?? "member") as ChannelMember["role"],
-            groups: (m.user_groups ?? m.groups ?? []).map((g: any) => String(g.name ?? g)).filter(Boolean)
-        })),
+        data: (payload?.data ?? payload?.members ?? []).map((m: any) => {
+            const avatar = m.user_avatar === undefined ? m.avatar ?? m.icon : m.user_avatar;
+            return {
+                user_id: Number(m.user_id),
+                user_name: String(m.user_name ?? ""),
+                avatar: resolveUserAvatarUrl(typeof avatar === "string" ? avatar : undefined, __APP_ENV__.BASE_URL),
+                role: (m.user_role ?? m.role ?? "member") as ChannelMember["role"],
+                groups: (m.user_groups ?? m.groups ?? []).map((g: any) => String(g.name ?? g)).filter(Boolean)
+            };
+        }),
         total: payload?.total ?? 0
     };
 }

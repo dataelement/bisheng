@@ -21,6 +21,7 @@ router = APIRouter()
 
 class TenantAdminGrant(BaseModel):
     """Request body for POST /tenants/{tenant_id}/admins."""
+
     user_id: int
 
 
@@ -29,11 +30,11 @@ def _root_admin_forbidden_response() -> JSONResponse:
     exc = RootTenantAdminNotAllowedError()
     return JSONResponse(
         status_code=403,
-        content=exc.return_resp_instance().model_dump(mode='json'),
+        content=exc.return_resp_instance().model_dump(mode="json"),
     )
 
 
-@router.get('/{tenant_id}/admins')
+@router.get("/{tenant_id}/admins")
 async def list_tenant_admins(
     tenant_id: int,
     login_user: UserPayload = Depends(UserPayload.get_admin_user),
@@ -41,17 +42,19 @@ async def list_tenant_admins(
     """List user ids holding direct tenant#admin tuple on the tenant.
 
     Root tenant returns an empty list by design (no tuples exist).
-    ``users`` carries ``{user_id, user_name}`` for display; ``user_ids`` is
+    ``users`` carries the administrator's identity and optional avatar for display; ``user_ids`` is
     kept for existing callers.
     """
     try:
-        users = (await TenantAdminService.list_tenant_admin_users([tenant_id])).get(tenant_id) or []
-        return resp_200(data={'user_ids': [u['user_id'] for u in users], 'users': users})
+        users = (await TenantAdminService.list_tenant_admin_users([tenant_id], include_avatars=True)).get(
+            tenant_id
+        ) or []
+        return resp_200(data={"user_ids": [u["user_id"] for u in users], "users": users})
     except BaseErrorCode as e:
         return e.return_resp_instance()
 
 
-@router.post('/{tenant_id}/admins')
+@router.post("/{tenant_id}/admins")
 async def grant_tenant_admin(
     tenant_id: int,
     data: TenantAdminGrant,
@@ -70,7 +73,7 @@ async def grant_tenant_admin(
         return e.return_resp_instance()
 
 
-@router.delete('/{tenant_id}/admins/{user_id}')
+@router.delete("/{tenant_id}/admins/{user_id}")
 async def revoke_tenant_admin(
     tenant_id: int,
     user_id: int,

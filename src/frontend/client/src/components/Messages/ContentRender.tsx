@@ -148,7 +148,7 @@ const ContentRender = memo(
           <div>
             <div className="pt-0.5">
               <div className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full">
-                <MessageIcon iconData={iconData} assistant={assistant} agent={agent} />
+                <MessageIcon iconData={iconData} message={msg} assistant={assistant} agent={agent} />
               </div>
             </div>
           </div>

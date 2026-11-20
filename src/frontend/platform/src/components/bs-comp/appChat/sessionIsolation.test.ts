@@ -11,12 +11,14 @@ function deferred<T>() {
 for (const [mode, createStore] of [['assistant', createAssistantStore], ['workflow', createWorkflowStore]] as const) {
     describe(`${mode} host isolation`, () => {
         it('owns state independently in two simultaneously mounted panels', () => {
-            const a = createStore(); const b = createStore();
+            const a = createStore(() => 17); const b = createStore(() => 41);
             a.getState().changeChatId('a'); b.getState().changeChatId('b');
             a.getState().createSendMsg('Question A');
             b.getState().createSendMsg('Question B');
             expect(a.getState().messages).toHaveLength(1);
             expect(b.getState().messages).toHaveLength(1);
+            expect(a.getState().messages[0].user_id).toBe(17);
+            expect(b.getState().messages[0].user_id).toBe(41);
             a.getState().clearMsgs();
             expect(b.getState().messages).toHaveLength(1);
             expect(b.getState().chatId).toBe('b');

@@ -71,6 +71,7 @@ export interface PermissionGrantSubject {
   type: SubjectType;
   id: string;
   name: string | null;
+  avatar?: string | null;
 }
 
 export interface PermissionGrantSource {
@@ -180,6 +181,7 @@ export interface SelectedSubject {
   type: SubjectType;
   id: number;
   name: string;
+  avatar?: string | null;
   include_children?: boolean;
   externalId?: string | null;
   departmentPath?: string | null;

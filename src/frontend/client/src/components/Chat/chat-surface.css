@@ -26,10 +26,24 @@
   --dsh-hero-stack-gap:8px;
   display:flex; min-height:0; flex:1; flex-direction:column;
   overflow-y:auto; padding:40px 0 0;
+  scrollbar-gutter:stable;
 }
-.dsh-chat-hero {
-  width:100%; max-width:calc(clamp(680px,64cqw,920px) + 64px);
-  margin:auto; padding:0 16px 32px; display:flex; flex-direction:column;
+.dsh-chat-column > .dsh-chat-landing[data-bisheng-chat-welcome] { padding-block-end:128px; }
+.dsh-chat-column:has(> .dsh-chat-landing) { --dsh-chat-scroll-clearance:2px; }
+.dsh-chat-landing::-webkit-scrollbar { width:5px; }
+.dsh-chat-landing::-webkit-scrollbar-thumb { border-radius:5px; background:rgb(var(--text-3) / 35%); }
+
+/* Center the hero independently of the content below it. The third row can
+   extend into the landing scroll area when the viewport is short. */
+.dsh-chat-welcome-grid {
+  display:grid; flex:none; height:100%; min-width:0;
+  grid-template: minmax(0,1fr) auto minmax(0,1fr) / minmax(0,1fr);
+}
+.dsh-chat-welcome-tail { grid-area:3 / 1; align-self:start; }
+.dsh-chat-welcome-hero {
+  grid-area:2 / 1;
+  width:100%;
+  margin-inline:auto; padding-inline:16px; display:flex; flex-direction:column;
   /* Work's shell gap, stack gaps and control row preserve the shared title/card anchors. */
   gap:calc(12px + var(--dsh-hero-stack-gap) * 2 + var(--dsh-hero-controls-height));
   --dsh-add-background:#f5f6f7;
@@ -40,7 +54,7 @@
 .dsh-chat-headline { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:12px 10px; min-height:34px; }
 .dsh-chat-hero-mark { display:block; width:34px; height:34px; object-fit:contain; flex:none; }
 .dsh-chat-headline-title { max-width:100%; margin:0; text-align:center; color:rgb(var(--text-1)); font-size:26px; font-weight:500; line-height:32px; }
-body[data-dsh-chat-theme=dark] .dsh-chat-hero {
+body[data-dsh-chat-theme=dark] .dsh-chat-welcome-hero {
   --dsh-add-background:#353638;
   --dsh-hero-placeholder:#81858c;
   --dsh-hero-stroke:rgb(255 255 255 / 10%);
@@ -95,23 +109,93 @@ body[data-dsh-chat-theme=dark] .dsh-web-chat .dsh-history-new-chat { background:
 .dsh-chat-surface .dsh-chat-composer .dsh-composer-editor[data-empty=true]::before { color:rgb(var(--text-3)); }
 .dsh-chat-surface .dsh-chat-composer:focus-within { outline:1px solid rgb(var(--border-deep)); }
 .dsh-chat-surface .dsh-composer-toolbar { height:auto; min-height:42px; flex-wrap:wrap; gap:12px; container-type:inline-size; padding:2px 8px 6px; }
-.dsh-chat-hero .dsh-chat-composer {
+.dsh-chat-welcome-hero .dsh-chat-composer {
   min-height:114px;
   box-shadow:0 0 0 .5px var(--dsh-hero-stroke),0 4px 16px rgb(0 0 0 / 3%),0 0 24px rgb(0 0 0 / 3%);
 }
-.dsh-chat-hero .dsh-chat-composer .dsh-composer-editor { font-size:14px; }
-.dsh-chat-hero .dsh-chat-composer .dsh-composer-editor[data-empty=true]::before { color:var(--dsh-hero-placeholder); }
-:root:not(.theme-green) .dsh-chat-hero .dsh-composer-submit {
+.dsh-chat-welcome-hero .dsh-chat-composer .dsh-composer-editor { font-size:14px; }
+.dsh-chat-welcome-hero .dsh-chat-composer .dsh-composer-editor[data-empty=true]::before { color:var(--dsh-hero-placeholder); }
+:root:not(.theme-green) .dsh-chat-welcome-hero .dsh-composer-submit {
   --dsh-composer-submit-fill: #4176e6;
   --dsh-composer-submit-hover: #7aaaff;
 }
-.dsh-chat-hero .dsh-composer-submit:disabled { background:rgb(var(--fill-3)); color:rgb(var(--text-3)); opacity:1; }
-.dsh-chat-hero .dsh-composer-submit:hover:enabled { background:var(--dsh-composer-submit-hover); }
-.dsh-chat-hero .dsh-chat-composer .dsh-composer-editor { min-height:52px; }
+.dsh-chat-welcome-hero .dsh-composer-submit:disabled { background:rgb(var(--fill-3)); color:rgb(var(--text-3)); opacity:1; }
+.dsh-chat-welcome-hero .dsh-composer-submit:hover:enabled { background:var(--dsh-composer-submit-hover); }
+.dsh-chat-welcome-hero .dsh-chat-composer .dsh-composer-editor { min-height:52px; }
 /* Work measures the full conversation body before the scroll gutter and trailing
    margin. Add that space back for the width calculation and keep the same center. */
-:root[data-bisheng-surface='desktop'] .dsh-chat-hero {
-  max-width:calc(clamp(680px, calc((100cqw + var(--dsh-chat-scroll-clearance)) * .64), 920px) + 64px);
+:root[data-bisheng-surface='desktop'] .dsh-chat-landing {
+  --dsh-welcome-max-width:calc(clamp(680px, calc((100cqw + var(--dsh-chat-scroll-clearance)) * .64), 920px) + 64px);
+}
+
+.dsh-chat-welcome-hero,
+.chat-welcome-examples,
+.chat-welcome-apps-header {
+  max-width:var(--dsh-welcome-max-width, calc(clamp(680px,64cqw,920px) + 64px));
+}
+.chat-welcome-examples,
+.chat-welcome-apps-header { margin-inline:auto; padding-inline:16px; }
+.chat-welcome-examples {
+  margin-block-start:22px;
+  padding-block-end:16px;
+}
+.chat-welcome-apps-header { margin-block-end:12px; }
+.chat-welcome-examples-header {
+  display:flex; align-items:flex-start; justify-content:space-between; gap:6px 12px;
+  margin-block-end:10px;
+}
+.chat-welcome-section-title {
+  margin:0; padding-inline-start:12px;
+  color:rgb(var(--text-1)); font-size:13px; line-height:20px; font-weight:600;
+}
+.chat-welcome-examples-header .chat-welcome-section-title { margin-block:4px; }
+.chat-welcome-examples .chat-welcome-examples-next {
+  flex:none; height:28px; border-radius:6px; color:rgb(var(--text-2)); font-size:12px; line-height:18px;
+}
+.chat-welcome-examples-list { list-style:none; margin:0; padding:0; }
+.chat-welcome-examples .chat-welcome-example {
+  display:flex; justify-content:flex-start; width:100%; min-width:0; height:auto; min-height:40px;
+  gap:10px; padding:8px 12px; border-radius:var(--dsw-radius-panel, 28px);
+  corner-shape:var(--dsw-corner-shape, superellipse(1.5)); color:rgb(var(--text-2));
+  font-size:14px; line-height:20px; text-align:start; white-space:normal; overflow-wrap:anywhere;
+}
+.chat-welcome-example-icon {
+  display:grid; place-items:center; flex:none; width:18px; height:20px;
+  color:rgb(var(--text-3));
+  color:oklch(var(--chat-welcome-icon-lightness, 50%) var(--chat-welcome-icon-tone));
+}
+.chat-welcome-example .chat-welcome-example-icon svg { width:17px; height:17px; }
+.dark .chat-welcome-examples,
+body[data-dsh-chat-theme=dark] .chat-welcome-examples { --chat-welcome-icon-lightness:63%; }
+.chat-welcome-example-icon[data-icon=mail] { --chat-welcome-icon-tone:0.084 22; }
+.chat-welcome-example-icon[data-icon=news] { --chat-welcome-icon-tone:0.071 251; }
+.chat-welcome-example-icon[data-icon=compare] { --chat-welcome-icon-tone:0.087 307; }
+.chat-welcome-example-icon[data-icon=plan] { --chat-welcome-icon-tone:0.072 132; }
+.chat-welcome-example-icon[data-icon=notes] { --chat-welcome-icon-tone:0.061 62; }
+.chat-welcome-example-icon[data-icon=research] { --chat-welcome-icon-tone:0.074 175; }
+.chat-welcome-examples-feedback { margin:6px 12px 0; color:rgb(var(--text-2)); font-size:12px; line-height:18px; }
+.chat-welcome-examples-feedback:empty { margin:0; }
+
+:root[data-bisheng-surface='desktop'] .chat-welcome-examples :is(.chat-welcome-examples-next,.chat-welcome-example):focus-visible {
+  outline:2px solid currentColor; outline-offset:2px; box-shadow:none;
+}
+
+@media (hover:hover) and (pointer:fine) {
+  .chat-welcome-examples :is(.chat-welcome-examples-next,.chat-welcome-example):hover { background:rgb(var(--fill-2)); }
+}
+@media (pointer:coarse) {
+  .chat-welcome-examples-header { align-items:center; }
+  .chat-welcome-examples :is(.chat-welcome-examples-next,.chat-welcome-example) { min-height:44px; }
+}
+@media (prefers-reduced-motion:no-preference) {
+  .chat-welcome-examples-list li { animation:chat-welcome-example-in 280ms cubic-bezier(.25,.55,.35,1) backwards; }
+  .chat-welcome-examples-list li:nth-child(2) { animation-delay:100ms; }
+  .chat-welcome-examples-list li:nth-child(3) { animation-delay:200ms; }
+  .chat-welcome-examples-list li:nth-child(4) { animation-delay:300ms; }
+}
+@keyframes chat-welcome-example-in {
+  from { opacity:0; transform:translateX(-8px); }
+  to { opacity:1; transform:translateX(0); }
 }
 
 /* The embedded Chat document may not have the Work palette, so mirror the

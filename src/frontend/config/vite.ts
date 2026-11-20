@@ -1,5 +1,7 @@
+import * as http from 'node:http';
+import * as https from 'node:https';
 import path from 'node:path';
-import { loadEnv, type ProxyOptions } from 'vite';
+import { loadEnv, type Plugin, type ProxyOptions } from 'vite';
 
 /** App-local configuration wins over workspace defaults; process.env wins over files. */
 export function loadFrontendEnv(
@@ -42,6 +44,48 @@ export function createMinioWarning(envName: string, target: string) {
         `Set ${envName} to the backend object_storage.minio.sharepoint host ` +
         `(currently ${new URL(target).host}; localhost and 127.0.0.1 sign differently).`,
     );
+  };
+}
+
+const legacyImagePath = /^\/([a-z0-9][a-z0-9.-]*)\/(?:avatar\/\d+\/[a-f0-9]{32}\.(?:jpg|png|webp|gif)|icon\/[a-f0-9]{32}\.png)\?/;
+const minioSignature = /[?&]X-Amz-Signature=[a-f0-9]{64}(?:&|$)/;
+
+/** Older dev backends sign user avatar and workbench icon URLs without the /object prefix. */
+export function legacyImageProxy(minioTarget: string, basePath: string, bucket?: string): Plugin | false {
+  if (!bucket) return false;
+
+  return {
+    name: 'bisheng:legacy-image-proxy',
+    apply: 'serve',
+    configureServer(server) {
+      const target = new URL(minioTarget);
+      const requestUpstream = target.protocol === 'https:' ? https.request : http.request;
+      const warnMinio = createMinioWarning('VITE_MINIO_PROXY_TARGET', minioTarget);
+      server.middlewares.use((req, res, next) => {
+        const requestUrl = req.url ?? '';
+        const objectUrl = requestUrl.startsWith(`${basePath}/`) ? requestUrl.slice(basePath.length) : '';
+        if (req.method !== 'GET' || legacyImagePath.exec(objectUrl)?.[1] !== bucket || !minioSignature.test(objectUrl)) {
+          next();
+          return;
+        }
+
+        const headers = { ...req.headers, host: target.host };
+        delete headers.cookie;
+        delete headers.authorization;
+
+        // Keep the raw object path and query so MinIO can verify the original signature.
+        const proxyReq = requestUpstream(target, { method: req.method, path: objectUrl, headers }, (proxyRes) => {
+          if (proxyRes.statusCode === 403) warnMinio(requestUrl.split('?', 1)[0]);
+          res.writeHead(proxyRes.statusCode || 502, proxyRes.headers);
+          proxyRes.pipe(res);
+        });
+        proxyReq.on('error', (error) => {
+          if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'text/plain' });
+          res.end(`MinIO proxy error: ${error.message}`);
+        });
+        req.pipe(proxyReq);
+      });
+    },
   };
 }
 
