@@ -203,11 +203,13 @@ class GptsToolsTypeRead(GptsToolsTypeBase):
                 self.parameter_name = result.get("parameter_name")
 
     def mask_sensitive_data(self, *, search_category=False, ambiguous=False):
+        # Build fresh rows for the response. Deep-copying a loaded SQLModel
+        # also copies SQLAlchemy state which cannot track changes on the copy.
+        self.children = [GptsTools.model_validate(child) for child in self.children or []]
         if search_category or ambiguous:
             self.extra = _search_list_extra(self.extra) if search_category else "{}"
             self.api_location = None
             self.parameter_name = None
-            self.children = [child.model_copy(deep=True) for child in self.children or []]
             for child in self.children:
                 if child.tool_key == "web_search" and child.extra:
                     child.extra = _search_list_extra(child.extra)
@@ -219,7 +221,6 @@ class GptsToolsTypeRead(GptsToolsTypeBase):
             extra_json = json_masker.mask_json(extra_json)
             self.extra = json.dumps(extra_json, ensure_ascii=False)
         # Historical child overrides can also contain the same configuration.
-        self.children = [child.model_copy(deep=True) for child in self.children or []]
         for child in self.children:
             if child.tool_key in ("image_generation", "dalle_image_generator") and child.extra:
                 try:

@@ -3,12 +3,23 @@ from unittest.mock import AsyncMock
 
 from bisheng.api.v1.schemas import OrgKbConfig, WorkstationConfig
 from bisheng.dsh.domain.services.capability_catalog import CapabilityCatalogService
+from bisheng.llm.domain.services.llm import LLMService
 from bisheng.workstation.api.endpoints import config as config_endpoint
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
 
 def _login_user():
     return SimpleNamespace(user_id=840, user_name="regular-user")
+
+
+async def test_daily_config_can_skip_models_that_the_endpoint_replaces(monkeypatch):
+    monkeypatch.setattr(WorkStationService, "_aresolve_tenant_config", AsyncMock(return_value=("{}", False, 1, True)))
+    monkeypatch.setattr(WorkStationService, "sync_tool_info", lambda tools: tools)
+    picker = AsyncMock(side_effect=AssertionError("replaced model list must not be built"))
+    monkeypatch.setattr(LLMService, "get_workbench_llm_for_picker", picker)
+    config = await WorkStationService.get_daily_chat_config(for_picker=True, include_models=False)
+    assert config.models is None
+    picker.assert_not_awaited()
 
 
 async def test_public_config_keeps_only_visible_org_kbs(monkeypatch):

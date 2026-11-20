@@ -60,11 +60,13 @@ function unwrap<T>(response: Response<T>, pin?: string): T {
 }
 export async function inspectBatch(
   command: BatchCommand,
+  signal?: AbortSignal,
 ): Promise<{ inspection: BatchInspection; tenant: string }> {
-  const response = await request.postResponse<Response<BatchInspection>>(
-    `${path(command)}/inspect`,
-    body(command),
-  );
+  const endpoint = `${path(command)}/inspect`;
+  const payload = body(command);
+  const response = signal
+    ? await request.postResponse<Response<BatchInspection>>(endpoint, payload, { signal })
+    : await request.postResponse<Response<BatchInspection>>(endpoint, payload);
   return { inspection: unwrap(response), tenant: String(response.headers["x-management-tenant"]) };
 }
 export async function precheckBatch(

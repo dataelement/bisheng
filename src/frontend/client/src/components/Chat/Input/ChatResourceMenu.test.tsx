@@ -276,6 +276,6 @@ test.each(['dalle_image_generator', 'image_generation'])('image tool %s uses the
     availableTools={imageTools} showTools /></RecoilRoot>);
   await openMenu();
   await openTools();
-  expect(screen.getByRole('menuitemcheckbox', { name: 'tool:tools.dalle_image_generator.name' })).toBeInTheDocument();
+  expect(screen.getByRole('menuitemcheckbox', { name: 'tool:tools.image_generation.name' })).toBeInTheDocument();
   expect(screen.queryByText('Dalle3 drawing')).toBeNull();
 });

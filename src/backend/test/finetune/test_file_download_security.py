@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from bisheng.common.errcode.http_error import UnAuthorizedError
+from bisheng.common.errcode.finetune import TrainFileNotExistError
 from bisheng.finetune.api import finetune as endpoint
 
 
@@ -15,7 +15,7 @@ async def test_arbitrary_key_denied_before_sdk(monkeypatch):
     from bisheng.knowledge.domain.services.preview_source_service import PreviewSourceService
 
     monkeypatch.setattr(PreviewSourceService, "is_owned_object", AsyncMock(return_value=False), raising=False)
-    with pytest.raises(UnAuthorizedError):
+    with pytest.raises(TrainFileNotExistError):
         await endpoint.get_download_url(file_url="original/1.pdf", login_user=SimpleNamespace(user_id=11, tenant_id=7))
     storage.get_share_link.assert_not_awaited()
 
@@ -65,7 +65,7 @@ async def test_download_checks_binding_or_tenant_owned_preset(monkeypatch, bound
             await service.FinetuneFileService.get_download_url("finetune/train_file/preset/id.json", actor) == "signed"
         )
     else:
-        with pytest.raises(UnAuthorizedError):
+        with pytest.raises(TrainFileNotExistError):
             await service.FinetuneFileService.get_download_url("finetune/train_file/preset/id.json", actor)
         storage.get_share_link.assert_not_awaited()
 
@@ -115,6 +115,6 @@ async def test_expired_registry_needs_scoped_actual_job(monkeypatch, key, allowe
     if allowed:
         assert await service.FinetuneFileService.get_download_url(key, actor) == "signed"
     else:
-        with pytest.raises(UnAuthorizedError):
+        with pytest.raises(TrainFileNotExistError):
             await service.FinetuneFileService.get_download_url(key, actor)
         storage.get_share_link.assert_not_awaited()

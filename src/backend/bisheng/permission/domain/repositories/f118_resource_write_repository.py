@@ -116,68 +116,90 @@ class F118ResourceWriteRepository:
                 _blocked("resource_write_conflict")
 
     async def aapply_resource(self, session, *, plan):
-        if type(plan) is not ResourceRetirementPlan or plan.after is None or plan.namespace_target is None:
+        return (await self.aapply_resources(session, plans=(plan,)))[0]
+
+    async def aapply_resources(self, session, *, plans):
+        """Apply a bounded signed prefix atomically, retaining exact replay checks."""
+        if type(plans) is not tuple or not 1 <= len(plans) <= 100:
             _blocked("complete_resource_plan_required")
-        if (
-            type(self.planner) is not ResourceRetirementPlanner
-            or plan.catalog_plan is not self.planner.catalog_plan
-            or self.planner.build(before=plan.before, namespace_target=plan.namespace_target) != plan
-        ):
-            _blocked("resource_plan_changed")
+        for plan in plans:
+            if type(plan) is not ResourceRetirementPlan or plan.after is None or plan.namespace_target is None:
+                _blocked("complete_resource_plan_required")
+            if (
+                type(self.planner) is not ResourceRetirementPlanner
+                or plan.catalog_plan is not self.planner.catalog_plan
+                or self.planner.build(before=plan.before, namespace_target=plan.namespace_target) != plan
+            ):
+                _blocked("resource_plan_changed")
         current = _Current(session)
-        if plan.before.tenant_id != current.tenant:
+        if any(plan.before.tenant_id != current.tenant for plan in plans):
             _blocked("resource_tenant_changed")
-        keys = tuple(
-            dict.fromkeys(
-                (
-                    (plan.before.resource_type, plan.before.resource_id),
-                    (plan.after.resource_type, plan.after.resource_id),
-                )
+        requests = tuple(
+            (
+                plan.before.mode.id,
+                tuple(
+                    dict.fromkeys(
+                        (
+                            (plan.before.resource_type, plan.before.resource_id),
+                            (plan.after.resource_type, plan.after.resource_id),
+                        )
+                    )
+                ),
             )
+            for plan in plans
         )
-        before = await self.aread_resource(session, mode_id=plan.before.mode.id, resource_keys=keys, lock=True)
-        if before == plan.after:
+        before = await self.snapshots.aload_resources(session, requests=requests, lock=True)
+        current.check()
+        pending = []
+        for actual, plan in zip(before, plans, strict=True):
+            if actual == plan.after:
+                continue
+            if actual != plan.before:
+                _blocked("resource_before_changed")
+            pending.append(plan)
+        if not pending:
             return before
-        if before != plan.before:
-            _blocked("resource_before_changed")
         async with session.begin_nested():
             owned = _Current(session)
             if owned.tenant != current.tenant:
                 _blocked("resource_tenant_changed")
-            mode = ResourcePermissionMode.__table__
-            changes = {
-                name: getattr(plan.after.mode, name)
-                for name in ("resource_type", "parent_type")
-                if getattr(plan.before.mode, name) != getattr(plan.after.mode, name)
-            }
-            if changes:
-                await owned.execute(
-                    update(mode)
-                    .where(mode.c.id == before.mode.id, mode.c.tenant_id == current.tenant)
-                    .values(**changes, update_time=mode.c.update_time)
+            mode_updates, grant_updates, visible_updates = [], [], []
+            for plan in pending:
+                if any(
+                    getattr(plan.before.mode, name) != getattr(plan.after.mode, name)
+                    for name in ("resource_type", "parent_type")
+                ):
+                    mode_updates.append(
+                        {
+                            "f118_pk": plan.before.mode.id,
+                            "f118_tenant": current.tenant,
+                            "f118_resource_type": plan.after.mode.resource_type,
+                            "f118_parent_type": plan.after.mode.parent_type,
+                        }
+                    )
+                grant_updates.extend(
+                    {"f118_pk": old.id, "f118_tenant": current.tenant, "f118_resource_type": new.resource_type}
+                    for old, new in zip(plan.before.grants, plan.after.grants, strict=True)
+                    if old.resource_type != new.resource_type
                 )
-            grant_updates = [
-                {"f118_pk": old.id, "f118_tenant": current.tenant, "f118_resource_type": new.resource_type}
-                for old, new in zip(plan.before.grants, plan.after.grants, strict=True)
-                if old.resource_type != new.resource_type
-            ]
+                visible_updates.extend(
+                    {
+                        "f118_pk": old.id,
+                        "f118_tenant": current.tenant,
+                        "f118_resource_type": new.source.resource_type,
+                        "f118_tuple_fingerprint": new.source.tuple_fingerprint,
+                    }
+                    for old, new in zip(plan.before.visible_sources, plan.after.visible_sources, strict=True)
+                    if (old.source.resource_type, old.source.tuple_fingerprint)
+                    != (new.source.resource_type, new.source.tuple_fingerprint)
+                )
+            await self._updates(owned, ResourcePermissionMode, mode_updates, ("resource_type", "parent_type"))
             await self._updates(owned, PermissionGrant, grant_updates, ("resource_type",))
-            visible_updates = [
-                {
-                    "f118_pk": old.id,
-                    "f118_tenant": current.tenant,
-                    "f118_resource_type": new.source.resource_type,
-                    "f118_tuple_fingerprint": new.source.tuple_fingerprint,
-                }
-                for old, new in zip(plan.before.visible_sources, plan.after.visible_sources, strict=True)
-                if (old.source.resource_type, old.source.tuple_fingerprint)
-                != (new.source.resource_type, new.source.tuple_fingerprint)
-            ]
             await self._updates(
                 owned, PermissionVisibleSourceProjection, visible_updates, ("resource_type", "tuple_fingerprint")
             )
-            result = await self.aread_resource(session, mode_id=before.mode.id, resource_keys=keys, lock=True)
-            if result != plan.after:
+            result = await self.snapshots.aload_resources(session, requests=requests, lock=True)
+            if any(actual != plan.after for actual, plan in zip(result, plans, strict=True)):
                 _blocked("resource_after_changed")
             owned.check()
         current.check()

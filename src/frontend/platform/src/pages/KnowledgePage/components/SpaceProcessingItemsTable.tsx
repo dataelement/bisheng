@@ -11,10 +11,13 @@ import { SpaceProcessingStatus } from "./SpaceProcessingStatus";
 const ITEM_STATES: readonly ItemState[] = ["pending", "running", "succeeded", "failed", "obsolete"];
 
 interface SpaceProcessingItemsTableProps {
+  caption?: string;
+  emptyMessage?: string;
   items: readonly ProcessingItemRead[];
   kind?: ProcessingKind;
   filter?: ItemState;
-  onFilterChange: (state: ItemState | undefined) => void;
+  onFilterChange?: (state: ItemState | undefined) => void;
+  showReasons?: boolean;
   loading: boolean;
   failed: boolean;
   onRetry: () => void;
@@ -22,7 +25,7 @@ interface SpaceProcessingItemsTableProps {
 }
 
 export function SpaceProcessingItemsTable({
-  items, kind, filter, onFilterChange, loading, failed, onRetry, fill = false,
+  caption, emptyMessage, items, kind, filter, onFilterChange, showReasons = false, loading, failed, onRetry, fill = false,
 }: SpaceProcessingItemsTableProps) {
   const { t } = useTranslation("knowledge");
   const selectLabels = useSelectLabels();
@@ -34,19 +37,21 @@ export function SpaceProcessingItemsTable({
   return (
     <div className={fill ? "flex min-h-0 flex-1 flex-col" : "space-y-3"}>
       <KnowledgeDialogTable
-        caption={t("f118.processing_items")}
+        caption={caption ?? t("f118.processing_items")}
         showCaption={false}
         scrollable={fill}
         emptyContent={loading ? <SpaceProcessingLoading /> : failed ? (
           <Button variant="text" onClick={onRetry}>{t("retry")}</Button>
         ) : (
-          <p className="py-6 text-center text-body text-text-3">{t("f118.processing_no_matching_items")}</p>
+          <p className="py-6 text-center text-body text-text-3">
+            {emptyMessage ?? t("f118.processing_no_matching_items")}
+          </p>
         )}
         columns={[
           { label: t("f118.processing_item") },
           {
             label: t("status"),
-            header: (
+            header: onFilterChange && (
               <span className="inline-flex items-center gap-1 whitespace-nowrap">
                 {t("status")}
                 <Select
@@ -74,18 +79,23 @@ export function SpaceProcessingItemsTable({
               </span>
             ),
           },
+          ...(showReasons ? [{ label: t("batch.column_reason") }] : []),
         ]}
-        rows={items.map((item) => ({
-          key: item.id,
-          cells: [
-            item.file_name ?? t("f118.processing_file_id", { id: item.file_id }),
-            <SpaceProcessingStatus
-              state={item.state}
-              label={t(`f118.processing_item_${item.state}`)}
-              reasonKey={processingFailureKey(item, kind)}
-            />,
-          ],
-        }))}
+        rows={items.map((item) => {
+          const reasonKey = processingFailureKey(item, kind);
+          return {
+            key: item.id,
+            cells: [
+              item.file_name ?? t("f118.processing_file_id", { id: item.file_id }),
+              <SpaceProcessingStatus
+                state={item.state}
+                label={t(`f118.processing_item_${item.state}`)}
+                reasonKey={showReasons ? undefined : reasonKey}
+              />,
+              ...(showReasons ? [reasonKey ? t(reasonKey) : "—"] : []),
+            ],
+          };
+        })}
       />
       {failed && items.length > 0 && (
         <Button className="shrink-0 self-start" variant="text" onClick={onRetry}>{t("retry")}</Button>

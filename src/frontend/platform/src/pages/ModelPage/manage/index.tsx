@@ -4,7 +4,6 @@ import { toast } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 
 import { Button } from "@bisheng/ui"
-import { locationContext } from "@/contexts/locationContext"
 import { userContext } from "@/contexts/userContext"
 import { useContext, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -47,16 +46,16 @@ function ManagementContent() {
 
     const [data, setData] = useState([])
     const { user } = useContext(userContext)
-    const { appConfig } = useContext(locationContext)
     const [modelId, setModelId] = useState(null)
     const [systemModel, setSystemModel] = useState(false)
     const [systemModelTab, setSystemModelTab] = useState<string | undefined>(undefined)
     const [loading, setLoading] = useState(false)
     const { refetch } = useModel()
-    const canManage = canManageModelSettings(user, appConfig.multiTenantEnabled)
+    const canManage = canManageModelSettings(user)
     const [searchParams, setSearchParams] = useSearchParams()
     const navigate = useNavigate()
     useEffect(() => {
+        if (!canManage) return
         const tab = searchParams.get('systemModel')
         if (tab === 'dsh') {
             navigate('/dsh', { replace: true })
@@ -71,7 +70,7 @@ function ManagementContent() {
             next.delete('systemModel')
             setSearchParams(next, { replace: true })
         }
-    }, [searchParams, setSearchParams, data, navigate])
+    }, [searchParams, setSearchParams, data, navigate, canManage])
 
     const reload = async () => {
         setLoading(true)
@@ -146,7 +145,7 @@ function ManagementContent() {
             : server))
     }
 
-    if (modelId) return <ModelConfig
+    if (modelId && canManage) return <ModelConfig
         id={modelId}
         onGetName={handleGetRepeatName}
         onBack={() => setModelId(null)}
@@ -159,7 +158,7 @@ function ManagementContent() {
         }}
     />
 
-    if (systemModel) return <SystemModelConfig
+    if (systemModel && canManage) return <SystemModelConfig
         data={data}
         defaultTab={systemModelTab}
         onTabChange={setSystemModelTab}

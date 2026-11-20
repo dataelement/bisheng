@@ -69,7 +69,7 @@ def _get_web_search(**kwargs: Any) -> BaseTool:
     return WebSearchTool(api_wrapper=search_tool)
 
 
-def _get_dalle_image_generator(**kwargs: Any) -> BaseTool:
+def _get_legacy_image_generation(**kwargs: Any) -> BaseTool:
     return build_image_generation_tool(name="dalle_image_generator", **kwargs)
 
 
@@ -92,7 +92,7 @@ def _get_native_code_interpreter(**kwargs: Any) -> BaseTool:
 _EXTRA_PARAM_TOOLS: dict[str, tuple[Callable[[KwArg(Any)], BaseTool], list[str | None], list[str | None]]] = {
     # type: ignore
     "dalle_image_generator": (
-        _get_dalle_image_generator,
+        _get_legacy_image_generation,
         ["openai_api_key"],
         ["openai_api_base", "openai_proxy", "model", "provider", "azure_endpoint", "upload_image"],
     ),

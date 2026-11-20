@@ -1,3 +1,6 @@
+import { userContext } from "@/contexts/userContext";
+import { useKnowledgePageScope } from "@/hooks/useKnowledgePageScope";
+import { canManageModelSettings } from "./manage/permissions";
 import { Pagination } from "@bisheng/ui";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { useContext, useEffect, useState } from "react";
@@ -14,6 +17,15 @@ import RTConfig from "./components/RTConfig";
 import { CpuDetail } from "./cpuInfo";
 
 export const Finetune = () => {
+    const { scopes } = useKnowledgePageScope();
+    const scope = scopes?.ordinary;
+    if (!scope) return null;
+    return <FinetuneContent key={`${scope.identityKey}:${scope.tenantId}:${scope.managementTenantId}`} />;
+};
+
+function FinetuneContent() {
+    const { user } = useContext(userContext);
+    const canManageServices = canManageModelSettings(user);
     const { setSuccessData } = useContext(alertContext);
     const { t, i18n } = useTranslation();
     const paginationLocale = usePaginationLocale();
@@ -37,7 +49,7 @@ export const Finetune = () => {
             status: param.type || 'all'
         })
     )
-    // 详情
+    // Details
     const [taskId, setTaskId] = useState('')
 
     // del
@@ -54,7 +66,7 @@ export const Finetune = () => {
 
     // useDebounce
     const changeItem = useDebounce((id) => {
-        // 滚动到顶部
+        // Scroll to the top
         const scorllDom = document.querySelector('#model-scroll')
         scorllDom && (scorllDom.scrollTop = 0)
         setTaskId(id)
@@ -62,7 +74,7 @@ export const Finetune = () => {
 
     return <div className="relative bg-background-main-content pt-2">
         <div className={createOpen ? 'hidden' : 'block'}>
-            <FinetuneHead onSearch={search} onFilter={filterData} rtClick={() => setRTOpen(true)} onCreate={() => setCreateOpen(true)}></FinetuneHead>
+            <FinetuneHead onSearch={search} onFilter={filterData} rtClick={canManageServices ? () => setRTOpen(true) : undefined} onCreate={() => setCreateOpen(true)}></FinetuneHead>
             {/* body */}
             {tasks?.length === 0 ?
                 <div className="mt-6 text-center text-gray-400">{t('finetune.noData')}</div>
@@ -116,7 +128,7 @@ export const Finetune = () => {
             {
                 createOpen && <div>
                     <CreateTask
-                        rtClick={() => setRTOpen(true)}
+                        rtClick={canManageServices ? () => setRTOpen(true) : undefined}
                         gpuClick={() => setShowCpu({ type: 'finetune', show: true })}
                         onCancel={() => setCreateOpen(false)}
                         onCreate={(id) => {
@@ -127,9 +139,9 @@ export const Finetune = () => {
                 </div>
             }
         </div>
-        {/* RT配置 */}
-        <RTConfig open={rtOpen} onChange={() => setRTOpen(false)}></RTConfig>
-        {/* CPU使用情况 */}
+        {/* FT services */}
+        {canManageServices && <RTConfig open={rtOpen} onChange={() => setRTOpen(false)}></RTConfig>}
+        {/* GPU usage */}
         <Dialog open={showCpu.show} onOpenChange={(show) => setShowCpu({ ...showCpu, show })}>
             <DialogContent className="sm:max-w-[80%]">
                 <DialogHeader>

@@ -795,7 +795,9 @@ class WorkStationService(BaseService):
         return {"assistantIcon": icon.model_dump() if icon else None}
 
     @classmethod
-    async def get_daily_chat_config(cls, *, for_picker: bool = False) -> WorkstationConfig | None:
+    async def get_daily_chat_config(
+        cls, *, for_picker: bool = False, include_models: bool = True
+    ) -> WorkstationConfig | None:
         """Get the default workstation configuration for daily chat."""
         value, inherited, _, _ = await cls._aresolve_tenant_config(ConfigKeyEnum.WORKSTATION)
         config = type("TenantConfigValue", (), {"value": value}) if value else None
@@ -806,6 +808,8 @@ class WorkStationService(BaseService):
             ret.tools = cls.sync_tool_info(ret.tools)
         if inherited:
             ret = await cls._aproject_daily_config_for_current_tenant(ret, DEFAULT_TENANT_ID)
+        if not include_models:
+            return ret
         workbench_config = await (
             LLMService.get_workbench_llm_for_picker() if for_picker else LLMService.get_workbench_llm_candidates()
         )

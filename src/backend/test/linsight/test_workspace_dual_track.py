@@ -62,7 +62,8 @@ def test_keep_raw_extension_gate():
     assert Impl._should_keep_raw("报告.PDF")  # case-insensitive
     assert Impl._should_keep_raw("spec.docx")
     assert not Impl._should_keep_raw("notes.md")
-    assert not Impl._should_keep_raw("photo.png")  # images stay single-track
+    assert Impl._should_keep_raw("photo.png")  # the picture itself, not only its OCR text
+    assert not Impl._should_keep_raw("archive.zip")
     assert not Impl._should_keep_raw("clip.mp4")
     assert not Impl._should_keep_raw("")
 
@@ -98,14 +99,14 @@ async def test_original_lands_next_to_markdown():
 
 
 async def test_non_whitelisted_type_stays_single_track():
-    entry = entry_for("photo.png")
+    entry = entry_for("slides.key")
     minio = make_minio(entry)
 
     await Impl._write_attachment_to_workspace(entry, "chat1", minio, used_names=set())
 
-    assert entry["workspace_path"] == "/uploads/photo.md"
+    assert entry["workspace_path"] == "/uploads/slides.md"
     assert "raw_workspace_path" not in entry
-    assert "workspace/chat1/uploads/photo.png" not in minio.puts
+    assert "workspace/chat1/uploads/slides.key" not in minio.puts
 
 
 async def test_no_original_persisted_stays_single_track():

@@ -142,7 +142,12 @@ def _row(row, names):
             blocked("head_kind")
     if names == _BINDING:
         if row["target_space_id"] is not None:
-            if row["target_type"] != "knowledge_file":
+            # The online knowledge Owner persists a space's own ID here;
+            # files persist their parent space. Preserve both original facts.
+            if row["target_type"] == "knowledge_space":
+                if row["target_space_id"] != row["target_id"]:
+                    blocked("space_identity_metadata")
+            elif row["target_type"] != "knowledge_file":
                 blocked("non_file_parent_metadata")
             TargetKey(TargetType.KNOWLEDGE_SPACE, row["target_space_id"])
         if type(row["source_revision"]) is not int or row["source_revision"] < 0 or row["source_version"] == "__root__":

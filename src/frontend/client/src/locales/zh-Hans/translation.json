@@ -16,7 +16,8 @@
       "resplit": "相关文件正在重新切分，暂不能执行此操作。请在“处理任务”查看进度，结束后再试。",
       "file_queue": "文件已进入处理队列，暂不能重复处理。请等待排队任务执行，或在“任务记录”查看进度。",
       "file_state": "该文件当前状态不支持此操作。请返回文件列表刷新状态；解析失败的文件可从失败项入口重试。",
-      "source_input": "移动或复制任务仍需要读取源空间的数据，暂不能删除或清理源空间。请查看任务记录，待输入转移完成；失败任务请先重试。",
+      "source_file_input": "移动任务可能仍需要所选文件，暂不能执行此操作。请在“任务记录”中查看移动任务的状态。",
+      "source_input": "移动或复制任务仍需要此空间的数据，暂不能执行此操作。请在“任务记录”中查看任务状态。",
       "transfer_input": "空间中仍有未完成的移动或复制任务，暂不能执行此操作。请在任务记录查看进度并重试失败任务。",
       "move_input": "移动任务尚未完成数据转移或源数据清理，暂不能执行此操作。请查看移动任务；失败时重试原任务。",
       "copy_retry": "副本当前状态不允许重试复制。请刷新空间状态，若正在重建模型请等待重建结束。",
@@ -1304,9 +1305,8 @@
     "explore_more": "探索更多应用",
     "explore_plaza": "前往应用广场 <cta>探索更多应用<arrow /></cta>",
     "recent_apps_hint": "最近使用过的应用都在这里～",
-    "service_maintenance_title": "哎呀，系统出了点小状况",
-    "service_maintenance": "短暂停留一下，马上恢复正常使用",
-    "refresh": "刷新重试",
+    "service_maintenance_title": "服务暂时不可用",
+    "service_maintenance": "请稍后重试",
     "unknown_name": "未知应用",
     "featured": "精选",
     "history_deleted": "历史会话已删除"
@@ -1912,9 +1912,10 @@
       "new_tag": "新标签名称",
       "add_tag": "添加标签草稿",
       "draft_notice": "新标签仅在最终确认后创建。",
-      "tags_load_failed": "空间标签列表暂不可用，原权限限制仍适用。",
+      "tags_load_failed": "空间标签加载失败，可继续选择已显示的标签，或重试加载其他标签。",
       "invalid_name": "标签名称请遵守原长度限制。",
-      "select_first": "请先选择文件或文件夹"
+      "select_first": "请先选择文件或文件夹",
+      "reason_space_tag_permission_required": "有文件标签修改权限，但新建标签需要空间编辑权限。请改用已有标签，或联系空间管理员。"
     },
     "processing_jobs": {
       "title": "处理任务",
@@ -1947,6 +1948,9 @@
       "state_failed": "失败",
       "state_obsolete": "配置已变化，任务已过期",
       "state_pending": "待处理"
+    },
+    "tag_permissions": {
+      "space_required": "当前账号没有空间编辑权限，可选用已有标签；如需新建或删除空间标签，请联系空间管理员。"
     }
   },
   "com_subscription": {

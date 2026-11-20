@@ -1,8 +1,9 @@
 """Run F118 stopped-service M2→M3→M4 or inspect the same durable Run.
 
 From src/backend with the service's config: python scripts/unify_knowledge_spaces.py
---run-id maintenance-1 --environment production --backup-ref '<descriptor JSON>'
---schema-ref '<descriptor JSON>'. Default preview writes no SQL, FGA or artifacts.
+--run-id maintenance-1 --environment production.
+DBA backups are an operational prerequisite, not a script input or check.
+Default preview writes no SQL, FGA or artifacts.
 For a new Run it performs the complete current inventory preflight; for an
 existing Run it validates that Run's original frozen reference plan.
 Add --apply --operator-id 7 to freeze and execute; --apply --resume requires the
@@ -50,8 +51,16 @@ def parser():
     result.add_argument("--run-id", required=True)
     result.add_argument("--writer-contract-version", default="f118-v1")
     result.add_argument("--environment", required=True)
-    result.add_argument("--backup-ref", required=True, type=_descriptor)
-    result.add_argument("--schema-ref", required=True, type=_descriptor)
+    result.add_argument(
+        "--backup-ref",
+        type=_descriptor,
+        help="legacy frozen descriptor assertion; omit to read the original Run metadata",
+    )
+    result.add_argument(
+        "--schema-ref",
+        type=_descriptor,
+        help="legacy frozen descriptor assertion; omit to read the original Run metadata",
+    )
     result.add_argument("--operator-id", type=_operator, default=0)
     result.add_argument("--apply", action="store_true", help="execute the original full frozen migration")
     result.add_argument(
@@ -141,6 +150,8 @@ async def arun(args, *, runtime_factory=_runtime):
                 )
             if args.resume and frozen is None:
                 raise KnowledgeOperationPlanConflictError(reason="migration_cli_resume_requires_frozen_run")
+            if frozen is None and (args.backup_ref is not None or args.schema_ref is not None):
+                raise KnowledgeOperationPlanConflictError(reason="migration_cli_legacy_descriptors_require_frozen_run")
             if not args.apply:
                 if frozen is not None:
                     reader = UnificationReferencePlanReader(inventory=application.reader, artifact_store=runtime.store)

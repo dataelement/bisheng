@@ -171,8 +171,9 @@ it("leaves the deleted space before refreshing the catalog", async () => {
     .mockImplementation(async (filters) => {
       order.push("refresh");
       // The last overload types this argument as a query key, so predicate is unknown.
-      const predicate = (filters as InvalidateQueryFilters | undefined)
-        ?.predicate;
+      const filtersObject = filters as InvalidateQueryFilters | undefined;
+      const predicate =
+        typeof filtersObject?.predicate === "function" ? filtersObject.predicate : undefined;
       expect(predicate).toEqual(expect.any(Function));
       expect(
         predicate?.({

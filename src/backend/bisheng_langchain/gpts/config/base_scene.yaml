@@ -32,7 +32,7 @@ assistant:
       bing_search_url: "https://api.bing.microsoft.com/v7.0/search"
     - type: "get_current_time"
     - type: "calculator"
-    - type: "dalle_image_generator"
+    - type: "image_generation"
       openai_api_key: ''
       openai_proxy: 'http://118.195.232.223:39995'
     - type: macro_china_money_supply

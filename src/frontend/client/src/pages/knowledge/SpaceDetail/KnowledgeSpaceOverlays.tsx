@@ -30,7 +30,7 @@ export function KnowledgeSpaceOverlays({ model }: KnowledgeSpaceOverlaysProps) {
     editingTagsFileId,
     isBatchTagging,
     canEditSpace,
-    downloadEntryIds,
+    canReadSpaceTags,
     versionManagementEnabled,
     spaceIdNum,
     versionMgmtFile,
@@ -69,6 +69,8 @@ export function KnowledgeSpaceOverlays({ model }: KnowledgeSpaceOverlaysProps) {
       {" "}
       {/* Edit Tags Modal */}
       <EditTagsModal
+        canManageSpaceTags={canEditSpace}
+        canReadSpaceTags={canReadSpaceTags}
         isOpen={!!editingTagsFileId || isBatchTagging}
         onClose={handleCloseEditTags}
         onSaved={handleTagsSaved}
@@ -199,40 +201,38 @@ export function KnowledgeSpaceOverlays({ model }: KnowledgeSpaceOverlaysProps) {
             onOpenChange={(o) => {
               if (!o) setVersionHistoryFile(null);
             }}
+            spaceId={spaceIdNum}
             fileId={versionHistoryFile ? Number(versionHistoryFile.id) : null}
             documentTitle={versionHistoryFile?.name}
             canManage={canEditSpace}
             onPreview={(versionFileId, fileName) =>
               handlePreviewFile(String(versionFileId), fileName)
             }
-            onDownload={
-              versionHistoryFile && downloadEntryIds.has(versionHistoryFile.id)
-                ? async (versionFileId, fileName) => {
-                    try {
-                      const downloadData = await getFileDownloadApi(
-                        String(space.id),
-                        String(versionFileId),
-                      );
-                      const downloadUrl = downloadData.original_url;
-                      if (!downloadUrl) {
-                        showToast({
-                          message: localize("com_knowledge.get_download_link_failed"),
-                          status: "warning",
-                        });
-                        return;
-                      }
-                      triggerUrlDownload(downloadUrl, fileName);
-                    } catch {
-                      showToast({
-                        message: localize("com_knowledge.download_failed"),
-                        status: "warning",
-                      });
-                    }
-                  }
-                : undefined
-            }
-            onPrimaryChanged={handleVersionAction}
-            onDeleted={handleVersionAction}
+            onDownload={async (versionFileId, fileName, signal) => {
+              try {
+                const { original_url: downloadUrl } = await getFileDownloadApi(
+                  String(space.id),
+                  String(versionFileId),
+                  signal,
+                );
+                if (signal.aborted) return;
+                if (!downloadUrl) {
+                  showToast({
+                    message: localize("knowledge.version.history.download_feedback.no_url", { ns: "shared" }),
+                    status: "warning",
+                  });
+                  return;
+                }
+                triggerUrlDownload(downloadUrl, fileName);
+              } catch {
+                if (signal.aborted) return;
+                showToast({
+                  message: localize("knowledge.version.history.download_feedback.failed", { ns: "shared" }),
+                  status: "warning",
+                });
+              }
+            }}
+            onChanged={handleVersionAction}
           />
           <SimilarDocumentDialog
             open={similarDialogOpen}

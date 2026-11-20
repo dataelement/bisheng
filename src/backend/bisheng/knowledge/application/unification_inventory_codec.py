@@ -120,6 +120,16 @@ def _value(value, spec):
 
 def _validate(tag, data):
     schema = _SCHEMAS.get(tag)
+    # New Runs carry no DBA backup/schema attestations. Keep the legacy wire
+    # shape strict: null descriptors are legal only under this explicit policy.
+    if tag == "run" and type(data) is dict and "external_material_policy" in data:
+        schema = {**schema, "external_material_policy": "str", "backup_ref": "descriptor?", "schema_ref": "descriptor?"}
+        if (
+            data["external_material_policy"] != "not_required"
+            or data.get("backup_ref") is not None
+            or data.get("schema_ref") is not None
+        ):
+            _invalid()
     # Existing frozen metadata has no policy field and retains revision 1.
     # The reference writer contract itself does not change in this repair.
     if tag == "run" and type(data) is dict and "preparation_policy_version" in data:
@@ -132,6 +142,15 @@ def _validate(tag, data):
             _invalid()
     if tag == "permission_plan" and type(data) is dict and "restore_missing_markers" in data:
         schema = {**schema, "restore_missing_markers": "bool"}
+    if tag == "run" and type(data) is dict and any(key.startswith("unmounted_identity_") for key in data):
+        schema = {
+            **schema,
+            "unmounted_identity_policy": "str",
+            "unmounted_identity_count": "positive",
+            "unmounted_identity_digest": "hash",
+        }
+        if data.get("unmounted_identity_policy") != "preserve_unmounted_v1":
+            _invalid()
     if schema is None or type(data) is not dict or set(data) != set(schema):
         _invalid()
     for name, spec in schema.items():

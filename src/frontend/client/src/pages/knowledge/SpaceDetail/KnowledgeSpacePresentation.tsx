@@ -39,7 +39,6 @@ export function KnowledgeSpacePresentation({ model }: KnowledgeSpacePresentation
     cardCols,
     isAdmin,
     canEditSpace,
-    canManageMembers,
     versionManagementEnabled,
     setVersionMgmtFile,
     setVersionHistoryFile,
@@ -247,7 +246,6 @@ export function KnowledgeSpacePresentation({ model }: KnowledgeSpacePresentation
                       versionManagementEnabled={versionManagementEnabled}
                       onOpenVersionManagement={(f) => setVersionMgmtFile(f)}
                       onOpenVersionHistory={(f) => setVersionHistoryFile(f)}
-                      canManageMembers={canManageMembers}
                       canManageVersions={canEditSpace}
                       canRename={renameEntryIds.has(file.id)}
                       canDelete={deleteEntryIds.has(file.id)}
@@ -310,7 +308,6 @@ export function KnowledgeSpacePresentation({ model }: KnowledgeSpacePresentation
                 versionManagementEnabled={versionManagementEnabled}
                 onOpenVersionManagement={(f) => setVersionMgmtFile(f)}
                 onOpenVersionHistory={(f) => setVersionHistoryFile(f)}
-                canManageMembers={canManageMembers}
                 canManageVersions={canEditSpace}
                 highlightedTagIds={searchTagIds}
                 highlightKeyword={searchQuery}

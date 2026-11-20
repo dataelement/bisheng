@@ -14,6 +14,7 @@ from loguru import logger
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError
 from bisheng.core.context.tenant import tenant_execution_scope
+from bisheng.knowledge.application import unification_identity_retention as identity_retention
 from bisheng.knowledge.application.unification_inventory_codec import canonical, decode_inventory_page
 from bisheng.knowledge.application.unification_permission_namespace import PermissionNamespacePlan, catalog_from_records
 from bisheng.permission.application.catalog_api import OpenFGACatalogProjector
@@ -59,6 +60,8 @@ class PermissionPublicationInput:
         self.summaries = {tenant: {} for tenant in frozen.tenant_ids}
         self.original_tuples = []
         self.planner = None
+        self.retention_metadata = {}
+        self.retention_objects = None
 
     async def _catalog_seed(self):
         # This bounded pre-read supplies pure compilation, not admission. The
@@ -116,6 +119,7 @@ class PermissionPublicationInput:
         if len(metadata) != 1:
             blocked("plan_metadata")
         self.legacy_policy = metadata[0].get("preparation_policy_version", 1) == 1
+        self.retention_metadata = identity_retention.metadata(metadata[0])
         plan = build_catalog_retirement_plan(
             run_id=self.frozen.run_id,
             writer_contract_version=self.frozen.writer_contract_version,
@@ -272,7 +276,10 @@ class PermissionPublicationApplication:
         async with self.app._session() as session, session.begin():
             await self.app._scope_run(session, frozen)
             current = _Current(session)
-            await repository.snapshots.avalidate_global_integrity(session)
+            retained = await identity_retention.validate(
+                session, expected=inputs.retention_metadata, repository=repository.snapshots
+            )
+            inputs.retention_objects = identity_retention.protected_objects(retained)
             current.check()
         for tenant in frozen.tenant_ids:
             with tenant_execution_scope(tenant):
@@ -309,7 +316,9 @@ class PermissionPublicationApplication:
             blocked("final_tenant_universe_changed")
         repository = F118ResourceWriteRepository(permission_planner=self.inputs.planner)
         current = _Current(session)
-        await repository.snapshots.avalidate_global_integrity(session)
+        await identity_retention.validate(
+            session, expected=self.inputs.retention_metadata, repository=repository.snapshots
+        )
         current.check()
         for tenant in frozen.tenant_ids:
             with tenant_execution_scope(tenant):
@@ -330,18 +339,24 @@ class PermissionPublicationApplication:
                 count = checkpoint["processed_count"] if checkpoint else 0
                 seed, ordinal = _checksum(meta), 0
                 plans = await inputs.aplans(tenant)
+                pending = []
                 for plan in plans:
                     ordinal += 1
                     seed = _checksum((seed, plan.checksum))
                     if ordinal <= count:
                         continue
+                    pending.append(plan)
+                    if len(pending) < 100 and ordinal != len(plans):
+                        continue
+                    batch = tuple(pending)
 
-                    async def apply(session, plan=plan):
-                        return await repository.aapply_resource(session, plan=plan)
+                    async def apply(session, batch=batch):
+                        return await repository.aapply_resources(session, plans=batch)
 
                     value = self._value(meta, ordinal, complete=ordinal == len(plans), digest=seed)
                     await self._commit(frozen, "permission_namespace", checkpoint, value, apply)
                     checkpoint = value
+                    pending.clear()
                 if not plans and checkpoint is None:
                     await self._commit(
                         frozen, "permission_namespace", None, self._value(meta, 0, complete=True, digest=seed)
@@ -364,11 +379,15 @@ class PermissionPublicationApplication:
                         "restore_missing_markers", False
                     ),
                 )
-        return builder.finish(
+        result = builder.finish(
             stage_tuples=stage,
             before_release_key=inputs.planner.catalog_plan.before.release.release_key,
             after_release_key=release_key,
         )
+        if inputs.retention_objects is None:
+            blocked("identity_retention_not_checked")
+        identity_retention.verify_tuple_plan(result, inputs.retention_objects)
+        return result
 
     def _operations(self, tuple_plan, io, draft):
         operations = []

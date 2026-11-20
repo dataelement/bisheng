@@ -271,6 +271,11 @@ python scripts/migrate_model_token_configs.py --all-tenants
 python scripts/migrate_model_token_configs.py --tenant-id 1
 ```
 
+The CLI explicitly registers and initializes only its own database manager in
+the shared application context, using the service settings. It closes that
+manager in the same event loop on success, failure or cancellation; it does
+not start the FastAPI lifespan or initialize unrelated storage clients.
+
 Dry-run is the default. After draining model calls and stopping API/Worker/
 Linsight configuration writers, use the new backend runtime and a fresh private
 backup path to apply. Complete the target schema upgrade first:
@@ -1657,6 +1662,11 @@ embedding names, and purges invalid derived permissions. Exact orphan MinIO
 objects and ES/Milvus slices are backed before deletion; live index bindings,
 shared stores, audit, roles and queues remain. Operators stop every writer/consumer.
 
+Retired PRIVATE libraries (`Knowledge.type=2`) retain their existing rows and
+permissions. History preparation does not require new permission modes or repair
+depth/parent projections for their files/documents. Valid ownership/parent-chain
+checks remain; this is not permission to discard malformed or foreign rows.
+
 ```bash
 cd src/backend
 export config=config.yaml
@@ -1673,16 +1683,105 @@ unknown types or remaining downstreams are reported, never guessed away.
 Apply returns permission operation IDs; exit 2 means selected repairs completed
 but blocked items remain, and exit 3 means an error requiring the same plan to
 be inspected/resumed. Preview exit 0 does not certify migration readiness.
+
+For a historical deleted resource whose saved plan contains only one of the two
+`permission_enabled` technical markers, apply can automatically forward-recover
+its own `history-delete` operation if strict OpenFGA deletion leaves it
+`FAILED_CLOSED`. Recovery verifies the original ledger/checksums, tenant, version,
+business absence, downstreams, mirrors and Catalog Store/model pin. It delegates
+only the remaining marker deletes to the native checksum-bound recovery service,
+verifies the complete frozen AFTER state, then continues derived cleanup. It does
+not restore missing markers or recover unrelated permission failures. New graph
+relations, changed fences/versions, a corrupted ledger, or a healthy original pair
+that later became mixed still stop execution.
+
+To resume such a failure, use the **updated script with the same saved plan and
+original operator ID**, repeating the apply command above. No new plan or manual
+SQL/OpenFGA edit is required. Completed operations reuse their original receipts;
+interruption after correction or during SQL finalization/cleanup resumes through
+the original ledger. Keep the plan, events and payload backups until the upgrade
+is verified. If recovery is refused, the CLI reports a safe reason code and, when
+available, the operation ID/status; investigate rather than replacing the plan.
+
 SQL evidence is saved before physical inspection in `.candidates.json`; exact
 payload backups use `.payloads/`. Missing original bindings/file identities stop
 cleanup; no whole-index deletion or guessed replacement is allowed. This selected
 evidence does not replace a full environment backup. See
 [implemented rules and complete flow](../../../docs/reviews/f118-confirmed-rules-implementation-20261113.md).
 
+Historical preparation reads business rows and permission modes in primary-key
+pages of 200. Its internal `f118_history_snapshot.py` helper stores complete row
+payloads and lookup indexes in private, disposable SQLite files; invoke the
+maintenance command above, not that helper. Set `TMPDIR` to a local disk with
+space for the complete JSON inventory and indexes. Actual repair can retain
+several snapshots simultaneously. Normal exit, exceptions and async cancellation
+remove them; a force-killed process can leave private temporary directories for
+operator cleanup. These files are not recovery evidence; retain the original
+plan/events/payload backups. No-op/replayed business repairs compare the complete
+digest without requesting write locks. Real repairs retain the locked recheck.
+
+### `repair_f118_folder_inheritance.py`
+
+Use only when an operator has explicitly confirmed that selected legacy folders
+with **no mode, Grants, visible-source rows or FGA tuples** should inherit their
+canonical parent. This is an optional repair for a reported history-preparation
+blocker, not a required upgrade stage or a backup-proof workflow. Stop all
+writers/consumers and finish any running history apply first; an active frozen
+F118 Run refuses this repair.
+
+Example IDs below are synthetic; replace them with the reviewed tenant/library,
+folder and operator IDs. Preview saves a NEW private selected-row/pin/parent plan:
+
+```bash
+python scripts/repair_f118_folder_inheritance.py \
+  --plan /app/data/upgrade/3.1.0-beta1/folder-inherit.json \
+  --tenant-id 101 --knowledge-id 10 \
+  --folder-id 50 --folder-id 51 --folder-id 52 --operator-id 7
+
+python scripts/repair_f118_folder_inheritance.py \
+  --plan /app/data/upgrade/3.1.0-beta1/folder-inherit.json \
+  --apply --confirm-inherit
+```
+
+Apply and retries use the same saved plan and operator. The script writes only
+the native `HISTORICAL_INHERIT_REPAIR` operation, its fenced mode and five
+parent/INHERIT/permission-enabled tuples per selected folder. It does not infer
+creator ownership or add people/role Grants. Native projection verification and
+finalization establish CURRENT; no SQL status is forced. Parent folders complete
+before children. An uncertain/failed operation resumes its original journal;
+later grants, parent changes, foreign modes/journals or a changed pin refuse it.
+
+The selection is bounded to 20 folders and 200 ancestor IDs, with at most 200
+distinct tenant keys per relevant permission table and 500 tuples per external
+parent. Tenant-index enumeration plus selected ranges preserve cross-tenant
+absence checks without repeatedly scanning large permission tables or loading
+all Grant/source payloads. Scope-limit failures stop rather than sample data.
+
+Keep the original `f118-history.json`, events and payload backups unchanged.
+If that original apply completed its selected cleanup but returned blocked
+missing modes, complete this explicit repair, then preview history preparation
+into a **different** file such as `f118-history-after-inherit.json`. Review its
+blocked/selected list and apply that new plan. Require `blocked=[]` and
+`preparation_complete=true` before starting M2. Do not rewrite the old plan's
+blocked list/checksum or perform this repair while an old apply is still running.
+
+### First installation before schema migration
+
+For a new installation, run `python scripts/initialize_installation.py --apply`
+from `src/backend/` with the service's config **before** `alembic upgrade head`.
+Both packaged entrypoints run this automatically. Source/systemd installations
+must use the same order. Without `--apply` the command is read-only.
+Only an empty database can acquire the durable pending installation marker.
+Interrupted schema creation is resumable; default Root, real empty Coverage and
+marker completion commit together before historical migrations can seed Root.
+Existing databases are left unchanged and missing Coverage requires the formal
+stopped-service migration below. Historical Alembic revisions are unchanged.
+
 ### Formal stopped-service migration
 
 Run from `src/backend` after the operator has stopped all business writers and
-created the immutable backup/schema evidence artifacts. Use the same `config`
+received DBA confirmation that the consistent backup is complete. No backup/schema
+evidence descriptors or `f118-inputs.json` are required. Use the same `config`
 as the service. For a new Run, default preview executes the same complete
 SQL/permission/six-source inventory and plan validation as fresh M2, without
 SQL/FGA/MinIO writes or freezing a Run. Private local scratch pages are removed
@@ -1690,11 +1789,11 @@ on success or failure. Output is `validation_scope=current_inventory`,
 `preflight_complete=true`, `frozen=false`, `ready=false`; passing preflight is
 not a completed migration or permission publication.
 
-The supplied backup/schema artifacts must belong to this Run/environment/writer
-and the current tenant inventory. Materials for an earlier 30-tenant scope
-cannot be reused as evidence for a new 31-tenant scope. If another process
-freezes this Run between the CLI lookup and scanning, fresh preview stops
-instead of reporting the frozen graph as a complete current-data scan.
+DBA/operations own the actual backup and restore verification; this script does
+not inspect or attest it. Actual schema, tenant, business, permission and reference
+checks remain mandatory. If another process freezes this Run between the CLI
+lookup and scanning, fresh preview stops instead of reporting the frozen graph
+as a complete current-data scan.
 
 For an existing frozen Run, preview validates its original graph and reports
 `validation_scope=frozen_run`, `preflight_complete=false`. `--resume` requires
@@ -1712,26 +1811,36 @@ ES/Milvus existence, schema or count queries, or per-file MinIO stat. Physical
 store health and SQL/vector inconsistencies are separate diagnostics. The
 historical preparation above still requires exact payload backup/deletion when
 an approved orphan cleanup needs it; missing cleanup evidence remains blocking.
-MinIO reads of backup/schema and frozen migration artifacts remain necessary.
+MinIO reads of frozen migration artifacts remain necessary. New metadata records
+`external_material_policy=not_required` with null legacy backup/schema fields; no
+DBA evidence objects are created or fetched.
 
 ```bash
-python scripts/unify_knowledge_spaces.py --run-id maintenance-1 --environment production \
-  --backup-ref '{"object_key":"f118/unification/maintenance-1/verification/<hash>.json","sha256":"<hash>"}' \
-  --schema-ref '{"object_key":"f118/unification/maintenance-1/verification/<schema-hash>.json","sha256":"<schema-hash>"}'
+python scripts/unify_knowledge_spaces.py --run-id maintenance-1 --environment production
 ```
 
 Add `--apply --operator-id 7` for the actual M2 freeze, original SQL conversion,
 permission publication, six-source backfill, full reconciliation and persisted
 Coverage certificate. After interruption, repeat the identical arguments with
 `--apply --resume`; this requires the same already-frozen Run and never rebuilds
-its baseline. Old frozen artifacts retain their original codec and evidence
-checks; missing required legacy facts remain blocking rather than being invented
-or bypassed by rewriting the baseline. Output
+its baseline. Old frozen metadata is read internally, without resupplying DBA
+proofs; its original graph hashes, tenant scope, business facts and checkpoints
+remain mandatory. Legacy `--backup-ref/--schema-ref` flags assert original fields
+only for an existing frozen Run; fresh Runs reject them. DBA evidence objects
+are no longer read, including during recovery. Output
 contains the Run/hashes, tenant scope, six-source proofs and the immutable plan
 reference containing the invalid-slot inventory. Nonzero exit preserves the
 checkpoint and never restarts services. Enable business traffic only after the
 operator has accepted the overall upgrade verification and real environment
 checks; a local component test is not that acceptance.
+
+Permission namespace conversion commits at most 100 complete resource plans and
+their cumulative checkpoint in one transaction. Before/after reads keep every
+Grant, Assignee and VisibleSource, including inactive facts and foreign-assignee
+rejection. An old single-resource prefix remains resumable; an unknown commit
+result still requires the original Run. Artifact upload performs one verified
+readback; later frozen-graph and SQL/FGA phase checks remain. See
+[performance repair and measured limits](../../../docs/reviews/v310b1-migration-performance-fix-20261119.md).
 
 F118 deliberately uses a narrow context assembly rather than the general
 `initialize_app_context` convention: the eager general initializer constructs

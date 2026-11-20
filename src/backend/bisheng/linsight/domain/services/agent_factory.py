@@ -1,3 +1,4 @@
+# ruff: noqa: RUF001, RUF002
 """F035 Track A · TA-3: deepagents agent factory.
 
 ``create_linsight_agent`` is the single装配点 that replaces the legacy
@@ -825,7 +826,7 @@ def _coerce_text(value: object) -> str:
         return ""
     if isinstance(value, str):
         return value.strip()
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, list | tuple):
         for x in value:
             text = _coerce_text(x)
             if text:
@@ -849,7 +850,7 @@ def _coerce_bool(value: object) -> bool:
     multi-select one."""
     if isinstance(value, str):
         return value.strip().lower() not in _FALSY_STRINGS
-    if isinstance(value, (bool, int, float)):
+    if isinstance(value, bool | int | float):
         return bool(value)
     return False
 
@@ -869,7 +870,7 @@ def _coerce_options(value: object) -> list[str]:
     def walk(v: object) -> None:
         if v is None:
             return
-        if isinstance(v, (list, tuple)):
+        if isinstance(v, list | tuple):
             for x in v:
                 walk(x)
             return
@@ -1544,6 +1545,7 @@ async def create_linsight_agent(
     citation_scope=None,
     context_window_sink: dict | None = None,
     memory_prompt: str | None = None,
+    model_facts_sink: dict | None = None,
 ):
     """Build the deepagents-backed Linsight agent (design §2.1).
 
@@ -1568,6 +1570,9 @@ async def create_linsight_agent(
         memory_prompt: F132 long-term memory text of this round (tool guidance,
             resident and experience blocks), fixed at round start. Appended only
             when the memory tools are actually bound (prompt <-> tool lockstep).
+        model_facts_sink: mutable dict filled with ``supports_vision`` of the
+            resolved model, so the uploaded-files pointer block words image
+            originals the same way the binary guards treat them.
 
     Returns:
         ``CompiledStateGraph`` to be driven by ``agent.astream(...)``.
@@ -1584,6 +1589,8 @@ async def create_linsight_agent(
     # researcher handoff) follows the session's citation contract in lockstep.
     citation_handles = bool(citation_scope is not None and getattr(citation_scope, "enabled", False))
     model, supports_vision = await _resolve_model(session_model, model_id)
+    if model_facts_sink is not None:
+        model_facts_sink["supports_vision"] = bool(supports_vision)
     context_window = context_window_sink if context_window_sink is not None else {}
     await _apply_context_window(model, svid, context_window)
 

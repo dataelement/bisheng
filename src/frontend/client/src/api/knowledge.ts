@@ -1731,10 +1731,12 @@ export interface KnowledgeFilePreview {
 
 export async function getFilePreviewApi(
     space_id: string,
-    file_id: string
+    file_id: string,
+    options?: { skip403Redirect: boolean; showError: boolean },
 ): Promise<KnowledgeFilePreview> {
+    const endpoint = `/api/v1/knowledge/space/${space_id}/files/${file_id}/preview`;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const res = await request.get<any>(`/api/v1/knowledge/space/${space_id}/files/${file_id}/preview`);
+    const res = await (options ? request.get<any>(endpoint, options) : request.get<any>(endpoint));
     const data = res?.data ?? res;
     return {
         original_url: data?.original_url ?? "",
@@ -1754,10 +1756,16 @@ export async function getFilePreviewApi(
  */
 export async function getFileDownloadApi(
     space_id: string,
-    file_id: string
+    file_id: string,
+    signal?: AbortSignal,
+    options?: { skip403Redirect: boolean; showError: boolean },
 ): Promise<{ original_url: string; preview_url: string }> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const res = await request.get<any>(`/api/v1/knowledge/space/${space_id}/files/${file_id}/download`);
+    const endpoint = `/api/v1/knowledge/space/${space_id}/files/${file_id}/download`;
+    type DownloadData = { original_url?: string; preview_url?: string };
+    type DownloadResponse = DownloadData & { data?: DownloadData | null };
+    const res = signal || options
+        ? await request.get<DownloadResponse>(endpoint, { ...options, ...(signal ? { signal } : {}) })
+        : await request.get<DownloadResponse>(endpoint);
     const data = res?.data ?? res;
     return {
         original_url: data?.original_url ?? "",
@@ -1812,11 +1820,13 @@ export interface VersionListResponse {
  * GET /api/v1/knowledge/space/file/{knowledge_file_id}/versions
  */
 export async function getFileVersionsApi(
-    knowledge_file_id: number
+    knowledge_file_id: number,
+    signal?: AbortSignal,
 ): Promise<VersionListResponse> {
-    const res = await request.get(
-        `/api/v1/knowledge/space/file/${knowledge_file_id}/versions`
-    ) as ApiResponse<VersionListResponse>;
+    const endpoint = `/api/v1/knowledge/space/file/${knowledge_file_id}/versions`;
+    const res = signal
+        ? await request.get<ApiResponse<VersionListResponse>>(endpoint, { signal })
+        : await request.get<ApiResponse<VersionListResponse>>(endpoint);
     return res.data;
 }
 
@@ -1862,12 +1872,11 @@ export interface SetPrimaryResponse {
  * Promote a version to primary (the version that represents the document in search / display).
  * POST /api/v1/knowledge/space/version/{version_id}/set-primary
  */
-export async function setPrimaryVersionApi(version_id: number): Promise<SetPrimaryResponse> {
+export async function setPrimaryVersionApi(version_id: number, signal?: AbortSignal): Promise<SetPrimaryResponse> {
     const res = await request.post(
         `/api/v1/knowledge/space/version/${version_id}/set-primary`,
         undefined,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        { skip403Redirect: true } as any,
+        { skip403Redirect: true, ...(signal ? { signal } : {}) },
     ) as ApiResponse<SetPrimaryResponse>;
     return res.data;
 }
@@ -1876,11 +1885,10 @@ export async function setPrimaryVersionApi(version_id: number): Promise<SetPrima
  * Delete a non-primary version (history record only; does not affect the document).
  * DELETE /api/v1/knowledge/space/version/{version_id}
  */
-export async function deleteFileVersionApi(version_id: number): Promise<void> {
+export async function deleteFileVersionApi(version_id: number, signal?: AbortSignal): Promise<void> {
     await request.delete(
         `/api/v1/knowledge/space/version/${version_id}`,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        { skip403Redirect: true } as any,
+        { skip403Redirect: true, ...(signal ? { signal } : {}) },
     );
 }
 
@@ -1968,10 +1976,12 @@ export async function getPendingSimilarFilesApi(space_id: number): Promise<Pendi
  */
 export async function getVersionRecommendationsApi(
     file_id: number,
+    signal?: AbortSignal,
 ): Promise<SimilarCandidateEntry[]> {
-    const res = await request.get<ApiResponse<SimilarCandidateEntry[]>>(
-        `/api/v1/knowledge/space/file/${file_id}/version-recommendations`
-    );
+    const endpoint = `/api/v1/knowledge/space/file/${file_id}/version-recommendations`;
+    const res = signal
+        ? await request.get<ApiResponse<SimilarCandidateEntry[]>>(endpoint, { signal })
+        : await request.get<ApiResponse<SimilarCandidateEntry[]>>(endpoint);
     return extractList<SimilarCandidateEntry>((res as any)?.data ?? res);
 }
 
@@ -1983,10 +1993,11 @@ export async function searchVersionSourcesApi(
     space_id: number,
     keyword: string,
     current_file_id: number,
+    signal?: AbortSignal,
 ): Promise<SearchableDocumentEntry[]> {
     const res = await request.get<ApiResponse<SearchableDocumentEntry[]>>(
         `/api/v1/knowledge/space/${space_id}/document/version-search`,
-        { params: { keyword, current_file_id } }
+        { params: { keyword, current_file_id }, ...(signal ? { signal } : {}) },
     );
     return extractList<SearchableDocumentEntry>((res as any)?.data ?? res);
 }
@@ -2004,12 +2015,12 @@ export interface MergeIntoCurrentPayload {
  */
 export async function mergeIntoCurrentApi(
     payload: MergeIntoCurrentPayload,
+    signal?: AbortSignal,
 ): Promise<LinkAsNewVersionResponse> {
     const res = await request.post(
         `/api/v1/knowledge/space/version/merge`,
         payload,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        { skip403Redirect: true } as any,
+        { skip403Redirect: true, ...(signal ? { signal } : {}) },
     ) as ApiResponse<LinkAsNewVersionResponse>;
     return res.data;
 }
@@ -2018,12 +2029,11 @@ export async function mergeIntoCurrentApi(
  * Dismiss the similar-file flag for a file (user chose not to link it to any document).
  * POST /api/v1/knowledge/space/file/{file_id}/dismiss-similar
  */
-export async function dismissSimilarApi(file_id: number): Promise<void> {
+export async function dismissSimilarApi(file_id: number, signal?: AbortSignal): Promise<void> {
     await request.post(
         `/api/v1/knowledge/space/file/${file_id}/dismiss-similar`,
         undefined,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        { skip403Redirect: true } as any,
+        { skip403Redirect: true, ...(signal ? { signal } : {}) },
     );
 }
 
