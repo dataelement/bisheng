@@ -5,7 +5,14 @@
  * list below and every action on it stay available while it is off (AC-90).
  * Every call acts on the signed-in user in the current tenant only.
  */
-import { Button, Modal, Switch } from "@bisheng/ui";
+import {
+  Button,
+  EmptyStateIllustration,
+  Modal,
+  StateView,
+  Switch,
+  SystemMaintenanceIllustration,
+} from "@bisheng/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import {
@@ -21,6 +28,7 @@ import {
   type MemorySetting,
 } from "~/api/memory";
 import { groupMemoryItems, memoryDate, memoryGroupLabel } from "~/components/Memory/memoryLabels";
+import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { useLocalize } from "~/hooks";
 import { MemoryDetailView } from "./MemoryDetailView";
 import { MemoryItemEditor } from "./MemoryItemEditor";
@@ -43,6 +51,7 @@ export function MemoryPane() {
   const itemsQuery = useQuery({ queryKey: MEMORY_ITEMS_QUERY_KEY, queryFn: listMemoryItemsApi });
   const settingQuery = useQuery({ queryKey: SETTING_QUERY_KEY, queryFn: getMemorySettingApi });
   const items = itemsQuery.data ?? [];
+  const itemsLoading = itemsQuery.isLoading || (itemsQuery.isError && itemsQuery.isFetching);
   // No setting row means on (AC-68 default); the switch shows that until loaded.
   const enabled = settingQuery.data?.enabled ?? true;
 
@@ -145,7 +154,7 @@ export function MemoryPane() {
         />
       </section>
 
-      <section className="flex flex-col gap-3">
+      <section className="flex flex-col gap-3" aria-busy={itemsLoading}>
         <div className="flex items-center justify-between gap-2">
           <h3 className="text-body font-medium text-text-1">
             {localize("memory.list_title")}
@@ -173,15 +182,20 @@ export function MemoryPane() {
           </p>
         )}
 
-        {itemsQuery.isError ? (
-          <div className="flex items-center gap-2 py-8 text-body-sm text-text-3">
-            {localize("memory.load_failed")}
-            <Button size="small" variant="link" onClick={() => itemsQuery.refetch()}>
-              {localize("memory.retry")}
-            </Button>
+        {itemsLoading ? (
+          <div role="status" className="flex min-h-[320px] flex-col items-center justify-center gap-4 px-4 text-center text-body text-text-3">
+            <LoadingIcon className="size-20 [@media(max-height:479px)]:size-10" />
+            <span>{localize("com_list_loading")}</span>
           </div>
-        ) : itemsQuery.isLoading ? null : items.length === 0 ? (
-          <p className="py-8 text-center text-body-sm text-text-3">{localize("memory.empty")}</p>
+        ) : itemsQuery.isError ? (
+          <StateView
+            size="page"
+            image={<SystemMaintenanceIllustration />}
+            title={localize("memory.load_failed")}
+            action={<Button onClick={() => void itemsQuery.refetch()}>{localize("memory.retry")}</Button>}
+          />
+        ) : items.length === 0 ? (
+          <StateView size="page" image={<EmptyStateIllustration />} title={localize("memory.empty")} />
         ) : (
           // Grouped by type, like Claude's memory page: a quiet heading per group, then one
           // row per memory with its summary and the date it was last saved. Delete lives on
