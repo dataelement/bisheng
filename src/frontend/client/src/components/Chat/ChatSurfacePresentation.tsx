@@ -9,7 +9,7 @@ import { useRunAwaitingAnswer } from "./hooks/useTaskWorkspaceState";
 import { composerPlaceholder, useRunStopped } from "./hooks/runComposerState";
 import { WorkspacePanel } from "~/components/Linsight/Artifacts/WorkspacePanel";
 import { TaskTurnLoadContext } from "~/components/Linsight/Execution/taskTurnLoad";
-import { TaskTurnRetryContext, UnifiedRuntimeContext } from "~/components/Chat/unifiedRuntimeContext";
+import { RunPageContext, TaskTurnRetryContext } from "~/components/Chat/runPageContext";
 import { cn } from "~/utils";
 import Landing from "./Landing";
 import { DailyFeaturedApps } from "./DailyFeaturedApps";
@@ -93,19 +93,15 @@ export function ChatSurfacePresentation({
     taskWorkspaceFiles,
     reportTaskTurnLoadFailed,
     taskWorkspaceLoadState,
-    taskRunning,
-    awaitingUserInput,
-    handleStop,
     handleRetryTaskTurn,
-    unifiedRuntime,
     shareToken,
   } = model;
   const runAwaitingAnswer = useRunAwaitingAnswer(shareToken ? "" : conversationId);
   const runStopped = useRunStopped(shareToken ? "" : conversationId);
   return (
     <TaskTurnLoadContext.Provider value={reportTaskTurnLoadFailed}>
-      <UnifiedRuntimeContext.Provider value={unifiedRuntime === true}>
-      <TaskTurnRetryContext.Provider value={unifiedRuntime === true && !shareToken ? handleRetryTaskTurn : null}>
+      <RunPageContext.Provider value={!shareToken}>
+      <TaskTurnRetryContext.Provider value={shareToken ? null : handleRetryTaskTurn}>
       <Presentation isLingsi={false}>
         {inviteQuotaDialog}
         <div className="dsh-chat-surface" data-testid="dsh-chat-surface">
@@ -261,7 +257,6 @@ export function ChatSurfacePresentation({
                               <RunClarifyCard
                                 conversationId={shareToken ? "" : conversationId}
                                 onSend={handleSend}
-                                suppressed={awaitingUserInput}
                               />
                               {inviteQuotaBar}
                               <AiChatInput
@@ -275,23 +270,16 @@ export function ChatSurfacePresentation({
                                   !bsConfig?.models?.length ||
                                   !!shareToken
                                 }
-                                sendDisabled={taskRunning}
                                 isStreaming={isStreaming}
                                 isParsingMedia={isParsingMedia}
-                                // Parked awaiting the user → not "running": drop the Stop
-                                // button (sendDisabled still blocks a new round until the
-                                // current one resolves). The user replies via the
-                                // ClarifyCard in the stream above, not this input.
-                                taskRunning={taskRunning && !awaitingUserInput}
                                 features={{
                                   taskModeEntry: canUseTaskMode,
-                                  taskMode:
-                                    (taskMode || taskRunning) && canUseTaskMode,
+                                  taskMode: taskMode && canUseTaskMode,
                                 }}
                                 onToggleTaskMode={handleToggleTaskMode}
                                 placeholder={composerPlaceholder(t, {
-                                  runAwaitingAnswer, awaitingUserInput, runStopped, taskMode,
-                                  runTakesMessages: unifiedRuntime === true && !shareToken && (isStreaming || taskRunning),
+                                  runAwaitingAnswer, runStopped, taskMode,
+                                  runTakesMessages: isStreaming,
                                   taskPlaceholder: (bsConfig as { linsightConfig?: { input_placeholder?: string } } | undefined)
                                     ?.linsightConfig?.input_placeholder,
                                 })}
@@ -301,7 +289,7 @@ export function ChatSurfacePresentation({
                                 onModelChange={handleModelChange}
                                 onModelAutoChange={handleModelAutoChange}
                                 onSend={handleSend}
-                                onStop={handleStop}
+                                onStop={stopGenerating}
                                 value={inputText}
                                 onChange={setInputText}
                                 bsConfig={bsConfig}
@@ -512,7 +500,6 @@ export function ChatSurfacePresentation({
                                 !bsConfig?.models?.length ||
                                 !!shareToken
                               }
-                              sendDisabled={taskRunning}
                               isStreaming={isStreaming}
                               isParsingMedia={isParsingMedia}
                               features={{
@@ -606,7 +593,7 @@ export function ChatSurfacePresentation({
         </div>
       </Presentation>
       </TaskTurnRetryContext.Provider>
-      </UnifiedRuntimeContext.Provider>
+      </RunPageContext.Provider>
     </TaskTurnLoadContext.Provider>
   );
 }

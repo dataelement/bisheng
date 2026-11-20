@@ -80,23 +80,9 @@ interface AiChatInputProps {
     allowConfiguration?: boolean;
     features?: AiChatInputFeatures;
     disabled?: boolean;
-    /**
-     * F035: disable only the send button while keeping the textarea editable.
-     * Used by chat-embedded task mode: a running round must not accept a new
-     * submission, but the user may still type the next round's prompt ahead.
-     */
-    sendDisabled?: boolean;
     isStreaming?: boolean;
     /** True while backend ASR is processing attached media after send. */
     isParsingMedia?: boolean;
-    /**
-     * F035: a linsight task round is executing. The handoff SSE stream already
-     * closed (so ``isStreaming`` is false), but the task keeps running via the
-     * worker/WS — show the stop button (wired to terminate-execute) and keep the
-     * task-mode toggle highlighted. The textarea stays editable (unlike
-     * ``isStreaming``) so the user can compose the next round's prompt.
-     */
-    taskRunning?: boolean;
     modelOptions?: any[];
     modelValue?: any;
     hasMessages?: boolean;
@@ -158,10 +144,8 @@ const AiChatInput = memo(
         allowConfiguration = true,
         features,
         disabled = false,
-        sendDisabled = false,
         isStreaming = false,
         isParsingMedia = false,
-        taskRunning = false,
         modelOptions,
         modelValue,
         placeholder = '',
@@ -205,17 +189,16 @@ const AiChatInput = memo(
         // so reading it from bsConfig would silently fall back to 50MB.
         const envConfig = useRecoilValue(bishengConfState);
 
-        // F004: on the unified runtime a run in progress accepts messages (AC-12),
-        // so neither `isStreaming` nor `sendDisabled` blocks the composer. Only the
-        // conversation page passes a composer identity; the other surfaces that
-        // reuse this input (subscription dock, /linsight) keep the legacy stream.
-        const unifiedRuntime = bsConfig?.unified_runtime_enabled === true && !isLingsi && !!composerIdentity;
-        const blockedByRun = isStreaming && !unifiedRuntime;
-        const sendBlocked = sendDisabled && !unifiedRuntime;
+        // F004: on the conversation page a run in progress accepts messages
+        // (AC-12), so `isStreaming` does not block the composer. Only that page
+        // passes a composer identity; the other surfaces that reuse this input
+        // (subscription dock, /linsight) own a stream that takes one turn at a time.
+        const runComposer = !isLingsi && !!composerIdentity;
+        const blockedByRun = isStreaming && !runComposer;
         // F004: a message sent while a run is in progress carries text only, and
         // the run keeps its model. Uploading and the model selector wait for the
         // run to end; typing and sending stay available.
-        const runLocked = unifiedRuntime && isStreaming;
+        const runLocked = runComposer && isStreaming;
 
         // Collapse toolbar labels to icons when the toolbar's own width (not the
         // viewport's) runs short — e.g. once the sidebar opens on a mid-size screen.
@@ -417,7 +400,7 @@ const AiChatInput = memo(
         const handleSend = useCallback(async () => {
             const trimmed = text.trim();
             // Workbench: uploaded files require accompanying text before send.
-            if (!trimmed || disabled || sendBlocked || blockedByRun || isParsingMedia || fileUploading || filesParsing) return;
+            if (!trimmed || disabled || blockedByRun || isParsingMedia || fileUploading || filesParsing) return;
             if (sendPendingRef.current?.identity === composerIdentity) return;
             if (!taskMode && !isLingsi && chatFiles?.some((file) => !canProcessChatImage(
                 file.name || file.file_name || file.filename || '', supportsVision, supportsImageParsing,
@@ -458,7 +441,7 @@ const AiChatInput = memo(
                 window.clearTimeout(textareaScrollHideTimerRef.current);
                 textareaScrollHideTimerRef.current = null;
             }
-        }, [text, disabled, sendBlocked, blockedByRun, isParsingMedia, fileUploading, filesParsing, onSend, chatFiles, setText, taskMode, isLingsi, supportsVision, supportsImageParsing, showToast, localize, composerIdentity]);
+        }, [text, disabled, blockedByRun, isParsingMedia, fileUploading, filesParsing, onSend, chatFiles, setText, taskMode, isLingsi, supportsVision, supportsImageParsing, showToast, localize, composerIdentity]);
 
         // ── Handed-over ask (chatAskHandoff): upload its file, then send unattended ──
         const startedAskKeyRef = useRef<string | null>(null);
@@ -788,7 +771,7 @@ const AiChatInput = memo(
                                     onAutoChange={onModelAutoChange}
                                 />
                             )}
-                            {(isStreaming || taskRunning) && (
+                            {isStreaming && (
                                 <button
                                     type="button"
                                     className="dsh-composer-submit btn-brand-primary rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-fill-3 disabled:text-text-3 disabled:opacity-100"
@@ -814,8 +797,8 @@ const AiChatInput = memo(
                                     </svg>
                                 </button>
                             )}
-                            {/* Unified runtime: the send button stays next to the stop button. */}
-                            {(unifiedRuntime || !(isStreaming || taskRunning)) && (
+                            {/* Conversation page: the send button stays next to the stop button. */}
+                            {(runComposer || !isStreaming) && (
                                 <div className="flex items-center gap-2">
                                 {showVoice && (
                                     <SpeechToTextComponent
@@ -831,7 +814,6 @@ const AiChatInput = memo(
                                     disabled={
                                         voice.busy || !text?.trim() ||
                                         disabled ||
-                                        sendBlocked ||
                                         isParsingMedia ||
                                         fileUploading ||
                                         filesParsing

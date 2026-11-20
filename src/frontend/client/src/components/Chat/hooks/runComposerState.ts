@@ -1,21 +1,20 @@
 /**
- * F004 — what the conversation input box shows for the state of the run
- * (unified runtime). Inert when the tenant switch is off.
+ * F004 — what the conversation input box shows for the state of the run.
+ * The run store only holds conversations whose events the page follows, so
+ * every reader here is inert on a carrier that follows none.
  */
 import { useEffect, type Dispatch, type SetStateAction } from "react";
-import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { useRunStore } from "~/store/runStore";
 import { mergeReturnedText } from "~/store/runUnread";
 
 /**
- * F004: true after the user stopped the run of this conversation (unified
- * runtime) and until the next run starts. The input box then says that a
- * message continues the work. Always false when the tenant switch is off.
+ * F004: true after the user stopped the run of this conversation and until
+ * the next run starts. The input box then says that a message continues the
+ * work.
  */
 export function useRunStopped(conversationId: string): boolean {
-  const enabled = useGetBsConfig().data?.unified_runtime_enabled === true;
   return useRunStore((state) => {
-    if (!enabled || !conversationId) return false;
+    if (!conversationId) return false;
     return state.conversations[conversationId]?.run?.status === "stopped";
   });
 }
@@ -24,13 +23,11 @@ export function useRunStopped(conversationId: string): boolean {
  * F004 design §7 items 1 and 6: messages a run never read come back when the
  * user stops it (or when the run that should have answered them could not be
  * created). Their text is put into the input box, before what the user has
- * typed there since, so nothing is lost and it can be sent again. Does nothing
- * when the tenant switch is off.
+ * typed there since, so nothing is lost and it can be sent again.
  */
 export function useReturnedDraft(conversationId: string, setInputText: Dispatch<SetStateAction<string>>): void {
-  const enabled = useGetBsConfig().data?.unified_runtime_enabled === true;
   const returned = useRunStore((state) =>
-    enabled && conversationId ? (state.conversations[conversationId]?.draftReturn ?? null) : null,
+    conversationId ? (state.conversations[conversationId]?.draftReturn ?? null) : null,
   );
   useEffect(() => {
     if (!returned) return;
@@ -40,13 +37,11 @@ export function useReturnedDraft(conversationId: string, setInputText: Dispatch<
 }
 
 interface ComposerPlaceholderState {
-  /** The run waits for an answer the input box can take (unified runtime). */
+  /** The run waits for an answer the input box can take. */
   runAwaitingAnswer: boolean;
-  /** A legacy task turn waits for an answer given on its own card. */
-  awaitingUserInput: boolean;
-  /** The user stopped the latest run (unified runtime). */
+  /** The user stopped the latest run. */
   runStopped: boolean;
-  /** A run is going on and takes further messages (unified runtime only). */
+  /** A run is going on and takes further messages. */
   runTakesMessages?: boolean;
   taskMode: boolean;
   /** Admin-configured placeholder of deep research. */
@@ -58,8 +53,7 @@ export function composerPlaceholder(
   t: (key: string) => string,
   state: ComposerPlaceholderState,
 ): string | undefined {
-  if (state.runAwaitingAnswer && !state.awaitingUserInput) return t("com_linsight_answer_placeholder");
-  if (state.awaitingUserInput) return t("com_linsight_awaiting_reply");
+  if (state.runAwaitingAnswer) return t("com_linsight_answer_placeholder");
   if (state.runStopped) return t("runComposer.stoppedPlaceholder");
   if (state.runTakesMessages) return t("runComposer.runningPlaceholder");
   if (state.taskMode) return state.taskPlaceholder || t("com_linsight_input_placeholder");

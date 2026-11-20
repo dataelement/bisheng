@@ -1,13 +1,13 @@
 /**
- * F004 (T061): how the conversation page renders a deep-research turn on each
- * side of the tenant switch, and the typing cursor of a run that waits.
+ * F004 (T061): how a deep-research turn renders on the conversation page and
+ * on a carrier that follows no run events, and the typing cursor of a run that waits.
  */
 import { act, render } from "@testing-library/react";
 import type { ReactNode } from "react";
 import type { ChatMessage } from "~/api/chatApi";
 import { useRunStore, type RunEvent } from "~/store/runStore";
 import AiMessageBubble from "./AiMessageBubble";
-import { UnifiedRuntimeContext } from "./unifiedRuntimeContext";
+import { RunPageContext } from "./runPageContext";
 
 const mockTaskPanels: Array<{ versionId: string; liveChannel?: boolean }> = [];
 const mockMarkdown: Array<{ content: string; showCursor?: boolean }> = [];
@@ -74,8 +74,8 @@ const taskRow = (extra: Partial<ChatMessage> = {}): ChatMessage => ({
   ...extra,
 });
 
-const renderBubble = (message: ChatMessage, unified: boolean) => {
-  const wrap = (node: ReactNode) => <UnifiedRuntimeContext.Provider value={unified}>{node}</UnifiedRuntimeContext.Provider>;
+const renderBubble = (message: ChatMessage, runPage: boolean) => {
+  const wrap = (node: ReactNode) => <RunPageContext.Provider value={runPage}>{node}</RunPageContext.Provider>;
   return render(wrap(<AiMessageBubble message={message} isLatest />));
 };
 const emit = (event: Record<string, unknown>, id: string) =>
@@ -90,7 +90,7 @@ beforeEach(() => {
   act(() => useRunStore.setState({ conversations: {} }));
 });
 
-describe("tenant switch off", () => {
+describe("carrier that follows no run events (share view)", () => {
   it("renders a task turn in the inline task panel with its live channel", () => {
     renderBubble(taskRow(), false);
     expect(mockTaskPanels).toEqual([{ versionId: "sv1", liveChannel: true }]);
@@ -98,7 +98,7 @@ describe("tenant switch off", () => {
   });
 });
 
-describe("tenant switch on", () => {
+describe("conversation page", () => {
   it("shows a stored task turn for review, without the live channel", () => {
     renderBubble(taskRow(), true);
     expect(mockTaskPanels).toEqual([{ versionId: "sv1", liveChannel: false }]);

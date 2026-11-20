@@ -33,8 +33,7 @@ export function useTaskModeNavigation({
   // all constant within a visit, so it could never fire a second time. A single
 
   // current pathname) therefore parked the toggle on off for good, and
-  // `taskMode || taskRunning` below kept the button lit until the running task
-  // ended — so the drop was invisible and the NEXT turn silently went daily.
+  // the NEXT turn silently went daily.
   // Placed after isTaskConversation on purpose: it is in the dep array.
   useEffect(() => {
     // Only consumable once we are ON the rewritten URL. This effect is declared

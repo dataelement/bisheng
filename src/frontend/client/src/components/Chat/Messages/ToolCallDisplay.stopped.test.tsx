@@ -8,9 +8,6 @@ import { STOPPED_TOOL_NOTE } from '~/hooks/unifiedRun';
 import ToolCallDisplay from './ToolCallDisplay';
 
 jest.mock('~/hooks', () => ({ useLocalize: () => (key: string) => key }));
-jest.mock('~/hooks/queries/data-provider', () => ({
-    useGetBsConfig: () => ({ data: { unified_runtime_enabled: true } }),
-}));
 jest.mock('~/components/ChatErrorCard', () => ({ ChatErrorCard: () => null }));
 jest.mock('~/components/Memory/MemorySearchHits', () => ({ MemorySearchHits: () => null }));
 

@@ -1,7 +1,7 @@
 /**
- * F004 (T050): the question card of a run on the unified runtime.
+ * F004 (T050): the question card of a run.
  * It reads the pending question from the run store and answers through the
- * send entry (AC-20, AC-21). With the tenant switch off it renders nothing.
+ * send entry (AC-20, AC-21).
  */
 import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { useRunStore, type RunEvent } from '~/store/runStore';
@@ -9,10 +9,6 @@ import { useRunAwaitingAnswer } from '~/components/Chat/hooks/useTaskWorkspaceSt
 import { RunClarifyCard, runQuestionToClarifyData } from './ClarifyCard';
 import { parseClarifyRequest } from './stepUtils';
 
-let mockBsConfig: Record<string, unknown> | undefined = { unified_runtime_enabled: true };
-jest.mock('~/hooks/queries/data-provider', () => ({
-    useGetBsConfig: () => ({ data: mockBsConfig }),
-}));
 jest.mock('~/hooks', () => ({
     useLocalize: () => (key: string) => key,
 }));
@@ -58,7 +54,6 @@ function ask(callId = 'call-1') {
 }
 
 beforeEach(() => {
-    mockBsConfig = { unified_runtime_enabled: true };
     act(() => useRunStore.getState().resetConversation(CID));
 });
 
@@ -126,26 +121,15 @@ describe('RunClarifyCard', () => {
         await waitFor(() => expect(onSend).toHaveBeenCalledTimes(2));
     });
 
-    it('renders nothing when the tenant switch is off or missing', () => {
+    it('renders nothing without a conversation', () => {
         ask();
-        mockBsConfig = { unified_runtime_enabled: false };
-        const first = render(<RunClarifyCard conversationId={CID} onSend={jest.fn()} />);
-        expect(first.container.innerHTML).toBe('');
-        first.unmount();
-        mockBsConfig = undefined;
-        const second = render(<RunClarifyCard conversationId={CID} onSend={jest.fn()} />);
-        expect(second.container.innerHTML).toBe('');
-    });
-
-    it('renders nothing when the legacy task turn already shows the question', () => {
-        ask();
-        const { container } = render(<RunClarifyCard conversationId={CID} onSend={jest.fn()} suppressed />);
+        const { container } = render(<RunClarifyCard conversationId="" onSend={jest.fn()} />);
         expect(container.innerHTML).toBe('');
     });
 });
 
 describe('useRunAwaitingAnswer', () => {
-    it('is true only while the run waits for an answer on the unified runtime', () => {
+    it('is true only while the run waits for an answer', () => {
         const { result } = renderHook(() => useRunAwaitingAnswer(CID));
         expect(result.current).toBe(false);
         ask();
@@ -154,11 +138,8 @@ describe('useRunAwaitingAnswer', () => {
         expect(result.current).toBe(false);
     });
 
-    it('is false with the switch off, and for an empty conversation id', () => {
+    it('is false for an empty conversation id', () => {
         ask();
-        mockBsConfig = {};
-        expect(renderHook(() => useRunAwaitingAnswer(CID)).result.current).toBe(false);
-        mockBsConfig = { unified_runtime_enabled: true };
         expect(renderHook(() => useRunAwaitingAnswer('')).result.current).toBe(false);
     });
 });

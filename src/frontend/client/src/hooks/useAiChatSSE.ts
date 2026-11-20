@@ -79,15 +79,6 @@ export interface SSESubmission {
     ) => void;
     onStart: () => void;
     onEnd: () => void;
-    /**
-     * F035 Track J (TJ-6): task-mode handoff. When this turn was submitted with
-     * `task_mode:true`, the unified entry replies with a single
-     * `linsight_task_handoff` SSE event carrying the linsight session_version id
-     * + the (possibly newly created) chat_id, then closes the stream. The caller
-     * then drives start-execute + the task WS — the turn stays in this same
-     * daily conversation, no /linsight navigation.
-     */
-    onTaskHandoff?: (data: { session_version_id: string; chat_id: string }) => void;
     /** Daily chat: server finished parse-time cover extraction for attachments. */
     onQuestionFilesUpdate?: (data: { messageId?: string; files: any[] }) => void;
 }
@@ -122,7 +113,6 @@ export function openChatStream(
         onError,
         onStart,
         onEnd,
-        onTaskHandoff,
         onQuestionFilesUpdate,
     } = submission;
     const projectDraft = submission.projectDraft === undefined
@@ -211,20 +201,6 @@ export function openChatStream(
         try {
             const data = JSON.parse(e.data);
             console.log("[SSE] raw event:", data);
-
-            // --- F035 Track J (TJ-6): task-mode handoff ---
-            // Unified entry replies with a single handoff event then closes;
-            // hand the SV/chat ids to the caller and let the readystatechange
-            // watchdog fire onEnd when the stream drops.
-            if (data.event === "linsight_task_handoff") {
-                expectedClose = true;
-                const handoff = data.data || {};
-                onTaskHandoff?.({
-                    session_version_id: String(handoff.session_version_id ?? ""),
-                    chat_id: String(handoff.chat_id ?? ""),
-                });
-                return;
-            }
 
             // --- final: stream complete ---
             if (data.final != null) {

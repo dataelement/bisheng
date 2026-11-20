@@ -21,7 +21,6 @@ function setup(overrides: Partial<UseChatSendActionsOptions> = {}) {
     const options: UseChatSendActionsOptions = {
         taskMode: true,
         canUseTaskMode: true,
-        unifiedRuntime: true,
         conversationId: CID,
         sendMessage,
         allowInviteSend,
@@ -93,16 +92,6 @@ describe('handleSend and the invite quota (item 9)', () => {
         expect(sendMessage).not.toHaveBeenCalled();
     });
 
-    it('with the switch off a pending question in the store changes nothing: the quota is asked as today', async () => {
-        emit({ type: 'run_started' });
-        ask();
-        const { result, sendMessage, allowInviteSend } = setup({ unifiedRuntime: false });
-        allowInviteSend.mockReturnValue(false);
-        await act(async () => { await result.current.handleSend('research this'); });
-        expect(allowInviteSend).toHaveBeenCalledTimes(1);
-        expect(sendMessage).not.toHaveBeenCalled();
-    });
-
     it('never asks the quota for an ordinary turn', async () => {
         const { result, sendMessage, allowInviteSend } = setup({ taskMode: false });
         await act(async () => { await result.current.handleSend('hello'); });
@@ -166,7 +155,6 @@ describe('handleRetryTaskTurn (item 15)', () => {
     });
 
     it.each([
-        ['the switch is off', { unifiedRuntime: false }, 'q'],
         ['the role may not use deep research', { canUseTaskMode: false }, 'q'],
         ['the turn has no question', {}, '   '],
     ])('does nothing when %s', async (_name, overrides, question) => {

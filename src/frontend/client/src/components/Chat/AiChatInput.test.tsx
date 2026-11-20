@@ -362,12 +362,10 @@ test('an explicit new composer discards unsent files without a late send clearin
   expect(onSend).toHaveBeenLastCalledWith('Question B', null);
 });
 
-// ── F004 T048: a run in progress accepts messages on the unified runtime ──
-const unifiedConfig = { ...config, unified_runtime_enabled: true };
-
-test('unified runtime keeps the text box and send button usable next to stop while a run is in progress (AC-12)', () => {
-  const input = { ...props(), bsConfig: unifiedConfig, features: { taskMode: false } };
-  render(<AiChatInput {...input} composerIdentity="c1" allowConfiguration={false} isStreaming sendDisabled taskRunning value="Change step 3" />);
+// ── F004 T048: a run in progress accepts messages on the conversation page ──
+test('conversation composer keeps the text box and send button usable next to stop while a run is in progress (AC-12)', () => {
+  const input = { ...props(), features: { taskMode: false } };
+  render(<AiChatInput {...input} composerIdentity="c1" allowConfiguration={false} isStreaming value="Change step 3" />);
   expect(screen.getByRole('textbox')).toHaveAttribute('contenteditable', 'true');
   expect(screen.getByRole('button', { name: 'Stop generating' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled();
@@ -383,8 +381,8 @@ function dropFile() {
   fireEvent.drop(window, { dataTransfer: { files: [file], items: [], clearData: () => {} } });
 }
 
-test('unified runtime locks upload and the model selector while a run is in progress, and says when they come back', () => {
-  const input = { ...props(), bsConfig: unifiedConfig, features: { taskMode: false } };
+test('conversation composer locks upload and the model selector while a run is in progress, and says when they come back', () => {
+  const input = { ...props(), features: { taskMode: false } };
   const view = render(<AiChatInput {...input} composerIdentity="c1" allowConfiguration={false} isStreaming value="Change step 3" />);
   expect(screen.getByRole('button', { name: 'upload' })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'upload' })).toHaveAttribute('title', 'runComposer.uploadLocked');
@@ -401,8 +399,8 @@ test('unified runtime locks upload and the model selector while a run is in prog
   expect(screen.getByRole('button', { name: 'model' })).not.toHaveAttribute('title');
 });
 
-test('unified runtime refuses a pasted or dropped file while a run is in progress and explains why', () => {
-  const input = { ...props(), bsConfig: unifiedConfig, features: { taskMode: false } };
+test('conversation composer refuses a pasted or dropped file while a run is in progress and explains why', () => {
+  const input = { ...props(), features: { taskMode: false } };
   const view = render(<AiChatInput {...input} composerIdentity="c1" allowConfiguration={false} isStreaming />);
   mockToast.mockClear();
   pasteImage();
@@ -419,11 +417,8 @@ test('unified runtime refuses a pasted or dropped file while a run is in progres
   expect(screen.getByTestId('attachments')).toHaveTextContent('late.txt');
 });
 
-test.each([
-  ['the switch is off', { bsConfig: config, composerIdentity: 'c1' }],
-  ['the input is not the conversation composer', { bsConfig: unifiedConfig }],
-])('a streaming run adds no upload or model lock of its own when %s', (_name, extra) => {
-  const input = { ...props(), features: { taskMode: false }, ...extra };
+test('a streaming run adds no upload or model lock of its own when the input is not the conversation composer', () => {
+  const input = { ...props(), features: { taskMode: false } };
   render(<AiChatInput {...input} allowConfiguration={false} isStreaming />);
   expect(screen.getByRole('button', { name: 'upload' })).toBeEnabled();
   expect(screen.getByRole('button', { name: 'upload' })).not.toHaveAttribute('title');
@@ -431,24 +426,23 @@ test.each([
   expect(screen.getByRole('button', { name: 'model' })).not.toHaveAttribute('title');
 });
 
-test('unified runtime sends on Enter while a run is in progress (AC-12)', () => {
-  const input = { ...props(), bsConfig: unifiedConfig, features: { taskMode: false } };
+test('conversation composer sends on Enter while a run is in progress (AC-12)', () => {
+  const input = { ...props(), features: { taskMode: false } };
   render(<AiChatInput {...input} composerIdentity="c1" allowConfiguration={false} isStreaming value="Go on" />);
   fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
   expect(input.onSend).toHaveBeenCalledWith('Go on', null);
 });
 
-test('unified runtime shows no stop button when nothing runs', () => {
-  const input = { ...props(), bsConfig: unifiedConfig };
+test('conversation composer shows no stop button when nothing runs', () => {
+  const input = { ...props() };
   render(<AiChatInput {...input} composerIdentity="c1" allowConfiguration={false} />);
   expect(screen.queryByRole('button', { name: 'Stop generating' })).toBeNull();
   expect(screen.getByRole('button', { name: 'Send message' })).toBeInTheDocument();
 });
 
 test.each([
-  ['the switch is off', { bsConfig: config, composerIdentity: 'c1' }],
-  ['the input is not the conversation composer', { bsConfig: unifiedConfig }],
-  ['the input is the /linsight composer', { bsConfig: unifiedConfig, composerIdentity: 'c1', isLingsi: true }],
+  ['the input is not the conversation composer', {}],
+  ['the input is the /linsight composer', { composerIdentity: 'c1', isLingsi: true }],
 ])('a streaming run still blocks the composer when %s', (_name, extra) => {
   const input = { ...props(), features: { taskMode: false }, ...extra };
   render(<AiChatInput {...input} allowConfiguration={false} isStreaming value="Change step 3" />);
@@ -456,10 +450,4 @@ test.each([
   expect(screen.queryByRole('button', { name: 'Send message' })).toBeNull();
   fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
   expect(input.onSend).not.toHaveBeenCalled();
-});
-
-test('sendDisabled still blocks the send button with the switch off', () => {
-  const input = { ...props(), features: { taskMode: false } };
-  render(<AiChatInput {...input} composerIdentity="c1" allowConfiguration={false} sendDisabled value="Next round" />);
-  expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
 });

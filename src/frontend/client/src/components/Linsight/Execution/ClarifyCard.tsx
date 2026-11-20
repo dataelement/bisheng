@@ -13,7 +13,6 @@ import { Outlined } from 'bisheng-icons';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Textarea } from '@bisheng/ui';
 import { useLocalize } from '~/hooks';
-import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { useRunStore, type RunAskUserData } from '~/store/runStore';
 import { cn } from '~/utils';
 import type { ClarifyQuestion, ExecStepEventData } from './stepUtils';
@@ -64,28 +63,24 @@ interface RunClarifyCardProps {
     conversationId: string;
     /** The send entry of the page. `false` means the message was not accepted. */
     onSend: (text: string) => Promise<boolean | void> | boolean | void;
-    /** True when another surface already shows this question (legacy task turn). */
-    suppressed?: boolean;
 }
 
 /**
- * F004 (T050): the question a run of the unified runtime is waiting on (AC-20).
+ * F004 (T050): the question the conversation's run is waiting on (AC-20).
  * It reads the run store only and submits the answer through the send entry,
  * the same way as typing it in the input box (AC-21): the backend takes the
- * next message of a waiting run as the answer. Renders nothing when the tenant
- * switch is off, so the legacy card and its user-input API are untouched.
+ * next message of a waiting run as the answer.
  */
-export function RunClarifyCard({ conversationId, onSend, suppressed = false }: RunClarifyCardProps) {
-    const enabled = useGetBsConfig().data?.unified_runtime_enabled === true;
+export function RunClarifyCard({ conversationId, onSend }: RunClarifyCardProps) {
     const pending = useRunStore((state) => {
-        if (!enabled || !conversationId) return null;
+        if (!conversationId) return null;
         const run = state.conversations[conversationId]?.run;
         return run?.status === 'waiting' ? run.pendingQuestion : null;
     });
     const data = useMemo(() => (pending ? runQuestionToClarifyData(pending) : null), [pending]);
     // A rejected send re-mounts the card, so the user can answer again.
     const [attempt, setAttempt] = useState(0);
-    if (!data || suppressed) return null;
+    if (!data) return null;
     const handleSubmit = async (_taskId: string, answer: string) => {
         let accepted: boolean | void = false;
         try {

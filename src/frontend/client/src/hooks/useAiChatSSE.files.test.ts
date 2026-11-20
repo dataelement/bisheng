@@ -35,7 +35,7 @@ function open() {
         payload: {}, projectDraft: null,
         userMessage: { messageId: 'question', parentMessageId: '', conversationId: 'chat', sender: 'user', text: 'Question' },
         onCreated: jest.fn(), onMessage: jest.fn(), onAgentUpdate: jest.fn(), onFinal: jest.fn(),
-        onError: jest.fn(), onStart: jest.fn(), onEnd: jest.fn(), onTaskHandoff: jest.fn(),
+        onError: jest.fn(), onStart: jest.fn(), onEnd: jest.fn(),
     };
     mockHandles.push(openChatStream(submission, (key) => key));
     return { submission, stream: mockStreams[mockStreams.length - 1] };

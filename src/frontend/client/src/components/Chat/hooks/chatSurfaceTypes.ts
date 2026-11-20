@@ -28,8 +28,6 @@ export interface UseTaskWorkspaceStateOptions {
   closeCitationPanel: () => void;
   taskVersionIds: string[];
   latestTaskVersionId: string;
-  /** F004 (T061): the page runs on the unified agent runtime. */
-  unifiedRuntime?: boolean;
 }
 
 export interface UseChatModelSelectionOptions {

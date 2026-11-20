@@ -7,11 +7,6 @@ import { useRunStore, type RunEvent } from '~/store/runStore';
 import { useState } from 'react';
 import { composerPlaceholder, useReturnedDraft, useRunStopped } from './runComposerState';
 
-let mockUnified: boolean | undefined = true;
-jest.mock('~/hooks/queries/data-provider', () => ({
-    useGetBsConfig: () => ({ data: { unified_runtime_enabled: mockUnified } }),
-}));
-
 let entry = 0;
 const emit = (type: string, cid = 'c1', runId = 'r1') =>
     act(() => {
@@ -19,7 +14,6 @@ const emit = (type: string, cid = 'c1', runId = 'r1') =>
     });
 
 beforeEach(() => {
-    mockUnified = true;
     entry = 0;
     act(() => useRunStore.setState({ conversations: {} }));
 });
@@ -43,21 +37,17 @@ describe('useRunStopped', () => {
         expect(result.current).toBe(false);
     });
 
-    it('does not read another conversation, a draft, or a tenant with the switch off', () => {
+    it('does not read another conversation or a draft', () => {
         emit('run_started');
         emit('run_stopped');
         expect(renderHook(() => useRunStopped('other')).result.current).toBe(false);
         expect(renderHook(() => useRunStopped('')).result.current).toBe(false);
-        mockUnified = false;
-        expect(renderHook(() => useRunStopped('c1')).result.current).toBe(false);
-        mockUnified = undefined;
-        expect(renderHook(() => useRunStopped('c1')).result.current).toBe(false);
     });
 });
 
 describe('composerPlaceholder', () => {
     const t = (key: string) => key;
-    const base = { runAwaitingAnswer: false, awaitingUserInput: false, runStopped: false, taskMode: false };
+    const base = { runAwaitingAnswer: false, runStopped: false, taskMode: false };
 
     it('keeps the input default for an ordinary idle conversation', () => {
         expect(composerPlaceholder(t, base)).toBeUndefined();
@@ -79,9 +69,6 @@ describe('composerPlaceholder', () => {
 
     it('keeps the earlier wording for the states that existed before', () => {
         expect(composerPlaceholder(t, { ...base, runAwaitingAnswer: true })).toBe('com_linsight_answer_placeholder');
-        expect(composerPlaceholder(t, { ...base, awaitingUserInput: true })).toBe('com_linsight_awaiting_reply');
-        expect(composerPlaceholder(t, { ...base, runAwaitingAnswer: true, awaitingUserInput: true }))
-            .toBe('com_linsight_awaiting_reply');
         expect(composerPlaceholder(t, { ...base, taskMode: true })).toBe('com_linsight_input_placeholder');
         expect(composerPlaceholder(t, { ...base, taskMode: true, taskPlaceholder: 'admin text' })).toBe('admin text');
     });
@@ -128,15 +115,12 @@ describe('useReturnedDraft', () => {
         expect(result.current.text).toBe('');
     });
 
-    it('ignores another conversation, a draft, and a tenant with the switch off', () => {
+    it('ignores another conversation and a draft', () => {
         const other = renderComposer('other');
         const draft = renderComposer('');
         giveBack([['m1', 'first']]);
         expect(other.result.current.text).toBe('');
         expect(draft.result.current.text).toBe('');
-        mockUnified = false;
-        const off = renderComposer('c1');
-        expect(off.result.current.text).toBe('');
         expect(useRunStore.getState().conversations.c1.draftReturn).toBe('first');
     });
 });

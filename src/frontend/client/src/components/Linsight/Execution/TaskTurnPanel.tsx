@@ -34,7 +34,7 @@ import { useLinsightWebSocket } from '~/hooks/Websocket';
 import { useLinsightQueuePolling } from '~/hooks/useLinsightQueuePolling';
 import { SopStatus } from '~/store/linsight';
 import { selectIsRunning, useRunStore } from '~/store/runStore';
-import { useTaskTurnRetry } from '~/components/Chat/unifiedRuntimeContext';
+import { useTaskTurnRetry } from '~/components/Chat/runPageContext';
 import { AnswerFallback } from './AnswerFallback';
 import { BreathingRow } from './BreathingRow';
 import { ClarifyCard } from './ClarifyCard';
@@ -65,15 +65,15 @@ interface TaskTurnPanelProps {
         (ChatView owns it). A doc link opens the file directly — no drawer. */
     onPreviewFile?: (file: ArtifactFile) => void;
     /**
-     * F004 (T061): false on the conversation page of a tenant on the unified
-     * runtime. The panel then only shows what is stored: it opens no task
+     * F004 (T061): false on the conversation page, which follows the run
+     * events of its conversation. The panel then only shows what is stored: it opens no task
      * WebSocket and offers no clarify / cancel action (a question is answered
      * and a run is stopped through the page's send and stop entries). "Retry"
      * of a failed turn sends the turn's question again through the page's
      * send entry (`TaskTurnRetryContext`) instead of the task channel.
      * While the stored status still says "running" and the conversation has no
-     * run in progress, it asks the server for the final state. Default true
-     * keeps today's behaviour.
+     * run in progress, it asks the server for the final state. Default true:
+     * the carriers that follow no run events (share view) keep the task channel.
      */
     liveChannel?: boolean;
 }
@@ -97,7 +97,7 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
     const [loadFailed, setLoadFailedState] = useState(false);
     const [retrying, setRetrying] = useState(false);
     const retryPendingRef = useRef(false);
-    // F004: retry entry of a page on the unified runtime; null everywhere else.
+    // F004: retry entry of the conversation page; null everywhere else.
     const unifiedRetry = useTaskTurnRetry();
     const handleRetry = async () => {
         if (retryReadOnly || !linsight?.question || retryPendingRef.current) return;

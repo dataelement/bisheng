@@ -538,8 +538,6 @@ export type BsConfig = {
   homeMenuDisplayName?: string;
   appCenterMenuDisplayName?: string;
   enable_etl4lm: boolean;
-  /** F004: the tenant runs daily chat and deep research on the unified runtime. Missing means off. */
-  unified_runtime_enabled?: boolean;
   sidebarIcon: {
     enabled: boolean;
     image: string;

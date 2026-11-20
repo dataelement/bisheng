@@ -71,7 +71,6 @@ jest.mock("~/store", () => ({
   },
 }));
 jest.mock("~/store/linsight", () => ({
-  SopStatus: { Running: "running", Stoped: "stoped", SopGenerating: "sop_generating" },
   taskModeSkillsState: () => ({ __testValue: mockSelectedSkills }),
 }));
 
@@ -88,10 +87,9 @@ jest.mock("~/utils/mediaAttachmentUtils", () => ({
 let mockUUIDSequence = 0;
 jest.mock("uuid", () => ({ v4: () => `test-${++mockUUIDSequence}` }));
 jest.mock("~/hooks/useLinsightManager", () => ({
-  useLinsightManager: () => ({ createLinsight: jest.fn(), updateLinsight: jest.fn(), linsightMap: new Map() }),
+  useLinsightManager: () => ({ linsightMap: new Map() }),
 }));
 jest.mock("~/api/linsight", () => ({
-  startLinsight: jest.fn().mockResolvedValue(undefined),
   getLinsightSessionVersionList: jest.fn().mockResolvedValue([]),
 }));
 jest.mock("~/types/chat", () => ({
@@ -141,8 +139,16 @@ const historyOf = (conversationId: string) => [
   },
 ];
 
+/**
+ * The conversation page sends through the run protocol (see the
+ * useAiChat.unified / useUnifiedRun suites). This suite covers the page-owned
+ * stream, which the carriers outside that protocol still use; the
+ * subscription dock is one of them.
+ */
+const STREAM_SCOPE = 'subscription';
+
 const renderChat = (conversationId: string) =>
-  renderHook(({ cid }: { cid: string }) => useAiChat(cid), {
+  renderHook(({ cid }: { cid: string }) => useAiChat(cid, false, '', STREAM_SCOPE), {
     initialProps: { cid: conversationId },
   });
 
@@ -220,7 +226,7 @@ describe('daily answer retry identity', () => {
     let grant: (value: { leaseId: string; blocked: boolean }) => void = () => {};
     const pending = new Promise<{ leaseId: string; blocked: boolean }>(resolve => { grant = resolve; });
     const lease = jest.fn().mockResolvedValueOnce({ leaseId: 'initial-lease', blocked: false }).mockReturnValueOnce(pending);
-    const { result } = renderHook(() => useAiChat('new', false, '', 'chat', lease));
+    const { result } = renderHook(() => useAiChat('new', false, '', STREAM_SCOPE, lease));
     await act(async () => { await result.current.sendMessage('Project question'); });
     act(() => { latestStream().submission.onError('Failed'); latestStream().submission.onEnd(); });
     let retry: Promise<void> | undefined;
@@ -240,7 +246,7 @@ describe('project draft through the real SSE serializer', () => {
     window.history.replaceState({ key: 'project-origin' }, '', `/workspace/c/new?projectId=${firstProject}`);
     let grant: (value: { leaseId: string; blocked: boolean }) => void = () => {};
     const lease = new Promise<{ leaseId: string; blocked: boolean }>(resolve => { grant = resolve; });
-    const { result } = renderHook(() => useAiChat('new', false, '', 'chat', () => lease));
+    const { result } = renderHook(() => useAiChat('new', false, '', STREAM_SCOPE, () => lease));
     let sending: Promise<boolean> | undefined;
     act(() => { sending = result.current.sendMessage('From the first project', undefined, { taskMode }); });
     window.history.replaceState({ key: 'another-project' }, '', `/workspace/c/new?projectId=${otherProject}`);
@@ -253,7 +259,7 @@ describe('project draft through the real SSE serializer', () => {
     window.history.replaceState({ key: 'ordinary-origin' }, '', '/workspace/c/new');
     let grant: (value: { leaseId: string; blocked: boolean }) => void = () => {};
     const lease = new Promise<{ leaseId: string; blocked: boolean }>(resolve => { grant = resolve; });
-    const { result } = renderHook(() => useAiChat('new', false, '', 'chat', () => lease));
+    const { result } = renderHook(() => useAiChat('new', false, '', STREAM_SCOPE, () => lease));
     let sending: Promise<boolean> | undefined;
     act(() => { sending = result.current.sendMessage('Ordinary question'); });
     window.history.replaceState({ key: 'later-project' }, '', `/workspace/c/new?projectId=${otherProject}`);
@@ -264,7 +270,7 @@ describe('project draft through the real SSE serializer', () => {
   it.each([false, true])('keeps the project on a same-draft retry, task mode=%s', async taskMode => {
     mockUseRealProjectTransport = true;
     window.history.replaceState({ key: 'draft-retry', usr: { newChatKey: 'same-intent' } }, '', `/workspace/c/new?projectId=${firstProject}`);
-    const { result } = renderHook(() => useAiChat('new'));
+    const { result } = renderHook(() => useAiChat('new', false, '', STREAM_SCOPE));
     await act(async () => { await result.current.sendMessage('Retry this question', undefined, { taskMode }); });
     act(() => { latestStream().submission.onError('response lost'); latestStream().submission.onEnd(); });
     await act(async () => { await result.current.sendMessage('Retry this question', undefined, { taskMode }); });
@@ -276,7 +282,7 @@ describe('project draft through the real SSE serializer', () => {
 describe('new draft identity', () => {
   const firstProject = '11111111-1111-4111-8111-111111111111';
   const otherProject = '22222222-2222-4222-8222-222222222222';
-  const draft = () => renderHook(({ cid, key }: { cid: string; key: string }) => useAiChat(cid, false, '', 'chat', undefined, key), {
+  const draft = () => renderHook(({ cid, key }: { cid: string; key: string }) => useAiChat(cid, false, '', STREAM_SCOPE, undefined, key), {
     initialProps: { cid: 'new', key: 'first-project-draft' },
   });
   it.each([
@@ -339,7 +345,7 @@ describe('new draft identity', () => {
     let grant: (value: { leaseId: string; blocked: boolean }) => void = () => {};
     const pending = new Promise<{ leaseId: string; blocked: boolean }>(resolve => { grant = resolve; });
     const getLease = jest.fn().mockReturnValueOnce(pending).mockResolvedValue({ leaseId: 'immediate', blocked: false });
-    const { result, rerender } = renderHook(({ key }) => useAiChat('new', false, '', 'chat', getLease, key), { initialProps: { key: 'first-draft' } });
+    const { result, rerender } = renderHook(({ key }) => useAiChat('new', false, '', STREAM_SCOPE, getLease, key), { initialProps: { key: 'first-draft' } });
     act(() => result.current.setSelectedOrgKbs([{ id: '101', name: 'A', type: 'space' }]));
     let sending: Promise<boolean> | undefined;
     act(() => { sending = result.current.sendMessage('First question waits'); });
@@ -407,30 +413,6 @@ describe("useAiChat conversation switching", () => {
         "half an answer, then the rest",
       ),
     );
-  });
-
-  /**
-   * Added with the restore: the attachment-ingest poll was written after this
-   * fix was lost, on the assumption that one conversation is live at a time.
-   * It used a single timer, cancelled it on every switch, and wrote its result
-   * into whatever was on screen. Under buckets that is a silent corruption —
-   * it compiles, it passes the older tests, and it occasionally files one
-   * conversation's attachments under another.
-   */
-  it("does not cancel a conversation's attachment poll when the user walks away", async () => {
-    const { result, rerender } = renderChat("c1");
-    await waitFor(() => expect(result.current.messages).toHaveLength(1));
-
-    await act(async () => { await result.current.sendMessage("with a video", [{ name: "clip.mp4", filepath: "p" }]); });
-    const before = jest.getTimerCount?.() ?? 0;
-
-    rerender({ cid: "c2" });
-    await waitFor(() => expect(result.current.messages[0].text).toBe("c2 history"));
-
-    // Switching is not a reason to stop parsing what c1 uploaded.
-    expect(jest.getTimerCount?.() ?? 0).toBeGreaterThanOrEqual(before);
-    // And c2 must not show c1's parsing state.
-    expect(result.current.isParsingMedia).toBe(false);
   });
 
   it("keeps each conversation's parsing flag to itself", async () => {
@@ -522,24 +504,6 @@ describe("useAiChat conversation switching", () => {
  * the previous turn's messages instead of the welcome page.
  */
 describe("useAiChat adopts a new conversation id", () => {
-  it("keeps the turn on screen when the task handoff binds a real chat id", async () => {
-    const { result } = renderChat("new");
-
-    await act(async () => { await result.current.sendMessage("write me a report", null, { taskMode: true }); });
-    const turn = latestStream();
-    act(() => {
-      turn.submission.onStart();
-      turn.submission.onAgentUpdate?.({ text: "working on it" });
-    });
-    expect(result.current.messages.length).toBeGreaterThan(0);
-
-    act(() => turn.submission.onTaskHandoff?.({ session_version_id: "sv-1", chat_id: "c-real" }));
-
-    await waitFor(() => expect(result.current.conversationId).toBe("c-real"));
-    expect(result.current.messages.length).toBeGreaterThan(0);
-    expect(result.current.messages[result.current.messages.length - 1].text).toBe("working on it");
-  });
-
   it("does not blank a new chat when the reply finishes in the same tick the id is minted", async () => {
     const { result } = renderChat("new");
 
@@ -579,16 +543,18 @@ describe("useAiChat adopts a new conversation id", () => {
   it("leaves nothing behind under the id the turn started with", async () => {
     const { result, rerender } = renderChat("new");
 
-    await act(async () => { await result.current.sendMessage("write me a report", null, { taskMode: true }); });
+    await act(async () => { await result.current.sendMessage("write me a report"); });
     const turn = latestStream();
     act(() => {
       turn.submission.onStart();
       turn.submission.onAgentUpdate?.({ text: "working on it" });
     });
-    act(() => turn.submission.onTaskHandoff?.({ session_version_id: "sv-1", chat_id: "c-real" }));
+    act(() => turn.submission.onCreated("c-real", {
+      messageId: "42", parentMessageId: "", sender: "user", conversationId: "c-real", text: "write me a report",
+    } as Parameters<SSESubmission["onCreated"]>[1]));
     await waitFor(() => expect(result.current.conversationId).toBe("c-real"));
 
-    // The view rewrites its own URL to the id the handoff just minted.
+    // The view rewrites its own URL to the id the server just minted.
     rerender({ cid: "c-real" });
 
     // Starting another new chat must land on the welcome page, not on the
@@ -691,7 +657,7 @@ describe("conversation knowledge isolation", () => {
     const commits: Array<{ route: string; active: string; ids: string[] }> = [];
     const chat = renderHook(
       ({ cid }) => {
-        const value = useAiChat(cid);
+        const value = useAiChat(cid, false, '', STREAM_SCOPE);
         useLayoutEffect(() => {
           commits.push({
             route: cid,
@@ -774,7 +740,7 @@ describe("knowledge-space asks across cached conversations", () => {
     parkChatAsk({ text: "first question", space: { id: "101", name: "Space one" } });
     const { result, rerender } = renderHook(
       ({ cid, locationKey }) => {
-        const chat = useAiChat(cid);
+        const chat = useAiChat(cid, false, '', STREAM_SCOPE);
         useChatAskHandoff({
           conversationId: cid,
           activeConversationId: chat.conversationId,
@@ -825,7 +791,7 @@ test("knowledge handoff submits the chosen model ID and space in the real chat p
     renderHook(() => {
       const [model, setModel] = useState(initialModel);
       modelAtom.__testValue = model;
-      const chat = useAiChat("new");
+      const chat = useAiChat('new', false, '', STREAM_SCOPE);
       useChatAskHandoff({
         conversationId: "new",
         activeConversationId: chat.conversationId,

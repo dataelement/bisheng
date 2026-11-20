@@ -11,7 +11,7 @@
  *   - "knowledge"   → 「已检索知识 (N 个结果)」, doc-style chips
  *   - "web"         → 「已联网搜索 (N 个结果)」, site-style chips (title + source)
  *   - "tool" (any)  → 「已调用 {display_name} 工具」, brief chips / result preview;
- *                     with the unified runtime on, "查看代码和输出" opens the
+ *                     "查看代码和输出" opens the
  *                     call's parameters and output (ToolCodeOutput, F004 T060)
  */
 import { ChatErrorCard } from '~/components/ChatErrorCard';

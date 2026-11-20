@@ -442,7 +442,6 @@
   "com_linsight_add_skill": "スキルを追加",
   "com_linsight_exit_task_mode": "詳細リサーチを終了",
   "com_linsight_input_placeholder": "タスクの目標を入力すると、$t(com_linsight_task_mode)が進めます",
-  "com_linsight_awaiting_reply": "上記の質問に回答してタスクを続行してください",
   "com_linsight_answer_placeholder": "上の選択肢を選ぶか、回答を直接入力してください",
   "com_linsight_skill_empty": "利用可能なスキルはありません",
   "com_linsight_skill_search": "スキルを検索",

@@ -1,12 +1,12 @@
 /**
  * F004 (T061): the inline task turn with and without its live channel.
- * With the channel (tenant switch off, today's behaviour) the panel drives the
- * task WebSocket and the clarify card. Without it (conversation page on the
- * unified runtime) it only shows what is stored.
+ * With the channel (a carrier that follows no run events) the panel drives the
+ * task WebSocket and the clarify card. Without it (the conversation page) it
+ * only shows what is stored.
  */
 import { act, render } from '@testing-library/react';
 import { useRunStore, type RunEvent } from '~/store/runStore';
-import { TaskTurnRetryContext } from '~/components/Chat/unifiedRuntimeContext';
+import { TaskTurnRetryContext } from '~/components/Chat/runPageContext';
 import { TaskTurnPanel } from './TaskTurnPanel';
 
 const mockGetLinsight = jest.fn();
@@ -87,7 +87,7 @@ afterEach(() => {
     jest.useRealTimers();
 });
 
-describe('with the live channel (tenant switch off)', () => {
+describe('with the live channel', () => {
     it('drives the task WebSocket and answers a question through it', () => {
         mockGetLinsight.mockReturnValue(parked);
         render(<TaskTurnPanel versionId="sv1" conversationId="c1" />);
@@ -109,7 +109,7 @@ describe('with the live channel (tenant switch off)', () => {
     });
 });
 
-describe('without the live channel (conversation page on the unified runtime)', () => {
+describe('without the live channel (conversation page)', () => {
     it('opens no task WebSocket and never offers the legacy answer, cancel or retry', () => {
         mockGetLinsight.mockReturnValue(parked);
         render(<TaskTurnPanel versionId="sv1" conversationId="c1" liveChannel={false} />);

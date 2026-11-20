@@ -7,11 +7,8 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useRecoilState } from "recoil";
 import { useTaskInviteQuota } from "~/components/Chat/TaskInviteQuota";
-import {
-  getLinsightSessionVersionList,
-  userStopLinsightEvent,
-} from "~/api/linsight";
-import { SopStatus, taskModeState } from "~/store/linsight";
+import { getLinsightSessionVersionList } from "~/api/linsight";
+import { taskModeState } from "~/store/linsight";
 import { useCitationReferencePanel } from "~/components/Chat/Messages/Content/useCitationReferencePanel";
 import { useDesktopConversation } from "./useDesktopConversation";
 import { useAuthContext } from "~/hooks/AuthContext";
@@ -122,7 +119,6 @@ function useChatView(
     sendMessage,
     stopGenerating,
     regenerate,
-    unifiedRuntime,
   } = useAiChat(
     conversationId,
     false,
@@ -282,7 +278,7 @@ function useChatView(
   } = useTaskInviteQuota(inviteOn);
 
   const { handleSend, handleRetryTaskTurn } = useChatSendActions({
-    taskMode, canUseTaskMode, unifiedRuntime: unifiedRuntime === true, conversationId: activeConvoId,
+    taskMode, canUseTaskMode, conversationId: activeConvoId,
     sendMessage, allowInviteSend, composerIdentity, composerIdentityRef, setInputText,
   });
   useReturnedDraft(activeConvoId, setInputText);
@@ -438,7 +434,6 @@ function useChatView(
   // workspace itself belongs to the conversation. The drawer only opens on the
   // header button — no auto-expand (the entry icon appearing is enough).
   const {
-    updateLinsight,
     taskArtifacts,
     chatAttachments,
     dockedCardRef,
@@ -451,8 +446,6 @@ function useChatView(
     taskWorkspaceFiles,
     reportTaskTurnLoadFailed,
     taskWorkspaceLoadState,
-    taskRunning,
-    awaitingUserInput,
   } = useTaskWorkspaceState({
     conversationId,
     messages,
@@ -461,41 +454,7 @@ function useChatView(
     closeCitationPanel,
     taskVersionIds,
     latestTaskVersionId,
-    unifiedRuntime,
   });
-
-  // Stop button handler. A task round runs via the linsight worker/WS, normally
-  // AFTER the handoff SSE stream closed — route the stop to terminate-execute.
-  const handleStop = useCallback(() => {
-    if (taskRunning && latestTaskVersionId) {
-      userStopLinsightEvent(latestTaskVersionId).catch(() => {
-        /* best-effort: WS task_terminated reconciles */
-      });
-      updateLinsight(latestTaskVersionId, (prev) => ({
-        ...prev,
-        status: SopStatus.Stoped,
-        tasks: (prev.tasks || []).map((tk: any) => ({
-          ...tk,
-          status: tk.status === "in_progress" ? "terminated" : tk.status,
-          children: tk.children
-            ? tk.children.map((c: any) => ({
-                ...c,
-                status: c.status === "in_progress" ? "terminated" : c.status,
-              }))
-            : tk.children,
-        })),
-      }));
-      // The handoff SSE may still be open when the user stops quickly (esp. while
-      // queued): isStreaming would then keep the input's stop button lit after the
-      // terminate, since the button gates on `isStreaming || taskRunning` and only
-      // taskRunning flipped here. Abort the (now-useless) handoff stream + clear
-      // isStreaming so the input syncs to the stopped state immediately instead of
-      // lingering until the stream drops on its own. (QA: stop-while-queued.)
-      stopGenerating();
-      return;
-    }
-    stopGenerating();
-  }, [taskRunning, latestTaskVersionId, updateLinsight, stopGenerating]);
 
   return {
     t,
@@ -563,11 +522,7 @@ function useChatView(
     taskWorkspaceFiles,
     reportTaskTurnLoadFailed,
     taskWorkspaceLoadState,
-    taskRunning,
-    awaitingUserInput,
-    handleStop,
     handleRetryTaskTurn,
-    unifiedRuntime,
     id,
     shareToken,
     taskVersionIds,

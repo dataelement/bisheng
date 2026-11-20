@@ -246,7 +246,7 @@
   },
   "src/components/Chat/ChatView.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 5
+      "count": 3
     },
     "no-restricted-imports": {
       "count": 1
@@ -1883,7 +1883,7 @@
   },
   "src/hooks/useAiChat.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 14
+      "count": 5
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 4

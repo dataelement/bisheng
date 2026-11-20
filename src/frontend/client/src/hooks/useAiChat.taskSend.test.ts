@@ -1,7 +1,7 @@
 /**
- * F004 (T061): both sides of the tenant switch for a deep-research send.
- * Off: the page takes the handoff frame and starts the task as today.
- * On: no handoff, no legacy task start; the turn is fed by the run store.
+ * F004 (T061): a deep-research send of the conversation page goes through the
+ * run send and its turn is fed by the run store. A carrier outside the run
+ * protocol keeps its page-owned stream.
  */
 import { act, renderHook, waitFor } from "@testing-library/react";
 
@@ -61,7 +61,6 @@ jest.mock("~/store", () => ({
   },
 }));
 jest.mock("~/store/linsight", () => ({
-  SopStatus: { Running: "running", Stoped: "stoped", SopGenerating: "sop_generating" },
   taskModeSkillsState: () => ({ __testValue: [] }),
 }));
 jest.mock("~/hooks/AuthContext", () => ({ useAuthContext: () => ({ user: { id: "test-user" } }) }));
@@ -73,17 +72,10 @@ jest.mock("~/utils/mediaAttachmentUtils", () => ({ isMediaAttachmentFile: () => 
 let mockUUIDSequence = 0;
 jest.mock("uuid", () => ({ v4: () => `test-${++mockUUIDSequence}` }));
 jest.mock("~/hooks/useLinsightManager", () => ({
-  useLinsightManager: () => ({
-    createLinsight: (...args: unknown[]) => mockCreateLinsight(...args),
-    updateLinsight: jest.fn(),
-    linsightMap: new Map(),
-  }),
+  useLinsightManager: () => ({ linsightMap: new Map() }),
 }));
 jest.mock("~/hooks/inviteQuotaRefresh", () => ({ refreshInviteQuota: jest.fn() }));
-const mockStartLinsight = jest.fn();
-const mockCreateLinsight = jest.fn();
 jest.mock("~/api/linsight", () => ({
-  startLinsight: (...args: unknown[]) => mockStartLinsight(...args),
   getLinsightSessionVersionList: () => Promise.resolve([]),
 }));
 jest.mock("~/types/chat", () => ({
@@ -121,47 +113,28 @@ beforeEach(() => {
   localStorage.clear();
   mockOpenedStreams.length = 0;
   mockSubscribed.length = 0;
-  mockBsConfig = { models: [{ id: 1, visual: true }], unified_runtime_enabled: true };
+  mockBsConfig = { models: [{ id: 1, visual: true }] };
   mockGetAgentMessages.mockResolvedValue([]);
   mockSendRunMessage.mockReset();
   mockStopConversationRun.mockReset().mockResolvedValue(undefined);
   act(() => useRunStore.setState({ conversations: {} }));
 });
 
-
-beforeEach(() => {
-  mockStartLinsight.mockReset().mockResolvedValue(undefined);
-  mockCreateLinsight.mockReset();
-});
-
-type Handoff = (data: { session_version_id: string; chat_id: string }) => void;
-
-describe("deep-research send, tenant switch off", () => {
-  it("still takes the handoff: seeds the task store and starts the task (legacy WebSocket path)", async () => {
-    mockBsConfig = { models: [{ id: 1, visual: true }] };
-    const { result } = renderChat("new");
+describe("send outside the run protocol", () => {
+  it("opens the page-owned stream for the subscription dock and never the run send", async () => {
+    const { result } = renderHook(() => useAiChat("new", false, "", "subscription"));
     await act(async () => {
-      await result.current.sendMessage("research this", null, { taskMode: true });
+      await result.current.sendMessage("summarize this");
     });
     expect(mockSendRunMessage).not.toHaveBeenCalled();
     expect(mockOpenedStreams).toHaveLength(1);
-    const submission = mockOpenedStreams[0] as { payload: { task_mode?: boolean }; onTaskHandoff?: Handoff };
-    expect(submission.payload.task_mode).toBe(true);
-    expect(typeof submission.onTaskHandoff).toBe("function");
-    await act(async () => {
-      submission.onTaskHandoff?.({ session_version_id: "sv1", chat_id: "c9" });
-    });
-    expect(mockCreateLinsight).toHaveBeenCalledWith("sv1", expect.anything());
-    expect(mockStartLinsight).toHaveBeenCalledWith("sv1");
-    const taskTurn = result.current.messages.find((m) => m.category === "task");
-    expect(taskTurn).toMatchObject({ linsightSessionVersionId: "sv1" });
-    expect(taskTurn?.liveRunId).toBeUndefined();
-    expect(result.current.unifiedRuntime).toBe(false);
+    expect((mockOpenedStreams[0] as { payload: { task_mode?: boolean } }).payload.task_mode).toBe(false);
+    expect(mockSubscribed.every(([, enabled]) => enabled === false)).toBe(true);
   });
 });
 
-describe("deep-research send, tenant switch on", () => {
-  it("opens no handoff stream and starts no legacy task; the turn is a row fed by the run store", async () => {
+describe("deep-research send of the conversation page", () => {
+  it("opens no page-owned stream; the turn is a row fed by the run store", async () => {
     mockSendRunMessage.mockResolvedValue(
       sendAnswer({ run_id: "r1", disposition: "started", message_id: "m1", conversation_id: "c9" }),
     );
@@ -171,9 +144,6 @@ describe("deep-research send, tenant switch on", () => {
     });
     expect(mockOpenedStreams).toHaveLength(0);
     expect(mockSendRunMessage.mock.calls[0][0]).toMatchObject({ text: "research this", task_mode: true });
-    expect(mockCreateLinsight).not.toHaveBeenCalled();
-    expect(mockStartLinsight).not.toHaveBeenCalled();
-    expect(result.current.unifiedRuntime).toBe(true);
     emit("c9", { type: "run_started" });
     emit("c9", { type: "plan", data: { items: [{ id: "p1", content: "step", status: "in_progress" }] } });
     emit("c9", { type: "text", data: { text: "working" } });

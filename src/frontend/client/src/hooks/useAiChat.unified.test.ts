@@ -1,6 +1,6 @@
 /**
- * F004 (T047): the send path and the live answer row of a tenant on the
- * unified runtime, and the proof that nothing changes with the switch off.
+ * F004 (T047): the send path and the live answer row of the conversation
+ * page under the run protocol.
  */
 import { act, renderHook, waitFor } from "@testing-library/react";
 
@@ -110,31 +110,14 @@ beforeEach(() => {
   localStorage.clear();
   mockOpenedStreams.length = 0;
   mockSubscribed.length = 0;
-  mockBsConfig = { models: [{ id: 1, visual: true }], unified_runtime_enabled: true };
+  mockBsConfig = { models: [{ id: 1, visual: true }] };
   mockGetAgentMessages.mockResolvedValue([]);
   mockSendRunMessage.mockReset();
   mockStopConversationRun.mockReset().mockResolvedValue(undefined);
   act(() => useRunStore.setState({ conversations: {} }));
 });
 
-describe("tenant switch off", () => {
-  it("sends through today's stream and never touches the unified runtime", async () => {
-    mockBsConfig = { models: [{ id: 1, visual: true }] };
-    const { result } = renderChat("new");
-    await act(async () => {
-      await result.current.sendMessage("hello");
-    });
-    expect(mockOpenedStreams).toHaveLength(1);
-    expect(mockSendRunMessage).not.toHaveBeenCalled();
-    expect(mockSubscribed.every(([, enabled]) => enabled === false)).toBe(true);
-    expect(result.current.unifiedRuntime).toBe(false);
-    expect(result.current.messages.map((m) => m.liveRunId)).toEqual([undefined, undefined]);
-    act(() => result.current.stopGenerating());
-    expect(mockStopConversationRun).not.toHaveBeenCalled();
-  });
-});
-
-describe("tenant switch on", () => {
+describe("conversation page", () => {
   it("starts a run, shows it in one row and lets the stored turn replace that row", async () => {
     mockSendRunMessage.mockResolvedValue(
       sendAnswer({ run_id: "r1", disposition: "started", message_id: "m1", conversation_id: "c9" }),

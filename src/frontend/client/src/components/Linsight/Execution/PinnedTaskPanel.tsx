@@ -5,18 +5,15 @@
  * while it runs and after it completes.
  *
  * Two sources, never mixed (F004 design 决策 11):
- *   - Legacy path (and every tenant with `unified_runtime_enabled` off): the
- *     linsight Recoil store, keyed by `versionId`. Hydration is owned by the
- *     in-stream TaskTurnPanel (live WS pump for the active turn, lazy-load for
- *     history), so the panel re-renders reactively as that store entry fills in.
- *   - Unified runtime: the plan of the conversation's current run in `runStore`,
- *     keyed by `conversationId`. The store is filled by the run-events
- *     subscription, which replays the current run on mount, so the plan is back
- *     after a refresh for as long as the server keeps the run's events. When the
- *     store holds no plan (events expired, or the latest task turn predates the
- *     switch), the panel falls back to the legacy source.
+ *   - The plan of the conversation's current run in `runStore`, keyed by
+ *     `conversationId`. The store is filled by the run-events subscription,
+ *     which replays the current run on mount, so the plan is back after a
+ *     refresh for as long as the server keeps the run's events.
+ *   - The stored task list of the latest task turn in the linsight Recoil
+ *     store, keyed by `versionId` and hydrated by the in-stream TaskTurnPanel.
+ *     Used when `runStore` holds no plan: the run's events expired, or the
+ *     turn was stored before runs had a plan.
  */
-import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { SopStatus } from '~/store/linsight';
 import { selectRun, useRunStore, type RunPlanItem, type RunStatus } from '~/store/runStore';
@@ -24,9 +21,9 @@ import { PLAN_ROW_CANCELLED, TaskPanel } from './TaskPanel';
 import type { ExecTask } from './TaskStepRow';
 
 interface PinnedTaskPanelProps {
-    /** Latest task turn of the conversation (legacy source). Empty when there is none. */
+    /** Latest task turn of the conversation (stored source). Empty when there is none. */
     versionId?: string;
-    /** Conversation shown on the page (unified-runtime source). */
+    /** Conversation shown on the page (run source). */
     conversationId?: string;
 }
 
@@ -52,13 +49,9 @@ export function planItemsToTasks(items: RunPlanItem[], runStatus: RunStatus): Ex
 }
 
 export function PinnedTaskPanel({ versionId = '', conversationId = '' }: PinnedTaskPanelProps) {
-    const { data: bsConfig } = useGetBsConfig();
-    const unified = bsConfig?.unified_runtime_enabled === true && !!conversationId;
-    // With the switch off the selector reads a key that never exists, so the
-    // store cannot change what this component renders.
-    const run = useRunStore(selectRun(unified ? conversationId : ''));
+    const run = useRunStore(selectRun(conversationId));
 
-    if (unified && run && run.plan.length > 0) {
+    if (run && run.plan.length > 0) {
         const stopped = run.status === 'stopped';
         return (
             <div className="pb-3">
@@ -77,10 +70,10 @@ export function PinnedTaskPanel({ versionId = '', conversationId = '' }: PinnedT
         );
     }
     if (!versionId) return null;
-    return <LegacyPinnedTaskPanel versionId={versionId} />;
+    return <StoredPinnedTaskPanel versionId={versionId} />;
 }
 
-function LegacyPinnedTaskPanel({ versionId }: { versionId: string }) {
+function StoredPinnedTaskPanel({ versionId }: { versionId: string }) {
     const { getLinsight } = useLinsightManager();
     const linsight = getLinsight(versionId);
 

@@ -4,11 +4,6 @@ import { useRunStore, type RunFileData } from '~/store/runStore';
 import type { ArtifactFile } from './artifactUtils';
 import { mergeWorkspaceFiles, newLiveArtifacts, toLiveArtifact, useNewLiveArtifacts } from './liveWorkspaceFiles';
 
-let mockEnabled: boolean | undefined = true;
-jest.mock('~/hooks/queries/data-provider', () => ({
-    useGetBsConfig: () => ({ data: { unified_runtime_enabled: mockEnabled } }),
-}));
-
 const live = (over: Partial<RunFileData> = {}): RunFileData => ({
     file_id: 'f1',
     name: 'report.md',
@@ -80,7 +75,6 @@ describe('mergeWorkspaceFiles', () => {
 describe('useNewLiveArtifacts', () => {
     const known: ArtifactFile[] = [];
     beforeEach(() => {
-        mockEnabled = true;
         act(() => useRunStore.getState().resetConversation('c1'));
     });
     const emit = (file: RunFileData) =>
@@ -95,15 +89,6 @@ describe('useNewLiveArtifacts', () => {
         emit(live());
         expect(useRunStore.getState().conversations.c1.run?.status).toBe('running');
         expect(result.current.map((f) => f.file_id)).toEqual(['f1']);
-    });
-    it('stays empty when the tenant switch is off or missing', () => {
-        mockEnabled = false;
-        const off = renderHook(() => useNewLiveArtifacts(known, 'c1'));
-        emit(live());
-        expect(off.result.current).toEqual([]);
-        mockEnabled = undefined;
-        const missing = renderHook(() => useNewLiveArtifacts(known, 'c1'));
-        expect(missing.result.current).toEqual([]);
     });
     it('is scoped to its conversation', () => {
         const { result } = renderHook(() => useNewLiveArtifacts(known, 'c2'));

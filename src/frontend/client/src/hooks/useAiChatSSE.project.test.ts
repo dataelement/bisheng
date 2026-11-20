@@ -17,7 +17,7 @@ function start(overrides: Partial<SSESubmission> = {}) {
   const submission: SSESubmission = {
     payload: { conversationId: null, text: 'Hello' }, userMessage: { conversationId: '' } as ChatMessage,
     onCreated: jest.fn(), onMessage: jest.fn(), onFinal: jest.fn(),
-    onStart: jest.fn(), onError: jest.fn(), onEnd: jest.fn(), onTaskHandoff: jest.fn(), ...overrides,
+    onStart: jest.fn(), onError: jest.fn(), onEnd: jest.fn(), ...overrides,
   };
   openChatStream(submission, key => key);
   const stream = mockStreams[mockStreams.length - 1];
@@ -36,14 +36,6 @@ it('submits immutable project intent before created and never writes a local ass
   stream.emit({ created: true, message: { conversationId: 'created-chat', messageId: '42' } });
   expect(localStorage.getItem('bs_mock_project_chats')).toBeNull();
   expect(stream.submission.onCreated).toHaveBeenCalledWith('created-chat', expect.objectContaining({ messageId: '42' }));
-});
-
-it('sends the same project intent for task-mode handoff', () => {
-  const stream = start({ payload: { conversationId: null, task_mode: true } });
-  stream.emit({ event: 'linsight_task_handoff', data: { chat_id: 'task-chat', session_version_id: 'sv' } });
-  expect(stream.payload.project_id).toBe(projectId);
-  expect(stream.submission.onTaskHandoff).toHaveBeenCalledWith({ chat_id: 'task-chat', session_version_id: 'sv' });
-  expect(localStorage.getItem('bs_mock_project_chats')).toBeNull();
 });
 
 it('accepts an explicitly supplied ordinary workstation endpoint', () => {

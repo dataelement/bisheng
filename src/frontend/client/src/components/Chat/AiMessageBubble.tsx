@@ -28,7 +28,7 @@ import { useMessageSelection } from "~/hooks/useMessageSelection";
 import { queueIdOf } from "~/hooks/unifiedRun";
 import { selectIsMessageQueued, useRunStore } from "~/store/runStore";
 import { MessageQueuedNote, RunStoppedNote } from "./RunMessageNotes";
-import { useUnifiedRuntimePage } from "~/components/Chat/unifiedRuntimeContext";
+import { useRunPage } from "~/components/Chat/runPageContext";
 import {
     ExportSelectionButton,
     MessageCheckbox,
@@ -349,7 +349,7 @@ function UserBubble({
 }) {
     const { user } = useAuthContext();
     // F004 AC-13/AC-14: sent while a run was busy and not read by the agent yet.
-    // The store only holds entries on the unified runtime.
+    // The store only holds conversations whose run events the page follows.
     const queued = useRunStore(selectIsMessageQueued(message.conversationId ?? "", queueIdOf(message)));
 
     // F028: render selection checkbox at the left margin when selection mode
@@ -482,9 +482,9 @@ function AssistantBubble({
     const isLiveRun = message.liveRunId !== undefined;
     const isLatest = isLiveRun || isLatestProp;
     const isStreaming = isLiveRun || isStreamingProp;
-    // F004 (T061): on the unified runtime a stored deep-research turn is review
-    // only; the turn in progress is this same row fed by the run store.
-    const unifiedPage = useUnifiedRuntimePage();
+    // F004 (T061): on a page that follows run events a stored deep-research turn
+    // is review only; the turn in progress is this same row fed by the run store.
+    const runPage = useRunPage();
     const isLiveTaskRow = isLiveRun && message.category === "task";
     // The run waits for the user's answer: nothing is being written, so the
     // live row shows no typing cursor. Only a live row reads the store.
@@ -640,7 +640,7 @@ function AssistantBubble({
                         conversationId={message.conversationId}
                         answer={message.text}
                         onPreviewFile={onPreviewFile}
-                        liveChannel={!unifiedPage}
+                        liveChannel={!runPage}
                     />
                 </div>
             </div>

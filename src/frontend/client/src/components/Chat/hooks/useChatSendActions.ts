@@ -1,7 +1,7 @@
 /**
  * Send entries of the conversation page: the composer's send (also used by the
- * question card of the unified runtime) and the retry of a failed
- * deep-research turn (F004, unified runtime only).
+ * question card of a waiting run) and the retry of a failed deep-research
+ * turn (F004).
  */
 import { useCallback, type MutableRefObject } from "react";
 import { isRunActive, isRunAwaitingAnswer } from "~/hooks/unifiedRun";
@@ -19,8 +19,6 @@ export interface UseChatSendActionsOptions {
   taskMode: boolean;
   /** The user's role may use deep research. */
   canUseTaskMode: boolean;
-  /** The page runs on the unified agent runtime (tenant switch). */
-  unifiedRuntime: boolean;
   /** Conversation on screen (`"new"` for a draft); key of the run store. */
   conversationId: string;
   sendMessage: SendMessage;
@@ -34,7 +32,6 @@ export interface UseChatSendActionsOptions {
 export function useChatSendActions({
   taskMode,
   canUseTaskMode,
-  unifiedRuntime,
   conversationId,
   sendMessage,
   allowInviteSend,
@@ -48,8 +45,7 @@ export function useChatSendActions({
       const isTaskTurn = taskMode && canUseTaskMode;
       // F004: an answer to the question a run waits on continues that run. It
       // is not a new deep-research request, so the invite quota is not asked.
-      const answering =
-        unifiedRuntime && isRunAwaitingAnswer(useRunStore.getState().conversations[conversationId]?.run);
+      const answering = isRunAwaitingAnswer(useRunStore.getState().conversations[conversationId]?.run);
       if (isTaskTurn && !answering && !allowInviteSend()) return false;
       // Capture the turn's resources before resetting its composer draft. A
       // `false` result (e.g. the department is full) keeps the draft so the
@@ -62,7 +58,6 @@ export function useChatSendActions({
     [
       taskMode,
       canUseTaskMode,
-      unifiedRuntime,
       conversationId,
       sendMessage,
       allowInviteSend,
@@ -82,13 +77,13 @@ export function useChatSendActions({
   const handleRetryTaskTurn = useCallback(
     async (question: string): Promise<boolean> => {
       const text = question.trim();
-      if (!unifiedRuntime || !canUseTaskMode || !text) return false;
+      if (!canUseTaskMode || !text) return false;
       if (isRunActive(useRunStore.getState().conversations[conversationId]?.run)) return false;
       if (!allowInviteSend()) return false;
       const accepted = await sendMessage(text, null, { taskMode: true });
       return accepted !== false;
     },
-    [unifiedRuntime, canUseTaskMode, conversationId, sendMessage, allowInviteSend],
+    [canUseTaskMode, conversationId, sendMessage, allowInviteSend],
   );
 
   return { handleSend, handleRetryTaskTurn };

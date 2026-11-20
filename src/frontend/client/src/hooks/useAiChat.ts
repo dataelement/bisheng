@@ -25,8 +25,7 @@ import { openChatStream, type ChatStreamHandle, type SSESubmission } from "~/hoo
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { refreshInviteQuota } from "~/hooks/inviteQuotaRefresh";
 import { useLinsightManager } from "~/hooks/useLinsightManager";
-import { startLinsight, getLinsightSessionVersionList } from "~/api/linsight";
-import { SopStatus, taskModeSkillsState } from "~/store/linsight";
+import { taskModeSkillsState } from "~/store/linsight";
 import { isMediaAttachmentFile, type MediaParsingState } from "~/utils/mediaAttachmentUtils";
 import { useDesktopConversationActivity, useDesktopConversationRenamed } from "~/components/Chat/desktopConversationBridge";
 import { runningConversationIds } from "~/components/Chat/runningConversations";
@@ -66,33 +65,6 @@ export function closeChatStream(conversationId: string): void {
 }
 
 const NO_PARENT = "00000000-0000-0000-0000-000000000000";
-
-/** Poll cadence for the post-handoff attachment fetch (see the handoff handler).
- *
- * Two-speed on purpose. A small batch lands in seconds and deserves a snappy
- * first paint; a big one is the reason this poll exists at all — 12 bid PDFs
- * measured 19 minutes of ETL — and a fixed fast cadence would have to run for
- * hundreds of round-trips to cover it. So: fast while the common case plays out,
- * then back off and simply outlast the slow case.
- *
- * The deadline is a real bound, not a guess at the worst case: the per-file ETL
- * ceiling is 600s (settings.etl4lm.timeout) and the batch size is capped by the
- * folder-upload limits, so a pathological batch CAN outlive 30 minutes. Past the
- * deadline the drawer degrades to "visible after a refresh", which is where it
- * was before this poll existed — never to a timer that runs for the session's
- * lifetime. */
-const INGEST_POLL_FAST_MS = 3000;
-const INGEST_POLL_SLOW_MS = 15000;
-/** Round-trips kept at the fast cadence before backing off (~1 minute). */
-const INGEST_POLL_FAST_ATTEMPTS = 20;
-const INGEST_POLL_DEADLINE_MS = 30 * 60 * 1000;
-/** Backend SessionVersionStatusEnum values after which nothing will be ingested. */
-const TERMINAL_SV_STATUSES = new Set([
-    "completed",
-    "failed",
-    "terminated",
-    "sop_generation_failed",
-]);
 
 /** The fields of an input-box attachment that decide whether it can be sent.
     Backends disagree on the path key (filepath / file_path / file_url), so all
@@ -256,13 +228,13 @@ export default function useAiChat(
     // the org knowledge base feature is disabled, so we only strip org ids.
     const { data: bsConfig } = useGetBsConfig();
 
-    // F004: a tenant on the unified runtime sends with `X-BS-Run-Protocol: 2`
-    // and reads the answer from the run event stream. With the switch off or
-    // missing, `unified` stays inert and every path below is today's.
-    const unifiedEnabled = bsConfig?.unified_runtime_enabled === true
-        && draftScope === "chat" && !isLingsi && !shareToken;
+    // F004: the conversation page sends with `X-BS-Run-Protocol: 2` and reads
+    // the answer from the run event stream. The other carriers of this hook
+    // (the subscription dock, a share view) are outside that protocol: there
+    // `unified` stays inert and a send opens the page-owned stream below.
+    const usesRunProtocol = draftScope === "chat" && !isLingsi && !shareToken;
     const unified = useUnifiedRun({
-        enabled: unifiedEnabled,
+        enabled: usesRunProtocol,
         conversationId,
         bucketId: activeBucketId,
         messages,
@@ -284,10 +256,9 @@ export default function useAiChat(
 
     const queryClient = useQueryClient();
 
-    // F035 Track J (TJ-6): task-mode turns reuse the linsight execution machinery
-    // (createLinsight seeds the per-SV store, startLinsight kicks off the run, the
-    // inline task bubble hosts the WS). The turn stays in THIS daily conversation.
-    const { createLinsight, updateLinsight, linsightMap } = useLinsightManager();
+    // Stored deep-research turns hydrate into the linsight store; its running
+    // entries feed the desktop host's activity list below.
+    const { linsightMap } = useLinsightManager();
 
     // The desktop host lists conversations itself; keep its running state and names in step.
     useDesktopConversationActivity(ownerIdRef.current, runningConversationIds(streamingByConvo, linsightMap));
@@ -395,63 +366,16 @@ export default function useAiChat(
         [],
     );
 
-    // F035 Track J (TJ-6): after a task handoff we bind the conversation to the
-    // freshly-minted chat_id, which would normally trigger a history refetch.
-    // But the bot task row isn't persisted yet (the worker writes it at execution
-    // start), so a refetch here returns ONLY the user question and CLOBBERS the
-    // optimistic task turn — the panel vanishes ("jumps back to empty daily").
-    // This ref tells the load effect to skip exactly that one refetch; the live
-    // optimistic message + linsightMapState are authoritative for this turn.
+    // A send on "new" binds the conversation to the id the server just minted,
+    // which would normally trigger a history refetch. The answer row is not
+    // stored yet, so that refetch returns ONLY the user question and clobbers
+    // the optimistic turn. This ref tells the load effect to skip exactly that
+    // one refetch; the optimistic rows are authoritative for this turn.
     const skipLoadConvoRef = useRef<string | null>(null);
 
     // Track previous external ID to distinguish sidebar navigation from self-navigate
     const [previousExternalId, setPreviousExternalId] = useState(initialConversationId);
     const [previousDraftIdentity, setPreviousDraftIdentity] = useState(draftIdentity);
-
-    // Timer for the post-handoff attachment poll. `generation` fences a request
-    // that is already in flight: clearing the timeout alone would still let its
-    // `.then` re-arm a new one after we unmounted or switched conversations.
-    // One poll per conversation, not one for "the" conversation. It used to be a
-    // single timer cancelled on every switch, which was correct only while one
-    // chat could be live at a time. With buckets, a poll started in A must keep
-    // running while the user reads B and must write back into A — cancelling it
-    // on switch would strand A's attachments mid-parse, and letting it write to
-    // whatever is on screen would put A's files in B's messages.
-    const ingestPollsRef = useRef<
-        Map<string, { timer: ReturnType<typeof setTimeout> | null; generation: number }>
-    >(new Map());
-    const ingestPollFor = useCallback((cid: string) => {
-        let entry = ingestPollsRef.current.get(cid);
-        if (!entry) {
-            entry = { timer: null, generation: 0 };
-            ingestPollsRef.current.set(cid, entry);
-        }
-        return entry;
-    }, []);
-    const cancelIngestPoll = useCallback(
-        (cid: string) => {
-            const entry = ingestPollFor(cid);
-            if (entry.timer) {
-                clearTimeout(entry.timer);
-                entry.timer = null;
-            }
-            // Fences a request already in flight: clearing the timeout alone
-            // would still let its `.then` re-arm a new one.
-            entry.generation += 1;
-        },
-        [ingestPollFor],
-    );
-    // Only a real unmount stops every poll. Switching conversations does not.
-    useEffect(
-        () => () => {
-            for (const entry of ingestPollsRef.current.values()) {
-                if (entry.timer) clearTimeout(entry.timer);
-                entry.generation += 1;
-            }
-            ingestPollsRef.current.clear();
-        },
-        [],
-    );
 
     // Resolve sidebar navigation during render so the composer, its callbacks,
     // and the message bucket commit with the same conversation identity.
@@ -484,9 +408,9 @@ export default function useAiChat(
         if (!conversationId || conversationId === "new") {
             return;
         }
-        // F035 Track J: skip the one post-handoff refetch that would clobber the
-        // optimistic task turn (see skipLoadConvoRef). Consume the guard so a
-        // genuine later navigation back to this convo still reloads normally.
+        // Skip the one refetch that would clobber the optimistic turn (see
+        // skipLoadConvoRef). Consume the guard so a genuine later navigation
+        // back to this convo still reloads normally.
         if (conversationId === skipLoadConvoRef.current) {
             skipLoadConvoRef.current = null;
             setIsLoading(false);
@@ -501,7 +425,7 @@ export default function useAiChat(
         getAgentMessages(conversationId, shareToken || undefined)
             .then((msgs) => {
                 if (!active) return;
-                // F004: keeps the live row of a run in progress; returns `msgs` as is when the switch is off.
+                // F004: keeps the live row of a run in progress; returns `msgs` as is outside the run protocol.
                 setMessages((prev) => unified.composeHistory(conversationId, msgs, prev));
                 setIsLoading(false);
                 // F132: memory flags are owner-only, so a share view never asks.
@@ -718,11 +642,11 @@ export default function useAiChat(
             };
 
             // Add both messages immediately
-            // F004: on the unified runtime the answer row mirrors a run. A run
+            // F004: under the run protocol the answer row mirrors a run. A run
             // already in progress takes this message (as a steer or as the
             // answer to its question), so no second answer row is added; an
             // idle conversation gets a row that waits for its run id.
-            const updatedMessages = !unifiedEnabled
+            const updatedMessages = !usesRunProtocol
                 ? [...turnMessages, userMessage, initialResponse]
                 : unified.isBusy(turn.cid)
                     ? [...turnMessages, userMessage]
@@ -768,15 +692,14 @@ export default function useAiChat(
                     })),
                 ),
                 linsight: isLingsi,
-                // F035 Track J (TJ-6): route this turn to the linsight task kernel
-                // via the SAME unified entry. Backend replies with a handoff event.
+                // Deep research: the same entry starts the run with the task profile.
                 task_mode: taskMode,
                 // Ordinary turns carry an empty skill selection.
                 skills: taskMode ? dailyTaskSkills.map((s) => s.name) : [],
                 skill_ids: taskMode ? dailyTaskSkills.flatMap((s) => (typeof s.id === 'number' ? [s.id] : [])) : [],
             };
 
-            if (unifiedEnabled) {
+            if (usesRunProtocol) {
                 // F004: one JSON answer instead of a stream; the run's progress
                 // arrives through the conversation's event subscription.
                 setIsStreaming(true);
@@ -905,215 +828,6 @@ export default function useAiChat(
                                     : m
                         )
                     );
-                },
-                // F035 Track J (TJ-6): task-mode handoff. Promote the placeholder
-                // assistant turn into a `task` row pointing at the linsight SV,
-                // seed the per-SV store, and kick off execution. The inline task
-                // bubble (TJ-7) hosts the WS and renders the live run from there.
-                // F004 (T061): legacy channel only. A tenant on the unified
-                // runtime returned above (`unifiedEnabled`), so this page never
-                // receives a handoff frame, seeds no linsight store entry and
-                // opens no task WebSocket there; its deep-research turn is a
-                // row fed by the run store (useUnifiedRun).
-                onTaskHandoff:({ session_version_id: svid, chat_id }) => {
-                    // Consume is committed before this event. Reload the badge
-                    // so the remaining count drops without a full page refresh.
-                    if (taskMode) {
-                        refreshInviteQuota();
-                    }
-                    if (!svid) return;
-
-                    // The handoff is the daily SSE's last act: the task now runs via
-                    // the linsight worker/WS, so the daily stream is done. Clear
-                    // isStreaming NOW instead of waiting for the stream to drop on
-                    // its own (which can lag) — otherwise the input's stop button,
-                    // gated on `isStreaming || taskRunning`, stays lit after a task
-                    // is terminated (incl. from the QueueCard) until the stale stream
-                    // finally closes. With this, taskRunning alone drives the button,
-                    // so every terminate path syncs the input immediately. (QA: stop
-                    // /cancel while queued.)
-                    setIsStreaming(false);
-
-                    // Bind this conversation (new convo: chat_id was just minted
-                    // server-side as a flow_type=15 daily session). Guard the load
-                    // effect from refetching (and clobbering) the optimistic task
-                    // turn before the worker has persisted the bot task row.
-                    if (chat_id) {
-                        skipLoadConvoRef.current = chat_id;
-                        adoptConversationId(turn, chat_id);
-                        if (wasNewConvo) {
-                            const placeholderConvo = {
-                                conversationId: chat_id,
-                                title: localize('com_ui_new_chat'),
-                                createdAt: new Date().toISOString(),
-                                updatedAt: new Date().toISOString(),
-                                model: chatModel.name || '',
-                                endpoint: '',
-                                endpointType: 'custom',
-                                isArchived: false,
-                                tags: [],
-                            } as unknown as TConversation;
-                            queryClient.setQueryData<ConversationData>(
-                                [QueryKeys.allConversations],
-                                (convoData) =>
-                                    convoData ? addConversation(convoData, placeholderConvo) : convoData,
-                            );
-                        }
-                    }
-
-                    // Seed the linsight execution store for this SV, then start it.
-                    createLinsight(svid, {
-                        status: SopStatus.SopGenerating,
-                        question: text.trim(),
-                        tasks: [],
-                        sessionSteps: [],
-                        history: [],
-                        output_result: null,
-                        file_list: [],
-                        files: [],
-                        tools: [],
-                        session_id: chat_id,
-                        version: svid,
-                        queueCount: 0,
-                        taskError: '',
-                        sopError: '',
-                        inputSop: false,
-                    } as any);
-
-                    startLinsight(svid)
-                        .then(() => updateLinsight(svid, { status: SopStatus.Running }))
-                        .catch((err) => {
-                            console.error('[AiChat] task start-execute failed:', err);
-                            updateLinsight(svid, { taskError: String(err), status: SopStatus.Stoped });
-                        });
-
-                    // The handoff event carries no files. Attachment ingest no longer
-                    // runs inside the submit request — the linsight worker materializes
-                    // uploads/* just before the run — so at handoff time this SV's row
-                    // still has files=[] and the single shot this used to be always
-                    // missed, leaving the workspace drawer (uploaded-files group +
-                    // header button) empty until a manual refresh. Poll instead: stop
-                    // as soon as the files land, stop when the run can no longer
-                    // produce any, and give up at INGEST_POLL_DEADLINE_MS so a
-                    // pathological batch degrades to "visible after refresh" rather
-                    // than to an unbounded timer.
-                    if (chat_id) {
-                        // Keyed by the turn's conversation, so it survives the
-                        // user switching away and writes back where it started.
-                        const pollCid = turn.cid;
-                        cancelIngestPoll(pollCid);
-                        const pollEntry = ingestPollFor(pollCid);
-                        const pollGeneration = pollEntry.generation;
-                        const pollDeadline = Date.now() + INGEST_POLL_DEADLINE_MS;
-                        let attempts = 0;
-                        const scheduleNextIngestPoll = () => {
-                            if (pollEntry.generation !== pollGeneration) return;
-                            if (Date.now() >= pollDeadline) return;
-                            const delay =
-                                attempts < INGEST_POLL_FAST_ATTEMPTS
-                                    ? INGEST_POLL_FAST_MS
-                                    : INGEST_POLL_SLOW_MS;
-                            pollEntry.timer = setTimeout(pollIngestedFiles, delay);
-                        };
-                        const pollIngestedFiles = () => {
-                            attempts += 1;
-                            getLinsightSessionVersionList(chat_id, '')
-                                .then((versions: any[]) => {
-                                    if (pollEntry.generation !== pollGeneration) return;
-                                    const item = (versions || []).find((v: any) => v.id === svid);
-                                    if (item?.files?.length) {
-                                        updateLinsight(svid, {
-                                            files: item.files.map((f: any) => ({
-                                                ...f,
-                                                file_name: decodeURIComponent(f.original_filename),
-                                            })),
-                                        } as any);
-
-                                        // Stamp the user question's attachment chips with each
-                                        // file's parse result so a failed attachment shows its
-                                        // failed state live (not only after a refresh).
-                                        const statusById = new Map<string, any>(
-                                            item.files
-                                                .filter((f: any) => f?.file_id != null)
-                                                .map((f: any) => [String(f.file_id), f]),
-                                        );
-                                        setMessages((prev) =>
-                                            prev.map((m) =>
-                                                m.messageId === realUserMessageId && m.files?.length
-                                                    ? {
-                                                          ...m,
-                                                          files: m.files.map((mf: any) => {
-                                                              const p = statusById.get(String(mf.file_id));
-                                                              return p
-                                                                  ? {
-                                                                        ...mf,
-                                                                        valid: p.valid,
-                                                                        parsing_status: p.parsing_status,
-                                                                        error_message: p.error_message,
-                                                                        ...(p.cover_filepath
-                                                                            ? { cover_filepath: p.cover_filepath }
-                                                                            : {}),
-                                                                    }
-                                                                  : mf;
-                                                          }),
-                                                      }
-                                                    : m,
-                                            ),
-                                        );
-                                        return;
-                                    }
-                                    // A terminated / failed / completed run will never
-                                    // ingest anything more; keeping the timer alive would
-                                    // just poll a settled row for two minutes.
-                                    if (item && TERMINAL_SV_STATUSES.has(item.status)) return;
-                                    scheduleNextIngestPoll();
-                                })
-                                .catch(() => {
-                                    // best-effort: drawer still works after refresh
-                                    scheduleNextIngestPoll();
-                                });
-                        };
-                        pollIngestedFiles();
-                    }
-
-                    // Promote the placeholder assistant row to a task turn so the
-                    // bubble renders the embedded execution panel by SV.
-                    setMessages((prev) => {
-                        return prev.map((m) =>
-                            m.messageId === responseMessageId
-                                ? {
-                                      ...m,
-                                      category: 'task',
-                                      linsightSessionVersionId: svid,
-                                      conversationId: chat_id || m.conversationId,
-                                      unfinished: true,
-                                  }
-                                : m,
-                        );
-                    });
-
-                    // New task conversations have no daily `final` event to drive
-                    // title generation — request it explicitly. The gen_title
-                    // endpoint waits until the backend has persisted a real name,
-                    // so this no longer races slow models.
-                    if (wasNewConvo && chat_id) {
-                        dataService.genTitle({ conversationId: chat_id })
-                            .then((res: { title?: string }) => {
-                                if (!res?.title) return;
-                                setTitle(res.title);
-                                queryClient.setQueryData<ConversationData>(
-                                    [QueryKeys.allConversations],
-                                    (convoData) =>
-                                        convoData
-                                            ? updateConvoFields(convoData, {
-                                                  conversationId: chat_id,
-                                                  title: res.title,
-                                              } as TConversation)
-                                            : convoData,
-                                );
-                            })
-                            .catch(() => { /* non-critical */ });
-                    }
                 },
                 onQuestionFilesUpdate: ({ messageId, files: updatedFiles }) => {
                     if (!updatedFiles?.length) return;
@@ -1302,7 +1016,7 @@ export default function useAiChat(
             beginStream(turn.bucketId, submission);
             return true;
         },
-        [knowledgeAccessBlocked, knowledgeAccessMessage, conversationId, activeBucketId, isStreaming, chatModel, selectedOrgKbs, setSelectedOrgKbs, bsConfig, adoptConversationId, searchType, selectedAgentTools, dailyTaskSkills, isLingsi, createLinsight, updateLinsight, localize, showToast, queryClient, finishMediaParsing, ensureFlowLeaseId, unifiedEnabled, unified.isBusy, unified.send]
+        [knowledgeAccessBlocked, knowledgeAccessMessage, conversationId, activeBucketId, isStreaming, chatModel, selectedOrgKbs, setSelectedOrgKbs, bsConfig, adoptConversationId, searchType, selectedAgentTools, dailyTaskSkills, isLingsi, localize, showToast, queryClient, finishMediaParsing, ensureFlowLeaseId, usesRunProtocol, unified.isBusy, unified.send]
     );
 
     // --- Stop generating ---
@@ -1315,10 +1029,9 @@ export default function useAiChat(
         // Only the conversation being read. A turn generating in another one is
         // none of this button's business.
         endStream(activeBucketId);
-        cancelIngestPoll(conversationId);
         setIsStreaming(false);
         setIsParsingMedia(false);
-        // F004: a run of the unified runtime lives on the server; ask it to
+        // F004: a run lives on the server; ask it to
         // stop. The `run_stopped` event ends it on screen. No-op otherwise.
         unifiedStopRun().catch((err: { presentation?: string } | null) => {
             // The run keeps going and the stop button stays available. Say so,
@@ -1326,7 +1039,7 @@ export default function useAiChat(
             if (err?.presentation === "toast" || err?.presentation === "global") return;
             notifyStopFailedRef.current();
         });
-    }, [cancelIngestPoll, conversationId, activeBucketId, endStream, setIsParsingMedia, setIsStreaming, unifiedStopRun]);
+    }, [activeBucketId, endStream, setIsParsingMedia, setIsStreaming, unifiedStopRun]);
 
     // --- Clear conversation ---
     const clearConversation = useCallback(() => {
@@ -1340,15 +1053,14 @@ export default function useAiChat(
     const regenerate = useCallback(
         async (parentMessageId: string) => {
             if (isStreaming || unified.isRunning) return;
-            if (unifiedEnabled) {
-                // F004: the unified runtime has no "regenerate": a conversation
+            if (usesRunProtocol) {
+                // F004: the run protocol has no "regenerate": a conversation
                 // is one linear thread and every request stores a new question
                 // row. So this entry (also the "retry" of a failed answer)
                 // sends the question again through the normal send, which
-                // starts a new run with protocol 2. The legacy stream below
-                // would open a second, page-owned stream next to the run
-                // store: the composer stays open on the unified runtime but
-                // `sendMessage` refuses while that stream is going.
+                // starts a new run. The page-owned stream below would open
+                // next to the run store: the composer stays open during a
+                // run but `sendMessage` refuses while that stream is going.
                 // Attachments are not sent again: the files of the earlier
                 // turn are already in the conversation's workspace.
                 const question = messagesRef.current.find(
@@ -1530,7 +1242,7 @@ export default function useAiChat(
             setIsStreaming(true);
             beginStream(turn.bucketId, submission);
         },
-        [knowledgeAccessBlocked, knowledgeAccessMessage, conversationId, activeBucketId, isStreaming, unified.isRunning, chatModel, selectedOrgKbs, setSelectedOrgKbs, bsConfig, adoptConversationId, searchType, selectedAgentTools, localize, showToast, ensureFlowLeaseId, unifiedEnabled, sendMessage]
+        [knowledgeAccessBlocked, knowledgeAccessMessage, conversationId, activeBucketId, isStreaming, unified.isRunning, chatModel, selectedOrgKbs, setSelectedOrgKbs, bsConfig, adoptConversationId, searchType, selectedAgentTools, localize, showToast, ensureFlowLeaseId, usesRunProtocol, sendMessage]
     );
 
     return {
@@ -1538,8 +1250,8 @@ export default function useAiChat(
         isClearing: false,
         retryHistory,
         // State
-        // F004: with the unified runtime on, the row of a run in progress
-        // shows the run store's state; otherwise this is the bucket as is.
+        // F004: under the run protocol the row of a run in progress shows the
+        // run store's state; otherwise this is the bucket as is.
         messages: unified.messages,
         // Legacy alias — kept null to maintain the old destructuring shape
         // without shipping tree-building on the hot path.
@@ -1547,7 +1259,7 @@ export default function useAiChat(
         conversationId,
         title,
         isLoading,
-        // F004: also true while a run of the unified runtime is in progress.
+        // F004: also true while a run of the conversation is in progress.
         isStreaming: isStreaming || unified.isRunning,
         isParsingMedia,
 
@@ -1561,8 +1273,6 @@ export default function useAiChat(
         clearConversation,
         regenerate,
         setConversationId,
-        // F004 (unified runtime only; inert when the tenant switch is off)
-        unifiedRuntime: unifiedEnabled,
         /** A run is in progress (running, or waiting for the user's answer). */
         isRunActive: unified.isRunning,
         /** POST /conversations/{id}/stop for the run on screen. */

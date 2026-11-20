@@ -1,15 +1,13 @@
 /**
  * F004 (T060): "查看代码和输出" on a generic tool row of a direct answer.
  *
- * Opens the call's parameters and its output under the row. Rendered only when
- * the tenant switch `unified_runtime_enabled` is on, so the row is unchanged on
- * the old path. Sits inside a `flex-wrap` row: the toggle stays beside the row
- * label and the opened block takes the next full line.
+ * Opens the call's parameters and its output under the row. Sits inside a
+ * `flex-wrap` row: the toggle stays beside the row label and the opened block
+ * takes the next full line.
  */
 import { useState } from 'react';
 import type { AgentToolCall } from '~/api/chatApi';
 import { useLocalize } from '~/hooks';
-import { useGetBsConfig } from '~/hooks/queries/data-provider';
 
 interface ToolCodeOutputProps {
     toolCall: AgentToolCall;
@@ -39,9 +37,8 @@ export function toolCallOutputText(results: AgentToolCall['results']): string {
 
 export function ToolCodeOutput({ toolCall }: ToolCodeOutputProps) {
     const localize = useLocalize();
-    const enabled = useGetBsConfig().data?.unified_runtime_enabled === true;
     const [open, setOpen] = useState(false);
-    if (!enabled || toolCall.inflight || toolCall.error) return null;
+    if (toolCall.inflight || toolCall.error) return null;
     const input = toolCallInputText(toolCall.args);
     const output = toolCallOutputText(toolCall.results);
     if (!input.text && !output) return null;

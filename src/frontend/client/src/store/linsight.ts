@@ -212,10 +212,9 @@ export function isLinsightTaskRunning(info: LinsightInfo): boolean {
 /**
  * Whether a conversation (chat_id) currently owns a task-mode session that is
  * still executing — drives the per-conversation running spinner in the sidebar
- * list. A linsight session stores its owning chat_id in `session_id` (see
- * useAiChat `onTaskHandoff`), so we match the conversation against that. The
- * "running" set mirrors ChatView's `taskRunning` (startup → execution) so the
- * spinner is live for exactly the window the stop button is.
+ * list. A linsight session stores its owning chat_id in `session_id`, so we
+ * match the conversation against that. The "running" set covers startup →
+ * execution.
  *
  * EXCEPT a park (waiting for the user to answer an ask_user): the top-level status
  * stays `running` during a live park, but nothing is executing — the agent is

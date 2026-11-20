@@ -1,19 +1,15 @@
 /**
- * F004 (T049): the pinned plan panel reads `runStore` on the unified runtime
- * and the linsight Recoil store everywhere else.
+ * F004 (T049): the pinned plan panel reads the plan of the current run from
+ * `runStore`, and the stored task list of the linsight Recoil store otherwise.
  */
 import { act, render, screen } from '@testing-library/react';
 import { useRunStore, type RunEvent, type RunPlanItem } from '~/store/runStore';
 import { PinnedTaskPanel, planItemsToTasks } from './PinnedTaskPanel';
 
-let mockUnified: boolean | undefined = true;
 let mockLinsight: unknown = null;
 
 jest.mock('~/hooks', () => ({
     useLocalize: () => (key: string) => key,
-}));
-jest.mock('~/hooks/queries/data-provider', () => ({
-    useGetBsConfig: () => ({ data: { unified_runtime_enabled: mockUnified } }),
 }));
 jest.mock('~/hooks/useLinsightManager', () => ({
     useLinsightManager: () => ({ getLinsight: () => mockLinsight }),
@@ -46,7 +42,6 @@ function plan(items: RunPlanItem[]) {
 }
 
 beforeEach(() => {
-    mockUnified = true;
     mockLinsight = null;
     act(() => useRunStore.setState({ conversations: {} }));
 });
@@ -178,31 +173,9 @@ describe('PinnedTaskPanel on the unified runtime', () => {
         expect(container.firstChild).toBeNull();
     });
 
-    it('falls back to the legacy source when the store holds no plan', () => {
-        mockLinsight = { status: 'running', tasks: [{ id: 't1', name: 'legacy row', status: 'success' }] };
+    it('falls back to the stored task list when the store holds no plan', () => {
+        mockLinsight = { status: 'running', tasks: [{ id: 't1', name: 'stored row', status: 'success' }] };
         render(<PinnedTaskPanel versionId="v1" conversationId={CID} />);
-        expect(screen.getByText('legacy row')).toBeTruthy();
-    });
-});
-
-describe('PinnedTaskPanel with the switch off', () => {
-    it.each([false, undefined])('reads only the legacy source when the flag is %s', (flag) => {
-        mockUnified = flag;
-        apply({ type: 'run_started', data: {} });
-        plan([item('1', 'completed'), item('2', 'in_progress')]);
-        mockLinsight = { status: 'running', tasks: [{ id: 't1', name: 'legacy row', status: 'in_progress' }] };
-        render(<PinnedTaskPanel versionId="v1" conversationId={CID} />);
-        // Header (running row inline) + list row.
-        expect(screen.getAllByText('legacy row').length).toBeGreaterThan(0);
-        expect(screen.queryByText('step 1')).toBeNull();
-        expect(screen.getByText('0/1')).toBeTruthy();
-    });
-
-    it('renders nothing without a task turn', () => {
-        mockUnified = false;
-        apply({ type: 'run_started', data: {} });
-        plan([item('1', 'completed')]);
-        const { container } = render(<PinnedTaskPanel conversationId={CID} />);
-        expect(container.firstChild).toBeNull();
+        expect(screen.getByText('stored row')).toBeTruthy();
     });
 });

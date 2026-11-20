@@ -15,7 +15,6 @@
  */
 import { useMemo } from 'react';
 import { getRunFileUrlPath } from '~/api/runApi';
-import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { useRunStore, type RunFileData } from '~/store/runStore';
 import type { ArtifactFile } from './artifactUtils';
 
@@ -107,14 +106,10 @@ export function mergeWorkspaceFiles(
 const NO_ARTIFACTS: ArtifactFile[] = [];
 const NO_FILES: RunFileData[] = [];
 
-/**
- * Files of the conversation's current run. Always empty when the tenant switch
- * `unified_runtime_enabled` is off or missing, so nothing changes on the old path.
- */
+/** Files of the conversation's current run. */
 export function useLiveRunFiles(conversationId: string | undefined): RunFileData[] {
-    const enabled = useGetBsConfig().data?.unified_runtime_enabled === true;
     return useRunStore((state) => {
-        if (!enabled || !conversationId) return NO_FILES;
+        if (!conversationId) return NO_FILES;
         return state.conversations[conversationId]?.run?.files ?? NO_FILES;
     });
 }

@@ -1,8 +1,8 @@
 /**
  * F004 (T047) — the conversation page's side of the unified agent runtime.
  *
- * `useAiChat` owns the message list; this hook adds what a tenant on the
- * unified runtime needs and does nothing when `enabled` is false:
+ * `useAiChat` owns the message list; this hook adds what the run protocol
+ * needs and does nothing when `enabled` is false (a carrier outside it):
  *   - follows the run events of the open conversation (`useRunEvents`);
  *   - shows the answer of the run in progress as one row of the list;
  *   - when the run ends, freezes that row and lets the history endpoint
@@ -50,7 +50,7 @@ type MessagesUpdater = ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[]);
 const HISTORY_RETRY_DELAYS_MS = [500, 1000, 2000, 4000, 8000];
 
 export interface UseUnifiedRunOptions {
-    /** Tenant switch `unified_runtime_enabled`; false keeps every legacy path. */
+    /** The carrier sends with the run protocol (conversation page); false leaves the hook inert. */
     enabled: boolean;
     /** Conversation on screen (`"new"` for an unsaved draft). */
     conversationId: string;

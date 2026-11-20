@@ -43,7 +43,7 @@ function open(overrides: Partial<SSESubmission> = {}) {
         payload: {}, projectDraft: null,
         userMessage: { messageId: 'question', parentMessageId: '', conversationId: 'chat', sender: 'user', text: 'Question' },
         onCreated: jest.fn(), onMessage: jest.fn(), onAgentUpdate: jest.fn(), onFinal: jest.fn(),
-        onError: jest.fn(), onStart: jest.fn(), onEnd: jest.fn(), onTaskHandoff: jest.fn(),
+        onError: jest.fn(), onStart: jest.fn(), onEnd: jest.fn(),
         ...overrides,
     };
     const handle = openChatStream(submission, (key) => key);
@@ -89,7 +89,6 @@ it('lets a typed error beat close in the same event turn', async () => {
 
 it.each([
     { final: true },
-    { event: 'linsight_task_handoff', data: { session_version_id: 'version-1', chat_id: 'chat' } },
     { category: 'processing', type: 'close' },
 ])('does not manufacture a network failure after a normal terminal frame: %o', async (frame) => {
     const { stream, submission } = open();

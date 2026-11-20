@@ -3,11 +3,7 @@ import type { AgentToolCall } from '~/api/chatApi';
 import ToolCallDisplay from './ToolCallDisplay';
 import { toolCallInputText, toolCallOutputText } from './ToolCodeOutput';
 
-let mockEnabled: boolean | undefined = true;
 jest.mock('~/hooks', () => ({ useLocalize: () => (key: string) => key }));
-jest.mock('~/hooks/queries/data-provider', () => ({
-    useGetBsConfig: () => ({ data: { unified_runtime_enabled: mockEnabled } }),
-}));
 jest.mock('~/components/ChatErrorCard', () => ({ ChatErrorCard: () => null }));
 jest.mock('~/components/Memory/MemorySearchHits', () => ({ MemorySearchHits: () => null }));
 
@@ -19,10 +15,6 @@ const call = (over: Partial<AgentToolCall> = {}): AgentToolCall => ({
     results: '2',
     inflight: false,
     ...over,
-});
-
-beforeEach(() => {
-    mockEnabled = true;
 });
 
 describe('generic tool row: view code and output (AC-25)', () => {
@@ -43,15 +35,6 @@ describe('generic tool row: view code and output (AC-25)', () => {
         expect(screen.getByText('runTool.params')).toBeInTheDocument();
         expect(screen.getByText(/"city": "Taipei"/)).toBeInTheDocument();
         expect(screen.getByText(/"temp": 21/)).toBeInTheDocument();
-    });
-    it('is absent when the tenant switch is off or missing', () => {
-        mockEnabled = false;
-        const { unmount } = render(<ToolCallDisplay toolCall={call()} />);
-        expect(screen.queryByText('runTool.viewCodeOutput')).toBeNull();
-        unmount();
-        mockEnabled = undefined;
-        render(<ToolCallDisplay toolCall={call()} />);
-        expect(screen.queryByText('runTool.viewCodeOutput')).toBeNull();
     });
     it('is absent while the call runs, after it failed, and when it has nothing to show', () => {
         const { rerender } = render(<ToolCallDisplay toolCall={call({ inflight: true })} />);
