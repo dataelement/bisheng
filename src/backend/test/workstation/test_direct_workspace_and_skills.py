@@ -183,6 +183,33 @@ async def test_no_skills_selected_still_mounts_every_usable_skill(make_env, monk
     assert not os.path.exists(env.file_dir)
 
 
+@pytest.mark.real_auto_enabled
+@pytest.mark.parametrize("picked", [[], ["demo-skill"]])
+async def test_a_failed_skill_listing_does_not_fail_the_answer(make_env, monkeypatch: pytest.MonkeyPatch, picked):  # noqa: F811
+    """F005 (user decision 2026-11-20): skills are an extra for a direct answer.
+
+    If listing the user's skills fails (database or permission service), the answer
+    goes on without skills. Only skills the user picked are reported as not loaded.
+    """
+
+    async def materialize(backend, tenant_id, selected, store=None, **kwargs):
+        raise ConnectionError("permission service unavailable")
+
+    monkeypatch.setattr(skill_provisioning, "materialize_session_skills", materialize)
+    env = make_env([AIMessage(content="你好")])
+    ctx = await env.submit("你好")
+    ctx.skills = list(picked)
+
+    assert (await env.run(ctx)).status == "finished"
+
+    reported = [
+        e["data"]["extra_info"]["skills"]
+        for e in await env.events()
+        if e["type"] == "tool_call" and (e["data"].get("extra_info") or {}).get("kind") == "skill_load_failed"
+    ]
+    assert reported == ([picked] if picked else [])
+
+
 async def test_lazy_workspace_creation(make_env, monkeypatch: pytest.MonkeyPatch):  # noqa: F811
     env = make_env([AIMessage(content="不需要运行代码")])
     runner, binder = _real_assembly(env, monkeypatch)

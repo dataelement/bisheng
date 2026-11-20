@@ -1224,8 +1224,25 @@ class DirectRunner:
         not the user picked any; the picked ones are only the highlight. The copy
         is local (no workspace write), so a user without skills still gets no
         local directory (决策 10).
+
+        A failure to list the user's skills (database or permission service) does
+        not fail the answer: skills are an extra here, and the user usually picked
+        none. Unlike deep research, the run goes on without skills; picked skills
+        are reported as not loaded. A single skill that fails to copy is already
+        handled inside provisioning.
         """
-        result = await self._provision_skills(ctx, backend)
+        try:
+            result = await self._provision_skills(ctx, backend)
+        except Exception:
+            # Non-critical extra (user decision 2026-11-20); logged with the traceback, picked skills are reported.
+            logger.exception(
+                "direct run={} conversation={}: skill provisioning failed; answering without skills",
+                ctx.run_id,
+                ctx.conversation_id,
+            )
+            if ctx.skills:
+                await sink(self._skill_failure_event(ctx, list(ctx.skills)))
+            return False
         snapshot = getattr(result, "snapshot", None)
         if snapshot:
             # Reads of ``skills/<name>/`` check the row that owns the directory.
