@@ -228,7 +228,7 @@ class SenseChat(BaseChatModel):
         if 'error' in rsp_dict:
             logger.error(f'sensechat_error resp={rsp_dict}')
             message = rsp_dict['error']['message']
-            raise Exception(message)
+            raise ValueError(message)
         else:
             # return rsp_dict['data'], rsp_dict.get('usage', '')
             return rsp_dict, rsp_dict.get('usage', '')
