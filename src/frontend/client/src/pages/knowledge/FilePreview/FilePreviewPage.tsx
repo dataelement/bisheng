@@ -5,12 +5,13 @@
  * a reusable, decoupled component.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Outlined } from "bisheng-icons";
 import { getFileDownloadApi, getFilePreviewApi } from "~/api/knowledge";
 import { getMyResourcePermissions } from "~/api/permission";
 import type { KnowledgeFilePreview } from "~/api/knowledge";
 import { FileAiDock } from "~/pages/Subscription/AiChat/FileAiDock";
+import { useClientEnvironment } from "~/hooks/useClientEnvironment";
 import FilePreview from "./index";
 import { RichKnowledgePreview } from "./RichKnowledgePreview";
 import { resolveKnowledgePreviewUrl } from "./previewUrlUtils";
@@ -33,6 +34,37 @@ function extractExtFromUrl(url: string, fallback: string): string {
         // Parsing failed, use fallback
     }
     return fallback;
+}
+
+/** The mobile app has no browser chrome on this page. A phone browser keeps its own back control. */
+function KnowledgeFilePreviewHostBack({ spaceId }: { spaceId: string }) {
+    const localize = useLocalize();
+    const navigate = useNavigate();
+    const hostRequestsBack =
+        useClientEnvironment().capabilities?.hasHostBackButton === true;
+    if (!hostRequestsBack) return null;
+    const handleBack = () => {
+        if (window.history.length > 1) {
+            window.history.back();
+            return;
+        }
+        const host = window.BishengMobile;
+        if (host && typeof host.postMessage === "function") {
+            host.postMessage(JSON.stringify({ type: "close" }));
+            return;
+        }
+        navigate(spaceId ? `/knowledge/space/${encodeURIComponent(spaceId)}` : "/knowledge");
+    };
+    return (
+        <button
+            type="button"
+            aria-label={localize("com_ui_go_back")}
+            onClick={handleBack}
+            className="fixed left-4 top-[calc(env(safe-area-inset-top,0px)+12px)] z-10 inline-flex size-9 items-center justify-center rounded-xl border border-black/5 bg-bg-page/70 text-[#212121] shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition-colors hover:bg-bg-page/85"
+        >
+            <Outlined.ArrowLeft className="size-5" />
+        </button>
+    );
 }
 
 const AUDIO_EXTENSIONS = new Set(["mp3", "wav", "m4a", "aac", "flac", "ogg"]);
@@ -224,6 +256,7 @@ export default function FilePreviewPage() {
     if (loading) {
         return (
             <div className="h-screen flex items-center justify-center bg-bg-page">
+                {isMobile && <KnowledgeFilePreviewHostBack spaceId={spaceId} />}
                 <div className="text-text-3">{localize("com_knowledge.loading")}</div>
             </div>
         );
@@ -233,6 +266,7 @@ export default function FilePreviewPage() {
     if (!fileUrl && !conversionFailed && !isRichPreviewData(previewData)) {
         return (
             <div className="h-screen flex items-center justify-center bg-bg-page">
+                {isMobile && <KnowledgeFilePreviewHostBack spaceId={spaceId} />}
                 <div className="text-text-3">{localize("com_knowledge.fetch_preview_link_failed")}</div>
             </div>
         );
@@ -248,6 +282,8 @@ export default function FilePreviewPage() {
                 <div className="absolute inset-0">
                     {renderPreview(true)}
                 </div>
+
+                <KnowledgeFilePreviewHostBack spaceId={spaceId} />
 
                 {/* Floating top-right download button — styled like ArticlePage's menu button. */}
                 {canDownload && (
