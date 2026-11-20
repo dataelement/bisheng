@@ -13,18 +13,6 @@ from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
 from bisheng.tool.domain.repositories import user_availability as repository_module
 from bisheng.tool.domain.repositories.user_availability import UserToolAvailabilityRepository
 from bisheng.tool.domain.services.user_availability import UserToolAvailabilityService, manages_availability
-from bisheng.workstation.domain.services.workstation_service import WorkStationService
-
-
-@pytest.fixture(autouse=True)
-def no_auto_enabled_tools(monkeypatch):
-    """F005: an opt-out on record makes the service read the workbench config; none is auto-enabled here."""
-
-    async def _none(cls):
-        return set()
-
-    monkeypatch.setattr(WorkStationService, "aauto_enabled_tool_ids", classmethod(_none))
-    monkeypatch.setattr(WorkStationService, "auto_enabled_tool_ids", classmethod(lambda cls: set()))
 
 
 @pytest.fixture

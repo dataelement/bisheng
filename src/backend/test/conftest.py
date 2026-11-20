@@ -120,9 +120,10 @@ def _direct_run_outside_services(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _no_auto_enabled_capabilities(request, monkeypatch):
-    """F005 added two reads to every workbench send: the auto-enabled tools in the
-    tenant config, and the user's skills for a direct run. Tests that do not
-    cover F005 have neither a database nor a skill store, so both default to
+    """F005 reads the auto-enabled tools from the tenant config (on every
+    workbench send, in the capability center and on a personal opt-out) and
+    mounts the user's skills on every direct run. Tests that do not cover F005
+    have neither a database nor a skill store, so all of it defaults to
     "nothing". A test that exercises the real path opts out with
     ``@pytest.mark.real_auto_enabled``.
     """
@@ -139,7 +140,12 @@ def _no_auto_enabled_capabilities(request, monkeypatch):
     async def _no_skills(self, ctx, backend):
         return SimpleNamespace(copied=[], failed=[], snapshot=[])
 
+    async def _no_ids(cls):
+        return set()
+
     monkeypatch.setattr(WorkStationService, "awith_auto_enabled_tools", classmethod(_unchanged))
+    monkeypatch.setattr(WorkStationService, "aauto_enabled_tool_ids", classmethod(_no_ids))
+    monkeypatch.setattr(WorkStationService, "auto_enabled_tool_ids", classmethod(lambda cls: set()))
     monkeypatch.setattr(DirectRunner, "_default_provision_skills", _no_skills)
 
 

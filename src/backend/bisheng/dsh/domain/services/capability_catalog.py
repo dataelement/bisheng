@@ -46,10 +46,14 @@ class CapabilityCatalogService:
                 if not tool.is_delete and tool.id not in disabled
             },
         )
+        from bisheng.workstation.domain.services.workstation_service import WorkStationService
+
+        # F005: an auto-enabled workbench tool is always on, so the center does not list it.
+        auto_enabled = await WorkStationService.aauto_enabled_tool_ids()
         rows = []
         for group in groups:
             for tool in group.children or []:
-                if tool.is_delete:
+                if tool.is_delete or tool.id in auto_enabled:
                     continue
                 demo = demo_for(tool)
                 name = WorkCapabilitiesService._tool_name(tool)
