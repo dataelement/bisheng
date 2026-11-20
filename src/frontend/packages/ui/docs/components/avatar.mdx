@@ -1,0 +1,21 @@
+---
+status: done
+component: Avatar
+---
+
+# 用户头像 Avatar
+
+`UserAvatar` 优先显示用户上传的图片。图片缺失或加载失败时，使用灰底白字的昵称首字符。空昵称显示 `?`。使用 `className` 指定入口的尺寸，`fallbackClassName` 可匹配该尺寸的字号。
+
+```tsx
+import React from 'react';
+import { UserAvatar } from '@bisheng/ui';
+
+export default () => (
+  <div className="flex items-center gap-3">
+    <UserAvatar name="林晓" className="size-6" fallbackClassName="text-caption" />
+    <UserAvatar name="Alice" className="size-8" />
+    <UserAvatar name="" />
+  </div>
+);
+```
