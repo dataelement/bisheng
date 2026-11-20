@@ -52,14 +52,19 @@
 - **何时推翻**：如果停用记录以后要支持「管理员强制关闭」之类的第三方写入，读时剔除的逻辑会变复杂，届时改为写时处理。
 - **按 `tool_key` 匹配**：子租户继承根租户配置时，配置里的工具 id 属于根租户，要经过 `_aproject_tools_for_current_tenant` 按 `tool_key` 投影成本租户的 id。执行器是同步代码，拿到的是本租户的工具行，用 `tool_key` 匹配可以省掉投影。
 
-### 决策 5：直接回答里，用户没选技能时只拷贝自动启用的技能
+### 决策 5：直接回答总是挂载全部可用技能；技能挂载不再写会话工作区的 MinIO
 
-- **选定**：`DirectRunner._mount_skills`（`direct_run.py:1109`）的条件由「`ctx.skills` 非空」改为「`ctx.skills` 非空，或者该用户有自动启用的技能」。用户选了技能时行为不变（拷贝全部候选技能）。用户没选时只拷贝自动启用的技能：`_materialize_candidates` 新增参数 `restrict_to_auto: bool`，为 True 时只保留 `auto_enabled` 的候选。
-- **备选**：只要有自动启用的技能，就拷贝全部候选。F004 记录过直接回答每次执行都重新拷贝全部候选技能、没有跨执行快照（F004 design §残留）；一个租户有 41 个技能（截图），拷贝量随技能数增长，每条日常消息都要付出这个代价。
-- **原因**：拷贝量由自动启用的技能数决定，通常是 3–4 个。深度研究本来就挂载全部候选技能，不需要改动。
-- **AC-16**：`selected` 仍然只传 `ctx.skills`（用户自己选的），技能中间件的「用户选中」标注不会包含自动启用项。
-- **何时推翻**：F004 的直接回答如果有了跨执行的技能快照，拷贝全部候选就没有额外代价了，届时可以统一成「总是挂载全部候选」。
-- **代价实测**：交付前在 114 上测量直接回答「无技能 / 3 个自动启用技能」两组的准备时间，各 5 次，记录到 tasks.md。
+- **选定（2026-11-20 用户确认）**：
+  - `DirectRunner._mount_skills`（`direct_run.py:1109`）去掉「`ctx.skills` 为空就不挂载」的分支，与深度研究一致：总是挂载该用户的全部可用技能（含自动启用项），`selected` 只传用户自己选的，作为标注（AC-16）。
+  - 技能挂载改为只写本地：`_copy_one` 不再调用 `WorkspaceBackend.upload_files`（逐文件写本地缓存 + 同步 PUT 到 `workspace/{会话}/skills/...`），改为把技能包从本节点的技能缓存（按 content_hash 缓存）硬链接到 `file_dir/skills/<name>/`，跨文件系统时退回复制。会话里只记快照（name、skill_id、owner、content_hash）。`WorkspaceBackend` 读 `skills/` 下的路径时，按快照从技能存储取，不读会话工作区。换节点续跑时按快照重建本地目录。
+- **备选**：
+  - A. 用户没选时只挂载自动启用项（本文初稿）。直接回答和深度研究的行为不一致，用户被否决。
+  - B. 按需拷贝：只预先放 SKILL.md，其余文件在第一次读到时再取。去掉 MinIO 写入以后，挂载只剩本地硬链接，按需拷贝省不下多少时间。而且有两个约束：技能列表由 `SkillsMiddleware` 扫描本地 `file_dir` 生成；代码执行器直接读本地目录，执行代码前还要补落盘。不做。
+- **原因**：耗时主要在逐文件同步写 MinIO（`workspace_backend.py:1338` 的 `upload_files` 逐文件 `_minio_put_sync`）。技能包本身已经是对象存储里内容寻址、不可变的文件，工作区的 `skills/` 也是只读的（`_skills_readonly_error`），再复制一份到会话工作区，唯一用途是换节点续跑能取回，而按快照从技能存储同样能取回。
+- **影响范围**：直接回答和深度研究共用 `materialize_session_skills`，两边都受益。深度研究已有的会话快照（`skill_snapshot`）语义不变。
+- **沙箱 runner 部署的遗留开销**：配置了 `sandbox_conf.endpoints` 的部署，代码执行器每次执行都会把 `file_dir` 下的全部文件做 md5、把变化的文件打成 tar.gz 传给 runner（`container_executor._copy_in`）。同一个租约内只传一次，但技能包会占用 `max_copy_in_total_bytes` 的会话额度。见 §5 坑 6。
+- **何时推翻**：如果技能包变成可写的（例如允许模型修改技能），就不能再从技能存储直读，要退回写入会话工作区。
+- **实测**：见 §7.1。
 
 ### 决策 6：所有面向用户的列表都在后端过滤
 
@@ -129,7 +134,8 @@
   选择入口（selectable / center / dsh capabilities）【新】去掉 auto_enabled
   UserSkillsService.records【新】auto_enabled 的行忽略个人停用
   深度研究：_materialize_candidates 拷贝全部候选（已包含自动启用项）
-  直接回答：_mount_skills【新】无选择且有自动启用 → 只拷贝自动启用项
+  直接回答：_mount_skills【新】总是挂载全部候选（同深度研究）
+  挂载方式【新】本节点技能缓存 → 硬链接到 file_dir/skills/，不写会话工作区 MinIO；读 skills/ 按快照取技能存储
 ```
 
 ### 4.2 关键数据结构 / 字段约定
@@ -146,7 +152,8 @@
 | `WorkStationService.auto_enabled_tool_keys()`（同步、异步各一个） | 读当前租户（含继承）的配置，返回自动启用组的子工具 `tool_key` 集合 |
 | `UserToolAvailabilityService` | 剔除自动启用的 `tool_key` |
 | `UserSkillsService.records` | 自动启用的行视为启用 |
-| `DirectRunner._mount_skills` / `_materialize_candidates` | 无选择时只拷贝自动启用的技能 |
+| `DirectRunner._mount_skills` | 总是挂载全部候选 |
+| `skill_provisioning._copy_one` / `WorkspaceBackend` 的 `skills/` 读取 | 本地硬链接挂载；`skills/` 读取走技能存储 |
 | `ToolSelector.tsx` | 「使用方式」Select |
 | `SkillManagement.tsx` | 「自动启用」列 |
 
@@ -156,6 +163,7 @@
 2. **工具 id 按租户投影**。继承配置里的子工具 id 属于根租户，按 id 比较会在子租户失效。补入函数要用投影后的配置（`get_daily_chat_config` 已经做了投影），执行器的剔除用 `tool_key`。
 3. **浏览器里保存的旧选择**。客户端按账号保存工具选择（`agentToolDefaults.ts` 的 `applyToolDefaults`），代码执行器曾作为 `auto` 项写进去。工具改为自动启用后，`availableTools` 里没有它了。实现时要核对客户端是否已经按 `availableTools` 求交集；如果没有，旧选择会显示一个点不掉的标签。后端按 id 去重，所以不会重复挂载。技能选择（`SkillSelector`）同样处理。
 4. **超管验证会掩盖权限问题**。验证 AC-17 要用非管理员账号（backend AGENTS.md）。
+6. **沙箱 runner 的 copy-in 额度会被技能包占用**。总是挂载全部技能以后，配置了 runner 的部署每个会话都会把全部技能包（114 上是 30.7 MB）计入 copy-in 总量。默认上限 `max_copy_in_total_bytes` 是 512 MB，技能包约占 6%，默认配置下不会挤掉用户文件。如果某个部署调低了这个上限，超出部分会被跳过，可能包括用户上传的文件。深度研究今天已经是这样。本期不改，只记录；如果要改，就在 `_copy_in` 里跳过 `skills/` 下模型没读过 SKILL.md 的技能。
 5. **配置缓存**。配置写入后最长 100 秒内读到的可能还是旧值（Redis TTL）。验证时不要在这个时间窗内判断「没生效」。
 
 ## 6. 对外契约与依赖
@@ -174,19 +182,35 @@
 
 ## 7. 测试与可观测
 
-- 后端单测放在 `test/workstation/`、`test/linsight/`：配置字段透传（含继承投影）、互斥 validator、补入去重与权限过滤、个人停用剔除（工具、技能）、四个列表的过滤、`_mount_skills` 的三种组合（有选择 / 无选择有自动启用 / 都没有）、`selected` 不含自动启用项、迁移单 head。
+- 后端单测放在 `test/workstation/`、`test/linsight/`：配置字段透传（含继承投影）、互斥 validator、补入去重与权限过滤、个人停用剔除（工具、技能）、四个列表的过滤、`_mount_skills` 无选择时也挂载、挂载不产生 MinIO 写入、换节点（本地目录为空）时按快照重建与读取、`selected` 不含自动启用项、迁移单 head。
 - 前端：平台两处组件测试；客户端旧选择的过滤测试。
 - 日志：补入时打一条 info，内容为补入的 tool_key 列表和去重数；直接回答挂载时沿用现有的 provisioning 日志（已打印 candidates 和 materialized）。
-- 实测：114 上的直接回答准备时间（决策 5）；非管理员账号的端到端验证。
+- 实测：见 §7.1；非管理员账号的端到端验证。
 - 手动验证：环境地址和账号见 `.claude/docs/dev-environments.md`（114 个人开发机跑 beta2，部署用 `bash /opt/bisheng-ops/deploy.sh`）。步骤：管理端把代码执行器设为自动启用并保存 → 用非管理员账号打开用户端，确认工具菜单和能力中心都没有它 → 发一条「用 python 算 2 的 100 次方」，确认执行过程里出现代码执行器的调用。
+
+### 7.1 实测记录
+
+2026-11-20，114（代码 c93a27ccb = F004 分支），admin 账号，测量脚本对每个候选技能调用今天的 `_copy_one`，写入一次性前缀 `workspace/f005-measure-*`，测完已删除 1992 个对象。
+
+| 项 | 数值 |
+|---|---|
+| 候选技能数 | 17 |
+| 文件数 / 总字节 | 664 个 / 30.7 MB（最大的 gongwen-draft 45 个文件 22 MB；bisheng-pptx 246 个文件 1.9 MB） |
+| 本节点技能缓存读取（已预热） | 0.11 s |
+| 今天的挂载（写本地 + 逐文件 PUT MinIO），3 轮 | 3.71 / 3.80 / 4.47 s |
+| 改为从技能缓存硬链接，3 轮 | 0.014 / 0.021 / 0.026 s |
+
+结论：今天的方式每次直接回答要多 4 秒左右，耗时与文件数成正比；41 个技能的租户会更慢。改为硬链接后降到 30 ms 以内，所以「总是挂载全部可用技能」可以接受。
+
+执行器：114 没有配置沙箱 runner（`BS_SANDBOX_CONF__ENDPOINTS` 为空），用的是本地执行器，读本地目录，不受影响。
 
 ## 8. 后续改进 / 不打算做的事
 
 - 桌面端 Work 模式的技能、工具展示不在本期范围；它读的是运行时列表，自动启用项照常出现。
-- 直接回答的技能拷贝没有跨执行快照，这是 F004 遗留的问题，本期不处理。
 
 ## 修订历史
 
 | 日期 | 内容 |
 |---|---|
+| 2026-11-20 | 决策 5 改为直接回答总是挂载全部可用技能，技能挂载去掉 MinIO 写入，不做按需拷贝（用户确认）。 |
 | 2026-11-20 | 初稿。取证时发现能力中心（`/capabilities`）也是选择入口，并且工具也有个人停用；spec 补 AC-23，AC-10 / AC-11 的入口列表补上能力中心（待用户在 design 确认时一并确认） |
