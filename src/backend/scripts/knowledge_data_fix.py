@@ -236,22 +236,22 @@ def _init_knowledge_obj(knowledge: Knowledge):
     try:
         milvus_obj = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=knowledge)
         if milvus_obj.col is None:
-            raise Exception("Skip this Knowledge Base, Reason:Milvus collection name not exist")
+            raise FileNotFoundError("Skip this Knowledge Base, Reason:Milvus collection name not exist")
         collection_info = milvus_obj.col.schema
         fields = collection_info.fields
         fields = {field.name: 1 for field in fields}
         if "extra" not in fields or "source" not in fields or "file_id" not in fields:
-            raise Exception("Skip this Knowledge Base, Reason:Milvus fields not found file_id or source or extra")
+            raise FileNotFoundError("Skip this Knowledge Base, Reason:Milvus fields not found file_id or source or extra")
     except Exception as e:
         print(
             f"!!!! skip knowledge_id: {knowledge.id}; knowledge_name: {knowledge.name} because milvus connection error: {e}")
-        raise Exception(f"Skip this Knowledge Base, Reason:MilvusConnection Error: {e}")
+        raise ConnectionError(f"Skip this Knowledge Base, Reason:MilvusConnection Error: {e}")
     try:
         es_obj = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge)
     except Exception as e:
         print(
             f"!!!! skip knowledge_id: {knowledge.id}; knowledge_name: {knowledge.name} because es connection error: {e}")
-        raise Exception(f"Skip this Knowledge Base, Reason:ESConnection Error: {e}")
+        raise ConnectionError(f"Skip this Knowledge Base, Reason:ESConnection Error: {e}")
     return milvus_obj, es_obj
 
 
@@ -382,7 +382,7 @@ def _fix_knowledge_data(knowledge: Knowledge, milvus_obj, es_obj, all_files: Lis
         print("start copy milvus data to new collection_name")
         milvus_obj = _sync_milvus_new_collection_name(knowledge, milvus_obj)
         if not milvus_obj:
-            raise Exception(f"copy milvus data to new collection_name failed")
+            raise ValueError(f"copy milvus data to new collection_name failed")
         print("finish copy milvus data to new collection_name")
 
     all_milvus_chunk = _get_milvus_chunks_data(knowledge, milvus_obj, all_fields_expect_pk=True)
