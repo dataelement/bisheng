@@ -56,7 +56,9 @@
 
 - **选定（2026-11-20 用户确认）**：
   - `DirectRunner._mount_skills`（`direct_run.py:1109`）去掉「`ctx.skills` 为空就不挂载」的分支，与深度研究一致：总是挂载该用户的全部可用技能（含自动启用项），`selected` 只传用户自己选的，作为标注（AC-16）。
-  - 技能挂载改为只写本地：`_copy_one` 不再调用 `WorkspaceBackend.upload_files`（逐文件写本地缓存 + 同步 PUT 到 `workspace/{会话}/skills/...`），改为把技能包从本节点的技能缓存（按 content_hash 缓存）硬链接到 `file_dir/skills/<name>/`，跨文件系统时退回复制。会话里只记快照（name、skill_id、owner、content_hash）。`WorkspaceBackend` 读 `skills/` 下的路径时，按快照从技能存储取，不读会话工作区。换节点续跑时按快照重建本地目录。
+  - 技能挂载改为只写本地：`_copy_one` 不再调用 `WorkspaceBackend.upload_files`（逐文件写本地缓存 + 同步 PUT 到 `workspace/{会话}/skills/...`），改为把技能包从本节点的技能缓存（按 content_hash 缓存，`SkillStore.materialize`）**复制**到 `file_dir/skills/<name>/`。会话里只记快照（name、skill_id、owner、content_hash）。每次挂载都按快照把全部条目复制到本地：既包括这次新增的技能，也包括快照里已有的技能，因为同一会话的下一轮从空的 `file_dir` 开始（linsight AGENTS.md）。
+  - `WorkspaceBackend` 对 `skills/` 路径单独处理：`read` 先读本地，本地没有时按快照从技能存储取，不访问会话工作区；`ls` / `glob` / `grep` 的 `skills/` 部分按快照列出（`SkillStore.list_files`），与 MinIO 的列表合并。原因是工作区的 `ls` 以 MinIO 为准，不处理的话模型 `ls /skills` 会是空的。
+  - **不用硬链接**：硬链接与节点缓存共用 inode。代码执行器里的代码如果原地改写 `skills/` 下的文件，会改坏这个节点上所有会话共用的缓存。114 的执行器以 root 运行，只读权限拦不住。复制比硬链接多约 60 ms（§7.1），换来会话之间的隔离。
 - **备选**：
   - A. 用户没选时只挂载自动启用项（本文初稿）。直接回答和深度研究的行为不一致，用户被否决。
   - B. 按需拷贝：只预先放 SKILL.md，其余文件在第一次读到时再取。去掉 MinIO 写入以后，挂载只剩本地硬链接，按需拷贝省不下多少时间。而且有两个约束：技能列表由 `SkillsMiddleware` 扫描本地 `file_dir` 生成；代码执行器直接读本地目录，执行代码前还要补落盘。不做。
@@ -135,7 +137,7 @@
   UserSkillsService.records【新】auto_enabled 的行忽略个人停用
   深度研究：_materialize_candidates 拷贝全部候选（已包含自动启用项）
   直接回答：_mount_skills【新】总是挂载全部候选（同深度研究）
-  挂载方式【新】本节点技能缓存 → 硬链接到 file_dir/skills/，不写会话工作区 MinIO；读 skills/ 按快照取技能存储
+  挂载方式【新】本节点技能缓存 → 复制到 file_dir/skills/，不写会话工作区 MinIO；skills/ 的读和列表按快照取技能存储
 ```
 
 ### 4.2 关键数据结构 / 字段约定
@@ -153,7 +155,7 @@
 | `UserToolAvailabilityService` | 剔除自动启用的 `tool_key` |
 | `UserSkillsService.records` | 自动启用的行视为启用 |
 | `DirectRunner._mount_skills` | 总是挂载全部候选 |
-| `skill_provisioning._copy_one` / `WorkspaceBackend` 的 `skills/` 读取 | 本地硬链接挂载；`skills/` 读取走技能存储 |
+| `skill_provisioning._copy_one` / `WorkspaceBackend` 的 `skills/` 读取和列表 | 本地复制挂载；`skills/` 的读、ls、glob、grep 按快照走技能存储 |
 | `ToolSelector.tsx` | 「使用方式」Select |
 | `SkillManagement.tsx` | 「自动启用」列 |
 
@@ -199,8 +201,9 @@
 | 本节点技能缓存读取（已预热） | 0.11 s |
 | 今天的挂载（写本地 + 逐文件 PUT MinIO），3 轮 | 3.71 / 3.80 / 4.47 s |
 | 改为从技能缓存硬链接，3 轮 | 0.014 / 0.021 / 0.026 s |
+| 改为从技能缓存复制（选定），3 轮（第二次测量，同环境） | 0.076 / 0.094 / 0.072 s；同轮的今天方式为 3.57 / 3.78 / 3.59 s |
 
-结论：今天的方式每次直接回答要多 4 秒左右，耗时与文件数成正比；41 个技能的租户会更慢。改为硬链接后降到 30 ms 以内，所以「总是挂载全部可用技能」可以接受。
+结论：今天的方式每次直接回答要多 4 秒左右，耗时与文件数成正比；41 个技能的租户会更慢。改为复制后降到 100 ms 以内，所以「总是挂载全部可用技能」可以接受。
 
 执行器：114 没有配置沙箱 runner（`BS_SANDBOX_CONF__ENDPOINTS` 为空），用的是本地执行器，读本地目录，不受影响。
 
@@ -212,5 +215,6 @@
 
 | 日期 | 内容 |
 |---|---|
+| 2026-11-20 | 决策 5 细化：挂载用复制不用硬链接（共用 inode 会让执行器代码改坏节点缓存）；`skills/` 的 ls/glob/grep 按快照列出；每次挂载重新复制快照里的全部条目。复制耗时实测 72–94 ms |
 | 2026-11-20 | 决策 5 改为直接回答总是挂载全部可用技能，技能挂载去掉 MinIO 写入，不做按需拷贝（用户确认）。 |
 | 2026-11-20 | 初稿。取证时发现能力中心（`/capabilities`）也是选择入口，并且工具也有个人停用；spec 补 AC-23，AC-10 / AC-11 的入口列表补上能力中心（待用户在 design 确认时一并确认） |
