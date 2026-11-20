@@ -8,6 +8,8 @@ For a new Run it performs the complete current inventory preflight; for an
 existing Run it validates that Run's original frozen reference plan.
 Add --apply --operator-id 7 to freeze and execute; --apply --resume requires the
 same already-frozen Run. This script never stops, starts or probes services.
+An explicit --permissions-only apply stops after complete SQL/permission
+publication. It does not backfill references or certify global Coverage Ready.
 For historical depth/orphan permission cleanup, run prepare_f118_history.py
 with its selected-row backup plan BEFORE the first M2 freeze, never mid-resume.
 """
@@ -65,6 +67,9 @@ def parser():
     result.add_argument("--apply", action="store_true", help="execute the original full frozen migration")
     result.add_argument(
         "--resume", action="store_true", help="require an existing frozen Run; never replace its baseline"
+    )
+    result.add_argument(
+        "--permissions-only", action="store_true", help="apply SQL and permissions only; leave references unverified"
     )
     return result
 
@@ -135,6 +140,8 @@ async def arun(args, *, runtime_factory=_runtime):
     }
     runs = KnowledgeUnificationRunRepository()
     runs._identity(inputs["run_id"], inputs["writer_contract_version"])
+    if getattr(args, "permissions_only", False) and not args.apply:
+        raise KnowledgeOperationPlanConflictError(reason="migration_cli_permissions_only_requires_apply")
     with tenant_execution_scope(1):
         async with runtime_factory(args) as runtime:
             application = UnificationSQLConversionApplication(
@@ -185,6 +192,20 @@ async def arun(args, *, runtime_factory=_runtime):
                 async with runtime.sessions() as session, session.begin():
                     async with runtime.inventory(session) as inventory:
                         frozen = await inventory.arun(session, **inputs)
+            if getattr(args, "permissions_only", False):
+                report = await application.arun_permissions(**inputs, operator_id=args.operator_id)
+                return {
+                    "mode": "apply_permissions",
+                    "run_id": report.run_id,
+                    "writer_contract_version": report.writer_contract_version,
+                    "baseline_hash": report.baseline_hash,
+                    "plan_hash": report.plan_hash,
+                    "tenant_ids": list(frozen.tenant_ids),
+                    "permissions_complete": report.complete,
+                    "reference_backfill_executed": False,
+                    "ready": False,
+                    "invalid_manifest_ref": frozen.plan_ref,
+                }
             report = await application.arun_references(**inputs, operator_id=args.operator_id)
             async with runtime.sessions() as session, session.begin():
                 ready = await production_coverage_factory(

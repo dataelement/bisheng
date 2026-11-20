@@ -1839,6 +1839,24 @@ checkpoint and never restarts services. Enable business traffic only after the
 operator has accepted the overall upgrade verification and real environment
 checks; a local component test is not that acceptance.
 
+For an explicitly accepted phased opening, add `--permissions-only` to the
+`--apply` command (and `--resume` for the original frozen Run). This still runs
+complete native SQL conversion, permission publication, exact graph and original
+checkpoint checks. It stops at that boundary and returns `mode=apply_permissions`,
+`permissions_complete=true`, `reference_backfill_executed=false`, `ready=false`.
+It does not run six-source backfill or mint a Coverage certificate. Default full
+migration behavior is unchanged. This flag neither starts services nor relaxes
+online permission/reference guards.
+
+An empty reference index means an unregistered historical source. Workflows,
+assistants and default-model readers that require its index can reject execution;
+model/knowledge deletion and tenant creation can also remain gated. Opening in
+this state requires explicit acceptance of those limits. Do not fake empty-source
+readiness or mark the Run completed. If business writers resume, later backfill
+must first assess drift against the original frozen source universe; a bare
+`--resume` is only valid while its original frozen proofs still hold. Do not
+replace the old baseline or clear its checkpoints to make it pass.
+
 Permission namespace conversion commits at most 100 complete resource plans and
 their cumulative checkpoint in one transaction. Before/after reads keep every
 Grant, Assignee and VisibleSource, including inactive facts and foreign-assignee
