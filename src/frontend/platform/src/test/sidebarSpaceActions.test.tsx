@@ -5,11 +5,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import {
-  QueryClient,
-  QueryClientProvider,
-  type InvalidateQueryFilters,
-} from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { KnowledgeSpaceInfo } from "@/controllers/API/knowledgeSpace";
 import { knowledgeQueryKeys } from "@/controllers/hooks/knowledge";
@@ -170,9 +166,13 @@ it("leaves the deleted space before refreshing the catalog", async () => {
     .spyOn(QueryClient.prototype, "invalidateQueries")
     .mockImplementation(async (filters) => {
       order.push("refresh");
-      // The last overload types this argument as a query key, so predicate is unknown.
-      const predicate = (filters as InvalidateQueryFilters | undefined)
-        ?.predicate;
+      const predicate =
+        filters &&
+        typeof filters === "object" &&
+        "predicate" in filters &&
+        typeof filters.predicate === "function"
+          ? filters.predicate
+          : undefined;
       expect(predicate).toEqual(expect.any(Function));
       expect(
         predicate?.({

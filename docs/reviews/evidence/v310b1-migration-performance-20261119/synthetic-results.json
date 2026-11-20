@@ -1,0 +1,51 @@
+{
+  "basis": "c3319b055033da7a2f4466cb2a0c9f6e94db63d3",
+  "cpu": [
+    {
+      "spaces": 1000,
+      "members": 1000,
+      "seconds": 0.0514
+    },
+    {
+      "spaces": 2000,
+      "members": 2000,
+      "seconds": 0.1777
+    },
+    {
+      "spaces": 4000,
+      "members": 4000,
+      "seconds": 0.7617
+    },
+    {
+      "spaces": 8000,
+      "members": 8000,
+      "seconds": 3.0779
+    }
+  ],
+  "id_conversions": [
+    {
+      "spaces": 100,
+      "members": 100,
+      "str_calls": 10000
+    },
+    {
+      "spaces": 200,
+      "members": 200,
+      "str_calls": 40000
+    }
+  ],
+  "existence_sql": [
+    {
+      "healthy_modes": 100,
+      "sql_count": 101,
+      "all_modes": 1,
+      "existence": 100
+    },
+    {
+      "healthy_modes": 1000,
+      "sql_count": 1001,
+      "all_modes": 1,
+      "existence": 1000
+    }
+  ]
+}

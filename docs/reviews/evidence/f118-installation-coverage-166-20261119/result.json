@@ -1,0 +1,99 @@
+{
+  "mode": "apply",
+  "run_id": "repair166-coverage-20261119",
+  "writer_contract_version": "f118-v1",
+  "baseline_hash": "8dc3ba53b93790eb326a600a3667d5592332012f4f01b1a9f8b0e3637a12abd9",
+  "plan_hash": "ffcaca91ab2f9ca43304231dff90c0a9d2e906592c55b1f806ed6fb0a3d0158f",
+  "tenant_ids": [
+    1
+  ],
+  "coverage_epoch": 1,
+  "complete": true,
+  "ready": true,
+  "invalid_manifest_ref": {
+    "object_key": "f118/unification/repair166-coverage-20261119/plan/ffcaca91ab2f9ca43304231dff90c0a9d2e906592c55b1f806ed6fb0a3d0158f.json",
+    "sha256": "ffcaca91ab2f9ca43304231dff90c0a9d2e906592c55b1f806ed6fb0a3d0158f"
+  },
+  "source_proofs": {
+    "1": {
+      "assistant": {
+        "root_count": 1,
+        "valid_count": 3,
+        "source_count": 1,
+        "source_digest": "52a705002e2e0b461fee3bfe6878d27ca5a8fe4f08584aa56157e4980c1ea48c",
+        "reference_count": 3,
+        "reference_digest": "8a83b18fbdbe92326eb974797ceea7eda7b5d4f4d80c75998a6bbad6371dfc95",
+        "extractor_version": "assistant-v1",
+        "invalid_scope_count": 0,
+        "invalid_legacy_count": 0,
+        "zero_reference_count": 0,
+        "invalid_deleted_count": 0
+      },
+      "knowledge": {
+        "root_count": 5,
+        "valid_count": 5,
+        "source_count": 5,
+        "source_digest": "fb38a8993b218b67fc3dff6e069b5b1b97cc6371747de68e5e73d1cd000b5b26",
+        "reference_count": 5,
+        "reference_digest": "3d5f25973f7e9b6dba1269dca028c7b37b811643d49c7b851b80c79582ee15c1",
+        "extractor_version": "knowledge-model-v1",
+        "invalid_scope_count": 0,
+        "invalid_legacy_count": 0,
+        "zero_reference_count": 0,
+        "invalid_deleted_count": 0
+      },
+      "channel_sync": {
+        "root_count": 0,
+        "valid_count": 0,
+        "source_count": 0,
+        "source_digest": "3850701ce3caebf709a24e657729e848e14a9676394271cef90d12a8de0789fc",
+        "reference_count": 0,
+        "reference_digest": "3f10839806a4da6830d632f8f665795f1d73e07ecf155c0bc017008becd925e5",
+        "extractor_version": "channel-sync-v1",
+        "invalid_scope_count": 0,
+        "invalid_legacy_count": 0,
+        "zero_reference_count": 0,
+        "invalid_deleted_count": 0
+      },
+      "model_default": {
+        "root_count": 5,
+        "valid_count": 16,
+        "source_count": 5,
+        "source_digest": "e043f3adc0b8317efa9a2e75889eda45c023ad8834e36120013cc8ed88ecf6e4",
+        "reference_count": 16,
+        "reference_digest": "3d377c064f60a2cad2def0f5d1795b95461bb3f7d3bb5354c547b573c91e6ef4",
+        "extractor_version": "model-default-v1",
+        "invalid_scope_count": 0,
+        "invalid_legacy_count": 0,
+        "zero_reference_count": 0,
+        "invalid_deleted_count": 0
+      },
+      "workflow_version": {
+        "root_count": 1,
+        "valid_count": 12,
+        "source_count": 2,
+        "source_digest": "c7fd67d33c48f8e464f864a21cd1c00320bb16ec65cc67c83336a53a59e837c0",
+        "reference_count": 12,
+        "reference_digest": "4225abb2e5552e8d91d7ac49df6ddac457913fbcdc9e2f1cf53329ad7ed55ed9",
+        "extractor_version": "workflow-version-v1",
+        "invalid_scope_count": 0,
+        "invalid_legacy_count": 0,
+        "zero_reference_count": 0,
+        "invalid_deleted_count": 0
+      },
+      "hosted_app_version": {
+        "root_count": 0,
+        "valid_count": 0,
+        "source_count": 0,
+        "source_digest": "3850701ce3caebf709a24e657729e848e14a9676394271cef90d12a8de0789fc",
+        "reference_count": 0,
+        "reference_digest": "3f10839806a4da6830d632f8f665795f1d73e07ecf155c0bc017008becd925e5",
+        "extractor_version": "hosted-app-v1",
+        "invalid_scope_count": 0,
+        "invalid_legacy_count": 0,
+        "zero_reference_count": 0,
+        "invalid_deleted_count": 0
+      }
+    }
+  }
+}

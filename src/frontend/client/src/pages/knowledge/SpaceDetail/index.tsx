@@ -152,6 +152,7 @@ function useKnowledgeSpaceDetail(
     canDeleteSpace,
     canManageMembers,
     canEditSpace,
+    canReadSpaceTags,
     canLeaveSpace,
     versionManagementEnabled,
     queryClient,
@@ -171,6 +172,7 @@ function useKnowledgeSpaceDetail(
   } = useKnowledgeSpaceHeader({
     selectedFiles,
     space,
+    currentFolderId,
     onDeleteFile,
     localize,
     showToast,
@@ -385,7 +387,7 @@ function useKnowledgeSpaceDetail(
   const { batchActions, inlineActions, overflowActions } = getKnowledgeBatchActions({
     selectedFiles,
     isAdmin,
-    canManageMembers,
+    canEditSpace,
     versionManagementEnabled,
     handleProcessSimilar,
     handleManagePermission,
@@ -448,6 +450,7 @@ function useKnowledgeSpaceDetail(
     canDeleteSpace,
     canManageMembers,
     canEditSpace,
+    canReadSpaceTags,
     canLeaveSpace,
     versionManagementEnabled,
     setVersionMgmtFile,

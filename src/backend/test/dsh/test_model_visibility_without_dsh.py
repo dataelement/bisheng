@@ -60,12 +60,13 @@ def _candidates():
 
 @pytest.fixture
 def catalog(monkeypatch):
-    from bisheng.dsh.domain.services import model_catalog
+    from bisheng.dsh.domain.services import model_catalog, vision
     from bisheng.llm.domain.services.llm import LLMService
 
     _dsh(monkeypatch, False)
     monkeypatch.setattr(LLMService, "aget_online_chat_models", AsyncMock(return_value=_candidates()))
     monkeypatch.setattr(model_catalog, "read_visible_model_ids", AsyncMock(return_value={1, 2}))
+    monkeypatch.setattr(vision, "read_catalog_vision", AsyncMock(return_value={1: False, 2: True}))
     return model_catalog
 
 

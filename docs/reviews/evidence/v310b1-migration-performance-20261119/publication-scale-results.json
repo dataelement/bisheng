@@ -1,0 +1,20 @@
+{
+  "roots": 401,
+  "select": 3763,
+  "dml": 1712,
+  "max_in": 198,
+  "max_bulk": 51,
+  "max_bind": 202,
+  "derive": {
+    "actions": 22,
+    "models": 10
+  },
+  "full_store_scans": 3,
+  "fga_batches": 39,
+  "peak_bytes": 24072111,
+  "elapsed_seconds": 18.042,
+  "basis": "c3319b055033da7a2f4466cb2a0c9f6e94db63d3",
+  "scope": "SQL conversion and permission publication; M2 frozen by fixture before counters/timer start",
+  "infrastructure": "SQLite + mocked FGA and artifacts; not production wall time",
+  "test_result": "1 passed, 7 deselected"
+}

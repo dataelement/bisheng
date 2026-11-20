@@ -129,6 +129,7 @@ export interface UseKnowledgeCardColumnsOptions {
 export interface UseKnowledgeSpaceHeaderOptions {
   selectedFiles: Set<string>;
   space: KnowledgeSpaceContentProps["space"];
+  currentFolderId?: KnowledgeSpaceContentProps["currentFolderId"];
   onDeleteFile: KnowledgeSpaceContentProps["onDeleteFile"];
   localize: KnowledgeUiPorts["localize"];
   showToast: KnowledgeUiPorts["showToast"];
@@ -201,7 +202,7 @@ export interface UseKnowledgeSelectionActionsOptions {
 export interface GetKnowledgeBatchActionsOptions {
   selectedFiles: Set<string>;
   isAdmin: boolean;
-  canManageMembers: boolean;
+  canEditSpace: boolean;
   versionManagementEnabled: boolean;
   handleProcessSimilar: () => void;
   handleManagePermission: (fileId: string) => void;

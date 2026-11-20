@@ -440,6 +440,46 @@ class LLMService:
         return await cls._get_governed_dsh_model_snapshot(model_id, online_required=True)
 
     @classmethod
+    async def get_dsh_model_catalog_snapshots(cls, model_ids: list[int]) -> dict[int, tuple[LLMModel, LLMServer]]:
+        """Load fresh snapshots for the catalog's policy-selected IDs in display order."""
+        if not model_ids:
+            return {}
+        tenant_id = get_current_tenant_id()
+        if tenant_id is None:
+            raise DshModelNotAllowedError()
+
+        # Explicit IDs can include Root-shared models. Filter ownership and check
+        # Root sharing before resolving providers or returning any snapshots.
+        with bypass_tenant_filter():
+            rows = await LLMDao.aget_model_by_ids(model_ids)
+        models = {
+            model.id: model
+            for model in rows
+            if model.tenant_id in {tenant_id, ROOT_TENANT_ID}
+            and model.online
+            and model.model_type == LLMModelType.LLM.value
+        }
+        shared_ids = set()
+        if tenant_id != ROOT_TENANT_ID and any(model.tenant_id == ROOT_TENANT_ID for model in models.values()):
+            shared_ids = set(await LLMDao.aget_shared_server_ids_for_leaf(tenant_id, raise_on_error=True))
+        allowed = [
+            models[model_id]
+            for model_id in dict.fromkeys(model_ids)
+            if model_id in models
+            and (models[model_id].tenant_id == tenant_id or models[model_id].server_id in shared_ids)
+        ]
+        if not allowed:
+            return {}
+        with bypass_tenant_filter():
+            servers = await LLMDao.aget_server_by_ids(sorted({model.server_id for model in allowed}))
+        providers = {(server.tenant_id, server.id): server for server in servers}
+        return {
+            model.id: (model, providers[model.tenant_id, model.server_id])
+            for model in allowed
+            if (model.tenant_id, model.server_id) in providers
+        }
+
+    @classmethod
     async def get_dsh_model_metadata_snapshot(cls, model_id: int) -> tuple[LLMModel, LLMServer]:
         """Read governed metadata so authorized administrators can restrict offline models."""
         return await cls._get_governed_dsh_model_snapshot(model_id, online_required=False)

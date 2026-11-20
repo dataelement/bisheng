@@ -26,7 +26,7 @@ export function BatchOperationDialog({ operation }: BatchOperationDialogProps) {
   );
   const reason = (value: string) =>
     tr(
-      ["no_permission", "processing", "unsupported", "not_found", "type_mismatch"].includes(value)
+      ["no_permission", "space_tag_permission_required", "processing", "unsupported", "not_found", "type_mismatch"].includes(value)
         ? `reason_${value}`
         : "reason_unsupported",
     );

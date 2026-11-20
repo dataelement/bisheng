@@ -16,9 +16,11 @@ import {
   retryProcessing,
 } from "@/controllers/API/knowledgeProcessing";
 import type { ProcessingItemRead, ProcessingJobRead } from "@/controllers/API/knowledgeSpace";
+import { knowledgeQueryKeys } from "@/controllers/hooks/knowledge";
 import { SpaceProcessingProgress } from "@/pages/KnowledgePage/components/SpaceProcessingProgress";
 
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { showApiError } from "@/controllers/request";
 vi.mock("@/components/bs-ui/alertDialog/useConfirm", () => ({
   bsConfirm: vi.fn(),
 }));
@@ -215,7 +217,9 @@ it("polls metadata progress and requests only failed items when failures appear"
   );
 });
 
-it("requires explicit confirmation before refreshing failed copy inputs", async () => {
+it.each(["standard", "page", "expanded", "collapsed"] as const)("retries with current source inputs in view %s", async (view) => {
+  const compact = view === "expanded" || view === "collapsed";
+  const direct = view !== "standard";
   vi.mocked(readProcessingJob).mockReset().mockResolvedValue({
     id: "copy-7",
     space_id: 7,
@@ -247,6 +251,87 @@ it("requires explicit confirmation before refreshing failed copy inputs", async 
         spaceId={7}
         jobId="copy-7"
         kind="space_copy"
+        showCopyFailurePage={view === "page"}
+        copyDisclosure={compact ? {
+          phase: "failed",
+          open: view === "expanded",
+          render: (retry, details) => <>{retry}{details}</>,
+        } : undefined}
+        scope={{
+          identityKey: "user:5",
+          tenantId: 60,
+          managementTenantId: 60,
+          view: "ordinary",
+        }}
+      />
+    </QueryClientProvider>,
+  );
+  const retryLabel = direct ? "retry" : "f118.copy_refresh_source";
+  const retry = await screen.findByRole("button", { name: retryLabel });
+  if (direct) {
+    expect(screen.getAllByRole("button")).toEqual([retry]);
+    expect(retry).toHaveClass(compact ? "h-6" : "h-8", "border-btn-gray-border");
+  }
+  const close = vi.fn();
+  fireEvent.click(retry);
+  if (direct) {
+    expect(bsConfirm).not.toHaveBeenCalled();
+  } else {
+    expect(retryProcessing).not.toHaveBeenCalled();
+    expect(bsConfirm).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "f118.copy_refresh_source",
+        desc: "f118.copy_refresh_source_notice",
+      }),
+    );
+    await act(async () => {
+      await vi.mocked(bsConfirm).mock.calls.at(-1)![0].onOk?.(close);
+    });
+    expect(close).toHaveBeenCalledOnce();
+  }
+  await waitFor(() =>
+    expect(retryProcessing).toHaveBeenCalledWith(
+      7,
+      "copy-7",
+      expect.objectContaining({
+        expected_job_revision: 5,
+        refresh_source: true,
+      }),
+      "space_copy",
+    ),
+  );
+  if (view === "collapsed") expect(readProcessingItems).not.toHaveBeenCalled();
+});
+
+it("closes the copy refresh dialog when the job can no longer be retried", async () => {
+  const failed = {
+    id: "copy-7",
+    space_id: 7,
+    kind: "space_copy" as const,
+    state: "failed" as const,
+    revision: 5,
+    accepted_at: "2026-11-18T07:00:00Z",
+    started_at: null,
+    finished_at: null,
+    total_count: 17,
+    succeeded_count: 1,
+    failed_count: 0,
+    pending_count: 16,
+    hidden_item_count: 0,
+    retryable: true,
+    obsolete_reason: null,
+    error_code: null,
+  };
+  let current: ProcessingJobRead = failed;
+  vi.mocked(readProcessingJob).mockReset().mockImplementation(async () => current);
+  vi.mocked(readProcessingItems).mockResolvedValue({ data: [], total: 0 });
+  vi.mocked(retryProcessing).mockReset();
+  render(
+    <QueryClientProvider client={client}>
+      <SpaceProcessingProgress
+        spaceId={7}
+        jobId="copy-7"
+        kind="space_copy"
         scope={{
           identityKey: "user:5",
           tenantId: 60,
@@ -259,24 +344,121 @@ it("requires explicit confirmation before refreshing failed copy inputs", async 
   fireEvent.click(
     await screen.findByRole("button", { name: "f118.copy_refresh_source" }),
   );
-  expect(retryProcessing).not.toHaveBeenCalled();
-  expect(bsConfirm).toHaveBeenCalledWith(
-    expect.objectContaining({ desc: "f118.copy_refresh_source_notice" }),
-  );
+  current = { ...failed, state: "running", revision: 6, retryable: false };
+  const close = vi.fn();
   await act(async () => {
-    await vi.mocked(bsConfirm).mock.calls.at(-1)![0].onOk?.(vi.fn());
+    await vi.mocked(bsConfirm).mock.calls.at(-1)![0].onOk?.(close);
   });
-  await waitFor(() =>
-    expect(retryProcessing).toHaveBeenCalledWith(
-      7,
-      "copy-7",
-      expect.objectContaining({
-        expected_job_revision: 5,
-        refresh_source: true,
-      }),
-      "space_copy",
-    ),
+  expect(retryProcessing).not.toHaveBeenCalled();
+  expect(close).toHaveBeenCalledOnce();
+});
+
+it("closes the copy refresh dialog after a rejected retry", async () => {
+  vi.mocked(readProcessingJob).mockReset().mockResolvedValue({
+    id: "copy-7",
+    space_id: 7,
+    kind: "space_copy",
+    state: "failed",
+    revision: 5,
+    accepted_at: "2026-11-18T07:00:00Z",
+    started_at: null,
+    finished_at: null,
+    total_count: 1,
+    succeeded_count: 0,
+    failed_count: 1,
+    pending_count: 0,
+    hidden_item_count: 0,
+    retryable: true,
+    obsolete_reason: null,
+    error_code: null,
+  });
+  vi.mocked(readProcessingItems).mockResolvedValue({ data: [], total: 0 });
+  vi.mocked(retryProcessing).mockReset().mockRejectedValue(new Error("18084"));
+  render(
+    <QueryClientProvider client={client}>
+      <SpaceProcessingProgress
+        spaceId={7}
+        jobId="copy-7"
+        kind="space_copy"
+        scope={{
+          identityKey: "user:5",
+          tenantId: 60,
+          managementTenantId: 60,
+          view: "ordinary",
+        }}
+      />
+    </QueryClientProvider>,
   );
+  fireEvent.click(
+    await screen.findByRole("button", { name: "f118.copy_refresh_source" }),
+  );
+  const close = vi.fn();
+  await act(async () => {
+    await vi.mocked(bsConfirm).mock.calls.at(-1)![0].onOk?.(close);
+  });
+  expect(showApiError).toHaveBeenCalled();
+  expect(close).toHaveBeenCalledOnce();
+});
+
+it("waits for fresh items after preparing a copy with cached results", async () => {
+  const scope = { identityKey: "user:5", tenantId: 60, managementTenantId: 60, view: "ordinary" } as const;
+  const job: ProcessingJobRead = {
+    id: "copy-retry", space_id: 7, kind: "space_copy", state: "running", revision: 3,
+    accepted_at: "2026-11-19", started_at: null, finished_at: null, total_count: 1,
+    succeeded_count: 0, failed_count: 0, pending_count: 1, hidden_item_count: 0,
+    retryable: false, obsolete_reason: null, error_code: null,
+  };
+  const failedItem: ProcessingItemRead = {
+    id: "copy-item", file_id: 11, document_id: 11, version_id: 11, step: "pending",
+    file_name: "Previous attempt.pdf", state: "failed", attempt: 1, error_code: null,
+    message: null, retryable: true,
+  };
+  client.setQueryData(
+    knowledgeQueryKeys.items(scope, job.space_id, job.id, { page: 1, page_size: 20, state: undefined }),
+    { data: [failedItem], total: 1 },
+  );
+  client.setQueryData(knowledgeQueryKeys.job(scope, job.space_id, job.id), {
+    ...job, state: "partial_failed", revision: 1,
+  });
+  let resolveJob!: (job: ProcessingJobRead) => void;
+  const readJob = vi.mocked(readProcessingJob).mockReset().mockImplementation(
+    () => new Promise((resolve) => { resolveJob = resolve; }),
+  );
+  let resolveItems!: (page: { data: ProcessingItemRead[]; total: number }) => void;
+  const readItems = vi.mocked(readProcessingItems).mockReset().mockImplementation(
+    () => new Promise((resolve) => { resolveItems = resolve; }),
+  );
+  const view = (phase: "preparing" | "copying") => (
+    <QueryClientProvider client={client}>
+      <SpaceProcessingProgress
+        scope={scope}
+        spaceId={job.space_id}
+        jobId={job.id}
+        kind="space_copy"
+        copyDisclosure={{ phase, open: true, render: (_, details) => details }}
+      />
+    </QueryClientProvider>
+  );
+  const { rerender } = render(view("preparing"));
+  await waitFor(() => expect(readJob).toHaveBeenCalled());
+  expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  expect(readItems).not.toHaveBeenCalled();
+
+  rerender(view("copying"));
+  expect(await screen.findByRole("status", { name: "detail.loading" })).toBeVisible();
+  expect(screen.queryByText("Previous attempt.pdf")).not.toBeInTheDocument();
+  expect(readItems).not.toHaveBeenCalled();
+  await act(async () => resolveJob(job));
+  await waitFor(() => expect(readItems).toHaveBeenCalledExactlyOnceWith(
+    job.space_id, job.id, { page: 1, page_size: 20, state: undefined }, "space_copy",
+  ));
+  expect(screen.getByRole("status", { name: "loading" })).toBeVisible();
+  expect(screen.queryByText("Previous attempt.pdf")).not.toBeInTheDocument();
+  await act(async () => resolveItems({
+    data: [{ ...failedItem, file_name: "Current attempt.pdf", state: "pending" }],
+    total: 1,
+  }));
+  expect(await screen.findByRole("rowheader", { name: "Current attempt.pdf" })).toBeVisible();
 });
 
 it("filters history items on the server from later pages and recovers an empty selection", async () => {
@@ -344,4 +526,75 @@ it("filters history items on the server from later pages and recovers an empty s
   expect(read).toHaveBeenLastCalledWith(7, job.id, { page: 1, page_size: 20, state: undefined }, "move_index");
   expect(screen.queryByText("f118.processing_no_matching_items")).not.toBeInTheDocument();
   expect(screen.getByText("f118.processing_counts 20/1/0")).toBe(summary);
+});
+
+it("scrolls the copy item list so a failed row past the pane stays reachable", async () => {
+  vi.mocked(readProcessingJob).mockReset().mockResolvedValue({
+    id: "copy-7",
+    space_id: 7,
+    kind: "space_copy",
+    state: "partial_failed",
+    revision: 5,
+    accepted_at: "2026-11-18T07:00:00Z",
+    started_at: null,
+    finished_at: null,
+    total_count: 17,
+    succeeded_count: 16,
+    failed_count: 1,
+    pending_count: 0,
+    hidden_item_count: 0,
+    retryable: true,
+    obsolete_reason: null,
+    error_code: null,
+  });
+  const rows: ProcessingItemRead[] = [
+    ...Array.from({ length: 16 }, (_, index) => ({
+      id: `ok-${index + 1}`,
+      file_id: index + 1,
+      file_name: `done-${index + 1}.txt`,
+      document_id: index + 1,
+      version_id: index + 1,
+      step: "copy_completed",
+      state: "succeeded" as const,
+      attempt: 1,
+      error_code: null,
+      message: null,
+      retryable: false,
+    })),
+    {
+      id: "failed-17",
+      file_id: 17,
+      file_name: "failed-copy.pdf",
+      document_id: 17,
+      version_id: 17,
+      step: "copy_failed",
+      state: "failed",
+      attempt: 1,
+      error_code: 10998,
+      message: null,
+      failure_reason: "file_changed",
+      retryable: true,
+    },
+  ];
+  vi.mocked(readProcessingItems).mockResolvedValue({ data: rows, total: rows.length });
+  render(
+    <QueryClientProvider client={client}>
+      <SpaceProcessingProgress
+        fill
+        spaceId={7}
+        jobId="copy-7"
+        kind="space_copy"
+        scope={{
+          identityKey: "user:5",
+          tenantId: 60,
+          managementTenantId: 60,
+          view: "ordinary",
+        }}
+      />
+    </QueryClientProvider>,
+  );
+  const table = await screen.findByRole("table", { name: "f118.processing_items" });
+  expect(table.parentElement).toHaveClass("overflow-auto");
+  expect(within(table).getByRole("rowheader", { name: "failed-copy.pdf" })).toBeInTheDocument();
+  expect(within(table).getAllByRole("row")).toHaveLength(18);
 });

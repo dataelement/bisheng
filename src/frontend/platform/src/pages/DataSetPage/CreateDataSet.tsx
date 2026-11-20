@@ -159,7 +159,7 @@ const CreateDataSet = forwardRef<CreateDataSetHandle, CreateDataSetProps>(({ onC
                             <SimpleUpload
                                 icon={<Outlined.Upload size={24} className="group-hover:text-primary" />}
                                 filekey="file"
-                                uploadUrl={'/api/v1/knowledge/upload'}
+                                uploadUrl={'/api/v1/finetune/job/file/preset/upload'}
                                 accept={['json']}
                                 className={`${error.fileUrl ? 'border-red-400' : ''}`}
                                 onSuccess={handleFileUploadSuccess}

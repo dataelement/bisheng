@@ -1544,6 +1544,7 @@ async def create_linsight_agent(
     citation_scope=None,
     context_window_sink: dict | None = None,
     memory_prompt: str | None = None,
+    model_facts_sink: dict | None = None,
 ):
     """Build the deepagents-backed Linsight agent (design §2.1).
 
@@ -1568,6 +1569,9 @@ async def create_linsight_agent(
         memory_prompt: F132 long-term memory text of this round (tool guidance,
             resident and experience blocks), fixed at round start. Appended only
             when the memory tools are actually bound (prompt <-> tool lockstep).
+        model_facts_sink: mutable dict filled with ``supports_vision`` of the
+            resolved model, so the uploaded-files pointer block words image
+            originals the same way the binary guards treat them.
 
     Returns:
         ``CompiledStateGraph`` to be driven by ``agent.astream(...)``.
@@ -1584,6 +1588,8 @@ async def create_linsight_agent(
     # researcher handoff) follows the session's citation contract in lockstep.
     citation_handles = bool(citation_scope is not None and getattr(citation_scope, "enabled", False))
     model, supports_vision = await _resolve_model(session_model, model_id)
+    if model_facts_sink is not None:
+        model_facts_sink["supports_vision"] = bool(supports_vision)
     context_window = context_window_sink if context_window_sink is not None else {}
     await _apply_context_window(model, svid, context_window)
 

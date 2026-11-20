@@ -34,6 +34,6 @@ async def delete_server(*, server_id: int, login_user: UserPayload = Depends(Use
 @router.get("/model/{deploy_id}")
 async def get_model_deploy(*, deploy_id: int):
     model_deploy = await ModelDeployDao.find_model(deploy_id)
-    if not ModelDeployDao:
+    if not model_deploy:
         raise NotFoundError()
     return resp_200(data=model_deploy)

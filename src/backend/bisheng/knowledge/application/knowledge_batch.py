@@ -86,6 +86,7 @@ class KnowledgeBatchApplication:
 
     async def _classify(self, actual, scope, command, pin):
         allowed = set()
+        visible = set()
         action = "download" if command.operation == "download" else "rename"
         needed = {ident for unit in scope["units"] for ident in unit}
         selected = {item.id for item in command.items}
@@ -96,29 +97,29 @@ class KnowledgeBatchApplication:
                 if row["file_type"] == file_type
                 and row["id"] in needed
                 and (
-                    command.operation == "download"
+                    row["id"] in selected
+                    or command.operation == "download"
                     or (command.operation == "tag" and file_type == 1)
-                    or (
-                        command.operation == "retry"
-                        and (row["id"] in selected or row["status"] in (3, 6, 7))
-                    )
+                    or (command.operation == "retry" and row["status"] in (3, 6, 7))
                 )
             ]
             for offset in range(0, len(ids), 200):
                 self._check(pin)
                 result = await self.permissions(
-                    actual, resource_type=kind, resource_ids=ids[offset : offset + 200], actions=(action,)
+                    actual, resource_type=kind, resource_ids=ids[offset : offset + 200], actions=(action, "visible")
                 )
                 self._check(pin)
                 allowed.update(int(ident) for ident, codes in result.items() if action in codes)
+                # An action denial must not hide a name the caller is allowed to see.
+                visible.update(int(ident) for ident, codes in result.items() if "visible" in codes)
+        tag_creation_denied = False
         if set(command.new_tag_names) - {row["name"] for row in scope["tags"]}:
             result = await self.permissions(
                 actual, resource_type="knowledge_space", resource_ids=[scope["root"]["id"]], actions=("edit",)
             )
             self._check(pin)
-            if "edit" not in result.get(str(scope["root"]["id"]), ()):
-                allowed.clear()
-        return classify(scope, command, allowed)
+            tag_creation_denied = "edit" not in result.get(str(scope["root"]["id"]), ())
+        return classify(scope, command, allowed, visible=visible, tag_creation_denied=tag_creation_denied)
 
     async def ainspect(self, *, identity, space_id, command):
         command = BatchCommand.model_validate(command.model_dump(mode="json", exclude_defaults=True))

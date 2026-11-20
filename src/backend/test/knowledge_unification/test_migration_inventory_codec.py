@@ -19,6 +19,58 @@ DIGEST = "a" * 64
 DESCRIPTOR = {"object_key": "backup/original", "sha256": DIGEST}
 
 
+@pytest.mark.parametrize(
+    ("policy", "backup", "schema", "valid"),
+    [
+        (None, DESCRIPTOR, DESCRIPTOR, True),
+        (None, None, None, False),
+        ("not_required", None, None, True),
+        ("not_required", DESCRIPTOR, None, False),
+        ("not_required", None, DESCRIPTOR, False),
+        ("not_required", DESCRIPTOR, DESCRIPTOR, False),
+        ("unknown", None, None, False),
+    ],
+)
+def test_run_external_material_policy_preserves_strict_legacy_shape(codec, policy, backup, schema, valid):
+    data = {
+        "writer_contract_version": "f118-v1",
+        "environment": "test",
+        "tenant_count": 1,
+        "tenant_inventory_digest": DIGEST,
+        "backup_ref": backup,
+        "schema_ref": schema,
+        "catalog_digest": DIGEST,
+        "authorization_model_checksum": DIGEST,
+        "baseline_ref": None,
+    }
+    if policy is not None:
+        data["external_material_policy"] = policy
+    if not valid:
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            codec.record_from_values("run", **data)
+        return
+    record = codec.record_from_values("run", **data)
+    content = codec.encode_inventory_page(
+        run_id=RUN,
+        section="manifest",
+        scope="global",
+        tenant_id=None,
+        page_index=0,
+        records=(record,),
+        kind="baseline",
+    )
+    page = codec.decode_inventory_page(
+        content,
+        run_id=RUN,
+        section="manifest",
+        scope="global",
+        tenant_id=None,
+        page_index=0,
+        kind="baseline",
+    )
+    assert page.records == (record,)
+
+
 @pytest.fixture
 def codec():
     return importlib.import_module("bisheng.knowledge.application.unification_inventory_codec")

@@ -81,12 +81,23 @@ class KnowledgeProcessingCommands:
             self._clean(session)
         await asyncio.to_thread(probe_embedding, knowledge, selected, user_id)
 
+    @staticmethod
+    async def _require_source_inputs(session, space_id, operation, targets):
+        file_id = None
+        if operation in {"file_reprocess", "file_resplit"} and isinstance(targets, list) and len(targets) == 1:
+            candidate = targets[0].get("file_id") if isinstance(targets[0], dict) else None
+            if type(candidate) is int and candidate > 0:
+                file_id = candidate
+        await SourceMoveInputRepository().arequire_released(
+            session, space_id=space_id, include_copy=False, file_id=file_id
+        )
+
     async def aprecheck(self, space_id, request, *, identity, entry_kind="web"):
         await self.service._authorize(identity, space_id)
+        request = ProcessingPrecheckRequest.model_validate(request.model_dump(mode="json"))
         async with self.sessions() as session:
             await session.connection()
-            await SourceMoveInputRepository().arequire_released(session, space_id=space_id, include_copy=False)
-        request = ProcessingPrecheckRequest.model_validate(request.model_dump(mode="json"))
+            await self._require_source_inputs(session, space_id, request.kind, request.model_dump()["targets"])
         if request.kind == "embedding_rebuild":
             await self._verify_rebuild_model(space_id, request.parameters.model_dump(mode="json"), identity)
         selected = request.parameters.embedding_model_id if request.kind == "embedding_rebuild" else None
@@ -178,7 +189,7 @@ class KnowledgeProcessingCommands:
                 or {item["file_id"] for item in plan.target_manifest} != {file_id}
             ):
                 raise KnowledgeOperationPlanChangedError()
-            await SourceMoveInputRepository().arequire_released(session, space_id=space_id, include_copy=False)
+            await self._require_source_inputs(session, space_id, plan.operation, plan.target_manifest)
             if not plan.impact.get("configuration_only"):
                 result = await self.service.acreate(
                     session, space_id, request, identity=identity, entry_kind=entry_kind

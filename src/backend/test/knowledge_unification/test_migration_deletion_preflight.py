@@ -139,3 +139,90 @@ async def test_completed_deletion_does_not_make_live_target_valid(native):
     record = await captured_record(native, live=True)
     with pytest.raises(KnowledgeOperationPlanConflictError):
         source_decision(record, tenant_id=101)
+
+
+@pytest.mark.parametrize("space_metadata", ["9000", None, "9001"])
+async def test_existing_online_space_binding_retains_self_metadata_in_formal_inventory(native, space_metadata):
+    source = SourceKey(101, "workflow_version", "original-flow", "v1")
+    target = TargetKey("knowledge_space", "9000")
+    reference = ReferenceSpec("saved-space", target)
+    await native.insert(original.Knowledge, [original.resource(9000)])
+    common = {
+        "tenant_id": 101,
+        "source_type": source.source_type.value,
+        "source_id": source.source_id,
+        "source_revision": 1,
+    }
+    await native.insert(
+        BusinessReferenceSet,
+        [
+            common
+            | {
+                "source_version": "__root__",
+                "record_kind": "root_guard",
+                "effective": False,
+                "ready": False,
+                "extractor_version": "root-guard-v1",
+                "digest": reference_set_digest(()),
+            },
+            common
+            | {
+                "source_version": "v1",
+                "record_kind": "source",
+                "effective": False,
+                "ready": True,
+                "extractor_version": "workflow-v1",
+                "digest": reference_set_digest((reference,)),
+            },
+        ],
+    )
+    await native.insert(
+        BusinessResourceReference,
+        [
+            {
+                "tenant_id": 101,
+                "source_type": source.source_type.value,
+                "source_id": source.source_id,
+                "source_version": source.source_version,
+                "slot_key": reference.slot_key,
+                "target_type": target.target_type.value,
+                "target_id": target.target_id,
+                "target_tenant_id": 101,
+                "target_space_id": space_metadata,
+                "source_revision": 1,
+            }
+        ],
+    )
+    async with AsyncSession(native.engine) as session, session.begin():
+        fact = (await KnowledgeMigrationTargetRepository().ainspect(session, source_key=source, targets=(target,)))[0]
+        state = OriginalReferenceState()
+        snapshot = await state.repository.aload_raw_snapshot(session, source_key=source)
+        if space_metadata == "9001":
+            with pytest.raises(KnowledgeOperationPlanConflictError, match="operation no longer matches"):
+                await state.acapture(
+                    session,
+                    source_key=source,
+                    references=(reference,),
+                    physical={target: fact},
+                    tombstone_cache={},
+                    snapshot=snapshot,
+                )
+            return
+        _, states = await state.acapture(
+            session,
+            source_key=source,
+            references=(reference,),
+            physical={target: fact},
+            tombstone_cache={},
+            snapshot=snapshot,
+        )
+        record = ReferenceInventoryRecord(
+            source,
+            reference.slot_key,
+            target,
+            "explicit_id",
+            fact,
+            states[(reference.slot_key, target.target_type.value, target.target_id)],
+        )
+        assert source_decision(record, tenant_id=101).data["disposition"] == "existing_saved_slot"
+        assert not session.new and not session.dirty

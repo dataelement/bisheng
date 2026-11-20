@@ -4,6 +4,7 @@ from sqlalchemy import Column, DateTime, Integer, delete, text
 from sqlmodel import Field, col, select
 
 from bisheng.common.models.base import SQLModelSerializable
+from bisheng.core.context.tenant import bypass_tenant_filter, strict_tenant_filter
 from bisheng.core.database import get_async_db_session
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
 
@@ -35,13 +36,23 @@ class ServerDao(ServerBase):
     async def find_server(cls, server_id: int) -> Server | None:
         async with get_async_db_session() as session:
             statement = select(Server).where(Server.id == server_id)
-            return (await session.exec(statement)).first()
+            with strict_tenant_filter():
+                return (await session.exec(statement)).first()
 
     @classmethod
     async def find_all_server(cls):
         async with get_async_db_session() as session:
             statement = select(Server)
-            return (await session.exec(statement)).all()
+            with strict_tenant_filter():
+                return (await session.exec(statement)).all()
+
+    @classmethod
+    async def find_sft_owners(cls) -> list[tuple[int, str]]:
+        # Ownership proof only: FT has no tenant namespace. Never return this
+        # cross-tenant inventory to API callers or use it to widen task reads.
+        async with get_async_db_session() as session:
+            with bypass_tenant_filter():
+                return list((await session.exec(select(Server.tenant_id, Server.sft_endpoint))).all())
 
     @classmethod
     async def insert(cls, server: Server, *, tenant_id: int) -> Server:

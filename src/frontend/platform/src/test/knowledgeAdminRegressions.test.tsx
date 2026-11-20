@@ -72,13 +72,25 @@ vi.mock("@/pages/KnowledgePage/components/SpaceVersionHistorySheet", () => ({
   SpaceVersionHistorySheet: (props: {
     open: boolean;
     fileId: number;
-    initialPanel: string | null;
   }) =>
     props.open && (
-      <div role="dialog" aria-label="version-editor">
-        {JSON.stringify([props.fileId, props.initialPanel])}
+      <div role="dialog" aria-label="version-history">
+        {props.fileId}
       </div>
     ),
+}));
+vi.mock("@/pages/KnowledgePage/components/SpaceSimilarDocumentDialog", () => ({
+  SpaceSimilarDocumentDialog: ({ fileId, file, restrictToFileIds, onOpenChange }: {
+    fileId?: number;
+    file?: { name: string };
+    restrictToFileIds?: number[];
+    onOpenChange: (open: boolean) => void;
+  }) => (
+    <div role="dialog" aria-label={fileId === undefined ? "similar-documents" : "version-management"}>
+      {JSON.stringify(fileId === undefined ? restrictToFileIds : [fileId, file?.name])}
+      <button type="button" onClick={() => onOpenChange(false)}>close</button>
+    </div>
+  ),
 }));
 const scope: KnowledgeQueryScope = {
   identityKey: "user:7",
@@ -304,6 +316,15 @@ it("withholds privileged row actions without the corresponding server actions", 
   }
 });
 
+it.each([0, 1])("keeps delete but omits reference sources from the row menu for type %s", async (fileType) => {
+  actions = ["visible", "delete"];
+  rows = [file(11, { file_type: fileType })];
+  mount("workspace");
+  const opened = await menu();
+  expect(await within(opened).findByRole("menuitem", { name: "delete" })).toBeVisible();
+  expect(within(opened).queryByRole("menuitem", { name: "deletion.references" })).not.toBeInTheDocument();
+});
+
 it.each([0, 1])(
   "hides every mutating batch entry for a visible-only type %s",
   async (fileType) => {
@@ -466,7 +487,8 @@ it("filters the workspace batch dropdown by the selected resource actions", asyn
   }
 });
 
-it("offers version management and a direct similar-document entry for a parsed single version", async () => {
+it("opens version management from the badge and keeps the separate similar-document entry", async () => {
+  rootActions = ["visible", "edit"];
   rows = [file(11, { has_similar: true, is_multi_version: false })];
   mount("workspace", true);
   fireEvent.click(
@@ -474,16 +496,18 @@ it("offers version management and a direct similar-document entry for a parsed s
       name: "knowledge.version.pill_similar",
     }),
   );
-  expect(
-    await screen.findByRole("dialog", { name: "version-editor" }),
-  ).toHaveTextContent('[11,"similar"]');
+  const management = await screen.findByRole("dialog", { name: "version-management" });
+  expect(management).toHaveTextContent('[11,"file-11.pdf"]');
+  fireEvent.click(within(management).getByRole("button", { name: "close" }));
   const opened = await menu();
   expect(
-    await within(opened).findByRole("menuitem", { name: "versions.manage" }),
+    await within(opened).findByRole("menuitem", { name: "knowledge.version.dialog_title" }),
   ).toBeVisible();
   expect(
-    within(opened).queryByRole("menuitem", { name: "f118.version_history" }),
+    within(opened).queryByRole("menuitem", { name: "knowledge.version.history.title" }),
   ).not.toBeInTheDocument();
+  fireEvent.click(within(opened).getByRole("menuitem", { name: "versions.similar" }));
+  expect(await screen.findByRole("dialog", { name: "similar-documents" })).toHaveTextContent("[11]");
 });
 
 it("shows version management and history when the permission payload omits the visible relation", async () => {
@@ -494,10 +518,10 @@ it("shows version management and history when the permission payload omits the v
   expect(await screen.findByText("V2")).toBeVisible();
   const opened = await menu("versioned.md");
   expect(
-    await within(opened).findByRole("menuitem", { name: "versions.manage" }),
+    await within(opened).findByRole("menuitem", { name: "knowledge.version.dialog_title" }),
   ).toBeVisible();
   expect(
-    within(opened).getByRole("menuitem", { name: "f118.version_history" }),
+    within(opened).getByRole("menuitem", { name: "knowledge.version.history.title" }),
   ).toBeVisible();
 });
 
@@ -507,26 +531,66 @@ it("shows version numbers and history for multiple versions", async () => {
   expect(await screen.findByText("V3")).toBeVisible();
   fireEvent.click(
     await within(await menu()).findByRole("menuitem", {
-      name: "f118.version_history",
+      name: "knowledge.version.history.title",
     }),
   );
   expect(
-    await screen.findByRole("dialog", { name: "version-editor" }),
-  ).toHaveTextContent("[11,null]");
+    await screen.findByRole("dialog", { name: "version-history" }),
+  ).toHaveTextContent("11");
 });
 
 it.each([false, true])(
   "withholds version management without a feature flag or space edit (flag=%s)",
   async (enabled) => {
-    rootActions = ["visible"];
+    rootActions = enabled ? ["visible", "manage_permission"] : ["visible", "edit", "manage_permission"];
     rows = [file(11, { has_similar: true, is_multi_version: false })];
     mount("workspace", enabled);
     const opened = await menu();
     expect(
-      within(opened).queryByRole("menuitem", { name: "versions.manage" }),
+      within(opened).queryByRole("menuitem", { name: "knowledge.version.dialog_title" }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "knowledge.version.pill_similar" }),
     ).not.toBeInTheDocument();
   },
 );
+
+
+it.each([0, 1])("omits reference sources from both batch toolbar variants for type %s", async (fileType) => {
+  actions = ["visible", "delete"];
+  rows = [file(11, { file_type: fileType })];
+  const view = mount("workspace");
+  fireEvent.click(await screen.findByRole("checkbox", { name: "deletion.select file-11.pdf" }));
+  expect(await screen.findByRole("button", { name: "deletion.selected (1)" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "deletion.references" })).not.toBeInTheDocument();
+  view.unmount();
+
+  const target = document.createElement("div");
+  document.body.append(target);
+  try {
+    mount("workspace", false, target);
+    fireEvent.click(await screen.findByRole("checkbox", { name: "deletion.select file-11.pdf" }));
+    const trigger = await screen.findByRole("button", { name: "detail.batch" });
+    fireEvent.keyDown(trigger, { key: "Enter" });
+    const opened = await screen.findByRole("menu");
+    expect(within(opened).getByRole("menuitem", { name: "deletion.selected" })).toBeVisible();
+    expect(within(opened).queryByRole("menuitem", { name: "deletion.references" })).not.toBeInTheDocument();
+  } finally {
+    target.remove();
+  }
+});
+
+it.each([true, false])("requires edit instead of permission management for batch similar documents (edit=%s)", async (edit) => {
+  rootActions = ["visible", edit ? "edit" : "manage_permission"];
+  rows = [file(11, { has_similar: true, is_multi_version: false })];
+  mount("workspace", true);
+  fireEvent.click(await screen.findByRole("checkbox", { name: "deletion.select file-11.pdf" }));
+  await waitFor(() => expect(mocks.permissions).toHaveBeenCalledWith("knowledge_space", "7", expect.anything()));
+  const name = "knowledge.version.header_process_similar_label";
+  if (edit) {
+    fireEvent.click(await screen.findByRole("button", { name }));
+    expect(await screen.findByRole("dialog", { name: "similar-documents" })).toHaveTextContent("[11]");
+  } else {
+    expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+  }
+});

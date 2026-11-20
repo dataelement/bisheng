@@ -68,6 +68,12 @@ class PresetTrainDao(PresetTrainBase):
                 return (await session.exec(statement)).all()
 
     @classmethod
+    async def find_by_url(cls, url: str) -> PresetTrain | None:
+        async with get_async_db_session() as session:
+            with strict_tenant_filter():
+                return (await session.exec(select(PresetTrain).where(PresetTrain.url == url))).first()
+
+    @classmethod
     async def search_name(
         cls, keyword: str | None = None, page_size: int | None = None, page_num: int | None = None
     ) -> tuple[list[PresetTrain], int]:

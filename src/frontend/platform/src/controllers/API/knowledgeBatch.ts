@@ -54,8 +54,12 @@ export async function inspectBatch(
   if (tenant === null) throw new Error("management_scope_unavailable");
   return { inspection, tenant: String(tenant) };
 }
-export function inspectBatchItems(command: BatchCommand): Promise<BatchInspection> {
-  return request.post<unknown, BatchInspection>(`${path(command)}/inspect`, body(command));
+export function inspectBatchItems(command: BatchCommand, signal?: AbortSignal): Promise<BatchInspection> {
+  const endpoint = `${path(command)}/inspect`;
+  const payload = body(command);
+  return signal
+    ? request.post<unknown, BatchInspection>(endpoint, payload, { signal })
+    : request.post<unknown, BatchInspection>(endpoint, payload);
 }
 export function precheckBatch(command: BatchCommand, tenant: string): Promise<OperationPrecheck> {
   return request.post<unknown, OperationPrecheck>(`${path(command)}/precheck`, body(command), {

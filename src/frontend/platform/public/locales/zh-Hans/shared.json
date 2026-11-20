@@ -118,6 +118,32 @@
           "queueing": "排队中",
           "timeout": "超时",
           "violation": "违规"
+        },
+        "empty": "—",
+        "uncertain": "操作结果未确认，请关闭弹窗并刷新列表核对结果。",
+        "actions": {
+          "preview": "预览",
+          "download": "下载",
+          "primary": "设为主版本",
+          "delete": "删除"
+        },
+        "confirm": {
+          "primary": {
+            "title": "切换主版本",
+            "description": "V{{version}} 将成为主版本,RAG 检索和对话立即生效。"
+          },
+          "delete": {
+            "title": "删除历史版本",
+            "description": "V{{version}} 将被永久删除,无法恢复。"
+          }
+        },
+        "feedback": {
+          "primary": "已切换主版本",
+          "delete": "已删除版本"
+        },
+        "download_feedback": {
+          "no_url": "下载链接获取失败",
+          "failed": "下载失败"
         }
       }
     },
