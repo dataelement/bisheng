@@ -8690,7 +8690,7 @@ W3基础交付：T346原ModuleNotFound红→T344 DTO 8绿；T348原ModuleNotFoun
 - [x] MIG-DEFAULT-4：AC-138、AC-139；普通文件原生继承初始化及原失败授权续办、围栏和中断恢复。
 - [x] MIG-DEFAULT-5：AC-135–AC-140；真实 SQL schema 与原生权限/引用运行时的端到端、负向和规模回归，Ruff、架构守卫及特性审查；范围和基线失败见[审查记录](../../../docs/reviews/f118-upgrade-default-classification-20261120.md)。
 - [ ] MIG-DEFAULT-6：AC-140；按用户后续要求，先拷贝带哈希清单的修复代码到生产维护容器验证，同配置且禁用维护容器健康检查；全部升级完成后再正式推送 GitHub 发布线。
-- [ ] MIG-DEFAULT-7：AC-140；通过正式脚本继续生产历史准备、M2→M4、Redis 回填、校验和开服；Gateway 按用户决定延期，不直接改业务数据绕过校验。
+- [ ] MIG-DEFAULT-7：AC-140；按用户最新范围通过正式脚本完成历史准备、M2/M3/权限发布及 Redis 回填，原生权限完成后抽检开服并升级 Gateway；历史引用/M4 后置，不直接改业务数据或伪造 Coverage。
 - [x] MIG-DEFAULT-8：AC-141；失效创建者闭合保留、成员零新增、原生 apply/verify 身份重验；完整迁移、续跑、账号重现拒绝及 200/400 资源有界查询测试。
 - [x] MIG-DEFAULT-9：AC-142；原文件定位标量与实际存储键分离，原值不改、不发起外部读取；编码器及完整迁移回归。
 - [x] MIG-DEFAULT-10：AC-143；已关闭权限/保留 payload 的闭合证明，残留服务账号 marker 原生关闭、冗余父边合并，schema-2 原计划续跑及提交未知恢复；完整 M2→M4/覆盖及晚期漂移拒绝验证。
@@ -8703,3 +8703,7 @@ W3基础交付：T346原ModuleNotFound红→T344 DTO 8绿；T348原ModuleNotFoun
 - [x] MIG-DEFAULT-14：AC-147；保存无效工作流配置的显式隔离、整行/标记/无索引证明、完整 M2→M4/Coverage/续跑、当前版本与有效旧 type1 共存、缺创建者组合、2/4 全程规模及新写严格拒绝。
 
 - [x] MIG-DEFAULT-15：AC-135/140；冻结 SQL 明确 INACTIVE 的普通来源及空活动集 Grant 残留图分类，完整组件闭合、聚合 ACTIVE 贡献保留、旧 policy-1、原生 DELETE ACK 丢失续跑与完整 Coverage 回归。
+
+
+- [x] MIG-DEFAULT-16：用户明确要求的权限阶段执行：`--apply --permissions-only` 复用完整原生 SQL/权限收敛，保留 `ready=false` 与未完成引用事实；26 项 CLI/runtime 原生集成、静态/架构检查通过。
+- [ ] MIG-DEFAULT-17：后续引用回填及 M4/Coverage：在线开服后先评估原冻结 Run 与当前来源宇宙漂移，再按受控方案回填和验证；不可覆盖原制品或伪造空引用就绪。
