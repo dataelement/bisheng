@@ -1371,9 +1371,11 @@
   },
   "com_app": {
     "all": "All",
+    "bisheng_apps": "Bisheng apps",
     "center_title": "App Center",
-    "empty_go_explore": "No apps used yet. Head to the app marketplace",
-    "explore_more": "Explore more apps",
+    "empty_title": "No recently used apps",
+    "search_empty_title": "No matching apps",
+    "search_empty_description": "Try a different keyword or clear the search to see recently used apps",
     "explore_plaza": "Visit the App Marketplace to <cta>explore more apps<arrow /></cta>",
     "recent_apps_hint": "Your recently used apps are all here～",
     "service_maintenance_title": "Oops, we hit a small hiccup",

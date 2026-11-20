@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useRecoilState, useRecoilValue } from "recoil";
 import { NotificationSeverity } from "~/common";
@@ -68,10 +68,21 @@ export function useAppCenter() {
   const [page, setPage] = useState(1);
   const appsRef = useRef<AppItem[]>([]);
   const requestSeqRef = useRef(0);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      // An old tab must not overwrite the shared list after the user switches back.
+      mountedRef.current = false;
+      requestSeqRef.current += 1;
+    };
+  }, []);
 
   /** Fetch apps with recent history */
   const fetchApps = useCallback(
     async (nextPage: number = 1, isAppend: boolean = false) => {
+      if (!mountedRef.current) return;
       const requestId = ++requestSeqRef.current;
       if (isAppend) {
         setLoadingMore(true);
@@ -111,8 +122,8 @@ export function useAppCenter() {
         setPage(nextPage);
         setHasMore(nextApps.length < total);
       } catch (error) {
-        console.error("Failed to load app center list:", error);
         if (requestId !== requestSeqRef.current) return;
+        console.error("Failed to load app center list:", error);
         if (isAppend) {
           setLoadMoreError(true);
         } else {

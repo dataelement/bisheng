@@ -1296,9 +1296,11 @@
   },
   "com_app": {
     "all": "すべて",
+    "bisheng_apps": "Bisheng アプリ",
     "center_title": "アプリセンター",
-    "empty_go_explore": "利用したアプリはまだありません。アプリ広場へどうぞ",
-    "explore_more": "さらにアプリを探す",
+    "empty_title": "最近使用したアプリはありません",
+    "search_empty_title": "一致するアプリがありません",
+    "search_empty_description": "別のキーワードで検索するか、検索をクリアして最近使用したアプリを表示してください",
     "explore_plaza": "アプリ広場で <cta>さらにアプリを探す<arrow /></cta>",
     "recent_apps_hint": "最近使用したアプリはすべてここにあります～",
     "service_maintenance_title": "おっと、システムに少し問題が発生しました",
