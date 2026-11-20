@@ -702,6 +702,10 @@
       "agent_ref": {
         "label": "平台 Agent"
       },
+      "user_prompt": {
+        "label": "用户输入",
+        "placeholder": "输入对话内容或引用上游变量"
+      },
       "input_bindings": {
         "label": "输入来源"
       },

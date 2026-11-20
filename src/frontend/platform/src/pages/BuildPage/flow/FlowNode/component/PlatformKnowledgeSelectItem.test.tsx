@@ -89,4 +89,29 @@ describe('platform knowledge selection', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent('api_errors:10564');
         expect(screen.queryByText('platformKnowledge.empty')).not.toBeInTheDocument();
     });
+
+    it('syncs resolved version_id into selection reference when missing or updated', async () => {
+        vi.mocked(getKnowledgeCapabilities).mockResolvedValue({
+            platform_knowledge_enabled: true, platform_knowledge_mode: 'real', platform_knowledge_connection_id: 'kunlian',
+            platform_knowledge_policy_revision: 'real-v1', multi_tenant_enabled: false,
+        });
+        vi.mocked(listPlatformKnowledge).mockResolvedValue({
+            items: [{ resource_id: 'kb-real', version_id: 'ver-2', name: 'Real KB', status: 'active', provider_mode: 'real' }],
+            next_cursor: null,
+        });
+        vi.mocked(getPlatformKnowledge).mockResolvedValue({
+            resource_id: 'kb-real', version_id: 'ver-2', name: 'Real KB', status: 'active', provider_mode: 'real',
+        });
+        const onChange = vi.fn();
+        const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        function Harness() {
+            const defaults = useContext(userContext);
+            return <userContext.Provider value={{ ...defaults, user: { user_id: 12 } }}>
+                <PlatformKnowledgeSelectItem workflowId="flow" reference={{ resource_id: 'kb-real' }}
+                    onChange={onChange} onValidate={vi.fn()} />
+            </userContext.Provider>;
+        }
+        render(<QueryClientProvider client={queryClient}><Harness /></QueryClientProvider>);
+        await waitFor(() => expect(onChange).toHaveBeenCalledWith({ resource_id: 'kb-real', version_id: 'ver-2' }));
+    });
 });

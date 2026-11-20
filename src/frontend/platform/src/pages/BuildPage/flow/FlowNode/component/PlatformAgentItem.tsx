@@ -23,6 +23,7 @@ interface Props {
     nodeId: string;
     reference: PlatformAgentReference | null;
     bindings: PlatformAgentBindings;
+    userPrompt?: string;
     executionMode?: PlatformAgentExecutionMode;
     allowInteraction?: boolean;
     onOptionsChange?: (mode: PlatformAgentExecutionMode, allowInteraction: boolean) => void;
@@ -113,7 +114,7 @@ function mergeAgentPages(pages?: { data: PlatformAgentDirectoryItem[] }[]): Plat
     return [...byId.values()];
 }
 
-export function PlatformAgentItem({ workflowId, nodeId, reference, bindings, executionMode = 'sync', allowInteraction = false,
+export function PlatformAgentItem({ workflowId, nodeId, reference, bindings, userPrompt, executionMode = 'sync', allowInteraction = false,
     onOptionsChange, workflowGraph, onChange, onValidate }: Props) {
     const { t } = useTranslation('flow');
     const labels = useSelectLabels();
@@ -181,6 +182,7 @@ export function PlatformAgentItem({ workflowId, nodeId, reference, bindings, exe
         && version.data.available === true && version.data.can_use === true;
     const graph = { nodes: [{ id: nodeId, data: { id: nodeId, type: 'platform_agent', group_params: [{ params: [
         { key: 'agent_ref', value: currentReference }, { key: 'input_bindings', value: bindings },
+        ...(typeof userPrompt === 'string' && userPrompt ? [{ key: 'user_prompt', value: userPrompt }] : []),
         ...(executionMode === 'async' ? [{ key: 'execution_mode', value: 'async' }] : []),
         ...(allowInteraction ? [{ key: 'allow_interaction', value: true }] : []),
     ] }] } }], edges: [] };
@@ -268,8 +270,10 @@ export function PlatformAgentItem({ workflowId, nodeId, reference, bindings, exe
                 obsolete={!(name in (version.data!.input_schema.properties ?? {})) && version.data!.input_schema.additionalProperties === false}
                 onRemove={() => { const next = { ...bindings }; delete next[name]; setInvalidFields(previous => ({ ...previous, [name]: false })); onChange(currentReference, next); }}
                 onChange={binding => onChange(currentReference, { ...bindings, [name]: binding })} onInvalid={invalid => setInvalidFields(previous => ({ ...previous, [name]: invalid }))} />)}
-            <p className="bisheng-label">{t('platformAgent.outputSchema')}</p>
-            <pre className="whitespace-pre-wrap break-all text-xs">{JSON.stringify(version.data.output_schema, null, 2)}</pre>
+            {Object.keys(version.data.output_schema?.properties ?? {}).length > 0 && <>
+                <p className="bisheng-label">{t('platformAgent.outputSchema')}</p>
+                <pre className="whitespace-pre-wrap break-all text-xs">{JSON.stringify(version.data.output_schema, null, 2)}</pre>
+            </>}
         </>}
         {validation.data && !validation.data.valid && <p role="alert">{t('platformAgent.invalidConfiguration')}</p>}
     </div>;

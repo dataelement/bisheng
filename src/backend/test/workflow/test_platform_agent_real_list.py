@@ -12,6 +12,7 @@ from pydantic import SecretStr
 from bisheng.api.v1.endpoints import get_env
 from bisheng.common.errcode.flow import (
     PlatformAgentBadRequestError,
+    PlatformAgentExecutionError,
     PlatformAgentNotReadyError,
     PlatformAgentPermissionError,
     PlatformAgentRateLimitError,
@@ -24,7 +25,7 @@ from bisheng.common.services.config_service import ConfigService
 from bisheng.core.config.settings import PlatformAgentConf, PlatformLLMConf, WorkflowConf
 from bisheng.sso_sync.application.kunlian import KunlianTokenExchangeMaterial
 from bisheng.workflow.application import platform_agent as app_platform_agent
-from bisheng.workflow.domain.clients.kunlian_resources import SCOPE_RESOURCES_READ
+from bisheng.workflow.domain.clients.kunlian_resources import SCOPE_AGENT_INVOKE, SCOPE_RESOURCES_READ
 from bisheng.workflow.domain.clients.platform_agent import build_provider
 from bisheng.workflow.domain.clients.platform_agent_real import (
     KunlianPlatformAgentClient,
@@ -286,18 +287,235 @@ async def test_fixed_version_detail_parses_kunlian_envelope_and_falls_back_null_
         await client.get_agent_version(SecretStr("tok"), resource_id="agent-finance-001", version_id="latest")
 
 
-async def test_real_mode_invoke_and_unconfigured_real_provider_raise_not_ready():
-    provider = build_provider(_conf())
-    assert isinstance(provider, RealPlatformAgentProvider)
-    with pytest.raises(PlatformAgentNotReadyError):
-        await provider.invoke(
-            VerifiedAgentActor(12, 7),
-            AgentReference(agent_id="agent-finance-001", version_id="ver-101"),
-            {},
-            "call-1",
-        )
+def test_unconfigured_real_provider_raises_not_ready():
     with pytest.raises(PlatformAgentNotReadyError):
         build_provider(PlatformAgentConf(mode="real", resource_base_url=""))
+
+
+async def test_real_provider_invoke_sync_chat_completion_and_wraps_empty_schema():
+    import json as _json
+
+    captured: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        if request.url.path == "/oidc/token":
+            form = parse_qs(request.content.decode("utf-8"))
+            scope = form["scope"][0]
+            token_value = "agent-invoke-tok" if scope == SCOPE_AGENT_INVOKE else "agent-read-tok"
+            return httpx.Response(200, json={"access_token": token_value, "expires_in": 120, "scope": scope})
+        if request.url.path == "/api/platform/v1/resources/agent/a43f6f70/versions/release-babc":
+            assert request.headers["authorization"] == "Bearer agent-read-tok"
+            return httpx.Response(
+                200,
+                json={
+                    "code": "OK",
+                    "data": {
+                        "resource_type": "agent",
+                        "resource_id": "a43f6f70",
+                        "version_id": "release-babc",
+                        "name": "毕昇联调 Agent",
+                        "call_id": "release-babc",
+                        "status": "PUBLISHED",
+                        "allowed_actions": ["use"],
+                        "input_schema": None,
+                        "output_schema": None,
+                    },
+                },
+            )
+        if request.url.path == "/api/platform/v1/chat/completions":
+            assert request.method == "POST"
+            assert request.headers["authorization"] == "Bearer agent-invoke-tok"
+            assert request.headers["x-caller-type"] == "workflow"
+            assert request.headers["x-trace-id"]
+            idem = request.headers["x-idempotency-key"]
+            assert 16 <= len(idem) <= 128 and " " not in idem
+            assert "cookie" not in {k.lower() for k in request.headers.keys()}
+            body = _json.loads(request.content.decode("utf-8"))
+            assert body == {
+                "model": "release-babc",
+                "messages": [{"role": "user", "content": "请执行毕昇联调测试。"}],
+                "stream": False,
+                "metadata": {"workflow_run_id": "wf-sess-001", "node_run_id": "node-run-001"},
+            }
+            return httpx.Response(
+                200,
+                headers={"X-Trace-ID": request.headers["x-trace-id"], "X-Request-ID": "req-kl-001"},
+                json={
+                    "id": "chatcmpl-kl-001",
+                    "object": "chat.completion",
+                    "model": "release-babc",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "finish_reason": "stop",
+                            "message": {"role": "assistant", "content": "毕昇联调通过"},
+                        }
+                    ],
+                },
+            )
+        raise AssertionError(f"unexpected path {request.url.path}")
+
+    async def resolver(user_id: int, *, session_reference=None, oidc_token_url=""):
+        return _material()
+
+    provider = build_provider(_conf())
+    assert isinstance(provider, RealPlatformAgentProvider)
+    real_provider = RealPlatformAgentProvider(
+        _conf(),
+        token_material_resolver=resolver,
+        transport=httpx.MockTransport(handler),
+    )
+    res = await real_provider.invoke(
+        VerifiedAgentActor(12, 7, session_reference="sess-1"),
+        AgentReference(agent_id="a43f6f70", version_id="release-babc"),
+        {},
+        "exec1:pa_1:0",
+        user_prompt="请执行毕昇联调测试。",
+        workflow_run_id="wf-sess-001",
+        node_run_id="node-run-001",
+        idempotency_key="idem-fixed-key-0001",
+    )
+    assert res.status == "SUCCEEDED"
+    assert res.agent_run_id == "chatcmpl-kl-001"
+    assert res.ref == AgentReference(agent_id="a43f6f70", version_id="release-babc")
+    assert res.output == {
+        "content": "毕昇联调通过",
+        "id": "chatcmpl-kl-001",
+        "model": "release-babc",
+        "finish_reason": "stop",
+    }
+    assert [req.url.path for req in captured] == [
+        "/oidc/token",
+        "/api/platform/v1/resources/agent/a43f6f70/versions/release-babc",
+        "/oidc/token",
+        "/api/platform/v1/chat/completions",
+    ]
+
+
+async def test_real_provider_invoke_rejects_token_missing_agent_invoke_scope():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/oidc/token":
+            return httpx.Response(200, json={"access_token": "tok-only-read", "expires_in": 120, "scope": "openid"})
+        raise AssertionError("chat completions must not be called without platform.agent.invoke scope")
+
+    async def resolver(user_id: int, *, session_reference=None, oidc_token_url=""):
+        return _material()
+
+    from bisheng.workflow.domain.schemas.platform_agent import AgentVersion
+
+    provider = RealPlatformAgentProvider(
+        _conf(),
+        token_material_resolver=resolver,
+        transport=httpx.MockTransport(handler),
+    )
+    version = AgentVersion(
+        ref=AgentReference(agent_id="a43f6f70", version_id="release-babc"),
+        name="Agent",
+        call_id="release-babc",
+        input_schema={"type": "object", "properties": {}, "required": []},
+        output_schema={"type": "object", "properties": {}, "required": []},
+        available=True,
+        can_use=True,
+    )
+    with pytest.raises(PlatformAgentPermissionError):
+        await provider.invoke(
+            VerifiedAgentActor(12, 7),
+            AgentReference(agent_id="a43f6f70", version_id="release-babc"),
+            {},
+            "exec1:pa_1:0",
+            user_prompt="hello",
+            resolved_version=version,
+        )
+
+
+@pytest.mark.parametrize(
+    ("http_status", "error_code", "expected_error"),
+    [
+        (401, "invalid_token", PlatformAgentTokenError),
+        (403, "permission_denied", PlatformAgentPermissionError),
+        (409, "idempotency_in_progress", PlatformAgentExecutionError),
+        (409, "idempotency_conflict", PlatformAgentExecutionError),
+        (429, "rate_limit_exceeded", PlatformAgentRateLimitError),
+        (503, "service_unavailable", PlatformAgentNotReadyError),
+        (504, "execution_timeout", PlatformAgentUnknownError),
+    ],
+)
+async def test_real_invoke_chat_completion_maps_kunlian_error_codes(http_status, error_code, expected_error):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            http_status,
+            headers={"X-Trace-ID": "trace-invoke-err", "X-Request-ID": "req-invoke-err"},
+            json={"error": {"code": error_code, "message": "failed"}},
+        )
+
+    client = KunlianPlatformAgentClient(_conf(), transport=httpx.MockTransport(handler))
+    with pytest.raises(expected_error):
+        await client.invoke_chat_completion(
+            SecretStr("tok"),
+            call_id="release-babc",
+            messages=[{"role": "user", "content": "hi"}],
+            workflow_run_id="wf-1",
+            node_run_id="nd-1",
+            idempotency_key="idem-fixed-key-0001",
+        )
+
+
+async def test_real_provider_invoke_parses_structured_output_when_schema_defined():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/oidc/token":
+            return httpx.Response(
+                200,
+                json={"access_token": "agent-invoke-tok", "expires_in": 120, "scope": SCOPE_AGENT_INVOKE},
+            )
+        return httpx.Response(
+            200,
+            json={
+                "id": "chatcmpl-struct-1",
+                "object": "chat.completion",
+                "model": "release-struct",
+                "choices": [
+                    {
+                        "index": 0,
+                        "finish_reason": "stop",
+                        "message": {"role": "assistant", "content": '{"summary": "done", "score": 100}'},
+                    }
+                ],
+            },
+        )
+
+    async def resolver(user_id: int, *, session_reference=None, oidc_token_url=""):
+        return _material()
+
+    from bisheng.workflow.domain.schemas.platform_agent import AgentVersion
+
+    provider = RealPlatformAgentProvider(
+        _conf(),
+        token_material_resolver=resolver,
+        transport=httpx.MockTransport(handler),
+    )
+    version = AgentVersion(
+        ref=AgentReference(agent_id="agent-s", version_id="ver-s"),
+        name="Struct Agent",
+        call_id="release-struct",
+        input_schema={"type": "object", "properties": {}, "required": []},
+        output_schema={
+            "type": "object",
+            "properties": {"summary": {"type": "string"}, "score": {"type": "integer"}},
+            "required": ["summary", "score"],
+        },
+        available=True,
+        can_use=True,
+    )
+    res = await provider.invoke(
+        VerifiedAgentActor(12, 7),
+        version.ref,
+        {},
+        "exec1:pa_1:0",
+        user_prompt="evaluate",
+        resolved_version=version,
+    )
+    assert res.output == {"summary": "done", "score": 100}
 
 
 async def test_platform_agent_conf_and_env_fallback_to_platform_llm(monkeypatch):

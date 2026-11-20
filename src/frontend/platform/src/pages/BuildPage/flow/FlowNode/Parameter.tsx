@@ -97,6 +97,7 @@ export default function Parameter({
         case 'platform_agent':
             return <PlatformAgentItem workflowId={workflowId || ''} nodeId={nodeId} reference={item.value}
                 workflowGraph={workflowGraph}
+                userPrompt={node.group_params.flatMap(group => group.params).find(param => param.key === 'user_prompt')?.value}
                 bindings={node.group_params.flatMap(group => group.params).find(param => param.key === 'input_bindings')?.value || {}}
                 executionMode={node.group_params.flatMap(group => group.params).find(param => param.key === 'execution_mode')?.value}
                 allowInteraction={node.group_params.some(group => group.params.some(param => param.key === 'allow_interaction' && param.value === true))}
@@ -116,7 +117,13 @@ export default function Parameter({
                     const input = params.find(param => param.key === 'input_bindings');
                     if (input) input.value = bindings;
                     const output = params.find(param => param.key === 'result');
-                    if (output && outputSchema) output.value = [{ key: 'result', type: outputSchema.type || 'any' }, ...Object.keys(outputSchema.properties || {}).map(key => ({ key: `result#${key}`, type: 'any' }))];
+                    if (output && outputSchema) {
+                        const schemaProps = Object.keys(outputSchema.properties || {});
+                        const fields = schemaProps.length
+                            ? schemaProps.map(key => ({ key: `result#${key}`, type: 'any' }))
+                            : [{ key: 'result#content', type: 'string' }];
+                        output.value = [{ key: 'result', type: outputSchema.type || 'any' }, ...fields];
+                    }
                     refreshPlatformAgent();
                 }} />;
         case 'textarea':

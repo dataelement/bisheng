@@ -171,20 +171,26 @@ class PlatformAgentConf(BaseModel):
     resource_audience: str = Field(default="moduvela-platform-resources", min_length=1, max_length=256)
     list_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
     max_list_payload_bytes: int = Field(default=2 * 1024 * 1024, strict=True, ge=1024, le=16777216)
-    invoke_timeout_seconds: float = Field(default=5, gt=0, le=300)
+    invoke_timeout_seconds: float = Field(default=135.0, gt=0, le=300)
     max_payload_bytes: int = Field(default=1048576, strict=True, ge=1024, le=16777216)
     base_url: str | None = None
 
 
 class PlatformKnowledgeConf(BaseModel):
+    """昆联平台知识库检索节点配置，默认对接真实资源目录与检索接口。"""
+
     model_config = ConfigDict(extra="forbid")
 
-    mode: Literal["disabled", "mock", "real"] = "mock"
+    mode: Literal["disabled", "mock", "real"] = "real"
     connection_id: str = Field(default="kunlian", min_length=1, max_length=128)
-    policy_revision: str = Field(default="mock-v1", min_length=1, max_length=128)
+    policy_revision: str = Field(default="real-v1", min_length=1, max_length=128)
     mock_subjects: dict[str, Literal["A", "B", "C"]] = Field(default_factory=dict)
-    # TODO [F120][EXT-03] 联调确认真实检索的时间和响应大小预算。
-    retrieve_timeout_seconds: float = Field(default=5, gt=0, le=300)
+    resource_base_url: str = ""
+    oidc_token_url: str = ""
+    resource_audience: str = Field(default="moduvela-platform-resources", min_length=1, max_length=256)
+    list_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
+    max_list_payload_bytes: int = Field(default=2 * 1024 * 1024, strict=True, ge=1024, le=16777216)
+    retrieve_timeout_seconds: float = Field(default=65.0, gt=0, le=300)
     max_payload_bytes: int = Field(default=1048576, strict=True, ge=1024, le=16777216)
 
 

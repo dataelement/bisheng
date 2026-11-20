@@ -4,12 +4,14 @@ export type KnowledgeQuestion =
 
 export interface KnowledgeReference {
     resource_id: string;
+    version_id?: string;
 }
 
 export interface KnowledgeResource extends KnowledgeReference {
     name: string;
     status: string;
     provider_mode: string;
+    use_allowed?: boolean;
 }
 
 export interface KnowledgeCapabilities {

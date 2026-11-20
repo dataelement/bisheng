@@ -34,8 +34,9 @@ const platformAgentTemplate = {
     id: 'platform_agent_xxx', type: 'platform_agent', name: '', description: '', v: 1,
     group_params: [{ name: '', params: [
         { key: 'agent_ref', type: 'platform_agent', value: null, required: true },
+        { key: 'user_prompt', label: 'true', type: 'var_textarea', test: 'var', value: '', placeholder: 'true' },
         { key: 'input_bindings', type: 'platform_agent_bindings', value: {}, hidden: true },
-        { key: 'result', type: 'var', value: [{ key: 'result', type: 'any' }], global: "code:value.map(el => ({ label: el.key, value: el.key }))", hidden: true },
+        { key: 'result', type: 'var', value: [{ key: 'result', type: 'object' }, { key: 'result#content', type: 'string' }], global: "code:value.map(el => ({ label: el.key, value: el.key }))", hidden: true },
     ] }],
 };
 

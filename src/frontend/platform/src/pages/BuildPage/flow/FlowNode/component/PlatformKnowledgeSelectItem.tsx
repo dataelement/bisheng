@@ -42,6 +42,16 @@ export function PlatformKnowledgeSelectItem({ workflowId, reference, onChange, o
     useEffect(() => {
         onValidate(() => activeSelection ? false : t('platformKnowledge.invalidKnowledge'));
     }, [activeSelection, onValidate, t]);
+    useEffect(() => {
+        if (
+            activeSelection
+            && detail.data.version_id
+            && reference?.resource_id === detail.data.resource_id
+            && reference.version_id !== detail.data.version_id
+        ) {
+            onChange({ resource_id: detail.data.resource_id, version_id: detail.data.version_id });
+        }
+    }, [activeSelection, detail.data?.resource_id, detail.data?.version_id, reference?.resource_id, reference?.version_id, onChange]);
     const rows = enabled && directory.isSuccess ? directory.data.pages.flatMap(page => page.items) : [];
     const options = new Map(rows.filter(row => row.resource_id && !(detail.isError && row.resource_id === selected))
         .map(row => [row.resource_id, row.name]));
@@ -55,8 +65,9 @@ export function PlatformKnowledgeSelectItem({ workflowId, reference, onChange, o
             loading={directory.isInitialLoading} disabled={!enabled}
             onChange={value => {
                 const id = value ? String(value) : '';
+                const matched = rows.find(row => row.resource_id === id);
                 setSelected(id);
-                onChange(id ? { resource_id: id } : null);
+                onChange(id ? (matched?.version_id ? { resource_id: id, version_id: matched.version_id } : { resource_id: id }) : null);
             }} />
         {directory.hasNextPage && enabled && <Button onClick={() => { void directory.fetchNextPage(); }}>{t('platformAgent.loadMore')}</Button>}
         {directory.isError || capability.isError ? <p role="alert">{t(directoryDenied ? 'api_errors:10564' : 'platformAgent.queryFailed')}</p>

@@ -25,7 +25,8 @@ interface Input {
     required: boolean,
     label: string,
     value: string,
-    autoFill: boolean
+    autoFill: boolean,
+    jsonExpected?: boolean
 }
 
 export const ResultText = ({ title, value }: { title: string, value: any }) => {
@@ -114,7 +115,7 @@ export const RunTest = forwardRef((props, ref) => {
                     }
                     if (node.type === 'platform_agent' && param.key === 'input_bindings') {
                         Object.values(param.value || {}).forEach((binding: { source: string; variable?: string }) => {
-                            if (binding.source === 'variable' && binding.variable) setInputs(prev => [...prev, { key: binding.variable, required: true, label: binding.variable, value: '', autoFill: false }]);
+                            if (binding.source === 'variable' && binding.variable) setInputs(prev => [...prev, { key: binding.variable, required: true, label: binding.variable, value: '', autoFill: false, jsonExpected: true }]);
                         });
                     }
                     if (param.test === 'input') { // 遍历value[] ,每一项作为一个test输入
@@ -199,7 +200,7 @@ export const RunTest = forwardRef((props, ref) => {
                     toast.show({ type: 'warning', message: t('platformAgent.invalidConfiguration') });
                     return;
                 }
-                const nodeInput = Object.fromEntries(inputs.map(input => [input.key, JSON.parse(input.value)]));
+                const nodeInput = Object.fromEntries(inputs.map(input => [input.key, input.jsonExpected ? JSON.parse(input.value) : input.value]));
                 const result = await runWorkflowNodeApi({ node_input: nodeInput, data: node, workflow_id });
                 setCurrentIndex(0);
                 setResults(result.map(batch => TranslationName(batch)));
@@ -306,7 +307,7 @@ export const RunTest = forwardRef((props, ref) => {
                         input.autoFill ? null : <div className="mb-2" key={input.key}>
                             <Label className="flex items-center bisheng-label mb-2">
                                 {input.required && <span className="text-red-500">*</span>}
-                                {input.label} {node?.type === 'platform_agent' && t('platformAgent.jsonHint')}
+                                {input.label} {node?.type === 'platform_agent' && input.jsonExpected && t('platformAgent.jsonHint')}
                             </Label>
                             <Textarea defaultValue={input.value} onChange={(e) => {
                                     setInputs((prev) =>

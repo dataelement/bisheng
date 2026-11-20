@@ -1,6 +1,7 @@
 """固定版本的平台 Agent 同步节点。构造时不查询资源或发送请求。"""
 
 import asyncio
+import json
 from contextlib import contextmanager
 from copy import deepcopy
 
@@ -8,6 +9,7 @@ from bisheng.common.errcode.flow import PlatformAgentExecutionError, PlatformAge
 from bisheng.utils.async_utils import run_async_safe
 from bisheng.workflow.domain.schemas.platform_agent import MISSING, node_configuration
 from bisheng.workflow.nodes.base import BaseNode
+from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
 
 
 class PlatformAgentNode(BaseNode):
@@ -30,6 +32,28 @@ class PlatformAgentNode(BaseNode):
         if isinstance(value, list) and field.isdigit() and int(field) < len(value):
             return value[int(field)]
         return MISSING
+
+    def _render_user_prompt(self, template: str | None) -> str | None:
+        if not isinstance(template, str) or not template.strip():
+            return None
+        parser = PromptTemplateParser(template=template)
+        variables = parser.extract()
+        if not variables:
+            return template
+        var_map: dict[str, str] = {}
+        for var in variables:
+            value = self.lookup(var)
+            if value is MISSING:
+                value = ""
+            elif isinstance(value, (dict, list)):
+                value = json.dumps(value, ensure_ascii=False)
+            elif value is None:
+                value = ""
+            else:
+                value = str(value)
+            self.other_node_variable[var] = value
+            var_map[var] = value
+        return parser.format(var_map)
 
     def _run(self, unique_id):
         context = self.platform_agent_context
@@ -54,7 +78,12 @@ class PlatformAgentNode(BaseNode):
             notify = getattr(self.callback_manager, "on_agent_long_task", None)
             execution = service.invoke_long_node(*args, notify=notify)
         else:
-            execution = service.invoke_node(*args)
+            rendered_prompt = self._render_user_prompt(configuration.user_prompt)
+            execution = service.invoke_node(
+                *args,
+                node_run_id=unique_id,
+                rendered_user_prompt=rendered_prompt,
+            )
         result = run_async_safe(execution, timeout=None)
         return {"result": result}
 

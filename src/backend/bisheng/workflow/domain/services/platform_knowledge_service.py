@@ -1,6 +1,7 @@
 """昆联知识库目录、配置校验及检索编排。"""
 
 import asyncio
+import inspect
 import json
 from collections import defaultdict
 from uuid import uuid4
@@ -32,6 +33,15 @@ from bisheng.workflow.domain.schemas.platform_knowledge import (
 )
 
 
+def _session_reference_from_user(login_user) -> str | None:
+    ref = getattr(login_user, "_runtime_credential_reference", None)
+    if isinstance(ref, dict) and ref.get("kind") == "kunlian_session":
+        value = ref.get("reference")
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
 class PlatformKnowledgeService:
     def __init__(self, *, config, repository=None, provider=None, identity_reader=None, config_source=None):
         self.config = config
@@ -39,6 +49,10 @@ class PlatformKnowledgeService:
         self._provider = provider
         self.identity_reader = identity_reader or read_current_person_facts
         self.config_source = config_source or (lambda: self.config)
+
+    @property
+    def current_config(self):
+        return self.config_source() if self.config_source else self.config
 
     @property
     def provider(self):
@@ -52,7 +66,12 @@ class PlatformKnowledgeService:
         if facts.get("state") != "active" or facts.get("tenant_id") != login_user.tenant_id:
             raise UnAuthorizedError()
         await require_business_action(login_user, resource_type="workflow", resource_id=workflow_id, action=action)
-        return KnowledgeActor(int(login_user.user_id), int(login_user.tenant_id), facts["token_version"])
+        return KnowledgeActor(
+            int(login_user.user_id),
+            int(login_user.tenant_id),
+            facts["token_version"],
+            session_reference=_session_reference_from_user(login_user),
+        )
 
     async def list_knowledge(self, login_user, workflow_id, cursor=None, name=None):
         actor = await self.authorize(login_user, workflow_id)
@@ -127,18 +146,29 @@ class PlatformKnowledgeService:
             "nodes": validation["nodes"],
         }
 
-    async def retrieve(self, actor, node, lookup, *, call_id=None):
+    async def retrieve(self, actor, node, lookup, *, call_id=None, workflow_run_id=None):
         config = node_configuration(node)
         query = resolve_question(config, lookup)
         resource = config.knowledge.resource_id
+        version_id = config.knowledge.version_id
+        node_run_id = call_id or uuid4().hex
         try:
             async with asyncio.timeout(self.config.retrieve_timeout_seconds):
-                await self.provider.check_use(actor, resource)
-                rows = (
-                    await self.provider.retrieve(actor, resource, query, config.top_k, call_id or uuid4().hex)
-                    if query
-                    else []
-                )
+                if self.current_config.mode != "real" or not version_id:
+                    await self.provider.check_use(actor, resource)
+                if query:
+                    retrieve_fn = self.provider.retrieve
+                    params = inspect.signature(retrieve_fn).parameters
+                    kwargs = {}
+                    if "version_id" in params:
+                        kwargs["version_id"] = version_id
+                    if "workflow_run_id" in params:
+                        kwargs["workflow_run_id"] = workflow_run_id
+                    if "node_run_id" in params:
+                        kwargs["node_run_id"] = node_run_id
+                    rows = await retrieve_fn(actor, resource, query, config.top_k, node_run_id, **kwargs)
+                else:
+                    rows = []
         except TimeoutError:
             raise PlatformKnowledgeTimeoutError() from None
         except PlatformKnowledgeError:

@@ -125,6 +125,12 @@ def get_env():
             knowledge.policy_revision,
             knowledge.connection_id,
         )
+        knowledge_base_url = knowledge.resource_base_url.strip() or (
+            workflow_conf.platform_llm.resource_base_url.strip() if workflow_conf.platform_llm.enabled else ""
+        )
+        platform_knowledge_enabled = (
+            bool(knowledge_base_url) if knowledge_mode == "real" else knowledge_mode == "mock"
+        )
         platform_llm_enabled = bool(
             workflow_conf.platform_llm.enabled and workflow_conf.platform_llm.resource_base_url.strip()
         )
@@ -136,11 +142,12 @@ def get_env():
         platform_agent_revision = ""
         platform_agent_enabled = False
         knowledge_mode, knowledge_revision, knowledge_connection = "disabled", "", ""
+        platform_knowledge_enabled = False
         platform_llm_enabled = False
     env["workflow"] = {
         "auto_rerun_on_open": workflow_auto_rerun_on_open,
         "code_node_enabled": workflow_code_node_enabled,
-        "platform_knowledge_enabled": knowledge_mode == "mock",
+        "platform_knowledge_enabled": platform_knowledge_enabled,
         "platform_knowledge_mode": knowledge_mode,
         "platform_knowledge_policy_revision": knowledge_revision,
         "platform_knowledge_connection_id": knowledge_connection,

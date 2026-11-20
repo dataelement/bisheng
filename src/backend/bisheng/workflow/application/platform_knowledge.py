@@ -28,10 +28,25 @@ from bisheng.workflow.domain.schemas.platform_knowledge import (
 from bisheng.workflow.domain.services.platform_knowledge_service import PlatformKnowledgeService
 
 
+def _resolve_platform_knowledge_conf():
+    wf_conf = settings.get_workflow_conf()
+    knowledge_conf = wf_conf.platform_knowledge
+    if knowledge_conf.mode != "real":
+        return knowledge_conf
+    updates = {}
+    llm_conf = wf_conf.platform_llm
+    if not knowledge_conf.resource_base_url.strip() and llm_conf.enabled and llm_conf.resource_base_url.strip():
+        updates["resource_base_url"] = llm_conf.resource_base_url
+    if not knowledge_conf.oidc_token_url.strip() and llm_conf.oidc_token_url.strip():
+        updates["oidc_token_url"] = llm_conf.oidc_token_url
+    return knowledge_conf.model_copy(update=updates) if updates else knowledge_conf
+
+
 def get_service():
+    resolved = _resolve_platform_knowledge_conf()
     return PlatformKnowledgeService(
-        config=settings.get_workflow_conf().platform_knowledge,
-        config_source=lambda: settings.get_workflow_conf().platform_knowledge,
+        config=resolved,
+        config_source=_resolve_platform_knowledge_conf,
     )
 
 
@@ -74,7 +89,13 @@ class KnowledgeRun:
                 raise TimeoutError()
             async with asyncio.timeout(budget):
                 actor = await self.authorize()
-                return await self.service.retrieve(actor, node, lookup, call_id=call_id)
+                return await self.service.retrieve(
+                    actor,
+                    node,
+                    lookup,
+                    call_id=call_id,
+                    workflow_run_id=self.record.get("session_id") or self.execution_id,
+                )
         except TimeoutError:
             raise PlatformKnowledgeTimeoutError() from None
         except Exception as exc:
@@ -148,6 +169,7 @@ async def prepare_execution(login_user, workflow_id, session_id, graph, *, publi
     record = {
         "graph": frozen,
         "workflow_id": workflow_id,
+        "session_id": session_id,
         "action": action,
         "token_version": actor.token_version,
         "environment": canonical_digest(service.config.model_dump()),

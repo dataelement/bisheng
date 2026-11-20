@@ -17,7 +17,7 @@ async def test_directory_and_validation_share_actual_editor(monkeypatch):
     actor = SimpleNamespace(user_id=12, tenant_id=7)
     repo = SimpleNamespace(get_workflow=lambda _: {"tenant_id": 7, "flow_type": 10})
     service = domain.PlatformKnowledgeService(
-        config=PlatformKnowledgeConf(),
+        config=PlatformKnowledgeConf(mode="mock"),
         repository=repo,
         identity_reader=AsyncMock(return_value={12: {"state": "active", "tenant_id": 7, "token_version": 0}}),
     )

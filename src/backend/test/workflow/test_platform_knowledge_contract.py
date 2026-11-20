@@ -23,7 +23,7 @@ def knowledge_service(monkeypatch):
     auth = AsyncMock()
     monkeypatch.setattr(domain, "require_business_action", auth)
     service = domain.PlatformKnowledgeService(
-        config=PlatformKnowledgeConf(mock_subjects={"7:12": "A", "7:13": "B"}),
+        config=PlatformKnowledgeConf(mode="mock", mock_subjects={"7:12": "A", "7:13": "B"}),
         repository=repo,
         identity_reader=AsyncMock(return_value=facts),
     )

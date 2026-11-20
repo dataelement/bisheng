@@ -35,7 +35,7 @@ export const platformKnowledgeTemplate = {
         { name: '', params: [
             { key: 'user_question', type: 'platform_knowledge_query', required: true, value: { source: 'variable', variable: '' } },
             { key: 'knowledge', type: 'platform_knowledge_select', required: true, value: null },
-            { key: 'top_k', label: 'true', type: 'number', required: true, value: 5, min: 1, max: 20 },
+            { key: 'top_k', label: 'true', type: 'number', required: true, value: 5, min: 1, max: 100 },
         ] },
         { name: '', params: [
             { key: 'retrieved_result', type: 'var', value: knowledgeOutputs, global: 'code:value.map(el => ({ label: el.label, value: el.key }))' },

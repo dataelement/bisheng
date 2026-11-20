@@ -702,6 +702,10 @@
       "agent_ref": {
         "label": "Platform Agent"
       },
+      "user_prompt": {
+        "label": "User Prompt",
+        "placeholder": "Enter prompt or reference upstream variables"
+      },
       "input_bindings": {
         "label": "Input source"
       },

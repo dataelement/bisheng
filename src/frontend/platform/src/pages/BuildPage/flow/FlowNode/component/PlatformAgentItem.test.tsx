@@ -247,4 +247,92 @@ describe('PlatformAgentItem', () => {
         render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><PlatformAgentItem workflowId="flow" nodeId="platform_agent_1" reference={null} bindings={{}} onChange={() => {}} onValidate={() => {}} /></QueryClientProvider>);
         expect(await screen.findByText('platformAgent.tokenInvalid')).toBeInTheDocument();
     });
+
+    it('forwards userPrompt into validation candidate graph', async () => {
+        render(
+            <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+                <PlatformAgentItem
+                    workflowId="flow"
+                    nodeId="platform_agent_1"
+                    reference={{ agent_id: 'echo', version_id: 'v1' }}
+                    bindings={{}}
+                    userPrompt="hello {{#start.q#}}"
+                    onChange={() => {}}
+                    onValidate={() => {}}
+                />
+            </QueryClientProvider>,
+        );
+        await waitFor(() =>
+            expect(validatePlatformAgents).toHaveBeenLastCalledWith(
+                'flow',
+                expect.objectContaining({
+                    nodes: [
+                        expect.objectContaining({
+                            data: expect.objectContaining({
+                                group_params: [
+                                    {
+                                        params: expect.arrayContaining([
+                                            { key: 'user_prompt', value: 'hello {{#start.q#}}' },
+                                        ]),
+                                    },
+                                ],
+                            }),
+                        }),
+                    ],
+                }),
+                'platform_agent_1',
+            ),
+        );
+    });
+
+    it('hides empty output schema and renders it only when properties are declared', async () => {
+        vi.mocked(getPlatformAgentVersion).mockResolvedValueOnce({
+            ref: { agent_id: 'echo', version_id: 'v1' },
+            available: true,
+            can_use: true,
+            provider_mode: 'real',
+            policy_revision: 'real-v1',
+            input_schema: { type: 'object', properties: {} },
+            output_schema: { type: 'object', properties: {}, required: [] },
+        });
+        const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        const { rerender } = render(
+            <QueryClientProvider client={queryClient}>
+                <PlatformAgentItem
+                    workflowId="flow"
+                    nodeId="platform_agent_1"
+                    reference={{ agent_id: 'echo', version_id: 'v1' }}
+                    bindings={{}}
+                    onChange={() => {}}
+                    onValidate={() => {}}
+                />
+            </QueryClientProvider>,
+        );
+        await waitFor(() => expect(getPlatformAgentVersion).toHaveBeenCalledTimes(1));
+        expect(screen.queryByText('platformAgent.outputSchema')).not.toBeInTheDocument();
+
+        vi.mocked(getPlatformAgentVersion).mockResolvedValueOnce({
+            ref: { agent_id: 'echo', version_id: 'v2' },
+            available: true,
+            can_use: true,
+            provider_mode: 'real',
+            policy_revision: 'real-v1',
+            input_schema: { type: 'object', properties: {} },
+            output_schema: { type: 'object', properties: { answer: { type: 'string' } } },
+        });
+        rerender(
+            <QueryClientProvider client={queryClient}>
+                <PlatformAgentItem
+                    workflowId="flow"
+                    nodeId="platform_agent_1"
+                    reference={{ agent_id: 'echo', version_id: 'v2' }}
+                    bindings={{}}
+                    onChange={() => {}}
+                    onValidate={() => {}}
+                />
+            </QueryClientProvider>,
+        );
+        expect(await screen.findByText('platformAgent.outputSchema')).toBeInTheDocument();
+        expect(screen.getByText(/"answer"/)).toBeInTheDocument();
+    });
 });

@@ -256,3 +256,150 @@ async def test_sql_commit_failure_restores_memory_and_redacts_driver_details(age
     assert state.variables_pool[node.id] == {"before": True}
     assert repo.get_execution(dispatch.execution_id)["calls"][f"{node.id}:0"]["state"] == "DISPATCHING"
     assert "secret-probe" not in str(failure.value) + str(callback.mock_calls)
+
+
+@pytest.mark.asyncio
+async def test_node_renders_user_prompt_variables_and_validates_wrapped_content_reference(agent_store, monkeypatch):
+    import time
+
+    from bisheng.workflow.domain.schemas.platform_agent import AgentInvokeResult, AgentVersion
+
+    repo, _, _, _ = agent_store
+    repo.clock = time.time
+    config = PlatformAgentConf(
+        mode="real",
+        resource_base_url="http://ai-gateway.comlansh.com:30001",
+        oidc_token_url="http://ai-idp.comlansh.com:30001/oidc/token",
+    )
+    captured_invoke = {}
+
+    class StubProvider:
+        async def get_version(self, actor, ref):
+            return AgentVersion(
+                ref=ref,
+                name="毕昇联调 Agent",
+                call_id="release-babc",
+                input_schema={"type": "object", "properties": {}, "required": []},
+                output_schema={"type": "object", "properties": {}, "required": []},
+                available=True,
+                can_use=True,
+            )
+
+        async def check_use(self, actor, ref):
+            return await self.get_version(actor, ref)
+
+        async def invoke(
+            self,
+            actor,
+            ref,
+            inputs,
+            call_id="",
+            *,
+            user_prompt=None,
+            workflow_run_id=None,
+            node_run_id=None,
+            idempotency_key=None,
+            resolved_version=None,
+        ):
+            captured_invoke.update(
+                {
+                    "inputs": inputs,
+                    "call_id": call_id,
+                    "user_prompt": user_prompt,
+                    "workflow_run_id": workflow_run_id,
+                    "node_run_id": node_run_id,
+                    "idempotency_key": idempotency_key,
+                }
+            )
+            return AgentInvokeResult(
+                status="SUCCEEDED",
+                ref=ref,
+                output={"content": "毕昇联调通过", "id": "run-1", "model": "release-babc", "finish_reason": "stop"},
+                agent_run_id="run-1",
+            )
+
+    service = domain.PlatformAgentService(config=config, repository=repo, provider=StubProvider())
+    monkeypatch.setattr(domain, "require_business_action", AsyncMock())
+    monkeypatch.setattr(
+        domain,
+        "read_current_person_facts",
+        AsyncMock(return_value={12: {"state": "active", "tenant_id": 7, "token_version": 0}}),
+    )
+
+    pa_node = {
+        "id": "platform_agent_1",
+        "type": "platform_agent",
+        "name": "平台 Agent",
+        "group_params": [
+            {
+                "name": "",
+                "params": [
+                    {"key": "agent_ref", "value": {"agent_id": "a1", "version_id": "release-babc"}},
+                    {"key": "user_prompt", "value": "提问：{{#input_1.text_input#}}"},
+                    {"key": "input_bindings", "value": {}},
+                ],
+            }
+        ],
+    }
+    graph = {
+        "nodes": [
+            {
+                "id": "input_1",
+                "data": {
+                    "id": "input_1",
+                    "type": "input",
+                    "group_params": [{"params": [{"key": "text_input", "type": "var", "value": ""}]}],
+                },
+            },
+            {"id": "platform_agent_1", "data": pa_node},
+            {
+                "id": "output_1",
+                "data": {
+                    "id": "output_1",
+                    "type": "output",
+                    "group_params": [
+                        {
+                            "params": [
+                                {
+                                    "key": "message",
+                                    "type": "var_textarea",
+                                    "value": "{{#platform_agent_1.result#content#}}",
+                                }
+                            ]
+                        }
+                    ],
+                },
+            },
+        ],
+        "edges": [],
+    }
+    validation = await service.validate_graph(SimpleNamespace(user_id=12, tenant_id=7), "f" * 32, graph)
+    assert validation["valid"] is True
+
+    execution, dispatch_id = repo.prepare_execution(
+        "f" * 32, "sess-real-exec-1", VerifiedAgentActor(12, 7), graph, config, "DEBUG"
+    )
+    dispatch = repo.claim_dispatch(execution["execution_id"], dispatch_id)
+    state = GraphState(variables_pool={"input_1": {"text_input": "请执行毕昇联调测试。"}})
+    callback = Mock()
+    node = PlatformAgentNode(
+        node_data=BaseNodeData(**pa_node),
+        workflow_id="f" * 32,
+        user_id=12,
+        graph_state=state,
+        target_edges=[],
+        max_steps=10,
+        callback=callback,
+        tenant_id=7,
+        platform_agent_context={
+            "service": service,
+            "login_user": SimpleNamespace(user_id=12, tenant_id=7),
+            "dispatch": dispatch,
+        },
+    )
+    await node.arun({})
+    assert captured_invoke["user_prompt"] == "提问：请执行毕昇联调测试。"
+    assert captured_invoke["workflow_run_id"] == "sess-real-exec-1"
+    assert captured_invoke["node_run_id"]
+    assert 16 <= len(captured_invoke["idempotency_key"]) <= 128
+    assert state.get_variable_by_str("platform_agent_1.result#content") == "毕昇联调通过"

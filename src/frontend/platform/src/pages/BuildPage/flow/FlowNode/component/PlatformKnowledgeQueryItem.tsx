@@ -24,7 +24,7 @@ export function PlatformKnowledgeQueryItem({ nodeId, data, onChange, onValidate,
 
     useEffect(() => {
         if (question.source === 'constant') {
-            onValidate(() => question.value.trim() && question.value.length <= 8192 ? false : t('platformKnowledge.invalidQuestion'));
+            onValidate(() => question.value.trim() && question.value.length <= 1000 ? false : t('platformKnowledge.invalidQuestion'));
             onVarEvent(async () => '');
         }
     }, [question, onValidate, onVarEvent, t]);
@@ -54,7 +54,7 @@ export function PlatformKnowledgeQueryItem({ nodeId, data, onChange, onValidate,
                     update({ source: 'variable', variable: value });
                 }}
                 onValidate={onValidate} onVarEvent={onVarEvent} />
-            : <Input aria-label={t(prefix + 'label')} value={question.value} maxLength={8192}
+            : <Input aria-label={t(prefix + 'label')} value={question.value} maxLength={1000}
                 onChange={event => update({ source: 'constant', value: event.target.value })} />}
     </div>;
 }

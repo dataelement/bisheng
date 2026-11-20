@@ -17,11 +17,12 @@ class PlatformKnowledgeProvider(Protocol):
 
 
 def build_provider(config: PlatformKnowledgeConf) -> PlatformKnowledgeProvider:
-    if config.mode != "mock":
-        # TODO [F120][EXT-01] 确认正式资源契约后装配真实目录。
-        # TODO [F120][EXT-02] 按昆联确认的用户授权能力获取限时凭据。
-        # TODO [F120][EXT-03] 正式检索及错误合同就绪后装配真实调用。
-        raise PlatformKnowledgeNotReadyError()
-    from bisheng.workflow.domain.clients.platform_knowledge_mock import MockPlatformKnowledgeProvider
+    if config.mode == "mock":
+        from bisheng.workflow.domain.clients.platform_knowledge_mock import MockPlatformKnowledgeProvider
 
-    return MockPlatformKnowledgeProvider(config)
+        return MockPlatformKnowledgeProvider(config)
+    if config.mode == "real":
+        from bisheng.workflow.domain.clients.platform_knowledge_real import RealPlatformKnowledgeProvider
+
+        return RealPlatformKnowledgeProvider(config)
+    raise PlatformKnowledgeNotReadyError()

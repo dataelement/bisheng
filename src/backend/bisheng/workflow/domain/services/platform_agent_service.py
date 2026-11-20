@@ -212,6 +212,13 @@ class PlatformAgentService:
                         raise PlatformAgentConfigurationError()
                     elif trial_inputs is None or binding.variable not in trial_inputs:
                         await self.validate_reference(actor, graph, binding.variable)
+                if isinstance(configuration.user_prompt, str) and configuration.user_prompt:
+                    for reference in re.findall(r"\{\{#(.*?)#\}\}", configuration.user_prompt):
+                        if trial_inputs is not None and reference in trial_inputs:
+                            continue
+                        if "." not in reference:
+                            raise PlatformAgentConfigurationError()
+                        await self.validate_reference(actor, graph, reference)
                 if all(binding.source == "constant" for binding in configuration.input_bindings.values()):
                     resolve_inputs(configuration.input_bindings, version.input_schema, lambda _: None)
                 materials[node["id"]] = {
@@ -281,8 +288,12 @@ class PlatformAgentService:
                 raise PlatformAgentConfigurationError()
             version = await self.provider.get_version(actor, configuration.agent_ref)
             schema = version.output_schema
+            properties = schema.get("properties", {})
+            default_wrapped_fields = {"content", "id", "model", "finish_reason"} if not properties else set()
             if field and not (
-                field in schema.get("properties", {}) or (schema.get("type") == "array" and field.isdigit())
+                field in properties
+                or field in default_wrapped_fields
+                or (schema.get("type") == "array" and field.isdigit())
             ):
                 raise PlatformAgentConfigurationError()
             return
@@ -408,7 +419,43 @@ class PlatformAgentService:
             options["long_task_resume"] = True
         return self.repository.prepare_execution(workflow_id, session_id, actor, graph, self.config, entry_kind, **options)
 
-    async def invoke_node(self, login_user, workflow_id, dispatch, node, ordinal, lookup):
+    @staticmethod
+    def _render_prompt_template(template: str | None, lookup) -> str | None:
+        if not isinstance(template, str) or not template.strip():
+            return None
+        from bisheng.workflow.domain.schemas.platform_agent import MISSING
+        from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
+
+        parser = PromptTemplateParser(template=template)
+        variables = parser.extract()
+        if not variables:
+            return template
+        var_map: dict[str, str] = {}
+        for var in variables:
+            value = lookup(var)
+            if value is MISSING:
+                value = ""
+            elif isinstance(value, (dict, list)):
+                value = json.dumps(value, ensure_ascii=False)
+            elif value is None:
+                value = ""
+            else:
+                value = str(value)
+            var_map[var] = value
+        return parser.format(var_map)
+
+    async def invoke_node(
+        self,
+        login_user,
+        workflow_id,
+        dispatch,
+        node,
+        ordinal,
+        lookup,
+        *,
+        node_run_id: str | None = None,
+        rendered_user_prompt: str | None = None,
+    ):
         if node_configuration(node).execution_mode == "async":
             return await self.invoke_long_node(login_user, workflow_id, dispatch, node, ordinal, lookup)
         # 总预算覆盖重新授权、版本检查和 invoke。不为 POST 配置自动重试。
@@ -444,14 +491,39 @@ class PlatformAgentService:
                 ):
                     raise PlatformAgentVersionError()
                 inputs = resolve_inputs(configuration.input_bindings, version.input_schema, lookup)
-                if len(json.dumps(inputs, ensure_ascii=False).encode()) > self.config.max_payload_bytes:
+                effective_prompt = (
+                    rendered_user_prompt
+                    if rendered_user_prompt is not None
+                    else self._render_prompt_template(configuration.user_prompt, lookup)
+                )
+                if self.config.mode == "real" and not inputs and not (effective_prompt and effective_prompt.strip()):
                     raise PlatformAgentConfigurationError()
-                digest = canonical_digest([version.ref.model_dump(), inputs, actor.user_id, actor.tenant_id])
+                payload_size = len(json.dumps(inputs, ensure_ascii=False).encode()) + len(
+                    (effective_prompt or "").encode("utf-8")
+                )
+                if payload_size > self.config.max_payload_bytes:
+                    raise PlatformAgentConfigurationError()
+                digest = canonical_digest(
+                    [version.ref.model_dump(), inputs, effective_prompt, actor.user_id, actor.tenant_id]
+                )
                 self.repository.reserve_call(dispatch, node["id"], ordinal, digest, version.ref.model_dump(), deadline)
                 reserved = True
-                result = await provider.invoke(
-                    actor, version.ref, inputs, f"{dispatch.execution_id}:{node['id']}:{ordinal}"
-                )
+                call_id = f"{dispatch.execution_id}:{node['id']}:{ordinal}"
+                invoke_params = inspect.signature(provider.invoke).parameters
+                if "workflow_run_id" in invoke_params or "user_prompt" in invoke_params:
+                    result = await provider.invoke(
+                        actor,
+                        version.ref,
+                        inputs,
+                        call_id,
+                        user_prompt=effective_prompt,
+                        workflow_run_id=execution.get("session_id"),
+                        node_run_id=node_run_id or call_id,
+                        idempotency_key=canonical_digest([dispatch.execution_id, node["id"], ordinal]),
+                        resolved_version=version,
+                    )
+                else:
+                    result = await provider.invoke(actor, version.ref, inputs, call_id)
                 self.repository.record_response(dispatch, node["id"], ordinal, result.agent_run_id)
                 if result.ref != version.ref:
                     raise PlatformAgentVersionError()

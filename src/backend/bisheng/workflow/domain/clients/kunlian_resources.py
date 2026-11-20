@@ -19,6 +19,8 @@ RESOURCES_PATH = "/api/platform/v1/resources"
 TOKEN_EXCHANGE_GRANT = "urn:ietf:params:oauth:grant-type:token-exchange"
 ACCESS_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token"
 SCOPE_RESOURCES_READ = "platform.resources.read"
+SCOPE_AGENT_INVOKE = "platform.agent.invoke"
+SCOPE_KNOWLEDGE_RETRIEVE = "platform.knowledge.retrieve"
 
 
 class ResponseTooLargeError(ValueError):
@@ -144,10 +146,21 @@ def extract_error_context(
                 reason_code = err_data["reason_code"].strip()
             if isinstance(err_data.get("trace_id"), str) and err_data["trace_id"].strip():
                 trace_id = err_data["trace_id"].strip()
+        err_obj = body.get("error")
+        if reason_code is None and isinstance(err_obj, dict):
+            if isinstance(err_obj.get("code"), str) and err_obj["code"].strip():
+                reason_code = err_obj["code"].strip()
+            elif isinstance(err_obj.get("type"), str) and err_obj["type"].strip():
+                reason_code = err_obj["type"].strip()
         if trace_id is None and isinstance(body.get("request_id"), str) and body["request_id"].strip():
             trace_id = body["request_id"].strip()
     if trace_id is None:
-        header_trace = response.headers.get("X-Trace-ID") or response.headers.get("x-trace-id")
+        header_trace = (
+            response.headers.get("X-Trace-ID")
+            or response.headers.get("x-trace-id")
+            or response.headers.get("X-Request-ID")
+            or response.headers.get("x-request-id")
+        )
         if isinstance(header_trace, str) and header_trace.strip():
             trace_id = header_trace.strip()
     if trace_id is None and request_trace_id:
@@ -247,7 +260,8 @@ async def fetch_resources_page(
     resource_base: str,
     resource_token: SecretStr,
     resource_type: str,
-    action: str = "use",
+    action: str | None = "use",
+    type_param_name: str = "types",
     page_size: int = 20,
     search: str | None = None,
     cursor: str | None = None,
@@ -256,14 +270,16 @@ async def fetch_resources_page(
     trace_id: str | None = None,
     transport: httpx.AsyncBaseTransport | None = None,
 ) -> KunlianResourcesPage:
-    """调用 GET /api/platform/v1/resources 读取单页资源目录。"""
+    """调用 GET /api/platform/v1/resources 读取单页资源目录（兼容 status_code/data 与 code/items 两种信封）。"""
     if isinstance(page_size, bool) or not isinstance(page_size, int) or not 1 <= page_size <= 100:
         raise KunlianBadRequestError()
+    param_key = "resource_type" if type_param_name == "resource_type" else "types"
     params: dict[str, Any] = {
-        "types": resource_type,
-        "action": action,
+        param_key: resource_type,
         "page_size": page_size,
     }
+    if action is not None and action.strip():
+        params["action"] = action.strip()
     if search is not None:
         cleaned_search = search.strip()
         if cleaned_search:
@@ -306,31 +322,43 @@ async def fetch_resources_page(
     if not isinstance(body, dict):
         raise KunlianUpstreamError()
 
-    if response.status_code != 200 or body.get("status_code") != 200:
+    status_code_field = body.get("status_code")
+    code_field = body.get("code")
+    envelope_failed = (
+        response.status_code != 200
+        or (isinstance(status_code_field, int) and status_code_field != 200)
+        or (code_field is not None and code_field not in ("OK", "SUCCESS", 200, 0))
+    )
+    if envelope_failed:
         ctx = extract_error_context(response, body, request_trace_id=req_trace)
         logger.warning(
             "kunlian resources list failed type={} http_status={} body_status={} reason_code={} trace_id={}",
             sanitize_log_field(resource_type),
             response.status_code,
-            sanitize_log_field(body.get("status_code")),
+            sanitize_log_field(status_code_field if status_code_field is not None else code_field),
             sanitize_log_field(ctx.reason_code),
             sanitize_log_field(ctx.trace_id),
         )
         raise KunlianHttpStatusError(response.status_code, ctx.reason_code, ctx.trace_id)
 
     payload = body.get("data")
-    if not isinstance(payload, dict) or not isinstance(payload.get("data"), list):
+    if not isinstance(payload, dict):
         raise KunlianUpstreamError()
-
-    raw_items = payload["data"]
+    raw_items = payload.get("data") if isinstance(payload.get("data"), list) else payload.get("items")
+    if not isinstance(raw_items, list):
+        raise KunlianUpstreamError()
     if not all(isinstance(row, dict) for row in raw_items):
         raise KunlianUpstreamError()
 
-    has_more = payload.get("has_more")
     next_cursor = payload.get("next_cursor")
-    resp_page_size = payload.get("page_size", page_size)
-    if not isinstance(has_more, bool) or (next_cursor is not None and not isinstance(next_cursor, str)):
+    if next_cursor is not None and not isinstance(next_cursor, str):
         raise KunlianUpstreamError()
+    has_more = payload.get("has_more")
+    if has_more is None:
+        has_more = bool(next_cursor)
+    elif not isinstance(has_more, bool):
+        raise KunlianUpstreamError()
+    resp_page_size = payload.get("page_size", page_size)
 
     return KunlianResourcesPage(
         raw_items=raw_items,

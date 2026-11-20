@@ -11,9 +11,8 @@ NODE_TYPE = "platform_knowledge_retriever"
 PUBLICATION_KEY = "_platform_knowledge_publication"
 OUTPUT_KEYS = ("retrieved_result", "retrieved_text", "citations", "hit_count")
 MISSING = object()
-# TODO [F120][EXT-03] 正式检索协议确认后校准本地限制。
-MAX_QUERY_LENGTH = 8192
-MAX_TOP_K = 20
+MAX_QUERY_LENGTH = 1000
+MAX_TOP_K = 100
 
 
 class KnowledgeContract(BaseModel):
@@ -32,6 +31,7 @@ class VariableQuestion(KnowledgeContract):
 
 class KnowledgeReference(KnowledgeContract):
     resource_id: str = Field(min_length=1, max_length=256, pattern=r"^[^\s]+$")
+    version_id: str | None = Field(default=None, min_length=1, max_length=256, pattern=r"^[^\s]+$")
 
 
 class KnowledgeNodeConfiguration(KnowledgeContract):
@@ -48,6 +48,7 @@ class KnowledgeHit(KnowledgeContract):
     document_name: str | None = None
     location: str | None = None
     score: FiniteFloat | None = None
+    source_ref: str | None = None
 
 
 @dataclass(frozen=True)
@@ -55,6 +56,7 @@ class KnowledgeActor:
     user_id: int
     tenant_id: int
     token_version: int
+    session_reference: str | None = None
 
 
 def uses_platform_knowledge(graph: dict | None) -> bool:

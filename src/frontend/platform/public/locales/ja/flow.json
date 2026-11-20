@@ -702,6 +702,10 @@
       "agent_ref": {
         "label": "プラットフォーム Agent"
       },
+      "user_prompt": {
+        "label": "ユーザー入力",
+        "placeholder": "入力内容または上流変数を指定"
+      },
       "input_bindings": {
         "label": "入力元"
       },

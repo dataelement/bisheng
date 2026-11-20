@@ -59,6 +59,7 @@ class AgentInputBinding(AgentContract):
 class AgentNodeConfiguration(AgentContract):
     agent_ref: AgentReference | None = None
     input_bindings: dict[str, AgentInputBinding] = Field(default_factory=dict)
+    user_prompt: str | None = None
     execution_mode: Literal["sync", "async"] = "sync"
     allow_interaction: bool = False
 
@@ -287,13 +288,14 @@ def node_configuration(node: dict) -> AgentNodeConfiguration:
     params = {
         param["key"]: param.get("value") for group in node.get("group_params", []) for param in group.get("params", [])
     }
-    if set(params) - {"agent_ref", "input_bindings", "result", "execution_mode", "allow_interaction"}:
+    if set(params) - {"agent_ref", "input_bindings", "user_prompt", "result", "execution_mode", "allow_interaction"}:
         raise PlatformAgentConfigurationError()
     try:
         return AgentNodeConfiguration.model_validate(
             {
                 "agent_ref": params.get("agent_ref"),
                 "input_bindings": params.get("input_bindings") or {},
+                "user_prompt": params.get("user_prompt"),
                 "execution_mode": params.get("execution_mode", "sync"),
                 "allow_interaction": params.get("allow_interaction", False),
             }
