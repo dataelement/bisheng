@@ -1,5 +1,5 @@
 import { diagramAssetTargets } from '../config/diagramAssets';
-import { createFrontendProxy, frontendEnvDefinitions, createMinioWarning, loadFrontendEnv, resolveApiTarget } from '../config/vite';
+import { createFrontendProxy, frontendEnvDefinitions, createMinioWarning, legacyImageProxy, loadFrontendEnv, resolveApiTarget } from '../config/vite';
 import react from '@vitejs/plugin-react';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -111,7 +111,7 @@ function minioFileProxyPlugin(minioTarget: string, apiTarget: string): Plugin {
           },
           (proxyRes) => {
             if (proxyRes.statusCode === 403) {
-              warnMinio(requestUrl);
+              warnMinio(requestUrl.split('?', 1)[0]);
             }
             res.writeHead(proxyRes.statusCode || 502, proxyRes.headers);
             proxyRes.pipe(res);
@@ -191,6 +191,7 @@ export default defineConfig(({ command, mode }) => {
     envPrefix: ['VITE_', 'SCRIPT_', 'DOMAIN_', 'ALLOW_'],
     plugins: [
       minioFileProxyPlugin(minioTarget, apiTarget),
+      legacyImageProxy(minioTarget, app_env.BASE_URL, env.DEV_LEGACY_IMAGE_BUCKET),
       react(),
       nodePolyfills(),
       VitePWA({

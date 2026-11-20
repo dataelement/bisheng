@@ -1,5 +1,5 @@
 import { diagramAssetTargets } from '../config/diagramAssets';
-import { createFrontendProxy, frontendEnvDefinitions, loadFrontendEnv, resolveApiTarget } from '../config/vite';
+import { createFrontendProxy, frontendEnvDefinitions, legacyImageProxy, loadFrontendEnv, resolveApiTarget } from '../config/vite';
 import react from "@vitejs/plugin-react";
 import fs from "fs";
 import http from "node:http";
@@ -342,6 +342,7 @@ export default defineConfig(({ command, mode }) => {
     },
     plugins: [
       objectBucketGate(target),
+      legacyImageProxy(fileServiceTarget, app_env.BASE_URL, env.DEV_LEGACY_IMAGE_BUCKET),
       dshContentSafetyStyles(),
       react(),
       svgr(),
