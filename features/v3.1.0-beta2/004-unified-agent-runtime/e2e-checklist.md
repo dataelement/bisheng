@@ -2,7 +2,7 @@
 
 **测试环境**: http://192.168.106.114:13000/workspace （Client）
 **前置条件**: 已登录的账号；工作台至少配置一个模型；深度研究菜单权限已开。
-**接口层自动化**: `src/backend/test/e2e/test_e2e_f004_unified_agent_runtime.py`（10 个用例）。
+**接口层自动化**: `src/backend/test/e2e/test_e2e_f004_unified_agent_runtime.py`（13 个用例；其中 3 个开放 API 用例需要设置 `E2E_F004_PAT`，即管理员账号带 `chat:invoke` 的个人访问令牌）。
 
 状态标记：`[x]` 已在 114 执行并通过（2026-11-19、2026-11-20，提交 `c2d4205d16`）；`[ ]` 未执行。
 
@@ -75,5 +75,10 @@
 ## 回归检查
 - [x] 会话页正常加载，API 日志没有与本功能相关的报错
 - [ ] 桌面端（旧协议客户端）: 发送消息能收到回答
-- [ ] 开放 API `/api/v2/workstation/*`: 请求与响应格式不变（AC-39）
+- [ ] 开放 API 日常对话（AC-39，决策 14）: 用 API 密钥调 `POST /api/v2/workstation/chat/completions`，SSE 帧依次是 user_message、processing begin、question over、回答流、agent_answer end、processing close、final
+- [ ] 开放 API 日常对话: 同一会话连发两次（第二次在第一次结束前），两次都拿到各自的回答；会话忙超过 60 秒时返回 12048
+- [ ] 开放 API 日常对话: 用另一个外部使用者（X-End-User）的身份访问同一会话 id，返回 HTTP 404
+- [ ] 开放 API 日常对话: 带附件发消息，附件和生成文件能在 `/api/v2/chat/info` 的历史里读到
+- [ ] 开放 API 深度研究（AC-39）: 提交、查询、下载、终止的请求与响应格式不变
+- [ ] 工作台系统提示词: 在管理端改日常对话的系统提示词后，网页端和开放 API 的回答都遵循它
 - [ ] 两节点部署（AC-33）、DM8（AC-42）

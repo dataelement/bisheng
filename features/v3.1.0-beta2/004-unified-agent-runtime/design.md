@@ -208,6 +208,22 @@
 - **何时该重新考虑**：出现必须按租户回退的线上问题，且改库不可接受时。
 - **2026-11-20 更新（用户决定）**：开关 `unified_runtime_enabled` 已整体删除，上面“实现”“前端怎么知道”“保留显式 `false` 的原因”三条不再适用。现在没有不改代码的回退手段。配置里残留的这个键被忽略，下次保存工作台配置时消失；存了 `false` 的租户升级后直接走新链路（回归：`test_removed_runtime_switch_key.py`）。登录态请求全部进 `run_send.unified_send`，分流条件只剩 `session_subject is None`。删除与保留的范围见 §8 第一条。
 
+### 决策 14：开放 API 的日常对话也走统一运行时，按 AC-39 保持契约（用户决定，2026-11-20）
+
+- **目标**：开放 API 的日常对话（`POST /api/v2/workstation/chat/completions`，不带 `run_mode=task`）不再使用旧的日常 agent 循环 `_agent_stream_chat_completion`。验收以 AC-39 为准：请求格式、响应格式和状态含义不变。
+- **直观做法**：让开放 API 和登录态一样调用 `unified_send`，再在两头修补差异。
+- **实际做法**：开放 API 调用 `unified_send` 时带上 `session_subject`。发送入口按下面七条处理这类请求。
+  1. **不能协商新协议**：即使请求带了协商头，也按旧帧格式应答。开放 API 没有订阅事件的入口。
+  2. **会话归属按主体**：新会话用 `session_subject.stamp` 打上主体；已有会话用 `get_subject_session` 校验，不匹配返回 HTTP 404，与旧循环一致。附件和生成文件用主体的 `storage_partition`。这个分区写进 `bisheng:run:direct:{cid}`，接力运行和崩溃后补写回答行时读回。
+  3. **消息只开新运行**：派发脚本增加“独占提交”。会话正在运行或等待回答时，独占提交返回 `busy`，消息不进收件箱，也不当作回答。会话里有未读消息时，独占提交照常启动它们的接力运行，自己仍返回 `busy`。发送入口每 0.5 秒重试一次，最多等 60 秒，超时返回新错误码 12048（`ConversationBusyError`）。顺序调用的客户端在上一轮刚结束时发下一条，也是靠这条等待拿到自己的回答。
+  4. **无人值守**：运行上下文的 `unattended=True` 让会话模型带上 `api_meta.channel=open_api_v2`。agent 因此不挂 `ask_user`，也不挂收件箱中间件，提示词改为“不提问，写明所做假设”。这与开放 API 深度研究（F073）的规则相同。
+  5. **部门名额在响应开始前占用**：请求先取执行租约。被拒时只回一帧 12045 错误，不建会话、不写任何行。拿到的租约交给运行，由运行续期并在结束时释放（`execution_lease_id`）。没有启动运行的路径由请求自己释放。
+  6. **不挂技能、不用长期记忆**：与旧循环相同，`skills=[]`，不传 `memory_register`。
+  7. **错误码沿用统一运行时**（用户决定）：运行失败时 error 帧的信封字段不变，`status_code` 按模型错误分类给出，例如 11090/11091。`data` 多出 `error_code`、`detail`、`reference_id`。
+- **接受的差异**（用户决定，与网页端一致）：历史从 checkpoint 读，不再取最近 10 条；最大迭代次数用深度研究的配置；附件内联上限是单文件 4000 字、总计 15000 字；工具结束帧里的输出截到 8000 字（落库的回答行保留完整输出）；会出现 `read_attachments`、`ls` 等新的工具帧；客户端断开时回答记为“已停止”，不是错误；标题在发送时生成；部门名额被拒时不再留下问题行；视频封面的 `question/update` 帧不再发出。帧的格式和字段名不变，只是内容不同。
+- **同时补上的两处回归**（对网页端同样生效，用户决定）：直接回答链路没有使用管理员配置的工作台系统提示词，也没有记日常对话的应用遥测。现在 `direct_run.workbench_system_prompt` 读取工作台配置的 `systemPrompt`，替换 `{cur_date}`，把旧的“逐字复制来源 id”引用规则换成编号规则，再以“管理员设定的回答要求”一节接在平台规则之后，冲突时以平台规则为准。运行结束（完成或失败）时记 `APPLICATION_ALIVE` / `APPLICATION_PROCESS` 两条遥测。
+- **代价**：同一会话里开放 API 的请求要串行，旧循环允许并行。会话被一个长时间运行的深度研究占着时，开放 API 的请求 60 秒后失败。
+- **何时该重新考虑**：开放 API 需要插话、提问或订阅事件时，给开放 API 单独设计运行协议，不再走旧帧格式。
 
 ## 4. 系统现状与目标形态
 
@@ -242,8 +258,8 @@
 | 回答提问 | 统一链路：发送入口（会话处于等待回答时，下一条消息即回答）。旧通道沿用 `/api/v1/linsight/workbench/user-input` | 两种档位共用。 |
 | 停止 | `POST /api/v1/workstation/conversations/{id}/stop`（新增）。旧通道沿用 `/api/v1/linsight/workbench/terminate-execute` | 两种档位共用。服务端按会话当前持有者停止，不读请求体里的 `run_id`。 |
 | 文件下载地址 | `GET /api/v1/workstation/conversations/{id}/files/{file_id}/url`（新增） | 只接受本会话工作区登记过的文件 id，不接受调用方给的对象键；本人或审计可取。 |
-| 协议选择 | 无 | 开关已删除（决策 13 的 2026-11-20 更新）。会话页总是带 `X-BS-Run-Protocol: 2`。不带该头的请求仍由统一发送入口按旧帧格式应答，订阅页的 AI 助手面板和桌面端在用。开放 API 不经过统一发送入口。 |
-| 开放 API | `/api/v2/workstation/*` | 不变。 |
+| 协议选择 | 无 | 开关已删除（决策 13 的 2026-11-20 更新）。会话页总是带 `X-BS-Run-Protocol: 2`。不带该头的请求仍由统一发送入口按旧帧格式应答，订阅页的 AI 助手面板和桌面端在用。开放 API 的日常对话也经过统一发送入口，总是按旧帧格式应答（决策 14）。 |
+| 开放 API | `/api/v2/workstation/*` | 请求、响应格式和状态含义不变（AC-39）。新增一种失败：会话 60 秒内没有空闲，返回 12048（决策 14）。 |
 
 事件的统一外形：`{id, run_id, seq, type, data, ts}`。`type` 的取值：
 
@@ -270,7 +286,7 @@
 | `run_failed` | `{code, reason, detail, reference_id}`（沿用深度研究现有的报错卡结构） |
 | `resync` | `{text, thinking, plan, files, pending_question?, ended, status, unread_messages}`。不含工具调用，也不含收件箱状态（§5 #27） |
 
-发送接口的协商头是 `X-BS-Run-Protocol: 2`。错误码：本设计不新增业务错误码；“已排队”是成功响应里的 `disposition`，失败沿用深度研究已有的错误码。实现中如发现确需新增，按 release-contract 的规则先核对占用再登记。
+发送接口的协商头是 `X-BS-Run-Protocol: 2`。错误码：“已排队”是成功响应里的 `disposition`，失败沿用深度研究已有的错误码。唯一新增的是 12048（`ConversationBusyError`，决策 14），只有开放 API 的日常对话会返回它。
 
 运行相关的 Redis 键（同一会话的键都带 hash tag `{会话 id}`，K8）：
 
@@ -378,7 +394,7 @@
 |---|---|---|
 | 发送、订阅、回答、停止（§4.3） | HTTP API | client 前端（桌面端内嵌的网页会话也经由它访问） |
 | 旧流式响应、旧 WebSocket `task-message-stream` | HTTP / WS（P4 前保留） | 尚未升级的客户端 |
-| `/api/v2/workstation/*` | 开放 API | 外部集成方 |
+| `/api/v2/workstation/*` | 开放 API（日常对话自决策 14 起也由统一运行时执行） | 外部集成方 |
 | 事件外形 `{id, run_id, seq, type, data, ts}` | 数据格式 | 前端运行 store、两个落库投影器 |
 | 统一内核工厂 | 内部 Python 接口 | 工作台运行调度、开放 API 的 `submit_task_turn` |
 
@@ -519,10 +535,11 @@ Wave 1–4 留下、技术上已知、尚未处理的：
 
 - **旧通道删除（2026-11-20 已做一轮）**：
   - 已删：开关及其读取点；`_task_mode_stream_completion` 与入队失败后依赖浏览器 start-execute 的分支；worker 的 `_legacy_session_run_lock` 与旧线程的工作区接管 `_seed_workspace_from_previous`；前端会话页的交接帧处理、附件解析轮询、旧的停止分支。
-  - 仍可达而保留：开放 API 的日常对话 agent 循环（`_agent_stream_chat_completion`，经 `session_subject` 到达）；不带协商头的 SSE 兼容应答；`/linsight/workbench/*` 接口与任务 WebSocket（`/linsight/:id` 历史页跟进本人进行中的任务时在用）；前端 `beginStream` / `useAiChatSSE`（订阅页 AI 助手面板在用）；`task_exec.py` 里未在会话线程上的分支（升级前建的记录续跑时走）。
+  - 第三轮（2026-11-20）：开放 API 的日常对话迁到统一运行时（决策 14），旧的日常 agent 循环 `_agent_stream_chat_completion` 及只被它使用的函数随之删除。
+  - 仍可达而保留：不带协商头的 SSE 兼容应答；`/linsight/workbench/*` 接口与任务 WebSocket（`/linsight/:id` 历史页跟进本人进行中的任务时在用）；前端 `beginStream` / `useAiChatSSE`（订阅页 AI 助手面板在用）；`task_exec.py` 里未在会话线程上的分支（升级前建的记录续跑时走）。
   - 第二轮（2026-11-20，用户确认）：`/linsight/new` 不再能提交。进入这个地址时，前端新建对话、打开「深度研究」并跳到 `/c/new`。`/linsight/:id` 只读，没有输入框。前端删除了提交流水线（`useLinsightSubmit`、`submissionState`、`TaskModeInput`、`TaskModeChatInput` 及只被它们使用的组件）。分享页上的深度研究回合只显示快照：不开任务 WebSocket，不轮询排队，不提供回答提问和停止。后端的 `/linsight/workbench/submit` 与 `start-execute` 不再有 client 前端调用，接口本身保留，因为桌面端是否在用没有核实。
   - 待用户决定：订阅页 AI 助手面板是否改用运行协议 2。
-  - 未追完：`_agent_stream_chat_completion` 里的长期记忆代码（开放 API 不传 `memory_register`，生产上到不了）；`agent_factory.py` 里按有无收件箱区分的图片中间件条件与两套计划措辞；`copy_workspace_prefix` 的 `only_if_empty` 默认路径。
+  - 未追完：`agent_factory.py` 里按有无收件箱区分的图片中间件条件与两套计划措辞；`copy_workspace_prefix` 的 `only_if_empty` 默认路径。
   - worker 的运行作用域依赖 Redis。旧锁在 Redis 不可用时放行的行为已不存在。
 
 - **待用户决定**：统一运行时下的“重新生成”目前等于把原问题再发一次（§5 #29）。是否需要“同一问题下生成另一个回答”的语义，需要产品决定；要做就得后端先支持。
@@ -553,3 +570,4 @@ Wave 1–4 留下、技术上已知、尚未处理的：
 | 2026-11-19 | §5 增 #31（深度研究流式正文的 `[Sn]` 未转换）、#32（看图模型输出进入回答流）；verification-final.md 增 §7 | 用户要求把独立特性 F005 的两点补进 F004 |
 | 2026-11-20 | 删除开关 `unified_runtime_enabled` 与只有它能到达的旧通道代码；决策 13、§4.3、§4.6、§8 同步 | 用户决定 |
 | 2026-11-20 | §8 记录第二轮删除：`/linsight/new` 改为跳到会话页并打开深度研究；分享页的深度研究回合改为只读快照 | 用户确认决策 11 的落地方式 |
+| 2026-11-20 | 新增决策 14：开放 API 日常对话迁到统一运行时；补回工作台系统提示词与日常对话遥测；新增错误码 12048；§4.3、§6.1、§8 同步 | 用户要求删掉开放 API 的旧 agent 逻辑，验收以 AC-39 为准 |
