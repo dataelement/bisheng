@@ -72,11 +72,14 @@ function row(id: string, name: string, date = '2026-01-01'): KnowledgeSpace {
 }
 const callbacks = { onSpaceSelect: jest.fn(), onSpaceSettings: jest.fn(), onCreateSpace: jest.fn(), onKnowledgeSquare: jest.fn() };
 function mount(path = '/knowledge') {
-  return render(<MemoryRouter initialEntries={[path]}>
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const page = () => <MemoryRouter initialEntries={[path]}>
+    <QueryClientProvider client={client}>
       <KnowledgeHomePage {...callbacks} />
     </QueryClientProvider>
-  </MemoryRouter>);
+  </MemoryRouter>;
+  const view = render(page());
+  return { ...view, refresh: () => view.rerender(page()) };
 }
 
 beforeEach(() => {
@@ -411,6 +414,22 @@ it('uses the sidebar photo for the signed-in creator without assigning it to a n
 
   fireEvent.error(photo!);
   expect(within(own).getByText('J')).toHaveClass('bg-fill-4', 'text-white');
+});
+
+it('updates the signed-in creator name and fallback on the current page when their nickname changes', () => {
+  mockUser = { id: '42', username: 'Kinyoo', avatar: '' };
+  Object.assign(mockData.mine[0], { creatorId: '42', creator: 'Kinyoo' });
+  const view = mount();
+  const card = within(screen.getByRole('link', { name: 'Alpha' }));
+  expect(card.getByText('Kinyoo')).toBeInTheDocument();
+  expect(card.getByText('K')).toHaveClass('bg-fill-4', 'text-white');
+
+  mockUser = { ...mockUser, username: 'admin' };
+  view.refresh();
+  expect(card.getByText('admin')).toBeInTheDocument();
+  expect(card.getByText('A')).toHaveClass('bg-fill-4', 'text-white');
+  expect(card.queryByText('Kinyoo')).not.toBeInTheDocument();
+  expect(mockCreatorInfo).not.toHaveBeenCalled();
 });
 
 it('opens existing space settings instead of renaming inline', async () => {
