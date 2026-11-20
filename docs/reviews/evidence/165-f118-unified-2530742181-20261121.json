@@ -220,5 +220,23 @@
   "original_five_business_files_present": 5,
   "executor_seed_count": 0,
   "onsite_migration_source_patches": false,
-  "business_services_restarted": false
+  "business_services_restarted": false,
+  "runtime_exit_log_checks": {
+    "f118": {
+      "event_loop_closed": 0,
+      "unclosed_client_session": 0,
+      "unclosed_connector": 0,
+      "destroyed_task": 0,
+      "traceback": 0
+    },
+    "redis": {
+      "unclosed_client_session": 1,
+      "legacy_preview_count": 1,
+      "legacy_apply_count": 1,
+      "legacy_verify_count": 1,
+      "script_source_unchanged": true,
+      "exit_code": 0,
+      "ready": true
+    }
+  }
 }
