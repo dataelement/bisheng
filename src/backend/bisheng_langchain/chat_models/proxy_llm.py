@@ -209,7 +209,7 @@ class ProxyChatLLM(BaseChatModel):
         rsp_dict = _completion_with_retry(**kwargs)
         if 200 != rsp_dict.get('status_code', 200):
             logger.error(f'proxy_llm_error resp={rsp_dict}')
-            raise Exception(rsp_dict)
+            raise ValueError(rsp_dict)
         return rsp_dict
 
     def _combine_llm_outputs(self, llm_outputs: List[Optional[dict]]) -> dict:
@@ -314,7 +314,7 @@ class ProxyChatLLM(BaseChatModel):
     def _create_chat_result(self, response: Mapping[str, Any]) -> ChatResult:
         generations = []
         if 'choices' not in response:
-            raise Exception(f'LLM return error {response}')
+            raise ValueError(f'LLM return error {response}')
         for res in response['choices']:
             message = _convert_dict_to_message(res['message'])
             gen = ChatGeneration(message=message)
