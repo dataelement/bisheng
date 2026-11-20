@@ -427,6 +427,21 @@ class UnificationResourceRepository:
     ) -> InventoryPage[FileRow]:
         return await self._page(session, KnowledgeFile, FILE_COLUMNS, FileRow, after_id, limit)
 
+    async def ainspect_existing_knowledge_ids(self, session, *, knowledge_ids):
+        """Global PK existence only; another tenant's parent is never absence."""
+        _scope(session)
+        if (
+            type(knowledge_ids) is not tuple
+            or len(knowledge_ids) > 200
+            or any(type(value) is not int or value <= 0 for value in knowledge_ids)
+        ):
+            _blocked("invalid_rootless_parent_ids")
+        if not knowledge_ids:
+            return frozenset()
+        table = Knowledge.__table__.alias("retained_original_parent")
+        rows = await self._read(session, select(table.c.id).where(table.c.id.in_(knowledge_ids)), global_facts=True)
+        return frozenset(row["id"] for row in rows)
+
     async def aload_retention_rows(self, session, *, resource_ids=(), file_ids=()):
         tenant = _scope(session)
         output = []
@@ -625,7 +640,7 @@ class UnificationResourceRepository:
         if rows:
             _blocked(reason, id=rows[0]["id"])
 
-    async def avalidate_global_integrity(self, session: AsyncSession) -> None:
+    async def avalidate_global_integrity(self, session: AsyncSession, *, retain_rootless_files=False) -> None:
         _scope(session)
         for model in (
             Knowledge,
@@ -661,11 +676,22 @@ class UnificationResourceRepository:
             "projected_creation_conflict",
         )
         physical, space = KnowledgeFile.__table__.alias("m2_file_row"), Knowledge.__table__.alias("m2_file_parent")
+        invalid_file_parent = or_(space.c.id.is_(None), space.c.tenant_id != physical.c.tenant_id)
+        if retain_rootless_files:
+            # The new policy separately freezes these exact unreachable rows
+            # and proves no SQL/FGA authorization. Foreign parents, folders and
+            # unknown ancestor paths still fail this global gate.
+            invalid_file_parent = and_(
+                invalid_file_parent,
+                ~and_(
+                    space.c.id.is_(None),
+                    physical.c.file_type == 1,
+                    or_(physical.c.file_level_path.is_(None), physical.c.file_level_path == ""),
+                ),
+            )
         await self._probe(
             session,
-            select(physical.c.id)
-            .outerjoin(space, space.c.id == physical.c.knowledge_id)
-            .where(or_(space.c.id.is_(None), space.c.tenant_id != physical.c.tenant_id)),
+            select(physical.c.id).outerjoin(space, space.c.id == physical.c.knowledge_id).where(invalid_file_parent),
             "file_parent_invalid",
         )
         doc, doc_space = KnowledgeDocument.__table__.alias("m2_doc_row"), Knowledge.__table__.alias("m2_doc_parent")

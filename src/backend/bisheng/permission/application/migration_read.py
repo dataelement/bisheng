@@ -182,6 +182,26 @@ class PinnedMigrationPermissionReader:
             if rows:
                 raise _blocked("stranded_file_authorization_present")
 
+    async def aassert_no_historical_file_objects(self, *, file_ids):
+        """One complete pinned Store walk for a verified Run's retained IDs.
+
+        This is an operational whole-Run proof, never a resource decision.
+        Checking both subjects and objects retains the downstream guard while
+        avoiding one remote request per historical file.
+        """
+        if (
+            type(file_ids) is not tuple
+            or tuple(sorted(set(file_ids))) != file_ids
+            or any(type(ident) is not int or ident <= 0 for ident in file_ids)
+        ):
+            raise _blocked("invalid_historical_file_ids")
+        if not file_ids:
+            return
+        selected = {f"{kind}:{ident}" for ident in file_ids for kind in ("knowledge_file", "folder")}
+        async for fact in self.aiter_original_tuples():
+            if fact.object in selected or fact.user.split("#", 1)[0] in selected:
+                raise _blocked("historical_file_authorization_present")
+
     async def aassert_no_file_tuples(self, session, tenant_id, *, file_ids):
         self._scope(session, tenant_id)
         await self.aassert_no_file_objects(tenant_id, file_ids=file_ids)
@@ -209,3 +229,12 @@ class PinnedMigrationPermissionReader:
                 raise _blocked("shared_identity_invalid")
             ids.add(int(key.removeprefix("llm_server:")))
         return frozenset(ids)
+
+
+async def read_completed_migration_catalog(session, *, environment):
+    """Finite current Catalog/pin facts for an explicit completed-stage resume."""
+    from bisheng.permission.domain.repositories.f118_migration_snapshot_repository import (
+        PermissionMigrationSnapshotRepository,
+    )
+
+    return await PermissionMigrationSnapshotRepository().aload_catalog_baseline(session, environment=environment)

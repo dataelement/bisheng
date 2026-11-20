@@ -143,6 +143,15 @@ class UnificationSpaceMembershipRepository:
         groups = {ident: [] for ident in by_id}
         if not groups:
             return groups
+        missing = tuple(sorted({cmd.creator_user_id for cmd in selected if cmd.membership_action == "retain_missing"}))
+        if missing:
+            from bisheng.user.domain.models.user import User
+
+            # Global identity absence is necessary on apply and committed-page
+            # verification; a new user cannot inherit a retained exception.
+            query = select(User.user_id).where(User.user_id.in_(missing)).with_for_update()
+            if await self._global_read(session, query, tenant, transaction):
+                _blocked("retained_creator_reappeared")
         canonical = {str(ident): ident for ident in by_id}
         member, after = SpaceChannelMember.__table__.c, None
         while True:
@@ -182,7 +191,7 @@ class UnificationSpaceMembershipRepository:
             or type(command.before_member_count) is not int
             or command.before_member_count < 0
             or type(command.membership_action) is not str
-            or command.membership_action not in {"insert", "keep"}
+            or command.membership_action not in {"insert", "keep", "retain_missing"}
             or any(
                 type(value) is not str or re.fullmatch(r"[0-9a-f]{64}", value) is None
                 for value in (command.before_member_digest, command.creator_template_digest)
@@ -204,6 +213,13 @@ class UnificationSpaceMembershipRepository:
             )
             if digest(template) != command.creator_template_digest:
                 _blocked("conversion_template_changed")
+        elif command.membership_action == "retain_missing":
+            if (
+                command.existing_creator_member_id is not None
+                or command.creator_planned_at is not None
+                or command.creator_template_digest != digest(None)
+            ):
+                _blocked("conversion_retained_identity_invalid")
         elif not _positive(command.existing_creator_member_id) or command.creator_planned_at is not None:
             _blocked("conversion_keep_identity_invalid")
         owners, other_creator, previous = [], False, 0
@@ -232,6 +248,8 @@ class UnificationSpaceMembershipRepository:
             or other
         ):
             _blocked("conversion_member_before_changed")
+        if command.membership_action == "retain_missing":
+            return
         if command.membership_action == "insert":
             if owners:
                 _blocked("conversion_owner_already_exists")
@@ -248,6 +266,8 @@ class UnificationSpaceMembershipRepository:
         current()
         if session.new or session.dirty or session.deleted:
             _blocked("conversion_caller_pending")
+        if command.membership_action == "retain_missing":
+            return None
         if command.membership_action == "keep":
             return command.existing_creator_member_id
         member = SpaceChannelMember(
@@ -267,6 +287,17 @@ class UnificationSpaceMembershipRepository:
 
     def _assert_conversion_after(self, *, command, root, members, expected_member_id=None):
         owners, other, actual = self._conversion_facts(command, root, members)
+        if command.membership_action == "retain_missing":
+            if (
+                root["type"] != 3
+                or other
+                or len(owners) > 1
+                or expected_member_id is not None
+                or len(members) != command.before_member_count
+                or actual != command.before_member_digest
+            ):
+                _blocked("conversion_retained_members_changed")
+            return None, actual
         if root["type"] != 3 or len(owners) != 1 or other:
             _blocked("conversion_creator_after_invalid")
         owner = owners[0]

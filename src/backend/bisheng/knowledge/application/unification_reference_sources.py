@@ -19,7 +19,7 @@ from bisheng.knowledge.application.unification_reference_state import (
 )
 from bisheng.knowledge.application.unification_sources import knowledge_business_revision_digest
 from bisheng.knowledge.domain.repositories.unification_inventory_repository import UnificationInventoryRepository
-from bisheng.knowledge.domain.services.model_reference_extractor import extract_knowledge_model_references
+from bisheng.knowledge.domain.services.model_reference_extractor import knowledge_model_source_configuration
 from bisheng.knowledge.domain.services.unification_fingerprints import digest
 from bisheng.llm.domain.services.default_reference_extractor import extract_model_default_references
 from bisheng.resource_reference.application.contracts import (
@@ -80,7 +80,9 @@ class ReferenceAfterSources:
                 "model": root.model,
                 "model_transition": json.loads(root.model_transition_json) if root.model_transition_json else None,
             }
-            references = extract_knowledge_model_references(**configuration)
+            extractor, references = knowledge_model_source_configuration(**configuration, retain_legacy=True)
+            if extractor != header.extractor_version:
+                blocked("legacy_knowledge_model_changed")
             revision = knowledge_business_revision_digest(root)
         else:
             lifecycle = (root.key,)
@@ -138,14 +140,21 @@ class ReferenceAfterSources:
 
     async def averify_retired(self, session, *, header):
         from bisheng.knowledge.application.unification_workflow_retention import (
+            invalid_configuration,
             invalid_root,
             invalid_version,
+            invalid_workflow_configuration,
             invalid_workflow_root,
             invalid_workflow_version,
         )
         from bisheng.resource_reference.application.contracts import SourceKey
 
-        if invalid_root(header):
+        if invalid_configuration(header):
+            parent, version, _ = await self.repository.aload_reference_source(session, source_key=header.source_key)
+            if parent.flow_type != 10 or parent.tenant_id != header.root_key.tenant_id or parent.is_delete != 0:
+                blocked("invalid_workflow_configuration_parent_changed")
+            actual = invalid_workflow_configuration(header.source_key, digest(asdict(parent)), version)
+        elif invalid_root(header):
             parent = await self.repository.aload_invalid_workflow_parent(session, root_key=header.root_key)
             actual = invalid_workflow_root(header.root_key, parent)
         elif invalid_version(header):

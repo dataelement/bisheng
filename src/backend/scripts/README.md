@@ -1678,11 +1678,32 @@ python scripts/prepare_f118_history.py --plan /secure/upgrade/f118-history.json 
 Preview saves a private, checksummed selected-row/FGA backup and plan using
 exclusive creation. Apply and retries read exactly that plan; never overwrite
 it with a new baseline. The adjacent `.events.jsonl` retains execution events.
-An active frozen Run is rejected. Missing/ambiguous parents, changed facts,
-unknown types or remaining downstreams are reported, never guessed away.
-Apply returns permission operation IDs; exit 2 means selected repairs completed
-but blocked items remain, and exit 3 means an error requiring the same plan to
-be inspected/resumed. Preview exit 0 does not certify migration readiness.
+An active frozen Run is rejected. Ambiguous ownership, changed facts, unknown
+types or remaining live downstreams stop apply before repair. Preview/apply
+classify deterministic repairs, retained historical invalidity and blockers;
+the ordinary commands above require no per-row SQL edits or force option.
+Apply returns permission operation IDs; exit 2 reports unresolved blockers,
+and exit 3 means an error requiring the same plan to be inspected/resumed.
+Preview exit 0 does not certify migration readiness.
+
+Flat historical files whose Knowledge parent is globally absent and whose SQL,
+FGA and saved references contain no authorization/live contribution are retained
+when the original physical index is unknown. Their full rows enter the immutable
+new M2 baseline and are checked again during conversion/resume/Coverage. No index
+is guessed and no physical data is deleted for these retained records. Populated
+Knowledge resources with old embedding names retain the raw name and original
+index, with a source fingerprint and a `legacy_embedding_preserved` warning.
+The source is invalid for model execution until explicitly reconfigured to a
+lawful model. New resource creation remains strict; there is no default fallback.
+
+Successful old NORMAL-library files lacking every permission mirror, FGA edge and
+historical operation can initialize only their original parent's INHERIT mode
+through a native RESOURCE_CREATE ledger. No personal or everyone Grant is added.
+An existing FAILED_CLOSED GRANT_MUTATION with an intact original ledger, matching
+Store/model and original version fence uses native checksum-bound forward recovery.
+Changed evidence or a failed native recovery stops execution. All newly supported
+repairs remain tied to the exact saved plan and operator on retry. Older frozen
+Run materials are not rewritten or assigned the new retention policy.
 
 For a historical deleted resource whose saved plan contains only one of the two
 `permission_enabled` technical markers, apply can automatically forward-recover
@@ -1779,6 +1800,40 @@ stopped-service migration below. Historical Alembic revisions are unchanged.
 
 ### Formal stopped-service migration
 
+Historical finalized knowledge-resource DELETE receipts may coexist with retained
+business rows. History preparation automatically closes a residual service-account
+enable marker when the original user marker is absent and the complete native
+receipt, mode, payload and object graph match. It preserves payloads and Grants;
+the formal inventory freezes a disabled-state proof and never restores enable
+markers for those scopes. Unknown user access or changed authority still blocks.
+New closure plans use schema 2, and old schema-1 plans remain readable unchanged.
+
+If the earlier history preparation already completed and M2 has not frozen,
+the same formal helper can preview only this class without rescanning payloads:
+
+```bash
+python scripts/prepare_f118_history.py --plan /secure/upgrade/delete-closures.json --delete-closures-only
+python scripts/prepare_f118_history.py --plan /secure/upgrade/delete-closures.json --apply --operator-id 7
+```
+
+Keep the new plan and receipts; interrupted execution resumes that exact plan.
+This mode does not certify other history preparation or a complete platform upgrade.
+
+Original file locator columns are retained SQL strings, including historical
+URL-shaped values. Binding-only inventory preserves them and warns without
+fetching external contents. Actual physical object operations and migration
+artifact descriptors still require strict storage keys; no new upload input or
+download authorization is relaxed by this compatibility.
+
+Historical resource creators whose positive original IDs no longer exist are
+retained with an explicit warning and frozen identity proof. NORMAL conversion
+preserves the complete original member set (`retain_missing`) and does not create
+an account, assign another owner, or insert membership for the missing account.
+Apply/verify/resume recheck global identity absence and the original file count;
+conflicting members or an account that reappears still block. File uploader and
+QA/tag author IDs remain unchanged audit metadata, without a new user-existence
+gate. This retention does not excuse a missing creator on unrelated sources.
+
 Run from `src/backend` after the operator has stopped all business writers and
 received DBA confirmation that the consistent backup is complete. No backup/schema
 evidence descriptors or `f118-inputs.json` are required. Use the same `config`
@@ -1834,6 +1889,56 @@ checkpoint and never restarts services. Enable business traffic only after the
 operator has accepted the overall upgrade verification and real environment
 checks; a local component test is not that acceptance.
 
+For an explicitly accepted phased opening, add `--permissions-only` to the
+`--apply` command (and `--resume` for the original frozen Run). This still runs
+complete native SQL conversion, permission publication, exact graph and original
+checkpoint checks. It stops at that boundary and returns `mode=apply_permissions`,
+`permissions_complete=true`, `reference_backfill_executed=false`, `ready=false`.
+It does not run six-source backfill or mint a Coverage certificate. Default full
+migration behavior is unchanged. This flag neither starts services nor relaxes
+online permission/reference guards.
+
+For the explicitly authorized **registration-only** phase of an already frozen
+Run whose SQL and permission publication have completed, use:
+
+```bash
+# Read-only preview, using the original Run/operator/environment
+python scripts/unify_knowledge_spaces.py --run-id maintenance-1 --environment production --operator-id 7 --register-references-only
+# Apply without repeating completed SQL/FGA stages or a second full reference scan
+python scripts/unify_knowledge_spaces.py --run-id maintenance-1 --environment production --operator-id 7 --register-references-only --apply --resume
+```
+
+This mode checks original completion checkpoints and the finite CURRENT Catalog /
+ACTIVE pin, reads only hash-verified source/conversion leaves, and retains native
+per-source configuration/target/transaction checks. It freezes bounded differences
+in a separate immutable artifact bound to `backfilling.registration_plan`; the
+original baseline and plan are unchanged. New post-freeze workflow/channel sources
+are retained only when their existing native index matches their real configuration.
+App revision changes are accepted only with unchanged owner, root lifecycle,
+capability configuration and references. The same timestamp-only rule applies
+to channels with unchanged owner, release state, complete sync configuration and
+references. Existing proofs remain immutable: a channel-only extension for
+uncommitted sources is bound through `registration_plan_extension`, with the
+original proof and resume cursor retained. Unexpected changes stop with a reason.
+
+Registration and its cursor commit together. Same-mode resume skips the committed
+prefix and continues outstanding sources/retirements; progress is logged at most
+15 seconds apart while processing. Output has `registration_complete=true`,
+`full_verification_deferred=true`, `ready=false`. Run remains `backfilling`; this
+is not full upgrade acceptance and does not restart services. Complete verification
+must later consume the additional difference proof; do not discard it or assume a
+bare full resume can validate the original pre-drift source universe. Global Ready
+operations (including resource deletion / tenant creation) remain gated.
+
+An empty reference index means an unregistered historical source. Workflows,
+assistants and default-model readers that require its index can reject execution;
+model/knowledge deletion and tenant creation can also remain gated. Opening in
+this state requires explicit acceptance of those limits. Do not fake empty-source
+readiness or mark the Run completed. If business writers resume, later backfill
+must first assess drift against the original frozen source universe; a bare
+`--resume` is only valid while its original frozen proofs still hold. Do not
+replace the old baseline or clear its checkpoints to make it pass.
+
 Permission namespace conversion commits at most 100 complete resource plans and
 their cumulative checkpoint in one transaction. Before/after reads keep every
 Grant, Assignee and VisibleSource, including inactive facts and foreign-assignee
@@ -1853,3 +1958,19 @@ contract and does not change general script initialization. The migration
 runtime does not open ES/Milvus clients. Current query order, comparison rules,
 conversion and publication boundaries are shown in the
 [complete current flow](../../../docs/reviews/f118-migration-current-flow-20261113.md).
+
+#### 已完成历史准备后的投影补充
+
+默认 `prepare_f118_history.py` 预览也包含有原账本和围栏证明的失败删除闭合、无需图修改的 builtin CREATE 收尾。保留原失败记录和业务内容，未知状态继续阻断。若主历史准备已经完成，可生成独立补充计划（不代表完整迁移 Ready）：
+
+```bash
+python scripts/prepare_f118_history.py --projection-repairs-only --plan /private/upgrade/projection-repairs.json
+python scripts/prepare_f118_history.py --projection-repairs-only --plan /private/upgrade/projection-repairs.json --apply --operator-id 1
+```
+
+`f118_empty_root.py` 是上述准备 CLI 的内部辅助，无独立写入口。默认及 `--projection-repairs-only` 可处理无 payload/SQL 授权/完整图关系的空 NORMAL 根缺 mode：原生登记关闭的 CUSTOM mode，无 Grant、无 enable WRITE，保留原根/作者。非空或未知授权仍阻断；schema 4 保留原计划续跑。
+
+正式 `unify_knowledge_spaces.py` 默认保留无法提取引用且无既有来源索引/引用/legacy 证据的已保存工作流版本。原配置、作者及当前标记不改，日志逐版本提示；该失效版本不签发可执行来源 ready，需补齐真实模型/知识库 ID 后保存有效版本。其他来源仍完整核验，已有索引或运行期事实变化保持真正阻塞。
+
+
+冻结后的默认权限发布还会核验原图残留：原 mode/Grant 为 CURRENT、原普通 assignee 明确 INACTIVE 且没有相同聚合边的 ACTIVE 贡献时，将该 assignee 边列入正式发布的 DELETE；原 Grant 明确 INACTIVE、全部来源均为已停用普通来源时，连同其准确 model/grant 边退役。候选必须来自冻结 SQL，整个 Grant 图组件不能含其他资源、userset 或未知关系。只通过原 Run 的正式发布和 ACK 检查点执行，不手工删图、不改历史账本、不重新冻结。旧 policy-1 Run 沿用原保留规则；缺失退役证据、保护主体或未知关系继续阻塞。

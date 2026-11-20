@@ -212,6 +212,8 @@ class UnificationSQLConversionApplication:
         factory = self.structural_reader_factory or (
             lambda catalog: PinnedMigrationPermissionReader(settings.openfga, catalog)
         )
+        historical_files = set()
+        historical_catalog = None
         for tenant, proofs in structural.items():
             with tenant_execution_scope(tenant):
                 async with self._session() as session, session.begin():
@@ -224,7 +226,17 @@ class UnificationSQLConversionApplication:
                         controls=UnificationControlRepository(),
                         permissions=permissions,
                     )
-                files = tuple(sorted({p["file_id"] for p in proofs if "file_id" in p}))
+                rootless = {
+                    p["file_id"]
+                    for p in proofs
+                    if p.get("reason") == "preserve_original_file_with_absent_knowledge_parent"
+                }
+                historical_files.update(rootless)
+                if rootless:
+                    if historical_catalog is not None and historical_catalog != catalog:
+                        _blocked("structural_permission_pin_changed")
+                    historical_catalog = catalog
+                files = tuple(sorted({p["file_id"] for p in proofs if "file_id" in p} - rootless))
                 if not files:
                     continue
                 # External I/O never holds an M3 native SQL Session open.
@@ -243,6 +255,26 @@ class UnificationSQLConversionApplication:
                         controls=UnificationControlRepository(),
                         permissions=permissions,
                     )
+
+        if historical_files:
+            # One complete Store read for the entire retained set, with no
+            # native SQL session held across external I/O.
+            async with factory(historical_catalog) as reader:
+                await reader.aassert_no_historical_file_objects(file_ids=tuple(sorted(historical_files)))
+            for tenant, proofs in structural.items():
+                with tenant_execution_scope(tenant):
+                    async with self._session() as session, session.begin():
+                        await self._scope_run(session, frozen)
+                        current = await permissions.aload_catalog_baseline(session, environment=environment)
+                        if current != historical_catalog:
+                            _blocked("structural_permission_pin_changed")
+                        await validate_native_retentions(
+                            session,
+                            proofs,
+                            resources=UnificationResourceRepository(),
+                            controls=UnificationControlRepository(),
+                            permissions=permissions,
+                        )
 
     async def _page(self, frozen, member):
         content = await self.store.aload_canonical(member.descriptor, run_id=frozen.run_id, kind="plan")

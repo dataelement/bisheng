@@ -111,7 +111,7 @@ def plan_space_creator_membership(
         or type(creator) is not CreatorFact
         or not _positive(creator.user_id)
         or creator.user_id != header.creator_user_id
-        or creator.exists is not True
+        or type(creator.exists) is not bool
         or (creator.delete is not None and type(creator.delete) is not int)
     ):
         _blocked("original_creator_unproven")
@@ -121,6 +121,20 @@ def plan_space_creator_membership(
         or (owner is not None and (owner["user_role"], owner["status"]) != ("creator", "ACTIVE"))
     ):
         _blocked("original_membership_conflict")
+    if creator.exists is False:
+        # Preserve the original identity and complete member set. Never create
+        # an ACTIVE relationship for an account that no longer exists.
+        return CreatorMembershipPlan(
+            tenant_id=header.tenant_id,
+            knowledge_id=header.knowledge_id,
+            creator_user_id=header.creator_user_id,
+            membership_action="retain_missing",
+            before_member_count=header.member_count,
+            before_member_digest=digest(original),
+            existing_creator_member_id=None,
+            creator_template_digest=digest(None),
+            planned_at=None,
+        )
     if owner is None:
         template = creator_membership_template(
             knowledge_id=header.knowledge_id, creator_user_id=header.creator_user_id, planned_at=planned_at

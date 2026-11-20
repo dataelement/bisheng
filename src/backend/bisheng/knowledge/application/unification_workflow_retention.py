@@ -40,3 +40,39 @@ def invalid_root(record):
 
 def invalid_version(record):
     return bool(record.lifecycle and record.lifecycle[0] == INVALID_WORKFLOW_VERSION)
+
+
+INVALID_WORKFLOW_CONFIGURATION = "retained_invalid_workflow_configuration"
+
+
+def unextractable_workflow_configuration(version):
+    from bisheng.workflow.domain.services.reference_extractor import unextractable_workflow_configuration as classify
+
+    return classify(version.data_json, flow_type=version.flow_type, is_delete=version.is_delete)
+
+
+def invalid_workflow_configuration(source_key, parent_digest, version):
+    from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
+    from bisheng.knowledge.application.unification_sources import RetiredInventoryRecord
+    from bisheng.resource_reference.application.contracts import SourceRootKey, SourceType
+
+    if (
+        source_key.source_type != SourceType.WORKFLOW_VERSION
+        or source_key.tenant_id != version.tenant_id
+        or source_key.source_id != version.flow_id
+        or source_key.source_version != str(version.id)
+        or not unextractable_workflow_configuration(version)
+        or version.is_current not in (None, 0, 1)
+    ):
+        raise KnowledgeOperationPlanConflictError(reason="unification_invalid_workflow_configuration_changed")
+    return RetiredInventoryRecord(
+        SourceRootKey(source_key.tenant_id, source_key.source_type, source_key.source_id),
+        source_key,
+        (INVALID_WORKFLOW_CONFIGURATION, version.flow_type, version.is_current, version.is_delete),
+        digest({"data_json": version.data_json}),
+        digest({"parent": parent_digest, "version": asdict(version)}),
+    )
+
+
+def invalid_configuration(record):
+    return bool(record.lifecycle and record.lifecycle[0] == INVALID_WORKFLOW_CONFIGURATION)

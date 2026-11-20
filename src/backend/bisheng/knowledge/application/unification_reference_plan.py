@@ -101,6 +101,7 @@ class FrozenReferencePlan:
     roots: tuple[LocatedRoot, ...]
     retired: tuple[LocatedRetired, ...]
     conversions: tuple = ()
+    rootless_retentions: tuple = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,6 +166,7 @@ class UnificationReferencePlanReader:
     async def aprepare(self, frozen, *, environment, backup_ref, schema_ref, current=None):
         current = self._current(current)
         pages, sources, roots, retired, conversions = [], {}, {}, [], []
+        rootless = []
         active, seen, retired_roots, retired_sources = {}, set(), set(), set()
         decisions, latest_decision = {}, {}
 
@@ -176,6 +178,19 @@ class UnificationReferencePlanReader:
         async for page in self.inventory.aiter_frozen_pages(
             frozen, environment=environment, backup_ref=backup_ref, schema_ref=schema_ref, current=current
         ):
+            if (page.kind, page.section) == ("plan", "control"):
+                rows = decode_inventory_page(
+                    page.content,
+                    run_id=frozen.run_id,
+                    section=page.section,
+                    scope=page.scope,
+                    tenant_id=page.tenant_id,
+                    page_index=page.page_index,
+                    kind="plan",
+                ).records
+                rootless.extend(
+                    (page.tenant_id, row.data) for row in rows if row.record_type == "rootless_file_retention"
+                )
             if page.section not in {"sources", "conversion"}:
                 continue
             if page.kind != ("baseline" if page.section == "sources" else "plan"):
@@ -271,6 +286,9 @@ class UnificationReferencePlanReader:
         for tenant in tuple(active):
             close(tenant)
         counts = Counter(_root(key) for key in sources)
+        from bisheng.knowledge.application.unification_workflow_retention import invalid_configuration
+
+        counts.update(_root(row.header.source_key) for row in retired if invalid_configuration(row.header))
         if (
             set(counts) - roots.keys()
             or roots.keys() & retired_roots
@@ -294,7 +312,13 @@ class UnificationReferencePlanReader:
             entries.append(replace(entry, decisions=RecordSpan(actual.first, actual.last) if actual else None))
         current()
         return FrozenReferencePlan(
-            deepcopy(frozen), tuple(pages), tuple(entries), tuple(roots.values()), tuple(retired), tuple(conversions)
+            deepcopy(frozen),
+            tuple(pages),
+            tuple(entries),
+            tuple(roots.values()),
+            tuple(retired),
+            tuple(conversions),
+            tuple(rootless),
         )
 
     @staticmethod

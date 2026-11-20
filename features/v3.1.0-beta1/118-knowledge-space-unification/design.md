@@ -1288,12 +1288,62 @@ Mode编译只迁移原before已存在的技术标记，permission_enabled/custom
 
 ### 修订历史：2026-11-20 历史删除技术标记缺失的受限恢复
 
+### 2026-11-20 已确认升级默认分类增量（AC-138–AC-143）
+
+本轮已获用户对分类、正式修改、验证和生产升级的明确授权。遵循 constitution C1–C8，不增加在线绕过接口或数据库专用语法。实施与验证进度以 tasks.md 的 MIG-DEFAULT 项为准，以下为本轮目标合同，未完成项不得视为已部署行为。
+
+1. 历史准备计划保存自动修复项、完整保留事实及阻塞项，CLI 输出有界数量摘要和私密制品路径。保留原 schema-1 计划读取及原冻结 Run 的策略；新增原生盘点策略只对新 Run 生效。拒绝直接删除 blocked 检查，因为后续结构、来源和 Coverage 必须能够解释这些事实。
+2. 父知识资源全局缺失的普通文件保留原行和物理内容。准备及正式 M2 分别确认原租户/ID、原父缺失和无授权贡献；保留记录进入不可变制品并在冻结重读与收尾校验。仅从活资源转换中隔离该明确范围，不放宽跨租户、未知父链、有效下游或未知 FGA 关系。原精确清理在具备原绑定和备份时仍可执行；本次不为升级猜索引。
+3. 知识旧模型名称复用已有旧名称来源保留机制：给原来源保存名称指纹的 extractor 版本，不构造假模型 ID，不搜索同名模型。正式盘点、M4 原配置重读、在线 SourceOwner、详情读取及显式模型修复使用同一规则；新写仍严格要求合法模型。原配置与索引不变，模型调用和处理在重新配置前拒绝。拒绝清空旧名称后回退默认模型。
+4. 无任何原授权事实的普通文档库成功文件，通过现有 RESOURCE_CREATE 投影记录继承模式及确定父关系，不添加个人/全员 Grant。已有 FAILED_CLOSED 授权只使用原 operation/tuple 账本、scope fence、原 pin 和原生恢复服务；先预览后恢复并校验 SQL 收尾，不直接写状态。
+5. 本地操作文件仅为显式维护的选中计划/证据；正式共享事实仍在 SQL/MinIO，不引入运行时本地共享状态。全局扫描与文件/授权检查按批次处理并复用索引；保留完整验证，禁止用户与资源的笛卡尔积探针。
+
+已知坑：同一批 22,171 个孤儿文件在原预检被原索引缺失、父链缺失重复计为 44,342 项；名称配置不能作为数字模型槽位解码；mode 的“父级或状态异常”不能等同于父级错误，实际可能是原 GRANT_MUTATION 失败。省略这些区别会导致误删、猜绑或丢失原授权意图。
+
+复审触发：需要恢复孤儿物理内容、引入新的旧名称格式、处理有原授权的缺 mode 文件，或改变已有冻结 Run 的身份时，重新评审对应边界，不扩展本次保留策略。
+
 按用户确认的方案，历史准备 apply 对原快照已缺一类技术标记的自有删除操作接入现有前向恢复服务；同计划、同 operator、原生投影账本与版本栅栏保持，已完成操作不重写，恢复中断继续原账本。CLI 错误增加安全原因码及可用的操作编号/状态。SQL 业务修复、物理清理及正式 M2 流程不改；165 环境按用户要求不部署、不执行。验证与审查见 [修复记录](../../../docs/reviews/f118-history-delete-recovery-20261120.md)。
 
-### 修订历史：2026-11-20 显式目录继承与私有库保留
+# 2026-11-20 补充：失效创建者（AC-144）
 
-后续升级执行中发现历史准备将退役私有库文件也当作必须补 mode 的活动资源；用户确认缺失目录应继承父库，私有库保留且不新增授权。按 D12 增加选中目录原生投影修复入口与私有库保留回归，保留原历史计划及全部断点。独立修复和后续历史复核串行执行，正式 M2 合同不改。验证见 [修复审查记录](../../../docs/reviews/f118-folder-inheritance-repair-20261120.md)。
+保留 `historical_resource_creator_retention` 原资源指纹及缺账号事实。NORMAL 的成员指令新增 `retain_missing`：空模板摘要、无新增成员主键和时间；原成员集合冻结且完整保持，创建者 ID 不变。冻结 verifier 要求缺账号事实和原资源逐项闭合；原 SQL Writer 在 apply/verify 以有界批次重验全局账号缺失，成员集合前后摘要相等。续跑前原生重新读取身份，资源类型仅允许原类型及既定 0→3 转换。六类来源保留仍仅限同一 Knowledge 身份，不借此解释其他来源的缺创建者。文件/QA/标签作者为原审计元数据，不参与该成员指令。已有授权与目录迁移合同保持。
+# 2026-11-20 补充：原始文件定位字段（AC-145）
 
-## 2026-11-20 取消租户身份保留兼容
+`file`/`rootless_file` 中的原对象定位字段是历史 SQL 标量，受字符串长度/NUL 规则和整行摘要约束；不能与 `physical_object.object_key` 或制品 descriptor 的存储能力混用。bindings-only 盘点保留旧 URL 原值、输出不含 URL 的提示，不验证外部地址可达性。物理端口、制品 key 和在线输入规则不变；不把迁移编码器作为对象获取授权。
+### 2026-11-20 补充：保留已删除权限的历史业务行（AC-146）
 
-用户明确保留原记录并确认受控兼容方案后，增加 D13 / AC-135～137。新 Run 显式冻结已分类保留集合的身份数量与原事实摘要；原 Run 不重解释，实际租户及 Coverage 清单不扩张。原生恢复、漂移拒绝和 FGA 键保持由新增测试覆盖；现场只读 acquisition 已在真实 MySQL 测得 185 SELECT、约 1.7 秒，真实开服验收与原生双库覆盖分开记录。
+权限删除的原生 FINALIZED 账本仅证明权限关闭，不伪装业务行物理消失。历史准备读取 <=200 条自有当前 DELETE 操作和有界 tuple 页，复原校验 request/before/after 摘要；确认原用户启用标记缺失、原始业务指纹、SQL mode/Grant/来源和完整对象关系。残留 service_account 标记用原生 RESOURCE_DELETE 预留、版本围栏、投影及 finalizer 关闭；缺失的旧 user 标记通过原生 checksum-bound FAILED_CLOSED 恢复处理，不直接修改状态。已证明冗余 parent DELETE 合入同一自有对象的删除投影，避免后续父边修复覆盖关闭意图。新清理计划使用 schema 2，旧脚本拒绝而非忽略；旧 schema 1 计划仍可原样续跑。
+
+M2 控制页保存 `retained_permission_delete`，绑定原 mode/版本、operation、Store/model 和原生校验和；冻结 verifier 要求实际业务行仍在、两个主体均无 permission_enabled、marker restore 为 false。同 Store 的完整目标图验证确保新 namespace 仍关闭；M3、续跑及 Coverage 前重读原生账本/业务身份。原生恢复成功可保留 PENDING tuple 明细，最终操作及真实 AFTER 图才是证明，不手改明细状态。已存在业务行仍被完整盘点、转换及登记来源；保留不会生成新的人员/全员 Grant 或重新启用权限。
+
+### 2026-11-20 补充：工作流审计创建者与未完成投影（AC-147–148）
+
+工作流 creator retention 使用实际全局缺失事实，控制页冻结根/版本/生命周期摘要，原来源清单仍完整登记；原生复核按 200 根批次读取根、版本数及账号，不能产生新授权。历史 DELETE 的 FAILED_CLOSED 原账本仅由维护捕获器读取，默认 M2 保留证明仍只接受 FINALIZED。仅精确 CURRENT/expected fence 可生成当前 pin 的新 DELETE；原失败账本永不改写，业务完整对象图/SQL 意图按预览及续跑校验。
+
+内置技能 RESOURCE_CREATE 必须是 source=builtin、owner=0、created_by=NULL 且有原内容定位摘要；原 operation 与 CURRENT pin/tenant/scope/fence 精确匹配，原生账本实际 AFTER 且无 correction。冻结 mode/SQL镜像/原生回执/技能摘要，apply 全集复核后逐项原生收尾，完成后重复执行不写 FGA。其他不完整操作不自动推断。计划 schema 3 防止旧脚本忽略新收尾字段；已有 schema 1/2 计划仍可续跑。`--projection-repairs-only` 是已做完历史准备后的有界补充入口，不签发迁移 Ready。候选 mode 200 条游标分页，按原生操作读取固定范围，无用户×资源扫描。
+
+### 空根缺 mode 的关闭初始化（AC-149）
+
+内部 f118_empty_root 按 200 根游标寻找无 payload 的旧 NORMAL；全局检查两个命名空间 mode/Grant/visible source/原操作及子 mode 均不存在，冻结原业务整行。默认准备复用完整 Store 遍历，补充入口仅对存在的候选单独遍历，证明对象/入向边为空。apply 全集重读业务/pin/SQL/完整图；原生预留 DELETE 后，用 owner-state 以 CUSTOM、无 owner_grant 创建 mode，计划动作全部 DELETE，无 enable WRITE/成员/Grant。原生 AFTER 对账及 finalizer 完成，支持 PREPARED/claim/最终回包丢失续跑。M2 复用 finalized-delete 保留证明，M3 正常根转换及完整来源/Coverage 不恢复访问。schema 4 防止旧版本忽略；非空或未知授权缺 mode 仍阻塞。
+
+### 失效工作流配置保留（AC-150）
+
+迁移对已保存版本的严格引用提取器仅捕获 TypeError/ValueError，并产生 `retained_invalid_workflow_configuration` 生命周期事实，包含原 flow_type/is_current/is_delete、原数据摘要及父/版本整行修订摘要。版本仍计入原根保留数；不作为可用 source，不签发来源 ready head。完整 census 保留所有版本、根及显式隔离事实，排除的版本由同一纯提取器失败事实决定，原配置不改，不猜变量/占位 ID。M2 要求对应来源 head/raw rows/legacy 全空；父 root head 可独立存在并原样冻结。M3/M4/续跑原生读取并重验精确根、版本、原标记及解析失败，变得可解析/来源重现/已有索引等继续拒绝。运行时及所有新配置写入仍用原严格提取器，旧失效版本须显式修复后保存新版本才能执行。正常版本只提取一次；额外完整 census 对已分页读入的版本做一次纯解析，无远程目标/用户乘积。
+
+### 2026-11-20 已确认的引用仅登记操作设计（AC-154～157）
+
+用户先确认仅登记/差异分类方案，再明确要求跳过已完成 SQL 和权限重验并执行，作为本次分阶段运维合同与设计确认。使用既有 F118 分支，不改变线上引用策略。
+
+`--register-references-only --resume` 默认只读预览，`--apply` 才写。新入口直接读取原生完成检查点和当前发布目录/授权 pin，复用已完成阶段，不调用 arun/arun_permissions。只遍历哈希验证的 manifests、sources 和 conversion 叶，不读取 FGA/权限/成员全量叶；原 sources/decisions/转换闭包校验仍保留。
+
+差异在新不可变 verification 制品中记录，并由 Run 的 backfilling.registration_plan 检查点绑定。只支持有界的新增且已原生登记来源以及配置/生命周期/引用未变的托管应用 revision 更新，根作者必须匹配原 root。增量登记事实含实际业务与索引摘要，重试必须复用同一描述符；不修改原 baseline_ref/plan_ref。当前已有登记若不存在或不一致，先停止报告而非写占位。
+
+ReferenceMigration 增加仅登记内部模式：复用目标检查、RegisteredReferenceBackfill 写后校验及原子 checkpoint；跳过已提交前缀、最终 census 与第二轮 verify，不签发证书。退役记录仍走原生证明和清理，不能留下原有效来源。完整复核后续必须消费此增量证明，不能假称原全量入口在有漂移情况下直接兼容。所有业务授权/租户/目标规则保持，遵守 constitution C1/C2/C3/C4/C8。
+
+规模：仅登记按来源/退役线性处理；预览与执行只读取一次所需叶；追加来源有界 100，应用 revision 更新有界 100；没有用户×资源穷举。用真实事务测试正常、零引用、完成阶段拒绝、回滚/续跑、增量变化及 N/2N 成本。维护期间不调用线上业务写接口进行验证。
+
+### 频道差异扩展及旧登记证明兼容
+
+用户已在新阻塞报告后明确确认扩展并继续。频道原投影为 id/tenant_id/user_id/is_released/update_time；先核对原 root 的 creator/lifecycle，再由原生来源读取核对完整配置/引用，仅放行剩余的更新时间变化。初始证明中已有应用差异必须完全保持。若原 registration_plan 已冻结，则新增 `registration_plan_extension`，verification 制品绑定原描述符/摘要、追加频道差异和当时各租户来源游标；只允许追加未提交来源。既有证明、来源、游标不改写；续跑验证扩展事实不变且游标不回退。已完成零来源租户由空游标初始化为正式空 checkpoint 不应误报回退。
+
+差异写前核验只遍历有界的差异来源，不重放已提交引用前缀或无关来源引用叶。其余来源仍在各自登记事务中检查；不取消真实目标检查。

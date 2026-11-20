@@ -191,6 +191,8 @@ def object_fact(codec, **changes):
 
 
 def test_required_port_shapes_are_closed_private_and_preserve_original_physical_facts(codec):
+    with pytest.raises(KnowledgeOperationPlanConflictError):
+        object_fact(codec, object_key="https://legacy.invalid/original")
     obj = object_fact(codec)
     index = codec.record_from_values(
         "physical_index",

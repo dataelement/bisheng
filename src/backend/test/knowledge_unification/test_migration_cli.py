@@ -105,6 +105,34 @@ async def test_apply_and_same_run_resume_reach_real_certificate(published_input)
         ).scalar_one() == "completed"
 
 
+async def test_explicit_permission_stage_does_not_certify_references(published_input):
+    from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError
+    from bisheng.knowledge.application.unification_coverage import production_coverage_factory
+
+    value = published_input
+    args = arguments(value, "--apply", "--operator-id", "7", "--permissions-only")
+    result = await entry().arun(args, runtime_factory=runtime(value))
+    assert result["mode"] == "apply_permissions" and result["permissions_complete"] is True
+    assert result["ready"] is False and result["reference_backfill_executed"] is False
+    async with value.sessions() as session, session.begin():
+        row = (await session.execute(sa.select(Run).where(Run.run_id == value.frozen.run_id))).scalar_one()
+        assert row.phase == "converting" and row.coverage_epoch is None and row.source_coverage == {}
+        with pytest.raises(ReferenceCoverageNotReadyError):
+            await production_coverage_factory(session).arequire_global_ready()
+    args.resume = True
+    assert await entry().arun(args, runtime_factory=runtime(value)) == result
+    args.permissions_only = False
+    assert (await entry().arun(args, runtime_factory=runtime(value)))["ready"] is True
+
+
+async def test_permission_stage_requires_explicit_apply(published_input):
+    from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
+
+    with pytest.raises(KnowledgeOperationPlanConflictError) as caught:
+        await entry().arun(arguments(published_input, "--permissions-only"), runtime_factory=runtime(published_input))
+    assert caught.value.kwargs["reason"] == "migration_cli_permissions_only_requires_apply"
+
+
 def test_cli_requires_explicit_apply_and_valid_operator():
     module = entry()
     args = module.parser().parse_args(
@@ -214,7 +242,9 @@ async def test_new_run_preview_reports_actual_data_blocker_instead_of_only_listi
     async with value.sessions() as session, session.begin():
         await session.execute(sa.delete(Run.__table__))
         await session.execute(
-            sa.update(KnowledgeFile.__table__).where(KnowledgeFile.id == 1).values(knowledge_id=999999)
+            # Rootless ordinary files are retained by the new closed policy;
+            # a rootless directory remains genuinely ambiguous and must block.
+            sa.update(KnowledgeFile.__table__).where(KnowledgeFile.id == 1).values(knowledge_id=999999, file_type=0)
         )
     value.store.enforce_closed = False
     objects_before = dict(value.artifacts.objects)

@@ -122,8 +122,10 @@ def state_digest(snapshot):
                 row = {key: value for key, value in row.items() if key not in {"level", "update_time"}}
             if position:
                 add(",")
-            for fragment in encoder.iterencode(row):
-                add(fragment)
+            # Public encode() uses the C encoder instead of yielding every JSON
+            # primitive through Python. Still encode only one already-loaded row,
+            # never the complete inventory; schema-1 canonical bytes are identical.
+            add(encoder.encode(row))
         add("]")
     add("}")
     return result.hexdigest()
@@ -133,7 +135,7 @@ def build(snapshot, *, permission_modes=(), model_names=(), legacy_embedding_nam
     """Compile exact selected before rows and the expected complete SQL after."""
     from scripts.prepare_f118_history import folder_path
 
-    plan = {"deletes": [], "updates": [], "physical": [], "blocked": []}
+    plan = {"deletes": [], "updates": [], "physical": [], "blocked": [], "retained": [], "warnings": []}
     roots = row_index(snapshot["knowledge"])
     files = row_index(snapshot["knowledgefile"])
     docs = row_index(snapshot["knowledge_document"])
@@ -209,7 +211,23 @@ def build(snapshot, *, permission_modes=(), model_names=(), legacy_embedding_nam
                     binding = candidates[0]
             if row["file_type"] == 1:
                 if binding is None:
-                    reject("knowledgefile", row, "orphan_original_index_binding_unavailable")
+                    # A missing physical binding prevents deletion, not the
+                    # preservation of an already unreachable historical row.
+                    # The owner capture still proves the absence of SQL/FGA
+                    # authorization; formal M2 freezes and rechecks the row.
+                    if root is None and not path and not current_modes:
+                        plan["retained"].append(
+                            {
+                                "table": "knowledgefile",
+                                "before": deepcopy(row),
+                                "reason": "retain_rootless_file_without_index_binding",
+                            }
+                        )
+                        plan["warnings"].append(
+                            {"table": "knowledgefile", "id": ident, "reason": "historical_orphan_preserved"}
+                        )
+                    else:
+                        reject("knowledgefile", row, "orphan_original_index_binding_unavailable")
                     continue
                 plan["physical"].append({"file": deepcopy(row), "knowledge": deepcopy(binding)})
             remove("knowledgefile", row, "missing_parent_resource")
@@ -349,7 +367,13 @@ def build(snapshot, *, permission_modes=(), model_names=(), legacy_embedding_nam
             reject("knowledge", row, "invalid_numeric_embedding_requires_resolution")
             continue
         remaining = row["id"] in populated_roots
-        if not isinstance(model, str) or model in names or remaining or row.get("model_transition"):
+        from bisheng.knowledge.domain.services.model_reference_extractor import legacy_knowledge_model_version
+
+        if legacy_knowledge_model_version(model, row.get("model_transition")) is not None and (
+            remaining or model in names
+        ):
+            plan["warnings"].append({"table": "knowledge", "id": row["id"], "reason": "legacy_embedding_preserved"})
+        elif not isinstance(model, str) or model in names or remaining or row.get("model_transition"):
             reject("knowledge", row, "legacy_embedding_requires_explicit_resolution")
         else:
             change("knowledge", row, {"model": None}, "unmapped_legacy_embedding")

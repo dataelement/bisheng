@@ -8,8 +8,9 @@ business data or certifies Coverage. Backups remain an operational prerequisite.
 
 from collections import defaultdict
 from copy import copy
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ReferenceCoverageNotReadyError
@@ -89,6 +90,11 @@ _SECTIONS = {
         "space_member",
         "existing_space_creator_retention",
         "stranded_file_retention",
+        "rootless_file",
+        "rootless_file_retention",
+        "historical_resource_creator_retention",
+        "retained_permission_delete",
+        "workflow_creator_retention",
     },
     "permission": {"resource_mode", "grant", "assignee", "visible_source"},
     "permission_namespace": {
@@ -435,7 +441,7 @@ class UnificationInventoryApplication:
         retained_creators = {}
         liveness, liveness_pending, liveness_operations = {}, [], {}
         async for section, record in self.preflight.aiter_tenant(
-            session, permission_planner=permission_planner, planned_at=planned_at
+            session, permission_planner=permission_planner, planned_at=planned_at, retain_rootless_files=True
         ):
             if record.record_type == "resource_mode":
                 data = record.data
@@ -446,11 +452,25 @@ class UnificationInventoryApplication:
                         data["version"],
                     )
             if len(liveness_pending) == 200 or (record.record_type == "permission_plan" and liveness_pending):
+                retained_deletes = []
                 liveness.update(
                     await self.raw.ainspect_permission_resource_liveness(
-                        session, resources=tuple(liveness_pending), operations=liveness_operations
+                        session,
+                        resources=tuple(liveness_pending),
+                        operations=liveness_operations,
+                        retained_deletes=retained_deletes,
                     )
                 )
+                for fact in retained_deletes:
+                    logger.warning(
+                        "F118 retains payload for {}:{} with finalized delete {}; permissions remain disabled",
+                        fact.resource_type,
+                        fact.resource_id,
+                        fact.operation_id,
+                    )
+                    await pages.add(
+                        "control", tenant, record_from_values("retained_permission_delete", **asdict(fact)), kind="plan"
+                    )
                 liveness_pending.clear()
                 liveness_operations.clear()
             if record.record_type == "permission_plan":
@@ -465,7 +485,7 @@ class UnificationInventoryApplication:
                 if section in {"conversion", "permission_namespace"} or record.record_type in RETENTIONS
                 else "baseline"
             )
-            if record.record_type == CREATOR_RETENTION:
+            if record.record_type in {CREATOR_RETENTION, "historical_resource_creator_retention"}:
                 retained_creators[record.data["space_id"]] = record.data["creator_user_id"]
             elif record.record_type == FILE_RETENTION:
                 await source_inventory.sharing_reader.aassert_no_file_tuples(
@@ -475,7 +495,7 @@ class UnificationInventoryApplication:
             await pages.add(section, tenant, record, kind=kind)
         memberships.finish()
         header, refs = None, []
-        creators = {}
+        creators, creator_records = {}, {}
         source_headers = {}
         pending_creators = {}
         batch = []
@@ -514,12 +534,25 @@ class UnificationInventoryApplication:
                     session, user_ids=wanted[offset : offset + 200]
                 ):
                     creators[fact.user_id] = fact.exists
+                    creator_records[fact.user_id] = fact
                     await pages.add("control", tenant, record_from_row(fact))
             for row in items:
                 if type(row) is RootInventoryRecord and row.creator_id is not None:
                     if row.creator_id not in creators:
                         _blocked("source_creator_fact_missing")
-                    if not creators[row.creator_id] and not retained(row):
+                    if not creators[row.creator_id] and row.root_key.source_type.value == "workflow_version":
+                        from bisheng.knowledge.application.unification_structural_retention import (
+                            workflow_creator_retention,
+                        )
+
+                        proof = workflow_creator_retention(row, record_from_row(creator_records[row.creator_id]).data)
+                        await pages.add("control", tenant, proof, kind="plan")
+                        logger.warning(
+                            "F118 retains workflow {} missing creator {}; no account or grant is created",
+                            row.root_key.source_id,
+                            row.creator_id,
+                        )
+                    elif not creators[row.creator_id] and not retained(row):
                         if (
                             row.root_key.source_type.value == "assistant"
                             and row.retained_version_count == 1
@@ -634,7 +667,7 @@ class UnificationInventoryApplication:
                 raise ReferenceCoverageNotReadyError(reason="migration_required_native_ports_missing")
             await self.raw.avalidate_global_orphans(session)
             await self.raw.avalidate_registered_source_tenants(session)
-            await self.preflight.resources.avalidate_global_integrity(session)
+            await self.preflight.resources.avalidate_global_integrity(session, retain_rootless_files=True)
             await self.preflight.controls.avalidate_global_integrity(session)
             retained_identity = await identity_retention.validate(session, repository=self.permissions)
             catalog = await self.permissions.aload_catalog_baseline(session, environment=environment)
@@ -678,7 +711,7 @@ class UnificationInventoryApplication:
             # broker/pidbox contents. Old frozen task pages remain readable.
             await pages.finish()
             common = {
-                "preparation_policy_version": 2,
+                "preparation_policy_version": 3,
                 "physical_inventory_policy": "bindings_only",
                 "writer_contract_version": writer_contract_version,
                 "environment": environment,
