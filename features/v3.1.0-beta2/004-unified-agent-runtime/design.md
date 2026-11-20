@@ -519,8 +519,9 @@ Wave 1–4 留下、技术上已知、尚未处理的：
 
 - **旧通道删除（2026-11-20 已做一轮）**：
   - 已删：开关及其读取点；`_task_mode_stream_completion` 与入队失败后依赖浏览器 start-execute 的分支；worker 的 `_legacy_session_run_lock` 与旧线程的工作区接管 `_seed_workspace_from_previous`；前端会话页的交接帧处理、附件解析轮询、旧的停止分支。
-  - 仍可达而保留：开放 API 的日常对话 agent 循环（`_agent_stream_chat_completion`，经 `session_subject` 到达）；不带协商头的 SSE 兼容应答；`/linsight/workbench/*` 接口与任务 WebSocket（`/linsight/new` 独立页、分享页在用）；前端 `beginStream` / `useAiChatSSE`（订阅页 AI 助手面板在用）；`task_exec.py` 里未在会话线程上的分支（升级前建的记录续跑时走）。
-  - 待用户决定：订阅页 AI 助手面板是否改用运行协议 2；`/linsight/new` 是否去掉提交入口（决策 11 写的是“只做历史回看”，代码仍可提交）；分享页上进行中的深度研究回合是否改为只读回看。这三项定了之后才能删第二轮。
+  - 仍可达而保留：开放 API 的日常对话 agent 循环（`_agent_stream_chat_completion`，经 `session_subject` 到达）；不带协商头的 SSE 兼容应答；`/linsight/workbench/*` 接口与任务 WebSocket（`/linsight/:id` 历史页跟进本人进行中的任务时在用）；前端 `beginStream` / `useAiChatSSE`（订阅页 AI 助手面板在用）；`task_exec.py` 里未在会话线程上的分支（升级前建的记录续跑时走）。
+  - 第二轮（2026-11-20，用户确认）：`/linsight/new` 不再能提交。进入这个地址时，前端新建对话、打开「深度研究」并跳到 `/c/new`。`/linsight/:id` 只读，没有输入框。前端删除了提交流水线（`useLinsightSubmit`、`submissionState`、`TaskModeInput`、`TaskModeChatInput` 及只被它们使用的组件）。分享页上的深度研究回合只显示快照：不开任务 WebSocket，不轮询排队，不提供回答提问和停止。后端的 `/linsight/workbench/submit` 与 `start-execute` 不再有 client 前端调用，接口本身保留，因为桌面端是否在用没有核实。
+  - 待用户决定：订阅页 AI 助手面板是否改用运行协议 2。
   - 未追完：`_agent_stream_chat_completion` 里的长期记忆代码（开放 API 不传 `memory_register`，生产上到不了）；`agent_factory.py` 里按有无收件箱区分的图片中间件条件与两套计划措辞；`copy_workspace_prefix` 的 `only_if_empty` 默认路径。
   - worker 的运行作用域依赖 Redis。旧锁在 Redis 不可用时放行的行为已不存在。
 
@@ -551,3 +552,4 @@ Wave 1–4 留下、技术上已知、尚未处理的：
 | 2026-11-19 | §5 增 #23–#30（排队租约释放、租约失效收尾、按 run_id 定位版本、停靠运行的流 TTL、运行替换与重同步、退回消息去重、重新生成、事件列表增量）；§4.3 补 `resync` 字段与 Redis 键表；新增 upgrade.md | 修复代码审查剩余的 9 个 MEDIUM |
 | 2026-11-19 | §5 增 #31（深度研究流式正文的 `[Sn]` 未转换）、#32（看图模型输出进入回答流）；verification-final.md 增 §7 | 用户要求把独立特性 F005 的两点补进 F004 |
 | 2026-11-20 | 删除开关 `unified_runtime_enabled` 与只有它能到达的旧通道代码；决策 13、§4.3、§4.6、§8 同步 | 用户决定 |
+| 2026-11-20 | §8 记录第二轮删除：`/linsight/new` 改为跳到会话页并打开深度研究；分享页的深度研究回合改为只读快照 | 用户确认决策 11 的落地方式 |

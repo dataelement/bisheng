@@ -56,7 +56,6 @@ jest.mock('~/components/ui', () => {
 jest.mock('./Input/ChatSkillSelector', () => ({ ChatSkillSelector: ({ onChange }) => <button onClick={() => onChange(mockSkills)}>skills</button> }));
 jest.mock('./Input/AgentToolSelector', () => () => <button>tools</button>);
 jest.mock('./Input/ChatFormTools', () => ({ ChatToolDown: () => <button>legacy tools</button> }));
-jest.mock('~/components/Linsight/Input/TaskModeToggle', () => ({ TaskModeToggle: () => <button>research</button> }));
 jest.mock('./Input/ChatResourceMenu', () => ({
   ChatResourceMenu: ({ showKnowledgeSelection, showFileUpload, fileUploadDisabled, fileUploadDisabledReason, onFileUploadClick, showTools, showResearch, researchActive, onResearchChange, children }) => (
     <div>

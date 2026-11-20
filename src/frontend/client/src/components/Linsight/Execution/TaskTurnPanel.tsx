@@ -73,7 +73,8 @@ interface TaskTurnPanelProps {
      * send entry (`TaskTurnRetryContext`) instead of the task channel.
      * While the stored status still says "running" and the conversation has no
      * run in progress, it asks the server for the final state. Default true:
-     * the carriers that follow no run events (share view) keep the task channel.
+     * the carriers that follow no run events keep the task channel, except a
+     * share page, which shows the stored snapshot only.
      */
     liveChannel?: boolean;
 }
@@ -87,11 +88,14 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
     // tasks, even when their carrier omits the explicit readOnly prop.
     const { token: shareToken } = useParams<{ token?: string }>();
     const retryReadOnly = readOnly || Boolean(shareToken);
+    // A share page shows the stored snapshot only: no task WebSocket, no queue
+    // polling, no clarify or cancel action (F004, decision 11).
+    const channelOpen = liveChannel && !shareToken;
     const { getLinsight, retryConversation, switchAndUpdateLinsight, updateLinsight, reconcileLinsightFromServer } = useLinsightManager();
     // WS pump — self-guards on status===Running, so mounting it for a completed
     // historical turn is a no-op (no connection opened). Without a live channel
     // it gets no version id, so it never connects.
-    const { sendInput, stop, networkFailure } = useLinsightWebSocket(liveChannel ? versionId : '');
+    const { sendInput, stop, networkFailure } = useLinsightWebSocket(channelOpen ? versionId : '');
 
     const linsight = getLinsight(versionId);
     const [loadFailed, setLoadFailedState] = useState(false);
@@ -197,7 +201,7 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
     // the badge clears the moment the worker picks us up (index → 0) or any
     // execution output arrives over the WS.
     const noProgressYet = !tasks.length && !sessionSteps.length;
-    useLinsightQueuePolling(versionId, liveChannel && running && noProgressYet);
+    useLinsightQueuePolling(versionId, channelOpen && running && noProgressYet);
     // Gate on noProgressYet too: once steps/tasks arrive polling stops and the
     // last-polled queueCount may stay stale >0, so this prevents the queue card
     // from lingering next to real task rows.
@@ -268,7 +272,7 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
         <ExecutionLiveContext.Provider value={running && !pendingInput && !tasks.length}>
         <div ref={rootRef} className="w-full">
             {/* queueing card (auto-disappears when the worker picks us up) */}
-            {queueing && liveChannel && <QueueCard position={linsight!.queueCount} onCancel={stop} />}
+            {queueing && channelOpen && <QueueCard position={linsight!.queueCount} onCancel={stop} />}
 
             {/* session-level steps (planning-stage tools etc.); an answered clarify
                 renders as an inline IntentRow at its chronological position here
@@ -289,7 +293,7 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
             ))}
 
             {/* active clarify card (HITL stays on linsight WS) */}
-            {pendingInput && liveChannel && (
+            {pendingInput && channelOpen && (
                 <ClarifyCard data={pendingInput} disabled={readOnly} onSubmit={handleClarifySubmit} />
             )}
 

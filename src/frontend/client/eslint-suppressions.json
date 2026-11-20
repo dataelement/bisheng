@@ -83,7 +83,7 @@
   },
   "src/api/linsight.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 13
+      "count": 12
     },
     "no-console": {
       "count": 1
@@ -903,32 +903,6 @@
       "count": 2
     }
   },
-  "src/components/Linsight/Input/KnowledgeSpaceSelect.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 5
-    }
-  },
-  "src/components/Linsight/Input/ModelSelector.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 4
-    }
-  },
-  "src/components/Linsight/Input/TaskModeChatInput.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 11
-    },
-    "no-restricted-imports": {
-      "count": 1
-    }
-  },
-  "src/components/Linsight/Input/TaskModeInput.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 21
-    },
-    "no-restricted-imports": {
-      "count": 1
-    }
-  },
   "src/components/Messages/ContentRender.tsx": {
     "no-restricted-imports": {
       "count": 1
@@ -1382,9 +1356,6 @@
     }
   },
   "src/components/Sop/index.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    },
     "no-console": {
       "count": 1
     },
@@ -1778,19 +1749,13 @@
     }
   },
   "src/hooks/Messages/useSubmitMessage.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
     "@typescript-eslint/no-unused-expressions": {
       "count": 1
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    },
-    "no-restricted-imports": {
       "count": 1
     },
-    "react-hooks/exhaustive-deps": {
+    "no-restricted-imports": {
       "count": 1
     }
   },
@@ -1940,16 +1905,13 @@
   },
   "src/hooks/useLinsightManager.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    },
-    "no-console": {
       "count": 1
     },
     "no-restricted-imports": {
       "count": 1
     },
     "react-hooks/exhaustive-deps": {
-      "count": 2
+      "count": 1
     }
   },
   "src/hooks/useLinsightQueuePolling.ts": {
@@ -2728,7 +2690,7 @@
   },
   "src/store/linsight.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 19
+      "count": 16
     },
     "no-restricted-imports": {
       "count": 1
