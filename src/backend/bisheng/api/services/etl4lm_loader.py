@@ -215,14 +215,14 @@ class Etl4lmLoader(BasePDFLoader):
             )
         except requests.Timeout as e:
             logger.error(f"Request to etl4lm API timed out: {e}")
-            raise Exception("etl4lm server timeout")
+            raise ConnectionError("etl4lm server timeout")
         except Exception as e:
             if str(e).find("Timeout") != -1:
                 logger.error(f"Request to etl4lm API timed out: {e}")
-                raise Exception("etl4lm server timeout")
+                raise ConnectionError("etl4lm server timeout")
             raise e
         if resp.status_code != 200:
-            raise Exception(
+            raise ValueError(
                 f"file partition {os.path.basename(self.file_name)} failed resp={resp.text}"
             )
 
@@ -231,7 +231,7 @@ class Etl4lmLoader(BasePDFLoader):
             logger.info(
                 f"file partition {os.path.basename(self.file_name)} error resp={resp}"
             )
-            raise Exception(
+            raise ValueError(
                 f"file partition error {os.path.basename(self.file_name)} error resp={resp}"
             )
         partitions = resp["partitions"]
@@ -293,13 +293,13 @@ class Etl4lmLoader(BasePDFLoader):
         except Exception as e:
             if str(e).find("Timeout") != -1:
                 logger.error(f"Request to etl4lm API timed out: {e}")
-                raise Exception("etl4lm server timeout")
+                raise ConnectionError("etl4lm server timeout")
             raise e
         if (resp.status_code != 200) or (resp.body and resp.body.get("status_code") != 200):
             logger.info(
                 f"file partition {os.path.basename(self.file_name)} error resp={resp}"
             )
-            raise Exception(
+            raise ValueError(
                 f"file partition error {os.path.basename(self.file_name)} error resp={resp}"
             )
 
