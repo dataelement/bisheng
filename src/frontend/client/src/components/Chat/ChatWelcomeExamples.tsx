@@ -42,7 +42,7 @@ export function ChatWelcomeExamples({ onSelect }: ChatWelcomeExamplesProps) {
   return (
     <section className="chat-welcome-examples" aria-labelledby={headingId}>
       <div className="chat-welcome-examples-header">
-        <h3 id={headingId}>{t('dshChat.welcomeExamples.heading')}</h3>
+        <h3 id={headingId} className="chat-welcome-section-title">{t('dshChat.welcomeExamples.heading')}</h3>
         <Button color="default" variant="text" size="small" className="chat-welcome-examples-next" onClick={handleNextBatch}>
           {t('dshChat.welcomeExamples.next')}
         </Button>

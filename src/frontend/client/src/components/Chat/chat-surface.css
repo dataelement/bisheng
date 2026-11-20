@@ -129,20 +129,26 @@ body[data-dsh-chat-theme=dark] .dsh-web-chat .dsh-history-new-chat { background:
 }
 
 .dsh-chat-welcome-hero,
-.chat-welcome-examples {
+.chat-welcome-examples,
+.chat-welcome-apps-header {
   max-width:var(--dsh-welcome-max-width, calc(clamp(680px,64cqw,920px) + 64px));
 }
+.chat-welcome-examples,
+.chat-welcome-apps-header { margin-inline:auto; padding-inline:16px; }
 .chat-welcome-examples {
-  margin:22px auto 0;
-  padding:0 16px 16px;
+  margin-block-start:22px;
+  padding-block-end:16px;
 }
+.chat-welcome-apps-header { margin-block-end:12px; }
 .chat-welcome-examples-header {
   display:flex; align-items:flex-start; justify-content:space-between; gap:6px 12px;
-  margin-block-end:10px; padding-inline-start:12px;
+  margin-block-end:10px;
 }
-.chat-welcome-examples-header h3 {
-  margin:4px 0; color:rgb(var(--text-1)); font-size:13px; line-height:20px; font-weight:600;
+.chat-welcome-section-title {
+  margin:0; padding-inline-start:12px;
+  color:rgb(var(--text-1)); font-size:13px; line-height:20px; font-weight:600;
 }
+.chat-welcome-examples-header .chat-welcome-section-title { margin-block:4px; }
 .chat-welcome-examples .chat-welcome-examples-next {
   flex:none; height:28px; border-radius:6px; color:rgb(var(--text-2)); font-size:12px; line-height:18px;
 }
