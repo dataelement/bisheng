@@ -162,6 +162,16 @@ async def test_auto_enabled_tools_are_added_to_the_request(monkeypatch, user, al
     assert [(tool.id, tool.tool_key) for tool in out.tools] == [(33, "web_search"), (22, "bisheng_code_interpreter")]
 
 
+async def test_projected_config_groups_are_plain_dicts(monkeypatch, user, allow_all):
+    """The child-tenant projection hands the groups back as dicts (found on 114)."""
+    _patch_config(monkeypatch, _config(CODE.model_dump(mode="json"), WEB.model_dump(mode="json")))
+    data = APIChatCompletion(model="m", clientTimestamp="2026-11-20T00:00:00Z", text="hi")
+
+    out = await WorkStationService.awith_auto_enabled_tools(data, user)
+
+    assert [(tool.id, tool.tool_key) for tool in out.tools] == [(22, "bisheng_code_interpreter")]
+
+
 async def test_a_tool_already_in_the_request_is_not_added_twice(monkeypatch, user, allow_all):
     _patch_config(monkeypatch, _config(CODE))
     data = APIChatCompletion(

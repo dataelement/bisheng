@@ -664,8 +664,14 @@ class WorkStationService(BaseService):
         from bisheng.workstation.domain.schemas.chat import ToolPayload
 
         config = await cls.get_daily_chat_config()
+        # The tenant projection writes the groups back as plain dicts, a stored config as ToolConfig.
         groups = [
-            tool.model_dump(mode="json") for tool in (config.tools if config else None) or [] if tool.auto_enabled
+            group
+            for group in (
+                tool if isinstance(tool, dict) else tool.model_dump(mode="json")
+                for tool in (config.tools if config else None) or []
+            )
+            if group.get("auto_enabled")
         ]
         if not groups:
             return data
