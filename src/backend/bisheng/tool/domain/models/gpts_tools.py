@@ -3,11 +3,11 @@ from datetime import datetime
 from urllib.parse import urlsplit
 
 from pydantic import model_validator
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, UniqueConstraint, false, func, text
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, UniqueConstraint, case, false, func, text
 from sqlmodel import Field, Text, col, or_, select, update
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.context.tenant import strict_tenant_filter, tenant_execution_scope
+from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter, tenant_execution_scope
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType, LargeText
 from bisheng.utils import generate_uuid, md5_hash
@@ -645,7 +645,13 @@ class GptsToolsDao(GptsToolsBase):
                 # Update tool category data
                 session.add(data)
                 # Delete a list of tools that don't exist
-                delete_old_tools = update(GptsTools).where(GptsTools.tenant_id == data.tenant_id, GptsTools.type == data.id, GptsTools.id.in_(del_tool_ids)).values(is_delete=1)
+                delete_old_tools = (
+                    update(GptsTools)
+                    .where(
+                        GptsTools.tenant_id == data.tenant_id, GptsTools.type == data.id, GptsTools.id.in_(del_tool_ids)
+                    )
+                    .values(is_delete=1)
+                )
                 await session.exec(delete_old_tools)
                 # Add Tool List
                 for one in add_tool_list:
@@ -662,7 +668,6 @@ class GptsToolsDao(GptsToolsBase):
                     finally_children.append(one)
                 await session.commit()
                 await session.refresh(data)
-
 
     @classmethod
     async def aset_tool_type_is_shared(cls, tool_type_id: int, is_shared: bool) -> None:
@@ -737,15 +742,30 @@ class GptsToolsDao(GptsToolsBase):
             await session.commit()
             return True
 
+    @staticmethod
+    def _tool_by_key_statement(tool_key: str):
+        """Select one builtin row by tool_key, preferring the current tenant's own row.
+
+        Every tenant owns one row per builtin tool_key, and the tenant filter lets
+        a child tenant also see root rows. Without an order, ``.first()`` may return
+        the root row, whose id and tool type are not the ones the child tenant's
+        users select and are authorized against. A visible row from another
+        tenant is used only when the current tenant has none.
+        """
+        statement = select(GptsTools).where(GptsTools.tool_key == tool_key)
+        tenant_id = get_current_tenant_id()
+        if tenant_id is not None:
+            statement = statement.order_by(case((GptsTools.tenant_id == tenant_id, 0), else_=1))
+        return statement.order_by(GptsTools.id)
+
     @classmethod
     def get_tool_by_tool_key(cls, tool_key: str) -> GptsTools:
         with get_sync_db_session() as session:
-            statement = select(GptsTools).where(GptsTools.tool_key == tool_key)
-            return session.exec(statement).first()
+            return session.exec(cls._tool_by_key_statement(tool_key)).first()
 
     @classmethod
     async def aget_tool_by_tool_key(cls, tool_key: str) -> GptsTools:
-        statement = select(GptsTools).where(GptsTools.tool_key == tool_key)
+        statement = cls._tool_by_key_statement(tool_key)
         async with get_async_db_session() as session:
             result = await session.exec(statement)
             return result.first()
