@@ -126,6 +126,7 @@ asyncio_mode = "auto"
 markers = [
     "e2e: end-to-end tests requiring a running backend (deselect with '-m not e2e')",
     "slow: tests that take more than 5 seconds",
+    "real_auto_enabled: run the real F005 auto-enabled tool injection and direct-run skill mount (see test/conftest.py)",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning:sqlalchemy.*",

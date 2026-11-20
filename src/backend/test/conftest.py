@@ -118,6 +118,31 @@ def _direct_run_outside_services(monkeypatch):
     monkeypatch.setattr(module, "log_daily_chat_telemetry", no_telemetry)
 
 
+@pytest.fixture(autouse=True)
+def _no_auto_enabled_capabilities(request, monkeypatch):
+    """F005 added two reads to every workbench send: the auto-enabled tools in the
+    tenant config, and the user's skills for a direct run. Tests that do not
+    cover F005 have neither a database nor a skill store, so both default to
+    "nothing". A test that exercises the real path opts out with
+    ``@pytest.mark.real_auto_enabled``.
+    """
+    if request.node.get_closest_marker("real_auto_enabled"):
+        return
+    from types import SimpleNamespace
+
+    from bisheng.workstation.domain.services.direct_run import DirectRunner
+    from bisheng.workstation.domain.services.workstation_service import WorkStationService
+
+    async def _unchanged(cls, data, login_user):
+        return data
+
+    async def _no_skills(self, ctx, backend):
+        return SimpleNamespace(copied=[], failed=[], snapshot=[])
+
+    monkeypatch.setattr(WorkStationService, "awith_auto_enabled_tools", classmethod(_unchanged))
+    monkeypatch.setattr(DirectRunner, "_default_provision_skills", _no_skills)
+
+
 @pytest.fixture()
 def mock_settings(monkeypatch):
     """Mock the global settings object with controllable multi_tenant config.

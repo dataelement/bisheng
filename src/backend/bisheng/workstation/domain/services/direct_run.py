@@ -1218,9 +1218,13 @@ class DirectRunner:
         return {name: value for name, value in kwargs.items() if name in parameters}
 
     async def _mount_skills(self, ctx: DirectRunContext, backend: Any, sink: Callable[[dict], Awaitable[None]]) -> bool:
-        """Copy the selected skills into the workspace. True when at least one is there."""
-        if not ctx.skills:
-            return False
+        """Copy every skill the user may use into the run directory. True when at least one is there.
+
+        F005 (AC-24): like deep research, a direct run mounts all of them whether or
+        not the user picked any; the picked ones are only the highlight. The copy
+        is local (no workspace write), so a user without skills still gets no
+        local directory (决策 10).
+        """
         result = await self._provision_skills(ctx, backend)
         snapshot = getattr(result, "snapshot", None)
         if snapshot:
@@ -1459,8 +1463,8 @@ class DirectRunner:
 
         With ``user_id`` every skill the user may use is copied and the selected
         names are the highlighted ones, exactly as in a deep-research run. A
-        direct run keeps no snapshot between executions, so each execution that
-        selected skills copies them again.
+        direct run keeps no snapshot between executions, so each execution
+        copies them again from the node cache (F005 决策 5).
         """
         from bisheng.linsight.domain.services import skill_provisioning
 

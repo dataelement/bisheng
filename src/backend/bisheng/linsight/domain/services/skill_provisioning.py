@@ -11,11 +11,18 @@ deepagents' ``SkillsMiddleware`` discovers a skill from the *directory* entries 
     ``read_file`` cannot reach.
 
 So at task startup we copy the bundles this run is allowed to use into the
-workspace ``/skills/`` subtree. ``WorkspaceBackend.aupload_files`` write-throughs
-to both MinIO and the local cache, after which a plain ``SkillsMiddleware`` backed
-by a ``FilesystemBackend`` over that cache can enumerate them (real on-disk dirs,
-``is_dir``-aware) and the model reads the very same ``/skills/<name>/SKILL.md``
-paths back through the workspace backend.
+local ``file_dir/skills/`` subtree (F005): a plain copy out of the node's
+content-addressed skill cache, never a write into the session workspace in
+object storage. Bundles are immutable and ``skills/`` is read-only to the model,
+so a second copy in MinIO bought nothing but one synchronous PUT per file (about
+4 s for 664 files on 114). A ``SkillsMiddleware`` backed by a ``FilesystemBackend``
+over ``file_dir`` enumerates the copies, and ``WorkspaceBackend`` serves reads and
+listings under ``skills/`` from the session's ``skill_snapshot``, so another node
+resolves the same files without the workspace holding them.
+
+The copy is not a hard link: a link would share the inode with the node cache,
+and executor code that rewrites a file under ``skills/`` would corrupt that cache
+for every session on the node.
 
 Calls that omit ``user_id`` keep the Fork X whitelist: only
 ``enabled (DB governance) ∩ selected (this run)`` bundles are materialized.
@@ -28,6 +35,8 @@ not written into ``SKILL.md``.
 from __future__ import annotations
 
 import asyncio
+import shutil
+from pathlib import Path
 from typing import NamedTuple
 
 from loguru import logger
@@ -93,22 +102,24 @@ def _split_snapshot(
     return skill_ids, prior
 
 
-def _collect_bundle_pairs(
-    store: SkillStore, tenant_id: int, name: str, content_hash: str, *, owner_user_id: int = 0
-) -> list[tuple[str, bytes]]:
-    """Read a bundle's files as ``(workspace_path, bytes)`` upload pairs.
+def _install_local(
+    file_dir, store: SkillStore, tenant_id: int, name: str, content_hash: str, *, owner_user_id: int = 0
+) -> bool:
+    """Copy one bundle version from the node cache into ``file_dir/skills/<name>/``.
 
-    Blocking I/O: the first call for a given version fetches the object, later
-    ones are served from the node's local cache. ``owner_user_id`` selects the
-    personal-skill object prefix; 0 is the tenant skill prefix.
+    Blocking I/O. The first call for a version fetches it from object storage;
+    later ones read the node's local cache. An existing directory is replaced so
+    a different version never leaves stray files behind. False means the bundle
+    holds no files.
     """
-    return [
-        (
-            f"/{WORKSPACE_SKILLS_DIR}/{name}/{entry['path']}",
-            store.read_bytes(tenant_id, name, content_hash, entry["path"], owner_user_id=owner_user_id),
-        )
-        for entry in store.list_files(tenant_id, name, content_hash, owner_user_id=owner_user_id)
-    ]
+    src = store.materialize(tenant_id, name, content_hash, owner_user_id=owner_user_id)
+    if not any(path.is_file() for path in src.rglob("*")):
+        return False
+    dst = Path(file_dir) / WORKSPACE_SKILLS_DIR / name
+    if dst.exists():
+        shutil.rmtree(dst)
+    shutil.copytree(src, dst)
+    return True
 
 
 def _snapshot_entry(skill) -> dict:
@@ -117,6 +128,7 @@ def _snapshot_entry(skill) -> dict:
         "skill_id": int(skill.id),
         "owner_user_id": int(skill.owner_user_id or 0),
         "content_hash": skill.content_hash,
+        "tenant_id": int(skill.tenant_id),
     }
 
 
@@ -288,6 +300,23 @@ async def _materialize_candidates(
     copied: list[str] = []
     failed: list[str] = []
     fresh: list[dict] = []
+    # A directory already in the session keeps the version it was first given,
+    # so a later candidate never mixes its files in. Its local copy is redone on
+    # every call: a later round starts from an empty ``file_dir`` and the
+    # workspace in object storage no longer holds it.
+    kept: list[str] = []
+    for entry in prior:
+        if await _copy_one(
+            backend,
+            store,
+            int(entry.get("tenant_id") or tenant_id),
+            entry["name"],
+            entry.get("content_hash") or "",
+            owner_user_id=int(entry.get("owner_user_id") or 0),
+        ):
+            kept.append(entry["name"])
+        else:
+            failed.append(entry["name"])
     for skill in sorted(candidates, key=lambda row: row.name):
         if skill.name in occupied:
             continue
@@ -298,9 +327,7 @@ async def _materialize_candidates(
         else:
             failed.append(skill.name)
     snapshot = [*prior, *fresh]
-    # Directories already in the session still count as present: a resume that
-    # skips the write must keep the skills middleware attached.
-    present_names = [entry["name"] for entry in prior] + copied
+    present_names = kept + copied
     selected_names = None
     if pending_ids is not None:
         rows = await LinsightSkillDao.list_visible(user_id)
@@ -314,7 +341,7 @@ async def _materialize_candidates(
         tenant_id,
         user_id,
         sorted(skill.name for skill in candidates),
-        sorted(occupied),
+        kept,
         copied,
         failed,
     )
@@ -326,20 +353,14 @@ async def _materialize_candidates(
 async def _copy_one(
     backend, store: SkillStore, tenant_id: int, name: str, content_hash: str, *, owner_user_id: int
 ) -> bool:
-    """Copy one bundle. False means the caller should treat the name as failed."""
+    """Copy one bundle into the run's local directory. False means the caller treats it as failed."""
     try:
-        pairs = await asyncio.to_thread(
-            _collect_bundle_pairs, store, tenant_id, name, content_hash, owner_user_id=owner_user_id
-        )
-        if not pairs:
-            logger.warning("linsight skill {!r} (tenant {}) resolved to an empty bundle", name, tenant_id)
-            return False
-        responses = await backend.aupload_files(pairs)
-        upload_errors = [item for item in responses if getattr(item, "error", None)]
-        if upload_errors:
-            logger.warning("linsight skill {!r} copy had failures, not advertising: {}", name, upload_errors)
-            return False
-        return True
+        if await asyncio.to_thread(
+            _install_local, backend.file_dir, store, tenant_id, name, content_hash, owner_user_id=owner_user_id
+        ):
+            return True
+        logger.warning("linsight skill {!r} (tenant {}) resolved to an empty bundle", name, tenant_id)
+        return False
     except Exception:
         logger.exception("failed to materialize linsight skill {!r} (tenant {})", name, tenant_id)
         return False

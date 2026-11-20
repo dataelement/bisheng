@@ -110,6 +110,10 @@ async def chat_completions(
         # but passes no register callable (AC-10).
         await MemoryGate.open(chat_id, login_user)
 
+    # F005: the workbench adds the tools an admin auto-enabled; the open API does not.
+    from bisheng.workstation.domain.services.workstation_service import WorkStationService
+
+    data = await WorkStationService.awith_auto_enabled_tools(data, login_user)
     return await stream_chat_completion(request, data, login_user, memory_register=memory_register)
 
 

@@ -75,6 +75,9 @@ class CapabilityCatalogService:
         from bisheng.linsight.domain.services.user_skills import UserSkillsService
 
         for record, enabled in await UserSkillsService(self.user.user_id).records(False):
+            if getattr(record, "auto_enabled", False):
+                # F005: always available, so not listed in the capability center.
+                continue
             skill = self.work._skill_info(record)
             ready = enabled
             if ready:
@@ -106,7 +109,10 @@ class CapabilityCatalogService:
         if configured_tools is not None:
             from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
-            configured = await WorkStationService.afilter_tools_by_use_permission(configured_tools, self.user)
+            # F005: auto-enabled groups are always on, so the picker does not offer them.
+            configured = await WorkStationService.afilter_tools_by_use_permission(
+                [group for group in configured_tools if not group.get("auto_enabled")], self.user
+            )
             disabled = await UserToolAvailabilityService(self.user.user_id).disabled_ids(
                 [
                     SimpleNamespace(id=child["id"], is_preset=group.get("is_preset") or 0)

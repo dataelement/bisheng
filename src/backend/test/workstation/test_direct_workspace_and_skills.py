@@ -129,6 +129,7 @@ async def test_code_output_lands_in_conversation_workspace(make_env, monkeypatch
     assert tool_messages and "no workspace directory" not in str(tool_messages[-1].content)
 
 
+@pytest.mark.real_auto_enabled
 async def test_skills_available_in_direct(make_env, monkeypatch: pytest.MonkeyPatch):  # noqa: F811
     body = "---\nname: demo-skill\ndescription: 生成演示报告\n---\n\n# demo-skill\n按三步写报告。\n"
     calls: list[dict] = []
@@ -152,7 +153,7 @@ async def test_skills_available_in_direct(make_env, monkeypatch: pytest.MonkeyPa
     assert (await env.run(ctx)).status == "finished"
 
     assert calls == [{"tenant_id": TENANT, "selected": ["demo-skill"], "user_id": USER}]
-    # Mounted: the bundle is in the workspace of the conversation.
+    # Mounted: the stub copied the bundle into the conversation (the real copy is local, see test_skill_local_mount).
     assert f"workspace/{CID}/skills/demo-skill/SKILL.md" in env.store.objects
     # Advertised: the system prompt of the first model request lists the skill.
     system = "\n".join(str(m.content) for m in env.model.inputs[0] if isinstance(m, SystemMessage))
@@ -162,15 +163,22 @@ async def test_skills_available_in_direct(make_env, monkeypatch: pytest.MonkeyPa
     assert "按三步写报告" in str(read_back[-1].content)
 
 
-async def test_no_skills_selected_mounts_nothing(make_env, monkeypatch: pytest.MonkeyPatch):  # noqa: F811
-    async def materialize(*args, **kwargs):
-        raise AssertionError("no skill was selected: nothing may be materialised")
+@pytest.mark.real_auto_enabled
+async def test_no_skills_selected_still_mounts_every_usable_skill(make_env, monkeypatch: pytest.MonkeyPatch):  # noqa: F811
+    """F005 AC-24: a direct run mounts the user's skills even when none is picked; none is highlighted."""
+    calls: list[dict] = []
+
+    async def materialize(backend, tenant_id, selected, store=None, **kwargs):
+        calls.append({"selected": list(selected or []), "user_id": kwargs.get("user_id")})
+        return SkillProvisionResult([], [], None, None)
 
     monkeypatch.setattr(skill_provisioning, "materialize_session_skills", materialize)
     env = make_env([AIMessage(content="你好")])
 
     assert (await env.run(await env.submit("你好"))).status == "finished"
 
+    assert calls == [{"selected": [], "user_id": USER}]
+    # Nothing to copy: no workspace object and no local directory (决策 10).
     assert env.store.objects == {}
     assert not os.path.exists(env.file_dir)
 
