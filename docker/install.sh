@@ -6,6 +6,7 @@ umask 077
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${SCRIPT_DIR}/.env"
 source "${SCRIPT_DIR}/lib/install-env.sh"
+source "${SCRIPT_DIR}/lib/sandbox-security.sh"
 source "${SCRIPT_DIR}/lib/credential-install.sh"
 source "${SCRIPT_DIR}/lib/credential-migrate.sh"
 source "${SCRIPT_DIR}/lib/credential-rotate.sh"
@@ -57,9 +58,15 @@ if [[ $PREPARE_ONLY != true ]]; then
   docker_mode=$(docker info --format '{{range .SecurityOptions}}{{if eq . "name=rootless"}}rootless{{end}}{{end}}') || die '无法核实Docker权限模式，未准备新凭据'
   [[ $docker_mode != rootless ]] || die '当前rootless Docker的密钥映射尚未通过验收；未准备新凭据或修改账号，请使用已验证的标准Docker环境'
 fi
+# Host-owned runner firewall is a mandatory deployment precondition. No secrets
+# or application state are changed before this check succeeds.
+if [[ $PREPARE_ONLY != true ]]; then
+  bash "${SCRIPT_DIR}/lib/runner-egress.sh" verify
+fi
 # An existing .env is never replaced or merged automatically.
 [[ -f "$ENV_FILE" ]] || cp "${SCRIPT_DIR}/.env.example" "$ENV_FILE"
 chmod 600 "$ENV_FILE"
+sandbox_initialize_token
 compose() { "${COMPOSE[@]}" --env-file "$ENV_FILE" -f "${SCRIPT_DIR}/docker-compose.yml" "$@"; }
 credential_initialize_store
 profiles="$(env_get "$ENV_FILE" COMPOSE_PROFILES)"

@@ -30,6 +30,7 @@ def test_native_credentials_do_not_appear_in_environment_or_arguments():
     assert s["mysql"]["entrypoint"][-2:] == ["bash", "/credential-entrypoint.sh"]
     assert s["mysql"]["command"] == ["mysqld"]
     assert any("mysql/credential-entrypoint.sh:/credential-entrypoint.sh:ro" in v for v in s["mysql"]["volumes"])
+    assert (ROOT / "docker/mysql/credential-entrypoint.sh").is_file()
     assert "OPENFGA_DATASTORE_URI" not in s["openfga"]["environment"]
     assert s["openfga"]["command"] == ["run"]
     assert s["openfga-migrate"]["command"] == ["migrate"]
@@ -42,6 +43,15 @@ def test_native_credentials_do_not_appear_in_environment_or_arguments():
     assert "--aclfile" in s["redis"]["command"]
     assert "NOAUTH" not in str(s["redis"]["healthcheck"])
     assert "mysql-init" in s["openfga-migrate"]["depends_on"]
+
+
+def test_compose_script_mounts_have_checked_in_assets():
+    for service in services().values():
+        for mount in service.get("volumes", []):
+            if isinstance(mount, str) and mount.startswith("./"):
+                source = mount.split(":")[0]
+                if source.endswith((".sh", ".awk")):
+                    assert (ROOT / "docker" / source).is_file(), source
 
 
 def test_health_scripts_are_readonly_and_no_trace_or_password_argv():

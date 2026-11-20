@@ -122,6 +122,11 @@ scope_overrides(
 scope_overrides(endpoints_router, S.PLATFORM, "get_config", "save_config", "update_web_config")
 scope_overrides(brand_router, S.PUBLIC, "get_brand_runtime_config")
 scope_overrides(share_link_router, S.CREDENTIAL, "get_share_link_info")
+# Document-server callbacks authenticate their signed body and bound edit ticket;
+# requiring a browser session here rejects legitimate server-to-server saves.
+# Editor configuration and template routes retain their tenant/browser admission.
+scope_overrides(report_router, S.CREDENTIAL, "callback")
+scope_overrides(workflow_router, S.CREDENTIAL, "upload_report_file")
 
 router = APIRouter(
     prefix="/api/v1",

@@ -1,138 +1,26 @@
-import asyncio
-import json
 from typing import Annotated
 
-from fastapi import APIRouter, Body
-from sqlmodel import select
+from fastapi import APIRouter, Body, Depends, Query
 
-from bisheng.api.v1.schemas import resp_200
-from bisheng.common.errcode.knowledge import BackendProcessingError
-from bisheng.core.database import get_sync_db_session
-from bisheng.database.models.recall_chunk import RecallChunk
-from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
-from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.schemas.api import resp_200
+from bisheng.knowledge.domain.services.qa_recall_service import QaRecallService
 
-# build router
-router = APIRouter(prefix='/qa', tags=['QA'])
+router = APIRouter(prefix="/qa", tags=["QA"], dependencies=[Depends(UserPayload.get_login_user)])
 
 
-# Some interfaces of the traceability module
-@router.get('/keyword')
-async def get_answer_keyword(message_id: int):
-    # Get Hitskey
-    conter = 3
-    while True:
-        with get_sync_db_session() as session:
-            chunks = session.exec(
-                select(RecallChunk).where(RecallChunk.message_id == message_id)).first()
-        # keywords
-        if chunks:
-            keywords = chunks.keywords
-            return resp_200(json.loads(keywords))
-        else:
-            # Delay Loop
-            if conter <= 0:
-                break
-            await asyncio.sleep(1)
-            conter -= 1
-    raise BackendProcessingError()
+@router.get("/keyword")
+async def get_answer_keyword(
+    message_id: Annotated[int, Query(gt=0)],
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    return resp_200(await QaRecallService.keywords(login_user, message_id))
 
 
-@router.post('/chunk', status_code=200)
-def get_original_file(message_id: Annotated[int, Body(embed=True)],
-                      keys: Annotated[str, Body(embed=True)]):
-    # Get Hitskey
-    with get_sync_db_session() as session:
-        chunks = session.exec(
-            select(RecallChunk).where(RecallChunk.message_id == message_id)).all()
-
-    if not chunks:
-        return resp_200(message='No bulkpost found in Trashchunks')
-
-    # chunk care of all offile
-    file_ids = {chunk.file_id for chunk in chunks}
-    db_knowledge_files = KnowledgeFileDao.get_file_by_ids(list(file_ids))
-    id2file = {file.id: file for file in db_knowledge_files}
-    # keywords
-    keywords = keys.split(';') if keys else []
-    result = []
-    for index, chunk in enumerate(chunks):
-        file = id2file.get(chunk.file_id)
-        chunk_metadata = json.loads(chunk.meta_data) if chunk.meta_data else {}
-
-        chunk_res = json.loads(chunk_metadata.get('bbox')) if chunk_metadata and chunk_metadata.get("bbox") else {}
-        file_access = chunk_metadata.get('right', True)
-        chunk_res['right'] = file_access
-        if file_access and file:
-            # Preview filesurl
-            original_url, preview_url = KnowledgeService.get_file_share_url(file.id)
-            chunk_res['preview_url'] = preview_url
-            chunk_res['original_url'] = original_url
-            chunk_res['source'] = file.file_name
-        else:
-            chunk_res['preview_url'] = ''
-            chunk_res['original_url'] = ''
-            chunk_res['source'] = ''
-
-        chunk_res['score'] = round(match_score(chunk.chunk, keywords),
-                                   2) if len(keywords) > 0 else 0
-        chunk_res['file_id'] = chunk.file_id
-        chunk_res['parse_type'] = file.parse_type if file else ''
-
-        result.append(chunk_res)
-
-    # sort_and_filter_all_chunks(keywords, all_chunk)
-    return resp_200(result)
-
-
-def find_lcsubstr(s1, s2):
-    m = [[0 for i in range(len(s2) + 1)] for j in range(len(s1) + 1)]
-    mmax = 0
-    p = 0
-    for i in range(len(s1)):
-        for j in range(len(s2)):
-            if s1[i] == s2[j]:
-                m[i + 1][j + 1] = m[i][j] + 1
-                if m[i + 1][j + 1] > mmax:
-                    mmax = m[i + 1][j + 1]
-                    p = i + 1
-    return s1[p - mmax:p], mmax
-
-
-def match_score(chunk, keywords):
-    """
-    After deduplicationkeywordsBlanketchunkWhat percentage is covered?
-    """
-    hit_num = 0
-    # # Exact match
-    # for keyword in keywords:
-    #     if keyword in chunk:
-    #         hit_num += 1
-
-    # fuzzy matching, keywords2/3The above is included
-    for keyword in keywords:
-        res = find_lcsubstr(keyword, chunk)
-        if res[1] >= 2 / 3 * len(keyword):
-            hit_num += 1
-    return hit_num / len(keywords)
-
-
-def sort_and_filter_all_chunks(keywords, all_chunks, thr=0.0):
-    """
-    1. answerExtract and deduplicate keywords
-    2. Calculated keywords arechunkPercentage of coverage (=matched_key_num / all_key_num), calculate each in turnchunk
-    3. From high to low in terms of coverage ratio, yeschunkSort
-    4. Filter coverage ratio is less than thresholdThrright of privacychunkwhile retaining at least onechunk(To prevent the threshold from being too high, put all thechunkhave been filtered out)
-    """
-    keywords = set(keywords)
-
-    chunk_match_score = []
-    for index, chunk in enumerate(all_chunks):
-        chunk_match_score.append(match_score(chunk, keywords))
-
-    sorted_res = sorted(enumerate(chunk_match_score), key=lambda x: -x[1])
-    remain_chunks = [all_chunks[elem[0]] for elem in sorted_res if elem[1] >= thr]
-    if not remain_chunks:
-        remain_chunks = [all_chunks[sorted_res[0][0]]]
-
-    return remain_chunks
+@router.post("/chunk", status_code=200)
+async def get_original_file(
+    message_id: Annotated[int, Body(embed=True, gt=0)],
+    keys: Annotated[str, Body(embed=True, max_length=4096)],
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    return resp_200(await QaRecallService.original_files(login_user, message_id, keys))

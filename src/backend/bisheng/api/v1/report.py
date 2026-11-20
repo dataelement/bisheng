@@ -1,14 +1,18 @@
+import hashlib
+
 import jwt
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, Header, HTTPException
 from loguru import logger
-from sqlalchemy import or_
 from sqlmodel import select
 
 from bisheng.api.services.office_callback import afetch_office_document
+from bisheng.api.services.report_editor_security import authorize_editor, resolve_callback_report, verify_callback
+from bisheng.api.services.report_repository import ReportRepository
 from bisheng.api.v1.schemas import resp_200
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.services.config_service import settings as bisheng_settings
+from bisheng.core.context.tenant import tenant_execution_scope
 from bisheng.core.database import get_sync_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.report import Report
@@ -33,26 +37,36 @@ async def get_office_token(
     hand the document server an editor config of their choosing.
     """
     secret = bisheng_settings.get_from_db("office_jwt_secret") or ""
-    if not secret:
-        return resp_200({"token": ""})
-    token = jwt.encode(payload, secret, algorithm="HS256")
-    return resp_200({"token": token})
+    if not isinstance(secret, str) or not secret:
+        raise HTTPException(503, "Document server authentication is not configured")
+    config = await authorize_editor(payload, login_user)
+    token = jwt.encode(config, secret, algorithm="HS256")
+    return resp_200({"token": token, "config": config})
 
 
 @router.post("/callback")
-async def callback(data: dict):
-    status = data.get("status")
-    file_url = data.get("url")
-    key = data.get("key")
-    logger.debug(f"calback={data}")
-    if status in {2, 6}:
-        # Save Back
-        logger.info(f"office_callback url={file_url}")
-        content = await afetch_office_document(file_url)
+async def callback(data: dict, authorization: str | None = Header(default=None)):
+    if not isinstance(data.get("token"), str) and not isinstance(authorization, str):
+        return {"error": 1}
+    secret = bisheng_settings.get_from_db("office_jwt_secret") or ""
+    body = verify_callback(data, secret, authorization if isinstance(authorization, str) else None)
+    if body is None:
+        return {"error": 1}
+    if body["status"] not in {2, 6}:
+        return {"error": 0}
+    key = body["key"]
+    db_report = await resolve_callback_report(key)
+    if db_report is None:
+        return {"error": 1}
+    # No default/middleware tenant is trusted for a document-server callback.
+    with tenant_execution_scope(db_report.tenant_id):
+        content = await afetch_office_document(body["url"])
         if content is None:
-            # Non-zero tells the document server the save failed; nothing is stored.
             return {"error": 1}
-        object_name = mino_prefix + key + ".docx"
+        # Immutable content-addressed write: a stale concurrent key cannot
+        # overwrite the blob referenced by a newer report row.
+        digest = hashlib.sha256(content).hexdigest()
+        object_name = f"{mino_prefix}{db_report.id}/{key}/{digest}.docx"
         minio_client = await get_minio_storage()
         await minio_client.put_object(
             bucket_name=minio_client.bucket,
@@ -60,32 +74,21 @@ async def callback(data: dict):
             file=content,
             content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         )
-        # Duplicate save,key Data Update Error
-        with get_sync_db_session() as session:
-            db_report = session.exec(
-                select(Report).where(or_(Report.version_key == key, Report.newversion_key == key))
-            ).first()
-        if not db_report:
-            logger.error(f"report_callback cannot find the flow_id flow_id={key}")
-            raise HTTPException(status_code=500, detail="cannot find the flow_id")
-        db_report.object_name = object_name
-        db_report.version_key = key
-        db_report.newversion_key = None
-        with get_sync_db_session() as session:
-            session.add(db_report)
-            session.commit()
+        if not ReportRepository.save_callback(db_report.id, key, object_name):
+            logger.warning("Report callback key changed during save; row update refused")
+            return {"error": 1}
     return {"error": 0}
 
 
 @router.get("/report_temp")
 async def get_template(*, flow_id: str, login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    """Return the report template only to a user who can view that workflow.
+    """Open an editor only for a user who can edit the owning workflow.
 
     The handler used to carry no login dependency, and CustomMiddleware only
     authenticates requests that bring a token, so an anonymous GET could read
     any flow's presigned report URL and mint a new ``newversion_key``.
     """
-    if not await check_business_action(login_user, resource_type="workflow", resource_id=flow_id, action="visible"):
+    if not await check_business_action(login_user, resource_type="workflow", resource_id=flow_id, action="edit"):
         raise UnAuthorizedError()
     with get_sync_db_session() as session:
         db_report = session.exec(

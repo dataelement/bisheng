@@ -8,6 +8,7 @@ process, rather than changing its encryption identity partway through a request.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import stat
@@ -113,7 +114,7 @@ def load_keyring(path: str | Path) -> KeyRing:
     if (
         not isinstance(data, dict)
         or set(data) != {"version", "keys"}
-        or type(data["version"]) is not int
+        or type(data["version"]) not in (int,)  # Reject bool and integer subclasses.
         or data["version"] != 1
         or not isinstance(data["keys"], list)
         or not data["keys"]
@@ -124,6 +125,13 @@ def load_keyring(path: str | Path) -> KeyRing:
         raise CredentialConfigurationError(f"{_KEY_FILE_ENV}: invalid Fernet key")
     if len(set(keys)) != len(keys):
         raise CredentialConfigurationError(f"{_KEY_FILE_ENV}: duplicate keys")
+    # A public historical product key may only be a credential migration reader.
+    if hashlib.sha256(keys[0].encode("utf-8")).hexdigest() == (
+        "f58095410df241bfee6f26c9963900d062bfe68f429a2fc3ca9147357851b80a"
+    ):
+        raise CredentialConfigurationError(
+            f"{_KEY_FILE_ENV}: public historical primary refused; provision a private primary and restart"
+        )
     try:
         ciphers = [Fernet(key.encode("ascii")) for key in keys]
     except (ValueError, TypeError):

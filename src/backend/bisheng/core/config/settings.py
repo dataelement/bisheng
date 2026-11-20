@@ -18,11 +18,7 @@ from bisheng.core.config.multi_tenant import MultiTenantConf
 from bisheng.core.config.open_platform import OpenApiConf, OpenMcpConf, OpenPlatformConf
 from bisheng.core.config.openfga import OpenFGAConf
 from bisheng.core.config.reconcile import ReconcileConf
-from bisheng.core.config.secret_crypto import (
-    CredentialConfigurationError,
-    decrypt_token,
-    encrypt_token,  # noqa: F401 -- compatibility export for existing consumers
-)
+from bisheng.core.config.secret_crypto import CredentialConfigurationError, decrypt_token, encrypt_token  # noqa: F401
 from bisheng.core.config.sso_sync import SSOSyncConf
 from bisheng.core.config.user_tenant_sync import UserTenantSyncConf
 
@@ -223,7 +219,7 @@ class ElasticsearchConf(BaseModel):
                 raise CredentialConfigurationError("elasticsearch.url: invalid or embedded authentication") from None
         if "basic_auth" in result:
             auth = result["basic_auth"]
-            if not isinstance(auth, (tuple, list)) or len(auth) != 2 or not isinstance(auth[0], str):
+            if not isinstance(auth, tuple | list) or len(auth) != 2 or not isinstance(auth[0], str):
                 raise CredentialConfigurationError("elasticsearch.basic_auth: username and encrypted password required")
             result["basic_auth"] = (auth[0], _credential(auth[1], "elasticsearch.basic_auth"))
         self.ssl_verify = result
@@ -291,10 +287,9 @@ class WorkflowConf(BaseModel):
     code_node_enabled: bool = Field(
         default=False,
         description=(
-            "Whether workflows may run their Code node. Off unless an operator turns it on: "
-            "the node executes user-supplied Python with this process's privileges and there "
-            "is no execution sandbox yet, so while it is on, everyone who can edit a workflow "
-            "can run commands on the server."
+            "Whether workflows may run their Code node. Off unless an operator turns it on. "
+            "User code is not executed in this process: the backend-host local executor is rejected, "
+            "and a run uses only a configured external container or e2b interpreter."
         ),
     )
 
@@ -423,7 +418,11 @@ class CeleryConf(BaseModel):
             ("memory_scan_sessions", "bisheng.worker.memory.tasks.scan_memory_sessions", 60.0),
             ("memory_reconcile", "bisheng.worker.memory.tasks.reconcile_memory", 3600.0),
             ("memory_flush_metrics", "bisheng.worker.memory.tasks.flush_memory_metrics", 600.0),
-            ("memory_cleanup_turns", "bisheng.worker.memory.tasks.cleanup_memory_turns", crontab.from_string("40 4 * * *")),
+            (
+                "memory_cleanup_turns",
+                "bisheng.worker.memory.tasks.cleanup_memory_turns",
+                crontab.from_string("40 4 * * *"),
+            ),
         ):
             if key not in self.beat_schedule:
                 self.beat_schedule[key] = {"task": task, "schedule": schedule}

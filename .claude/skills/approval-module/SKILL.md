@@ -88,6 +88,8 @@ ApprovalCenterService.decide_task()
 - 排在 applicant 之后是刻意的——反过来的话，陌生人打一个终态单子会拿到「已结束」而不是「无权限」，等于把「哪些单子还开着」探测出去。
 - ⚠️ **这是审批模块公共 API 的行为收紧，对菜单权限申请 / 频道订阅 / 知识空间加入三个既有场景同样生效**。`executing` / `executed` / `execute_failed` / `exception` 四个审批后状态同样被拒（「已结束不能撤回」）。回归护栏在 `test/app_publish/test_withdraw_guard.py`（15 例，含频道订阅与知识空间加入两个既有场景）。
 
+**审批决定安全边界（2026-11-13，当前分支未发布）**：`ApprovalTaskDecisionReq.action` 只接受字面值 `approve` / `reject`，`decide_task()` 服务边界也拒绝其它值（422），避免错误字符串落入通过或跳过应用发布候选人复核。所有场景使用 `ApprovalInstanceRepository.decision_transaction()`：先用数据库 UPDATE 获取实例写锁，再在同一异步 session 内复核实例/任务 pending、更新 OR/AND 同级任务、推进节点、写动作日志与 outbox；异常整体回滚。无进程锁、无同步数据库锁跨 await。审计、通知、业务拒绝回调和 Celery dispatch 在事务提交后才执行；提交后的副作用失败会传播，已提交决定不回滚、再次决定不重复执行。队列失败会保留 pending outbox，需运维重投，不保证通知/队列与 SQL 的跨系统恰好一次。通用撤回、业务取消及应用发布撤回现在同样按实例先锁、再读任务的顺序执行 SQL 事务，事务内复核 pending/终态，业务回调与通知仍在提交后。管理员异常处理的其它旧路径不宣称全部交错已覆盖。
+
 **多节点 / 会签**：`_advance_after_node_approved()` 实现顺序流转。
 - OR 节点（`node_mode=or`）：任一人通过即把同节点其余 PENDING task 置 SKIPPED 并 advance。
 - AND 节点（`node_mode=and`）：同节点全部通过才 advance。
@@ -237,7 +239,7 @@ ApprovalCenterService.decide_task()
 | `approval_instance` | 一次审批申请 | `pending/approved/rejected/withdrawn/executed/execute_failed/exception/cancelled` |
 | `approval_task` | 分配给审批人的节点待办 | `pending/approved/rejected/skipped/cancelled` |
 | `approval_exception` | 异常记录 | `open/resolved`，`exception_type: route_missing/approver_empty/execute_failed` |
-| `approval_outbox` | 业务执行队列 | `pending/success/failed` |
+| `approval_outbox` | 业务执行队列 | `pending/executing/success/failed`（executing 为已持久认领、结果可能待核对） |
 | `approval_action_log` | 时间线日志 | — |
 | `user_menu_access` | 用户级菜单授权（菜单审批专用） | `active/revoked` |
 | `approval_request` | **旧系统（已废弃）**：部门知识空间文件上传审批，仅兼容存量 | — |
@@ -251,7 +253,9 @@ ApprovalCenterService.decide_task()
 
 ## 6. outbox 与 Celery
 
-业务执行走 outbox：通过后写 `approval_outbox(PENDING)` → Celery `execute_approval_outbox` 执行 `handler.on_approved()` → 成功 outbox=SUCCESS、instance=EXECUTED；失败 outbox=FAILED、instance=EXECUTE_FAILED 并建 `execute_failed` 异常。
+业务执行走 outbox：通过后写 `approval_outbox(PENDING)` → Celery `execute_approval_outbox` 先 SQL CAS 认领 `pending → executing`，再执行 `handler.on_approved()` → 成功 outbox=SUCCESS、instance=EXECUTED；失败 outbox=FAILED、instance=EXECUTE_FAILED 并建 `execute_failed` 异常。管理员异常重试也统一走 `ApprovalOutboxService.retry_outbox()`，只允许 CAS `failed → executing`；success/执行中不会再次调用业务。认领按实例串行且 UPDATE 显式限定当前租户，普通投递仅允许 approved 实例，显式重试仅允许 execute_failed；历史竞争留下的不同 outbox 若同实例已有 success/executing/failed 也拒绝执行。`finish_outbox()` 在同一实例锁事务中写 outbox 结果和实例状态/失败异常；取消、撤回、拒绝、已执行终态不会被失败回写成 execute_failed。worker setup 失败同样在实例锁事务处理 pending outbox，不覆盖终态。管理员异常取消和手动完成也使用相同实例先锁事务及终态复核。
+
+**中断恢复契约（2026-11-13，未发布）**：`executing` 与 `error_summary` 持久保留认领时间和“业务结果可能不确定，核对后恢复”的说明，管理实例详情 API 同级 `executions` 返回 outbox_id/status/error_summary/update_time/retry_count（不返回额外执行 payload）。进程崩溃可能发生在外部业务已生效但 SQL 未确认时，故自动重投和普通 retry 均不抢占 executing。运维须先确认原 worker 已停止、检查业务实际效果，再人工选择确认完成或按受审操作恢复；本次没有自动租约接管，也没有宣称外部副作用恰好一次。pending 但未投递需运维重投原 outbox_id；不要为补投新建 outbox。现有异常“标记完成”与“取消”入口仍须按真实业务状态使用。
 
 > **原则：业务回调（`on_approved` 等）不得静默失败。** 该执行成功/失败由「是否抛异常」判定：抛异常 → outbox=FAILED + `execute_failed` 异常暴露问题；正常返回 → 一律视为成功并置 instance=EXECUTED。因此前置条件缺失（如找不到要激活的 membership/资源）**必须 raise**，绝不能 `return {'status':'xxx'}` 之类把失败伪装成成功——否则会出现 instance=executed 但业务实际没生效的「假成功」，且无任何告警。
 

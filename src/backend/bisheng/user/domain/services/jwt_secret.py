@@ -64,6 +64,16 @@ def configured_jwt_secret() -> str | None:
     return value
 
 
+def _validated_db_secret(value: str) -> str:
+    """Fail closed on compromised persisted signing authority without rotating data."""
+    if value.strip() in LEGACY_JWT_SECRETS:
+        raise ValueError(
+            "JWT signing key is publicly disclosed; configure a private signing key, "
+            "rotate the persisted key through the deployment procedure, and restart all processes"
+        )
+    return value
+
+
 def _load_or_create_db_secret() -> str:
     # Deferred: the config DAO drags in the database package, which must not be
     # imported by modules that are loaded before the app context exists.
@@ -74,7 +84,7 @@ def _load_or_create_db_secret() -> str:
 
     row = ConfigDao.get_config(ConfigKeyEnum.JWT_SECRET)
     if row and row.value:
-        return row.value
+        return _validated_db_secret(row.value)
     candidate = secrets.token_urlsafe(_SECRET_BYTES)
     try:
         with get_sync_db_session() as session:
@@ -86,7 +96,7 @@ def _load_or_create_db_secret() -> str:
         # Another process won the first-boot race; its value is the one to use.
         row = ConfigDao.get_config(ConfigKeyEnum.JWT_SECRET)
         if row and row.value:
-            return row.value
+            return _validated_db_secret(row.value)
         raise
 
 

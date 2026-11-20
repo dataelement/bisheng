@@ -133,14 +133,18 @@ async def _ensure_mutate_group_members(login_user, group: Group) -> bool:
 
 
 async def _ensure_tenant_member_scope(login_user, group: Group, user_ids: list[int], *, tenant_admin: bool) -> None:
-    """The new tenant-admin path cannot assign personnel from another tenant."""
-    if not tenant_admin:
-        return
+    """All membership writers must bind both groups and people to their scope."""
+    from bisheng.core.context.tenant import get_current_tenant_id
     from bisheng.user_group.domain.repositories.member_identity_repository import MemberIdentityRepository
 
-    tenant_id = int(getattr(login_user, "tenant_id", 0) or 0)
-    if group.tenant_id != tenant_id or (
-        await MemberIdentityRepository.tenant_member_ids(user_ids, tenant_id) != set(user_ids)
+    del tenant_admin  # Creator/delegated/global authority never grants foreign personnel.
+    tenant_id = get_current_tenant_id() or getattr(login_user, "tenant_id", None)
+    if (
+        type(tenant_id) is not int  # noqa: E721  # exact type, bool must not pass as int
+        or tenant_id <= 0
+        or group.tenant_id != tenant_id
+        or any(type(user_id) is not int or user_id <= 0 for user_id in user_ids)  # noqa: E721  # exact type, bool must not pass as int
+        or await MemberIdentityRepository.tenant_member_ids(user_ids, tenant_id) != set(user_ids)
     ):
         raise UserGroupPermissionDeniedError()
 
@@ -164,7 +168,7 @@ def _normalize_id_rows(raw: list) -> set[int]:
     for x in raw or []:
         if x is None:
             continue
-        if isinstance(x, (list, tuple)):
+        if isinstance(x, list | tuple):
             out.add(int(x[0]))
         else:
             out.add(int(x))
@@ -173,6 +177,51 @@ def _normalize_id_rows(raw: list) -> set[int]:
 
 class UserGroupService:
     """User group business logic. All methods are async classmethods."""
+
+    @classmethod
+    async def aensure_group_visible(cls, group_id: int, login_user) -> Group:
+        """Load the business target before applying the shared roster policy."""
+        group = await GroupDao.aget_by_id(group_id)
+        if not group:
+            raise UserGroupNotFoundError()
+        if not await _user_can_view_group(login_user, group):
+            raise UserGroupPermissionDeniedError()
+        return group
+
+    @classmethod
+    async def avalidate_legacy_membership_changes(
+        cls, login_user, user_id: int, group_ids: list[int], *, delegated_group_ids: list[int]
+    ) -> None:
+        """Validate every target GROUP before the legacy batch performs any writes.
+
+        Preserve delegated group administrators, but never treat authority over a
+        managed user as authority over an unrelated destination group.
+        """
+        delegated_ids = set(delegated_group_ids)
+        for group_id in group_ids:
+            group = await GroupDao.aget_by_id(group_id)
+            if not group:
+                raise UserGroupNotFoundError()
+            if not _is_admin(login_user) and group.tenant_id != getattr(login_user, "tenant_id", None):
+                raise UserGroupPermissionDeniedError()
+            if group_id in delegated_ids:
+                from bisheng.permission.application import (
+                    PermissionObject,
+                    PermissionSubject,
+                    get_permission_relation_api,
+                )
+
+                permissions = await get_permission_relation_api()
+                if not await permissions.check(
+                    subject=PermissionSubject("user", str(login_user.user_id)),
+                    relation="admin",
+                    resource=PermissionObject("user_group", str(group_id)),
+                ):
+                    raise UserGroupPermissionDeniedError()
+                await _ensure_tenant_member_scope(login_user, group, [user_id], tenant_admin=False)
+                continue
+            tenant_admin = await _ensure_mutate_group_members(login_user, group)
+            await _ensure_tenant_member_scope(login_user, group, [user_id], tenant_admin=tenant_admin)
 
     @classmethod
     async def _list_manageable_groups(cls, login_user) -> list[Group]:
@@ -305,13 +354,7 @@ class UserGroupService:
         group_id: int,
         login_user,
     ) -> dict[str, Any]:
-        group = await GroupDao.aget_by_id(group_id)
-        if not group:
-            raise UserGroupNotFoundError()
-
-        if not await _user_can_view_group(login_user, group):
-            raise UserGroupPermissionDeniedError()
-
+        group = await cls.aensure_group_visible(group_id, login_user)
         return await cls._enrich_group(group)
 
     @classmethod
@@ -379,12 +422,7 @@ class UserGroupService:
         keyword: str,
         login_user,
     ) -> dict[str, Any]:
-        group = await GroupDao.aget_by_id(group_id)
-        if not group:
-            raise UserGroupNotFoundError()
-
-        if not await _user_can_view_group(login_user, group):
-            raise UserGroupPermissionDeniedError()
+        await cls.aensure_group_visible(group_id, login_user)
 
         members, total = await UserGroupDao.aget_group_members(
             group_id,
@@ -427,7 +465,7 @@ class UserGroupService:
 
         ops = GroupChangeHandler.on_members_added(group_id, to_add)
         await GroupChangeHandler.execute_async(ops)
-        cls._audit_group(login_user, group, "update", note=f"增加={_id_brief(to_add)}；移除=无；结果=成功")
+        cls._audit_group(login_user, group, "update", note=f"增加={_id_brief(to_add)};移除=无;结果=成功")
 
     @classmethod
     async def async_plain_members(
@@ -440,13 +478,19 @@ class UserGroupService:
         group = await GroupDao.aget_by_id(group_id)
         if not group:
             raise UserGroupNotFoundError()
-        await _ensure_mutate_group_members(login_user, group)
+        tenant_admin = await _ensure_mutate_group_members(login_user, group)
 
         desired_set = {int(x) for x in desired_user_ids if x and int(x) > 0}
         current_ids = set(await UserGroupDao.aget_plain_member_user_ids(group_id))
 
         to_remove = sorted(current_ids - desired_set)
         to_add = sorted(desired_set - current_ids)
+        await _ensure_tenant_member_scope(
+            login_user,
+            group,
+            sorted(desired_set | set(to_remove)),
+            tenant_admin=tenant_admin,
+        )
 
         if to_remove:
             ops = []
@@ -464,7 +508,7 @@ class UserGroupService:
                 login_user,
                 group,
                 "update",
-                note=f"增加={_id_brief(to_add)}；移除={_id_brief(to_remove)}；结果=成功",
+                note=f"增加={_id_brief(to_add)};移除={_id_brief(to_remove)};结果=成功",
             )
 
     @classmethod
@@ -491,6 +535,14 @@ class UserGroupService:
 
         to_remove = sorted(current_manageable_ids - desired_ids)
         to_add = sorted((desired_ids & manageable_ids) - current_manageable_ids)
+
+        # Freeze/validate the entire delta before the first destructive remove.
+        for group_id in to_remove + to_add:
+            group = await GroupDao.aget_by_id(group_id)
+            if not group:
+                raise UserGroupNotFoundError()
+            tenant_admin = await _ensure_mutate_group_members(login_user, group)
+            await _ensure_tenant_member_scope(login_user, group, [user_id], tenant_admin=tenant_admin)
 
         for group_id in to_remove:
             await cls.aremove_member(group_id, user_id, login_user)
@@ -519,7 +571,7 @@ class UserGroupService:
 
         ops = GroupChangeHandler.on_member_removed(group_id, user_id)
         await GroupChangeHandler.execute_async(ops)
-        cls._audit_group(login_user, group, "update", note=f"增加=无；移除={user_id}；结果=成功")
+        cls._audit_group(login_user, group, "update", note=f"增加=无;移除={user_id};结果=成功")
 
     @classmethod
     async def aset_admins(

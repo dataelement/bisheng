@@ -75,6 +75,10 @@ docker compose --profile ft stop ft_server
 
 端口和资源需要满足 Compose 配置；Elasticsearch 的宿主机配置、外部模型及文档服务按实际环境准备。首次启动后仍需注册用户、配置模型。
 
+## 隔离执行与端口安全变更
+
+中间件宿主机端口默认只绑定 `127.0.0.1`（`BISHENG_MIDDLEWARE_BIND_IP` / `BISHENG_MINIO_BIND_IP`）。远程维护走受保护的入口、防火墙和 TLS，不把 MySQL、Redis、Elasticsearch、Milvus、OpenFGA 直接暴露到公网。`install.sh` 会生成 32 字节私有 `SANDBOX_TOKEN`，并拒绝空值、公开默认值和过短值。代码节点不再回退到进程内本地执行器。
+
 ## 查看启动状态
 
 ```bash

@@ -452,8 +452,17 @@ class AgentNode(BaseNode):
                 access_scope="per_user" if self._knowledge_auth else "shared",
             )
             return [space_tool]
+        knowledge_ids = self._knowledge_ids
+        if self._knowledge_type == "knowledge":
+            from bisheng.knowledge.domain.services.workflow_knowledge_authorization import authorized_knowledge_ids
+
+            knowledge_ids = authorized_knowledge_ids(
+                identity_user_id=self.user_id if self._knowledge_auth else self.flow_user_id,
+                tenant_id=self.tenant_id,
+                knowledge_ids=self._knowledge_ids,
+            )
         tools = []
-        for index, knowledge_id in enumerate(self._knowledge_ids):
+        for index, knowledge_id in enumerate(knowledge_ids):
             if self._knowledge_type == "knowledge":
                 knowledge_tool = ToolExecutor.init_knowledge_tool_sync(
                     self.user_id, knowledge_id, llm=self._llm, **knowledge_retriever
@@ -582,7 +591,7 @@ class AgentNode(BaseNode):
         logger.debug("agent_over result={}", ret)
         if self._output_user:
             # Nonstream Mode, processing results
-            for k, v in ret.items():
+            for _k, v in ret.items():
                 answer = v
                 self.graph_state.save_context(content=answer, msg_sender="AI")
 
@@ -624,7 +633,7 @@ class AgentNode(BaseNode):
             tool_logs = list(tool_invoke_info.values())
             tool_logs = self._dedupe_web_search_tool_logs(tool_logs)
             for one in tool_logs:
-                # knowledge_retriever_tool belong into rag logic，not show in tool log
+                # knowledge_retriever_tool belong into rag logic, not show in tool log
                 if one["name"] == "knowledge_retriever_tool":
                     continue
                 ret.append(
@@ -659,7 +668,11 @@ class AgentNode(BaseNode):
         return [item for index, item in enumerate(tool_logs) if index == keep_index or index not in web_search_indexes]
 
     def _run_once(
-        self, input_variable: str = None, unique_id: str = None, output_key: str = None, tool_invoke_list: list = None
+        self,
+        input_variable: str | None = None,
+        unique_id: str | None = None,
+        output_key: str | None = None,
+        tool_invoke_list: list | None = None,
     ) -> (str, str, list[CitationRegistryItemSchema]):
         """
         params:
@@ -713,7 +726,7 @@ class AgentNode(BaseNode):
             )
             output = result["agent_outcome"].return_values["output"]
             if isinstance(output, dict):
-                output = list(output.values())[0]
+                output = next(iter(output.values()))
             round_messages = [human_message]
             round_messages.extend(_format_intermediate_steps(result.get("intermediate_steps", [])))
             round_messages.append(AIMessage(content=output))
