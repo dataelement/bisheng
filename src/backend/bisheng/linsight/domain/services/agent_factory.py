@@ -1,3 +1,4 @@
+# ruff: noqa: RUF001, RUF002
 """F035 Track A · TA-3: deepagents agent factory.
 
 ``create_linsight_agent`` is the single装配点 that replaces the legacy
@@ -825,7 +826,7 @@ def _coerce_text(value: object) -> str:
         return ""
     if isinstance(value, str):
         return value.strip()
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, list | tuple):
         for x in value:
             text = _coerce_text(x)
             if text:
@@ -849,7 +850,7 @@ def _coerce_bool(value: object) -> bool:
     multi-select one."""
     if isinstance(value, str):
         return value.strip().lower() not in _FALSY_STRINGS
-    if isinstance(value, (bool, int, float)):
+    if isinstance(value, bool | int | float):
         return bool(value)
     return False
 
@@ -869,7 +870,7 @@ def _coerce_options(value: object) -> list[str]:
     def walk(v: object) -> None:
         if v is None:
             return
-        if isinstance(v, (list, tuple)):
+        if isinstance(v, list | tuple):
             for x in v:
                 walk(x)
             return

@@ -1,3 +1,4 @@
+# ruff: noqa: RUF001, RUF003
 import asyncio
 import mimetypes
 import os
@@ -2214,9 +2215,6 @@ class LinsightWorkbenchImpl:
             """
             Build task tree
             """
-            # Create task mapping
-            task_map = {task.id: task for task in all_tasks}
-
             # By Parent TaskIDGroup subtasks
             children_map = {}
             for task in all_tasks:
@@ -2585,7 +2583,11 @@ class LinsightWorkbenchImpl:
 
     @classmethod
     async def init_linsight_config_tools(
-        cls, session_version: LinsightSessionVersion, llm: BishengLLM, need_upload: bool = False, file_dir: str = None
+        cls,
+        session_version: LinsightSessionVersion,
+        llm: BishengLLM,
+        need_upload: bool = False,
+        file_dir: str | None = None,
     ) -> list[BaseTool]:
         """
         Tools for initializing Invis configurations

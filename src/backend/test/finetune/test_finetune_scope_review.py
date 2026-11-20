@@ -1,3 +1,4 @@
+# ruff: noqa: F811
 """Adversarial references and FT transport scope, through real tenant HTTP routes."""
 
 from unittest.mock import AsyncMock
@@ -216,9 +217,9 @@ async def test_service_registration_stamps_verified_target_not_request_tenant(ta
     from bisheng.common.dependencies.user_deps import UserPayload
     from bisheng.permission import application
 
-    tasks.app.dependency_overrides[UserPayload.get_tenant_admin_user] = lambda: tasks.user
-    # ServerService re-checks tenant administration below the route dependency.
+    # The route override already admits this caller. The service repeats the admin check.
     monkeypatch.setattr(application, "is_tenant_admin", AsyncMock(return_value=True))
+    tasks.app.dependency_overrides[UserPayload.get_tenant_admin_user] = lambda: tasks.user
     if super_user:
         tasks.user.is_global_super = True
         tasks.user.tenant_id = 1

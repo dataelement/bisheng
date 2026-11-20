@@ -1,3 +1,4 @@
+# ruff: noqa: RUF001, RUF002
 import asyncio
 import os
 import re
@@ -34,8 +35,8 @@ from bisheng.linsight.domain.models.linsight_session_version import (
     SessionVersionStatusEnum,
 )
 from bisheng.linsight.domain.services.agent_factory import _resolve_model, create_linsight_agent
-from bisheng.linsight.domain.services.memory_turns import LinsightMemoryRound, redact_exec_step
 from bisheng.linsight.domain.services.binary_content_guard import CODE_INTERPRETER_TOOL
+from bisheng.linsight.domain.services.memory_turns import LinsightMemoryRound, redact_exec_step
 from bisheng.linsight.domain.services.resilience_middleware import _MAX_STATE_ONLY_REFUNDS
 from bisheng.linsight.domain.services.state_message_manager import (
     LinsightStateMessageManager,
@@ -1688,7 +1689,7 @@ class LinsightWorkflowTask:
             # list holding the <uploaded_files> block). Join it — interpolating the
             # list directly emits its Python repr (brackets/quotes + escaped "\n"),
             # mangling the pointer block the model has to parse.
-            files_block = "\n".join(file_list) if isinstance(file_list, (list, tuple)) else str(file_list)
+            files_block = "\n".join(file_list) if isinstance(file_list, list | tuple) else str(file_list)
             parts.append(f"\n# 可用文件\n{files_block}")
         if knowledge_block:
             parts.append(
