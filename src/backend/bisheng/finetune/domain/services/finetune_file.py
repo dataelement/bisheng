@@ -1,14 +1,19 @@
+import asyncio
+import hashlib
 import json
 import os.path
 import re
+import zipfile
+from typing import Any
 from urllib.parse import unquote, urlsplit
 
 from fastapi import UploadFile
 from loguru import logger
+from PIL import UnidentifiedImageError
 from pydantic import BaseModel, ValidationError
 
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.finetune import InvalidExtraParamsError, TrainFileNotExistError
+from bisheng.common.errcode.finetune import InvalidDatasetPackageError, InvalidExtraParamsError, TrainFileNotExistError
 from bisheng.common.errcode.tenant import NoTenantContextError
 from bisheng.common.schemas.api import PageList
 from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter
@@ -19,26 +24,140 @@ from bisheng.knowledge.domain.upload_file_size import validate_knowledge_upload_
 from bisheng.permission.application.business_authorization import require_business_action
 from bisheng.utils import generate_uuid
 
+from ..models.dataset import FinetuneDataset
 from ..models.finetune import FinetuneTrainingFile
 from ..models.preset_train import PresetTrain, PresetTrainDao
+from ..repositories.dataset import FinetuneDatasetRepository
+from .dataset_validation import (
+    MEDIA_MAX_BYTES,
+    TEXT_MAX_BYTES,
+    UPLOAD_MAX_BYTES,
+    build_preview,
+    inspect_media,
+    inspect_package,
+    package_preview,
+    parse_manifest,
+    validate_records,
+)
 
 
 class FinetuneFileService(BaseModel):
     """Training Tasks File management"""
 
     @classmethod
-    async def upload_file(cls, files: list[UploadFile], is_preset: bool, user: UserPayload) -> list[PresetTrain]:
+    async def upload_file(
+        cls, files: list[UploadFile], is_preset: bool, user: UserPayload
+    ) -> list[PresetTrain] | list[dict[str, Any]]:
         if len(files) == 0:
             raise TrainFileNotExistError()
 
-        # Upload training files tominio
+        inspections = []
+        if not is_preset:
+            inspections = [await cls.inspect_training_upload(file) for file in files]
         file_root = cls.get_upload_file_root(is_preset)
         file_list = await cls.upload_file_to_minio(files, file_root, user)
         # Store preset data in database
         if is_preset:
             logger.info(f"save preset file : {file_list}")
             file_list = await PresetTrainDao.insert_batch(file_list)
-        return file_list
+        if is_preset:
+            return file_list
+        result = []
+        for item, (report, preview) in zip(file_list, inspections, strict=True):
+            report = await cls.store_preview(item.url, report, preview)
+            record = await FinetuneDatasetRepository.save(
+                FinetuneDataset(
+                    id=item.id,
+                    name=item.name,
+                    url=item.url,
+                    report=report,
+                    user_id=user.user_id,
+                )
+            )
+            result.append({**item.model_dump(), "dataset_report": report, "version_id": record.id})
+        return result
+
+    @staticmethod
+    async def store_preview(url: str, report: dict[str, Any], preview: bytes) -> dict[str, Any]:
+        minio_client = await get_minio_storage()
+        preview_url = f"{url}.preview.zip"
+        await minio_client.put_object(
+            bucket_name=minio_client.bucket, object_name=preview_url, file=preview, content_type="application/zip"
+        )
+        return {**report, "preview_url": preview_url, "preview_sha256": hashlib.sha256(preview).hexdigest()}
+
+    @staticmethod
+    def _inspect_stream(stream, extension: str) -> tuple[str, str, int, int, bytes]:
+        """Hash and validate an upload from its spooled file without loading a 2 GiB package into memory."""
+        digest = hashlib.sha256()
+        stream.seek(0)
+        while chunk := stream.read(1024 * 1024):
+            digest.update(chunk)
+        stream.seek(0)
+        if extension in {".json", ".jsonl"}:
+            raw = stream.read(TEXT_MAX_BYTES + 1)
+            if len(raw) > TEXT_MAX_BYTES:
+                raise ValueError("JSON / JSONL datasets must be at most 200 MiB; pack larger data as a ZIP")
+            records = parse_manifest(raw, extension)
+            validate_records(records)
+            preview = build_preview(records, lambda name: b"")
+            modality, samples, media = "text", len(records), 0
+        else:
+            modality, samples, media = inspect_package(stream)
+            stream.seek(0)
+            preview = package_preview(stream)
+        stream.seek(0)
+        return modality, digest.hexdigest(), samples, media, preview
+
+    @classmethod
+    async def inspect_training_upload(cls, file: UploadFile) -> tuple[dict[str, Any], bytes]:
+        file.file.seek(0, os.SEEK_END)
+        size = file.file.tell()
+        file.file.seek(0)
+        if not size or size > UPLOAD_MAX_BYTES:
+            raise InvalidDatasetPackageError.http_exception(msg="Dataset must be between 1 byte and 2 GiB")
+        extension = os.path.splitext(file.filename or "")[1].lower()
+        if extension not in {".json", ".jsonl", ".zip"}:
+            raise InvalidDatasetPackageError.http_exception(
+                msg="Use JSON/JSONL text data or a ZIP text, image or video package"
+            )
+        try:
+            modality, digest, samples, media, preview = await asyncio.to_thread(
+                cls._inspect_stream, file.file, extension
+            )
+        except (
+            UnicodeDecodeError,
+            json.JSONDecodeError,
+            ValueError,
+            zipfile.BadZipFile,
+            UnidentifiedImageError,
+            OSError,
+        ) as exc:
+            raise InvalidDatasetPackageError.http_exception(msg=str(exc)) from exc
+        return cls.dataset_report(modality, digest, samples, media), preview
+
+    @staticmethod
+    def dataset_report(data_type: str, digest: str, samples: int, media: int) -> dict[str, Any]:
+        return {
+            "data_type": data_type,
+            "samples": samples,
+            "media": media,
+            "sha256": digest,
+            "validated": True,
+            "validation_stage": "structure_checked" if data_type == "video_text" else "content_checked",
+            "requires_ft_decode": data_type == "video_text",
+        }
+
+    @staticmethod
+    def validate_text_records(records: Any) -> None:
+        validate_records(records)
+
+    @staticmethod
+    def validate_image_text_archive(content: bytes) -> tuple[int, int]:
+        modality, samples, media = inspect_package(content)
+        if modality != "image_text":
+            raise ValueError("Expected an image-text dataset")
+        return samples, media
 
     @classmethod
     def _tenant_id(cls) -> int:
@@ -154,6 +273,30 @@ class FinetuneFileService(BaseModel):
             cls.validate_personal_file(file_url, user)
         minio = await get_minio_storage()
         return await minio.get_share_link(dataset.url if dataset else file_url, clear_host=False)
+
+    @classmethod
+    async def upload_validation_media(cls, job_id: str, modality: str, file: UploadFile, user: UserPayload):
+        content = await file.read(MEDIA_MAX_BYTES + 1)
+        await file.seek(0)
+        try:
+            inspect_media(content, file.filename or "", modality)
+        except (ValueError, OSError) as exc:
+            raise InvalidDatasetPackageError.http_exception(msg=str(exc)) from exc
+        report = cls.dataset_report(modality, hashlib.sha256(content).hexdigest(), 1, 1)
+        items = await cls.upload_file_to_minio([file], f"finetune/validation/{job_id}", user)
+        item = items[0]
+        await FinetuneDatasetRepository.save(
+            FinetuneDataset(
+                id=item.id,
+                name=item.name,
+                url=item.url,
+                purpose="inference",
+                job_id=job_id,
+                report=report,
+                user_id=user.user_id,
+            )
+        )
+        return {"url": item.url, "name": item.name, **report}
 
     @classmethod
     def get_upload_file_root(cls, is_preset: bool) -> str:

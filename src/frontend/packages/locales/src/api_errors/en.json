@@ -790,5 +790,12 @@
   "WORKBENCH_ARCHIVE_INVALID": "Workbench archive is corrupt or invalid",
   "WORKBENCH_VALIDATION_FAILED": "Workbench package content is invalid",
   "workbenchUploadTooLarge": "The server rejected the upload because it exceeds its size limit (HTTP 413). Choose a smaller archive.",
-  "15033": "Invalid image generation settings. Check the API address, API key and model; Azure is not supported."
+  "15033": "Invalid image generation settings. Check the API address, API key and model; Azure is not supported.",
+  "10127": "The selected model does not support this data type or training method.",
+  "10128": "Training preflight failed. Check the service, model and parameters.",
+  "10129": "The dataset or media is invalid. Correct it using the validation details.",
+  "10130": "Fine-tuned model inference failed. Check the artifacts and service logs.",
+  "10131": "The training file could not be delivered to the training service. Check that the service is reachable and has free disk space, then submit again.",
+  "10132": "The training server cannot read the data source, so no task was created. Check the password or keys, and that the training server can reach the data source.",
+  "10133": "The training service is too old for this page: it lacks the interfaces the new fine-tuning page needs. Upgrade it to the version that supports text, image and video fine-tuning."
 }

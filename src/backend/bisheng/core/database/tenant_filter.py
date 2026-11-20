@@ -125,6 +125,7 @@ _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.finetune.domain.models.preset_train",
     "bisheng.finetune.domain.models.model_deploy",
     "bisheng.finetune.domain.models.finetune",
+    "bisheng.finetune.domain.models.dataset",
     # Open API auth: package-level registration — the package __init__ imports
     # api_credential / service_account / credential_delegate_scope /
     # open_api_tenant_setting, all of which carry tenant_id.

@@ -4,69 +4,104 @@ from .base import BaseErrorCode
 # finetuneTraining Module Return error code, business code101
 class CreateFinetuneError(BaseErrorCode):
     Code: int = 10100
-    Msg: str = 'Failed to create training task'
+    Msg: str = "Failed to create training task"
 
 
 class TrainDataNoneError(BaseErrorCode):
     Code: int = 10101
-    Msg: str = 'Individual Training Sets and Preset Training Sets Select at least one'
+    Msg: str = "Individual Training Sets and Preset Training Sets Select at least one"
 
 
 class NotFoundJobError(BaseErrorCode):
     Code: int = 10102
-    Msg: str = 'Quest does not exist'
+    Msg: str = "Quest does not exist"
 
 
 class JobStatusError(BaseErrorCode):
     Code: int = 10103
-    Msg: str = 'Task status error'
+    Msg: str = "Task status error"
 
 
 class CancelJobError(BaseErrorCode):
     Code: int = 10104
-    Msg: str = 'Task cancellation failed'
+    Msg: str = "Task cancellation failed"
 
 
 class DeleteJobError(BaseErrorCode):
     Code: int = 10105
-    Msg: str = 'Task deletion failed'
+    Msg: str = "Task deletion failed"
 
 
 class ExportJobError(BaseErrorCode):
     Code: int = 10106
-    Msg: str = 'Task publishing failed'
+    Msg: str = "Task publishing failed"
 
 
 class ChangeModelNameError(BaseErrorCode):
     Code: int = 10107
-    Msg: str = 'Model name interface modification failed'
+    Msg: str = "Model name interface modification failed"
 
 
 class UnExportJobError(BaseErrorCode):
     Code: int = 10108
-    Msg: str = 'Failed to unpublish'
+    Msg: str = "Failed to unpublish"
 
 
 class InvalidExtraParamsError(BaseErrorCode):
     Code: int = 10109
-    Msg: str = 'Invalid training parameters'
+    Msg: str = "Invalid training parameters"
 
 
 class ModelNameExistsError(BaseErrorCode):
     Code: int = 10110
-    Msg: str = 'Model name already exists'
+    Msg: str = "Model name already exists"
 
 
 class TrainFileNotExistError(BaseErrorCode):
     Code: int = 10120
-    Msg: str = 'Training file does not exist'
+    Msg: str = "Training file does not exist"
 
 
 class GetGPUInfoError(BaseErrorCode):
     Code: int = 10125
-    Msg: str = 'DapatkanGPUMessage failed'
+    Msg: str = "DapatkanGPUMessage failed"
 
 
 class GetModelError(BaseErrorCode):
     Code: int = 10126
-    Msg: str = 'Access to model list failed'
+    Msg: str = "Access to model list failed"
+
+
+class UnsupportedFinetuneCapabilityError(BaseErrorCode):
+    Code: int = 10127
+    Msg: str = "The selected model, modality and training method combination is not supported"
+
+
+class FinetunePreflightError(BaseErrorCode):
+    Code: int = 10128
+    Msg: str = "Training preflight failed"
+
+
+class InvalidDatasetPackageError(BaseErrorCode):
+    Code: int = 10129
+    Msg: str = "The training dataset package is invalid"
+
+
+class FinetuneInferenceValidationError(BaseErrorCode):
+    Code: int = 10130
+    Msg: str = "Fine-tuned model inference validation failed"
+
+
+class FinetuneDatasetTransferError(BaseErrorCode):
+    Code: int = 10131
+    Msg: str = "Failed to deliver the training file to the training service"
+
+
+class FinetuneDatasetSourceError(BaseErrorCode):
+    Code: int = 10132
+    Msg: str = "The training service cannot read the dataset from its source"
+
+
+class FinetuneServiceOutdatedError(BaseErrorCode):
+    Code: int = 10133
+    Msg: str = "The training service is too old for this page; upgrade it to the multimodal version"
