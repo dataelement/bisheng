@@ -1,0 +1,83 @@
+name: Offline bundle
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 已发布的 git tag，例如 v3.1.0
+        required: true
+        type: string
+jobs:
+  offline-bundle:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: amd64, runner: ubuntu-latest }
+          - { arch: arm64, runner: ubuntu-22.04-arm }
+    runs-on: ${{ matrix.runner }}
+    env:
+      VERSION: ${{ inputs.version }}
+      ARCH: ${{ matrix.arch }}
+      NEXUS_USER: ${{ secrets.NEXUS_CI_USER }}
+      NEXUS_PASS: ${{ secrets.NEXUS_CI_PASS }}
+      NEXUS_BASE: https://nexus.dataelem.com
+      NEXUS_REPO: raw-hosted
+    steps:
+    - name: Reject the test-environment branch name
+      run: |
+        [[ "$VERSION" =~ ^v[0-9] ]] || { echo "version 必须是 v* tag，不能是分支名：$VERSION"; exit 1; }
+
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+
+    - name: Take docker/ from the version tag
+      id: tag
+      run: |
+        git fetch --depth 1 origin "refs/tags/${VERSION}:refs/tags/${VERSION}"
+        git archive "$VERSION" docker | tar -x -C "$RUNNER_TEMP"
+        grep -q -- '--offline' "$RUNNER_TEMP/docker/install.sh" \
+          || { echo "${VERSION} 的 docker/install.sh 还不识别 --offline"; exit 1; }
+        echo "commit=$(git rev-parse "${VERSION}^{}")" >> "$GITHUB_OUTPUT"
+
+    - uses: docker/login-action@v3
+      with:
+        registry: cr.dataelem.com
+        username: ${{ secrets.CR_DOCKERHUB_USERNAME }}
+        password: ${{ secrets.CR_DOCKERHUB_TOKEN }}
+
+    - name: Require the promoted CR tag
+      run: |
+        suffix=""
+        [[ "$ARCH" == "arm64" ]] && suffix="-arm64"
+        docker manifest inspect "cr.dataelem.com/dataelement/bisheng-backend:${VERSION}${suffix}" >/dev/null
+
+    - name: Collect image refs
+      run: ./scripts/collect-images.sh --arch "$ARCH" --version "$VERSION" --env-example "$RUNNER_TEMP/docker/.env.example" > images.txt
+
+    - name: Build offline bundle
+      env:
+        GIT_COMMIT: ${{ steps.tag.outputs.commit }}
+        GIT_REF: refs/tags/${{ inputs.version }}
+        CI_PROVIDER: github
+      run: |
+        ./scripts/make-bundle.sh \
+          --version "${VERSION#v}" --arch "$ARCH" \
+          --images-file images.txt \
+          --docker-dir "$RUNNER_TEMP/docker" \
+          --out dist --compress zstd --split-size 2G
+
+    - name: Upload to Nexus
+      run: |
+        ./scripts/nexus-upload.sh \
+          --dir dist --version "${VERSION#v}" --arch "$ARCH" \
+          --base-url "$NEXUS_BASE" --repo "$NEXUS_REPO" \
+          --method rest --verify sha256 --update-latest
+
+    - name: Notify
+      if: always()
+      continue-on-error: true
+      env:
+        FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
+        BUNDLE_STATUS: ${{ job.status }}
+      run: ./scripts/notify-lark.sh

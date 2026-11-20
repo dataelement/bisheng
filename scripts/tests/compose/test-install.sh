@@ -44,6 +44,7 @@ run_install() {
   if PATH="${CASE_ROOT}/bin:$PATH" INSTALL_TEST_LOG="${CASE_ROOT}/calls" \
     INSTALL_TEST_PYTHON="${CASE_ROOT}/python-called" INSTALL_TEST_FAIL="${TEST_FAIL:-}" \
     INSTALL_TEST_LEGACY="${TEST_LEGACY:-}" INSTALL_TEST_EXPECTED_PASSWORD="${TEST_PASSWORD:-dataelem}" \
+    INSTALL_TEST_UNAME="${TEST_UNAME:-}" \
     /bin/bash "${CASE_DIR}/install.sh" "$@" </dev/null >"${CASE_ROOT}/out" 2>"${CASE_ROOT}/err"; then result=0; else result=$?; fi
 }
 ok() { [[ $result = 0 ]] || { cat "${CASE_ROOT}/err" >&2; fail 'Installer failed'; }; }
@@ -244,5 +245,78 @@ for value in "quote'and\"double" 'trailing\' 'slash\and$literal${VALUE}'; do
   [[ "$(env_get "${CASE_DIR}/.env" ROUNDTRIP)" = "$value" ]] || fail 'Dotenv literal changed'
 done
 pass 'Dotenv content stays data and literal special characters round-trip'
+
+prepare_offline() {
+  local arch="$1"
+  printf '#!/bin/bash\nexec %q "$@"\n' "$(command -v python3)" > "${CASE_ROOT}/bin/python3"
+  cat > "${CASE_ROOT}/bin/uname" <<'EOF'
+#!/bin/bash
+if [[ "${1:-}" == -m ]]; then printf '%s\n' "${INSTALL_TEST_UNAME:-x86_64}"; exit 0; fi
+exec /usr/bin/uname "$@"
+EOF
+  printf '#!/bin/bash\nexit 0\n' > "${CASE_ROOT}/bin/zstd"
+  chmod +x "${CASE_ROOT}/bin/python3" "${CASE_ROOT}/bin/uname" "${CASE_ROOT}/bin/zstd"
+  printf '{"product":"bisheng","arch":"%s","images":[{"env":"BISHENG_BACKEND_IMAGE","service":"backend","ref":"cr.dataelem.com/dataelement/bisheng-backend:v3.1.0"}]}\n' "$arch" > "${CASE_ROOT}/manifest.json"
+  printf 'image-bytes\n' > "${CASE_ROOT}/images.tar.zst"
+  printf 'docker-archive\n' > "${CASE_ROOT}/docker.tar.gz"
+  if command -v sha256sum >/dev/null 2>&1; then
+    ( cd "$CASE_ROOT" && sha256sum manifest.json images.tar.zst docker.tar.gz > SHA256SUMS )
+  else
+    ( cd "$CASE_ROOT" && shasum -a 256 manifest.json images.tar.zst docker.tar.gz > SHA256SUMS )
+  fi
+}
+
+new_case
+prepare_offline arm64
+TEST_UNAME=x86_64 run_install --offline
+failed
+contains "${CASE_ROOT}/err" '离线包架构'
+absent "${CASE_ROOT}/calls" $'load\t'
+absent "${CASE_ROOT}/calls" $'config\t'
+pass 'Offline install rejects a different CPU architecture before load or compose'
+
+new_case
+prepare_offline amd64
+printf 'deadbeef  manifest.json\n' > "${CASE_ROOT}/SHA256SUMS"
+TEST_UNAME=x86_64 run_install --offline
+failed
+contains "${CASE_ROOT}/err" '离线包校验失败'
+absent "${CASE_ROOT}/calls" $'load\t'
+absent "${CASE_ROOT}/calls" $'up\t'
+pass 'Offline install stops when the bundle checksum fails'
+
+new_case
+prepare_offline amd64
+TEST_UNAME=x86_64 run_install --offline
+ok
+[[ "$(env_get "${CASE_DIR}/.env" BISHENG_BACKEND_IMAGE)" = cr.dataelem.com/dataelement/bisheng-backend:v3.1.0 ]] || fail 'Offline image ref was not written'
+secret="$(env_get "${CASE_DIR}/.env" BISHENG_RUNTIME_MANAGER_SECRET)"
+[[ ${#secret} = 64 ]] || fail 'Offline install dropped runtime secrets'
+contains "${CASE_ROOT}/calls" $'load\t'
+absent "${CASE_ROOT}/calls" $'login\t'
+absent "${CASE_ROOT}/calls" $'pull\t'
+contains "${CASE_ROOT}/calls" $'up\t-d\t'
+awk '/load\t/ { load = NR } /config\t/ { config = NR } /up\t-d\t$/ { up = NR } END { exit !(load && config > load && up > config) }' "${CASE_ROOT}/calls" || fail 'Offline order is not load, config, up'
+cp "${CASE_DIR}/.env" "${CASE_ROOT}/before"
+run_install --offline
+ok
+[[ "$(env_get "${CASE_DIR}/.env" BISHENG_RUNTIME_MANAGER_SECRET)" = "$secret" ]] || fail 'Repeated offline install rotated a secret'
+cmp "${CASE_DIR}/.env" "${CASE_ROOT}/before" || fail 'Repeated offline install rewrote .env'
+pass 'Offline install loads tags, skips login and pull, and keeps secrets on retry'
+
+new_case
+TEST_UNAME=x86_64 run_install --offline --gateway --license-file "${CASE_ROOT}/license" --public-url https://example.invalid
+failed
+contains "${CASE_ROOT}/err" 'gateway'
+absent "${CASE_ROOT}/calls" $'load\t'
+pass 'Offline install refuses gateway because that image is not in the bundle'
+
+new_case
+printf 'COMPOSE_PROFILES=app-runtime,ft\n' > "${CASE_DIR}/.env"
+TEST_UNAME=x86_64 run_install --offline
+failed
+contains "${CASE_ROOT}/err" 'ft'
+absent "${CASE_ROOT}/calls" $'load\t'
+pass 'Offline install refuses an existing ft profile'
 
 printf '\n%s installer checks passed.\n' "$count"

@@ -7,7 +7,50 @@ ENV_FILE="${SCRIPT_DIR}/.env"
 source "${SCRIPT_DIR}/lib/install-env.sh"
 die() { printf '部署停止：%s\n' "$*" >&2; exit 1; }
 
-GATEWAY_CHOICE=""; FT_CHOICE=""; LICENSE_FILE=""; PUBLIC_URL=""; PREPARE_ONLY=false
+offline_load() {
+  local root manifest arch host list key ref
+  root="$(cd "${SCRIPT_DIR}/.." && pwd)"
+  manifest="${root}/manifest.json"
+  [[ -f "$manifest" ]] || die "找不到离线清单：${manifest}"
+  command -v python3 >/dev/null 2>&1 || die "离线安装需要 python3 来读取 manifest.json"
+  arch="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["arch"])' "$manifest")"
+  host="$(uname -m)"
+  case "$host" in
+    x86_64) [[ "$arch" == amd64 ]] || die "离线包架构是 ${arch}，本机是 ${host}，需要 amd64 包" ;;
+    aarch64) [[ "$arch" == arm64 ]] || die "离线包架构是 ${arch}，本机是 ${host}，需要 arm64 包" ;;
+    *) die "无法识别的本机架构：${host}" ;;
+  esac
+  if command -v sha256sum >/dev/null 2>&1; then
+    ( cd "$root" && sha256sum -c SHA256SUMS ) || die "离线包校验失败，尚未启动服务"
+  elif command -v shasum >/dev/null 2>&1; then
+    ( cd "$root" && shasum -a 256 -c SHA256SUMS ) || die "离线包校验失败，尚未启动服务"
+  else
+    die "离线安装需要 sha256sum"
+  fi
+  command -v zstd >/dev/null 2>&1 || die "离线安装需要 zstd"
+  zstd -dc "${root}/images.tar.zst" | docker load || die "镜像导入失败"
+  list="$(mktemp)"
+  python3 - "$manifest" > "$list" <<'PY'
+import json, sys
+manifest = json.load(open(sys.argv[1], encoding="utf-8"))
+images = manifest.get("images") or []
+if not images:
+    raise SystemExit("清单里没有镜像")
+for image in images:
+    env_name = image.get("env") or ""
+    ref = image.get("ref") or ""
+    if (not env_name) or (not ref) or ("\n" in env_name + ref) or ("\t" in env_name + ref):
+        raise SystemExit("清单镜像项缺少 env 或 ref")
+    sys.stdout.write("%s\t%s\n" % (env_name, ref))
+PY
+  while IFS=$'\t' read -r key ref; do
+    [[ -n "$key" && -n "$ref" ]] || die "清单镜像项不完整"
+    env_set "$ENV_FILE" "$key" "$ref"
+  done < "$list"
+  rm -f "$list"
+}
+
+GATEWAY_CHOICE=""; FT_CHOICE=""; LICENSE_FILE=""; PUBLIC_URL=""; PREPARE_ONLY=false; OFFLINE=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --gateway) GATEWAY_CHOICE=true; shift ;;
@@ -15,13 +58,15 @@ while [[ $# -gt 0 ]]; do
     --ft) FT_CHOICE=true; shift ;;
     --no-ft) FT_CHOICE=false; shift ;;
     --prepare-only) PREPARE_ONLY=true; shift ;;
+    --offline) OFFLINE=true; shift ;;
     --license-file|--public-url)
       [[ $# -ge 2 && -n "$2" ]] || die "$1 需要参数"
       if [[ "$1" = --license-file ]]; then LICENSE_FILE="$2"; else PUBLIC_URL="$2"; fi
       shift 2 ;;
     -h|--help)
-      printf '%s\n' '用法：bash docker/install.sh [--gateway | --no-gateway] [--ft | --no-ft] [--prepare-only]' \
+      printf '%s\n' '用法：bash docker/install.sh [--gateway | --no-gateway] [--ft | --no-ft] [--offline] [--prepare-only]' \
         '首次无参数部署不启用 Gateway 和 FT；已有 .env 按原配置继续。' \
+        '--offline 从上级目录的 manifest.json 导入镜像，不登录、不拉取 cr.dataelem.com。' \
         'FT 需要 NVIDIA GPU 和 NVIDIA Container Toolkit；--no-ft 不停止已运行容器。' \
         'Gateway 必须提供 license 文件路径：--license-file <文件> --public-url <平台地址>'
       exit 0 ;;
@@ -34,6 +79,13 @@ else die "请安装 Docker Compose（推荐 V2，也支持 docker-compose 命令
 # An existing .env is never replaced or merged automatically.
 [[ -f "$ENV_FILE" ]] || cp "${SCRIPT_DIR}/.env.example" "$ENV_FILE"
 chmod 600 "$ENV_FILE"
+if [[ "$OFFLINE" == true ]]; then
+  [[ "$GATEWAY_CHOICE" != true && "$FT_CHOICE" != true ]] \
+    || die "离线包不含 gateway 和 ft 镜像，不要同时使用 --gateway 或 --ft"
+  case ",$(env_get "$ENV_FILE" COMPOSE_PROFILES)," in
+    *,gateway,*|*,ft,*) die "离线包不含 gateway 和 ft 镜像，请从 .env 的 COMPOSE_PROFILES 去掉 gateway 和 ft" ;;
+  esac
+fi
 compose() { "${COMPOSE[@]}" --env-file "$ENV_FILE" -f "${SCRIPT_DIR}/docker-compose.yml" "$@"; }
 profiles="$(env_get "$ENV_FILE" COMPOSE_PROFILES)"
 if [[ -n "$LICENSE_FILE" ]]; then
@@ -111,17 +163,20 @@ case ",$(env_get "$ENV_FILE" COMPOSE_PROFILES)," in
     fi
     ;;
 esac
+if [[ "$OFFLINE" == true ]]; then offline_load; fi
 compose config --quiet
 if [[ "$PREPARE_ONLY" = true ]]; then printf '配置已生成并通过 Compose 校验。\n'; exit 0; fi
-# Authenticate with the public defaults; existing deployments may override them.
-registry_user="$(env_get "$ENV_FILE" CR_REGISTRY_USERNAME)"
-registry_password="$(env_get "$ENV_FILE" CR_REGISTRY_PASSWORD)"
-printf '%s\n' "${registry_password:-dataelem}" | \
-  docker login cr.dataelem.com --username "${registry_user:-docker}" --password-stdin \
-  || die "CR 镜像源登录失败，请检查网络或 .env 中的 CR_REGISTRY_USERNAME / CR_REGISTRY_PASSWORD"
-unset registry_password
-# Pull first so missing images stop deployment before existing services change.
-compose pull || die "镜像拉取失败；请检查网络、镜像权限或 .env 中的 *_IMAGE 地址。不会自动构建。"
+if [[ "$OFFLINE" != true ]]; then
+  # Authenticate with the public defaults; existing deployments may override them.
+  registry_user="$(env_get "$ENV_FILE" CR_REGISTRY_USERNAME)"
+  registry_password="$(env_get "$ENV_FILE" CR_REGISTRY_PASSWORD)"
+  printf '%s\n' "${registry_password:-dataelem}" | \
+    docker login cr.dataelem.com --username "${registry_user:-docker}" --password-stdin \
+    || die "CR 镜像源登录失败，请检查网络或 .env 中的 CR_REGISTRY_USERNAME / CR_REGISTRY_PASSWORD"
+  unset registry_password
+  # Pull first so missing images stop deployment before existing services change.
+  compose pull || die "镜像拉取失败；请检查网络、镜像权限或 .env 中的 *_IMAGE 地址。不会自动构建。"
+fi
 case ",$(env_get "$ENV_FILE" COMPOSE_PROFILES)," in
   *,gateway,*) compose up -d gateway ;;
 esac

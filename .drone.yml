@@ -395,3 +395,98 @@ volumes:
 - name: uv-cache
   host:
     path: /opt/drone/data/uv/
+
+---
+
+kind: pipeline
+type: docker
+name: offline_bundle
+clone:
+  disable: true
+trigger:
+  event:
+    - promote
+  target:
+    - offline
+steps:
+  - name: clone
+    image: alpine/git
+    pull: if-not-exists
+    volumes:
+      - name: ssh-key
+        path: /root/.ssh
+    commands:
+      - git clone git@github.com:dataelement/bisheng.git .
+      - git fetch origin "$DRONE_COMMIT"
+      - git checkout "$DRONE_COMMIT"
+      - git fetch origin --tags
+      - tag=$(git tag --points-at "$DRONE_COMMIT" | grep -E '^v[0-9]')
+      - test "$(printf '%s\n' "$tag" | grep -c .)" -eq 1
+      - printf '%s' "$tag" > .offline-version
+      - grep -q -- '--offline' docker/install.sh
+  - name: bundle
+    image: docker:24.0.6
+    pull: if-not-exists
+    privileged: true
+    volumes:
+      - name: socket
+        path: /var/run/docker.sock
+    environment:
+      CR_DOCKERHUB_USERNAME:
+        from_secret: CR_DOCKERHUB_USERNAME
+      CR_DOCKERHUB_TOKEN:
+        from_secret: CR_DOCKERHUB_TOKEN
+      NEXUS_USER:
+        from_secret: NEXUS_CI_USER
+      NEXUS_PASS:
+        from_secret: NEXUS_CI_PASS
+      NEXUS_BASE: https://nexus.dataelem.com
+      NEXUS_REPO: raw-hosted
+      GIT_COMMIT: ${DRONE_COMMIT}
+      CI_PROVIDER: drone
+    commands:
+      - apk add --no-cache bash python3 zstd git coreutils
+      - version=$(cat .offline-version)
+      - export GIT_REF="refs/tags/${version}"
+      - docker login -u "$CR_DOCKERHUB_USERNAME" -p "$CR_DOCKERHUB_TOKEN" cr.dataelem.com
+      - docker manifest inspect "cr.dataelem.com/dataelement/bisheng-backend:${version}"
+      - ./scripts/collect-images.sh --arch amd64 --version "$version" > images.txt
+      - ./scripts/make-bundle.sh --version "${version#v}" --arch amd64 --images-file images.txt --docker-dir docker --out dist --compress zstd --split-size 2G
+      - ./scripts/nexus-upload.sh --dir dist --version "${version#v}" --arch amd64 --base-url "$NEXUS_BASE" --repo "$NEXUS_REPO" --method rest --verify sha256 --update-latest
+  - name: notify
+    image: plugins/webhook
+    failure: ignore
+    when:
+      status: [success, failure]
+    settings:
+      debug: true
+      urls:
+        from_secret: FEISHU_URL
+      content_type: application/json
+      template: |
+        {
+          "msg_type": "interactive",
+          "card": {
+            "type": "template",
+            "data": {
+              "template_id": "AAqkI9bnY5FUs",
+              "template_variable": {
+                "repo_name": "{{ repo.name }}",
+                "build_branch": "{{build.branch}}",
+                "build_author": "{{ DRONE_COMMIT_AUTHOR }}",
+                "link": "{{build.link}}",
+                "commit_msg": "{{ trim build.message }}",
+                "build_tag":"{{build.tag}}",
+                "build_start":"{{build.started}}",
+                "status": "{{ build.status }}"
+              }
+            }
+          }
+        }
+volumes:
+  - name: socket
+    host:
+      path: /var/run/docker.sock
+  - name: ssh-key
+    host:
+      path: /root/.ssh

@@ -83,6 +83,16 @@ DSH 检测开关为 `dsh.content-safety.enabled`。仅设为 `false` 不会停�
 
 所有镜像地址集中在 `.env.example`，默认使用 `cr.dataelem.com`。需要修改镜像时，先执行 `bash docker/install.sh --prepare-only`，编辑生成的 `.env` 中完整的 `*_IMAGE` 地址，再执行安装脚本。下载源码不会重新构建镜像。
 
+目标机不能访问镜像仓库时，先在能访问 Nexus 的机器下载离线包并校验，再拷到目标机。外层 tar 解开后先校验，再解出 `docker/`：
+
+```bash
+sha256sum -c SHA256SUMS
+tar xzf docker.tar.gz
+bash docker/install.sh --offline
+```
+
+`--offline` 只导入包内镜像并跳过 `docker login` 和 `compose pull`。默认包没有 gateway、ft 镜像，不要同时加 `--gateway` 或 `--ft`。目标机需要 `zstd`。
+
 ARM 主机需要将每个启用服务的镜像替换为兼容 ARM 的 tag 或多架构镜像。Gateway 需使用经确认兼容 ARM 的版本，通过 `BISHENG_GATEWAY_IMAGE` 指定。Socket proxy 的 AMD64 tag 为 `0.3.0`，ARM64 部署需设置 `DOCKER_SOCKET_PROXY_IMAGE=cr.dataelem.com/tecnativa/docker-socket-proxy:0.3.0-arm64`；沙箱必须使用可用的对应架构镜像。
 
 ## 模型微调 bisheng-ft（可选）
