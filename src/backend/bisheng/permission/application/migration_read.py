@@ -229,3 +229,12 @@ class PinnedMigrationPermissionReader:
                 raise _blocked("shared_identity_invalid")
             ids.add(int(key.removeprefix("llm_server:")))
         return frozenset(ids)
+
+
+async def read_completed_migration_catalog(session, *, environment):
+    """Finite current Catalog/pin facts for an explicit completed-stage resume."""
+    from bisheng.permission.domain.repositories.f118_migration_snapshot_repository import (
+        PermissionMigrationSnapshotRepository,
+    )
+
+    return await PermissionMigrationSnapshotRepository().aload_catalog_baseline(session, environment=environment)

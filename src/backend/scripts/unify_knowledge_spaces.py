@@ -71,6 +71,11 @@ def parser():
     result.add_argument(
         "--permissions-only", action="store_true", help="apply SQL and permissions only; leave references unverified"
     )
+    result.add_argument(
+        "--register-references-only",
+        action="store_true",
+        help="reuse completed SQL/permissions; register references without full verification or Coverage",
+    )
     return result
 
 
@@ -142,6 +147,8 @@ async def arun(args, *, runtime_factory=_runtime):
     runs._identity(inputs["run_id"], inputs["writer_contract_version"])
     if getattr(args, "permissions_only", False) and not args.apply:
         raise KnowledgeOperationPlanConflictError(reason="migration_cli_permissions_only_requires_apply")
+    if getattr(args, "register_references_only", False) and getattr(args, "permissions_only", False):
+        raise KnowledgeOperationPlanConflictError(reason="migration_cli_conflicting_stages")
     with tenant_execution_scope(1):
         async with runtime_factory(args) as runtime:
             application = UnificationSQLConversionApplication(
@@ -159,6 +166,14 @@ async def arun(args, *, runtime_factory=_runtime):
                 raise KnowledgeOperationPlanConflictError(reason="migration_cli_resume_requires_frozen_run")
             if frozen is None and (args.backup_ref is not None or args.schema_ref is not None):
                 raise KnowledgeOperationPlanConflictError(reason="migration_cli_legacy_descriptors_require_frozen_run")
+            if getattr(args, "register_references_only", False):
+                if frozen is None or (args.apply and not args.resume):
+                    raise KnowledgeOperationPlanConflictError(
+                        reason="migration_cli_registration_requires_frozen_resume"
+                    )
+                from bisheng.knowledge.application.unification_registration import run_registration
+
+                return await run_registration(application, apply=args.apply, **inputs, operator_id=args.operator_id)
             if not args.apply:
                 if frozen is not None:
                     reader = UnificationReferencePlanReader(inventory=application.reader, artifact_store=runtime.store)

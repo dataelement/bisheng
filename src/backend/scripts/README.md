@@ -1848,6 +1848,34 @@ It does not run six-source backfill or mint a Coverage certificate. Default full
 migration behavior is unchanged. This flag neither starts services nor relaxes
 online permission/reference guards.
 
+For the explicitly authorized **registration-only** phase of an already frozen
+Run whose SQL and permission publication have completed, use:
+
+```bash
+# Read-only preview, using the original Run/operator/environment
+python scripts/unify_knowledge_spaces.py --run-id maintenance-1 --environment production --operator-id 7 --register-references-only
+# Apply without repeating completed SQL/FGA stages or a second full reference scan
+python scripts/unify_knowledge_spaces.py --run-id maintenance-1 --environment production --operator-id 7 --register-references-only --apply --resume
+```
+
+This mode checks original completion checkpoints and the finite CURRENT Catalog /
+ACTIVE pin, reads only hash-verified source/conversion leaves, and retains native
+per-source configuration/target/transaction checks. It freezes bounded differences
+in a separate immutable artifact bound to `backfilling.registration_plan`; the
+original baseline and plan are unchanged. New post-freeze workflow/channel sources
+are retained only when their existing native index matches their real configuration.
+App revision changes are accepted only with unchanged owner, root lifecycle,
+capability configuration and references. Unexpected changes stop with a reason.
+
+Registration and its cursor commit together. Same-mode resume skips the committed
+prefix and continues outstanding sources/retirements; progress is logged at most
+15 seconds apart while processing. Output has `registration_complete=true`,
+`full_verification_deferred=true`, `ready=false`. Run remains `backfilling`; this
+is not full upgrade acceptance and does not restart services. Complete verification
+must later consume the additional difference proof; do not discard it or assume a
+bare full resume can validate the original pre-drift source universe. Global Ready
+operations (including resource deletion / tenant creation) remain gated.
+
 An empty reference index means an unregistered historical source. Workflows,
 assistants and default-model readers that require its index can reject execution;
 model/knowledge deletion and tenant creation can also remain gated. Opening in

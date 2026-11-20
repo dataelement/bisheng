@@ -8707,3 +8707,10 @@ W3基础交付：T346原ModuleNotFound红→T344 DTO 8绿；T348原ModuleNotFoun
 
 - [x] MIG-DEFAULT-16：用户明确要求的权限阶段执行：`--apply --permissions-only` 复用完整原生 SQL/权限收敛，保留 `ready=false` 与未完成引用事实；26 项 CLI/runtime 原生集成、静态/架构检查通过。
 - [ ] MIG-DEFAULT-17：后续引用回填及 M4/Coverage：在线开服后先评估原冻结 Run 与当前来源宇宙漂移，再按受控方案回填和验证；不可覆盖原制品或伪造空引用就绪。
+
+### 2026-11-20 引用仅登记（用户已确认 AC-151～154）
+
+- [x] 实现独立轻量 admission、所需叶读取与有界增量证明。
+- [x] 原生登记单次执行、原子检查点、已提交前缀续跑及阶段进度。
+- [x] CLI 默认预览/显式 apply，原生事务回归和规模检查、审查。结果见 docs/reviews/f118-reference-registration-only-20261120.md。
+- [ ] 拷贝维护容器验证，执行仅登记；保持维护、不发布 GitHub。

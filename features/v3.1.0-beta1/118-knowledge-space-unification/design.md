@@ -1309,3 +1309,15 @@ M2 控制页保存 `retained_permission_delete`，绑定原 mode/版本、operat
 ### 失效工作流配置保留（AC-147）
 
 迁移对已保存版本的严格引用提取器仅捕获 TypeError/ValueError，并产生 `retained_invalid_workflow_configuration` 生命周期事实，包含原 flow_type/is_current/is_delete、原数据摘要及父/版本整行修订摘要。版本仍计入原根保留数；不作为可用 source，不签发来源 ready head。完整 census 保留所有版本、根及显式隔离事实，排除的版本由同一纯提取器失败事实决定，原配置不改，不猜变量/占位 ID。M2 要求对应来源 head/raw rows/legacy 全空；父 root head 可独立存在并原样冻结。M3/M4/续跑原生读取并重验精确根、版本、原标记及解析失败，变得可解析/来源重现/已有索引等继续拒绝。运行时及所有新配置写入仍用原严格提取器，旧失效版本须显式修复后保存新版本才能执行。正常版本只提取一次；额外完整 census 对已分页读入的版本做一次纯解析，无远程目标/用户乘积。
+
+### 2026-11-20 已确认的引用仅登记操作设计（AC-151～154）
+
+用户先确认仅登记/差异分类方案，再明确要求跳过已完成 SQL 和权限重验并执行，作为本次分阶段运维合同与设计确认。使用既有 F118 分支，不改变线上引用策略。
+
+`--register-references-only --resume` 默认只读预览，`--apply` 才写。新入口直接读取原生完成检查点和当前发布目录/授权 pin，复用已完成阶段，不调用 arun/arun_permissions。只遍历哈希验证的 manifests、sources 和 conversion 叶，不读取 FGA/权限/成员全量叶；原 sources/decisions/转换闭包校验仍保留。
+
+差异在新不可变 verification 制品中记录，并由 Run 的 backfilling.registration_plan 检查点绑定。只支持有界的新增且已原生登记来源以及配置/生命周期/引用未变的托管应用 revision 更新，根作者必须匹配原 root。增量登记事实含实际业务与索引摘要，重试必须复用同一描述符；不修改原 baseline_ref/plan_ref。当前已有登记若不存在或不一致，先停止报告而非写占位。
+
+ReferenceMigration 增加仅登记内部模式：复用目标检查、RegisteredReferenceBackfill 写后校验及原子 checkpoint；跳过已提交前缀、最终 census 与第二轮 verify，不签发证书。退役记录仍走原生证明和清理，不能留下原有效来源。完整复核后续必须消费此增量证明，不能假称原全量入口在有漂移情况下直接兼容。所有业务授权/租户/目标规则保持，遵守 constitution C1/C2/C3/C4/C8。
+
+规模：仅登记按来源/退役线性处理；预览与执行只读取一次所需叶；追加来源有界 100，应用 revision 更新有界 100；没有用户×资源穷举。用真实事务测试正常、零引用、完成阶段拒绝、回滚/续跑、增量变化及 N/2N 成本。维护期间不调用线上业务写接口进行验证。

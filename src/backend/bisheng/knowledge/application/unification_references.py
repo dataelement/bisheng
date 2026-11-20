@@ -1,6 +1,9 @@
 """Original M3→M4 entry: registered backfill, full reconciliation, then Coverage."""
 
+import time
 from dataclasses import asdict, dataclass
+
+from loguru import logger
 
 from bisheng.core.context.tenant import tenant_execution_scope
 from bisheng.knowledge.application.unification_coverage import (
@@ -264,9 +267,9 @@ class ReferenceMigration:
             )
         return tuple(values), counts
 
-    async def _records(self, tenant):
+    async def _records(self, tenant, *, after=0):
         records, entry = [], None
-        async for chunk in self.reader.aiter_reference_chunks(self.plan, tenant_id=tenant):
+        async for chunk in self.reader.aiter_reference_chunks(self.plan, tenant_id=tenant, after_source_ordinal=after):
             if entry is not None and entry is not chunk.source:
                 blocked("source_chunk_changed")
             entry = chunk.source
@@ -282,7 +285,7 @@ class ReferenceMigration:
             session, plan=self.plan, tenant=tenant, reference_repository=self.backfill.repository
         )
 
-    async def _retire(self, tenant, *, verify_only):
+    async def _retire(self, tenant, *, verify_only, skip_committed=False):
         from bisheng.knowledge.application.unification_reference_state import (
             PHYSICAL_ROOT_ABSENT,
             parse_retired,
@@ -299,8 +302,14 @@ class ReferenceMigration:
             goal = run.checkpoints.get("backfilling", {}).get("references_retired")
         _validate_progress(goal, len(rows))
         prefix = goal["processed_count"] if goal else 0
-        checksum, acknowledged = digest({"retired": _seed(self.frozen, tenant)}), goal
+        checksum, acknowledged = (
+            (goal["digest"] if skip_committed and goal else digest({"retired": _seed(self.frozen, tenant)})),
+            goal,
+        )
+        started, last_log = time.monotonic(), time.monotonic()
         for ordinal, header in enumerate(rows, 1):
+            if skip_committed and ordinal <= prefix:
+                continue
             async with self.app._session() as session, session.begin():
                 run = await self.app._scope_run(session, self.frozen)
                 if run.checkpoints.get("backfilling", {}).get("references_retired") != acknowledged:
@@ -377,6 +386,15 @@ class ReferenceMigration:
                         checkpoint=checkpoint,
                     )
                     acknowledged = checkpoint
+            if skip_committed and (ordinal == len(rows) or time.monotonic() - last_log >= 15):
+                logger.info(
+                    "reference_registration stage=retired tenant={} processed={} total={} elapsed_s={:.1f}",
+                    tenant,
+                    ordinal,
+                    len(rows),
+                    time.monotonic() - started,
+                )
+                last_log = time.monotonic()
         if not rows:
             checkpoint = _checkpoint(self.frozen, tenant, 0, checksum, True)
             if goal is not None and goal != checkpoint:
@@ -399,12 +417,12 @@ class ReferenceMigration:
             blocked("retired_stream_incomplete")
         return checksum
 
-    async def _tenant(self, tenant, *, verify_only=False):
+    async def _tenant(self, tenant, *, verify_only=False, registration_only=False):
         from bisheng.knowledge.application.unification_reference_state import PHYSICAL_ROOT_ABSENT
         from bisheng.knowledge.application.unification_workflow_retention import invalid_root
 
         phase, goal = await self._phase(tenant)
-        retired_digest = await self._retire(tenant, verify_only=verify_only)
+        retired_digest = await self._retire(tenant, verify_only=verify_only, skip_committed=registration_only)
         entries = tuple(entry for entry in self.plan.sources if entry.header.source_key.tenant_id == tenant)
         _validate_progress(goal, len(entries))
         if phase != "backfilling" and (goal is None or goal["complete"] is not True):
@@ -439,7 +457,14 @@ class ReferenceMigration:
         checksum, ordinal = _seed(self.frozen, tenant), 0
         prefix = goal["processed_count"] if goal else 0
         acknowledged = goal
-        async for header, records in self._records(tenant):
+        if registration_only:
+            checksum, ordinal = (goal["digest"] if goal else checksum), prefix
+        started, last_log = time.monotonic(), time.monotonic()
+        if registration_only:
+            logger.info(
+                "reference_registration stage=sources tenant={} processed={} total={}", tenant, ordinal, len(entries)
+            )
+        async for header, records in self._records(tenant, after=prefix if registration_only else 0):
             key = header.source_key
             index = parse_frozen(header.frozen_index, index=True)
             revision = (index["root_head"]["source_revision"] if index["root_head"] else 0) + 1
@@ -492,6 +517,15 @@ class ReferenceMigration:
                         checkpoint=checkpoint,
                     )
                     acknowledged = checkpoint
+            if registration_only and (ordinal == len(entries) or time.monotonic() - last_log >= 15):
+                logger.info(
+                    "reference_registration stage=sources tenant={} processed={} total={} elapsed_s={:.1f}",
+                    tenant,
+                    ordinal,
+                    len(entries),
+                    time.monotonic() - started,
+                )
+                last_log = time.monotonic()
             proof = proofs[key.source_type.value]
             proof["source_count"] += 1
             proof["zero_reference_count"] += not templates
@@ -512,7 +546,8 @@ class ReferenceMigration:
         if ordinal != len(entries):
             blocked("source_stream_incomplete")
         async with self.app._session() as session, session.begin():
-            await self._census(session, tenant)
+            if not registration_only:
+                await self._census(session, tenant)
             run = await self.app._scope_run(session, self.frozen)
             if not entries and phase == "backfilling" and not verify_only and goal is None:
                 acknowledged = _checkpoint(self.frozen, tenant, 0, checksum, True)
@@ -527,9 +562,10 @@ class ReferenceMigration:
             if phase == "backfilling" and not verify_only:
                 if acknowledged is None or acknowledged["complete"] is not True:
                     blocked("reference_checkpoint_not_complete")
-                await self.app.runs.aadvance(
-                    session, **self.app._identity(self.frozen), expected_phase="backfilling", next_phase="verifying"
-                )
+                if not registration_only:
+                    await self.app.runs.aadvance(
+                        session, **self.app._identity(self.frozen), expected_phase="backfilling", next_phase="verifying"
+                    )
         return proofs
 
     async def arun(self):
