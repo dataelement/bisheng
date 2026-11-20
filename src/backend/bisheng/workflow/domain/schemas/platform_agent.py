@@ -87,9 +87,21 @@ class AgentSubmissionReceipt(AgentContract):
 class AgentRunObservation(AgentContract):
     run_id: str = Field(min_length=1, max_length=256)
     ref: AgentReference
-    status: Literal["QUEUED", "RUNNING", "WAITING_INPUT", "SUCCEEDED", "FAILED", "CANCELLED"]
+    status: Literal[
+        "QUEUED",
+        "RUNNING",
+        "RECONCILING",
+        "WAITING_CHILDREN",
+        "WAITING_INPUT",
+        "WAITING_APPROVAL",
+        "SUCCEEDED",
+        "FAILED",
+        "CANCELLED",
+    ]
     progress: int | None = Field(default=None, ge=0, le=100)
     interaction: AgentInteraction | None = None
+    request_id: str | None = Field(default=None, max_length=256)
+    error_code: str | None = Field(default=None, max_length=128)
 
 
 class AgentInvokeResult(AgentContract):
@@ -130,6 +142,8 @@ class VerifiedAgentActor:
     tenant_id: int
     token_version: int = 0
     session_reference: str | None = None
+    workflow_context_id: str | None = None
+    workflow_session_id: str | None = None
 
 
 @dataclass(frozen=True)

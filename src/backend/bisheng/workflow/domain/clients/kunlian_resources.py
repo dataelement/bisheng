@@ -15,6 +15,8 @@ from loguru import logger
 from pydantic import SecretStr
 
 RESOURCES_PATH = "/api/platform/v1/resources"
+WORKFLOW_CALLBACK_TOKEN_PATH = "/oidc/workflow-callback/token"
+OIDC_INTROSPECT_PATH = "/oidc/introspect"
 
 TOKEN_EXCHANGE_GRANT = "urn:ietf:params:oauth:grant-type:token-exchange"
 ACCESS_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token"
@@ -252,6 +254,251 @@ async def exchange_resource_token(
         access_token=SecretStr(access_token),
         expires_in=min(expires_in, 120),
         scope=str(body.get("scope") or scope),
+    )
+
+
+def resolve_workflow_callback_token_url(oidc_token_url: str) -> str:
+    """从 OIDC Token 地址或 Issuer 推导 /oidc/workflow-callback/token 地址。"""
+    cleaned = (oidc_token_url or "").strip().rstrip("/")
+    if not cleaned:
+        raise KunlianNotConfiguredError()
+    if cleaned.endswith(WORKFLOW_CALLBACK_TOKEN_PATH):
+        return cleaned
+    if cleaned.endswith("/oidc/token"):
+        return cleaned[: -len("/oidc/token")] + WORKFLOW_CALLBACK_TOKEN_PATH
+    if "/oidc/" in cleaned:
+        return cleaned.split("/oidc/", 1)[0].rstrip("/") + WORKFLOW_CALLBACK_TOKEN_PATH
+    return cleaned + WORKFLOW_CALLBACK_TOKEN_PATH
+
+
+async def exchange_workflow_callback_token(
+    *,
+    oidc_token_url: str,
+    client_id: str,
+    client_secret: SecretStr,
+    context_id: str,
+    remote_session_id: str,
+    scope: str = SCOPE_AGENT_INVOKE,
+    timeout_seconds: float = 15.0,
+    trace_id: str | None = None,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> ExchangedResourceToken:
+    """使用已确认的 Workflow Session 与 context_id 向昆联兑换回调令牌（/oidc/workflow-callback/token）。"""
+    callback_url = resolve_workflow_callback_token_url(oidc_token_url)
+    if not client_id or not client_secret.get_secret_value():
+        raise KunlianNotConfiguredError()
+    clean_ctx = (context_id or "").strip()
+    clean_sess = (remote_session_id or "").strip()
+    if not clean_ctx or not clean_sess:
+        raise KunlianInvalidTokenError()
+
+    req_trace = trace_id or uuid4().hex
+    basic_raw = f"{quote_plus(client_id)}:{quote_plus(client_secret.get_secret_value())}"
+    basic_header = "Basic " + b64encode(basic_raw.encode("utf-8")).decode("ascii")
+    headers = {
+        "Authorization": basic_header,
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "application/json",
+        "X-Trace-ID": req_trace,
+    }
+    form_data = {
+        "context_id": clean_ctx,
+        "remote_session_id": clean_sess,
+        "scope": scope,
+    }
+    try:
+        async with build_async_client(timeout=timeout_seconds, transport=transport) as client:
+            async with asyncio.timeout(timeout_seconds):
+                request = client.build_request("POST", callback_url, headers=headers, data=form_data)
+                request.headers.pop("cookie", None)
+                response, content = await send_bounded(client, request, max_bytes=1024 * 1024)
+    except TimeoutError:
+        raise KunlianTimeoutError() from None
+    except (httpx.TransportError, ResponseTooLargeError):
+        raise KunlianUpstreamError() from None
+
+    try:
+        body = json.loads(content)
+    except ValueError:
+        body = None
+
+    if response.status_code != 200 or not isinstance(body, dict):
+        ctx = extract_error_context(response, body, request_trace_id=req_trace)
+        logger.warning(
+            "kunlian workflow callback token exchange failed status={} reason_code={} trace_id={} session_id={}",
+            ctx.status_code,
+            sanitize_log_field(ctx.reason_code),
+            sanitize_log_field(ctx.trace_id),
+            sanitize_log_field(clean_sess),
+        )
+        if response.status_code in (400, 401):
+            raise KunlianInvalidTokenError()
+        raise KunlianHttpStatusError(response.status_code, ctx.reason_code, ctx.trace_id)
+
+    payload = body.get("data") if isinstance(body.get("data"), dict) and "access_token" not in body else body
+    access_token = payload.get("access_token") if isinstance(payload, dict) else None
+    expires_in = payload.get("expires_in", 120) if isinstance(payload, dict) else 120
+    if not isinstance(access_token, str) or not access_token.strip():
+        raise KunlianUpstreamError()
+    if not isinstance(expires_in, int) or expires_in <= 0:
+        expires_in = 120
+    resolved_scope = payload.get("scope") if isinstance(payload, dict) else None
+    return ExchangedResourceToken(
+        access_token=SecretStr(access_token.strip()),
+        expires_in=min(expires_in, 120),
+        scope=str(resolved_scope or scope),
+    )
+
+
+def resolve_oidc_introspect_url(oidc_token_url: str) -> str:
+    """从 OIDC Token 地址或 Issuer 推导 /oidc/introspect 地址。"""
+    cleaned = (oidc_token_url or "").strip().rstrip("/")
+    if not cleaned:
+        raise KunlianNotConfiguredError()
+    if cleaned.endswith(OIDC_INTROSPECT_PATH):
+        return cleaned
+    if cleaned.endswith("/oidc/token"):
+        return cleaned[: -len("/oidc/token")] + OIDC_INTROSPECT_PATH
+    if "/oidc/" in cleaned:
+        return cleaned.split("/oidc/", 1)[0].rstrip("/") + OIDC_INTROSPECT_PATH
+    return cleaned + OIDC_INTROSPECT_PATH
+
+
+@dataclass(frozen=True)
+class WorkflowExecutionIntrospection:
+    """昆联 POST /oidc/introspect 返回的 Workflow 执行令牌核验结果。"""
+
+    context_id: str
+    external_user_id: str
+    external_tenant_id: str | None = None
+    user_account: str | None = None
+    workflow_id: str | None = None
+    workflow_version_id: str | None = None
+    scope: str = ""
+    raw_claims: dict[str, Any] | None = None
+
+
+async def introspect_workflow_execution_token(
+    *,
+    oidc_token_url: str,
+    client_id: str,
+    client_secret: SecretStr,
+    token: str,
+    expected_audience: str | None = None,
+    expected_workflow_version_id: str | int | None = None,
+    require_workflow_execution_grant: bool = True,
+    timeout_seconds: float = 15.0,
+    trace_id: str | None = None,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> WorkflowExecutionIntrospection:
+    """调用昆联 POST /oidc/introspect 核验执行令牌并提取 context_id 与主体标识。"""
+    introspect_url = resolve_oidc_introspect_url(oidc_token_url)
+    if not client_id or not client_secret.get_secret_value():
+        raise KunlianNotConfiguredError()
+    clean_token = (token or "").strip()
+    if not clean_token:
+        raise KunlianInvalidTokenError()
+
+    req_trace = trace_id or uuid4().hex
+    basic_raw = f"{quote_plus(client_id)}:{quote_plus(client_secret.get_secret_value())}"
+    basic_header = "Basic " + b64encode(basic_raw.encode("utf-8")).decode("ascii")
+    headers = {
+        "Authorization": basic_header,
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "application/json",
+        "X-Trace-ID": req_trace,
+    }
+    try:
+        async with build_async_client(timeout=timeout_seconds, transport=transport) as client:
+            async with asyncio.timeout(timeout_seconds):
+                request = client.build_request(
+                    "POST",
+                    introspect_url,
+                    headers=headers,
+                    data={"token": clean_token},
+                )
+                request.headers.pop("cookie", None)
+                response, content = await send_bounded(client, request, max_bytes=1024 * 1024)
+    except TimeoutError:
+        raise KunlianTimeoutError() from None
+    except (httpx.TransportError, ResponseTooLargeError):
+        raise KunlianUpstreamError() from None
+
+    try:
+        body = json.loads(content)
+    except ValueError:
+        body = None
+
+    if response.status_code != 200 or not isinstance(body, dict):
+        ctx = extract_error_context(response, body, request_trace_id=req_trace)
+        logger.warning(
+            "kunlian oidc introspect failed status={} reason_code={} trace_id={}",
+            ctx.status_code,
+            sanitize_log_field(ctx.reason_code),
+            sanitize_log_field(ctx.trace_id),
+        )
+        if response.status_code in (400, 401):
+            raise KunlianInvalidTokenError()
+        raise KunlianHttpStatusError(response.status_code, ctx.reason_code, ctx.trace_id)
+
+    claims = body.get("data") if isinstance(body.get("data"), dict) and "active" not in body else body
+    if not isinstance(claims, dict) or claims.get("active") is not True:
+        raise KunlianInvalidTokenError()
+
+    if require_workflow_execution_grant:
+        grant_kind = claims.get("grant_kind")
+        if grant_kind is not None and str(grant_kind).strip() != "workflow_execution":
+            raise KunlianInvalidTokenError()
+
+    if expected_audience and expected_audience.strip():
+        aud = claims.get("aud")
+        if aud is not None:
+            aud_values = {str(item).strip() for item in aud} if isinstance(aud, list) else {str(aud).strip()}
+            if expected_audience.strip() not in aud_values:
+                raise KunlianInvalidTokenError()
+
+    claim_ver = claims.get("workflow_version_id")
+    if expected_workflow_version_id is not None and claim_ver is not None:
+        if str(claim_ver).strip() != str(expected_workflow_version_id).strip():
+            raise KunlianInvalidTokenError()
+
+    context_id = claims.get("context_id")
+    if not isinstance(context_id, str) or not context_id.strip():
+        raise KunlianInvalidTokenError()
+
+    ext_user = None
+    for key in ("sub", "external_user_id", "user_id"):
+        val = claims.get(key)
+        if isinstance(val, str) and val.strip():
+            ext_user = val.strip()
+            break
+    if not ext_user:
+        raise KunlianInvalidTokenError()
+
+    ext_tenant = None
+    for key in ("external_tenant_id", "tenant_id"):
+        val = claims.get(key)
+        if isinstance(val, str) and val.strip():
+            ext_tenant = val.strip()
+            break
+
+    user_account = None
+    for key in ("preferred_username", "user_account", "username"):
+        val = claims.get(key)
+        if isinstance(val, str) and val.strip():
+            user_account = val.strip()
+            break
+
+    wf_id = claims.get("workflow_id")
+    return WorkflowExecutionIntrospection(
+        context_id=context_id.strip(),
+        external_user_id=ext_user,
+        external_tenant_id=ext_tenant,
+        user_account=user_account,
+        workflow_id=str(wf_id).strip() if isinstance(wf_id, str) and wf_id.strip() else None,
+        workflow_version_id=str(claim_ver).strip() if claim_ver is not None else None,
+        scope=str(claims.get("scope") or ""),
+        raw_claims=claims,
     )
 
 

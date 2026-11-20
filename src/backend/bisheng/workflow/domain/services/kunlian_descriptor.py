@@ -45,11 +45,27 @@ def prepare_descriptor(flow, version, graph, agent_binding, knowledge_binding):
     dependencies = []
     for item in agent_binding.get("nodes", {}).values():
         ref = item["ref"]
+        ver_id = ref.get("version_id")
         dependencies.append(
-            {"resource_type": "agent", "resource_id": ref.get("agent_id"), "resource_version_id": ref.get("version_id")}
+            {
+                "system": "kunlian",
+                "resource_type": "agent",
+                "resource_id": ref.get("agent_id"),
+                "version_id": ver_id,
+                "resource_version_id": ver_id,
+            }
         )
     for item in knowledge_binding.get("nodes", {}).values():
-        dependencies.append({"resource_type": "knowledge", "resource_id": item["knowledge"]["resource_id"]})
+        kb = item["knowledge"]
+        kb_ver = kb.get("version_id")
+        dependencies.append(
+            {
+                "system": "kunlian",
+                "resource_type": "knowledge",
+                "resource_id": kb["resource_id"],
+                **({"version_id": kb_ver, "resource_version_id": kb_ver} if kb_ver else {}),
+            }
+        )
     try:
         descriptor = Descriptor(
             workflow_id=flow.id,

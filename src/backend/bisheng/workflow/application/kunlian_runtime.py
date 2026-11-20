@@ -30,7 +30,15 @@ def run_subject_from_request(access):
 
 
 class KunlianRuntimeService(WorkflowInvocationService):
-    async def submit(self, subject, key, body):
+    async def submit(
+        self,
+        subject,
+        key,
+        body,
+        *,
+        allow_platform_agent: bool = False,
+        extra_material: dict | None = None,
+    ):
         await self.authorize(subject, body.workflow_id)
         record, created = await to_thread(
             self.repository.admit,
@@ -40,10 +48,24 @@ class KunlianRuntimeService(WorkflowInvocationService):
             body,
             run_control=True,
             identity=asdict(subject),
+            allow_platform_agent=allow_platform_agent,
+            extra_material=extra_material,
         )
         if created:
             await self.deliver(record.tenant_id, record.session_id)
         return record, created
+
+    async def lookup_operation(self, subject, operation_key: str):
+        row = await to_thread(
+            self.repository.lookup_by_operation_key,
+            RegistrationScope(subject.tenant_id, subject.connection_id, 0),
+            subject.user_id,
+            operation_key,
+        )
+        if row is None:
+            raise RunError("SESSION_NOT_FOUND")
+        await self.authorize(subject, row.workflow_id)
+        return row
 
     async def answer(self, subject, session_id, interaction_id, key, body):
         row = await self._authorized_row(subject, session_id)

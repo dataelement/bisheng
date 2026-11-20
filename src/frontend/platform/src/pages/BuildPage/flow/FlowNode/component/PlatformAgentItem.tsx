@@ -177,7 +177,8 @@ export function PlatformAgentItem({ workflowId, nodeId, reference, bindings, use
         queryFn: () => getPlatformAgentVersion(workflowId, currentReference!.agent_id, currentReference!.version_id),
         enabled: canLoadAgents && Boolean(currentReference?.agent_id && currentReference.version_id), cacheTime: 0, staleTime: 0 });
     const canRunAsync = version.data?.supports_async === true && version.data.long_tasks_available === true;
-    const canInteract = canRunAsync && executionMode === 'async' && capability.data?.platform_agent_mode === 'mock'
+    const isMockMode = capability.data?.platform_agent_mode === 'mock';
+    const canInteract = (isMockMode ? (canRunAsync && executionMode === 'async') : true)
         && version.data?.interaction_available === true && version.data.supports_interaction === true
         && version.data.available === true && version.data.can_use === true;
     const graph = { nodes: [{ id: nodeId, data: { id: nodeId, type: 'platform_agent', group_params: [{ params: [

@@ -537,8 +537,14 @@ class PublishedRunRegistrationRepository(RegistrationRepository):
         version = versions[0]
         if version.tenant_id != scope.tenant_id or (version_id is not None and version.id != version_id):
             raise WorkflowRegistrationConflict()
-        graph = version.data
-        descriptor = prepare_descriptor(flow, version, graph, {}, {})
+        graph = version.data or {}
+        descriptor = prepare_descriptor(
+            flow,
+            version,
+            graph,
+            graph.get(AGENT_BINDING) if isinstance(graph.get(AGENT_BINDING), dict) else {},
+            graph.get(KNOWLEDGE_BINDING) if isinstance(graph.get(KNOWLEDGE_BINDING), dict) else {},
+        )
         if descriptor is None:
             raise WorkflowRegistrationConflict()
         return graph, {**descriptor, "runtime_contract": "published-workflow", "flow_user_id": flow.user_id}
@@ -550,7 +556,10 @@ class PublishedRunRegistrationRepository(RegistrationRepository):
         with tenant_execution_scope(tenant_id), self.transaction() as session:
             flow = self.invocation_flow(session, tenant_id, workflow_id)
             _, descriptor = self.invocation_version(session, SimpleNamespace(tenant_id=tenant_id), flow, version_id)
-            return {
+            result = {
                 key: descriptor[key]
                 for key in ("workflow_id", "workflow_version_id", "name", "description", "input_schema", "output_schema")
             }
+            if descriptor.get("dependencies"):
+                result["dependencies"] = descriptor["dependencies"]
+            return result

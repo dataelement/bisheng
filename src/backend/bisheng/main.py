@@ -28,6 +28,9 @@ from bisheng.open_api.api.openapi_schema import install_open_api_schema
 from bisheng.open_api.domain.services.call_audit_service import open_api_call_audit_service
 from bisheng.open_api.domain.services.model_call_record_writer import model_call_record_writer
 from bisheng.open_endpoints.api.endpoints.kunlian_workflow_api import router as kunlian_workflow_router
+from bisheng.open_endpoints.api.endpoints.kunlian_workflow_candidate import (
+    router as kunlian_workflow_candidate_router,
+)
 from bisheng.open_mcp.server import OpenMcpDispatchMiddleware, create_open_mcp_runtime
 from bisheng.public_endpoints.api.exception_handlers import register_public_exception_handlers
 from bisheng.public_endpoints.api.router import router_public
@@ -292,6 +295,7 @@ def create_app():
     from bisheng.dsh.api.router import compatibility_router
 
     app.include_router(compatibility_router)
+    app.include_router(kunlian_workflow_candidate_router)
     app.include_router(router_rpc)
     app.include_router(kunlian_workflow_router)
     app.include_router(router_public)

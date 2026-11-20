@@ -137,7 +137,18 @@ class RunRepository:
         with tenant_execution_scope(tenant_id), self.registration.transaction() as session:
             self.registration.invocation_flow(session, tenant_id, workflow_id)
 
-    def admit(self, scope, user_id, key, body, *, run_control=False, identity=None):
+    def admit(
+        self,
+        scope,
+        user_id,
+        key,
+        body,
+        *,
+        run_control=False,
+        identity=None,
+        allow_platform_agent=False,
+        extra_material=None,
+    ):
         key_digest = sha256(key.encode()).hexdigest()
         digest = canonical_digest(body.model_dump(exclude={"mode"} if body.mode is None else None))
         from bisheng.workflow.domain.repositories.kunlian_registration import PublishedRunRegistrationRepository
@@ -165,7 +176,15 @@ class RunRepository:
                     graph, descriptor = self.registration.invocation_version(
                         session, scope, flow, body.workflow_version_id
                     )
-                    material = execution_material(graph, descriptor, body.input, body.mode)
+                    material = execution_material(
+                        graph,
+                        descriptor,
+                        body.input,
+                        body.mode,
+                        allow_platform_agent=allow_platform_agent,
+                    )
+                    if isinstance(extra_material, dict) and extra_material:
+                        material.update(extra_material)
                     if identity is not None:
                         material["kunlian_identity"] = identity
                     if formal_quota:
@@ -204,6 +223,14 @@ class RunRepository:
         with tenant_execution_scope(tenant_id), self.registration.transaction() as session:
             row = session.exec(select(Run).where(Run.session_id == session_id)).first()
             if row is None or row.tenant_id != tenant_id or self.is_expired(row):
+                return None
+            return Run.model_validate(row)
+
+    def lookup_by_operation_key(self, scope, user_id, key):
+        key_digest = sha256(key.encode()).hexdigest()
+        with tenant_execution_scope(scope.tenant_id), self.registration.transaction() as session:
+            row = self._by_key(session, scope, user_id, key_digest)
+            if row is None or self.is_expired(row):
                 return None
             return Run.model_validate(row)
 
@@ -248,7 +275,61 @@ class RunRepository:
         }
 
     def finish(self, tenant_id, session_id, claim_id, *, output=None, error=None):
-        return self._finish_claim(tenant_id, session_id, claim_id, "RUNNING", output=output, error=error)
+        return self._finish_claim(
+            tenant_id,
+            session_id,
+            claim_id,
+            ("RUNNING", "WAITING_INPUT"),
+            output=output,
+            error=error,
+        )
+
+    def update_agent_runtime(
+        self,
+        tenant_id,
+        session_id,
+        claim_id,
+        agent_info: dict,
+        *,
+        waiting: bool | None = None,
+        extend_seconds: int = 125,
+    ):
+        with tenant_execution_scope(tenant_id), self.registration.transaction() as session:
+            row = self._locked_row(session, tenant_id, session_id)
+            now = int(self.clock())
+            if (
+                row is None
+                or not claim_id
+                or row.claim_id != claim_id
+                or row.status not in {"RUNNING", "WAITING_INPUT"}
+            ):
+                return False
+            next_status = row.status
+            if waiting is True:
+                next_status = "WAITING_INPUT"
+            elif waiting is False and row.status == "WAITING_INPUT":
+                next_status = "RUNNING"
+            material = {
+                **(row.material if isinstance(row.material, dict) else {}),
+                "agent_runtime": dict(agent_info),
+            }
+            next_deadline = max(row.deadline_at, now + extend_seconds)
+            return self._update_current(
+                session,
+                row,
+                Run.claim_id == claim_id,
+                now=now,
+                status=next_status,
+                deadline_at=next_deadline,
+                material=material,
+            )
+
+    def is_claim_cancelled(self, tenant_id, session_id, claim_id) -> bool:
+        with tenant_execution_scope(tenant_id), self.registration.transaction() as session:
+            row = self._locked_row(session, tenant_id, session_id)
+            if row is None or row.claim_id != claim_id:
+                return True
+            return row.status in {"CANCEL_REQUESTED", "CANCELLED", "FAILED"}
 
     def fail_before_claim(self, tenant_id, session_id, error):
         return self._transition_initial(tenant_id, session_id, "QUEUED", lambda now: self._terminal(now, error=error))
@@ -342,7 +423,7 @@ class RunRepository:
                     raise RunError("CONTROL_UNAVAILABLE")
                 if row.deadline_at <= now:
                     values = self._terminal(now, error=timeout, material=row.material)
-                elif row.status in _ACTIVE_CLAIM:
+                elif row.status in _ACTIVE_CLAIM or row.claim_id is not None:
                     values = {"status": "CANCEL_REQUESTED"}
                 else:
                     values = self._cancelled(now, row.material)
@@ -513,10 +594,11 @@ class RunRepository:
                 now = int(self.clock())
                 if row is None or not claim_id or row.claim_id != claim_id:
                     return False
+                allowed_phases = phase if isinstance(phase, tuple) else (phase,)
                 if row.status == "CANCEL_REQUESTED":
                     if not self._confirm_cancel(session, row, now):
                         continue
-                elif row.status == phase and row.deadline_at > now:
+                elif row.status in allowed_phases and row.deadline_at > now:
                     if self._update_current(
                         session,
                         row,

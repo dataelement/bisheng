@@ -21,7 +21,7 @@ from bisheng.workflow.domain.schemas.kunlian_workflow_invocation import (
     read_run_control,
     validate_interaction_input,
 )
-from bisheng.workflow.domain.schemas.platform_agent import canonical_digest
+from bisheng.workflow.domain.schemas.platform_agent import AgentDispatch, canonical_digest, uses_platform_agent
 from bisheng.workflow.graph.kunlian_interaction import capture_wait, prepare_thread, restore_wait
 from bisheng.workflow.graph.workflow import Workflow
 
@@ -46,7 +46,7 @@ class ResultCallback(BaseCallback):
         self.result = data.msg
 
 
-def build_workflow(row, user, *, node_entry_check=None):
+def build_workflow(row, user, *, node_entry_check=None, platform_agent_context=None):
     material = row.material
     callback = ResultCallback(
         material["output_node"], allow_intermediate=material.get("runtime_contract") == "published-workflow"
@@ -63,6 +63,7 @@ def build_workflow(row, user, *, node_entry_check=None):
         flow_user_id=material.get("flow_user_id"),
         redact_errors=True,
         node_entry_check=node_entry_check,
+        platform_agent_context=platform_agent_context,
     )
     return workflow, callback
 
@@ -169,6 +170,61 @@ async def execute_run(service, tenant_id, session_id, interaction_id=None):
                         identity_check(row)
 
                 options["node_entry_check"] = check_entry
+            if uses_platform_agent((row.material or {}).get("graph")):
+                from bisheng.workflow.application import platform_agent as platform_agent_app
+
+                agent_service = platform_agent_app.get_service()
+                execution, dispatch_id = await agent_service.admit(
+                    user,
+                    row.workflow_id,
+                    row.session_id,
+                    row.material["graph"],
+                    "PUBLISHED",
+                )
+                context_id = (row.material or {}).get("context_id")
+                existing_runtime = (row.material or {}).get("agent_runtime") or {}
+
+                def _on_started(snapshot):
+                    repository.update_agent_runtime(
+                        tenant_id,
+                        session_id,
+                        claim,
+                        {
+                            "agent_run_id": snapshot.agent_run_id,
+                            "remote_status": snapshot.status,
+                            "interaction_id": snapshot.interaction_id,
+                            "request_id": snapshot.request_id,
+                        },
+                        waiting=snapshot.status in {"waiting_input", "waiting_approval"},
+                    )
+
+                def _on_status(snapshot):
+                    repository.update_agent_runtime(
+                        tenant_id,
+                        session_id,
+                        claim,
+                        {
+                            "agent_run_id": snapshot.agent_run_id,
+                            "remote_status": snapshot.status,
+                            "interaction_id": snapshot.interaction_id,
+                            "request_id": snapshot.request_id,
+                        },
+                        waiting=snapshot.status in {"waiting_input", "waiting_approval"},
+                    )
+
+                options["platform_agent_context"] = {
+                    "service": agent_service,
+                    "login_user": user,
+                    "execution": execution,
+                    "dispatch": AgentDispatch(execution["execution_id"], dispatch_id, f"kunlian:{session_id}"),
+                    "workflow_context_id": context_id,
+                    "workflow_session_id": session_id,
+                    "budget_seconds": 120.0,
+                    "existing_agent_run_id": existing_runtime.get("agent_run_id"),
+                    "on_agent_run_started": _on_started,
+                    "on_status_change": _on_status,
+                    "is_cancelled": lambda: repository.is_claim_cancelled(tenant_id, session_id, claim),
+                }
             if resuming:
                 output = await to_thread(resume_graph, row, user, **options)
             elif row.material.get("mode") == "interactive":

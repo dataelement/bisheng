@@ -262,6 +262,48 @@ class KunlianManagementApplication:
 
 
 @dataclass(frozen=True)
+class KunlianClientCredentialsMaterial:
+    """服务端调用昆联 OIDC 内省或 Workflow 回调换票所需的客户端凭据材料。"""
+
+    client_id: str
+    client_secret: object
+    oidc_token_url: str
+    issuer: str
+    approved_test_origins: tuple[str, ...] = ()
+
+
+async def resolve_kunlian_client_credentials_material(
+    *,
+    oidc_token_url: str = "",
+) -> KunlianClientCredentialsMaterial:
+    """读取已登记的毕昇昆联 OIDC 客户端凭据（无需浏览器 SSO 会话）。"""
+    from bisheng.common.errcode.sso_sync import KunlianDependencyUnavailableError
+    from bisheng.common.services.config_service import settings
+    from bisheng.sso_sync.application.runtime import resolve_environment_secret
+
+    config = settings.sso_sync.kunlian
+    if not config.client_id:
+        raise KunlianDependencyUnavailableError()
+    issuer = (config.issuer or "").strip().rstrip("/")
+    token_url = oidc_token_url.strip() or (f"{issuer}/oidc/token" if issuer else "")
+    if not token_url:
+        raise KunlianDependencyUnavailableError()
+    if not issuer and "/oidc/" in token_url:
+        issuer = token_url.split("/oidc/", 1)[0].rstrip("/")
+    try:
+        client_secret = resolve_environment_secret(config.client_secret_reference)
+    except (LookupError, ValueError):
+        raise KunlianDependencyUnavailableError() from None
+    return KunlianClientCredentialsMaterial(
+        client_id=config.client_id,
+        client_secret=client_secret,
+        oidc_token_url=token_url,
+        issuer=issuer,
+        approved_test_origins=tuple(config.approved_test_origins or ()),
+    )
+
+
+@dataclass(frozen=True)
 class KunlianTokenExchangeMaterial:
     """服务端兑换昆联资源令牌所需的最小凭据材料，禁止序列化输出。"""
 

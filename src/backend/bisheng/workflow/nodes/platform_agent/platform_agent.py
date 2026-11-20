@@ -74,16 +74,27 @@ class PlatformAgentNode(BaseNode):
             return {"result": context.pop("long_task_resume_result")}
         if configuration.allow_interaction and "interaction_result" in context:
             return {"result": context.pop("interaction_result")}
-        if configuration.execution_mode == "async":
+        if configuration.execution_mode == "async" and service.config.mode == "mock":
             notify = getattr(self.callback_manager, "on_agent_long_task", None)
             execution = service.invoke_long_node(*args, notify=notify)
         else:
             rendered_prompt = self._render_user_prompt(configuration.user_prompt)
-            execution = service.invoke_node(
-                *args,
-                node_run_id=unique_id,
-                rendered_user_prompt=rendered_prompt,
-            )
+            invoke_kwargs = {
+                "node_run_id": unique_id,
+                "rendered_user_prompt": rendered_prompt,
+            }
+            for opt_key in (
+                "workflow_context_id",
+                "workflow_session_id",
+                "budget_seconds",
+                "existing_agent_run_id",
+                "on_agent_run_started",
+                "on_status_change",
+                "is_cancelled",
+            ):
+                if opt_key in context and context[opt_key] is not None:
+                    invoke_kwargs[opt_key] = context[opt_key]
+            execution = service.invoke_node(*args, **invoke_kwargs)
         result = run_async_safe(execution, timeout=None)
         return {"result": result}
 

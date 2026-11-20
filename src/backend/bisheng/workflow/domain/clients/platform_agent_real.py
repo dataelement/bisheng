@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import inspect
 import json
+import time
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import quote
 from uuid import uuid4
 
 import httpx
@@ -29,7 +32,10 @@ from bisheng.common.errcode.flow import (
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.sso_sync import KunlianDependencyUnavailableError, KunlianError
 from bisheng.core.config.settings import PlatformAgentConf
-from bisheng.sso_sync.application.kunlian import resolve_kunlian_token_exchange_material
+from bisheng.sso_sync.application.kunlian import (
+    resolve_kunlian_client_credentials_material,
+    resolve_kunlian_token_exchange_material,
+)
 from bisheng.workflow.domain.clients.kunlian_resources import (
     SCOPE_AGENT_INVOKE,
     SCOPE_RESOURCES_READ,
@@ -51,6 +57,9 @@ from bisheng.workflow.domain.clients.kunlian_resources import (
 from bisheng.workflow.domain.clients.kunlian_resources import (
     exchange_resource_token as shared_exchange_resource_token,
 )
+from bisheng.workflow.domain.clients.kunlian_resources import (
+    exchange_workflow_callback_token as shared_exchange_workflow_callback_token,
+)
 from bisheng.workflow.domain.schemas.platform_agent import (
     AgentInvokeResult,
     AgentReference,
@@ -64,6 +73,14 @@ from bisheng.workflow.domain.schemas.platform_agent import (
 
 AGENT_VERSION_PATH = "/api/platform/v1/resources/agent/{resource_id}/versions/{version_id}"
 CHAT_COMPLETIONS_PATH = "/api/platform/v1/chat/completions"
+AGENT_RUNTIME_INVOKE_PATH = "/api/platform/v1/agent-runtime/invoke"
+AGENT_RUNTIME_RUN_PATH = "/api/platform/v1/agent-runtime/runs/{agent_run_id}"
+
+CALLBACK_MAX_BUDGET_SECONDS = 120.0
+RUNTIME_IN_PROGRESS_STATES = frozenset({"queued", "running", "reconciling", "waiting_children"})
+RUNTIME_WAITING_STATES = frozenset({"waiting_input", "waiting_approval"})
+RUNTIME_TERMINAL_STATES = frozenset({"succeeded", "failed", "cancelled"})
+RUNTIME_ALL_STATES = RUNTIME_IN_PROGRESS_STATES | RUNTIME_WAITING_STATES | RUNTIME_TERMINAL_STATES
 
 
 @dataclass(frozen=True)
@@ -74,6 +91,22 @@ class AgentChatCompletion:
     raw_id: str
     model: str
     finish_reason: str
+    trace_id: str = ""
+    request_id: str = ""
+
+
+@dataclass(frozen=True)
+class AgentRuntimeRunSnapshot:
+    """昆联 Agent Runtime 异步运行与交互状态快照。"""
+
+    agent_run_id: str
+    status: str
+    content: str | None = None
+    result_payload: dict[str, Any] | None = None
+    interaction: dict[str, Any] | None = None
+    interaction_id: str | None = None
+    error_code: str | None = None
+    error_message: str | None = None
     trace_id: str = ""
     request_id: str = ""
 
@@ -304,6 +337,8 @@ class KunlianPlatformAgentClient:
         raw_actions = data.get("allowed_actions")
         can_use = ("use" in raw_actions) if isinstance(raw_actions, list) else True
         available = bool(data.get("available", status not in ("disabled", "unavailable", "offline")))
+        supports_async = bool(data.get("supports_async", True))
+        supports_interaction = bool(data.get("supports_interaction", True))
 
         return AgentVersion(
             ref=AgentReference(
@@ -319,8 +354,8 @@ class KunlianPlatformAgentClient:
             status=status,
             available=available,
             can_use=can_use,
-            supports_async=False,
-            supports_interaction=False,
+            supports_async=supports_async,
+            supports_interaction=supports_interaction,
         )
 
     async def invoke_chat_completion(
@@ -474,6 +509,279 @@ class KunlianPlatformAgentClient:
             request_id=resp_request_id,
         )
 
+    async def invoke_agent_runtime(
+        self,
+        resource_token: SecretStr,
+        *,
+        call_id: str,
+        messages: list[dict[str, Any]],
+        workflow_run_id: str,
+        node_run_id: str,
+        idempotency_key: str,
+        trace_id: str | None = None,
+    ) -> AgentRuntimeRunSnapshot:
+        """调用昆联 POST /api/platform/v1/agent-runtime/invoke 异步启动或幂等查回子 Agent 运行。"""
+        model_id = call_id.strip()
+        if not model_id or model_id.lower() == "latest" or not messages:
+            raise PlatformAgentBadRequestError()
+
+        req_trace = (trace_id or "").strip() or uuid4().hex
+        wf_run = workflow_run_id.strip() or req_trace
+        nd_run = node_run_id.strip() or uuid4().hex
+        idem_key = _normalize_idempotency_key(idempotency_key)
+
+        headers = {
+            "Authorization": f"Bearer {resource_token.get_secret_value()}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "X-Caller-Type": "workflow",
+            "X-Trace-ID": req_trace,
+            "X-Idempotency-Key": idem_key,
+        }
+        payload = {
+            "model": model_id,
+            "stream": False,
+            "messages": messages,
+            "metadata": {
+                "workflow_run_id": wf_run,
+                "node_run_id": nd_run,
+            },
+        }
+        try:
+            async with build_async_client(
+                timeout=self.config.list_timeout_seconds,
+                transport=self._transport,
+            ) as client:
+                async with asyncio.timeout(self.config.list_timeout_seconds):
+                    request = client.build_request(
+                        "POST",
+                        f"{self._resource_base}{AGENT_RUNTIME_INVOKE_PATH}",
+                        headers=headers,
+                        json=payload,
+                    )
+                    request.headers.pop("cookie", None)
+                    response, content = await send_bounded(
+                        client,
+                        request,
+                        max_bytes=self.config.max_payload_bytes,
+                    )
+        except TimeoutError:
+            raise PlatformAgentUnknownError() from None
+        except (httpx.TransportError, ResponseTooLargeError):
+            raise PlatformAgentUpstreamError() from None
+
+        resp_trace = (
+            response.headers.get("X-Trace-ID")
+            or response.headers.get("x-trace-id")
+            or req_trace
+        )
+        resp_request_id = (
+            response.headers.get("X-Request-ID")
+            or response.headers.get("x-request-id")
+            or ""
+        )
+
+        try:
+            body = json.loads(content)
+        except ValueError:
+            raise PlatformAgentUpstreamError() from None
+
+        if response.status_code not in (200, 202) or not isinstance(body, dict):
+            ctx = extract_error_context(response, body, request_trace_id=req_trace)
+            logger.warning(
+                "kunlian agent-runtime invoke failed status={} error_code={} x_trace_id={} x_request_id={} "
+                "workflow_run_id={} node_run_id={}",
+                response.status_code,
+                sanitize_log_field(ctx.reason_code),
+                sanitize_log_field(resp_trace),
+                sanitize_log_field(resp_request_id or ctx.trace_id),
+                sanitize_log_field(wf_run),
+                sanitize_log_field(nd_run),
+            )
+            raise _map_http_error(response.status_code, ctx.reason_code)
+
+        return _parse_runtime_snapshot(
+            body,
+            default_status="queued",
+            trace_id=resp_trace,
+            request_id=resp_request_id,
+        )
+
+    async def get_agent_runtime_run(
+        self,
+        resource_token: SecretStr,
+        *,
+        agent_run_id: str,
+        trace_id: str | None = None,
+    ) -> AgentRuntimeRunSnapshot:
+        """查询昆联 GET /api/platform/v1/agent-runtime/runs/{agent_run_id} 运行状态与结果。"""
+        clean_run_id = (agent_run_id or "").strip()
+        if not clean_run_id:
+            raise PlatformAgentBadRequestError()
+
+        req_trace = (trace_id or "").strip() or uuid4().hex
+        headers = {
+            "Authorization": f"Bearer {resource_token.get_secret_value()}",
+            "Accept": "application/json",
+            "X-Caller-Type": "workflow",
+            "X-Trace-ID": req_trace,
+        }
+        path = AGENT_RUNTIME_RUN_PATH.format(agent_run_id=quote(clean_run_id, safe=""))
+        try:
+            async with build_async_client(
+                timeout=self.config.list_timeout_seconds,
+                transport=self._transport,
+            ) as client:
+                async with asyncio.timeout(self.config.list_timeout_seconds):
+                    request = client.build_request("GET", f"{self._resource_base}{path}", headers=headers)
+                    request.headers.pop("cookie", None)
+                    response, content = await send_bounded(
+                        client,
+                        request,
+                        max_bytes=self.config.max_payload_bytes,
+                    )
+        except TimeoutError:
+            raise PlatformAgentUnknownError() from None
+        except (httpx.TransportError, ResponseTooLargeError):
+            raise PlatformAgentUpstreamError() from None
+
+        resp_trace = (
+            response.headers.get("X-Trace-ID")
+            or response.headers.get("x-trace-id")
+            or req_trace
+        )
+        resp_request_id = (
+            response.headers.get("X-Request-ID")
+            or response.headers.get("x-request-id")
+            or ""
+        )
+
+        try:
+            body = json.loads(content)
+        except ValueError:
+            raise PlatformAgentUpstreamError() from None
+
+        if response.status_code != 200 or not isinstance(body, dict):
+            ctx = extract_error_context(response, body, request_trace_id=req_trace)
+            logger.warning(
+                "kunlian agent-runtime get run failed status={} error_code={} x_trace_id={} x_request_id={} "
+                "agent_run_id={}",
+                response.status_code,
+                sanitize_log_field(ctx.reason_code),
+                sanitize_log_field(resp_trace),
+                sanitize_log_field(resp_request_id or ctx.trace_id),
+                sanitize_log_field(clean_run_id),
+            )
+            raise _map_http_error(response.status_code, ctx.reason_code)
+
+        return _parse_runtime_snapshot(
+            body,
+            default_agent_run_id=clean_run_id,
+            trace_id=resp_trace,
+            request_id=resp_request_id,
+        )
+
+
+def _parse_runtime_snapshot(
+    body: dict[str, Any],
+    *,
+    default_agent_run_id: str | None = None,
+    default_status: str | None = None,
+    trace_id: str = "",
+    request_id: str = "",
+) -> AgentRuntimeRunSnapshot:
+    """解析昆联 agent-runtime 发起或查询响应（兼容顶层与 data 包络）。"""
+    if isinstance(body.get("status_code"), int) and body["status_code"] != 200:
+        raise _map_http_error(body["status_code"], None)
+    payload = body.get("data") if isinstance(body.get("data"), dict) else body
+    if not isinstance(payload, dict):
+        raise PlatformAgentUpstreamError()
+
+    run_id = None
+    for candidate in (
+        payload.get("agent_run_id"),
+        payload.get("run_id"),
+        payload.get("id"),
+        body.get("agent_run_id"),
+        body.get("run_id"),
+        default_agent_run_id,
+    ):
+        if isinstance(candidate, str) and candidate.strip():
+            run_id = candidate.strip()
+            break
+    if not run_id:
+        raise PlatformAgentUpstreamError()
+
+    raw_status = payload.get("status") or body.get("status") or default_status
+    if not isinstance(raw_status, str) or not raw_status.strip():
+        raise PlatformAgentUpstreamError()
+    status = raw_status.strip().lower()
+    if status not in RUNTIME_ALL_STATES:
+        raise PlatformAgentUpstreamError()
+
+    result_obj = payload.get("result")
+    if not isinstance(result_obj, dict):
+        result_obj = payload.get("output") if isinstance(payload.get("output"), dict) else None
+
+    content: str | None = None
+    if isinstance(result_obj, dict):
+        raw_content = result_obj.get("content")
+        if isinstance(raw_content, str):
+            content = raw_content
+        elif isinstance(raw_content, list):
+            content = "".join(
+                part.get("text", "")
+                for part in raw_content
+                if isinstance(part, dict) and part.get("type") == "text"
+            )
+        elif raw_content is None and isinstance(result_obj.get("text"), str):
+            content = result_obj["text"]
+    elif isinstance(payload.get("content"), str):
+        content = payload["content"]
+
+    interaction_obj = payload.get("interaction") if isinstance(payload.get("interaction"), dict) else None
+    interaction_id = None
+    for candidate in (
+        payload.get("interaction_id"),
+        interaction_obj.get("interaction_id") if interaction_obj else None,
+        interaction_obj.get("id") if interaction_obj else None,
+    ):
+        if isinstance(candidate, str) and candidate.strip():
+            interaction_id = candidate.strip()
+            break
+
+    err_obj = payload.get("error") if isinstance(payload.get("error"), dict) else (
+        body.get("error") if isinstance(body.get("error"), dict) else None
+    )
+    error_code = None
+    error_message = None
+    if isinstance(err_obj, dict):
+        if isinstance(err_obj.get("code"), str):
+            error_code = err_obj["code"].strip()
+        if isinstance(err_obj.get("message"), str):
+            error_message = err_obj["message"].strip()
+    if error_code is None and isinstance(payload.get("error_code"), str):
+        error_code = payload["error_code"].strip()
+
+    resp_request_id = request_id
+    for candidate in (body.get("request_id"), payload.get("request_id"), request_id):
+        if isinstance(candidate, str) and candidate.strip():
+            resp_request_id = candidate.strip()
+            break
+
+    return AgentRuntimeRunSnapshot(
+        agent_run_id=run_id,
+        status=status,
+        content=content,
+        result_payload=result_obj if isinstance(result_obj, dict) else None,
+        interaction=interaction_obj,
+        interaction_id=interaction_id,
+        error_code=error_code,
+        error_message=error_message,
+        trace_id=trace_id,
+        request_id=resp_request_id,
+    )
+
 
 def _normalize_idempotency_key(raw: str) -> str:
     """规范化 X-Idempotency-Key 为 16-128 位不含空格的可打印 ASCII。"""
@@ -536,7 +844,7 @@ def _format_agent_output(
 
 
 class RealPlatformAgentProvider:
-    """昆联真实模式 PlatformAgentProvider（支持目录列表、固定版本详情与同步执行）。"""
+    """昆联真实模式 PlatformAgentProvider（支持目录列表、固定版本详情、同步执行与回调异步交互）。"""
 
     def __init__(
         self,
@@ -544,13 +852,56 @@ class RealPlatformAgentProvider:
         *,
         client: KunlianPlatformAgentClient | None = None,
         token_material_resolver=None,
+        callback_credentials_resolver=None,
         transport: httpx.AsyncBaseTransport | None = None,
         enable_interactions: bool = False,
+        poll_sleep=asyncio.sleep,
+        clock=time.monotonic,
     ):
         self.config = config
         self.enable_interactions = enable_interactions
         self.client = client or KunlianPlatformAgentClient(config, transport=transport)
         self.token_material_resolver = token_material_resolver or resolve_kunlian_token_exchange_material
+        self.callback_credentials_resolver = callback_credentials_resolver or resolve_kunlian_client_credentials_material
+        self.poll_sleep = poll_sleep
+        self.clock = clock
+
+    async def _exchange_callback_token(
+        self,
+        actor: VerifiedAgentActor,
+        *,
+        scope: str = SCOPE_AGENT_INVOKE,
+        trace_id: str,
+        require_scope: bool = False,
+    ) -> ExchangedResourceToken:
+        if not actor.workflow_context_id or not actor.workflow_session_id:
+            raise PlatformAgentTokenError()
+        try:
+            creds = await self.callback_credentials_resolver(oidc_token_url=self.config.oidc_token_url)
+            exchanged = await shared_exchange_workflow_callback_token(
+                oidc_token_url=creds.oidc_token_url,
+                client_id=creds.client_id,
+                client_secret=creds.client_secret,
+                context_id=actor.workflow_context_id,
+                remote_session_id=actor.workflow_session_id,
+                scope=scope,
+                timeout_seconds=self.config.list_timeout_seconds,
+                trace_id=trace_id,
+                transport=self.client._transport,
+            )
+        except Exception as exc:
+            logger.debug(
+                "platform agent callback token exchange error user_id={} trace_id={} scope={} err_type={}",
+                actor.user_id,
+                sanitize_log_field(trace_id),
+                sanitize_log_field(scope),
+                type(exc).__name__,
+            )
+            raise _map_identity_error(exc) from None
+
+        if require_scope and scope not in (exchanged.scope or "").split():
+            raise PlatformAgentPermissionError()
+        return exchanged
 
     async def _exchange_token(
         self,
@@ -560,6 +911,13 @@ class RealPlatformAgentProvider:
         trace_id: str,
         require_scope: bool = False,
     ) -> ExchangedResourceToken:
+        if actor.workflow_context_id and actor.workflow_session_id:
+            return await self._exchange_callback_token(
+                actor,
+                scope=scope,
+                trace_id=trace_id,
+                require_scope=require_scope,
+            )
         try:
             material = await self.token_material_resolver(
                 actor.user_id,
@@ -670,6 +1028,164 @@ class RealPlatformAgentProvider:
             raise PlatformAgentPermissionError()
         return version
 
+    async def _invoke_runtime_callback(
+        self,
+        actor: VerifiedAgentActor,
+        version: AgentVersion,
+        ref: AgentReference,
+        messages: list[dict[str, Any]],
+        *,
+        wf_run: str,
+        nd_run: str,
+        idem: str,
+        trace_id: str,
+        budget_seconds: float = CALLBACK_MAX_BUDGET_SECONDS,
+        existing_agent_run_id: str | None = None,
+        on_agent_run_started=None,
+        on_status_change=None,
+        is_cancelled=None,
+    ) -> AgentInvokeResult:
+        """在昆联 Workflow 回调上下文中发起并持续观察子 Agent 交互运行直至终态。"""
+        model_call_id = (version.call_id or ref.call_id or version.ref.version_id).strip()
+        if not model_call_id or model_call_id.lower() == "latest":
+            raise PlatformAgentVersionError()
+
+        budget = min(max(float(budget_seconds), 1.0), CALLBACK_MAX_BUDGET_SECONDS)
+        deadline = self.clock() + budget
+
+        token_state: dict[str, Any] = {"token": None, "expires_at": 0.0}
+
+        async def ensure_token(force_refresh: bool = False) -> SecretStr:
+            now = self.clock()
+            if (
+                not force_refresh
+                and token_state["token"] is not None
+                and token_state["expires_at"] - now > 15.0
+            ):
+                return token_state["token"]
+            exchanged = await self._exchange_callback_token(
+                actor,
+                scope=SCOPE_AGENT_INVOKE,
+                trace_id=trace_id,
+                require_scope=True,
+            )
+            token_state["token"] = exchanged.access_token
+            token_state["expires_at"] = now + max(float(exchanged.expires_in), 30.0)
+            return exchanged.access_token
+
+        async def call_with_refresh(fn):
+            token = await ensure_token(False)
+            try:
+                return await fn(token)
+            except PlatformAgentTokenError:
+                token = await ensure_token(True)
+                return await fn(token)
+
+        async def _notify(hook, arg):
+            if hook is None:
+                return
+            res = hook(arg)
+            if inspect.isawaitable(res):
+                await res
+
+        agent_run_id = (existing_agent_run_id or "").strip() or None
+        last_snapshot: AgentRuntimeRunSnapshot | None = None
+        if not agent_run_id:
+            try:
+                snapshot = await call_with_refresh(
+                    lambda tok: self.client.invoke_agent_runtime(
+                        tok,
+                        call_id=model_call_id,
+                        messages=messages,
+                        workflow_run_id=wf_run,
+                        node_run_id=nd_run,
+                        idempotency_key=idem,
+                        trace_id=trace_id,
+                    )
+                )
+            except PlatformAgentUnknownError:
+                # 响应丢失时沿用原幂等键与相同请求找回原运行编号
+                snapshot = await call_with_refresh(
+                    lambda tok: self.client.invoke_agent_runtime(
+                        tok,
+                        call_id=model_call_id,
+                        messages=messages,
+                        workflow_run_id=wf_run,
+                        node_run_id=nd_run,
+                        idempotency_key=idem,
+                        trace_id=trace_id,
+                    )
+                )
+            agent_run_id = snapshot.agent_run_id
+            last_snapshot = snapshot
+            await _notify(on_agent_run_started, snapshot)
+            await _notify(on_status_change, snapshot)
+
+        delay = 0.5
+        prev_marker: tuple[str, str | None] | None = (
+            (last_snapshot.status, last_snapshot.interaction_id) if last_snapshot else None
+        )
+        while True:
+            if last_snapshot is not None:
+                if last_snapshot.status == "succeeded":
+                    content_text = last_snapshot.content or ""
+                    completion = AgentChatCompletion(
+                        content=content_text,
+                        raw_id=last_snapshot.agent_run_id,
+                        model=model_call_id,
+                        finish_reason="stop",
+                        trace_id=last_snapshot.trace_id,
+                        request_id=last_snapshot.request_id,
+                    )
+                    output = _format_agent_output(completion, output_schema=version.output_schema)
+                    return AgentInvokeResult(
+                        status="SUCCEEDED",
+                        ref=version.ref,
+                        output=output,
+                        agent_run_id=last_snapshot.agent_run_id,
+                    )
+                if last_snapshot.status == "cancelled":
+                    logger.warning(
+                        "kunlian agent-runtime cancelled agent_run_id={} request_id={} error_code={}",
+                        sanitize_log_field(last_snapshot.agent_run_id),
+                        sanitize_log_field(last_snapshot.request_id),
+                        sanitize_log_field(last_snapshot.error_code),
+                    )
+                    raise PlatformAgentExecutionError()
+                if last_snapshot.status == "failed":
+                    logger.warning(
+                        "kunlian agent-runtime failed agent_run_id={} request_id={} error_code={}",
+                        sanitize_log_field(last_snapshot.agent_run_id),
+                        sanitize_log_field(last_snapshot.request_id),
+                        sanitize_log_field(last_snapshot.error_code),
+                    )
+                    raise PlatformAgentUpstreamError()
+
+            if is_cancelled is not None and is_cancelled():
+                raise PlatformAgentExecutionError()
+
+            remaining = deadline - self.clock()
+            if remaining <= 0:
+                raise PlatformAgentUnknownError()
+
+            await self.poll_sleep(min(delay, remaining))
+            delay = min(1.5, delay * 1.5)
+
+            if is_cancelled is not None and is_cancelled():
+                raise PlatformAgentExecutionError()
+
+            last_snapshot = await call_with_refresh(
+                lambda tok: self.client.get_agent_runtime_run(
+                    tok,
+                    agent_run_id=agent_run_id,
+                    trace_id=trace_id,
+                )
+            )
+            marker = (last_snapshot.status, last_snapshot.interaction_id)
+            if marker != prev_marker:
+                prev_marker = marker
+                await _notify(on_status_change, last_snapshot)
+
     async def invoke(
         self,
         actor: VerifiedAgentActor,
@@ -682,6 +1198,11 @@ class RealPlatformAgentProvider:
         node_run_id: str | None = None,
         idempotency_key: str | None = None,
         resolved_version: AgentVersion | None = None,
+        budget_seconds: float | None = None,
+        existing_agent_run_id: str | None = None,
+        on_agent_run_started=None,
+        on_status_change=None,
+        is_cancelled=None,
     ) -> AgentInvokeResult:
         trace_id = uuid4().hex
         version = resolved_version or await self.check_use(actor, ref)
@@ -693,15 +1214,33 @@ class RealPlatformAgentProvider:
             raise PlatformAgentVersionError()
 
         messages = _build_agent_messages(inputs, user_prompt)
+        wf_run = (workflow_run_id or "").strip() or (call_id.split(":", 1)[0] if call_id else trace_id)
+        nd_run = (node_run_id or "").strip() or call_id or trace_id
+        idem = (idempotency_key or "").strip() or call_id or trace_id
+
+        if actor.workflow_context_id and actor.workflow_session_id:
+            return await self._invoke_runtime_callback(
+                actor,
+                version,
+                ref,
+                messages,
+                wf_run=wf_run,
+                nd_run=nd_run,
+                idem=idem,
+                trace_id=trace_id,
+                budget_seconds=budget_seconds or CALLBACK_MAX_BUDGET_SECONDS,
+                existing_agent_run_id=existing_agent_run_id,
+                on_agent_run_started=on_agent_run_started,
+                on_status_change=on_status_change,
+                is_cancelled=is_cancelled,
+            )
+
         exchanged = await self._exchange_token(
             actor,
             scope=SCOPE_AGENT_INVOKE,
             trace_id=trace_id,
             require_scope=True,
         )
-        wf_run = (workflow_run_id or "").strip() or (call_id.split(":", 1)[0] if call_id else trace_id)
-        nd_run = (node_run_id or "").strip() or call_id or trace_id
-        idem = (idempotency_key or "").strip() or call_id or trace_id
         completion = await self.client.invoke_chat_completion(
             exchanged.access_token,
             call_id=model_call_id,

@@ -117,7 +117,15 @@ class PlatformAgentService:
             return self._provider or build_provider(self.config, enable_interactions=True)
         return self._provider or build_provider(self.config)
 
-    async def authorize(self, login_user, workflow_id, action="edit"):
+    async def authorize(
+        self,
+        login_user,
+        workflow_id,
+        action="edit",
+        *,
+        workflow_context_id: str | None = None,
+        workflow_session_id: str | None = None,
+    ):
         flow = self.repository.get_workflow(workflow_id)
         if flow["tenant_id"] != login_user.tenant_id or flow.get("flow_type", 10) != 10:
             raise UnAuthorizedError()
@@ -132,6 +140,8 @@ class PlatformAgentService:
             int(login_user.tenant_id),
             facts["token_version"],
             session_reference=_session_reference_from_user(login_user),
+            workflow_context_id=workflow_context_id,
+            workflow_session_id=workflow_session_id,
         )
 
     async def list_agents(
@@ -159,8 +169,10 @@ class PlatformAgentService:
             **version.model_dump(),
             "provider_mode": self.config.mode,
             "policy_revision": self.config.policy_revision,
-            "long_tasks_available": self.config.mode == "mock" and self.enable_long_tasks,
-            "interaction_available": self.interaction_available,
+            "long_tasks_available": (self.config.mode == "mock" and self.enable_long_tasks)
+            or (self.config.mode == "real" and version.supports_async),
+            "interaction_available": self.interaction_available
+            or (self.config.mode == "real" and version.supports_interaction),
         }
 
     async def validate_graph(self, login_user, workflow_id, graph, node_id=None, *, action="edit", trial_inputs=None):
@@ -179,18 +191,23 @@ class PlatformAgentService:
                 if not version.ref.same_identity(configuration.agent_ref):
                     raise PlatformAgentVersionError()
                 if configuration.allow_interaction:
-                    if not (
-                        self.enable_interactions
-                        and self.enable_long_tasks
-                        and self.config.mode == "mock"
-                        and configuration.execution_mode == "async"
-                        and version.supports_async
-                        and version.supports_interaction
-                    ):
+                    if self.config.mode == "mock":
+                        if not (
+                            self.enable_interactions
+                            and self.enable_long_tasks
+                            and configuration.execution_mode == "async"
+                            and version.supports_async
+                            and version.supports_interaction
+                        ):
+                            raise PlatformAgentConfigurationError()
+                        interaction_node_ids(graph)
+                    elif not version.supports_interaction:
                         raise PlatformAgentConfigurationError()
-                    interaction_node_ids(graph)
-                if configuration.execution_mode == "async" and not (self.enable_long_tasks and version.supports_async):
-                    raise PlatformAgentVersionError()
+                if configuration.execution_mode == "async":
+                    if self.config.mode == "mock" and not (self.enable_long_tasks and version.supports_async):
+                        raise PlatformAgentVersionError()
+                    if self.config.mode == "real" and not version.supports_async:
+                        raise PlatformAgentVersionError()
                 await self.provider.check_use(actor, configuration.agent_ref)
                 validate_schema(version.input_schema, root_object=True)
                 validate_schema(version.output_schema)
@@ -359,11 +376,10 @@ class PlatformAgentService:
             if not self.long_task_resume_available or entry_kind != "PUBLISHED" or not session_id or override:
                 raise PlatformAgentConfigurationError()
             long_task_resume_node_ids(graph)
-        if uses_agent_interaction(graph):
+        if uses_agent_interaction(graph) and self.config.mode == "mock":
             if not (
                 self.enable_interactions
                 and self.enable_long_tasks
-                and self.config.mode == "mock"
                 and entry_kind == "PUBLISHED"
                 and interaction_session
                 and session_id
@@ -455,18 +471,28 @@ class PlatformAgentService:
         *,
         node_run_id: str | None = None,
         rendered_user_prompt: str | None = None,
+        workflow_context_id: str | None = None,
+        workflow_session_id: str | None = None,
+        budget_seconds: float | None = None,
+        existing_agent_run_id: str | None = None,
+        on_agent_run_started=None,
+        on_status_change=None,
+        is_cancelled=None,
     ):
-        if node_configuration(node).execution_mode == "async":
+        if node_configuration(node).execution_mode == "async" and self.config.mode == "mock":
             return await self.invoke_long_node(login_user, workflow_id, dispatch, node, ordinal, lookup)
         # 总预算覆盖重新授权、版本检查和 invoke。不为 POST 配置自动重试。
-        deadline = time.time() + self.config.invoke_timeout_seconds
+        effective_timeout = budget_seconds if budget_seconds and budget_seconds > 0 else self.config.invoke_timeout_seconds
+        deadline = time.time() + effective_timeout
         reserved = False
         try:
-            async with asyncio.timeout(self.config.invoke_timeout_seconds):
+            async with asyncio.timeout(effective_timeout):
                 actor = await self.authorize(
                     login_user,
                     workflow_id,
                     "edit" if self.repository.get_execution(dispatch.execution_id)["entry_kind"] == "DEBUG" else "use",
+                    workflow_context_id=workflow_context_id,
+                    workflow_session_id=workflow_session_id,
                 )
                 execution = self.repository.get_execution(dispatch.execution_id)
                 if (execution["user_id"], execution["tenant_id"]) != (actor.user_id, actor.tenant_id):
@@ -511,16 +537,26 @@ class PlatformAgentService:
                 call_id = f"{dispatch.execution_id}:{node['id']}:{ordinal}"
                 invoke_params = inspect.signature(provider.invoke).parameters
                 if "workflow_run_id" in invoke_params or "user_prompt" in invoke_params:
+                    extra_kwargs = {}
+                    if "budget_seconds" in invoke_params:
+                        extra_kwargs.update(
+                            budget_seconds=budget_seconds,
+                            existing_agent_run_id=existing_agent_run_id,
+                            on_agent_run_started=on_agent_run_started,
+                            on_status_change=on_status_change,
+                            is_cancelled=is_cancelled,
+                        )
                     result = await provider.invoke(
                         actor,
                         version.ref,
                         inputs,
                         call_id,
                         user_prompt=effective_prompt,
-                        workflow_run_id=execution.get("session_id"),
+                        workflow_run_id=workflow_session_id or execution.get("session_id"),
                         node_run_id=node_run_id or call_id,
                         idempotency_key=canonical_digest([dispatch.execution_id, node["id"], ordinal]),
                         resolved_version=version,
+                        **extra_kwargs,
                     )
                 else:
                     result = await provider.invoke(actor, version.ref, inputs, call_id)

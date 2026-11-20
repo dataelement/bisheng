@@ -21,8 +21,10 @@ class RegistrationContract(BaseModel):
 
 
 class Dependency(RegistrationContract):
+    system: Literal["kunlian"] = "kunlian"
     resource_type: Literal["agent", "knowledge"]
     resource_id: str = Field(min_length=1, max_length=256)
+    version_id: str | None = Field(default=None, max_length=256)
     resource_version_id: str | None = Field(default=None, max_length=256)
 
 

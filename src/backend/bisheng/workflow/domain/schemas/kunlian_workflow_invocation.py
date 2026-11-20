@@ -180,7 +180,7 @@ def validate_interaction_input(schema, inputs):
         raise RunError("INVALID_INPUT")
 
 
-def _published_nodes(graph, mode):
+def _published_nodes(graph, mode, *, allow_platform_agent: bool = False):
     from bisheng.workflow.common.node import BaseNodeData, NodeType
     from bisheng.workflow.edges.edges import EdgeBase
 
@@ -195,15 +195,14 @@ def _published_nodes(graph, mode):
         raise RunError("VERSION_UNAVAILABLE") from exc
     grouped = {}
     ids = set()
+    disallowed = {"platform_knowledge_retriever", "fake_output"}
+    if not allow_platform_agent:
+        disallowed.add("platform_agent")
     for node in graph["nodes"]:
         kind = node["data"]["type"]
         if kind == NodeType.NOTE.value:
             continue
-        if kind not in {item.value for item in NodeType} or kind in {
-            "platform_agent",
-            "platform_knowledge_retriever",
-            "fake_output",
-        }:
+        if kind not in {item.value for item in NodeType} or kind in disallowed:
             # These platform nodes require separate dispatch contexts not supplied
             # by this worker. Never accept them only to fail after admission.
             raise RunError("VERSION_UNAVAILABLE")
@@ -227,10 +226,10 @@ def _published_nodes(graph, mode):
     return nodes
 
 
-def execution_material(graph, descriptor, inputs, mode=None):
+def execution_material(graph, descriptor, inputs, mode=None, *, allow_platform_agent: bool = False):
     try:
         if descriptor.get("runtime_contract") == "published-workflow":
-            nodes = _published_nodes(graph, mode)
+            nodes = _published_nodes(graph, mode, allow_platform_agent=allow_platform_agent)
             return _text_material(graph, descriptor, inputs, mode, nodes)
         nodes = {node["data"]["type"]: node for node in graph["nodes"]}
         order = ["start", "input", "output", "end"] if "input" in nodes else ["start", "output", "end"]
