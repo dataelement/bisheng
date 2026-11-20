@@ -11,6 +11,7 @@ from cryptography.fernet import Fernet
 from bisheng.core.config.credential_artifacts import bundle_native_files, write_confidential
 from bisheng.core.config.credential_bundle import prepare_bundle
 from bisheng.core.config.secret_crypto import CredentialConfigurationError, get_keyring
+from test.fixtures.runtime_secrets import RUNTIME_SECRETS_ENV
 
 
 @pytest.fixture
@@ -35,7 +36,7 @@ def rotation_deployment(tmp_path, monkeypatch):
     inputs = tmp_path / "fresh.yaml"
     inputs.write_text(yaml.safe_dump(manifest))
     env = tmp_path / "deployment.env"
-    env.write_text("BISHENG_GATEWAY_HMAC_SECRET=\nCOMPOSE_PROJECT_NAME=e2e-rotation\n")
+    env.write_text("BISHENG_GATEWAY_HMAC_SECRET=\n" + RUNTIME_SECRETS_ENV + "COMPOSE_PROJECT_NAME=e2e-rotation\n")
     env.chmod(0o600)
     root = Path(__file__).resolve().parents[4]
     base = tmp_path / "bundle"

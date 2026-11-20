@@ -1,5 +1,6 @@
 """Current verified identity value for server-owned delayed web work."""
 
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -35,6 +36,35 @@ async def read_current_person_facts(user_ids):
             "token_version": user.token_version if user else None,
         }
     return result
+
+
+@asynccontextmanager
+async def browser_message_identity_scope(identity):
+    """Refuse a new WS message after its authenticated person has changed.
+
+    The connection's selected business tenant stays frozen. Compare membership
+    to the authenticated Home, rather than that administrator-selected view.
+    Yield no replacement execution so the native client retains its own state.
+    """
+    facts = (await read_current_person_facts([identity.user_id])).get(identity.user_id)
+    if (
+        facts is None
+        or facts["state"] != "active"
+        or facts["tenant_id"] != identity.tenant_id
+        or facts["token_version"] != identity.token_version
+    ):
+        raise PermissionDeniedError(reason="browser_message_identity_changed")
+    if identity.is_global_super:
+        current = await UserPayload.init_login_user(
+            user_id=identity.user_id,
+            user_name=facts["name"],
+            tenant_id=identity.tenant_id,
+            token_version=identity.token_version,
+            require_current_super=True,
+        )
+        if not current.is_global_super:
+            raise PermissionDeniedError(reason="browser_message_privilege_changed")
+    yield None
 
 
 async def resolve_web_creation_identity(reference):

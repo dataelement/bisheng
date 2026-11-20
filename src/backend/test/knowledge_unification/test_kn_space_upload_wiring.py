@@ -1,6 +1,7 @@
 """Original SPACE entry point, native chain and request-independent application DI."""
 
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -11,7 +12,7 @@ from starlette.requests import Request
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
-from bisheng.common.errcode.knowledge_space import SpaceFileSizeLimitError
+from bisheng.common.errcode.knowledge_space import SpaceFileFormatError, SpaceFileSizeLimitError
 from bisheng.core.context import tenant as context
 from bisheng.knowledge.api import dependencies
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
@@ -246,3 +247,54 @@ async def test_native_upload_accepts_actual_management_middleware_own_pin(upload
         assert upload.context.user.model_dump() == user_before
     finally:
         reset_current_permission_actor(token)
+
+
+async def test_unsupported_format_rejected_before_chain_and_permanent_blob(upload, monkeypatch, tmp_path):
+    """A direct registration cannot smuggle a type the pipeline cannot read."""
+    before = await chain_snapshot(upload)
+    payload = tmp_path / "payload.exe"
+    payload.write_bytes(b"MZ" + b"\x00" * 9)
+    prepare_globals = upload.legacy.cls.prepare_one_file.__func__.__globals__
+    download = prepare_globals["file_download"]
+    monkeypatch.setitem(
+        prepare_globals,
+        "file_download",
+        lambda path: (str(payload), payload.name) if path == "opaque-document" else download(path),
+    )
+    upload.legacy.storage.reset_mock()
+
+    with pytest.raises(SpaceFileFormatError):
+        await upload.service.add_file(40, ["opaque-document"])
+
+    upload.legacy.storage.put_object_sync.assert_not_called()
+    upload.publish.assert_not_called()
+    assert await chain_snapshot(upload) == before
+
+
+async def test_actual_size_over_per_file_limit_rejected_before_registration(upload, monkeypatch, tmp_path):
+    """The limit is read from the stored object, not from a caller-reported size."""
+    from bisheng.knowledge.domain import upload_file_size
+
+    before = await chain_snapshot(upload)
+    oversized = tmp_path / "oversized.txt"
+    oversized.write_bytes(b"x" * (1024 * 1024 + 1))
+    prepare_globals = upload.legacy.cls.prepare_one_file.__func__.__globals__
+    download = prepare_globals["file_download"]
+    monkeypatch.setitem(
+        prepare_globals,
+        "file_download",
+        lambda path: (str(oversized), oversized.name) if path == "opaque-document" else download(path),
+    )
+    monkeypatch.setattr(
+        upload_file_size,
+        "settings",
+        SimpleNamespace(get_from_db=lambda key: {"uploaded_files_maximum_size": 1}),
+    )
+    upload.legacy.storage.reset_mock()
+
+    with pytest.raises(SpaceFileSizeLimitError):
+        await upload.service.add_file(40, ["opaque-document"])
+
+    upload.legacy.storage.put_object_sync.assert_not_called()
+    upload.publish.assert_not_called()
+    assert await chain_snapshot(upload) == before

@@ -186,6 +186,10 @@ async def writes(concrete_tenant, monkeypatch):
         )
         from bisheng.knowledge.application.knowledge_version_mutation import KnowledgeVersionMutationApplication
 
+        monkeypatch.setattr(
+            "bisheng.knowledge.application.knowledge_version_mutation.require_business_action", AsyncMock()
+        )
+
         @asynccontextmanager
         async def fresh_version_sessions():
             async with AsyncSession(engine, expire_on_commit=False) as owned:

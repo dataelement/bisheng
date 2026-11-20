@@ -63,10 +63,8 @@ export default function Report() {
                                 <Button size="small" className="w-full" onClick={createDocx}>
                                     {t("report.newButton")}
                                 </Button>
-                                <Button variant="filled" disabled={loading} size="small" className="w-full" onClick={importDocx} color="default">
-                                    {loading && (
-                                        <span className="loading loading-spinner loading-sm pointer-events-none h-8 pl-3"></span>
-                                    )}
+                                <Button variant="filled" disabled={loading} size="small" className="w-full" onClick={importDocx} color="default" loading={loading}>
+
                                     {t("report.importButton")}
                                 </Button>
                             </div>

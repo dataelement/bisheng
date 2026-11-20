@@ -31,7 +31,7 @@ async def consumers(reads, monkeypatch):
     monkeypatch.setattr(defaults, "_runtime", reads.facade)
     monkeypatch.setattr(
         "bisheng.dsh.domain.services.model_catalog.project_workbench_config",
-        AsyncMock(side_effect=lambda config, user_id: config),
+        AsyncMock(side_effect=lambda config, user_id, **kwargs: config),
     )
     # A missing new admission call must fail locally instead of touching the
     # deployment database through the old self-session DAO.
@@ -208,11 +208,25 @@ async def test_workbench_runtime_derives_asr_capability_without_changing_raw_set
     from bisheng.llm.domain.models.llm_server import LLMServer
 
     payload = {
-        "models": [{"id": "777", "name": "still-needs-repair"}],
+        "models": [{"id": "22", "name": "still-needs-repair"}],
         "asr_model": {"id": "11", "realtime": stored_realtime},
     }
     with Session(consumers.engine, expire_on_commit=False) as session, session.begin():
-        session.add(TenantSystemModelConfig(tenant_id=101, key="linsight_llm", value=json.dumps(payload)))
+        native.seed_default(session, key="linsight_llm", payload=payload)
+        session.execute(delete(LLMModel).where(LLMModel.id == 22))
+        session.add(
+            ResourceReferenceTombstone(
+                tenant_id=1,
+                target_tenant_id=1,
+                target_type="model",
+                target_id="22",
+                operation_id="deleted-unused-chat",
+                operation_type="force_delete_model",
+                actor_type="user",
+                actor_id="7",
+                stage="deleted",
+            )
+        )
         model = session.get(LLMModel, 11)
         model.model_type = model_type
         server = session.get(LLMServer, model.server_id)
@@ -225,7 +239,7 @@ async def test_workbench_runtime_derives_asr_capability_without_changing_raw_set
     result = await api.get_workbench_llm(request=None, login_user=user)
     assert result.data["data"]["asr_model"]["id"] == "11"
     assert result.data["data"]["asr_model"]["realtime"] is expected
-    assert result.data["data"]["models"][0]["id"] == "777"
+    assert result.data["data"]["models"][0]["id"] == "22"
     assert result.data["inherited_from_root"] is False and result.data["fallback_blocked"] is False
     lookup.assert_awaited_once_with(11)
     provider.assert_not_awaited()
@@ -234,7 +248,7 @@ async def test_workbench_runtime_derives_asr_capability_without_changing_raw_set
     monkeypatch.setattr(api, "_assert_can_write_system_config", AsyncMock())
     raw = await api.get_workbench_settings(login_user=user)
     assert raw.data["data"]["asr_model"]["realtime"] is stored_realtime
-    assert raw.data["data"]["models"][0]["id"] == "777"
+    assert raw.data["data"]["models"][0]["id"] == "22"
     lookup.assert_not_awaited()
     with Session(consumers.engine) as session:
         stored = session.execute(
@@ -244,7 +258,7 @@ async def test_workbench_runtime_derives_asr_capability_without_changing_raw_set
 
 
 @pytest.mark.parametrize("invalid_id", ["not-a-model", "0", "-1"])
-async def test_workbench_runtime_keeps_malformed_asr_id_without_trusting_saved_realtime(
+async def test_workbench_runtime_refuses_malformed_source_but_repair_read_keeps_original(
     consumers, monkeypatch, invalid_id
 ):
     import json
@@ -261,11 +275,13 @@ async def test_workbench_runtime_keeps_malformed_asr_id_without_trusting_saved_r
         )
     lookup = AsyncMock(side_effect=AssertionError("invalid ID must not be resolved"))
     monkeypatch.setattr(service.BishengASR, "get_model_server_info", lookup)
-    result = await api.get_workbench_llm(
-        request=None, login_user=UserPayload(user_id=7, user_name="user", tenant_id=101, user_role=[])
-    )
-    assert result.data["data"]["asr_model"]["id"] == invalid_id
-    assert result.data["data"]["asr_model"]["realtime"] is False
+    user = UserPayload(user_id=7, user_name="user", tenant_id=101, user_role=[])
+    with pytest.raises(ResourceReferenceInvalidError):
+        await api.get_workbench_llm(request=None, login_user=user)
+    monkeypatch.setattr(api, "_assert_can_write_system_config", AsyncMock())
+    raw = await api.get_workbench_settings(login_user=user)
+    assert raw.data["data"]["asr_model"]["id"] == invalid_id
+    assert raw.data["data"]["asr_model"]["realtime"] is True
     lookup.assert_not_awaited()
 
 
@@ -285,7 +301,8 @@ async def test_workbench_runtime_does_not_hide_asr_metadata_backend_failure(cons
     from bisheng.llm.api import router as api
 
     with Session(consumers.engine) as session, session.begin():
-        session.add(TenantSystemModelConfig(tenant_id=101, key="linsight_llm", value='{"asr_model":{"id":"11"}}'))
+        native.seed_default(session, key="linsight_llm", payload={"asr_model": {"id": "11"}})
+        session.execute(update(LLMModel).where(LLMModel.id == 11).values(model_type="asr"))
     error = RuntimeError("model catalog unavailable")
     monkeypatch.setattr(service.BishengASR, "get_model_server_info", AsyncMock(side_effect=error))
     with pytest.raises(RuntimeError) as raised:
@@ -293,3 +310,98 @@ async def test_workbench_runtime_does_not_hide_asr_metadata_backend_failure(cons
             request=None, login_user=UserPayload(user_id=7, user_name="user", tenant_id=101, user_role=[])
         )
     assert raised.value is error
+
+
+@pytest.mark.parametrize("bad_digest", [False, True])
+async def test_native_workbench_http_projects_optional_slots_without_mutating_repair_settings(
+    consumers, monkeypatch, bad_digest
+):
+    import json
+
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+
+    from bisheng.llm.api import router as api
+    from bisheng.resource_reference.domain.models.business_reference_set import BusinessReferenceSet
+
+    payload = {
+        "models": [{"id": "11", "name": "chat"}],
+        "chat_default_model_id": "11",
+        "asr_model": {"id": "22", "name": "wrong-type"},
+        "tts_model": {"id": "33", "name": "foreign-child"},
+        "embedding_model": {"id": "22", "name": "wrong-type"},
+        "image_read_model": {"id": "11", "name": "image helper"},
+        "chat_title_llm": {"id": "11", "name": "title"},
+    }
+    with Session(consumers.engine) as session, session.begin():
+        native.seed_default(session, key="linsight_llm", payload=payload)
+        if bad_digest:
+            session.execute(
+                update(BusinessReferenceSet)
+                .where(
+                    BusinessReferenceSet.source_id == "linsight_llm", BusinessReferenceSet.source_version == "current"
+                )
+                .values(digest="bad")
+            )
+    user = UserPayload(user_id=7, user_name="member", tenant_id=101, user_role=[])
+    app = FastAPI()
+    app.include_router(api.router)
+    app.dependency_overrides[UserPayload.get_login_user] = lambda: user
+    async with AsyncClient(transport=ASGITransport(app), base_url="http://native") as client:
+        if bad_digest:
+            with pytest.raises(ReferenceCoverageNotReadyError):
+                await client.get("/llm/workbench")
+        else:
+            response = await client.get("/llm/workbench")
+            assert response.status_code == 200
+            config = response.json()["data"]["data"]
+            assert config["asr_model"] is None and config["tts_model"] is None and config["embedding_model"] is None
+            assert config["image_read_model"]["id"] == "11" and config["chat_title_llm"]["id"] == "11"
+            assert config["chat_default_model_id"] == "11"
+    original = await consumers.facade.aget_default("linsight_llm")
+    assert json.loads(original.payload_json) == payload
+
+
+@pytest.mark.parametrize("voice_status", ["not_shared", "offline"])
+async def test_native_runtime_voice_is_removed_independently_of_valid_chat(consumers, voice_status):
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+
+    from bisheng.llm.api import router as api
+
+    class NoShare:
+        async def aget_shared_server_ids(self, session, tenant_id, server_ids):
+            return frozenset()
+
+        def get_shared_server_ids(self, session, tenant_id, server_ids):
+            return frozenset()
+
+    with Session(consumers.engine) as session, session.begin():
+        native.seed_default(
+            session,
+            key="linsight_llm",
+            payload={
+                "models": [{"id": "11", "name": "chat"}],
+                "chat_default_model_id": "11",
+                "asr_model": {"id": "22", "name": "Root ASR"},
+            },
+        )
+        session.execute(
+            update(LLMModel).where(LLMModel.id == 22).values(model_type="asr", online=voice_status != "offline")
+        )
+    if voice_status == "not_shared":
+        consumers.core.target_owners[next(iter(consumers.core.target_owners))].sharing = NoShare()
+    user = UserPayload(user_id=7, user_name="member", tenant_id=101, user_role=[])
+    app = FastAPI()
+    app.include_router(api.router)
+    app.dependency_overrides[UserPayload.get_login_user] = lambda: user
+    async with AsyncClient(transport=ASGITransport(app), base_url="http://native") as client:
+        response = await client.get("/llm/workbench")
+    assert response.status_code == 200
+    config = response.json()["data"]["data"]
+    assert config["asr_model"] is None
+    assert config["models"][0]["id"] == "11" and config["chat_default_model_id"] == "11"
+    original = await consumers.facade.aget_default("linsight_llm")
+    import json
+
+    assert json.loads(original.payload_json)["asr_model"]["id"] == "22"

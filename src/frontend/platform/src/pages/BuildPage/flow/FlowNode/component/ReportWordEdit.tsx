@@ -84,8 +84,8 @@ export default function ReportWordEdit({ versionKey, nodeId, onChange }) {
                 <p className="text-sm mt-2">{t('report.reportDescription')}</p>
                 <div className="flex gap-2 mt-4">
                     <Button size="small" className="w-full" onClick={createDocx}>{t('report.newButton')}</Button>
-                    <Button variant="filled" disabled={loading} size="small" className="w-full border-gray-200" onClick={importDocx} color="default">
-                        {loading && <span className="loading loading-spinner loading-sm pointer-events-none h-8 pl-3"></span>}
+                    <Button variant="filled" disabled={loading} size="small" className="w-full border-gray-200" onClick={importDocx} color="default" loading={loading}>
+
                         {t('report.importButton')}
                     </Button>
                 </div>
@@ -116,8 +116,8 @@ export default function ReportWordEdit({ versionKey, nodeId, onChange }) {
                         }}>
                         <Button>{t('inserVar')}<Outlined.Down size={14} /></Button>
                     </SelectVar>}
-                    <Button disabled={saving} onClick={handleSave}>
-                        {saving && <LoadingIcon className="mr-1 size-4" />}
+                    <Button disabled={saving} onClick={handleSave} loading={saving}>
+
                         {t('report.saveTemplate')}
                     </Button>
                 </div>

@@ -8,9 +8,11 @@ from pydantic import field_validator
 from sqlalchemy import Column, DateTime, Index, Integer, String, Text, or_, text
 from sqlmodel import Field, col, delete, func, select, update
 
+from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType
+from bisheng.core.database.tenant_filter import apply_strict_tenant_filter
 from bisheng.database.base import async_get_count, get_count
 
 KNOWLEDGE_FILE_NAME_MAX_LENGTH = 500
@@ -376,14 +378,22 @@ class KnowledgeFileDao(KnowledgeFileBase):
     @classmethod
     def delete_batch(cls, file_ids: list[int]) -> bool:
         with get_sync_db_session() as session:
-            session.exec(delete(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids)))
+            session.exec(
+                apply_strict_tenant_filter(delete(KnowledgeFile), KnowledgeFile.tenant_id).where(
+                    KnowledgeFile.id.in_(file_ids)
+                )
+            )
             session.commit()
             return True
 
     @classmethod
     async def adelete_batch(cls, file_ids: list[int]) -> bool:
         async with get_async_db_session() as session:
-            await session.exec(delete(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids)))
+            await session.exec(
+                apply_strict_tenant_filter(delete(KnowledgeFile), KnowledgeFile.tenant_id).where(
+                    KnowledgeFile.id.in_(file_ids)
+                )
+            )
             await session.commit()
             return True
 
@@ -472,7 +482,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
     def update_file_status(cls, file_ids: list[int], status: KnowledgeFileStatus, reason: str | None = None):
         """Batch update file status"""
         statement = (
-            update(KnowledgeFile)
+            apply_strict_tenant_filter(update(KnowledgeFile), KnowledgeFile.tenant_id)
             .where(KnowledgeFile.id.in_(file_ids))
             .values(status=status.value, remark=_limit_remark(reason))
         )
@@ -484,7 +494,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
     async def aupdate_file_status(cls, file_ids: list[int], status: KnowledgeFileStatus, reason: str | None = None):
         """Batch update file status"""
         statement = (
-            update(KnowledgeFile)
+            apply_strict_tenant_filter(update(KnowledgeFile), KnowledgeFile.tenant_id)
             .where(KnowledgeFile.id.in_(file_ids))
             .values(status=status.value, remark=_limit_remark(reason))
         )
@@ -561,6 +571,17 @@ class KnowledgeFileDao(KnowledgeFileBase):
             return []
         with get_sync_db_session() as session:
             return session.exec(select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids))).all()
+
+    @classmethod
+    def list_document_ids(cls, knowledge_id: int) -> list[int]:
+        """Return non-directory file ids stored in one knowledge container."""
+        statement = select(KnowledgeFile.id).where(
+            KnowledgeFile.knowledge_id == knowledge_id,
+            KnowledgeFile.file_type != FileType.DIR.value,
+        )
+        with get_sync_db_session() as session:
+            rows = session.exec(statement).all()
+        return [int(row if isinstance(row, int) else row[0]) for row in rows]
 
     @classmethod
     async def aget_file_by_ids(cls, file_ids: list[int]) -> list[KnowledgeFile]:
@@ -815,7 +836,9 @@ class KnowledgeFileDao(KnowledgeFileBase):
         if not file_ids:
             return
 
-        statement = update(KnowledgeFile).where(col(KnowledgeFile.id).in_(file_ids))
+        statement = apply_strict_tenant_filter(update(KnowledgeFile), KnowledgeFile.tenant_id).where(
+            col(KnowledgeFile.id).in_(file_ids)
+        )
 
         statement = statement.values(status=status.value)
 
@@ -986,7 +1009,9 @@ class KnowledgeFileDao(KnowledgeFileBase):
         :return: None
         """
 
-        statement = update(KnowledgeFile).where(col(KnowledgeFile.id) == file_id)
+        statement = apply_strict_tenant_filter(update(KnowledgeFile), KnowledgeFile.tenant_id).where(
+            col(KnowledgeFile.id) == file_id
+        )
 
         statement = statement.values(updater_id=updater_id, updater_name=updater_name)
         with get_sync_db_session() as session:
@@ -1067,8 +1092,9 @@ class QAKnoweldgeDao(QAKnowledgeBase):
     def select_list(cls, ids: list[int]) -> list[QAKnowledge]:
         with get_sync_db_session() as session:
             QAKnowledges = session.exec(select(QAKnowledge).where(QAKnowledge.id.in_(ids))).all()
-        if not QAKnowledges:
-            raise ValueError("Knowledge base does not exist")
+        # Never let a partially filtered batch feed its original IDs to a write.
+        if not ids or {row.id for row in QAKnowledges} != set(ids):
+            raise NotFoundError()
         return QAKnowledges
 
     @classmethod
@@ -1137,7 +1163,9 @@ class QAKnoweldgeDao(QAKnowledgeBase):
         :return:
         """
 
-        statement = update(QAKnowledge).where(col(QAKnowledge.id).in_(qa_ids))
+        statement = apply_strict_tenant_filter(update(QAKnowledge), QAKnowledge.tenant_id).where(
+            col(QAKnowledge.id).in_(qa_ids)
+        )
 
         statement = statement.values(status=status.value).values(remark=_limit_remark(remark))
         with get_sync_db_session() as session:
@@ -1155,7 +1183,9 @@ class QAKnoweldgeDao(QAKnowledgeBase):
         :return:
         """
 
-        statement = update(QAKnowledge).where(col(QAKnowledge.knowledge_id) == knowledge_id)
+        statement = apply_strict_tenant_filter(update(QAKnowledge), QAKnowledge.tenant_id).where(
+            col(QAKnowledge.knowledge_id) == knowledge_id
+        )
 
         statement = statement.values(status=status.value).values(remark=_limit_remark(remark))
         with get_sync_db_session() as session:

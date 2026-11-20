@@ -1,6 +1,7 @@
 import { Outlined } from 'bisheng-icons';
 import { forwardRef, useId, useRef, type ComponentProps, type ComponentPropsWithoutRef, type CSSProperties, type ReactNode } from 'react';
 import cn from '../../utils/cn';
+import { useLoadingIndicatorRenderer } from '../../providers/LoadingIndicatorProvider';
 import { Dropdown } from '../Dropdown';
 import styles from './TreeNavigation.module.css';
 import { useTreeViewport } from './useTreeViewport';
@@ -75,13 +76,14 @@ export interface TreeNavigationNodeProps {
   href?: string;
   onSelect?: () => void;
   disclosure?: { expanded: boolean; label: string; onToggle: () => void };
+  hideLeafArrow?: boolean;
   actions?: ReactNode;
   /** Child list items, including any branch loading, error or pagination state. */
   children?: ReactNode;
 }
 
 export function TreeNavigationNode({
-  name, depth = 0, icon, marker, current, disabled, href, onSelect, disclosure, actions, children,
+  name, depth = 0, icon, marker, current, disabled, href, onSelect, disclosure, hideLeafArrow, actions, children,
 }: TreeNavigationNodeProps) {
   const id = useId();
   const expanded = disclosure?.expanded ?? true;
@@ -116,7 +118,7 @@ export function TreeNavigationNode({
             aria-expanded={expanded} aria-controls={id} onClick={disclosure.onToggle}>
             {expanded ? <Outlined.Down aria-hidden /> : <Outlined.Right aria-hidden />}
           </button>
-        ) : <span className={styles.disclosure} aria-hidden />}
+        ) : <span className={styles.disclosure} aria-hidden>{!hideLeafArrow && <Outlined.Right />}</span>}
         {href && !disabled
           ? <a {...targetProps} href={href}>{targetContent}</a>
           : <button {...targetProps} type="button" disabled={disabled}>{targetContent}</button>}
@@ -150,11 +152,17 @@ export interface TreeNavigationStatusProps {
 }
 
 export function TreeNavigationStatus({ children, depth = 0, loading }: TreeNavigationStatusProps) {
+  const renderIndicator = useLoadingIndicatorRenderer();
   return (
     <li className={styles.status} style={{ '--tree-depth': depth } as CSSProperties}>
       {loading ? <span role="status" className="flex items-center gap-1">
-        <Outlined.Loading aria-hidden className="size-4 shrink-0 animate-spin motion-reduce:animate-none" />
-        {children}
+        {renderIndicator ? <>
+          <span className="inline-flex shrink-0" aria-hidden>{renderIndicator({ className: 'size-4' })}</span>
+          <span className="sr-only">{children}</span>
+        </> : <>
+          <Outlined.Loading aria-hidden className="size-4 shrink-0 animate-spin motion-reduce:animate-none" />
+          {children}
+        </>}
       </span> : children}
     </li>
   );

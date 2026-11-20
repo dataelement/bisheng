@@ -378,6 +378,7 @@ export interface ProcessingJobRead {
   hidden_item_count: number;
   retryable: boolean;
   obsolete_reason: string | null;
+  failure_reason?: string | null;
   error_code: number | null;
 }
 export interface ProcessingItemRead {
@@ -390,6 +391,8 @@ export interface ProcessingItemRead {
   attempt: number;
   error_code: number | null;
   message: string | null;
+  file_name?: string | null;
+  failure_reason?: string | null;
   retryable: boolean;
 }
 export interface OperationItem {
@@ -475,8 +478,11 @@ export async function createSpace(
     body,
   );
 }
-export function getSpaceInfo(spaceId: number): Promise<KnowledgeSpaceInfo> {
-  return axios.get<unknown, KnowledgeSpaceInfo>(`${spacePath(spaceId)}/info`);
+export function getSpaceInfo(
+  spaceId: number,
+  config?: { showError?: boolean },
+): Promise<KnowledgeSpaceInfo> {
+  return axios.get<unknown, KnowledgeSpaceInfo>(`${spacePath(spaceId)}/info`, config);
 }
 export function updateSpaceBasicInfo(
   spaceId: number,
@@ -494,7 +500,7 @@ export function listChildren(
 ): Promise<CursorPage<KnowledgeSpaceChild>> {
   return axios.get<unknown, CursorPage<KnowledgeSpaceChild>>(
     `${spacePath(spaceId)}/children`,
-    { params: query },
+    { params: query, paramsSerializer: { indexes: null } },
   );
 }
 export function listAdminSpaces(

@@ -12,10 +12,13 @@ interface SpacePanelFrameProps {
   title: string;
   presentation?: "page" | "inline";
   hideTitle?: boolean;
+  fill?: boolean;
+  centered?: boolean;
   busy?: boolean;
   children: ReactNode;
   footer?: ReactNode;
   className?: string;
+  contentClassName?: string;
   back?: { label: string; onClick: () => void };
 }
 
@@ -23,21 +26,40 @@ export function SpacePanelFrame({
   title,
   presentation,
   hideTitle = false,
+  fill = false,
+  centered = false,
   busy = false,
   children,
   footer,
   className,
+  contentClassName,
   back,
 }: SpacePanelFrameProps) {
+  if (presentation === "page" && centered)
+    return (
+      <section className="flex h-full min-h-0 min-w-0 flex-col">
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-[1200px] space-y-6 px-6 py-4">
+            {!hideTitle && <h1 className="text-h4 text-text-1">{title}</h1>}
+            {children}
+          </div>
+        </div>
+        {footer && (
+          <footer className="flex min-h-16 shrink-0 flex-wrap items-center justify-center gap-3 border-t border-border-base px-6 py-2 max-[768px]:[&>button]:flex-1">
+            {footer}
+          </footer>
+        )}
+      </section>
+    );
   if (presentation === "inline")
     return (
-      <section className="min-w-0 space-y-4">
+      <section className={fill ? "flex min-h-0 min-w-0 flex-1 flex-col gap-4" : "min-w-0 space-y-4"}>
         {!hideTitle && (
-          <h4 className="text-base font-medium text-text-1">{title}</h4>
+          <h4 className="shrink-0 text-base font-medium text-text-1">{title}</h4>
         )}
         {children}
         {footer && (
-          <div className="flex flex-wrap justify-end gap-2">{footer}</div>
+          <div className="flex shrink-0 flex-wrap justify-end gap-2">{footer}</div>
         )}
       </section>
     );
@@ -63,7 +85,7 @@ export function SpacePanelFrame({
           <h1 className="text-body font-medium text-text-1">{title}</h1>
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto py-4">
-          <div className="mx-auto w-full max-w-[648px]">{children}</div>
+          <div className={`mx-auto w-full max-w-[648px] ${contentClassName ?? ""}`}>{children}</div>
         </div>
         {footer && (
           <footer className="flex min-h-16 shrink-0 flex-wrap items-center justify-center gap-3 border-t border-border-base py-2 max-[768px]:[&>button]:flex-1">

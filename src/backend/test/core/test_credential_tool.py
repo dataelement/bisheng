@@ -4,6 +4,8 @@ import json
 import subprocess
 import sys
 
+from test.fixtures.runtime_secrets import RUNTIME_SECRETS_ENV
+
 MODULE = "bisheng.core.config.credential_tool"
 
 
@@ -70,7 +72,7 @@ def test_real_cli_prepares_checked_in_template_and_validates_native_consumers(tm
     inputs = tmp_path / "inputs.yaml"
     inputs.write_text(yaml.safe_dump(manifest))
     env = tmp_path / "deploy.env"
-    env.write_text("BISHENG_GATEWAY_HMAC_SECRET=\n")
+    env.write_text("BISHENG_GATEWAY_HMAC_SECRET=\n" + RUNTIME_SECRETS_ENV)
     monkeypatch.delenv("BISHENG_GATEWAY_HMAC_SECRET", raising=False)
     bundle = tmp_path / "bundle"
     result = run(

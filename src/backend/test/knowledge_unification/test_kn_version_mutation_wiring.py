@@ -25,6 +25,11 @@ native = native_tests.native
 database = native_tests.database
 
 
+@pytest.fixture(autouse=True)
+def admitted_space_editor(monkeypatch):
+    monkeypatch.setattr("bisheng.knowledge.application.knowledge_version_mutation.require_business_action", AsyncMock())
+
+
 @pytest.fixture
 async def wired(database, monkeypatch):
     sessions = []
@@ -136,7 +141,7 @@ async def test_original_http_writes_commit_one_complete_chain_and_keep_response_
         1 if operation == "primary" else 4
     )
     assert response.json()["data"] == expected
-    assert len(wired.sessions) == 1 and not wired.sessions[0].in_transaction()
+    assert len(wired.sessions) == 2 and all(not session.in_transaction() for session in wired.sessions)
     after = await native_tests.snapshot(wired.database)
     versions = [row for row in after["knowledge_document_version"] if row["document_id"] == 20]
     primary = [row for row in versions if row["is_primary"]]
@@ -176,7 +181,7 @@ async def test_locked_real_rebuilding_space_keeps_entire_chain_and_audit_unchang
     with pytest.raises(KnowledgeProcessingConflictError):
         await invoke(wired, operation)
     assert await native_tests.snapshot(wired.database) == before
-    assert len(wired.sessions) == 1 and not wired.sessions[0].in_transaction()
+    assert len(wired.sessions) == 2 and all(not session.in_transaction() for session in wired.sessions)
     wired.audit_link.assert_not_called()
     wired.audit_primary.assert_not_called()
 

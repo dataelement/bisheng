@@ -2,6 +2,40 @@
 
 This directory contains manual maintenance and migration scripts for the backend.
 
+## Restore omitted Root model sharing
+
+Run from `src/backend` using the live service `config`. This tool recognizes the
+legacy Root switch through actual sharing recipients and honors newer explicit
+OFF records. Preview never writes grants or receiving policies:
+
+```bash
+python scripts/repair_model_sharing.py --operator-id 191 --manifest /tmp/model-sharing.json
+python scripts/repair_model_sharing.py --operator-id 191 --manifest /tmp/model-sharing.json --apply --provider-ids 337,358
+```
+
+Apply requires explicit provider IDs from that preview and a currently authorized
+Root global super administrator. The original sharing Owner checks the preview's
+intent/version under the provider lock, then journals and projects missing grants.
+Only absent receiving visibility policies are initialized; existing restrictions,
+prices, defaults, provider credentials and pending operation records are preserved.
+Results include remaining coverage gaps and conflicts. Failed commands retain
+their original reservation and frozen manifest; do not delete or re-sign them.
+
+For an independently confirmed **unstarted** historical preparation, the preview
+may contain `unstarted_preparation` with its immutable fingerprint. Only with
+explicit operational authorization may that exact preparation be retired:
+
+```bash
+python scripts/repair_model_sharing.py --operator-id 191 --manifest /tmp/model-sharing.json --apply --provider-ids 12 --abandon-preparing
+```
+
+This refuses any changed fingerprint, nonempty frozen execution, receiving
+receipt or existing projection journal. The terminal `ABANDONED` record retains
+its original actor, command, request hash and plan digest, with the cancelling
+actor/fingerprint audited in its acknowledgement. A delayed worker or journal
+cannot execute it. Re-preview before repairing grants; cancellation and sharing
+are separate commands. It never cancels a started/reserved projection.
+
 ## Single-version document path recovery
 
 Run `python scripts/repair_knowledge_document_path.py --tenant-id T --space-id S --file-id F`

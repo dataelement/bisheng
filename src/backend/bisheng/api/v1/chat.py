@@ -8,6 +8,7 @@ from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.v1.schemas import resp_200
 from bisheng.common.chat.manager import ChatManager
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.core.context.tenant import strict_tenant_filter
 from bisheng.database.models.flow import FlowStatus
 
 router = APIRouter(tags=["Chat"])
@@ -48,33 +49,34 @@ async def get_online_chat(
     total_start = perf_counter()
     action = "visible" if action == "use" else action
     page_size = limit or 10
-    if sort_by == "update_time":
-        result = await WorkFlowService.get_all_flows_envelope(
-            user,
-            keyword,
-            FlowStatus.ONLINE.value,
-            tag_id,
-            flow_type,
-            cursor=cursor,
-            page_size=page_size,
-            search_description=bool(search_description),
-            action=action,
-        )
-        # get_all_flows_envelope resolves edit (write) but not share; decorate
-        # the page (bounded by page_size) with can_share.
-        await WorkFlowService.aenrich_apps_can_share(user, result.data)
-    else:
-        result = await WorkFlowService.get_online_flows_cursor(
-            user,
-            keyword,
-            FlowStatus.ONLINE.value,
-            tag_id,
-            flow_type,
-            cursor=cursor,
-            page_size=page_size,
-            search_description=bool(search_description),
-            action=action,
-        )
+    with strict_tenant_filter():
+        if sort_by == "update_time":
+            result = await WorkFlowService.get_all_flows_envelope(
+                user,
+                keyword,
+                FlowStatus.ONLINE.value,
+                tag_id,
+                flow_type,
+                cursor=cursor,
+                page_size=page_size,
+                search_description=bool(search_description),
+                action=action,
+            )
+            # get_all_flows_envelope resolves edit (write) but not share; decorate
+            # the page (bounded by page_size) with can_share.
+            await WorkFlowService.aenrich_apps_can_share(user, result.data)
+        else:
+            result = await WorkFlowService.get_online_flows_cursor(
+                user,
+                keyword,
+                FlowStatus.ONLINE.value,
+                tag_id,
+                flow_type,
+                cursor=cursor,
+                page_size=page_size,
+                search_description=bool(search_description),
+                action=action,
+            )
 
     logger.info(
         "[perf][chat.online.total] user_id={} flow_type={} sort_by={} limit={} rows={} "

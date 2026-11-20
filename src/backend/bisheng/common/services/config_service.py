@@ -166,6 +166,8 @@ class ConfigService(Settings):
     def load_settings_from_yaml(cls, file_path: str) -> "ConfigService":
         settings_dict = load_config(config_path(file_path)).data
 
+        settings_dict = Settings.normalize_client_settings(settings_dict)
+
         if "admin" in settings_dict:
             # Old deployment files must remain loadable, but cannot create users.
             settings_dict.pop("admin")

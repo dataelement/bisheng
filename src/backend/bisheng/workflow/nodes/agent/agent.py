@@ -342,7 +342,9 @@ class AgentNode(BaseNode):
 
     def _init_agent(self, system_prompt: str):
         # Get a list of configured helper models
-        assistant_llm = LLMService.sync_get_assistant_llm(tenant_id=self.tenant_id)
+        assistant_llm = LLMService.sync_get_assistant_llm(
+            tenant_id=self.tenant_id, slots=(f"llm_list.{self.node_params['model_id']}.model_id",)
+        )
         if not assistant_llm.llm_list:
             raise Exception("Assistant reasoning model list is empty")
         default_llm = [one for one in assistant_llm.llm_list if one.model_id == self.node_params["model_id"]]

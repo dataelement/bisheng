@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button, toast, notification } from '@bisheng/ui';
 import TipPng from "@/assets/tip.jpg";
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
@@ -256,7 +257,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
         <header className="flex justify-between items-center p-4 py-2 bisheng-bg border-b">
             {
                 loading && <div className=" fixed left-0 top-0 w-full h-screen bg-background/60 z-50 flex items-center justify-center">
-                    <Outlined.Loading size={16} className="animate-spin mr-2 text-gray-600" />
+                    <LoadingState size="inline" className="mr-2" />
                     <span>{t('switchToVersion', { versionName: version.name })}</span>
                 </div>
             }

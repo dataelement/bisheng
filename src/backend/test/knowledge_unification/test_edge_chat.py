@@ -18,6 +18,7 @@ from bisheng.common.errcode.flow import AppInvalidCursorError
 from bisheng.common.errcode.open_api import PersonalTokenDataScopeError, ServiceAccountOwnerTenantMismatchError
 from bisheng.common.errcode.permission import PermissionInvalidResourceError
 from bisheng.common.schemas.api import PageInfiniteCursorData
+from bisheng.core.context.tenant import is_strict_tenant_filter
 from bisheng.database.models.flow import FlowStatus, FlowType
 from bisheng.permission.application import business_authorization as business
 from bisheng.permission.application.identity import (
@@ -64,6 +65,13 @@ async def test_actual_http_default_and_legacy_action_are_canonical_with_original
         params["action"] = action
     if sort_by is not None:
         params["sort_by"] = sort_by
+
+    async def assert_tenant_scope(*args, **kwargs):
+        assert is_strict_tenant_filter()
+        return chat_http.page
+
+    scanner = chat_http.updated if sort_by else chat_http.ranked
+    scanner.side_effect = assert_tenant_scope
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=chat_http.app), base_url="http://asgi", trust_env=False
     ) as client:

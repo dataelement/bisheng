@@ -1,6 +1,7 @@
-import { Button, DropdownItem } from "@bisheng/ui";
+import { DropdownItem } from "@bisheng/ui";
 import { useQuery } from "@tanstack/react-query";
 import { Outlined } from "bisheng-icons";
+import { FileSearch } from "lucide-react";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { getMyResourcePermissionsApi } from "@/controllers/API/permission";
@@ -18,7 +19,7 @@ interface SpaceRowVersionMenuProps {
 }
 
 export function SpaceRowVersionMenu({ scope, spaceId, item, enabled, indicator = false, onOpen }: SpaceRowVersionMenuProps) {
-  const { t } = useTranslation("knowledge");
+  const { t } = useTranslation(["knowledge", "shared"]);
   const similar = item.has_similar === true && item.is_multi_version !== true;
   const eligible = enabled && item.file_type === 1 && item.status === 2 && (!indicator || similar);
   const permission = useQuery({
@@ -33,9 +34,14 @@ export function SpaceRowVersionMenu({ scope, spaceId, item, enabled, indicator =
   }, [eligible, permission.error]);
   if (!eligible || permission.isError || !permission.data?.actions?.includes(indicator ? "manage_permission" : "edit")) return null;
   if (indicator) return (
-    <Button size="small" variant="link" onClick={() => onOpen("similar")}>
-      {t("versions.similar")}
-    </Button>
+    <button
+      type="button"
+      className="flex h-5 shrink-0 items-center gap-1 rounded bg-[#FFF3E8] px-1.5 text-xs text-[#F76F44] hover:bg-[#FFE6D2]"
+      onClick={event => { event.stopPropagation(); onOpen("similar"); }}
+    >
+      <FileSearch className="size-3" />
+      {t("knowledge.version.pill_similar", { ns: "shared" })}
+    </button>
   );
   return (
     <>

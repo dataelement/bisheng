@@ -47,6 +47,24 @@ def _blocked(reason):
     raise PermissionPublishNotReadyError(msg="Knowledge move projection: " + reason)
 
 
+def _deployment_environment(value):
+    """Deployment name stored on the authorization release.
+
+    ``settings.environment`` is the legacy mapping (``env: dev`` plus file
+    types). The catalog seed reads the same keys and stores the resulting
+    name on ``AuthorizationModelRelease.environment``.
+    """
+
+    if isinstance(value, dict):
+        value = next(
+            (value[key] for key in ("name", "environment", "env", "mode") if value.get(key)),
+            "dev",
+        )
+    if type(value) is not str or not value:
+        _blocked("environment required")
+    return value[:64]
+
+
 def _digest(value):
     if type(value) is not str or not re.fullmatch(r"[0-9a-fA-F]{64}", value):
         _blocked("invalid checksum")
@@ -209,9 +227,7 @@ class MoveProjectionRepository:
             from bisheng.common.services.config_service import settings
 
             environment = settings.environment
-        if type(environment) is not str or not environment:
-            _blocked("environment required")
-        self.environment, self._issued = environment, WeakKeyDictionary()
+        self.environment, self._issued = _deployment_environment(environment), WeakKeyDictionary()
 
     @staticmethod
     def _scope(session):

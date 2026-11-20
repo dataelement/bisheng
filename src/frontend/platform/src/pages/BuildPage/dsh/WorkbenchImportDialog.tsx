@@ -5,6 +5,7 @@ import type { WorkbenchImport, WorkbenchPreview } from "@/controllers/API/dshWor
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { workbenchPreviewErrorMessage } from "./workbenchPreviewError";
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 
 interface WorkbenchImportDialogProps {
     tenant: number;
@@ -153,7 +154,7 @@ export function WorkbenchImportDialog({ tenant, onClose, onImported }: Workbench
             placeholder={t("workbenchDisplayName")} onChange={event => setDisplayName(event.target.value)} />}
         {selectionError && <p role="alert" className="text-sm text-red-600">{t(selectionError)}</p>}
         {selectionError && files.map((file, index) => <p key={index}>{file.name} · {(file.size / 1048576).toFixed(1)} MiB</p>)}
-        {checking && <p role="status">{t("previewing")}</p>}
+        {checking && <LoadingState label={t("previewing")} />}
         {batch && entries.length > 0 && <p role="status">{t("workbenchBatch.summary", {
             total: entries.length, ready, rejected: entries.filter(entry => entry.status === "rejected").length,
             duplicate: entries.filter(entry => entry.status === "duplicate").length,

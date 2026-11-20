@@ -262,12 +262,12 @@ export function useMemberTableController({
     () => [
       { defaultWidth: 140, minWidth: 100 },
       { defaultWidth: 200, minWidth: 140 },
-      { defaultWidth: 100, minWidth: 88 },
+      { defaultWidth: 144, minWidth: 120 },
       { defaultWidth: 160, minWidth: 120 },
       { defaultWidth: 140, minWidth: 100 },
       { defaultWidth: 160, minWidth: 120 },
-      { defaultWidth: 72, minWidth: 64 },
-      { defaultWidth: 144, minWidth: 120 },
+      { defaultWidth: 56, minWidth: 52 },
+      { defaultWidth: 48, minWidth: 48 },
     ],
     []
   );

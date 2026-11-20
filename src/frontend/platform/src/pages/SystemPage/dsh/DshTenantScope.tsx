@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { userContext } from "@/contexts/userContext";
 import { useAdminScope } from "@/hooks/useAdminScope";
 import type { User } from "@/types/api/user";
@@ -28,7 +29,7 @@ export function DshTenantScope({ children }: DshTenantScopeProps) {
   return (
     <div className="space-y-3">
       <p role={loading ? "status" : "alert"}>
-        {t(loading ? "dsh.loading" : "dsh.unavailable")}
+        {loading ? <LoadingState label={t("dsh.loading")} /> : t("dsh.unavailable")}
       </p>
       {global && !loading && (
         <Button variant="outlined" color="default" onClick={() => void refresh().catch(() => undefined)}>

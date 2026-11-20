@@ -194,7 +194,9 @@ async def create(
         if knowledge.model is None or not str(knowledge.model).strip():
             # Same default as the platform create dialog (GET /api/v1/llm/knowledge).
             # When the tenant has no default either, acreate_knowledge raises 10901.
-            knowledge_llm = await LLMService.aget_knowledge_llm(tenant_id=login_user.tenant_id)
+            knowledge_llm = await LLMService.aget_knowledge_llm(
+                tenant_id=login_user.tenant_id, slots=("embedding_model_id",)
+            )
             knowledge.model = str(knowledge_llm.embedding_model_id) if knowledge_llm.embedding_model_id else None
         db_knowledge = await KnowledgeService.acreate_knowledge(request, login_user, knowledge)
         # Enrich to the unified KnowledgeRead (user_name + concrete actions), matching

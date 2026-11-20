@@ -1,4 +1,4 @@
-"""Model/server current-read plans use the authorized source's real tenant."""
+"""Model/server current-read plans use the actual request execution tenant."""
 
 from dataclasses import dataclass
 
@@ -6,11 +6,10 @@ from sqlalchemy import select
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ResourceReferenceInvalidError
 from bisheng.core.context.tenant import bypass_tenant_filter
+from bisheng.core.database.tenant_filter import _resolve_tenant_id
 from bisheng.database.models.tenant import ROOT_TENANT_ID, Tenant
 from bisheng.llm.domain.models.llm_server import LLMModel, LLMServer
-from bisheng.llm.domain.models.tenant_system_model_config import TenantSystemModelConfig
 from bisheng.llm.domain.repositories.reference_target_repository import (
-    DEFAULT_SCHEMAS,
     ModelReferenceTargetRepository,
     _original,
 )
@@ -38,7 +37,6 @@ class ModelReadObservation:
 class ModelReadPlan:
     tenant_id: int
     observations: tuple[ModelReadObservation, ...]
-    inherited_server_ids: frozenset[int]
 
 
 class ModelSourceReadTargetRepository:
@@ -119,28 +117,16 @@ class ModelSourceReadTargetRepository:
         )
         return {row.id: row for row in rows}
 
-    async def _configs(self, session, tenant_id, *, lock):
-        return await self._rows(
-            session,
-            select(TenantSystemModelConfig.tenant_id, TenantSystemModelConfig.key, TenantSystemModelConfig.value)
-            .where(
-                TenantSystemModelConfig.tenant_id.in_(sorted({ROOT_TENANT_ID, tenant_id})),
-                TenantSystemModelConfig.key.in_(tuple(DEFAULT_SCHEMAS)),
-            )
-            .order_by(TenantSystemModelConfig.tenant_id, TenantSystemModelConfig.key),
-            lock=lock,
-        )
-
     async def alock_targets(self, session, scope, target_keys, *, identity, transient=False):
         snapshot = await self.verifier.aassert_target_keys(
             session, scope, identity, target_keys, allowed_types=(TargetType.MODEL,)
         )
         if transient:
             await self.verifier.aget_transient_snapshot(session, scope, identity)
-            tenant_id, originals = snapshot.owner_tenant_id, ()
+            tenant_id, originals = _resolve_tenant_id(), ()
         else:
             await self.verifier.aget_source_snapshot(session, scope, identity)
-            tenant_id = snapshot.source_key.tenant_id
+            tenant_id = _resolve_tenant_id()
             originals = (await self.sources.aread_source(session, scope, identity)).references
         keys = tuple(sorted(target_keys, key=lambda key: key.lock_order_key))
         originals_by_key = self._originals_by_key(originals, keys)
@@ -166,9 +152,7 @@ class ModelSourceReadTargetRepository:
         candidates = await self._models(session, ids, owners, lock=False)
         sharing = any(row.tenant_id != tenant_id for row in candidates.values())
         topology = await self._topology(session, tenant_id, lock=False) if sharing else {}
-        configs = await self._configs(session, tenant_id, lock=False) if sharing else ()
-        inherited_ids = ModelReferenceTargetRepository._inherited_ids(topology, configs, tenant_id)
-        all_ids = ids | inherited_ids
+        all_ids = ids
         candidates = await self._models(session, all_ids, owners, lock=False)
         mapping = {row.id: row.server_id for row in candidates.values()}
         server_ids = set(mapping.values())
@@ -180,17 +164,6 @@ class ModelSourceReadTargetRepository:
             raise KnowledgeOperationPlanConflictError(reason="reference_read_target_plan_changed")
         if sharing:
             topology = await self._topology(session, tenant_id, lock=True)
-            configs = await self._configs(session, tenant_id, lock=True)
-            if ModelReferenceTargetRepository._inherited_ids(topology, configs, tenant_id) != inherited_ids:
-                raise KnowledgeOperationPlanConflictError(reason="reference_read_target_plan_changed")
-        inherited_servers = frozenset(
-            row.server_id
-            for row in models.values()
-            if row.id in inherited_ids
-            and row.tenant_id == ROOT_TENANT_ID
-            and row.server_id in servers
-            and servers[row.server_id].tenant_id == ROOT_TENANT_ID
-        )
         planned = []
         for key in keys:
             row, original = (
@@ -233,7 +206,7 @@ class ModelSourceReadTargetRepository:
         await self.verifier.aassert_target_keys(
             session, scope, identity, target_keys, allowed_types=(TargetType.MODEL,)
         )
-        return ModelReadPlan(tenant_id, tuple(result), inherited_servers)
+        return ModelReadPlan(tenant_id, tuple(result))
 
     @staticmethod
     def _rows_sync(session, statement, *, lock=False):
@@ -258,24 +231,12 @@ class ModelSourceReadTargetRepository:
         )
         return {row.id: row for row in rows}
 
-    def _configs_sync(self, session, tenant_id, *, lock):
-        return self._rows_sync(
-            session,
-            select(TenantSystemModelConfig.tenant_id, TenantSystemModelConfig.key, TenantSystemModelConfig.value)
-            .where(
-                TenantSystemModelConfig.tenant_id.in_(sorted({ROOT_TENANT_ID, tenant_id})),
-                TenantSystemModelConfig.key.in_(tuple(DEFAULT_SCHEMAS)),
-            )
-            .order_by(TenantSystemModelConfig.tenant_id, TenantSystemModelConfig.key),
-            lock=lock,
-        )
-
     def lock_targets(self, session, scope, target_keys, *, identity):
         snapshot = self.verifier.assert_target_keys(
             session, scope, identity, target_keys, allowed_types=(TargetType.MODEL,)
         )
         self.verifier.get_source_snapshot(session, scope, identity)
-        tenant_id = snapshot.source_key.tenant_id
+        tenant_id = _resolve_tenant_id()
         originals = self.sources.read_source(session, scope, identity).references
         keys = tuple(sorted(target_keys, key=lambda key: key.lock_order_key))
         originals_by_key = self._originals_by_key(originals, keys)
@@ -301,9 +262,7 @@ class ModelSourceReadTargetRepository:
         candidates = self._models_sync(session, ids, owners, lock=False)
         sharing = any(row.tenant_id != tenant_id for row in candidates.values())
         topology = self._topology_sync(session, tenant_id, lock=False) if sharing else {}
-        configs = self._configs_sync(session, tenant_id, lock=False) if sharing else ()
-        inherited_ids = ModelReferenceTargetRepository._inherited_ids(topology, configs, tenant_id)
-        all_ids = ids | inherited_ids
+        all_ids = ids
         candidates = self._models_sync(session, all_ids, owners, lock=False)
         mapping = {row.id: row.server_id for row in candidates.values()}
         server_ids = set(mapping.values())
@@ -315,17 +274,6 @@ class ModelSourceReadTargetRepository:
             raise KnowledgeOperationPlanConflictError(reason="reference_read_target_plan_changed")
         if sharing:
             topology = self._topology_sync(session, tenant_id, lock=True)
-            configs = self._configs_sync(session, tenant_id, lock=True)
-            if ModelReferenceTargetRepository._inherited_ids(topology, configs, tenant_id) != inherited_ids:
-                raise KnowledgeOperationPlanConflictError(reason="reference_read_target_plan_changed")
-        inherited_servers = frozenset(
-            row.server_id
-            for row in models.values()
-            if row.id in inherited_ids
-            and row.tenant_id == ROOT_TENANT_ID
-            and row.server_id in servers
-            and servers[row.server_id].tenant_id == ROOT_TENANT_ID
-        )
         planned = []
         for key in keys:
             row, original = (
@@ -366,4 +314,4 @@ class ModelSourceReadTargetRepository:
             for key, row, original, owner in planned
         )
         self.verifier.assert_target_keys(session, scope, identity, target_keys, allowed_types=(TargetType.MODEL,))
-        return ModelReadPlan(tenant_id, tuple(result), inherited_servers)
+        return ModelReadPlan(tenant_id, tuple(result))

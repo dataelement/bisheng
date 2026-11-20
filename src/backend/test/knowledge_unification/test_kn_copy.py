@@ -62,6 +62,16 @@ store, tenant, business, admission, processing, application = (
 @pytest.fixture
 async def copying(application, monkeypatch):
     ctx = application.context
+    from bisheng.knowledge.application import space_copy_owner
+    from bisheng.knowledge.domain.models.knowledge_processing_fence import (
+        KnowledgeProcessingArtifact,
+        KnowledgeProcessingFence,
+    )
+    from bisheng.knowledge.domain.models.knowledge_space_delete_job import KnowledgeSpaceDeleteJob
+
+    monkeypatch.setattr(space_copy_owner, "require_business_action", AsyncMock())
+    for model in (KnowledgeProcessingFence, KnowledgeProcessingArtifact, KnowledgeSpaceDeleteJob):
+        model.__table__.create(ctx.sync, checkfirst=True)
     metadata = sa.MetaData()
     models = (
         SpaceChannelMember,
@@ -221,8 +231,8 @@ async def test_real_copy_accepts_independent_history_model_and_original_permissi
     root = result["knowledge"]
     assert root.id != 40 and root.state == 0 and root.model == "11" and not root.is_released
     assert result["processing_job"].accepted and not result["completed"]
-    assert not copying.transport.calls
     await SpaceCopyOwner(app).aensure_logical(root.id, result["processing_job"].job_id)
+    assert copying.transport.calls
     async with ctx.sessions() as session:
         source = await session.get(Knowledge, 40)
         job = await session.get(Job, result["processing_job"].job_id)
@@ -431,3 +441,173 @@ async def test_consumed_copy_keeps_original_actor_and_frozen_defaults_across_fre
         job = await session.get(Job, first["processing_job"].job_id)
         assert job.actor_reference["credential_reference"]["token_version"] == 0
         assert (await session.get(Knowledge, first["knowledge"].id)).description != "A later description"
+
+
+@pytest.mark.parametrize("damage", [None, "source_ref", "source_fingerprint", "subject_id", "protected"])
+async def test_copy_normalizes_legacy_source_and_still_rejects_actual_target_tampering(copying, damage):
+    from bisheng.common.errcode.permission import PermissionPublishNotReadyError
+
+    ctx = copying.ctx
+    async with ctx.sessions() as session, session.begin():
+        session.add(
+            PermissionGrant(
+                id=901,
+                tenant_id=101,
+                resource_type="knowledge_space",
+                resource_id="40",
+                model_key="owner",
+                state="ACTIVE",
+                projection_state="CURRENT",
+            )
+        )
+        for ident, subject_type, subject_id, relation, source_type, ref in (
+            (902, "user", "686", None, "DIRECT", "user:686|owner|knowledge_space:40|"),
+            (903, "department", "142", "member", "DEPARTMENT", "department:142#member|owner|knowledge_space:40|"),
+        ):
+            session.add(
+                PermissionGrantAssignee(
+                    id=ident,
+                    tenant_id=101,
+                    grant_id=901,
+                    subject_type=subject_type,
+                    subject_id=subject_id,
+                    userset_relation=relation,
+                    source_type=source_type,
+                    source_ref=ref,
+                    source_locator=ref,
+                    source_fingerprint=str(ident)[-1] * 64,
+                    projected_subject=f"{subject_type}:{subject_id}" + (f"#{relation}" if relation else ""),
+                    state="ACTIVE",
+                    protected=False,
+                )
+            )
+    plan = await copying.app.aprecheck(40, name="Legacy grants copy", identity=ctx.user)
+    result = await copying.app.aconfirm(40, command(plan), identity=ctx.user)
+    sid, jid = result["knowledge"].id, result["processing_job"].job_id
+    owner = SpaceCopyOwner(copying.app)
+    await owner.aensure_logical(sid, jid)
+    async with ctx.sessions() as session:
+        rows = (
+            (
+                await session.execute(
+                    sa.select(PermissionGrantAssignee)
+                    .join(
+                        PermissionGrant,
+                        PermissionGrant.id == PermissionGrantAssignee.grant_id,
+                    )
+                    .where(PermissionGrant.resource_id == str(sid), PermissionGrant.resource_type == "knowledge_space")
+                )
+            )
+            .scalars()
+            .all()
+        )
+        ordinary = [row for row in rows if not row.protected]
+        assert {row.source_ref for row in ordinary} == {"user:686", "142#member"}
+        assert len([row for row in rows if row.protected]) == 1
+    if damage:
+        async with ctx.sessions() as session, session.begin():
+            row = await session.get(PermissionGrantAssignee, ordinary[0].id)
+            setattr(row, damage, True if damage == "protected" else "tampered")
+        from bisheng.permission.application.identity import get_current_permission_actor
+
+        _, payload, mapping, _ = await owner._logical(sid, jid)
+        source, target, mode, actor = owner._pairs(payload, mapping, sid, get_current_permission_actor())[0]
+        with pytest.raises(PermissionPublishNotReadyError):
+            await copying.bridge.aexecute_or_resume(
+                source=source, target=target, mode=mode, actor=actor, owner_user_id=7
+            )
+    else:
+        await owner.aensure_logical(sid, jid)
+
+
+async def test_source_change_fails_one_file_without_blocking_usable_target(copying):
+    from bisheng.common.errcode.knowledge import KnowledgeOperationPlanChangedError
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+    from bisheng.worker.knowledge.space_copy_worker import SpaceCopyResult
+
+    accepted = await copying.app.aconfirm(
+        40,
+        command(await copying.app.aprecheck(40, name="Independent failures", identity=copying.ctx.user)),
+        identity=copying.ctx.user,
+    )
+    owner, jid = SpaceCopyOwner(copying.app), accepted["processing_job"].job_id
+    lease = await owner.astart(jid, 0)
+    changed = await owner.aclaim(lease)
+    snapshot = (await owner.aguard(changed.lease)).snapshot
+    async with copying.ctx.sessions() as session, session.begin():
+        file = await session.get(KnowledgeFile, snapshot["source_file"]["id"])
+        file.md5 = "changed after acceptance"
+    with pytest.raises(KnowledgeOperationPlanChangedError):
+        await owner.aguard(changed.lease)
+    assert await owner.acomplete(changed.lease, error_code=10998, failure_reason="file_changed")
+    sibling = await owner.aclaim(lease)
+    assert await owner.acomplete(sibling.lease, result=SpaceCopyResult(sibling.item.file_id, 0, 0, 0, "a" * 64, None))
+    assert (await owner.afinalize(lease)).state == "partial_failed"
+    async with copying.ctx.sessions() as session:
+        assert (await session.get(Knowledge, accepted["knowledge"].id)).state == 1
+        assert (await session.get(KnowledgeFile, changed.item.file_id)).status == 3
+        assert (await session.get(KnowledgeFile, sibling.item.file_id)).status == 2
+
+
+async def test_explicit_current_source_retry_preserves_target_identity_and_deduplicates_request(
+    copying, actual_processing_task
+):
+    from bisheng.common.errcode.knowledge import KnowledgeIdempotencyConflictError
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+    from bisheng.knowledge.domain.schemas.processing_job import ProcessingRetryRequest
+
+    ctx = copying.ctx
+    result = await copying.app.aconfirm(
+        40, command(await copying.app.aprecheck(40, name="Refresh source", identity=ctx.user)), identity=ctx.user
+    )
+    owner, jid = SpaceCopyOwner(copying.app), result["processing_job"].job_id
+    await owner.aensure_logical(result["knowledge"].id, jid)
+    failed = await owner.afail(jid, 0, error_code=10998)
+    async with ctx.sessions() as session, session.begin():
+        source = await session.get(KnowledgeFile, 81)
+        source.md5, source.file_name = "new checksum", "current source.txt"
+        before = (await session.execute(sa.select(Item).where(Item.job_id == jid))).scalars().all()
+        target_ids = {item.id: (item.file_id, item.document_id, item.version_id) for item in before}
+    request = ProcessingRetryRequest(
+        idempotency_key="refresh-current", expected_job_revision=failed.revision, refresh_source=True
+    )
+    assert (await owner.aretry(jid, request, identity=ctx.user)).state == "accepted"
+    assert (await owner.aretry(jid, request, identity=ctx.user)).reused
+    with pytest.raises(KnowledgeIdempotencyConflictError):
+        await owner.aretry(jid, request.model_copy(update={"refresh_source": False}), identity=ctx.user)
+    async with ctx.sessions() as session:
+        items = (await session.execute(sa.select(Item).where(Item.job_id == jid))).scalars().all()
+        assert all(target_ids[item.id] == (item.file_id, item.document_id, item.version_id) for item in items)
+        assert all(item.checkpoint["copy_source_override"]["source_file"]["id"] == 81 for item in items)
+        assert all([(await session.get(KnowledgeFile, item.file_id)).md5 == "new checksum" for item in items])
+        assert all(item.processing_snapshot["source_file"]["md5"] != "new checksum" for item in items)
+
+
+async def test_current_source_retry_does_not_overwrite_target_user_edits(copying, actual_processing_task):
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+    from bisheng.knowledge.domain.schemas.processing_job import ProcessingRetryRequest
+
+    ctx = copying.ctx
+    result = await copying.app.aconfirm(
+        40, command(await copying.app.aprecheck(40, name="Keep target", identity=ctx.user)), identity=ctx.user
+    )
+    owner, jid = SpaceCopyOwner(copying.app), result["processing_job"].job_id
+    await owner.aensure_logical(result["knowledge"].id, jid)
+    failed = await owner.afail(jid, 0, error_code=10998)
+    async with ctx.sessions() as session, session.begin():
+        items = (await session.execute(sa.select(Item).where(Item.job_id == jid).order_by(Item.id))).scalars().all()
+        kept_id = items[0].file_id
+        kept = await session.get(KnowledgeFile, kept_id)
+        kept.file_name = "user renamed.txt"
+    await owner.aretry(
+        jid,
+        ProcessingRetryRequest(
+            idempotency_key="keep-user-edit", expected_job_revision=failed.revision, refresh_source=True
+        ),
+        identity=ctx.user,
+    )
+    async with ctx.sessions() as session:
+        assert (await session.get(KnowledgeFile, kept_id)).file_name == "user renamed.txt"
+        items = (await session.execute(sa.select(Item).where(Item.job_id == jid))).scalars().all()
+        assert next(item for item in items if item.file_id == kept_id).state == "failed"
+        assert sum(item.state == "pending" for item in items) == 1

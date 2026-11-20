@@ -29,7 +29,8 @@ export function KnowledgeSpaceOverlays({ model }: KnowledgeSpaceOverlaysProps) {
     selectedFiles,
     editingTagsFileId,
     isBatchTagging,
-    isAdmin,
+    canEditSpace,
+    downloadEntryIds,
     versionManagementEnabled,
     spaceIdNum,
     versionMgmtFile,
@@ -53,6 +54,7 @@ export function KnowledgeSpaceOverlays({ model }: KnowledgeSpaceOverlaysProps) {
     webLinkSubmitting,
     resetWebLinkDialog,
     submitWebLink,
+    moveConfirmation,
     moveProgress,
     moveDialogOpen,
     setMoveDialogOpen,
@@ -169,6 +171,7 @@ export function KnowledgeSpaceOverlays({ model }: KnowledgeSpaceOverlaysProps) {
         />
       )}
       {moveProgress && <MoveJobProgress progress={moveProgress} />}
+      {moveConfirmation}
       {/* F034: Move files/folders (same-space + cross-space) */}
       <MoveToDialog
         open={moveDialogOpen}
@@ -198,32 +201,36 @@ export function KnowledgeSpaceOverlays({ model }: KnowledgeSpaceOverlaysProps) {
             }}
             fileId={versionHistoryFile ? Number(versionHistoryFile.id) : null}
             documentTitle={versionHistoryFile?.name}
-            canManage={isAdmin}
+            canManage={canEditSpace}
             onPreview={(versionFileId, fileName) =>
               handlePreviewFile(String(versionFileId), fileName)
             }
-            onDownload={async (versionFileId, fileName) => {
-              try {
-                const downloadData = await getFileDownloadApi(
-                  String(space.id),
-                  String(versionFileId),
-                );
-                const downloadUrl = downloadData.original_url;
-                if (!downloadUrl) {
-                  showToast({
-                    message: localize("com_knowledge.get_download_link_failed"),
-                    status: "warning",
-                  });
-                  return;
-                }
-                triggerUrlDownload(downloadUrl, fileName);
-              } catch {
-                showToast({
-                  message: localize("com_knowledge.download_failed"),
-                  status: "warning",
-                });
-              }
-            }}
+            onDownload={
+              versionHistoryFile && downloadEntryIds.has(versionHistoryFile.id)
+                ? async (versionFileId, fileName) => {
+                    try {
+                      const downloadData = await getFileDownloadApi(
+                        String(space.id),
+                        String(versionFileId),
+                      );
+                      const downloadUrl = downloadData.original_url;
+                      if (!downloadUrl) {
+                        showToast({
+                          message: localize("com_knowledge.get_download_link_failed"),
+                          status: "warning",
+                        });
+                        return;
+                      }
+                      triggerUrlDownload(downloadUrl, fileName);
+                    } catch {
+                      showToast({
+                        message: localize("com_knowledge.download_failed"),
+                        status: "warning",
+                      });
+                    }
+                  }
+                : undefined
+            }
             onPrimaryChanged={handleVersionAction}
             onDeleted={handleVersionAction}
           />

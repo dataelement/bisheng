@@ -1,5 +1,12 @@
 import { showApiError } from "~/api/request";
-import { Button as RetryButton, Tooltip as SharedTooltip } from "@bisheng/ui";
+import { Button as RetryButton } from "@bisheng/ui";
+import {
+  VersionHistoryAction,
+  VersionHistoryStatusBadge,
+  VersionHistorySummary,
+  VersionHistoryTable,
+  versionDialogStyles as styles,
+} from "@bisheng/knowledge";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import { CheckCircle, Download, Eye, Loader2, Trash2, X } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "~/components/ui/Dialog";
@@ -15,7 +22,6 @@ import {
   setPrimaryVersionApi,
   deleteFileVersionApi,
 } from "~/api/knowledge";
-import { cn } from "~/utils";
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -33,59 +39,6 @@ interface VersionHistoryDialogProps {
   onPrimaryChanged?: () => void;
   onDeleted?: () => void;
 }
-
-// ─── Status badge ─────────────────────────────────────────────────────────────
-
-const STATUS_CONFIG: Record<string, { labelKey: string; color: string; bg: string; dot: string }> = {
-  [FileStatus.SUCCESS]: {
-    labelKey: "com_knowledge.success",
-    color: "text-[#00b42a]",
-    bg: "bg-[#e8ffea]",
-    dot: "bg-[#00b42a]",
-  },
-  [FileStatus.PROCESSING]: {
-    labelKey: "com_knowledge.parsing_status",
-    color: "text-blue-500",
-    bg: "bg-blue-50",
-    dot: "bg-blue-500",
-  },
-  [FileStatus.WAITING]: {
-    labelKey: "com_knowledge.queueing_status",
-    color: "text-blue-500",
-    bg: "bg-blue-50",
-    dot: "bg-blue-500",
-  },
-  [FileStatus.REBUILDING]: {
-    labelKey: "com_knowledge.rebuilding_status",
-    color: "text-blue-500",
-    bg: "bg-blue-50",
-    dot: "bg-blue-500",
-  },
-  [FileStatus.UPLOADING]: {
-    labelKey: "com_knowledge.uploading_status",
-    color: "text-blue-500",
-    bg: "bg-blue-50",
-    dot: "bg-blue-500",
-  },
-  [FileStatus.FAILED]: {
-    labelKey: "com_knowledge.fail",
-    color: "text-[#f53f3f]",
-    bg: "bg-[#fff2f0]",
-    dot: "bg-[#f53f3f]",
-  },
-  [FileStatus.TIMEOUT]: {
-    labelKey: "com_knowledge.timeout",
-    color: "text-[#f53f3f]",
-    bg: "bg-[#fff2f0]",
-    dot: "bg-[#f53f3f]",
-  },
-  [FileStatus.VIOLATION]: {
-    labelKey: "com_knowledge.violation",
-    color: "text-[#f53f3f]",
-    bg: "bg-[#fff2f0]",
-    dot: "bg-[#f53f3f]",
-  },
-};
 
 function numericStatusToEnum(n: number): FileStatus {
   switch (n) {
@@ -108,59 +61,7 @@ function numericStatusToEnum(n: number): FileStatus {
   }
 }
 
-interface VersionStatusBadgeProps {
-  parseStatus: number;
-}
-
-function VersionStatusBadge({ parseStatus }: VersionStatusBadgeProps) {
-  const localize = useLocalize();
-  const status = numericStatusToEnum(parseStatus);
-  const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG[FileStatus.WAITING];
-  return (
-    <span
-      className={cn(
-        "inline-flex shrink-0 items-center whitespace-nowrap rounded px-2 py-0.5 text-xs",
-        cfg.bg,
-        cfg.color,
-      )}
-    >
-      {localize(cfg.labelKey)}
-    </span>
-  );
-}
-
-// ─── Action button with tooltip ───────────────────────────────────────────────
-
-interface ActionButtonProps {
-  label: string;
-  onClick: () => void;
-  disabled?: boolean;
-  className?: string;
-  children: React.ReactNode;
-}
-
-function ActionButton({ label, onClick, disabled, className, children }: ActionButtonProps) {
-  return (
-    <SharedTooltip content={label} side="top">
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={onClick}
-        className={cn(
-          "inline-flex size-7 items-center justify-center rounded-[4px] border border-border-base bg-white text-text-2",
-          "transition-colors hover:bg-[#f7f7f7] disabled:cursor-not-allowed disabled:opacity-40",
-          className,
-        )}
-      >
-        {children}
-      </button>
-    </SharedTooltip>
-  );
-}
-
-// ─── Table row ────────────────────────────────────────────────────────────────
-
-interface VersionTableRowProps {
+interface VersionTableActionsProps {
   version: FileVersionEntry;
   canManage: boolean;
   setPrimaryPending: boolean;
@@ -171,7 +72,7 @@ interface VersionTableRowProps {
   onDelete: (versionId: number, versionNo: number) => void;
 }
 
-function VersionTableRow({
+function VersionTableActions({
   version,
   canManage,
   setPrimaryPending,
@@ -180,7 +81,7 @@ function VersionTableRow({
   onDownload,
   onSetPrimary,
   onDelete,
-}: VersionTableRowProps) {
+}: VersionTableActionsProps) {
   const localize = useLocalize();
   const isSuccess = numericStatusToEnum(version.status ?? 0) === FileStatus.SUCCESS;
   const canSetPrimary = canManage && !version.is_primary && isSuccess;
@@ -188,112 +89,48 @@ function VersionTableRow({
   const anyPending = setPrimaryPending || deletePending;
 
   return (
-    <tr className="border-b border-fill-2 last:border-b-0 hover:bg-[#FAFAFA]">
-      {/* Version */}
-      <td className="px-4 py-3 text-sm text-text-1 whitespace-nowrap">
-        <div className="flex items-center gap-2">
-          <span className="font-medium">V{version.version_no}</span>
-          {version.is_primary && (
-            <span className="inline-flex items-center rounded bg-blue-50 px-1.5 py-0.5 text-[11px] font-medium text-blue-500">
-              {localize("com_knowledge.version.history_primary_badge")}
-            </span>
-          )}
-        </div>
-      </td>
-
-      {/* Original file name */}
-      <td className="max-w-[200px] px-4 py-3">
-        <span className="block truncate text-sm text-text-1" title={version.original_file_name}>
-          {version.original_file_name}
-        </span>
-      </td>
-
-      {/* File encoding (doc_code per version) */}
-      <td className="max-w-[180px] px-4 py-3">
-        <span className="block truncate text-sm text-text-2" title={version.file_code ?? undefined}>
-          {version.file_code ?? "—"}
-        </span>
-      </td>
-
-      {/* Uploader */}
-      <td className="px-4 py-3 text-sm text-text-2 whitespace-nowrap">{version.uploader_name ?? "—"}</td>
-
-      {/* Upload time */}
-      <td className="px-4 py-3 text-sm text-text-2 whitespace-nowrap">
-        {version.upload_time ? version.upload_time.replace("T", " ").slice(0, 16) : "—"}
-      </td>
-
-      {/* Status */}
-      <td className="px-4 py-3">
-        <VersionStatusBadge parseStatus={version.status ?? 0} />
-      </td>
-
-      {/* Actions */}
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-1.5">
-          {onPreview && (
-            <ActionButton
-              label={localize("com_knowledge.version.history_action_preview")}
-              onClick={() => onPreview(version.knowledge_file_id, version.original_file_name)}
-              disabled={anyPending}
-            >
-              <Eye className="size-4" />
-            </ActionButton>
-          )}
-          {onDownload && (
-            <ActionButton
-              label={localize("com_knowledge.version.history_action_download")}
-              onClick={() => onDownload(version.knowledge_file_id, version.original_file_name)}
-              disabled={anyPending}
-            >
-              <Download className="size-4" />
-            </ActionButton>
-          )}
-          {canSetPrimary && (
-            <ActionButton
-              label={localize("com_knowledge.version.history_action_set_primary")}
-              onClick={() => onSetPrimary(version.version_id, version.version_no)}
-              disabled={anyPending}
-              className="text-blue-500 hover:text-blue-500"
-            >
-              <CheckCircle className="size-4" />
-            </ActionButton>
-          )}
-          {canDelete && (
-            <ActionButton
-              label={localize("com_knowledge.version.history_action_delete")}
-              onClick={() => onDelete(version.version_id, version.version_no)}
-              disabled={anyPending}
-              className="hover:text-[#f53f3f]"
-            >
-              <Trash2 className="size-4" />
-            </ActionButton>
-          )}
-        </div>
-      </td>
-    </tr>
+    <>
+      {onPreview && (
+        <VersionHistoryAction
+          label={localize("com_knowledge.version.history_action_preview")}
+          onClick={() => onPreview(version.knowledge_file_id, version.original_file_name)}
+          disabled={anyPending}
+        >
+          <Eye className="size-4" />
+        </VersionHistoryAction>
+      )}
+      {onDownload && (
+        <VersionHistoryAction
+          label={localize("com_knowledge.version.history_action_download")}
+          onClick={() => onDownload(version.knowledge_file_id, version.original_file_name)}
+          disabled={anyPending}
+        >
+          <Download className="size-4" />
+        </VersionHistoryAction>
+      )}
+      {canSetPrimary && (
+        <VersionHistoryAction
+          label={localize("com_knowledge.version.history_action_set_primary")}
+          onClick={() => onSetPrimary(version.version_id, version.version_no)}
+          disabled={anyPending}
+          tone="primary"
+        >
+          <CheckCircle className="size-4" />
+        </VersionHistoryAction>
+      )}
+      {canDelete && (
+        <VersionHistoryAction
+          label={localize("com_knowledge.version.history_action_delete")}
+          onClick={() => onDelete(version.version_id, version.version_no)}
+          disabled={anyPending}
+          tone="danger"
+        >
+          <Trash2 className="size-4" />
+        </VersionHistoryAction>
+      )}
+    </>
   );
 }
-
-// ─── Top info panel (3-column summary) ────────────────────────────────────────
-
-interface InfoColumnProps {
-  label: string;
-  value: string | null | undefined;
-}
-
-function InfoColumn({ label, value }: InfoColumnProps) {
-  return (
-    <div className="flex-1 min-w-0">
-      <p className="text-xs text-text-3 mb-1">{label}</p>
-      <p className="truncate text-sm font-medium text-text-1" title={value ?? undefined}>
-        {value ?? "—"}
-      </p>
-    </div>
-  );
-}
-
-// ─── Main component ───────────────────────────────────────────────────────────
 
 export function VersionHistorySheet({
   open,
@@ -373,16 +210,16 @@ export function VersionHistorySheet({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[80vh] w-[860px] max-w-[90vw] flex-col gap-0 overflow-hidden rounded-xl p-0 sm:max-w-[860px] [&>button]:hidden">
+      <DialogContent className={`${styles.historySize} ${styles.historyFrame} [&>button]:hidden`}>
         {/* Header */}
-        <DialogHeader className="relative shrink-0 px-6 pt-5 pb-3 text-left">
-          <DialogTitle className="text-base font-semibold text-text-1">
-            {localize("com_knowledge.version.history_title")}
+        <DialogHeader className={styles.historyHeader}>
+          <DialogTitle className={styles.historyTitle}>
+            {localize("knowledge.version.history.title", { ns: "shared" })}
           </DialogTitle>
           <button
             type="button"
             onClick={() => onOpenChange(false)}
-            className="absolute right-4 top-4 inline-flex size-8 items-center justify-center rounded-md text-text-2 transition-colors hover:bg-fill-2"
+            className={styles.close}
             aria-label={localize("com_knowledge.close") || "Close"}
           >
             <X className="size-4" />
@@ -390,16 +227,12 @@ export function VersionHistorySheet({
         </DialogHeader>
 
         {/* Body */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4">
-          {/* 3-column info panel */}
-          <div className="mb-4 flex gap-6 rounded-lg border border-border-base bg-fill-1 px-4 py-3">
-            <InfoColumn label={localize("com_knowledge.version.history_label_doc")} value={headerTitle} />
-            <InfoColumn label={localize("com_knowledge.version.history_label_doc_code")} value={docCode} />
-            <InfoColumn
-              label={localize("com_knowledge.version.history_label_primary_version")}
-              value={primaryVersionNo != null ? `V${primaryVersionNo}` : null}
-            />
-          </div>
+        <div className={`${styles.body} py-4`}>
+          <VersionHistorySummary
+            documentTitle={headerTitle}
+            documentCode={docCode}
+            primaryVersion={primaryVersionNo}
+          />
 
           {/* Table */}
           {isLoading ? (
@@ -416,55 +249,35 @@ export function VersionHistorySheet({
           ) : sortedVersions.length === 0 ? (
             <div className="flex h-32 items-center justify-center text-sm text-text-3">—</div>
           ) : (
-            <div className="overflow-x-auto rounded-lg border border-border-base">
-              <table className="w-full min-w-[720px] border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-border-base bg-[#FAFAFA]">
-                    <th className="px-4 py-2.5 text-left text-xs font-medium text-text-3">
-                      {localize("com_knowledge.version.history_col_version")}
-                    </th>
-                    <th className="px-4 py-2.5 text-left text-xs font-medium text-text-3">
-                      {localize("com_knowledge.version.history_col_filename")}
-                    </th>
-                    <th className="px-4 py-2.5 text-left text-xs font-medium text-text-3">
-                      {localize("com_knowledge.version.history_col_file_encoding")}
-                    </th>
-                    <th className="px-4 py-2.5 text-left text-xs font-medium text-text-3">
-                      {localize("com_knowledge.version.history_col_uploader")}
-                    </th>
-                    <th className="px-4 py-2.5 text-left text-xs font-medium text-text-3">
-                      {localize("com_knowledge.version.history_col_upload_time")}
-                    </th>
-                    <th className="px-4 py-2.5 text-left text-xs font-medium text-text-3">
-                      {localize("com_knowledge.version.history_col_parse_status")}
-                    </th>
-                    <th className="px-4 py-2.5 text-left text-xs font-medium text-text-3">
-                      {localize("com_knowledge.version.history_col_actions")}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedVersions.map((v) => (
-                    <VersionTableRow
-                      key={v.version_id}
-                      version={v}
-                      canManage={canManage}
-                      setPrimaryPending={setPrimaryMutation.isPending}
-                      deletePending={deleteMutation.isPending}
-                      onPreview={onPreview}
-                      onDownload={onDownload}
-                      onSetPrimary={handleSetPrimary}
-                      onDelete={handleDelete}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <VersionHistoryTable
+              rows={sortedVersions.map((version) => ({
+                id: version.version_id,
+                versionNumber: version.version_no,
+                isPrimary: version.is_primary,
+                fileName: version.original_file_name,
+                fileCode: version.file_code,
+                uploader: version.uploader_name,
+                uploadedAt: version.upload_time,
+                status: <VersionHistoryStatusBadge status={version.status ?? 0} />,
+                actions: (
+                  <VersionTableActions
+                    version={version}
+                    canManage={canManage}
+                    setPrimaryPending={setPrimaryMutation.isPending}
+                    deletePending={deleteMutation.isPending}
+                    onPreview={onPreview}
+                    onDownload={onDownload}
+                    onSetPrimary={handleSetPrimary}
+                    onDelete={handleDelete}
+                  />
+                ),
+              }))}
+            />
           )}
         </div>
 
         {/* Footer */}
-        <div className="shrink-0 flex justify-end gap-2 border-t border-border-base px-6 py-3">
+        <div className={styles.footer}>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             {localize("com_knowledge.version.btn_close")}
           </Button>

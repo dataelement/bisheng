@@ -1,4 +1,5 @@
 import { lazy,Suspense,useMemo } from 'react';
+import { LoadingState } from '@/components/bs-icons/loading/LoadingState';
 import type { CitationFileProps } from '@bisheng/chat/citation-views';
 import { usePreviewLocale } from '@bisheng/file-viewers/locale';
 import { TextViewer } from '@bisheng/file-viewers/text';
@@ -30,6 +31,6 @@ export function PlatformCitationFile({fileName,fileType,fileUrl,transcriptUrl,hi
   case 'txt':body=<TextViewer {...props}/>;break;
   default:body=<div className="flex h-full items-center justify-center text-text-3">{locale.unsupported}</div>;
  }
- return <Suspense fallback={<div>{locale.loading}</div>}><div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">{body}</div></Suspense>;
+ return <Suspense fallback={<LoadingState size="page" label={locale.loading} />}><div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">{body}</div></Suspense>;
 }
 export function renderPlatformCitationFile(props:CitationFileProps){return <PlatformCitationFile {...props}/>;}

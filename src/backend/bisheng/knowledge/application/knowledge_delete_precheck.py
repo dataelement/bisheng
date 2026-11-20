@@ -8,9 +8,10 @@ from bisheng.knowledge.application import deletion_admission as admission
 from bisheng.knowledge.domain.repositories.knowledge_deletion_execution_repository import OPERATIONS
 from bisheng.knowledge.domain.repositories.operation_plan_repository import _now
 from bisheng.knowledge.domain.repositories.source_move_input_repository import SourceMoveInputRepository
+from bisheng.knowledge.domain.schemas.direct_delete_scope import deletion_scope_payload
 from bisheng.knowledge.domain.schemas.direct_delete_scope import select_delete_scope as _selected
 from bisheng.knowledge.domain.schemas.processing_job import OperationInvalidItem, OperationItem, ResourceVersionTarget
-from bisheng.knowledge.domain.services.knowledge_processing_guard import require_space_processing_idle
+from bisheng.knowledge.domain.services.knowledge_processing_guard import require_space_deletion_allowed
 from bisheng.knowledge.domain.services.knowledge_reference_service import impact_digest
 from bisheng.resource_reference.application.contracts import SourceType
 
@@ -121,8 +122,6 @@ async def precheck_deletion(
             reason = (
                 "referenced"
                 if index in referenced and not whole
-                else "processing"
-                if unit.processing_file_ids
                 else "no_permission"
                 if allowed is not None and not set(unit.resource_ids) <= allowed
                 else None
@@ -142,17 +141,13 @@ async def precheck_deletion(
             valid_positions = list(range(len(scope.selections)))
         positions = tuple(sorted(set(valid_positions)))
         chosen = _selected(scope, positions)
-        executable = (
-            (whole or bool(chosen.resources))
-            and (not whole or not inspection.blocked or force)
-            and (not whole or not any(unit.processing_file_ids for unit in scope.units))
-        )
+        executable = (whole or bool(chosen.resources)) and (not whole or not inspection.blocked or force)
         pin = await owner._pin()
         async with owner._session() as session:
             root, root_revision = await owner.execution.aroot(session, space_id, lock=True)
-            require_space_processing_idle(root, operation="delete")
-            if whole:
-                await SourceMoveInputRepository().arequire_released(session, space_id=space_id)
+            require_space_deletion_allowed(root, operation=operation)
+            await owner.execution.arequire_transfer_idle(session, space_id=space_id)
+            await SourceMoveInputRepository().arequire_released(session, space_id=space_id)
             current = await owner._collect(session, space_id=space_id, selections=selections, operation=operation)
             if current != facts:
                 raise KnowledgeOperationPlanConflictError(reason="knowledge_delete_precheck_changed")
@@ -168,8 +163,8 @@ async def precheck_deletion(
                     if row.id in ids
                 ],
                 target_revisions={
-                    "scope": inspection.scope_digest,
-                    "selected_scope": impact_digest(asdict(chosen)),
+                    "scope": impact_digest(deletion_scope_payload(scope)),
+                    "selected_scope": impact_digest(deletion_scope_payload(chosen)),
                 },
                 source_revisions={
                     "inbound": inspection.inbound_digest,
@@ -184,6 +179,7 @@ async def precheck_deletion(
                     "valid_positions": list(positions),
                     "force": force,
                     "can_execute": executable,
+                    "processing_fence_version": 1,
                     "historical_version_id": historical_version_id,
                     "pin": pin,
                 },

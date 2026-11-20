@@ -33,7 +33,7 @@ async def quota_db(policy_db, monkeypatch):
     with bypass_tenant_filter():
         async with policy_db.sessions() as session:
             await session.exec(delete(UserRole).where(UserRole.user_id == 77, UserRole.role_id == 1))
-            for role_id in (2, 3):
+            for role_id in (2, 3, 4, 5):
                 (await session.get(Role, role_id)).quota_config = {"workflow": 10, "channel": 0}
             (await session.get(Tenant, 2)).quota_config = {"workflow": 8}
             session.add_all(
@@ -75,7 +75,7 @@ async def test_role_ten_user_five_tenant_three_allows_one(quota_db, monkeypatch)
 
 
 async def test_global_zero_is_not_default_when_view_changes(quota_db):
-    """AC-20: both effective roles explicitly deny channel creation."""
+    """AC-20: all bound roles explicitly deny channel creation."""
     with management_scope(home=2, target=3), pytest.raises(TenantRoleQuotaExceededError):
         await QuotaService.check_quota(77, "channel", 2)
 

@@ -80,7 +80,14 @@ export function useSpaceFileDetail(scope: KnowledgeQueryScope, spaceId: number, 
     cacheTime: 0,
     retry: false,
   });
-  const canEdit = hasEdit && target.data?.file_id === fileId && !target.isError;
+  // A failed attempt keeps the previous successful content in the index, but that
+  // content is excluded from retrieval. Editing it would silently change nothing
+  // users can search, so content writes stay closed while the file is not
+  // retrievable — reprocessing must stay reachable, otherwise there is no way out.
+  const retrievable = info.data?.retrievable !== false;
+  const targetValid = target.data?.file_id === fileId && !target.isError;
+  const canProcess = hasEdit && targetValid;
+  const canEdit = canProcess && retrievable;
   useEffect(() => {
     alive.current = true;
     const store = useKnowledgeStore.getState();
@@ -143,6 +150,7 @@ export function useSpaceFileDetail(scope: KnowledgeQueryScope, spaceId: number, 
     boxes,
     target,
     canEdit,
+    canProcess,
     page,
     setPage,
     keyword,

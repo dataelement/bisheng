@@ -582,10 +582,11 @@ class AssistantService(BaseService, AssistantUtils):
         logger.info(f"assistant original prompt id: {assistant.id}, desc: {assistant.prompt}")
 
         # Automatically replenish default model configurations
-        assistant_llm = await LLMService.get_assistant_llm()
+        assistant_llm, _, _ = await LLMService.aget_assistant_llm_with_meta()
         if assistant_llm.llm_list:
             for one in assistant_llm.llm_list:
                 if one.default:
+                    await LLMService.get_assistant_llm(slots=(f"llm_list.{one.model_id}.model_id",))
                     assistant.model_name = str(one.model_id)
                     break
 

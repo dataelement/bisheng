@@ -18,7 +18,6 @@ import { Label } from "@/components/bs-ui/label";
 
 import { createServiceAccountApi } from "@/controllers/API/serviceAccount";
 import { showApiError } from "@/controllers/request";
-import { Outlined } from "bisheng-icons";
 import { useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -129,13 +128,8 @@ export function CreateServiceAccountDialog({
           <Button variant="outlined" disabled={loading} onClick={() => handleOpenChange(false)} color="default">
             {t("cancel")}
           </Button>
-          <Button disabled={((String((name) ?? '').length > 128) || (String((description) ?? '').length > 512)) || (loading || !name.trim() || owners.length !== 1)} onClick={handleCreate}>
-            {loading ? (
-              <Outlined.Loading
-                aria-hidden="true"
-                className="mr-2 size-4 animate-spin"
-              />
-            ) : null}
+          <Button disabled={((String((name) ?? '').length > 128) || (String((description) ?? '').length > 512)) || (loading || !name.trim() || owners.length !== 1)} onClick={handleCreate} loading={loading}>
+
             {t("confirmButton")}
           </Button>
         </DialogFooter>

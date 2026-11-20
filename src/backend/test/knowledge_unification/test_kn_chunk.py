@@ -3,6 +3,7 @@
 import asyncio
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
@@ -61,9 +62,13 @@ async def chunk_entry(moving, monkeypatch):
     from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 
     monkeypatch.setattr(KnowledgeRag, "init_knowledge_milvus_vectorstore_sync", index)
+    visible = AsyncMock()
+    monkeypatch.setitem(
+        KnowledgeService.update_knowledge_chunk.__func__.__globals__, "require_business_action", visible
+    )
     user = UserPayload(user_id=7, tenant_id=101, user_role=[])
     object.__setattr__(user, "allowed", True)
-    return SimpleNamespace(database=moving, user=user, actions=actions, io=io)
+    return SimpleNamespace(database=moving, user=user, actions=actions, io=io, visible=visible)
 
 
 def invoke(entry, action, *, space_id=10, file_id=82):
@@ -96,7 +101,7 @@ async def test_real_pending_model_transition_blocks_chunk_before_index_io(chunk_
 
 
 @pytest.mark.parametrize("action", ["update", "delete"])
-async def test_original_container_edit_allows_historical_physical_version_without_file_edit(chunk_entry, action):
+async def test_container_edit_and_file_visibility_allow_historical_physical_version(chunk_entry, action):
     entry = chunk_entry
     with pytest.raises(IndexIOReached):
         await asyncio.to_thread(invoke, entry, action)
@@ -110,3 +115,13 @@ async def test_file_rename_without_original_container_edit_is_insufficient(chunk
         await asyncio.to_thread(invoke, entry, "delete")
     assert failure.value.status_code == 403 and not entry.io
     assert entry.actions == [(10, "edit")]
+
+
+@pytest.mark.parametrize("action", ["update", "delete"])
+async def test_hidden_file_is_rejected_before_any_index_write(chunk_entry, action):
+    entry = chunk_entry
+    entry.visible.side_effect = UnAuthorizedError()
+    with pytest.raises(UnAuthorizedError):
+        await asyncio.to_thread(invoke, entry, action)
+    assert not entry.io
+    entry.visible.assert_awaited_once_with(entry.user, resource_type="knowledge_file", resource_id=82, action="visible")

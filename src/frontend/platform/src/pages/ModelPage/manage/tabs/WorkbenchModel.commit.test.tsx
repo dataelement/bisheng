@@ -4,11 +4,13 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, expect, it, vi } from 'vitest';
 import { createPlatformQueryClient } from '@/queryClient';
 import WorkbenchModel from './WorkbenchModel';
+import { managementRequestScope } from '@/controllers/managementScope';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- captured props of the mocked ModelManagement
 const mocks = vi.hoisted(() => ({ load: vi.fn(), save: vi.fn(), notice: vi.fn(), toast: vi.fn(), translate: (key: string) => key, managementProps: null as any }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: mocks.translate }) }));
 vi.mock('@/controllers/API/finetune', () => ({ getLinsightModelEnvelope: mocks.load, updateLinsightModelConfig: mocks.save }));
 vi.mock('@/controllers/request', () => ({ showApiError: mocks.notice }));
+vi.mock('@/hooks/useDshBrowserConfig', () => ({ useDshBrowserConfig: () => ({ config: { enabled: false } }) }));
 vi.mock('@/pages/ModelPage/manage', () => ({ useModel: () => ({ llmOptions: [], embeddings: [], asrModel: [], ttsModel: [] }) }));
 vi.mock('@bisheng/ui', async importOriginal => {
   const actual = await importOriginal<typeof import('@bisheng/ui')>();
@@ -21,6 +23,7 @@ it('acknowledges a committed write once when the following refresh fails', async
   mocks.load.mockResolvedValueOnce({ data: { models: [{ id: '9', displayName: 'Chat' }], embedding_model: { id: '1' } } }).mockRejectedValue(failure);
   mocks.save.mockResolvedValue(undefined);
   const client = createPlatformQueryClient();
+  const invalidate = vi.spyOn(client, 'invalidateQueries');
   render(<QueryClientProvider client={client}><WorkbenchModel data={[]} onBack={vi.fn()} /></QueryClientProvider>);
   const save = await screen.findByRole('button', { name: 'model.save' });
   await waitFor(() => expect(save).toBeEnabled());
@@ -30,7 +33,9 @@ it('acknowledges a committed write once when the following refresh fails', async
   expect(mocks.save).toHaveBeenCalledTimes(1);
   expect(mocks.toast).toHaveBeenCalledWith({ type: 'success', message: 'model.saveSuccess' });
   expect(mocks.notice).toHaveBeenCalledWith(failure);
-  expect(client.getQueryData(['linsightModelEnvelope'])).toMatchObject({ data: { embedding_model: { id: '1' } } });
+  expect(invalidate).toHaveBeenCalledWith({ queryKey: ['system-model-settings'] });
+  expect(invalidate).toHaveBeenCalledWith({ queryKey: ['system-model-settings-impact'] });
+  expect(client.getQueryData(['linsightModelEnvelope', managementRequestScope()])).toMatchObject({ data: { embedding_model: { id: '1' } } });
   client.clear();
 });
 it('keeps both defaults when selectable model metadata changes', async () => {

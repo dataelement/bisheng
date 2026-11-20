@@ -154,6 +154,14 @@ class BoundResourceAuthorizationPort:
             resource_id=resource_id,
         )
 
+    async def load_permission_records(self, *, resource_ids: tuple[str, ...]):
+        """Batch form of the business proof. None means the adapter has no batch loader."""
+
+        method = getattr(self._adapter, "load_permission_records", None)
+        if method is None:
+            return None
+        return await method(resource_type=self._resource_type, resource_ids=resource_ids)
+
 
 class PermissionDecisionApplication:
     """Resolve a business target, then ask the sole permission facade."""

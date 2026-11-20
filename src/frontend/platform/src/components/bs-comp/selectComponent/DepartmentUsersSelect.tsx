@@ -1,4 +1,5 @@
 import { Button, SearchInput } from '@bisheng/ui';
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState"
 import { useSubjectSearch } from "./useSubjectSearch"
 import { SubjectBusinessId, SubjectSearchStatus } from "./SubjectSearchStatus"
 import { useLazyDepartmentTree } from "@/components/bs-comp/department"
@@ -15,7 +16,7 @@ import {
 import { getUsersApi } from "@/controllers/API/user"
 import { showApiError } from "@/controllers/request"
 import type { DepartmentSearchResult, DepartmentTreeNode } from "@/types/api/department"
-import { Building2, ChevronDown, ChevronRight, Loader2, User as UserIcon, X } from "lucide-react"
+import { Building2, ChevronDown, ChevronRight, User as UserIcon, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -251,7 +252,7 @@ export default function DepartmentUsersSelect({
               }}
             >
               {tree.loadingIds.has(did) ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <LoadingState size="inline" />
               ) : isExpanded ? (
                 <ChevronDown className="h-3.5 w-3.5" />
               ) : (
@@ -269,7 +270,7 @@ export default function DepartmentUsersSelect({
             {loadingDeptIds.has(did) && (
               <div className="flex items-center py-1 pl-1.5 text-xs text-muted-foreground">
                 <div className="shrink-0" style={{ width: (depth + 1) * TREE_INDENT_PER_LEVEL }} aria-hidden />
-                {t("loading", { ns: "bs" })}
+                <LoadingState size="inline" />
               </div>
             )}
             {users.map((u) => renderUserRow(u, depth + 1, pathLabel))}
@@ -353,7 +354,7 @@ export default function DepartmentUsersSelect({
               // Search mode: a flat list of matched users (by name), each labeled
               // with its resolved department path (lazy, no full tree to bucket into).
               searchingUsers ? (
-                <div className="px-2 py-4 text-center text-sm text-muted-foreground">{t("loading", { ns: "bs" })}</div>
+                <LoadingState className="min-h-24 px-2 py-4" />
               ) : searchedUsers.length === 0 ? (
                 <div className="py-4 text-center text-sm text-muted-foreground">
                   {emptyMessage || t("subjectSearch.emptyUsers")}
@@ -388,7 +389,7 @@ export default function DepartmentUsersSelect({
                 })
               )
             ) : tree.initialLoading ? (
-              <div className="py-4 text-center text-sm text-muted-foreground">{t("loading", { ns: "bs" })}</div>
+              <LoadingState className="min-h-24 py-4" />
             ) : browseRoots.length === 0 ? (
               <div className="py-4 text-center text-sm text-muted-foreground">
                 {emptyMessage || t("subjectSearch.emptyUsers")}

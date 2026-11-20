@@ -4,6 +4,7 @@ from loguru import logger
 
 from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.knowledge import (
     KnowledgeFileNotExistError,
@@ -12,10 +13,16 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeMetadataValueTypeConvertError,
     KnowledgeProcessingConflictError,
 )
+from bisheng.core.context.tenant import get_current_tenant_id
+from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.domain import utils
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
+from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileStatus
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
+from bisheng.knowledge.domain.repositories.knowledge_version_read_repository import KnowledgeVersionReadRepository
+from bisheng.knowledge.domain.repositories.retrieval_file_repository import KnowledgeRetrievalFileRepository
 from bisheng.knowledge.domain.schemas.knowledge_file_schema import KnowledgeFileInfoRes
 from bisheng.knowledge.domain.schemas.knowledge_schema import MetadataField, ModifyKnowledgeFileMetaDataReq
 from bisheng.knowledge.domain.services.knowledge_permission_service import KnowledgePermissionService
@@ -102,7 +109,55 @@ class KnowledgeFileService:
             for key, item in knowledge_file_info_res.user_metadata.items():
                 if key in metadata_field_dict:
                     item["field_type"] = metadata_field_dict[key].field_type
+        (
+            knowledge_file_info_res.version_id,
+            knowledge_file_info_res.version_no,
+            knowledge_file_info_res.is_primary_version,
+        ) = await self._file_version_link(knowledge_model, knowledge_file_model.id)
+        knowledge_file_info_res.retrievable = await self._file_retrievable(knowledge_model, knowledge_file_model)
         return knowledge_file_info_res
+
+    async def _file_version_link(self, knowledge_model, file_id: int):
+        """Version row behind this physical file: (version_id, version_no, is_primary).
+
+        A space file is one version of a logical document; a failed attempt keeps
+        the previous successful content, so callers need the version identity to
+        label what they are showing. Legacy libraries have no version chain and
+        return nulls instead of guessing.
+        """
+        if knowledge_model is None or knowledge_model.type != KnowledgeTypeEnum.SPACE.value:
+            return None, None, None
+        tenant_id = get_current_tenant_id()
+        if type(tenant_id) is not int or tenant_id <= 0:
+            return None, None, None
+        try:
+            anchor = await KnowledgeVersionReadRepository().aget_anchor(tenant_id=tenant_id, file_id=file_id)
+        except BaseErrorCode:
+            # A damaged or half-migrated version chain must not hide file facts.
+            logger.opt(exception=True).warning("act=file_info_version_link file_id={}", file_id)
+            return None, None, None
+        if anchor is None:
+            return None, None, None
+        primary = bool(anchor.version.is_primary and anchor.document.primary_version_id == anchor.version.id)
+        return anchor.version.id, anchor.version.version_no, primary
+
+    async def _file_retrievable(self, knowledge_model, knowledge_file_model) -> bool:
+        """Whether retrieval may serve this file right now.
+
+        Mirrors the retrieval result filter: only a successful primary version is
+        served, and retained content of a failed attempt is explicitly excluded.
+        """
+        if knowledge_model is None or knowledge_model.type != KnowledgeTypeEnum.SPACE.value:
+            return knowledge_file_model.status == KnowledgeFileStatus.SUCCESS.value
+        try:
+            async with get_async_db_session() as session:
+                successful = await KnowledgeRetrievalFileRepository().alist_successful_files(
+                    session, space_id=knowledge_model.id, file_ids=[knowledge_file_model.id]
+                )
+        except (BaseErrorCode, ValueError):
+            logger.opt(exception=True).warning("act=file_info_retrievable file_id={}", knowledge_file_model.id)
+            return False
+        return bool(successful)
 
     @staticmethod
     async def modify_milvus_file_user_metadata(

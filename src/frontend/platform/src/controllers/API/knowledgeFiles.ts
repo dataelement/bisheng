@@ -59,8 +59,9 @@ function itemPath(
 export async function listSpaceFolderParents(
   spaceId: number,
   folderId: number,
+  signal?: AbortSignal,
 ): Promise<SpaceFolderParent[]> {
-  return axios.get(`${itemPath(spaceId, "folders", folderId)}/parent`);
+  return axios.get(`${itemPath(spaceId, "folders", folderId)}/parent`, signal ? { signal } : undefined);
 }
 export async function createSpaceFolder(
   spaceId: number,

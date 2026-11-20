@@ -72,7 +72,10 @@ class KnowledgeSpaceDirectDeleteService:
     async def purge(self, job_id: str) -> bool:
         job = await self.repository.claim(job_id)
         if job is None:
-            return False
+            verified = await self.repository.claim_verification(job_id)
+            if verified is None:
+                return False
+            return await self._verify_outputs(verified)
         if job.operation_type is not None:
             if self.execution_application_factory is None:
                 await self.repository.advance(job, error="knowledge_delete_execution_unconfigured")
@@ -93,7 +96,27 @@ class KnowledgeSpaceDirectDeleteService:
             await self.repository.advance(job, error=str(exc))
             raise
 
-    async def _purge_step(self, step: str, job) -> None:
+    async def _verify_outputs(self, job):
+        from bisheng.knowledge.domain.repositories.processing_fence_repository import ProcessingFenceRepository
+
+        try:
+            async with ProcessingFenceRepository(async_sessions=self.session_factory).cleanup(job):
+                for step in DELETE_STEPS[1:]:
+                    await self.repository.renew_verification(job)
+                    await self.purge_step(step, job, verification=True)
+                await self.repository.renew_verification(job, complete=True)
+            return True
+        except BaseException as error:
+            await self.repository.renew_verification(job, error=type(error).__name__)
+            raise
+
+    async def _renew(self, job):
+        if job.state == "SUCCEEDED":
+            await self.repository.renew_verification(job)
+        else:
+            await self.repository.advance(job)
+
+    async def _purge_step(self, step: str, job, *, verification=False) -> None:
         manifest = job.manifest
         file_ids = manifest["file_ids"]
         if step == "fga":
@@ -103,24 +126,35 @@ class KnowledgeSpaceDirectDeleteService:
 
             actor = PermissionActor(user_id=job.applicant_user_id, current_tenant_id=job.tenant_id)
             for snapshot in manifest["fga_permission_records"]:
-                await self.repository.advance(job)
+                await self._renew(job)
                 record = KnowledgeFilePermissionRecord(**{**snapshot, "ancestor_ids": tuple(snapshot["ancestor_ids"])})
                 adapter = await get_f048_resource_adapter(record.resource_type)
                 await adapter.project_delete(record=record, actor=actor)
             return
         if step == "minio":
-            if not manifest["object_names"]:
-                return
             from bisheng.core.storage.minio.minio_manager import get_minio_storage
+            from bisheng.knowledge.domain.repositories.processing_fence_repository import ProcessingFenceRepository
 
+            fence = ProcessingFenceRepository(async_sessions=self.session_factory)
+            generated = []
+            if job.operation_type is not None:
+                async with self.session_factory() as session:
+                    generated = await fence.artifacts(session, job)
+            objects = sorted(set(manifest["object_names"]) | set(generated))
+            if not objects:
+                return
             storage = await get_minio_storage()
-            for object_name in manifest["object_names"]:
-                await self.repository.advance(job)
+            for object_name in objects:
+                await self._renew(job)
                 await storage.remove_object(bucket_name=storage.bucket, object_name=object_name)
                 if await storage.object_exists(bucket_name=storage.bucket, object_name=object_name):
                     raise RuntimeError("knowledge deletion left an object in MinIO")
             return
-        whole = job.operation_type in {"knowledge_space_clear", "knowledge_space_delete"}
+        # A later verification of CLEAR must never match documents uploaded
+        # after cutover. Only space deletion owns the entire physical namespace.
+        whole = job.operation_type == "knowledge_space_delete" or (
+            job.operation_type == "knowledge_space_clear" and not verification
+        )
         if not file_ids and not whole:
             return
         from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
@@ -129,6 +163,10 @@ class KnowledgeSpaceDirectDeleteService:
         knowledge = Knowledge(**manifest["knowledge"])
         index_name = knowledge.index_name or knowledge.collection_name
         if step == "es":
+            if file_ids:
+                from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
+
+                KnowledgeUtils.delete_violation_display_chunks(file_ids)
             store = await asyncio.to_thread(
                 KnowledgeRag.init_knowledge_es_cleanup_sync, knowledge=knowledge, deletion_job=job
             )
@@ -140,7 +178,7 @@ class KnowledgeSpaceDirectDeleteService:
                     return
                 groups = (None,) if whole else (file_ids[start : start + 200] for start in range(0, len(file_ids), 200))
                 for group in groups:
-                    await self.repository.advance(job)
+                    await self._renew(job)
                     query = {"match_all": {}} if group is None else {"terms": {"metadata.document_id": group}}
                     result = await asyncio.to_thread(store.client.delete_by_query, index=index_name, query=query)
                     if result.get("failures"):
@@ -166,7 +204,7 @@ class KnowledgeSpaceDirectDeleteService:
                     return
                 groups = (None,) if whole else (file_ids[start : start + 200] for start in range(0, len(file_ids), 200))
                 for group in groups:
-                    await self.repository.advance(job)
+                    await self._renew(job)
                     expression = "document_id >= 0" if group is None else f"document_id in {group}"
                     await asyncio.to_thread(store.col.delete, expr=expression, timeout=60)
                     await asyncio.to_thread(store.col.flush)

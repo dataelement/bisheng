@@ -487,13 +487,8 @@ export function KeyIssueDialog({
           <Button variant="outlined" disabled={loading} onClick={() => handleOpenChange(false)} color="default">
             {t("cancel")}
           </Button>
-          <Button disabled={((String((name) ?? '').length > 128)) || (loading || !name.trim() || delegateInvalid || scopeConflict)} onClick={handleSubmit}>
-            {loading ? (
-              <Outlined.Loading
-                aria-hidden="true"
-                className="mr-2 size-4 animate-spin"
-              />
-            ) : null}
+          <Button disabled={((String((name) ?? '').length > 128)) || (loading || !name.trim() || delegateInvalid || scopeConflict)} onClick={handleSubmit} loading={loading}>
+
             {t(editingKey ? "save" : "openApiManagement.keys.issue")}
           </Button>
         </DialogFooter>

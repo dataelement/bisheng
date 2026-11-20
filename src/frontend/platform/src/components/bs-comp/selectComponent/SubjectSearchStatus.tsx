@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next"
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState"
 
 interface SubjectSearchStatusProps {
   tooLong?: boolean
@@ -12,8 +13,9 @@ interface SubjectSearchStatusProps {
 export function SubjectSearchStatus({ tooLong, failed, loading, empty, permission, onRetry }: SubjectSearchStatusProps) {
   const { t } = useTranslation("bs")
   if (!tooLong && !failed && !loading && !empty) return null
+  if (loading && !tooLong && !failed) return <LoadingState label={t("loading")} className="py-4" />
   return <div className="py-4 text-center text-sm text-muted-foreground" role="status">
-    {tooLong ? t("subjectSearch.tooLong") : failed ? <>{t("subjectSearch.failed")} <button type="button" onClick={onRetry}>{t("subjectSearch.retry")}</button></> : loading ? t("loading") : t(permission ? "subjectSearch.emptySubjects" : "subjectSearch.emptyUsers")}
+    {tooLong ? t("subjectSearch.tooLong") : failed ? <>{t("subjectSearch.failed")} <button type="button" onClick={onRetry}>{t("subjectSearch.retry")}</button></> : t(permission ? "subjectSearch.emptySubjects" : "subjectSearch.emptyUsers")}
   </div>
 }
 

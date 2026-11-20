@@ -72,6 +72,7 @@ from bisheng.knowledge.domain.services.knowledge_creation_policy import Knowledg
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.qa_import_service import QAImportService
 from bisheng.knowledge.domain.upload_file_size import validate_knowledge_upload_file_size
+from bisheng.knowledge.domain.upload_policy import validate_knowledge_upload_file
 from bisheng.permission.application.business_authorization import require_business_action
 from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService, require_quota
 from bisheng.user.domain.models.user import UserDao
@@ -95,6 +96,9 @@ async def upload_file(*, login_user: UserPayload = Depends(UserPayload.get_login
         if type(tenant_id) not in (int,) or tenant_id <= 0:
             raise NotFoundError.http_exception()
         file_name = PurePath((file.filename or "upload").replace("\\", "/")).name[-80:]
+        # Generic attachment staging (chat / workflow file inputs accept their own
+        # per-node formats): size only. Knowledge-space staging is the id-scoped
+        # route below, and registration re-applies both rules to the stored object.
         validate_knowledge_upload_file_size(file_name, file.size)
         suffix = PurePath(file_name).suffix
         object_name = f"uploads/{tenant_id}/{login_user.user_id}/{generate_uuid()}{suffix}"
@@ -164,7 +168,7 @@ async def upload_knowledge_file(
                 login_user=login_user, owner_user_id=knowledge.user_id, knowledge_id=knowledge.id
             )
         file_name = PurePath((file.filename or "upload").replace("\\", "/")).name[-80:]
-        validate_knowledge_upload_file_size(file_name, file.size)
+        validate_knowledge_upload_file(file_name, file.size)
 
         # Stage an unguessable object belonging to this tenant and uploader.
         object_name = f"uploads/{tenant_id}/{login_user.user_id}/{generate_uuid()}{PurePath(file_name).suffix}"

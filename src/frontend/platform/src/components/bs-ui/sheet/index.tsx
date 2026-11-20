@@ -41,6 +41,8 @@ const sheetVariants = cva(
                 left: "inset-y-0 left-0 h-full w-3/4 border-r data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left sm:max-w-sm",
                 right:
                     "inset-y-0 right-0 h-full w-3/4 border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-sm",
+                center:
+                    "left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 data-[state=closed]:duration-200 data-[state=open]:duration-200 data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]",
             },
         },
         defaultVariants: {
@@ -51,14 +53,19 @@ const sheetVariants = cva(
 
 interface SheetContentProps
     extends React.ComponentPropsWithoutRef<typeof SheetPrimitive.Content>,
-    VariantProps<typeof sheetVariants> { }
+    VariantProps<typeof sheetVariants> {
+    overlayClassName?: string
+    closeClassName?: string
+    noOverlay?: boolean
+    noClose?: boolean
+}
 
 const SheetContent = React.forwardRef<
     React.ElementRef<typeof SheetPrimitive.Content>,
     SheetContentProps
->(({ side = "right", className, noOverlay = false, noClose = false, children, onInteractOutside, ...props }, ref) => (
+>(({ side = "right", className, overlayClassName, closeClassName, noOverlay = false, noClose = false, children, onInteractOutside, ...props }, ref) => (
     <SheetPortal>
-        {!noOverlay && <SheetOverlay />}
+        {!noOverlay && <SheetOverlay className={overlayClassName} />}
         <SheetPrimitive.Content
             ref={ref}
             className={cname(sheetVariants({ side }), 'bg-gray-100 dark:bg-gray-950', className)}
@@ -72,7 +79,7 @@ const SheetContent = React.forwardRef<
             }}
         >
             {children}
-            {!noClose && <SheetPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary">
+            {!noClose && <SheetPrimitive.Close className={cname("absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary", closeClassName)}>
                 <X className="h-4 w-4" />
                 <span className="sr-only">Close</span>
             </SheetPrimitive.Close>}

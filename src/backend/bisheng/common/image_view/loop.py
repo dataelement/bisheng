@@ -399,7 +399,7 @@ async def _image_view_model_id(tenant_id: int | None = None) -> str | None:
     """Model id from the workbench image-reading model, or None when unset."""
     from bisheng.llm.domain.services.llm import LLMService
 
-    workbench = await LLMService.get_workbench_llm(tenant_id=tenant_id)
+    workbench = await LLMService.get_workbench_llm(tenant_id=tenant_id, slots=("image_read_model.id",))
     model = getattr(workbench, "image_read_model", None)
     raw = getattr(model, "id", None)
     model_id = str(raw).strip() if raw is not None else ""

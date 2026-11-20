@@ -30,7 +30,7 @@ it("saves a single file's complete selection and closes the externally opened ed
   render(<ControlledEditor />);
   fireEvent.click(await screen.findByText("Legal"));
   fireEvent.click(screen.getByRole("button", { name: "bs:confirmButton" }));
-  await waitFor(() => expect(mocks.save).toHaveBeenCalledWith({ knowledge_id: 7, file_id: 11, tag_ids: [4, 5] }));
+  await waitFor(() => expect(mocks.save).toHaveBeenCalledWith({ knowledge_id: 7, file_id: 11, tag_ids: [4, 5] }, false));
   expect(updated).toHaveBeenCalledOnce();
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
 });
@@ -45,5 +45,14 @@ it("retains the editor and draft after a failed save", async () => {
   expect(updated).not.toHaveBeenCalled();
   mocks.save.mockResolvedValue({});
   fireEvent.click(screen.getByRole("button", { name: "bs:confirmButton" }));
-  await waitFor(() => expect(mocks.save).toHaveBeenLastCalledWith({ knowledge_id: 7, file_id: 11, tag_ids: [4, 5] }));
+  await waitFor(() => expect(mocks.save).toHaveBeenLastCalledWith({ knowledge_id: 7, file_id: 11, tag_ids: [4, 5] }, false));
+});
+
+
+it("uses space tag APIs for a knowledge-space file", async () => {
+ render(<KnowledgeTagSelect isSpace knowledgeId={7} fileIds={[11]} initialTags={[tags[0]]} open onUpdate={updated} />);
+ fireEvent.click(await screen.findByText("Legal"));
+ expect(mocks.get).toHaveBeenCalledWith(7, {page: 1, limit: 100}, true);
+ fireEvent.click(screen.getByRole("button", {name: "bs:confirmButton"}));
+ await waitFor(() => expect(mocks.save).toHaveBeenCalledWith({knowledge_id: 7, file_id: 11, tag_ids: [4, 5]}, true));
 });

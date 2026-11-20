@@ -12,6 +12,7 @@ from sqlalchemy.engine import make_url
 from bisheng.core.config.credential_artifacts import bundle_native_files, write_bundle_native
 from bisheng.core.config.credential_bundle import prepare_bundle
 from bisheng.core.config.secret_crypto import CredentialConfigurationError, load_keyring
+from test.fixtures.runtime_secrets import RUNTIME_SECRETS
 
 
 @pytest.fixture
@@ -172,6 +173,7 @@ def test_shipped_template_can_prepare_without_legacy_secret_environment(deployme
             "BS_MINIO_SHAREPOINT": "minio:9000",
             "BS_MINIO_ACCESS_KEY": "",
             "BS_MINIO_SECRET_KEY": "",
+            **RUNTIME_SECRETS,
         },
         deployment_root=root / "docker",
     )

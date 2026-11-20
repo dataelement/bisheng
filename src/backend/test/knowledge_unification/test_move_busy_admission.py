@@ -51,7 +51,7 @@ async def unchanged(app, plan):
 
 
 @pytest.mark.parametrize("same", [False, True])
-@pytest.mark.parametrize("change", ["copying", "rebuilding", "model_transition", "permission"])
+@pytest.mark.parametrize("change", ["unpublished", "copying", "rebuilding", "model_transition", "permission"])
 async def test_confirm_rechecks_current_busy_or_permission_before_consumption(outer, monkeypatch, same, change):
     app, service = outer
     source_calls = observed_source(monkeypatch)
@@ -69,7 +69,7 @@ async def test_confirm_rechecks_current_busy_or_permission_before_consumption(ou
                 if change == "model_transition":
                     root.model_transition = {"operation_id": "actual-pending"}
                 else:
-                    root.state = 2 if change == "copying" else 3
+                    root.state = {"unpublished": 0, "copying": 2, "rebuilding": 3}[change]
         app.calls.clear()
         source_calls.clear()
         mutations = []
@@ -154,3 +154,21 @@ async def test_busy_space_does_not_replace_missing_selection_classification(oute
     assert not review.can_execute and review.valid_items == []
     assert review.invalid_items[0].reason == "not_found" and review.invalid_items[0].name is None
     await unchanged(app, review)
+
+
+@pytest.mark.parametrize("phase", ["precheck", "confirm"])
+async def test_incomplete_copy_destination_is_rejected_before_move_mutations(outer, phase):
+    app, service = outer
+    with request_context(app.actor):
+        plan = await service.aprecheck(10, request(False), identity=app.current) if phase == "confirm" else None
+        async with app.built.sessions() as session, session.begin():
+            (await session.get(Knowledge, 11)).state = 0
+        with pytest.raises(KnowledgeProcessingConflictError):
+            if plan is None:
+                await service.aprecheck(10, request(False), identity=app.current)
+            else:
+                await service.aconfirm(10, native.command(plan), identity=app.current)
+        async with app.built.sessions() as session:
+            assert (await session.get(native.base.File, 81)).knowledge_id == 10
+            assert (await session.execute(sa.select(sa.func.count()).select_from(native.Job))).scalar_one() == 0
+            assert (await session.execute(sa.select(sa.func.count()).select_from(Projection))).scalar_one() == 0

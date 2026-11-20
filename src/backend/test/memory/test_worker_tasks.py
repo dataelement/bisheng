@@ -44,8 +44,8 @@ def _due(memory_db, chat_id, tenant_id, user_id, minutes_ago):
 
 
 async def test_scan_enumerates_across_tenants_and_dispatches_with_header(memory_db, kv, config):
-    _due(memory_db, "a", TENANT_A, USER_1, 60)
-    _due(memory_db, "b", TENANT_B, USER_2, 60)
+    _due(memory_db, "a", TENANT_A, USER_1, 600)
+    _due(memory_db, "b", TENANT_B, USER_2, 600)
     _due(memory_db, "c", TENANT_A, USER_2, 5)  # still in quiet period
     sent = []
     await tasks.scan(kv, publish=lambda t, u: sent.append((t, u)))
@@ -73,7 +73,7 @@ async def test_ac43_quiet_period_and_scan_interval_follow_config(memory_db, kv, 
 
 
 async def test_ac43_auto_consolidation_switch_off(memory_db, kv, config):
-    _due(memory_db, "a", TENANT_A, USER_1, 60)
+    _due(memory_db, "a", TENANT_A, USER_1, 600)
     config["cfg"] = MemoryRuntimeConfig(auto_consolidation_enabled=False)
     sent = []
     await tasks.scan(kv, publish=lambda t, u: sent.append((t, u)))

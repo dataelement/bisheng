@@ -18,6 +18,7 @@ import { Table,TableBody,TableCell,TableHead,TableHeader,TableRow } from "@/comp
 import { userContext } from "@/contexts/userContext";
 import { copyQaDatabase,deleteFileLib,readFileLibDatabase } from "@/controllers/API";
 import { showApiError } from "@/controllers/request";
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { useInfiniteCursorTable } from "@/util/hook";
 
 import { useContext,useEffect,useState } from "react";
@@ -196,8 +197,8 @@ export default function KnowledgeQa({ toolbarTarget }: KnowledgeQaProps) {
     const renderRowMenu = (el: KnowledgeListRow) => {
         const resourceId = String(el.id);
         if (rowActionsLoading[resourceId]) {
-            return <DropdownItem disabled icon={<Outlined.Loading className="animate-spin" />}>
-                {t('knowledgeRowActions.loading', { ns: 'permission' })}
+            return <DropdownItem disabled>
+                <LoadingState size="inline" label={t('knowledgeRowActions.loading', { ns: 'permission' })} />
             </DropdownItem>;
         }
         if (!hasRowActions(el)) {
@@ -245,7 +246,7 @@ export default function KnowledgeQa({ toolbarTarget }: KnowledgeQaProps) {
             {toolbarTarget ? createPortal(toolbar, toolbarTarget) : toolbarTarget === undefined ? toolbar : null}
             {loading && (
                 <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-                    <Outlined.Loading  className="size-4 animate-spin"/>
+                    <LoadingState size="page" />
                 </div>
             )}
             <div className="h-[calc(100vh-128px-var(--license-banner-h,0px))] overflow-y-auto pb-20">
@@ -319,7 +320,7 @@ export default function KnowledgeQa({ toolbarTarget }: KnowledgeQaProps) {
                                                     >
                                                         {[KnowledgeBaseStatus.Copying, KnowledgeBaseStatus.Unpublished].includes(el.state) ? (
                                                             <>
-                                                                <Outlined.Loading className="animate-spin" />
+                                                                <LoadingState size="inline" label={t('copying')} />
                                                                 <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-white text-gray-800 text-xs px-2 py-1 rounded whitespace-nowrap border border-gray-300 shadow-sm">
                                                                     {t('copying')}
                                                                 </div>

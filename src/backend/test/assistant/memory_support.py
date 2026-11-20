@@ -89,6 +89,12 @@ async def build_agent(executor: str, replies, chat_id="chat-a1", tools=None, max
     login_user = UserPayload(user_id=user_id, user_name=f"u{user_id}", tenant_id=TENANT_A, user_role=[])
     agent = AssistantAgent(assistant, chat_id=chat_id, invoke_user_id=user_id, login_user=login_user)
     agent.memory_allowed = True  # what ChatClient sets on a logged-in connection
+
+    async def _source_is_current():
+        # Source admission (the saved-reference gate) is not under test here.
+        return None
+
+    agent._require_current_source = _source_is_current
     llm = make_llm(replies)
     agent.llm = llm
     agent.tools = list(tools or [])

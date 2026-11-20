@@ -62,11 +62,11 @@ export function CreateDepartmentDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent onCloseAutoFocus={onCloseAutoFocus}>
+      <DialogContent className="grid-cols-1" onCloseAutoFocus={onCloseAutoFocus}>
         <DialogHeader>
           <DialogTitle>{t("bs:department.create")}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 py-4">
+        <div className="min-w-0 space-y-4 py-4">
           {/* Parent department */}
           <div className="space-y-2">
             <Label>{t("bs:department.parentDept")} *</Label>

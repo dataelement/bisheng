@@ -371,3 +371,30 @@ async def test_original_prepared_object_cannot_authorize_reflected_plan_mutation
             await KnowledgeModelReferenceApplication.aapply_model_change(session, prepared)
         await session.rollback()
     assert state(business) == before
+
+
+async def test_delete_tombstone_fences_a_model_change_prepared_before_acceptance(business):
+    await seed(business)
+    async with business.sessions() as session:
+        change = await KnowledgeModelReferenceApplication.aprepare_rebuild(
+            session, 40, 12, login_user=business.user, operation_id="late-rebuild"
+        )
+        # Simulate acceptance after preparation but before the native CAS.
+        session.add(
+            ResourceReferenceTombstone(
+                tenant_id=101,
+                target_tenant_id=101,
+                target_type="knowledge_space",
+                target_id="40",
+                operation_id="delete-space",
+                operation_type="knowledge_space_delete",
+                actor_type="user",
+                actor_id="7",
+            )
+        )
+        await session.flush()
+        with pytest.raises(KnowledgeOperationPlanConflictError):
+            await KnowledgeModelReferenceApplication.aapply_model_change(session, change)
+        await session.rollback()
+    row = next(row for row in state(business)["knowledge"] if row["id"] == 40)
+    assert row["model"] == "11" and row["model_transition"] is None

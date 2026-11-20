@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import "@/style/dsh-content-safety.css";
 import { isDshSensitivePolicyConflict } from "@/controllers/API/dshContentSafety";
 import type {
@@ -158,13 +159,13 @@ function DshContentSafetyForm({
       {!hasTenant ? (
         <p role="status">{t("dsh.modelAuditView.selectTenant")}</p>
       ) : controls.capabilities.isLoading ? (
-        <p role="status">{t("dsh.loading")}</p>
+        <LoadingState size="panel" label={t("dsh.loading")} />
       ) : !controls.ready ? (
         <p role="alert">{t("dsh.contentSafety." + capabilityError)}</p>
       ) : controls.policy.isError && !draft ? (
         <p role="alert">{t("dsh.contentSafety.errors.load_failed")}</p>
       ) : !draft || !snapshot ? (
-        <p role="status">{t("dsh.loading")}</p>
+        <LoadingState size="panel" label={t("dsh.loading")} />
       ) : (
         <form
           className="space-y-4"

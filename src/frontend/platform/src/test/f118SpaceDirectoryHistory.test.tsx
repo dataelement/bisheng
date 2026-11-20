@@ -243,7 +243,7 @@ it("reads history from an actual file row with only child visible, without root/
   ).not.toBeInTheDocument();
 });
 
-it("preserves rename/download actions without offering history when file.visible is absent", async () => {
+it("offers history after a successful file permission read when visible is absent from the catalog actions", async () => {
   actions = ["rename", "download"];
   mount();
   const opened = await menu();
@@ -254,8 +254,8 @@ it("preserves rename/download actions without offering history when file.visible
     screen.getByRole("button", { name: "downloadOriginal", hidden: true }),
   ).toBeInTheDocument();
   expect(
-    within(opened).queryByRole("menuitem", { name: "f118.version_history" }),
-  ).not.toBeInTheDocument();
+    within(opened).getByRole("menuitem", { name: "f118.version_history" }),
+  ).toBeVisible();
   expect(mocks.history).not.toHaveBeenCalled();
 });
 

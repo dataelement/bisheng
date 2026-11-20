@@ -14,6 +14,7 @@ import sqlalchemy as sa
 from sqlmodel import Session
 
 from bisheng.common.errcode.knowledge import (
+    KnowledgeEmbeddingUnavailableError,
     KnowledgeOperationPlanConflictError,
     ReferenceCoverageNotReadyError,
     ResourceReferenceInvalidError,
@@ -79,6 +80,22 @@ async def rebuild(admission, monkeypatch, request):
     )
     monkeypatch.setattr(document.KnowledgeDao, "query_by_id", load)
     monkeypatch.setattr(document.KnowledgeDao, "update_one", save)
+    from bisheng.knowledge.domain.models.knowledge_processing_fence import (
+        KnowledgeProcessingArtifact,
+        KnowledgeProcessingFence,
+    )
+    from bisheng.knowledge.domain.models.knowledge_space_delete_job import KnowledgeSpaceDeleteJob
+    from bisheng.knowledge.domain.models.knowledge_vector_cleanup import KnowledgeVectorCleanup
+    from bisheng.knowledge.domain.repositories import processing_fence_repository as fences
+
+    for model in (
+        KnowledgeProcessingFence,
+        KnowledgeProcessingArtifact,
+        KnowledgeSpaceDeleteJob,
+        KnowledgeVectorCleanup,
+    ):
+        model.__table__.create(context.sync, checkfirst=True)
+    monkeypatch.setattr(fences, "get_sync_db_session", sessions)
     monkeypatch.setattr(read_module, "get_sync_db_session", sessions)
     # The worker's finalization borrows this same isolated Session factory.
     monkeypatch.setattr(document, "get_sync_db_session", sessions, raising=False)
@@ -170,12 +187,16 @@ def assert_stage_preserved(rebuild):
     assert business_fixtures.state(rebuild.context) == rebuild.before
 
 
-def assert_finalized(rebuild):
+def assert_finalized(rebuild, *, document_path=True):
     state = business_fixtures.state(rebuild.context)
     row = next(item for item in state["knowledge"] if item["id"] == 40)
     assert row["model"] == "12" and row["model_transition"] is None and row["state"] == 1
-    assert row["model_config_revision"] == rebuild.arguments["expected_model_config_revision"] + 1
+    assert row["model_config_revision"] == rebuild.arguments["expected_model_config_revision"] + (
+        2 if document_path else 1
+    )
     assert row["index_generation"] == rebuild.arguments["expected_index_generation"]
+    if document_path:
+        assert row["collection_name"] != "col40"
     assert [(item["slot_key"], item["target_id"]) for item in state["business_resource_reference"]] == [("model", "12")]
 
 
@@ -191,7 +212,7 @@ def test_legacy_message_without_expectations_is_rejected_before_any_io(rebuild, 
 def test_real_pending_model_is_selected_and_business_and_references_finalize_together(rebuild, kind):
     execute(rebuild, kind)
     assert ("provider", 12, 987) in rebuild.events
-    assert_finalized(rebuild)
+    assert_finalized(rebuild, document_path=kind == "document")
 
 
 @pytest.mark.parametrize("kind", ["document", "qa"])
@@ -281,9 +302,12 @@ def test_global_provider_failure_preserves_unfinished_stage_and_does_not_finaliz
         "get_bisheng_knowledge_embedding_sync",
         Mock(side_effect=RuntimeError("provider unavailable")),
     )
-    with pytest.raises(RuntimeError, match="provider unavailable"):
+    expected = KnowledgeEmbeddingUnavailableError if kind == "document" else RuntimeError
+    with pytest.raises(expected):
         execute(rebuild, kind)
     assert_stage_preserved(rebuild)
+    if kind == "document":
+        assert rebuild.events == []
 
 
 @pytest.mark.parametrize("kind", ["document", "qa"])
@@ -297,7 +321,17 @@ def test_finalize_r2_failure_rolls_back_model_stage_state_and_references(rebuild
     monkeypatch.setattr(App, "apply_finalization", fail_after_apply)
     with pytest.raises(RuntimeError, match="finalization transaction failed"):
         execute(rebuild, kind)
-    assert_stage_preserved(rebuild)
+    if kind == "qa":
+        assert_stage_preserved(rebuild)
+    else:
+        state = business_fixtures.state(rebuild.context)
+        row = next(item for item in state["knowledge"] if item["id"] == 40)
+        assert row["model"] == "12" and row["state"] == 3
+        assert row["model_transition"]["pending_model_id"] == "12"
+        assert row["model_config_revision"] == rebuild.arguments["expected_model_config_revision"] + 1
+        monkeypatch.setattr(App, "apply_finalization", original)
+        execute(rebuild, kind)
+        assert_finalized(rebuild)
 
 
 def test_guard_error_inside_document_rag_is_not_laundered_into_controlled_file_failure(rebuild, monkeypatch):
@@ -308,7 +342,7 @@ def test_guard_error_inside_document_rag_is_not_laundered_into_controlled_file_f
     )
     with pytest.raises(ReferenceCoverageNotReadyError):
         execute(rebuild, "document")
-    assert_stage_preserved(rebuild)
+    assert_finalized(rebuild)
 
 
 def test_controlled_document_partial_failure_keeps_item_diagnostic_and_completes_transition(rebuild, monkeypatch):
@@ -327,7 +361,7 @@ def test_controlled_qa_batch_failure_keeps_item_diagnostic_and_completes_transit
         if call.kwargs["status"] == qa.QAStatus.FAILED
     ]
     assert failed and failed[0]["qa_ids"] == [701] and failed[0]["remark"]
-    assert_finalized(rebuild)
+    assert_finalized(rebuild, document_path=False)
 
 
 @pytest.mark.parametrize("kind", ["document", "qa"])
@@ -337,7 +371,7 @@ def test_empty_resource_still_atomically_completes_current_business_transition(r
     if kind == "qa":
         rebuild.es.client.search.side_effect = lambda **kwargs: {"hits": {"total": {"value": 0}}}
     execute(rebuild, kind)
-    assert_finalized(rebuild)
+    assert_finalized(rebuild, document_path=kind == "document")
 
 
 def test_obsolete_after_processing_cannot_publish_or_release_current_stage(rebuild, monkeypatch):
@@ -352,9 +386,9 @@ def test_obsolete_after_processing_cannot_publish_or_release_current_stage(rebui
         execute(rebuild, "document")
     state = business_fixtures.state(rebuild.context)
     row = next(item for item in state["knowledge"] if item["id"] == 40)
-    assert row["model"] == "11" and row["state"] == 3
+    assert row["model"] == "12" and row["state"] == 3
     assert row["model_transition"]["operation_id"] == "new-build"
-    assert state["business_resource_reference"] == rebuild.before["business_resource_reference"]
+    assert {item["target_id"] for item in state["business_resource_reference"]} == {"12"}
 
 
 def test_expired_actual_background_lifecycle_cannot_finalize_successful_io(rebuild, monkeypatch):
@@ -365,19 +399,23 @@ def test_expired_actual_background_lifecycle_cannot_finalize_successful_io(rebui
     monkeypatch.setattr(document, "_process_single_file", expire)
     with pytest.raises(ResourceReferenceInvalidError):
         execute(rebuild, "document")
-    assert_stage_preserved(rebuild)
+    state = business_fixtures.state(rebuild.context)
+    row = next(item for item in state["knowledge"] if item["id"] == 40)
+    assert row["model"] == "12" and row["state"] == 3
+    assert row["model_transition"]["operation_id"] == "build-1"
 
 
 def test_global_missing_source_index_does_not_become_controlled_partial_success(rebuild):
     rebuild.es.client.indices.exists.return_value = False
     with pytest.raises(RuntimeError, match="does not exist"):
         execute(rebuild, "document")
-    assert_stage_preserved(rebuild)
+    assert_finalized(rebuild)
 
 
-def test_failed_partial_cleanup_preserves_stage_instead_of_publishing_inconsistent_files(rebuild, monkeypatch):
+def test_failed_partial_cleanup_keeps_new_model_and_records_file_failures(rebuild, monkeypatch):
     monkeypatch.setattr(document, "_process_single_file", Mock(return_value=False))
     rebuild.vector.col.delete.side_effect = RuntimeError("cleanup unavailable")
     with pytest.raises(RuntimeError, match="cleanup unavailable"):
         execute(rebuild, "document")
-    assert_stage_preserved(rebuild)
+    assert_finalized(rebuild)
+    assert all(file.status == 3 for file in rebuild.files)

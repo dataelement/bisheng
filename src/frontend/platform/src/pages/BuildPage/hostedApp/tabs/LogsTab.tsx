@@ -132,8 +132,7 @@ export function LogsTab({ appId }: LogsTabProps) {
           }))}
           onChange={(value) => { if (value != null) setTail(Number(value)) }}
         />
-        <Button variant="outline" size="sm" disabled={loading} onClick={load}>
-          <RefreshCw className={`mr-1 size-3.5 ${loading ? "animate-spin" : ""}`} />
+        <Button variant="outline" size="sm" disabled={loading} loading={loading} icon={<RefreshCw className="mr-1 size-3.5" />} onClick={load}>
           {t("hostedApp.logs.refresh")}
         </Button>
         <Button variant="ghost" size="sm" onClick={handleReset}>

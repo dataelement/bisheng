@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from sqlalchemy import delete
+from sqlalchemy import delete, update
 from sqlmodel import Session
 
 from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
@@ -130,7 +130,9 @@ def test_linsight_task_exec_threads_session_tenant():
     node = function("linsight/domain/task_exec.py", "_get_llm")
     assert has_parameter(node, "session_model")
     assert contains("linsight/domain/task_exec.py", "_resolve_model(session_model,getattr(session_model,'model',None))")
-    assert forwards("linsight/domain/services/agent_factory.py", "session_model.tenant_id", "get_workbench_llm")
+    assert forwards(
+        "linsight/domain/services/agent_factory.py", "session_model.tenant_id", "get_workbench_llm_candidates"
+    )
 
 
 def test_evaluation_uses_evaluation_tenant():
@@ -199,6 +201,9 @@ async def test_native_live_helpers_consume_original_admitted_id_and_reject_tenan
             key="knowledge_llm",
             payload={"source_model_id": 11, "qa_similar_model_id": 11, "embedding_model_id": 11},
         )
+    if method == "get_knowledge_default_embedding":
+        with Session(admitted_defaults.engine) as session, session.begin():
+            session.execute(update(LLMModel).where(LLMModel.id == 11).values(model_type="embedding"))
     sentinel = object()
     model = Mock(return_value=sentinel)
     monkeypatch.setattr(LLMService, provider, model)
@@ -223,7 +228,7 @@ async def test_async_live_helper_uses_same_whole_source_before_provider(admitted
     assert model.await_args.kwargs["model_id"] == 11 and model.await_args.kwargs["user_id"] == 7
 
 
-async def test_invalid_other_slot_blocks_actual_default_consumer_before_provider(admitted_defaults, monkeypatch):
+async def test_invalid_other_slot_does_not_block_actual_default_consumer(admitted_defaults, monkeypatch):
     with Session(admitted_defaults.engine) as session, session.begin():
         native.seed_default(session, key="knowledge_llm", payload={"source_model_id": 22, "extract_title_model_id": 11})
         session.execute(delete(LLMModel).where(LLMModel.tenant_id == 101, LLMModel.id == 11))
@@ -240,8 +245,7 @@ async def test_invalid_other_slot_blocks_actual_default_consumer_before_provider
                 stage="deleted",
             )
         )
-    model = Mock(side_effect=AssertionError("invalid optional default reached provider"))
+    model = Mock(return_value=object())
     monkeypatch.setattr(LLMService, "get_bisheng_llm_sync", model)
-    with pytest.raises(ResourceReferenceInvalidError):
-        LLMService.get_knowledge_source_llm(7, tenant_id=101)
-    model.assert_not_called()
+    assert LLMService.get_knowledge_source_llm(7, tenant_id=101) is model.return_value
+    assert model.call_args.kwargs["model_id"] == 22

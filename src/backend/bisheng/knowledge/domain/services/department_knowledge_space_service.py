@@ -15,7 +15,9 @@ from bisheng.common.models.space_channel_member import (
     SpaceChannelMemberDao,
     UserRoleEnum,
 )
+from bisheng.core.context.tenant import bypass_tenant_filter, get_current_tenant_id, strict_tenant_filter
 from bisheng.database.models.department import DepartmentDao
+from bisheng.department.application.directory import organization_directory_scope, require_directory_department
 from bisheng.department.domain.services.department_service import DepartmentService
 from bisheng.knowledge.domain.models.department_knowledge_space import (
     DepartmentKnowledgeSpaceDao,
@@ -36,6 +38,7 @@ from bisheng.permission.application.business_authorization import (
     batch_check_business_actions,
     check_business_action,
 )
+from bisheng.permission.application.identity import is_current_tenant_administrator
 from bisheng.user.domain.models.user import UserDao
 
 
@@ -46,8 +49,8 @@ class DepartmentKnowledgeSpaceService:
     DEFAULT_IS_RELEASED = False
 
     @classmethod
-    def _ensure_super_admin(cls, login_user: UserPayload) -> None:
-        if not login_user.is_admin():
+    async def _ensure_tenant_admin(cls, login_user: UserPayload) -> None:
+        if not login_user.is_admin() and not await is_current_tenant_administrator(login_user):
             raise UnAuthorizedError()
 
     @classmethod
@@ -61,8 +64,18 @@ class DepartmentKnowledgeSpaceService:
     @classmethod
     async def _load_departments(cls, department_ids: Sequence[int]):
         deduped = list(dict.fromkeys(int(i) for i in department_ids))
-        rows = await DepartmentDao.aget_by_ids(deduped)
-        dept_map = {row.id: row for row in rows if getattr(row, "status", "active") == "active"}
+        async with organization_directory_scope():
+            for department_id in deduped:
+                await require_directory_department(department_id)
+            # Authorization used the directory facts. Read the same rows without the
+            # business-tenant SQL filter, which hides departments stored on Root.
+            with bypass_tenant_filter():
+                rows = await DepartmentDao.aget_by_ids(deduped)
+        dept_map = {
+            row.id: row
+            for row in rows
+            if getattr(row, "status", "active") == "active" and not getattr(row, "is_deleted", 0)
+        }
         if len(dept_map) != len(deduped):
             raise DepartmentNotFoundError(msg="One or more departments do not exist or are archived")
         return dept_map
@@ -356,7 +369,7 @@ class DepartmentKnowledgeSpaceService:
         login_user: UserPayload,
         req: DepartmentKnowledgeSpaceBatchCreateReq,
     ) -> list[KnowledgeSpaceInfoResp]:
-        cls._ensure_super_admin(login_user)
+        await cls._ensure_tenant_admin(login_user)
         if not req.items:
             return []
         dept_ids = [int(item.department_id) for item in req.items]
@@ -385,7 +398,7 @@ class DepartmentKnowledgeSpaceService:
                 skip_user_limit=True,
             )
             await DepartmentKnowledgeSpaceDao.acreate(
-                tenant_id=login_user.tenant_id,
+                tenant_id=get_current_tenant_id() or login_user.tenant_id,
                 department_id=dept.id,
                 space_id=space.id,
                 created_by=login_user.user_id,
@@ -395,7 +408,8 @@ class DepartmentKnowledgeSpaceService:
                 department_id=dept.id,
                 operator_user_id=login_user.user_id,
             )
-            admin_rows = await DepartmentService.aget_admins(dept.dept_id, login_user)
+            async with organization_directory_scope():
+                admin_rows = await DepartmentService.aget_admins(dept.dept_id, login_user)
             await cls._grant_default_department_admins(
                 request=request,
                 login_user=login_user,
@@ -501,8 +515,9 @@ class DepartmentKnowledgeSpaceService:
         """
         from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 
-        cls._ensure_super_admin(login_user)
-        bindings = await DepartmentKnowledgeSpaceDao.aget_all()
+        await cls._ensure_tenant_admin(login_user)
+        with strict_tenant_filter():
+            bindings = await DepartmentKnowledgeSpaceDao.aget_all()
         if not include_hidden:
             bindings = [binding for binding in bindings if not binding.is_hidden]
         if not bindings:
@@ -524,18 +539,19 @@ class DepartmentKnowledgeSpaceService:
         login_user: UserPayload,
         req: DepartmentKnowledgeSpaceVisibilityReq,
     ) -> int:
-        """Hide or restore department knowledge spaces (super admin only).
+        """Hide or restore department knowledge spaces in the managed tenant.
 
         Only flips the ``is_hidden`` flag on the binding rows. The knowledge
         spaces, their files and member permissions (OpenFGA tuples / space
         members) are intentionally left untouched, so hiding is fully
         reversible. Returns the number of rows whose state actually changed.
         """
-        cls._ensure_super_admin(login_user)
+        await cls._ensure_tenant_admin(login_user)
         department_ids = [int(dept_id) for dept_id in req.department_ids]
         if not department_ids:
             return 0
-        return await DepartmentKnowledgeSpaceDao.aset_hidden_by_department_ids(
-            department_ids,
-            req.is_hidden,
-        )
+        with strict_tenant_filter():
+            return await DepartmentKnowledgeSpaceDao.aset_hidden_by_department_ids(
+                department_ids,
+                req.is_hidden,
+            )

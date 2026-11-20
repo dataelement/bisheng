@@ -1,6 +1,9 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import {
   Button,
   Checkbox,
+  Dropdown,
+  DropdownItem,
   Pagination,
   Select,
   Switch,
@@ -26,6 +29,7 @@ import { ColumnResizeHandle } from "@/components/bs-ui/table/useResizableColumns
 import { cname } from "@/components/bs-ui/utils";
 import UserPwdModal from "@/pages/LoginPage/UserPwdModal";
 import type { DepartmentMember } from "@/types/api/department";
+import { MemberRoleSummary } from "./MemberRoleSummary";
 import { CreateLocalMemberDialog } from "./CreateLocalMemberDialog";
 import type { useMemberTableController } from "./MemberTable";
 import { OrganizationMemberEditDialog } from "./OrganizationMemberEditDialog";
@@ -73,9 +77,14 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
   const selectLabels = useSelectLabels();
   const isArchivedMember = (member: DepartmentMember) =>
     isArchived || member.department?.status === "archived";
+  const canEditMember = (member: DepartmentMember) =>
+    !isArchivedMember(member) && member.enabled &&
+    user?.user_id !== member.user_id && !member.roles.some(role => role.id === 1);
+  const canResetPassword = user?.role === "admin";
+  const memberTypeHeader = mrc.getThProps(2);
   return (
-    <div className="min-w-0">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <div className="flex h-full min-h-0 min-w-0 flex-col">
+      <div className="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <h3 className="text-base font-semibold">
             {deptName}
@@ -112,7 +121,7 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
           </div>
         )}
       </div>
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+      <div className="mb-4 flex shrink-0 flex-wrap items-center gap-2">
         <Select
           {...selectLabels}
           className="w-[140px]"
@@ -133,14 +142,13 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
           {t("bs:organization.addMember")}
         </Button>
       </div>
-      <div className="overflow-x-auto">
         <SharedTooltipProvider delayDuration={200}>
           <Table
-            noScroll
+            containerClassName="min-h-0 flex-1 scroll-pt-11"
             className="!w-auto min-w-full"
             style={{ tableLayout: "fixed", width: mrc.totalWidth }}
           >
-            <TableHeader>
+            <TableHeader className="sticky top-0 z-10 bg-background">
               <TableRow>
                 <TableHead {...mrc.getThProps(0)}>
                   {t("accountIdentity.nickname")}
@@ -154,7 +162,10 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
                   {t('accountIdentity.account')}
                   <ColumnResizeHandle columnIndex={1} lastColumn={1 === memberLastCol} startResize={mrc.startResize} />
                 </TableHead>
-                <TableHead {...mrc.getThProps(2)}>
+                <TableHead
+                  {...memberTypeHeader}
+                  style={{ ...memberTypeHeader.style, minWidth: memberTypeHeader.style?.width }}
+                >
                   {t("bs:department.memberType")}
                   <ColumnResizeHandle
                     columnIndex={2}
@@ -186,7 +197,10 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
                     startResize={mrc.startResize}
                   />
                 </TableHead>
-                <TableHead {...mrc.getThProps(6)}>
+                <TableHead
+                  style={mrc.getThProps(6).style}
+                  className={cname(mrc.getThProps(6).className, "px-1.5")}
+                >
                   {t("bs:department.enabled")}
                   <ColumnResizeHandle
                     columnIndex={6}
@@ -194,10 +208,7 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
                     startResize={mrc.startResize}
                   />
                 </TableHead>
-                <TableHead
-                  style={mrc.getThProps(7).style}
-                  className={cname(mrc.getThProps(7).className, "text-right")}
-                >
+                <TableHead className="w-[1%] whitespace-nowrap">
                   {t("operations")}
                 </TableHead>
               </TableRow>
@@ -209,7 +220,7 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
                     colSpan={8}
                     className="py-8 text-center text-muted-foreground"
                   >
-                    {t("loading")}
+                    <LoadingState label={t("loading")} />
                   </TableCell>
                 </TableRow>
               ) : members.length === 0 ? (
@@ -229,12 +240,13 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
                     data-member-department={m.department_id ?? departmentId}
                     onClick={event => {
                       const target = event.target;
-                      if (target instanceof Element && target.closest('button,a,input,textarea,select,[role="switch"],[role="checkbox"]')) return;
+                      if (!(target instanceof Element) || !event.currentTarget.contains(target)) return;
+                      if (target.closest('button,a,input,textarea,select,[role="switch"],[role="checkbox"]')) return;
                       if (window.getSelection()?.toString()) return;
-                      if (!isArchivedMember(m) && m.enabled && user?.user_id !== m.user_id && !m.roles.some(role => role.id === 1)) handleEditUser(m);
+                      if (canEditMember(m)) handleEditUser(m);
                     }}
                     className={cname(
-                      !isArchivedMember(m) && m.enabled && user?.user_id !== m.user_id && !m.roles.some(role => role.id === 1) ? 'cursor-pointer' : '',
+                      canEditMember(m) ? 'cursor-pointer' : '',
                       highlightUserId === m.user_id && (m.department_id ?? departmentId) === departmentId
                         ? "[&>td]:!bg-blue-50"
                         : ""
@@ -264,36 +276,25 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
                       })()}
                     </TableCell>
                     <TableCell {...mrc.getTdProps(2)}>
-                      <Tag
-                        size="small"
-                        color={m.is_primary === 1 ? "brand" : "default"}
-                      >
-                        {m.is_primary === 1
-                          ? t("bs:department.primary")
-                          : t("bs:department.secondary")}
-                      </Tag>
-                      {m.department && (
-                        <span className="mt-1 block truncate text-xs text-muted-foreground" title={m.department.name}>
-                          {departmentDisplayName(m.department, t("bs:department.defaultOrganization"))}
-                        </span>
-                      )}
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Tag
+                          size="small"
+                          color={m.is_primary === 1 ? "brand" : "default"}
+                          className="shrink-0 whitespace-nowrap"
+                        >
+                          {m.is_primary === 1
+                            ? t("bs:department.primary")
+                            : t("bs:department.secondary")}
+                        </Tag>
+                        {m.department && (
+                          <span className="min-w-0 truncate text-xs text-muted-foreground" title={m.department.name}>
+                            {departmentDisplayName(m.department, t("bs:department.defaultOrganization"))}
+                          </span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell {...mrc.getTdProps(3)}>
-                      {(() => {
-                        const roleNames: string[] = [];
-                        if (m.is_department_admin) {
-                          roleNames.push(t("bs:department.deptAdminRoleName"));
-                        }
-                        roleNames.push(...m.roles.map((r) => r.role_name));
-                        const text = roleNames.join(", ") || "-";
-                        return (
-                          <SharedTooltip content={text}>
-                            <div className="cursor-default truncate">
-                              {text}
-                            </div>
-                          </SharedTooltip>
-                        );
-                      })()}
+                      <MemberRoleSummary member={m} />
                     </TableCell>
                     <TableCell {...mrc.getTdProps(4)}>
                       {(() => {
@@ -315,7 +316,7 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
                     >
                       {fmtTime(m.update_time ?? m.create_time)}
                     </TableCell>
-                    <TableCell {...mrc.getTdProps(6)}>
+                    <TableCell {...mrc.getTdProps(6)} className="px-1.5 text-right">
                       <Switch
                         checked={m.enabled}
                         disabled={
@@ -329,48 +330,29 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
                         }
                       />
                     </TableCell>
-                    <TableCell {...mrc.getTdProps(7)} className="text-right">
-                      {(() => {
-                        const isSuperAdmin = m.roles.some(
-                          (role) => role.id === 1
-                        );
-                        const canResetPwd = user.role === "admin";
-                        return (
-                          <div className="flex flex-wrap items-center justify-end gap-x-2">
-                            {isSuperAdmin ? (
-                              <Button variant="link" size="small" disabled>
-                                {t("edit")}
-                              </Button>
-                            ) : (
-                              <Button
-                                variant="link"
-                                size="small"
-                                disabled={
-                                  isArchivedMember(m) ||
-                                  user.user_id === m.user_id ||
-                                  !m.enabled
-                                }
-                                onClick={() => handleEditUser(m)}
-                              >
-                                {t("edit")}
-                              </Button>
-                            )}
-                            {canResetPwd && (
-                              <Button
-                                variant="link"
-                                size="small"
+                    <TableCell className="w-[1%] whitespace-nowrap">
+                      <Dropdown
+                        align="end"
+                        menu={
+                          <>
+                            <DropdownItem disabled={!canEditMember(m)} onSelect={() => handleEditUser(m)}>
+                              {t("edit")}
+                            </DropdownItem>
+                            {canResetPassword && (
+                              <DropdownItem
                                 disabled={isArchivedMember(m)}
-                                onClick={() =>
-                                  !isArchivedMember(m) &&
-                                  userPwdModalRef.current?.open(m.user_id)
-                                }
+                                onSelect={() => userPwdModalRef.current?.open(m.user_id)}
                               >
                                 {t("system.resetPwd")}
-                              </Button>
+                              </DropdownItem>
                             )}
-                          </div>
-                        );
-                      })()}
+                          </>
+                        }
+                      >
+                        <Button type="button" color="default" variant="text" iconOnly aria-label={`${t("more")} ${m.user_name}`}>
+                          <Outlined.More aria-hidden />
+                        </Button>
+                      </Dropdown>
                     </TableCell>
                   </TableRow>
                 ))
@@ -378,9 +360,8 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
             </TableBody>
           </Table>
         </SharedTooltipProvider>
-      </div>
-      {!loading && (
-        <div className="mt-4 flex justify-end">
+      <div className="mt-4 flex min-h-8 shrink-0 justify-end">
+        {!loading && (
           <Pagination
             locale={paginationLocale}
             current={page}
@@ -389,8 +370,8 @@ export function MemberTableView({ controller }: MemberTableViewProps) {
             showTotal
             onChange={handlePageChange}
           />
-        </div>
-      )}
+        )}
+      </div>
       {addOpen && !isArchived && (
         <CreateLocalMemberDialog
           deptId={deptId}

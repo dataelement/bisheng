@@ -322,40 +322,17 @@ class KnowledgeVersionService:
     async def list_pending_similar_files(self, knowledge_id: int) -> list:
         """List files in this space with similar_status=1 (pending user action).
 
-        For each, count how many candidates currently exceed threshold (fresh re-scan).
+        Candidate counts share one space scan. A multi-version document is no
+        longer an independent document that needs the link-or-dismiss decision.
+        The count stays capped at the right panel's limit of 3.
         """
-        from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
-        from bisheng.knowledge.domain.schemas.knowledge_version_schema import PendingSimilarFileEntry
 
-        await self._require_knowledge(knowledge_id, "visible")
-        pending = await KnowledgeFileDao.aget_files_by_similar_status(
-            knowledge_id=knowledge_id,
-            similar_status=1,
+        conf = await bisheng_settings.async_get_knowledge()
+        vmc = getattr(conf, "version_management", None)
+        return await self._reads().list_pending_similar(
+            knowledge_id,
+            threshold=vmc.simhash_similarity_threshold if vmc else 0.85,
         )
-
-        out: list[PendingSimilarFileEntry] = []
-        for kf in pending:
-            await self._require_file(kf.id, "visible", knowledge_id=knowledge_id)
-            v = await self.version_repo.find_by_knowledge_file_id(kf.id)
-            if v is not None:
-                await self._require_version(v, knowledge_id=knowledge_id)
-                chain = await self._require_chain(v.document_id, knowledge_id=knowledge_id)
-                if len(chain) >= 2:
-                    continue
-            # Cap candidate_count at the same limit the right-panel uses (default 3)
-            # so the left-side count never exceeds what the user can actually act on.
-            candidates = await self.get_similar_candidates_for_file(kf.id)
-            out.append(
-                PendingSimilarFileEntry(
-                    knowledge_file_id=kf.id,
-                    file_name=kf.file_name,
-                    file_code=getattr(kf, "file_encoding", None),
-                    candidate_count=len(candidates),
-                    current_primary_version_no=v.version_no if v else 1,
-                    primary_uploader_name=kf.user_name,
-                )
-            )
-        return out
 
     async def dismiss_similar(self, knowledge_file_id: int):
         """User chose 'don't link'. Set similar_status=2 + audit log."""

@@ -9,6 +9,9 @@ from dataclasses import dataclass
 import jwt
 from fastapi import Depends, HTTPException, Request
 
+from bisheng.common.errcode.dsh_market import MarketPermissionError
+from bisheng.common.request_scope import RequestScope, get_admitted_request_scope
+
 
 @dataclass(frozen=True)
 class MarketActor:
@@ -24,6 +27,11 @@ async def market_actor(request: Request) -> MarketActor:
     authorization = request.headers.get("authorization", "")
     if len(request.headers.getlist("authorization")) > 1:
         raise HTTPException(401, "Use one enterprise credential")
+    admitted = get_admitted_request_scope()
+    if admitted is not None and admitted.kind == RequestScope.TENANT:
+        if admitted.source == "credential":
+            raise MarketPermissionError()
+        return MarketActor(admitted.home_tenant_id, admitted.user_id, admitted.is_super)
     if authorization.startswith("Bearer "):
         try:
             desktop = jwt.get_unverified_header(authorization[7:]).get("typ") == "bisheng-dsh-access+jwt"
@@ -78,7 +86,6 @@ async def market_actor(request: Request) -> MarketActor:
 
 
 async def market_admin(request: Request, actor: MarketActor = Depends(market_actor)) -> MarketActor:
-    from bisheng.common.errcode.dsh_market import MarketPermissionError
     from bisheng.common.permission_identity import check_tenant_admin
     from bisheng.core.context.tenant import set_current_tenant_id, set_is_management_api, set_visible_tenant_ids
     from bisheng.dsh_market.infrastructure import tenant_is_active
@@ -99,3 +106,21 @@ async def market_admin(request: Request, actor: MarketActor = Depends(market_act
             raise MarketPermissionError()
         return actor
     raise MarketPermissionError()
+
+
+def market_list_tenant(actor: MarketActor) -> int:
+    """Only the platform's admitted list request can extend beyond the home tenant."""
+    admitted = get_admitted_request_scope()
+    if actor.desktop:
+        raise MarketPermissionError()
+    if admitted is None:
+        return actor.tenant_id
+    if (
+        admitted.kind != RequestScope.TENANT
+        or admitted.source == "credential"
+        or admitted.user_id != actor.user_id
+        or admitted.home_tenant_id != actor.tenant_id
+        or (admitted.tenant_id != actor.tenant_id and not (admitted.is_super and actor.global_super))
+    ):
+        raise MarketPermissionError()
+    return admitted.tenant_id

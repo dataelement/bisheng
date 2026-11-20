@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button, Input, notification, Pagination, Segmented } from '@bisheng/ui';
 import { usePaginationLocale } from "@/hooks/usePaginationLocale";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
@@ -6,7 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 
 
 import { userContext } from "@/contexts/userContext";
-import type { MarketImport, MarketPlugin, MarketPreview } from "@/controllers/API/dshMarket";
+import type { MarketImport, MarketPage, MarketPlugin, MarketPluginRow, MarketPreview } from "@/controllers/API/dshMarket";
 import {
   deleteMarketPlugin,
   getMarketContext,
@@ -34,11 +35,23 @@ interface PluginMarketPageProps {
 export function PluginMarketPage({ toolbarTarget }: PluginMarketPageProps) {
   const { user } = useContext(userContext);
   const { t } = useTranslation("dshMarket");
+  const [viewRevision, setViewRevision] = useState(0);
+  useEffect(() => {
+    // A management-view switch does not change the login tenant. Retire the
+    // active pane's requests and dialogs even when the host keeps this page mounted.
+    const reset = () => setViewRevision(value => value + 1);
+    window.addEventListener("bisheng:management-scope-changed", reset);
+    return () => window.removeEventListener("bisheng:management-scope-changed", reset);
+  }, []);
   if (!canManageWorkbenchConfig(user)) return <div className="p-8">{t("forbidden")}</div>;
-  return <PluginMarketContent key={`${user.user_id}:${user.tenant_id}`} toolbarTarget={toolbarTarget} />;
+  return <PluginMarketContent key={`${user.user_id}:${user.tenant_id}`} toolbarTarget={toolbarTarget} viewRevision={viewRevision} />;
 }
 
-function PluginMarketContent({ toolbarTarget }: PluginMarketPageProps) {
+interface PluginMarketContentProps extends PluginMarketPageProps {
+  viewRevision: number;
+}
+
+function PluginMarketContent({ toolbarTarget, viewRevision }: PluginMarketContentProps) {
   const { t } = useTranslation("dshMarket");
   const [section, setSection] = useState("plugins");
   const selector = (
@@ -56,7 +69,7 @@ function PluginMarketContent({ toolbarTarget }: PluginMarketPageProps) {
   return (
     <div className="h-full overflow-auto px-2 pb-4">
       {toolbarTarget ? createPortal(selector, toolbarTarget) : toolbarTarget === undefined ? selector : null}
-      {section === "plugins" ? <TenantPluginMarket /> : <WorkbenchMarketSection />}
+      {section === "plugins" ? <TenantPluginMarket key={viewRevision} /> : <WorkbenchMarketSection key={viewRevision} />}
     </div>
   );
 }
@@ -66,7 +79,7 @@ function TenantPluginMarket() {
   const paginationLocale = usePaginationLocale();
   const [tenant, setTenant] = useState<number | null>(null);
   const [page, setPage] = useState(1);
-  const [data, setData] = useState<{ data: MarketPlugin[]; total: number }>({ data: [], total: 0 });
+  const [data, setData] = useState<MarketPage<MarketPluginRow> | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const [detail, setDetail] = useState<MarketPlugin | null>(null);
@@ -80,6 +93,7 @@ function TenantPluginMarket() {
   const [progress, setProgress] = useState<number | null>(null);
   const [refresh, setRefresh] = useState(0);
   const upload = useRef<AbortController | null>(null);
+  const canManage = data !== null && !data.read_only;
 
   useEffect(() => {
     if (tenant !== null) return;
@@ -116,7 +130,7 @@ function TenantPluginMarket() {
     return () => controller.abort();
   }, [page, tenant, refresh]);
   useEffect(() => {
-    if (tenant === null) return;
+    if (tenant === null || !canManage) return;
     let active = true;
     listMarketImports(tenant)
       .then((jobs) => {
@@ -128,7 +142,7 @@ function TenantPluginMarket() {
     return () => {
       active = false;
     };
-  }, [tenant, refresh]);
+  }, [tenant, refresh, canManage]);
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -239,11 +253,11 @@ function TenantPluginMarket() {
           <h1 className="text-xl font-semibold">{t("title")}</h1>
           <p className="text-muted-foreground">{t("intro")}</p>
         </div>
-        <Button className="shrink-0" disabled={tenant === null || busy} onClick={() => setUploadOpen(true)}>
+        {canManage && <Button className="shrink-0" disabled={busy} onClick={() => setUploadOpen(true)}>
           {t("import")}
-        </Button>
+        </Button>}
       </header>
-      {tenant !== null && <InstallPolicySettings tenant={tenant} />}
+      {canManage && tenant !== null && <InstallPolicySettings tenant={tenant} />}
       {error && (
         <div role="alert" className="text-red-600 flex items-center gap-3">
           {t("loadFailed")}
@@ -252,14 +266,14 @@ function TenantPluginMarket() {
           </Button>
         </div>
       )}
-      {loading ? (
-        <p role="status">{t("loading")}</p>
+      {loading || (!data && !error) ? (
+        <LoadingState size="panel" label={t("loading")} />
       ) : (
         <div className="border rounded-lg overflow-x-auto">
           <table className="w-full text-sm text-left">
             <thead className="bg-muted">
               <tr>
-                {["name", "version", "platform", "updated", "actions"].map((key) => (
+                {["name", "version", "platform", "updated", ...(canManage ? ["actions"] : [])].map((key) => (
                   <th className="p-4" key={key}>
                     {t(key)}
                   </th>
@@ -267,7 +281,7 @@ function TenantPluginMarket() {
               </tr>
             </thead>
             <tbody>
-              {data.data.map((plugin) => {
+              {data?.data.map((plugin) => {
                 const current = plugin.versions.find((v) => v.id === plugin.current_version_id);
                 const shownVersion = current || plugin.versions[0];
                 return (
@@ -279,7 +293,7 @@ function TenantPluginMarket() {
                     <td className="p-4">{shownVersion?.version || "—"}</td>
                     <td className="p-4">{Object.keys(shownVersion?.manifest.targets || {}).join(", ")}</td>
                     <td className="p-4">{new Date(`${plugin.updated_at}Z`).toLocaleString()}</td>
-                    <td className="p-4">
+                    {canManage && "revision" in plugin && <td className="p-4">
                       <div className="flex gap-2">
                         <Button variant="outlined" disabled={busy} onClick={() => void openDetail(plugin.id)} color="default">
                           {t("details")}
@@ -288,25 +302,25 @@ function TenantPluginMarket() {
                           {t("delete")}
                         </Button>
                       </div>
-                    </td>
+                    </td>}
                   </tr>
                 );
               })}
             </tbody>
           </table>
-          {!data.data.length && <p className="p-10 text-center text-muted-foreground">{t("empty")}</p>}
+          {data?.data.length === 0 && <p className="p-10 text-center text-muted-foreground">{t("empty")}</p>}
         </div>
       )}
       <Pagination
         locale={paginationLocale}
         current={page}
         pageSize={20}
-        total={data.total}
+        total={data?.total ?? 0}
         showTotal
         disabled={loading}
         onChange={(nextPage) => setPage(nextPage)}
       />
-      {imports.some((job) => job.status === "validating" || job.status === "failed") && (
+      {canManage && imports.some((job) => job.status === "validating" || job.status === "failed") && (
         <section className="border rounded-lg p-4 space-y-3">
           <h2 className="font-semibold">{t("imports")}</h2>
           {imports
@@ -336,7 +350,7 @@ function TenantPluginMarket() {
         </section>
       )}
       <Dialog
-        open={uploadOpen}
+        open={canManage && uploadOpen}
         onOpenChange={(open) => {
           if (!busy) setUploadOpen(open);
         }}
@@ -351,7 +365,7 @@ function TenantPluginMarket() {
               setFile(e.target.files?.[0] || null);
             }} />
           <p className="text-xs leading-5 text-muted-foreground">{t("bundleHelp")}</p>
-          {checking && <p role="status">{t("previewing")}</p>}
+          {checking && <LoadingState label={t("previewing")} />}
           {previewError && (
             <p role="alert" className="text-sm text-red-600">
               {t("previewFailed")}
@@ -398,7 +412,7 @@ function TenantPluginMarket() {
         </DialogContent>
       </Dialog>
       <Dialog
-        open={Boolean(detail)}
+        open={canManage && Boolean(detail)}
         onOpenChange={(open) => {
           if (!open && !busy) setDetail(null);
         }}

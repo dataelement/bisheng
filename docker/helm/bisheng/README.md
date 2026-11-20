@@ -138,7 +138,7 @@ Redis 默认支持独立 Redis 与 DB index 分离。不要据此假定 Sentinel
 runtime: {enabled: false}
 sandbox: {enabled: false}
 # 原生 DSH 的基本登录独立于 Gateway 开关
-# dsh: {enabled: true}
+# bs_client: {enabled: false}  # 客户端默认开启，按需关闭
 ```
 
 Vibe 关闭时无运行控制面、材料入口和目录初始化；新装关闭沙箱时沿用正常未启用流程。**本期不支持已开启沙箱、已保存端点/执行器/会话后的热关闭联动**；默认开启后持续使用，后续专门修复该业务缺陷。
@@ -203,3 +203,9 @@ python scripts/verify_k8s_runtime.py --context company \
 私有执行镜像需要先在执行空间放 Registry Secret。若该空间由运维预建，设置 `runtime.namespaceManagement.createExecution: false`，明确并固定 `runtime.execution.installationId`，由运维给专用 Namespace 设置同值 `runtime.bisheng.io/installation` 以及 restricted PSA 标签；不要将共享业务空间作为执行空间。控制空间通过 Helm --namespace 选择。新空间由 Chart 创建时自动带这些标签。
 
 受管配置/运行策略/Nginx/Gateway 配置通过 Pod template checksum 触发正常 Helm 滚动，无手工启动补丁。已有外部 ConfigMap/Secret 内容在 Chart 外变化时，更新 `global.configRevision` 为新的运维版本号后升级，以让进程重新装配配置/读取身份；不要用此参数自动轮换签名根。
+
+## BS Client 可选地址
+
+客户端默认开启，`bs_client: null` 表示使用默认值；显式 `bs_client: {enabled: false}` 关闭入口。旧 `dsh` 仍被接受，新块非 null 时整块优先。完整后端配置使用 `config.settings.bs_client`；其中 `platform_public_url` 默认不注入，留空可正常登录并使用 Chat、会话及 Work/MCP。需要固定 origin 时在该字段显式设置；全局 `publicUrl` 继续服务其它部署用途，不再成为 DSH 使用前提。
+
+公开 Host 必须连同端口保留。Chart 为前端/可选 Gateway 建立 headless peers Service，让后端按代理 Pod IP 验证可信协议来源。外部 TLS 终止代理须清理客户端转发头，并将实际边缘代理 CIDR 放入 `frontend.proxy.trustedForwardedCidrs`；不默认信任整个私网。自管 `config.existingConfigMap` 的用户须同步相应 BS Client 配置。

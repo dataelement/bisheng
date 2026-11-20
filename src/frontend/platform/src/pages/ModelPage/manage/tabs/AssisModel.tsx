@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { isNumberDraftWithinBounds } from '@/utils/fieldValidation';
 import { Button, Input, Select, toast } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
@@ -40,6 +41,7 @@ const ModelRow = ({ item, index, llmOptions, updateField, deleteRow }) => {
     return <div className="grid mb-4 items-center" style={{ gridTemplateColumns: "repeat(2, 1fr) 80px 110px 76px 90px 40px" }}>
         <div className="pr-2">
             <ModelSelect
+                close
                 label={''}
                 value={item.model_id}
                 options={llmOptions}
@@ -111,8 +113,9 @@ export default function AssisModel({ llmOptions, onBack }) {
     const { t } = useTranslation('model')
     const selectLabels = useSelectLabels()
     const queryClient = useQueryClient()
+    const [saving, setSaving] = useState(false)
 
-    const { config, loading, inheritedFromRoot, fallbackBlocked, clearInherited: markEdited } =
+    const { config, loading, inheritedFromRoot, fallbackBlocked, reload } =
         useSystemConfigEnvelope<any>(getAssistantModelEnvelope)
 
     useEffect(() => {
@@ -124,7 +127,6 @@ export default function AssisModel({ llmOptions, onBack }) {
     }, [config]);
 
     const updateField = (index, field, value) => {
-        markEdited();
         const updatedList = form.llm_list.map((item, i) => {
             if (i === index) {
                 return { ...item, [field]: value };
@@ -138,7 +140,6 @@ export default function AssisModel({ llmOptions, onBack }) {
     };
 
     const updateAutoLLMField = (field, value) => {
-        markEdited();
         setForm({ ...form, auto_llm: { ...form.auto_llm, [field]: value } });
     };
 
@@ -174,7 +175,7 @@ export default function AssisModel({ llmOptions, onBack }) {
 
 
     const handleSave = () => {
-        console.log('Form data to save:', form);
+        if (saving) return;
         if (form.llm_list.some(el => el.model_id === null)) {
             return toast.show({ type: 'error', message: String(t('model.assistantInferenceModel') + t('bs:required')) })
         }
@@ -186,18 +187,22 @@ export default function AssisModel({ llmOptions, onBack }) {
             return toast.show({ type: 'error', message: String(t('model.assistantInferenceModelRepetition') ?? '') })
         }
 
-        void updateAssistantModelConfig(form).then(() => {
+        setSaving(true);
+        void updateAssistantModelConfig(form).then(async () => {
             toast.show({ type: 'success', message: String(t('model.saveSuccess') ?? '') })
             // The root QueryClient sets refetchOnMount: false globally, so
             // invalidateQueries only marks the entry stale and the workbench
             // dropdown still serves cached data on next mount. removeQueries
             // drops the cache entirely, forcing a fresh fetch on next read.
             queryClient.removeQueries({ queryKey: ['QueryAssistantModelsKey'] })
-        }).catch(showApiError);
+            await queryClient.invalidateQueries({ queryKey: ['system-model-settings'] });
+            await queryClient.invalidateQueries({ queryKey: ['system-model-settings-impact'] });
+            await reload();
+        }).catch(showApiError).finally(() => setSaving(false));
     };
 
     if (loading) return <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-        <Outlined.Loading  className="size-4 animate-spin"/>
+        <LoadingState size="page" />
     </div>
 
     return (
@@ -251,6 +256,7 @@ export default function AssisModel({ llmOptions, onBack }) {
                     </div>
                     <div className="grid grid-cols-4 gap-2 mt-4">
                         <ModelSelect
+                            close
                             label={''}
                             value={form.auto_llm.model_id}
                             options={llmOptions}
@@ -269,9 +275,10 @@ export default function AssisModel({ llmOptions, onBack }) {
                     </div>
                 </div>
             </div>
+            {inheritedFromRoot && <p className="mt-4 text-xs text-muted-foreground">{t('model.draftSourceHelp')}</p>}
             <div className="mt-10 text-center space-x-6">
                 <Button variant="outlined" onClick={onBack} color="default">{t('model.cancel')}</Button>
-                <Button disabled={!config} onClick={handleSave}>{t('model.save')}</Button>
+                <Button disabled={saving || !config} onClick={handleSave}>{t(inheritedFromRoot ? 'model.saveLocalConfiguration' : 'model.save')}</Button>
             </div>
         </div>
     );

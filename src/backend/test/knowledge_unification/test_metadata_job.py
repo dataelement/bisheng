@@ -309,3 +309,35 @@ async def test_http_rejects_after_schema_or_values_as_request_inputs(flow):
         flow.http, "POST", "/processing-jobs/precheck", payload=payload, headers=http_fixtures.HEADERS
     )
     assert result["status_code"] == 422
+
+
+async def test_plain_add_finishes_without_historical_items_despite_unrelated_file_or_model_changes(flow):
+    change = ProcessingPrecheckRequest(
+        kind="metadata_schema_change", parameters=preparation.parameters(preparation.add())
+    )
+    async with flow.context.sessions() as session:
+        (await session.get(KnowledgeFile, 81)).status = 1
+        await session.commit()
+    async with flow.context.sessions() as session:
+        plan = await flow.service.aprecheck(session, 40, change, identity=flow.context.user, entry_kind="web")
+        assert plan.can_execute
+        assert (await session.get(KnowledgeOperationPlan, plan.confirmation_id)).target_manifest == []
+        await session.commit()
+    async with flow.context.sessions() as session:
+        file = await session.get(KnowledgeFile, 81)
+        file.user_metadata = {"unrelated": {"field_value": "changed"}}
+        root = await session.get(Knowledge, 40)
+        root.model_config_revision += 1
+        root.index_generation = "other-generation"
+        await session.commit()
+    async with flow.context.sessions() as session:
+        result = await create(flow, session, plan, key="plain-add")
+        job = await flow.owner.jobs.aget(session, result.job_id)
+        assert result.state == "succeeded" and job.total_count == 0 and not job.pending_dispatch
+        assert not (
+            await session.exec(select(KnowledgeProcessingItem).where(KnowledgeProcessingItem.job_id == job.id))
+        ).all()
+        root = await session.get(Knowledge, 40)
+        assert "fresh" in {row["field_name"] for row in root.metadata_fields}
+        assert (await session.get(KnowledgeFile, 81)).user_metadata == {"unrelated": {"field_value": "changed"}}
+        await session.commit()

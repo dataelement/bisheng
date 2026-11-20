@@ -74,6 +74,57 @@ beforeEach(() => {
 });
 
 describe("DSH market administration", () => {
+    it("reloads the current workbench section from page one when only the management view changes", async () => {
+        vi.mocked(listMarketWorkbenches).mockResolvedValue({ data: [await getMarketWorkbench("fixture")], total: 21 });
+        render(view());
+        await userEvent.setup().click(screen.getByRole("radio", { name: "workbenchSection" }));
+        await screen.findByText("Workbench Demo");
+        fireEvent.click(screen.getByRole("button", { name: "pagination.next" }));
+        await waitFor(() => expect(listMarketWorkbenches).toHaveBeenLastCalledWith(2, 2, expect.any(AbortSignal)));
+        await screen.findByText("Workbench Demo");
+        fireEvent.click(screen.getByRole("button", { name: "delete" }));
+        const confirmation = vi.mocked(bsConfirm).mock.calls[0][0];
+        fireEvent.click(screen.getByRole("button", { name: "details" }));
+        await screen.findByRole("dialog");
+        vi.mocked(listMarketWorkbenches).mockResolvedValue({ data: [{
+            id: "tenant-7", display_name: "Tenant Seven Workbench", description: "", workbench_key: "seven/bench",
+            legacy_id: null, current_version: { version: "7.0.0" }, updated_at: "2026-11-19T00:00:00",
+        }], total: 1, read_only: true });
+        act(() => { window.dispatchEvent(new Event("bisheng:management-scope-changed")); });
+        expect(screen.queryByText("Workbench Demo")).not.toBeInTheDocument();
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+        expect(confirmation.signal?.aborted).toBe(true);
+        await screen.findByText("Tenant Seven Workbench");
+        expect(screen.getByRole("radio", { name: "workbenchSection" })).toBeChecked();
+        expect(listMarketWorkbenches).toHaveBeenLastCalledWith(2, 1, expect.any(AbortSignal));
+        expect(screen.queryByRole("button", { name: "workbenchImport" })).not.toBeInTheDocument();
+        await act(async () => { await confirmation.onOk?.(vi.fn()); });
+        expect(deleteMarketWorkbench).not.toHaveBeenCalled();
+    });
+    it("retires a late workbench list response from the previous management view", async () => {
+        let resolve!: (value: Awaited<ReturnType<typeof listMarketWorkbenches>>) => void;
+        vi.mocked(listMarketWorkbenches).mockReturnValueOnce(new Promise(fulfill => { resolve = fulfill; }));
+        render(view());
+        await userEvent.setup().click(screen.getByRole("radio", { name: "workbenchSection" }));
+        await waitFor(() => expect(listMarketWorkbenches).toHaveBeenCalledOnce());
+        const oldSignal = vi.mocked(listMarketWorkbenches).mock.calls[0][2];
+        vi.mocked(listMarketWorkbenches).mockResolvedValue({ data: [], total: 0, read_only: true });
+        act(() => { window.dispatchEvent(new Event("bisheng:management-scope-changed")); });
+        await screen.findByText("workbenchEmpty");
+        expect(oldSignal?.aborted).toBe(true);
+        await act(async () => { resolve({ data: [{ ...await getMarketWorkbench("fixture"), display_name: "Old tenant result" }], total: 1 }); });
+        expect(screen.queryByText("Old tenant result")).not.toBeInTheDocument();
+    });
+    it("also refreshes the plugin list without changing the login tenant", async () => {
+        render(view());
+        await screen.findByText("Company Demo");
+        vi.mocked(listMarketPlugins).mockResolvedValue({ data: [{ ...plugin, display_name: "Tenant Seven Plugin" }], total: 1, read_only: true });
+        act(() => { window.dispatchEvent(new Event("bisheng:management-scope-changed")); });
+        expect(screen.queryByText("Company Demo")).not.toBeInTheDocument();
+        await screen.findByText("Tenant Seven Plugin");
+        expect(getMarketContext).toHaveBeenCalledTimes(2);
+        expect(listMarketPlugins).toHaveBeenLastCalledWith({ page: 1 }, 2, expect.any(AbortSignal));
+    });
     it("keeps the market selector beside the page tabs and removes it when leaving the market", async () => {
         const { container } = render(
             <MemoryRouter initialEntries={["/dsh?tab=plugins"]}>
@@ -97,6 +148,29 @@ describe("DSH market administration", () => {
         await userEvent.setup().click(screen.getByRole("tab", { name: "dsh.unified.usage" }));
         expect(screen.getByTestId("dsh-management")).toBeInTheDocument();
         expect(screen.queryByRole("radiogroup", { name: "marketSections" })).not.toBeInTheDocument();
+    });
+    it("only displays both lists when the server marks the selected tenant read only", async () => {
+        vi.mocked(listMarketPlugins).mockResolvedValue({ data: [plugin], total: 1, read_only: true });
+        vi.mocked(listMarketWorkbenches).mockResolvedValue({
+            data: [{
+                id: "other", display_name: "Other workbench", description: "",
+                current_version: { version: "1.0.0" }, workbench_key: "other", legacy_id: null,
+                updated_at: "2026-11-18T00:00:00",
+            }], total: 1, read_only: true,
+        });
+
+        render(view());
+        await screen.findByText(plugin.display_name);
+        for (const name of ["import", "delete", "details"])
+            expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+        expect(getMarketInstallPolicy).not.toHaveBeenCalled();
+        expect(listMarketImports).not.toHaveBeenCalled();
+
+        await userEvent.setup().click(screen.getByRole("radio", { name: "workbenchSection" }));
+        await screen.findByText("Other workbench");
+        for (const name of ["workbenchImport", "delete", "details"])
+            expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+        expect(listWorkbenchImports).not.toHaveBeenCalled();
     });
     it("saves each installation setting for the current tenant", async () => {
         render(view());

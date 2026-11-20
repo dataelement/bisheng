@@ -6,6 +6,7 @@ from bisheng.admin.application.tenant_scope import require_expected_management_t
 from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.admin_scope import AdminScopeChangedError
+from bisheng.common.errcode.knowledge import KnowledgeProcessingConflictError
 from bisheng.common.schemas.api import resp_200
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.database import get_async_db_session
@@ -41,6 +42,10 @@ def get_processing_service():
         owner=KnowledgeProcessingOwner(),
         available_kinds={"embedding_rebuild", "file_reprocess", "file_resplit", "metadata_schema_change"},
     )
+
+
+async def _require_knowledge_menu(identity):
+    await UserPayload.assert_effective_web_menu_contains(identity.user_id, "knowledge")
 
 
 async def _write_scope(request, identity):
@@ -91,6 +96,7 @@ async def read_processing_target(
 async def get_processing_settings(
     space_id: int = Path(gt=0), identity: UserPayload = Depends(UserPayload.get_login_user)
 ):
+    await _require_knowledge_menu(identity)
     await require_business_action(identity, resource_type="knowledge_space", resource_id=space_id, action="edit")
     async with get_async_db_session() as session:
         data = await ProcessingSettingsService(ProcessingSettingsRepository()).get_settings(
@@ -106,6 +112,7 @@ async def update_processing_settings(
     space_id: int = Path(gt=0),
     identity: UserPayload = Depends(UserPayload.get_login_user),
 ):
+    await _require_knowledge_menu(identity)
     await _write_scope(request, identity)
     await require_business_action(identity, resource_type="knowledge_space", resource_id=space_id, action="edit")
     async with get_async_db_session() as session:
@@ -227,6 +234,8 @@ async def retry_processing_job(
     service: ProcessingJobService = Depends(get_processing_service),
 ):
     await _write_scope(request, identity)
+    if change.refresh_source and kind != "space_copy":
+        raise KnowledgeProcessingConflictError(reason="copy_refresh_source_only")
     if kind == "space_copy":
         return resp_200(await SpaceCopyAccess().aretry(space_id, job_id, change, identity=identity))
     if kind == "move_index":

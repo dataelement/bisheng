@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from sqlalchemy import or_, select, update
 
-from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, KnowledgeProcessingConflictError
+from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument as Document
@@ -20,6 +20,7 @@ from bisheng.knowledge.domain.schemas.move_processing import (
     MoveRoot,
     move_path_ids,
 )
+from bisheng.knowledge.domain.schemas.processing_diagnostics import space_processing_conflict
 
 
 def conflict(reason):
@@ -46,8 +47,11 @@ class MoveBatchRepository(MoveRowRepository):
 
     @staticmethod
     def require_idle(*roots):
-        if any(row["state"] in (2, 3) or row["model_transition"] for row in roots):
-            raise KnowledgeProcessingConflictError(reason="move_space_processing")
+        for row in roots:
+            if row["state"] != 1 or row["model_transition"]:
+                raise space_processing_conflict(
+                    "move_space_processing", state=row["state"], has_transition=bool(row["model_transition"])
+                )
 
     async def aread(self, session, *, source_space_id, destination_space_id, roots, destination_folder_id, lock=False):
         tenant = get_current_tenant_id()

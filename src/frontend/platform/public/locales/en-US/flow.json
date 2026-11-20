@@ -632,5 +632,7 @@
   "rerunWorkflow": "Run again",
   "type": "Type",
   "valueType": "Value type",
-  "selectDbType": "Select a database type"
+  "selectDbType": "Select a database type",
+  "modelLoadFailed": "Failed to load models. Please retry.",
+  "retryModelLoad": "Retry"
 }

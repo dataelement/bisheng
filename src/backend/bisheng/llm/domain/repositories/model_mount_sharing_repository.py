@@ -113,7 +113,7 @@ class ModelMountSharingRepository:
                             select(KnowledgeOperationPlan).where(
                                 KnowledgeOperationPlan.tenant_id == tenant,
                                 KnowledgeOperationPlan.model_server_id.in_(ids),
-                                KnowledgeOperationPlan.model_execution_state.in_(ACTIVE_STATES),
+                                KnowledgeOperationPlan.model_execution_state.in_((*ACTIVE_STATES, "ABANDONED")),
                                 KnowledgeOperationPlan.operation == "model_share_server",
                             )
                         )

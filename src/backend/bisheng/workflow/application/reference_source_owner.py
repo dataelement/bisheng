@@ -108,6 +108,7 @@ class WorkflowReferenceSourceOwner:
                     resource_type="workflow",
                     resource_id=row.id,
                     status=row.status,
+                    creation_state=row.creation_state,
                     owner_user_id=row.owner_user_id,
                     permission_version=snapshot.version,
                     context_version=context,

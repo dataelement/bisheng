@@ -13,6 +13,8 @@ class ApprovalGateDecision(str, Enum):
 
 
 class ApprovalGateRequest(BaseModel):
+    # Set only when rebuilding a persisted request, never a new submission.
+    instance_id: int | None = None
     tenant_id: int
     scenario_code: str
     business_key: str

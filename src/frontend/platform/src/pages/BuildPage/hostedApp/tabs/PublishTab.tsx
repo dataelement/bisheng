@@ -28,7 +28,7 @@ import type {
   HostedAppPendingReason,
 } from "@/controllers/API/hostedApp"
 import { copyText } from "@/utils"
-import { Copy, ExternalLink, Loader2 } from "lucide-react"
+import { Copy, ExternalLink } from "lucide-react"
 import { QRCodeSVG } from "qrcode.react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -144,8 +144,8 @@ export function PublishTab({
       size="sm"
       disabled={pending !== null}
       onClick={() => runAction(kind, action)}
-    >
-      {pending === kind && <Loader2 className="mr-1 size-3.5 animate-spin" />}
+     loading={pending === kind}>
+
       {label}
     </Button>
   )

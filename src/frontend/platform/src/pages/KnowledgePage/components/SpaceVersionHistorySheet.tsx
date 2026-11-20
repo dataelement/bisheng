@@ -1,14 +1,26 @@
-import { Button, Tag } from "@bisheng/ui";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useContext, useEffect, useId, useRef, useState } from "react";
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
+import { Button, Tooltip } from "@bisheng/ui";
+import {
+  VersionHistoryAction,
+  VersionHistoryStatusBadge,
+  VersionHistorySummary,
+  VersionHistoryTable,
+  versionDialogStyles as styles,
+  type SimilarDocumentFile,
+} from "@bisheng/knowledge";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { CheckCircle, Trash2 } from "lucide-react";
+import { Outlined } from "bisheng-icons";
+import { useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Sheet,
+  SheetClose,
   SheetContent,
-  SheetFooter,
   SheetHeader,
   SheetTitle,
 } from "@/components/bs-ui/sheet";
+import { cname } from "@/components/bs-ui/utils";
 import {
   knowledgeVersionsApi,
   type KnowledgeVersionsApi,
@@ -18,11 +30,13 @@ import {
   type KnowledgeQueryScope,
 } from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
+import { getMyResourcePermissionsApi } from "@/controllers/API/permission";
 import { locationContext } from "@/contexts/locationContext";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { KnowledgeScopeUnavailable } from "./KnowledgeScopeUnavailable";
 import { SpaceVersionRelationPanel } from "./SpaceVersionRelationPanel";
 import { SpaceVersionUploadPanel } from "./SpaceVersionUploadPanel";
-import { SpaceSimilarDocumentPanel } from "./SpaceSimilarDocumentPanel";
+import { SpaceSimilarDocumentDialog } from "./SpaceSimilarDocumentDialog";
 import { SpaceFileTools } from "./SpaceFileTools";
 import { FILE_STATUSES, StatusIndicator } from "./KnowledgeFileStatus";
 
@@ -31,6 +45,7 @@ interface SpaceVersionHistorySheetProps {
   spaceId: number;
   parentId: number | null;
   fileId: number | null;
+  file?: SimilarDocumentFile;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   hasSimilar?: boolean;
@@ -46,9 +61,20 @@ export function SpaceVersionHistorySheet(props: SpaceVersionHistorySheetProps) {
     props.fileId,
     appConfig.versionManagementEnabled === true,
   ]);
+  const epoch = useMemo(() => ({ targetKey }), [targetKey]);
+  const [similarTarget, setSimilarTarget] = useState<typeof epoch | null>(null);
+  const handleOpenChange = (open: boolean) => {
+    if (!open) setSimilarTarget(null);
+    props.onOpenChange(open);
+  };
+  if (props.open && appConfig.versionManagementEnabled === true && props.fileId !== null &&
+      (props.initialPanel === "similar" || similarTarget === epoch)) {
+    return <SpaceSimilarDocumentDialog scope={props.scope} spaceId={props.spaceId} restrictToFileIds={[props.fileId]}
+      api={{ ...knowledgeVersionsApi, ...props.api }} onOpenChange={handleOpenChange} />;
+  }
   return (
-    <Sheet open={props.open} onOpenChange={props.onOpenChange}>
-      {props.open && <HistoryContent key={targetKey} {...props} />}
+    <Sheet open={props.open} onOpenChange={handleOpenChange}>
+      {props.open && <HistoryContent key={targetKey} {...props} onSimilar={() => setSimilarTarget(epoch)} />}
     </Sheet>
   );
 }
@@ -58,17 +84,19 @@ function HistoryContent({
   spaceId,
   parentId,
   fileId,
-  onOpenChange,
   hasSimilar = false,
   initialPanel = null,
   api: customApi,
-}: SpaceVersionHistorySheetProps) {
+  onSimilar,
+}: SpaceVersionHistorySheetProps & { onSimilar: () => void }) {
   const { t } = useTranslation("knowledge");
+  const isManagement = initialPanel === "merge";
+  const closeLabel = t("close", { ns: "bs" });
   const { appConfig } = useContext(locationContext);
   const api = { ...knowledgeVersionsApi, ...customApi };
   const client = useQueryClient();
-  const [panel, setPanel] = useState<"upload" | "merge" | "similar" | null>(
-    initialPanel,
+  const [panel, setPanel] = useState<"upload" | "merge" | null>(
+    initialPanel === "merge" ? "merge" : null,
   );
   const [busy, setBusy] = useState(false),
     [uncertain, setUncertain] = useState(false);
@@ -112,8 +140,47 @@ function HistoryContent({
     query.isError || query.data?.knowledge_id !== spaceId
       ? undefined
       : query.data;
+  const permissions = useQuery({
+    queryKey: [...knowledgeQueryKeys.space(scope, spaceId), "version-actions", openingId],
+    queryFn: () => getMyResourcePermissionsApi("knowledge_space", String(spaceId)),
+    enabled: enabled && appConfig.versionManagementEnabled === true,
+    retry: false,
+    cacheTime: 0,
+  });
+  const containerPermissions = useQuery({
+    queryKey: [...knowledgeQueryKeys.space(scope, spaceId), "version-upload-actions", parentId, openingId],
+    queryFn: () => getMyResourcePermissionsApi(parentId === null ? "knowledge_space" : "folder", String(parentId ?? spaceId)),
+    enabled: enabled && appConfig.versionManagementEnabled === true,
+    retry: false,
+    cacheTime: 0,
+  });
+  const permissionError = permissions.error || containerPermissions.error;
+  useEffect(() => {
+    if (permissionError) showApiError(permissionError);
+  }, [permissionError]);
   const operationsEnabled =
-    appConfig.versionManagementEnabled === true && enabled && !!data;
+    appConfig.versionManagementEnabled === true && enabled && !!data &&
+    permissions.isSuccess && !permissions.isFetching && permissions.data?.actions?.includes("edit") === true;
+  const canUploadVersion = operationsEnabled && containerPermissions.isSuccess &&
+    !containerPermissions.isFetching && containerPermissions.data?.actions?.includes("upload_file") === true;
+  const historicalVersions = data?.versions.filter(version => !version.is_primary) ?? [];
+  const deletePermissions = useQueries({
+    queries: historicalVersions.map(version => ({
+      queryKey: [...knowledgeQueryKeys.space(scope, spaceId), "version-delete-actions", version.knowledge_file_id, openingId],
+      queryFn: () => getMyResourcePermissionsApi("knowledge_file", String(version.knowledge_file_id)),
+      enabled: operationsEnabled,
+      retry: false,
+      cacheTime: 0,
+    })),
+  });
+  const deleteError = deletePermissions.find(permission => permission.isError)?.error;
+  useEffect(() => {
+    if (deleteError) showApiError(deleteError);
+  }, [deleteError]);
+  const canDeleteVersion = (versionId: number) => {
+    const permission = deletePermissions[historicalVersions.findIndex(version => version.version_id === versionId)];
+    return operationsEnabled && permission?.isSuccess && !permission.isFetching && permission.data?.actions?.includes("delete") === true;
+  };
   const handleChanged = async () => {
     if (lifetime.current?.signal.aborted) return;
     setPanel(null);
@@ -128,6 +195,7 @@ function HistoryContent({
     const controller = lifetime.current;
     if (
       !operationsEnabled ||
+      (operation === "delete" && !canDeleteVersion(versionId)) ||
       !controller ||
       controller.signal.aborted ||
       writing.current ||
@@ -174,63 +242,93 @@ function HistoryContent({
   };
   return (
     <SheetContent
+      side="bottom"
+      noClose
       aria-describedby={undefined}
-      className="flex w-full flex-col gap-0 sm:max-w-[400px]"
+      overlayClassName="z-modal bg-black/40 dark:bg-black/60"
+      className={cname(
+        "z-modal flex h-[60dvh] max-h-[90dvh] flex-col gap-0 overflow-hidden rounded-t-2xl border-border-base bg-bg-page text-text-1 shadow-modal outline-none dark:bg-bg-page",
+        "data-[state=closed]:duration-200 data-[state=open]:[animation-duration:240ms] motion-reduce:animate-none",
+        "min-[576px]:inset-y-0 min-[576px]:left-auto min-[576px]:h-full min-[576px]:max-h-none min-[576px]:w-[min(400px,calc(100vw-96px))] min-[576px]:rounded-none min-[576px]:border-l min-[576px]:border-t-0",
+        "min-[576px]:data-[state=closed]:slide-out-to-right min-[576px]:data-[state=closed]:[--tw-exit-translate-y:0] min-[576px]:data-[state=open]:slide-in-from-right min-[576px]:data-[state=open]:[--tw-enter-translate-y:0]",
+      )}
     >
-      <SheetHeader className="h-[60px] shrink-0 justify-center border-b px-6 pr-12">
-        <SheetTitle className="m-0 truncate text-lg font-medium">
-          {data?.title ?? t("f118.version_history")}
+      <div aria-hidden className="mx-auto mt-2 h-1 w-8 shrink-0 rounded-full bg-fill-3 min-[576px]:hidden" />
+      <SheetHeader className="h-14 shrink-0 flex-row items-center justify-between gap-3 space-y-0 border-b border-border-base px-5 text-left">
+        <SheetTitle title={isManagement ? data?.title : undefined} className="m-0 min-w-0 truncate text-base font-medium text-text-1">
+          {isManagement
+            ? data?.title ?? t("f118.version_history")
+            : t("knowledge.version.history.title", { ns: "shared" })}
         </SheetTitle>
+        <Tooltip content={closeLabel}>
+          <SheetClose asChild>
+            <Button
+              type="button"
+              iconOnly
+              size="small"
+              color="default"
+              variant="text"
+              className="shrink-0"
+              aria-label={closeLabel}
+              icon={<Outlined.Close aria-hidden />}
+            />
+          </SheetClose>
+        </Tooltip>
       </SheetHeader>
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-5 pb-[calc(20px+env(safe-area-inset-bottom))] min-[576px]:pb-5">
         {!enabled ? (
-          <p className="text-sm text-muted-foreground">
-            {t("f118.scope_unavailable")}
-          </p>
+          <KnowledgeScopeUnavailable size="panel" />
         ) : query.isError ? (
           <Button variant="outline" onClick={() => void query.refetch()}>
             {t("retry")}
           </Button>
         ) : query.data && !data ? (
-          <p role="alert">{t("f118.scope_unavailable")}</p>
+          <KnowledgeScopeUnavailable size="panel" role="alert" />
         ) : !data ? (
-          <p className="text-sm text-muted-foreground" role="status">
-            {t("loading")}
-          </p>
+          <LoadingState label={t("loading")} className="min-h-32" />
         ) : (
           <>
-            <dl className="mb-4 space-y-2 text-sm">
-              <div>
-                <dt className="text-muted-foreground">
-                  {t("f118.document_code")}
-                </dt>
-                <dd>{data.doc_code ?? "--"}</dd>
-              </div>
-              {data.current_primary_version_no !== null && (
-                <div>
-                  <dt className="text-muted-foreground">
-                    {t("f118.primary_version")}
+            {isManagement ? (
+              <dl className={`mb-4 flex flex-wrap gap-x-6 gap-y-3 ${styles.summary}`}>
+                <div className="min-w-0 flex-1">
+                  <dt className={`mb-1 ${styles.fieldLabel}`}>
+                    {t("f118.document_code")}
                   </dt>
-                  <dd>{data.current_primary_version_no}</dd>
+                  <dd className={`break-words ${styles.summaryValue}`}>{data.doc_code ?? "--"}</dd>
                 </div>
-              )}
-            </dl>
+                {data.current_primary_version_no !== null && (
+                  <div className="min-w-0 flex-1">
+                    <dt className={`mb-1 ${styles.fieldLabel}`}>
+                      {t("f118.primary_version")}
+                    </dt>
+                    <dd className={styles.summaryValue}>{data.current_primary_version_no}</dd>
+                  </div>
+                )}
+              </dl>
+            ) : (
+              <VersionHistorySummary
+                documentTitle={data.title}
+                documentCode={data.doc_code}
+                primaryVersion={data.current_primary_version_no}
+              />
+            )}
             {operationsEnabled && (
               <div className="mb-4 space-y-3">
                 <div className="flex flex-wrap gap-2">
-                  <Button
-                    size="small"
-                    variant="outlined"
+                  {canUploadVersion && <Button
+                    size="medium"
+                    variant="solid"
                     disabled={busy || uncertain}
                     onClick={() =>
                       setPanel(panel === "upload" ? null : "upload")
                     }
                   >
                     {t("versions.new_version")}
-                  </Button>
+                  </Button>}
                   <Button
-                    size="small"
+                    size="medium"
                     variant="outlined"
+                    color="default"
                     disabled={busy || uncertain}
                     onClick={() => setPanel(panel === "merge" ? null : "merge")}
                   >
@@ -238,11 +336,12 @@ function HistoryContent({
                   </Button>
                   {hasSimilar && (
                     <Button
-                      size="small"
-                      variant="outlined"
+                      size="medium"
+                      variant="text"
+                      color="default"
                       disabled={busy || uncertain}
                       onClick={() =>
-                        setPanel(panel === "similar" ? null : "similar")
+                        onSimilar()
                       }
                     >
                       {t("versions.similar")}
@@ -254,7 +353,7 @@ function HistoryContent({
                     {t("versions.uncertain")}
                   </p>
                 )}
-                {panel === "upload" && (
+                {panel === "upload" && canUploadVersion && (
                   <SpaceVersionUploadPanel
                     scope={scope}
                     spaceId={spaceId}
@@ -276,16 +375,6 @@ function HistoryContent({
                     onBusyChange={setBusy}
                   />
                 )}
-                {panel === "similar" && (
-                  <SpaceSimilarDocumentPanel
-                    scope={scope}
-                    spaceId={spaceId}
-                    fileId={fileId!}
-                    api={api}
-                    onChanged={handleChanged}
-                    onBusyChange={setBusy}
-                  />
-                )}
               </div>
             )}
             {data.versions.length === 0 ? (
@@ -293,91 +382,45 @@ function HistoryContent({
                 {t("f118.no_visible_versions")}
               </p>
             ) : (
-              <ol className="divide-y">
-                {data.versions.map((version) => (
-                  <li
-                    key={version.version_id}
-                    className="space-y-3 py-4 first:pt-0"
-                  >
-                    <div className="flex items-center gap-2 text-sm font-medium">
-                      <span>
-                        {t("f118.version_no")} {version.version_no}
-                      </span>
-                      {version.is_primary && (
-                        <Tag size="small" color="brand">
-                          {t("f118.primary_version")}
-                        </Tag>
-                      )}
-                    </div>
-                    <dl className="space-y-2 text-sm">
-                      <div>
-                        <dt className="text-muted-foreground">
-                          {t("fileName")}
-                        </dt>
-                        <dd className="break-words">
-                          {version.original_file_name}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="text-muted-foreground">
-                          {t("f118.document_code")}
-                        </dt>
-                        <dd>{version.file_code ?? "--"}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-muted-foreground">
-                          {t("f118.version_uploader")}
-                        </dt>
-                        <dd>{version.uploader_name ?? "--"}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-muted-foreground">
-                          {t("f118.version_upload_time")}
-                        </dt>
-                        <dd>
-                          {version.upload_time?.replace("T", " ") ?? "--"}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="mb-1 text-muted-foreground">
-                          {t("status")}
-                        </dt>
-                        <dd>
-                          {version.status !== null &&
-                          FILE_STATUSES[version.status] ? (
-                            <StatusIndicator status={version.status} />
-                          ) : (
-                            "--"
-                          )}
-                        </dd>
-                      </div>
-                    </dl>
+              <VersionHistoryTable compact rows={data.versions.map((version) => ({
+                id: version.version_id,
+                versionNumber: version.version_no,
+                isPrimary: version.is_primary,
+                fileName: version.original_file_name,
+                fileCode: version.file_code,
+                uploader: version.uploader_name,
+                uploadedAt: version.upload_time,
+                status: version.status !== null && FILE_STATUSES[version.status] ? (
+                  <StatusIndicator
+                    status={version.status}
+                    badge={<VersionHistoryStatusBadge status={version.status} />}
+                  />
+                ) : null,
+                actions: (
+                  <>
                     {operationsEnabled && !version.is_primary && (
-                      <div className="flex flex-wrap gap-2">
+                      <>
                         {version.status === 2 && (
-                          <Button
-                            size="small"
-                            variant="outlined"
+                          <VersionHistoryAction
+                            label={t("versions.set_primary")}
+                            tone="primary"
                             disabled={busy || uncertain}
-                            onClick={() =>
-                              handleMutation(version.version_id, "primary")
-                            }
+                            onClick={() => handleMutation(version.version_id, "primary")}
                           >
-                            {t("versions.set_primary")}
-                          </Button>
+                            <CheckCircle className="size-4" aria-hidden />
+                          </VersionHistoryAction>
                         )}
-                        <Button
-                          size="small"
-                          color="danger"
-                          variant="text"
-                          disabled={busy || uncertain}
-                          onClick={() =>
-                            handleMutation(version.version_id, "delete")
-                          }
-                        >
-                          {t("versions.delete_history")}
-                        </Button>
-                      </div>
+                        {canDeleteVersion(version.version_id) && (
+                          <VersionHistoryAction
+                            label={t("versions.delete_history")}
+                            tone="danger"
+                            disabled={busy || uncertain}
+                            onClick={() => handleMutation(version.version_id, "delete")}
+                          >
+                            <Trash2 className="size-4" aria-hidden />
+                          </VersionHistoryAction>
+                        )}
+                      </>
                     )}
                     <SpaceFileTools
                       scope={scope}
@@ -385,18 +428,13 @@ function HistoryContent({
                       fileId={version.knowledge_file_id}
                       status={version.status}
                     />
-                  </li>
-                ))}
-              </ol>
+                  </>
+                ),
+              }))} />
             )}
           </>
         )}
       </div>
-      <SheetFooter className="h-[60px] shrink-0 items-center border-t px-6">
-        <Button variant="outline" onClick={() => onOpenChange(false)}>
-          {t("close", { ns: "bs" })}
-        </Button>
-      </SheetFooter>
     </SheetContent>
   );
 }

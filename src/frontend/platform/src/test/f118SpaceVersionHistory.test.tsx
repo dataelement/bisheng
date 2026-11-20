@@ -106,13 +106,16 @@ afterEach(() => {
 
 it("renders only actual visible history facts without synthesizing hidden primary or nullable metadata", async () => {
   const view = mount();
-  const dialog = await screen.findByRole("dialog");
+  const dialog = await screen.findByRole("dialog", { name: "knowledge.version.history.title" });
   expect(await within(dialog).findByText("Visible history")).toBeVisible();
-  expect(within(dialog).getByText("visible.md")).toBeVisible();
+  const table = within(dialog).getByRole("table");
+  expect(within(table).getAllByRole("columnheader")).toHaveLength(7);
+  expect(within(table).getByRole("cell", { name: "visible.md" })).toBeVisible();
   expect(
-    within(dialog).queryByText("f118.primary_version"),
+    within(dialog).queryByText("primary_badge"),
   ).not.toBeInTheDocument();
-  expect(within(dialog).getAllByText("--").length).toBeGreaterThanOrEqual(4);
+  expect(within(dialog).getByText("current_primary").nextElementSibling).toHaveTextContent("—");
+  expect(within(dialog).getAllByText("—").length).toBeGreaterThanOrEqual(4);
   expect(view.read).toHaveBeenCalledExactlyOnceWith(
     11,
     expect.any(AbortSignal),
@@ -139,7 +142,8 @@ it("keeps actual primary, uploader and document codes when the server makes them
   expect(await screen.findByText("DOC-41")).toBeVisible();
   expect(screen.getByText("FILE-11")).toBeVisible();
   expect(screen.getByText("Actual user")).toBeVisible();
-  expect(screen.getAllByText("f118.primary_version").length).toBeGreaterThan(0);
+  expect(screen.getByText("primary_badge")).toBeVisible();
+  expect(screen.getByText("current_primary").nextElementSibling).toHaveTextContent("V3");
 });
 
 it("renders an empty visible list without filling it from old row data", async () => {

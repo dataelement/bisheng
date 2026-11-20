@@ -34,6 +34,11 @@ def concrete_tenant(tenant_context):
     tenant_context(1)
 
 
+@pytest.fixture(autouse=True)
+def admitted_space_editor(monkeypatch):
+    monkeypatch.setattr("bisheng.knowledge.application.knowledge_version_mutation.require_business_action", AsyncMock())
+
+
 @pytest.fixture
 def enable_switch(monkeypatch):
     from bisheng.knowledge.domain.services import knowledge_version_service as kvs_mod

@@ -219,6 +219,9 @@ async def lifespan(app: FastAPI):
             # give the in-flight ones a bounded chance to land before the database
             # goes away, so a deploy restart is not a silent gap in an audit asset.
             await flush_pending_access_records(timeout=5.0)
+            from bisheng.dsh.api.endpoints.mobile import close_mobile_service
+
+            await close_mobile_service()
             try:
                 dsh_runtime = getattr(app.state, "dsh_runtime", None)
                 if dsh_runtime is not None:

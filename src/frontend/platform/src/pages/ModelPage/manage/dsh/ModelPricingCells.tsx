@@ -32,7 +32,9 @@ interface PriceSummaryCellProps {
 export function PriceSummaryCell({ row, modelName, onEdit }: PriceSummaryCellProps) {
     const { t } = useTranslation()
     if (!row) return <Empty />
-    const edit = <Button variant="link" size="small" className="h-auto px-0"
+    const edit = row.read_only || row.can_edit === false
+        ? <span className="text-xs text-muted-foreground">{t('model:model.sharedPriceReadonly')}</span>
+        : <Button variant="link" size="small" className="h-auto px-0"
         aria-label={`${t('dsh.pricing.editPrice')} · ${modelName}`} onClick={onEdit}>
         {t('dsh.pricing.editPrice')}
     </Button>

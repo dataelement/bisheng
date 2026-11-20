@@ -62,6 +62,11 @@ class SpaceFolderUploadCountExceededError(BaseErrorCode):
     Msg: str = "A single batch upload supports at most 1000 files"
 
 
+class SpaceFileFormatError(BaseErrorCode):
+    Code: int = 18026
+    Msg: str = "File format is not supported"
+
+
 # ── Subscribe ────────────────────────────────────────────────────────────────
 
 

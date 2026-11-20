@@ -827,7 +827,7 @@ class RedisCallback(BaseCallback):
                 return
             question = input_message[0].message
 
-        llm_conf = LLMService.get_workbench_llm_sync(tenant_id=self.tenant_id)
+        llm_conf = LLMService.get_workbench_llm_sync(tenant_id=self.tenant_id, slots=("chat_title_llm.id",))
         if not llm_conf or not llm_conf.chat_title_llm or not llm_conf.chat_title_llm.id:
             return
         llm = LLMService.get_bisheng_llm_sync(

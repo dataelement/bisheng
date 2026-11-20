@@ -172,3 +172,21 @@ def select_delete_scope(scope, positions):
         scope.cleanup_identity,
         tuple(sorted({name for row in resources for name in row.object_names})),
     )
+
+
+def deletion_scope_payload(scope):
+    """Consent freezes ownership/structure, not transient parsing output.
+
+    Output keys are separately retained by the durable artifact ledger, including
+    uploads made before a worker crashed without saving its file patch.
+    """
+    from dataclasses import asdict
+
+    payload = asdict(scope)
+    payload.pop("object_names")
+    for row in payload["resources"]:
+        for name in ("status", "update_time", "object_names"):
+            row.pop(name)
+    for unit in payload["units"]:
+        unit.pop("processing_file_ids")
+    return payload

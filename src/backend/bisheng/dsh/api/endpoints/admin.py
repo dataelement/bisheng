@@ -9,7 +9,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import resp_200
 from bisheng.dsh.api.dependencies import get_runtime
 from bisheng.dsh.domain.schemas.audit import AuditAction, AuditStatus
-from bisheng.dsh.domain.services.vision import VisionSetting
+from bisheng.dsh.domain.services.vision import VisionBatchRequest, VisionSetting, batch_vision
 
 router = APIRouter(prefix="/dsh/admin")
 admin_user = UserPayload.get_tenant_admin_user
@@ -24,14 +24,39 @@ async def get_management(runtime=Depends(get_runtime)):
     return (await get_admin_runtime(runtime)).admin
 
 
+async def get_model_management():
+    """Platform model metadata remains administrable without DSH access enabled."""
+    from bisheng.dsh.admin_runtime import authorize_admin
+    from bisheng.dsh.domain.services.admin import DshManagementService
+
+    return DshManagementService(
+        repository_scope=None,
+        authorize=authorize_admin,
+        profiles=None,
+        policy=None,
+        policy_view=None,
+        now=None,
+    )
+
+
+@router.post("/model-vision")
+async def model_vision_batch(body: VisionBatchRequest, user=Depends(admin_user), service=Depends(get_model_management)):
+    from bisheng.core.context.tenant import get_current_tenant_id
+    from bisheng.dsh.domain.services.profile import profile_scope
+
+    _, tenant = await service.authorize(user.user_id, get_current_tenant_id())
+    with profile_scope(tenant):
+        return resp_200(data=await batch_vision(body.model_ids))
+
+
 @router.get("/models/{model_id}/vision")
-async def model_vision(model_id: UserId, user=Depends(admin_user), service=Depends(get_management)):
+async def model_vision(model_id: UserId, user=Depends(admin_user), service=Depends(get_model_management)):
     return resp_200(data=await service.model_vision(user.user_id, model_id))
 
 
 @router.put("/models/{model_id}/vision")
 async def update_model_vision(
-    model_id: UserId, setting: VisionSetting, user=Depends(admin_user), service=Depends(get_management)
+    model_id: UserId, setting: VisionSetting, user=Depends(admin_user), service=Depends(get_model_management)
 ):
     return resp_200(data=await service.model_vision(user.user_id, model_id, setting))
 

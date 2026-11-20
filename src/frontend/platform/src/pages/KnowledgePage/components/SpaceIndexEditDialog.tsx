@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button, Input, Pagination, StateView, Textarea } from "@bisheng/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useRef, useState } from "react";
@@ -138,7 +139,7 @@ function Content({ scope, spaceId, fileId }: SpaceIndexEditDialogProps) {
         <section aria-labelledby={metadataHeadingId} className="space-y-3">
           <h3 id={metadataHeadingId} className="text-h4 text-text-1">{t("f118.index_metadata")}</h3>
           {(space.isInitialLoading || target.isInitialLoading || metadata.isInitialLoading) && (
-            <p role="status" className="text-body text-text-3">{t("loading")}</p>
+            <LoadingState label={t("loading")} className="min-h-32" />
           )}
           {space.isSuccess && metadata.isSuccess && values !== null && !entries.length && !availableFields.length && (
             <StateView size="inline" title={t("f118.index_metadata_empty")} className="rounded-md bg-fill-1" />

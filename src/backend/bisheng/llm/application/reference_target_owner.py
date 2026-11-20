@@ -60,16 +60,14 @@ class DefaultModelReferenceSharing:
         shared = permissions.list_resource_ids_sync(
             subject=PermissionSubject("tenant", str(tenant_id)), relation="shared_with", resource_type="llm_server"
         )
-        inherited = self.repository.get_inherited_default_server_ids(session, tenant_id)
-        return frozenset(server_ids) & (self._shared_ids(shared) | inherited)
+        return frozenset(server_ids) & self._shared_ids(shared)
 
     async def aget_shared_server_ids(self, session, tenant_id, server_ids):
         permissions = await get_permission_relation_api()
         shared = await permissions.list_resource_ids(
             subject=PermissionSubject("tenant", str(tenant_id)), relation="shared_with", resource_type="llm_server"
         )
-        inherited = await self.repository.aget_inherited_default_server_ids(session, tenant_id)
-        return frozenset(server_ids) & (self._shared_ids(shared) | inherited)
+        return frozenset(server_ids) & self._shared_ids(shared)
 
 
 class ModelReferenceTargetOwner:

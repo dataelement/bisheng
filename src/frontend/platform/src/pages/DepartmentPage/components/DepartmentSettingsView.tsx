@@ -31,7 +31,6 @@ export function DepartmentSettingsView({
     handleRestore,
     isArchived,
     t,
-    loading,
     isSynced,
     name,
     setName,
@@ -68,12 +67,6 @@ export function DepartmentSettingsView({
         />
       )}
 
-      {loading && (
-        <p className="mb-4 text-sm text-muted-foreground">
-          {t("loading", { ns: "bs" })}
-        </p>
-      )}
-
       <section className="space-y-4">
         {!hideActions && (
           <div>
@@ -84,7 +77,7 @@ export function DepartmentSettingsView({
           </div>
         )}
         <div className="space-y-1.5">
-          <Label>{t("bs:department.name")}</Label>
+          <Label className="block leading-[var(--line-height-3)]">{t("bs:department.name")}</Label>
           {isSynced || isArchived ? (
             <Input value={name} disabled className={FORM_CONTROL_WIDTH} />
           ) : (
@@ -208,9 +201,6 @@ export function DepartmentSettingsView({
                 </span>
               </span>
             </label>
-            <p className="mt-1 max-w-md text-xs leading-snug text-gray-500 dark:text-gray-400">
-              {t("bs:department.defaultRolesHint")}
-            </p>
           </div>
         </section>
       )}
@@ -238,6 +228,7 @@ export function DepartmentSettingsView({
                 <Button
                   type="button"
                   onClick={handleUiRequest(() => handleGlobalSave())}
+                  loading={saving}
                   disabled={saving}
                 >
                   {t("save")}
@@ -261,6 +252,7 @@ export function DepartmentSettingsView({
                 variant="outlined"
                 onClick={() => {
                   bsConfirm({
+                    variant: "default",
                     title: t("bs:tenant.unmountTitle"),
                     desc: t("bs:tenant.unmountConfirm"),
                     okTxt: t("bs:tenant.unmountOk"),

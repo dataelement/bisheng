@@ -263,3 +263,21 @@ def seed_online_workflow(memory_db, flow_id="wf-1", switch=True, status=2, name=
         for data in extra_versions:
             s.add(FlowVersion(flow_id=flow_id, name="other", is_current=0, data=data, user_id=1))
         s.commit()
+
+
+def run_tasks_in_flow_tenant(monkeypatch, tasks, tenant_id: int = 1) -> None:
+    """Run the worker entry points inside the flow's tenant, as the Celery task wrapper does.
+
+    ``_execute_workflow`` / ``_continue_workflow`` refuse a run whose flow tenant differs
+    from the current tenant; the wrapper (durable_workload_scope) is not under test here.
+    """
+    from bisheng.core.context.tenant import tenant_execution_scope
+
+    for name in ("_execute_workflow", "_continue_workflow"):
+        original = getattr(tasks, name)
+
+        def scoped(*args, _original=original, **kwargs):
+            with tenant_execution_scope(tenant_id):
+                return _original(*args, **kwargs)
+
+        monkeypatch.setattr(tasks, name, scoped)

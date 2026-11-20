@@ -1,6 +1,6 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { useState, type ReactNode } from "react";
 import { Button, SearchInput, Tag } from "@bisheng/ui";
-import { Outlined } from "bisheng-icons";
 import { useTranslation } from "react-i18next";
 import { useSubjectSearch } from "@/components/bs-comp/selectComponent/useSubjectSearch";
 import { SubjectSearchStatus } from "@/components/bs-comp/selectComponent/SubjectSearchStatus";
@@ -106,13 +106,7 @@ export function OrganizationSearchPanel({
   const renderStatus = (search: typeof members | typeof departments) => (
     <>
       {search.loading && (
-        <p
-          role="status"
-          className="flex items-center gap-2 px-2 py-4 text-sm text-muted-foreground"
-        >
-          <Outlined.Loading className="size-4 animate-spin" />
-          {t("loading")}
-        </p>
+        <LoadingState label={t("loading")} className="flex items-center gap-2 px-2 py-4 text-sm text-muted-foreground" />
       )}
       <SubjectSearchStatus
         tooLong={search.tooLong}
@@ -136,10 +130,11 @@ export function OrganizationSearchPanel({
           size="small"
           variant="text"
           disabled={search.loadingMore}
+          loading={search.loadingMore}
           onClick={search.loadMore}
           className="my-1 w-full"
         >
-          {t(search.loadingMore ? "loading" : "bs:organization.loadMore")}
+          {t("bs:organization.loadMore")}
         </Button>
       ) : null}
     </>
