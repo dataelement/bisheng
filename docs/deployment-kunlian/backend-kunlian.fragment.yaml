@@ -1,7 +1,10 @@
-# Merge into docker/bisheng/config/config.yaml. Do not duplicate top-level keys.
-# Keep existing sso_sync.gateway_hmac_secret and signature_header.
+# 合并到 docker/bisheng/config/config.yaml，不要重复已有的顶层键。
+# 保留原有的 sso_sync.gateway_hmac_secret 与 sso_sync.signature_header。
+# 注意：platform_llm / platform_agent / platform_knowledge 不在这里配置，
+# 而在服务启动后于管理后台「系统配置」（数据库 initdb_config.workflow）填写。
 multi_tenant:
   enabled: true
+
 sso_sync:
   gateway_hmac_secret: !env ${BISHENG_GATEWAY_HMAC_SECRET}
   signature_header: X-Signature
@@ -12,9 +15,16 @@ sso_sync:
     policy_revision: 1
     issuer: https://idp.example.com
     client_id: REPLACE_CLIENT_ID
+    # 准入范围模式：fixed（默认单租户） | tenant_workspace_map | directory_active_tenants
+    login_scope_mode: fixed
     allowed_tenant_id: REPLACE_EXTERNAL_TENANT_ID
     allowed_workspace_ids:
       - REPLACE_WORKSPACE_ID
+    # 当 login_scope_mode 为 tenant_workspace_map 时使用：
+    # tenant_workspace_allowlist:
+    #   tenant_1: ["ws_1"]
+    # 是否基于同步目录自动开通本地租户与基础访问权限（默认 false：人工建租户+绑定）
+    auto_onboarding_enabled: false
     state_semantics_revision: REPLACE_CONFIRMED_STATE_REVISION
     max_directory_age_seconds: 600
     public_origin: https://workflow.example.com
@@ -31,7 +41,7 @@ sso_sync:
     sync_key_reference: env:KUNLIAN_SYNC_API_KEY
     internal_key_id: kunlian-internal-v1
     internal_secret_reference: env:KUNLIAN_INTERNAL_SECRET
-    # Replace after inspecting the actual gateway peer IP. Do not trust a whole subnet.
+    # 启动 gateway 后通过 docker inspect 获取实际对端 IP 并替换为精确 /32，不要信任整个网段。
     trusted_gateway_networks:
       - 192.0.2.10/32
     csrf_secret_reference: env:KUNLIAN_BACKEND_CSRF_SECRET
