@@ -305,7 +305,12 @@ async def test_download_endpoint_still_signs_the_requested_key(env, monkeypatch)
         await endpoint.linsight_file_download(
             file_url=FILE_KEY, session_version_id=SVID, login_user=_user(99), share_link=None
         )
-    for own in (f"linsight/session_files/{SVID}/x.md", "linsight/sess-1/upload.pdf"):
+    for own in (
+        f"linsight/session_files/{SVID}/x.md",
+        # uploads are ingested under the version id; their originals preview in place
+        f"linsight/{SVID}/f1_original.png",
+        "linsight/sess-1/upload.pdf",
+    ):
         resp = await endpoint.linsight_file_download(
             file_url=own, session_version_id=SVID, login_user=_user(), share_link=None
         )
