@@ -259,7 +259,9 @@ async def test_same_tenant_service_aliases_do_not_block_legitimate_tasks(tasks):
     from bisheng.finetune.domain.models.server import Server
 
     with tenant_execution_scope(60):
-        await ServerDao.insert(Server(server="alias", endpoint="runtime", sft_endpoint="http://training-60.test"))
+        await ServerDao.insert(
+            Server(server="alias", endpoint="runtime", sft_endpoint="http://training-60.test"), tenant_id=60
+        )
     options = result(await tasks.client.get("/api/v1/finetune/server/options"))
     assert len(options) == 2
     result(await tasks.client.post("/api/v1/finetune/job", json=payload()))

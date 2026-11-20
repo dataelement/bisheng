@@ -233,7 +233,7 @@ async def test_dismiss_404_when_file_not_found(enable_switch, async_db_session):
 
 
 @pytest.mark.asyncio
-async def test_dismiss_business_error_when_switch_off(async_db_session, monkeypatch):
+async def test_dismiss_returns_business_error_when_switch_off(async_db_session, monkeypatch):
     from bisheng.knowledge.domain.services import knowledge_version_service as kvs_mod
 
     mock_settings = MagicMock()
