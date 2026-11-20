@@ -169,7 +169,7 @@
 6. **沙箱 runner 的 copy-in 额度会被技能包占用**。总是挂载全部技能以后，配置了 runner 的部署每个会话都会把全部技能包（114 上是 30.7 MB）计入 copy-in 总量。默认上限 `max_copy_in_total_bytes` 是 512 MB，技能包约占 6%，默认配置下不会挤掉用户文件。如果某个部署调低了这个上限，超出部分会被跳过，可能包括用户上传的文件。深度研究今天已经是这样。本期不改，只记录；如果要改，就在 `_copy_in` 里跳过 `skills/` 下模型没读过 SKILL.md 的技能。
 7. **投影后的 `config.tools` 是 dict，不是 `ToolConfig`**。`get_daily_chat_config` 对继承配置做投影后，把工具组以普通 dict 写回 `config.tools`；根租户自己保存的配置读出来才是 `ToolConfig`。如果不知道：按属性取 `tool.auto_enabled` 会让子租户的每次发送都返回 500（114 实测）。处理位置：`WorkStationService.awith_auto_enabled_tools` 两种形态都接受；测试 `test_projected_config_groups_are_plain_dicts`。
 8. **能力中心列的是用户能用的全部工具，不是工作台的已选工具**。`CapabilityCatalogService.list` 读 `ToolServices.get_tool_list(action="use")`，与工作台配置无关，所以只在 `picker_tools` 过滤到不了它。如果不知道：自动启用的工具仍出现在侧边栏「工具与技能」里（114 实测）。处理位置：`list` 按 `aauto_enabled_tool_ids()` 跳过；测试 `test_an_auto_enabled_workbench_tool_is_not_listed`。
-9. **子租户用户的代码执行器在 F005 之前就不生效**。`GptsToolsDao.aget_tool_by_tool_key` 用无序 `.first()`，子租户的可见租户含根租户，拿到的是根租户那一行，用户的选择被当成「隐式」，权限检查失败后静默跳过。自动启用补入的是同样的请求，所以也不生效。不是本特性引入，修复在单独分支 `fix/3.1.0-beta1/child-tenant-code-interpreter`（让查询优先取当前租户的行）。合入前，验证工具类功能要用根租户账号。
+9. **子租户用户的代码执行器在 F005 之前就不生效**。`GptsToolsDao.aget_tool_by_tool_key` 用无序 `.first()`，子租户的可见租户含根租户，拿到的是根租户那一行，用户的选择被当成「隐式」，权限检查失败后静默跳过。自动启用补入的是同样的请求，所以也不生效。不是本特性引入，已在 beta1 修复（4645d9c0b8，查询优先取当前租户的行），并随 beac4a3257 合进 beta2；本分支基于 F004，合入 beta2 后即包含该修复。
 10. **技能的自动启用按租户存，不随配置继承**。根租户打开某个技能的自动启用，子租户的同名技能行不变（114 上租户 36 实测）。这是决策 3 的设计结果，验证时要在用户所在的租户里设置。
 
 ## 6. 对外契约与依赖
