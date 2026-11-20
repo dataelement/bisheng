@@ -1,7 +1,8 @@
 import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
-import { Button, Input, Radio, RadioGroup, Segmented } from '@bisheng/ui'
+import { bsConfirm } from '@/components/bs-ui/alertDialog/useConfirm'
+import { Button, Input, Segmented } from '@bisheng/ui'
 import type { PricingCurrency } from '@/controllers/API/modelPricing'
-import { convertCreditValue, isValidPrice, priceMicro } from '@/pages/ModelPage/manage/modelPricing'
+import { isValidPrice, priceMicro } from '@/pages/ModelPage/manage/modelPricing'
 import { creditPricingErrorKey, useCreditSettings } from '@/pages/ModelPage/manage/dsh/useCreditPricing'
 import { useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -12,10 +13,11 @@ const RATE_RANGE = [10_000, 100_000_000] as const
 const inRange = (value: string, [low, high]: readonly [number, number]) =>
     isValidPrice(value) && priceMicro(value) >= low && priceMicro(value) <= high
 
-type KeepChoice = 'budget' | 'number'
-// Unset fields show the saved value; creditValue stays unset until the administrator types one.
-type Draft = { currency?: PricingCurrency; creditValue?: string; rate?: string; keep: KeepChoice }
-const EMPTY_DRAFT: Draft = { keep: 'budget' }
+// Unset fields show the saved value. Switching the currency keeps the credit value's number
+// (1 credit = 0.01 CNY becomes 1 credit = 0.01 USD), so each credit is suddenly worth a different
+// amount of money: the switch asks for confirmation first, and still needs Save to apply.
+type Draft = { currency?: PricingCurrency; creditValue?: string; rate?: string }
+const EMPTY_DRAFT: Draft = {}
 
 export function CreditSettingsPanel() {
     const { t } = useTranslation()
@@ -38,19 +40,37 @@ export function CreditSettingsPanel() {
 
     const currency = draft.currency ?? saved.currency
     const rate = draft.rate ?? saved.usd_cny_rate
-    const switching = currency !== saved.currency
-    const converted = switching ? convertCreditValue(saved.credit_value, saved.currency, currency, rate) : null
-    const creditValue = draft.creditValue
-        ?? (switching && draft.keep === 'budget' && converted ? converted : saved.credit_value)
+    const creditValue = draft.creditValue ?? saved.credit_value
     const creditValid = inRange(creditValue, CREDIT_VALUE_RANGE)
     const rateValid = inRange(rate, RATE_RANGE)
-    const dirty = switching || creditValue !== saved.credit_value || rate !== saved.usd_cny_rate
+    const dirty = currency !== saved.currency || creditValue !== saved.credit_value || rate !== saved.usd_cny_rate
     const pending = mutation.isLoading
     const currencyName = (value: PricingCurrency) => t(value === 'USD' ? 'dsh.pricing.currencyUSD' : 'dsh.pricing.currencyCNY')
     const edit = (changes: Partial<Draft>) => {
         setDraft(old => ({ ...old, ...changes }))
         setError(null)
         mutation.reset()
+    }
+    const handleCurrencyChange = (next: PricingCurrency) => {
+        if (next === currency) return
+        // Going back to the saved currency only undoes an unsaved switch: nothing to warn about.
+        if (next === saved.currency) return edit({ currency: undefined })
+        const usdCny = rateValid ? rate : saved.usd_cny_rate
+        const times = next === 'USD' ? usdCny : String(Number((1 / Number(usdCny)).toFixed(4)))
+        bsConfirm({
+            // Not destructive (it can be switched back), so the primary tone rather than the red delete one.
+            variant: 'default',
+            title: t('dsh.pricing.switchCurrencyTitle', { currency: currencyName(next) }),
+            desc: t('dsh.pricing.switchCurrencyDesc', {
+                value: creditValue, from: currencyName(currency), to: currencyName(next), rate: usdCny, times,
+            }),
+            canelTxt: t('dsh.pricing.switchCurrencyCancel'),
+            okTxt: t('dsh.pricing.switchCurrencyOk'),
+            onOk: close => {
+                edit({ currency: next })
+                close()
+            },
+        })
     }
     const handleSave = () => {
         if (!dirty || !creditValid || !rateValid || pending) return
@@ -69,35 +89,20 @@ export function CreditSettingsPanel() {
             <h3 className="text-sm font-medium">{t('dsh.pricing.settings')}</h3>
             <p className="mt-1 text-xs text-muted-foreground">{t('dsh.pricing.settingsHelp')}</p>
         </div>
-        <div className="space-y-2">
-            <span className="text-sm">{t('dsh.pricing.currency')}</span>
-            <div>
+        <div className="space-y-1">
+            <label htmlFor={`${fieldId}-credit`} className="text-sm">{t('dsh.pricing.creditValue')}</label>
+            {/* The billing currency sits right after the value it denominates (two options, so a segmented control). */}
+            <div className="flex items-center gap-2">
+                <Input id={`${fieldId}-credit`} className="w-48" inputMode="decimal" value={creditValue} disabled={pending}
+                    status={creditValid ? undefined : 'error'} aria-describedby={`${fieldId}-credit-help`}
+                    onChange={event => edit({ creditValue: event.target.value.trim() })} />
                 <Segmented aria-label={t('dsh.pricing.currency')} value={currency} disabled={pending}
-                    onChange={value => edit({ currency: value as PricingCurrency, creditValue: undefined, keep: 'budget' })}
+                    onChange={value => handleCurrencyChange(value as PricingCurrency)}
                     options={[
                         { value: 'CNY', label: currencyName('CNY') },
                         { value: 'USD', label: currencyName('USD') },
                     ]} />
             </div>
-            {switching && <div className="space-y-2 rounded-lg border px-4 py-3">
-                <p className="text-sm">{t('dsh.pricing.switchCurrencyDesc')}</p>
-                <RadioGroup direction="vertical" value={draft.keep} disabled={pending}
-                    aria-label={t('dsh.pricing.switchCurrencyDesc')}
-                    onValueChange={keep => edit({ keep: keep as KeepChoice, creditValue: undefined })}>
-                    <Radio value="budget" disabled={!converted}>
-                        {t('dsh.pricing.keepBudget', { value: converted ?? '—', currency: currencyName(currency) })}
-                    </Radio>
-                    <Radio value="number">
-                        {t('dsh.pricing.keepNumber', { value: saved.credit_value, currency: currencyName(currency) })}
-                    </Radio>
-                </RadioGroup>
-            </div>}
-        </div>
-        <div className="space-y-1">
-            <label htmlFor={`${fieldId}-credit`} className="text-sm">{t('dsh.pricing.creditValue')}</label>
-            <Input id={`${fieldId}-credit`} className="w-48" inputMode="decimal" value={creditValue} disabled={pending}
-                status={creditValid ? undefined : 'error'} aria-describedby={`${fieldId}-credit-help`}
-                onChange={event => edit({ creditValue: event.target.value.trim() })} />
             <p id={`${fieldId}-credit-help`} role={creditValid ? undefined : 'alert'}
                 className={`text-xs ${creditValid ? 'text-muted-foreground' : 'text-destructive'}`}>
                 {creditValid
