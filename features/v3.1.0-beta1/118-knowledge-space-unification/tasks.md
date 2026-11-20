@@ -8714,3 +8714,5 @@ W3基础交付：T346原ModuleNotFound红→T344 DTO 8绿；T348原ModuleNotFoun
 - [x] 原生登记单次执行、原子检查点、已提交前缀续跑及阶段进度。
 - [x] CLI 默认预览/显式 apply，原生事务回归和规模检查、审查。结果见 docs/reviews/f118-reference-registration-only-20261120.md。
 - [ ] 拷贝维护容器验证，执行仅登记；保持维护、不发布 GitHub。
+
+- [ ] 用户确认后扩展频道纯时间戳规则；不可变追加证明、原游标续跑，验证并部署执行。

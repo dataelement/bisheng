@@ -1321,3 +1321,9 @@ M2 控制页保存 `retained_permission_delete`，绑定原 mode/版本、operat
 ReferenceMigration 增加仅登记内部模式：复用目标检查、RegisteredReferenceBackfill 写后校验及原子 checkpoint；跳过已提交前缀、最终 census 与第二轮 verify，不签发证书。退役记录仍走原生证明和清理，不能留下原有效来源。完整复核后续必须消费此增量证明，不能假称原全量入口在有漂移情况下直接兼容。所有业务授权/租户/目标规则保持，遵守 constitution C1/C2/C3/C4/C8。
 
 规模：仅登记按来源/退役线性处理；预览与执行只读取一次所需叶；追加来源有界 100，应用 revision 更新有界 100；没有用户×资源穷举。用真实事务测试正常、零引用、完成阶段拒绝、回滚/续跑、增量变化及 N/2N 成本。维护期间不调用线上业务写接口进行验证。
+
+### 频道差异扩展及旧登记证明兼容
+
+用户已在新阻塞报告后明确确认扩展并继续。频道原投影为 id/tenant_id/user_id/is_released/update_time；先核对原 root 的 creator/lifecycle，再由原生来源读取核对完整配置/引用，仅放行剩余的更新时间变化。初始证明中已有应用差异必须完全保持。若原 registration_plan 已冻结，则新增 `registration_plan_extension`，verification 制品绑定原描述符/摘要、追加频道差异和当时各租户来源游标；只允许追加未提交来源。既有证明、来源、游标不改写；续跑验证扩展事实不变且游标不回退。已完成零来源租户由空游标初始化为正式空 checkpoint 不应误报回退。
+
+差异写前核验只遍历有界的差异来源，不重放已提交引用前缀或无关来源引用叶。其余来源仍在各自登记事务中检查；不取消真实目标检查。

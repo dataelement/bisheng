@@ -203,24 +203,32 @@ async def differences(application, plan):
                     added.append(await added_fact(session, key, repository, index_repository))
                 for entry in plan.sources:
                     h = entry.header
-                    if h.source_key.tenant_id != tenant or h.source_key.source_type != SourceType.HOSTED_APP_VERSION:
+                    if h.source_key.tenant_id != tenant or h.source_key.source_type not in {
+                        SourceType.HOSTED_APP_VERSION,
+                        SourceType.CHANNEL_SYNC,
+                    }:
                         continue
-                    root, version, _ = await repository.aload_reference_source(session, source_key=h.source_key)
+                    root, version, children = await repository.aload_reference_source(session, source_key=h.source_key)
                     original_root = roots_by_key[
                         SourceRootKey(tenant, h.source_key.source_type, h.source_key.source_id)
                     ]
-                    if (
-                        root.owner_user_id != original_root.creator_id
-                        or root.state == "deleted"
-                        or (root.state, root.current_version_id, root.pending_version_id) != original_root.lifecycle
-                    ):
-                        blocked("registration_app_identity_changed")
-                    revision = digest({"root": digest(asdict(root)), "version": asdict(version)})
+                    if h.source_key.source_type == SourceType.HOSTED_APP_VERSION:
+                        if (
+                            root.owner_user_id != original_root.creator_id
+                            or root.state == "deleted"
+                            or (root.state, root.current_version_id, root.pending_version_id) != original_root.lifecycle
+                        ):
+                            blocked("registration_app_identity_changed")
+                        revision = digest({"root": digest(asdict(root)), "version": asdict(version)})
+                    else:
+                        if root.user_id != original_root.creator_id or (root.is_released,) != original_root.lifecycle:
+                            blocked("registration_channel_identity_changed")
+                        revision = digest({"root": asdict(root), "links": tuple(asdict(c) for c in children)})
                     # Native source reader still checks configuration, lifecycle and
                     # complete reference membership. Only this exact revision varies.
                     if revision != h.business_revision_digest:
-                        if len(overrides) >= 100:
-                            blocked("registration_app_drift_limit")
+                        if sum(r["key"]["source_type"] == h.source_key.source_type for r in overrides) >= 100:
+                            blocked("registration_timestamp_drift_limit")
                         overrides.append(
                             {"key": key_values(h.source_key), "before": h.business_revision_digest, "after": revision}
                         )
@@ -267,12 +275,18 @@ async def run_registration(application, *, apply=False, **inputs):
     overlaid = overlay(plan, delta)
     migration = ReferenceMigration(application, frozen, overlaid, reader, environment=inputs["environment"])
     changed = {tuple(r["key"].values()) for r in delta["overrides"]}
+    validation_plan = replace(
+        overlaid,
+        sources=tuple(
+            entry for entry in overlaid.sources if tuple(key_values(entry.header.source_key).values()) in changed
+        ),
+    )
+    validation = ReferenceMigration(application, frozen, validation_plan, reader, environment=inputs["environment"])
     for tenant in frozen.tenant_ids:
         with tenant_execution_scope(tenant):
-            async for header, records in migration._records(tenant):
-                if tuple(key_values(header.source_key).values()) in changed:
-                    async with application._session() as session, session.begin():
-                        await migration.sources.aload(session, header=header, records=records)
+            async for header, records in validation._records(tenant):
+                async with application._session() as session, session.begin():
+                    await validation.sources.aload(session, header=header, records=records)
     payload = {
         "registration_contract": 1,
         **application._identity(frozen),
@@ -286,13 +300,18 @@ async def run_registration(application, *, apply=False, **inputs):
         async with application._session() as session, session.begin():
             run = await application._scope_run(session, frozen)
             checkpoint = run.checkpoints.get("backfilling", {}).get("registration_plan")
+        extension_ref = None
         if checkpoint is not None:
             descriptor = json.loads(checkpoint["cursor"])
             stored = json.loads(
                 await application.store.aload_canonical(descriptor, run_id=frozen.run_id, kind="verification")
             )
-            if stored["records"] != [json.loads(canonical(payload))] or checkpoint["digest"] != digest(payload):
+            original = stored["records"][0]
+            if checkpoint["digest"] != digest(original) or checkpoint["complete"] is not True:
                 blocked("registration_delta_changed")
+            extension_ref = await bind_channel_extension(
+                application, frozen, plan, original, payload, descriptor, checkpoint["digest"], apply=apply
+            )
         if apply and checkpoint is None:
             descriptor = await application.store.aput_canonical(
                 run_id=frozen.run_id,
@@ -341,7 +360,13 @@ async def run_registration(application, *, apply=False, **inputs):
         "tenant_ids": list(frozen.tenant_ids),
         "source_count": len(plan.sources),
         "retired_count": len(plan.retired),
-        "app_revision_differences": len(delta["overrides"]),
+        "app_revision_differences": sum(
+            r["key"]["source_type"] == SourceType.HOSTED_APP_VERSION for r in delta["overrides"]
+        ),
+        "channel_revision_differences": sum(
+            r["key"]["source_type"] == SourceType.CHANNEL_SYNC for r in delta["overrides"]
+        ),
+        "registration_extension_ref": extension_ref,
         "retained_added_sources": len(delta["added"]),
         "registration_plan_ref": descriptor,
         "registration_complete": apply,
@@ -351,3 +376,103 @@ async def run_registration(application, *, apply=False, **inputs):
     }
     logger.info("reference_registration result={}", json.dumps(result))
     return result
+
+
+async def bind_channel_extension(application, frozen, plan, original, payload, base_ref, base_digest, *, apply):
+    """Append only uncommitted channel timestamp facts to an existing proof."""
+    async with application._session() as session, session.begin():
+        run = await application._scope_run(session, frozen)
+        checkpoint = run.checkpoints.get("backfilling", {}).get("registration_plan_extension")
+    if json.loads(canonical(payload)) == original:
+        if checkpoint is not None:
+            blocked("registration_extension_facts_disappeared")
+        return None
+    original_keys = {
+        tuple(r["key"][k] for k in ("tenant_id", "source_type", "source_id", "source_version"))
+        for r in original["overrides"]
+    }
+    additions = [
+        r
+        for r in payload["overrides"]
+        if r["key"]["source_type"] == SourceType.CHANNEL_SYNC
+        and tuple(r["key"][k] for k in ("tenant_id", "source_type", "source_id", "source_version")) not in original_keys
+    ]
+    equivalent = {**payload, "overrides": [r for r in payload["overrides"] if r not in additions]}
+    if not additions or json.loads(canonical(equivalent)) != original:
+        blocked("registration_delta_changed")
+    prefixes = {}
+    for tenant in frozen.tenant_ids:
+        with tenant_execution_scope(tenant):
+            async with application._session() as session, session.begin():
+                run = await application._scope_run(session, frozen)
+                cp = run.checkpoints.get("backfilling", {}).get("references", {})
+                prefixes[str(tenant)] = {"processed_count": cp.get("processed_count", 0), "digest": cp.get("digest")}
+    if checkpoint is not None:
+        ref = json.loads(checkpoint["cursor"])
+        artifact = json.loads(await application.store.aload_canonical(ref, run_id=frozen.run_id, kind="verification"))
+        recorded = artifact["records"][0]
+        if (
+            checkpoint["digest"] != digest(recorded)
+            or checkpoint["complete"] is not True
+            or recorded
+            != {
+                **application._identity(frozen),
+                "registration_contract": 2,
+                "base_plan_ref": base_ref,
+                "base_digest": base_digest,
+                "overrides": json.loads(canonical(additions)),
+                "resume_prefixes": recorded.get("resume_prefixes"),
+            }
+        ):
+            blocked("registration_extension_changed")
+        for tenant, before in recorded["resume_prefixes"].items():
+            current = prefixes[tenant]
+            if current["processed_count"] < before["processed_count"] or (
+                current["processed_count"] == before["processed_count"]
+                and before["digest"] is not None
+                and current != before
+            ):
+                blocked("registration_extension_prefix_changed")
+        return ref
+    addition_keys = {
+        tuple(r["key"][k] for k in ("tenant_id", "source_type", "source_id", "source_version")) for r in additions
+    }
+    ordinals = dict.fromkeys(frozen.tenant_ids, 0)
+    for entry in plan.sources:
+        key = entry.header.source_key
+        ordinals[key.tenant_id] += 1
+        if (
+            tuple(key_values(key).values()) in addition_keys
+            and ordinals[key.tenant_id] <= prefixes[str(key.tenant_id)]["processed_count"]
+        ):
+            blocked("registration_extension_touches_committed_source")
+    if not apply:
+        return None
+    record = {
+        **application._identity(frozen),
+        "registration_contract": 2,
+        "base_plan_ref": base_ref,
+        "base_digest": base_digest,
+        "overrides": additions,
+        "resume_prefixes": prefixes,
+    }
+    ref = await application.store.aput_canonical(
+        run_id=frozen.run_id,
+        kind="verification",
+        content=canonical({"schema_version": 1, "run_id": frozen.run_id, "kind": "verification", "records": [record]}),
+    )
+    async with application._session() as session, session.begin():
+        await application.runs.acheckpoint(
+            session,
+            **application._identity(frozen),
+            expected_phase="backfilling",
+            checkpoint_key="registration_plan_extension",
+            expected_checkpoint=None,
+            checkpoint={
+                "cursor": canonical(ref).decode(),
+                "processed_count": 1,
+                "digest": digest(record),
+                "complete": True,
+            },
+        )
+    return ref

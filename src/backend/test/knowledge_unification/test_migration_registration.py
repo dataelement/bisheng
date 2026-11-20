@@ -6,6 +6,7 @@ import pytest
 import sqlalchemy as sa
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ReferenceCoverageNotReadyError
+from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.knowledge.application.unification_coverage import production_coverage_factory
 from bisheng.knowledge.application.unification_registration import run_registration
 from bisheng.knowledge.domain.models.knowledge_unification_run import KnowledgeUnificationRun as Run
@@ -384,3 +385,143 @@ async def test_only_required_source_leaves_are_revalidated(published_input, sect
             assert not (await session.execute(sa.select(Head.id))).all()
     else:
         assert (await run_registration(application, apply=True, **value.input, operator_id=7))["registration_complete"]
+
+
+async def seed_channel_and_workflow(database):
+    from sqlmodel.ext.asyncio.session import AsyncSession
+
+    from bisheng.database.models.flow_version import FlowVersion
+    from test.knowledge_unification import test_migration_inventory_repository as raw
+
+    async with AsyncSession(database.engine) as session, session.begin():
+        session.add(raw.channel("registration-channel"))
+        session.add(
+            FlowVersion(
+                id=650001,
+                tenant_id=101,
+                flow_id="zero-version",
+                name="v",
+                flow_type=10,
+                is_delete=0,
+                is_current=1,
+                data={"nodes": [], "edges": []},
+            )
+        )
+
+
+@pytest.mark.parametrize("published_input", [{"reference_seed": seed_channel_and_workflow}], indirect=True)
+async def test_channel_timestamp_extension_keeps_original_proof_and_committed_prefix(published_input, monkeypatch):
+    from datetime import datetime
+
+    from bisheng.channel.domain.models.channel import Channel
+    from bisheng.resource_reference.domain.repositories.reference_backfill_repository import ReferenceBackfillRepository
+
+    value = published_input
+    application = await prepared(value)
+    original_write = ReferenceBackfillRepository.awrite_registered_source
+
+    async def fail_at_channel(self, session, **kwargs):
+        if kwargs["source_key"].source_type == "channel_sync":
+            raise KnowledgeOperationPlanConflictError(reason="channel_stop")
+        return await original_write(self, session, **kwargs)
+
+    monkeypatch.setattr(ReferenceBackfillRepository, "awrite_registered_source", fail_at_channel)
+    with pytest.raises(KnowledgeOperationPlanConflictError):
+        await run_registration(application, apply=True, **value.input, operator_id=7)
+    async with value.sessions() as session, session.begin():
+        rows = (await session.execute(sa.select(Run))).scalars().all()
+        with bypass_tenant_filter():
+            rows = (await session.execute(sa.select(Run))).scalars().all()
+        first = next(r for r in rows if r.tenant_id == 1)
+        frozen_checkpoint = dict(first.checkpoints["backfilling"]["registration_plan"])
+        tenant = next(r for r in rows if r.tenant_id == 101)
+        assert tenant.checkpoints["backfilling"]["references"]["processed_count"] == 1
+        await session.execute(
+            sa.update(Channel.__table__)
+            .where(Channel.id == "registration-channel")
+            .values(update_time=datetime(2026, 11, 20, 12))
+        )
+    written = []
+
+    async def capture(self, session, **kwargs):
+        written.append(kwargs["source_key"].source_type.value)
+        return await original_write(self, session, **kwargs)
+
+    monkeypatch.setattr(ReferenceBackfillRepository, "awrite_registered_source", capture)
+    result = await run_registration(application, apply=True, **value.input, operator_id=7)
+    assert result["channel_revision_differences"] == 1 and result["registration_extension_ref"]
+    assert "workflow_version" not in written
+    async with value.sessions() as session, session.begin():
+        with bypass_tenant_filter():
+            row = (await session.execute(sa.select(Run).where(Run.tenant_id == 1))).scalar_one()
+        assert row.checkpoints["backfilling"]["registration_plan"] == frozen_checkpoint
+        assert row.checkpoints["backfilling"]["registration_plan_extension"]["complete"]
+    assert (await run_registration(application, apply=True, **value.input, operator_id=7))[
+        "registration_extension_ref"
+    ] == result["registration_extension_ref"]
+    async with value.sessions() as session, session.begin():
+        await session.execute(
+            sa.update(Channel.__table__)
+            .where(Channel.id == "registration-channel")
+            .values(update_time=datetime(2026, 11, 20, 13))
+        )
+    with pytest.raises(KnowledgeOperationPlanConflictError) as caught:
+        await run_registration(application, apply=True, **value.input, operator_id=7)
+    assert caught.value.kwargs["reason"].endswith("extension_changed")
+
+
+@pytest.mark.parametrize("published_input", [{"reference_seed": seed_channel_and_workflow}], indirect=True)
+@pytest.mark.parametrize("field,content", [("user_id", 8), ("is_released", True)])
+async def test_channel_owner_or_release_change_is_never_timestamp_repair(published_input, field, content):
+    from bisheng.channel.domain.models.channel import Channel
+
+    value = published_input
+    application = await prepared(value)
+    async with value.sessions() as session, session.begin():
+        await session.execute(
+            sa.update(Channel.__table__).where(Channel.id == "registration-channel").values(**{field: content})
+        )
+    with pytest.raises(KnowledgeOperationPlanConflictError) as caught:
+        await run_registration(application, apply=True, **value.input, operator_id=7)
+    assert caught.value.kwargs["reason"].endswith("channel_identity_changed")
+
+
+@pytest.mark.parametrize("published_input", [{"reference_seed": seed_channel_and_workflow}], indirect=True)
+async def test_channel_binding_change_is_not_timestamp_repair(published_input):
+    from bisheng.channel.domain.models.channel_knowledge_sync import ChannelKnowledgeSync
+
+    value = published_input
+    application = await prepared(value)
+    async with value.sessions() as session, session.begin():
+        session.add(
+            ChannelKnowledgeSync(
+                id="changed-link",
+                channel_id="registration-channel",
+                knowledge_space_id="9000",
+                user_id=7,
+                is_enabled=False,
+            )
+        )
+    with pytest.raises(KnowledgeOperationPlanConflictError) as caught:
+        await run_registration(application, apply=True, **value.input, operator_id=7)
+    assert caught.value.kwargs["reason"].endswith("actual_source_after_changed")
+
+
+@pytest.mark.parametrize("published_input", [{"reference_seed": seed_channel_and_workflow}], indirect=True)
+async def test_new_channel_extension_cannot_rebase_an_already_committed_source(published_input):
+    from datetime import datetime
+
+    from bisheng.channel.domain.models.channel import Channel
+
+    value = published_input
+    application = await prepared(value)
+    await run_registration(application, apply=True, **value.input, operator_id=7)
+    async with value.sessions() as session, session.begin():
+        await session.execute(
+            sa.update(Channel.__table__)
+            .where(Channel.id == "registration-channel")
+            .values(update_time=datetime(2026, 11, 21))
+        )
+    with pytest.raises(KnowledgeOperationPlanConflictError) as caught:
+        await run_registration(application, apply=True, **value.input, operator_id=7)
+    assert caught.value.kwargs["reason"].endswith("extension_touches_committed_source")

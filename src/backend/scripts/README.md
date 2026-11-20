@@ -1865,7 +1865,11 @@ in a separate immutable artifact bound to `backfilling.registration_plan`; the
 original baseline and plan are unchanged. New post-freeze workflow/channel sources
 are retained only when their existing native index matches their real configuration.
 App revision changes are accepted only with unchanged owner, root lifecycle,
-capability configuration and references. Unexpected changes stop with a reason.
+capability configuration and references. The same timestamp-only rule applies
+to channels with unchanged owner, release state, complete sync configuration and
+references. Existing proofs remain immutable: a channel-only extension for
+uncommitted sources is bound through `registration_plan_extension`, with the
+original proof and resume cursor retained. Unexpected changes stop with a reason.
 
 Registration and its cursor commit together. Same-mode resume skips the committed
 prefix and continues outstanding sources/retirements; progress is logged at most
