@@ -1651,14 +1651,11 @@
     "@typescript-eslint/no-explicit-any": {
       "count": 11
     },
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 1
-    },
     "@typescript-eslint/no-unused-vars": {
-      "count": 4
+      "count": 3
     },
     "react-hooks/exhaustive-deps": {
-      "count": 5
+      "count": 4
     }
   },
   "src/pages/Dashboard/components/config/DashboardConfigPanel.tsx": {
