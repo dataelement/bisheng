@@ -153,7 +153,9 @@ class TestE2EF004UnifiedAgentRuntime:
             return await get_user_token(client, OTHER_USER, OTHER_PASSWORD)
         except AssertionError:
             # First run on this environment: the user does not exist yet.
-            await create_test_user(client, owner, username=OTHER_USER, role_id=2, password=OTHER_PASSWORD)
+            await create_test_user(
+                client, owner, username=OTHER_USER, role_id=2, password=OTHER_PASSWORD, management_tenant=TENANT
+            )
             return await get_user_token(client, OTHER_USER, OTHER_PASSWORD)
 
     async def _new_conversation(self, client, owner, text="只回复两个字：收到") -> tuple[dict, list[dict]]:
@@ -353,7 +355,9 @@ class TestE2EF004OpenApiDailyChat:
             return await get_user_token(client, OTHER_USER, OTHER_PASSWORD)
         except AssertionError:
             admin = await get_admin_token(client)
-            await create_test_user(client, admin, username=OTHER_USER, role_id=2, password=OTHER_PASSWORD)
+            await create_test_user(
+                client, admin, username=OTHER_USER, role_id=2, password=OTHER_PASSWORD, management_tenant=TENANT
+            )
             return await get_user_token(client, OTHER_USER, OTHER_PASSWORD)
 
     @pytest.fixture
