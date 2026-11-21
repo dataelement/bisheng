@@ -29,9 +29,9 @@ from ..models.user_role import UserRoleDao
 
 logger = logging.getLogger(__name__)
 
-# Department admins always receive the admin-console parent and system menu.
+# Organization administrators receive the admin-console parent and system menu.
 # All other business menus continue to come from role or personal grants.
-_DEPARTMENT_ADMIN_WEB_MENU_SYSTEM = frozenset({"admin", "system_config", "sys"})
+_ORGANIZATION_ADMIN_WEB_MENU_SYSTEM = frozenset({"admin", "system_config", "sys"})
 
 # Disabled parent menu sections keep stored child grants inactive, matching Roles.tsx.
 _WORKBENCH_ENTRY_KEYS = frozenset({"workstation", "frontend"})
@@ -693,6 +693,17 @@ class LoginUser(BaseModel):
         return login_user
 
     @classmethod
+    async def is_home_tenant_admin(cls, user_id: int, *, policy=None) -> bool:
+        """Verify administration of the person's actual home, never a management view."""
+        from bisheng.permission.application import is_tenant_admin
+        from bisheng.role.application.effective_roles import load_effective_roles
+
+        policy = policy or await load_effective_roles(user_id)
+        if policy.home_tenant_id == DEFAULT_TENANT_ID or policy.is_identity_admin:
+            return False
+        return await is_tenant_admin(user_id, policy.home_tenant_id)
+
+    @classmethod
     async def get_roles_web_menu(
         cls,
         user: User,
@@ -704,9 +715,9 @@ class LoginUser(BaseModel):
         """Resolve role key(s) and web_menu.
 
         - AC-13: multi-role web_menu is the **union** of each role's WEB_MENU entries.
-        - Department admins always get the system menu; business menus still come from
-          role or personal grants.
-        - ``system_config`` is only granted via super-admin or department-admin; it is
+        - Department and home-tenant admins get the admin parent and system menu;
+          ordinary role IDs and business grants stay unchanged.
+        - ``system_config`` is only granted via verified organizational administration; it is
           stripped for other users even if legacy role_access rows exist.
         """
         from bisheng.role.application.effective_roles import load_effective_roles
@@ -730,8 +741,13 @@ class LoginUser(BaseModel):
                     policy.home_tenant_id, user.user_id
                 )
             web_menu = list(set(web_menu) | set(personal_menu))
-            if is_department_admin:
-                web_menu = list(set(web_menu) | set(_DEPARTMENT_ADMIN_WEB_MENU_SYSTEM))
+            tenant_admin = await cls.is_home_tenant_admin(user.user_id, policy=policy)
+            if is_department_admin or tenant_admin:
+                web_menu = list(set(web_menu) | set(_ORGANIZATION_ADMIN_WEB_MENU_SYSTEM))
+                if tenant_admin:
+                    # Verified home-tenant administration includes application
+                    # creation; ordinary role IDs and resource grants stay intact.
+                    web_menu = list(set(web_menu) | {"build", WebMenuResource.CREATE_APP.value})
             else:
                 web_menu = [m for m in web_menu if m not in ("system_config", "sys")]
             web_menu = _effective_web_menu_strip_orphans(web_menu)
@@ -825,11 +841,13 @@ class LoginUser(BaseModel):
             policy=policy,
             is_department_admin=is_department_admin,
         )
-        # Regular users (neither super-admin nor department admin) prefer 工作台
+        # Regular users (without organizational administration) prefer 工作台
         # when they have workbench access — even if their role also carries
         # admin-console menus (e.g. legacy default roles) — so login doesn't drop
         # them into 管理后台. `and` short-circuits the dept-admin FGA call for supers.
-        prefer_workbench = (not is_super) and not bool(is_department_admin)
+        prefer_workbench = (
+            not is_super and not is_department_admin and not await cls.is_home_tenant_admin(user.user_id, policy=policy)
+        )
         return {
             "has_workbench": hw,
             "has_admin_console": ha,

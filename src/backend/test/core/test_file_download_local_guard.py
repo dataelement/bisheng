@@ -81,10 +81,35 @@ def test_query_string_is_stripped_before_the_check(roots):
         utils.file_download(f"{f}?X-Amz-Algorithm=AWS4")
 
 
-def test_default_roots_cover_cache_and_tempdir():
+def test_default_roots_only_cover_download_cache():
     import tempfile
     from pathlib import Path
 
     resolved = {r.resolve() for r in utils._LOCAL_FILE_ROOTS}
     assert Path(utils.CACHE_DIR).resolve() in resolved
-    assert Path(tempfile.gettempdir()).resolve() in resolved
+    assert Path(tempfile.gettempdir()).resolve() not in resolved
+
+
+def test_workflow_image_variable_cannot_open_an_untrusted_temp_path(tmp_path):
+    from bisheng.workflow.nodes.base import BaseNode
+
+    file = tmp_path / "image.txt"
+    file.write_bytes(b"inert-local-data")
+    with pytest.raises(ValueError):
+        BaseNode.get_file_base64_data(str(file))
+
+
+def test_workflow_image_variable_retains_trusted_download_cache(monkeypatch, roots):
+    from bisheng.workflow.nodes.base import BaseNode
+
+    allowed, _ = roots
+    file = allowed / "cached_image.png"
+    file.write_bytes(b"image")
+    assert BaseNode.get_file_base64_data(str(file)) == "aW1hZ2U="
+
+
+def test_unrelated_temp_owner_file_is_not_a_download_capability(tmp_path):
+    file = tmp_path / "other-owner-private.txt"
+    file.write_bytes(b"inert-owner-fixture")
+    with pytest.raises(ValueError):
+        utils.file_download(str(file))

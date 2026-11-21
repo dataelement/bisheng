@@ -203,6 +203,70 @@ class KnowledgeUtils(BaseService):
                 chunk_info = json.loads(chunk_info)
             return chunk_info
 
+    violation_display_prefix = "knowledge:violation_display:"
+
+    @classmethod
+    def violation_display_key(cls, file_id: int) -> str:
+        return f"{cls.violation_display_prefix}{int(file_id)}"
+
+    @classmethod
+    def save_violation_display_chunks(cls, file_id: int, documents) -> None:
+        """Store parse segments that must stay out of the retrieval index.
+
+        A missing key means the segments have not been built. An empty hash
+        field marks a file whose segments were built and are empty, so the
+        detail read does not parse the original again on every request.
+        """
+        redis_client = get_redis_client_sync()
+        key = cls.violation_display_key(file_id)
+        redis_client.delete(key)
+        mapping: dict[str, str] = {}
+        for index, doc in enumerate(documents or []):
+            metadata = getattr(doc, "metadata", None) or {}
+            if not isinstance(metadata, dict):
+                metadata = {}
+            chunk_index = metadata.get("chunk_index", index)
+            if isinstance(chunk_index, bool) or not isinstance(chunk_index, int):
+                chunk_index = index
+            text = getattr(doc, "page_content", "")
+            if not isinstance(text, str):
+                text = ""
+            bbox = metadata.get("bbox") if isinstance(metadata.get("bbox"), str) else ""
+            page = metadata.get("page") if isinstance(metadata.get("page"), int) else 0
+            mapping[str(chunk_index)] = json.dumps(
+                {"text": text, "chunk_index": chunk_index, "bbox": bbox, "page": page},
+                ensure_ascii=False,
+            )
+        if not mapping:
+            mapping["__empty__"] = "1"
+        redis_client.hset(key, mapping=mapping, expiration=0)
+
+    @classmethod
+    def load_violation_display_chunks(cls, file_id: int) -> list[dict] | None:
+        redis_client = get_redis_client_sync()
+        raw = redis_client.hgetall(cls.violation_display_key(file_id)) or {}
+        if not raw:
+            return None
+        items = []
+        for field, value in raw.items():
+            if isinstance(field, bytes):
+                field = field.decode()
+            if isinstance(value, bytes):
+                value = value.decode()
+            if field == "__empty__":
+                continue
+            payload = json.loads(value)
+            if isinstance(payload, dict) and isinstance(payload.get("text"), str):
+                items.append(payload)
+        items.sort(key=lambda item: item.get("chunk_index", 0))
+        return items
+
+    @classmethod
+    def delete_violation_display_chunks(cls, file_ids) -> None:
+        redis_client = get_redis_client_sync()
+        for file_id in file_ids or []:
+            redis_client.delete(cls.violation_display_key(file_id))
+
     @classmethod
     async def async_get_preview_cache(cls, cache_key, chunk_index: int | None = None) -> dict:
         redis_client = await get_redis_client()
@@ -300,7 +364,7 @@ class KnowledgeUtils(BaseService):
         tenant_id: int | None = None,
     ) -> tuple[BaseChatModel | None, KnowledgeLLMConfig | None]:
         """Get a summary of the knowledge basechunkright of privacy llmObjects"""
-        knowledge_llm = LLMService.get_knowledge_llm(tenant_id=tenant_id)
+        knowledge_llm = LLMService.get_knowledge_llm(tenant_id=tenant_id, slots=("extract_title_model_id",))
         if not knowledge_llm.abstract_enabled or not knowledge_llm.extract_title_model_id:
             # No related configurations
             return None, None

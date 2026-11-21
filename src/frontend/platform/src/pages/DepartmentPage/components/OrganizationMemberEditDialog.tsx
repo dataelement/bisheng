@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { departmentDisplayName } from "@/components/bs-comp/department/departmentDisplayName";
 import { Tooltip as SharedTooltip, TooltipProvider as SharedTooltipProvider } from '@bisheng/ui';
 import { Button, Input, Select, notification } from '@bisheng/ui';
@@ -209,7 +210,9 @@ export function OrganizationMemberEditDialog({
   const handleDeleteLocalMember = useCallback(() => {
     if (!member || !form) return
     bsConfirm({
+      variant: "destructive",
       desc: t("bs:department.deleteLocalMemberConfirm"),
+      okTxt: t("bs:department.deleteLocalMember"),
       onOk: async (close) => {
         const chk = await checkDepartmentMemberDeleteApi(deptId, member.user_id)
         if (chk?.has_assets) {
@@ -334,9 +337,7 @@ export function OrganizationMemberEditDialog({
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         {loading || !form ? (
-          <div className="py-10 text-center text-muted-foreground">
-            {t("bs:department.memberEditLoading")}
-          </div>
+          <LoadingState size="panel" label={t("bs:department.memberEditLoading")} className="py-10 text-center text-muted-foreground" />
         ) : (
           <div className="min-w-0 space-y-4 py-1">
             <div>

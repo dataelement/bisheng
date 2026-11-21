@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
@@ -68,7 +69,7 @@ const scope: KnowledgeQueryScope = {
   view: "ordinary",
 };
 const clients: QueryClient[] = [];
-function mount() {
+function mount(onBack?: () => void) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -76,7 +77,7 @@ function mount() {
   const element = (value: KnowledgeQueryScope) => (
     <MemoryRouter>
       <QueryClientProvider client={client}>
-        <SpaceFileUploadPanel scope={value} spaceId={7} parentId={9} />
+        <SpaceFileUploadPanel scope={value} spaceId={7} parentId={9} onBack={onBack} />
       </QueryClientProvider>
     </MemoryRouter>
   );
@@ -161,15 +162,36 @@ it("loads effective rules for the actual folder eagerly and stages without proce
     screen.getByRole("checkbox", { name: "keepImages" }),
   ).not.toBeChecked();
 });
-it("submits the same manual rule and edited preview revision only after comparison confirmation", async () => {
+it("enables comparison next once the preview is on screen", async () => {
+  mocks.get.mockImplementation(async (url: string) => {
+    if (url.endsWith("/upload-settings")) return uploadSettings();
+    if (url.includes("/previews/")) return preview();
+    throw new Error(`unexpected read ${url}`);
+  });
   mount();
   await drop();
   fireEvent.click(screen.getByRole("button", { name: "nextStep" }));
+  fireEvent.click(await screen.findByRole("button", { name: "nextStep" }));
+  await screen.findByText("original-preview");
+  await screen.findByText("original chunk");
+  expect(screen.getByRole("button", { name: "nextStep" })).toBeEnabled();
+});
+it("submits the same manual rule and edited preview revision only after comparison confirmation", async () => {
+  const onBack = vi.fn();
+  mount(onBack);
+  await drop();
+  const footer = screen.getByRole("button", { name: "nextStep" }).closest("footer");
+  expect(footer).toBeInTheDocument();
+  const actions = within(footer!);
+  expect(actions.getByRole("button", { name: "uploadDirectly" })).toBeEnabled();
+  fireEvent.click(actions.getByRole("button", { name: "nextStep" }));
+  expect(actions.getByRole("button", { name: "previousStep" })).toBeEnabled();
+  expect(actions.getByRole("button", { name: "uploadDirectlyDefaults" })).toBeEnabled();
   fireEvent.change(
     await screen.findByRole("spinbutton", { name: "splitLength" }),
     { target: { value: "456" } },
   );
-  fireEvent.click(screen.getByRole("button", { name: "nextStep" }));
+  fireEvent.click(actions.getByRole("button", { name: "nextStep" }));
   await screen.findByText("original-preview");
   fireEvent.click(await screen.findByRole("button", { name: "edit-chunk" }));
   await screen.findByText("edited chunk");
@@ -180,9 +202,9 @@ it("submits the same manual rule and edited preview revision only after comparis
     { signal: expect.any(AbortSignal) },
   ]);
   await waitFor(() =>
-    expect(screen.getByRole("button", { name: "nextStep" })).toBeEnabled(),
+    expect(actions.getByRole("button", { name: "nextStep" })).toBeEnabled(),
   );
-  fireEvent.click(screen.getByRole("button", { name: "nextStep" }));
+  fireEvent.click(actions.getByRole("button", { name: "nextStep" }));
   await waitFor(() => expect(registers()).toHaveLength(1));
   const body = registers()[0][1];
   expect(body.overrides.document.chunk_size).toBe(456);
@@ -194,6 +216,9 @@ it("submits the same manual rule and edited preview revision only after comparis
   expect(body.upload_context.items[0].overrides).toEqual(
     previews()[0][1].overrides,
   );
+  expect(actions.queryByRole("button", { name: "nextStep" })).not.toBeInTheDocument();
+  fireEvent.click(actions.getByRole("button", { name: "backToKnowledge" }));
+  expect(onBack).toHaveBeenCalledTimes(1);
 });
 it("keeps manual changes when returning to strategy, and direct upload deliberately uses space defaults", async () => {
   mount();

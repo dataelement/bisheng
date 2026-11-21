@@ -70,7 +70,7 @@ export default function SystemPage() {
                   children: (
                     <>
                       {" "}
-                      <div className="min-h-0 flex-1 overflow-hidden">
+                      <div className="!mt-0 min-h-0 flex-1 overflow-hidden">
                         <OrganizationAndMembers />
                       </div>
                     </>

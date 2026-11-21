@@ -33,6 +33,7 @@ from test.workflow.memory_fixtures import (  # noqa: F401  (fixtures)
     memory_runtime_config,
     register_chat,
     retriever_node,
+    run_tasks_in_flow_tenant,
     seed_online_workflow,
     service,
     wired,
@@ -243,6 +244,7 @@ def worker(monkeypatch):
         return wf
 
     monkeypatch.setattr(tasks, "Workflow", _capture)
+    run_tasks_in_flow_tenant(monkeypatch, tasks)
     return SimpleNamespace(tasks=tasks, built=built)
 
 

@@ -83,11 +83,10 @@ export default function ToolsSheet({ select, onSelect, children }) {
                             {type === 'mcp' && <Button className="mt-4" onClick={() => window.open(__APP_ENV__.BASE_URL + "/build/tools?c=mcp")}>
                                 {t("tools.addMcpServer")}
                             </Button>}
-                            {type === 'mcp' && <Button variant="outlined" disabled={loading} className="mt-4 ml-4" onClick={async () => {
+                            {type === 'mcp' && <Button variant="outlined" loading={loading} className="mt-4 ml-4" onClick={async () => {
                                     await refresh()
                                     loadMData()
                                 }} color="default">
-                                {loading && <Outlined.Loading className="animate-spin text-gray-800" />}
                                 {t("tools.refresh")}
                             </Button>}
                         </div>

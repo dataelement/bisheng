@@ -8,16 +8,25 @@ import {
 } from '@/controllers/API/modelPricing'
 import { getDshRequestErrorKey } from '@/utils/dshRequestError'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { managementRequestScope } from '@/controllers/managementScope'
+import { useContext } from 'react'
+import { userContext } from '@/contexts/userContext'
 
 const creditSettingsKey = ['dsh-credit-pricing', 'settings'] as const
 const modelPricingKey = ['dsh-credit-pricing', 'models'] as const
+function usePricingScope() {
+    const { user } = useContext(userContext)
+    return [user?.user_id, managementRequestScope()]
+}
 // Prices and ratios change from other pages (model configuration), so always read them fresh.
 const fresh = { retry: false, cacheTime: 0, staleTime: 0, refetchOnWindowFocus: false } as const
 
 export function useCreditSettings(enabled = true) {
     const client = useQueryClient()
+    const scope = usePricingScope()
+    const scopedKey = [...creditSettingsKey, ...scope]
     const settings = useQuery({
-        queryKey: creditSettingsKey,
+        queryKey: scopedKey,
         queryFn: ({ signal }) => getCreditSettings(signal),
         enabled,
         ...fresh,
@@ -26,7 +35,7 @@ export function useCreditSettings(enabled = true) {
         mutationFn: (value: CreditSettings) => saveCreditSettings(value),
         retry: false,
         onSuccess: (value) => {
-            client.setQueryData(creditSettingsKey, value)
+            client.setQueryData(scopedKey, value)
             // Ratios and converted prices depend on the base model, the currency and the rate.
             void client.invalidateQueries({ queryKey: modelPricingKey })
         },
@@ -35,8 +44,9 @@ export function useCreditSettings(enabled = true) {
 }
 
 export function useModelPricingRows(enabled: boolean) {
+    const scope = usePricingScope()
     return useQuery({
-        queryKey: modelPricingKey,
+        queryKey: [...modelPricingKey, ...scope],
         queryFn: ({ signal }) => getModelPricingRows(signal),
         select: (rows) => new Map(rows.map(row => [row.model_id, row])),
         enabled,

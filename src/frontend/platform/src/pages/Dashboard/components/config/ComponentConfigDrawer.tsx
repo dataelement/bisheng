@@ -32,6 +32,9 @@ export function useComponentConfigController() {
   const [limitValue, setLimitValue] = useState("1000")
   // 数据集字段
   const [datasetFields, setDatasetFields] = useState<DatasetField[]>([])
+  const [datasetDraft, setDatasetDraft] = useState<string | null>(null)
+  const selectedDatasetCode = datasetDraft ?? editingComponent?.dataset_code
+  const hasDatasetDraft = selectedDatasetCode !== editingComponent?.dataset_code
   // 对话框状态
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [filterDialogOpen, setFilterDialogOpen] = useState(false)
@@ -79,6 +82,7 @@ export function useComponentConfigController() {
     return field.isVirtual === true
   }
   useEffect(() => {
+    setDatasetDraft(null)
     if (editingComponent) {
       // 从组件配置中获取时间范围
       const timeFilter = editingComponent.data_config?.timeFilter;
@@ -247,12 +251,10 @@ export function useComponentConfigController() {
     }
   }, [editingComponent, categoryDimensions, stackDimensions, valueDimensions, currentChartHasStack, chartState, t])
   const invalidFieldIds = useMemo(() => {
-    const validSet = new Set(
-      datasetFields.map(f => f.fieldId || f.fieldCode || f.fieldName).filter(Boolean)
-    )
+    const fieldsByRole = new Set(datasetFields.map(field => `${field.role}:${field.fieldCode}`))
     return new Set(
       [...categoryDimensions, ...stackDimensions, ...valueDimensions]
-        .filter(d => !validSet.has(d.fieldId))
+        .filter(d => !fieldsByRole.has(`${d.fieldType}:${d.fieldId}`))
         .map(d => d.id)
     )
   }, [datasetFields, categoryDimensions, stackDimensions, valueDimensions])
@@ -263,20 +265,12 @@ export function useComponentConfigController() {
       setIsMetricCard(true)
     }
   }, [chartType])
-  editingComponent?.dataset_code
-  // 数据集改变
   const handleDatasetChange = useCallback((datasetCode: string) => {
-    if (editingComponent) {
-      updateEditingComponent({ dataset_code: datasetCode })
-      // 只有当数据集真正改变时才重置
-      if (editingComponent.dataset_code !== datasetCode) {
-        setFilterGroup({
-          logic: "and",
-          conditions: []
-        })
-      }
-    }
-  }, [editingComponent, updateEditingComponent, setFilterGroup])
+    if (!editingComponent || selectedDatasetCode === datasetCode) return
+    setDatasetDraft(datasetCode)
+    setDatasetFields([])
+    setFilterGroup({ logic: "and", conditions: [] })
+  }, [editingComponent, selectedDatasetCode, setFilterGroup])
   // 拖拽开始
   const handleDragStart = useCallback((e: React.DragEvent, data: any) => {
     e.dataTransfer.setData('application/json', JSON.stringify(data))
@@ -329,7 +323,7 @@ export function useComponentConfigController() {
     }
   }, [filterGroup, handleAddFilter])
   const handleSaveFilter = useCallback((newFilterGroup: any) => {
-    if (editingComponent) {
+    if (editingComponent && !hasDatasetDraft) {
       // 获取当前的数据配置
       const currentDataConfig = editingComponent.data_config || {}
       updateEditingComponent({
@@ -342,7 +336,7 @@ export function useComponentConfigController() {
     }
     setFilterGroup(newFilterGroup)
     setFilterDialogOpen(false)
-  }, [])
+  }, [editingComponent, hasDatasetDraft, setFilterGroup, updateEditingComponent])
   // 切换折叠
   const toggleCollapse = useCallback((section: keyof typeof configCollapsed) => {
     setConfigCollapsed(prev => ({ ...prev, [section]: !prev[section] }))
@@ -374,8 +368,11 @@ export function useComponentConfigController() {
     if (valueDimensions.some(dim => invalidFieldIds.has(dim.id))) {
       return { isValid: false, errorKey: 'invalidMetricFields' };
     }
-    if (!editingComponent.dataset_code) {
+    if (!selectedDatasetCode) {
       return { isValid: false, errorKey: 'datasetRequired' };
+    }
+    if (hasDatasetDraft && stackDimensions.some(dim => invalidFieldIds.has(dim.id))) {
+      return { isValid: false, errorKey: 'invalidCategoryFields' };
     }
     // if (currentChartHasStack && stackDimensions.length === 0) {
     //   return { isValid: false, errorKey: 'stackRequired' };
@@ -385,7 +382,7 @@ export function useComponentConfigController() {
   // 更新图表 - 添加校验
   const handleUpdateChart = useCallback((e) => {
     if (!editingComponent) return
-    if (e.isTrusted) {
+    if (e.isTrusted || hasDatasetDraft) {
       const { isValid, errorKey } = validateChartConfig({
         editingComponent,
         chartType,
@@ -397,7 +394,7 @@ export function useComponentConfigController() {
         invalidFieldIds
       });
       if (!isValid) {
-        if (errorKey) {
+        if (e.isTrusted && errorKey) {
           notification.open({ type: "error", description: String(t(`componentConfigDrawer.validation.${errorKey}`) ?? '') });
         }
         return;
@@ -420,13 +417,14 @@ export function useComponentConfigController() {
       type: chartType,
       title: finalStyleConfig.title || dataConfig.metrics[0].fieldName,
       style_config: finalStyleConfig,
-      dataset_code: editingComponent.dataset_code
+      dataset_code: selectedDatasetCode
     })
+    setDatasetDraft(null)
     if (e.isTrusted) {
       refreshChart(editingComponent.id)
       notification.open({ type: "success", description: String(t("componentConfigDrawer.dialog.chartUpdated") ?? '') })
     }
-  }, [editingComponent, chartType, title, styleConfig, limitType, limitValue, getDataConfig, updateEditingComponent, refreshChart, categoryDimensions, valueDimensions, stackDimensions, currentChartHasStack, invalidFieldIds, sortPriorityFields, chartState.sortPriorityOrder, t])
+  }, [editingComponent, selectedDatasetCode, hasDatasetDraft, chartType, title, styleConfig, limitType, limitValue, getDataConfig, updateEditingComponent, refreshChart, categoryDimensions, valueDimensions, stackDimensions, currentChartHasStack, invalidFieldIds, sortPriorityFields, chartState.sortPriorityOrder, t])
   const isStackedChart = (type: ChartType) =>
     type.startsWith('grouped-');
   // 时间范围改变
@@ -515,7 +513,7 @@ export function useComponentConfigController() {
   handleDragLeave, handleDrop, handleDeleteDimension, handleSortChange, openEditDialog, isStackedChart,
   stackDimensions, handleAggregationChange, handleMetricFormatChange, sortPriorityFields, setDraggingId, handleDropSortPriority,
   draggingId, filterGroup, handleEditFilter, handleDeleteFilter, filter, handleTimeFilterChange,
-  setFilter, setLimitType, setLimitValue, handleUpdateChart, handleDatasetChange, handleDragStart,
+  setFilter, setLimitType, setLimitValue, handleUpdateChart, handleDatasetChange, selectedDatasetCode, hasDatasetDraft, handleDragStart,
   setDatasetFields, handleFieldClick, editDialogOpen, setEditDialogOpen, editingDimension, setEditingDimension,
   saveDisplayName, filterDialogOpen, setFilterDialogOpen, handleSaveFilter, datasetFields };
 }

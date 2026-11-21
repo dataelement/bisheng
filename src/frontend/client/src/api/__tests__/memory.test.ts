@@ -21,6 +21,7 @@ jest.mock("~/api/request", () => ({
   __esModule: true,
   default: { get: jest.fn(), post: jest.fn(), put: jest.fn(), delete: jest.fn() },
   translateApiErrorMessage: () => "",
+  prepareBrowserHeaders: () => Promise.resolve({}),
 }));
 
 

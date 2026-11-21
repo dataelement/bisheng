@@ -151,18 +151,23 @@ beforeEach(() => {
       throw new Error(`unexpected API read: ${url}`);
     },
   );
-  mocks.downloadPermissions.mockImplementation(async (items: { id: number; type: string }[]) => ({
-    check_complete: true,
-    can_execute: true,
-    valid_items: items.filter((item) => grants.get(`knowledge_file:${item.id}`)?.includes("download")),
-    invalid_items: [],
-    requires_skip_confirmation: false,
-    impact: {},
-  }));
-  mocks.post.mockImplementation((url: string, body: { items?: { id: number; type: string }[] }) =>
-    url.endsWith("/files/batch/download/inspect")
-      ? mocks.downloadPermissions(body.items)
-      : Promise.resolve(row(31, "Created", 0)),
+  mocks.downloadPermissions.mockImplementation(
+    async (items: { id: number; type: string }[]) => ({
+      check_complete: true,
+      can_execute: true,
+      valid_items: items.filter((item) =>
+        grants.get(`knowledge_file:${item.id}`)?.includes("download"),
+      ),
+      invalid_items: [],
+      requires_skip_confirmation: false,
+      impact: {},
+    }),
+  );
+  mocks.post.mockImplementation(
+    (url: string, body: { items?: { id: number; type: string }[] }) =>
+      url.endsWith("/files/batch/download/inspect")
+        ? mocks.downloadPermissions(body.items)
+        : Promise.resolve(row(31, "Created", 0)),
   );
   mocks.put.mockResolvedValue(row(11, "renamed.pdf"));
   vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(
@@ -189,6 +194,7 @@ it("reads real SPACE children and continues an opaque empty page without total",
   ]);
   expect(mocks.get).toHaveBeenCalledWith("/api/v1/knowledge/space/7/children", {
     params: expect.objectContaining({ page_size: 40 }),
+    paramsSerializer: { indexes: null },
   });
   expect(mocks.legacy).not.toHaveBeenCalled();
 });
@@ -234,7 +240,9 @@ it("only loads each row's real namespace actions when its menu opens", async () 
   mocks.children.mockResolvedValue(page([row(), row(9, "Folder", 0)]));
   mount();
   await screen.findByText("report.pdf");
-  expect(mocks.permissions.mock.calls).toEqual([["knowledge_space", "7"]]);
+  expect(mocks.permissions.mock.calls).toEqual([
+    ["knowledge_space", "7", { showError: false }],
+  ]);
   await menu();
   await waitFor(() =>
     expect(mocks.permissions).toHaveBeenCalledWith("knowledge_file", "11"),
@@ -341,6 +349,7 @@ it.each([null, 9])(
     expect(mocks.permissions).toHaveBeenCalledWith(
       parentId === null ? "knowledge_space" : "folder",
       String(parentId ?? 7),
+      { showError: false },
     );
     await waitFor(() =>
       expect(mocks.toast).toHaveBeenCalledExactlyOnceWith({

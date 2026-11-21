@@ -14,12 +14,11 @@ async def test_cross_home_management_display_does_not_build_personal_policy(monk
     from bisheng.dsh import runtime
     from bisheng.dsh.domain.services import model_catalog
     from bisheng.llm.domain.schemas import WorkbenchModelConfig
-    from bisheng.llm.domain.services.llm import LLMService
 
     monkeypatch.setattr(config_service, "settings", SimpleNamespace(dsh=SimpleNamespace(enabled=True)))
     operator = SimpleNamespace(user_id=191, tenant_id=1, is_global_super=True)
     verified = WorkbenchModelConfig(models=[WSModel(id="42")])
-    monkeypatch.setattr(LLMService, "get_workbench_llm", AsyncMock(return_value=verified))
+    monkeypatch.setattr(model_catalog, "read_workbench_metadata", AsyncMock(return_value=verified))
     personal = AsyncMock(side_effect=AssertionError("must not build a child-tenant personal policy"))
     monkeypatch.setattr(runtime, "read_policy", personal)
     projector = AsyncMock(return_value=[WSModel(id="42")])
@@ -66,6 +65,7 @@ async def test_chat_projection_uses_stored_labels_and_keeps_permission_filter(mo
     from bisheng.common.services import config_service
     from bisheng.dsh import runtime
     from bisheng.dsh.domain.schemas.chat import ChatCapabilities
+    from bisheng.dsh.domain.services import vision
     from bisheng.dsh.domain.services.model_catalog import project_workbench_config
     from bisheng.dsh.infrastructure import model_capabilities
     from bisheng.llm.domain.schemas import WorkbenchModelConfig
@@ -82,15 +82,18 @@ async def test_chat_projection_uses_stored_labels_and_keeps_permission_filter(mo
     monkeypatch.setattr(runtime, "read_policy", AsyncMock(return_value=SimpleNamespace(allowed_model_ids=[42])))
     monkeypatch.setattr(
         LLMService,
-        "get_dsh_model_snapshot",
+        "get_dsh_model_catalog_snapshots",
         AsyncMock(
-            return_value=(
-                SimpleNamespace(id=42, model_name="vendor-id", name="alias"),
-                SimpleNamespace(id=7, name="Provider", type="openai"),
-            )
+            return_value={
+                42: (
+                    SimpleNamespace(id=42, model_name="vendor-id", name="alias"),
+                    SimpleNamespace(id=7, name="Provider", type="openai"),
+                )
+            }
         ),
     )
-    monkeypatch.setattr(model_capabilities, "desktop_model_capabilities", AsyncMock(return_value=ChatCapabilities()))
+    monkeypatch.setattr(model_capabilities, "model_capabilities", lambda model, server: ChatCapabilities())
+    monkeypatch.setattr(vision, "read_catalog_vision", AsyncMock(return_value={42: False}))
     result = await project_workbench_config(config, 20)
     assert [(model.id, model.displayName) for model in result.models] == [("42", "Custom label")]
     assert result.models[0].provider_id == "7"
@@ -153,12 +156,15 @@ async def test_cross_home_display_without_dsh_uses_verified_online_candidates(mo
 
     monkeypatch.setattr(config_service, "settings", SimpleNamespace(dsh=SimpleNamespace(enabled=False)))
     verified = WorkbenchModelConfig(models=[WSModel(id="42", displayName="Target label")])
-    monkeypatch.setattr(LLMService, "get_workbench_llm", AsyncMock(return_value=verified))
-    model = SimpleNamespace(id=42, model_name="model", name="internal")
+    monkeypatch.setattr(model_catalog, "read_workbench_metadata", AsyncMock(return_value=verified))
+    model = SimpleNamespace(id=42, tenant_id=1, model_name="model", name="internal")
     server = SimpleNamespace(id=7, name="Provider", type="openai")
     monkeypatch.setattr(LLMService, "aget_online_chat_models", AsyncMock(return_value=[(model, server)]))
     personal = AsyncMock(side_effect=AssertionError("management display must not read personal policy"))
     monkeypatch.setattr(model_catalog, "read_visible_model_ids", personal)
+    from bisheng.dsh.domain.services import vision
+
+    monkeypatch.setattr(vision, "read_catalog_vision", AsyncMock(return_value={42: False}))
     with management_tenant_scope(60):
         models = await model_catalog.workbench_models_for_display(
             SimpleNamespace(user_id=191, tenant_id=1, is_global_super=True)

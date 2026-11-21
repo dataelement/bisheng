@@ -1,3 +1,4 @@
+# ruff: noqa: RUF001, RUF002
 import asyncio
 import os
 import re
@@ -517,6 +518,9 @@ class LinsightWorkflowTask:
         # Set per run in _create_agent; gates every prompt hint that names the
         # code interpreter (prompt ⟺ tool lockstep).
         self._has_code_interpreter: bool = False
+        # Filled by create_linsight_agent (``supports_vision``); gates the image
+        # wording of the uploaded-files pointer block, in lockstep with the guards.
+        self._model_facts: dict = {}
         self.session_version_id: str | None = None
         self.llm: BaseChatModel | None = None  # For storageLLMInstances
         # F132: long-term memory state of this run's round (begin at round start,
@@ -2106,6 +2110,7 @@ class LinsightWorkflowTask:
             skills_present=bool(skills.copied),
             turn_budget_sink=self._turn_budget,
             context_window_sink=self._context_window,
+            model_facts_sink=self._model_facts,
             citation_scope=citation_scope,
             memory_prompt=self._memory_round().prompt(),
             inbox=self._inbox_middleware(),
@@ -2383,7 +2388,9 @@ class LinsightWorkflowTask:
         async def agent_execution():
             """Agent performs a task via astream + mapper."""
             file_list = await LinsightWorkbenchImpl.prepare_file_list(
-                session_model, has_code_interpreter=self._has_code_interpreter
+                session_model,
+                has_code_interpreter=self._has_code_interpreter,
+                supports_vision=bool(self._model_facts.get("supports_vision")),
             )
             # F035 Track J: rebuild prior conversation context (by chat_id) so a
             # fresh task turn answers with the whole conversation in view, not just
@@ -2466,7 +2473,7 @@ class LinsightWorkflowTask:
             # list holding the <uploaded_files> block). Join it — interpolating the
             # list directly emits its Python repr (brackets/quotes + escaped "\n"),
             # mangling the pointer block the model has to parse.
-            files_block = "\n".join(file_list) if isinstance(file_list, (list, tuple)) else str(file_list)
+            files_block = "\n".join(file_list) if isinstance(file_list, list | tuple) else str(file_list)
             parts.append(f"\n# 可用文件\n{files_block}")
         if knowledge_block:
             parts.append(

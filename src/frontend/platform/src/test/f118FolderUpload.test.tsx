@@ -8,7 +8,9 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
 import { SpaceFileUploadPanel } from "@/pages/KnowledgePage/components/SpaceFileUploadPanel";
@@ -66,7 +68,9 @@ function mount() {
   clients.push(client);
   const view = (parentId: number | null) => (
     <QueryClientProvider client={client}>
-      <SpaceFileUploadPanel scope={scope} spaceId={7} parentId={parentId} />
+      <MemoryRouter>
+        <SpaceFileUploadPanel scope={scope} spaceId={7} parentId={parentId} />
+      </MemoryRouter>
     </QueryClientProvider>
   );
   const result = render(view(9));
@@ -117,11 +121,116 @@ afterEach(() => {
   clients.splice(0).forEach((client) => client.clear());
 });
 
+it("anchors the picker menu to each mouse click and returns focus for keyboard use", async () => {
+  mount();
+  const user = userEvent.setup();
+  const trigger = screen.getByRole("button", { name: "f118.upload_picker_trigger" });
+  vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue(new DOMRect(40, 72, 920, 192));
+
+  for (const coords of [{ clientX: 240, clientY: 120 }, { clientX: 680, clientY: 200 }]) {
+    await user.pointer({ keys: "[MouseLeft]", target: trigger, coords });
+    const menu = await screen.findByRole("menu");
+    const anchor = document.getElementById(menu.getAttribute("aria-labelledby")!);
+
+    expect(anchor).toHaveAttribute("aria-hidden", "true");
+    expect(anchor).toHaveStyle({ left: `${coords.clientX}px`, top: `${coords.clientY}px` });
+
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(trigger).toHaveFocus());
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  }
+
+  await user.keyboard("{Enter}");
+  const menu = await screen.findByRole("menu");
+  const keyboardAnchor = document.getElementById(menu.getAttribute("aria-labelledby")!);
+  expect(keyboardAnchor).toHaveStyle({ left: "40px", top: "264px" });
+});
+
+it.each([
+  ["f118.choose_files", "file"],
+  ["f118.choose_folder", "folder"],
+] as const)("opens only the native picker for %s", async (label, kind) => {
+  mount();
+  const user = userEvent.setup();
+  const filePicker = document.querySelector('input[type="file"]:not([webkitdirectory])')!;
+  const folderPicker = screen.getByLabelText("f118.upload_folder");
+  const selectFiles = vi.fn();
+  const selectFolder = vi.fn();
+  filePicker.addEventListener("click", selectFiles);
+  folderPicker.addEventListener("click", selectFolder);
+  expect(folderPicker).toHaveAttribute("webkitdirectory");
+  expect(screen.queryByRole("button", { name: "f118.upload_folder" })).not.toBeInTheDocument();
+
+  const trigger = screen.getByRole("button", { name: "f118.upload_picker_trigger" });
+  if (kind === "file") {
+    await user.click(trigger);
+  } else {
+    trigger.focus();
+    await user.keyboard("{Enter}");
+  }
+  const item = await screen.findByRole("menuitem", { name: label });
+
+  expect(selectFiles).not.toHaveBeenCalled();
+  expect(selectFolder).not.toHaveBeenCalled();
+  await user.click(item);
+
+  expect(selectFiles).toHaveBeenCalledTimes(kind === "file" ? 1 : 0);
+  expect(selectFolder).toHaveBeenCalledTimes(kind === "folder" ? 1 : 0);
+  expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+});
+
+it.each(["file", "folder"])(
+  "switches %s task actions from cancel to retry/remove and then staged removal",
+  async (kind) => {
+    let finishUpload!: (value: { file_path: string; upload_id: string; repeat: boolean }) => void;
+    mocks.post.mockImplementation(() => new Promise((resolve) => {
+      finishUpload = resolve;
+    }));
+    mount();
+    const selected = kind === "folder" ? file("Root/a.txt") : file("report.txt");
+    const input = kind === "folder"
+      ? screen.getByLabelText("f118.upload_folder")
+      : document.querySelector('input[type="file"]')!;
+    await act(async () => fireEvent.change(input, { target: { files: [selected] } }));
+    await waitFor(() => expect(stages()).toHaveLength(1));
+    expect(screen.getByRole("button", { name: "cancel" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "delete" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "retry" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "cancel" }));
+    expect(stages()[0][2].signal.aborted).toBe(true);
+    expect(screen.queryByRole("button", { name: "cancel" })).toBeNull();
+    expect(screen.getByRole("button", { name: "retry" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "delete" })).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "retry" }));
+    await waitFor(() => expect(stages()).toHaveLength(2));
+    expect(screen.getByRole("button", { name: "cancel" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "delete" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "retry" })).toBeNull();
+
+    await act(async () => finishUpload({ file_path: "tmp/a", upload_id: "a".repeat(32), repeat: false }));
+    await screen.findByText("f118.upload_staged");
+    expect(screen.queryByRole("button", { name: "cancel" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "retry" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "delete" }));
+    expect(screen.queryByText(kind === "folder" ? "Root" : "report.txt")).toBeNull();
+    expect(screen.getByText("f118.upload_tasks_empty")).toBeVisible();
+    expect(registers()).toHaveLength(0);
+  },
+);
+
 it("stages the complete tree before one original registration with exact relative paths", async () => {
+  const append = vi.spyOn(FormData.prototype, "append");
   mount();
   await pick();
   await proceed();
   await waitFor(() => expect(registers()).toHaveLength(1));
+  const uploadNames = append.mock.calls
+    .filter(([field]) => field === "file")
+    .map(([, , filename]) => filename);
+  append.mockRestore();
+  expect(uploadNames).toEqual(["a.txt", "b.csv"]);
   expect(stages()).toHaveLength(2);
   expect(registers()[0][1]).toMatchObject({
     parent_id: 9,
@@ -206,13 +315,29 @@ it("rejects the original raw count cap and does not upload hidden roots", async 
   expect(stages()).toHaveLength(0);
 });
 
-it("keeps the directory tree when the original DropZone supplies relative drag paths", async () => {
+it("keeps the directory tree when a folder is dragged onto the upload area", async () => {
   mount();
-  const input = new File(["x"], "a.txt");
-  Object.defineProperty(input, "path", { value: "Root/Sub/a.txt" });
+  const fileEntry = {
+    isDirectory: false,
+    fullPath: "/Root/Sub/a.txt",
+    file: (onRead: (file: File) => void) => onRead(new File(["x"], "a.txt")),
+  };
+  const directoryEntry = (children: unknown[]) => ({
+    isDirectory: true,
+    createReader() {
+      const batches = [children, []];
+      return {
+        readEntries: (onRead: (entries: unknown[]) => void) => onRead(batches.shift() ?? []),
+      };
+    },
+  });
+  const folder = directoryEntry([directoryEntry([fileEntry])]);
   await act(async () =>
-    fireEvent.change(document.querySelector('input[type="file"]')!, {
-      target: { files: [input] },
+    fireEvent.drop(screen.getByRole("button", { name: "f118.upload_picker_trigger" }), {
+      dataTransfer: {
+        types: ["Files"],
+        items: [{ kind: "file", webkitGetAsEntry: () => folder }],
+      },
     }),
   );
   await proceed();

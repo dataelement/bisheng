@@ -14,8 +14,8 @@ API endpoint → MarketService → MarketRepository → SQLModel，MinIO 制品�
 
 - 桌面与 SPA 传递 BISHENG 签名 JWT（Bearer），也兼容现有 HttpOnly Cookie。验证 JWT、token_version，再构造 LoginUser。
 - 员工目录、下载、同步从已验证 JWT 的租户与用户派生范围；管理视图不影响员工范围。
-- 管理端使用现有 check_tenant_admin 应用协议；普通及全局管理员均以登录身份的 tenant_id 为当前市场范围。
-- `X-DSH-Market-Tenant` 作为登录租户一致性检查，和 actor.tenant_id 不同即拒绝。管理路由移出 AdminScopeMiddleware，market_actor/market_admin 显式关闭管理视图标志并设置仅含登录租户的可见范围。
+- 既有市场管理接口使用现有租户管理员协议，以登录身份的租户执行业务。两张管理列表由平台请求准入提供显示范围，见下节。
+- `X-DSH-Market-Tenant` 作为登录租户一致性检查，和 actor.tenant_id 不同即拒绝。既有市场管理路由继续由 market_actor/market_admin 绑定登录租户。两个管理列表 GET 是例外，走平台管理请求准入。
 - 市场属于租户分发设置，采用租户管理员/员工二层权限；对象没有个人所有者、共享关系或继承授权，无需新增 FGA 资源类型及 tuple 投影。
 - 所有读写显式添加 tenant_id 谓词，写操作同时校验 revision。JSON 字段使用 JsonType，SQL 避免绑定 MySQL 专属操作。
 
@@ -32,7 +32,8 @@ API endpoint → MarketService → MarketRepository → SQLModel，MinIO 制品�
 | GET /plugins/{id}/versions/{version_id}/artifact | 已登录员工 | 复核发布状态和摘要，返回制品；禁止共享缓存 |
 | POST /sync | 已登录员工 | 设备运行状态报告，返回未签名发布快照；响应 `Cache-Control: no-store` |
 | GET /admin/context | 租户管理员 | 当前登录租户 |
-| GET /admin/plugins | 租户管理员 | 本登录租户列表及分页；旧搜索/状态参数保留协议兼容 |
+| GET /admin/plugins | 全局超管或租户管理员 | 查询管理视图下的插件列表及分页；旧搜索和状态参数继续使用 |
+| GET /admin/workbenches | 全局超管或租户管理员 | 查询管理视图下的工作台列表及分页 |
 | GET /admin/plugins/{id} | 租户管理员 | 插件状态和全部版本；操作记录保留在后台 |
 | DELETE /admin/plugins/{id}?revision= | 租户管理员 | 删除本租户市场记录，保留历史及已有安装授权 |
 | POST /admin/plugins/{id}/transition | 租户管理员 | 旧 publish/unpublish/disable 协议保留兼容；当前页面使用导入和删除 |
@@ -43,9 +44,31 @@ API endpoint → MarketService → MarketRepository → SQLModel，MinIO 制品�
 
 错误码 26101：发布包校验；26102：并发/版本状态冲突；26103：记录或可发布制品缺失；26104：管理权限。多语言错误码遵循 locales SSOT 生成。
 
+## 两张列表跟随平台管理视图
+
+代码已实现，现场验收待执行。目标版本为 3.1.0-beta1，验收对应 [AC-MS-01～03](spec.md#管理视图验收)。
+
+### 实现方案
+
+1. 复用现有 `GET /api/v1/dsh/market/admin/plugins` 与 `GET /api/v1/dsh/market/admin/workbenches`。只将这两个 GET 注册为平台租户范围请求，并在现有浏览器请求规则中为它们附带选中租户。已有准入先验证身份和选中值，再把这个值交给原列表查询。全局超管使用所选租户，租户管理员只查询登录租户。桌面凭据和普通员工不能访问管理列表。
+2. 两张表继续使用现有分页、排序和查询服务。筛选在数据库分页前完成，列表和总数使用同一租户。响应继续使用 `{data, total}`，查看其他租户时增加 `read_only: true`，并仅保留现有表格展示所需的字段，剔除完整版本清单、截图与下载链接、操作版本号。其他市场入口继续使用登录租户，原有操作鉴权保持有效。
+3. 现有右上角切换继续重载页面；市场页同时监听既有 `bisheng:management-scope-changed` 确认事件，以本地刷新序号重建当前列表面板。在宿主保留页面挂载时也立即清空分页、详情、导入状态和旧请求；当前插件/工作台页签保持不变，列表从第 1 页重查。刷新序号不是租户授权来源，租户仍由现有请求层的服务端确认上下文决定。不新增全局租户状态、事件或页面。收到只读列表时隐藏操作入口，切回本租户恢复原界面。
+
+### 取舍与验证
+
+前端已有正确的切换状态，但当前后端列表会强制使用登录租户，仅在前端筛选会漏掉目标租户的记录。改动范围因此限定在两个现有 GET 的租户来源及两张表的只读展示。放弃新增专用列表接口，避免同一列表有两套契约。未来若这些列表成为外部集成的公开接口，再考虑独立版本。
+
+回归验证覆盖全局超管切换两个租户后记录和总数正确，分页重置、旧响应不会覆盖新列表，以及租户管理员无法借请求头跨租户查询。查看其他租户时页面只读，直接调用详情、导入或删除仍受原权限限制。桌面目录同登录租户的对照行为保持一致。
+
+2026-11-19 补充：市场页原先只用 `user_id:tenant_id` 作为重建标识；切管理视图不改变登录租户，整页重载之外的已挂载面板不会重新查询。`PluginMarketPage` 现按上述确认事件重建活动面板；组件回归覆盖登录租户不变、第二页重置、旧确认失效和迟到响应。真实请求适配器同时验证 `X-Management-Tenant` 随确认视图变更，而 `X-DSH-Market-Tenant` 继续保留登录租户，避免把显示范围误当作操作权限。
+
+发布时前后端一起更新。两个列表变更为平台租户请求后，旧前端没有发送全局超管所需的管理租户证明。
+
+设计沿用 [架构宪法 C1～C8](../../../docs/constitution.md)。不改表结构、存储、错误码、桌面协议或管理状态模型。
+
 ## 在线会话与发布快照
 
-分发不使用独立签名密钥。`BISHENG_DSH_MARKET_SIGNING_KEY` 不再读取；能力声明不返回 `public_key` 或 `lease_seconds`。员工目录、制品和同步沿用本分支的原生桌面会话或平台登录身份校验；不新增席位校验。管理员身份和工作台接口保持原边界。
+分发不使用独立签名密钥。`BISHENG_DSH_MARKET_SIGNING_KEY` 不再读取；能力声明不返回 `public_key` 或 `lease_seconds`。员工目录、制品和同步沿用本分支的原生桌面会话或平台登录身份校验；不新增席位校验。既有管理操作和 Desktop 工作台接口保持原来的身份范围。
 
 `/sync` 直接返回 `{tenant_id, user_id, device_id, synced_at, policies}`。`policies` 含各插件 disabled、revision、current_version_id 及曾发布版本摘要。`synced_at` 为服务端秒级时间。响应禁止缓存。
 

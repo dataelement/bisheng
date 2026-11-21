@@ -175,7 +175,7 @@ export function DropdownChevron({ className }: DropdownChevronProps) {
 }
 
 export interface DropdownItemProps {
-  /** §4.1 — a verb first; end with "…" when the action asks for more input. */
+  /** §4.1 — start with a verb that describes the action. */
   children: React.ReactNode;
   /** §4 — 16px; either every item in a group has one or none do. */
   icon?: React.ReactNode;
@@ -307,7 +307,7 @@ export function DropdownSeparator() {
 }
 
 export interface DropdownSubProps {
-  /** §7.1 — say what is inside: "移动到…", "导出为". */
+  /** §7.1 — describe the actions inside the submenu. */
   label: React.ReactNode;
   icon?: React.ReactNode;
   disabled?: boolean;

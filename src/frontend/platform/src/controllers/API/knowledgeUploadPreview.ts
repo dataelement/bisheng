@@ -44,7 +44,8 @@ export const knowledgeUploadPreviewApi = {
     signal?: AbortSignal,
   ): Promise<SpaceUploadFile> => {
     const body = new FormData();
-    body.append("file", file);
+    // Chromium otherwise uses webkitRelativePath for directory selections.
+    body.append("file", file, file.name);
     return axios.post(path(spaceId), body, {
       params: parentId === null ? {} : { parent_id: parentId },
       signal,

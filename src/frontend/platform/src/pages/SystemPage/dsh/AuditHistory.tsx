@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button } from '@bisheng/ui';
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
@@ -115,7 +116,7 @@ export function AuditHistory({ revision = 0 }: AuditHistoryProps) {
       {failed ? (
         <p role="alert">{t("dsh.auditHistory.loadError")}</p>
       ) : loading ? (
-        <p role="status">{t("dsh.loading")}</p>
+        <LoadingState size="panel" label={t("dsh.loading")} />
       ) : (
         <div className="overflow-x-auto rounded-lg border">
           <Table>

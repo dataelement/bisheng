@@ -88,6 +88,8 @@ ApprovalCenterService.decide_task()
 - 排在 applicant 之后是刻意的——反过来的话，陌生人打一个终态单子会拿到「已结束」而不是「无权限」，等于把「哪些单子还开着」探测出去。
 - ⚠️ **这是审批模块公共 API 的行为收紧，对菜单权限申请 / 频道订阅 / 知识空间加入三个既有场景同样生效**。`executing` / `executed` / `execute_failed` / `exception` 四个审批后状态同样被拒（「已结束不能撤回」）。回归护栏在 `test/app_publish/test_withdraw_guard.py`（15 例，含频道订阅与知识空间加入两个既有场景）。
 
+**审批决定安全边界（2026-11-13，当前分支未发布）**：`ApprovalTaskDecisionReq.action` 只接受字面值 `approve` / `reject`，`decide_task()` 服务边界也拒绝其它值（422），避免错误字符串落入通过或跳过应用发布候选人复核。所有场景使用 `ApprovalInstanceRepository.decision_transaction()`：先用数据库 UPDATE 获取实例写锁，再在同一异步 session 内复核实例/任务 pending、更新 OR/AND 同级任务、推进节点、写动作日志与 outbox；异常整体回滚。无进程锁、无同步数据库锁跨 await。审计、通知、业务拒绝回调和 Celery dispatch 在事务提交后才执行；提交后的副作用失败会传播，已提交决定不回滚、再次决定不重复执行。队列失败会保留 pending outbox，需运维重投，不保证通知/队列与 SQL 的跨系统恰好一次。通用撤回、业务取消及应用发布撤回现在同样按实例先锁、再读任务的顺序执行 SQL 事务，事务内复核 pending/终态，业务回调与通知仍在提交后。管理员异常处理的其它旧路径不宣称全部交错已覆盖。
+
 **多节点 / 会签**：`_advance_after_node_approved()` 实现顺序流转。
 - OR 节点（`node_mode=or`）：任一人通过即把同节点其余 PENDING task 置 SKIPPED 并 advance。
 - AND 节点（`node_mode=and`）：同节点全部通过才 advance。
@@ -99,7 +101,7 @@ ApprovalCenterService.decide_task()
 
 ---
 
-**申请人角色条件（F009）**：`_get_user_role_labels` 的 `role_{id}` 来自 `role/application/effective_roles.py`，按申请人真实H和有效部门作用域过滤；跨租户兼属与管理M不授予普通角色。平台超管、租户管理员、部门管理员身份标签独立读取；必要政策/身份查询失败会拒绝路由匹配，不回退普通用户免审。验证：`test/approval/test_managed_tenant_labels.py`。
+**申请人角色条件（F009）**：`_get_user_role_labels` 的 `role_{id}` 来自 `role/application/effective_roles.py`，按用户仍存在的原普通绑定读取，与v3.0.0一致，不以绑定存储租户、定义类型/归属或部门范围作既有角色过滤；真实H仍校验并决定执行租户，跨租户兼属与管理M不新授予普通角色。平台超管、租户管理员、部门管理员身份标签独立读取；必要政策/身份查询失败会拒绝路由匹配，不回退普通用户免审。验证：`test/approval/test_managed_tenant_labels.py`。
 
 ## 3. 代码锚点
 
@@ -112,6 +114,7 @@ ApprovalCenterService.decide_task()
 | `approval/domain/services/approval_gate.py` | 统一入口：路由匹配、实例创建、pass/pending/exception 分流 | `request_or_pass()`、`_create_exception_result()`、`_notify_admins_of_exception()` |
 | `approval/domain/services/approval_center_service.py` | 用户端：任务列表/详情、同意/拒绝、撤回、**业务侧取消**、菜单申请、多节点流转 | `decide_task()`、`_advance_after_node_approved()`、`_dispatch_outbox()`、`_send_approval_notify()`、`withdraw_instance()`（**带 18118 终态守卫**）、**`cancel_instance_by_business()`**（公共 API，见 §4.5） |
 | `approval/domain/services/approval_exception_service.py` | 管理端异常处理：重试/指定审批人/跳过节点/取消/标记完成 | `assign_approvers()`、`_resolve_exception_node()` |
+| `approval/domain/repositories/approver_candidate_repository.py` | 异常指派候选的只读分页搜索；有效且唯一 Home、本租户或已验证全局管理员、安全身份字段 | `search()` |
 | `approval/domain/services/approval_outbox_service.py` | outbox 执行与重试；成功后置 instance=EXECUTED | `execute_outbox()`、`retry_outbox()` |
 | `approval/domain/services/approval_scenario_admin_service.py` | 管理端：场景/分支/流程/节点配置、异常列表 | — |
 | `approval/domain/services/approver_resolver.py` | 解析审批人来源 `direct_user` / `department_admin` / `tenant_admin` | `resolve_approvers_from_sources()`、**`resolve_tenant_admin_user_ids()`** |
@@ -236,7 +239,7 @@ ApprovalCenterService.decide_task()
 | `approval_instance` | 一次审批申请 | `pending/approved/rejected/withdrawn/executed/execute_failed/exception/cancelled` |
 | `approval_task` | 分配给审批人的节点待办 | `pending/approved/rejected/skipped/cancelled` |
 | `approval_exception` | 异常记录 | `open/resolved`，`exception_type: route_missing/approver_empty/execute_failed` |
-| `approval_outbox` | 业务执行队列 | `pending/success/failed` |
+| `approval_outbox` | 业务执行队列 | `pending/executing/success/failed`（executing 为已持久认领、结果可能待核对） |
 | `approval_action_log` | 时间线日志 | — |
 | `user_menu_access` | 用户级菜单授权（菜单审批专用） | `active/revoked` |
 | `approval_request` | **旧系统（已废弃）**：部门知识空间文件上传审批，仅兼容存量 | — |
@@ -250,7 +253,9 @@ ApprovalCenterService.decide_task()
 
 ## 6. outbox 与 Celery
 
-业务执行走 outbox：通过后写 `approval_outbox(PENDING)` → Celery `execute_approval_outbox` 执行 `handler.on_approved()` → 成功 outbox=SUCCESS、instance=EXECUTED；失败 outbox=FAILED、instance=EXECUTE_FAILED 并建 `execute_failed` 异常。
+业务执行走 outbox：通过后写 `approval_outbox(PENDING)` → Celery `execute_approval_outbox` 先 SQL CAS 认领 `pending → executing`，再执行 `handler.on_approved()` → 成功 outbox=SUCCESS、instance=EXECUTED；失败 outbox=FAILED、instance=EXECUTE_FAILED 并建 `execute_failed` 异常。管理员异常重试也统一走 `ApprovalOutboxService.retry_outbox()`，只允许 CAS `failed → executing`；success/执行中不会再次调用业务。认领按实例串行且 UPDATE 显式限定当前租户，普通投递仅允许 approved 实例，显式重试仅允许 execute_failed；历史竞争留下的不同 outbox 若同实例已有 success/executing/failed 也拒绝执行。`finish_outbox()` 在同一实例锁事务中写 outbox 结果和实例状态/失败异常；取消、撤回、拒绝、已执行终态不会被失败回写成 execute_failed。worker setup 失败同样在实例锁事务处理 pending outbox，不覆盖终态。管理员异常取消和手动完成也使用相同实例先锁事务及终态复核。
+
+**中断恢复契约（2026-11-13，未发布）**：`executing` 与 `error_summary` 持久保留认领时间和“业务结果可能不确定，核对后恢复”的说明，管理实例详情 API 同级 `executions` 返回 outbox_id/status/error_summary/update_time/retry_count（不返回额外执行 payload）。进程崩溃可能发生在外部业务已生效但 SQL 未确认时，故自动重投和普通 retry 均不抢占 executing。运维须先确认原 worker 已停止、检查业务实际效果，再人工选择确认完成或按受审操作恢复；本次没有自动租约接管，也没有宣称外部副作用恰好一次。pending 但未投递需运维重投原 outbox_id；不要为补投新建 outbox。现有异常“标记完成”与“取消”入口仍须按真实业务状态使用。
 
 > **原则：业务回调（`on_approved` 等）不得静默失败。** 该执行成功/失败由「是否抛异常」判定：抛异常 → outbox=FAILED + `execute_failed` 异常暴露问题；正常返回 → 一律视为成功并置 instance=EXECUTED。因此前置条件缺失（如找不到要激活的 membership/资源）**必须 raise**，绝不能 `return {'status':'xxx'}` 之类把失败伪装成成功——否则会出现 instance=executed 但业务实际没生效的「假成功」，且无任何告警。
 
@@ -307,6 +312,7 @@ GET    /approval/admin/flows/{flow_definition_id}/nodes       # 节点配置
 PUT    /approval/admin/flows/{flow_definition_id}/nodes       # 提交节点（全量提交触发新版本）
 GET    /approval/admin/flows/{flow_definition_id}/versions/{flow_version_id} # 版本预览
 GET    /approval/admin/exceptions                            # 异常列表
+GET    /approval/admin/exceptions/{exception_id}/approver-candidates # 本异常的合格人员；keyword/page/limit(<=50)，返回 data/total；exclusive 表示只能单独选择
 POST   /approval/admin/exceptions/{exception_id}/retry       # 重试/指定审批人/跳过节点/标记完成
 POST   /approval/admin/exceptions/{exception_id}/cancel      # 取消审批（必须填原因）
 ```
@@ -474,3 +480,11 @@ cd src/backend && uv run pytest test/approval test/app_publish
 - `approval/application/app_publish.py::withdraw_app_publish` → `ApprovalCenterService.withdraw_app_publish` → `app_publish_withdrawal_repository.py` 在一个事务内锁定目标实例、取消任务、写 withdrawn 动作。目标由发布模块基于冻结 tenant/app/deployment/version/instance 生成；发布模块先重验当前 publish，实际操作者计审计。通用 `withdraw_instance` 仍要求申请人。
 - 平台 Vibe 管理页使用 `POST /api/v1/apps/{app_id}/withdraw`，body 含 expected_instance_id 和可选 reason；不拿申请人身份代发通用撤回。完整确认和终态保护不变。
 - 双用途预览由 F055 public `preview_access` 当前资格端口消费 pending task；临时资格不会写入长期 F048 Grant。真实部署 E2E 尚未执行，以 F114 verification 为准。
+
+### 历史发布审批与异常候选一致性（2026-11-19）
+
+- 异常指派弹窗按 exception_id 请求 `approver-candidates`，不使用普通人员搜索结果。服务先验证具体管理租户与异常/实例归属，仅开放 approver_empty + open + instance=exception；保存时再次按当前资格验证，已处理异常不得重开。重试和取消 API 也显式传入具体管理租户围栏。
+- `AppCandidatePolicy` 与 `qualify_app_candidates` 共用双排除/有效人员/真实管理员判据。列表 SQL 在分页及 COUNT 前过滤停用、未知/多重有效 Home、外租户与被排除人员；允许现有真实全局管理员资格。单管理员自审例外用 exclusive 标记，前端双向互斥选择；保存仍重查管理员与候选人员的同一份 SQL 当前性，不能拿列表结果作权限证明。节点配置原 picker 与 approver_resolver 来源语义不变。
+- 只有两个新增身份字段都不存在的旧 CLI 快照，才调用 `app_publish/application/legacy_review_identity.py::frozen_legacy_review_user`。原 owner-only 管线在接收时验证凭据资源归属人等于应用归属人；恢复必须绑定真实 app/deployment/version/instance/tenant、版本号及冻结 owner/applicant，发布记录 authorization_context=NULL、submitted_by 为 0 或该冻结 owner。只恢复自审排除身份，不制造运行授权、不改快照、不使用服务账号当前归属人。
+- 现代字段已存在但为 NULL、发布记录/实例/租户/版本不匹配、提交身份不一致、证据不可读时继续拒绝；不能把 owner 当成通用缺省提交人。持久请求重建通过内部 `ApprovalGateRequest.instance_id`/同级 req 字段携带实例证据，初次请求没有该证据；正常候选、异常指定和后续节点读取同一冻结来源。
+- 现场 436/895 的只读重放、前后差异、未部署与异常 83 的独立执行问题见 `docs/reviews/beta1-approval-candidates-20261119.md`；原生回归在 `test/approval/test_exception_candidates.py`，前端在 `approvalCandidates.test.tsx`。没有迁移或重开已处理单据。

@@ -1,22 +1,26 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { page, row } from "@/test/helpers/knowledgeSpaceFixtures";
 import Files, { type FilesProps } from "./Files";
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
+  post: vi.fn(),
   permissions: vi.fn(),
   error: vi.fn(),
 }));
 vi.mock("@/controllers/request", () => ({
-  default: { get: mocks.get },
+  default: { get: mocks.get, post: mocks.post },
   showApiError: mocks.error,
 }));
 vi.mock("@/controllers/API/permission", () => ({
@@ -90,6 +94,32 @@ function mount(props: Partial<FilesProps> = {}) {
   };
 }
 
+function mockScrollIntersections() {
+  class ScrollObserver {
+    observe = vi.fn<(target: Element) => void>();
+    disconnect = vi.fn();
+
+    constructor(
+      private readonly callback: IntersectionObserverCallback,
+      readonly options: IntersectionObserverInit,
+    ) {
+      observers.push(this);
+    }
+
+    intersect(isIntersecting = true) {
+      const target = this.observe.mock.lastCall?.[0];
+      this.callback(
+        [{ target, isIntersecting } as IntersectionObserverEntry],
+        this as unknown as IntersectionObserver,
+      );
+    }
+  }
+
+  const observers: ScrollObserver[] = [];
+  vi.stubGlobal("IntersectionObserver", ScrollObserver);
+  return observers;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   const values = new Map<string, string>();
@@ -104,6 +134,13 @@ beforeEach(() => {
     clear: vi.fn(() => values.clear()),
   });
   mocks.permissions.mockResolvedValue({ actions: ["visible"] });
+  mocks.post.mockImplementation(async (url: string) => {
+    if (url.endsWith("/batch/download/inspect")) return {
+      can_execute: false, check_complete: true, valid_items: [],
+      invalid_items: [{ id: 11, type: "file", reason: "permission_denied" }],
+    };
+    throw new Error(`Unexpected write ${url}`);
+  });
   mocks.get.mockImplementation(
     async (url: string, options?: { params?: { page?: number } }) => {
       if (url.endsWith("/children"))
@@ -247,14 +284,136 @@ it("restores list and card presentations without losing folder navigation, file 
   await screen.findByText("preview-content");
 });
 
+it("shows header batch actions only while directory items are selected", async () => {
+  mocks.permissions.mockResolvedValue({ actions: ["visible", "move"] });
+  const toolbarTarget = document.createElement("div");
+  document.body.append(toolbarTarget);
+  try {
+    mount({ toolbarTarget });
+    const file = await screen.findByRole("checkbox", { name: "deletion.select report.pdf" });
+    const folder = screen.getByRole("checkbox", { name: "deletion.select Folder" });
+    const toolbar = within(toolbarTarget);
+
+    expect(toolbar.queryByRole("button", { name: "detail.batch" })).toBeNull();
+    fireEvent.click(folder);
+    expect(await toolbar.findByRole("button", { name: "detail.batch" })).toBeVisible();
+    fireEvent.click(file);
+    expect(await toolbar.findByRole("button", { name: "detail.batch" })).toBeVisible();
+    fireEvent.click(folder);
+    fireEvent.click(file);
+    expect(toolbar.queryByRole("button", { name: "detail.batch" })).toBeNull();
+  } finally {
+    toolbarTarget.remove();
+  }
+});
+
+it.each(["workspace", undefined] as const)("hides unavailable batch and download actions for manage-permission-only users in %s presentation", async (presentation) => {
+  mocks.permissions.mockResolvedValue({ actions: ["visible", "manage_permission"] });
+  const view = mount({ presentation });
+  fireEvent.click(await screen.findByRole("checkbox", { name: "deletion.select report.pdf" }));
+  await waitFor(() => expect(mocks.post).toHaveBeenCalledWith(
+    "/api/v1/knowledge/space/7/files/batch/download/inspect",
+    { items: [{ id: 11, type: "file" }] },
+  ));
+  await waitFor(() => expect(mocks.permissions.mock.calls.some(([kind, id]) => kind === "knowledge_file" && id === "11")).toBe(true));
+  expect(screen.queryByRole("button", { name: "detail.batch" })).not.toBeInTheDocument();
+  expect(view.container.querySelector('[aria-label="downloadOriginal"]')).toBeNull();
+  fireEvent.keyDown(screen.getByRole("button", { name: "more report.pdf" }), { key: "ArrowDown" });
+  expect(await screen.findByRole("menuitem", { name: "managePermission" })).toBeVisible();
+  for (const name of ["downloadOriginal", "editTag", "rename", "move", "delete"]) {
+    expect(screen.queryByRole("menuitem", { name })).not.toBeInTheDocument();
+  }
+});
+
+it("appends directory pages on scroll, including continuation after an empty page", async () => {
+  const observers = mockScrollIntersections();
+  let finishEmptyPage!: () => void;
+  const pendingPage = new Promise<void>((resolve) => { finishEmptyPage = resolve; });
+  mocks.get.mockImplementation(async (_url, { params }) => {
+    if (params.cursor === "empty/+==") {
+      await pendingPage;
+      return page([], "remaining/+==");
+    }
+    if (params.cursor === "remaining/+==") return page([row(12, "next.pdf")]);
+    return page([row()], "empty/+==");
+  });
+
+  const view = mount();
+  const selected = await screen.findByRole("checkbox", { name: "deletion.select report.pdf" });
+  fireEvent.click(selected);
+  expect(screen.queryByRole("button", { name: "f118.more_files" })).toBeNull();
+  await waitFor(() => expect(observers.at(-1)?.observe).toHaveBeenCalled());
+  const first = observers.at(-1)!;
+  expect(first.options.root).toBe(view.container.querySelector("[data-view-mode]")?.parentElement);
+  expect(first.options.rootMargin).toBe("0px 0px 240px 0px");
+
+  act(() => first.intersect(false));
+  expect(mocks.get).toHaveBeenCalledTimes(1);
+  act(() => {
+    first.intersect();
+    first.intersect();
+  });
+  expect(mocks.get).toHaveBeenCalledTimes(2);
+
+  finishEmptyPage();
+  await waitFor(() => expect(observers.at(-1)).not.toBe(first));
+  const next = observers.at(-1)!;
+  act(() => next.intersect());
+  await screen.findByText("next.pdf");
+
+  expect(screen.getByRole("checkbox", { name: "deletion.select report.pdf" })).toBeChecked();
+  expect(mocks.get.mock.calls.map(([, { params }]) => params.cursor)).toEqual([
+    undefined,
+    "empty/+==",
+    "remaining/+==",
+  ]);
+  expect(next.disconnect).toHaveBeenCalled();
+  expect(screen.queryByRole("button", { name: "f118.more_files" })).toBeNull();
+});
+
+it.each(["an error", "a repeated cursor"])("pauses automatic loading after %s and retries the same cursor", async (failure) => {
+  const observers = mockScrollIntersections();
+  let failed = false;
+  mocks.get.mockImplementation(async (_url, { params }) => {
+    if (!params.cursor) return page([row()], "retry/+==");
+    if (!failed) {
+      failed = true;
+      if (failure === "a repeated cursor") return page([row()], "retry/+==");
+      throw new Error("next page failed");
+    }
+    return page([row(12, "next.pdf")]);
+  });
+
+  mount({ scope: { ...scope, view: "admin" } });
+  await screen.findByText("report.pdf");
+  fireEvent.click(screen.getByRole("button", { name: "workspace.card_view" }));
+  await waitFor(() => expect(observers.at(-1)?.observe).toHaveBeenCalled());
+  const observer = observers.at(-1)!;
+  act(() => observer.intersect());
+  const retry = await screen.findByRole("button", { name: "retry" });
+  expect(screen.getByText("report.pdf")).toBeVisible();
+  expect(observer.disconnect).toHaveBeenCalled();
+  act(() => observer.intersect());
+  expect(mocks.get).toHaveBeenCalledTimes(2);
+
+  fireEvent.click(retry);
+  await screen.findByText("next.pdf");
+  expect(mocks.get.mock.calls.map(([, { params }]) => params.cursor)).toEqual([
+    undefined,
+    "retry/+==",
+    "retry/+==",
+  ]);
+});
+
 it("sends sort changes to the directory and search APIs and resets the cursor", async () => {
   mount();
   await screen.findByText("report.pdf");
   expect(mocks.get).toHaveBeenCalledWith("/api/v1/knowledge/space/7/children", {
     params: expect.objectContaining({
-      order_field: "update_time",
-      order_sort: "desc",
+      order_field: "file_type",
+      order_sort: "asc",
     }),
+    paramsSerializer: { indexes: null },
   });
   fireEvent.keyDown(screen.getByRole("button", { name: "workspace.sort" }), {
     key: "Enter",
@@ -270,6 +429,7 @@ it("sends sort changes to the directory and search APIs and resets the cursor", 
           order_field: "file_name",
           order_sort: "asc",
         }),
+        paramsSerializer: { indexes: null },
       },
     ),
   );
@@ -303,8 +463,15 @@ it.each([
   mocks.permissions.mockResolvedValue({ actions: ["visible", "delete"] });
   mount();
   await screen.findByRole("button", { name: "report.pdf" });
-  if (layout === "card") fireEvent.click(screen.getByRole("button", { name: "workspace.card_view" }));
-  fireEvent.keyDown(screen.getByRole("button", { name: `more ${name}` }), { key: "ArrowDown" });
+  if (layout === "card")
+    fireEvent.click(
+      screen.getByRole("button", { name: "workspace.card_view" }),
+    );
+  fireEvent.keyDown(screen.getByRole("button", { name: `more ${name}` }), {
+    key: "ArrowDown",
+  });
   expect(await screen.findByRole("menuitem", { name: "delete" })).toBeVisible();
-  expect(screen.queryByRole("menuitem", { name: "deletion.delete_items" })).toBeNull();
+  expect(
+    screen.queryByRole("menuitem", { name: "deletion.delete_items" }),
+  ).toBeNull();
 });

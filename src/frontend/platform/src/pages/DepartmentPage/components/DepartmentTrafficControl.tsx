@@ -1,8 +1,10 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button, notification } from "@bisheng/ui";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FlowControl } from "@/components/Pro/FlowControl";
 import { FlowRadio } from "@/components/Pro/FlowRadio";
+import { Label } from "@/components/bs-ui/label";
 import {
   getDepartmentLimitDetailApi,
   saveDepartmentLimitApi,
@@ -106,9 +108,7 @@ export function DepartmentTrafficView({
     controller;
   if (loading)
     return (
-      <p role="status" className="py-8 text-sm text-muted-foreground">
-        {t("loading")}
-      </p>
+      <LoadingState label={t("bs:organization.loadingSettings")} className="py-8" />
     );
   if (failed)
     return (
@@ -120,10 +120,12 @@ export function DepartmentTrafficView({
   return (
     <div className="space-y-6 pb-2">
       <div>
-        <p className="mb-4 text-sm font-medium">
-          {t("bs:department.deptFlowControl")}
-        </p>
-        <FlowRadio limit={limit} onChange={setLimit} />
+        <div className="space-y-1.5">
+          <Label className="block leading-[var(--line-height-3)]">
+            {t("bs:department.deptFlowControl")}
+          </Label>
+          <FlowRadio limit={limit} onChange={setLimit} />
+        </div>
         <p className="mt-3 text-xs leading-5 text-muted-foreground">
           {t("bs:organization.trafficHint")}
         </p>

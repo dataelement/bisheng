@@ -170,12 +170,30 @@ class ChatMessageService:
         ChatMessageDao.delete_by_message_id(user_id, message_id)
 
     @staticmethod
-    def like_response(data: ChatInput) -> None:
-        """Process like/dislike with session counter updates."""
-        message_id = data.message_id
-        message = ChatMessageDao.get_message_by_id(data.message_id)
+    def _feedback_message(message_id: int, login_user: UserPayload) -> ChatMessage:
+        """A browser feedback write requires the real natural-person session owner."""
+        from bisheng.chat_session.domain.session_subject import SessionSubject
+
+        message = ChatMessageDao.get_message_by_id(message_id)
         if not message:
             raise NotFoundError.http_exception()
+        tenant_id = _resolve_leaf_tenant_id(login_user)
+        session = MessageSessionDao.get_one(message.chat_id)
+        subject = SessionSubject.natural_person(tenant_id=tenant_id, user_id=login_user.user_id)
+        if (
+            session is None
+            or not subject.matches(session)
+            or message.tenant_id != tenant_id
+            or message.user_id != login_user.user_id
+        ):
+            raise UnAuthorizedError.http_exception()
+        return message
+
+    @staticmethod
+    def like_response(data: ChatInput, login_user: UserPayload) -> None:
+        """Process like/dislike with session counter updates."""
+        message_id = data.message_id
+        message = ChatMessageService._feedback_message(message_id, login_user)
 
         if message.liked == data.liked:
             return
@@ -204,16 +222,15 @@ class ChatMessageService:
         MessageSessionDao.add_dislike_count(message.chat_id, dislike_count)
 
     @staticmethod
-    def mark_copied(message_id: int) -> None:
+    def mark_copied(message_id: int, login_user: UserPayload) -> None:
         """Mark a message as copied with session counter update."""
-        message = ChatMessageDao.get_message_by_id(message_id)
-        if not message:
-            raise NotFoundError.http_exception()
+        message = ChatMessageService._feedback_message(message_id, login_user)
         if message.copied != 1:
             ChatMessageDao.update_message_copied(message_id, 1)
             MessageSessionDao.add_copied_count(message.chat_id, 1)
 
     @staticmethod
-    def comment_on_answer(message_id: int, comment: str) -> None:
+    def comment_on_answer(message_id: int, comment: str, login_user: UserPayload) -> None:
         """Add a comment to a message answer."""
+        ChatMessageService._feedback_message(message_id, login_user)
         comment_answer(message_id, comment)

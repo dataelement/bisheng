@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { KnowledgeDeletionDialog } from "./KnowledgeDeletionDialog";
 import { useKnowledgeDeletion } from "../hooks/useKnowledgeDeletion";
@@ -31,9 +31,14 @@ const commands: api.DeleteCommand[] = [
   { spaceId: 3, kind: "files", items: [{ id: 4, type: "folder" }] },
   { spaceId: 3, kind: "files", items: [{ id: 5, type: "file" }] },
 ];
-function Harness({ command }: { command: api.DeleteCommand }) {
+function Harness({ command, readonly = false }: { command: api.DeleteCommand; readonly?: boolean }) {
   const operation = useKnowledgeDeletion("current-scope");
-  return <><button onClick={() => { void operation.open(command); }}>Delete target</button><KnowledgeDeletionDialog operation={operation} /></>;
+  return (
+    <>
+      <button onClick={() => { void operation.open(command, readonly); }}>Open check</button>
+      <KnowledgeDeletionDialog operation={operation} />
+    </>
+  );
 }
 beforeEach(() => {
   jest.mocked(api.readDeletionTenant).mockResolvedValue({ tenant: "2" });
@@ -45,7 +50,7 @@ it.each(commands)("checks deletion on demand and hides references when none exis
   render(<Harness command={command} />);
   expect(api.readDeletionTenant).not.toHaveBeenCalled();
   expect(api.precheckDeletion).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByText("Delete target"));
+  fireEvent.click(screen.getByText("Open check"));
   await screen.findByText("com_knowledge.deletion.irreversible");
   expect(api.precheckDeletion).toHaveBeenCalledWith(command, false, "2");
   expect(screen.queryByText("com_knowledge.deletion.source_counts")).toBeNull();
@@ -66,25 +71,53 @@ it.each(commands)("shows existing dependencies inside the deletion flow and bloc
   }, matched_slot_count: 1 }] };
   jest.mocked(api.precheckDeletion).mockResolvedValue(referenced);
   render(<Harness command={command} />);
-  fireEvent.click(screen.getByText("Delete target"));
-  expect(await screen.findByRole("link", { name: "Policy assistant" })).toHaveAttribute("href", "/build/assistants/1");
+  fireEvent.click(screen.getByText("Open check"));
+  const details = within(await screen.findByRole("table", { name: "com_knowledge.deletion.source_details" }));
+  expect(details.getByRole("link", { name: "Policy assistant" })).toHaveAttribute("href", "/build/assistants/1");
+  expect(details.getByRole("cell", { name: "1" })).toBeVisible();
   expect(screen.getByText("com_knowledge.deletion.source_counts")).toBeVisible();
   expect(screen.getByText("com_knowledge.deletion.confirm")).toBeDisabled();
   expect(document.body.textContent).not.toContain("private-id");
   expect(api.confirmDeletion).not.toHaveBeenCalled();
 });
 
-it("hides knowledge and default model counts in both sections for space deletion", async () => {
+it("hides knowledge and default model rows in the space deletion summary", async () => {
   const result = plan();
   result.impact.source_counts = { knowledge: 4, model_default: 3, assistant: 1 };
   result.impact.restricted_counts = { knowledge: 2, model_default: 1, workflow_version: 5 };
   jest.mocked(api.precheckDeletion).mockResolvedValue(result);
   render(<Harness command={commands[0]} />);
-  fireEvent.click(screen.getByText("Delete target"));
-  expect(await screen.findByText("com_knowledge.deletion.source_assistant: 1")).toBeVisible();
-  expect(screen.getByText("com_knowledge.deletion.source_workflow_version: 5")).toBeVisible();
-  expect(screen.queryByText(/com_knowledge.deletion.source_knowledge/)).toBeNull();
-  expect(screen.queryByText(/com_knowledge.deletion.source_model_default/)).toBeNull();
+  fireEvent.click(screen.getByText("Open check"));
+  const summary = within(await screen.findByRole("table", { name: "com_knowledge.deletion.references" }));
+  const assistant = within(summary.getByRole("row", { name: /deletion.source_assistant/ }));
+  const workflow = within(summary.getByRole("row", { name: /deletion.source_workflow_version/ }));
+  expect(assistant.getByRole("cell", { name: "1" })).toBeVisible();
+  expect(workflow.getByRole("cell", { name: "5" })).toBeVisible();
+  expect(summary.queryByRole("rowheader", { name: "com_knowledge.deletion.source_knowledge" })).toBeNull();
+  expect(summary.queryByRole("rowheader", { name: "com_knowledge.deletion.source_model_default" })).toBeNull();
+  expect(summary.queryByRole("columnheader", { name: "com_knowledge.deletion.slot_counts" })).toBeNull();
+});
+
+it("shows zero counts and types present only in reference slots in the read-only table", async () => {
+  jest.mocked(api.inspectReferences).mockResolvedValue({
+    check_complete: true,
+    blocked: false,
+    source_counts: { assistant: 0 },
+    restricted_counts: {},
+    slot_counts: { workflow_version: 3 },
+    source_page: page,
+  });
+  render(<Harness command={commands[0]} readonly />);
+  fireEvent.click(screen.getByText("Open check"));
+  const summary = within(await screen.findByRole("table", { name: "com_knowledge.deletion.references" }));
+  expect(summary.getByRole("columnheader", { name: "com_knowledge.deletion.slot_counts" })).toBeVisible();
+  const assistant = within(summary.getByRole("row", { name: /deletion.source_assistant/ }));
+  const workflow = within(summary.getByRole("row", { name: /deletion.source_workflow_version/ }));
+  expect(assistant.getAllByRole("cell")[0]).toHaveTextContent("0");
+  expect(workflow.getByRole("cell", { name: "3" })).toBeVisible();
+  expect(screen.queryByText("com_knowledge.deletion.confirm")).toBeNull();
+  expect(screen.queryByRole("button", { name: "com_knowledge.deletion.close" })).toBeNull();
+  expect(screen.getByRole("button", { name: "com_knowledge.deletion.review" })).toBeEnabled();
 });
 
 it("shows restricted counts without inventing a source name, and keeps incomplete checks blocked", async () => {
@@ -93,11 +126,11 @@ it("shows restricted counts without inventing a source name, and keeps incomplet
   restricted.impact.restricted_counts = { workflow_version: 2 };
   jest.mocked(api.precheckDeletion).mockResolvedValueOnce(restricted).mockResolvedValueOnce({ ...plan(), check_complete: false });
   render(<Harness command={commands[0]} />);
-  fireEvent.click(screen.getByText("Delete target"));
+  fireEvent.click(screen.getByText("Open check"));
   expect(await screen.findByText("com_knowledge.deletion.restricted")).toBeVisible();
   expect(screen.queryByRole("link")).toBeNull();
   fireEvent.click(screen.getByText("com_knowledge.deletion.close"));
-  fireEvent.click(screen.getByText("Delete target"));
+  fireEvent.click(screen.getByText("Open check"));
   await waitFor(() => expect(screen.getByText("com_knowledge.deletion.confirm")).toBeDisabled());
   expect(await screen.findByText("com_knowledge.deletion.unavailable")).toBeVisible();
   expect(screen.queryByText("com_knowledge.deletion.source_counts")).toBeNull();

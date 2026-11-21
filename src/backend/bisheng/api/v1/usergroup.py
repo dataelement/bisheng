@@ -49,7 +49,7 @@ async def _can_use_v25_role_catalog(user: UserPayload) -> bool:
 @router.get("/list")
 async def get_all_group(login_user: UserPayload = Depends(UserPayload.get_login_user)):
     """
-    Get all groups（PRD：超管/租户管理员全量；其他用户见公开组 + 自建/加入的私密组）
+    Get all groups(PRD:超管/租户管理员全量;其他用户见公开组 + 自建/加入的私密组)
     """
     from bisheng.department.domain.services.department_service import _is_tenant_admin
 
@@ -138,14 +138,17 @@ async def get_user_group(user_id: int, login_user: UserPayload = Depends(UserPay
 @router.get("/get_group_user")
 async def get_group_user(
     group_id: int,
-    page_size: int = None,
-    page_num: int = None,
+    page_size: int | None = None,
+    page_num: int | None = None,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """
     Get grouped users
     """
-    return resp_200(RoleGroupService().get_group_user_list(group_id, page_size, page_num))
+    data = await anyio.to_thread.run_sync(
+        RoleGroupService().get_group_user_list, group_id, page_size, page_num, login_user
+    )
+    return resp_200(data)
 
 
 @router.post("/set_group_admin")

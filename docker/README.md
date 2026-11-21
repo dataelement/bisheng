@@ -10,9 +10,9 @@
 bash docker/install.sh
 ```
 
-脚本首次将 `.env.example` 复制为 `.env`，按提示隐藏输入本公司的五项中间件密码，自动生成外置密钥和加密配置，使用默认公共账号登录 `cr.dataelem.com`，拉取镜像并执行 `up -d`。默认不启用 Gateway 和 FT，也不会询问是否启用。已有 `.env` 会保留，不自动覆盖或合并。部署需要 Bash 和常用系统命令，无需宿主机 Python。
+脚本首次将 `.env.example` 复制为 `.env`，按提示隐藏输入本公司的五项中间件密码，自动生成外置密钥和加密配置，使用默认公共账号登录 `cr.dataelem.com`，拉取镜像并执行 `up -d`。默认启用 Vibe App 运行服务、沙箱和 BS Client；Gateway 和 FT 默认关闭，也不会询问是否启用。已有 `.env` 的开关、镜像、来源与凭据保留；启用 app-runtime 时仅补齐缺失的独立运行时密钥。部署需要 Bash 和常用系统命令，无需宿主机 Python。
 
-账号在 `.env` 的 `CR_REGISTRY_USERNAME` / `CR_REGISTRY_PASSWORD` 中配置；默认使用提供的公共账号，密码通过 `--password-stdin` 传入 Docker。`--prepare-only` 首次只准备参数并校验 Compose 结构，不要求密码和工具镜像；不登录、不拉取、不启动服务。正式安装才进行凭据和新连接检查。
+账号在 `.env` 的 `CR_REGISTRY_USERNAME` / `CR_REGISTRY_PASSWORD` 中配置；默认使用提供的公共账号，密码通过 `--password-stdin` 传入 Docker。`--prepare-only` 首次只准备参数（含首次生成的独立运行时密钥）并校验 Compose 结构，不要求密码和工具镜像；不登录、不拉取、不启动服务。正式安装才进行凭据和新连接检查。
 
 ## Gateway（可选）
 
@@ -28,11 +28,64 @@ Gateway 与基础服务位于同一个 Compose 文件，通过 `gateway` profile
 
 后续重复执行会保留 `.env` 中的 Gateway 配置。使用 `--no-gateway` 可恢复直接转发；该选项不会删除数据，也不停止已经运行的 Gateway。
 
+### Gateway 1.9.3 与数据库初始化
+
+Compose 默认 Gateway 镜像为 `cr.dataelem.com/dataelement/gateway:v1.9.3`，
+版本在 `.env.example` 的 `BISHENG_GATEWAY_IMAGE` 中配置。已有部署不会被安装脚本
+自动覆盖，升级时先将 `docker/.env` 中的该变量改为上述镜像。
+
+Gateway 使用独立的 `bisheng_gateway` 数据库。MySQL 需为 **8.0.16 或更新版本**；
+MySQL 5.7 不支持 DSH outbox 查询使用的窗口函数。新安装的 `gateway-db-init`
+会执行 [gateway/init.sql](gateway/init.sql)，完整创建以下 8 张表：
+
+- `gt_group_resource`、`gt_sensitive_words`、`gt_user_group`：历史用户组及技能/助手敏感词配置。
+- `gt_block_record`：技能/助手敏感词拦截记录。
+- `gt_department`、`gt_department_resource`：部门及资源限流。
+- `gt_dsh_sensitive_policy`：DSH 租户敏感词策略。
+- `gt_dsh_safety_outbox`：DSH 安全事件持久化与投递。
+
+已有部署升级前先备份数据库并停止所有 Gateway 副本，在 Gateway 数据库中核对表结构。
+若只缺两张 DSH 表，可单独执行
+[gateway/f111_dsh_content_safety_mysql.sql](gateway/f111_dsh_content_safety_mysql.sql)。
+该脚本仅创建缺失表，不修改已有数据，也不会修复已有表的字段或索引差异。
+同栈 MySQL 可在代码根目录执行以下命令补表（示例密码沿用 Compose 模板；若已改密码需同步调整）：
+
+```bash
+docker compose --env-file docker/.env -f docker/docker-compose.yml exec -T \
+  -e MYSQL_PWD=1234 mysql mysql -u root bisheng_gateway \
+  < docker/gateway/f111_dsh_content_safety_mysql.sql
+```
+
+首次安装已包含多副本唯一索引。已有数据库若尚未升级这些索引，先在
+`bisheng_gateway` 中执行只读的
+[gateway/multi_node_preflight.sql](gateway/multi_node_preflight.sql)，处理前三项检查
+返回的冲突，再执行一次
+[gateway/multi_node_mysql.sql](gateway/multi_node_mysql.sql)。已包含对应索引、约束
+或生成列的数据库不要重复执行；不要自动删除或合并冲突数据。
+
+补表完成并更新 `.env` 后，重新创建初始化容器并更新 Gateway：
+
+```bash
+cd docker
+docker compose --profile gateway pull gateway
+docker compose --profile gateway up --force-recreate gateway-db-init
+docker compose --profile gateway up -d gateway
+docker compose --profile gateway logs --tail=100 gateway-db-init gateway
+```
+
+若初始化容器失败，先修复初始化错误，成功后再启动 Gateway。仅更换镜像不会修复已有表结构。
+
+DSH 检测开关为 `dsh.content-safety.enabled`。仅设为 `false` 不会停止历史安全事件投递：
+当 `backend-namespace`、`source-id` 和共享 HMAC 均已配置时，后台仍会访问 outbox 表。
+出现 `BadSqlGrammarException`、`DSH outbox delivery unavailable code=claim_failed` 时，
+先检查 MySQL 版本、outbox 表及字段是否齐全，再结合底层 SQL 异常定位。
+
+
 ## 镜像与部署配置
 
 所有镜像地址集中在 `.env.example`，默认使用 `cr.dataelem.com`。需要修改镜像时，先执行 `bash docker/install.sh --prepare-only`，编辑生成的 `.env` 中完整的 `*_IMAGE` 地址，再执行安装脚本。下载源码不会重新构建镜像。
 
-ARM 主机需要将每个启用服务的镜像替换为兼容 ARM 的 tag 或多架构镜像。Gateway ARM tag 为 `v1.8.0-arm64`。Socket proxy 的 AMD64 tag 为 `0.3.0`，ARM64 部署需设置 `DOCKER_SOCKET_PROXY_IMAGE=cr.dataelem.com/tecnativa/docker-socket-proxy:0.3.0-arm64`；沙箱必须使用可用的对应架构镜像。
+ARM 主机需要将每个启用服务的镜像替换为兼容 ARM 的 tag 或多架构镜像。Gateway 需使用经确认兼容 ARM 的版本，通过 `BISHENG_GATEWAY_IMAGE` 指定。Socket proxy 的 AMD64 tag 为 `0.3.0`，ARM64 部署需设置 `DOCKER_SOCKET_PROXY_IMAGE=cr.dataelem.com/tecnativa/docker-socket-proxy:0.3.0-arm64`；沙箱必须使用可用的对应架构镜像。
 
 ## 模型微调 bisheng-ft（可选）
 
@@ -75,6 +128,10 @@ docker compose --profile ft stop ft_server
 
 端口和资源需要满足 Compose 配置；Elasticsearch 的宿主机配置、外部模型及文档服务按实际环境准备。首次启动后仍需注册用户、配置模型。
 
+## 隔离执行与端口安全变更
+
+中间件宿主机端口默认只绑定 `127.0.0.1`（`BISHENG_MIDDLEWARE_BIND_IP` / `BISHENG_MINIO_BIND_IP`）。远程维护走受保护的入口、防火墙和 TLS，不把 MySQL、Redis、Elasticsearch、Milvus、OpenFGA 直接暴露到公网。`install.sh` 会生成 32 字节私有 `SANDBOX_TOKEN`，并拒绝空值、公开默认值和过短值。代码节点不再回退到进程内本地执行器。
+
 ## 查看启动状态
 
 ```bash
@@ -89,10 +146,21 @@ docker compose logs gateway
 
 ## 其他部署方式
 
-- VibeApp 运行环境是独立的 `app-runtime` profile，需要额外配置，见[应用工场部署说明](../docs/architecture/14-app-factory-deployment.md)。
+- Vibe App 的 `app-runtime` profile 在全新部署默认启用。宿主隔离、基础运行镜像和容量等实际运行前提见[应用工场部署说明](../docs/architecture/14-app-factory-deployment.md)与[宿主隔离说明](../deploy/runtime-manager/README.md)。这些条件尚未满足时操作会明确失败，默认开关不替代运行准入。
 - Kubernetes 部署见 [Helm 说明](helm/README.md)。
 - Office 可选服务使用 `docker-compose-office.yml`。
 
+## 默认客户端与依赖下载
+
+部署 YAML 使用 `bs_client`（旧 `dsh` 仍兼容）；两者同时存在时新块整块优先。`enabled` 默认开启，`platform_public_url` 可留空，登录、Chat、会话、Work 工具和技能按当前请求地址工作。需要固定公开地址时才配置它；URL 为不带路径的 HTTP(S) origin。
+
+标准代理保留公开 Host 与端口。外部 TLS 终止代理应覆盖客户端转发头，并在 `nginx/conf.d/default.conf` 与 `websocket.conf` 的 `geo $bs_trusted_edge` 中登记其真实 IP/CIDR；无需为此填写客户端部署地址。后端仅信任 `bs_client.trusted_proxy_hosts` 声明的代理，默认 Compose 为 frontend/gateway。直接访问后端时不会相信任意客户端传入的转发头。
+
+全新在线部署在受控准备阶段从 PyPI（含 wheel 文件域名）与 npm 下载基础镜像未预装的包；`.env` 中 `BISHENG_RTM_BUILD_INDEX_URL`、`BISHENG_RTM_BUILD_NPM_REGISTRY` 可改为企业源。`BISHENG_RUNTIME_OFFLINE=true` 选择离线，缺包明确失败，不自动改用公网。安装/编译和正式运行继续使用既有出站限制。
+
+首次运行 install.sh 为各运行时身份生成不同随机密钥，重跑不会轮换。关闭 Vibe 时将实际 YAML 的 `app_runtime.enabled` 改为 false，并从 `.env` 的 `COMPOSE_PROFILES` 移除 app-runtime；保留数据。仅修改 profile 不会修改用户自管 YAML。沙箱按现有 endpoints/执行器配置关闭，已有会话的停用需要单独安排。
+
+模板服务 tag 跟随 v3.1.0-beta1，实际安装需使用包含本次变更的后端/运行时发行镜像。源码验证不表示镜像已构建、已推送或线上已更新。
 
 ## 中间件凭据配置（v3.1.0-beta2）
 

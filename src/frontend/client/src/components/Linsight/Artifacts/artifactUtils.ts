@@ -139,6 +139,10 @@ export function stripWorkspacePaths(text: string): string {
  * useLinsightManager with `file_name` + the backend entry fields) into drawer
  * artifacts. The previewable url is the parsed-markdown object (`markdown_file_path`);
  * invalid/expired entries (failed parse, no formal product) are dropped.
+ *
+ * `file_path` is the file's workspace path (`/uploads/<dir>/<name>`, the original
+ * when one was carried), so a markdown deliverable's `![](uploads/x.png)` resolves
+ * to the exact upload even inside a folder upload or after a `-2` rename.
  */
 export function toUploadedArtifacts(files: any[] | undefined): ArtifactFile[] {
     return (files || [])
@@ -151,9 +155,11 @@ export function toUploadedArtifacts(files: any[] | undefined): ArtifactFile[] {
             const previewAsImage = IMAGE_EXTS.includes(getFileExtension(name)) && !!f.original_file_path;
             const previewAsOriginal =
                 !previewAsImage && f.ingest_mode === 'spreadsheet_original' && !!f.original_file_path;
+            const workspacePath: string | undefined = f.raw_workspace_path || f.workspace_path;
             return {
                 file_id: f.file_id,
                 file_name: name,
+                ...(workspacePath ? { file_path: workspacePath } : {}),
                 file_url: previewAsImage || previewAsOriginal ? f.original_file_path : f.markdown_file_path,
                 file_md5: f.file_md5,
                 source: 'upload' as const,
@@ -288,6 +294,11 @@ export function isAbsoluteImageSrc(src: string): boolean {
  * the path suffix first (disambiguates same-name files in different dirs) and fall
  * back to basename. Returns the matching entry (whose `file_url` resolves to a
  * presigned URL) or undefined when nothing matches.
+ *
+ * Uploaded files (`source: 'upload'`) live under `uploads/` and match only a ref
+ * that names that directory (`uploads/x.png`); a bare `x.png` written next to an
+ * output markdown still means the deliverable image, so on a basename tie the
+ * deliverable wins.
  */
 export function matchArtifactByRelPath(
     fileList: ArtifactFile[] | undefined,
@@ -302,6 +313,9 @@ export function matchArtifactByRelPath(
     const bySuffix = fileList.find((f) => {
         if (!f.file_path) return false;
         const p = norm(f.file_path);
+        if (f.source === 'upload') {
+            return target.startsWith('uploads/') && (p === target || p.endsWith('/' + target));
+        }
         return (
             p === target ||
             p.endsWith('/' + target) ||
@@ -310,8 +324,9 @@ export function matchArtifactByRelPath(
         );
     });
     if (bySuffix) return bySuffix;
-    // 2) basename match on file_name (bare filename, no dir).
-    return fileList.find((f) => norm(f.file_name) === base);
+    // 2) basename match on file_name (bare filename, no dir); deliverables first.
+    const byBase = (f: ArtifactFile) => norm(f.file_name) === base;
+    return fileList.find((f) => f.source !== 'upload' && byBase(f)) ?? fileList.find(byBase);
 }
 
 const DELIVERABLE_LINK_EXT = /\.(md|markdown|html|htm|docx|pdf)$/i;

@@ -5,12 +5,13 @@
  * Both list endpoints are F027 cursor waterfalls: the first page asks with a
  * `null` cursor and the answer is `{ list, hasMore, nextCursor }`.
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 const mockGetChatOnlineApi = jest.fn();
 const mockGetHomeLabelApi = jest.fn();
 const mockGetUncategorized = jest.fn();
 const mockRecordUsedAppApi = jest.fn();
+const mockIntersections = new Set<() => void>();
 
 jest.mock('~/api/apps', () => ({
   getChatOnlineApi: (...args: unknown[]) => mockGetChatOnlineApi(...args),
@@ -35,7 +36,6 @@ jest.mock('~/utils', () => ({
   cn: (...classes: unknown[]) => classes.filter(Boolean).join(' '),
   copyText: jest.fn(),
 }));
-jest.mock('~/components/ui/Button', () => ({ Button: () => null }));
 jest.mock('~/components/ui/icon/Loading', () => ({ LoadingIcon: () => null }));
 jest.mock('~/components/illustrations', () => ({ EmptyStateIllustration: () => null }));
 jest.mock('./appUtils', () => ({ getAppShareUrl: () => '' }));
@@ -67,14 +67,21 @@ async function selectTaggedTab() {
 
 beforeAll(() => {
   class IntersectionObserverStub {
+    private intersect: () => void;
+    constructor(callback: IntersectionObserverCallback) {
+      this.intersect = () => callback(
+        [{ isIntersecting: true } as IntersectionObserverEntry],
+        this as unknown as IntersectionObserver,
+      );
+    }
     observe() {
-      /* no-op */
+      mockIntersections.add(this.intersect);
     }
     unobserve() {
       /* no-op */
     }
     disconnect() {
-      /* no-op */
+      mockIntersections.delete(this.intersect);
     }
   }
   (globalThis as unknown as { IntersectionObserver: unknown }).IntersectionObserver =
@@ -82,10 +89,17 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+  mockIntersections.clear();
   mockGetChatOnlineApi.mockResolvedValue({ list: [], hasMore: false, nextCursor: null });
   mockGetHomeLabelApi.mockResolvedValue({ data: [{ id: 7, name: 'Finance' }] });
   mockGetUncategorized.mockResolvedValue({ list: [], hasMore: false, nextCursor: null });
 });
+
+async function showLoader() {
+  await act(async () => {
+    for (const intersect of [...mockIntersections]) intersect();
+  });
+}
 
 describe('ExplorePlaza search scope', () => {
   it('defaults to All and can return to it from a category', async () => {
@@ -192,5 +206,154 @@ describe('ExplorePlaza search scope', () => {
 
     await waitFor(() => expect(screen.getAllByTestId('agent')).toHaveLength(1));
     expect(screen.getByTestId('agent')).toHaveTextContent('searched app');
+  });
+});
+
+it.each([false, true])('pauses scroll after a request fails and retries the same page (append=%s)', async (append) => {
+  mockGetChatOnlineApi.mockClear();
+  if (append) {
+    mockGetChatOnlineApi.mockResolvedValueOnce({
+      list: [{ id: '1', name: 'First app' }], hasMore: true, nextCursor: 'next',
+    });
+  }
+  mockGetChatOnlineApi.mockRejectedValueOnce(new Error('unavailable')).mockResolvedValueOnce({
+    list: [{ id: '2', name: 'Recovered app' }], hasMore: false, nextCursor: null,
+  });
+  render(<ExplorePlaza />);
+  if (append) {
+    await screen.findByText('First app');
+    await showLoader();
+  }
+
+  const retry = await screen.findByRole('button', { name: 'com_ui_retry' });
+  await showLoader();
+  expect(mockGetChatOnlineApi).toHaveBeenCalledTimes(append ? 2 : 1);
+  if (append) expect(screen.getByText('First app')).toBeTruthy();
+
+  fireEvent.click(retry);
+  await screen.findByText('Recovered app');
+  expect(mockGetChatOnlineApi).toHaveBeenLastCalledWith(append ? 'next' : null, '', -1, PAGE_SIZE);
+});
+
+describe('ExplorePlaza failed pages', () => {
+  beforeEach(() => {
+    jest.spyOn(console, 'error').mockImplementation(() => undefined);
+  });
+
+  it('stops automatic requests after 25008 and retries only when asked', async () => {
+    mockGetChatOnlineApi.mockRejectedValue(Object.assign(new Error('Projection unavailable'), { status_code: 25008 }));
+    render(<ExplorePlaza />);
+    await screen.findByRole('alert');
+    expect(screen.queryByText('com_app_explore_no_agents')).not.toBeInTheDocument();
+    expect(screen.queryByText('com_app_explore_loading_more')).not.toBeInTheDocument();
+    for (let n = 0; n < 3; n++) await showLoader();
+    expect(mockGetChatOnlineApi).toHaveBeenCalledTimes(1);
+
+    mockGetChatOnlineApi.mockResolvedValue({ list: [{ id: 'own', name: 'Own app' }], hasMore: false, nextCursor: null });
+    fireEvent.click(screen.getByRole('button', { name: 'com_ui_retry' }));
+    await screen.findByText('Own app');
+    expect(mockGetChatOnlineApi).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('keeps existing cards and retries the same cursor after an append fails', async () => {
+    mockGetChatOnlineApi.mockResolvedValueOnce({
+      list: [{ id: '1', name: 'First app' }], hasMore: true, nextCursor: 'page-2',
+    }).mockRejectedValue(new Error('Network unavailable'));
+    render(<ExplorePlaza />);
+    await screen.findByText('First app');
+    await showLoader();
+    await screen.findByRole('alert');
+    expect(screen.getByText('First app')).toBeInTheDocument();
+    for (let n = 0; n < 3; n++) await showLoader();
+    expect(mockGetChatOnlineApi).toHaveBeenCalledTimes(2);
+
+    mockGetChatOnlineApi.mockResolvedValue({
+      list: [{ id: '2', name: 'Second app' }], hasMore: false, nextCursor: null,
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'com_ui_retry' }));
+    await screen.findByText('Second app');
+    expect(screen.getAllByTestId('agent')).toHaveLength(2);
+    expect(mockGetChatOnlineApi).toHaveBeenLastCalledWith('page-2', '', -1, PAGE_SIZE);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('allows changing category after the first page fails', async () => {
+    mockGetChatOnlineApi.mockRejectedValueOnce(new Error('Unavailable')).mockResolvedValue({
+      list: [{ id: '2', name: 'Finance app' }], hasMore: false, nextCursor: null,
+    });
+    render(<ExplorePlaza />);
+    await screen.findByRole('alert');
+    await selectTaggedTab();
+    await screen.findByText('Finance app');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    { list: [], hasMore: true, nextCursor: 'page-2' },
+    { list: [{ id: '1', name: 'App' }], hasMore: true, nextCursor: null },
+  ])('stops when the response cannot advance pagination: %j', async (response) => {
+    mockGetChatOnlineApi.mockResolvedValue(response);
+    render(<ExplorePlaza />);
+    await screen.findByRole('alert');
+    await showLoader();
+    expect(mockGetChatOnlineApi).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops when an append returns its input cursor', async () => {
+    mockGetChatOnlineApi.mockResolvedValue({
+      list: [{ id: '1', name: 'First app' }], hasMore: true, nextCursor: 'page-2',
+    });
+    render(<ExplorePlaza />);
+    await screen.findByText('First app');
+    await showLoader();
+    await screen.findByRole('alert');
+    await showLoader();
+    expect(screen.getAllByTestId('agent')).toHaveLength(1);
+    expect(mockGetChatOnlineApi).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not replace a newer search with an old request failure', async () => {
+    let rejectFirst: (reason: Error) => void = () => undefined;
+    mockGetChatOnlineApi.mockImplementationOnce(() => new Promise((_, reject) => { rejectFirst = reject; }));
+    render(<ExplorePlaza />);
+    await waitFor(() => expect(mockGetChatOnlineApi).toHaveBeenCalledTimes(1));
+    mockGetChatOnlineApi.mockResolvedValue({
+      list: [{ id: '2', name: 'Search result' }], hasMore: false, nextCursor: null,
+    });
+    fireEvent.change(screen.getByTestId('search-input'), { target: { value: 'search' } });
+    await screen.findByText('Search result');
+    await act(async () => { rejectFirst(new Error('Old request failed')); });
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByText('Search result')).toBeInTheDocument();
+  });
+
+  it('keeps the current append locked when a previous filter finishes late', async () => {
+    type Page = { list: { id: string; name: string }[]; hasMore: boolean; nextCursor: string | null };
+    let resolveOld: (page: Page) => void = () => undefined;
+    let resolveCurrent: (page: Page) => void = () => undefined;
+    mockGetChatOnlineApi
+      .mockResolvedValueOnce({ list: [{ id: '1', name: 'Old result' }], hasMore: true, nextCursor: 'old-page' })
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveOld = resolve; }))
+      .mockResolvedValueOnce({ list: [{ id: '2', name: 'New result' }], hasMore: true, nextCursor: 'new-page' })
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveCurrent = resolve; }));
+    render(<ExplorePlaza />);
+    await screen.findByText('Old result');
+    await showLoader();
+    fireEvent.change(screen.getByTestId('search-input'), { target: { value: 'new' } });
+    await screen.findByText('New result');
+    await showLoader();
+    expect(mockGetChatOnlineApi).toHaveBeenCalledTimes(4);
+    await act(async () => {
+      resolveOld({ list: [{ id: '3', name: 'Stale append' }], hasMore: false, nextCursor: null });
+    });
+    expect(screen.getByText('com_app_explore_loading_more')).toBeInTheDocument();
+    await showLoader();
+    expect(mockGetChatOnlineApi).toHaveBeenCalledTimes(4);
+    await act(async () => {
+      resolveCurrent({ list: [{ id: '4', name: 'Current append' }], hasMore: false, nextCursor: null });
+    });
+    expect(screen.getByText('Current append')).toBeInTheDocument();
+    expect(screen.queryByText('Stale append')).not.toBeInTheDocument();
   });
 });

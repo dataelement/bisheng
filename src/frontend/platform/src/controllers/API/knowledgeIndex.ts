@@ -9,6 +9,12 @@ export interface FileMetadata extends Partial<Omit<KnowledgeSpaceChild, "user_me
     string,
     { field_value: unknown; field_type?: string }
   > | null;
+  /** Version row behind this physical file (space files only). */
+  version_id?: number | null;
+  version_no?: number | null;
+  is_primary_version?: boolean | null;
+  /** Whether retrieval may serve this file right now; absent on legacy backends. */
+  retrievable?: boolean | null;
 }
 export function readVersionChunks(
   spaceId: number,

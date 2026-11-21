@@ -1,5 +1,6 @@
 // @ts-strict-ignore
 import { notification } from '@bisheng/ui';
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 // components/AudioPlayButton.tsx
 import { textToSpeech } from '@/controllers/API/workbench';
 import { showApiError } from '@/controllers/request';
@@ -118,7 +119,7 @@ export const AudioPlayComponent = ({ messageId, msg = '', compact = false }: Aud
         aria-label={isPlaying ? 'Pause' : 'Play'}
       >
         {isThisLoading ? (
-          <Outlined.Loading size={compact ? 14 : 20} color={compact ? undefined : "#9ca3af"} className={compact ? "animate-spin" : "mt-0.5 mr-1 animate-spin"} />
+          <LoadingState size="inline" className={compact ? undefined : "mt-0.5 mr-1"} />
         ) : (
           compact ? (isPlaying ? <Outlined.PlayerPause size={14} /> : <Outlined.VolumeNotice size={14} />)
             : <Outlined.VolumeNotice size={20} color="#9ca3af" className="cursor-pointer mt-0.5 mr-1 text-primary hover:text-primary" />

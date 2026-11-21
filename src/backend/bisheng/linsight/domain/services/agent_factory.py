@@ -1,3 +1,4 @@
+# ruff: noqa: RUF001, RUF002
 """F035 Track A · TA-3: deepagents agent factory.
 
 ``create_linsight_agent`` is the single装配点 that replaces the legacy
@@ -1131,7 +1132,7 @@ def _coerce_text(value: object) -> str:
         return ""
     if isinstance(value, str):
         return value.strip()
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, list | tuple):
         for x in value:
             text = _coerce_text(x)
             if text:
@@ -1155,7 +1156,7 @@ def _coerce_bool(value: object) -> bool:
     multi-select one."""
     if isinstance(value, str):
         return value.strip().lower() not in _FALSY_STRINGS
-    if isinstance(value, (bool, int, float)):
+    if isinstance(value, bool | int | float):
         return bool(value)
     return False
 
@@ -1175,7 +1176,7 @@ def _coerce_options(value: object) -> list[str]:
     def walk(v: object) -> None:
         if v is None:
             return
-        if isinstance(v, (list, tuple)):
+        if isinstance(v, list | tuple):
             for x in v:
                 walk(x)
             return
@@ -1924,6 +1925,7 @@ async def create_linsight_agent(
     inbox: AgentMiddleware | None = None,
     memory: MemoryWiring | None = None,
     workbench_prompt: str | None = None,
+    model_facts_sink: dict | None = None,
 ):
     """Build the deepagents-backed Linsight agent (design §2.1).
 
@@ -1966,6 +1968,9 @@ async def create_linsight_agent(
             tools are bound on the main graph and its text is appended to the
             system message. Deep research still passes the tools inside ``tools``
             and the text as ``memory_prompt``; both come from ``wire_memory`` too.
+        model_facts_sink: mutable dict filled with ``supports_vision`` of the
+            resolved model, so the uploaded-files pointer block words image
+            originals the same way the binary guards treat them.
 
     Returns:
         ``CompiledStateGraph`` to be driven by ``agent.astream(...)``.
@@ -1993,6 +1998,8 @@ async def create_linsight_agent(
     # researcher handoff) follows the session's citation contract in lockstep.
     citation_handles = bool(citation_scope is not None and getattr(citation_scope, "enabled", False))
     model, supports_vision = await _resolve_model(session_model, model_id)
+    if model_facts_sink is not None:
+        model_facts_sink["supports_vision"] = bool(supports_vision)
     context_window = context_window_sink if context_window_sink is not None else {}
     await _apply_context_window(model, svid, context_window)
 
@@ -2438,22 +2445,13 @@ async def _apply_context_window(model: BaseChatModel, svid: str, sink: dict | No
 
 
 async def _resolve_model(session_model, model_id: str | None) -> tuple[BaseChatModel, bool]:
-    """Resolve the per-task model via LLMService (design §2.2 / §2.2.1).
+    """Keep a frozen task selection, or resolve the default for a new task.
 
-    Priority: per-task ``model_id`` -> tenant Linsight default model. Tenant
-    resolution + share fallback live inside ``get_bisheng_linsight_llm``
-    (INV-T18: tenant_id is threaded explicitly in the Worker subprocess).
-
-    Returns ``(model, supports_vision)``. ``supports_vision`` is the admin-declared
-    ``WSModel.visual`` flag — the 视觉 column in 系统模型设置 → 工作台模型, which
-    daily chat already gates image attachments on. Linsight picks its model from
-    that SAME list (``models[]``, the id ``linsight_default_model_id`` selects
-    from), so the lookup is always resolvable; a model id that is somehow absent
-    reads as False, matching the field's own default. Returned from here rather
-    than fetched separately because ``workbench_conf`` is already in hand —
-    ``get_workbench_llm`` re-validates model refs and is not free to call twice.
+    The current user's catalog and actual Root-provider sharing both remain
+    mandatory. Vision uses the same owner capability/local restriction service
+    as Chat and DSH, rather than trusting a stored workbench checkbox.
     """
-    workbench_conf = await LLMService.get_workbench_llm(tenant_id=session_model.tenant_id)
+    workbench_conf = await LLMService.get_workbench_llm_candidates(tenant_id=session_model.tenant_id)
     from bisheng.dsh.domain.services.model_catalog import project_workbench_config
 
     workbench_conf = await project_workbench_config(workbench_conf, session_model.user_id)
@@ -2470,9 +2468,13 @@ async def _resolve_model(session_model, model_id: str | None) -> tuple[BaseChatM
                 "linsight_default_model_id is not configured"
             )
 
-    supports_vision = any(
-        str(entry.id) == str(resolved_id) and bool(entry.visual) for entry in (workbench_conf.models or [])
-    )
+    allowed = {str(entry.id) for entry in workbench_conf.models or []}
+    if str(resolved_id) not in allowed:
+        raise ValueError("The selected task model is not currently available to this user")
+
+    from bisheng.dsh.domain.services.vision import read_vision
+
+    supports_vision = (await read_vision(int(resolved_id))).vision
 
     model = await LLMService.get_bisheng_linsight_llm(
         invoke_user_id=session_model.user_id,

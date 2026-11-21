@@ -246,6 +246,8 @@ docker stop bisheng-backend bisheng-backend-worker bisheng-frontend
 
 # 3. 启动本地后端
 cd src/backend
+.venv/bin/python scripts/initialize_installation.py --apply
+.venv/bin/alembic upgrade head
 .venv/bin/uvicorn bisheng.main:app --host 0.0.0.0 --port 7860 --workers 1 --no-access-log
 
 # 4. 启动 Celery Workers（各开一个终端）

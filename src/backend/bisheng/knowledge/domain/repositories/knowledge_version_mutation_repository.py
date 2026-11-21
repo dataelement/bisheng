@@ -123,6 +123,30 @@ class KnowledgeVersionMutationRepository:
     def __init__(self):
         self._issued = WeakKeyDictionary()
 
+    async def aread_authorization_space(self, session, *, operation, inputs):
+        """Resolve the owning space without locks or issuing a mutation state."""
+        tenant, _ = _scope(session)
+        if operation == "primary":
+            version = await self._one(session, Version, VersionRowFact, _id(inputs["version_id"]))
+            document = (
+                await self._one(session, Document, VersionDocumentFact, version.document_id, owned=True)
+                if version
+                else None
+            )
+            if document is None:
+                return None
+            space_id = document.knowledge_id
+        else:
+            key = "knowledge_file_id" if operation == "link" else "current_file_id"
+            file = await self._one(session, File, VersionFileFact, _id(inputs[key]))
+            if file is None or file.file_type != 1:
+                return None
+            space_id = file.knowledge_id
+        space = await self._one(session, Knowledge, VersionSpaceFact, space_id)
+        if space is None or space.tenant_id != tenant or space.type != 3:
+            return None
+        return space
+
     @staticmethod
     async def _rows(session, statement):
         tenant, transaction = _scope(session)

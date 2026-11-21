@@ -1,13 +1,9 @@
 #!/bin/bash
-set -e
+set -xe
 
 export PYTHONPATH="./"
 
 start_mode=${1:-api}
-
-# Pure configuration validation must finish before migrations or any worker
-# imports can initialize infrastructure clients. No passwords are printed.
-python -m bisheng.core.config.credential_loader
 
 start_knowledge(){
   # 知识库解析的celery worker
@@ -44,6 +40,8 @@ start_min_worker(){
 }
 
 if [ "$start_mode" = "api" ]; then
+    echo "Preparing first-installation reference coverage..."
+    python scripts/initialize_installation.py --apply
     echo "Running database migrations..."
     # Fail fast on migration errors instead of starting the API on a stale,
     # half-migrated schema (which surfaces later as confusing "missing

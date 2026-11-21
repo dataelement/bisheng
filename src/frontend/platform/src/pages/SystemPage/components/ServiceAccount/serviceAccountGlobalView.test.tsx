@@ -1,9 +1,9 @@
 import { render, screen } from "@/test/test-utils"
-import { expect, it, vi } from "vitest"
+import { beforeEach, expect, it, vi } from "vitest"
 import { locationContext } from "@/contexts/locationContext"
 import { userContext } from "@/contexts/userContext"
 import { ServiceAccount } from "./index"
-import { listServiceAccountsApi } from "@/controllers/API/serviceAccount"
+import { getServiceAccountManagementScopeApi, listServiceAccountsApi } from "@/controllers/API/serviceAccount"
 
 vi.mock("@/controllers/API/serviceAccount", () => ({
   getServiceAccountManagementScopeApi: vi.fn().mockResolvedValue({ scope_tenant_id: null }),
@@ -30,4 +30,18 @@ it("does not load accounts for a legacy null scope", async () => {
   expect(screen.queryByText("account-2")).toBeNull()
   expect(screen.queryByTestId("create-form")).toBeNull()
   expect(listServiceAccountsApi).not.toHaveBeenCalled()
+})
+
+
+beforeEach(() => vi.clearAllMocks())
+
+it.each(["[]", "admin"])("admits a child admin on its leaf without reading a super-only scope (%s)", async role => {
+  render(<locationContext.Provider value={{ appConfig: { multiTenantEnabled: true } } as never}>
+    <userContext.Provider value={{ user: { user_id: 3, role, tenant_id: null, leaf_tenant_id: 26, is_child_admin: true, is_global_super: false } } as never}>
+      <ServiceAccount />
+    </userContext.Provider>
+  </locationContext.Provider>)
+  expect(await screen.findByText("account-1")).toBeInTheDocument()
+  expect(listServiceAccountsApi).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ tenantId: 26 }))
+  expect(getServiceAccountManagementScopeApi).not.toHaveBeenCalled()
 })

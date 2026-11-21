@@ -13,7 +13,9 @@ from bisheng.common.errcode.dsh_market import (
     MarketWorkbenchConflictError,
     MarketWorkbenchNotFoundError,
 )
+from bisheng.common.request_scope import RequestScope, request_scope
 from bisheng.common.schemas.api import resp_200
+from bisheng.core.context.tenant import tenant_execution_scope
 from bisheng.dsh_market.domain.bundle import MAX_UPLOAD_BYTES, BundleError
 from bisheng.dsh_market.domain.repository import ConflictError
 from bisheng.dsh_market.domain.workbench_bundle import (
@@ -24,7 +26,7 @@ from bisheng.dsh_market.domain.workbench_repository import WorkbenchConflictErro
 from bisheng.dsh_market.domain.workbench_service import WorkbenchArtifactError
 from bisheng.dsh_market.infrastructure import get_market_service, get_workbench_service
 
-from .auth import MarketActor, market_actor, market_admin
+from .auth import MarketActor, market_actor, market_admin, market_list_tenant
 
 router = APIRouter(prefix="/dsh/market", tags=["DSH enterprise plugin market"])
 
@@ -158,7 +160,40 @@ async def sync(
     return resp_200(receipt)
 
 
+def _read_only_list(result, *, workbenches: bool = False):
+    """Return only table cells when browsing another tenant."""
+    rows = []
+    for source in result["data"]:
+        row = {key: source[key] for key in ("id", "display_name", "description", "updated_at")}
+        if workbenches:
+            row.update(
+                workbench_key=source["workbench_key"],
+                legacy_id=source["legacy_id"],
+                current_version={"version": source["current_version"]["version"]},
+            )
+        else:
+            versions = source["versions"]
+            version = next(
+                (v for v in versions if v["id"] == source["current_version_id"]), versions[0] if versions else None
+            )
+            row["current_version_id"] = version["id"] if version else None
+            row["versions"] = (
+                [
+                    {
+                        "id": version["id"],
+                        "version": version["version"],
+                        "manifest": {"targets": {platform: {} for platform in version["manifest"]["targets"]}},
+                    }
+                ]
+                if version
+                else []
+            )
+        rows.append(row)
+    return {"data": rows, "total": result["total"], "read_only": True}
+
+
 @router.get("/admin/plugins")
+@request_scope(RequestScope.TENANT)
 async def plugins(
     q: str = Query(default="", max_length=200),
     status: Literal["all", "published", "unpublished"] = "all",
@@ -167,7 +202,10 @@ async def plugins(
     actor: MarketActor = Depends(market_admin),
     service=Depends(get_market_service),
 ):
-    return resp_200(await call(service.list_plugins, actor.tenant_id, q.strip(), status, page, size))
+    tenant_id = market_list_tenant(actor)
+    with tenant_execution_scope(tenant_id):
+        result = await call(service.list_plugins, tenant_id, q.strip(), status, page, size)
+    return resp_200(_read_only_list(result) if tenant_id != actor.tenant_id else result)
 
 
 @router.get("/admin/context")
@@ -280,13 +318,17 @@ async def resume_workbench_import(
 
 
 @router.get("/admin/workbenches")
+@request_scope(RequestScope.TENANT)
 async def admin_workbenches(
     page: int = Query(default=1, ge=1),
     size: int = Query(default=20, ge=1, le=100),
     actor: MarketActor = Depends(market_admin),
     service=Depends(get_workbench_service),
 ):
-    return resp_200(await call_workbench(service.list, actor.tenant_id, page, size))
+    tenant_id = market_list_tenant(actor)
+    with tenant_execution_scope(tenant_id):
+        result = await call_workbench(service.list, tenant_id, page, size)
+    return resp_200(_read_only_list(result, workbenches=True) if tenant_id != actor.tenant_id else result)
 
 
 @router.delete("/admin/workbenches/{workbench_id}")

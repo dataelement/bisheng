@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { isSpaceDeletionActive, useKnowledgeSpaceDeletion } from "@/store/knowledgeSpaceDeletion";
 import { useKnowledgeDeletion } from "./useKnowledgeDeletion";
 import * as api from "@/controllers/API/knowledgeDeletion";
 vi.mock("@/controllers/API/knowledgeDeletion");
@@ -186,4 +187,71 @@ it("pages references without issuing a deletion plan", async () => {
   expect(api.pageReferences).toHaveBeenCalledWith(command, "cursor");
   expect(precheck).not.toHaveBeenCalled();
   expect(confirm).not.toHaveBeenCalled();
+});
+
+it("preserves a source-task conflict reason for the deletion explanation", async () => {
+  const { ApiError } = await import("@bisheng/api-client");
+  precheck.mockRejectedValueOnce(new ApiError({ status_code: 10999, data: { reason: "source_space_move_input_required" } }, { message: "Resource conflict" }));
+  const { result } = renderHook(() => useKnowledgeDeletion("scope"));
+  act(() => { void result.current.open(command); });
+  await waitFor(() => expect(result.current.view?.reason).toBe("source_space_move_input_required"));
+  expect(result.current.view?.code).toBe(10999);
+  expect(result.current.view?.result).toBeUndefined();
+  act(() => result.current.cancel());
+});
+
+const spaceScope = { identityKey: "user:7", tenantId: 101, managementTenantId: 101, view: "ordinary" as const };
+afterEach(() => { vi.useRealTimers(); useKnowledgeSpaceDeletion.setState({ entries: {} }); });
+
+it("keeps the target paused after a lost ACK and polls the original task to completion", async () => {
+  confirm.mockRejectedValueOnce(new Error("lost ACK"));
+  status.mockResolvedValueOnce({ job_id: "plan-1", state: "running" }).mockResolvedValueOnce({ job_id: "plan-1", state: "succeeded" });
+  const { result } = renderHook(() => useKnowledgeDeletion("scope", spaceScope));
+  let done!: Promise<boolean>;
+  act(() => { done = result.current.open(command); });
+  await ready(result);
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  await act(async () => { await result.current.confirm(false, false); });
+  expect(isSpaceDeletionActive(spaceScope, 3)).toBe(true);
+  expect(isSpaceDeletionActive({ ...spaceScope, tenantId: 202 }, 3)).toBe(false);
+  expect(isSpaceDeletionActive({ ...spaceScope, identityKey: "user:8" }, 3)).toBe(false);
+  expect(isSpaceDeletionActive({ ...spaceScope, managementTenantId: 202 }, 3)).toBe(false);
+  expect(isSpaceDeletionActive({ ...spaceScope, view: "admin" }, 3)).toBe(false);
+  await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+  expect(status).toHaveBeenLastCalledWith(3, "plan-1");
+  expect(result.current.view?.status?.state).toBe("running");
+  await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+  expect(await done).toBe(true);
+  expect(result.current.view).toBeNull();
+  expect(isSpaceDeletionActive(spaceScope, 3)).toBe(true);
+  await act(async () => { await vi.advanceTimersByTimeAsync(4000); });
+  expect(status).toHaveBeenCalledTimes(2);
+  expect(confirm).toHaveBeenCalledTimes(1);
+});
+
+it("releases an unfinished UI pause when its scope retires and ignores a late ACK", async () => {
+  let resolve!: (value: api.DeletionStatus) => void;
+  confirm.mockReturnValueOnce(new Promise(done => { resolve = done; }));
+  const { result, rerender } = renderHook(({ key }) => useKnowledgeDeletion(key, spaceScope), { initialProps: { key: "a" } });
+  act(() => { void result.current.open(command); });
+  await ready(result);
+  let pending!: Promise<void>;
+  act(() => { pending = result.current.confirm(false, false); });
+  expect(isSpaceDeletionActive(spaceScope, 3)).toBe(true);
+  rerender({ key: "b" });
+  expect(isSpaceDeletionActive(spaceScope, 3)).toBe(false);
+  await act(async () => { resolve({ job_id: "plan-1", state: "succeeded" }); await pending; });
+  expect(isSpaceDeletionActive(spaceScope, 3)).toBe(false);
+  expect(result.current.view).toBeNull();
+});
+
+it("does not pause an entire space when deleting individual files", async () => {
+  confirm.mockResolvedValueOnce({ job_id: "plan-1", state: "running" });
+  const { result, unmount } = renderHook(() => useKnowledgeDeletion("scope", spaceScope));
+  act(() => { void result.current.open({ spaceId: 3, kind: "files", items: [{ id: 5, type: "file" }] }); });
+  await ready(result);
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  await act(async () => { await result.current.confirm(false, false); });
+  expect(isSpaceDeletionActive(spaceScope, 3)).toBe(false);
+  unmount();
 });

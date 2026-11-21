@@ -35,8 +35,11 @@ def harness(monkeypatch):
     )
     monkeypatch.setattr(sources, "get_current_tenant_id", lambda: 2)
     monkeypatch.setattr(sources, "get_minio_storage", AsyncMock(return_value=SimpleNamespace(tmp_bucket="temporary")))
+    monkeypatch.setattr(endpoint, "get_minio_storage", AsyncMock(return_value=SimpleNamespace(tmp_bucket="temporary")))
     monkeypatch.setattr(
-        endpoint.KnowledgeDao, "aquery_by_id", AsyncMock(return_value=SimpleNamespace(id=3, user_id=7, type=1))
+        endpoint.KnowledgeDao,
+        "aquery_by_id",
+        AsyncMock(return_value=SimpleNamespace(id=3, user_id=7, tenant_id=2, type=1)),
     )
     permission = AsyncMock()
     monkeypatch.setattr(endpoint.KnowledgeService.permission_service, "ensure_knowledge_write_async", permission)
@@ -89,9 +92,7 @@ async def test_upload_response_reference_is_accepted_by_preview(harness, monkeyp
     app, _, permission = harness
     monkeypatch.setattr(endpoint.QuotaService, "check_quota", AsyncMock())
     monkeypatch.setattr(endpoint, "validate_knowledge_upload_file_size", Mock())
-    monkeypatch.setattr(
-        endpoint.KnowledgeService, "save_upload_file_original_name", AsyncMock(return_value="server-generated.txt")
-    )
+    monkeypatch.setattr(endpoint, "generate_uuid", lambda: "server-generated")
     monkeypatch.setattr(endpoint, "save_uploaded_file", AsyncMock(return_value="https://storage.invalid/temp"))
     monkeypatch.setattr(endpoint.KnowledgeFileDao, "get_repeat_file", AsyncMock(return_value=None))
     from bisheng.core.cache import utils as cache_utils
@@ -134,7 +135,7 @@ async def test_upload_response_reference_is_accepted_by_preview(harness, monkeyp
     assert status["status"] == "completed", status
     assert status["data"]["chunks"][0]["text"] == "hello"
     assert permission.await_count == 2
-    storage.download_object_sync.assert_called_once_with("temporary", "server-generated.txt")
+    storage.download_object_sync.assert_called_once_with("temporary", "uploads/2/7/server-generated.txt")
     response_stream.close.assert_called_once()
     response_stream.release_conn.assert_called_once()
     network.assert_not_called()

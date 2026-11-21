@@ -172,6 +172,8 @@ CREATE TABLE IF NOT EXISTS knowledge (
     auto_tag_enabled INTEGER NOT NULL DEFAULT 0,
     auto_tag_library_id INTEGER,
     metadata_fields JSON,
+    copy_source_id INTEGER,
+    copy_target_id INTEGER,
     processing_defaults JSON,
     processing_config_version INTEGER NOT NULL DEFAULT 0,
     metadata_schema_revision INTEGER NOT NULL DEFAULT 0,

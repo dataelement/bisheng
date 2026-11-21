@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { showApiError } from "@/controllers/request";
 import { Outlined } from "bisheng-icons";
 import { Button, Switch, Tag, Tooltip, TooltipProvider } from '@bisheng/ui'
@@ -6,6 +7,7 @@ import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/bs-ui/table'
+import { ModelSharingCoverage } from './ModelSharingCoverage'
 
 export type ManagedModel = {
     id: number
@@ -32,6 +34,7 @@ interface ModelProviderRowProps {
     onModel: (id: number) => void
     onToggle: (modelId: number, online: boolean) => Promise<boolean>
     onVerify: (modelId: number) => Promise<void>
+    showSharingCoverage?: boolean
 }
 
 interface ModelRowProps extends Pick<ModelProviderRowProps, 'probing' | 'onToggle' | 'onVerify'> {
@@ -82,16 +85,16 @@ function ModelRow({ model, canEdit, probing, onToggle, onVerify }: ModelRowProps
         <TableCell>
             <div className="flex items-center gap-2">
                 {probing && model.status === 2
-                    ? <span className="inline-flex items-center gap-1 text-text-3"><Outlined.Loading className="animate-spin size-3" />{t('model.modelStatusChecking')}</span>
+                    ? <span className="inline-flex items-center gap-1 text-text-3"><LoadingState size="inline" />{t('model.modelStatusChecking')}</span>
                     : <Tag size="small" dot color={model.status === 0 ? 'success' : model.status === 1 ? 'warning' : 'default'}>
                         {t(model.status === 0 ? 'model.available' : model.status === 1 ? 'model.abnormal' : 'model.unknown')}
                     </Tag>}
                 {model.status === 1 && model.remark && <Tooltip content={model.remark}>
                     <Button variant="ghost" size="icon" aria-label={model.remark}><Outlined.Question className="size-3.5 text-text-3" /></Button>
                 </Tooltip>}
-                <Button variant="link" size="small" loading={verifying} disabled={verifying} onClick={handleVerify}>
+                {canEdit && <Button variant="link" size="small" loading={verifying} disabled={verifying} onClick={handleVerify}>
                     {t('model.updateStatus')}
-                </Button>
+                </Button>}
             </div>
         </TableCell>
         <TableCell className="text-text-3">{model.status_update_time?.replace('T', ' ') || '—'}</TableCell>
@@ -103,7 +106,7 @@ function ModelRow({ model, canEdit, probing, onToggle, onVerify }: ModelRowProps
     </TableRow>
 }
 
-export function ModelProviderRow({ data, canManage, probing, onModel, onToggle, onVerify }: ModelProviderRowProps) {
+export function ModelProviderRow({ data, canManage, probing, onModel, onToggle, onVerify, showSharingCoverage = false }: ModelProviderRowProps) {
     const { t } = useTranslation()
     const [expanded, setExpanded] = useState(false)
     const canEdit = canManage && !data.is_root_shared_readonly
@@ -120,15 +123,16 @@ export function ModelProviderRow({ data, canManage, probing, onModel, onToggle, 
                         {expanded ? <Outlined.Down className="size-4" /> : <Outlined.Right className="size-4" />}
                         {data.name}
                     </Button>
-                    {data.is_root_shared_readonly && <Tag size="small">
+                    {data.is_root_shared_readonly && <Tooltip content={t('model.sharedStatusRootOnly')}><span><Tag size="small">
                         {t('model.tenantSharedReadonly', { tenantName: data.tenant_name || 'Root' })}
-                    </Tag>}
+                    </Tag></span></Tooltip>}
                 </div>
                 <div className="bs-table-td h-full p-2 flex items-center justify-end first:rounded-l-md last:rounded-r-md">
                     <Button size="small" variant="link" disabled={!canEdit} onClick={() => onModel(data.id)}>{t('model.modelConfiguration')}</Button>
                 </div>
             </div>
             {expanded && <div className="px-12 py-2">
+                {showSharingCoverage && canEdit && <ModelSharingCoverage serverId={data.id} />}
                 {/* The shared library does not yet ship a finalized table. */}
                 <Table>
                     <TableHeader><TableRow>

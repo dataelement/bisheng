@@ -11,14 +11,120 @@ from bisheng.permission.domain.services.projection_plan import projection_reques
 from bisheng.permission.domain.services.projection_service import restore_projection_plan
 
 
-def blocked():
-    raise PermissionPublishNotReadyError(msg="Copy projection no longer matches its original complete operation")
+def blocked(reason="copy_projection_unavailable"):
+    raise PermissionPublishNotReadyError(
+        reason=reason, msg="Copy projection no longer matches its original complete operation"
+    )
 
 
 class KnowledgeCopyProjectionApplication:
     def __init__(self, *, session_factory=get_async_db_session, components=None):
         self.repository = ProjectionRepository(session_factory)
         self.composition = KnowledgeMoveProjectionApplication(session_factory=session_factory, components=components)
+
+    async def ahas_completed_copies(self, *, pairs):
+        """Original finalized journals prove the copy's permission phase ended."""
+        if not pairs:
+            return False
+        components = await self.composition._composition()
+        catalog = await components.facade._runtime_catalog()
+        for source, target, _mode, actor in pairs:
+            key = _idempotency_key(
+                "copy", target.tenant_id, source.resource_type, source.resource_id, target.resource_id
+            )
+            fact = await self.repository.aget_operation_by_idempotency(key)
+            if fact is None or fact.status != "FINALIZED":
+                return False
+            await self._plan(fact, source, target, actor, catalog)
+        return True
+
+    async def arequire_independent(self, session, *, pairs, owner_user_id):
+        """Keep the copy's current permissions, including subsequent legitimate edits."""
+        from bisheng.permission.domain.repositories.copy_projection_repository import CopyProjectionRepository
+        from bisheng.resource_reference.application.contracts import TransactionIdentity
+
+        tx = TransactionIdentity.capture(session)
+        tenant, actor = get_current_tenant_id(), get_current_permission_actor()
+        if is_tenant_filter_bypassed() or session.new or session.dirty or session.deleted:
+            blocked()
+        if not await self.ahas_completed_copies(pairs=pairs):
+            blocked()
+        _source, target, _mode, _operator = pairs[0]
+        if target.resource_type != "knowledge_space":
+            blocked()
+        components = await self.composition._composition()
+        catalog = await components.facade._runtime_catalog()
+        repository = CopyProjectionRepository(environment=self.composition.repository.environment)
+        if await repository._pin(session) != (catalog.store_id, catalog.model_id):
+            blocked()
+        state, fact, tuples = await repository.aread_current_target(session, target=target)
+        if (
+            state.projection_state != "CURRENT"
+            or state.mode not in {"CUSTOM", "INHERIT"}
+            or state.version < 1
+            or (state.parent_type, state.parent_id) != (target.parent_type, target.parent_id)
+            or fact.status != "FINALIZED"
+            or fact.target_version != state.version
+            or (fact.scope_type, fact.scope_key) != ("resource", f"{target.resource_type}:{target.resource_id}")
+            or (fact.store_id, fact.model_id) != (catalog.store_id, catalog.model_id)
+        ):
+            blocked()
+        plan = restore_projection_plan(fact, tuples)
+        if projection_request_checksum(plan) != fact.request_checksum or not await components.projection._is_after(
+            plan.deltas
+        ):
+            blocked()
+        models = components.facade._models_for_target(catalog, target.resource_type)
+        grants = await components.state.load_grants(target=target, models=models)
+        protected = [row for grant in grants for row in grant.sources if grant.active and row.active and row.protected]
+        if (
+            len(protected) != 1
+            or protected[0].subject_type != "user"
+            or protected[0].subject_id != str(owner_user_id)
+            or protected[0].source_type != "CREATOR"
+            or protected[0].source_ref != f"{target.resource_type}:{target.resource_id}"
+        ):
+            blocked()
+        for grant in grants:
+            for row in grant.sources:
+                if not grant.active or not row.active:
+                    continue
+                try:
+                    canonical = components.facade._sources.canonicalize_source(
+                        source_id=row.source_id,
+                        subject_type=row.subject_type,
+                        subject_id=row.subject_id,
+                        userset_relation=row.userset_relation,
+                        include_children=row.include_children,
+                        source_type=row.source_type,
+                        source_ref=row.source_ref,
+                        protected=row.protected,
+                    )
+                except ValueError:
+                    blocked("copy_permission_sources_changed")
+                if any(
+                    getattr(row, field) != getattr(canonical, field)
+                    for field in (
+                        "subject_type",
+                        "subject_id",
+                        "userset_relation",
+                        "source_type",
+                        "source_ref",
+                        "source_locator",
+                        "source_fingerprint",
+                        "projected_subject",
+                    )
+                ):
+                    blocked("copy_permission_sources_changed")
+        if not await components.projection._is_after(components.facade._sources.compile_existing_tuples(grants)):
+            blocked()
+        tx.assert_current(session)
+        if (
+            get_current_tenant_id() != tenant
+            or get_current_permission_actor() is not actor
+            or is_tenant_filter_bypassed()
+        ):
+            blocked()
 
     async def aexecute_or_resume(self, *, source, target, actor, owner_user_id, mode):
         tenant, ambient = get_current_tenant_id(), get_current_permission_actor()
@@ -115,7 +221,18 @@ class KnowledgeCopyProjectionApplication:
         actual = await components.state.load_grants(target=target, models=models)
         expected = await components.state.load_grants(target=source, models=models) if mode == "CUSTOM" else ()
 
-        def signature(grant, row):
+        def signature(grant, row, *, copied=False):
+            if copied:
+                row = components.facade._sources.canonicalize_source(
+                    source_id=1,
+                    subject_type=row.subject_type,
+                    subject_id=row.subject_id,
+                    userset_relation=row.userset_relation,
+                    include_children=row.include_children,
+                    source_type=row.source_type,
+                    source_ref=row.source_ref,
+                    protected=False,
+                )
             return (
                 grant.model.model_key,
                 row.subject_type,
@@ -129,7 +246,7 @@ class KnowledgeCopyProjectionApplication:
             )
 
         wanted = {
-            signature(grant, row)
+            signature(grant, row, copied=True)
             for grant in expected
             for row in grant.sources
             if grant.active and row.active and not row.protected
@@ -149,7 +266,7 @@ class KnowledgeCopyProjectionApplication:
             or protected[0].source_type != "CREATOR"
             or protected[0].source_ref != f"{target.resource_type}:{target.resource_id}"
         ):
-            blocked()
+            blocked("copy_permission_sources_changed")
         grant_keys = {delta.key for delta in components.facade._sources.compile_existing_tuples(actual)}
         frozen_keys = {
             delta.key

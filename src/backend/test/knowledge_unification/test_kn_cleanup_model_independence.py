@@ -234,3 +234,21 @@ async def test_legacy_resource_vector_cleanup_drops_owned_index_without_consumin
         index="actual_index", ignore=[400, 404]
     )
     module.LLMService.get_bisheng_knowledge_embedding_sync.assert_not_called()
+
+
+@pytest.mark.parametrize("valid", [True, False])
+async def test_completed_receipt_allows_only_complete_leased_background_verification(cleanup, valid):
+    context, _, historical, job = cleanup
+    async with context.sessions() as session, session.begin():
+        row = await session.get(KnowledgeSpaceDeleteJob, job.id)
+        row.state, row.operation_type, row.business_phase = "SUCCEEDED", "knowledge_space_delete", "finalized"
+        row.completed_steps = ["fga", "minio", "es", "milvus"] if valid else ["fga"]
+        job.state, job.operation_type, job.business_phase = row.state, row.operation_type, row.business_phase
+        job.completed_steps = row.completed_steps
+    if valid:
+        await asyncio.to_thread(KnowledgeRag.init_knowledge_es_cleanup_sync, knowledge=historical, deletion_job=job)
+        module.ElasticsearchFactory.init_vectorstore_sync.assert_called_once()
+    else:
+        with pytest.raises(ResourceReferenceInvalidError):
+            await asyncio.to_thread(KnowledgeRag.init_knowledge_es_cleanup_sync, knowledge=historical, deletion_job=job)
+        module.ElasticsearchFactory.init_vectorstore_sync.assert_not_called()

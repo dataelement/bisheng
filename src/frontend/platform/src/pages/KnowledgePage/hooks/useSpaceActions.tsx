@@ -3,6 +3,7 @@ import { Outlined } from "bisheng-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { userContext } from "@/contexts/userContext";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
 import { useLazyResourceActions } from "@/components/bs-comp/permission/useResourceActions";
@@ -47,7 +48,7 @@ export function useSpaceActions(
       current.current = null;
     };
   }, [scopeKey]);
-  const deletion = useKnowledgeDeletion(scopeKey);
+  const deletion = useKnowledgeDeletion(scopeKey, scope);
   const refresh = () =>
     client.invalidateQueries({ queryKey: knowledgeQueryKeys.scope(scope) });
   const load = (row: KnowledgeSpaceInfo, open: boolean) => {
@@ -75,7 +76,7 @@ export function useSpaceActions(
       <>
         {loading && (
           <DropdownItem disabled>
-            {t("knowledgeRowActions.loading", { ns: "permission" })}
+            <LoadingState size="inline" label={t("knowledgeRowActions.loading", { ns: "permission" })} />
           </DropdownItem>
         )}
         {onEdit && !loading && !canEdit && !canManage && !canDelete && (
@@ -119,10 +120,19 @@ export function useSpaceActions(
                 void deletion
                   .open({ spaceId: row.id, kind: "delete" })
                   .then(async (deleted) => {
-                    if (deleted && current.current === scopeKey) {
-                      await refresh();
-                      if (current.current === scopeKey) onDeleted?.(row.id);
-                    }
+                    if (!deleted || current.current !== scopeKey) return;
+                    // Leave before the catalog refresh. Refreshing first refetches
+                    // the page that is still open on the deleted space.
+                    onDeleted?.(row.id);
+                    if (current.current !== scopeKey) return;
+                    const viewKey = knowledgeQueryKeys.scope(scope);
+                    await client.invalidateQueries({
+                      queryKey: viewKey,
+                      predicate: ({ queryKey }) => {
+                        const [kind, id] = queryKey.slice(viewKey.length);
+                        return kind !== "space" || id !== row.id;
+                      },
+                    });
                   });
               }}
             >

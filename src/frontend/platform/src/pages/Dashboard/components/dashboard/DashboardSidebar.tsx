@@ -51,7 +51,7 @@ export function DashboardSidebar({
     const [permDialogOpen, setPermDialogOpen] = useState(false);
     const [permTarget, setPermTarget] = useState<{ id: string; name: string } | null>(null);
     const canCreate = useMemo(() => {
-        return user.web_menu?.includes('create_dashboard') || user.role === 'admin'
+        return user.web_menu?.includes('create_dashboard') || user.role === 'admin' || user.is_child_admin === true
     }, [user])
 
     // Visibility is already decided by the server list; the sidebar only narrows
@@ -160,7 +160,7 @@ export function DashboardSidebar({
                     <div className="flex items-center gap-1">
                         {
                             canCreate && <Tip content={t('addDashboard')} >
-                                <Button variant="text" size="medium" onClick={handleCreate} color="default" iconOnly><Outlined.Plus size={16} /></Button>
+                                <Button aria-label={t('addDashboard')} variant="text" size="medium" onClick={handleCreate} color="default" iconOnly><Outlined.Plus size={16} /></Button>
                             </Tip>
                         }
                         <Tip content={t('collapseList')}>

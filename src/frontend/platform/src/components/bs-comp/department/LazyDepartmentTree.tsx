@@ -1,4 +1,5 @@
 import { departmentDisplayName } from "./departmentDisplayName";
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import {
   Button, SearchInput, Tag, TreeNavigation, TreeNavigationList, TreeNavigationNode, TreeNavigationStatus,
 } from "@bisheng/ui";
@@ -82,6 +83,7 @@ function Row({ node, depth, searchMode, props }: RowProps) {
         depth={depth}
         current={isSelected}
         disabled={disabled}
+        hideLeafArrow
         icon={<Outlined.City />}
         marker={node.is_tenant_root && <Tag size="small" color="brand">{t("bs:tenant.mountedTag")}</Tag>}
         disclosure={canExpand ? {
@@ -95,7 +97,7 @@ function Row({ node, depth, searchMode, props }: RowProps) {
         {isExpanded && (children.length > 0 || isLoading || failed) && (
           <>
             {children}
-            {isLoading && <TreeNavigationStatus depth={depth + 1} loading>{t("loading")}</TreeNavigationStatus>}
+            {isLoading && <TreeNavigationStatus depth={depth + 1}><LoadingState size="inline" /></TreeNavigationStatus>}
             {failed && !isLoading && <DepartmentTreeRetry controller={controller} parentId={node.id} depth={depth + 1} />}
           </>
         )}
@@ -130,7 +132,7 @@ function Row({ node, depth, searchMode, props }: RowProps) {
           }}
         >
           {isLoading ? (
-            <Outlined.Loading className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+            <LoadingState size="inline" />
           ) : node.has_children ? (
             isExpanded ? (
               <Outlined.Down className="h-3.5 w-3.5 text-muted-foreground" />
@@ -210,7 +212,7 @@ export function LazyDepartmentTree(props: LazyDepartmentTreeProps) {
             {searchStatus ? <TreeNavigationStatus>{searchStatus}</TreeNavigationStatus> : (
               <>
                 {rows}
-                {busy && roots.length === 0 && <TreeNavigationStatus loading>{t("loading")}</TreeNavigationStatus>}
+                {busy && roots.length === 0 && <TreeNavigationStatus><LoadingState size="inline" /></TreeNavigationStatus>}
                 {!busy && !searchMode && controller.hasLayerError(null) && <DepartmentTreeRetry controller={controller} parentId={null} />}
                 {!busy && roots.length === 0 && (searchMode || !controller.hasLayerError(null)) && (
                   <TreeNavigationStatus>{emptyHint ?? t("bs:department.noResult")}</TreeNavigationStatus>
@@ -223,10 +225,7 @@ export function LazyDepartmentTree(props: LazyDepartmentTreeProps) {
       ) : (
         <div className="flex-1 overflow-y-auto" onWheel={handleWheel}>
           {searchStatus ?? (busy ? (
-            <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
-              <Outlined.Loading className="mr-2 h-4 w-4 animate-spin" />
-              {t("loading")}
-            </div>
+            <LoadingState className="py-6" />
           ) : roots.length === 0 ? (
             <div className="py-6 text-center text-sm text-muted-foreground">
               {emptyHint ?? t("bs:department.noResult")}

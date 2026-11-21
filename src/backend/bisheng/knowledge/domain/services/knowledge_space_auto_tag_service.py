@@ -1,6 +1,6 @@
 import json
 import re
-from typing import Iterable, List, Optional, Sequence
+from collections.abc import Iterable, Sequence
 
 from langchain_core.documents import Document
 from loguru import logger
@@ -23,12 +23,11 @@ from bisheng.knowledge.domain.models.knowledge_space_tag_library import (
 )
 from bisheng.llm.domain import LLMService
 
-
 AUTO_TAG_MAX_CONTENT = 3000
 AUTO_TAG_MAX_RESULT = 5
 DEFAULT_AUTO_TAG_SYSTEM_PROMPT = (
     "你是文件自动标签分类器。只能从候选标签中选择最相关的标签，最多返回 5 个标签。\n"
-    "输出格要求严格遵循 JSON 格式： {\"tags\": [\"标签名\"]}。"
+    '输出格要求严格遵循 JSON 格式： {"tags": ["标签名"]}。'
 )
 
 
@@ -38,7 +37,7 @@ class KnowledgeSpaceAutoTagService:
         cls,
         knowledge: Knowledge,
         db_file: KnowledgeFile,
-        documents: Optional[Sequence[Document]] = None,
+        documents: Sequence[Document] | None = None,
     ) -> None:
         try:
             if not cls._should_run(knowledge, db_file):
@@ -54,7 +53,7 @@ class KnowledgeSpaceAutoTagService:
                 )
                 return
 
-            llm_config = LLMService.get_knowledge_llm(tenant_id=db_file.tenant_id)
+            llm_config = LLMService.get_knowledge_llm(tenant_id=db_file.tenant_id, slots=("extract_title_model_id",))
             if not llm_config.auto_tag_enabled or not llm_config.extract_title_model_id:
                 return
 
@@ -74,16 +73,11 @@ class KnowledgeSpaceAutoTagService:
                 app_type=ApplicationTypeEnum.KNOWLEDGE_BASE,
                 user_id=db_file.user_id,
             )
-            system_prompt = (
-                (llm_config.auto_tag_prompt or "").strip()
-                or DEFAULT_AUTO_TAG_SYSTEM_PROMPT
-            )
+            system_prompt = (llm_config.auto_tag_prompt or "").strip() or DEFAULT_AUTO_TAG_SYSTEM_PROMPT
             selected = cls._invoke_llm(llm, text, library.tags or [], system_prompt)
             matched = cls._match_library_tags(selected, library.tags or [])
             if not matched:
-                logger.info(
-                    "auto_tag_no_match space_id={} file_id={}", knowledge.id, db_file.id
-                )
+                logger.info("auto_tag_no_match space_id={} file_id={}", knowledge.id, db_file.id)
                 return
 
             cls._append_file_tags(
@@ -116,15 +110,12 @@ class KnowledgeSpaceAutoTagService:
             and bool(knowledge.auto_tag_library_id)
             and db_file.file_type == FileType.FILE.value
             and db_file.status == KnowledgeFileStatus.SUCCESS.value
-            and db_file.file_source
-            in {FileSource.UPLOAD.value, FileSource.SPACE_UPLOAD.value}
+            and db_file.file_source in {FileSource.UPLOAD.value, FileSource.SPACE_UPLOAD.value}
         )
 
     @staticmethod
-    def _collect_content(
-        documents: Optional[Sequence[Document]], db_file: KnowledgeFile
-    ) -> str:
-        parts: List[str] = []
+    def _collect_content(documents: Sequence[Document] | None, db_file: KnowledgeFile) -> str:
+        parts: list[str] = []
         for doc in documents or []:
             if not doc or not doc.page_content:
                 continue
@@ -140,9 +131,9 @@ class KnowledgeSpaceAutoTagService:
     def _invoke_llm(
         llm,
         text: str,
-        library_tags: List[str],
+        library_tags: list[str],
         system_prompt: str = DEFAULT_AUTO_TAG_SYSTEM_PROMPT,
-    ) -> List[str]:
+    ) -> list[str]:
         candidate_text = "\n".join(f"- {tag}" for tag in library_tags)
         response = llm.invoke(
             [
@@ -153,12 +144,10 @@ class KnowledgeSpaceAutoTagService:
                 },
             ]
         )
-        return KnowledgeSpaceAutoTagService._parse_llm_tags(
-            getattr(response, "content", "") or ""
-        )
+        return KnowledgeSpaceAutoTagService._parse_llm_tags(getattr(response, "content", "") or "")
 
     @staticmethod
-    def _parse_llm_tags(raw: str) -> List[str]:
+    def _parse_llm_tags(raw: str) -> list[str]:
         text = raw.strip()
         if not text:
             return []
@@ -176,11 +165,9 @@ class KnowledgeSpaceAutoTagService:
         return [str(tag).strip() for tag in tags if str(tag).strip()]
 
     @staticmethod
-    def _match_library_tags(
-        selected: Iterable[str], library_tags: List[str]
-    ) -> List[str]:
+    def _match_library_tags(selected: Iterable[str], library_tags: list[str]) -> list[str]:
         allowed = {tag: tag for tag in library_tags}
-        matched: List[str] = []
+        matched: list[str] = []
         for tag in selected:
             if tag in allowed and tag not in matched:
                 matched.append(allowed[tag])
@@ -192,9 +179,9 @@ class KnowledgeSpaceAutoTagService:
     def _append_file_tags(
         space_id: int,
         file_id: int,
-        tag_names: List[str],
+        tag_names: list[str],
         user_id: int,
-        tenant_id: Optional[int],
+        tenant_id: int | None,
     ) -> None:
         if not tag_names:
             return
@@ -220,9 +207,7 @@ class KnowledgeSpaceAutoTagService:
                     session.flush()
                     tag_by_name[tag_name] = tag
 
-            tag_ids = [
-                tag_by_name[name].id for name in tag_names if tag_by_name.get(name)
-            ]
+            tag_ids = [tag_by_name[name].id for name in tag_names if tag_by_name.get(name)]
             existing_links = session.exec(
                 select(TagLink).where(
                     TagLink.resource_id == str(file_id),

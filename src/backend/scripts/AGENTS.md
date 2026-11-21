@@ -126,31 +126,67 @@ Always import the shared settings singleton — never re-parse the YAML yourself
 from bisheng.common.services.config_service import settings  # YAML → env → DB → Redis, identical to the service
 ```
 
-### 6.2 App context (infra clients)
+### 6.2 Context initialization and resource ownership
 
-The API service builds its runtime context in the FastAPI lifespan via `initialize_app_context(config=settings)` (`bisheng/main.py`). A bare script does **not** — only the lazily-registered **database** context exists. So raw DB reads/writes work without any setup, but anything that needs another engine — **OpenFGA/ReBAC**, **Redis** caches, **Milvus**, **Elasticsearch** — will fail (e.g. `FGAClient not available`) until you initialize the full context yourself.
+FastAPI initializes the complete shared application context in its lifespan
+with `initialize_app_context(config=settings)`. Standalone scripts do not run
+that lifespan. Choose the clients the script actually needs and use the same
+settings and context interfaces as the service.
 
-If your script touches anything beyond the database, mirror the lifespan: initialize at startup, **always** close on teardown.
+**DB-only scripts must explicitly own their database manager.**
+`get_async_db_session()` closes a session, not its connection pool. A lazily
+registered database does not set `app_context.is_initialized()` to true;
+`close_app_context()` then returns without closing it. Exit code 0 and closed
+sessions therefore do not prove cleanup succeeded. Do not initialize the entire
+FastAPI environment merely to make this global flag true.
 
 ```python
 from bisheng.common.services.config_service import settings
-from bisheng.core.context.manager import close_app_context, initialize_app_context
+from bisheng.core.context.manager import app_context
+from bisheng.core.database.manager import DatabaseManager
 
-async def _main() -> int:
-    await initialize_app_context(config=settings)   # DB + OpenFGA + Redis + Milvus + ES, same as the service
+async def _main():
+    database = DatabaseManager(
+        database_url=settings.database_url,
+        engine_config=settings.database_pool.as_engine_kwargs(),
+    )
     try:
-        return await run(...)
+        app_context.register_context(database)
+        await app_context.async_get_instance(DatabaseManager.name)
+        return await run()  # uses get_async_db_session(), same service config
     finally:
-        await close_app_context()                   # release pools/clients; do this even on error
+        await database.async_close()
 
 asyncio.run(_main())
 ```
 
-Reference script that does this correctly:
-`migrate_f048_permission_data.py` (composition in
-`f048_migration_runtime.py`).
+- Construct, initialize, use and close owned async resources in **one event
+  loop**. Never put cleanup in a second `asyncio.run()` or leave it to `__del__`
+  after the loop has closed. Register cleanup before registration/initialization
+  can fail; `try/finally` or `AsyncExitStack` must cover partial initialization,
+  business errors and cancellation as well as normal/no-op results.
+- Scripts needing multiple engines must initialize their actual DB/Redis/FGA/
+  object-store clients explicitly, or use the full shared application context
+  when that complete lifecycle is intended. Do not assume a raw script has API
+  clients available. Close only resources the script owns, in reverse order.
+  For subsets and failed initialization, never rely solely on the global
+  `close_app_context()` guard; the flag can still be false.
+- Test with a native context and real connection pool: verify engine disposal
+  happens before the loop closes on success, no-op, reported business error,
+  exception, initialization failure and cancellation. A mocked close function,
+  a CLOSED flag alone, or process exit 0 cannot prove the pool was released.
 
-**Rule of thumb:** DB-only script → `get_async_db_session()` is enough (§7). Touches FGA / Redis / Milvus / ES → you **must** call `initialize_app_context` first.
+Verified references: `migrate_model_token_configs.py` and
+`test/llm/test_model_token_config_cli_runtime.py` (native pool disposal and CLI
+loop-boundary checks); `unify_knowledge_spaces.py::_runtime` and
+`test/knowledge_unification/test_migration_cli_runtime.py` (owned DB/Redis,
+partial initialization and cancellation); `f048_maintenance_runtime.py` uses an
+`AsyncExitStack` for its explicit maintenance composition.
+
+2026-11-19 onsite repro: the old model-token CLI returned 0 with no data changes
+on 165, but called no database-manager close and emitted `Event loop is closed`.
+The same read-only operation with explicit database close did not emit it.
+Full FastAPI initialization was not needed for this DB-only operation.
 
 ---
 
@@ -238,3 +274,29 @@ def main() -> int:
 if __name__ == '__main__':
     sys.exit(main())
 ```
+
+---
+
+## 10. 迁移脚本必须验证完整流程的规模成本
+
+新增或修改迁移脚本，必须同时审查 preview、apply、verify 和 resume
+的总体成本；不能因采用分页、BatchCheck 或 checkpoint 就认定性能合格。
+
+- 按实际待迁移关系处理数据，不额外穷举“用户 × 全部资源”等组合。
+  可批量读取或校验的事实不得写成逐项 SQL/远程调用；关联集合、
+  查找索引和不变配置应在合适作用域内构建一次，避免循环内全量扫描。
+- 大表使用主键游标、必要字段和有界批次；限制跨页累积、缓存、
+  deepcopy 和整体 JSON 编码的内存。确需全量比较时，说明原因并采用
+  有容量上限的方案。无变更路径不得无故全量加锁或重写数据。
+- 区分事实完整性校验与 API 一致性探针：完整性校验不得用抽样替代；
+  API 一致性探针采用有界样本。每次全量扫描、重复读取和阶段复核
+  都应说明必要性；复用原 Run 的冻结材料，同时保留必要的实时状态、
+  租户、权限及提交结果检查，不以提速为由削弱恢复合同。
+- 验证必须覆盖正常、无变更、大量异常和中断恢复路径，并比较 N、2N
+  数据量下的 SQL/远程调用数、扫描行数、事务次数、峰值内存及耗时。
+  分别放大资源、成员、引用和 tuple 等维度，防止乘积开销被小样本掩盖。
+  本机或模拟服务耗时不能直接作为生产维护窗口。
+
+验证依据：F048 的 735eb5f3ca、7d9a1be214 改动历史及定向测试；
+F118 的性能评估见 ../../../docs/reviews/v310b1-migration-performance-20261119.md，
+包含实际函数的查询计数、规模对比和权限发布测试。

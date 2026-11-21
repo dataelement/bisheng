@@ -304,7 +304,8 @@ async def test_preview_redacts_and_does_not_persist(store, monkeypatch):
     assert (await search_service.get_settings(16))["revision"] == saved["revision"]
 
 
-async def test_generic_search_view_omits_custom_even_without_auth(store):
+@pytest.mark.parametrize("search_category", [True, False])
+async def test_generic_search_view_omits_custom_even_without_auth(store, monkeypatch, search_category):
     first = await search_service.get_settings(16)
     req = draft(first["revision"], {"action": "keep"})
     operation = req.providers["custom"]["operation"]
@@ -315,17 +316,23 @@ async def test_generic_search_view_omits_custom_even_without_auth(store):
     ]
     admin = await search_service.put_settings(16, req, 42)
     assert admin["providers"]["custom"]["operation"]["fixed_params"] == operation["fixed_params"]
+    original = json.dumps({"config": {"custom": {"fixed_params": operation["fixed_params"]}}})
     async with store() as db:
         category = (await db.exec(search_service.select(GptsToolsType))).one()
         child = (await db.exec(search_service.select(GptsTools))).one()
-        child.extra = json.dumps({"config": {"custom": {"fixed_params": operation["fixed_params"]}}})
-        view = GptsToolsTypeRead(**category.model_dump(), children=[child])
-        view.mask_sensitive_data(search_category=True)
+        child.extra = original
+        await db.commit()
+    monkeypatch.setattr("bisheng.tool.domain.models.gpts_tools.get_async_db_session", store)
+    loaded_children = await GptsToolsDao.aget_list_by_type([category.id])
+    view = GptsToolsTypeRead(**category.model_dump(), children=loaded_children)
+    view.mask_sensitive_data(search_category=search_category)
+    assert "custom" not in json.loads(view.children[0].extra)["config"]
+    if search_category:
+        assert "custom" not in json.loads(view.extra)["config"]
         generic = json.dumps(view.model_dump(), default=str)
         assert "private-fixed-value" not in generic
         assert "another-fixed-value" not in generic
-        assert "custom" not in json.loads(view.extra)["config"]
-        assert "custom" not in json.loads(view.children[0].extra)["config"]
+    assert loaded_children[0].extra == original
 
 
 async def test_secret_cannot_be_saved_in_plaintext_settings(store):

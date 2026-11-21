@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { createContext } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { DepartmentMember } from '@/types/api/department';
@@ -69,7 +70,10 @@ it('keeps switch, password reset, and selected text from opening the row editor'
     const row = await open();
     fireEvent.click(within(row).getByRole('switch'));
     expect(screen.queryByTestId('identity-editor')).not.toBeInTheDocument();
-    fireEvent.click(within(row).getByRole('button', { name: 'system.resetPwd' }));
+    const user = userEvent.setup();
+    await user.click(within(row).getByRole('button', { name: `more ${member.user_name}` }));
+    expect(screen.queryByTestId('identity-editor')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('menuitem', { name: 'system.resetPwd' }));
     expect(mocks.reset).toHaveBeenCalledWith(7);
     expect(screen.queryByTestId('identity-editor')).not.toBeInTheDocument();
     vi.spyOn(window, 'getSelection').mockReturnValue({ toString: () => rawAccount } as Selection);
@@ -81,4 +85,6 @@ it('does not open disabled accounts from a member row', async () => {
     mocks.members.mockResolvedValueOnce({ data: [{ ...member, enabled: false }], total: 1 });
     const row = await open(); fireEvent.click(within(row).getByText(member.user_name));
     expect(screen.queryByTestId('identity-editor')).not.toBeInTheDocument();
+    await userEvent.click(within(row).getByRole('button', { name: `more ${member.user_name}` }));
+    expect(screen.getByRole('menuitem', { name: 'edit' })).toHaveAttribute('aria-disabled', 'true');
 });

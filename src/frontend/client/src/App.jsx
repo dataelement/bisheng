@@ -42,21 +42,22 @@ const App = () => {
       <RecoilRoot>
         <LiveAnnouncer>
           <ThemeProvider>
-            <ConfirmProvider>
-              <SessionKickListener />
-              <ToastProvider>
-                <DndProvider backend={HTML5Backend}>
-                  <RouterProvider router={router} />
-                  {/* <ReactQueryDevtools initialIsOpen={false} position="top-right" /> */}
-                  <SystemMaintenanceOverlay />
-                  {/* Single toast container, always mounted — its live regions
-                      have to pre-exist the messages they announce. */}
-                  <Toast />
-                  {/* Same for the top-right notification stack. */}
-                  <Notification />
-                </DndProvider>
-              </ToastProvider>
-            </ConfirmProvider>
+            <SystemMaintenanceOverlay>
+              <ConfirmProvider>
+                <SessionKickListener />
+                <ToastProvider>
+                  <DndProvider backend={HTML5Backend}>
+                    <RouterProvider router={router} />
+                    {/* <ReactQueryDevtools initialIsOpen={false} position="top-right" /> */}
+                    {/* Single toast container, always mounted — its live regions
+                        have to pre-exist the messages they announce. */}
+                    <Toast />
+                    {/* Same for the top-right notification stack. */}
+                    <Notification />
+                  </DndProvider>
+                </ToastProvider>
+              </ConfirmProvider>
+            </SystemMaintenanceOverlay>
           </ThemeProvider>
         </LiveAnnouncer>
       </RecoilRoot>

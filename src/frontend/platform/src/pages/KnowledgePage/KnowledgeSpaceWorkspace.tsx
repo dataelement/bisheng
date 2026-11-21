@@ -1,13 +1,16 @@
 import { Button } from "@bisheng/ui";
-import { useContext, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useCallback, useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { userContext } from "@/contexts/userContext";
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import type { KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
+import { KnowledgeScopeUnavailable } from "./components/KnowledgeScopeUnavailable";
 import { SpaceDetail, parseKnowledgeId } from "./detail";
 import { canCreateKnowledgeSpace } from "./knowledgeSpaceCreation";
 import { KnowledgeSpaceSidebar } from "./sidebar/KnowledgeSpaceSidebar";
-import { useInitialSpace } from "./sidebar/useInitialSpace";
+import { rememberRetiredKnowledgeSpace, useInitialSpace } from "./sidebar/useInitialSpace";
 
 interface KnowledgeSpaceWorkspaceProps {
   scope: KnowledgeQueryScope;
@@ -22,6 +25,7 @@ export function KnowledgeSpaceWorkspace({
   active = true,
 }: KnowledgeSpaceWorkspaceProps) {
   const { t } = useTranslation("knowledge");
+  const client = useQueryClient();
   const { user } = useContext(userContext);
   const location = useLocation();
   const navigate = useNavigate();
@@ -33,18 +37,33 @@ export function KnowledgeSpaceWorkspace({
     routeId !== undefined &&
     (spaceId === null ||
       (parents.length > 0 && (parents.length !== 1 || parentId === null)));
-  const initial = useInitialSpace(scope, active && routeId === undefined);
+  const [retired, setRetired] = useState<ReadonlySet<number>>(() => new Set());
+  const leaveDeletedSpace = useCallback((id: number) => {
+    rememberRetiredKnowledgeSpace(client, scope, id);
+    setRetired((current) => {
+      if (current.has(id)) return current;
+      const next = new Set(current);
+      next.add(id);
+      return next;
+    });
+    if (id === spaceId) {
+      navigate(scope.view === "admin" ? "/filelib?view=admin" : "/filelib", { replace: true });
+    }
+  }, [client, navigate, scope, spaceId]);
+  const initial = useInitialSpace(scope, active && routeId === undefined, retired);
   useEffect(() => {
-    if (!active || routeId !== undefined || !initial.space) return;
+    if (!active || routeId !== undefined || !initial.space || retired.has(initial.space.id)) return;
     const next = new URLSearchParams(params);
     next.delete("parent_id");
     next.delete("tab");
     next.delete("file_id");
+    next.delete("process_file_id");
+    if (scope.view === "admin") next.set("view", "admin");
     navigate(
       { pathname: `/filelib/${initial.space.id}`, search: next.toString() },
       { replace: true },
     );
-  }, [initial.space, active, routeId, params, navigate]);
+  }, [initial.space, active, routeId, params, navigate, scope.view, retired]);
   const canCreate =
     scope.view === "ordinary" && canCreateKnowledgeSpace(user);
   const handleCreate = () => {
@@ -60,6 +79,8 @@ export function KnowledgeSpaceWorkspace({
     const next = new URLSearchParams(params);
     if (showFiles) next.delete("tab");
     next.delete("file_id");
+    next.delete("process_file_id");
+    if (scope.view === "admin") next.set("view", "admin");
     if (folderId === null) next.delete("parent_id");
     else next.set("parent_id", String(folderId));
     navigate({ pathname: `/filelib/${id}`, search: next.toString() });
@@ -74,38 +95,33 @@ export function KnowledgeSpaceWorkspace({
         canCopy={canCreate}
         onCreate={canCreate ? handleCreate : undefined}
         onSelect={(id, folderId) => handleSelect(id, folderId, true)}
-        onDeleted={(id) => {
-          if (id === spaceId)
-            navigate(
-              scope.view === "admin" ? "/filelib?view=admin" : "/filelib",
-              { replace: true },
-            );
-        }}
+        onDeleted={leaveDeletedSpace}
       />
       <main
         className="min-w-0 flex-1 overflow-auto"
         aria-label={t("workspace.files")}
       >
         {invalid ? (
-          <p role="status" className="p-4">{t("f118.scope_unavailable")}</p>
+          <KnowledgeScopeUnavailable />
         ) : spaceId !== null ? (
           <SpaceDetail
-            key={JSON.stringify([scope, spaceId, parentId])}
+            key={JSON.stringify([scope, spaceId])}
             scope={scope}
             spaceId={spaceId}
             parentId={parentId}
             presentation="workspace"
             onOpenFolder={(id) => handleSelect(spaceId, id)}
+            onDeleted={leaveDeletedSpace}
           />
+        ) : !initial.error && (initial.loading || initial.space) ? (
+          <LoadingState size="page" className="h-full" label={t("sidebar.loading")} />
         ) : (
           <div role="status" className="space-y-3 px-4 py-6">
             <p>
               {t(
                 initial.error
                   ? "sidebar.load_failed"
-                  : initial.loading || initial.space
-                    ? "sidebar.loading"
-                    : "sidebar.empty",
+                  : "sidebar.empty",
               )}
             </p>
             {initial.error && (

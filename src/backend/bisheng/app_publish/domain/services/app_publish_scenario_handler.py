@@ -183,21 +183,32 @@ class AppPublishScenarioHandler:
         return await self.validate_approver_candidates(req, candidates)
 
     async def validate_approver_candidates(self, req, candidates):
-        from bisheng.approval.application.app_candidates import qualify_app_candidates
+        from bisheng.approval.application.app_candidates import QualifiedAppCandidates
 
-        payload = _payload(req)
-        result = await qualify_app_candidates(
-            int(getattr(req, "tenant_id", 0) or 0),
-            int(payload.get("owner_user_id") or 0),
-            payload.get("self_review_user_id"),
-            candidates,
-        )
+        policy = await self.approver_candidate_policy(req)
+        result = await policy.qualify(candidates) if policy is not None else QualifiedAppCandidates(())
         self.last_self_approval = result.self_approval
         if result.self_approval:
             logger.info(
                 "app_publish.self_approval verified_single_admin business_key={}", getattr(req, "business_key", None)
             )
         return list(result.user_ids)
+
+    async def approver_candidate_policy(self, req):
+        from bisheng.app_publish.application.legacy_review_identity import frozen_legacy_review_user
+        from bisheng.approval.application.app_candidates import app_candidate_policy
+
+        payload = _payload(req)
+        review_user = payload.get("self_review_user_id")
+        if "self_review_user_id" not in payload and "submission_actor" not in payload:
+            review_user = await frozen_legacy_review_user(
+                instance_id=getattr(req, "instance_id", None),
+                tenant_id=req.tenant_id,
+                applicant_user_id=req.applicant_user_id,
+                business_resource_id=getattr(req, "business_resource_id", None) or payload.get("app_id"),
+                payload=payload,
+            )
+        return await app_candidate_policy(req.tenant_id, payload.get("owner_user_id"), review_user)
 
     # ------------------------------------------------------------------
     # Terminal callbacks

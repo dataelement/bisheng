@@ -1,15 +1,20 @@
 import { ApiError } from '@bisheng/api-client';
-import request, { prepareBrowserHeaders, serviceProbeSettled, showApiError, translateApiErrorMessage } from './request';
+import { fetchProjectSnapshot } from './chatProjects';
+import request, { checkServiceAvailability, prepareBrowserHeaders, serviceProbeSettled, showApiError, translateApiErrorMessage } from './request';
 
 jest.mock('axios', () => {
-  const actual = jest.requireActual('axios');
-  const instance = actual.create();
-  return { __esModule: true, ...actual, default: { ...actual, create: () => instance } };
+  const actual = jest.requireActual<typeof import('axios')>('axios');
+  const transport = actual.create();
+  const create = jest.fn((config: Parameters<typeof actual.create>[0]) => actual.create({
+    ...config,
+    adapter: (requestConfig) => actual.getAdapter(transport.defaults.adapter)(requestConfig),
+  })).mockReturnValueOnce(transport);
+  return { __esModule: true, ...actual, transport, default: { ...actual, create } };
 });
 jest.mock('~/api/chat/headers-helpers', () => ({ setTokenHeader: jest.fn() }));
 jest.mock('~/utils/loginRedirect', () => ({ redirectToLogin: jest.fn() }));
 jest.mock('i18next', () => ({ __esModule: true, default: { exists: () => false, t: (key: string) => key } }));
-const transport = (jest.requireMock('axios') as typeof import('axios')).default.create();
+const { transport } = jest.requireMock<{ transport: import('axios').AxiosInstance }>('axios');
 const adapter = transport.defaults.adapter;
 const toast = jest.fn();
 beforeEach(async () => {
@@ -66,20 +71,76 @@ const httpFailure = (config: object, status: number) => {
   return new AxiosError('Request failed', 'ERR_BAD_RESPONSE', config, null, response);
 };
 
-it('raises the maintenance overlay when a business 500 is confirmed by a failing service probe', async () => {
+it.each([500, 503])('raises the maintenance overlay when a business %s is confirmed by a failing service probe', async status => {
   const listener = jest.fn();
   window.addEventListener('bs:service-maintenance', listener);
-  const blob = new Blob(['{"status_code":500,"status_message":"maintenance"}'], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify({ status_code: status, status_message: 'maintenance' })], { type: 'application/json' });
   transport.defaults.adapter = async config => {
     if (config.url === PROBE) throw httpFailure(config, 500);
     return { config, status: 200, statusText: 'OK', headers: {}, data: blob };
   };
   try {
     const error = await request.get('/test', { responseType: 'blob' }).catch(cause => cause);
-    expect(error).toMatchObject({ status_code: 500 });
+    expect(error).toMatchObject({ status_code: status });
     await serviceProbeSettled();
     expect(listener).toHaveBeenCalledTimes(1);
   } finally { window.removeEventListener('bs:service-maintenance', listener); }
+});
+
+it.each([502, 503, 504])('raises the maintenance overlay for a confirmed project snapshot HTTP %s', async status => {
+  const listener = jest.fn();
+  window.addEventListener('bs:service-maintenance', listener);
+  transport.defaults.adapter = async config => { throw httpFailure(config, status); };
+  try {
+    await expect(fetchProjectSnapshot()).rejects.toMatchObject({ httpStatus: status });
+    await serviceProbeSettled();
+    expect(listener).toHaveBeenCalledTimes(1);
+  } finally { window.removeEventListener('bs:service-maintenance', listener); }
+});
+
+it.each(['ERR_NETWORK', 'ECONNABORTED', 'ETIMEDOUT'])('raises the maintenance overlay for a confirmed %s', async code => {
+  const listener = jest.fn();
+  window.addEventListener('bs:service-maintenance', listener);
+  const { AxiosError } = jest.requireActual<typeof import('axios')>('axios');
+  transport.defaults.adapter = async config => { throw new AxiosError('Connection failed', code, config); };
+  try {
+    await expect(request.get('/test')).rejects.toMatchObject({ code });
+    await serviceProbeSettled();
+    expect(listener).toHaveBeenCalledTimes(1);
+  } finally { window.removeEventListener('bs:service-maintenance', listener); }
+});
+
+it('does not probe for canceled requests', async () => {
+  const { AxiosError } = jest.requireActual<typeof import('axios')>('axios');
+  const requestUrls: (string | undefined)[] = [];
+  transport.defaults.adapter = async config => {
+    requestUrls.push(config.url);
+    throw new AxiosError('Canceled', 'ERR_CANCELED', config);
+  };
+  await expect(request.get('/test')).rejects.toMatchObject({ kind: 'canceled' });
+  await serviceProbeSettled();
+  expect(requestUrls).toEqual(['/test']);
+});
+
+it.each([401, 403])('treats an HTTP %s from the probe as reachable', async status => {
+  transport.defaults.adapter = async config => ({
+    config, status, statusText: 'Authorization required', headers: {},
+    data: { status_code: status },
+  });
+  await expect(checkServiceAvailability()).resolves.toBe(true);
+  expect(toast).not.toHaveBeenCalled();
+});
+
+it('rechecks the backend after a 200 HTML fallback', async () => {
+  transport.defaults.adapter = async config => ({
+    config, status: 200, statusText: 'OK', headers: { 'content-type': 'text/html' },
+    data: '<!doctype html>',
+  });
+  await expect(checkServiceAvailability()).resolves.toBe(false);
+  transport.defaults.adapter = async config => ({
+    config, status: 200, statusText: 'OK', headers: {}, data: { status_code: 200, data: {} },
+  });
+  await expect(checkServiceAvailability()).resolves.toBe(true);
 });
 
 it('keeps a single endpoint 500 local when the service probe succeeds', async () => {

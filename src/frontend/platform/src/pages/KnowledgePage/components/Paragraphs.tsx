@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Pagination, notification } from '@bisheng/ui';
 // @ts-strict-ignore
 import { Button, SearchInput } from '@bisheng/ui';
@@ -398,7 +399,7 @@ export default function Paragraphs({ fileId, onBack, canEditKb = false, canDelet
     return (
         <div className="relative flex flex-col h-[calc(100vh-64px-var(--license-banner-h,0px))]">
             {load && <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,1)] dark:bg-blur-shared">
-                <Outlined.Loading  className="size-4 animate-spin"/>
+                <LoadingState size="page" label={t("loading")} className="h-full" />
             </div>}
             {/* Top navigation bar */}
             <div className="flex justify-between items-center px-4 pt-4 pb-4">

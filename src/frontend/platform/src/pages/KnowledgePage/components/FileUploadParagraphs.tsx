@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Outlined } from "bisheng-icons";
 
 import { previewFileSplitApi } from "@/controllers/API";
@@ -112,7 +113,7 @@ const FileUploadParagraphs = forwardRef(function ({ open = false, change, onChan
 
     if (loading) return (
         <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-            <Outlined.Loading  className="size-4 animate-spin"/>
+            <LoadingState label={t("loading")} className="h-full" />
         </div>
     )
 

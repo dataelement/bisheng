@@ -38,6 +38,7 @@ from bisheng.common.errcode.department import (
 from bisheng.common.errcode.permission import PermissionInvalidResourceError
 from bisheng.common.services.config_service import settings
 from bisheng.common.subject_search import normalize_keyword
+from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.department import (
     Department,
@@ -306,6 +307,12 @@ def _parse_path_ids(path: str | None) -> list[int]:
         except ValueError:
             continue
     return ids
+
+
+def _layer_status_visible(status: str | None, include_archived: bool) -> bool:
+    if include_archived:
+        return status in {"active", "archived"}
+    return status == "active"
 
 
 def _path_in_scope(path: str | None, is_sys_admin: bool, admin_paths: set[str]) -> bool:
@@ -1277,6 +1284,9 @@ class DepartmentService:
             else:
                 topmost_ids = [ids[-1] for p in _topmost_paths(admin_paths) if (ids := _parse_path_ids(p))]
                 depts = await DepartmentDao.aget_by_ids(topmost_ids)
+                # The directory root is loaded by id, so it skips the child-layer
+                # status clause. An archived root would otherwise stay selectable.
+                depts = [dept for dept in depts if _layer_status_visible(dept.status, include_archived)]
                 depts = sorted(depts, key=lambda d: (d.sort_order, d.id))
         else:
             parent = await DepartmentDao.aget_by_id(parent_id)
@@ -1389,6 +1399,9 @@ class DepartmentService:
         for d in seeds:
             needed.update(_parse_path_ids(d.path))
         depts = await DepartmentDao.aget_by_ids(list(needed))
+        # Path ancestors are loaded by id. An archived ancestor must not become a
+        # selectable row when the caller asked for active departments only.
+        depts = [dept for dept in depts if _layer_status_visible(dept.status, include_archived)]
         # Clamp to scope: ancestors above the admin boundary are dropped (no leak).
         visible = [d for d in depts if _path_in_scope(d.path, is_sys_admin, admin_paths)]
         if not visible:
@@ -2269,7 +2282,7 @@ class DepartmentService:
         # Batch enrich: user_groups and roles
         user_ids = {r.user_id for r in rows}
         user_groups_map: dict = {}
-        roles_map: dict = {}
+        role_display: dict = {}
 
         if user_ids:
             with directory_business_data_scope():
@@ -2324,23 +2337,14 @@ class DepartmentService:
                             {"id": gid, "group_name": gname},
                         )
 
-                    # Roles
-                    from bisheng.database.models.role import Role
-                    from bisheng.user.domain.models.user_role import UserRole
+            from bisheng.role.application.member_role_display import read_member_role_display
 
-                    role_result = await session.exec(
-                        select(
-                            UserRole.user_id,
-                            Role.id,
-                            Role.role_name,
-                        )
-                        .join(Role, UserRole.role_id == Role.id)
-                        .where(UserRole.user_id.in_(user_ids))
-                    )
-                    for uid, rid, rname in role_result.all():
-                        roles_map.setdefault(uid, []).append(
-                            {"id": rid, "role_name": rname},
-                        )
+            with directory_business_data_scope():
+                role_display = await read_member_role_display(
+                    user_ids,
+                    tenant_id=get_current_tenant_id(),
+                    include_issues=_is_admin(login_user),
+                )
         department_ids = sorted({r.department_id for r in rows})
         admin_user_ids = await asyncio.gather(
             *(cls._aget_department_admin_user_ids(department_id) for department_id in department_ids)
@@ -2376,7 +2380,7 @@ class DepartmentService:
                 "enabled": r.user_deleted == 0,
                 "disable_source": getattr(r, "user_disable_source", None),
                 "user_groups": user_groups_map.get(r.user_id, []),
-                "roles": roles_map.get(r.user_id, []),
+                **role_display.get(r.user_id, {"roles": []}),
                 "is_department_admin": r.user_id in admins_by_department[r.department_id],
                 **(
                     {

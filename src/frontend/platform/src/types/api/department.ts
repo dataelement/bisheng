@@ -47,6 +47,14 @@ export interface DepartmentDetail {
   member_count: number
 }
 
+export type RoleBindingIssueReason = "binding_tenant_mismatch" | "definition_out_of_scope" | "department_out_of_scope" | "definition_missing";
+export interface RoleBindingIssue {
+  binding_id: number;
+  role_id: number;
+  role_name: string | null;
+  reason: RoleBindingIssueReason;
+}
+
 export interface DepartmentMember {
   external_id?: string | null
   user_id: number
@@ -64,6 +72,7 @@ export interface DepartmentMember {
   disable_source?: string | null
   user_groups: { id: number; group_name: string }[]
   roles: { id: number; role_name: string }[]
+  role_binding_issues?: RoleBindingIssue[]
   /** 当前部门 OpenFGA admin；用于在角色列最前展示「部门管理员」 */
   is_department_admin?: boolean
 }

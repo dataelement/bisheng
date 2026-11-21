@@ -149,9 +149,10 @@ export default function MainLayout() {
   // Load env config once on mount — makes bishengConfState available to all pages
   const [config, setConfig] = useRecoilState(bishengConfState);
   useEffect(() => {
-    getBysConfigApi().then((res: any) => {
-      setConfig(res.data);
-    });
+    getBysConfigApi().then(
+      (res: any) => setConfig(res.data),
+      () => { /* Keep the current config. Service outages are handled by the request layer. */ },
+    );
   }, []);
 
   // System notice popup — single instance above KeepAlive so dismissal is global.

@@ -16,6 +16,14 @@ vi.mock('react-dropzone', () => ({ useDropzone: ({ onDrop }: { onDrop: (files: F
 beforeEach(() => vi.clearAllMocks());
 afterEach(cleanup);
 
+it.each(['issued-ref-C', undefined])('forwards only the reference returned by upload (%s)', async (reference) => {
+    mock.post.mockResolvedValueOnce({ file_path: 'tmp/qa.xlsx', preview_upload_ref: reference });
+    const onSuccess = vi.fn();
+    render(<SimpleUpload filekey="file" uploadUrl="/upload" accept={['xlsx']} onSuccess={onSuccess} />);
+    await act(() => mock.drop!([new File(['synthetic'], 'qa.xlsx')]));
+    expect(onSuccess).toHaveBeenCalledWith('qa.xlsx', 'tmp/qa.xlsx', reference);
+});
+
 it('terminates a rejected upload without invoking success or repeating the request notice', async () => {
     const error = normalizeApiError(new Error('Upload failed'), { message: 'Upload failed' });
     error.presentation = 'toast';

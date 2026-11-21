@@ -5,7 +5,7 @@ from copy import deepcopy
 from sqlalchemy import update
 from sqlmodel import select
 
-from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, KnowledgeProcessingConflictError
+from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 from bisheng.core.context.tenant import get_current_tenant_id, is_tenant_filter_bypassed, strict_tenant_filter
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument as Document
@@ -13,6 +13,7 @@ from bisheng.knowledge.domain.models.knowledge_document_version import Knowledge
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile
 from bisheng.knowledge.domain.repositories.knowledge_version_read_repository import KnowledgeVersionReadRepository
 from bisheng.knowledge.domain.repositories.source_move_input_repository import SourceMoveInputRepository
+from bisheng.knowledge.domain.schemas.processing_diagnostics import file_processing_conflict
 from bisheng.knowledge.domain.services.knowledge_processing_guard import require_space_processing_idle
 from bisheng.resource_reference.application.contracts import TransactionIdentity
 
@@ -83,7 +84,7 @@ class LegacyRetryRepository:
             blocked("space_missing")
         root = roots[0]
         require_space_processing_idle(root, operation="legacy_retry")
-        await SourceMoveInputRepository().arequire_released(session, space_id=space_id)
+        await SourceMoveInputRepository().arequire_released(session, space_id=space_id, include_copy=False)
         current()
         files = {}
         for start in range(0, len(file_ids), 200):
@@ -96,7 +97,7 @@ class LegacyRetryRepository:
                 if row.tenant_id != tenant or row.knowledge_id != space_id or row.file_type != FileType.FILE.value:
                     blocked("file_scope_changed")
                 if row.status in {1, 4, 5} and not allow_processing:
-                    raise KnowledgeProcessingConflictError(reason="legacy_retry_file_busy")
+                    raise file_processing_conflict("legacy_retry_file_busy", row.status)
                 if row.status not in ({1, 2, 3, 4, 5, 6, 7} if allow_processing else {2, 3, 6, 7}):
                     blocked("file_state_invalid")
                 files[row.id] = row.model_dump(mode="json")

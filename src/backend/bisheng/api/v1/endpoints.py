@@ -133,10 +133,10 @@ def get_env():
 
 @router.get("/all")
 def get_all_langchain_types_legacy():
-    """兼容旧版平台：启动时请求 GET /api/v1/all（LangChain 节点类型注册表）。
+    """兼容旧版平台:启动时请求 GET /api/v1/all(LangChain 节点类型注册表)。
 
-    v2.5+ 后端不再在单体中动态构建该字典；返回空对象以避免 SPA 404。
-    若画布/组件列表异常，请使用与当前后端版本一致的前端构建，或在此补全数据。
+    v2.5+ 后端不再在单体中动态构建该字典;返回空对象以避免 SPA 404。
+    若画布/组件列表异常,请使用与当前后端版本一致的前端构建,或在此补全数据。
     """
     return resp_200({})
 
@@ -199,7 +199,7 @@ async def update_web_config(
 
 
 async def _upload_file(
-    file: UploadFile, object_name_prefix: str, file_supports: list[str] = None, bucket_name: str = None
+    file: UploadFile, object_name_prefix: str, file_supports: list[str] | None = None, bucket_name: str | None = None
 ) -> UploadFileResponse:
     if file.size == 0:
         raise UploadFileEmptyError()
@@ -251,23 +251,47 @@ async def upload_icon_workflow(
 
 
 @router.post("/upload/{flow_id}")
-async def create_upload_file(file: UploadFile, flow_id: str):
-    # Cache file
+async def create_upload_file(
+    file: UploadFile, flow_id: str, login_user: UserPayload = Depends(UserPayload.get_login_user)
+):
+    from pathlib import PurePath
+
+    from bisheng.core.context.tenant import get_current_tenant_id
+    from bisheng.knowledge.domain.services.preview_source_service import PreviewSourceService
+    from bisheng.knowledge.domain.upload_file_size import validate_knowledge_upload_file_size
+    from bisheng.permission.application.business_authorization import check_business_action, require_business_action
+
     try:
-        if len(file.filename) > 80:
-            file.filename = file.filename[-80:]
-        file_path = await save_uploaded_file(file, folder_name=flow_id, file_name=file.filename)
-        if not isinstance(file_path, str):
-            file_path = str(file_path)
-        return resp_200(
-            UploadFileResponse(
-                flowId=flow_id,
-                file_path=file_path,
-            )
+        if not flow_id or len(flow_id) > 128 or any(not (c.isascii() and (c.isalnum() or c in "-_")) for c in flow_id):
+            raise HTTPException(status_code=422, detail="Invalid flow ID")
+        # Runtime attachments require use; builder uploads may instead use edit.
+        # The business adapter verifies the workflow's tenant and status first.
+        if not await check_business_action(login_user, resource_type="workflow", resource_id=flow_id, action="use"):
+            await require_business_action(login_user, resource_type="workflow", resource_id=flow_id, action="edit")
+        tenant_id = get_current_tenant_id()
+        if tenant_id is None or tenant_id != login_user.tenant_id:
+            raise HTTPException(status_code=403, detail="Invalid upload tenant")
+        file_name = PurePath((file.filename or "upload").replace("\\", "/")).name[-80:]
+        validate_knowledge_upload_file_size(file_name, file.size)
+        suffix = PurePath(file_name).suffix.lower()
+        if len(suffix) > 10 or not suffix[1:].isalnum():
+            suffix = ""
+        object_name = f"uploads/{tenant_id}/{login_user.user_id}/{generate_uuid()}{suffix}"
+        file_path = str(await save_uploaded_file(file, folder_name="uploads", file_name=object_name))
+        from bisheng.core.storage.minio.minio_manager import get_minio_storage
+
+        minio = await get_minio_storage()
+        await PreviewSourceService.bind_owned_object(
+            bucket=minio.tmp_bucket, object_name=object_name, login_user=login_user
         )
-    except Exception as exc:
-        logger.error(f"Error saving file: {exc}")
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        upload_ref = await PreviewSourceService.issue(
+            user_id=login_user.user_id,
+            knowledge_id=0,
+            object_name=object_name,
+            file_path=file_path,
+            file_name=file_name,
+        )
+        return resp_200(UploadFileResponse(flowId=flow_id, file_path=file_path, preview_upload_ref=upload_ref))
     finally:
         await file.close()
 

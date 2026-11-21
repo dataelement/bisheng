@@ -18,6 +18,9 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from sqlmodel import Field, SQLModel
 
+from bisheng.common.errcode.knowledge_space import SpaceNotFoundError
+from bisheng.core.context.tenant import is_strict_tenant_filter, strict_tenant_filter
+
 BACKEND = Path(__file__).resolve().parents[2]
 SERVICE = BACKEND / "bisheng/knowledge/domain/services/knowledge_space_service.py"
 
@@ -99,6 +102,8 @@ def context(monkeypatch):
     )
     namespace = {
         "KnowledgeUtils": object,
+        "strict_tenant_filter": strict_tenant_filter,
+        "SpaceNotFoundError": SpaceNotFoundError,
         "datetime": datetime,
         "asyncio": asyncio,
         "perf_counter": perf_counter,
@@ -163,6 +168,30 @@ def context(monkeypatch):
     # subscribe_space uses the class-owned permission projector.
     type(service).sync_direct_space_user_permissions = service.sync_direct_space_user_permissions
     return SimpleNamespace(service=service, member=member, space=space, namespace=namespace)
+
+
+async def test_square_queries_use_only_current_tenant(context):
+    async def load(**kwargs):
+        assert is_strict_tenant_filter(), "Discovery must exclude Root resources for child tenants"
+        return []
+
+    async def count(**kwargs):
+        assert is_strict_tenant_filter(), "The total must use the same tenant boundary"
+        return 0
+
+    context.namespace["KnowledgeDao"].async_get_public_spaces_paginated.side_effect = load
+    context.namespace["KnowledgeDao"].async_count_public_spaces.side_effect = count
+    await context.service.get_knowledge_square()
+    assert not is_strict_tenant_filter()
+
+
+async def test_cross_tenant_subscribe_rejected_before_membership_or_approval(context):
+    context.service.login_user.tenant_id = 69
+    with pytest.raises(SpaceNotFoundError):
+        await context.service.subscribe_space(context.space.id)
+    context.namespace["SpaceChannelMemberDao"].async_find_member.assert_not_awaited()
+    context.service.approval_gate.request_or_pass.assert_not_awaited()
+    context.service._persist_space_member.assert_not_awaited()
 
 
 @pytest.mark.parametrize("status", [Status.SUBSCRIBED, Status.NOT_SUBSCRIBED])

@@ -1,6 +1,5 @@
 // @ts-strict-ignore
 import { Button, Dropdown, DropdownChevron, DropdownItem, Input, Textarea, toast } from '@bisheng/ui';
-import { Outlined } from "bisheng-icons";
 
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
@@ -429,8 +428,8 @@ const McpServerEditorDialog = forwardRef<{ open: (...args: unknown[]) => void },
                         <Button variant="outlined" onClick={() => setIsDialogOpen(false)} color="default">
                             {t('cancel')}
                         </Button>
-                        <Button disabled={isLoading} onClick={handleSubmit}>
-                            {isLoading && <Outlined.Loading className="animate-spin mr-1" />}
+                        <Button disabled={isLoading} onClick={handleSubmit} loading={isLoading}>
+
                             {t('save')}
                         </Button>
                     </SheetFooter>

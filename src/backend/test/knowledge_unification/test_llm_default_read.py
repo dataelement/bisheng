@@ -9,7 +9,7 @@ from dataclasses import FrozenInstanceError, replace
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import delete
+from sqlalchemy import delete, update
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel import Session, create_engine
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -42,6 +42,7 @@ async def reads(tmp_path, model_owner_tenant, monkeypatch):
         table.create(engine)
     with Session(engine) as session, session.begin():
         models.setup(session)
+        session.execute(update(LLMModel).values(online=True))
     identity = ModelDefaultReadIdentityPort()
     owner = ModelDefaultSourceOwner(identity_port=identity)
     verifier = SourceReadVerifier({"model_default": owner}, identity)
@@ -104,7 +105,7 @@ async def test_valid_inherited_source_returns_original_root_without_child_copy(r
 
 
 @pytest.mark.parametrize("native_sync", [False, True])
-async def test_invalid_optional_model_blocks_entire_key_and_all_slots(reads, native_sync):
+async def test_invalid_optional_model_blocks_whole_key_but_not_unused_slots(reads, native_sync):
     with Session(reads.engine) as session, session.begin():
         native.seed_default(
             session,
@@ -130,9 +131,15 @@ async def test_invalid_optional_model_blocks_entire_key_and_all_slots(reads, nat
     assert json.loads(raw.payload_json)["models"][0]["id"] == "11"
     with pytest.raises(ResourceReferenceInvalidError):
         if native_sync:
-            reads.facade.require_default_slot("linsight_llm", "chat_title_llm.id")
+            reads.facade.require_default("linsight_llm")
         else:
-            await reads.facade.arequire_default_slot("linsight_llm", "chat_title_llm.id")
+            await reads.facade.arequire_default("linsight_llm")
+    slot = (
+        reads.facade.require_default_slot("linsight_llm", "chat_title_llm.id")
+        if native_sync
+        else await reads.facade.arequire_default_slot("linsight_llm", "chat_title_llm.id")
+    )
+    assert slot == "22"
     other = (
         reads.facade.require_default("evaluation_llm")
         if native_sync

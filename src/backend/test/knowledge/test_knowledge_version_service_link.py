@@ -10,7 +10,6 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge_space import (
     VersionLinkFileNotReadyError,
-    VersionLinkSourceMultiVersionError,
     VersionManagementDisabledError,
 )
 from bisheng.knowledge.application.knowledge_version_mutation import KnowledgeVersionMutationApplication
@@ -33,6 +32,11 @@ from bisheng.knowledge.domain.services.knowledge_version_service import Knowledg
 @pytest.fixture(autouse=True)
 def concrete_tenant(tenant_context):
     tenant_context(1)
+
+
+@pytest.fixture(autouse=True)
+def admitted_space_editor(monkeypatch):
+    monkeypatch.setattr("bisheng.knowledge.application.knowledge_version_mutation.require_business_action", AsyncMock())
 
 
 @pytest.fixture
@@ -203,8 +207,10 @@ async def test_link_rejected_when_source_is_primary_of_multi_version_doc(enable_
     await async_db_session.commit()
 
     svc = _build_svc(async_db_session)
-    with pytest.raises(VersionLinkSourceMultiVersionError):
+    with pytest.raises(HTTPException) as ctx:
         await svc.link_file_to_document(knowledge_file_id=201, target_document_id=target_doc.id)
+    assert ctx.value.status_code == 409
+    assert ctx.value.detail == "source file is already in a multi-version document"
 
 
 @pytest.mark.asyncio
@@ -238,8 +244,10 @@ async def test_link_rejected_when_source_is_historical_version_of_multi_version_
         (row.id, row.knowledge_file_id, row.is_primary)
         for row in await svc.version_repo.find_by_document_id(source_doc.id)
     ]
-    with pytest.raises(VersionLinkSourceMultiVersionError):
+    with pytest.raises(HTTPException) as ctx:
         await svc.link_file_to_document(knowledge_file_id=300, target_document_id=target_doc.id)
+    assert ctx.value.status_code == 409
+    assert ctx.value.detail == "source file is already in a multi-version document"
     surviving = await svc.version_repo.find_by_document_id(source_doc.id)
     assert [(row.id, row.knowledge_file_id, row.is_primary) for row in surviving] == before
     target = await svc.version_repo.find_by_document_id(target_doc.id)

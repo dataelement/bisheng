@@ -32,7 +32,9 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileDao,
     KnowledgeFileStatus,
 )
+from bisheng.knowledge.domain.repositories.processing_fence_repository import ProcessingCancelled
 from bisheng.knowledge.domain.schemas.processing_settings import EffectiveProcessingSnapshot
+from bisheng.knowledge.domain.services.processing_write_guard import ProcessingWriteGuard, guarded_processing
 from bisheng.knowledge.rag.knowledge_file_pipeline import (
     FILE_PROCESSING_PATCH_FIELDS,
     FileProcessingResult,
@@ -98,17 +100,27 @@ def prepare_processing_file(
     detached.simhash = None
     detached.similar_status = 0
     documents, status, code = (), 2, None
+    pipeline = KnowledgeFilePipeline(
+        invoke_user_id=invoke_user_id,
+        db_file=detached,
+        effective_processing=effective,
+        need_thumbnail=True,
+        processing_guard=ProcessingWriteGuard(space_id, file_id),
+    )
     try:
-        result = KnowledgeFilePipeline(
-            invoke_user_id=invoke_user_id, db_file=detached, effective_processing=effective, need_thumbnail=True
-        ).run(PipelineConfig(stop_at=PipelineStage.TRANSFORMER))
+        result = pipeline.run(PipelineConfig(stop_at=PipelineStage.TRANSFORMER))
         documents = tuple(result.documents or ())
         if not documents:
             raise KnowledgeFileEmptyError()
-    except KnowledgeUnificationError:
+    except (KnowledgeUnificationError, ProcessingCancelled):
         raise
-    except ContentSafetyViolation:
+    except ContentSafetyViolation as error:
         logger.opt(exception=True).warning("Knowledge processing safety rejection file={}", file_id)
+        try:
+            documents = tuple(pipeline.segment_for_display(error.documents))
+        except Exception:
+            logger.opt(exception=True).warning("violation display segments unavailable file={}", file_id)
+            documents = ()
         status, code = 7, KnowledgeFileFailedError.Code
     except BaseErrorCode as error:
         logger.opt(exception=True).warning("Knowledge processing parse rejected file={} code={}", file_id, error.Code)
@@ -132,6 +144,7 @@ def prepare_processing_file(
     )
 
 
+@guarded_processing(file_arg="prepared.file_id")
 def write_processing_file(
     prepared, *, space_id, invoke_user_id, expected_model_config_revision, expected_index_generation
 ) -> FileProcessingResult:
@@ -147,11 +160,13 @@ def write_processing_file(
     if physical_processing_source_digest(source) != prepared.physical_source_digest:
         raise KnowledgeOperationPlanConflictError(reason="processing_file_source_changed")
     if prepared.status != 2:
+        if prepared.status == KnowledgeFileStatus.VIOLATION.value:
+            KnowledgeUtils.save_violation_display_chunks(prepared.file_id, prepared.documents)
         return FileProcessingResult(
             prepared.file_id,
             prepared.source_revision,
             prepared.status,
-            0,
+            len(prepared.documents) if prepared.status == KnowledgeFileStatus.VIOLATION.value else 0,
             deepcopy(prepared.file_patch),
             prepared.error_code,
         )
@@ -181,7 +196,7 @@ def write_processing_file(
     try:
         vector.add_documents(deepcopy(list(prepared.documents)))
         es.add_documents(deepcopy(list(prepared.documents)))
-    except KnowledgeUnificationError:
+    except (KnowledgeUnificationError, ProcessingCancelled):
         raise
     except Exception:
         logger.exception("Knowledge processing ingest failed file={}", prepared.file_id)
@@ -194,6 +209,7 @@ def write_processing_file(
             deepcopy(prepared.file_patch),
             KnowledgeFileFailedError.Code,
         )
+    KnowledgeUtils.delete_violation_display_chunks([prepared.file_id])
     return FileProcessingResult(
         prepared.file_id, prepared.source_revision, 2, len(prepared.documents), deepcopy(prepared.file_patch)
     )
@@ -511,13 +527,15 @@ def parse_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
     knowledge = None
     try:
         knowledge = _parse_knowledge_file(file_id, preview_cache_key, callback_url)
+    except ProcessingCancelled:
+        logger.info("Parsing cancelled by deletion file={}", file_id)
     except Exception as e:
         logger.error("parse_knowledge_file_celery error: {}", str(e))
     finally:
         if stop_heartbeat is not None:
             stop_heartbeat()
         db_file = KnowledgeFileDao.get_file_by_ids([file_id])
-        if not db_file and knowledge:
+        if not db_file and knowledge and knowledge.type != KnowledgeTypeEnum.SPACE.value:
             logger.debug("delete_knowledge_file_celery file_id={}", file_id)
             # File was deleted during parsing; clean up the vector data.
             # Note: original code had [db_file[0].id] here which would crash when
@@ -564,9 +582,19 @@ def _parse_knowledge_file(file_id: int, preview_cache_key: str = None, callback_
     if not db_knowledge:
         logger.error("knowledge_id={} not found", db_file.knowledge_id)
         return None
+    guard = (
+        ProcessingWriteGuard(db_file.knowledge_id, file_id)
+        if db_knowledge.type == KnowledgeTypeEnum.SPACE.value
+        else None
+    )
+    if guard:
+        guard.checkpoint()
     if db_file.status == KnowledgeFileStatus.WAITING.value:
         db_file.status = KnowledgeFileStatus.PROCESSING.value
-        KnowledgeFileDao.update_file_status([db_file.id], KnowledgeFileStatus.PROCESSING)
+        if guard:
+            guard.repository.persist_file(db_file)
+        else:
+            KnowledgeFileDao.update_file_status([db_file.id], KnowledgeFileStatus.PROCESSING)
 
     # Get Splitting Rules
     file_rule = FileProcessBase(**json.loads(db_file.split_rule))
@@ -593,8 +621,16 @@ def retry_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
     trace_id_var.set(f"retry_knowledge_file_{file_id}")
     logger.info("retry_knowledge_file_celery start file_id={}", file_id)
 
+    rows = KnowledgeFileDao.get_file_by_ids([file_id])
+    if not rows:
+        return
+    guard = ProcessingWriteGuard(rows[0].knowledge_id, file_id)
     try:
-        delete_knowledge_file_vectors(file_ids=[file_id], clear_minio=False)
+        with guard.write():
+            delete_knowledge_file_vectors(file_ids=[file_id], clear_minio=False)
+    except ProcessingCancelled:
+        logger.info("Retry cancelled by deletion file={}", file_id)
+        return
     except Exception as e:
         logger.exception("retry_knowledge_file_celery delete vectors error: {}", str(e))
         KnowledgeFileDao.update_file_status(
@@ -610,7 +646,8 @@ def retry_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
             logger.warning("retry_knowledge_file_celery file_id={} disappeared", file_id)
             return
         row = db_file[0]
-        KnowledgeFileDao.update_file_status([file_id], KnowledgeFileStatus.WAITING)
+        row.status = KnowledgeFileStatus.WAITING.value
+        guard.repository.persist_file(row)
         file_scheduler.enqueue_or_dispatch(
             user_id=row.user_id,
             file_id=file_id,
@@ -628,7 +665,7 @@ def retry_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
         logger.error("retry_knowledge_file_celery error: {}", str(e))
     finally:
         db_file = KnowledgeFileDao.get_file_by_ids([file_id])
-        if not db_file and knowledge:
+        if not db_file and knowledge and knowledge.type != KnowledgeTypeEnum.SPACE.value:
             logger.debug("delete_knowledge_file_celery file_id={}", file_id)
             delete_vector_files([file_id], knowledge)
 

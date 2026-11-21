@@ -30,7 +30,7 @@ const independentPaths = new Set([
 ]);
 
 /** Browser transport boundary, independent of the generated route inventory. */
-export function needsBrowserScope(_method: string, raw: string, origin: string, baseURL = '/'): boolean {
+export function needsBrowserScope(method: string, raw: string, origin: string, baseURL = '/'): boolean {
   const base = new URL(baseURL.replace(/\/?$/, '/'), origin);
   const absolute = /^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(raw);
   const url = absolute ? new URL(raw, origin) : new URL(raw.replace(/^\//, ''), base);
@@ -44,6 +44,8 @@ export function needsBrowserScope(_method: string, raw: string, origin: string, 
   // These namespaces establish their own public, device or external credential.
   if (/^\/api\/(?:auth|oauth2|share|dsh|v2|v3)(?:\/|$)/.test(path)) return false;
   if (/^\/api\/v1\/(?:public|internal|share_link)(?:\/|$)/.test(path)) return false;
+  if (method.toUpperCase() === 'GET' &&
+      (path === '/api/v1/dsh/market/admin/plugins' || path === '/api/v1/dsh/market/admin/workbenches')) return true;
   if (/^\/api\/v1\/dsh(?:\/|$)/.test(path) && !/^\/api\/v1\/dsh\/admin(?:\/|$)/.test(path)) return false;
   return true;
 }

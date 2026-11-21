@@ -2484,31 +2484,13 @@
       "count": 1
     }
   },
-  "src/pages/knowledge/SpaceDetail/MoveToDialog.tsx": {
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 2
-    }
-  },
   "src/pages/knowledge/SpaceDetail/SelectionPathBreadcrumb.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 2
     }
   },
-  "src/pages/knowledge/SpaceDetail/SimilarDocumentDialog.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    }
-  },
-  "src/pages/knowledge/SpaceDetail/VersionManagementDialog.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
   "src/pages/knowledge/SpaceDetail/index.tsx": {
     "no-restricted-imports": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
       "count": 1
     }
   },

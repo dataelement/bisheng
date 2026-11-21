@@ -18,11 +18,7 @@ from bisheng.core.config.multi_tenant import MultiTenantConf
 from bisheng.core.config.open_platform import OpenApiConf, OpenMcpConf, OpenPlatformConf
 from bisheng.core.config.openfga import OpenFGAConf
 from bisheng.core.config.reconcile import ReconcileConf
-from bisheng.core.config.secret_crypto import (
-    CredentialConfigurationError,
-    decrypt_token,
-    encrypt_token,  # noqa: F401 -- compatibility export for existing consumers
-)
+from bisheng.core.config.secret_crypto import CredentialConfigurationError, decrypt_token, encrypt_token  # noqa: F401
 from bisheng.core.config.sso_sync import SSOSyncConf
 from bisheng.core.config.user_tenant_sync import UserTenantSyncConf
 
@@ -223,7 +219,7 @@ class ElasticsearchConf(BaseModel):
                 raise CredentialConfigurationError("elasticsearch.url: invalid or embedded authentication") from None
         if "basic_auth" in result:
             auth = result["basic_auth"]
-            if not isinstance(auth, (tuple, list)) or len(auth) != 2 or not isinstance(auth[0], str):
+            if not isinstance(auth, tuple | list) or len(auth) != 2 or not isinstance(auth[0], str):
                 raise CredentialConfigurationError("elasticsearch.basic_auth: username and encrypted password required")
             result["basic_auth"] = (auth[0], _credential(auth[1], "elasticsearch.basic_auth"))
         self.ssl_verify = result
@@ -291,10 +287,9 @@ class WorkflowConf(BaseModel):
     code_node_enabled: bool = Field(
         default=False,
         description=(
-            "Whether workflows may run their Code node. Off unless an operator turns it on: "
-            "the node executes user-supplied Python with this process's privileges and there "
-            "is no execution sandbox yet, so while it is on, everyone who can edit a workflow "
-            "can run commands on the server."
+            "Whether workflows may run their Code node. Off unless an operator turns it on. "
+            "User code is not executed in this process: the backend-host local executor is rejected, "
+            "and a run uses only a configured external container or e2b interpreter."
         ),
     )
 
@@ -423,7 +418,11 @@ class CeleryConf(BaseModel):
             ("memory_scan_sessions", "bisheng.worker.memory.tasks.scan_memory_sessions", 60.0),
             ("memory_reconcile", "bisheng.worker.memory.tasks.reconcile_memory", 3600.0),
             ("memory_flush_metrics", "bisheng.worker.memory.tasks.flush_memory_metrics", 600.0),
-            ("memory_cleanup_turns", "bisheng.worker.memory.tasks.cleanup_memory_turns", crontab.from_string("40 4 * * *")),
+            (
+                "memory_cleanup_turns",
+                "bisheng.worker.memory.tasks.cleanup_memory_turns",
+                crontab.from_string("40 4 * * *"),
+            ),
         ):
             if key not in self.beat_schedule:
                 self.beat_schedule[key] = {"task": task, "schedule": schedule}
@@ -815,6 +814,33 @@ class PaddleOcrConf(BaseModel):
     request_kwargs: dict = Field(default_factory=dict, description="PaddleOcrService Request Arguments")
 
 
+class MinicpmOcrConf(BaseModel):
+    """MiniCPM-OCR Configure.
+
+    MiniCPM-OCR is served by an OpenAI-compatible endpoint (vLLM / SGLang /
+    llama.cpp). ``base_url`` is the API root, e.g. ``http://127.0.0.1:8000/v1``;
+    the loader appends ``/chat/completions``.
+    """
+
+    base_url: str = Field(default="", description="OpenAI-compatible API root, e.g. http://127.0.0.1:8000/v1")
+    model: str = Field(default="minicpm-ocr", description="Model name exposed by the endpoint")
+    api_key: str = Field(default="", description="Bearer token for the OpenAI-compatible endpoint")
+    prompt: str = Field(default="Text Recognition:", description="Instruction sent with each page image")
+    timeout: int = Field(default=120, description="Per-page request timeout (sec)")
+    max_retries: int = Field(default=3, ge=0, description="Retries for transient MiniCPM-OCR errors")
+    retry_backoff: float = Field(default=1.0, ge=0, description="Initial MiniCPM-OCR retry delay (sec)")
+    concurrency: int = Field(default=4, ge=1, le=32, description="Pages recognized in parallel")
+    dpi: int = Field(default=200, ge=72, le=600, description="PDF rasterization resolution")
+    max_tokens: int = Field(default=4096, ge=1, description="Per-page output token budget")
+    temperature: float = Field(default=0.0, ge=0.0, le=2.0, description="Sampling temperature")
+    mm_processor_kwargs: dict | None = Field(
+        default=None,
+        description="Request-level multimodal processor arguments; null sends none",
+    )
+    request_kwargs: dict = Field(default_factory=dict, description="Extra chat-completions request fields")
+    headers: dict = Field(default_factory=dict, description="Additional HTTP headers")
+
+
 class VersionManagementConf(BaseModel):
     """Version Management Configure"""
 
@@ -835,6 +861,7 @@ class KnowledgeConf(BaseModel):
     mineru: MineruConf = Field(default_factory=MineruConf, description="Mineru Configure")
     mineru_v4: MineruV4Conf = Field(default_factory=MineruV4Conf, description="MinerU V4 configuration")
     paddle_ocr: PaddleOcrConf = Field(default_factory=PaddleOcrConf, description="PaddleOcr Config")
+    minicpm_ocr: MinicpmOcrConf = Field(default_factory=MinicpmOcrConf, description="MiniCPM-OCR Config")
     version_management: VersionManagementConf = Field(
         default_factory=VersionManagementConf,
         description="Version Management Configure",
@@ -858,6 +885,8 @@ class KnowledgeConf(BaseModel):
             return bool(self.mineru_v4.api_url)
         if provider == "paddle_ocr":
             return bool(self.paddle_ocr.url)
+        if provider == "minicpm_ocr":
+            return bool(self.minicpm_ocr.base_url)
         return False
 
 
@@ -1127,9 +1156,9 @@ class Settings(BaseModel):
     environment: Union[dict, str] = "dev"
     # ↑↑↑ before config for langchain flow, will be deprecated
     debug: bool = False
-    dsh: DshSettings = Field(
+    bs_client: DshSettings = Field(
         default_factory=DshSettings,
-        description="DSH Desktop access, gateway trust, verified model capabilities and quota infrastructure configuration.",
+        description="BS Client deployment settings, native Desktop access and quota/audit bounds.",
     )
     database_url: str | None = Field(default=None, repr=False, validate_default=True)
     redis_url: Union[str, dict] | None = Field(default=None, repr=False)
@@ -1241,6 +1270,21 @@ class Settings(BaseModel):
             if not result[key]:
                 result[key] = []
         return result
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_client_settings(cls, values):
+        if isinstance(values, dict) and "dsh" in values:
+            values = dict(values)
+            legacy = values.pop("dsh")
+            if "bs_client" not in values:
+                values["bs_client"] = legacy
+        return values
+
+    @property
+    def dsh(self) -> DshSettings:
+        """Compatibility for existing internal consumers; one canonical configuration."""
+        return self.bs_client
 
     def get_minio_conf(self) -> MinioConf:
         return self.object_storage.minio

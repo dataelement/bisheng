@@ -13,8 +13,7 @@ from bisheng.core.context.tenant import bypass_tenant_filter, is_tenant_filter_b
 from bisheng.core.database.tenant_filter import _resolve_tenant_id
 from bisheng.database.models.tenant import ROOT_TENANT_ID, Tenant
 from bisheng.llm.domain.models.llm_server import LLMModel, LLMServer
-from bisheng.llm.domain.models.tenant_system_model_config import TenantSystemModelConfig
-from bisheng.llm.domain.repositories.reference_target_repository import DEFAULT_SCHEMAS, ModelReferenceTargetRepository
+from bisheng.llm.domain.repositories.reference_target_repository import ModelReferenceTargetRepository
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,23 +90,6 @@ class ModelNameResolutionRepository:
             lock=lock,
         )
 
-    async def _configs(self, session, tenant_id, *, lock=False):
-        return await self._rows(
-            session,
-            select(
-                TenantSystemModelConfig.tenant_id,
-                TenantSystemModelConfig.key,
-                TenantSystemModelConfig.value,
-            )
-            .where(
-                TenantSystemModelConfig.tenant_id.in_(sorted({ROOT_TENANT_ID, tenant_id})),
-                TenantSystemModelConfig.key.in_(tuple(DEFAULT_SCHEMAS)),
-            )
-            .order_by(TenantSystemModelConfig.tenant_id, TenantSystemModelConfig.key),
-            CatalogConfig,
-            lock=lock,
-        )
-
     async def _models(self, session, tenant_id, ids, server_ids, *, lock=False):
         if not ids and not server_ids:
             return ()
@@ -153,9 +135,9 @@ class ModelNameResolutionRepository:
     async def _catalog(self, session, tenant_id, shared_ids, frozen_models, *, lock=False):
         self._tenant(tenant_id)
         topology = await self._topology(session, tenant_id)
-        configs = await self._configs(session, tenant_id)
+        configs = ()
         topo = {row.id: row for row in topology}
-        inherited = ModelReferenceTargetRepository._inherited_ids(topo, configs, tenant_id)
+        inherited = frozenset()
         frozen_ids = {item.model_id for item in frozen_models}
         dependencies = await self._models(session, tenant_id, inherited | frozen_ids, ())
         dependency_by_id = {row.id: row for row in dependencies}
@@ -163,11 +145,8 @@ class ModelNameResolutionRepository:
             row = dependency_by_id.get(item.model_id)
             if row is None or row.server_id != item.server_id:
                 raise ResourceReferenceInvalidError(reason="model_name_frozen_identity_unavailable")
-        inherited_servers = {
-            row.server_id for row in dependencies if row.id in inherited and row.tenant_id == ROOT_TENANT_ID
-        }
         child = tenant_id != ROOT_TENANT_ID and ModelReferenceTargetRepository._child(topo, tenant_id)
-        root_visible = set(shared_ids) | inherited_servers if child else set()
+        root_visible = set(shared_ids) if child else set()
         frozen_servers = {
             row.server_id for row in dependencies if row.id in frozen_ids and row.tenant_id == ROOT_TENANT_ID
         }
@@ -176,7 +155,7 @@ class ModelNameResolutionRepository:
         models = await self._models(session, tenant_id, inherited | frozen_ids, visible, lock=lock)
         if lock:
             locked_topology = await self._topology(session, tenant_id, lock=True)
-            locked_configs = await self._configs(session, tenant_id, lock=True)
+            locked_configs = ()
             if locked_topology != topology or locked_configs != configs:
                 raise KnowledgeOperationPlanConflictError(reason="model_name_catalog_changed")
         server_by_id = {row.id: row for row in servers}
@@ -232,7 +211,7 @@ class ModelNameResolutionRepository:
         if models != expected.models:
             raise KnowledgeOperationPlanConflictError(reason="model_name_catalog_changed")
         topology = await self._topology(session, expected.tenant_id, lock=True)
-        configs = await self._configs(session, expected.tenant_id, lock=True)
+        configs = ()
         if topology != expected.topology or configs != expected.configs:
             raise KnowledgeOperationPlanConflictError(reason="model_name_catalog_changed")
         return current

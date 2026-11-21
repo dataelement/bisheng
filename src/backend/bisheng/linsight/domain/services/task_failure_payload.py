@@ -1,6 +1,7 @@
 """Project a persisted task failure onto its public replay event."""
 
 from bisheng.common.services.failure_context import FailureContextAdapter
+from bisheng.common.services.llm_error_classifier import recover_model_transport_failure
 
 _METADATA_FIELDS = (
     "failure_info",
@@ -16,7 +17,7 @@ _METADATA_FIELDS = (
 
 def task_failure_payload(output_result: dict | None) -> dict:
     raw = output_result if isinstance(output_result, dict) else {}
-    public = FailureContextAdapter.public_payload(raw)
+    public = FailureContextAdapter.public_payload(recover_model_transport_failure(raw))
     payload = {key: public[key] for key in _METADATA_FIELDS if key in public}
     payload.update(
         error=FailureContextAdapter.public_text(raw.get("error_message") or "Task failed"),

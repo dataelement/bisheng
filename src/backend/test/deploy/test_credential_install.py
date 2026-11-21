@@ -109,6 +109,12 @@ def test_prepare_only_does_not_pull_login_or_start_services(tmp_path):
     for name in ("install.sh", "credentials.sh", ".env.example"):
         shutil.copyfile(ROOT / "docker" / name, deployment / name)
     shutil.copytree(ROOT / "docker/lib", deployment / "lib")
+    # The fixed production store needs administrator provisioning; isolate this
+    # host-wrapper test instead of depending on /opt permissions or host state.
+    env_lib = deployment / "lib/install-env.sh"
+    env_lib.write_text(
+        env_lib.read_text().replace("/opt/bisheng/.credential-security", str(tmp_path / "credential-security"))
+    )
     binaries = tmp_path / "bin"
     binaries.mkdir()
     log = tmp_path / "docker-commands"

@@ -59,8 +59,9 @@ function itemPath(
 export async function listSpaceFolderParents(
   spaceId: number,
   folderId: number,
+  signal?: AbortSignal,
 ): Promise<SpaceFolderParent[]> {
-  return axios.get(`${itemPath(spaceId, "folders", folderId)}/parent`);
+  return axios.get(`${itemPath(spaceId, "folders", folderId)}/parent`, signal ? { signal } : undefined);
 }
 export async function createSpaceFolder(
   spaceId: number,
@@ -96,8 +97,10 @@ export async function getSpaceFilePreview(
 export async function getSpaceFileDownload(
   spaceId: number,
   fileId: number,
+  signal?: AbortSignal,
 ): Promise<SpaceFileUrls> {
-  return axios.get(`${itemPath(spaceId, "files", fileId)}/download`);
+  const path = `${itemPath(spaceId, "files", fileId)}/download`;
+  return signal ? axios.get(path, { signal }) : axios.get(path);
 }
 export async function searchSpaceChildren(
   spaceId: number,

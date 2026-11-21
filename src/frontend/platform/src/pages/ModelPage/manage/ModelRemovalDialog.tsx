@@ -6,9 +6,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/bs-ui/dialog";
+import { Table } from "@/components/bs-ui/table";
 import { Alert, Button } from "@bisheng/ui";
 import { useTranslation } from "react-i18next";
 import type { ModelRemovalView } from "./useModelRemoval";
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 
 interface ModelRemovalDialogProps {
   view: ModelRemovalView | null;
@@ -18,6 +20,9 @@ interface ModelRemovalDialogProps {
   onRefresh: () => void;
   onLoadMore: () => void;
 }
+
+const referenceTableClassName =
+  "min-w-[24rem] border-collapse text-text-1 [&_td]:h-10 [&_td]:p-2 [&_th]:h-10 [&_th]:p-2 [&_thead]:text-body-sm [&_tbody]:text-body-sm";
 
 interface ModelConfigActionsProps {
   showDelete: boolean;
@@ -84,6 +89,10 @@ export function ModelRemovalDialog({
   const { t } = useTranslation("model");
   if (!view) return null;
   const inspection = view.result?.inspection;
+  const sourceCounts =
+    inspection?.source_counts.filter(([, count]) => count > 0) ?? [];
+  const slotCounts = new Map(inspection?.slot_counts);
+  const restrictedCounts = new Map(inspection?.restricted_counts);
   const blocked = inspection?.blocked === true;
   const frozen = view.pending || view.dispatched;
   return (
@@ -94,6 +103,7 @@ export function ModelRemovalDialog({
       }}
     >
       <DialogContent
+        className="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-2xl grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-h-[calc(100dvh-4rem)]"
         close={false}
         onEscapeKeyDown={(event) => {
           if (frozen) event.preventDefault();
@@ -112,11 +122,9 @@ export function ModelRemovalDialog({
           </DialogTitle>
           <DialogDescription>{t("model.removalDescription")}</DialogDescription>
         </DialogHeader>
-        <div className="max-h-[60vh] overflow-y-auto space-y-4">
+        <div className="min-h-0 max-h-[60vh] space-y-4 overflow-y-auto">
           {!inspection && view.pending && (
-            <p role="status" className="text-sm">
-              {t("model.removalChecking")}
-            </p>
+            <LoadingState label={t("model.removalChecking")} />
           )}
           {view.error && <Alert type="error" live description={view.error} />}
           {view.dispatched && !view.pending && (
@@ -135,74 +143,110 @@ export function ModelRemovalDialog({
               {blocked && (
                 <Alert type="warning" description={t("model.removalBlocked")} />
               )}
-              <ul className="space-y-2 text-sm">
-                {inspection.source_counts
-                  .filter(([, count]) => count > 0)
-                  .map(([kind, count]) => {
-                    const slots =
-                      inspection.slot_counts.find(
-                        ([key]) => key === kind,
-                      )?.[1] ?? 0;
-                    const restricted =
-                      inspection.restricted_counts.find(
-                        ([key]) => key === kind,
-                      )?.[1] ?? 0;
-                    return (
-                      <li key={kind}>
-                        <p>
-                          {t(`model.removalSourceTypes.${kind}`)}:{" "}
-                          {t("model.removalSourceCount", { count, slots })}
-                        </p>
-                        {restricted > 0 && (
-                          <p className="text-muted-foreground">
-                            {t("model.removalRestrictedCount", {
-                              count: restricted,
-                            })}
-                          </p>
-                        )}
-                      </li>
-                    );
-                  })}
-              </ul>
+              {sourceCounts.length > 0 && (
+                <Table
+                  aria-label={t("model.removalReferenceSummary")}
+                  className={referenceTableClassName}
+                >
+                  <thead className="bg-fill-1">
+                    <tr>
+                      <th scope="col" className="text-left font-medium">
+                        {t("model.removalSourceType")}
+                      </th>
+                      <th scope="col" className="text-right font-medium">
+                        {t("model.removalSourceCount")}
+                      </th>
+                      <th scope="col" className="text-right font-medium">
+                        {t("model.removalRestrictedCount")}
+                      </th>
+                      <th scope="col" className="text-right font-medium">
+                        {t("model.removalSlotCount")}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sourceCounts.map(([kind, count]) => (
+                      <tr key={kind} className="even:bg-fill-1/60">
+                        <th scope="row" className="text-left font-normal">
+                          {t(`model.removalSourceTypes.${kind}`)}
+                        </th>
+                        <td className="text-right tabular-nums">{count}</td>
+                        <td className="text-right tabular-nums">
+                          {restrictedCounts.get(kind) ?? 0}
+                        </td>
+                        <td className="text-right tabular-nums">
+                          {slotCounts.get(kind) ?? 0}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+              )}
               {!!view.page?.data.length && (
-                <ul className="space-y-2 rounded-md border p-3 text-sm">
-                  {view.page.data.map(({ disclosure, matched_slot_count }) => {
-                    const source = disclosure.source;
-                    const entry =
-                      disclosure.entry?.startsWith("/") &&
-                      !disclosure.entry.startsWith("//")
-                        ? disclosure.entry
-                        : null;
-                    return (
-                      <li
-                        key={`${source.source_type}:${source.tenant_id}:${source.source_id}:${source.source_version}`}
-                      >
-                        {entry ? (
-                          <a
-                            className="text-primary underline"
-                            href={entry}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                <Table
+                  aria-label={t("model.removalReferenceDetails")}
+                  className={`${referenceTableClassName} table-fixed`}
+                >
+                  <thead className="bg-fill-1">
+                    <tr>
+                      <th scope="col" className="w-2/5 text-left font-medium">
+                        {t("model.removalSourceName")}
+                      </th>
+                      <th scope="col" className="w-1/4 text-left font-medium">
+                        {t("model.removalSourceType")}
+                      </th>
+                      <th scope="col" className="w-[15%] text-left font-medium">
+                        {t("model.removalSourceVersion")}
+                      </th>
+                      <th scope="col" className="w-1/5 text-right font-medium">
+                        {t("model.removalSlotCount")}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {view.page.data.map(({ disclosure, matched_slot_count }) => {
+                      const source = disclosure.source;
+                      const entry =
+                        disclosure.entry?.startsWith("/") &&
+                        !disclosure.entry.startsWith("//")
+                          ? disclosure.entry
+                          : null;
+                      return (
+                        <tr
+                          key={`${source.source_type}:${source.tenant_id}:${source.source_id}:${source.source_version}`}
+                          className="even:bg-fill-1/60"
+                        >
+                          <th
+                            scope="row"
+                            className="break-words text-left font-normal"
                           >
-                            {disclosure.name}
-                          </a>
-                        ) : (
-                          <span>{disclosure.name}</span>
-                        )}
-                        {disclosure.version_label && (
-                          <span className="ml-2 text-muted-foreground">
-                            {disclosure.version_label}
-                          </span>
-                        )}
-                        <span className="ml-2 text-muted-foreground">
-                          {t("model.removalSlotCount", {
-                            count: matched_slot_count,
-                          })}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
+                            {entry ? (
+                              <a
+                                className="text-primary underline"
+                                href={entry}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                {disclosure.name}
+                              </a>
+                            ) : (
+                              disclosure.name
+                            )}
+                          </th>
+                          <td>
+                            {t(`model.removalSourceTypes.${source.source_type}`)}
+                          </td>
+                          <td className="break-words">
+                            {disclosure.version_label || "—"}
+                          </td>
+                          <td className="text-right tabular-nums">
+                            {matched_slot_count}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </Table>
               )}
               {view.page?.has_more && !view.dispatched && (
                 <Button

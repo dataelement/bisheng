@@ -460,6 +460,10 @@ class UserService:
                 tenant_id=assigned_tenant_id,
             )
             await cls._ensure_user_guest_department_membership(db_user.user_id)
+            if settings.multi_tenant.enabled:
+                from bisheng.tenant.domain.services.user_tenant_sync_service import UserTenantSyncService
+
+                await UserTenantSyncService.sync_user(db_user.user_id)
             await cls.areconcile_first_user_dashboard_permissions(db_user.user_id)
             return db_user
         finally:
@@ -567,16 +571,17 @@ class UserService:
         of ``user`` (F053 design K15 / K17), so no login path can ever hand one
         in as ``db_user``.
         """
-        # Pre-tenant-context check: any role/dept/group access across all tenants
-        # qualifies for login. Without bypass, every DAO below trips
-        # NoTenantContextError because do_orm_execute can't infer a tenant for
-        # tenant-aware tables (userrole/department/usergroup/roleaccess).
+        # Before middleware establishes tenant context, verify the real home
+        # policy and independent administration. Bypass permits fact reads;
+        # it does not make foreign ordinary bindings effective.
         with bypass_tenant_filter():
             from bisheng.role.application.effective_roles import load_effective_roles
 
             policy = await load_effective_roles(db_user.user_id)
             resolved_role_ids = ([AdminRole] if policy.is_identity_admin else []) + list(policy.role_ids)
             if AdminRole in resolved_role_ids:
+                return None
+            if await LoginUser.is_home_tenant_admin(db_user.user_id, policy=policy):
                 return None
             if is_department_admin is None:
                 is_department_admin = bool(await DepartmentDao.aget_user_admin_departments(db_user.user_id))

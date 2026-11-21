@@ -13,8 +13,8 @@ import { Label } from "../../../components/bs-ui/label";
 import { RadioGroup, Radio as RadioGroupItem } from "@bisheng/ui";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../components/bs-ui/table";
 import { alertContext } from "../../../contexts/alertContext";
-import { getFTServicesApi, getServicesApi } from "../../../controllers/API";
-import { createTaskApi } from "../../../controllers/API/finetune";
+import { getFTServicesApi } from "../../../controllers/API";
+import { createTaskApi, getTrainingServicesApi } from "../../../controllers/API/finetune";
 import { showApiError } from "../../../controllers/request";
 import Combobox from "./Combobox";
 import CreateTaskList from "./CreateTaskList";
@@ -35,7 +35,7 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
     const [table] = useState(defaultTable)
     const { setErrorData } = useContext(alertContext);
 
-    // 表单数据
+    // Form values
     const resultRef = useRef({
         method: 'full',
         server: '',
@@ -49,7 +49,10 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
     })
 
     const { services, models, selectService } = useOptions()
+    const [selectedService, setSelectedService] = useState('')
     const handleRtChange = async (val) => {
+        setSelectedService(String(val))
+        resultRef.current['base_model'] = ''
         resultRef.current['server'] = val
         selectService(val)
     }
@@ -57,15 +60,14 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
 
     const [loading, setLoading] = useState(false)
     const handleCreate = async () => {
-        // 数据校验
+        // Validate inputs
         const errors = []
         if (!resultRef.current.server) errors.push(t('finetune.selectRTService'))
         if (!resultRef.current.base_model) errors.push(t('finetune.selectBaseModel'))
         if (!/^(?=.*[a-zA-Z])(?=.*\d)?[a-zA-Z\d_-]+$/.test(resultRef.current.model_name)) errors.push(t('finetune.enterModelName'))
         if (String(resultRef.current.model_name ?? '').length > 50) errors.push(t('finetune.enterModelName'));
         if (errors.length) return setErrorData({ title: '', list: errors });
-        // 合并数据
-        console.log('object :>> ', resultRef.current);
+        // Submit inputs
         setLoading(true)
         // api
         try {
@@ -81,8 +83,7 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
     return <div className="pt-2 h-[calc(100vh-162px-var(--license-banner-h,0px))] px-2 overflow-y-auto">
         <div className="border-b pb-2 flex justify-between items-center">
             <h1 className="">{t('finetune.createTrainingTask')}</h1>
-            {/* <Button variant="black" onClick={rtClick}>FT服务管理</Button> */}
-            <Button onClick={rtClick} variant="solid" color="default">{t('finetune.rtServiceManagement')}</Button>
+            {rtClick && <Button onClick={rtClick} variant="solid" color="default">{t('finetune.rtServiceManagement')}</Button>}
         </div>
         {/* base */}
         <div className="border-b pb-4">
@@ -110,6 +111,7 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
             <div className="flex gap-4 flex-col mt-4">
                 <small className="text-sm font-medium leading-none text-gray-500">{t('finetune.baseModel')}</small>
                 <Combobox
+                    key={selectedService}
                     options={models}
                     labelKey="model"
                     valueKey="id"
@@ -196,20 +198,26 @@ const useOptions = () => {
     const [models, setModels] = useState([])
 
     useEffect(() => {
-        getServicesApi().then(res => {
+        getTrainingServicesApi().then(res => {
             setServices(res.map(el => ({
                 id: el.id,
-                name: el.server,
-                url: el.endpoint
+                name: el.server
             })))
-        })
+        }).catch(showApiError)
     }, [])
 
+    const selection = useRef(0)
     const selectService = async (val) => {
-        const servceId = services.find(item => item.id === val)?.id
-        const res = await getFTServicesApi(servceId)
-        // setModels(res)
-        setModels(res.filter(item => item.sft_support))
+        const request = ++selection.current
+        setModels([])
+        const serviceId = services.find(item => String(item.id) === String(val))?.id
+        if (serviceId == null) return
+        try {
+            const res = await getFTServicesApi(serviceId)
+            if (selection.current === request) setModels(res.filter(item => item.sft_support))
+        } catch (error) {
+            showApiError(error)
+        }
     }
 
     return { services, models, selectService }

@@ -2,14 +2,12 @@
 
 import inspect
 import json
-from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
 from bisheng.api.v1.schemas import WorkstationConfig
 from bisheng.common.errcode.memory import MemoryNoModelError
-from bisheng.llm.domain.repositories.reference_target_repository import ModelReferenceTargetRepository
 from bisheng.llm.domain.schemas import WorkbenchModelConfig, WSModel
 from bisheng.llm.domain.services.default_reference_extractor import (
     WORKBENCH_MODEL_OBJECTS,
@@ -82,17 +80,11 @@ async def test_ac106_child_tenant_inherits_root_value(monkeypatch):
     3.1 resolves system-model defaults generically per key (Root row when the
     child has none and Root shares defaults; covered for every key in
     test/knowledge_unification/test_llm_default_repository.py). What is
-    memory-specific: the child may use the Root-owned memory_llm model, and
-    consolidation picks it from the inherited workbench payload.
+    memory-specific: consolidation picks memory_llm from the inherited workbench
+    payload. Whether the child may use the Root-owned model is decided by the real
+    Root sharing check (F025), not by a memory-specific shortcut.
     """
     root_value = '{"memory_llm":{"id":"9"}}'
-    topology = {
-        1: SimpleNamespace(id=1, parent_tenant_id=None, share_default_to_children=1),
-        101: SimpleNamespace(id=101, parent_tenant_id=1, share_default_to_children=0),
-    }
-    configs = [SimpleNamespace(tenant_id=1, key="linsight_llm", value=root_value)]
-    assert 9 in ModelReferenceTargetRepository._inherited_ids(topology, configs, 101)
-
     inherited = WorkbenchModelConfig.model_validate_json(root_value)
     monkeypatch.setattr(consolidation_model.LLMService, "get_workbench_llm", AsyncMock(return_value=inherited))
     assert await consolidation_model.resolve_memory_model_id() == 9

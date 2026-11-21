@@ -1,6 +1,6 @@
 # Feature: 长期记忆
 
-**关联 PRD**: [长期记忆 PRD v0.6](<../../../docs/PRD/memory 长期记忆/长期记忆 PRD.md>)（§4 需求、§5 验收、§7 决策）；需求发现见 [discovery.md](./discovery.md)
+**关联 PRD**: [长期记忆 PRD v0.6](<../../../docs/PRD/3.1/memory 长期记忆/长期记忆 PRD.md>)（§4 需求、§5 验收、§7 决策）；需求发现见 [discovery.md](./discovery.md)
 **优先级**: P0（标注 P1 的验收标准排在 P0 之后实现，同一个版本交付）
 **所属版本**: v3.0.0（开发基线；目标版本号待定，见 discovery.md）
 **依赖**: v3.0.0-beta1 F048（权限与租户隔离）、v3.0.0-beta1 F075（日常模式引用角标，归因的呈现沿用它）。无阻塞性前置 Feature
@@ -304,7 +304,7 @@
 | 性能 / 安全 / 可观测非功能指标 | design.md §2 + §7 |
 | 任务拆解、文件清单、执行顺序、踩坑落档 | tasks.md |
 
-下列数值是未经评测校准的初值，不属于验收标准，由 design.md 承接：常驻记忆上限（PRD 初值 60 条、6000 字）、安静期（PRD 初值 30 分钟）、深度研究带入经验类条目的上限。
+下列数值是未经评测校准的初值，不属于验收标准，由 design.md 承接：常驻记忆上限（PRD 初值 60 条、6000 字）、安静期（初值 8 小时，2026-11-19 用户裁定，原 30 分钟）、深度研究带入经验类条目的上限。
 
 ---
 
@@ -315,5 +315,5 @@
 - 执行与落档: [tasks.md](./tasks.md)（待写）
 - 版本契约: [features/v3.0.0/release-contract.md](../release-contract.md)
 - 架构法则: `docs/constitution.md`
-- PRD: `docs/PRD/memory 长期记忆/长期记忆 PRD.md`
-- 调研: `docs/PRD/memory 长期记忆/memory 方案调研（结构版）.md`
+- PRD: `docs/PRD/3.1/memory 长期记忆/长期记忆 PRD.md`
+- 调研: `docs/PRD/3.1/memory 长期记忆/memory 方案调研（结构版）.md`

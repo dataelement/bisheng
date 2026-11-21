@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button, Input, Radio, RadioGroup, Segmented } from '@bisheng/ui'
 import type { PricingCurrency } from '@/controllers/API/modelPricing'
 import { convertCreditValue, isValidPrice, priceMicro } from '@/pages/ModelPage/manage/modelPricing'
@@ -28,7 +29,7 @@ export function CreditSettingsPanel() {
         return <section className="space-y-2">
             <h3 className="text-sm font-medium">{t('dsh.pricing.settings')}</h3>
             <p role={settings.isError ? 'alert' : 'status'} className="flex items-center gap-2 text-sm">
-                {t(settings.isError ? 'dsh.pricing.unavailable' : 'dsh.loading')}
+                {settings.isError ? t('dsh.pricing.unavailable') : <LoadingState label={t('dsh.loading')} />}
                 {settings.isError && <Button variant="link" size="small" className="h-auto px-0"
                     onClick={() => void settings.refetch()}>{t('dsh.pricing.refresh')}</Button>}
             </p>
