@@ -4,7 +4,9 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
+import { toast } from "@bisheng/ui";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, expect, it, vi } from "vitest";
 import { MoveDialog } from "@/pages/KnowledgePage/components/MoveDialog";
@@ -31,37 +33,67 @@ vi.mock("react-i18next", () => ({
     i18n: { resolvedLanguage: "en", exists: () => true },
   }),
 }));
-vi.mock("@/pages/KnowledgePage/components/MoveDestinationPicker", () => ({
-  MoveDestinationPicker: ({
-    onChange,
-  }: {
-    onChange: (
-      value: { spaceId: number; folderId: null },
-      label: string,
-    ) => void;
-  }) => (<>
-    <button
-      onClick={() => onChange({ spaceId: 42, folderId: null }, "Target root")}
-    >
-      destination
-    </button>
-    <button onClick={() => onChange({ spaceId: 43, folderId: null }, "Target two")}>destination two</button>
-  </>),
-}));
+vi.mock("@bisheng/knowledge", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@bisheng/knowledge")>();
+  const { useState } = await import("react");
+  return {
+    ...actual,
+    MoveToDialog: ({
+      onOpenChange,
+      onConfirm,
+    }: {
+      onOpenChange: (open: boolean) => void;
+      onConfirm: (
+        spaceId: string,
+        folderId: null,
+        crossSpace: boolean,
+        name: string,
+      ) => void;
+    }) => {
+      const [target, setTarget] = useState("40");
+      return (
+        <>
+          <button onClick={() => setTarget("42")}>destination</button>
+          <button onClick={() => setTarget("43")}>destination two</button>
+          <button onClick={() => onOpenChange(false)}>close</button>
+          <button
+            onClick={() => {
+              onOpenChange(false);
+              onConfirm(
+                target,
+                null,
+                target !== "40",
+                target === "43" ? "Target two" : "Target root",
+              );
+            }}
+          >
+            move here
+          </button>
+        </>
+      );
+    },
+  };
+});
 vi.mock("@/pages/KnowledgePage/components/SpaceProcessingProgress", () => ({
   SpaceProcessingProgress: ({
     kind,
     spaceId,
+    onCompleted,
   }: {
     kind: string;
     spaceId: number;
+    onCompleted?: () => void;
   }) => (
-    <p>
-      {kind}:{spaceId}
-    </p>
+    <>
+      <p>
+        {kind}:{spaceId}
+      </p>
+      <button onClick={onCompleted}>complete job</button>
+    </>
   ),
 }));
 const clients: QueryClient[] = [];
+vi.spyOn(toast, "show").mockReturnValue("move-toast");
 afterEach(() => {
   vi.unstubAllGlobals();
   cleanup();
@@ -76,7 +108,7 @@ const plan = {
   can_execute: true,
   valid_items: [{ id: 31, type: "file" as const }],
   invalid_items: [
-    { id: 32, type: "file" as const, reason: "no_permission" as const },
+    { id: 32, type: "file" as const, name: "blocked.txt", reason: "no_permission" as const },
   ],
   impact: {
     cross_space: true,
@@ -91,7 +123,7 @@ function setup() {
   });
   clients.push(client);
   const onClose = vi.fn();
-  render(
+  const view = render(
     <QueryClientProvider client={client}>
       <MoveDialog
         scope={{
@@ -110,17 +142,16 @@ function setup() {
       />
     </QueryClientProvider>,
   );
-  return onClose;
+  return { onClose, ...view };
 }
 it("cancel leaves both API commands untouched", () => {
-  const close = setup();
+  const { onClose: close } = setup();
   fireEvent.click(screen.getByText("close"));
   expect(close).toHaveBeenCalledOnce();
   expect(api.precheckMove).not.toHaveBeenCalled();
   expect(api.confirmMove).not.toHaveBeenCalled();
 });
-it("reviews full mixed selection and field losses, then retries the same immutable confirmation after unknown ACK", async () => {
-  // HTTP deployments have getRandomValues but no secure-context randomUUID.
+it("confirms mixed selection with the shared dialog and retries an unknown ACK with the same command", async () => {
   vi.stubGlobal("crypto", {
     getRandomValues: globalThis.crypto.getRandomValues.bind(globalThis.crypto),
   });
@@ -133,12 +164,17 @@ it("reviews full mixed selection and field losses, then retries the same immutab
       state: "accepted",
       reused: true,
     });
-  setup();
+  const { onClose } = setup();
   fireEvent.click(screen.getByText("destination"));
-  expect(screen.queryByText("f118.processing_review_action")).toBeNull();
-  await screen.findByText("move.removed_fields: confidentiality");
-  expect(screen.getByText("move.destination: Target root")).toBeTruthy();
-  expect(screen.getByText("move.retained_fields: date")).toBeTruthy();
+  fireEvent.click(screen.getByText("move here"));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "move_here" })).toBeEnabled(),
+  );
+  expect(screen.getByRole("alertdialog")).toHaveTextContent("confidentiality");
+  const unavailable = screen.getByRole("table", { name: "batch.invalid" });
+  expect(within(unavailable).getByRole("rowheader", { name: "blocked.txt" })).toBeVisible();
+  expect(within(unavailable).getByRole("cell", { name: "batch.reason_no_permission" })).toBeVisible();
+  expect(screen.queryByRole("checkbox")).toBeNull();
   expect(api.precheckMove).toHaveBeenCalledWith(
     40,
     [
@@ -148,15 +184,13 @@ it("reviews full mixed selection and field losses, then retries the same immutab
     { spaceId: 42, folderId: null },
     101,
   );
-  expect((screen.getByText("confirm") as HTMLButtonElement).disabled).toBe(
-    true,
-  );
-  fireEvent.click(screen.getByRole("checkbox"));
-  fireEvent.click(screen.getByText("confirm"));
-  await screen.findByText("move.unknown_ack");
-  expect((screen.getByText("close") as HTMLButtonElement).disabled).toBe(true);
-  fireEvent.click(screen.getByText("retry"));
-  await waitFor(() => expect(screen.getByText("move_index:40")).toBeTruthy());
+  fireEvent.click(screen.getByRole("button", { name: "move_here" }));
+  await screen.findByText(/move.unknown_ack/);
+  expect(screen.queryByRole("button", { name: "cancel_all" })).toBeNull();
+  fireEvent.keyDown(document, { key: "Escape" });
+  expect(onClose).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "retry" }));
+  expect(await screen.findByText("move_index:40")).toBeVisible();
   expect(api.confirmMove).toHaveBeenCalledTimes(2);
   expect(vi.mocked(api.confirmMove).mock.calls[0]).toEqual(
     vi.mocked(api.confirmMove).mock.calls[1],
@@ -165,48 +199,150 @@ it("reviews full mixed selection and field losses, then retries the same immutab
     Object.keys(vi.mocked(api.confirmMove).mock.calls[0][1]).sort(),
   ).toEqual(["confirmation_id", "idempotency_key", "plan_digest"]);
   expect(api.precheckMove).toHaveBeenCalledOnce();
+  fireEvent.click(screen.getByRole("button", { name: "complete job" }));
+  expect(onClose).toHaveBeenCalledOnce();
+  expect(toast.show).toHaveBeenCalledWith({
+    type: "success",
+    message: "success",
+  });
 });
 
-it("checks the selected destination automatically and moves after one confirmation", async () => {
-  vi.mocked(api.precheckMove).mockResolvedValue({ ...plan, invalid_items: [], requires_skip_confirmation: false });
-  vi.mocked(api.confirmMove).mockResolvedValue({ moved: [{ id: 31, type: "file" }], invalid: [] });
-  setup();
-  expect(screen.queryByText("f118.processing_review_action")).toBeNull();
+it("confirms a cross-space move once and closes with a success toast", async () => {
+  vi.mocked(api.precheckMove).mockResolvedValue({
+    ...plan,
+    invalid_items: [],
+    requires_skip_confirmation: false,
+  });
+  vi.mocked(api.confirmMove).mockResolvedValue({
+    moved: [{ id: 31, type: "file" }],
+    invalid: [],
+  });
+  const { onClose } = setup();
   fireEvent.click(screen.getByText("destination"));
-  await waitFor(() => expect(screen.getByRole("button", { name: "confirm" })).toBeEnabled());
+  fireEvent.click(screen.getByText("move here"));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "move_here" })).toBeEnabled(),
+  );
   expect(api.confirmMove).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "confirm" }));
-  expect(await screen.findByText("move.completed")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "move_here" }));
+  await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+  expect(toast.show).toHaveBeenCalledWith({
+    type: "success",
+    message: "success",
+  });
   expect(api.confirmMove).toHaveBeenCalledOnce();
 });
 
-it("ignores a retired destination check and only confirms the current plan", async () => {
-  let resolve!: (value: typeof plan) => void;
-  vi.mocked(api.precheckMove)
-    .mockReturnValueOnce(new Promise((yes) => { resolve = yes; }))
-    .mockResolvedValueOnce({ ...plan, confirmation_id: "current-plan", invalid_items: [], requires_skip_confirmation: false });
+it("only prechecks after the picker commits its latest destination", async () => {
+  vi.mocked(api.precheckMove).mockResolvedValue({
+    ...plan,
+    confirmation_id: "current-plan",
+    invalid_items: [],
+    requires_skip_confirmation: false,
+  });
   vi.mocked(api.confirmMove).mockResolvedValue({ moved: [], invalid: [] });
   setup();
   fireEvent.click(screen.getByText("destination"));
-  await waitFor(() => expect(api.precheckMove).toHaveBeenCalledOnce());
   fireEvent.click(screen.getByText("destination two"));
-  await screen.findByText("move.destination: Target two");
-  resolve(plan);
-  fireEvent.click(screen.getByRole("button", { name: "confirm" }));
-  await waitFor(() => expect(api.confirmMove).toHaveBeenCalledWith(40, expect.objectContaining({ confirmation_id: "current-plan" }), 101));
+  expect(api.precheckMove).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByText("move here"));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "move_here" })).toBeEnabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "move_here" }));
+  await waitFor(() =>
+    expect(api.confirmMove).toHaveBeenCalledWith(
+      40,
+      expect.objectContaining({ confirmation_id: "current-plan" }),
+      101,
+    ),
+  );
+  expect(api.precheckMove).toHaveBeenCalledOnce();
+  expect(api.precheckMove).toHaveBeenCalledWith(
+    40,
+    expect.any(Array),
+    { spaceId: 43, folderId: null },
+    101,
+  );
 });
 
-it("automatically renews an expired plan and requires fresh skip consent", async () => {
-  vi.mocked(api.precheckMove).mockResolvedValueOnce(plan).mockResolvedValueOnce({ ...plan, confirmation_id: "renewed-plan" });
-  vi.mocked(api.confirmMove).mockRejectedValueOnce({ status_code: 18087 }).mockResolvedValueOnce({ moved: [], invalid: [] });
+it("moves a valid same-space selection without a second confirmation", async () => {
+  vi.mocked(api.precheckMove).mockResolvedValue({
+    ...plan,
+    invalid_items: [],
+    impact: { cross_space: false },
+    requires_skip_confirmation: false,
+  });
+  vi.mocked(api.confirmMove).mockResolvedValue({ moved: [], invalid: [] });
+  const { onClose } = setup();
+  fireEvent.click(screen.getByText("move here"));
+  await waitFor(() => expect(onClose).toHaveBeenCalledOnce());
+  expect(toast.show).toHaveBeenCalledWith({
+    type: "success",
+    message: "success",
+  });
+  expect(api.confirmMove).toHaveBeenCalledOnce();
+});
+
+it("does not execute a retired same-space precheck after unmount", async () => {
+  let resolve!: (value: typeof plan) => void;
+  vi.mocked(api.precheckMove).mockReturnValueOnce(
+    new Promise((yes) => {
+      resolve = yes;
+    }),
+  );
+  const { unmount } = setup();
+  fireEvent.click(screen.getByText("move here"));
+  await waitFor(() => expect(api.precheckMove).toHaveBeenCalledOnce());
+  unmount();
+  resolve({
+    ...plan,
+    invalid_items: [],
+    impact: { ...plan.impact, cross_space: false },
+    requires_skip_confirmation: false,
+  });
+  await new Promise((yes) => setTimeout(yes, 0));
+  expect(api.confirmMove).not.toHaveBeenCalled();
+});
+
+it("renews an expired plan and asks for a fresh confirmation of the valid subset", async () => {
+  vi.mocked(api.precheckMove)
+    .mockResolvedValueOnce(plan)
+    .mockResolvedValueOnce({ ...plan, confirmation_id: "renewed-plan" });
+  vi.mocked(api.confirmMove)
+    .mockRejectedValueOnce({ status_code: 18087 })
+    .mockResolvedValueOnce({ moved: [], invalid: [] });
   setup();
   fireEvent.click(screen.getByText("destination"));
-  fireEvent.click(await screen.findByRole("checkbox"));
-  fireEvent.click(screen.getByRole("button", { name: "confirm" }));
+  fireEvent.click(screen.getByText("move here"));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "move_here" })).toBeEnabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "move_here" }));
   await waitFor(() => expect(api.precheckMove).toHaveBeenCalledTimes(2));
-  await waitFor(() => expect(screen.getByRole("checkbox")).not.toBeChecked());
-  expect(screen.getByRole("button", { name: "confirm" })).toBeDisabled();
-  fireEvent.click(screen.getByRole("checkbox"));
-  fireEvent.click(screen.getByRole("button", { name: "confirm" }));
-  await waitFor(() => expect(api.confirmMove).toHaveBeenLastCalledWith(40, expect.objectContaining({ confirmation_id: "renewed-plan" }), 101));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "move_here" })).toBeEnabled(),
+  );
+  expect(api.confirmMove).toHaveBeenCalledOnce();
+  fireEvent.click(screen.getByRole("button", { name: "move_here" }));
+  await waitFor(() =>
+    expect(api.confirmMove).toHaveBeenLastCalledWith(
+      40,
+      expect.objectContaining({ confirmation_id: "renewed-plan" }),
+      101,
+    ),
+  );
+});
+
+it("never executes a visible navigation destination denied by the server precheck", async () => {
+  vi.mocked(api.precheckMove).mockResolvedValue({
+    ...plan,
+    can_execute: false,
+  });
+  setup();
+  fireEvent.click(screen.getByText("destination"));
+  fireEvent.click(screen.getByText("move here"));
+  await screen.findByText(/review_impact/);
+  expect(screen.getByRole("button", { name: "move_here" })).toBeDisabled();
+  expect(api.confirmMove).not.toHaveBeenCalled();
 });

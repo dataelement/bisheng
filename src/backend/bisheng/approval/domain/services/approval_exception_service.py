@@ -16,14 +16,47 @@ from bisheng.approval.domain.repositories.approval_instance_repository import Ap
 from bisheng.approval.domain.repositories.approval_scenario_repository import ApprovalScenarioRepository
 from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateRequest
 from bisheng.approval.domain.services.approval_runtime_handler_factory import build_runtime_handler
+from bisheng.common.errcode.approval import ApprovalRequestNotFoundError
 from bisheng.database.models.audit_log import AuditLogDao
 
 logger = logging.getLogger(__name__)
 
 
 class ApprovalExceptionService:
-    def __init__(self, *, instance_repository) -> None:
+    def __init__(self, *, instance_repository, tenant_id: int | None = None) -> None:
         self.instance_repository = instance_repository
+        self.tenant_id = tenant_id
+
+    @staticmethod
+    def _require_assignable(exception, instance):
+        from bisheng.common.errcode.approval import ApprovalRequestAlreadyProcessedError
+
+        if exception.status != "open" or exception.exception_type != "approver_empty" or instance.status != "exception":
+            raise ApprovalRequestAlreadyProcessedError()
+
+    @classmethod
+    async def list_approver_candidates(cls, *, exception_id, tenant_id, keyword, page, limit):
+        from bisheng.approval.domain.repositories.approver_candidate_repository import ApproverCandidateRepository
+        from bisheng.approval.domain.services.approval_runtime_handler_factory import manual_candidate_policy
+
+        service = cls(instance_repository=ApprovalInstanceRepository, tenant_id=tenant_id)
+        exception = await service._get_exception(exception_id)
+        instance = await service._get_instance(exception.instance_id)
+        service._require_assignable(exception, instance)
+        policy = await manual_candidate_policy(instance)
+        if instance.scenario_code == "app_publish_request" and policy is None:
+            return {"data": [], "total": 0}
+        rows, total = await ApproverCandidateRepository.search(
+            tenant_id,
+            keyword=keyword,
+            page=page,
+            limit=limit,
+            global_ids=policy.global_ids if policy else (),
+            excluded_ids=policy.search_excluded_ids if policy else (),
+        )
+        for row in rows:
+            row["exclusive"] = policy is not None and row["user_id"] == policy.exclusive_user_id
+        return {"data": rows, "total": total}
 
     @classmethod
     async def retry_exception_api(
@@ -34,8 +67,9 @@ class ApprovalExceptionService:
         operator_user_id: int,
         approver_user_ids: list[int] | None = None,
         ip_address: str | None = None,
+        tenant_id: int | None = None,
     ):
-        service = cls(instance_repository=ApprovalInstanceRepository)
+        service = cls(instance_repository=ApprovalInstanceRepository, tenant_id=tenant_id)
         exception = await service._get_exception(exception_id)
         instance = await service._get_instance(exception.instance_id)
 
@@ -163,37 +197,45 @@ class ApprovalExceptionService:
         operator_user_id: int,
         reason: str,
         ip_address: str | None = None,
+        tenant_id: int | None = None,
     ):
         if not reason or not reason.strip():
             raise ValueError("cancel reason is required")
-        service = cls(instance_repository=ApprovalInstanceRepository)
+        service = cls(instance_repository=ApprovalInstanceRepository, tenant_id=tenant_id)
         exception = await service._get_exception(exception_id)
         instance = await service._get_instance(exception.instance_id)
 
-        # Cancel all pending tasks
-        tasks = await service.instance_repository.list_tasks(instance.id)
-        for task in tasks:
-            if task.status == ApprovalTaskStatus.PENDING:
-                task.status = ApprovalTaskStatus.CANCELLED
-                await service.instance_repository.update_task(task)
-
-        instance.status = ApprovalInstanceStatus.CANCELLED
-        await service.instance_repository.update_instance(instance)
         operator_user_name = await service._lookup_user_name(operator_user_id)
-        await service.instance_repository.create_action_log(
-            ApprovalActionLog(
-                tenant_id=instance.tenant_id,
-                instance_id=instance.id,
-                action="cancelled",
-                operator_user_id=operator_user_id,
-                operator_user_name=operator_user_name,
-                detail={"reason": reason.strip(), "exception_id": exception_id},
+        async with service.instance_repository.instance_transaction(
+            instance_id=instance.id, tenant_id=instance.tenant_id
+        ) as repo:
+            instance = await repo.get_instance(instance.id)
+            exception = await repo.get_exception(exception_id)
+            if instance is None or exception is None or exception.instance_id != instance.id:
+                raise ValueError("Approval cancellation target not found")
+            if exception.status != "open" or instance.status in ("executed", "cancelled", "rejected", "withdrawn"):
+                raise ValueError("Approval cancellation is no longer pending")
+            tasks = await repo.list_tasks(instance.id)
+            for task in tasks:
+                if task.status == ApprovalTaskStatus.PENDING:
+                    task.status = ApprovalTaskStatus.CANCELLED
+                    await repo.update_task(task)
+            instance.status = ApprovalInstanceStatus.CANCELLED
+            await repo.update_instance(instance)
+            await repo.create_action_log(
+                ApprovalActionLog(
+                    tenant_id=instance.tenant_id,
+                    instance_id=instance.id,
+                    action="cancelled",
+                    operator_user_id=operator_user_id,
+                    operator_user_name=operator_user_name,
+                    detail={"reason": reason.strip(), "exception_id": exception_id},
+                )
             )
-        )
-        exception.status = "resolved"
-        exception.resolved_by_user_id = operator_user_id
-        exception.resolved_action = "cancel"
-        await service.instance_repository.update_exception(exception)
+            exception.status = "resolved"
+            exception.resolved_by_user_id = operator_user_id
+            exception.resolved_action = "cancel"
+            await repo.update_exception(exception)
         await service._write_audit_log(
             action="approval.exception.cancel",
             tenant_id=instance.tenant_id,
@@ -273,6 +315,7 @@ class ApprovalExceptionService:
     ) -> None:
         exception = await self._get_exception(exception_id)
         instance = await self._get_instance(exception.instance_id)
+        self._require_assignable(exception, instance)
         from bisheng.approval.domain.services.approval_runtime_handler_factory import validate_scenario_candidates
 
         approver_user_ids = await validate_scenario_candidates(instance, approver_user_ids)
@@ -529,22 +572,18 @@ class ApprovalExceptionService:
             raise ValueError(f"outbox not found for instance: {instance.id}")
         outbox = outboxes[-1]
         handler = await self._build_handler(scenario_code)
-        try:
-            await handler.on_approved(instance.id, outbox.payload_snapshot)
-        except Exception as exc:
-            outbox.status = ApprovalOutboxStatus.FAILED
-            outbox.retry_count += 1
-            outbox.error_summary = str(exc)
-            await self.instance_repository.update_outbox(outbox)
-            return False
+        from bisheng.approval.domain.services.approval_outbox_service import ApprovalOutboxService
 
-        outbox.status = ApprovalOutboxStatus.SUCCESS
-        outbox.error_summary = None
-        await self.instance_repository.update_outbox(outbox)
-        instance.status = ApprovalInstanceStatus.EXECUTED
-        await self.instance_repository.update_instance(instance)
-        await self._resolve_exception(exception, resolved_by_user_id, "retry_execute_failed")
-        return True
+        async def execute(claimed):
+            await handler.on_approved(instance.id, claimed.payload_snapshot)
+            return True, None
+
+        success = await ApprovalOutboxService(instance_repository=self.instance_repository).retry_outbox(
+            outbox_id=outbox.id, executor=execute
+        )
+        if success:
+            await self._resolve_exception(exception, resolved_by_user_id, "retry_execute_failed")
+        return success
 
     async def _create_tasks(
         self, *, instance_id: int, tenant_id: int, flow_version_id: int, node, approver_user_ids: list[int]
@@ -593,9 +632,24 @@ class ApprovalExceptionService:
         instance = await self._get_instance(exception.instance_id)
         if exception.exception_type != "execute_failed":
             raise ValueError("mark_manually_completed only applies to execute_failed exceptions")
-        instance.status = ApprovalInstanceStatus.EXECUTED
-        await self.instance_repository.update_instance(instance)
-        await self._resolve_exception(exception, resolved_by_user_id, "mark_manually_completed")
+        async with self.instance_repository.instance_transaction(
+            instance_id=instance.id, tenant_id=instance.tenant_id
+        ) as repo:
+            instance = await repo.get_instance(instance.id)
+            exception = await repo.get_exception(exception_id)
+            if (
+                instance is None
+                or exception is None
+                or instance.status != "execute_failed"
+                or exception.status != "open"
+            ):
+                raise ValueError("Approval completion is no longer recoverable")
+            instance.status = ApprovalInstanceStatus.EXECUTED
+            await repo.update_instance(instance)
+            exception.status = "resolved"
+            exception.resolved_by_user_id = resolved_by_user_id
+            exception.resolved_action = "mark_manually_completed"
+            await repo.update_exception(exception)
 
     async def _resolve_exception(self, exception, resolved_by_user_id: int, resolved_action: str) -> None:
         exception.status = "resolved"
@@ -627,14 +681,22 @@ class ApprovalExceptionService:
     async def _get_exception(self, exception_id: int):
         exception = await self.instance_repository.get_exception(exception_id)
         if exception is None:
-            raise ValueError(f"exception not found: {exception_id}")
+            raise ApprovalRequestNotFoundError()
+        self._require_tenant(exception)
         return exception
 
     async def _get_instance(self, instance_id: int):
         instance = await self.instance_repository.get_instance(instance_id)
         if instance is None:
-            raise ValueError(f"instance not found: {instance_id}")
+            raise ApprovalRequestNotFoundError()
+        self._require_tenant(instance)
         return instance
+
+    def _require_tenant(self, row):
+        from bisheng.common.errcode.approval import ApprovalRequestPermissionDeniedError
+
+        if self.tenant_id is not None and row.tenant_id != self.tenant_id:
+            raise ApprovalRequestPermissionDeniedError()
 
     async def _retry_route_missing(self, exception, instance, operator_user_id: int) -> None:
         """Re-run the full gate route-matching logic for a route_missing exception.
@@ -744,6 +806,7 @@ class ApprovalExceptionService:
     @staticmethod
     def _build_gate_request(instance) -> ApprovalGateRequest:
         return ApprovalGateRequest(
+            instance_id=instance.id,
             tenant_id=instance.tenant_id,
             scenario_code=instance.scenario_code,
             business_key=instance.business_key,

@@ -1,5 +1,3 @@
-import ast
-import pickle
 import typing
 
 import redis
@@ -14,6 +12,8 @@ from redis.cluster import ClusterNode
 from redis.retry import Retry
 from redis.sentinel import Sentinel
 
+from bisheng.core.cache.serialization import decode_redis_value, encode_redis_value
+
 
 class RedisClient:
     def __init__(self, redis_url, max_connections=100):
@@ -21,15 +21,6 @@ class RedisClient:
         if isinstance(redis_url, dict):
             redis_conf = dict(redis_url)
             mode = redis_conf.pop("mode", "sentinel")
-            if mode == "single":
-                url = redis_conf.pop("url")
-                self.pool = ConnectionPool.from_url(url, max_connections=max_connections, **redis_conf)
-                self.async_pool = redis.asyncio.ConnectionPool.from_url(
-                    url, max_connections=max_connections, **redis_conf
-                )
-                self.connection = redis.StrictRedis(connection_pool=self.pool)
-                self.async_connection = redis.asyncio.Redis.from_pool(self.async_pool)
-                return
             if mode == "cluster":
                 # Cluster Mode
                 cluster_url = ""
@@ -46,7 +37,7 @@ class RedisClient:
                     cluster_url, **redis_conf, retry=Retry(ExponentialBackoff(), 6), cluster_error_retry_attempts=1
                 )
                 return
-            hosts = [ast.literal_eval(x) if isinstance(x, str) else x for x in redis_conf.pop("sentinel_hosts")]
+            hosts = [eval(x) for x in redis_conf.pop("sentinel_hosts")]
             password = redis_conf.pop("sentinel_password", None)
             master = redis_conf.pop("sentinel_master")
             sentinel = Sentinel(sentinels=hosts, sentinel_kwargs={"password": password})
@@ -64,7 +55,7 @@ class RedisClient:
 
     def set(self, key, value, expiration=3600, enx=None):
         try:
-            if pickled := pickle.dumps(value):
+            if pickled := encode_redis_value(key, value):
                 self.cluster_nodes(key)
                 if expiration:
                     result = self.connection.setex(key, expiration, pickled)
@@ -79,7 +70,7 @@ class RedisClient:
 
     async def aset(self, key, value, expiration=3600):
         try:
-            if pickled := pickle.dumps(value):
+            if pickled := encode_redis_value(key, value):
                 await self.acluster_nodes(key)
                 if expiration:
                     result = await self.async_connection.setex(name=key, value=pickled, time=expiration)
@@ -94,10 +85,9 @@ class RedisClient:
 
     def setNx(self, key, value, expiration=3600):
         try:
-            if pickled := pickle.dumps(value):
+            if pickled := encode_redis_value(key, value):
                 self.cluster_nodes(key)
-                result = self.connection.setnx(key, pickled)
-                self.connection.expire(key, expiration)
+                result = self.connection.set(key, pickled, nx=True, ex=expiration)
                 if not result:
                     return False
             return True
@@ -106,7 +96,7 @@ class RedisClient:
 
     async def asetNx(self, key, value, expiration=3600):
         try:
-            pickled = pickle.dumps(value)
+            pickled = encode_redis_value(key, value)
             await self.acluster_nodes(key)
             # Failed acquisition must not extend another caller's lease.
             return bool(await self.async_connection.set(key, pickled, nx=True, ex=expiration))
@@ -115,7 +105,7 @@ class RedisClient:
 
     def setex(self, key, value, expiration=3600):
         try:
-            if pickled := pickle.dumps(value):
+            if pickled := encode_redis_value(key, value):
                 self.cluster_nodes(key)
                 result = self.connection.setex(key, expiration, pickled)
                 if not result:
@@ -127,7 +117,7 @@ class RedisClient:
 
     async def asetex(self, key, value, expiration=3600):
         try:
-            if pickled := pickle.dumps(value):
+            if pickled := encode_redis_value(key, value):
                 await self.acluster_nodes(key)
                 result = await self.async_connection.setex(key, expiration, pickled)
                 if not result:
@@ -143,7 +133,7 @@ class RedisClient:
             if not mapping:
                 return True
 
-            serialized_mapping = {k: pickle.dumps(v) for k, v in mapping.items() if v is not None}
+            serialized_mapping = {k: encode_redis_value(k, v) for k, v in mapping.items() if v is not None}
             result = self.connection.mset(serialized_mapping)
 
             if expiration:
@@ -163,7 +153,7 @@ class RedisClient:
             if not mapping:
                 return True
 
-            serialized_mapping = {k: pickle.dumps(v) for k, v in mapping.items() if v is not None}
+            serialized_mapping = {k: encode_redis_value(k, v) for k, v in mapping.items() if v is not None}
             result = await self.async_connection.mset(serialized_mapping)
 
             if expiration:
@@ -184,7 +174,7 @@ class RedisClient:
                 return []
             values = self.connection.mget(keys)
 
-            return [pickle.loads(v) for v in values if v is not None]
+            return [decode_redis_value(k, v) for k, v in zip(keys, values, strict=True) if v is not None]
         except TypeError as exc:
             raise TypeError("RedisCache only accepts values that can be pickled. ") from exc
 
@@ -194,7 +184,7 @@ class RedisClient:
             if not keys:
                 return []
             values = await self.async_connection.mget(keys)
-            return [pickle.loads(v) for v in values if v is not None]
+            return [decode_redis_value(k, v) for k, v in zip(keys, values, strict=True) if v is not None]
         except TypeError as exc:
             raise TypeError("RedisCache only accepts values that can be pickled. ") from exc
 
@@ -325,7 +315,7 @@ class RedisClient:
         try:
             self.cluster_nodes(key)
             value = self.connection.get(key)
-            return pickle.loads(value) if value else None
+            return decode_redis_value(key, value) if value is not None else None
         except Exception as e:
             raise e
 
@@ -333,7 +323,7 @@ class RedisClient:
         try:
             await self.acluster_nodes(key)
             value = await self.async_connection.get(key)
-            return pickle.loads(value) if value else None
+            return decode_redis_value(key, value) if value is not None else None
         except Exception as e:
             # Handle the case where the value is None or not picklable
             raise e
@@ -405,7 +395,7 @@ class RedisClient:
     async def alpush(self, key, value, expiration=3600):
         try:
             await self.acluster_nodes(key)
-            ret = await self.async_connection.lpush(key, value)
+            ret = await self.async_connection.lpush(key, encode_redis_value(key, value))
             if expiration:
                 await self.aexpire_key(key, expiration)
             return ret
@@ -416,7 +406,7 @@ class RedisClient:
         try:
             await self.acluster_nodes(key)
             value = await self.async_connection.blpop(key, timeout)
-            return pickle.loads(value[1]) if value and value[1] else None
+            return decode_redis_value(value[0], value[1]) if value is not None else None
         except Exception as e:
             raise e
 
@@ -424,15 +414,19 @@ class RedisClient:
         try:
             await self.acluster_nodes(key)
             values = await self.async_connection.lrange(key, start, end)
-            return [pickle.loads(v) for v in values if v is not None]
+            return [decode_redis_value(key, v) for v in values if v is not None]
         except Exception as e:
             raise e
 
     async def alrem(self, key, value):
         try:
             await self.acluster_nodes(key)
-            value = pickle.dumps(value) if not isinstance(value, bytes) else value
-            return await self.async_connection.lrem(key, 0, value)
+            values = await self.async_connection.lrange(key, 0, -1)
+            removed = 0
+            for stored in values:
+                if decode_redis_value(key, stored) == value:
+                    removed += await self.async_connection.lrem(key, 0, stored)
+            return removed
         except Exception as e:
             raise e
 
@@ -449,7 +443,7 @@ class RedisClient:
     async def arpush(self, key, value, expiration=3600):
         try:
             await self.acluster_nodes(key)
-            value = pickle.dumps(value) if not isinstance(value, bytes) else value
+            value = encode_redis_value(key, value)
             ret = await self.async_connection.rpush(key, value)
             if expiration:
                 await self.aexpire_key(key, expiration)

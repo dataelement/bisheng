@@ -175,6 +175,7 @@ export const ImportQa = forwardRef(function ({ knowlageId, onChange }: any, ref)
     const [form, setForm] = useState({
         fileUrl: '',
         fileName: '',
+        previewUploadRef: '',
     });
     const [error, setError] = useState({
         fileUrl: false,
@@ -186,6 +187,7 @@ export const ImportQa = forwardRef(function ({ knowlageId, onChange }: any, ref)
             setForm({
                 fileUrl: '',
                 fileName: '',
+                previewUploadRef: '',
             });
             setError({
                 fileUrl: false,
@@ -213,7 +215,8 @@ export const ImportQa = forwardRef(function ({ knowlageId, onChange }: any, ref)
             return toast.show({ type: 'warning', message: errors.filter(Boolean).join('\n') });
         }
         const res = await postImportQaFile(id, {
-            url: form.fileUrl
+            url: form.fileUrl,
+            preview_upload_ref: form.previewUploadRef,
         });
         const errorLines = res.errors[0];
         console.log('errors', errorLines);
@@ -226,16 +229,23 @@ export const ImportQa = forwardRef(function ({ knowlageId, onChange }: any, ref)
         onChange();
     };
     const { id } = useParams();
-    const handleFileUploadSuccess = async (name, url) => {
+    const handleFileUploadSuccess = async (name: string, url: string, previewUploadRef?: string) => {
+        setDataList([]);
+        setForm({ fileUrl: '', fileName: '', previewUploadRef: '' });
+        if (!previewUploadRef) {
+            return toast.show({ type: 'warning', message: String(t('emptyUploadData')) });
+        }
         const res = await getQaFilePreview(id, {
             size: 10,
             url,
+            preview_upload_ref: previewUploadRef,
         });
         const { result } = res;
         setDataList(result);
         setForm({
             fileUrl: url,
-            fileName: name
+            fileName: name,
+            previewUploadRef,
         });
     };
 

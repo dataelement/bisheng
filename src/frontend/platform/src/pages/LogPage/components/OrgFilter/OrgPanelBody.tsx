@@ -1,3 +1,4 @@
+import { LoadingState } from '@/components/bs-icons/loading/LoadingState'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button, Checkbox, Tag } from '@bisheng/ui'
@@ -67,7 +68,7 @@ function TreeNode({ dept, tenantId, depth, checked, onToggle }: TreeNodeProps) {
           : <span className="size-5 shrink-0" />}
         <DeptCheckbox dept={dept} checked={checked} onToggle={onToggle} />
       </div>
-      {open && children.isInitialLoading && <p role="status" className="py-1 text-xs text-muted-foreground" style={{ paddingLeft: (depth + 1) * 16 + 20 }}>{t('log.org.loading')}</p>}
+      {open && children.isInitialLoading && <div className="py-1" style={{ paddingLeft: (depth + 1) * 16 + 20 }}><LoadingState size="inline" label={t('log.org.loading')} /></div>}
       {open && children.isError && (
         <p role="alert" className="py-1 text-xs" style={{ paddingLeft: (depth + 1) * 16 + 20 }}>
           {t('log.org.loadFailed')} <Button size="small" variant="link" onClick={() => void children.refetch()}>{t('log.org.retry')}</Button>
@@ -96,7 +97,7 @@ export function OrgPanelBody({
 }: OrgPanelBodyProps) {
   const { t } = useTranslation()
   const roots = useAuditDepartmentRoots(tenantId, keyword, true)
-  if (roots.isInitialLoading) return <p role="status" className="py-4 text-center text-sm text-muted-foreground">{t('log.org.loading')}</p>
+  if (roots.isInitialLoading) return <LoadingState size="panel" label={t('log.org.loading')} className="py-4 text-center text-sm text-muted-foreground" />
   if (roots.isError || !roots.data) {
     return (
       <div role="alert" className="py-4 text-center text-sm">

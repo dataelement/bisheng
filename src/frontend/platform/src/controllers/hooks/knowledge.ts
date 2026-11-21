@@ -18,6 +18,7 @@ import {
   type ProcessingSettingsWrite,
   type ProcessingCreateRequest,
   type ProcessingRetryRequest,
+  type ProcessingKind,
 } from "../API/knowledgeSpace";
 import { getKnowledgeDetailApi } from "../API";
 
@@ -65,6 +66,8 @@ const scopeKey = (scope: KnowledgeQueryScope) =>
   ] as const;
 const spaceKey = (scope: KnowledgeQueryScope, spaceId: number) =>
   [...scopeKey(scope), "space", spaceId] as const;
+const jobItemsKey = (scope: KnowledgeQueryScope, spaceId: number, jobId: string) =>
+  [...spaceKey(scope, spaceId), "job", jobId, "items"] as const;
 
 export const knowledgeQueryKeys = {
   scope: scopeKey,
@@ -80,6 +83,8 @@ export const knowledgeQueryKeys = {
   creation: (scope: KnowledgeQueryScope) =>
     [...scopeKey(scope), "creation-settings"] as const,
   space: spaceKey,
+  metadataSchema: (scope: KnowledgeQueryScope, spaceId: number) =>
+    [...spaceKey(scope, spaceId), "metadata-schema"] as const,
   info: (scope: KnowledgeQueryScope, spaceId: number) =>
     [...spaceKey(scope, spaceId), "info"] as const,
   children: (
@@ -107,13 +112,13 @@ export const knowledgeQueryKeys = {
   ) => [...spaceKey(scope, spaceId), "jobs", { ...query }] as const,
   job: (scope: KnowledgeQueryScope, spaceId: number, jobId: string) =>
     [...spaceKey(scope, spaceId), "job", jobId] as const,
+  jobItems: jobItemsKey,
   items: (
     scope: KnowledgeQueryScope,
     spaceId: number,
     jobId: string,
     query: ProcessingItemsQuery,
-  ) =>
-    [...spaceKey(scope, spaceId), "job", jobId, "items", { ...query }] as const,
+  ) => [...jobItemsKey(scope, spaceId, jobId), { ...query }] as const,
 };
 
 function useKnowledgeScope(scope: KnowledgeQueryScope) {
@@ -279,13 +284,13 @@ export function useKnowledgeProcessingJobs(
   spaceId: number,
   query: ProcessingJobsQuery,
   api: KnowledgeSpaceApi = knowledgeSpaceApi,
-  options: ProcessingQueryOptions = {},
+  { enabled = true, ...options }: ProcessingQueryOptions & { enabled?: boolean } = {},
 ) {
   useKnowledgeScope(scope);
   return useQuery({
     queryKey: knowledgeQueryKeys.jobs(scope, spaceId, query),
     queryFn: () => api.listProcessingJobs(spaceId, query),
-    enabled: canQuery(scope, spaceId),
+    enabled: enabled && canQuery(scope, spaceId),
     keepPreviousData: false,
     ...options,
   });
@@ -295,13 +300,13 @@ export function useKnowledgeProcessingJob(
   spaceId: number,
   jobId: string,
   api: KnowledgeSpaceApi = knowledgeSpaceApi,
-  options: ProcessingQueryOptions = {},
+  { enabled = true, ...options }: ProcessingQueryOptions & { enabled?: boolean } = {},
 ) {
   useKnowledgeScope(scope);
   return useQuery({
     queryKey: knowledgeQueryKeys.job(scope, spaceId, jobId),
     queryFn: () => api.getProcessingJob(spaceId, jobId),
-    enabled: canQuery(scope, spaceId) && Boolean(jobId),
+    enabled: enabled && canQuery(scope, spaceId) && Boolean(jobId),
     keepPreviousData: false,
     ...options,
   });
@@ -344,7 +349,7 @@ export function useKnowledgeProcessingActions(
   const latest = useRef(epoch);
   latest.current = epoch;
   return useMemo(() => {
-    const plans = new Map<string, string>();
+    const plans = new Map<string, { digest: string; kind: ProcessingPrecheckRequest["kind"] }>();
     const assertCurrent = () => {
       if (latest.current !== epoch || !canQuery(stableScope, spaceId))
         throw scopeChanged("knowledge_scope_changed");
@@ -353,13 +358,26 @@ export function useKnowledgeProcessingActions(
       client.invalidateQueries({
         queryKey: knowledgeQueryKeys.space(stableScope, spaceId),
       });
+    const invalidateMetadata = (jobId?: string) => Promise.all([
+      client.invalidateQueries({ queryKey: knowledgeQueryKeys.metadataSchema(stableScope, spaceId), exact: true }),
+      client.invalidateQueries({
+        queryKey: [...knowledgeQueryKeys.space(stableScope, spaceId), "jobs"],
+        predicate: ({ queryKey }) => {
+          const query = queryKey.at(-1) as ProcessingJobsQuery;
+          return !query.kind || query.kind === "metadata_schema_change";
+        },
+      }),
+      ...(jobId ? [
+        client.invalidateQueries({ queryKey: knowledgeQueryKeys.job(stableScope, spaceId, jobId) }),
+      ] : []),
+    ]);
     return {
       async precheck(request: ProcessingPrecheckRequest) {
         assertCurrent();
         const result = await api.precheckProcessing(spaceId, request);
         assertCurrent();
         if (result.check_complete && result.can_execute)
-          plans.set(result.confirmation_id, result.plan_digest);
+          plans.set(result.confirmation_id, { digest: result.plan_digest, kind: request.kind });
         else plans.delete(result.confirmation_id);
         return result;
       },
@@ -373,19 +391,22 @@ export function useKnowledgeProcessingActions(
       },
       async createJob(request: ProcessingCreateRequest) {
         assertCurrent();
-        if (plans.get(request.confirmation_id) !== request.plan_digest)
+        const plan = plans.get(request.confirmation_id);
+        if (plan?.digest !== request.plan_digest)
           throw scopeChanged("knowledge_confirmation_scope_changed");
         const result = await api.createProcessingJob(spaceId, request);
         assertCurrent();
-        await invalidate();
+        if (plan.kind === "metadata_schema_change") await invalidateMetadata();
+        else await invalidate();
         assertCurrent();
         return result;
       },
-      async retryJob(jobId: string, request: ProcessingRetryRequest) {
+      async retryJob(jobId: string, request: ProcessingRetryRequest, kind?: ProcessingKind) {
         assertCurrent();
         const result = await api.retryProcessingJob(spaceId, jobId, request);
         assertCurrent();
-        await invalidate();
+        if (kind === "metadata_schema_change") await invalidateMetadata(jobId);
+        else await invalidate();
         assertCurrent();
         return result;
       },

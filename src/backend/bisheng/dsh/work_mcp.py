@@ -1,6 +1,7 @@
 """Streamable HTTP transport for user-authorized Desktop Work capabilities."""
 
 import json
+from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from urllib.parse import urlsplit
 
@@ -20,6 +21,7 @@ from bisheng.common.errcode import BaseErrorCode
 from bisheng.core.config.dsh import normalize_dsh_origin
 from bisheng.core.session_activity import record_authenticated_activity
 from bisheng.dsh.domain.services.work_capabilities import WorkCapabilitiesService
+from bisheng.dsh.request_origin import resolve_client_origin
 
 current_work_service: ContextVar[WorkCapabilitiesService] = ContextVar("current_work_service")
 current_work_connection: ContextVar[HTTPConnection | None] = ContextVar("current_work_connection", default=None)
@@ -129,7 +131,7 @@ def create_work_mcp_runtime(security_settings=None):
     if security_settings is None:
         from bisheng.common.services.config_service import settings
 
-        security_settings = work_transport_security(settings.dsh.platform_public_url)
+        return RequestScopedWorkMcpRuntime(server, settings.dsh)
 
     return StreamableHTTPSessionManager(
         app=server,
@@ -137,6 +139,34 @@ def create_work_mcp_runtime(security_settings=None):
         stateless=True,
         security_settings=security_settings,
     )
+
+
+class RequestScopedWorkMcpRuntime:
+    """One protocol Server, with a bounded stateless SDK manager per request."""
+
+    def __init__(self, server, settings):
+        self.server = server
+        self.settings = settings
+
+    @asynccontextmanager
+    async def run(self):
+        # Application lifespan owns this facade; transports own their actual task groups.
+        yield self
+
+    async def handle_request(self, scope, receive, send):
+        try:
+            origin = await resolve_client_origin(HTTPConnection(scope), self.settings)
+        except HTTPException as error:
+            await Response(error.detail, status_code=error.status_code)(scope, receive, send)
+            return
+        manager = StreamableHTTPSessionManager(
+            app=self.server,
+            json_response=True,
+            stateless=True,
+            security_settings=work_transport_security(origin),
+        )
+        async with manager.run():
+            await manager.handle_request(scope, receive, send)
 
 
 class WorkMcpResponse(Response):

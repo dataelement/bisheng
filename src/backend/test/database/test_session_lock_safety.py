@@ -14,6 +14,7 @@ Root cause (109 DaMeng deployment):
    isolation level on connection checkin while a transaction is open
    -> [CODE:-6510], so ``asyncio.shield`` is used instead.)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -25,16 +26,13 @@ from sqlalchemy.pool import StaticPool
 
 from bisheng.core.database.connection import DatabaseConnectionManager
 
-
 # ---------------------------------------------------------------------------
 # Fix #1 — async_session must roll back on CancelledError (BaseException)
 # ---------------------------------------------------------------------------
 
 
 async def test_async_session_rolls_back_on_cancellederror():
-    engine = create_async_engine(
-        "sqlite+aiosqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
+    engine = create_async_engine("sqlite+aiosqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     mgr = DatabaseConnectionManager("sqlite+aiosqlite://")
     mgr._async_engine = engine
 
@@ -61,6 +59,7 @@ async def test_async_session_rolls_back_on_cancellederror():
 
 
 async def test_touch_session_completes_write_despite_cancellation(monkeypatch):
+    from bisheng.core.context.tenant import tenant_execution_scope
     from bisheng.database.models import session as session_module
 
     events: list[str] = []
@@ -79,7 +78,9 @@ async def test_touch_session_completes_write_despite_cancellation(monkeypatch):
 
     monkeypatch.setattr(session_module, "get_async_db_session", _fake_get_async_db_session)
 
-    task = asyncio.ensure_future(session_module.MessageSessionDao.touch_session("chat-abc"))
+    # Production tasks inherit the admitted tenant; cancellation must retain it.
+    with tenant_execution_scope(1):
+        task = asyncio.ensure_future(session_module.MessageSessionDao.touch_session("chat-abc"))
     await asyncio.sleep(0)  # let the shielded write start
     task.cancel()
     with pytest.raises(asyncio.CancelledError):

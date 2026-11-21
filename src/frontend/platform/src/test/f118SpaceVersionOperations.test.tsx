@@ -5,14 +5,13 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { locationContext } from "@/contexts/locationContext";
 import { SpaceVersionHistorySheet } from "@/pages/KnowledgePage/components/SpaceVersionHistorySheet";
-import { SpaceVersionRelationPanel } from "@/pages/KnowledgePage/components/SpaceVersionRelationPanel";
-import { SpaceSimilarDocumentPanel } from "@/pages/KnowledgePage/components/SpaceSimilarDocumentPanel";
-import { SpaceVersionUploadPanel } from "@/pages/KnowledgePage/components/SpaceVersionUploadPanel";
+import { SpaceSimilarDocumentDialog } from "@/pages/KnowledgePage/components/SpaceSimilarDocumentDialog";
 import { SpaceDirectoryRow } from "@/pages/KnowledgePage/components/SpaceDirectoryRow";
 import type {
   KnowledgeVersionsApi,
@@ -22,39 +21,12 @@ import type { KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
-  confirm: vi.fn(),
+  post: vi.fn(),
   error: vi.fn(),
-  upload: vi.fn(),
-  register: vi.fn(),
-  children: vi.fn(),
-  preview: vi.fn(),
 }));
 vi.mock("@/controllers/request", () => ({
-  default: { get: mocks.get },
+  default: { get: mocks.get, post: mocks.post },
   showApiError: mocks.error,
-}));
-vi.mock("@/components/bs-ui/alertDialog/useConfirm", () => ({
-  bsConfirm: mocks.confirm,
-}));
-vi.mock("@/controllers/API/knowledgeUploads", () => ({
-  knowledgeUploadsApi: {
-    uploadSpaceFile: mocks.upload,
-    registerSpaceFiles: mocks.register,
-  },
-}));
-vi.mock("@/controllers/API/knowledgeSpace", () => ({
-  knowledgeSpaceApi: { listChildren: mocks.children },
-}));
-vi.mock("@/controllers/API/knowledgeFiles", () => ({
-  knowledgeFilesApi: { getSpaceFilePreview: mocks.preview },
-}));
-vi.mock("@/pages/KnowledgePage/components/SpaceFileTools", () => ({
-  SpaceFileTools: ({ children }: { children?: (items: React.ReactNode) => React.ReactNode }) => children?.(null) ?? null,
-}));
-vi.mock("@/pages/KnowledgePage/components/PreviewFile", () => ({
-  default: ({ file }: { file: { id: number } }) => (
-    <div>preview-file-{file.id}</div>
-  ),
 }));
 const scope: KnowledgeQueryScope = {
   identityKey: "user7/credential-a",
@@ -132,7 +104,6 @@ function mount(content: React.ReactNode, enabled = true) {
           {
             appConfig: {
               versionManagementEnabled: flag,
-              uploadFileMaxSize: 50,
             },
           } as React.ContextType<typeof locationContext>
         }
@@ -150,21 +121,65 @@ function mount(content: React.ReactNode, enabled = true) {
   };
 }
 async function confirmLast() {
-  const confirmation = mocks.confirm.mock.lastCall?.[0];
-  expect(confirmation).toBeDefined();
+  const confirmation = await screen.findByRole("alertdialog");
   await act(async () => {
-    await confirmation.onOk(vi.fn());
+    fireEvent.click(within(confirmation).getByRole("button", { name: "confirm" }));
   });
 }
-beforeEach(() => vi.resetAllMocks());
+beforeEach(() => {
+  vi.resetAllMocks();
+  mocks.get.mockResolvedValue({ actions: ["visible", "edit", "upload_file", "delete"] });
+  mocks.post.mockResolvedValue({ check_complete: true, valid_items: [] });
+});
 afterEach(() => {
   cleanup();
   clients.forEach((client) => client.clear());
   clients.length = 0;
 });
 
+it.each(["visible", "error", "pending"])("keeps version history readable without mutation entries when permission is %s", async state => {
+  if (state === "error") mocks.get.mockRejectedValue({ status_code: 25008 });
+  else if (state === "pending") mocks.get.mockReturnValue(new Promise(() => undefined));
+  else mocks.get.mockResolvedValue({ actions: ["visible"] });
+  const ports = api();
+  mount(<SpaceVersionHistorySheet scope={scope} spaceId={7} parentId={9} fileId={12} open onOpenChange={vi.fn()} api={ports} />);
+  expect(await screen.findByText("old.md")).toBeVisible();
+  for (const name of ["history.actions.primary", "history.actions.delete"]) {
+    expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+  }
+  expect(ports.deleteSpaceFileVersion).not.toHaveBeenCalled();
+  expect(ports.setSpacePrimaryVersion).not.toHaveBeenCalled();
+});
+
+it("checks delete on the historical physical file independently of space edit", async () => {
+  mocks.get.mockImplementation(async (url: string) => ({ actions:
+    url.includes("knowledge_space/7/") ? ["visible", "edit"] : ["visible"],
+  }));
+  const ports = api();
+  mount(<SpaceVersionHistorySheet scope={scope} spaceId={7} parentId={9} fileId={12} open onOpenChange={vi.fn()} api={ports} />);
+  expect(await screen.findByRole("button", { name: "history.actions.primary" })).toBeVisible();
+  await waitFor(() => expect(mocks.get).toHaveBeenCalledWith(expect.stringContaining("knowledge_file/11/my-permissions"), undefined));
+  expect(screen.queryByRole("button", { name: "history.actions.delete" })).not.toBeInTheDocument();
+});
+
+it("ignores late history mutation grants from a retired tenant view", async () => {
+  let resolve!: (value: { actions: string[] }) => void;
+  mocks.get.mockReturnValue(new Promise<{ actions: string[] }>(done => { resolve = done; }));
+  const ports = api();
+  const content = (target = scope) => <SpaceVersionHistorySheet scope={target} spaceId={7} parentId={9} fileId={12} open onOpenChange={vi.fn()} api={ports} />;
+  const view = mount(content());
+  await screen.findByText("old.md");
+  mocks.get.mockResolvedValue({ actions: ["visible"] });
+  view.update(content({ ...scope, tenantId: 202, managementTenantId: 202 }));
+  await act(async () => { resolve({ actions: ["visible", "edit", "upload_file", "delete"] }); });
+  await screen.findByText("old.md");
+  for (const name of ["history.actions.primary", "history.actions.delete"]) {
+    expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+  }
+});
+
 it("opens version management for a parsed single-version file only with space edit and the feature flag", async () => {
-  mocks.get.mockImplementation(async (url: string) => url.endsWith("/my-permissions") ? { actions: ["edit"] } : history());
+  mocks.get.mockImplementation(async (url: string) => url.endsWith("/my-permissions") ? { actions: ["edit", "upload_file"] } : []);
   const row = (
     <table>
       <tbody>
@@ -195,23 +210,26 @@ it("opens version management for a parsed single-version file only with space ed
   );
   const view = mount(row);
   fireEvent.click(
-    await screen.findByRole("menuitem", { name: "versions.manage" }),
+    await screen.findByRole("menuitem", { name: "knowledge.version.dialog_title" }),
   );
-  expect(
-    await screen.findByRole("button", { name: "versions.new_version" }),
-  ).toBeVisible();
+  const dialog = await screen.findByRole("dialog", { name: "dialog_title" });
+  expect(dialog).toHaveClass("left-1/2", "top-1/2", "max-w-[min(720px,90vw)]");
+  expect(within(dialog).getByRole("button", { name: "btn_dismiss" })).toBeVisible();
+  expect(within(dialog).getByRole("textbox", { name: "search_placeholder" })).toBeVisible();
+  expect(within(dialog).queryByRole("button", { name: "versions.new_version" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("dialog", { name: "history.title" })).not.toBeInTheDocument();
   view.update(row, false);
   await waitFor(() =>
     expect(
-      screen.queryByRole("button", { name: "versions.new_version" }),
+      screen.queryByRole("dialog", { name: "dialog_title" }),
     ).not.toBeInTheDocument(),
   );
   expect(
-    screen.queryByRole("menuitem", { name: "versions.manage" }),
+    screen.queryByRole("menuitem", { name: "knowledge.version.dialog_title" }),
   ).not.toBeInTheDocument();
 });
 
-it("runs the actual historical version endpoints and rereads history, without adding an edit/role gate", async () => {
+it("runs permitted historical version endpoints and rereads history", async () => {
   const ports = api();
   mount(
     <SpaceVersionHistorySheet
@@ -225,25 +243,19 @@ it("runs the actual historical version endpoints and rereads history, without ad
     />,
   );
   fireEvent.click(
-    await screen.findByRole("button", { name: "versions.set_primary" }),
+    await screen.findByRole("button", { name: "history.actions.primary" }),
   );
   expect(ports.setSpacePrimaryVersion).not.toHaveBeenCalled();
   await confirmLast();
-  expect(ports.setSpacePrimaryVersion).toHaveBeenCalledExactlyOnceWith(
-    51,
-    expect.any(AbortSignal),
-  );
+  await waitFor(() => expect(ports.setSpacePrimaryVersion).toHaveBeenCalledExactlyOnceWith(51, expect.any(AbortSignal)));
   await waitFor(() =>
     expect(ports.getSpaceFileVersions).toHaveBeenCalledTimes(2),
   );
   fireEvent.click(
-    screen.getByRole("button", { name: "versions.delete_history" }),
+    await screen.findByRole("button", { name: "history.actions.delete" }),
   );
   await confirmLast();
-  expect(ports.deleteSpaceFileVersion).toHaveBeenCalledExactlyOnceWith(
-    51,
-    expect.any(AbortSignal),
-  );
+  await waitFor(() => expect(ports.deleteSpaceFileVersion).toHaveBeenCalledExactlyOnceWith(51, expect.any(AbortSignal)));
 });
 
 it("keeps feature-off history read-only and rejects a foreign-space response", async () => {
@@ -261,9 +273,8 @@ it("keeps feature-off history read-only and rejects a foreign-space response", a
     false,
   );
   await screen.findByText("Current document");
-  expect(
-    screen.queryByRole("button", { name: "versions.new_version" }),
-  ).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "history.actions.primary" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "history.actions.delete" })).not.toBeInTheDocument();
   view.unmount();
   vi.mocked(ports.getSpaceFileVersions).mockResolvedValue({
     ...history(),
@@ -299,16 +310,16 @@ it("does not replay an uncertain history mutation and retires old confirmations 
   };
   const view = mount(<SpaceVersionHistorySheet {...props} />);
   fireEvent.click(
-    await screen.findByRole("button", { name: "versions.delete_history" }),
+    await screen.findByRole("button", { name: "history.actions.delete" }),
   );
   await confirmLast();
-  expect(await screen.findByText("versions.uncertain")).toBeVisible();
-  expect(
-    screen.getByRole("button", { name: "versions.delete_history" }),
-  ).toBeDisabled();
+  expect(await screen.findByText("history.uncertain")).toBeVisible();
+  const deleteButton = screen.getByRole("button", { name: "history.actions.delete" });
+  expect(deleteButton).toBeDisabled();
   expect(ports.deleteSpaceFileVersion).toHaveBeenCalledTimes(1);
   expect(mocks.error).toHaveBeenCalledWith(error);
-  await confirmLast();
+  fireEvent.click(deleteButton);
+  expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
   expect(ports.deleteSpaceFileVersion).toHaveBeenCalledTimes(1);
   view.update(
     <SpaceVersionHistorySheet
@@ -317,18 +328,36 @@ it("does not replay an uncertain history mutation and retires old confirmations 
     />,
   );
   fireEvent.click(
-    await screen.findByRole("button", { name: "versions.set_primary" }),
+    await screen.findByRole("button", { name: "history.actions.primary" }),
   );
-  const pending = mocks.confirm.mock.lastCall![0];
+  expect(await screen.findByRole("alertdialog")).toBeVisible();
   view.update(<SpaceVersionHistorySheet {...props} />, false);
-  expect(pending.signal.aborted).toBe(true);
-  await act(async () => {
-    await pending.onOk(vi.fn());
-  });
+  expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
   expect(ports.setSpacePrimaryVersion).not.toHaveBeenCalled();
 });
 
-it("keeps cursor search and merge direction exact, and previews only the authorized primary file ID", async () => {
+it("aborts a confirmed history write when the active tenant scope changes", async () => {
+  const ports = api();
+  let finish!: (result: Awaited<ReturnType<KnowledgeVersionsApi["setSpacePrimaryVersion"]>>) => void;
+  vi.mocked(ports.setSpacePrimaryVersion).mockReturnValue(
+    new Promise((resolve) => { finish = resolve; }),
+  );
+  const props = { spaceId: 7, parentId: null, fileId: 12, open: true, onOpenChange: vi.fn(), api: ports };
+  const view = mount(<SpaceVersionHistorySheet {...props} scope={scope} />);
+  fireEvent.click(await screen.findByRole("button", { name: "history.actions.primary" }));
+  await confirmLast();
+  await waitFor(() => expect(ports.setSpacePrimaryVersion).toHaveBeenCalledExactlyOnceWith(51, expect.any(AbortSignal)));
+  expect(screen.getByRole("button", { name: "btn_close" })).toBeDisabled();
+  const signal = vi.mocked(ports.setSpacePrimaryVersion).mock.calls[0][1];
+  const nextScope = { ...scope, identityKey: "user8/credential-b", tenantId: 202, managementTenantId: 202 };
+  view.update(<SpaceVersionHistorySheet {...props} scope={nextScope} />);
+  expect(signal?.aborted).toBe(true);
+  await act(async () => finish({ document_id: 41, new_primary_version_no: 1 }));
+  await waitFor(() => expect(ports.getSpaceFileVersions).toHaveBeenCalledTimes(2));
+  expect(ports.setSpacePrimaryVersion).toHaveBeenCalledTimes(1);
+});
+
+it("gathers cursor search pages in the shared management dialog and merges a searched source", async () => {
   const ports = api(),
     onChanged = vi.fn().mockResolvedValue(undefined);
   const candidate = {
@@ -350,24 +379,21 @@ it("keeps cursor search and merge direction exact, and previews only the authori
       next_cursor: null,
       page_size: 40,
     });
-  mocks.preview.mockResolvedValue({
-    preview_url: "https://example.invalid/preview",
-    original_url: "",
-  });
   mount(
-    <SpaceVersionRelationPanel
+    <SpaceSimilarDocumentDialog
       scope={scope}
       spaceId={7}
       fileId={12}
-      mode="merge"
+      file={{ id: 12, name: "primary.md" }}
       api={ports}
+      onOpenChange={vi.fn()}
       onChanged={onChanged}
     />,
   );
   fireEvent.change(screen.getByRole("textbox"), {
     target: { value: "Candidate" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "versions.search" }));
+  fireEvent.click(screen.getByRole("button", { name: "search_button" }));
   await screen.findByText("Candidate");
   expect(ports.searchVersionDocuments).toHaveBeenCalledWith(
     7,
@@ -377,7 +403,6 @@ it("keeps cursor search and merge direction exact, and previews only the authori
     undefined,
     expect.any(AbortSignal),
   );
-  fireEvent.click(screen.getByRole("button", { name: "versions.load_more" }));
   await screen.findByText("Next candidate");
   expect(ports.searchVersionDocuments).toHaveBeenLastCalledWith(
     7,
@@ -387,25 +412,17 @@ it("keeps cursor search and merge direction exact, and previews only the authori
     "page2",
     expect.any(AbortSignal),
   );
-  fireEvent.click(
-    screen.getAllByRole("button", { name: "versions.preview" })[0],
-  );
-  expect(await screen.findByText("preview-file-99")).toBeVisible();
-  expect(mocks.preview).toHaveBeenCalledExactlyOnceWith(7, 99);
-  fireEvent.click(screen.getAllByRole("button", { name: "versions.merge" })[0]);
+  fireEvent.click(screen.getAllByRole("button", { name: "btn_link_as_new_version" })[1]);
   await confirmLast();
-  expect(ports.mergeSpaceFileVersion).toHaveBeenCalledExactlyOnceWith(
-    12,
-    61,
-    expect.any(AbortSignal),
-  );
+  await waitFor(() => expect(ports.mergeSpaceFileVersion).toHaveBeenCalledExactlyOnceWith(12, 62, expect.any(AbortSignal)));
   expect(ports.linkSpaceFileVersion).not.toHaveBeenCalled();
   expect(onChanged).toHaveBeenCalledTimes(1);
 });
 
-it("keeps similar as-version in the original link direction, and keep-both uses dismissal", async () => {
+it("shares the client single-file merge direction, search scope and direct dismissal", async () => {
   const ports = api(),
-    changed = vi.fn().mockResolvedValue(undefined);
+    changed = vi.fn().mockResolvedValue(undefined),
+    onOpenChange = vi.fn();
   vi.mocked(ports.getVersionRecommendations).mockResolvedValue([
     {
       target_document_id: 61,
@@ -414,114 +431,95 @@ it("keeps similar as-version in the original link direction, and keep-both uses 
       similarity: 0.98,
     },
   ]);
-  mount(
-    <SpaceSimilarDocumentPanel
+  const dialog = (
+    <SpaceSimilarDocumentDialog
       scope={scope}
       spaceId={7}
       fileId={12}
+      file={{ id: 12, name: "primary.md", version_no: 1, user_name: "Uploader" }}
+      open
+      onOpenChange={onOpenChange}
       api={ports}
       onChanged={changed}
-    />,
+    />
   );
+  const view = mount(dialog);
+  await screen.findByText("Similar");
+  expect(ports.getVersionRecommendations).toHaveBeenCalledExactlyOnceWith(
+    12,
+    true,
+    expect.any(AbortSignal),
+  );
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "source" } });
+  fireEvent.click(screen.getByRole("button", { name: "search_button" }));
+  await waitFor(() => expect(ports.searchVersionDocuments).toHaveBeenCalledExactlyOnceWith(
+    7,
+    12,
+    "source",
+    true,
+    undefined,
+    expect.any(AbortSignal),
+  ));
   fireEvent.click(
-    await screen.findByRole("button", { name: "versions.as_version" }),
+    screen.getByRole("button", { name: "btn_link_as_new_version" }),
   );
-  await confirmLast();
-  expect(ports.linkSpaceFileVersion).toHaveBeenCalledExactlyOnceWith(
+  const confirmation = await screen.findByRole("alertdialog");
+  expect(confirmation).toHaveTextContent("confirm_merge_description");
+  fireEvent.click(within(confirmation).getByRole("button", { name: "confirm" }));
+  await waitFor(() => expect(ports.mergeSpaceFileVersion).toHaveBeenCalledExactlyOnceWith(
     12,
     61,
     expect.any(AbortSignal),
-  );
-  expect(ports.mergeSpaceFileVersion).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "versions.keep_two" }));
-  await confirmLast();
+  ));
+  expect(ports.linkSpaceFileVersion).not.toHaveBeenCalled();
+  expect(changed).toHaveBeenCalledTimes(1);
+  expect(onOpenChange).toHaveBeenCalledWith(false);
+  view.unmount();
+  mount(dialog);
+  fireEvent.click(await screen.findByRole("button", { name: "btn_dismiss" }));
+  await waitFor(() => expect(changed).toHaveBeenCalledTimes(2));
   expect(ports.dismissSpaceSimilarFile).toHaveBeenCalledExactlyOnceWith(
     12,
     expect.any(AbortSignal),
   );
 });
 
-it("registers once in the real parent, waits for actual processing success, then requires explicit link confirmation", async () => {
-  const ports = api(),
-    changed = vi.fn().mockResolvedValue(undefined),
-    busy = vi.fn();
-  const row = {
-    id: 99,
-    knowledge_id: 7,
-    file_type: 1,
-    file_name: "new.md",
-    status: 5,
-  };
-  mocks.upload.mockResolvedValue({ file_path: "staged/new.md", preview_upload_ref: "ref-new" });
-  mocks.register.mockResolvedValue([row]);
-  let resolve!: (value: unknown) => void;
-  mocks.children.mockImplementation(
-    () =>
-      new Promise((done) => {
-        resolve = done;
-      }),
-  );
-  mount(
-    <SpaceVersionUploadPanel
-      scope={scope}
+it("retires similar-document requests on scope changes and closes when the feature is disabled", async () => {
+  const ports = api();
+  let resolve!: (rows: Awaited<ReturnType<KnowledgeVersionsApi["getVersionRecommendations"]>>) => void;
+  const previous = new Promise<Awaited<ReturnType<KnowledgeVersionsApi["getVersionRecommendations"]>>>((done) => { resolve = done; });
+  vi.mocked(ports.getVersionRecommendations).mockReturnValueOnce(previous).mockResolvedValue([
+    { target_document_id: 62, title: "New scope candidate", current_primary_version_no: 1, similarity: 0.97 },
+  ]);
+  const dialog = (currentScope = scope) => (
+    <SpaceSimilarDocumentDialog
+      scope={currentScope}
       spaceId={7}
-      parentId={9}
-      documentId={41}
+      fileId={12}
+      file={{ id: 12, name: "primary.md" }}
+      open
+      onOpenChange={vi.fn()}
       api={ports}
-      onChanged={changed}
-      onBusyChange={busy}
-    />,
+    />
   );
-  fireEvent.change(screen.getByLabelText("versions.choose_file"), {
-    target: { files: [new File(["new"], "new.md", { type: "text/markdown" })] },
-  });
-  await waitFor(() =>
-    expect(mocks.register).toHaveBeenCalledExactlyOnceWith(
-      7,
-      { file_path: ["staged/new.md"], preview_upload_refs: ["ref-new"], parent_id: 9 },
-      expect.any(AbortSignal),
-    ),
-  );
-  expect(ports.linkSpaceFileVersion).not.toHaveBeenCalled();
-  expect(
-    screen.getByRole("button", { name: "versions.confirm_new_version" }),
-  ).toBeDisabled();
-  await act(async () => {
-    resolve({ data: [{ ...row, status: 2 }], has_more: false });
-  });
-  fireEvent.click(
-    await screen.findByRole("button", { name: "versions.confirm_new_version" }),
-  );
-  expect(ports.linkSpaceFileVersion).not.toHaveBeenCalled();
-  await confirmLast();
-  expect(ports.linkSpaceFileVersion).toHaveBeenCalledExactlyOnceWith(
-    99,
-    41,
-    expect.any(AbortSignal),
-  );
-  expect(mocks.register).toHaveBeenCalledTimes(1);
-  expect(changed).toHaveBeenCalledTimes(1);
+  const view = mount(dialog());
+  await waitFor(() => expect(ports.getVersionRecommendations).toHaveBeenCalledTimes(1));
+  const signal = vi.mocked(ports.getVersionRecommendations).mock.calls[0][2];
+  const nextScope: KnowledgeQueryScope = { ...scope, identityKey: "user8/credential-b", tenantId: 202, managementTenantId: 202 };
+  view.update(dialog(nextScope));
+  expect(await screen.findByText("New scope candidate")).toBeVisible();
+  expect(signal?.aborted).toBe(true);
+  await act(async () => { resolve([{ target_document_id: 61, title: "Retired scope candidate", current_primary_version_no: 1, similarity: 0.98 }]); });
+  expect(screen.queryByText("Retired scope candidate")).not.toBeInTheDocument();
+  view.update(dialog(nextScope), false);
+  expect(screen.queryByRole("dialog", { name: "dialog_title" })).not.toBeInTheDocument();
 });
 
-it("retains the uploaded standalone file on registration ACK loss without automatic registration or linking", async () => {
+it("opens the client's two-column similar dialog directly rather than nesting it in version history", async () => {
   const ports = api();
-  mocks.upload.mockResolvedValue({ file_path: "staged/new.md", preview_upload_ref: "ref-new" });
-  mocks.register.mockRejectedValue(new Error("ACK unknown"));
-  mount(
-    <SpaceVersionUploadPanel
-      scope={scope}
-      spaceId={7}
-      parentId={null}
-      documentId={41}
-      api={ports}
-      onChanged={vi.fn()}
-      onBusyChange={vi.fn()}
-    />,
-  );
-  const input = screen.getByLabelText("versions.choose_file");
-  fireEvent.change(input, { target: { files: [new File(["new"], "new.md")] } });
-  await screen.findByText("versions.uncertain");
-  expect(input).toBeDisabled();
-  expect(mocks.register).toHaveBeenCalledTimes(1);
-  expect(ports.linkSpaceFileVersion).not.toHaveBeenCalled();
+  mocks.get.mockResolvedValue([{ knowledge_file_id: 12, file_name: "Current.pdf", candidate_count: 0 }]);
+  mount(<SpaceSimilarDocumentDialog scope={scope} spaceId={7} restrictToFileIds={[12]} api={ports} onOpenChange={vi.fn()} />);
+  expect(await screen.findByText("section_current_file")).toBeVisible();
+  expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  expect(ports.getSpaceFileVersions).not.toHaveBeenCalled();
 });

@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ComponentProps } from "react";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
@@ -7,10 +8,13 @@ import KnowledgePage from "@/pages/KnowledgePage";
 import { KnowledgeSpaceCreatePage } from "@/pages/KnowledgePage/KnowledgeSpaceCreatePage";
 import { KnowledgeSpaceSettingsPage } from "@/pages/KnowledgePage/KnowledgeSpaceSettingsPage";
 import { userContext } from "@/contexts/userContext";
+import { showApiError } from "@/controllers/request";
 import type { FilesProps } from "@/pages/KnowledgePage/components/Files";
 import type { CreateSpaceForm } from "@/pages/KnowledgePage/components/KnowledgeLibraryDialog";
 import type { SpaceSettingsEditor } from "@/pages/KnowledgePage/components/SpaceSettingsEditor";
+import type { SpaceFileDetail } from "@/pages/KnowledgePage/components/SpaceFileDetail";
 import type { User } from "@/types/api/user";
+import { jobsPath, mockTaskRecords, taskKinds } from "./knowledgeSpaceTaskFixtures";
 
 const mock = vi.hoisted(() => ({ get: vi.fn(), permissions: vi.fn(), scope: vi.fn() }));
 vi.mock("@/contexts/userContext", async () => ({ userContext: (await import("react")).createContext({ user: {} }) }));
@@ -42,7 +46,15 @@ vi.mock("@/pages/KnowledgePage/components/KnowledgeLibraryDialog", () => ({
     </section>
   ),
 }));
-vi.mock("@/pages/KnowledgePage/components/Files", () => ({ default: (props: FilesProps) => <output data-testid="files">{JSON.stringify({ id: props.spaceId, parent: props.parentId, presentation: props.presentation, view: props.scope?.view })}</output> }));
+vi.mock("@/pages/KnowledgePage/components/Files", () => ({ default: (props: FilesProps) => <output data-testid="files">{JSON.stringify({ id: props.spaceId, parent: props.parentId, presentation: props.presentation, view: props.scope?.view, scope: props.scope })}</output> }));
+vi.mock("@/pages/KnowledgePage/components/SpaceFileDetail", () => ({
+  SpaceFileDetail: ({ scope: fileScope, spaceId, fileId, onBack }: ComponentProps<typeof SpaceFileDetail>) => (
+    <section>
+      <output data-testid="file-detail">{JSON.stringify({ scope: fileScope, spaceId, fileId })}</output>
+      <button onClick={onBack}>file-back</button>
+    </section>
+  ),
+}));
 
 const scope = { identityKey: "user:5", tenantId: 60, managementTenantId: 60, view: "ordinary" } as const;
 const clients: QueryClient[] = [];
@@ -54,7 +66,7 @@ function Location() {
 function mount(path = "/filelib", user: Partial<User> = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   clients.push(client);
-  return render(
+  const view = render(
     <QueryClientProvider client={client}>
       <userContext.Provider value={{ user: { user_id: 5, ...user }, setUser: vi.fn(), savedComponents: [], addSavedComponent: async () => undefined, checkComponentsName: () => false, delComponent: vi.fn() }}>
         <MemoryRouter initialEntries={[path]}>
@@ -69,7 +81,22 @@ function mount(path = "/filelib", user: Partial<User> = {}) {
       </userContext.Provider>
     </QueryClientProvider>,
   );
+  return { ...view, client };
 }
+
+async function openSpaceMore() {
+  const info = await screen.findByRole("button", { name: "detail.space_info" });
+  const more = await within(info.closest("header")!).findByRole("button", { name: "more" });
+  fireEvent.keyDown(more, { key: "Enter" });
+  return { more, menu: within(await screen.findByRole("menu")) };
+}
+async function openTaskRecords() {
+  const { more, menu } = await openSpaceMore();
+  fireEvent.click(await menu.findByRole("menuitem", { name: "detail.view_task_records" }));
+  await screen.findByRole("dialog", { name: "detail.task_records" });
+  return more;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mock.permissions.mockResolvedValue({ actions: [] });
@@ -108,12 +135,15 @@ it("opens deep folder links while preserving the independent QA and management t
   expect(await screen.findByTestId("files")).toHaveTextContent('"parent":9');
   const tree = screen.getByRole("complementary");
   expect(await within(tree).findByRole("button", { name: "Finance" })).toHaveAttribute("aria-current", "page");
+  const path = await screen.findByRole("navigation", { name: "f118.current_folder" });
+  expect(within(path).getByText("Finance")).toHaveAttribute("aria-current", "page");
+  expect(mock.get.mock.calls.filter(([url]) => url.endsWith("/space/7/folders/9/parent"))).toHaveLength(1);
   fireEvent.mouseDown(screen.getByRole("tab", { name: "lib.qaData" }), { button: 0, ctrlKey: false });
   expect(await screen.findByText("qa-list")).toBeVisible();
   fireEvent.mouseDown(screen.getByRole("tab", { name: "f118.manage_spaces" }), { button: 0, ctrlKey: false });
-  expect(await screen.findByRole("table", { name: "f118.manage_spaces" })).toBeVisible();
-  expect(screen.queryByRole("complementary")).toBeNull();
-  expect(screen.queryByTestId("files")).toBeNull();
+  expect(await screen.findByTestId("files")).toHaveTextContent('"view":"admin"');
+  expect(screen.getByRole("complementary")).toBeVisible();
+  expect(screen.getByRole("region", { name: "sidebar.personal" })).toBeVisible();
 });
 
 it("rejects invalid directory links without loading their file content", async () => {
@@ -163,6 +193,126 @@ it("automatically opens the first sidebar space instead of rendering the ordinar
   expect(screen.queryByRole("button", { name: "back" })).not.toBeInTheDocument();
   expect(screen.getByTestId("location")).toHaveTextContent("/filelib/7");
   expect(screen.queryByText("ordinary-list")).toBeNull();
+});
+
+it("hides task records when both histories are empty", async () => {
+  mock.permissions.mockResolvedValue({ actions: ["edit"] });
+  const { client } = mount("/filelib/7");
+  await screen.findByRole("heading", { name: "Reports" });
+  await waitFor(() => {
+    for (const kind of taskKinds) {
+      expect(mock.get).toHaveBeenCalledWith(jobsPath, {
+        params: expect.objectContaining({ kind }),
+      });
+    }
+    expect(client.isFetching()).toBe(0);
+  });
+  expect(screen.queryByRole("button", { name: "detail.task_records" })).not.toBeInTheDocument();
+  expect((await openSpaceMore()).menu.queryByRole("menuitem", { name: "detail.view_task_records" })).not.toBeInTheDocument();
+});
+
+it.each(taskKinds)("shows the root menu entry when only %s has records and hides it in folders", async (kind) => {
+  mock.permissions.mockResolvedValue({ actions: ["edit"] });
+  mockTaskRecords(mock.get, [kind]);
+  mount("/filelib/7");
+  const interaction = userEvent.setup();
+  expect(await (await openSpaceMore()).menu.findByRole("menuitem", { name: "detail.view_task_records" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "detail.task_records" })).not.toBeInTheDocument();
+  await interaction.keyboard("{Escape}");
+  const sidebar = within(screen.getByRole("complementary"));
+  fireEvent.click(await sidebar.findByRole("button", { name: "Finance" }));
+  await screen.findByRole("navigation", { name: "f118.current_folder" });
+  expect((await openSpaceMore()).menu.queryByRole("menuitem", { name: "detail.view_task_records" })).not.toBeInTheDocument();
+  await interaction.keyboard("{Escape}");
+  fireEvent.click(await within(screen.getByRole("navigation", { name: "f118.current_folder" })).findByRole("button", { name: "Reports" }));
+  expect(await (await openSpaceMore()).menu.findByRole("menuitem", { name: "detail.view_task_records" })).toBeVisible();
+});
+
+it.each(taskKinds)("opens the empty category when only %s has records and returns to its history", async (kind) => {
+  mock.permissions.mockResolvedValue({ actions: ["edit"] });
+  mockTaskRecords(mock.get, [kind]);
+  mount("/filelib/7");
+  const interaction = userEvent.setup();
+  await openTaskRecords();
+  const dialog = within(await screen.findByRole("dialog", { name: "detail.task_records" }));
+  const processing = dialog.getByRole("radio", { name: "f118.processing_title_jobs" });
+  const moves = dialog.getByRole("radio", { name: "move.jobs" });
+  const populated = kind === "embedding_rebuild" ? processing : moves;
+  const empty = kind === "embedding_rebuild" ? moves : processing;
+  const emptyKind = kind === "embedding_rebuild" ? "move_index" : "embedding_rebuild";
+  const rowLabel = kind === "embedding_rebuild"
+    ? "f118.processing_kind_embedding_rebuild · f118.processing_state_succeeded"
+    : "move.jobs · f118.processing_state_succeeded";
+
+  expect(populated).toBeEnabled();
+  expect(populated).toHaveAttribute("aria-checked", "true");
+  expect(empty).toBeEnabled();
+  expect(empty).toHaveAttribute("aria-checked", "false");
+  expect(await dialog.findByRole("link", { name: rowLabel })).toBeVisible();
+
+  await interaction.click(empty);
+  expect(populated).toHaveAttribute("aria-checked", "false");
+  expect(empty).toHaveAttribute("aria-checked", "true");
+  const emptyLabel = kind === "embedding_rebuild" ? "move.no_jobs" : "detail.no_jobs";
+  const emptyState = await dialog.findByText(emptyLabel);
+  expect(emptyState).toBeVisible();
+  expect(emptyState.parentElement?.querySelector('[aria-hidden="true"] svg')).toBeInTheDocument();
+  expect(empty).not.toHaveAttribute("aria-describedby");
+  expect(mock.get).toHaveBeenCalledWith(jobsPath, {
+    params: { page: 1, page_size: 20, kind: emptyKind },
+  });
+
+  expect(empty).toHaveFocus();
+  const arrow = kind === "embedding_rebuild" ? "ArrowLeft" : "ArrowRight";
+  await interaction.keyboard(`{${arrow}>}`);
+  await waitFor(() => expect(populated).toHaveAttribute("aria-checked", "true"));
+  await interaction.keyboard(`{/${arrow}}`);
+  expect(empty).toHaveAttribute("aria-checked", "false");
+  expect(await dialog.findByRole("link", { name: rowLabel })).toBeVisible();
+  expect(dialog.queryByText(emptyLabel)).not.toBeInTheDocument();
+});
+
+it("opens both histories and their job details from a single dialog", async () => {
+  mock.permissions.mockResolvedValue({ actions: ["edit"] });
+  mockTaskRecords(mock.get, taskKinds);
+  mount("/filelib/7");
+  const interaction = userEvent.setup();
+  const more = await openTaskRecords();
+  const dialog = within(await screen.findByRole("dialog", { name: "detail.task_records" }));
+  expect(dialog.getByRole("radio", { name: "f118.processing_title_jobs" })).toHaveAttribute("aria-checked", "true");
+  await interaction.click(await dialog.findByRole("link", { name: "f118.processing_kind_embedding_rebuild · f118.processing_state_succeeded" }));
+  const counts = await dialog.findByText("f118.processing_counts");
+  const detailHeader = within(dialog.getByRole("heading", { name: "f118.processing_items", level: 3 }).closest("header")!);
+  expect(detailHeader.getByText("f118.processing_counts")).toBe(counts);
+  expect(dialog.queryByText("f118.processing_state_succeeded", { selector: "p" })).not.toBeInTheDocument();
+  const back = detailHeader.getByRole("button", { name: "detail.back_to_jobs" });
+  expect(back).toHaveTextContent("");
+  expect(mock.get).toHaveBeenCalledWith(`${jobsPath}/job-embedding_rebuild`, expect.any(Object));
+  await interaction.click(back);
+
+  await interaction.click(dialog.getByRole("radio", { name: "move.jobs" }));
+  await interaction.click(await dialog.findByRole("link", { name: "move.jobs · f118.processing_state_succeeded" }));
+  expect(await dialog.findByText("f118.processing_counts")).toBeVisible();
+  expect(mock.get).toHaveBeenCalledWith(`${jobsPath}/job-move_index`, { params: { kind: "move_index" } });
+
+  await interaction.keyboard("{Escape}");
+  expect(screen.queryByRole("dialog", { name: "detail.task_records" })).not.toBeInTheDocument();
+  expect(screen.getByTestId("location")).toHaveTextContent(/^\/filelib\/7$/);
+  await waitFor(() => expect(more).toHaveFocus());
+  expect(await (await openSpaceMore()).menu.findByRole("menuitem", { name: "detail.view_task_records" })).toBeVisible();
+});
+
+it("opens permitted move records without requesting processing history for a non-editor", async () => {
+  mock.permissions.mockResolvedValue({ actions: ["visible"] });
+  mockTaskRecords(mock.get, ["move_index"]);
+  mount("/filelib/7");
+  await openTaskRecords();
+  const dialog = within(await screen.findByRole("dialog", { name: "detail.task_records" }));
+  expect(await dialog.findByRole("link", { name: "move.jobs · f118.processing_state_succeeded" })).toBeVisible();
+  expect(dialog.queryByRole("radio", { name: "f118.processing_title_jobs" })).not.toBeInTheDocument();
+  expect(mock.get).not.toHaveBeenCalledWith(jobsPath, {
+    params: expect.objectContaining({ kind: "embedding_rebuild" }),
+  });
 });
 
 it.each<Partial<User>>([
@@ -233,70 +383,108 @@ it("cancels a direct creation link back to the ordinary workspace", async () => 
   expect(screen.getByTestId("location")).toHaveTextContent(/^\/filelib\/7$/);
 });
 
-it("shows the searchable management list without opening spaces or requesting their files", async () => {
+it("pages and searches all managed spaces within department and personal groups", async () => {
+  const fallback = mock.get.getMockImplementation()!;
+  mock.get.mockImplementation(async (url: string, options?: { params?: { page?: number; keyword?: string } }) => {
+    if (!url.endsWith("/admin/list")) return fallback(url, options);
+    if (options?.params?.keyword) return { data: [{ id: 12, name: "Later personal", tenant_id: 60, space_kind: "normal" }], total: 1 };
+    if (options?.params?.page === 2) return { data: [{ id: 12, name: "Later personal", tenant_id: 60, space_kind: "normal" }], total: 201 };
+    return {
+      data: [
+        { id: 7, name: "Personal reports", tenant_id: 60, space_kind: "normal" },
+        { id: 8, name: "Department reports", tenant_id: 60, space_kind: "department" },
+      ],
+      total: 201,
+    };
+  });
   mount("/filelib?view=admin", { is_child_admin: true });
-  fireEvent.click(await screen.findByText("Reports"));
-  expect(screen.getByTestId("location")).toHaveTextContent(/^\/filelib\?view=admin$/);
-  const search = screen.getByRole("searchbox", { name: "sidebar.search" });
-  fireEvent.change(search, { target: { value: "Repo" } });
+  const files = await screen.findByTestId("files");
+  expect(files).toHaveTextContent('"id":8');
+  expect(files).toHaveTextContent('"scope":{"identityKey":"user:5","tenantId":60,"managementTenantId":60,"view":"admin"}');
+  expect(screen.getByTestId("location").textContent).toBe("/filelib/8?view=admin");
+  const sidebar = within(screen.getByRole("complementary"));
+  expect(sidebar.getByRole("region", { name: "sidebar.department" })).toHaveTextContent("Department reports");
+  expect(sidebar.getByRole("region", { name: "sidebar.personal" })).toHaveTextContent("Personal reports");
+  expect(sidebar.queryByRole("region", { name: "sidebar.created" })).toBeNull();
+  expect(sidebar.queryByRole("region", { name: "sidebar.joined" })).toBeNull();
+  expect(sidebar.queryByRole("button", { name: "f118.create_space" })).toBeNull();
+  fireEvent.click(sidebar.getByRole("button", { name: "sidebar.more_spaces" }));
+  expect(await sidebar.findByRole("button", { name: "Later personal" })).toBeVisible();
+  expect(mock.get).toHaveBeenCalledWith("/api/v1/knowledge/space/admin/list", {
+    params: { page: 2, page_size: 200 },
+  });
+
+  const search = sidebar.getByRole("searchbox", { name: "sidebar.search" });
+  fireEvent.change(search, { target: { value: "Later" } });
   await waitFor(() => expect(mock.get).toHaveBeenCalledWith("/api/v1/knowledge/space/admin/list", {
-    params: { page: 1, page_size: 20, keyword: "Repo" },
+    params: { page: 1, page_size: 200, keyword: "Later" },
   }));
-  expect(screen.queryByRole("complementary")).toBeNull();
-  expect(screen.queryByTestId("files")).toBeNull();
-  expect(mock.get.mock.calls.every(([url]) => String(url).endsWith("/admin/list"))).toBe(true);
-  expect(screen.queryByRole("button", { name: "f118.create_space" })).toBeNull();
+  await waitFor(() => expect(sidebar.queryByRole("button", { name: "Department reports" })).toBeNull());
+  expect(await sidebar.findByRole("button", { name: "Later personal" })).toBeVisible();
+  expect(screen.getByTestId("files")).toBe(files);
+  expect(screen.getByTestId("location").textContent).toBe("/filelib/8?view=admin");
+  fireEvent.change(search, { target: { value: "" } });
+  expect(await sidebar.findByRole("button", { name: "Department reports" })).toBeVisible();
+  expect(mock.get.mock.calls.some(([url]) => /\/(?:mine|joined|department)$/.test(url) || url.endsWith("/space/list"))).toBe(false);
 });
 
-it("returns old management file and folder links to the list and keeps ordinary file browsing", async () => {
-  mount("/filelib/7?view=admin&parent_id=9&file_id=21");
-  expect(await screen.findByText("Reports")).toBeVisible();
-  expect(screen.getByTestId("location")).toHaveTextContent(/^\/filelib\?view=admin$/);
-  expect(mock.get.mock.calls.every(([url]) => String(url).endsWith("/admin/list"))).toBe(true);
+it("opens management folder and file links with their original scope and filters", async () => {
+  const directory = "/filelib/7?view=admin&parent_id=9&fileStatus=abnormal&keep=1";
+  mount(`${directory}&file_id=21`);
+  const file = await screen.findByTestId("file-detail");
+  expect(file).toHaveTextContent('"spaceId":7,"fileId":21');
+  expect(file).toHaveTextContent('"view":"admin"');
+  expect(screen.getByTestId("location").textContent).toBe(`${directory}&file_id=21`);
+  fireEvent.click(screen.getByRole("button", { name: "file-back" }));
+  expect(await screen.findByTestId("files")).toHaveTextContent('"parent":9');
+  expect(screen.getByTestId("files")).toHaveTextContent('"view":"admin"');
+  expect(screen.getByTestId("location").textContent).toBe(directory);
   fireEvent.mouseDown(screen.getByRole("tab", { name: "f118.spaces" }), { button: 0, ctrlKey: false });
-  await waitFor(() => expect(screen.getByTestId("files")).toHaveTextContent('"view":"ordinary"'));
+  expect(await screen.findByTestId("files")).toHaveTextContent('"view":"ordinary"');
   expect(screen.getByTestId("location")).not.toHaveTextContent("view=admin");
 });
 
-it("opens standalone settings from the admin list", async () => {
+it.each(["back", "cancel", "confirm"])("returns from management settings to the same folder on %s", async (action) => {
   mock.permissions.mockResolvedValue({ actions: ["edit", "manage_permission", "delete"] });
-  mount("/filelib?view=admin");
-  const row = (await screen.findByText("Reports")).closest("tr")!;
-  fireEvent.keyDown(within(row).getByRole("button", { name: "more" }), { key: "Enter" });
+  const directory = "/filelib/7?view=admin&parent_id=9&fileStatus=abnormal&keep=1";
+  mount(directory);
+  const header = (await screen.findByRole("navigation", { name: "f118.current_folder" })).closest("header")!;
+  fireEvent.keyDown(await within(header).findByRole("button", { name: "more" }), { key: "Enter" });
   const settings = await screen.findByRole("menuitem", { name: "detail.settings" });
   expect(screen.getByRole("menuitem", { name: "managePermission" })).toBeVisible();
   expect(screen.getByRole("menuitem", { name: "deletion.delete_space" })).toBeVisible();
   fireEvent.click(settings);
   expect(await screen.findByText("settings-editor")).toBeVisible();
-  expect(screen.getByTestId("location").textContent).toBe("/filelib/7/settings?view=admin");
+  expect(screen.getByTestId("location").textContent).toBe("/filelib/7/settings?view=admin&parent_id=9&fileStatus=abnormal&keep=1");
   expect(screen.getByTestId("settings-scope")).toHaveTextContent('"view":"admin"');
   expect(screen.queryByRole("tab", { name: "f118.manage_spaces" })).toBeNull();
   expect(screen.queryByTestId("files")).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "back" }));
-  expect(await screen.findByRole("table", { name: "f118.manage_spaces" })).toBeVisible();
-  expect(screen.getByTestId("location").textContent).toBe("/filelib?view=admin");
+  fireEvent.click(screen.getByRole("button", { name: action }));
+  expect(await screen.findByTestId("files")).toHaveTextContent('"view":"admin"');
+  expect(screen.getByTestId("files")).toHaveTextContent('"parent":9');
+  expect(screen.getByTestId("location").textContent).toBe(directory);
 });
 
-it("opens metadata over the current admin list and keeps its search and focus on close", async () => {
+it("opens metadata over the managed files and keeps sidebar search and focus on close", async () => {
   mock.permissions.mockResolvedValue({ actions: ["edit"] });
   mount("/filelib?view=admin");
-  const table = await screen.findByRole("table", { name: "f118.manage_spaces" });
-  const search = screen.getByRole("searchbox", { name: "sidebar.search" });
+  const files = await screen.findByTestId("files");
+  const search = within(screen.getByRole("complementary")).getByRole("searchbox", { name: "sidebar.search" });
   fireEvent.change(search, { target: { value: "Repo" } });
-  const row = (await within(table).findByText("Reports")).closest("tr")!;
-  const more = within(row).getByRole("button", { name: "more" });
+  const header = (await screen.findByRole("heading", { name: "Reports" })).closest("header")!;
+  const more = await within(header).findByRole("button", { name: "more" });
   fireEvent.keyDown(more, { key: "Enter" });
   fireEvent.click(await screen.findByRole("menuitem", { name: "detail.metadata" }));
   const metadata = await screen.findByRole("dialog", { name: "metaData" });
   expect(await within(metadata).findByText("document_id")).toBeVisible();
-  expect(table).toBeVisible();
+  expect(files).toBeVisible();
   expect(search).toHaveValue("Repo");
-  expect(screen.getByTestId("location").textContent).toBe("/filelib?view=admin");
+  expect(screen.getByTestId("location").textContent).toBe("/filelib/7?view=admin");
   fireEvent.click(within(metadata).getByRole("button", { name: /^close$/i }));
   await waitFor(() => expect(more).toHaveFocus());
-  expect(screen.getByRole("table", { name: "f118.manage_spaces" })).toBe(table);
+  expect(screen.getByTestId("files")).toBe(files);
   expect(search).toHaveValue("Repo");
-  expect(screen.getByTestId("location").textContent).toBe("/filelib?view=admin");
+  expect(screen.getByTestId("location").textContent).toBe("/filelib/7?view=admin");
 });
 
 it("waits for earlier navigation groups before selecting the first space", async () => {
@@ -338,6 +526,21 @@ it("advances a child-only visible-space cursor without showing a space list", as
 });
 
 
+it("leaves a deleted space instead of reopening it and reporting that it is missing", async () => {
+  const read = mock.get.getMockImplementation()!;
+  mock.get.mockImplementation(async (url: string, options?: unknown) => {
+    if (String(url).endsWith("/info")) throw Object.assign(new Error("missing"), { status_code: 18000 });
+    if (String(url).endsWith("/space/list")) return { data: [], has_more: false, next_cursor: null };
+    return read(url, options);
+  });
+  mount("/filelib/7");
+  await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/filelib"));
+  await waitFor(() => expect(mock.get.mock.calls.some(([url]) => String(url).endsWith("/space/list"))).toBe(true));
+  expect(screen.getByTestId("location").textContent).toBe("/filelib");
+  expect(screen.queryByTestId("files")).toBeNull();
+  expect(showApiError).not.toHaveBeenCalled();
+});
+
 it("does not let a late initial space redirect a user away from QA", async () => {
   let finish!: (value: object[]) => void;
   const delayed = new Promise<object[]>((resolve) => { finish = resolve; });
@@ -366,6 +569,20 @@ it.each([
 it("waits for a concrete management scope before reading spaces", () => {
   mock.scope.mockReturnValue({ scopes: undefined, canManage: true, isLoading: true, retry: vi.fn() });
   mount("/filelib?view=admin");
-  expect(screen.getByText("f118.loading_space")).toBeVisible();
+  expect(screen.getByRole("status", { name: "f118.loading_space" })).toBeVisible();
+  expect(screen.queryByText("f118.scope_unavailable")).not.toBeInTheDocument();
   expect(mock.get).not.toHaveBeenCalled();
+});
+
+it("shows an illustrated error and keeps retry available when settings cannot determine the scope", () => {
+  const retry = vi.fn().mockResolvedValue(undefined);
+  mock.scope.mockReturnValue({ scopes: null, canManage: true, isLoading: false, retry });
+  const { container } = mount("/filelib/7/settings?parent_id=9");
+
+  expect(screen.getByText("f118.scope_unavailable")).toHaveAttribute("role", "status");
+  expect(container.querySelector("main [aria-hidden=true] svg.brand-illustration")).toBeVisible();
+  expect(screen.getByRole("button", { name: "cancel" })).toBeVisible();
+  expect(mock.get).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "retry" }));
+  expect(retry).toHaveBeenCalledTimes(1);
 });

@@ -6,7 +6,7 @@ from bisheng.knowledge.domain.schemas.knowledge_batch import BatchInspection
 from bisheng.knowledge.domain.schemas.processing_job import OperationInvalidItem, OperationItem
 
 
-def classify(scope, command, allowed):
+def classify(scope, command, allowed, *, visible, tag_creation_denied=False):
     rows = {row["id"]: row for row in scope["files"]}
     valid, invalid, physical, positions = [], [], {}, []
     for index, item in enumerate(command.items):
@@ -47,12 +47,14 @@ def classify(scope, command, allowed):
         needed = {child["id"] for child in chosen} | {item.id}
         if reason is None and not needed <= allowed:
             reason = "no_permission"
+        if reason is None and command.operation == "tag" and tag_creation_denied:
+            reason = "space_tag_permission_required"
         if reason:
             invalid.append(
                 OperationInvalidItem(
                     id=item.id,
                     type=item.type,
-                    name=row["file_name"] if row and item.id in allowed else None,
+                    name=row["file_name"] if row and item.id in visible else None,
                     reason=reason,
                 )
             )

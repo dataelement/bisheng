@@ -19,6 +19,7 @@ from bisheng.knowledge.domain.repositories.move_batch_repository import MoveBatc
 from bisheng.knowledge.domain.repositories.move_row_repository import MoveRowRepository
 from bisheng.knowledge.domain.repositories.operation_plan_repository import _digest
 from bisheng.knowledge.domain.schemas.move_processing import DOC_FIELDS, ROOT_FIELDS, MoveRoot, move_path_ids
+from bisheng.knowledge.domain.schemas.processing_diagnostics import file_processing_conflict, space_processing_conflict
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 
 
@@ -96,7 +97,9 @@ class SpaceCopyRepository(MoveRowRepository):
     async def aload_scope(self, session, space_id, *, lock=False):
         source = await self.aroot(session, space_id, lock=lock)
         if source.state != 1 or source.model_transition is not None:
-            raise KnowledgeProcessingConflictError(reason="copy_source_processing")
+            raise space_processing_conflict(
+                "copy_source_processing", state=source.state, has_transition=bool(source.model_transition)
+            )
         files = await self._rows(
             session, File, tuple(File.__table__.c.keys()), File.knowledge_id == space_id, lock=lock
         )
@@ -121,8 +124,9 @@ class SpaceCopyRepository(MoveRowRepository):
             if docs:
                 raise KnowledgeOperationPlanChangedError()
             versions = ()
-        if any(row["file_type"] == 1 and row["status"] in {1, 4, 5} for row in files):
-            raise KnowledgeProcessingConflictError(reason="copy_source_file_processing")
+        for row in files:
+            if row["file_type"] == 1 and row["status"] in {1, 4, 5}:
+                raise file_processing_conflict("copy_source_file_processing", row["status"])
         with session.no_autoflush, strict_tenant_filter():
             tags = (
                 (
@@ -309,15 +313,10 @@ class SpaceCopyRepository(MoveRowRepository):
             raise KnowledgeOperationPlanChangedError()
         return source, target, found[source_file_id], found[target_file_id]
 
-    async def aassert_item(self, session, snapshot):
-        source, destination, before, copied = await self.aitem_facts(
-            session,
-            source_id=snapshot["source"]["id"],
-            target_id=snapshot["destination"]["id"],
-            source_file_id=snapshot["source_file"]["id"],
-            target_file_id=snapshot["target_file"]["id"],
-        )
-        root_fields = (
+    async def aassert_target(self, session, snapshot):
+        destination = await self.aroot(session, snapshot["destination"]["id"], lock=True)
+        expected = snapshot["destination"]
+        fields = (
             "id",
             "tenant_id",
             "user_id",
@@ -325,36 +324,134 @@ class SpaceCopyRepository(MoveRowRepository):
             "model",
             "model_config_revision",
             "index_generation",
-            "metadata_fields",
-            "metadata_schema_revision",
             "index_name",
             "collection_name",
             "model_transition",
         )
-        for current, expected in ((source, snapshot["source"]), (destination, snapshot["destination"])):
-            actual = root_facts(current)
-            if any(actual[key] != expected[key] for key in root_fields):
-                raise KnowledgeOperationPlanChangedError()
-        if source.state != 1 or destination.state != 2 or before != snapshot["source_file"]:
-            raise KnowledgeOperationPlanChangedError()
+        if destination.state not in {1, 2} or any(root_facts(destination)[key] != expected[key] for key in fields):
+            raise KnowledgeOperationPlanChangedError(reason="copy_target_changed")
+        # A newly added empty schema field does not alter this input.
+        schema = {row["field_name"]: row for row in destination.metadata_fields or []}
+        if any(schema.get(row["field_name"]) != row for row in expected.get("metadata_fields") or []):
+            raise KnowledgeOperationPlanChangedError(reason="copy_target_changed")
+        rows = await self._by_ids(session, File, tuple(File.__table__.c.keys()), (snapshot["target_file"]["id"],))
+        if len(rows) != 1:
+            raise KnowledgeOperationPlanChangedError(reason="copy_target_changed")
+        copied = File(**rows[0]).model_dump(mode="json")
         ignored = {"status", "update_time", "create_time", "updater_id"}
-        if any(copied[key] != value for key, value in snapshot["target_file"].items() if key not in ignored):
-            raise KnowledgeOperationPlanChangedError()
-        for name in ("source_version", "target_version"):
-            expected = snapshot[name]
-            rows = await self._by_ids(session, Version, tuple(Version.__table__.c.keys()), (expected["id"],))
-            if len(rows) != 1 or any(rows[0][key] != value for key, value in expected.items()):
-                raise KnowledgeOperationPlanChangedError()
-            docs = await self._by_ids(session, Document, DOC_FIELDS, (expected["document_id"],))
-            root = source if name == "source_version" else destination
-            if len(docs) != 1 or docs[0]["knowledge_id"] != root.id:
-                raise KnowledgeOperationPlanChangedError()
-        return source, destination
+        if copied["status"] not in {3, 5} or any(
+            copied[key] != value for key, value in snapshot["target_file"].items() if key not in ignored
+        ):
+            raise KnowledgeOperationPlanChangedError(reason="copy_target_changed")
+        version = snapshot["target_version"]
+        rows = await self._by_ids(session, Version, tuple(Version.__table__.c.keys()), (version["id"],))
+        docs = await self._by_ids(session, Document, DOC_FIELDS, (version["document_id"],))
+        if (
+            len(rows) != 1
+            or any(rows[0][key] != value for key, value in version.items())
+            or len(docs) != 1
+            or docs[0]["knowledge_id"] != destination.id
+        ):
+            raise KnowledgeOperationPlanChangedError(reason="copy_target_changed")
+        return destination
 
-    async def acomplete_file(self, session, *, file_id, target_id, succeeded, user_metadata=None):
+    async def aassert_source(self, session, snapshot):
+        source = await self.aroot(session, snapshot["source"]["id"])
+        rows = await self._by_ids(session, File, tuple(File.__table__.c.keys()), (snapshot["source_file"]["id"],))
+        if len(rows) != 1 or source.state != 1 or source.model_transition is not None:
+            raise KnowledgeOperationPlanChangedError(reason="copy_source_file_changed")
+        before = File(**rows[0]).model_dump(mode="json")
+        fields = (
+            "id",
+            "tenant_id",
+            "knowledge_id",
+            "file_type",
+            "file_source",
+            "object_name",
+            "md5",
+            "file_size",
+            "user_metadata",
+            "split_rule",
+            "preview_file_object_name",
+            "bbox_object_name",
+        )
+        if before["status"] != snapshot["source_file"]["status"] or any(
+            before[key] != snapshot["source_file"][key] for key in fields
+        ):
+            raise KnowledgeOperationPlanChangedError(reason="copy_source_file_changed")
+        version = snapshot["source_version"]
+        rows = await self._by_ids(session, Version, tuple(Version.__table__.c.keys()), (version["id"],))
+        # Primary designation/name/location can change without changing bytes.
+        fields = ("id", "document_id", "knowledge_file_id", "version_no")
+        if len(rows) != 1 or any(rows[0][key] != version[key] for key in fields):
+            raise KnowledgeOperationPlanChangedError(reason="copy_source_file_changed")
+        return source
+
+    async def aassert_item(self, session, snapshot):
+        return await self.aassert_source(session, snapshot), await self.aassert_target(session, snapshot)
+
+    async def acurrent_source(self, session, snapshot):
+        source = await self.aroot(session, snapshot["source"]["id"])
+        docs = await self._by_ids(session, Document, DOC_FIELDS, (snapshot["source_version"]["document_id"],))
+        if source.state != 1 or source.model_transition or len(docs) != 1 or docs[0]["knowledge_id"] != source.id:
+            raise KnowledgeOperationPlanChangedError(reason="copy_source_file_changed")
+        rows = await self._by_ids(session, Version, tuple(Version.__table__.c.keys()), (docs[0]["primary_version_id"],))
+        if len(rows) != 1:
+            raise KnowledgeOperationPlanChangedError(reason="copy_source_file_changed")
+        version = rows[0]
+        files = await self._by_ids(session, File, tuple(File.__table__.c.keys()), (version["knowledge_file_id"],))
+        if len(files) != 1 or files[0]["knowledge_id"] != source.id or files[0]["status"] not in {2, 3, 6, 7}:
+            raise KnowledgeOperationPlanChangedError(reason="copy_source_file_changed")
+        return {
+            "source": root_facts(source),
+            "source_file": File(**files[0]).model_dump(mode="json"),
+            "source_version": {
+                key: version[key] for key in ("id", "document_id", "knowledge_file_id", "version_no", "is_primary")
+            },
+        }
+
+    async def afreshen_target(self, session, snapshot, source):
+        await self.aassert_target(session, snapshot)
+        if await self.acurrent_source(session, snapshot) != source:
+            raise KnowledgeOperationPlanChangedError(reason="copy_source_file_changed")
+        with strict_tenant_filter():
+            row = (
+                await session.execute(select(File).where(File.id == snapshot["target_file"]["id"]).with_for_update())
+            ).scalar_one()
+        for name in (
+            "file_name",
+            "file_source",
+            "md5",
+            "file_size",
+            "user_metadata",
+            "split_rule",
+            "file_encoding",
+            "abstract",
+        ):
+            setattr(row, name, deepcopy(source["source_file"][name]))
+        if row.split_rule:
+            rule = json.loads(row.split_rule)
+            if "knowledge_id" in rule:
+                rule["knowledge_id"] = row.knowledge_id
+            row.split_rule = json.dumps(rule, ensure_ascii=False)
+        for name, value in object_names(source["source_file"], row.knowledge_id, row.id).items():
+            setattr(row, name, value)
+        row.status = 5
+        await session.flush()
+        return {
+            **deepcopy(snapshot),
+            **source,
+            "target_file": row.model_dump(mode="json", exclude={"create_time", "update_time"}),
+        }
+
+    async def acomplete_file(self, session, *, file_id, target_id, succeeded, user_metadata=None, original_status=2):
         from sqlalchemy import update
 
-        values = {"status": 2 if succeeded else 3}
+        values = {
+            "status": (2 if original_status == 2 else original_status if original_status in {3, 6, 7} else 3)
+            if succeeded
+            else 3
+        }
         if user_metadata is not None:
             values["user_metadata"] = user_metadata
         with session.no_autoflush, strict_tenant_filter():

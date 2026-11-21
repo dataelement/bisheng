@@ -75,6 +75,13 @@ class KnowledgeModelReadRuntime:
             row["index_generation"],
         )
 
+    @staticmethod
+    def _executable(read):
+        return read.snapshot.invalid_reason is None and all(fact.is_valid for fact in read.target_states)
+
+    def _request(self, knowledge_id, purpose):
+        return SourceReadRequest(SourceType.KNOWLEDGE, str(knowledge_id), "current", purpose=purpose)
+
     def require(
         self,
         knowledge_id,
@@ -98,13 +105,47 @@ class KnowledgeModelReadRuntime:
                     expected_index_generation=expected_index_generation,
                 )
         identity = self.identity_port.issue(session, knowledge_id, login_user=login_user)
-        scope = self.core.verifier.issue_scope(
-            session, SourceReadRequest(SourceType.KNOWLEDGE, str(knowledge_id), "current"), identity
-        )
+        scope = self.core.verifier.issue_scope(session, self._request(knowledge_id, "execute"), identity)
         read = self.core.require_source_valid(session, scope, identity)
         return self._result(
             read, slot_key, expected_operation_id, expected_model_config_revision, expected_index_generation
         )
+
+    def inspect(
+        self,
+        knowledge_id,
+        login_user=None,
+        session=None,
+        slot_key="model",
+        *,
+        expected_operation_id=None,
+        expected_model_config_revision=None,
+        expected_index_generation=None,
+    ):
+        """Read the saved model slot without requiring it to be executable.
+
+        Stored chunk browsing and a segmentation precheck need the current
+        index and revision. A recorded missing or cross-tenant model still
+        fails closed when something actually embeds or publishes.
+        """
+        if session is None:
+            with get_sync_db_session() as active:
+                return self.inspect(
+                    knowledge_id,
+                    login_user,
+                    active,
+                    slot_key,
+                    expected_operation_id=expected_operation_id,
+                    expected_model_config_revision=expected_model_config_revision,
+                    expected_index_generation=expected_index_generation,
+                )
+        identity = self.identity_port.issue(session, knowledge_id, login_user=login_user)
+        scope = self.core.verifier.issue_scope(session, self._request(knowledge_id, "inspect"), identity)
+        read = self.core.inspect_source(session, scope, identity)
+        admitted = self._result(
+            read, slot_key, expected_operation_id, expected_model_config_revision, expected_index_generation
+        )
+        return admitted, self._executable(read)
 
     async def arequire(
         self,
@@ -129,13 +170,41 @@ class KnowledgeModelReadRuntime:
                     expected_index_generation=expected_index_generation,
                 )
         identity = await self.identity_port.aissue(session, knowledge_id, login_user=login_user)
-        scope = await self.core.verifier.aissue_scope(
-            session, SourceReadRequest(SourceType.KNOWLEDGE, str(knowledge_id), "current"), identity
-        )
+        scope = await self.core.verifier.aissue_scope(session, self._request(knowledge_id, "execute"), identity)
         read = await self.core.arequire_source_valid(session, scope, identity)
         return self._result(
             read, slot_key, expected_operation_id, expected_model_config_revision, expected_index_generation
         )
+
+    async def ainspect(
+        self,
+        knowledge_id,
+        login_user=None,
+        session=None,
+        slot_key="model",
+        *,
+        expected_operation_id=None,
+        expected_model_config_revision=None,
+        expected_index_generation=None,
+    ):
+        if session is None:
+            async with get_async_db_session() as active:
+                return await self.ainspect(
+                    knowledge_id,
+                    login_user,
+                    active,
+                    slot_key,
+                    expected_operation_id=expected_operation_id,
+                    expected_model_config_revision=expected_model_config_revision,
+                    expected_index_generation=expected_index_generation,
+                )
+        identity = await self.identity_port.aissue(session, knowledge_id, login_user=login_user)
+        scope = await self.core.verifier.aissue_scope(session, self._request(knowledge_id, "inspect"), identity)
+        read = await self.core.ainspect_source(session, scope, identity)
+        admitted = self._result(
+            read, slot_key, expected_operation_id, expected_model_config_revision, expected_index_generation
+        )
+        return admitted, self._executable(read)
 
 
 _runtime: KnowledgeModelReadRuntime | None = None

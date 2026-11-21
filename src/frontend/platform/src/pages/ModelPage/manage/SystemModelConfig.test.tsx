@@ -17,6 +17,7 @@ vi.mock('./tabs/KnowledgeModel', () => ({ KnowledgeModel: () => <div>knowledge s
 vi.mock('./tabs/AssisModel', () => ({ default: () => <div>assistant settings</div> }))
 vi.mock('./tabs/EvaluationModel', () => ({ default: () => <div>evaluation settings</div> }))
 vi.mock('./tabs/WorkflowModel', () => ({ default: () => <div>workflow settings</div> }))
+vi.mock('./SystemModelDiagnostics', () => ({ SystemModelDiagnostics: () => null }))
 afterEach(() => { cleanup(); vi.clearAllMocks() })
 
 describe('system model settings navigation', () => {

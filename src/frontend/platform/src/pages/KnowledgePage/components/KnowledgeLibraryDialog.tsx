@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button, notification, toast } from "@bisheng/ui";
 import {
   useQuery,
@@ -15,6 +16,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { Dialog } from "@/components/bs-ui/dialog";
+import { KnowledgeScopeUnavailable } from "./KnowledgeScopeUnavailable";
 import { SpacePanelFrame } from "./SpacePanelFrame";
 import { SpaceBasicFields, isValidSpaceBasic } from "./SpaceBasicFields";
 import { SpaceSettingsSectionHeader } from "./SpaceSettingsControls";
@@ -383,7 +385,7 @@ export function CreateSpaceForm({
           </Button>
         </div>
       ) : (
-        <p role="status">{t("f118.loading_space")}</p>
+        <LoadingState label={t("f118.loading_space")} className="min-h-32" />
       )}
     </FormFrame>
   );
@@ -498,7 +500,7 @@ function EditSpaceForm({
           </Button>
         </div>
       ) : (
-        <p role="status">{t("f118.loading_space")}</p>
+        <LoadingState label={t("f118.loading_space")} className="min-h-32" />
       )}
     </FormFrame>
   );
@@ -555,7 +557,7 @@ export function KnowledgeLibraryDialog({
             )}
             onCancel={() => onOpenChange(false)}
           >
-            <p role="alert">{t("f118.scope_unavailable")}</p>
+            <KnowledgeScopeUnavailable size="panel" role="alert" />
           </FormFrame>
         ))}
     </Dialog>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button, Tabs, Tooltip, notification } from "@bisheng/ui";
 import {
   Dialog,
@@ -46,6 +46,15 @@ export function DepartmentSettingsDialog({
   );
   const { t, isArchived } = settings;
   const [tab, setTab] = useState("basic");
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [contentHeight, setContentHeight] = useState<string>();
+  const handleTabChange = (nextTab: string) => {
+    if (contentRef.current) {
+      const height = window.getComputedStyle(contentRef.current).height;
+      setContentHeight((current) => current ?? height);
+    }
+    setTab(nextTab);
+  };
   const [saving, setSaving] = useState(false);
   const [partiallySaved, setPartiallySaved] = useState(false);
   const dirty = settings.hasUnsavedSettingsChanges() || traffic.dirty;
@@ -60,8 +69,11 @@ export function DepartmentSettingsDialog({
       return;
     }
     bsConfirm({
-      title: t("prompt"),
+      variant: "destructive",
+      title: t("bs:organization.discardChangesTitle"),
       desc: t("bs:organization.discardChanges"),
+      canelTxt: t("bs:organization.keepEditing"),
+      okTxt: t("bs:organization.discardChangesAction"),
       onOk(next) {
         finishLeave();
         next();
@@ -69,16 +81,26 @@ export function DepartmentSettingsDialog({
     });
   };
   const handleSave = async () => {
+    const invalidInput = contentRef.current?.querySelector<HTMLInputElement>("input:invalid");
+    if (invalidInput) {
+      handleTabChange("traffic");
+      window.requestAnimationFrame(() => {
+        if (!invalidInput.isConnected) return;
+        invalidInput.focus();
+        invalidInput.reportValidity();
+      });
+      return;
+    }
     setSaving(true);
     let basicsSaved = false;
     try {
       if (!(await settings.handleGlobalSave(true))) {
-        setTab("basic");
+        handleTabChange("basic");
         return;
       }
       basicsSaved = true;
       if (!(await traffic.save())) {
-        setTab("traffic");
+        handleTabChange("traffic");
         setPartiallySaved(true);
         return;
       }
@@ -92,7 +114,7 @@ export function DepartmentSettingsDialog({
     } catch (error) {
       if (basicsSaved) {
         setPartiallySaved(true);
-        setTab("traffic");
+        handleTabChange("traffic");
       }
       showApiError(error);
     } finally {
@@ -113,7 +135,9 @@ export function DepartmentSettingsDialog({
       }}
     >
       <DialogContent
-        className="flex max-h-[85vh] flex-col gap-0 sm:max-w-[640px]"
+        ref={contentRef}
+        style={{ height: contentHeight }}
+        className="flex max-h-[85vh] flex-col gap-0"
         onPointerDownOutside={(event) => event.preventDefault()}
       >
         <DialogHeader className="shrink-0 pb-4">
@@ -123,7 +147,7 @@ export function DepartmentSettingsDialog({
         {showTrafficControl && !isArchived && (
           <Tabs
             activeKey={tab}
-            onChange={setTab}
+            onChange={handleTabChange}
             className="mb-4 shrink-0"
             items={[
               { key: "basic", label: t("bs:department.sectionBasic") },
@@ -203,8 +227,10 @@ export function DepartmentSettingsDialog({
                       handleLeave(() => {
                         if (dept.is_tenant_root) {
                           bsConfirm({
+                            variant: "default",
                             title: t("bs:tenant.unmountTitle"),
                             desc: t("bs:tenant.unmountConfirm"),
+                            okTxt: t("bs:tenant.unmountOk"),
                             onOk: async (next) => {
                               await unmountTenantApi(dept.id);
                               onChanged();
@@ -254,10 +280,11 @@ export function DepartmentSettingsDialog({
             </Button>
             {!isArchived && (
               <Button
+                loading={saving}
                 disabled={saving || settings.loading || traffic.loading}
                 onClick={() => void handleSave()}
               >
-                {t(saving ? "loading" : "save")}
+                {t("save")}
               </Button>
             )}
           </div>

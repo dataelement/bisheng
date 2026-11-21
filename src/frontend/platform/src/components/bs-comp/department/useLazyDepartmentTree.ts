@@ -4,6 +4,7 @@ import {
   getDepartmentPathTreeApi,
   searchDepartmentsApi,
 } from "@/controllers/API/department"
+import { managementRequestScope } from "@/controllers/managementScope"
 import { showApiError } from "@/controllers/request"
 import { DepartmentSearchResult, DepartmentTreeNode } from "@/types/api/department"
 import { useCallback, useEffect, useRef, useState, type InputHTMLAttributes } from "react"
@@ -108,7 +109,15 @@ export function useLazyDepartmentTree(
 ): LazyDepartmentTree {
   const { includeArchived = false, autoLoad = true, autoExpandRoots = false, excludeSubtreePath } = options
   const queryClient = useQueryClient()
-  const cacheKey = options.cacheKey ?? `dept:${includeArchived}`
+  const [managementTenant, setManagementTenant] = useState<number | null>(() => managementRequestScope())
+  useEffect(() => {
+    const syncTenant = () => setManagementTenant(managementRequestScope())
+    window.addEventListener("bisheng:management-scope-changed", syncTenant)
+    return () => window.removeEventListener("bisheng:management-scope-changed", syncTenant)
+  }, [])
+  // The department APIs follow the selected management view. A shared cache key
+  // would keep showing the previous tenant's departments after switching to Root.
+  const cacheKey = options.cacheKey ?? `dept:${includeArchived}:${managementTenant ?? "home"}`
 
   // Effective data source, kept in a ref so the fetch callbacks stay stable even
   // if the caller passes inline (non-memoized) fetchers. Defaults to the platform

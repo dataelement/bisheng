@@ -25,6 +25,19 @@ def storage():
     client = MagicMock()
     client.bucket = "bisheng"
     client.tmp_bucket = "bisheng-tmp"
+    from datetime import UTC, datetime, timedelta
+    from types import SimpleNamespace
+
+    from minio import Minio
+
+    client.minio_config = SimpleNamespace(access_key="fixture-access", secret_key="fixture-secret")
+    client.get_minio_share_host.return_value = "https://storage.invalid"
+    signer = Minio(
+        "storage.invalid", access_key="fixture-access", secret_key="fixture-secret", secure=True, region="us-east-1"
+    )
+    client.signed = lambda key: signer.get_presigned_url(
+        "GET", client.tmp_bucket, key, expires=timedelta(minutes=5), request_date=datetime.now(UTC)
+    )
     client.copy_object = AsyncMock()
     with patch("bisheng.core.storage.chat_attachment.get_minio_storage", AsyncMock(return_value=client)):
         yield client
@@ -33,7 +46,7 @@ def storage():
 class TestPromoteChatAttachments:
     async def test_copies_temp_object_and_records_permanent_name(self, storage):
         # AC-01 — after this the file no longer depends on the temp bucket.
-        files = [{"file_id": "f1", "filename": "a.png", "filepath": "/bisheng-tmp/abc.png"}]
+        files = [{"file_id": "f1", "filename": "a.png", "filepath": storage.signed("abc.png")}]
 
         promoted = await promote_chat_attachments(files, user_id=7)
 
@@ -58,8 +71,8 @@ class TestPromoteChatAttachments:
         # Sending the message matters more than any single attachment.
         storage.copy_object.side_effect = [Exception("gone"), None]
         files = [
-            {"file_id": "f1", "filename": "a.png", "filepath": "/bisheng-tmp/a.png"},
-            {"file_id": "f2", "filename": "b.png", "filepath": "/bisheng-tmp/b.png"},
+            {"file_id": "f1", "filename": "a.png", "filepath": storage.signed("a.png")},
+            {"file_id": "f2", "filename": "b.png", "filepath": storage.signed("b.png")},
         ]
 
         promoted = await promote_chat_attachments(files, user_id=7)
@@ -70,7 +83,7 @@ class TestPromoteChatAttachments:
     async def test_workflow_chat_names_the_link_file_url(self, storage):
         # Each upload path spells the link field differently; workflow chat says
         # file_url, and reading only `filepath` silently promoted nothing.
-        files = [{"file_id": "f1", "file_name": "a.png", "file_url": "/bisheng-tmp/abc.png"}]
+        files = [{"file_id": "f1", "file_name": "a.png", "file_url": storage.signed("abc.png")}]
 
         promoted = await promote_chat_attachments(files, user_id=7)
 
@@ -78,7 +91,7 @@ class TestPromoteChatAttachments:
         assert promoted[0]["object_name"].startswith(f"{CHAT_OBJECT_PREFIX}7/")
 
     async def test_extension_is_carried_over_from_the_display_name(self, storage):
-        files = [{"file_id": "f1", "filename": "报告.PDF", "filepath": "/bisheng-tmp/xyz.pdf"}]
+        files = [{"file_id": "f1", "filename": "报告.PDF", "filepath": storage.signed("xyz.pdf")}]
 
         promoted = await promote_chat_attachments(files, user_id=7)
 
@@ -89,11 +102,11 @@ class TestPromoteChatAttachments:
         assert await promote_chat_attachments(None, user_id=7) == []
         storage.copy_object.assert_not_awaited()
 
-    async def test_unreachable_storage_does_not_block_the_message(self):
+    async def test_unreachable_storage_does_not_block_the_message(self, storage):
         # Sending must survive a storage outage: the worst outcome allowed here
         # is an attachment that can't be viewed later, never a message the user
         # cannot send at all.
-        files = [{"file_id": "f1", "filename": "a.png", "filepath": "/bisheng-tmp/a.png"}]
+        files = [{"file_id": "f1", "filename": "a.png", "filepath": storage.signed("a.png")}]
         with patch(
             "bisheng.core.storage.chat_attachment.get_minio_storage",
             AsyncMock(side_effect=RuntimeError("minio down")),

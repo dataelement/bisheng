@@ -1,9 +1,20 @@
-import { Button, Checkbox, Dropdown, DropdownItem, DropdownSeparator, Tag } from "@bisheng/ui";
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
+import {
+  Button,
+  Checkbox,
+  Dropdown,
+  DropdownItem,
+  DropdownSeparator,
+  Tag,
+  Tooltip,
+} from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
+import { History } from "lucide-react";
 import { useContext, useMemo, useState } from "react";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
 import { FileAbnormalStatusCell } from "./FileAbnormalStatusCell";
 import KnowledgeTagSelect from "./tags/KnowledgeTagSelect";
+import { useSpaceTagPermission } from "../hooks/useSpaceTagPermission";
 import { SpaceRowVersionMenu } from "./SpaceRowVersionMenu";
 import { useTranslation } from "react-i18next";
 import { TableCell, TableRow } from "@/components/bs-ui/table";
@@ -13,7 +24,7 @@ import type { KnowledgeQueryScope } from "@/controllers/hooks/knowledge";
 import { formatStrTime } from "@/util/utils";
 import { StatusIndicator } from "./KnowledgeFileStatus";
 import { SpaceDirectoryIcon } from "./SpaceDirectoryIcon";
-import { SpaceVersionHistorySheet } from "./SpaceVersionHistorySheet";
+import { SpaceSimilarDocumentDialog } from "./SpaceSimilarDocumentDialog";
 import { SPACE_FILE_CHECKBOX_CLASS } from "./spaceFileSelectionStyles";
 
 interface SpaceDirectoryRowProps {
@@ -29,7 +40,6 @@ interface SpaceDirectoryRowProps {
   selected?: boolean;
   onSelect?: (selected: boolean) => void;
   onDelete?: () => void;
-  onReferences?: () => void;
   onMenu: (open: boolean) => void;
   onOpen: () => void;
   onPreview: () => void;
@@ -37,9 +47,13 @@ interface SpaceDirectoryRowProps {
   onMove?: () => void;
   onRetry?: () => void;
   onChanged?: () => Promise<unknown>;
+  onOpenVersionHistory?: () => void;
   canDownload?: boolean;
   onDownload: () => void;
 }
+
+type VersionDialog = "manage" | "similar";
+
 export function SpaceDirectoryRow({
   layout,
   scope,
@@ -53,7 +67,6 @@ export function SpaceDirectoryRow({
   selected,
   onSelect,
   onDelete,
-  onReferences,
   onMenu,
   onOpen,
   onPreview,
@@ -61,6 +74,7 @@ export function SpaceDirectoryRow({
   onMove,
   onRetry,
   onChanged,
+  onOpenVersionHistory,
   canDownload = false,
   onDownload,
 }: SpaceDirectoryRowProps) {
@@ -95,13 +109,30 @@ export function SpaceDirectoryRow({
       item.has_similar,
     ],
   );
-  const [history, setHistory] = useState<{ epoch: typeof epoch; panel: "merge" | "similar" | null } | null>(null);
+  const managementEligible = item.status === 2;
+  const versionEpoch = useMemo(() => ({ epoch, managementEligible }), [epoch, managementEligible]);
+  const [versionDialog, setVersionDialog] = useState<{
+    epoch: typeof versionEpoch;
+    kind: VersionDialog;
+  } | null>(null);
+  const activeVersionDialog = epoch.enabled && versionDialog?.epoch === versionEpoch ? versionDialog.kind : null;
+  const handleOpenVersionDialog = (kind: VersionDialog) => setVersionDialog({ epoch: versionEpoch, kind });
+  const handleVersionDialogOpenChange = (next: boolean) => {
+    if (!next) setVersionDialog(null);
+  };
   const [permission, setPermission] = useState<typeof epoch | null>(null);
   const [tagsEditor, setTagsEditor] = useState<typeof epoch | null>(null);
+  const tagPermission = useSpaceTagPermission(scope, spaceId, tagsEditor === epoch);
   const menuReady = !loading && !error;
   const canRename = menuReady && actions.includes("rename");
-  const canManagePermission = menuReady && actions.includes("manage_permission");
-  const retryable = folder ? item.has_failed_files === true : [3, 6, 7].includes(item.status ?? -1);
+  const canManagePermission =
+    menuReady && actions.includes("manage_permission");
+  const retryable = folder
+    ? item.has_failed_files === true
+    : [3, 6, 7].includes(item.status ?? -1);
+  const rowActionClass = layout === "list"
+    ? `rounded-lg focus-visible:ring-0 focus-visible:ring-offset-0 ${selected ? "hover:bg-white/60" : "hover:bg-btn-fill-2"}`
+    : undefined;
   const selection = (layout || (known && onSelect)) && (
     <Checkbox
       aria-label={`${t("deletion.select")} ${item.file_name}`}
@@ -112,21 +143,54 @@ export function SpaceDirectoryRow({
     />
   );
   const icon = <SpaceDirectoryIcon item={item} layout={layout} />;
-  const similarIndicator = <SpaceRowVersionMenu scope={scope} spaceId={spaceId} item={item} indicator
-    enabled={historyEnabled} onOpen={panel => setHistory({ epoch, panel })} />;
-  const status = folder ? <FileAbnormalStatusCell hasAbnormalFiles={item.has_abnormal_files} /> : (
+  const similarIndicator = (
+    <SpaceRowVersionMenu
+      scope={scope}
+      spaceId={spaceId}
+      item={item}
+      indicator
+      enabled={historyEnabled}
+      onOpen={handleOpenVersionDialog}
+    />
+  );
+  const status = folder ? (
+    <FileAbnormalStatusCell hasAbnormalFiles={item.has_abnormal_files} />
+  ) : (
     <>
-      {typeof item.status === "number" && <StatusIndicator status={item.status} remark={item.remark ?? undefined} workspace={Boolean(layout)} />}
+      {typeof item.status === "number" && (
+        <StatusIndicator
+          status={item.status}
+          remark={item.remark ?? undefined}
+          workspace={Boolean(layout)}
+        />
+      )}
       {similarIndicator}
-      {historyEnabled && item.is_multi_version === true && (item.version_no ?? 0) >= 1 && <Tag size="small">{`V${item.version_no}`}</Tag>}
+      {historyEnabled && item.is_multi_version === true && (item.version_no ?? 0) >= 1 && (
+        <Tag size="small" color={layout ? "brand" : "default"} className={layout ? "shrink-0" : undefined}>
+          {`V${item.version_no}`}
+        </Tag>
+      )}
     </>
   );
   const actionsContent = (
     <>
       {!folder && canDownload && (
-        <Button variant="text" color="default" iconOnly aria-label={t("downloadOriginal")} onClick={onDownload}>
-          <Outlined.Download />
-        </Button>
+        <Tooltip content={t("download", { ns: "bs" })}>
+          <Button
+            variant="text"
+            color="default"
+            size="medium"
+            iconOnly
+            className={rowActionClass}
+            aria-label={t("downloadOriginal")}
+            onClick={onDownload}
+          >
+            <Outlined.Download />
+          </Button>
+        </Tooltip>
+      )}
+      {layout === "list" && !folder && canDownload && known && (
+        <span aria-hidden className="mx-1 h-2 w-px shrink-0 bg-border-base" />
       )}
       {known && (
         <Dropdown
@@ -136,11 +200,8 @@ export function SpaceDirectoryRow({
           menu={
             <>
               {loading && (
-                <DropdownItem
-                  disabled
-                  icon={<Outlined.Loading aria-hidden className="animate-spin motion-reduce:animate-pulse" />}
-                >
-                  {t("loading")}
+                <DropdownItem disabled aria-label={t("loading")}>
+                  <LoadingState size="inline" label={t("loading")} />
                 </DropdownItem>
               )}
               {error && (
@@ -151,39 +212,71 @@ export function SpaceDirectoryRow({
                   {t("retry")}
                 </DropdownItem>
               )}
-              {menuReady && !folder && canDownload && (
-                <DropdownItem icon={<Outlined.Download aria-hidden />} onSelect={onDownload}>{t("downloadOriginal")}</DropdownItem>
-              )}
               {canManagePermission && (
-                <DropdownItem icon={<Outlined.PeopleSafe aria-hidden />} onSelect={() => setPermission(epoch)}>
-                  {t("manage_permission", { ns: "permission" })}
+                <DropdownItem
+                  icon={<Outlined.PeopleSafe aria-hidden />}
+                  onSelect={() => setPermission(epoch)}
+                >
+                  {t("managePermission", { ns: "permission" })}
                 </DropdownItem>
               )}
               {canRename && !folder && (
-                <DropdownItem icon={<Outlined.Tag aria-hidden />} onSelect={() => setTagsEditor(epoch)}>{t("editTag")}</DropdownItem>
-              )}
-              {canRename && (
-                <DropdownItem icon={<Outlined.Edit aria-hidden />} onSelect={onRename}>{t("rename")}</DropdownItem>
-              )}
-              {menuReady && actions.includes("move") && onMove && (
-                <DropdownItem icon={<Outlined.MoveToFolder aria-hidden />} onSelect={onMove}>{t("move.title")}</DropdownItem>
-              )}
-              {canRename && retryable && onRetry && (
-                <DropdownItem icon={<Outlined.Refresh aria-hidden />} onSelect={onRetry}>{t("retry")}</DropdownItem>
-              )}
-              {historyEnabled && menuReady && actions.includes("visible") && item.is_multi_version === true && (
-                <DropdownItem icon={<Outlined.History aria-hidden />} onSelect={() => setHistory({ epoch, panel: null })}>
-                  {t("f118.version_history")}
+                <DropdownItem
+                  icon={<Outlined.Tag aria-hidden />}
+                  onSelect={() => setTagsEditor(epoch)}
+                >
+                  {t("editTag")}
                 </DropdownItem>
               )}
-              <SpaceRowVersionMenu scope={scope} spaceId={spaceId} item={item}
-                enabled={historyEnabled && menuReady && open && actions.includes("visible")}
-                onOpen={panel => setHistory({ epoch, panel })} />
+              {canRename && (
+                <DropdownItem
+                  icon={<Outlined.Edit aria-hidden />}
+                  onSelect={onRename}
+                >
+                  {t("rename")}
+                </DropdownItem>
+              )}
+              {menuReady && actions.includes("move") && onMove && (
+                <DropdownItem
+                  icon={<Outlined.MoveToFolder aria-hidden />}
+                  onSelect={onMove}
+                >
+                  {t("move.title")}
+                </DropdownItem>
+              )}
+              {canRename && retryable && onRetry && (
+                <DropdownItem
+                  icon={<Outlined.Refresh aria-hidden />}
+                  onSelect={onRetry}
+                >
+                  {t("retry")}
+                </DropdownItem>
+              )}
+              <SpaceRowVersionMenu
+                scope={scope}
+                spaceId={spaceId}
+                item={item}
+                enabled={historyEnabled && menuReady && open}
+                onOpen={handleOpenVersionDialog}
+              />
+              {historyEnabled && menuReady && item.is_multi_version === true && onOpenVersionHistory && (
+                <DropdownItem
+                  icon={<History aria-hidden />}
+                  onSelect={onOpenVersionHistory}
+                >
+                  {t("knowledge.version.history.title", { ns: "shared" })}
+                </DropdownItem>
+              )}
               {menuReady && actions.includes("delete") && (
                 <>
-                  <DropdownItem icon={<Outlined.FileSearch aria-hidden />} onSelect={onReferences}>{t("deletion.references")}</DropdownItem>
                   <DropdownSeparator />
-                  <DropdownItem danger icon={<Outlined.Delete aria-hidden />} onSelect={onDelete}>{t("delete")}</DropdownItem>
+                  <DropdownItem
+                    danger
+                    icon={<Outlined.Delete aria-hidden />}
+                    onSelect={onDelete}
+                  >
+                    {t("delete")}
+                  </DropdownItem>
                 </>
               )}
             </>
@@ -192,46 +285,94 @@ export function SpaceDirectoryRow({
           <Button
             variant={layout === "card" ? "outlined" : "text"}
             color="default"
+            size="medium"
             iconOnly
-            className={layout === "card" ? "size-5 rounded-md px-0" : layout ? "rounded-lg" : undefined}
+            className={
+              layout === "card"
+                ? "size-5 rounded-md px-0"
+                : rowActionClass
+            }
             aria-label={`${t("more", { ns: "bs" })} ${item.file_name}`}
           >
-            <Outlined.More className={layout === "card" ? "rotate-90" : undefined} />
+            <Outlined.More
+              className={layout === "card" ? "rotate-90" : undefined}
+            />
           </Button>
         </Dropdown>
       )}
-      {permission === epoch && <PermissionDialog open onOpenChange={next => { if (!next) { setPermission(null); void onChanged?.(); } }}
-        resourceType={folder ? "folder" : "knowledge_file"} resourceId={String(item.id)} resourceName={item.file_name} />}
-      {tagsEditor === epoch && <KnowledgeTagSelect knowledgeId={spaceId} fileIds={[item.id]} initialTags={item.tags}
-        open onOpenChange={next => { if (!next) setTagsEditor(null); }} onUpdate={() => { void onChanged?.(); }} />}
-      <SpaceVersionHistorySheet
-        scope={epoch.scope}
-        spaceId={epoch.spaceId}
-        parentId={epoch.parentId}
-        fileId={epoch.fileId}
-        hasSimilar={
-          item.has_similar === true &&
-          item.is_multi_version !== true &&
-          item.status === 2
-        }
-        open={epoch.enabled && history?.epoch === epoch}
-        initialPanel={history?.epoch === epoch ? history.panel : null}
-        onOpenChange={(next) => {
-          if (!next) setHistory(null);
-        }}
-      />
+      {permission === epoch && (
+        <PermissionDialog
+          open
+          onOpenChange={(next) => {
+            if (!next) {
+              setPermission(null);
+              void onChanged?.();
+            }
+          }}
+          resourceType={folder ? "folder" : "knowledge_file"}
+          resourceId={String(item.id)}
+          resourceName={item.file_name}
+        />
+      )}
+      {tagsEditor === epoch && (
+        <KnowledgeTagSelect
+          spaceTagPermission={tagPermission}
+          isSpace
+          knowledgeId={spaceId}
+          fileIds={[item.id]}
+          initialTags={item.tags}
+          open
+          onOpenChange={(next) => {
+            if (!next) setTagsEditor(null);
+          }}
+          onUpdate={() => {
+            void onChanged?.();
+          }}
+        />
+      )}
+      {activeVersionDialog === "manage" && (
+        <SpaceSimilarDocumentDialog
+          scope={epoch.scope}
+          spaceId={epoch.spaceId}
+          fileId={epoch.fileId}
+          file={{
+            id: item.id,
+            name: item.file_name,
+            version_no: item.version_no,
+            user_name: item.user_name,
+          }}
+          onOpenChange={handleVersionDialogOpenChange}
+        />
+      )}
+      {activeVersionDialog === "similar" && (
+        <SpaceSimilarDocumentDialog
+          scope={epoch.scope}
+          spaceId={epoch.spaceId}
+          restrictToFileIds={[epoch.fileId]}
+          onOpenChange={handleVersionDialogOpenChange}
+        />
+      )}
     </>
   );
   const handleOpen = folder ? onOpen : onPreview;
-  const compactDate = item.update_time ? formatStrTime(item.update_time, "yyyy-MM-dd") : "--";
+  const compactDate = item.update_time
+    ? formatStrTime(item.update_time, "yyyy-MM-dd")
+    : "--";
   const unparsed = !folder && item.status !== 2;
   const nameTone = unparsed ? "text-text-3" : "text-text-1 hover:text-blue-500";
-  const selectedStyle = selected ? { backgroundColor: "rgb(var(--brand-500) / 0.07)" } : undefined;
-  const tags = !folder && item.tags?.length ? (
-    <span className="flex min-w-0 items-center gap-1 overflow-hidden">
-      {item.tags.map((tag) => <span key={tag.id} className="truncate" title={tag.name}>#{tag.name}</span>)}
-    </span>
-  ) : null;
+  const selectedStyle = selected
+    ? { backgroundColor: "rgb(var(--brand-500) / 0.07)" }
+    : undefined;
+  const tags =
+    !folder && item.tags?.length ? (
+      <span className="flex min-w-0 items-center gap-1 overflow-hidden">
+        {item.tags.map((tag) => (
+          <span key={tag.id} className="truncate" title={tag.name}>
+            #{tag.name}
+          </span>
+        ))}
+      </span>
+    ) : null;
   if (layout === "card")
     return (
       <div
@@ -253,10 +394,14 @@ export function SpaceDirectoryRow({
           >
             {selection}
           </span>
-          <span className={`absolute right-2 top-2 z-20 inline-flex items-center transition-opacity ${open ? "" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 coarse-pointer:opacity-100"}`}>
+          <span
+            className={`absolute right-2 top-2 z-20 inline-flex items-center transition-opacity ${open ? "" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 coarse-pointer:opacity-100"}`}
+          >
             {actionsContent}
           </span>
-          <span className="absolute bottom-2.5 left-2.5 z-10 flex items-center gap-1">{status}</span>
+          <span className="absolute bottom-2.5 left-2.5 z-10 flex items-center gap-1">
+            {status}
+          </span>
         </div>
         <div className="flex min-w-0 flex-col gap-1 px-2 py-1.5">
           <button
@@ -266,10 +411,14 @@ export function SpaceDirectoryRow({
             disabled={!known}
             onClick={handleOpen}
           >
-            <span className="line-clamp-2 min-h-10 break-all">{item.file_name}</span>
+            <span className="line-clamp-2 min-h-10 break-all">
+              {item.file_name}
+            </span>
           </button>
           <div className="flex min-h-5 min-w-0 items-center justify-between gap-2">
-            <div className="min-w-0 flex-1 text-caption-sm leading-5 text-text-3">{tags}</div>
+            <div className="min-w-0 flex-1 text-caption-sm leading-5 text-text-3">
+              {tags}
+            </div>
             <span className="shrink-0 text-caption-sm leading-5 text-text-3 tabular-nums">
               {compactDate}
             </span>
@@ -298,19 +447,24 @@ export function SpaceDirectoryRow({
             {item.file_name}
           </button>
           <div className="mt-0.5 flex min-w-0 items-center gap-1.5 overflow-hidden text-[10px] leading-[18px] text-text-3">
-            <span className="shrink-0 tabular-nums">
-              {compactDate}
-            </span>
+            <span className="shrink-0 tabular-nums">{compactDate}</span>
             {tags && (
               <>
-                <span className="h-2.5 w-px shrink-0 bg-border-base" aria-hidden />
-                <span className="min-w-0 text-[#999999] dark:text-text-3">{tags}</span>
+                <span
+                  className="h-2.5 w-px shrink-0 bg-border-base"
+                  aria-hidden
+                />
+                <span className="min-w-0 text-[#999999] dark:text-text-3">
+                  {tags}
+                </span>
               </>
             )}
           </div>
         </div>
         <span className="inline-flex items-center gap-1">{status}</span>
-        <div className="flex min-w-[73px] shrink-0 items-center justify-end">{actionsContent}</div>
+        <div className="flex min-w-[73px] shrink-0 items-center justify-end">
+          {actionsContent}
+        </div>
       </div>
     );
   return (

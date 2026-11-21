@@ -130,6 +130,22 @@ async def read(auth, keys, *, owner=None):
         return result
 
 
+async def test_offline_workflow_disclosure_carries_creation_state(auth):
+    adapter = await module.get_f048_resource_adapter("workflow")
+    seen = []
+    loaded = adapter.batch_check_loaded
+
+    async def capture(*, records, actor, action):
+        seen.extend(records)
+        return await loaded(records=records, actor=actor, action=action)
+
+    adapter.batch_check_loaded = capture
+    result = await read(auth, (source(),))
+    assert result[0].name == "workflow" and result[0].version_label == "v0"
+    assert [row.creation_state for row in seen] == ["READY"]
+    assert seen[0].status == "OFFLINE"
+
+
 async def test_current_visible_and_history_edit_are_distinct_with_duplicates(auth):
     keys = (source(), source("2"), source())
     result = await read(auth, keys)

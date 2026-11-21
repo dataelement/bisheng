@@ -2,6 +2,7 @@ import asyncio
 import json
 import math
 import os
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from datetime import datetime
 from time import perf_counter
@@ -46,7 +47,6 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeNotQAError,
     KnowledgeOperationConfirmationRequiredError,
     KnowledgeOperationPlanConflictError,
-    KnowledgeProcessingConflictError,
     KnowledgeTagExistError,
     KnowledgeTagNotExistError,
     KnowledgeTenantMismatchError,
@@ -58,7 +58,7 @@ from bisheng.common.schemas.api import PageInfiniteCursorData
 from bisheng.common.services.metric_log import emit_metric
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
 from bisheng.core.cache.utils import async_file_download, file_download
-from bisheng.core.context.tenant import get_current_tenant_id
+from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage, get_minio_storage_sync
 from bisheng.database.models.group_resource import (
@@ -85,6 +85,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileDao,
     KnowledgeFileStatus,
     ParseType,
+    QAKnoweldgeDao,
 )
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
@@ -93,6 +94,7 @@ from bisheng.knowledge.domain.schemas.knowledge_schema import (
     AddKnowledgeMetadataFieldsReq,
     UpdateKnowledgeMetadataFieldsReq,
 )
+from bisheng.knowledge.domain.schemas.processing_diagnostics import file_processing_conflict
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
 from bisheng.knowledge.domain.services.knowledge_index_results import require_es_write, require_milvus_write
 from bisheng.knowledge.domain.services.knowledge_metadata_service import KnowledgeMetadataService
@@ -553,7 +555,8 @@ class KnowledgeService(KnowledgeUtils):
         visible_ids: list[int] | None
         fga_elapsed_ms = 0.0
         if is_admin:
-            # Admin bypass: no F048 enumeration, DB filter left unbounded.
+            # Skip F048 enumeration only within the current tenant. The visible
+            # tenant set may also contain Root for explicitly shared resources.
             visible_ids = None
         else:
             fga_started = perf_counter()
@@ -611,16 +614,17 @@ class KnowledgeService(KnowledgeUtils):
             candidate_page = 1
             authorized: list[Knowledge] = []
             while len(authorized) < target_authorized:
-                batch = await KnowledgeDao.aget_all_knowledge(
-                    name,
-                    knowledge_type,
-                    sort_by,
-                    page=candidate_page,
-                    limit=_KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE,
-                    preferred_ids=preferred_ids,
-                    id_in=visible_ids,
-                    has_abnormal=has_abnormal,
-                )
+                with strict_tenant_filter() if is_admin else nullcontext():
+                    batch = await KnowledgeDao.aget_all_knowledge(
+                        name,
+                        knowledge_type,
+                        sort_by,
+                        page=candidate_page,
+                        limit=_KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE,
+                        preferred_ids=preferred_ids,
+                        id_in=visible_ids,
+                        has_abnormal=has_abnormal,
+                    )
                 if not batch:
                     break
                 if needs_action_check:
@@ -639,16 +643,17 @@ class KnowledgeService(KnowledgeUtils):
         else:
             candidate_cursor = list(keyset_cursor) if keyset_cursor else None
             while len(res) < fetch_limit:
-                batch = await KnowledgeDao.aget_all_knowledge(
-                    name,
-                    knowledge_type,
-                    sort_by,
-                    limit=_KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE,
-                    preferred_ids=preferred_ids,
-                    cursor=candidate_cursor,
-                    id_in=visible_ids,
-                    has_abnormal=has_abnormal,
-                )
+                with strict_tenant_filter() if is_admin else nullcontext():
+                    batch = await KnowledgeDao.aget_all_knowledge(
+                        name,
+                        knowledge_type,
+                        sort_by,
+                        limit=_KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE,
+                        preferred_ids=preferred_ids,
+                        cursor=candidate_cursor,
+                        id_in=visible_ids,
+                        has_abnormal=has_abnormal,
+                    )
                 if not batch:
                     break
                 if needs_action_check:
@@ -2500,7 +2505,7 @@ class KnowledgeService(KnowledgeUtils):
         from bisheng.worker.knowledge import file_worker
 
         knowledge_file = KnowledgeFileDao.select_list(file_ids)
-        if not knowledge_file:
+        if not knowledge_file or {file.id for file in knowledge_file} != set(file_ids):
             raise NotFoundError.http_exception()
         db_knowledge = KnowledgeDao.query_by_id(knowledge_file[0].knowledge_id)
         if db_knowledge is None or any(file.knowledge_id != db_knowledge.id for file in knowledge_file):
@@ -2595,6 +2600,101 @@ class KnowledgeService(KnowledgeUtils):
         return db_knowledge
 
     @classmethod
+    def _violation_display_chunks(
+        cls,
+        knowledge_id: int,
+        file_ids: list[int],
+        keyword: str | None,
+        page: int | None,
+        limit: int | None,
+    ):
+        """Return detail-only segments for violation files that have no index rows.
+
+        None means the request is not a violation-file read, so the caller keeps
+        the empty index result. Retrieval never reads this store.
+        """
+        from bisheng.api.services.knowledge_imp import ensure_violation_display_chunks
+        from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
+
+        files = KnowledgeFileDao.get_file_by_ids(file_ids)
+        by_id = {one.id: one for one in files}
+        selected = [by_id.get(file_id) for file_id in file_ids]
+        if any(
+            one is None or one.knowledge_id != knowledge_id or one.status != KnowledgeFileStatus.VIOLATION.value
+            for one in selected
+        ):
+            return None
+        rows = []
+        for one in selected:
+            stored = KnowledgeUtils.load_violation_display_chunks(one.id)
+            if stored is None:
+                ensure_violation_display_chunks(one)
+                stored = KnowledgeUtils.load_violation_display_chunks(one.id) or []
+            for item in stored:
+                text = item.get("text") or ""
+                if keyword and keyword not in text:
+                    continue
+                rows.append(
+                    FileChunk(
+                        text=text,
+                        parse_type=one.parse_type,
+                        metadata=Metadata(
+                            document_id=one.id,
+                            document_name=one.file_name,
+                            knowledge_id=knowledge_id,
+                            chunk_index=item.get("chunk_index") or 0,
+                            bbox=item.get("bbox") or "",
+                            page=item.get("page") or 0,
+                        ),
+                    )
+                )
+        page_size = limit or 10
+        start = max((page or 1) - 1, 0) * page_size
+        return rows[start : start + page_size], len(rows)
+
+    @classmethod
+    def _readable_chunk_file_ids(
+        cls,
+        request: Request,
+        login_user: UserPayload,
+        knowledge,
+        file_ids: list[int] | None,
+    ) -> list[int] | None:
+        """Files whose segment text this caller may read.
+
+        A named file that is hidden, missing, or outside a knowledge space is
+        rejected before any index or violation-text read. An unscoped read is
+        limited to the files this caller can see.
+
+        ``None`` means "the container grant is the whole decision". Only SPACE
+        containers carry the per-file F048 records this filter is built on; a
+        document library created before the unification may have none at all,
+        and filtering it by that empty set would hide text the container grant
+        already covers. Its index is per container too, so leaving the read
+        unscoped cannot reach another library's text.
+        """
+        from bisheng.knowledge.domain.services.knowledge_file_visibility_service import (
+            KnowledgeFileVisibilityService,
+        )
+
+        requested = [int(one) for one in (file_ids or [])]
+        if knowledge.type != KnowledgeTypeEnum.SPACE.value:
+            # A named file still selects which segments to show; it just is not
+            # a permission decision here.
+            return sorted(set(requested)) if requested else None
+        candidates = requested or KnowledgeFileDao.list_document_ids(knowledge.id)
+        if not candidates:
+            return []
+        visible = run_async_safe(
+            KnowledgeFileVisibilityService(request, login_user).post_filter_visible_files(knowledge.id, candidates),
+            timeout=60,
+        )
+        allowed = {int(one) for one in visible}
+        if requested and any(one not in allowed for one in requested):
+            raise UnAuthorizedError.http_exception()
+        return sorted(allowed)
+
+    @classmethod
     def get_knowledge_chunks(
         cls,
         request: Request,
@@ -2610,8 +2710,12 @@ class KnowledgeService(KnowledgeUtils):
             knowledge_id,
             "visible",
         )
+        requested_file_ids = [int(one) for one in (file_ids or [])]
+        readable_file_ids = cls._readable_chunk_file_ids(request, login_user, db_knowledge, requested_file_ids)
+        if readable_file_ids is not None and not readable_file_ids:
+            return [], 0
 
-        es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(db_knowledge)
+        es_client, index_name = KnowledgeRag.open_stored_chunk_index_sync(db_knowledge, login_user=login_user)
 
         search_data = {
             "from": (page - 1) * limit,
@@ -2633,15 +2737,23 @@ class KnowledgeService(KnowledgeUtils):
                 },
             ],
         }
-        if file_ids:
-            search_data["post_filter"] = {"terms": {"metadata.document_id": file_ids}}
+        if readable_file_ids is not None:
+            search_data["post_filter"] = {"terms": {"metadata.document_id": readable_file_ids}}
         if keyword:
             search_data["query"] = {"match_phrase": {"text": keyword}}
         try:
-            res = es_client.client.search(index=db_knowledge.index_name, body=search_data)
+            res = es_client.client.search(index=index_name, body=search_data)
         except Exception as e:
             logger.warning(f"act=get_knowledge_chunks error={e!s}")
             raise KnowledgeChunkError.http_exception()
+
+        # A content-safety rejection never writes the retrieval index. Segments
+        # kept for the detail view live outside that index and are not searchable.
+        if requested_file_ids and res["hits"]["total"]["value"] == 0:
+            scope = requested_file_ids if readable_file_ids is None else readable_file_ids
+            display = cls._violation_display_chunks(knowledge_id, scope, keyword, page, limit)
+            if display is not None:
+                return display
 
         # Query the file information corresponding to the next block
         file_ids = set()
@@ -2652,8 +2764,11 @@ class KnowledgeService(KnowledgeUtils):
         if file_ids:
             file_list = KnowledgeFileDao.get_file_by_ids(list(file_ids))
             file_map = {one.id: one for one in file_list}
+        readable = None if readable_file_ids is None else set(readable_file_ids)
         for one in res["hits"]["hits"]:
             file_id = one["_source"]["metadata"]["document_id"]
+            if readable is not None and int(file_id) not in readable:
+                continue
             file_info = file_map.get(file_id, None)
             # Filter document summary contents of file names and summaries
             result.append(
@@ -2715,7 +2830,7 @@ class KnowledgeService(KnowledgeUtils):
         if file is None or file.knowledge_id != knowledge.id or file.file_type != 1:
             raise NotFoundError.http_exception()
         if file.status in {1, 4, 5}:
-            raise KnowledgeProcessingConflictError(reason="chunk_file_processing")
+            raise file_processing_conflict("chunk_file_processing", file.status)
         if knowledge.type == KnowledgeTypeEnum.SPACE.value:
             anchor = run_async_safe(
                 cls.version_read_repository.aget_anchor(tenant_id=get_current_tenant_id(), file_id=file_id),
@@ -2751,6 +2866,10 @@ class KnowledgeService(KnowledgeUtils):
             "edit",
         )
         db_knowledge = cls._chunk_target(db_knowledge, file_id)
+        run_async_safe(
+            require_business_action(login_user, resource_type="knowledge_file", resource_id=file_id, action="visible"),
+            timeout=60,
+        )
 
         logger.info(f"act=update_vector knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}")
         vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(login_user.user_id, db_knowledge)
@@ -2833,6 +2952,10 @@ class KnowledgeService(KnowledgeUtils):
             "edit",
         )
         db_knowledge = cls._chunk_target(db_knowledge, file_id)
+        run_async_safe(
+            require_business_action(login_user, resource_type="knowledge_file", resource_id=file_id, action="visible"),
+            timeout=60,
+        )
 
         logger.info(f"act=delete_vector knowledge_id={knowledge_id} document_id={file_id} chunk_index={chunk_index}")
         vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(login_user.user_id, db_knowledge)
@@ -3037,6 +3160,15 @@ class KnowledgeService(KnowledgeUtils):
                 state="PENDING_INSPECTION",
             ) from exc
         return target
+
+    @classmethod
+    def judge_qa_batch_write(cls, login_user: UserPayload, qa_ids: list[int]):
+        """Resolve the complete batch and its one authorized vector collection."""
+        rows = QAKnoweldgeDao.select_list(qa_ids)
+        if len({row.knowledge_id for row in rows}) != 1:
+            raise NotFoundError()
+        knowledge = cls.judge_qa_knowledge_write(login_user, rows[0].knowledge_id)
+        return knowledge, rows
 
     @classmethod
     def judge_qa_knowledge_write(cls, login_user: UserPayload, qa_knowledge_id: int) -> Knowledge:

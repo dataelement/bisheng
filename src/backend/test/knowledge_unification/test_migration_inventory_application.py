@@ -407,20 +407,24 @@ async def test_uploaded_content_readback_corruption_blocks_freeze(module, comple
     assert await count_runs(complete.engine) == 0
 
 
-async def test_unreadable_material_manifest_blocks_before_formal_inventory(module, complete, transport):
+async def test_inventory_does_not_require_external_backup_manifest(module, complete, transport):
     del transport.objects[transport.inputs["backup_ref"]["object_key"]]
+    del transport.objects[transport.inputs["schema_ref"]["object_key"]]
+    inputs = {key: value for key, value in transport.inputs.items() if key not in {"backup_ref", "schema_ref"}}
     async with AsyncSession(complete.engine) as session, session.begin():
-        with pytest.raises(ReferenceCoverageNotReadyError):
-            await application(module, transport).arun(session, **transport.inputs)
-    assert await count_runs(complete.engine) == 0
+        result = await application(module, transport).arun(session, **inputs)
+    assert await count_runs(complete.engine) == 3
+    root = json.loads(transport.objects[result.plan_ref["object_key"]])
+    metadata = next(row for row in root["records"] if row["record_type"] == "run")
+    assert metadata["external_material_policy"] == "not_required"
+    assert metadata["backup_ref"] is None and metadata["schema_ref"] is None
 
 
-async def test_schema_material_cannot_be_used_as_backup_evidence(module, complete, transport):
+async def test_partial_legacy_descriptors_are_not_silently_mixed_with_new_policy(module, complete, transport):
     async with AsyncSession(complete.engine) as session, session.begin():
-        with pytest.raises(KnowledgeOperationPlanConflictError):
-            await application(module, transport).arun(
-                session, **(transport.inputs | {"backup_ref": transport.inputs["schema_ref"]})
-            )
+        with pytest.raises(KnowledgeOperationPlanConflictError) as caught:
+            await application(module, transport).arun(session, **(transport.inputs | {"schema_ref": None}))
+    assert caught.value.kwargs["reason"] == "migration_inventory_material_descriptor_pair_required"
     assert await count_runs(complete.engine) == 0
 
 

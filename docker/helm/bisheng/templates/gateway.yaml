@@ -13,6 +13,11 @@ data:
       main: {allow-bean-definition-overriding: true}
       cloud:
         gateway:
+          default-filters: [PreserveHostHeader]
+          x-forwarded:
+            proto-enabled: false
+            host-enabled: false
+            port-enabled: false
           httpclient:
             connect-timeout: 30000
             response-timeout: 3600s

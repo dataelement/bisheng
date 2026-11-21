@@ -16,9 +16,8 @@ they only activate when explicitly requested in function signatures.
 Created by F000-test-infrastructure. Expanded from F001 minimal conftest.
 """
 
-# Explicit, temporary unit-test deployment bootstrap must exist before the
-# pre-mock import chain imports ConfigService during collection. Production
-# startup has no such fallback. Live acceptance uses its own --confcutdir.
+# Provide explicit throwaway deployment credentials before application imports.
+# Production has no default key; tests must not depend on a developer's secrets.
 import json
 import os
 import tempfile
@@ -69,7 +68,7 @@ from test.fixtures.table_definitions import create_all_tables
 
 @pytest.fixture(autouse=True)
 def _credential_keys(tmp_path, monkeypatch):
-    """Explicit, throwaway deployment key for tests; never a product default."""
+    """Give each test a private keyring without changing runtime admission rules."""
     from bisheng.core.config.secret_crypto import get_keyring
 
     path = tmp_path / "deployment-keyring.json"

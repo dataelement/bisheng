@@ -197,7 +197,7 @@ class LLMDao:
             await session.commit()
             await session.refresh(server)
 
-        if operator is not None and share_to_children and server.tenant_id == _ROOT_TENANT_ID:
+        if operator is not None and server.tenant_id == _ROOT_TENANT_ID:
             from bisheng.tenant.domain.services.resource_share_service import (
                 ResourceShareService,
             )
@@ -207,13 +207,13 @@ class LLMDao:
             # the per-request ``share_to_children`` flag — the ModelConfig UI
             # is the source of truth for super admins.
             try:
-                await ResourceShareService.enable_sharing(
-                    "llm_server",
-                    str(server.id),
-                    operator=operator,
+                writer = (
+                    ResourceShareService.enable_sharing if share_to_children else ResourceShareService.disable_sharing
                 )
+                await writer("llm_server", str(server.id), operator=operator)
             except Exception:
-                _LOG.exception("enable_sharing llm_server=%s failed", server.id)
+                _LOG.exception("set_sharing llm_server=%s failed", server.id)
+                raise
 
         return server
 
@@ -255,6 +255,12 @@ class LLMDao:
         from bisheng.common.errcode.knowledge import ResourceReferenceInvalidError
         from bisheng.llm.domain.repositories.model_deletion_repository import ModelDeletionRepository
         from bisheng.llm.domain.repositories.model_provider_operation_repository import ModelProviderOperationRepository
+
+        sharing_snapshot = None
+        if server.tenant_id == _ROOT_TENANT_ID and any(not model.id for model in models):
+            from bisheng.llm.application.model_sharing_lifecycle import prepare_added_provider_models
+
+            sharing_snapshot = await prepare_added_provider_models(server_id=server.id, identity=operator)
 
         async with get_async_db_session() as session:
             await session.begin()
@@ -305,6 +311,17 @@ class LLMDao:
                     await initialize_new_model_visibility(
                         session, add_models, operator.user_id if operator else server.user_id
                     )
+            if add_models and current.tenant_id == _ROOT_TENANT_ID:
+                from bisheng.llm.application.model_sharing_lifecycle import initialize_added_provider_models
+
+                await session.flush()
+                await initialize_added_provider_models(
+                    session,
+                    server_id=current.id,
+                    model_ids=tuple(model.id for model in add_models),
+                    identity=operator,
+                    sharing_snapshot=sharing_snapshot,
+                )
             # Update data for existing models
             for one in update_models:
                 await session.exec(
@@ -447,32 +464,56 @@ class LLMDao:
             return result.all()
 
     @classmethod
-    def update_model_status(cls, model_id: int, status: int, remark: str = ""):
-        """Update model status and stamp when it was decided."""
+    def update_model_status(
+        cls,
+        model_id: int,
+        status: int,
+        remark: str = "",
+        *,
+        tenant_id: int | None = None,
+        server_id: int | None = None,
+    ):
+        """Update model status and stamp when it was decided.
+
+        An explicit tenant/server pair is the verified management scope. It is
+        applied on top of the idle-model lock so a probe cannot stamp another row.
+        """
         from bisheng.llm.domain.repositories.model_provider_write_guard import check_idle_model_write, lock_idle_model
 
         with get_sync_db_session() as session:
             session.begin()
-            tenant, server_id, transaction = lock_idle_model(session, model_id)
+            tenant, locked_server_id, transaction = lock_idle_model(session, model_id)
+            bound_tenant = tenant if tenant_id is None else tenant_id
+            bound_server = locked_server_id if server_id is None else server_id
             session.exec(
                 update(LLMModel)
-                .where(LLMModel.id == model_id, LLMModel.tenant_id == tenant, LLMModel.server_id == server_id)
+                .where(LLMModel.id == model_id, LLMModel.tenant_id == bound_tenant, LLMModel.server_id == bound_server)
                 .values(status=status, remark=remark, status_update_time=datetime.now())
             )
             check_idle_model_write(session, tenant, transaction)
             session.commit()
 
     @classmethod
-    async def aupdate_model_status(cls, model_id: int, status: int, remark: str = ""):
+    async def aupdate_model_status(
+        cls,
+        model_id: int,
+        status: int,
+        remark: str = "",
+        *,
+        tenant_id: int | None = None,
+        server_id: int | None = None,
+    ):
         """Asynchronously update model status and stamp when it was decided."""
         from bisheng.llm.domain.repositories.model_provider_write_guard import alock_idle_model, check_idle_model_write
 
         async with get_async_db_session() as session:
             await session.begin()
-            tenant, server_id, transaction = await alock_idle_model(session, model_id)
+            tenant, locked_server_id, transaction = await alock_idle_model(session, model_id)
+            bound_tenant = tenant if tenant_id is None else tenant_id
+            bound_server = locked_server_id if server_id is None else server_id
             await session.exec(
                 update(LLMModel)
-                .where(LLMModel.id == model_id, LLMModel.tenant_id == tenant, LLMModel.server_id == server_id)
+                .where(LLMModel.id == model_id, LLMModel.tenant_id == bound_tenant, LLMModel.server_id == bound_server)
                 .values(status=status, remark=remark, status_update_time=datetime.now())
             )
             check_idle_model_write(session, tenant, transaction)
@@ -495,16 +536,25 @@ class LLMDao:
             session.commit()
 
     @classmethod
-    async def aupdate_model_online(cls, model_id: int, online: bool):
-        """Asynchronous update model online status"""
+    async def aupdate_model_online(
+        cls,
+        model_id: int,
+        online: bool,
+        *,
+        tenant_id: int | None = None,
+        server_id: int | None = None,
+    ):
+        """Bind a management online write to the verified owner and parent when given."""
         from bisheng.llm.domain.repositories.model_provider_write_guard import alock_idle_model, check_idle_model_write
 
         async with get_async_db_session() as session:
             await session.begin()
-            tenant, server_id, transaction = await alock_idle_model(session, model_id)
+            tenant, locked_server_id, transaction = await alock_idle_model(session, model_id)
+            bound_tenant = tenant if tenant_id is None else tenant_id
+            bound_server = locked_server_id if server_id is None else server_id
             await session.exec(
                 update(LLMModel)
-                .where(LLMModel.id == model_id, LLMModel.tenant_id == tenant, LLMModel.server_id == server_id)
+                .where(LLMModel.id == model_id, LLMModel.tenant_id == bound_tenant, LLMModel.server_id == bound_server)
                 .values(online=online)
             )
             check_idle_model_write(session, tenant, transaction)

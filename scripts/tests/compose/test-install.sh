@@ -68,6 +68,13 @@ BLOCK
   cat >> "${CASE_DIR}/lib/install-env.sh" <<EOF
 credential_store_path() { printf '%s\n' '${CASE_ROOT}/credential-store'; }
 EOF
+  # Real verify needs Linux root, iptables, and a reviewed host CIDR list.
+  # Record the mandatory call, then let the command-boundary checks continue.
+  cat > "${CASE_DIR}/lib/runner-egress.sh" <<'EOF'
+#!/usr/bin/env bash
+printf 'egress\t%s\n' "${1:-}" >> "${INSTALL_TEST_LOG:-/dev/null}"
+[[ "${1:-}" == verify ]]
+EOF
 }
 # Registry/Gateway contract fixtures start from saved deployment metadata.
 # Real no-argument bootstrap and crypto are covered by test_credential_one_command.py.
@@ -94,14 +101,28 @@ gateway() { run_install --gateway --license-file "${CASE_ROOT}/license" --public
 new_case
 run_install --prepare-only
 ok
-cmp "${SCRIPT_DIR}/.env.example" "${CASE_DIR}/.env" || fail 'Default configuration was rewritten'
+[[ "$(env_get "${CASE_DIR}/.env" COMPOSE_PROFILES)" = app-runtime ]] || fail 'Runtime is not enabled by default'
+seen_secrets='|'
+for key in BISHENG_RUNTIME_MANAGER_SECRET BISHENG_RUNTIME_CONTROL_SECRET BISHENG_RUNTIME_ENTRY_SECRET BISHENG_RUNTIME_EGRESS_SECRET BISHENG_APP_PROXY_HMAC_SECRET BISHENG_APP_OBO_SECRET BISHENG_RUNTIME_HOST_ISOLATION_SECRET SANDBOX_TOKEN; do
+  value="$(env_get "${CASE_DIR}/.env" "$key")"
+  [[ ${#value} = 64 ]] || fail 'Runtime secret missing'
+  [[ "$seen_secrets" != *"|$value|"* ]] || fail 'Runtime identities share a secret'
+  seen_secrets="${seen_secrets}${value}|"
+  absent "${CASE_ROOT}/out" "$value"
+done
+[[ ${#seen_secrets} -gt 1 ]] || fail 'No runtime identities'
+[[ "$(env_get "${CASE_DIR}/.env" BISHENG_RUNTIME_PAYLOAD_KEY)" =~ ^[A-Za-z0-9_-]{43}=$ ]] || fail 'Invalid Fernet key'
+# Only the generated runtime identities and sandbox token may differ from the template.
+runtime_keys='^(BISHENG_RUNTIME_MANAGER_SECRET|BISHENG_RUNTIME_CONTROL_SECRET|BISHENG_RUNTIME_ENTRY_SECRET|BISHENG_RUNTIME_EGRESS_SECRET|BISHENG_APP_PROXY_HMAC_SECRET|BISHENG_APP_OBO_SECRET|BISHENG_RUNTIME_HOST_ISOLATION_SECRET|BISHENG_RUNTIME_PAYLOAD_KEY|SANDBOX_TOKEN)='
+cmp <(grep -Ev "$runtime_keys" "${SCRIPT_DIR}/.env.example") <(grep -Ev "$runtime_keys" "${CASE_DIR}/.env") || fail 'Default configuration was rewritten'
 [[ -z "$(env_get "${CASE_DIR}/.env" BISHENG_SECRET_KEYS_FILE)" ]] || fail 'Structural check persisted a key path'
 absent "${CASE_DIR}/.env" 'MINIO_ROOT_PASSWORD='
 [[ "$(ls -l "${CASE_DIR}/.env" | awk '{print substr($1, 1, 10)}')" = -rw------- ]] || fail 'Unsafe .env permissions'
 absent "${CASE_ROOT}/calls" $'login\t'
 absent "${CASE_ROOT}/calls" $'pull\t'
 absent "${CASE_ROOT}/calls" $'up\t'
-pass 'Prepare-only copies the template exactly, persists no secret placeholders, and starts nothing'
+absent "${CASE_ROOT}/calls" $'egress\tverify'
+pass 'Prepare-only enables runtime with independent secrets, otherwise keeps the template, persists no credential placeholders, and starts nothing'
 
 env_set "${CASE_DIR}/.env" MINIO_ROOT_PASSWORD existing-password
 env_set "${CASE_DIR}/.env" BISHENG_BACKEND_IMAGE custom.example/backend:custom
@@ -116,7 +137,7 @@ new_case
 saved_credentials
 run_install
 ok
-awk '/^login\t/ { login = NR } /pull\t/ { pull = NR } /up\t-d\t$/ { up = NR } END { exit !(login && pull > login && up > pull) }' "${CASE_ROOT}/calls" || fail 'Default deploy is not pull then up -d'
+awk '/^egress\tverify$/ { egress = NR } /^login\t/ { login = NR } /pull\t/ { pull = NR } /up\t-d\t$/ { up = NR } END { exit !(egress && login > egress && pull > login && up > pull) }' "${CASE_ROOT}/calls" || fail 'Default deploy is not verified egress, then pull, then up -d'
 absent "${CASE_ROOT}/calls" $'--wait\t'
 [[ ! -f "${CASE_ROOT}/python-called" ]] || fail 'Host Python called'
 contains "${CASE_ROOT}/calls" $'login\tcr.dataelem.com\t--username\tdocker\t--password-stdin\t'
@@ -194,7 +215,7 @@ pass 'Disabling Gateway restores direct routing without deleting data or other p
 new_case
 run_install --ft --prepare-only
 ok
-[[ "$(env_get "${CASE_DIR}/.env" COMPOSE_PROFILES)" = ft ]] || fail 'FT profile missing'
+[[ "$(env_get "${CASE_DIR}/.env" COMPOSE_PROFILES)" = app-runtime,ft ]] || fail 'FT profile missing'
 absent "${CASE_ROOT}/calls" $'pull\t'
 absent "${CASE_ROOT}/calls" $'up\t'
 env_set "${CASE_DIR}/.env" BISHENG_FT_IMAGE custom.example/ft:custom

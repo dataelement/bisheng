@@ -153,6 +153,23 @@ def _resolve_write_target(login_user: UserPayload) -> int:
 # --- LLM server CRUD (unchanged from F020) ---------------------------------
 
 
+@router.get("/system-settings", response_model=UnifiedResponseModel)
+async def system_model_settings(
+    include_impact: bool = Query(False),
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
+):
+    from bisheng.llm.application.system_model_settings import read_system_model_settings
+
+    return resp_200(data=await read_system_model_settings(login_user, include_impact=include_impact))
+
+
+@router.get("/{server_id}/sharing-status", response_model=UnifiedResponseModel)
+async def model_sharing_status(server_id: int, login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user)):
+    from bisheng.llm.application.model_sharing_status import ModelSharingStatusService
+
+    return resp_200(data=await ModelSharingStatusService().aget(identity=login_user, server_id=server_id))
+
+
 @router.get("")
 async def get_all_llm(
     request: Request,
@@ -268,7 +285,7 @@ async def update_model_online(
     model_id: int = Body(..., embed=True, description="Model UniqueID"),
     online: bool = Body(..., embed=True, description="Online or not"),
 ):
-    ret = await LLMService.update_model_online(model_id, online)
+    ret = await LLMService.update_model_online(model_id, online, login_user)
     return resp_200(data=ret)
 
 
@@ -298,7 +315,7 @@ async def get_workbench_llm(request: Request, login_user: UserPayload = Depends(
     from bisheng.dsh.domain.services.model_catalog import project_workbench_config
 
     cfg = await project_workbench_config(cfg, login_user.user_id, operator=login_user)
-    cfg = await LLMService.project_workbench_runtime_capabilities(cfg)
+    cfg = await LLMService.project_workbench_runtime_capabilities(cfg, login_user=login_user)
     return resp_200(data=_envelope(cfg, inherited, blocked))
 
 

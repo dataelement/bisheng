@@ -74,8 +74,11 @@ class LinsightArtifactPreviewService:
     def owned_file_key(version: LinsightSessionVersion, file_url: str, bucket: str) -> str:
         """Normalise ``file_url`` to an object key and require it to belong to this version.
 
-        Task files live under ``linsight/final_result/{svid}/``, intermediate files
-        under ``linsight/session_files/{svid}/`` and uploads under ``linsight/{session_id}/``.
+        Task files live under ``linsight/final_result/{svid}/`` and intermediate
+        files under ``linsight/session_files/{svid}/``. Uploads are ingested with
+        the version id as their chat id (``_process_submitted_files``), so their
+        formal objects, originals included, sit under ``linsight/{svid}/``;
+        ``linsight/{session_id}/`` stays allowed for entries written before that.
         """
         key = file_url.lstrip("/")
         if key.startswith(bucket + "/"):
@@ -83,6 +86,7 @@ class LinsightArtifactPreviewService:
         prefixes = (
             f"linsight/final_result/{version.id}/",
             f"linsight/session_files/{version.id}/",
+            f"linsight/{version.id}/",
             f"linsight/{version.session_id}/",
         )
         parts = key.split("/")

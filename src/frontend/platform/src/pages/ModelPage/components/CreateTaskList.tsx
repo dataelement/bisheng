@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { showApiError } from "@/controllers/request";
 import { isNumberDraftWithinBounds } from '@/utils/fieldValidation';
 import { Button, Input } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
@@ -30,7 +31,7 @@ export default function CreateTaskList({ onChange }) {
     const [isCustom, setIsCustom] = useState(false)
 
     const handleDownloadFile = async (data) => {
-        const res = await getFileUrlApi(data.dataSource)
+        const res = await getFileUrlApi(data.dataSource, true)
         setDownloadMap(map => ({ ...map, [data.id]: true }))
         await downloadFile(checkSassUrl(res.url), data.name)
         setDownloadMap(map => ({ ...map, [data.id]: false }))
@@ -68,8 +69,8 @@ export default function CreateTaskList({ onChange }) {
                             onCheckedChange={(val: boolean) => handleChangePrsetList(data.id, 'checked', val)} />
                         <span className="text-sm">{data.name}</span>
                         <div className="flex ml-auto gap-4">
-                            <Button size="small" variant="outlined" disabled={downloadMap[data.id]} onClick={() => handleDownloadFile(data)} className="rounded-lg h-7 px-4 ml-auto" color="default">
-                                {downloadMap[data.id] && <Outlined.Loading className="animate-spin animate-spin mr-2" size={14} />}
+                            <Button size="small" variant="outlined" disabled={downloadMap[data.id]} onClick={() => handleDownloadFile(data)} className="rounded-lg h-7 px-4 ml-auto" color="default" loading={downloadMap[data.id]}>
+
                                 {t('finetune.download')}</Button>
                             {isCustom ?
                                 <Input placeholder={t('finetune.sampleSize')} type="number" value={data.sampleSize} onChange={(e) => { if (!isNumberDraftWithinBounds(e.currentTarget.value, {  })) return; return handleChangePrsetList(data.id, 'sampleSize', e.target.value); }} className={"bg-[#fff] rounded-full w-28 h-6"}></Input> :
@@ -111,7 +112,7 @@ export function usePresetList(onChange) {
     const [prsetList, setPrsetList] = useState([]);
 
     useEffect(() => {
-        getPresetFileApi({ page_size: 400, page_num: 1, keyword: '' }).then(res => setPrsetList(res.data));
+        getPresetFileApi({ page_size: 400, page_num: 1, keyword: '' }, true).then(res => setPrsetList(res.data)).catch(showApiError);
     }, []);
 
     const handleChangePrsetList = (id, key, val) => {

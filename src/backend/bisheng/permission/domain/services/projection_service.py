@@ -318,9 +318,12 @@ class ProjectionService:
             raise PermissionPublishNotReadyError(
                 msg=f"Projection operation is not recoverable from status {status}",
             )
-        if plan.scope_type != "resource":
+        if plan.scope_type != "resource" and not (
+            plan.scope_type == "llm_model_deletion"
+            and await self._scope_guard.is_failed_closed_recovery_scope(plan, int(operation.id))
+        ):
             raise PermissionPublishNotReadyError(
-                msg="FAILED_CLOSED forward recovery only supports resource scopes",
+                msg="FAILED_CLOSED forward recovery requires its original business fence",
             )
 
         correction = await self._terminal_correction(plan.deltas)

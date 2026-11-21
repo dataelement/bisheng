@@ -7,7 +7,7 @@ import { AlignJustify, Check, CpuIcon, Minus, Plus, Star, User, X } from 'lucide
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
 import { useTranslation } from 'react-i18next';
-import { LoadIcon } from '../bs-icons/loading';
+import { LoadingState } from '@/components/bs-icons/loading/LoadingState';
 
 
 type CheckboxState = 'checked' | 'unchecked' | 'indeterminate';
@@ -376,9 +376,7 @@ const ToolSelector = ({
           >
             {loadErrorContent}
             {loading ? (
-              <div className="flex justify-center items-center h-full">
-                <LoadIcon className="animate-spin" />
-              </div>
+              <LoadingState size="page" className="h-full" />
             ) : filteredTools.length > 0 ? (
               <Accordion
                 type="multiple"

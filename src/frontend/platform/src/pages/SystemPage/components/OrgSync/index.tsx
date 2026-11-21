@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button, Pagination } from '@bisheng/ui';
 import { Tag } from "@bisheng/ui";
 
@@ -81,7 +82,7 @@ export default function OrgSync() {
             {loading && gatewayLogs.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center text-muted-foreground">
-                  {t("loading")}
+                  <LoadingState label={t("loading")} />
                 </TableCell>
               </TableRow>
             ) : gatewayLogs.length === 0 ? (

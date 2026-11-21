@@ -1,16 +1,22 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button, Select, type SelectValue } from '@bisheng/ui'
 import { useSelectLabels } from '@/components/bs-comp/formFields/useSelectLabels'
 import type { ModelPricingRow } from '@/controllers/API/modelPricing'
-import { Check, Loader2 } from 'lucide-react'
+import { Check } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { creditPricingErrorKey, useCreditSettings } from './useCreditPricing'
 
 // Shared Select items must not use an empty value; this stands for "no explicit base model".
 const DEFAULT_BASE = 'default'
+const baseReasonKeys: Record<string, string> = {
+    base_model_not_allowed: 'model:model.baseModelNotAllowed',
+    base_price_missing: 'model:model.basePriceMissing',
+    base_price_not_positive: 'model:model.basePriceNotPositive',
+}
 
 interface BaseModelPickerProps {
-    models: { id: number; label: string }[]
+    models: { id: number; label: string; provider: string }[]
     rows?: Map<number, ModelPricingRow>
 }
 
@@ -47,19 +53,23 @@ export function BaseModelPicker({ models, rows }: BaseModelPickerProps) {
     return <div className="space-y-1">
         <div className="flex flex-wrap items-center gap-3">
             <span className="text-sm font-medium">{t('dsh.pricing.baseModel')}</span>
-            <Select {...selectLabels} className="w-72" aria-label={t('dsh.pricing.baseModel')}
+            <Select {...selectLabels} className="w-96" aria-label={t('dsh.pricing.baseModel')}
                 loading={!value} disabled={!value || mutation.isLoading}
                 value={value ? value.base_model_id ?? DEFAULT_BASE : null}
                 onChange={handleChange}
                 options={[
                     { value: DEFAULT_BASE, label: t('dsh.pricing.baseModelDefault') },
-                    ...models.map(model => ({ value: model.id, label: model.label })),
+                    // Relays often carry the same model name; the provider tells them apart,
+                    // also in the trigger once chosen.
+                    ...models.map(model => ({ value: model.id, label: t('dsh.pricing.baseModelOption', { model: model.label, provider: model.provider }) })),
                 ]} />
-            {mutation.isLoading && <Loader2 className="size-4 animate-spin text-muted-foreground" aria-label={t('dsh.pricing.saving')} />}
+            {mutation.isLoading && <LoadingState size="inline" label={t('dsh.pricing.saving')} />}
             {mutation.isSuccess && !error && <Check className="size-4 text-green-600" aria-label={t('dsh.pricing.saved')} />}
         </div>
         <p className="text-xs text-muted-foreground">{t('dsh.pricing.baseModelHelp')}</p>
         {unavailable && <p role="status" className="text-xs text-amber-600">{t('dsh.pricing.baseUnavailable')}</p>}
+        {value?.base_reason && baseReasonKeys[value.base_reason] &&
+            <p className="text-xs text-muted-foreground">{t(baseReasonKeys[value.base_reason])}</p>}
         {error && <p role="alert" className="text-xs text-destructive">{t(error)}</p>}
     </div>
 }

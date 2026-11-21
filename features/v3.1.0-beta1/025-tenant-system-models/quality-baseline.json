@@ -1,0 +1,18 @@
+{
+  "files": 50,
+  "baseline_issues": 767,
+  "current_issues": 726,
+  "new_diagnostics": [],
+  "arch_guard": [
+    {
+      "file": "src/backend/bisheng/common/chat/client.py",
+      "baseline": "⚠️  [arch-guard] RULE-1 VIOLATION: client.py — common/core 禁止导入领域模块\n⚠️  [arch-guard] RULE-1 VIOLATION: client.py — common/core 禁止导入 api 层\n",
+      "current": "⚠️  [arch-guard] RULE-1 VIOLATION: client.py — common/core 禁止导入领域模块\n⚠️  [arch-guard] RULE-1 VIOLATION: client.py — common/core 禁止导入 api 层\n"
+    },
+    {
+      "file": "src/backend/bisheng/open_endpoints/api/endpoints/filelib.py",
+      "baseline": "⚠️  [arch-guard] RULE-5 VIOLATION: filelib.py — 禁止跨模块 API 层互相导入\n",
+      "current": "⚠️  [arch-guard] RULE-5 VIOLATION: filelib.py — 禁止跨模块 API 层互相导入\n"
+    }
+  ]
+}

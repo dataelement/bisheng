@@ -76,8 +76,8 @@ interface FileCardProps {
   onOpenVersionManagement?: (file: KnowledgeFile) => void;
   /** Open the version-history sheet for this file. */
   onOpenVersionHistory?: (file: KnowledgeFile) => void;
-  /** Whether the current user can manage members (gates the "similar" pill). */
-  canManageMembers?: boolean;
+  /** Space edit permission. Version mutations require it. */
+  canManageVersions?: boolean;
   disableClickNavigate?: boolean;
   hideSelectionCheckbox?: boolean;
   /** H5: render as list-row (not card tile). */
@@ -122,7 +122,7 @@ export function FileCard({
   versionManagementEnabled = false,
   onOpenVersionManagement,
   onOpenVersionHistory,
-  canManageMembers = false,
+  canManageVersions = false,
   disableClickNavigate = false,
   hideSelectionCheckbox = false,
   mobileListMode = false,
@@ -292,7 +292,7 @@ export function FileCard({
   const renderSimilarTag = (overlay = false) => {
     if (!(
       versionManagementEnabled &&
-      canManageMembers &&
+      canManageVersions &&
       file.has_similar &&
       !file.is_multi_version &&
       file.status === FileStatus.SUCCESS
@@ -339,9 +339,9 @@ export function FileCard({
           file.is_multi_version &&
           file.version_no != null &&
           file.version_no >= 1 && (
-            <span className="mt-0.5 flex h-5 shrink-0 items-center justify-center rounded bg-blue-50 px-1.5 text-xs font-medium text-blue-500">
+            <Tag size="small" color="brand" className="mt-0.5 shrink-0">
               {`V${file.version_no}`}
-            </span>
+            </Tag>
           )}
         <span className={cn("line-clamp-2 min-h-[40px] min-w-0 break-all leading-5", nameToneClass)}>
           {renderHighlightedName(file.name, highlightKeyword)}
@@ -373,11 +373,11 @@ export function FileCard({
     versionManagementEnabled &&
     !isFolder &&
     file.status === FileStatus.SUCCESS &&
-    isAdmin &&
+    canManageVersions &&
     Boolean(onOpenVersionManagement);
   const showVersionHistory =
     versionManagementEnabled && !isFolder && Boolean(file.is_multi_version) && Boolean(onOpenVersionHistory);
-  const showMoveItem = Boolean(onMove) && !isCreating;
+  const showMoveItem = Boolean(onMove) && canMove && !isCreating;
   const showMenuDownloadItem = canDownload && !hideDownloadActions;
   // Card view puts EVERY action behind the ⋮ menu, even a lone one, so a card
   // never sprouts a second floating control over its thumbnail.
@@ -389,8 +389,12 @@ export function FileCard({
     showMoveItem ||
     showVersionManagement ||
     showVersionHistory;
-  // Placeholder has only a temp id (no backend identity) — suppress all row actions.
-  const showMoreMenu = !isUploadingFolderPlaceholder && hasReviewedMenuItems;
+  // A real file keeps the menu so its effective actions can be resolved on open.
+  // Placeholders have only a temp id and no backend identity.
+  const showMoreMenu =
+    !isUploadingFolderPlaceholder &&
+    !isCreating &&
+    /^[1-9][0-9]*$/.test(String(file.id));
   const showCardActions = moreMenuOpen || hovered;
   const cardOpensPreviewOrFolder =
     !isCreating &&
@@ -413,6 +417,8 @@ export function FileCard({
     <DropdownItem disabled icon={<Outlined.Loading className="animate-spin motion-reduce:animate-pulse" />}>
       {localize("com_list_loading")}
     </DropdownItem>
+  ) : !hasReviewedMenuItems ? (
+    <DropdownItem disabled>{localize("com_knowledge.home_next.no_actions")}</DropdownItem>
   ) : (
     <>
       {showMenuDownloadItem && (
@@ -437,7 +443,7 @@ export function FileCard({
       )}
       {showMoveItem && (
         <DropdownItem
-          disabled={!canMove || isUploading}
+          disabled={isUploading}
           onSelect={() => onMove?.()}
           icon={<Outlined.MoveToFolder />}
         >

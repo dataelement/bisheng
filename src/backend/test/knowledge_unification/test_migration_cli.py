@@ -39,7 +39,7 @@ def entry():
     return importlib.import_module("scripts.unify_knowledge_spaces")
 
 
-def arguments(value, *extra):
+def arguments(value, *extra, legacy=False):
     return (
         entry()
         .parser()
@@ -49,10 +49,16 @@ def arguments(value, *extra):
                 value.input["run_id"],
                 "--environment",
                 value.input["environment"],
-                "--backup-ref",
-                json.dumps(value.input["backup_ref"]),
-                "--schema-ref",
-                json.dumps(value.input["schema_ref"]),
+                *(
+                    [
+                        "--backup-ref",
+                        json.dumps(value.input["backup_ref"]),
+                        "--schema-ref",
+                        json.dumps(value.input["schema_ref"]),
+                    ]
+                    if legacy
+                    else []
+                ),
                 *extra,
             ]
         )
@@ -289,8 +295,7 @@ async def test_resume_preview_still_requires_original_frozen_run(published_input
     assert caught.value.kwargs["reason"] == "migration_cli_resume_requires_frozen_run"
 
 
-async def test_new_run_preview_does_not_relabel_old_backup_materials_for_new_tenants(published_input):
-    from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
+async def test_new_run_preview_scans_current_tenants_without_old_backup_materials(published_input):
     from bisheng.database.models.tenant import Tenant
 
     value = published_input
@@ -301,9 +306,8 @@ async def test_new_run_preview_does_not_relabel_old_backup_materials_for_new_ten
         )
     value.store.enforce_closed = False
     objects_before = dict(value.artifacts.objects)
-    with pytest.raises(KnowledgeOperationPlanConflictError) as caught:
-        await entry().arun(arguments(value), runtime_factory=current_inventory_runtime(value))
-    assert caught.value.kwargs["reason"] == "migration_inventory_material_manifest_identity"
+    result = await entry().arun(arguments(value), runtime_factory=current_inventory_runtime(value))
+    assert result["preflight_complete"] is True and result["tenant_ids"] == [1, 101, 202, 303]
     assert value.artifacts.objects == objects_before and value.store.writes == 0
 
 
@@ -325,3 +329,86 @@ async def test_actual_cli_inventory_runtime_needs_no_vector_configuration_or_cli
         async with runtime.inventory(None) as inventory:
             assert isinstance(inventory, UnificationInventoryApplication)
     native_runtime.eager.assert_not_awaited()
+
+
+def test_cli_needs_no_dba_evidence_inputs():
+    args = entry().parser().parse_args(["--run-id", "upgrade-310b1", "--environment", "test"])
+    assert args.backup_ref is None and args.schema_ref is None
+    assert not args.apply and not args.resume
+
+
+async def test_legacy_run_recovers_original_fields_without_reading_dba_proofs(published_input):
+    value = published_input
+    for name in ("backup_ref", "schema_ref"):
+        del value.artifacts.objects[value.input[name]["object_key"]]
+    objects_before = dict(value.artifacts.objects)
+    result = await entry().arun(arguments(value, "--resume"), runtime_factory=runtime(value))
+    assert result["frozen"] and result["validation_scope"] == "frozen_run"
+    assert value.artifacts.objects == objects_before and value.store.writes == 0
+    result = await entry().arun(
+        arguments(value, "--apply", "--resume", "--operator-id", "7"), runtime_factory=runtime(value)
+    )
+    assert result["ready"] and result["complete"]
+
+
+@pytest.mark.parametrize("changed", ["backup_ref", "schema_ref", "environment"])
+async def test_legacy_run_still_rejects_changed_explicit_identity(published_input, changed):
+    from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
+
+    args = arguments(published_input, legacy=True)
+    if changed == "environment":
+        args.environment = "another-environment"
+    else:
+        setattr(args, changed, getattr(args, changed) | {"sha256": "f" * 64})
+    with pytest.raises(KnowledgeOperationPlanConflictError) as caught:
+        await entry().arun(args, runtime_factory=runtime(published_input))
+    assert caught.value.kwargs["reason"] == "migration_inventory_frozen_input_changed"
+    assert published_input.store.writes == 0
+
+
+async def test_new_run_refuses_legacy_descriptor_flags(published_input):
+    from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
+
+    value = published_input
+    async with value.sessions() as session, session.begin():
+        await session.execute(sa.delete(Run.__table__))
+    with pytest.raises(KnowledgeOperationPlanConflictError) as caught:
+        await entry().arun(arguments(value, legacy=True), runtime_factory=current_inventory_runtime(value))
+    assert caught.value.kwargs["reason"] == "migration_cli_legacy_descriptors_require_frozen_run"
+
+
+async def test_new_run_interrupted_after_freeze_resumes_without_dba_inputs(published_input, monkeypatch):
+    from bisheng.core.context.tenant import bypass_tenant_filter
+    from bisheng.knowledge.application.unification_conversion import UnificationSQLConversionApplication
+
+    value = published_input
+    async with value.sessions() as session, session.begin():
+        await session.execute(sa.delete(Run.__table__))
+    for name in ("backup_ref", "schema_ref"):
+        del value.artifacts.objects[value.input[name]["object_key"]]
+    value.store.enforce_closed = False
+
+    async def interrupted(*args, **kwargs):
+        raise RuntimeError("interrupted after durable M2 freeze")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(UnificationSQLConversionApplication, "arun_references", interrupted)
+        with pytest.raises(RuntimeError, match="durable M2 freeze"):
+            await entry().arun(
+                arguments(value, "--apply", "--operator-id", "7"),
+                runtime_factory=current_inventory_runtime(value),
+            )
+    async with value.sessions() as session, session.begin():
+        with bypass_tenant_filter():
+            original = (
+                await session.execute(sa.select(Run.baseline_hash, Run.plan_hash).order_by(Run.tenant_id))
+            ).all()
+    assert len(original) == 3
+    result = await entry().arun(
+        arguments(value, "--apply", "--resume", "--operator-id", "7"), runtime_factory=runtime(value)
+    )
+    assert result["complete"] and result["ready"]
+    async with value.sessions() as session, session.begin():
+        with bypass_tenant_filter():
+            current = (await session.execute(sa.select(Run.baseline_hash, Run.plan_hash).order_by(Run.tenant_id))).all()
+    assert current == original

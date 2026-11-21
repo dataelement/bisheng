@@ -61,6 +61,7 @@ export function useKnowledgeFileActions({
   // F034: move selected files/folders (same-space or cross-space) via MoveToDialog,
   // plus drag-to-folder move (dropMoveToFolder wired into the table/card drag sources).
   const {
+    moveConfirmation,
     moveProgress,
     moveDialogOpen,
     setMoveDialogOpen,
@@ -249,6 +250,7 @@ export function useKnowledgeFileActions({
     deletion,
     handleBatchDownload,
     handleBatchTag,
+    moveConfirmation,
     moveProgress,
     moveDialogOpen,
     setMoveDialogOpen,

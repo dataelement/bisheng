@@ -270,17 +270,8 @@ class FileScheduler:
         uid = str(user_id)
         fid = str(file_id)
         self._conn.lrem(_queue_key(uid), 0, fid)
-        self._conn.srem(_inflight_key(uid), fid)
+        self.complete_file(user_id=uid, file_id=fid)
         self._conn.delete(_payload_key(fid))
-        # If the file was already confirmed in-flight, return its slot to the
-        # queue counter so deleting a parsing file doesn't leak capacity.
-        q = self._conn.hget(INFLIGHT_QUEUE_KEY, fid)
-        if q:
-            q = q.decode() if isinstance(q, bytes) else q
-            self._conn.decr(_inflight_total_key(q))
-            self._conn.hdel(INFLIGHT_QUEUE_KEY, fid)
-        if self._conn.scard(_inflight_key(uid)) == 0:
-            self._conn.srem(INFLIGHT_USERS_KEY, uid)
         if self._conn.llen(_queue_key(uid)) == 0:
             self._conn.srem(ACTIVE_USERS_KEY, uid)
 

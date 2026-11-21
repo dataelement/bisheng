@@ -10,6 +10,7 @@ jest.mock('~/api/chat/headers-helpers', () => ({ setTokenHeader: jest.fn() }));
 jest.mock('~/utils/loginRedirect', () => ({ redirectToLogin: jest.fn() }));
 import i18next from 'i18next';
 import messages from '../../../packages/locales/src/api_errors/en.json';
+import { knowledgeProcessing } from '../locales/en/translation.json';
 beforeAll(async () => { await i18next.init({ lng: 'en', resources: { en: { translation: { api_errors: messages } } } }); });
 const transport = (jest.requireMock('axios') as typeof import('axios')).default.create();
 const adapter = transport.defaults.adapter;
@@ -56,4 +57,20 @@ it('keeps a readable fallback before translations have initialized', () => {
  jest.spyOn(i18next, 'exists').mockReturnValue(false);
  jest.spyOn(i18next, 't').mockReturnValue(undefined as never);
  expect(showApiError(new Error('PRIVATE')).message).toBe('Request failed. Please try again.');
+});
+
+
+it.each([
+ ['source_file_move_input_required', knowledgeProcessing.conflict.source_file_input],
+ ['source_space_move_input_required', knowledgeProcessing.conflict.source_input],
+])('shows the localized source dependency for %s', (reason, expected) => {
+ i18next.addResourceBundle('en', 'translation', { knowledgeProcessing });
+ expect(translateApiErrorMessage({ status_code: 10999, data: { reason } })).toBe(expected);
+});
+
+it('explains the observed knowledge operation and keeps unknown diagnostics private', () => {
+ i18next.addResource('en', 'translation', 'knowledgeProcessing.conflict.file_queue', 'This file is queued. View Task history.');
+ const error = {status_code: 10999, data: {reason: 'processing_file_state_not_ready', blocking_operation: 'file_waiting', exception: 'PRIVATE'}};
+ expect(translateApiErrorMessage(error)).toBe('This file is queued. View Task history.');
+ expect(translateApiErrorMessage({status_code: 10999, data: {reason: 'PRIVATE', blocking_operation: '__proto__'}})).toBe(messages['10999']);
 });

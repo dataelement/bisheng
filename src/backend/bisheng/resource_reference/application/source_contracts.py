@@ -251,3 +251,21 @@ class ReadLegacyReferenceEvidencePort(Protocol):
         evidence_key: str,
         identity: object,
     ) -> LegacyEvidence: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ModelDefaultSlotReadResult:
+    """Internal complete-source proof with only the admitted target facts."""
+
+    snapshot: AuthorizedSourceSnapshot
+    target_states: tuple[ReferenceTargetReadFact, ...]
+    source_revision: int
+    root_revision: int
+    slots: tuple[str, ...]
+
+    def __post_init__(self):
+        if self.snapshot.source_key.source_type != SourceType.MODEL_DEFAULT:
+            raise ValueError("slot admission requires a model-default source")
+        expected = {reference.target for reference in self.snapshot.references if reference.slot_key in self.slots}
+        if {fact.key for fact in self.target_states} != expected or len(self.target_states) != len(expected):
+            raise ValueError("slot result must cover every admitted target")

@@ -1,10 +1,9 @@
 import { v4 as createOperationId } from "uuid";
-import { useCallback, useState } from "react";
+import { createElement, useCallback, useState } from "react";
 import { useMoveJobProgress } from "./useMoveJobProgress";
 
 import {
   FileType,
-  type InvalidEntry,
   type KnowledgeFile,
   precheckMoveFilesApi,
   confirmMoveFilesApi,
@@ -12,42 +11,41 @@ import {
   type MoveResult,
 } from "~/api/knowledge";
 import { toast } from "@bisheng/ui";
+import { KnowledgeDialogTable, useMoveConfirmation } from "@bisheng/knowledge";
 
-import { useConfirm, useToastContext } from "~/Providers";
+import { useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
 
 type Localize = ReturnType<typeof useLocalize>;
+type InvalidMove = { name: string; reason: string };
 
 /** i18n key for a per-item rejection reason (name_conflict differs by item type). */
-function reasonLabelKey(entry: InvalidEntry): string {
-  if (entry.reason === "name_conflict") {
-    return entry.type === "folder"
+function reasonLabelKey(reason: string, type?: string | null): string {
+  if (reason === "name_conflict") {
+    return type === "folder"
       ? "com_knowledge.move_reason_name_conflict_folder"
       : "com_knowledge.move_reason_name_conflict_file";
   }
-  return `com_knowledge.move_reason_${entry.reason}`;
+  return `com_knowledge.move_reason_${reason}`;
 }
 
-/**
- * Build a human description of why items were rejected, grouped by reason so a
- * single name clash names the conflicting folder. Order follows first appearance.
- */
-function describeInvalid(invalid: InvalidEntry[], localize: Localize): string {
+function renderInvalidTable(invalid: InvalidMove[], localize: Localize) {
   const groups = new Map<string, string[]>();
-  for (const entry of invalid) {
-    const label = localize(reasonLabelKey(entry));
-    const names = groups.get(label) ?? [];
-    names.push(entry.name);
-    groups.set(label, names);
+  for (const { name, reason } of invalid) {
+    const names = groups.get(reason) ?? [];
+    names.push(name);
+    groups.set(reason, names);
   }
-  return Array.from(groups.entries())
-    .map(([label, names]) =>
-      localize("com_knowledge.move_reason_group", {
-        0: label,
-        1: names.join("、"),
-      }),
-    )
-    .join("\n");
+  return createElement(KnowledgeDialogTable, {
+    caption: localize("com_knowledge.batch.invalid"),
+    columns: [
+      { label: localize("com_knowledge.batch.column_name") },
+      { label: localize("com_knowledge.batch.column_reason") },
+    ],
+    rows: Array.from(groups).flatMap(([reason, names]) =>
+      names.map((name, index) => ({ key: `${reason}:${index}`, cells: [name, reason] })),
+    ),
+  });
 }
 
 interface UseKnowledgeMoveArgs {
@@ -69,7 +67,7 @@ interface UseKnowledgeMoveArgs {
 export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
   const localize = useLocalize();
   const { showToast } = useToastContext();
-  const confirm = useConfirm();
+  const { confirm, confirmationDialog } = useMoveConfirmation();
   const moveProgress = useMoveJobProgress(spaceId, onMoved, (entries) => {
     toast.success(
       localize("com_knowledge.move_success", { 0: entries.length }),
@@ -111,29 +109,14 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
         openMove(permitted);
         return;
       }
-      const parts: string[] = [];
-      if (denied.length > 0) {
-        const blocked: InvalidEntry[] = denied.map((f) => ({
-          id: Number(f.id),
-          type: f.type === FileType.FOLDER ? "folder" : "file",
-          name: f.name,
-          reason: "no_permission",
-        }));
-        parts.push(describeInvalid(blocked, localize));
-      }
-      if (uploading.length > 0) {
-        // "uploading" is a frontend-only reason (not a backend MoveInvalidReason),
-        // so render its group line directly instead of via describeInvalid.
-        parts.push(
-          localize("com_knowledge.move_reason_group", {
-            0: localize("com_knowledge.move_reason_uploading"),
-            1: uploading.map((f) => f.name).join("、"),
-          }),
-        );
-      }
+      const deniedReason = localize("com_knowledge.move_reason_no_permission");
+      const uploadingReason = localize("com_knowledge.move_reason_uploading");
       const ok = await confirm({
         title: localize("com_knowledge.move_partial_title"),
-        description: parts.join("\n"),
+        description: renderInvalidTable([
+          ...denied.map(({ name }) => ({ name, reason: deniedReason })),
+          ...uploading.map(({ name }) => ({ name, reason: uploadingReason })),
+        ], localize),
         cancelText: localize("com_knowledge.move_cancel_all"),
         confirmText: localize("com_knowledge.move_rest"),
       });
@@ -175,29 +158,27 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
       });
       const plan = review.precheck;
       const invalid = plan.invalid_items.map((entry) => ({
-        id: entry.id ?? 0,
-        type: entry.type === "folder" ? ("folder" as const) : ("file" as const),
         name: entry.name ?? localize("com_knowledge.move_unavailable_item"),
-        reason: entry.reason as InvalidEntry["reason"],
+        reason: localize(reasonLabelKey(entry.reason, entry.type)),
       }));
-      const removed = Array.isArray(plan.impact.removed_fields)
-        ? plan.impact.removed_fields.join(", ")
-        : "";
-      const description = [
-        invalid.length ? describeInvalid(invalid, localize) : "",
-        targetSpaceId !== spaceId
+      if (invalid.length || targetSpaceId !== spaceId) {
+        const removed = Array.isArray(plan.impact.removed_fields)
+          ? plan.impact.removed_fields.join(", ")
+          : "";
+        const impact = targetSpaceId !== spaceId
           ? localize("com_knowledge.move_review_impact", {
               0: plan.impact.logical_count ?? plan.valid_items.length,
               1: removed || localize("com_knowledge.move_no_removed_fields"),
             })
-          : "",
-      ]
-        .filter(Boolean)
-        .join("\n");
-      if (invalid.length || targetSpaceId !== spaceId) {
+          : null;
         const ok = await confirm({
           title: localize("com_knowledge.move_review_title"),
-          description,
+          description: invalid.length
+            ? createElement("div", { className: "space-y-3" },
+                renderInvalidTable(invalid, localize),
+                impact && createElement("p", null, impact),
+              )
+            : impact,
           cancelText: localize("com_knowledge.move_cancel_all"),
           confirmText: localize("com_knowledge.move_here"),
         });
@@ -371,6 +352,7 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
   );
 
   return {
+    moveConfirmation: confirmationDialog,
     moveProgress,
     moveDialogOpen,
     setMoveDialogOpen,

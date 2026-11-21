@@ -297,3 +297,24 @@ async def test_related_revision_change_persists_obsolete_without_mutating_new_fi
         await session.commit()
     async with files.context.sessions() as session:
         assert (await files.owner.jobs.aget(session, job.id)).state == "obsolete"
+
+
+async def test_file_precheck_refuses_hidden_version_before_queueing(files, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from bisheng.common.errcode.permission import PermissionDeniedError
+    from bisheng.knowledge.application import processing_owner
+
+    async def authorize(identity, *, resource_type, resource_id, action):
+        if resource_type == "knowledge_file":
+            assert resource_id == 81 and action == "visible"
+            raise PermissionDeniedError()
+
+    permission = AsyncMock(side_effect=authorize)
+    monkeypatch.setattr(processing_owner, "require_business_action", permission)
+    async with files.context.sessions() as session:
+        with pytest.raises(PermissionDeniedError):
+            await preview(files, session)
+        assert not session.new and not session.dirty and not session.deleted
+        assert (await session.get(KnowledgeFile, 81)).status == 2
+    assert permission.await_count == 2

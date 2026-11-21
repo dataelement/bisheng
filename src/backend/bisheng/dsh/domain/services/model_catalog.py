@@ -3,14 +3,14 @@
 import asyncio
 
 from bisheng.common.errcode.dsh import DshModelNotAllowedError
+from bisheng.dsh.domain.services.model_display import read_workbench_metadata
 
 
 async def authorized_workbench_models(user_id: int, config=None):
     from bisheng.dsh.runtime import read_policy
-    from bisheng.llm.domain.services.llm import LLMService
 
     if config is None:
-        config = await LLMService.get_workbench_llm()
+        config = await read_workbench_metadata()
     policy = await read_policy(user_id)
     return await _project_models(config, policy.allowed_model_ids)
 
@@ -27,40 +27,40 @@ async def workbench_models_for_display(operator, config=None):
         raise DshModelNotAllowedError()
     # Revalidate ownership/sharing even when an editable metadata payload was
     # supplied. Configured IDs are display candidates, never a billing identity.
-    verified = await LLMService.get_workbench_llm()
+    verified = await read_workbench_metadata()
     from bisheng.common.services.config_service import settings
 
     if not settings.dsh.enabled:
         candidates = await LLMService.aget_online_chat_models()
-        return _project_visible_models(config or verified, candidates, {model.id for model, _ in candidates})
+        return await _project_visible_models(config or verified, candidates, {model.id for model, _ in candidates})
     return await _project_models(config or verified, [int(model.id) for model in verified.models or []])
 
 
 async def _project_models(config, model_ids):
     from bisheng.api.v1.schemas import WSModel
     from bisheng.dsh.domain.services.model_display import configured_display_names, model_display_name
-    from bisheng.dsh.infrastructure.model_capabilities import desktop_model_capabilities
+    from bisheng.dsh.domain.services.vision import read_catalog_vision
+    from bisheng.dsh.infrastructure.model_capabilities import model_capabilities
     from bisheng.llm.domain.services.llm import LLMService
 
     names = configured_display_names(config)
+    snapshots = await LLMService.get_dsh_model_catalog_snapshots(model_ids)
+    # Keep provider capability validation for the same catalog candidates.
+    candidates = list(snapshots.values())
+    for model, server in candidates:
+        model_capabilities(model, server)
+    vision = await read_catalog_vision([model for model, _ in candidates])
     result = []
-    for model_id in model_ids:
-        try:
-            model, server = await LLMService.get_dsh_model_snapshot(model_id)
-        except DshModelNotAllowedError:
-            continue
-        capabilities = await desktop_model_capabilities(model, server)
-        if capabilities is None:
-            continue
+    for model, server in candidates:
         result.append(
             WSModel(
-                id=str(model_id),
-                key=str(model_id),
+                id=str(model.id),
+                key=str(model.id),
                 name=model_display_name(model, server, names.get(str(model.id))),
                 displayName=names.get(str(model.id)) or model.model_name.strip() or model.name.strip(),
                 provider_id=str(server.id),
                 provider_name=server.name.strip() or server.type,
-                visual=capabilities.client_fields().get("vision", False),
+                visual=vision[model.id],
             )
         )
     return result
@@ -88,22 +88,23 @@ async def visible_workbench_models(user_id: int, config=None):
     from bisheng.llm.domain.services.llm import LLMService
 
     if config is None:
-        config = await LLMService.get_workbench_llm()
+        config = await read_workbench_metadata()
     candidates = await LLMService.aget_online_chat_models()
     visible = await read_visible_model_ids(user_id, [model.id for model, _ in candidates])
-    return _project_visible_models(config, candidates, visible)
+    return await _project_visible_models(config, candidates, visible)
 
 
-def _project_visible_models(config, candidates, visible):
+async def _project_visible_models(config, candidates, visible):
     from bisheng.api.v1.schemas import WSModel
     from bisheng.dsh.domain.services.model_display import configured_display_names
 
     names = configured_display_names(config)
-    vision = {str(entry.id): bool(entry.visual) for entry in (config.models or []) if entry.id}
+    from bisheng.dsh.domain.services.vision import read_catalog_vision
+
+    candidates = [(model, server) for model, server in candidates if model.id in visible]
+    vision = await read_catalog_vision([model for model, _ in candidates])
     result = []
     for model, server in candidates:
-        if model.id not in visible:
-            continue
         model_name = model.model_name.strip() or model.name.strip()
         result.append(
             WSModel(
@@ -113,7 +114,7 @@ def _project_visible_models(config, candidates, visible):
                 displayName=names.get(str(model.id)) or model_name,
                 provider_id=str(server.id),
                 provider_name=server.name.strip() or server.type,
-                visual=vision.get(str(model.id), False),
+                visual=vision[model.id],
             )
         )
     return result

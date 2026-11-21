@@ -11,7 +11,7 @@ from bisheng.knowledge.application.space_copy_owner import SpaceCopyOwner
 from bisheng.knowledge.domain.repositories.move_query_repository import MoveQueryRepository
 from bisheng.knowledge.domain.repositories.space_copy_repository import root_facts
 from bisheng.permission.application.business_authorization import require_business_action
-from bisheng.permission.application.identity import resolve_permission_actor
+from bisheng.permission.application.identity import get_current_permission_actor, resolve_permission_actor
 
 
 class SpaceCopyAccess(MoveProcessingAccess):
@@ -45,12 +45,16 @@ class SpaceCopyAccess(MoveProcessingAccess):
         ):
             root = await self._target(space_id, actual)
             if root.state == 0:
-                _, payload, _, _ = await self.owner._logical(space_id, job_id)
-                async with self.owner._session() as session:
-                    source = await self.owner.rows.aroot(session, payload["scope"]["source"]["id"])
-                # Reading the failure does not replay the frozen inputs. Retry
-                # still validates them in aensure_logical before any mutation.
-                await self.owner.app.authorize(actual, root_facts(source))
+                _, payload, mapping, _ = await self.owner._logical(space_id, job_id)
+                pairs = self.owner._pairs(payload, mapping, space_id, get_current_permission_actor())
+                if await self.owner.app.projection.ahas_completed_copies(pairs=pairs):
+                    await require_business_action(
+                        actual, resource_type="knowledge_space", resource_id=space_id, action="edit"
+                    )
+                else:
+                    async with self.owner._session() as session:
+                        source = await self.owner.rows.aroot(session, payload["scope"]["source"]["id"])
+                    await self.owner.app.authorize(actual, root_facts(source))
             yield job, reference, actual
 
     async def _stable(self, session, job, reference):

@@ -1,92 +1,18 @@
-import { X } from "lucide-react";
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-} from "~/components/ui";
-import { Button } from "~/components/ui/Button";
-import { useLocalize } from "~/hooks";
-import { type KnowledgeFile, type LinkAsNewVersionResponse } from "~/api/knowledge";
-import { RelateDocumentPanel } from "./RelateDocumentPanel";
-
-// ─── Props ─────────────────────────────────────────────────────────────────────
+import { VersionManagementDialog as SharedVersionManagementDialog } from '@bisheng/knowledge';
+import type { KnowledgeFile } from '~/api/knowledge';
+import { showApiError } from '~/api/request';
+import { useToastContext } from '~/Providers';
+import { clientSimilarDocumentsServices } from './RelateDocumentPanel';
 
 interface VersionManagementDialogProps {
-    open: boolean;
-    onOpenChange: (open: boolean) => void;
-    spaceId: number;
-    file: KnowledgeFile | null;
-    onLinked?: () => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  spaceId: number;
+  file: KnowledgeFile | null;
+  onLinked?: () => void;
 }
 
-// ─── Component ─────────────────────────────────────────────────────────────────
-
-export function VersionManagementDialog({
-    open,
-    onOpenChange,
-    spaceId,
-    file,
-    onLinked,
-}: VersionManagementDialogProps): JSX.Element | null {
-    const localize = useLocalize();
-
-    if (!open || !file) {
-        return null;
-    }
-
-    const handleLinked = (_response: LinkAsNewVersionResponse) => {
-        onLinked?.();
-        onOpenChange(false);
-    };
-
-    // Dismissing ("不关联") refreshes the file list and closes the dialog, the
-    // same way a successful link does — onLinked already triggers the refresh.
-    const handleDismissed = () => {
-        onLinked?.();
-        onOpenChange(false);
-    };
-
-    return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent
-                className="flex w-full max-w-[720px] max-h-[85vh] flex-col gap-0 rounded-xl border-none bg-white p-0 shadow-[0px_5px_22px_0px_rgba(61,68,110,0.2)] outline-none [&>button]:hidden"
-            >
-                <DialogHeader className="relative shrink-0 border-b border-border-base px-6 py-4 text-left">
-                    <DialogTitle className="text-[16px] font-semibold text-text-1">
-                        {localize("com_knowledge.version.dialog_title")}
-                    </DialogTitle>
-                    <button
-                        type="button"
-                        onClick={() => onOpenChange(false)}
-                        className="absolute right-4 top-4 inline-flex size-8 items-center justify-center rounded-md text-text-2 transition-colors hover:bg-fill-2"
-                        aria-label={localize("com_knowledge.close") || "Close"}
-                    >
-                        <X className="size-4" />
-                    </button>
-                </DialogHeader>
-
-                <div className="flex-1 overflow-y-auto px-6 py-5">
-                    <RelateDocumentPanel
-                        spaceId={spaceId}
-                        fileId={typeof file.id === "string" ? parseInt(file.id, 10) : file.id}
-                        file={file}
-                        onLinked={handleLinked}
-                        onDismissed={handleDismissed}
-                    />
-                </div>
-
-                <div className="flex shrink-0 items-center justify-end border-t border-border-base px-6 py-3">
-                    <Button
-                        type="button"
-                        variant="outline"
-                        className="h-8 rounded-md px-4 font-normal"
-                        onClick={() => onOpenChange(false)}
-                    >
-                        {localize("com_knowledge.cancel")}
-                    </Button>
-                </div>
-            </DialogContent>
-        </Dialog>
-    );
+export function VersionManagementDialog({ open, onOpenChange, spaceId, file, onLinked }: VersionManagementDialogProps) {
+  const { showToast } = useToastContext();
+  return <SharedVersionManagementDialog open={open} onOpenChange={onOpenChange} spaceId={spaceId} file={file ? { id: Number(file.id), name: file.name, version_no: file.version_no, user_name: file.user_name } : null} services={clientSimilarDocumentsServices} onLinked={onLinked} onDismissed={onLinked} onError={showApiError} onSuccess={(message) => showToast({ message, status: 'success' })} />;
 }

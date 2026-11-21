@@ -11,7 +11,9 @@ orphan metadata and its backed-up file payloads, and purges deleted resources'
 derived permissions. Keeps audit, roles and live index bindings. Physical
 cleanup deletes only identified orphan objects/rows, never whole stores. Unknown
 ownership or unavailable physical identity is reported. Run BEFORE a new M2
-freeze; an active frozen migration is rejected.
+freeze; an active frozen migration is rejected. A historical delete whose saved
+snapshot already lacks one permission_enabled marker can forward-recover its
+own frozen projection; other failed-closed operations remain blocked.
 """
 
 from __future__ import annotations
@@ -31,11 +33,13 @@ _BACKEND_ROOT = str(Path(__file__).resolve().parent.parent)
 if _BACKEND_ROOT not in sys.path:
     sys.path.insert(0, _BACKEND_ROOT)
 
+from scripts.f118_history_snapshot import snapshot_scope  # noqa: E402
 
-def blocked(reason):
+
+def blocked(reason, **details):
     from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError
 
-    raise KnowledgeOperationPlanConflictError(reason="history_prepare_" + reason)
+    raise KnowledgeOperationPlanConflictError(reason="history_prepare_" + reason, **details)
 
 
 def canonical(value):
@@ -216,6 +220,52 @@ async def hard_missing(session, target):
     return (await session.exec(select(model.id).where(model.id == ident).limit(1))).first() is None
 
 
+async def hard_missing_batch(session, modes):
+    """Global primary-key absence in bounded batches, with no tenant inference."""
+    from collections import defaultdict
+    from itertools import islice
+
+    from sqlmodel import select
+
+    owners, missing, iterator = business_models(), set(), iter(modes)
+    while batch := tuple(islice(iterator, 200)):
+        grouped = defaultdict(list)
+        for mode in batch:
+            owner = owners.get(mode.resource_type)
+            if mode.projection_state != "CURRENT" or owner is None:
+                continue
+            model, parse_id = owner
+            if type(mode.resource_id) is not str or not mode.resource_id:
+                continue
+            try:
+                ident = parse_id(mode.resource_id)
+            except (TypeError, ValueError):
+                continue
+            grouped[model].append((mode.id, ident))
+        for model, batch in grouped.items():
+            # The caller owns the global maintenance transaction. A physically
+            # present foreign/type-mismatched row must never be called absent.
+            present = set(
+                (await session.exec(select(model.id).where(model.id.in_([ident for _, ident in batch])))).all()
+            )
+            missing.update(mode_id for mode_id, ident in batch if ident not in present)
+    return missing
+
+
+class _ModeRows:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def __iter__(self):
+        for row in self.rows:
+            yield _ModeFact(**row)
+
+
+class _ModeFact(SimpleNamespace):
+    def model_dump(self):
+        return vars(self)
+
+
 async def downstream(session, target, *, ignored_modes=(), ignored_files=()):
     from sqlalchemy import or_
     from sqlmodel import select
@@ -257,7 +307,11 @@ async def downstream(session, target, *, ignored_modes=(), ignored_files=()):
     return False
 
 
-async def mirrors(session, target):
+async def mirrors_batch(session, targets):
+    """Read exact selected buckets, with bounded predicates/pages, including foreign sources."""
+    from collections import defaultdict
+
+    from sqlalchemy import or_
     from sqlmodel import select
 
     from bisheng.permission.application.sql_runtime import stable_grant_key
@@ -268,52 +322,126 @@ async def mirrors(session, target):
         ResourcePermissionMode,
     )
 
-    result, grants = {}, []
+    if not 1 <= len(targets) <= 50:
+        raise ValueError("history mirror batch must contain 1..50 resources")
+
+    def key(row):
+        return row["tenant_id"], row["resource_type"], row["resource_id"]
+
+    results = {key(target): {} for target in targets}
+    grant_owners = {}
     for model in (ResourcePermissionMode, PermissionGrant, PermissionVisibleSourceProjection):
-        rows = (
-            await session.exec(
-                select(model)
-                .where(
-                    model.tenant_id == target["tenant_id"],
-                    model.resource_type == target["resource_type"],
-                    model.resource_id == target["resource_id"],
-                )
-                .order_by(model.id)
-            )
-        ).all()
-        result[model.__tablename__] = [canonical(row.model_dump()) for row in rows]
-        if model is PermissionGrant:
-            grants = rows
-    ids = tuple(grant.id for grant in grants)
-    rows = (
-        (
-            await session.exec(
+        grouped = defaultdict(list)
+        predicates = [
+            (model.tenant_id == tenant) & (model.resource_type == kind) & (model.resource_id == ident)
+            for tenant, kind, ident in results
+        ]
+        after = None
+        while True:
+            query = select(model).where(or_(*predicates)).order_by(model.id).limit(200)
+            if after is not None:
+                query = query.where(model.id > after)
+            rows = (await session.exec(query)).all()
+            for row in rows:
+                fact = canonical(row.model_dump())
+                owner = key(fact)
+                grouped[owner].append(fact)
+                if model is PermissionGrant:
+                    grant_owners[row.id] = owner
+            if len(rows) < 200:
+                break
+            after = rows[-1].id
+        for owner, result in results.items():
+            result[model.__tablename__] = grouped[owner]
+    sources = defaultdict(list)
+    grant_ids = sorted(grant_owners)
+    for start in range(0, len(grant_ids), 200):
+        after = None
+        while True:
+            query = (
                 select(PermissionGrantAssignee)
-                .where(PermissionGrantAssignee.grant_id.in_(ids))
+                .where(PermissionGrantAssignee.grant_id.in_(grant_ids[start : start + 200]))
                 .order_by(PermissionGrantAssignee.id)
+                .limit(200)
             )
-        ).all()
-        if ids
-        else []
-    )
-    result[PermissionGrantAssignee.__tablename__] = [canonical(row.model_dump()) for row in rows]
-    objects = (
-        f"{target['resource_type']}:{target['resource_id']}",
-        *(
-            "permission_grant:"
-            + stable_grant_key(
-                tenant_id=target["tenant_id"],
-                resource_type=target["resource_type"],
-                resource_id=target["resource_id"],
-                model_key=grant.model_key,
-            )
-            for grant in grants
-        ),
-    )
-    return result, objects
+            if after is not None:
+                query = query.where(PermissionGrantAssignee.id > after)
+            rows = (await session.exec(query)).all()
+            for row in rows:
+                # No tenant predicate: a foreign assignee is retained evidence
+                # and blocks cleanup, exactly as in the original single reader.
+                sources[grant_owners[row.grant_id]].append(canonical(row.model_dump()))
+            if len(rows) < 200:
+                break
+            after = rows[-1].id
+    output = []
+    for target in targets:
+        owner = key(target)
+        result = results[owner]
+        result[PermissionGrantAssignee.__tablename__] = sorted(sources[owner], key=lambda row: row["id"])
+        objects = (
+            f"{target['resource_type']}:{target['resource_id']}",
+            *(
+                "permission_grant:"
+                + stable_grant_key(
+                    tenant_id=target["tenant_id"],
+                    resource_type=target["resource_type"],
+                    resource_id=target["resource_id"],
+                    model_key=grant["model_key"],
+                )
+                for grant in result[PermissionGrant.__tablename__]
+            ),
+        )
+        output.append((result, objects))
+    return output
 
 
+async def mirrors(session, target):
+    return (await mirrors_batch(session, (target,)))[0]
+
+
+def fga_blocked_modes(purges, incoming_by_subject, children_by_parent, parent_deletes):
+    """Propagate retained downstreams once per edge, including shared objects."""
+    from collections import Counter, defaultdict, deque
+
+    by_id = {item["mode"]["id"]: item for item in purges}
+    owners = Counter(obj for item in purges for obj in item["objects"])
+    object_dependents, mode_dependents = defaultdict(set), defaultdict(set)
+    rejected = set()
+    for ident, item in by_id.items():
+        mode = item["mode"]
+        for child in children_by_parent.get((mode["resource_type"], mode["resource_id"]), ()):
+            if child not in by_id:
+                rejected.add(ident)
+            else:
+                mode_dependents[child].add(ident)
+        for obj in item["objects"]:
+            for key in incoming_by_subject.get(obj, ()):
+                if key in parent_deletes:
+                    continue
+                if not owners[key[2]]:
+                    rejected.add(ident)
+                else:
+                    object_dependents[key[2]].add(ident)
+    queue = deque(sorted(rejected))
+    while queue:
+        ident = queue.popleft()
+        dependents = set(mode_dependents.get(ident, ()))
+        for obj in by_id[ident]["objects"]:
+            owners[obj] -= 1
+            if not owners[obj]:
+                dependents.update(object_dependents.get(obj, ()))
+        for dependent in sorted(dependents - rejected):
+            rejected.add(dependent)
+            queue.append(dependent)
+    return rejected
+
+
+@snapshot_scope
 async def capture(sessions, client):
+    from collections import defaultdict
+    from heapq import heappop, heappush
+
     from sqlmodel import select
 
     from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
@@ -332,21 +460,33 @@ async def capture(sessions, client):
             "blocked": [],
             "retained_evidence": [],
         }
-        modes = (await session.exec(select(ResourcePermissionMode).order_by(ResourcePermissionMode.id))).all()
-        business_plan, virtual = business.build(
-            await business.read(session), permission_modes=[canonical(m.model_dump()) for m in modes]
-        )
+        snapshot = await business.read(session)
+        store = snapshot["knowledge"].store
+        after = None
+        while True:
+            query = select(ResourcePermissionMode).order_by(ResourcePermissionMode.id).limit(200)
+            if after is not None:
+                query = query.where(ResourcePermissionMode.id > after)
+            page = (await session.exec(query)).all()
+            store.append("permission_modes", [canonical(row.model_dump()) for row in page])
+            if len(page) < 200:
+                break
+            after = page[-1].id
+        mode_rows = store.rows("permission_modes")
+        modes = _ModeRows(mode_rows)
+        business_plan, virtual = business.build(snapshot, permission_modes=mode_rows)
         result["business"] = business_plan
         result["blocked"].extend(business_plan["blocked"])
-        roots = {row["id"]: row for row in virtual["knowledge"]}
-        files = {row["id"]: row for row in virtual["knowledgefile"]}
+        roots = business.row_index(virtual["knowledge"])
+        files = business.row_index(virtual["knowledgefile"])
         retiring = {
             (row["before"]["file_type"], str(row["before"]["id"]))
             for row in business_plan["deletes"]
             if row["table"] == "knowledgefile"
         }
-        ignored_files = tuple(int(ident) for _, ident in retiring)
-        mode_map = {(row.resource_type, row.resource_id): row for row in modes}
+        ignored_files = frozenset(int(ident) for _, ident in retiring)
+        mode_map = mode_rows.grouped(("resource_type", "resource_id"))
+        parent_buffer = []
         for model, rows in (
             (KnowledgeFile, files.values()),
             (
@@ -370,6 +510,11 @@ async def capture(sessions, client):
                         {"table": model.__tablename__, "id": row["id"], "reason": "invalid_parent_chain"}
                     )
                     continue
+                # Retired PRIVATE libraries are preserved, not converted or
+                # exposed by F118. Their historical files need no new permission
+                # mode/parent projection (and must not acquire authorization).
+                if roots[row["knowledge_id"]]["type"] == 2:
+                    continue
                 if row["level"] != len(path):
                     result["levels"].append(
                         {
@@ -383,7 +528,8 @@ async def capture(sessions, client):
                 if model is not KnowledgeFile:
                     continue
                 kind = "folder" if row["file_type"] == 0 else "knowledge_file"
-                mode = mode_map.get((kind, str(row["id"])))
+                matched_modes = mode_map.get((kind, str(row["id"])))
+                mode = _ModeFact(**matched_modes[-1]) if matched_modes else None
                 root_kind = "knowledge_space" if roots[row["knowledge_id"]]["type"] == 3 else "knowledge_library"
                 parent = ("folder", str(path[-1])) if path else (root_kind, str(row["knowledge_id"]))
                 if (
@@ -400,9 +546,28 @@ async def capture(sessions, client):
                     continue
                 obj = f"{kind}:{row['id']}"
                 correct = (f"{parent[0]}:{parent[1]}", "parent", obj)
-                result["parents"].append({"before_file": row, "mode": canonical(mode.model_dump()), "correct": correct})
-        mode_links = [(mode.id, mode.parent_type, mode.parent_id) for mode in modes]
-        pending, ordered = [], set()
+                parent_buffer.append(
+                    {
+                        "id": row["id"],
+                        "item": {
+                            "before_file": row,
+                            "mode": canonical(mode.model_dump()),
+                            "correct": correct,
+                        },
+                    }
+                )
+                if len(parent_buffer) == 200:
+                    store.append("parent_candidates", parent_buffer)
+                    parent_buffer.clear()
+        store.append("parent_candidates", parent_buffer)
+        parent_rows = store.rows("parent_candidates")
+        children_by_parent = defaultdict(set)
+        for mode in modes:
+            children_by_parent[(mode.parent_type, mode.parent_id)].add(mode.id)
+        remaining_spaces = {row["knowledge_id"] for row in snapshot["knowledgefile"] if row["id"] not in ignored_files}
+        saved_references = business.group_index(snapshot["business_resource_reference"], ("target_type", "target_id"))
+        missing_ids = await hard_missing_batch(session, modes)
+        pending = []
         for mode in modes:
             target = canonical(mode.model_dump())
             planned_missing = (
@@ -410,49 +575,77 @@ async def capture(sessions, client):
                 if mode.resource_type in {"folder", "knowledge_file"}
                 else False
             )
-            if mode.projection_state == "CURRENT" and (planned_missing or await hard_missing(session, target)):
-                sql, objects = await mirrors(session, target)
-                pending.append({"mode": target, "sql": sql, "objects": objects})
-        # Schedule a deleted tree from its leaves. Ignore only children already
-        # proven eligible and earlier in this same immutable cleanup plan.
-        while pending:
-            previous = len(pending)
-            for item in tuple(pending):
-                target = item["mode"]
-                if any(row["tenant_id"] != target["tenant_id"] for row in item["sql"]["permission_grant_assignee"]):
-                    result["retained_evidence"].append({"reason": "foreign_assignee", **item})
-                    result["blocked"].append(
-                        {"table": "resource_permission_mode", "id": target["id"], "reason": "foreign_assignee"}
-                    )
-                    pending.remove(item)
-                elif not await downstream(session, target, ignored_modes=ordered, ignored_files=ignored_files):
-                    result["purges"].append(item)
-                    ordered.add(target["id"])
-                    pending.remove(item)
-            if len(pending) == previous:
-                for item in pending:
-                    result["retained_evidence"].append({"reason": "downstream_exists", **item})
-                    result["blocked"].append(
-                        {"table": "resource_permission_mode", "id": item["mode"]["id"], "reason": "downstream_exists"}
-                    )
-                break
+            if mode.projection_state == "CURRENT" and (planned_missing or mode.id in missing_ids):
+                pending.append(target)
+        candidates = []
+        for start in range(0, len(pending), 50):
+            batch = pending[start : start + 50]
+            facts = await mirrors_batch(session, batch)
+            candidates.extend(
+                {"mode": target, "sql": sql, "objects": objects}
+                for target, (sql, objects) in zip(batch, facts, strict=True)
+            )
+        pending = candidates
+        # All these facts were acquired in this same stopped-service native
+        # snapshot. Apply still re-reads live downstreams before each purge.
+        pending = {item["mode"]["id"]: item for item in pending}
+        for ident, item in tuple(pending.items()):
+            if any(row["tenant_id"] != item["mode"]["tenant_id"] for row in item["sql"]["permission_grant_assignee"]):
+                result["retained_evidence"].append({"reason": "foreign_assignee", **item})
+                result["blocked"].append(
+                    {"table": "resource_permission_mode", "id": ident, "reason": "foreign_assignee"}
+                )
+                del pending[ident]
+        parents_by_key = defaultdict(list)
+        remaining_children, queue = {}, []
+        for ident, item in pending.items():
+            mode = item["mode"]
+            key = (mode["resource_type"], mode["resource_id"])
+            parents_by_key[key].append(ident)
+            remaining_children[ident] = set(children_by_parent[key])
+            if not remaining_children[ident]:
+                heappush(queue, ident)
+        while queue:
+            ident = heappop(queue)
+            item = pending[ident]
+            target = item["mode"]
+            kind, resource_id = target["resource_type"], target["resource_id"]
+            if kind in {"knowledge_space", "knowledge_library"} and int(resource_id) in remaining_spaces:
+                continue
+            if kind in {"knowledge_space", "knowledge_library", "knowledge_file"} and (
+                (kind, resource_id) in saved_references
+                or ("knowledge_space" if kind == "knowledge_library" else kind, resource_id) in saved_references
+            ):
+                continue
+            result["purges"].append(item)
+            del pending[ident]
+            for parent in parents_by_key[(target["parent_type"], target["parent_id"])]:
+                if parent in pending:
+                    remaining_children[parent].discard(ident)
+                    if not remaining_children[parent]:
+                        heappush(queue, parent)
+        for ident, item in pending.items():
+            result["retained_evidence"].append({"reason": "downstream_exists", **item})
+            result["blocked"].append({"table": "resource_permission_mode", "id": ident, "reason": "downstream_exists"})
     # One offline Store walk; retain only relevant parent/owned-object keys.
     # External IO never holds a business SQL session.
-    parents = {item["correct"][2] for item in result["parents"]}
+    parents = {row["item"]["correct"][2] for row in parent_rows}
     owned = {obj for item in (*result["purges"], *result["retained_evidence"]) for obj in item.get("objects", ())}
     orphan_objects = {
         f"{'folder' if item['before']['file_type'] == 0 else 'knowledge_file'}:{item['before']['id']}"
         for item in result["business"]["deletes"]
         if item["table"] == "knowledgefile"
     }
-    keys_by_object, incoming = {}, []
+    keys_by_object, incoming_by_subject = {}, defaultdict(list)
+    selected_objects = owned | orphan_objects
     async for row in client.iter_tuples(consistency="HIGHER_CONSISTENCY"):
-        if row["object"] in owned | orphan_objects or (row["object"] in parents and row["relation"] == "parent"):
+        if row["object"] in selected_objects or (row["object"] in parents and row["relation"] == "parent"):
             keys_by_object.setdefault(row["object"], []).append(row)
-        if row["user"].partition("#")[0] in owned | orphan_objects:
-            incoming.append((row["user"], row["relation"], row["object"]))
+        subject = row["user"].partition("#")[0]
+        if subject in selected_objects:
+            incoming_by_subject[subject].append((row["user"], row["relation"], row["object"]))
     for obj in orphan_objects - owned:
-        if keys_by_object.get(obj) or any(key[0].partition("#")[0] == obj for key in incoming):
+        if keys_by_object.get(obj) or incoming_by_subject.get(obj):
             detail = {
                 "table": "knowledgefile",
                 "id": int(obj.partition(":")[2]),
@@ -461,7 +654,9 @@ async def capture(sessions, client):
             result["business"]["blocked"].append(detail)
             result["blocked"].append(detail)
     selected = []
-    for item in result["parents"]:
+    for stored in parent_rows:
+        item = stored["item"]
+        item["correct"] = tuple(item["correct"])
         present = {(raw["user"], raw["relation"], raw["object"]) for raw in keys_by_object.get(item["correct"][2], ())}
         extras = sorted(present - {item["correct"]})
         if extras and item["correct"] in present:
@@ -485,39 +680,22 @@ async def capture(sessions, client):
     parent_deletes = {tuple(key) for item in selected for key in item["deletes"]}
     # A graph edge to a live/unknown external object is a real downstream,
     # even when its SQL parent mirror has disappeared. Do not infer it away.
-    while True:
-        active = {obj for item in result["purges"] for obj in item["objects"]}
-        active_ids = {item["mode"]["id"] for item in result["purges"]}
-        rejected = {
-            item["mode"]["id"]
-            for item in result["purges"]
-            if any(
-                key[0].partition("#")[0] in item["objects"] and key[2] not in active and key not in parent_deletes
-                for key in incoming
-            )
-            or any(
-                ident not in active_ids
-                and (kind, parent_id) == (item["mode"]["resource_type"], item["mode"]["resource_id"])
-                for ident, kind, parent_id in mode_links
-            )
-        }
-        if not rejected:
-            break
-        result["retained_evidence"].extend(
-            {"reason": "fga_downstream_exists", **item} for item in result["purges"] if item["mode"]["id"] in rejected
-        )
-        result["blocked"].extend(
-            {"table": "resource_permission_mode", "id": ident, "reason": "fga_downstream_exists"}
-            for ident in sorted(rejected)
-        )
-        result["purges"] = [item for item in result["purges"] if item["mode"]["id"] not in rejected]
+    rejected = fga_blocked_modes(result["purges"], incoming_by_subject, children_by_parent, parent_deletes)
+    result["retained_evidence"].extend(
+        {"reason": "fga_downstream_exists", **item} for item in result["purges"] if item["mode"]["id"] in rejected
+    )
+    result["blocked"].extend(
+        {"table": "resource_permission_mode", "id": ident, "reason": "fga_downstream_exists"}
+        for ident in sorted(rejected)
+    )
+    result["purges"] = [item for item in result["purges"] if item["mode"]["id"] not in rejected]
     for item in result["purges"]:
         item["tuples"] = [row for obj in item["objects"] for row in keys_by_object.get(obj, ())]
-        item["incoming"] = [key for key in incoming if key[0].partition("#")[0] in item["objects"]]
+        item["incoming"] = [key for obj in item["objects"] for key in incoming_by_subject.get(obj, ())]
     for item in result["retained_evidence"]:
         if "objects" in item:
             item["tuples"] = [row for obj in item["objects"] for row in keys_by_object.get(obj, ())]
-            item["incoming"] = [key for key in incoming if key[0].partition("#")[0] in item["objects"]]
+            item["incoming"] = [key for obj in item["objects"] for key in incoming_by_subject.get(obj, ())]
     return canonical(result)
 
 
@@ -603,6 +781,98 @@ def level_scope(model, before):
     return (model.id == before["id"], model.knowledge_id == before["knowledge_id"], owner)
 
 
+async def project_history_delete(*, plan, item, sessions, client, runtime, repository, actor, target, key):
+    """Forward-recover only a frozen history delete with pre-existing missing markers.
+
+    Ordinary permission mutations retain their fail-closed semantics. The native
+    recovery service owns correction, fence checks, verification and finalization;
+    this maintenance adapter only narrows which failures it may recover.
+    """
+    from loguru import logger
+
+    from bisheng.common.errcode.permission import PermissionProjectionFailedError
+    from bisheng.permission.domain.services.projection_plan import (
+        build_projection_operation,
+        normalize_projection_plan,
+        projection_request_checksum,
+    )
+    from bisheng.permission.domain.services.projection_service import restore_projection_plan
+    from bisheng.permission.domain.services.resource_lifecycle_policy import build_delete_plan
+
+    try:
+        return await runtime.project_delete(actor=actor, target=target, idempotency_key=key)
+    except PermissionProjectionFailedError as error:
+        operation = await repository.aget_operation_by_idempotency(key)
+        # Safe diagnostics only: provider messages can contain configuration or SQL.
+        error.kwargs.update(reason="history_prepare_delete_projection_failed")
+        if operation is None:
+            raise
+        error.kwargs.update(operation_id=operation.id, projection_status=operation.status)
+        if operation.status != "FAILED_CLOSED":
+            raise
+        details = {"operation_id": operation.id, "projection_status": operation.status}
+        expected = normalize_projection_plan(
+            build_delete_plan(
+                target,
+                store_id=plan["pin"]["store_id"],
+                model_id=plan["pin"]["model_id"],
+                operator_id=actor.user_id,
+                idempotency_key=key,
+            )
+        )
+        frozen = restore_projection_plan(operation, await repository.aget_operation_tuples(operation.id))
+        expected_operation, _ = build_projection_operation(
+            expected, request_checksum=projection_request_checksum(expected)
+        )
+        if (
+            frozen != expected
+            or operation.before_checksum != expected_operation.before_checksum
+            or operation.after_checksum != expected_operation.after_checksum
+        ):
+            blocked("delete_recovery_ledger_changed", **details)
+        marker_keys = {delta.key for delta in expected.deltas}
+        original_keys = {(row["user"], row["relation"], row["object"]) for row in item["tuples"]}
+        # A full pair that became MIXED is a different failure. An empty pair
+        # already satisfies AFTER and ordinary reconciliation handles it.
+        if len(marker_keys & original_keys) != 1:
+            raise
+
+        # Recheck after the failed attempt, before any recovery write. The frozen
+        # plan must still own a hard-deleted resource and an unchanged inventory.
+        async with global_session(sessions) as session:
+            await unfrozen(session)
+            if await read_pin(session) != plan["pin"]:
+                blocked("catalog_pin_changed", **details)
+            if not await hard_missing(session, item["mode"]) or await downstream(session, item["mode"]):
+                blocked("purge_business_or_downstream_changed", **details)
+            current, _ = await mirrors(session, item["mode"])
+            if stable_mirrors(current) != stable_mirrors(item["sql"]):
+                blocked("purge_mirrors_changed", **details)
+        for obj in item["objects"]:
+            rows = await client.read_tuples(object=obj, consistency="HIGHER_CONSISTENCY")
+            if {(row["user"], row["relation"], row["object"]) for row in rows} - original_keys:
+                blocked("purge_graph_changed", **details)
+        preview = await runtime._projection.inspect_failed_closed_recovery(operation.id)
+        if (
+            preview.observed_state not in {"MIXED", "AFTER"}
+            or preview.target_tuple_count != len(marker_keys)
+            or any(delta.action != "DELETE" or delta.key not in marker_keys for delta in preview.correction_deltas)
+        ):
+            blocked("delete_recovery_not_marker_only", **details)
+        logger.warning("Recovering historical delete projection operation={} scope={}", operation.id, frozen.scope_key)
+        try:
+            return await runtime._projection.recover_failed_closed_operation(
+                operation.id, confirmation_checksum=preview.confirmation_checksum
+            )
+        except Exception as recovery_error:
+            # Preserve the error type and traceback while reporting a safe,
+            # actionable reason even when the transport error contains secrets.
+            if hasattr(recovery_error, "kwargs"):
+                recovery_error.kwargs.update(reason="history_prepare_delete_recovery_failed", **details)
+            raise
+
+
+@snapshot_scope
 async def apply(plan, *, sessions, client, runtime, operator_id, physical=None):
     from dataclasses import replace
 
@@ -638,10 +908,19 @@ async def apply(plan, *, sessions, client, runtime, operator_id, physical=None):
             blocked("business_scope_changed")
         from bisheng.permission.domain.models import ResourcePermissionMode
 
-        for mode in (await session.exec(select(ResourcePermissionMode))).all():
-            resource_key = (mode.resource_type, mode.resource_id)
-            if resource_key in deleted_files and resource_key not in purged:
-                blocked("orphan_permission_cleanup_not_proven")
+        for kind in ("folder", "knowledge_file"):
+            ids = sorted(ident for resource_type, ident in deleted_files if resource_type == kind)
+            for start in range(0, len(ids), 200):
+                rows = (
+                    await session.exec(
+                        select(ResourcePermissionMode.resource_type, ResourcePermissionMode.resource_id).where(
+                            ResourcePermissionMode.resource_type == kind,
+                            ResourcePermissionMode.resource_id.in_(ids[start : start + 200]),
+                        )
+                    )
+                ).all()
+                if any((row.resource_type, row.resource_id) not in purged for row in rows):
+                    blocked("orphan_permission_cleanup_not_proven")
         # Physical cleanup cannot precede a changed authorization/downstream
         # scope. Resume may have advanced only the original purge journal.
         for item in plan["purges"]:
@@ -796,7 +1075,17 @@ async def apply(plan, *, sessions, client, runtime, operator_id, physical=None):
 
             if keys(actual) - keys(item["tuples"]) or (existing is None and keys(actual) != keys(item["tuples"])):
                 blocked("purge_graph_changed")
-            outcome = await runtime.project_delete(actor=actor, target=target, idempotency_key=key)
+            outcome = await project_history_delete(
+                plan=plan,
+                item=item,
+                sessions=sessions,
+                client=client,
+                runtime=runtime,
+                repository=repository,
+                actor=actor,
+                target=target,
+                key=key,
+            )
             receipts.append(outcome.operation_id)
             await DeletedResourceCleanup(runtime, repository=repository).run(
                 actor=actor, target=target, delete_idempotency_key=key
@@ -840,6 +1129,7 @@ async def apply(plan, *, sessions, client, runtime, operator_id, physical=None):
     }
 
 
+@snapshot_scope
 async def arun(args):
     from contextlib import AsyncExitStack
 
@@ -1024,9 +1314,16 @@ def main(argv=None):
         # Do not expose configuration/provider exception text or backup rows.
         failure = {
             "error_type": type(error).__name__,
-            "reason": getattr(error, "kwargs", {}).get("reason"),
+            "reason": getattr(error, "kwargs", {}).get("reason") or "history_prepare_execution_failed",
             "resume_same_plan": True,
         }
+        failure.update(
+            {
+                key: error.kwargs[key]
+                for key in ("operation_id", "projection_status")
+                if key in getattr(error, "kwargs", {})
+            }
+        )
         if args.apply:
             try:
                 record_event(args.plan, {"event": "apply_failed", **failure})

@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button, notification } from '@bisheng/ui';
 import { SubjectSearchDepartment } from "@/components/bs-comp/permission/SubjectSearchDepartment"
 import type { SelectedSubject } from "@/components/bs-comp/permission/types"
@@ -121,7 +122,7 @@ export function DepartmentSpaceDialog({
             <p>{t("departmentSpace.dialogHint")}</p>
             <p className="mt-2">
               {loading
-                ? t("loading")
+                ? <LoadingState size="inline" label={t("loading")} />
                 : t("departmentSpace.createdHint", { count: departmentSpaces.length })}
             </p>
           </div>

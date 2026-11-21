@@ -19,6 +19,7 @@ from bisheng.knowledge.rag.pipeline.loader.media import BishengMediaLoader
 from bisheng.knowledge.rag.pipeline.loader.mineru import MineruLoader
 from bisheng.knowledge.rag.pipeline.loader.mineru_v4 import MineruV4Loader
 from bisheng.knowledge.rag.pipeline.loader.mineru_v4_client import MineruV4Error
+from bisheng.knowledge.rag.pipeline.loader.minicpm_ocr import MinicpmOcrLoader
 from bisheng.knowledge.rag.pipeline.loader.ofd import OfdLoader
 from bisheng.knowledge.rag.pipeline.loader.paddle_ocr import PaddleOcrLoader
 from bisheng.knowledge.rag.pipeline.loader.pdf import LocalPdfLoader
@@ -160,7 +161,12 @@ class BaseFilePipeline(BasePipeline):
             self.loader = loader
             transformers = getattr(self, transformers_func)() if transformers_func else []
             self.transformers = transformers
-            pipeline = NormalPipeline(loader=loader, transformers=transformers, vector_store=self.vector_store)
+            pipeline = NormalPipeline(
+                loader=loader,
+                transformers=transformers,
+                vector_store=self.vector_store,
+                processing_guard=self.processing_guard,
+            )
             return pipeline.run(config)
 
     def _get_loader_common_params(self, file_path: str | None = None, file_extension: str | None = None) -> dict:
@@ -296,6 +302,13 @@ class BaseFilePipeline(BasePipeline):
                 **common_params,
                 filter_page_header_footer=self.file_split_rule.filter_page_header_footer == 1,
                 **knowledge_conf.paddle_ocr.model_dump(),
+            )
+        elif knowledge_conf.loader_provider == ParseType.MINICPM_OCR.value and knowledge_conf.minicpm_ocr.base_url:
+            if hasattr(self, "db_file") and self.db_file:
+                self.db_file.parse_type = ParseType.MINICPM_OCR.value
+            return MinicpmOcrLoader(
+                **common_params,
+                **knowledge_conf.minicpm_ocr.model_dump(),
             )
         return LocalPdfLoader(
             **common_params,

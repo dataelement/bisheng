@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Iterable
 
+from loguru import logger
+
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.permission import (
     InvalidCatalogActionError,
@@ -27,6 +29,16 @@ from bisheng.permission.domain.services.permission_action_service import Permiss
 _MAX_BATCH_CHECKS = 100
 
 
+def _tenant_admin_business_visibility(actor: PermissionActor, target: VerifiedPermissionTarget, action: str) -> bool:
+    """Business access differs from personal membership's exact visibility."""
+    return (
+        action == "visible"
+        and actor.data_scope == DATA_SCOPE_ALL
+        and actor.current_tenant_id in actor.tenant_admin_tenant_ids
+        and target.tenant_id == actor.current_tenant_id
+    )
+
+
 async def _require_creation_ready(resource_type, resource_ids):
     from bisheng.core.context.tenant import get_current_tenant_id
 
@@ -44,23 +56,74 @@ async def _require_creation_ready(resource_type, resource_ids):
     await require_creation_ready(get_current_tenant_id(), resource_ids)
 
 
-async def _require_management_target(resource_type, resource_ids):
+async def _management_target_loader(resource_type):
+    """Return ``(expected_tenant_id, port)``, or ``None`` when no proof is due."""
+
     from bisheng.permission.application.request_boundary import request_business_target
 
     expected = request_business_target()
     if expected is None:
-        return
+        return None
     registry = await get_f048_resource_registry()
     port = registry.port_for(resource_type)
     loader = getattr(port, "load_permission_record", None)
     if loader is None:
         raise PermissionInvalidResourceError()
+    return expected, port
+
+
+async def _require_management_target(resource_type, resource_ids):
+    proof = await _management_target_loader(resource_type)
+    if proof is None:
+        return
+    expected, port = proof
     # This is a business boundary check, not a second authorization decision.
     # Domain-owned shared-resource scopes deliberately clear the admin override.
     for resource_id in resource_ids:
-        record = await loader(resource_id=str(resource_id))
+        record = await port.load_permission_record(resource_id=str(resource_id))
         if record is None or record.tenant_id != expected:
             raise PermissionInvalidResourceError()
+
+
+async def _admitted_management_targets(resource_type, resource_ids):
+    """Batch form of ``_require_management_target``: keep only the proven ids.
+
+    A listing asks "which of these can the caller act on", and its candidates
+    often come from stored references (a workstation config, a reference
+    ledger) that outlive the resource. One deleted or foreign id used to raise
+    25022 for the whole batch, which took every other candidate down with it:
+    a single deleted knowledge base in ``orgKbs`` failed the workstation config
+    for every super admin. An unproven id is left out, so it gets no action; a
+    resource with an unavailable projection is also excluded. Unexpected
+    loader failures still raise instead of returning a partial success.
+    """
+
+    proof = await _management_target_loader(resource_type)
+    if proof is None:
+        return resource_ids
+    expected, port = proof
+    batch = getattr(port, "load_permission_records", None)
+    records = await batch(resource_ids=tuple(str(value) for value in resource_ids)) if batch is not None else None
+    if records is None:
+        records = {}
+        for resource_id in resource_ids:
+            try:
+                records[str(resource_id)] = await port.load_permission_record(resource_id=resource_id)
+            except (PermissionInvalidResourceError, PermissionPublishNotReadyError):
+                # Deny this candidate without making unrelated valid resources
+                # unavailable. Single-resource operations retain the error.
+                logger.opt(exception=True).warning(
+                    "Excluded unreadable listing candidate: tenant={} resource={}:{}",
+                    expected,
+                    resource_type,
+                    resource_id,
+                )
+    admitted = []
+    for resource_id in resource_ids:
+        record = records.get(str(resource_id))
+        if record is not None and record.tenant_id == expected:
+            admitted.append(resource_id)
+    return tuple(admitted)
 
 
 @contextual_operation
@@ -105,6 +168,8 @@ async def check_business_action(
         actor=actor,
         action=action,
     )
+    if _tenant_admin_business_visibility(actor, target, action):
+        return True
     runtime = await get_f048_runtime()
     return await runtime.check_action(actor, target, action)
 
@@ -165,7 +230,12 @@ async def batch_check_business_actions(
     if not normalized_ids or not normalized_actions:
         return {}
 
-    await _require_management_target(resource_type, normalized_ids)
+    # Ids outside the admitted management target keep an empty action set, the
+    # same answer the resolver below gives for an id it cannot resolve.
+    result: dict[str, set[str]] = {resource_id: set() for resource_id in normalized_ids}
+    normalized_ids = await _admitted_management_targets(resource_type, normalized_ids)
+    if not normalized_ids:
+        return {resource_id: frozenset() for resource_id in result}
     await _require_creation_ready(resource_type, normalized_ids)
     actor = await resolve_permission_actor(login_user)
     if actor.super_admin and actor.data_scope == DATA_SCOPE_ALL:
@@ -175,10 +245,10 @@ async def batch_check_business_actions(
         # therefore paid 500 resolutions to reach a foregone conclusion.
         # F066: a narrowed token pays the full path instead — the runtime is
         # where the data-scope denial lives, and it must not be skipped.
-        return {resource_id: frozenset(normalized_actions) for resource_id in normalized_ids}
+        granted = frozenset(normalized_actions)
+        return {resource_id: granted if resource_id in normalized_ids else frozenset() for resource_id in result}
 
     registry = await get_f048_resource_registry()
-    result: dict[str, set[str]] = {resource_id: set() for resource_id in normalized_ids}
     runtime = await get_f048_runtime()
     for requested_action in normalized_actions:
         action = normalize_legacy_action(requested_action)
@@ -212,6 +282,9 @@ async def batch_check_business_actions(
                 continue
             if isinstance(resolution, BaseException):
                 raise resolution
+            if _tenant_admin_business_visibility(actor, resolution, action):
+                result[resource_id].add(requested_action)
+                continue
             targets.append(resolution)
             target_ids.append(resource_id)
         for offset in range(0, len(targets), _MAX_BATCH_CHECKS):

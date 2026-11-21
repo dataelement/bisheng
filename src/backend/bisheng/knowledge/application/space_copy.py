@@ -74,7 +74,7 @@ class SpaceCopyApplication:
 
         await KnowledgeSpaceService(None, identity)._assert_space_creation_quota()
 
-    async def authorize(self, identity, source):
+    async def authorize(self, identity, source, *, frozen=True):
         tenant = admission.tenant()
         async with self.sessions() as session:
             context = authority_context()
@@ -88,7 +88,7 @@ class SpaceCopyApplication:
             or (actor.subject_type, actor.subject_id) != ("user", source["user_id"])
         ):
             raise PermissionDeniedError(reason="space_copy_actual_creator_required")
-        if (
+        if frozen and (
             actual.state != 1
             or actual.model_transition is not None
             or any(
@@ -216,40 +216,39 @@ class SpaceCopyApplication:
             reference, current=identity, entry_kind=entry_kind, required_action="upload_file"
         ) as (actual, _):
             authority = authority_context()
-            await self.authorize(actual, scope.source)
+            await self.authorize(actual, scope.source, frozen=unconsumed)
             creation = await self.creation_policy.prepare(actual) if entry_kind == "web" else None
-            async with self.sessions() as session:
-                context = authority_context()
-                current = await self.rows.aload_scope(session, source_space_id)
-                if (
-                    (current.digest != scope.digest)
-                    if unconsumed
-                    else (current.execution_digest != scope.execution_digest)
-                ):
+            if unconsumed:
+                async with self.sessions() as session:
+                    current = await self.rows.aload_scope(session, source_space_id)
+                    if current.digest != scope.digest:
+                        raise KnowledgeOperationPlanChangedError()
+                if await self._permissions(scope) != payload["permissions"]:
                     raise KnowledgeOperationPlanChangedError()
-            if await self._permissions(scope) != payload["permissions"]:
-                raise KnowledgeOperationPlanChangedError()
             if creation is not None:
                 await self.creation_policy.revalidate(creation)
             if unconsumed:
                 await self.quota(actual)
             assert_authority(authority)
             result = await self._accept(source_space_id, request, scope, actual)
+            if result["processing_job"] is not None:
+                # The job is already durable and pending dispatch. Permission
+                # projection, index bootstrap and file copy continue in the
+                # worker, so this response can return as soon as the task exists.
+                return result
             from bisheng.knowledge.application.space_copy_owner import SpaceCopyOwner
 
-            # New copies, including empty spaces, execute only in the worker.
-            # Retain completion of already-consumed legacy empty-copy plans.
-            if result["processing_job"] is None:
-                await SpaceCopyOwner(self).aensure_logical(
-                    result["knowledge"].id, None, identity=actual, entry_kind=entry_kind
-                )
+            # An empty copy has no worker. Finish its permissions and indexes
+            # here; there is no file phase left to wait for.
+            await SpaceCopyOwner(self).aensure_logical(
+                result["knowledge"].id, None, identity=actual, entry_kind=entry_kind
+            )
             async with self.sessions() as session:
                 context = authority_context()
                 row = await self.rows.aroot(session, result["knowledge"].id)
                 clean(session, context)
                 result["knowledge"] = row.model_copy(deep=True)
-                if result["processing_job"] is None:
-                    result["completed"] = row.state == 1
+                result["completed"] = row.state == 1
             return result
 
     async def _accept(self, source_id, request, scope, identity):
@@ -257,14 +256,11 @@ class SpaceCopyApplication:
         scope_digest = scope.digest
         async with self.sessions() as session:
             context = authority_context()
-            current = await self.rows.aload_scope(session, source_id, lock=True)
             plan = await self._read_plan(session, source_id, request)
-            if (
-                (current.execution_digest != scope.execution_digest)
-                if plan.operation_id
-                else (current.digest != scope_digest)
-            ):
-                raise KnowledgeOperationPlanChangedError()
+            if plan.operation_id is None:
+                current = await self.rows.aload_scope(session, source_id, lock=True)
+                if current.digest != scope_digest:
+                    raise KnowledgeOperationPlanChangedError()
             if plan.operation_id:
                 if plan.operation == "space_copy":
                     job = await self.jobs.aget(session, plan.operation_id)
@@ -354,6 +350,14 @@ class SpaceCopyApplication:
                         key: {ident: value["id"] for ident, value in rows.items()} for key, rows in mapping.items()
                     },
                     "permissions": plan.parameters["permissions"],
+                    "object_map": {
+                        row[key]: copied[key]
+                        for row in scope.files
+                        if row["file_type"] == 1
+                        for copied in (mapping["files"][str(row["id"])],)
+                        for key in ("object_name", "preview_file_object_name", "bbox_object_name", "thumbnails")
+                        if row.get(key) and copied.get(key)
+                    },
                 }
                 result = await self.jobs.acreate(
                     session,

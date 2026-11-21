@@ -1,6 +1,5 @@
 // @ts-strict-ignore
 import { Button } from '@bisheng/ui';
-import { Outlined } from "bisheng-icons";
 
 import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -8,7 +7,6 @@ import { Tag } from "@bisheng/ui";
 
 import EditLabel from "../../../components/bs-ui/editLabel";
 import { alertContext } from "../../../contexts/alertContext";
-import { getModelInfoApi } from "../../../controllers/API";
 import { cancelTaskApi, getTaskInfoApi, publishTaskApi, unPublishTaskApi, updataTaskNameApi } from "../../../controllers/API/finetune";
 import { handleUiRequest, showApiError } from "../../../controllers/request";
 import { TaskDB } from "../../../types/api/finetune";
@@ -103,13 +101,13 @@ const HeadButtonView = ({ name, status, online, onPublish, onUnPublish, onDelete
 
     return <div className="absolute right-4 flex gap-2">
         {status === TaskStatus.PUBLISH_SUCCESS ?
-            <Button size="small" disabled={loading} onClick={handleUiRequest(cancelPublish)}>
-                {loading && <Outlined.Loading className="animate-spin animate-spin mr-2" size={14} />}
+            <Button size="small" disabled={loading} onClick={handleUiRequest(cancelPublish)} loading={loading}>
+
                 {t('finetune.cancelPublish')}
             </Button> :
             status === TaskStatus.TRAIN_SUCCESS ?
-                <Button size="small" disabled={loading} onClick={handleUiRequest(handlePublish)}>
-                    {loading && <Outlined.Loading className="animate-spin animate-spin mr-2" size={14} />}
+                <Button size="small" disabled={loading} onClick={handleUiRequest(handlePublish)} loading={loading}>
+
                     {t('finetune.publish')}
                 </Button> : null
         }
@@ -132,19 +130,11 @@ export default function FinetuneDetail({ id, onDelete, onStatusChange }) {
 
     // 上线状态
     const [online, setOnline] = useState(false)
-    const getOnlineState = (modelId) => {
-        if (modelId) {
-            return getModelInfoApi(modelId).then((data) => {
-                console.log(data);
-                setOnline(data.status === '已上线')
-            })
-        }
-    }
 
     useEffect(() => {
         getTaskInfoApi(id).then((data) => {
             setBaseInfo(data.finetune)
-            return getOnlineState(data.finetune.model_id)
+            setOnline(data.model_online === true)
         }).catch(showApiError)
     }, [id])
 

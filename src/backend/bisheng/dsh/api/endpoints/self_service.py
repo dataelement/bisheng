@@ -10,6 +10,7 @@ from bisheng.common.schemas.api import resp_200
 from bisheng.dsh.api.dependencies import get_runtime
 from bisheng.dsh.api.responses import DshRoute
 from bisheng.dsh.domain.services.self_service import DshSelfService
+from bisheng.dsh.request_origin import require_client_browser_origin
 
 router = APIRouter(prefix="/dsh/me", route_class=DshRoute)
 
@@ -37,11 +38,8 @@ async def sessions(
 async def revoke(
     session_id: UUID, request: Request, user=Depends(UserPayload.get_login_user), service=Depends(self_service)
 ):
-    if (
-        request.headers.get("origin") != service.runtime.settings.platform_public_url
-        or request.headers.get("sec-fetch-site", "same-origin") != "same-origin"
-        or request.headers.get("content-type", "").split(";", 1)[0].lower() != "application/json"
-    ):
+    await require_client_browser_origin(request, service.runtime.settings)
+    if request.headers.get("content-type", "").split(";", 1)[0].lower() != "application/json":
         raise HTTPException(403, "Invalid browser origin")
     return resp_200(data=await service.revoke(user, str(session_id)))
 

@@ -12,6 +12,43 @@ from bisheng.permission.domain.repositories.move_projection_repository import Mo
 
 
 class CopyProjectionRepository(MoveProjectionRepository):
+    async def aread_current_target(self, session, *, target):
+        tenant, _transaction = self._scope(session)
+        if target.tenant_id != tenant:
+            raise PermissionPublishNotReadyError()
+        keys = ((target.resource_type, target.resource_id),)
+        self._pending(session, keys, ())
+        modes = await self._read(
+            session,
+            sa.select(Mode.__table__)
+            .where(
+                Mode.tenant_id == tenant,
+                Mode.resource_type == target.resource_type,
+                Mode.resource_id == target.resource_id,
+            )
+            .with_for_update(),
+        )
+        if len(modes) != 1:
+            raise PermissionPublishNotReadyError()
+        state = SimpleNamespace(**modes[0])
+        operations = await self._read(
+            session,
+            sa.select(Operation.__table__)
+            .where(Operation.tenant_id == tenant, Operation.id == state.operation_id)
+            .with_for_update(),
+        )
+        if len(operations) != 1:
+            raise PermissionPublishNotReadyError()
+        fact = SimpleNamespace(**operations[0])
+        tuples = await self._read(
+            session,
+            sa.select(TupleRow.__table__)
+            .where(TupleRow.tenant_id == tenant, TupleRow.operation_id == fact.id)
+            .order_by(TupleRow.phase, TupleRow.sequence),
+        )
+        self._pending(session, keys, (fact.id,))
+        return state, fact, tuple(SimpleNamespace(**row) for row in tuples)
+
     async def aread_pair(self, session, *, source, target, key):
         tenant, _transaction = self._scope(session)
         if (

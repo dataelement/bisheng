@@ -6,6 +6,7 @@ module.exports = {
   content: [
     "../packages/ui/src/**/*.{ts,tsx}",
     "../packages/chat/src/**/*.{ts,tsx}",
+    "../packages/knowledge/src/**/*.{ts,tsx}",
     "./index.html",
     "./src/**/*.{js,ts,tsx,jsx}",
     // packages/file-viewers is source-shipped and consumed by both apps: its

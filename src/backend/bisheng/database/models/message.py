@@ -24,6 +24,7 @@ from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType, LargeText
 from bisheng.core.database.retry import retry_on_transient_db_conflict
+from bisheng.core.database.tenant_filter import apply_strict_tenant_filter
 
 
 class LikedType(Enum):
@@ -303,7 +304,9 @@ class ChatMessageDao(MessageBase):
             logger.info("delete_param_error user_id={} chat_id={}", user_id, chat_id)
             return False
 
-        statement = delete(ChatMessage).where(ChatMessage.chat_id == chat_id, ChatMessage.user_id == user_id)
+        statement = apply_strict_tenant_filter(delete(ChatMessage), ChatMessage.tenant_id).where(
+            ChatMessage.chat_id == chat_id, ChatMessage.user_id == user_id
+        )
 
         with get_sync_db_session() as session:
             session.exec(statement)
@@ -315,7 +318,9 @@ class ChatMessageDao(MessageBase):
         if user_id is None or chat_id is None:
             logger.info("delete_param_error user_id={} chat_id={}", user_id, chat_id)
             return False
-        statement = delete(ChatMessage).where(ChatMessage.chat_id == chat_id, ChatMessage.user_id == user_id)
+        statement = apply_strict_tenant_filter(delete(ChatMessage), ChatMessage.tenant_id).where(
+            ChatMessage.chat_id == chat_id, ChatMessage.user_id == user_id
+        )
         async with get_async_db_session() as session:
             await session.exec(statement)
             await session.commit()
@@ -327,7 +332,9 @@ class ChatMessageDao(MessageBase):
             logger.info("delete_param_error user_id={} chat_id={}", user_id, message_id)
             return False
 
-        statement = delete(ChatMessage).where(ChatMessage.id == message_id, ChatMessage.user_id == user_id)
+        statement = apply_strict_tenant_filter(delete(ChatMessage), ChatMessage.tenant_id).where(
+            ChatMessage.id == message_id, ChatMessage.user_id == user_id
+        )
 
         with get_sync_db_session() as session:
             session.exec(statement)
@@ -415,7 +422,7 @@ class ChatMessageDao(MessageBase):
     def update_message(cls, message_id: int, user_id: int, message: str):
         with get_sync_db_session() as session:
             statement = (
-                update(ChatMessage)
+                apply_strict_tenant_filter(update(ChatMessage), ChatMessage.tenant_id)
                 .where(ChatMessage.id == message_id)
                 .where(ChatMessage.user_id == user_id)
                 .values(message=message)
@@ -462,14 +469,22 @@ class ChatMessageDao(MessageBase):
     @classmethod
     def update_message_copied(cls, message_id: int, copied: int):
         with get_sync_db_session() as session:
-            statement = update(ChatMessage).where(ChatMessage.id == message_id).values(copied=copied)
+            statement = (
+                apply_strict_tenant_filter(update(ChatMessage), ChatMessage.tenant_id)
+                .where(ChatMessage.id == message_id)
+                .values(copied=copied)
+            )
             session.exec(statement)
             session.commit()
 
     @classmethod
     def update_message_mark(cls, chat_id: str, status: int):
         with get_sync_db_session() as session:
-            statement = update(ChatMessage).where(ChatMessage.chat_id == chat_id).values(mark_status=status)
+            statement = (
+                apply_strict_tenant_filter(update(ChatMessage), ChatMessage.tenant_id)
+                .where(ChatMessage.chat_id == chat_id)
+                .values(mark_status=status)
+            )
             session.exec(statement)
             session.commit()
 

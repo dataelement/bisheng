@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Input } from '@bisheng/ui';
 import { showApiError } from "@/controllers/request";
 import { Outlined } from "bisheng-icons";
@@ -204,9 +205,7 @@ export function EnumMultiSelect({
           </div>
 
           {loading && page === 1 ? (
-            <div className="px-3 py-4 text-sm text-muted-foreground text-center">
-              {t('filterConditionDialog.enumSelect.loading')}
-            </div>
+            <LoadingState size="panel" label={t('filterConditionDialog.enumSelect.loading')} className="px-3 py-4 text-sm text-muted-foreground text-center" />
           ) : (
             <>
               {values.length > 0 && (
@@ -235,9 +234,7 @@ export function EnumMultiSelect({
                       </div>
                     ))}
                     {(loading || searchLoading) && page > 1 && (
-                      <div className="px-3 py-2 text-sm text-muted-foreground text-center">
-                        {t('filterConditionDialog.enumSelect.loadingMore')}
-                      </div>
+                      <LoadingState size="inline" label={t('filterConditionDialog.enumSelect.loadingMore')} className="px-3 py-2 text-sm text-muted-foreground text-center" />
                     )}
                   </>
                 ) : (

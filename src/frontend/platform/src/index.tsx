@@ -12,6 +12,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { createPlatformQueryClient } from "./queryClient";
 import { DSH_BROWSER_CONFIG_QUERY_KEY, subscribeDshBrowserConfigChanges } from '@bisheng/api-client';
 import { installPlatformThemeBridge } from './utils/platformThemeBridge';
+import { PlatformLoadingProvider } from './components/bs-icons/loading/PlatformLoadingProvider';
 
 const stopThemeBridge = installPlatformThemeBridge();
 if (import.meta.hot) import.meta.hot.dispose(stopThemeBridge);
@@ -71,10 +72,12 @@ const stopDshConfigSync = subscribeDshBrowserConfigChanges(() => {
 });
 if (import.meta.hot) import.meta.hot.dispose(stopDshConfigSync);
 root.render(
-  <QueryClientProvider client={queryClient}>
-    <ContextWrapper>
-      <App />
-    </ContextWrapper>
-  </QueryClientProvider>
+  <PlatformLoadingProvider>
+    <QueryClientProvider client={queryClient}>
+      <ContextWrapper>
+        <App />
+      </ContextWrapper>
+    </QueryClientProvider>
+  </PlatformLoadingProvider>
 );
 reportWebVitals();

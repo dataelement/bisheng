@@ -18,6 +18,7 @@ module.exports = {
     '../packages/ui/src/**/*.{ts,tsx}',
     '../packages/file-viewers/src/**/*.{ts,tsx}',
     '../packages/chat/src/**/*.{ts,tsx}',
+    '../packages/knowledge/src/**/*.{ts,tsx}',
   ],
   theme: {
     // fontFamily: {

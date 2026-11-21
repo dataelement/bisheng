@@ -143,7 +143,10 @@ async def test_both_real_di_graphs_accept_schema_and_job_together_without_legacy
         jobs = (await session.exec(select(KnowledgeProcessingJob))).all()
         assert len(jobs) == 1
         job = jobs[0]
-        assert job.kind == "metadata_schema_change" and job.state == "accepted" and job.total_count == 2
+        assert job.kind == "metadata_schema_change"
+        assert (job.state, job.total_count, job.pending_dispatch) == (
+            ("succeeded", 0, False) if operation == "add" else ("accepted", 2, True)
+        )
         assert root.metadata_schema_revision == 1 and root.model_config_revision == 0 and root.index_generation == "g0"
         assert job.actor_reference["entry_kind"] == ("web" if protocol == "web" else "open_api")
         credential = job.actor_reference["credential_reference"]
@@ -157,14 +160,14 @@ async def test_both_real_di_graphs_accept_schema_and_job_together_without_legacy
             assert result["data"]["metadata_fields"] == root.metadata_fields
             assert result["data"]["processing_job"] == {
                 "job_id": job.id,
-                "state": "accepted",
+                "state": "succeeded" if operation == "add" else "accepted",
                 "accepted": True,
-                "completed": False,
+                "completed": operation == "add",
             }
         assert (await session.get(KnowledgeFile, 81)).user_metadata["note"]["field_value"] == "private-value"
         assert (await session.get(KnowledgeFile, 82)).status == 7
         items = (await session.exec(select(KnowledgeProcessingItem))).all()
-        assert {item.version_id for item in items} == {181, 182}
+        assert {item.version_id for item in items} == (set() if operation == "add" else {181, 182})
     legacy.retired.assert_not_awaited()
 
 

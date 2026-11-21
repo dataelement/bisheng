@@ -86,6 +86,39 @@ async def test_missing_super_target_and_query_conflict_are_denied(admitted_app):
     assert conflict.status_code == 409
 
 
+@pytest.mark.parametrize("selection", [60, None])
+async def test_super_share_link_read_needs_no_management_target(admitted_app, monkeypatch, selection):
+    """114, 2026-11-20: a global super opening /workspace/share/<token> got 400/19703.
+
+    The browser sends a share-token request without X-Management-Tenant
+    (hasIndependentScope), so admission must not demand one or a selection.
+    """
+    from bisheng.admin.domain.services.tenant_scope import TenantScopeService
+
+    app, _, target = admitted_app
+
+    async def get_scope(user_id, *, is_super=None, for_write=False, require_selection=False):
+        assert not require_selection
+        if selection is None:
+            return {"scope_tenant_id": 1, "expires_at": None, "source": "own"}
+        return {"scope_tenant_id": selection, "expires_at": None, "source": "selected"}
+
+    monkeypatch.setattr(TenantScopeService, "get_scope", get_scope)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        shared = await client.get("/stream", headers={"share-token": "synthetic-link"})
+        wrong = await client.get("/stream", headers={"share-token": "synthetic-link", "X-Management-Tenant": "65"})
+        empty = await client.get("/stream", headers={"share-token": ""})
+    expected = selection or 1
+    assert shared.status_code == 200
+    assert shared.text == f"{expected}:{expected}"
+    assert shared.headers["X-Management-Tenant"] == str(expected)
+    # Only the two requests that are not plain share reads used the strict path.
+    assert target.await_count == 2
+    # A target the client does send is still verified; an empty token is no share request.
+    assert wrong.status_code == 409
+    assert empty.status_code == 400 and empty.json()["status_code"] == 19703
+
+
 async def test_credential_target_never_reads_browser_selection(admitted_app):
     app, user, target = admitted_app
     user._dsh_web_session_tenant_id = 1
@@ -158,3 +191,37 @@ async def test_frozen_response_target_replaces_legacy_headers_exactly_once(admit
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         result = await client.get("/legacy-header", headers={"X-Management-Tenant": "60"})
     assert result.headers.get_list("X-Management-Tenant") == ["60"]
+
+
+@pytest.mark.parametrize(
+    "kind,source,is_super,pin,visible",
+    [
+        (RequestScope.TENANT, "own", False, 60, frozenset({60})),
+        (RequestScope.PERSONAL, "own", False, None, frozenset({60})),
+        (RequestScope.TENANT, "credential", False, None, frozenset({60})),
+        (RequestScope.TENANT, "selected", True, 60, frozenset({60})),
+    ],
+)
+def test_verified_tenant_binding_isolates_business_rows_and_restores_context_on_failure(
+    kind, source, is_super, pin, visible
+):
+    from bisheng.core.context.tenant import (
+        get_admin_scope_tenant_id,
+        get_is_management_api,
+        get_visible_tenant_ids,
+        tenant_execution_scope,
+    )
+
+    admitted = request_admission.AdmittedRequest(7, 60, 60, kind, is_super, source)
+    with tenant_execution_scope(202):
+        with pytest.raises(RuntimeError, match="business failure"):
+            with request_admission.bind_admitted_scope(admitted):
+                assert get_current_tenant_id() == 60
+                assert get_admin_scope_tenant_id() == pin
+                assert get_is_management_api() is (pin is not None)
+                assert get_visible_tenant_ids() == visible
+                raise RuntimeError("business failure")
+        assert get_current_tenant_id() == 202
+        assert get_admin_scope_tenant_id() is None
+        assert not get_is_management_api()
+        assert get_visible_tenant_ids() == frozenset({202})

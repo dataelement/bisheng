@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -135,6 +135,7 @@ async def test_ac10_submit_endpoint_registers_session(endpoint_env, monkeypatch,
     monkeypatch.setattr(ep.LinsightSessionVersionDao, "insert_one", AsyncMock())
 
     resp = await ep.submit_linsight_workbench(
+        request=Mock(),
         submit_obj=SimpleNamespace(question="查一下", session_id=None), login_user=LOGIN
     )
     events = [e async for e in resp.body_iterator]
@@ -176,7 +177,8 @@ async def test_ac10_task_turn_registers_before_enqueue_only_when_hooked(monkeypa
         seen_at_enqueue.append(cursor_row(memory_db))
 
     monkeypatch.setattr(linsight_utils, "enqueue_session_for_execution", _enqueue)
-    data = SimpleNamespace(files=None)
+    monkeypatch.setattr(tss, "_consume_task_invite", AsyncMock(return_value=False))
+    data = SimpleNamespace(files=None, project_id=None)
 
     await tss.submit_task_turn(data, LOGIN)
     assert seen_at_enqueue == [None]

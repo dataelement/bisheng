@@ -138,8 +138,8 @@ ${t('build.exampleTwo')}
             <DialogClose>
                 <Button variant="outlined" type="button" onClick={() => setFormData({ url: '', name: '', roleAndTasks: '' })} color="default">{t('cancle')}</Button>
             </DialogClose>
-            <Button disabled={((String((formData.name) ?? '').length > 50) || (String((formData.roleAndTasks) ?? '').length > 1000)) || (loading)} type="submit" onClick={handleSubmit}>
-                {loading && <Outlined.Loading className="animate-spin mr-2" />}
+            <Button disabled={((String((formData.name) ?? '').length > 50) || (String((formData.roleAndTasks) ?? '').length > 1000)) || (loading)} type="submit" onClick={handleSubmit} loading={loading}>
+
                 {t('build.create')}</Button>
         </DialogFooter>
     </DialogContent>

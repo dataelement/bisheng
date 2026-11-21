@@ -23,3 +23,8 @@ async def initialize_account_at_mount(user, directory, actor):
 async def department_display_records(tenant_id, department_ids):
     """Read known references after resource authorization; never a Grant admission decision."""
     return await DirectoryRepository.display_records(tenant_id, department_ids)
+
+
+async def require_directory_department(department_id):
+    """Validate a known department inside the current verified directory scope."""
+    await DirectoryRepository.require_department(department_id)

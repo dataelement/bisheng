@@ -32,6 +32,21 @@ it('preserves the legacy 11010 envelope for its caller-owned interaction', async
   expect(await request.get('/test')).toBe(body);
   expect(notices).not.toHaveBeenCalled();
 });
+it('keeps a deletion precheck conflict in the dialog without a duplicate notice', async () => {
+  const conflict = {
+    status_code: 10999,
+    status_message: 'Resource conflict',
+    data: { reason: 'space_transfer_input_required' },
+  };
+  await setup(conflict);
+  const { precheckDeletion } = await import('./API/knowledgeDeletion');
+  await expect(precheckDeletion({ spaceId: 7, kind: 'delete' })).rejects.toMatchObject({
+    status_code: conflict.status_code,
+    data: conflict.data,
+    presentation: 'none',
+  });
+  expect(notices).not.toHaveBeenCalled();
+});
 it('throttles concurrent license failures while every caller still receives its own error', async () => {
   vi.spyOn(Date, 'now').mockReturnValue(10000);
   const { default: request, showApiError } = await setup({ status_code: 11001, status_message: 'License expired', data: { license: 'expired' } });

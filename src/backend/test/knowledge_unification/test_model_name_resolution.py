@@ -231,12 +231,13 @@ async def test_all_servers_lock_before_any_model_and_external_transaction_owns_r
         await session.rollback()
 
 
-async def test_original_root_inheritance_is_real_sql_and_no_context_switch(ctx):
+async def test_original_root_inheritance_does_not_expand_callable_catalog(ctx):
     ctx[3].allowed = ()
     async with AsyncSession(ctx[0]) as session, session.begin():
         session.add(TenantSystemModelConfig(tenant_id=1, key="evaluation_llm", value='{"model_id":22}'))
     async with AsyncSession(ctx[0]) as session:
-        assert (await resolve(ctx, session, await prepare(ctx, session, ("root/same",)), "root/same")).model_id == 21
+        with pytest.raises(ModelFaceModelNotFoundError):
+            await prepare(ctx, session, ("root/same",))
         from bisheng.core.context.tenant import get_current_tenant_id
 
         assert get_current_tenant_id() == 101

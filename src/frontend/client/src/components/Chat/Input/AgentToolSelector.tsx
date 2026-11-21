@@ -58,7 +58,7 @@ function iconForGroup(group: AvailableToolGroup) {
 function labelForGroup(group: AvailableToolGroup, localize: (key: string) => string) {
   if (group.is_preset === 1 && (group.children ?? []).some(
     (child) => ["image_generation", "dalle_image_generator"].includes(child.tool_key),
-  )) return localize("tool:tools.dalle_image_generator.name");
+  )) return localize("tool:tools.image_generation.name");
   const isImageView =
     group.name === "Image View" ||
     (group.children ?? []).some((child) => child.tool_key === "image_view");

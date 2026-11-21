@@ -182,6 +182,22 @@ async def seed(database, items, *, status="FINALIZED", commit="f" * 64):
         await connection.execute(sa.insert(Mode), modes)
 
 
+def test_settings_environment_mapping_uses_the_named_deployment(monkeypatch):
+    from bisheng.common.services import config_service
+
+    monkeypatch.setattr(
+        config_service,
+        "settings",
+        SimpleNamespace(environment={"env": "dev", "uns_support": ["pdf"]}),
+    )
+    assert api().MoveProjectionRepository().environment == "dev"
+
+
+def test_blank_deployment_name_is_still_refused():
+    with pytest.raises(PermissionPublishNotReadyError):
+        api().MoveProjectionRepository(environment="")
+
+
 async def test_actual_finalized_current_ledger_is_same_transaction_and_issuer_evidence(database):
     item, repository = expectation(), api().MoveProjectionRepository(environment="test")
     await seed(database, (item,))

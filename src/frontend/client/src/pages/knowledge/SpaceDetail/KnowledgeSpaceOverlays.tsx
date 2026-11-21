@@ -29,7 +29,8 @@ export function KnowledgeSpaceOverlays({ model }: KnowledgeSpaceOverlaysProps) {
     selectedFiles,
     editingTagsFileId,
     isBatchTagging,
-    isAdmin,
+    canEditSpace,
+    canReadSpaceTags,
     versionManagementEnabled,
     spaceIdNum,
     versionMgmtFile,
@@ -53,6 +54,7 @@ export function KnowledgeSpaceOverlays({ model }: KnowledgeSpaceOverlaysProps) {
     webLinkSubmitting,
     resetWebLinkDialog,
     submitWebLink,
+    moveConfirmation,
     moveProgress,
     moveDialogOpen,
     setMoveDialogOpen,
@@ -67,6 +69,8 @@ export function KnowledgeSpaceOverlays({ model }: KnowledgeSpaceOverlaysProps) {
       {" "}
       {/* Edit Tags Modal */}
       <EditTagsModal
+        canManageSpaceTags={canEditSpace}
+        canReadSpaceTags={canReadSpaceTags}
         isOpen={!!editingTagsFileId || isBatchTagging}
         onClose={handleCloseEditTags}
         onSaved={handleTagsSaved}
@@ -169,6 +173,7 @@ export function KnowledgeSpaceOverlays({ model }: KnowledgeSpaceOverlaysProps) {
         />
       )}
       {moveProgress && <MoveJobProgress progress={moveProgress} />}
+      {moveConfirmation}
       {/* F034: Move files/folders (same-space + cross-space) */}
       <MoveToDialog
         open={moveDialogOpen}
@@ -196,36 +201,38 @@ export function KnowledgeSpaceOverlays({ model }: KnowledgeSpaceOverlaysProps) {
             onOpenChange={(o) => {
               if (!o) setVersionHistoryFile(null);
             }}
+            spaceId={spaceIdNum}
             fileId={versionHistoryFile ? Number(versionHistoryFile.id) : null}
             documentTitle={versionHistoryFile?.name}
-            canManage={isAdmin}
+            canManage={canEditSpace}
             onPreview={(versionFileId, fileName) =>
               handlePreviewFile(String(versionFileId), fileName)
             }
-            onDownload={async (versionFileId, fileName) => {
+            onDownload={async (versionFileId, fileName, signal) => {
               try {
-                const downloadData = await getFileDownloadApi(
+                const { original_url: downloadUrl } = await getFileDownloadApi(
                   String(space.id),
                   String(versionFileId),
+                  signal,
                 );
-                const downloadUrl = downloadData.original_url;
+                if (signal.aborted) return;
                 if (!downloadUrl) {
                   showToast({
-                    message: localize("com_knowledge.get_download_link_failed"),
+                    message: localize("knowledge.version.history.download_feedback.no_url", { ns: "shared" }),
                     status: "warning",
                   });
                   return;
                 }
                 triggerUrlDownload(downloadUrl, fileName);
               } catch {
+                if (signal.aborted) return;
                 showToast({
-                  message: localize("com_knowledge.download_failed"),
+                  message: localize("knowledge.version.history.download_feedback.failed", { ns: "shared" }),
                   status: "warning",
                 });
               }
             }}
-            onPrimaryChanged={handleVersionAction}
-            onDeleted={handleVersionAction}
+            onChanged={handleVersionAction}
           />
           <SimilarDocumentDialog
             open={similarDialogOpen}

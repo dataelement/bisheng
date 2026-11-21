@@ -20,8 +20,13 @@ export interface KnowledgeTagListResponse {
  */
 export async function getKnowledgeTagsApi(
     knowledge_id: number,
-    params?: { keyword?: string; page?: number; limit?: number }
+    params?: { keyword?: string; page?: number; limit?: number },
+    isSpace = false
 ): Promise<KnowledgeTagListResponse> {
+    if (isSpace) {
+        const tags = await axios.get(`/api/v1/knowledge/space/${knowledge_id}/tag`) as unknown as KnowledgeTagItem[];
+        return { data: tags, total: tags.length };
+    }
     return await axios.get(`/api/v1/knowledge/${knowledge_id}/tags`, { params });
 }
 
@@ -30,8 +35,10 @@ export async function getKnowledgeTagsApi(
  */
 export async function createKnowledgeTagApi(
     knowledge_id: number,
-    tag_name: string
+    tag_name: string,
+    isSpace = false
 ): Promise<KnowledgeTagItem> {
+    if (isSpace) return await axios.post(`/api/v1/knowledge/space/${knowledge_id}/tag`, { tag_name });
     return await axios.post(`/api/v1/knowledge/tags`, {
         knowledge_id,
         tag_name
@@ -55,7 +62,8 @@ export async function updateKnowledgeTagApi(
 /**
  * 删除指定的标签
  */
-export async function deleteKnowledgeTagApi(knowledge_id: number, tag_id: number) {
+export async function deleteKnowledgeTagApi(knowledge_id: number, tag_id: number, isSpace = false) {
+    if (isSpace) return await axios.delete(`/api/v1/knowledge/space/${knowledge_id}/tag`, { data: { tag_id } });
     return await axios.delete(`/api/v1/knowledge/tags/${tag_id}`, {
         data: { knowledge_id }
     });
@@ -64,7 +72,8 @@ export async function deleteKnowledgeTagApi(knowledge_id: number, tag_id: number
 /**
  * 单个文件设置标签关系（全量替换）
  */
-export async function setFileTagsApi(data: { knowledge_id: number; file_id: number; tag_ids: number[] }) {
+export async function setFileTagsApi(data: { knowledge_id: number; file_id: number; tag_ids: number[] }, isSpace = false) {
+    if (isSpace) return await axios.post(`/api/v1/knowledge/space/${data.knowledge_id}/files/${data.file_id}/tag`, { tag_ids: data.tag_ids });
     return await axios.post(`/api/v1/knowledge/file/tags`, data);
 }
 

@@ -15,6 +15,7 @@ from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.database.models.flow import Flow, FlowDao, FlowType
 from bisheng.database.models.session import MessageSession
 from bisheng.open_api.domain.context import OpenApiExecutionSnapshot
+from bisheng.permission.application.business_authorization import require_business_action
 from bisheng.worker.workflow.redis_callback import RedisCallback
 from bisheng.worker.workflow.tasks import continue_workflow, execute_workflow, workflow_stateful_worker
 from bisheng.workflow.application.execution_admission import prepare_saved
@@ -62,12 +63,24 @@ class PublishedWorkflowService:
     ) -> WorkflowInvocation:
         workflow_info = await cls.get_workflow(workflow_id)
         operator_user_id = operator.user_id
+        if override:
+            # Overrides are executable graph edits, not a capability granted by
+            # workflow:invoke/use. The contextual actor preserves service-account
+            # and delegated identity; never authorize as the resource owner.
+            await require_business_action(
+                UserPayload(user_id=operator_user_id, user_role=[], tenant_id=execution_snapshot.tenant_id),
+                resource_type="workflow",
+                resource_id=workflow_id,
+                action="edit",
+            )
         if not session_id:
             chat_id = uuid.uuid4().hex
             unique_id = f"{chat_id}_async_task_id"
             session_id = unique_id
         else:
             chat_id = session_id.split("_", 1)[0]
+            if session_id != f"{chat_id}_async_task_id":
+                raise WorkFlowInvalidUserInputError(msg="invalid workflow session_id")
             unique_id = session_id
 
         session = await ChatSessionService.get_subject_session_if_exists(chat_id, session_subject)

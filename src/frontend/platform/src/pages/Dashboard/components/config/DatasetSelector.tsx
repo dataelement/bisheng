@@ -166,7 +166,6 @@ export function DatasetSelector({ selectedDatasetCode, isMetricCard, onDatasetCh
                     showSearch
                     filterOption={filterDataset}
                     loading={datasetsLoading}
-                    loadingText={t("datasetSelector.loading")}
                     emptyText={t("datasetSelector.noDatasetsFound")}
                     noMatchText={t("datasetSelector.noDatasetsFound")}
                 />

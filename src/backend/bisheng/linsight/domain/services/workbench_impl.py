@@ -1,3 +1,4 @@
+# ruff: noqa: RUF001, RUF003
 import asyncio
 import mimetypes
 import os
@@ -132,10 +133,14 @@ class LinsightWorkbenchImpl:
     # altogether, see _SPREADSHEET_ORIGINAL_EXTS), a Word file loses styling, a PDF loses table
     # geometry. These land in the workspace ALONGSIDE the .md so
     # ``bisheng_code_interpreter`` can open them with pandas / python-docx / fitz.
-    # Images are deliberately absent: their originals are already promoted for
-    # frontend preview, and feeding one back through ``read_file`` yields an
-    # ``image`` block that a non-vision model rejects.
     _RAW_KEEP_EXTS = frozenset({"xlsx", "xls", "csv", "docx", "doc", "pptx", "ppt", "pdf", "ofd"})
+    # Every type whose original lands in the workspace next to its .md view.
+    # Images are here because the text view of a picture is only its OCR output:
+    # a user who asks to email it, put it in a Word file or a report, or crop it
+    # needs the picture itself. They were once left out because ``read_file`` on
+    # an image yields an ``image`` block that a non-vision model rejects; the
+    # binary guards (``binary_content_guard.py``) now handle that per model.
+    _CARRY_ORIGINAL_EXTS = _RAW_KEEP_EXTS | _IMAGE_EXTS
     # Ceiling for carrying an original into the workspace + local task dir. Past
     # this, the .md view is the only thing worth the storage and the download
     # latency on every task start.
@@ -971,10 +976,13 @@ class LinsightWorkbenchImpl:
            and reporting it as failed makes the chip cry wolf. This is what saves
            a large csv, whose ``ExcelLoader`` hard-fails past 10k chars while the
            csv sitting in the workspace is exactly what the user wanted analysed.
-        2. **Binary with a consumer** (``_RAW_KEEP_EXTS`` / ``_IMAGE_EXTS``) ->
-           ``failed`` + ``valid=False``. A broken pdf really is broken: there is no
-           text view, and only the code interpreter can do anything with it.
-        3. **Everything else** -> ``unsupported``, and it does not enter the
+        2. **Image** (``_IMAGE_EXTS``) -> ``image_original`` SUCCESS. The picture
+           has no text view, but sending, embedding or editing it needs only the
+           picture itself.
+        3. **Other binary with a consumer** (``_RAW_KEEP_EXTS``) -> ``failed`` +
+           ``valid=False``. A broken pdf really is broken: there is no text view,
+           and only the code interpreter can do anything with it.
+        4. **Everything else** -> ``unsupported``, and it does not enter the
            workspace at all. An mp3 that no parser, no ``read_file`` and no code
            interpreter can open is pure cost: storage, a confusing ``ls`` entry,
            and a wasted tool call.
@@ -999,6 +1007,19 @@ class LinsightWorkbenchImpl:
             )
             return await cls._finalize_passthrough(
                 submit_file, file_name, chat_id, minio_client, raw, used_names, degraded_from=error
+            )
+        # An image without a text view is still the picture the user uploaded.
+        if cls._is_image_filename(file_name):
+            logger.info("parse failed for image {}; landing the original without a text view ({})", file_name, error)
+            return await cls._finalize_passthrough(
+                submit_file,
+                file_name,
+                chat_id,
+                minio_client,
+                raw,
+                used_names,
+                degraded_from=error,
+                ingest_mode=cls._IMAGE_ORIGINAL_MODE,
             )
 
         ext = os.path.splitext(file_name)[1]
@@ -1172,8 +1193,13 @@ class LinsightWorkbenchImpl:
     # converter first.
     _SPREADSHEET_ORIGINAL_EXTS = frozenset({"xlsx", "xls"})
     _SPREADSHEET_ORIGINAL_MODE = "spreadsheet_original"
+    # An image the parser could not turn into text (gif/webp have no loader; a
+    # deployment without a remote ETL cannot OCR at all). The picture itself is
+    # still exactly what the user wants to send, embed or edit, so it lands as
+    # itself instead of failing the upload.
+    _IMAGE_ORIGINAL_MODE = "image_original"
     # ingest_mode values whose workspace file IS the original (no markdown product).
-    _ORIGINAL_ONLY_MODES = frozenset({"passthrough", _SPREADSHEET_ORIGINAL_MODE})
+    _ORIGINAL_ONLY_MODES = frozenset({"passthrough", _SPREADSHEET_ORIGINAL_MODE, _IMAGE_ORIGINAL_MODE})
 
     @classmethod
     def _spreadsheet_original_applies(cls, filename: str, local_path: str | None) -> bool:
@@ -1217,6 +1243,11 @@ class LinsightWorkbenchImpl:
         if ext in FileExtensionMap:
             return "parse"
         return "unsupported"
+
+    @classmethod
+    def _is_image_filename(cls, filename: str) -> bool:
+        ext = os.path.splitext(filename or "")[1].lower().lstrip(".")
+        return ext in cls._IMAGE_EXTS
 
     @classmethod
     def _original_is_text(cls, filename: str) -> bool:
@@ -1363,13 +1394,13 @@ class LinsightWorkbenchImpl:
     def _should_keep_raw(cls, filename: str, local_path: str | None = None, size: int | None = None) -> bool:
         """Whether this upload's ORIGINAL bytes belong in the workspace too.
 
-        Extension gate + size ceiling. When neither ``size`` nor a stat-able
+        Extension gate (``_CARRY_ORIGINAL_EXTS``) + size ceiling. When neither ``size`` nor a stat-able
         ``local_path`` is available the size check is skipped rather than
         failing closed — an un-measurable file is still worth carrying, and the
         ceiling exists to bound storage, not to gate correctness.
         """
         ext = os.path.splitext(filename or "")[1].lower().lstrip(".")
-        if ext not in cls._RAW_KEEP_EXTS:
+        if ext not in cls._CARRY_ORIGINAL_EXTS:
             return False
         if size is None and local_path:
             try:
@@ -1487,6 +1518,35 @@ class LinsightWorkbenchImpl:
         used_names.add(unique)
         return unique
 
+    @staticmethod
+    def _dedupe_workspace_pair(md_rel: str, raw_rel: str, used_names: set[str] | None) -> tuple[str, str]:
+        """Reserve a markdown view and its original under ONE shared suffix.
+
+        Deduping the two tracks independently can cross-wire them: uploading
+        ``x.jpg`` and ``x.png`` together used to yield ``x.md``+``x.jpg`` and
+        ``x-2.md``+``x.png``, and every hint that derives ``<stem>.md`` from the
+        original's name then pointed ``x.png`` at the other picture's text. Both
+        names here always carry the same ``-N``, so stem-derived lookups hold.
+        """
+        if used_names is None:
+            return md_rel, raw_rel
+
+        def _with_suffix(rel: str, n: int) -> str:
+            if n == 1:
+                return rel
+            dir_part, slash, filename = rel.rpartition("/")
+            stem, dot, ext = filename.rpartition(".")
+            base = stem if dot else filename
+            return f"{dir_part}{slash}{base}-{n}{f'.{ext}' if dot else ''}"
+
+        n = 1
+        while _with_suffix(md_rel, n) in used_names or _with_suffix(raw_rel, n) in used_names:
+            n += 1
+        md_name, raw_name = _with_suffix(md_rel, n), _with_suffix(raw_rel, n)
+        used_names.add(md_name)
+        used_names.add(raw_name)
+        return md_name, raw_name
+
     @classmethod
     async def _write_attachment_to_workspace(
         cls,
@@ -1502,8 +1562,8 @@ class LinsightWorkbenchImpl:
         Workspace layout (design §9.3.2): ``workspace/{chat_id}/uploads/<name>``
           - parsed markdown   -> ``uploads/<original-stem>.md`` (as_markdown=True)
           - unconverted original -> ``uploads/<original-name>.<ext>`` (False)
-          - **plus**, for ``_RAW_KEEP_EXTS`` that parsed fine, the ORIGINAL lands
-            next to its markdown as ``uploads/<original-name>.<ext>``.
+          - **plus**, for ``_CARRY_ORIGINAL_EXTS`` that parsed fine, the ORIGINAL
+            lands next to its markdown as ``uploads/<original-name>.<ext>``.
 
         Folder upload: when the entry carries a ``relative_path``, its directory
         part is rebuilt underneath ``uploads/`` — ``年报/2024/Q1.xlsx`` lands at
@@ -1530,12 +1590,18 @@ class LinsightWorkbenchImpl:
 
         safe = cls._safe_basename(entry["original_filename"])
         rel_dir = cls._safe_relpath(entry.get("relative_path"))
+        raw_rel: str | None = None
         if as_markdown:
             stem = safe.rsplit(".", 1)[0] if "." in safe else safe
-            filename = f"{stem}.md"
+            md_rel = f"{rel_dir}/{stem}.md" if rel_dir else f"{stem}.md"
+            if entry.get("original_file_path") and cls._should_keep_raw(entry.get("original_filename", "")):
+                filename, raw_rel = cls._dedupe_workspace_pair(
+                    md_rel, f"{rel_dir}/{safe}" if rel_dir else safe, used_names
+                )
+            else:
+                filename = cls._dedupe_workspace_name(md_rel, used_names)
         else:
-            filename = safe
-        filename = cls._dedupe_workspace_name(f"{rel_dir}/{filename}" if rel_dir else filename, used_names)
+            filename = cls._dedupe_workspace_name(f"{rel_dir}/{safe}" if rel_dir else safe, used_names)
         rel_path = f"uploads/{filename}"
         object_key = f"{WORKSPACE_PREFIX}/{chat_id}/{rel_path}"
 
@@ -1559,12 +1625,15 @@ class LinsightWorkbenchImpl:
         if as_markdown:
             text = file_bytes.decode("utf-8", errors="replace")
             entry["line_count"] = entry.get("line_count") or (text.count("\n") + 1 if text else 0)
+            # OCR of a photo or chart often yields nothing; the pointer block says
+            # so rather than send the model to read an empty view.
+            entry["text_empty"] = not text.strip()
         else:
             entry.setdefault("line_count", 0)
         entry["image_count"] = entry.get("image_count", 0)
 
-        if as_markdown:
-            await cls._write_raw_original_to_workspace(entry, chat_id, minio_client, safe, used_names)
+        if raw_rel is not None:
+            await cls._write_raw_original_to_workspace(entry, chat_id, minio_client, raw_rel)
 
     @classmethod
     async def _write_raw_original_to_workspace(
@@ -1572,8 +1641,7 @@ class LinsightWorkbenchImpl:
         entry: dict,
         chat_id: str,
         minio_client,
-        safe_name: str,
-        used_names: set[str] | None,
+        raw_filename: str,
     ) -> None:
         """Second track: copy the ORIGINAL next to its markdown view.
 
@@ -1587,6 +1655,8 @@ class LinsightWorkbenchImpl:
         upload included (``uploads/年报/2024/Q1.xlsx`` next to ``…/Q1.md``), because
         ``prepare_file_list`` hands the model the raw path relative to the code
         interpreter's working directory and the local prefetch mirrors that layout.
+        ``raw_filename`` was reserved together with the markdown name
+        (``_dedupe_workspace_pair``), so the two always share one suffix.
         """
         from bisheng.linsight.domain.services.workspace_backend import WORKSPACE_PREFIX
 
@@ -1599,9 +1669,11 @@ class LinsightWorkbenchImpl:
             if not raw_bytes:
                 logger.warning("original {} is empty/missing; workspace keeps only the markdown view", original_object)
                 return
+            # Upstream keeps an image original regardless of size (the chip
+            # previews it), so the ceiling is enforced here, on the bytes in hand.
+            if not cls._should_keep_raw(entry.get("original_filename", ""), size=len(raw_bytes)):
+                return
 
-            rel_dir = cls._safe_relpath(entry.get("relative_path"))
-            raw_filename = cls._dedupe_workspace_name(f"{rel_dir}/{safe_name}" if rel_dir else safe_name, used_names)
             rel_path = f"uploads/{raw_filename}"
             content_type = cls._content_type_for(raw_filename)
             await minio_client.put_object(
@@ -1709,7 +1781,7 @@ class LinsightWorkbenchImpl:
     @classmethod
     async def _get_workbench_config(cls, user_id: int):
         """Get and validate the workbench configuration"""
-        workbench_conf = await LLMService.get_workbench_llm()
+        workbench_conf = await LLMService.get_workbench_llm_candidates()
         from bisheng.dsh.domain.services.model_catalog import project_workbench_config
 
         workbench_conf = await project_workbench_config(workbench_conf, user_id)
@@ -1748,7 +1820,10 @@ class LinsightWorkbenchImpl:
 
     @classmethod
     async def prepare_file_list(
-        cls, session_version: LinsightSessionVersion, has_code_interpreter: bool = False
+        cls,
+        session_version: LinsightSessionVersion,
+        has_code_interpreter: bool = False,
+        supports_vision: bool = False,
     ) -> list[str]:
         """Prepare the zero-body ``<uploaded_files>`` pointer block (design §9.3.3).
 
@@ -1771,6 +1846,9 @@ class LinsightWorkbenchImpl:
                 this run. Gates the "open the original with Python" guidance —
                 naming a tool that is not bound is the same class of bug as the
                 ``search_knowledge_base`` prompt/tool mismatch.
+            supports_vision: whether this run's model is marked vision-capable.
+                Gates the "read_file the picture to look at it" guidance for image
+                originals; the binary guards refuse that read otherwise.
 
         Returns:
             A single-element list holding the ``<uploaded_files>`` block, or an
@@ -1790,6 +1868,7 @@ class LinsightWorkbenchImpl:
         has_sheet_original = False
         has_unparsed = False
         has_media = False
+        has_image = False
         for file in session_version.files:
             path = file.get("workspace_path") or f"/uploads/{file.get('file_id')}/index.md"
             name = file.get("original_filename", "")
@@ -1830,6 +1909,34 @@ class LinsightWorkbenchImpl:
                         rel_dir,
                         f"- path: {path}\n  name: {name}\n  raw: {path.lstrip('/')}\n"
                         "  note: Excel 原件，没有文本视图（不可 read_file）",
+                        name,
+                    )
+                )
+                continue
+
+            if file.get("ingest_mode") == cls._IMAGE_ORIGINAL_MODE:
+                has_image = True
+                records.append(
+                    (
+                        rel_dir,
+                        f"- path: {path}\n  name: {name}\n  raw: {path.lstrip('/')}\n"
+                        "  note: 图片原件，未能识别出文字，没有文本视图",
+                        name,
+                    )
+                )
+                continue
+
+            if cls._is_image_filename(name) and file.get("raw_workspace_path"):
+                # An image's raw track is the picture and its path is OCR text, so
+                # the dual-track wording ("precise data, do not read_file") is wrong
+                # for it; it gets its own note and header clause.
+                has_image = True
+                ocr_note = "path 为空：图中没有识别出文字" if file.get("text_empty") else "path 是图中识别出的文字"
+                records.append(
+                    (
+                        rel_dir,
+                        f"- path: {path}\n  name: {name}\n  raw: {file['raw_workspace_path'].lstrip('/')}\n"
+                        f"  note: 图片；raw 是图片原件，{ocr_note}",
                         name,
                     )
                 )
@@ -1932,6 +2039,21 @@ class LinsightWorkbenchImpl:
                 )
         if detail_parts:
             header_parts.append("说明：" + "".join(detail_parts) + "\n")
+        if has_image:
+            image_parts = [
+                "说明（图片）：标注「图片」的条目，raw 是用户上传的图片原件本身。"
+                "把图片作为附件发送、插入文档/表格/演示/报告、或做裁剪压缩等处理时，直接使用 raw 路径"
+                "（代码里用该相对路径打开，markdown 里写 ![说明](raw)）；"
+                "path 只是图中文字的识别结果，不包含图片本身，不要把它当成图片，也不要据此认为用户上传的不是图片。"
+            ]
+            if supports_vision:
+                image_parts.append("需要看图片内容时可以 read_file(raw)。")
+            else:
+                image_parts.append(
+                    "本次模型不具备视觉能力，不要 read_file 图片原件；图片内容以 path 中识别出的文字为准，"
+                    "识别不到的内容不要猜测。"
+                )
+            header_parts.append("".join(image_parts) + "\n")
         header = "".join(header_parts)
 
         if len(records) > cls._FILE_LIST_MAX_ITEMS:
@@ -2098,9 +2220,6 @@ class LinsightWorkbenchImpl:
             """
             Build task tree
             """
-            # Create task mapping
-            task_map = {task.id: task for task in all_tasks}
-
             # By Parent TaskIDGroup subtasks
             children_map = {}
             for task in all_tasks:
@@ -2353,6 +2472,10 @@ class LinsightWorkbenchImpl:
 
             return result
         except Exception as e:
+            if cls._is_image_filename(original_filename):
+                fallback = await cls._image_original_parse_result(file_id, file_path, original_filename, e)
+                if fallback is not None:
+                    return fallback
             logger.error(f"File parsing failed: file_id={file_id}, error={e!s}")
             return {
                 "file_id": file_id,
@@ -2360,6 +2483,38 @@ class LinsightWorkbenchImpl:
                 "parsing_status": "failed",
                 "error_message": str(e),
             }
+
+    @classmethod
+    async def _image_original_parse_result(
+        cls, file_id: str, file_path: str, original_filename: str, error: Exception
+    ) -> dict | None:
+        """Task-mode upload of an image the parser could not read.
+
+        Reporting ``failed`` here makes the follow-up input delete the attachment,
+        so the user could not even send the picture on. Land it as the original
+        instead, the same tmp shape as a spreadsheet original. ``None`` when the
+        local bytes are gone, so the caller reports the real failure.
+        """
+        raw_bytes = await cls._read_local_bytes(file_path)
+        if not raw_bytes:
+            return None
+        logger.info(
+            "image parse failed, keeping the original without a text view: file_id={} error={!s}", file_id, error
+        )
+        minio_client = await get_minio_storage()
+        tmp_key = f"{file_id}{os.path.splitext(original_filename)[1].lower()}"
+        await minio_client.put_object_tmp(tmp_key, raw_bytes)
+        return {
+            "file_id": file_id,
+            "original_filename": original_filename,
+            "parsing_status": "completed",
+            "ingest_mode": cls._IMAGE_ORIGINAL_MODE,
+            "parse_type": cls._IMAGE_ORIGINAL_MODE,
+            "markdown_filename": tmp_key,
+            "markdown_file_path": tmp_key,
+            "markdown_file_md5": await async_calculate_md5(raw_bytes),
+            "line_count": 0,
+        }
 
     @classmethod
     async def _cache_parse_result(cls, file_id: str, parse_result: dict) -> None:
@@ -2433,7 +2588,11 @@ class LinsightWorkbenchImpl:
 
     @classmethod
     async def init_linsight_config_tools(
-        cls, session_version: LinsightSessionVersion, llm: BishengLLM, need_upload: bool = False, file_dir: str = None
+        cls,
+        session_version: LinsightSessionVersion,
+        llm: BishengLLM,
+        need_upload: bool = False,
+        file_dir: str | None = None,
     ) -> list[BaseTool]:
         """
         Tools for initializing Invis configurations

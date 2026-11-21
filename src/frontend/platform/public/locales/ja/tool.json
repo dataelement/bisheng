@@ -398,8 +398,8 @@
       "name": "企業WeChat"
     },
     "Dalle3绘画": {
-      "name": "画像生成",
-      "desc": "設定したサービスとモデルで、プロンプトから画像を生成します。"
+      "name": "$t(tool:categories.图像生成.name)",
+      "desc": "$t(tool:categories.图像生成.desc)"
     },
     "Jina AI": {
       "desc": "指定されたウェブサイト（PDFをサポート）を大モデルが処理できるMarkdown形式に変換します",

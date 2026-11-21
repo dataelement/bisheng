@@ -60,10 +60,10 @@ def test_license_vectors_signed_by_test_public_key_only(dsh_contracts):
             assert isinstance(json.loads(decode(payload)), dict)
 
 
-def test_config_default_off_and_enabled_requires_trust():
+def test_config_default_on_and_origin_optional():
     from bisheng.dsh.config import DshSettings
 
-    assert DshSettings().enabled is False
+    assert DshSettings().enabled is True
     assert DshSettings().refresh_reuse_grace_seconds == 86400
     assert DshSettings(refresh_reuse_grace_seconds=0).refresh_reuse_grace_seconds == 0
     assert DshSettings(refresh_reuse_grace_seconds=604800).refresh_reuse_grace_seconds == 604800
@@ -71,8 +71,7 @@ def test_config_default_off_and_enabled_requires_trust():
         DshSettings(refresh_reuse_grace_seconds=-1)
     with pytest.raises(ValidationError):
         DshSettings(refresh_reuse_grace_seconds=604801)
-    with pytest.raises(ValidationError):
-        DshSettings(enabled=True)
+    assert DshSettings(enabled=True).platform_public_url is None
     with pytest.raises(ValidationError):
         DshSettings(platform_public_url="https://example.com/path")
     with pytest.raises(ValidationError):

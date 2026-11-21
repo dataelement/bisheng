@@ -1,4 +1,4 @@
-# Contract: bisheng-gateway v1.8.0 (2995df6f); Docker-only addresses.
+# Deployment target: bisheng-gateway v1.9.3 (3674032d); Docker-only addresses.
 server:
   port: 8080
 spring:
@@ -10,6 +10,11 @@ spring:
     max-in-memory-size: 200MB
   cloud:
     gateway:
+      default-filters: [PreserveHostHeader]
+      x-forwarded:
+        proto-enabled: false
+        host-enabled: false
+        port-enabled: false
       httpclient:
         connect-timeout: 30000
         response-timeout: 3600s

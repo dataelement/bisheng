@@ -21,6 +21,7 @@
     "./media-player": "./src/viewers/MediaPlayer.tsx",
     "./transcript": "./src/viewers/MediaTranscriptTabs.tsx",
     "./locale": "./src/usePreviewLocale.ts",
+    "./loading": "./src/PreviewLoading.tsx",
     "./viewer-types": "./src/viewerTypes.ts",
     "./sanitize": "./src/html/sanitizeHtml.ts",
     "./formats": "./src/formats.ts",

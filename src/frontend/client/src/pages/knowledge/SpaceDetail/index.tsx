@@ -2,7 +2,7 @@ import type { KnowledgeSpaceContentProps } from "./knowledgeSpaceTypes";
 import { getKnowledgeBatchActions } from "./getKnowledgeBatchActions";
 import { useKnowledgeSelectionActions } from "./useKnowledgeSelectionActions";
 import { useKnowledgeSpaceHeader } from "./useKnowledgeSpaceHeader";
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRecoilValue, useRecoilState } from "recoil";
 import { knowledgeSelectedFilesState } from "../selectionStore";
 import { FileStatus, FileType, SortDirection, SortType } from "~/api/knowledge";
@@ -12,6 +12,7 @@ import {
   getAllowedExtensions,
   getFileInputAccept,
   isKnowledgeItemRetryable,
+  isKnowledgeItemUploading,
   resolveUploadSizeLimits,
 } from "../knowledgeUtils";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
@@ -142,7 +143,7 @@ function useKnowledgeSpaceDetail(
     setSelectedFiles(new Set());
     setSearchQuery("");
     setSearchTagIds([]);
-  }, [space.id]);
+  }, [setSelectedFiles, space.id]);
 
   const {
     isAdmin,
@@ -151,6 +152,7 @@ function useKnowledgeSpaceDetail(
     canDeleteSpace,
     canManageMembers,
     canEditSpace,
+    canReadSpaceTags,
     canLeaveSpace,
     versionManagementEnabled,
     queryClient,
@@ -170,6 +172,7 @@ function useKnowledgeSpaceDetail(
   } = useKnowledgeSpaceHeader({
     selectedFiles,
     space,
+    currentFolderId,
     onDeleteFile,
     localize,
     showToast,
@@ -214,7 +217,9 @@ function useKnowledgeSpaceDetail(
     canCreateFolder,
     canUploadFile,
     canMoveFile,
+    ensureFilePermissions,
     permissionEntryIds,
+    moveEntryIds,
     deleteEntryIds,
     renameEntryIds,
     downloadEntryIds,
@@ -292,12 +297,35 @@ function useKnowledgeSpaceDetail(
     (f) => selectedFiles.has(f.id) && f.type === FileType.FOLDER,
   );
   const selectedList = displayFiles.filter((f) => selectedFiles.has(f.id));
-  // The actual server review classifies each selected source and the target.
-  // Uploading placeholders no longer block the entry — the
-  // move flow warns about them and lets the user move the rest (handleBatchMove).
-  const canBatchMove = selectedList.length > 0;
-  const canBatchDelete = selectedList.length > 0;
-  const canBatchDownload = selectedList.length > 0;
+  const selectedPermissionKey = selectedList.map((file) => file.id).sort().join("|");
+  const listedFiles = useRef(displayFiles);
+  listedFiles.current = displayFiles;
+  useEffect(() => {
+    const wanted = new Set(selectedPermissionKey.split("|").filter(Boolean));
+    for (const file of listedFiles.current) {
+      if (wanted.has(file.id)) void ensureFilePermissions(file);
+    }
+  }, [ensureFilePermissions, selectedPermissionKey]);
+  // Each batch entry follows the effective action the server will enforce.
+  // A selection with none of that action does not offer the entry.
+  const actionableSelection = selectedList.filter(
+    (file) => !isKnowledgeItemUploading(file) && /^[1-9][0-9]*$/.test(file.id),
+  );
+  const canBatchMove = actionableSelection.some((file) => moveEntryIds.has(file.id));
+  const canBatchDelete = actionableSelection.some((file) => deleteEntryIds.has(file.id));
+  const canBatchDownload = actionableSelection.some((file) => downloadEntryIds.has(file.id));
+  const canBatchTag =
+    actionableSelection.length > 0 &&
+    actionableSelection.every((file) => file.type !== FileType.FOLDER) &&
+    actionableSelection.some(
+      (file) =>
+        renameEntryIds.has(file.id) &&
+        file.status !== FileStatus.PROCESSING &&
+        file.status !== FileStatus.REBUILDING,
+    );
+  const canBatchRetry = actionableSelection.some(
+    (file) => renameEntryIds.has(file.id) && isKnowledgeItemRetryable(file),
+  );
 
   const fileActions = useKnowledgeFileActions({
     localize,
@@ -350,14 +378,6 @@ function useKnowledgeSpaceDetail(
   // Search page starts empty: show results only once a keyword/tag search is active.
   const suppressList = searchMode && !isSearching;
 
-  // ─── Mobile batch action bar ────────────────────────────────────────
-  // Shown at the bottom (replacing the AI dock) once any file is selected. Which
-  // actions appear mirrors the desktop toolbar exactly (same permission/status gates).
-  const selectionActive = isH5 && selectedFiles.size > 0;
-  useEffect(() => {
-    onSelectionActiveChange?.(selectionActive);
-  }, [selectionActive, onSelectionActiveChange]);
-
   // Permission management is a single-target action: only with exactly one selected item,
   // and only when the user is allowed to manage its permission (permissionEntryIds is the
   // permission-probed set, so this respects the user's permission).
@@ -367,7 +387,7 @@ function useKnowledgeSpaceDetail(
   const { batchActions, inlineActions, overflowActions } = getKnowledgeBatchActions({
     selectedFiles,
     isAdmin,
-    canManageMembers,
+    canEditSpace,
     versionManagementEnabled,
     handleProcessSimilar,
     handleManagePermission,
@@ -376,6 +396,8 @@ function useKnowledgeSpaceDetail(
     canBatchMove,
     canBatchDelete,
     canBatchDownload,
+    canBatchTag,
+    canBatchRetry,
     handleBatchDownload,
     handleBatchTag,
     handleBatchMove,
@@ -387,6 +409,11 @@ function useKnowledgeSpaceDetail(
     canManageSinglePermission,
     localize,
   });
+  // The mobile bar replaces the AI dock only when a permitted action remains.
+  const selectionActive = isH5 && batchActions.length > 0;
+  useEffect(() => {
+    onSelectionActiveChange?.(selectionActive);
+  }, [selectionActive, onSelectionActiveChange]);
 
   // F034: drag-move wiring for the card grid (table view wires its own internally).
   const cardDrag = useKnowledgeMoveDrag({
@@ -423,6 +450,7 @@ function useKnowledgeSpaceDetail(
     canDeleteSpace,
     canManageMembers,
     canEditSpace,
+    canReadSpaceTags,
     canLeaveSpace,
     versionManagementEnabled,
     setVersionMgmtFile,
@@ -447,6 +475,8 @@ function useKnowledgeSpaceDetail(
     canBatchMove,
     canBatchDelete,
     canBatchDownload,
+    canBatchTag,
+    canBatchRetry,
     hasSimilarSelected,
     effectiveViewMode,
     suppressList,

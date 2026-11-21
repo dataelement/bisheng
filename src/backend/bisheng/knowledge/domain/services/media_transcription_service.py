@@ -26,8 +26,9 @@ from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.llm.domain.llm.asr import BishengASR, is_asr_provider_supported
-from bisheng.llm.domain.models import LLMDao, LLMModel, LLMServer
+from bisheng.llm.domain.models import LLMModel, LLMServer
 from bisheng.llm.domain.services.llm import LLMService
+from bisheng.llm.domain.share_fallback import get_model_by_id_with_share_fallback, get_server_by_id_with_share_fallback
 from bisheng.utils.async_utils import run_async_safe
 from bisheng.utils.util import calculate_md5
 
@@ -173,17 +174,17 @@ class KnowledgeMediaTranscriptionService:
 
     @classmethod
     def _resolve_asr_model(cls, tenant_id: int | None) -> tuple[LLMModel, LLMServer]:
-        knowledge_llm = LLMService.get_knowledge_llm(tenant_id=tenant_id)
+        knowledge_llm = LLMService.get_knowledge_llm(tenant_id=tenant_id, slots=("asr_model_id",))
         if not knowledge_llm.asr_model_id:
             raise NoAsrModelConfigError()
 
-        model_info = LLMDao.get_model_by_id(int(knowledge_llm.asr_model_id))
+        model_info = get_model_by_id_with_share_fallback(int(knowledge_llm.asr_model_id))
         if not model_info:
             raise AsrModelConfigDeletedError()
         if not LLMModelType.is_speech(model_info.model_type):
             raise AsrModelTypeError(model_type=model_info.model_type)
 
-        server_info = LLMDao.get_server_by_id(model_info.server_id)
+        server_info = get_server_by_id_with_share_fallback(model_info.server_id)
         if not server_info:
             raise AsrProviderDeletedError()
         if not model_info.online:

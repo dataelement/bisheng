@@ -12,6 +12,7 @@ from sqlalchemy.engine import make_url
 from bisheng.core.config.credential_artifacts import bundle_native_files, write_bundle_native
 from bisheng.core.config.credential_bundle import prepare_bundle
 from bisheng.core.config.secret_crypto import CredentialConfigurationError, load_keyring
+from test.fixtures.runtime_secrets import RUNTIME_SECRETS
 
 
 @pytest.fixture
@@ -155,7 +156,27 @@ def test_adopt_records_existing_insecure_state(deployment, tmp_path):
 def test_shipped_template_can_prepare_without_legacy_secret_environment(deployment, tmp_path):
     root = Path(__file__).resolve().parents[4]
     deployment["config"] = root / "docker/bisheng/config/config.yaml"
-    out = prepare_bundle(**deployment, environ={"BISHENG_GATEWAY_HMAC_SECRET": ""}, deployment_root=root / "docker")
+    out = prepare_bundle(
+        **deployment,
+        # Current template topology inputs are explicit; credential fields are
+        # overwritten by the sealed deployment inputs before runtime validation.
+        environ={
+            "BISHENG_GATEWAY_HMAC_SECRET": "",
+            "BS_MILVUS_CONNECTION_ARGS": '{"host":"milvus","port":"19530"}',
+            "BS_MILVUS_IS_PARTITION": "true",
+            "BS_MILVUS_PARTITION_SUFFIX": "1",
+            "BS_ELASTICSEARCH_URL": "http://es:9200",
+            "BS_ELASTICSEARCH_SSL_VERIFY": "{}",
+            "BS_MINIO_SCHEMA": "false",
+            "BS_MINIO_CERT_CHECK": "false",
+            "BS_MINIO_ENDPOINT": "minio:9000",
+            "BS_MINIO_SHAREPOINT": "minio:9000",
+            "BS_MINIO_ACCESS_KEY": "",
+            "BS_MINIO_SECRET_KEY": "",
+            **RUNTIME_SECRETS,
+        },
+        deployment_root=root / "docker",
+    )
     assert "gateway-application.yml" in bundle_native_files(out, deployment["key_file"])
     assert "encrypt(" in (out / "config.yaml").read_text()
 

@@ -13,7 +13,7 @@ import { InputField } from "./InputField";
 import { SandboxEndpointFields, type SandboxProbeResult } from "./SandboxEndpointFields";
 import { parseSandboxEndpoints, sandboxSavePlan } from "./sandboxEndpoint";
 
-const Dalle3ToolForm = ({ formData, onSubmit }) => {
+const CodeExecutorForm = ({ formData, onSubmit }) => {
     const { t } = useTranslation('tool');
     const domainRef = useRef(null);
     const apiKeyRef = useRef(null);
@@ -324,4 +324,4 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
     );
 };
 
-export default Dalle3ToolForm;
+export default CodeExecutorForm;

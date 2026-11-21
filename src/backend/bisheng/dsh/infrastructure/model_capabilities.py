@@ -8,7 +8,7 @@ async def desktop_model_capabilities(model, server) -> ChatCapabilities:
     from bisheng.dsh.domain.services.vision import read_vision
 
     result = model_capabilities(model, server)
-    result.vision = (await read_vision(model.id)).vision
+    result.vision = (await read_vision(model.id, snapshot=(model, server))).vision
     return result
 
 

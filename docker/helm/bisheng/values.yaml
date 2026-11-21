@@ -37,8 +37,9 @@ database:
     existingSecret: ''
     passwordKey: password
     password: bisheng-change-me
-dsh:
-  enabled: false
+# null uses enabled: true; set bs_client.enabled: false to disable.
+# Legacy dsh input remains supported when bs_client is null.
+bs_client: null
 openPlatform:
   enabled: false
 bootstrap:
@@ -248,6 +249,7 @@ frontend:
     nodePort: 0
     clientNodePort: 0
   proxy:
+    trustedForwardedCidrs: [127.0.0.1/32, "::1/128"]
     readTimeoutSeconds: 300
     maxBodySize: 1024m
 mysql:

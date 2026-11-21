@@ -220,6 +220,14 @@ async def promote_chat_attachments(
     partition = storage_partition or str(user_id)
     for file, source_object, dest_object in _plan_promotions(files, partition, minio_client.tmp_bucket):
         try:
+            from bisheng.core.storage.minio.signed_reference import verify_signed_reference
+
+            reference = verify_signed_reference(
+                file.get("filepath") or file.get("file_path") or file.get("file_url") or "", minio_client
+            )
+            if reference.bucket != minio_client.tmp_bucket or reference.version_id:
+                raise ValueError("Attachment source does not match its signed reference")
+            source_object = reference.object_name
             await minio_client.copy_object(
                 source_bucket=minio_client.tmp_bucket,
                 source_object=source_object,
@@ -247,6 +255,14 @@ def promote_chat_attachments_sync(files: list[dict] | None, user_id: int | str) 
 
     for file, source_object, dest_object in _plan_promotions(files, user_id, minio_client.tmp_bucket):
         try:
+            from bisheng.core.storage.minio.signed_reference import verify_signed_reference
+
+            reference = verify_signed_reference(
+                file.get("filepath") or file.get("file_path") or file.get("file_url") or "", minio_client
+            )
+            if reference.bucket != minio_client.tmp_bucket or reference.version_id:
+                raise ValueError("Attachment source does not match its signed reference")
+            source_object = reference.object_name
             minio_client.copy_object_sync(
                 source_bucket=minio_client.tmp_bucket,
                 source_object=source_object,

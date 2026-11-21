@@ -1,10 +1,12 @@
 """AC-23/24/25: temporary preview authorization and frozen input behavior."""
 
+import io
 from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from starlette.datastructures import UploadFile
 
 from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.common.errcode.knowledge import (
@@ -13,6 +15,7 @@ from bisheng.common.errcode.knowledge import (
     KnowledgePreviewError,
     KnowledgeProcessingJobNotFoundError,
 )
+from bisheng.common.errcode.knowledge_space import SpaceFileFormatError
 from bisheng.knowledge.domain.schemas.upload_preview import UploadContextItem, UploadPreviewRequest
 from bisheng.knowledge.domain.services.upload_preview_service import UploadPreviewService, digest
 from bisheng.knowledge.rag.pipeline.transformer.preview_cache import PreviewCacheTransformer
@@ -218,3 +221,42 @@ def test_frozen_cache_rejects_duplicate_normalized_indices(monkeypatch):
     monkeypatch.setattr(KnowledgeUtils, "get_preview_cache", lambda _: {b"0": value, "0": value}, raising=False)
     with pytest.raises(KnowledgePreviewError):
         PreviewCacheTransformer("space_upload_frozen:test", {}).transform_documents([])
+
+
+async def test_stage_rejects_unsupported_format_before_storing(service, monkeypatch):
+    """The staging entry applies the same allow-list as the drop zone, server-side."""
+    from bisheng.knowledge.domain.services import upload_preview_service as module
+
+    saved = AsyncMock()
+    service.repository.create = AsyncMock()
+    monkeypatch.setattr(module, "save_uploaded_file", saved)
+    file = UploadFile(filename="payload.exe", file=io.BytesIO(b"MZ" + b"\x00" * 9))
+
+    with pytest.raises(SpaceFileFormatError):
+        await service.stage(7, 9, file)
+
+    saved.assert_not_awaited()
+    service.repository.create.assert_not_awaited()
+
+
+async def test_stage_keeps_supported_format_and_binds_the_owner(service, monkeypatch):
+    from bisheng.knowledge.domain.services import upload_preview_service as module
+
+    saved = AsyncMock(return_value="tmp/b")
+    service.repository.create = AsyncMock(return_value={"upload_id": "b" * 32, "expires_at": 1_900_000_000})
+    monkeypatch.setattr(module, "save_uploaded_file", saved)
+    monkeypatch.setattr(module.KnowledgeService, "save_upload_file_original_name", AsyncMock(return_value="uuid.md"))
+    file = UploadFile(filename="draft.md", file=io.BytesIO(b"# draft"))
+
+    staged = await service.stage(7, 9, file)
+
+    assert staged == {
+        "upload_id": "b" * 32,
+        "file_path": "tmp/b",
+        "file_name": "draft.md",
+        "repeat": False,
+        "expires_at": 1_900_000_000,
+    }
+    created = service.repository.create.await_args.args[0]
+    assert (created["space_id"], created["parent_id"], created["tenant_id"], created["actor_user_id"]) == (7, 9, 101, 5)
+    assert created["state"] == "OPEN" and created["file_name"] == "draft.md"

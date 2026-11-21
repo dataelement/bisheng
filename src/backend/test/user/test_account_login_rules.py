@@ -18,6 +18,8 @@ from bisheng.common.errcode.user import (
 from bisheng.database.models.user_role import UserRole
 from bisheng.user.domain.models.user import UserCreate, UserLogin
 from bisheng.user.domain.services.account_identity_service import AccountIdentityService
+from test.fixtures.managed_tenant import managed_db as managed_db
+from test.role.test_effective_roles import policy_db as policy_db
 from test.user.f011_fixtures import identity_store, old_user  # noqa: F401
 
 
@@ -80,6 +82,56 @@ async def test_registration_rejects_33_before_any_creation(user_module, monkeypa
             UserCreate(user_name="中" * 33, external_id="New01", password="cipher")
         )
     create.assert_not_awaited()
+
+
+@pytest.mark.parametrize("dsh_enabled", [False, True])
+async def test_registration_activates_home_before_member_roles_are_read(
+    user_module, policy_db, monkeypatch, dsh_enabled
+):
+    from bisheng.admin.domain.services.tenant_scope import TenantScopeService
+    from bisheng.core.context.tenant import tenant_execution_scope
+    from bisheng.database.models import tenant as tenant_models
+    from bisheng.database.models.department import Department
+    from bisheng.department.domain.services import department_service
+    from bisheng.role.application.member_role_display import read_member_role_display
+    from bisheng.tenant.domain.services.user_tenant_sync_service import UserTenantSyncService
+    from bisheng.user.domain.models import user as user_models
+    from bisheng.user.domain.models.account_identity import UserAccountReservation, UserIdentityWriteGuard
+    from bisheng.user.domain.repositories import policy_binding_repository
+    from bisheng.user.domain.repositories.account_identity_repository import AccountIdentityRepository
+
+    await policy_db.create(UserAccountReservation, UserIdentityWriteGuard)
+    with tenant_execution_scope(1):
+        async with policy_db.sessions() as session:
+            session.add(user_models.User(user_id=1, user_name="admin", password="fixture-only"))
+            session.add(Department(id=11, dept_id="BS@guest", name="Guest", tenant_id=1, parent_id=10, path="/10/11/"))
+            await session.commit()
+
+    for module in (user_module, user_models, tenant_models, department_service):
+        monkeypatch.setattr(module, "get_async_db_session", policy_db.sessions)
+    monkeypatch.setattr(AccountIdentityRepository, "session_scope", staticmethod(policy_db.sync_sessions))
+    user_module.settings.multi_tenant.enabled = True
+    user_module.settings.multi_tenant.default_tenant_code = "root"
+    user_module.settings.dsh = {"enabled": dsh_enabled}
+    monkeypatch.setattr(policy_binding_repository, "settings", user_module.settings)
+    service = user_module.UserService
+    monkeypatch.setattr(service, "decrypt_md5_password_strict", lambda _: "test-only-digest")
+    monkeypatch.setattr(service, "areconcile_first_user_dashboard_permissions", AsyncMock())
+    monkeypatch.setattr(user_module.LegacyRBACSyncService, "sync_user_auth_created", AsyncMock())
+    monkeypatch.setattr(department_service, "_resume_department_projection_if_needed", AsyncMock())
+    monkeypatch.setattr(department_service, "_prepare_department_projection", AsyncMock(return_value=None))
+    monkeypatch.setattr(department_service.DepartmentChangeHandler, "execute_async", AsyncMock())
+    monkeypatch.setattr(TenantScopeService, "clear_on_token_version_bump", AsyncMock())
+    for method in ("_invalidate_redis_caches", "_migrate_relocated_personal_token", "_write_relocation_audit"):
+        monkeypatch.setattr(UserTenantSyncService, method, AsyncMock())
+
+    row = await service.user_register(UserCreate(user_name="NewGuest", external_id="NewGuest", password="cipher"))
+
+    with tenant_execution_scope(1):
+        display = await read_member_role_display({row.user_id}, tenant_id=1)
+        home = await tenant_models.UserTenantDao.aget_active_user_tenant(row.user_id)
+    assert home is not None and home.tenant_id == 1 and home.is_default == 1
+    assert [role["id"] for role in display[row.user_id]["roles"]] == [user_module.DefaultRole]
 
 
 async def test_captcha_remains_before_identity_resolution(user_module, monkeypatch):

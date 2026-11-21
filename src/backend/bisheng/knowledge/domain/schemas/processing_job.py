@@ -135,6 +135,7 @@ class ProcessingCreateRequest(ProcessingSchema):
 class ProcessingRetryRequest(ProcessingSchema):
     idempotency_key: IdempotencyKey
     expected_job_revision: NonNegativeInteger
+    refresh_source: bool = Field(default=False, strict=True)
 
 
 class JobAccepted(ProcessingSchema):
@@ -161,6 +162,7 @@ class ProcessingJobRead(ProcessingSchema):
     retryable: bool = False
     obsolete_reason: str | None = None
     error_code: int | None = None
+    failure_reason: str | None = None
 
 
 class ProcessingItemRead(ProcessingSchema):
@@ -173,6 +175,8 @@ class ProcessingItemRead(ProcessingSchema):
     attempt: NonNegativeInteger
     error_code: int | None = None
     message: str | None = None
+    file_name: str | None = None
+    failure_reason: str | None = None
     retryable: bool = False
 
 

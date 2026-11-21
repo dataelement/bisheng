@@ -19,6 +19,7 @@ export type ReferenceRow = {
     entry: string | null;
   };
   matched_slot_count: number;
+  locations?: readonly string[];
 };
 export type ReferencePage = {
   data: ReferenceRow[];
@@ -71,6 +72,7 @@ export function precheckDeletion(
       : command.kind === "delete"
         ? { force }
         : undefined,
+    { showError: false },
   );
 }
 export function confirmDeletion(

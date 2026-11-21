@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import { Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { knowledgeQueryKeys } from "@/controllers/hooks/knowledge";
 import { useKnowledgePageScope } from "@/hooks/useKnowledgePageScope";
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
+import { KnowledgeScopeUnavailable } from "./components/KnowledgeScopeUnavailable";
 import { SpacePanelFrame } from "./components/SpacePanelFrame";
 import { SpaceSettingsEditor } from "./components/SpaceSettingsEditor";
 import { parseKnowledgeId } from "./detail";
@@ -27,8 +29,7 @@ export function KnowledgeSpaceSettingsPage() {
   if (admin && !canManage) return <Navigate to={directory} replace />;
 
   const scope = admin ? scopes?.admin : scopes?.ordinary;
-  const returnPath = admin ? "/filelib?view=admin" : directory;
-  const handleBack = () => navigate(returnPath, { replace: true });
+  const handleBack = () => navigate(directory, { replace: true });
   const handleSaved = () => {
     if (scope) return client.invalidateQueries({ queryKey: knowledgeQueryKeys.scope(scope) });
   };
@@ -41,6 +42,7 @@ export function KnowledgeSpaceSettingsPage() {
         <SpacePanelFrame
           title={t("detail.settings")}
           presentation="page"
+          contentClassName="h-full"
           back={{ label: t("back"), onClick: handleBack }}
           footer={
             <>
@@ -49,7 +51,7 @@ export function KnowledgeSpaceSettingsPage() {
             </>
           }
         >
-          <p role="status">{t(isLoading ? "f118.loading_space" : "f118.scope_unavailable")}</p>
+          {isLoading ? <LoadingState size="page" className="h-full" label={t("f118.loading_space")} /> : <KnowledgeScopeUnavailable />}
         </SpacePanelFrame>
       )}
     </main>

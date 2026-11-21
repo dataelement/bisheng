@@ -378,7 +378,7 @@ F086/F059 实现汇合到 `feat/3.0.0-vibe`。F059 原 267/271，加同版本 CI
 
 ## F132 长期记忆登记（2026-11-13；已在功能分支实现，待 test 环境验证与评测）
 
-范围见 [discovery](./132-long-term-memory/discovery.md) 与 [spec](./132-long-term-memory/spec.md)，伴生 PRD 为 `docs/PRD/memory 长期记忆/长期记忆 PRD.md` v0.5。分支 `feat/v3.0.0/132-long-term-memory` 自 `feat/3.0.0@741662475b` 创建；本功能同时要合入主版本线与 `feat/v3.0.0/118-kunlian-integration`，目标版本号未定。
+范围见 [discovery](./132-long-term-memory/discovery.md) 与 [spec](./132-long-term-memory/spec.md)，伴生 PRD 为 `docs/PRD/3.1/memory 长期记忆/长期记忆 PRD.md` v0.5。分支 `feat/v3.0.0/132-long-term-memory` 自 `feat/3.0.0@741662475b` 创建；本功能同时要合入主版本线与 `feat/v3.0.0/118-kunlian-integration`，目标版本号未定。
 
 - 新增领域对象 MemoryItem、MemorySwitch，Owner 为 F132（见表 1）。工作流节点、助手设置、工作台配置、client 个人设置各自的原 Owner 不变，F132 只在其上新增记忆相关的入口。
 - 候选不变量（随 spec 定稿转正，编号暂占）：

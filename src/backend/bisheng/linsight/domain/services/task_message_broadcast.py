@@ -1,8 +1,9 @@
 """Fan out the existing task queue to every connected viewer across API workers."""
 
 import asyncio
-import pickle
 from contextlib import asynccontextmanager
+
+from bisheng.core.cache.serialization import decode_redis_value
 
 # Redis executes delivery and acknowledgement together. Writers retain their
 # existing queue contract, and viewers receive each frame in the same order.
@@ -34,6 +35,6 @@ async def task_message_subscription(redis, queue_key: str):
                 # One key keeps this command compatible with Redis Cluster.
                 await redis.eval(_BROADCAST_NEXT, 1, queue_key, channel)
                 frame = await subscription.get_message(ignore_subscribe_messages=True, timeout=1)
-                yield pickle.loads(frame["data"]) if frame and frame["type"] == "message" else None
+                yield decode_redis_value(queue_key, frame["data"]) if frame and frame["type"] == "message" else None
 
         yield messages()

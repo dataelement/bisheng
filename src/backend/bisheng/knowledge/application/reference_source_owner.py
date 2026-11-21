@@ -151,7 +151,7 @@ class KnowledgeReferenceSourceOwner:
         knowledge_id = self._request(request)
         if isinstance(identity, UserPayload):
             return knowledge_id, None
-        if self.identity_port is None or request.purpose != "execute":
+        if self.identity_port is None or request.purpose not in {"execute", "inspect"}:
             raise ResourceReferenceInvalidError(reason="knowledge_model_original_identity_required")
         return knowledge_id, self.identity_port.assert_source(session, identity, knowledge_id)
 

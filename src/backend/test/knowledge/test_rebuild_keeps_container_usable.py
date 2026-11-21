@@ -9,7 +9,7 @@ No provider, vectorstore, queue or deployed database is contacted.
 
 from types import SimpleNamespace
 
-from bisheng.common.errcode.knowledge import ReferenceCoverageNotReadyError
+from bisheng.common.errcode.knowledge import KnowledgeFileFailedError, ReferenceCoverageNotReadyError
 from bisheng.knowledge.domain.models.knowledge import KnowledgeState
 from bisheng.worker.knowledge import rebuild_knowledge_worker as worker
 from test.knowledge_unification import test_kn_model_bindings as business_fixtures
@@ -59,12 +59,13 @@ def test_an_unexpected_global_error_preserves_unfinished_business_stage(rebuild,
 
 def test_controlled_all_file_failures_do_not_write_a_container_failed_state(rebuild, monkeypatch):
     files, error = _run(rebuild, monkeypatch, success=[], failed=[1, 2])
-    assert error is None
+    assert isinstance(error, KnowledgeFileFailedError)
+    assert error.kwargs["reason"] == "all_files_failed"
     assert all(item.status == 3 and item.remark for item in files)
-    fixtures.assert_finalized(rebuild)
+    fixtures.assert_stage_preserved(rebuild)
     row = next(item for item in business_fixtures.state(rebuild.context)["knowledge"] if item["id"] == 40)
-    assert row["state"] == KnowledgeState.PUBLISHED.value
-    assert row["state"] != KnowledgeState.FAILED.value
+    assert row["state"] == KnowledgeState.REBUILDING.value
+    assert row["model"] == "11" and row["model_transition"]["pending_model_id"] == "12"
 
 
 def test_reference_guard_failure_is_not_reclassified_as_a_finished_partial_run(rebuild, monkeypatch):

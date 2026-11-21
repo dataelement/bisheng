@@ -5,8 +5,14 @@ metadata:
 data:
   default.conf: |
     map $http_upgrade $connection_upgrade { default upgrade; '' close; }
-    map $http_x_forwarded_proto $bs_forwarded_proto { default $http_x_forwarded_proto; "" $scheme; }
-    map $http_x_forwarded_host $bs_forwarded_host { default $http_x_forwarded_host; "" $http_host; }
+    geo $bs_trusted_edge {
+      default 0;
+{{- range .Values.frontend.proxy.trustedForwardedCidrs }}
+      {{ . }} 1;
+{{- end }}
+    }
+    map "$bs_trusted_edge:$http_x_forwarded_proto" $bs_forwarded_proto { default $scheme; "1:http" http; "1:https" https; }
+    map $http_host $bs_forwarded_host { default $http_host; }
     server {
       listen {{ .Values.frontend.service.port }};
 {{- if .Values.frontend.service.clientPort }}

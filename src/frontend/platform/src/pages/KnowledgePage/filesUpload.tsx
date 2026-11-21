@@ -9,7 +9,9 @@ import {
   type KnowledgeQueryScope,
 } from "@/controllers/hooks/knowledge";
 import { showApiError } from "@/controllers/request";
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { useKnowledgePageScope } from "@/hooks/useKnowledgePageScope";
+import { KnowledgeScopeUnavailable } from "./components/KnowledgeScopeUnavailable";
 import { SpaceFileUploadPanel } from "./components/SpaceFileUploadPanel";
 
 const parseId = (value: string | null | undefined): number | null => {
@@ -48,7 +50,7 @@ function UploadTarget({ scope, spaceId, parentId }: UploadTargetProps) {
   return (
     <div className="h-full min-h-0">
       {permissions.isInitialLoading ? (
-        <div role="status">{t("f118.loading_directory")}</div>
+        <LoadingState size="page" className="h-full" label={t("f118.loading_directory")} />
       ) : permissions.isError ? (
         <Button
           variant="outlined"
@@ -84,21 +86,22 @@ export function FilesUpload() {
     spaceId === null ||
     (parents.length > 0 && (parents.length !== 1 || parentId === null))
   )
-    return <div role="status">{t("f118.scope_unavailable")}</div>;
-  if (isLoading) return <div role="status">{t("f118.loading_directory")}</div>;
+    return <KnowledgeScopeUnavailable />;
+  if (isLoading) return <LoadingState size="page" className="h-full" label={t("f118.loading_directory")} />;
   if (!scopes)
     return (
-      <div>
-        <div role="status">{t("f118.scope_unavailable")}</div>
-        <Button
-          variant="outlined"
-          onClick={() => {
-            void retry();
-          }}
-        >
-          {t("retry")}
-        </Button>
-      </div>
+      <KnowledgeScopeUnavailable
+        action={
+          <Button
+            variant="outlined"
+            onClick={() => {
+              void retry();
+            }}
+          >
+            {t("retry")}
+          </Button>
+        }
+      />
     );
   const views = params.getAll("view");
   const scope = canManage && views.length === 1 && views[0] === "admin" ? scopes.admin : scopes.ordinary;

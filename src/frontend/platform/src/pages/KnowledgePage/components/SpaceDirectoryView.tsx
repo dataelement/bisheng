@@ -72,12 +72,12 @@ export function SpaceDirectoryView({
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <SpaceDirectoryBrowseToolbar {...toolbar} />
-      <div ref={scrollRef} className={`min-h-0 flex-1 overflow-y-auto ${styles.rowViewport}`}>
+      <div ref={scrollRef} className={`flex min-h-0 flex-1 flex-col overflow-y-auto ${styles.rowViewport}`}>
         <div
           className={
             viewMode === "card"
-              ? styles.cardGrid
-              : "flex flex-col"
+              ? `shrink-0 ${styles.cardGrid}`
+              : "flex shrink-0 flex-col"
           }
           data-view-mode={viewMode}
         >

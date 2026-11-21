@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 import resource
 import signal
@@ -185,6 +186,41 @@ def _result(
     }
 
 
+SUPPORTED_LANGUAGES = frozenset({"python", "python3", "sh", "bash", "shell"})
+
+
+class InvalidExecRequest(ValueError):
+    """The request is invalid; no execution side effects have occurred."""
+
+
+def validate_exec_payload(payload: object) -> tuple[str, str, float]:
+    """Validate before logging, locking, filesystem reads/writes or process work."""
+    if not isinstance(payload, dict) or set(payload) - {"code", "lang", "timeout_s"}:
+        raise InvalidExecRequest()
+    code = payload.get("code")
+    lang = payload.get("lang", "python")
+    timeout = payload.get("timeout_s", 600)
+    if (
+        not isinstance(code, str)
+        or not isinstance(lang, str)
+        or lang not in SUPPORTED_LANGUAGES
+    ):
+        raise InvalidExecRequest()
+    try:
+        code.encode("utf-8")
+    except UnicodeEncodeError:
+        raise InvalidExecRequest() from None
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
+        raise InvalidExecRequest()
+    try:
+        timeout_s = float(timeout)
+    except (OverflowError, ValueError):
+        raise InvalidExecRequest() from None
+    if not math.isfinite(timeout_s) or not 0 < timeout_s <= 600:
+        raise InvalidExecRequest()
+    return code, lang, timeout_s
+
+
 def handle_exec(
     store: LeaseStore,
     lease: Lease,
@@ -199,9 +235,7 @@ def handle_exec(
     Raises UnknownLeaseError only when the lease was deleted before the child
     started; every outcome after that (including a failed kill) is a result dict.
     """
-    code = payload.get("code") or ""
-    lang = payload.get("lang") or "python"
-    timeout_s = float(payload.get("timeout_s") or 600)
+    code, lang, timeout_s = validate_exec_payload(payload)
     _log.info(
         "exec start session_id=%s lang=%s timeout_s=%s code_bytes=%s",
         lease.session_id,
@@ -223,8 +257,8 @@ def handle_exec(
             os.makedirs(os.path.join(lease.work_dir, zone), exist_ok=True)
         cmd = (
             [sys.executable, script]
-            if str(lang).startswith("python")
-            else ["sh", "-c", code]
+            if lang in {"python", "python3"}
+            else ["bash" if lang == "bash" else "sh", "-c", code]
         )
         started = time.monotonic()
         dropped = os.geteuid() == 0 and lease.uid != 0

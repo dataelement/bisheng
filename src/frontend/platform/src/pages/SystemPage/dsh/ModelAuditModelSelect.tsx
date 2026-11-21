@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button } from "@bisheng/ui";
 import { Input } from "@bisheng/ui";
 import {
@@ -200,9 +201,7 @@ export function ModelAuditModelSelect({
               </div>
             ))}
             {loading && (
-              <p role="status" className="p-3 text-sm text-muted-foreground">
-                {t("dsh.loading")}
-              </p>
+              <LoadingState size="panel" label={t("dsh.loading")} className="p-3 text-sm text-muted-foreground" />
             )}
             {failed && (
               <p role="alert" className="p-3 text-sm text-muted-foreground">

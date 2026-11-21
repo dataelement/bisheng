@@ -1,10 +1,13 @@
 """Actual processing commands; existing four-kind kernels retain their algorithms."""
 
+import asyncio
 from datetime import timedelta
+from types import SimpleNamespace
 from uuid import UUID, uuid5
 
 from bisheng.common.errcode.knowledge import KnowledgeOperationPlanChangedError
 from bisheng.core.database import get_async_db_session
+from bisheng.knowledge.application.model_availability import probe_embedding
 from bisheng.knowledge.application.model_reference import KnowledgeModelReferenceApplication
 from bisheng.knowledge.application.processing_identity import capture_processing_actor
 from bisheng.knowledge.application.processing_owner import KnowledgeProcessingOwner
@@ -15,6 +18,7 @@ from bisheng.knowledge.domain.schemas.processing_job import (
     ProcessingPrecheckRequest,
 )
 from bisheng.knowledge.domain.services.processing_job_service import ProcessingJobService
+from bisheng.permission.application.business_authorization import require_business_action
 
 
 class KnowledgeProcessingCommands:
@@ -62,14 +66,40 @@ class KnowledgeProcessingCommands:
         )
         if anchor is None or anchor.space.id != space_id:
             raise KnowledgeOperationPlanChangedError()
+        await require_business_action(identity, resource_type="knowledge_file", resource_id=file_id, action="visible")
         return ResourceVersionTarget(file_id=file_id, document_id=anchor.document.id, version_id=anchor.version.id)
+
+    async def _verify_rebuild_model(self, space_id, parameters, identity):
+        # Full target/tenant/action admission uses a short, rolled-back plan.
+        # The endpoint probe runs after its SQL locks have been released.
+        async with self.sessions() as session:
+            prepared = await self.service.owner.apreview(session, space_id, identity=identity, parameters=parameters)
+            selected = int(prepared.transition["pending_model_id"])
+            knowledge = SimpleNamespace(name=prepared.row.name)
+            operator = await self.service.owner._operator(identity)
+            user_id = operator.user_id
+            self._clean(session)
+        await asyncio.to_thread(probe_embedding, knowledge, selected, user_id)
+
+    @staticmethod
+    async def _require_source_inputs(session, space_id, operation, targets):
+        file_id = None
+        if operation in {"file_reprocess", "file_resplit"} and isinstance(targets, list) and len(targets) == 1:
+            candidate = targets[0].get("file_id") if isinstance(targets[0], dict) else None
+            if type(candidate) is int and candidate > 0:
+                file_id = candidate
+        await SourceMoveInputRepository().arequire_released(
+            session, space_id=space_id, include_copy=False, file_id=file_id
+        )
 
     async def aprecheck(self, space_id, request, *, identity, entry_kind="web"):
         await self.service._authorize(identity, space_id)
+        request = ProcessingPrecheckRequest.model_validate(request.model_dump(mode="json"))
         async with self.sessions() as session:
             await session.connection()
-            await SourceMoveInputRepository().arequire_released(session, space_id=space_id)
-        request = ProcessingPrecheckRequest.model_validate(request.model_dump(mode="json"))
+            await self._require_source_inputs(session, space_id, request.kind, request.model_dump()["targets"])
+        if request.kind == "embedding_rebuild":
+            await self._verify_rebuild_model(space_id, request.parameters.model_dump(mode="json"), identity)
         selected = request.parameters.embedding_model_id if request.kind == "embedding_rebuild" else None
         if selected is not None:
             async with self.sessions() as session:
@@ -126,6 +156,28 @@ class KnowledgeProcessingCommands:
         return await self._confirm(space_id, request, identity, "web", file_id=file_id)
 
     async def _confirm(self, space_id, request, identity, entry_kind, *, metadata=None, kind=None, file_id=None):
+        await self.service._authorize(identity, space_id)
+        async with self.sessions() as session:
+            actor = await capture_processing_actor(
+                identity, space_id=space_id, required_action="edit", entry_kind=entry_kind
+            )
+            candidate = await self.service.plans._locked(session, request.confirmation_id)
+            header = await self.service.plans.aget_for_execution(
+                session,
+                request.confirmation_id,
+                space_id=space_id,
+                operation=candidate.operation,
+                actor_reference=actor.reference,
+                plan_digest=request.plan_digest,
+            )
+            parameters = (
+                dict(header.parameters)
+                if header.operation == "embedding_rebuild" and header.operation_id is None
+                else None
+            )
+        if parameters is not None:
+            await self._verify_rebuild_model(space_id, parameters, identity)
+
         request = ProcessingCreateRequest.model_validate(request.model_dump(mode="json"))
         await self.service._authorize(identity, space_id)
         async with self.sessions() as session:
@@ -137,7 +189,7 @@ class KnowledgeProcessingCommands:
                 or {item["file_id"] for item in plan.target_manifest} != {file_id}
             ):
                 raise KnowledgeOperationPlanChangedError()
-            await SourceMoveInputRepository().arequire_released(session, space_id=space_id)
+            await self._require_source_inputs(session, space_id, plan.operation, plan.target_manifest)
             if not plan.impact.get("configuration_only"):
                 result = await self.service.acreate(
                     session, space_id, request, identity=identity, entry_kind=entry_kind

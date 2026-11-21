@@ -10,6 +10,7 @@ from starlette.websockets import WebSocketState
 from bisheng.api.services import report_template
 from bisheng.api.services.flow import FlowService
 from bisheng.api.services.office_callback import afetch_office_document
+from bisheng.api.services.report_editor_security import verify_callback
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.v1.chat import chat_manager
 from bisheng.api.v1.schemas import FlowVersionCreate, resp_200
@@ -35,6 +36,7 @@ from bisheng.permission.application.business_authorization import (
 from bisheng.role.domain.services.quota_service import QuotaResourceType, require_quota
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
+from bisheng.user.application.runtime_identity import browser_message_identity_scope
 from bisheng.utils import generate_uuid
 from bisheng.workflow.application.browser_scope import browser_workflow_scope
 from bisheng.workflow.application.execution_port import BoundWorkflowExecutionPort
@@ -323,15 +325,21 @@ async def force_save_report_file(
 
 @router.post("/report/callback", status_code=200)
 async def upload_report_file(request: Request, data: dict = Body(...)):
-    """office Callback interface save reportTemplate file for the node"""
-    status = data.get("status")
-    file_url = data.get("url")
-    key = data.get("key")
-    logger.debug(f"callback={data}")
+    """Verify document-server authenticity before consulting an editor ticket."""
+    authorization = request.headers.get("authorization")
+    authorization = authorization if isinstance(authorization, str) else None
+    if not isinstance(data.get("token"), str) and not authorization:
+        return {"error": 1}
+    secret = bisheng_settings.get_from_db("office_jwt_secret") or ""
+    body = verify_callback(data, secret, authorization)
+    if body is None:
+        return {"error": 1}
+    status = body.get("status")
+    file_url = body.get("url")
+    key = body.get("key")
     if status not in {2, 6}:
         # Non-saved callbacks are not processed
         return {"error": 0}
-    logger.info(f"office_callback url={file_url}")
     # The callback carries no user identity, so it cannot be authorized on its
     # own. It is accepted only for a template the backend handed to an editor,
     # and only when that editor was opened by someone with edit rights.
@@ -418,6 +426,7 @@ async def workflow_ws(
                 WorkType.WORKFLOW,
                 websocket,
                 conversation_persistence=ConversationPersistence(execution_user.user_id, user=execution_user),
+                message_admission=lambda: browser_message_identity_scope(execution_user),
                 flow_lease_id=flow_lease_id,
                 workflow_execution_port=BoundWorkflowExecutionPort(workflow_id, execution_user),
                 memory_register=_memory_register,

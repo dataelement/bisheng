@@ -263,12 +263,11 @@ async def test_saved_knowledge_same_numeric_id_keeps_complete_type_buckets(model
 
 
 @pytest.mark.parametrize("synchronous", [False, True])
-async def test_root_inherited_defaults_keep_scalar_topology_and_all_five_config_keys(model_read_context, synchronous):
+async def test_root_model_reads_lock_topology_without_consulting_unrelated_defaults(model_read_context, synchronous):
     import json
 
     from bisheng.database.models.tenant import Tenant
     from bisheng.llm.domain.models.tenant_system_model_config import TenantSystemModelConfig
-    from bisheng.llm.domain.repositories.reference_target_repository import DEFAULT_SCHEMAS
 
     ctx, key = model_read_context, TargetKey("model", 22)
     await scale.knowledge.configure(ctx, (scale.knowledge.spec("model", 22),), cached_owners={key: 1})
@@ -288,13 +287,11 @@ async def test_root_inherited_defaults_keep_scalar_topology_and_all_five_config_
             if model in entities:
                 locks.append(model)
                 assert all(item["expr"] is not item.get("entity") for item in state.statement.column_descriptions)
-        if TenantSystemModelConfig in entities:
-            assert list(DEFAULT_SCHEMAS) in state.statement.compile().params.values()
 
     async with AsyncSession(ctx.engine) as session:
         with observe(session, record):
             result = await read(ctx, "model", synchronous, session, (key,))
-        assert result.inherited_server_ids == frozenset({2})
+        assert result.tenant_id == 101 and not hasattr(result, "inherited_server_ids")
         assert result.observations[0].exists and result.observations[0].target_tenant_id == 1
         assert not session.sync_session.identity_map
-    assert locks == [LLMServer, LLMModel, Tenant, TenantSystemModelConfig]
+    assert locks == [LLMServer, LLMModel, Tenant]

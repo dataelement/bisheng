@@ -21,7 +21,17 @@ from fastapi.routing import APIRoute
 from bisheng.main import app
 
 AUTH_DEPENDENCIES = frozenset(
-    {"get_login_user", "get_admin_user", "get_tenant_admin_user", "get_model_admin_user", "get_app_creator_user"}
+    {
+        "get_login_user",
+        "get_admin_user",
+        "get_tenant_admin_user",
+        "get_model_admin_user",
+        "get_app_creator_user",
+        # These verify browser JWT/token-version or the DSH access credential;
+        # market_admin additionally checks active tenant administration.
+        "market_actor",
+        "market_admin",
+    }
 )
 
 
