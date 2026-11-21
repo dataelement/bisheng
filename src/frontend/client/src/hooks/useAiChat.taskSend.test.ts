@@ -1,7 +1,6 @@
 /**
  * F004 (T061): a deep-research send of the conversation page goes through the
- * run send and its turn is fed by the run store. A carrier outside the run
- * protocol keeps its page-owned stream.
+ * run send and its turn is fed by the run store.
  */
 import { act, renderHook, waitFor } from "@testing-library/react";
 
@@ -10,15 +9,6 @@ jest.mock("react-activation", () => ({ useActivate: jest.fn() }));
 let mockBsConfig: Record<string, unknown> = {};
 jest.mock("./useKnowledgeSpaceAccess", () => ({
   useKnowledgeSpaceAccess: (selection: unknown) => ({ available: selection, blocked: false, message: "" }),
-}));
-
-const mockOpenedStreams: unknown[] = [];
-jest.mock("sse.js", () => ({ SSE: jest.fn() }));
-jest.mock("./useAiChatSSE", () => ({
-  openChatStream: (submission: unknown) => {
-    mockOpenedStreams.push(submission);
-    return { close: jest.fn() };
-  },
 }));
 
 const mockFollow = jest.fn();
@@ -41,7 +31,6 @@ const mockGetAgentMessages = jest.fn();
 jest.mock("~/api/chatApi", () => ({
   getAgentMessages: (...args: unknown[]) => mockGetAgentMessages(...args),
   getSessionName: () => Promise.resolve(""),
-  getSSEUrl: () => "/workstation/chat",
 }));
 jest.mock("~/api/memory", () => ({
   getMemoryFlagsApi: () => Promise.resolve({}),
@@ -111,7 +100,6 @@ beforeEach(() => {
   mockUUIDSequence = 0;
   entry = 0;
   localStorage.clear();
-  mockOpenedStreams.length = 0;
   mockSubscribed.length = 0;
   mockBsConfig = { models: [{ id: 1, visual: true }] };
   mockGetAgentMessages.mockResolvedValue([]);
@@ -120,21 +108,8 @@ beforeEach(() => {
   act(() => useRunStore.setState({ conversations: {} }));
 });
 
-describe("send outside the run protocol", () => {
-  it("opens the page-owned stream for the subscription dock and never the run send", async () => {
-    const { result } = renderHook(() => useAiChat("new", false, "", "subscription"));
-    await act(async () => {
-      await result.current.sendMessage("summarize this");
-    });
-    expect(mockSendRunMessage).not.toHaveBeenCalled();
-    expect(mockOpenedStreams).toHaveLength(1);
-    expect((mockOpenedStreams[0] as { payload: { task_mode?: boolean } }).payload.task_mode).toBe(false);
-    expect(mockSubscribed.every(([, enabled]) => enabled === false)).toBe(true);
-  });
-});
-
 describe("deep-research send of the conversation page", () => {
-  it("opens no page-owned stream; the turn is a row fed by the run store", async () => {
+  it("sends through the run send; the turn is a row fed by the run store", async () => {
     mockSendRunMessage.mockResolvedValue(
       sendAnswer({ run_id: "r1", disposition: "started", message_id: "m1", conversation_id: "c9" }),
     );
@@ -142,7 +117,6 @@ describe("deep-research send of the conversation page", () => {
     await act(async () => {
       await result.current.sendMessage("research this", null, { taskMode: true });
     });
-    expect(mockOpenedStreams).toHaveLength(0);
     expect(mockSendRunMessage.mock.calls[0][0]).toMatchObject({ text: "research this", task_mode: true });
     emit("c9", { type: "run_started" });
     emit("c9", { type: "plan", data: { items: [{ id: "p1", content: "step", status: "in_progress" }] } });
@@ -165,7 +139,6 @@ describe("deep-research send of the conversation page", () => {
       await result.current.sendMessage("the second one");
     });
     expect(mockSendRunMessage.mock.calls[0][0]).toMatchObject({ text: "the second one", conversationId: "c9" });
-    expect(mockOpenedStreams).toHaveLength(0);
     expect(useRunStore.getState().conversations.c9.run).toMatchObject({ status: "running", pendingQuestion: null });
   });
 });

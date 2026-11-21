@@ -121,9 +121,7 @@ function useChatView(
     regenerate,
   } = useAiChat(
     conversationId,
-    false,
     shareToken,
-    "chat",
     presence.ensureLeaseId,
     draftIdentity,
   );

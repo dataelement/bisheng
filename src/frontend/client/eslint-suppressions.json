@@ -1848,27 +1848,16 @@
   },
   "src/hooks/useAiChat.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 5
+      "count": 2
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 4
-    },
-    "no-console": {
       "count": 4
     },
     "no-restricted-imports": {
       "count": 1
     },
     "react-hooks/exhaustive-deps": {
-      "count": 2
-    }
-  },
-  "src/hooks/useAiChatSSE.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 5
-    },
-    "no-console": {
-      "count": 3
+      "count": 1
     }
   },
   "src/hooks/useAutoScroll.ts": {
@@ -2023,9 +2012,6 @@
   },
   "src/pages/Subscription/AiChat/AiAssistantPanel.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-restricted-imports": {
       "count": 1
     }
   },

@@ -23,7 +23,6 @@ const API = {
         `/api/v1/workstation/messages/${conversationId}/agent`,
     sessionInfo: (conversationId: string) =>
         `/api/v1/chat/info?chat_id=${encodeURIComponent(conversationId)}`,
-    sseChat: () => `/api/v1/workstation/chat/completions`,
     // Links handed out at upload time expire; ask for a fresh one at render.
     attachmentUrl: (conversationId: string, fileId: string) =>
         `/api/v1/chat/${conversationId}/files/${fileId}/url`,
@@ -481,12 +480,6 @@ export async function resolveCitationDetails(citationIds: string[]): Promise<Cha
         .map((citationId) => citationDetailMemoryCache[citationCacheKey(citationId, scope)])
         .filter(Boolean)
         .concat(resolvedItems.filter((detail) => detail?.citationId && !citationIds.includes(detail.citationId)));
-}
-
-/** Get the full SSE URL (absolute) for creating SSE connection */
-export function getSSEUrl(): string {
-    const base = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
-    return `${base}${API.sseChat()}`;
 }
 
 /** Get the full SSE URL for channel article chat */

@@ -11,15 +11,6 @@ jest.mock("./useKnowledgeSpaceAccess", () => ({
   useKnowledgeSpaceAccess: (selection: unknown) => ({ available: selection, blocked: false, message: "" }),
 }));
 
-const mockOpenedStreams: unknown[] = [];
-jest.mock("sse.js", () => ({ SSE: jest.fn() }));
-jest.mock("./useAiChatSSE", () => ({
-  openChatStream: (submission: unknown) => {
-    mockOpenedStreams.push(submission);
-    return { close: jest.fn() };
-  },
-}));
-
 const mockFollow = jest.fn();
 const mockSubscribed: Array<[string, boolean]> = [];
 jest.mock("./useRunEvents", () => ({
@@ -40,7 +31,6 @@ const mockGetAgentMessages = jest.fn();
 jest.mock("~/api/chatApi", () => ({
   getAgentMessages: (...args: unknown[]) => mockGetAgentMessages(...args),
   getSessionName: () => Promise.resolve(""),
-  getSSEUrl: () => "/workstation/chat",
 }));
 jest.mock("~/api/memory", () => ({
   getMemoryFlagsApi: () => Promise.resolve({}),
@@ -108,7 +98,6 @@ beforeEach(() => {
   mockUUIDSequence = 0;
   entry = 0;
   localStorage.clear();
-  mockOpenedStreams.length = 0;
   mockSubscribed.length = 0;
   mockBsConfig = { models: [{ id: 1, visual: true }] };
   mockGetAgentMessages.mockResolvedValue([]);
@@ -128,7 +117,6 @@ describe("conversation page", () => {
       accepted = await result.current.sendMessage("hello");
     });
     expect(accepted).toBe(true);
-    expect(mockOpenedStreams).toHaveLength(0);
     expect(mockSendRunMessage.mock.calls[0][0]).toMatchObject({ text: "hello", conversationId: null, task_mode: false });
     expect(result.current.conversationId).toBe("c9");
     expect(result.current.messages.map((m) => m.messageId)).toEqual(["m1", "run:r1"]);
@@ -252,7 +240,7 @@ describe("conversation page", () => {
     expect(mockShowToast).not.toHaveBeenCalled();
   });
 
-  it("regenerate sends the question again as a new run and opens no legacy stream", async () => {
+  it("regenerate sends the question again as a new run", async () => {
     mockGetAgentMessages.mockResolvedValue([row("101", true, "what is up"), { ...row("102", false, "busy"), parentMessageId: "101", error: true }]);
     mockSendRunMessage.mockResolvedValue(sendAnswer({ run_id: "r1", disposition: "started", message_id: "103", conversation_id: "c9" }));
     const { result } = renderChat("c9");
@@ -260,12 +248,11 @@ describe("conversation page", () => {
     await act(async () => {
       await result.current.regenerate("101");
     });
-    expect(mockOpenedStreams).toHaveLength(0);
     expect(mockSendRunMessage).toHaveBeenCalledTimes(1);
     expect(mockSendRunMessage.mock.calls[0][0]).toMatchObject({ text: "what is up", conversationId: "c9", files: [], task_mode: false });
     expect(mockSendRunMessage.mock.calls[0][0].isRegenerate).toBeUndefined();
     expect(result.current.messages.map((m) => m.messageId)).toEqual(["101", "102", "103", "run:r1"]);
-    // The composer is not left behind a page-owned stream: the next message goes into the run.
+    // The next message goes into the run.
     mockSendRunMessage.mockResolvedValue(sendAnswer({ run_id: "r1", disposition: "queued", message_id: "m2", conversation_id: "c9" }));
     emit("c9", { type: "run_started" });
     let accepted: boolean | void = false;
@@ -285,7 +272,6 @@ describe("conversation page", () => {
       await result.current.regenerate("101");
     });
     expect(mockSendRunMessage).not.toHaveBeenCalled();
-    expect(mockOpenedStreams).toHaveLength(0);
   });
 
   it("does not show a second answer for a turn the history already holds", async () => {
@@ -295,5 +281,22 @@ describe("conversation page", () => {
     emit("c9", { type: "run_started" });
     emit("c9", { type: "text", data: { text: "live text" } });
     expect(result.current.messages.map((m) => m.messageId)).toEqual(["101", "102"]);
+  });
+});
+
+describe("share view", () => {
+  it("loads and shows the history but never subscribes to runs or sends", async () => {
+    mockGetAgentMessages.mockResolvedValue([row("101", true, "q"), row("102", false, "a")]);
+    const { result } = renderHook(() => useAiChat("c9", "share-token"));
+    await waitFor(() => expect(result.current.messages.map((m) => m.messageId)).toEqual(["101", "102"]));
+    expect(mockGetAgentMessages).toHaveBeenCalledWith("c9", "share-token");
+    expect(mockSubscribed.every(([, enabled]) => enabled === false)).toBe(true);
+    let accepted: boolean | undefined;
+    await act(async () => {
+      accepted = await result.current.sendMessage("hello");
+    });
+    expect(accepted).toBe(false);
+    expect(mockSendRunMessage).not.toHaveBeenCalled();
+    expect(result.current.messages).toHaveLength(2);
   });
 });
