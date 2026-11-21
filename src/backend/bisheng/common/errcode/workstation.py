@@ -62,14 +62,14 @@ class ChatFileParseError(BaseErrorCode):
     Msg: str = "File parsing failed, please try again later"
 
 
-# --- F028: Conversation export / import to knowledge space (12060-12079) ---
-
-
 class ConversationBusyError(BaseErrorCode):
     """Open API: the conversation is still answering an earlier message and did not become free in time."""
 
     Code: int = 12048
     Msg: str = "The conversation is still answering an earlier message, please try again later"
+
+
+# --- F028: Conversation export / import to knowledge space (12060-12079) ---
 
 
 class ConversationMessageNotFoundError(BaseErrorCode):

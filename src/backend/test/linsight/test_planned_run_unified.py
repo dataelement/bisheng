@@ -434,6 +434,27 @@ async def test_planned_run_parks_on_ask_user(monkeypatch: pytest.MonkeyPatch, tm
     assert env.finished == [(CHAT, SVID)]
 
 
+async def test_stop_that_arrives_before_parking_ends_the_run(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    """F004 review: a stop between the question and the park must not leave the flag behind.
+
+    Parking would keep the flag, and the resumed run (same run_id) would stop
+    on the user's answer.
+    """
+    env = _Env(monkeypatch, tmp_path)
+    task = env.task()
+    async with task._acquire_session_run_lock():
+        task._waiting_for_input = True
+        # The stop lands before the watcher's next poll.
+        await env.lease.request_stop(SVID, CHAT)
+
+    state = await env.lease.get_state(CHAT)
+    assert state.status == run_lease.STATUS_IDLE
+    types = [event["type"] for event in await env.events()]
+    assert types[-1] == "run_stopped"
+    assert env.finished == [(CHAT, SVID)]
+    assert await env.lease.should_stop(SVID) is False
+
+
 async def test_second_driver_of_the_same_run_is_rejected(monkeypatch: pytest.MonkeyPatch, tmp_path):
     env = _Env(monkeypatch, tmp_path)
     first = env.task()

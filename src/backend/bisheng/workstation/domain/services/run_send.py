@@ -751,6 +751,9 @@ async def _send_open_api(
     outcome, lease = await DepartmentFlowService.ensure_lease(login_user)
     if outcome is SlotOutcome.REJECTED:
         raise DepartmentDailyChatConcurrentLimitError()
+    # The send may wait for a busy conversation for up to BUSY_WAIT_SECONDS;
+    # the slot is renewed meanwhile so it is still held when the run takes it over.
+    renewal = DepartmentFlowService.start_renewal(lease) if lease is not None else None
     handed_over = False
     try:
         response = await _send(
@@ -765,6 +768,10 @@ async def _send_open_api(
         handed_over = True
         return response
     finally:
+        if renewal is not None:
+            # Cancelled before any release, so a late renewal cannot put the slot back.
+            renewal.cancel()
+            await asyncio.gather(renewal, return_exceptions=True)
         if lease is not None and not handed_over:
             await DepartmentFlowService.release_lease(lease)
 

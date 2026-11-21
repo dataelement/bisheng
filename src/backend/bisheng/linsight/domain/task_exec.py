@@ -736,6 +736,16 @@ class LinsightWorkflowTask:
         except Exception:
             logger.exception("planned run={}: could not flush the event writer", run.run_id)
         parked = bool(getattr(self, "_waiting_for_input", False)) and not run.terminal and not run.lease_lost
+        if parked and not run.stop_requested:
+            # A stop that arrived after the question was asked and before the
+            # watcher's next poll: parking would keep the flag, and the resumed
+            # run (same run_id) would stop on the user's answer.
+            try:
+                run.stop_requested = await run.lease.should_stop(run.run_id)
+            except Exception:
+                logger.exception("planned run={}: could not read the stop flag before parking", run.run_id)
+        if run.stop_requested:
+            parked = False
         run.parked = parked
         if run.stop_requested and not parked and not run.terminal and not run.lease_lost:
             # The stop was seen before the run reached the point that writes its

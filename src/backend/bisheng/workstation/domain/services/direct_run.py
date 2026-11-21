@@ -114,7 +114,7 @@ from bisheng.linsight.domain.services.unattended_run import OPEN_API_CHANNEL
 from bisheng.workstation.domain.services import direct_attachments, direct_run_turn
 from bisheng.workstation.domain.services.direct_attachments import AttachmentIntake, AttachmentView
 from bisheng.workstation.domain.services.run_dispatch import EXPIRED_REASON, RunDispatchService
-from bisheng.workstation.domain.services.run_lease import RENEW_INTERVAL_SECONDS, RunLeaseService
+from bisheng.workstation.domain.services.run_lease import LEASE_SECONDS, RENEW_INTERVAL_SECONDS, RunLeaseService
 
 PROFILE = "direct"
 STOP_POLL_SECONDS = 1.0
@@ -739,8 +739,18 @@ class DirectRunner:
                     await self._cleanup_local(ctx)
                     return DirectRunOutcome(STATUS_FAILED, error)
                 if work.result() == STATUS_WAITING:
+                    if await self.lease.should_stop(run_id):
+                        # The stop arrived after the question was asked and before
+                        # the run parked. Parking now would leave the flag behind,
+                        # and the resumed run (same run_id) would stop on the answer.
+                        return await self._end_stopped(ctx, output, sink)
                     await self._cleanup_local(ctx)
                     return await self._park(ctx)
+                if not await self._still_holds(ctx):
+                    # Another caller declared this run dead and saved its partial
+                    # answer: write nothing more (design §5 #24).
+                    logger.warning("direct run={} finished after losing conversation={}; nothing written", run_id, cid)
+                    return DirectRunOutcome(STATUS_LEASE_LOST)
                 if work.result() == _WORK_BLOCKED:
                     await self._finish_blocked(ctx, output, gate)
                     await self._cleanup_local(ctx)
@@ -753,20 +763,32 @@ class DirectRunner:
             work.cancel()
             await asyncio.gather(work, return_exceptions=True)
             if reason == STATUS_STOPPED:
-                await self._settle_files(ctx, sink)
-                # Text already written stays in the accumulated state (AC-29).
-                # Messages the run never read go back to the client inside the
-                # event; ``on_run_finished`` then finds an empty inbox and starts
-                # no relay run (design §7 item 6).
-                await output.run_stopped("user", await self._discard_unread(ctx))
-                await self._cleanup_local(ctx)
-                return DirectRunOutcome(reason)
+                return await self._end_stopped(ctx, output, sink)
             return await self._end_lost(ctx, sink)
         finally:
             for task in (work, watch):
                 if not task.done():
                     task.cancel()
             await asyncio.gather(work, watch, return_exceptions=True)
+
+    async def _end_stopped(self, ctx: DirectRunContext, output: Any, sink: Callable[[dict], Awaitable[None]]) -> Any:
+        await self._settle_files(ctx, sink)
+        # Text already written stays in the accumulated state (AC-29).
+        # Messages the run never read go back to the client inside the
+        # event; ``on_run_finished`` then finds an empty inbox and starts
+        # no relay run (design §7 item 6).
+        await output.run_stopped("user", await self._discard_unread(ctx))
+        await self._cleanup_local(ctx)
+        return DirectRunOutcome(STATUS_STOPPED)
+
+    async def _still_holds(self, ctx: DirectRunContext) -> bool:
+        """The run may write its own terminal event: it still holds the conversation.
+
+        ``renew`` proves it; when the lease lapsed unnoticed, ``reclaim`` takes it
+        back unless another caller already reported the run.
+        """
+        cid, run_id = ctx.conversation_id, ctx.run_id
+        return await self.lease.renew(cid, run_id) or await self.lease.reclaim(cid, run_id)
 
     async def _end_lost(self, ctx: DirectRunContext, sink: Callable[[dict], Awaitable[None]]) -> DirectRunOutcome:
         """End a run whose renew failed (see "the lease is lost" in the module docstring).
@@ -955,18 +977,36 @@ class DirectRunner:
         return DirectRunOutcome(STATUS_WAITING)
 
     async def _watch(self, ctx: DirectRunContext) -> str:
-        """Poll the stop flag every second, renew the lease every 10 s."""
+        """Poll the stop flag every second, renew the lease every 10 s.
+
+        One failed poll (a Redis hiccup) does not end the run, as in the planned
+        tier. When no renewal succeeded for a whole lease, the lease has lapsed
+        and the run ends as lost.
+        """
         next_renew = self._clock() + RENEW_INTERVAL_SECONDS
+        last_renewed = self._clock()
         while True:
             await self._sleep(self._stop_poll_seconds)
-            if await self.lease.should_stop(ctx.run_id):
-                logger.info("direct run={} conversation={}: stop requested", ctx.run_id, ctx.conversation_id)
-                return STATUS_STOPPED
-            if self._clock() >= next_renew:
-                if not await self.lease.renew(ctx.conversation_id, ctx.run_id):
-                    logger.warning("direct run={} lost the lease of conversation={}", ctx.run_id, ctx.conversation_id)
+            try:
+                if await self.lease.should_stop(ctx.run_id):
+                    logger.info("direct run={} conversation={}: stop requested", ctx.run_id, ctx.conversation_id)
+                    return STATUS_STOPPED
+                if self._clock() >= next_renew:
+                    if not await self.lease.renew(ctx.conversation_id, ctx.run_id):
+                        logger.warning(
+                            "direct run={} lost the lease of conversation={}", ctx.run_id, ctx.conversation_id
+                        )
+                        return STATUS_LEASE_LOST
+                    last_renewed = self._clock()
+                    next_renew = last_renewed + RENEW_INTERVAL_SECONDS
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception(
+                    "direct run={} conversation={}: stop/lease poll failed", ctx.run_id, ctx.conversation_id
+                )
+                if self._clock() - last_renewed >= LEASE_SECONDS:
                     return STATUS_LEASE_LOST
-                next_renew = self._clock() + RENEW_INTERVAL_SECONDS
 
     async def _work(
         self,

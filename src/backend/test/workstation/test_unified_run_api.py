@@ -507,10 +507,22 @@ def no_department_limit(monkeypatch: pytest.MonkeyPatch):
         return SlotOutcome.HELD, lease
 
     async def release(held):
+        # The renewal is always stopped before the slot is given back.
+        assert all(task.cancelled() or task.done() for task in calls["renewals"])
         calls["released"].append(held.lease_id)
 
+    def start_renewal(held):
+        async def renew_forever():
+            await asyncio.sleep(3600)
+
+        task = asyncio.create_task(renew_forever())
+        calls["renewals"].append(task)
+        return task
+
+    calls["renewals"] = []
     monkeypatch.setattr(DepartmentFlowService, "ensure_lease", ensure)
     monkeypatch.setattr(DepartmentFlowService, "release_lease", release)
+    monkeypatch.setattr(DepartmentFlowService, "start_renewal", start_renewal)
     return calls
 
 
@@ -531,8 +543,10 @@ async def test_open_api_send_answers_this_message_in_the_old_frames(world: _Worl
     assert ctx.execution_lease_id == "lease-1"
     assert ctx.skills == [] and ctx.memory_registered is False
     assert world.question_rows[0]["storage_partition"] == "service-account/9/abc"
-    # Handed over to the run: the request does not release it.
+    # Handed over to the run: the request stops renewing and does not release it.
     assert no_department_limit["released"] == []
+    (renewal,) = no_department_limit["renewals"]
+    assert renewal.cancelled()
 
 
 async def test_open_api_send_waits_until_the_conversation_is_free(
