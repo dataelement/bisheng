@@ -18,6 +18,7 @@ let mockClarifySubmit: ((taskId: string, answer: string) => void) | undefined;
 let mockOnRetry: (() => void | Promise<void>) | undefined;
 let mockTransient = true;
 let mockQueueCards = 0;
+let mockQueueCancel: boolean | undefined;
 const mockQueuePolling = jest.fn();
 
 jest.mock('~/api/linsight', () => ({ getLinsightSessionVersionList: jest.fn(), getLinsightTaskList: jest.fn() }));
@@ -37,7 +38,8 @@ jest.mock('~/hooks/Websocket', () => ({ useLinsightWebSocket: (versionId: string
 jest.mock('~/hooks/useLinsightQueuePolling', () => ({
     useLinsightQueuePolling: (...args: unknown[]) => mockQueuePolling(...args),
 }));
-jest.mock('react-router-dom', () => ({ useParams: () => ({}) }));
+let mockRouteParams: Record<string, string> = {};
+jest.mock('react-router-dom', () => ({ useParams: () => mockRouteParams }));
 jest.mock('~/store/linsight', () => ({
     SopStatus: { NotStarted: 'not_started', Running: 'running', Stoped: 'stoped', completed: 'completed' },
 }));
@@ -56,7 +58,13 @@ jest.mock('./ClarifyCard', () => ({
     },
 }));
 jest.mock('./ExecutionTimeline', () => ({ ExecutionTimeline: () => null }));
-jest.mock('./QueueCard', () => ({ QueueCard: () => { mockQueueCards += 1; return null; } }));
+jest.mock('./QueueCard', () => ({
+    QueueCard: (props: { onCancel?: () => void }) => {
+        mockQueueCards += 1;
+        mockQueueCancel = Boolean(props.onCancel);
+        return null;
+    },
+}));
 jest.mock('./ResultPanel', () => ({ ResultPanel: () => null }));
 jest.mock('./TaskStepRow', () => ({ TaskStepRow: () => null }));
 jest.mock('./taskTurnLoad', () => ({ useReportTaskTurnLoadFailed: () => jest.fn() }));
@@ -80,6 +88,8 @@ beforeEach(() => {
     mockOnRetry = undefined;
     mockTransient = true;
     mockQueueCards = 0;
+    mockQueueCancel = undefined;
+    mockRouteParams = {};
     mockReconcile.mockResolvedValue(false);
     act(() => useRunStore.setState({ conversations: {} }));
 });
@@ -102,6 +112,7 @@ describe('with the live channel', () => {
         mockGetLinsight.mockReturnValue(queued);
         render(<TaskTurnPanel versionId="sv1" conversationId="c1" />);
         expect(mockQueueCards).toBe(1);
+        expect(mockQueueCancel).toBe(true);
         expect(mockQueuePolling).toHaveBeenCalledWith('sv1', true);
         mockGetLinsight.mockReturnValue(failed);
         render(<TaskTurnPanel versionId="sv1" conversationId="c1" />);
@@ -109,16 +120,30 @@ describe('with the live channel', () => {
     });
 });
 
+describe('share page', () => {
+    it('shows a waiting turn as stored and never asks for its queue position', () => {
+        mockRouteParams = { token: 'share-1' };
+        mockGetLinsight.mockReturnValue(queued);
+        render(<TaskTurnPanel versionId="sv1" conversationId="c1" />);
+        expect(mockQueueCards).toBe(0);
+        expect(mockQueuePolling).toHaveBeenLastCalledWith('sv1', false);
+        expect(mockSocketVersions).toEqual(['']);
+    });
+});
+
 describe('without the live channel (conversation page)', () => {
-    it('opens no task WebSocket and never offers the legacy answer, cancel or retry', () => {
+    it('opens no task WebSocket and never offers the legacy answer or retry', () => {
         mockGetLinsight.mockReturnValue(parked);
         render(<TaskTurnPanel versionId="sv1" conversationId="c1" liveChannel={false} />);
         expect(mockSocketVersions).toEqual(['']);
         expect(mockClarifySubmit).toBeUndefined();
         mockGetLinsight.mockReturnValue(queued);
         render(<TaskTurnPanel versionId="sv1" conversationId="c1" liveChannel={false} />);
-        expect(mockQueueCards).toBe(0);
-        expect(mockQueuePolling).toHaveBeenLastCalledWith('sv1', false);
+        // AC-36: a stored turn that still waits shows its place; the page's own
+        // stop control cancels it, so the card offers no cancel button.
+        expect(mockQueueCards).toBe(1);
+        expect(mockQueueCancel).toBe(false);
+        expect(mockQueuePolling).toHaveBeenLastCalledWith('sv1', true);
         mockGetLinsight.mockReturnValue(failed);
         render(<TaskTurnPanel versionId="sv1" conversationId="c1" liveChannel={false} />);
         expect(mockOnRetry).toBeUndefined();

@@ -316,7 +316,7 @@
 | AC-27 | 交付文件写在主桶 `workspace/` 下，主桶没有生命周期规则；下载链接按需签名，不保存长期链接 | 【读码】F016 的转正逻辑 |
 | AC-28 | 工作区文件的预览与下载接口按会话归属校验；审计下载沿用 F016 的接口 | 【读码】`resolve_attachment_url` |
 | AC-32 | `run_failed` 事件的 `reason`、`reference_id` | 沿用 61f9ef5e99 的报错卡 |
-| AC-36 | 会话页在进行中的深度研究回合还没有任何输出时，每 5 秒调 `GET /conversations/{id}/queue-position`，位置大于 0 时显示排队卡片（“排队中，第 N 位”）。取消排队用输入框的停止按钮，卡片不另放取消按钮 | 位置的算法复用 `LinsightQueue.index`，与旧的 `/linsight/workbench/queue-status` 一致 |
+| AC-36 | 会话页在进行中的深度研究回合还没有任何输出时，每 5 秒调 `GET /conversations/{id}/queue-position`，位置大于 0 时显示排队卡片（“排队中，第 N 位”）。刷新或重新打开页面后，存储的回合按版本 id 轮询 `/linsight/workbench/queue-status`。分享页不查。取消排队用输入框的停止按钮，卡片不另放取消按钮 | 位置的算法复用 `LinsightQueue.index`，与旧的 `/linsight/workbench/queue-status` 一致 |
 | AC-38 | 发送入口在消息进收件箱之前执行输入检测（`evaluate_workbench_user_text`），所以插话与普通消息走同一检测；输出检测放在事件映射之后、写入事件流之前 | 【读码】`chat_service.py:1890` |
 | AC-43 | 知识库检索工具由统一工厂装配，权限范围由工具实例闭包携带，与今天两条链路相同 | 【读码】`linsight/AGENTS.md` Prompt / tool wiring |
 | AC-49 | 把日常对话的读图组件（`VisionToolBindWrapper`、`KbImageStage`）接入统一工厂 | 已核实（T008）：部分能。日常对话的读图不是外层循环，是“callable model 包装器 + `view_image` 工具”（`common/image_view/vision_llm.py:465`、`chat_service.py:2376`），每个请求新建 `ImageRegistry`（`chat_service.py:1951`），看图模型是独立配置 `workbench.image_read_model`（`image_view/loop.py:398`）。深度研究靠主模型的 `visual` 标志（`agent_factory.py:1957`），`read_file` 直接返回图片块（`workspace_backend.py:460`），由 `binary_content_guard.py:245`、`:319` 两个中间件拦截与挪位。接入方式：把包装器改写成一个 `awrap_model_call` 中间件并自带 `view_image` 工具，`ImageRegistry`、`annotate`、`fetch`、`tool`、`loop.py` 的判定函数直接复用。四个阻碍点见 §5 坑 12 |
@@ -386,7 +386,7 @@
 | 30 | 前端每个文本增量都重建全部思考段和工具调用的事件对象并排序 | 长回答时 CPU 占用随事件数增长，下游所有工具行都重渲染 | `hooks/runAgentEvents.ts`：文本增量直接返回上次的事件数组；思考增量或工具帧只为变化的一项新建对象；缓存是以 store 对象为键的 WeakMap，不保留历史帧。未做 CPU 实测对比 |
 | 31 | 深度研究的流式正文原来不经过句柄转换：直接回答在 `DirectTurn.rewrite` 里把 `[Sn]` 换成引用标记，深度研究的 `_UnifiedRun.emit` 把模型原文直接写进事件流 | 回答生成过程中用户看到 `[S1]` 原文，结束后换成存库的正式回答才变成角标。114 实测（2026-11-19，会话 `96757276…`）：句柄表有 S1–S5，17 个 `text` 事件里有 9 处 `[Sn]`、0 个标记 | 转换逻辑抽成 `text_handle_rewriter.TextHandleRewriter`，两种档位共用；`_UnifiedRun` 在 `_create_agent` 建好引用范围后 `bind_citation_scope`，逐字引用约定（scope 未启用）时不转换。回归 `test/linsight/test_text_handle_rewriter.py`；114 复测见 verification-final.md §7 |
 | 32 | 中间件在 `model` 节点里自己调用的模型（`KbImageViewMiddleware._describe` 的看图模型），其 token 同样出现在 `stream_mode="messages"` 里，统一映射器按主图正文发成 `text` | 主模型不能读图、配了看图模型时，看图模型对图片的描述会作为回答显示给用户。langchain 1.5 的摘要调用自带 `nostream` 标签，不受影响；`vision_llm.py` 用 `callbacks: []` 自行避开 | 该调用加 `tags=[TAG_NOSTREAM]`。原理用最小脚本验证（节点内未打标签的 `ainvoke` 会进入 messages 流，打标签后不会）；114 未配看图模型，未在环境中复现。回归 `test_unified_citation_image_memory.py::test_image_reading_model_describes_pictures_for_a_text_model` |
-| 33 | 深度研究提交时，`run_dispatch.submit` 算出的排队位置放在 `SubmitResult.events` 的 `queued` 事件里，但只有直接回答把 `initial_events` 写进事件流，深度研究这条路径从来没写；位置也只在提交时算一次 | 会话页收不到排队位置，排队中的回合看起来像卡住（AC-36 不成立） | 不靠事件：新增 `GET /conversations/{id}/queue-position`，按会话当前的运行记录找到版本，再用 `LinsightQueue.index` 现算；前端在回合没有输出时轮询。回归：`test_unified_queue_position.py`、`useRunQueuePosition.test.ts` |
+| 33 | 深度研究提交时，`run_dispatch.submit` 算出的排队位置放在 `SubmitResult.events` 的 `queued` 事件里，但只有直接回答把 `initial_events` 写进事件流，深度研究这条路径从来没写；位置也只在提交时算一次。也不能在提交时补写：worker 还没写 `run_started`，事件会落在上一次运行已结束的事件流上，读者停在上次的结束事件读不到它，快照还会被标上新运行的 id | 会话页收不到排队位置，排队中的回合看起来像卡住（AC-36 不成立） | 不靠事件：新增 `GET /conversations/{id}/queue-position`，发送后的进行中回合按会话轮询；刷新后，存储的回合按版本 id 轮询旧接口 `/linsight/workbench/queue-status`。回归：`test_unified_queue_position.py`、`useRunQueuePosition.test.ts`、`TaskTurnPanel.liveChannel.test.tsx` |
 
 ---
 
@@ -544,7 +544,7 @@ Wave 1–4 留下、技术上已知、尚未处理的：
   - 第二轮（2026-11-20，用户确认）：`/linsight/new` 不再能提交。进入这个地址时，前端新建对话、打开「深度研究」并跳到 `/c/new`。`/linsight/:id` 只读，没有输入框。前端删除了提交流水线（`useLinsightSubmit`、`submissionState`、`TaskModeInput`、`TaskModeChatInput` 及只被它们使用的组件）。分享页上的深度研究回合只显示快照：不开任务 WebSocket，不轮询排队，不提供回答提问和停止。后端的 `/linsight/workbench/submit` 与 `start-execute` 不再有 client 前端调用，接口本身保留，因为桌面端是否在用没有核实。
   - 第四轮（2026-11-21，用户决定订阅页 AI 助手改用运行协议 2）：核实发现订阅页 AI 助手的两个调用方都传文章 id，实际走的是频道文章问答 `/api/v1/channel/chat/completions`（独立服务，不在 F004 范围）；面板里用 `useAiChat` 的“工作台模式”和“文件问答模式”都到不了（知识库文件问答由 `FileAiDock` 直接用 `useFileChat`）。删掉这两个模式后，client 前端已没有不带协商头的发送，`useAiChat` 的旧发送路径（`beginStream`、`useAiChatSSE`、`getSSEUrl`）随之删除，`useAiChat` 从 1281 行减到约 730 行。同时补了一个改动前就有的缺口：会话页删除一个正在回答的会话时，前端先请求停止该会话的运行，否则运行会继续往已删除的会话里写回答。
   - 未追完：桌面端宿主的“运行中会话”列表只在发送请求进行期间包含该会话；请求返回后运行仍在继续时，宿主看不到它。这是运行协议 2 上线后就有的缺口，不是第四轮引入的。
-  - `/sdd-code-review`（2026-11-22）暂缓的项：停止仍在 worker 队列里的接力运行（停止接口只设标记，接力运行取出后才看到）；停止排队中的深度研究运行时“检查驱动锁、再释放会话”不是一个原子操作，窗口内 worker 抢到会话会被释放；事件快照里 `text`/`thinking` 每次追加都整串复制（量级未实测）；上传时在 API 进程内解析附件，进程中途退出会让后续发送等满 10 分钟。四项都需要改动较大或先实测，等用户决定。
+  - `/sdd-code-review`（2026-11-22）暂缓的项：停止仍在 worker 队列里的接力运行（停止接口只设标记，接力运行取出后才看到）；停止排队中的深度研究运行时“检查驱动锁、再释放会话”不是一个原子操作，窗口内 worker 抢到会话会被释放；事件快照里 `text`/`thinking` 每次追加都整串复制（量级未实测）；上传时在 API 进程内解析附件，进程中途退出会让后续发送等满 10 分钟。四项都需要改动较大或先实测，等用户决定。第二轮审查又记一项：删除会话前虽然先请求停止，但运行最多 1 秒后才看到停止标记，期间写的“已停止”回答行会落进已删除的会话（孤儿行，用户看不到）；要根治得在后端删除接口里停止运行。
   - 未追完：`agent_factory.py` 里按有无收件箱区分的图片中间件条件与两套计划措辞；`copy_workspace_prefix` 的 `only_if_empty` 默认路径。
   - worker 的运行作用域依赖 Redis。旧锁在 Redis 不可用时放行的行为已不存在。
 
@@ -579,3 +579,4 @@ Wave 1–4 留下、技术上已知、尚未处理的：
 | 2026-11-20 | 新增决策 14：开放 API 日常对话迁到统一运行时；补回工作台系统提示词与日常对话遥测；新增错误码 12048；§4.3、§6.1、§8 同步 | 用户要求删掉开放 API 的旧 agent 逻辑，验收以 AC-39 为准 |
 | 2026-11-21 | 用户决定：订阅页 AI 助手改用运行协议 2（落点是删掉到不了的工作台模式与前端旧发送路径）、实现 AC-36 排队位置、重新生成保持“再发一次”；§4.3 增排队位置接口，§4.4 增 AC-36，§5 增 #33，§8 记第四轮 | 用户决定 |
 | 2026-11-22 | `/sdd-code-review` 修复：停靠前查停止标记（两档）、看守协程单次 Redis 失败不再结束运行、失去会话后不写结尾、开放 API 等待期间续期部门名额、运行接口不触发 403 跳页、删除会话先等停止、提问卡片不清空草稿、事件流 HTTP 失败有上限；§4.5、§6.1 补发送入口与排队位置；§8 记暂缓项 | 代码审查 |
+| 2026-11-22 | 第二轮审查修复：撤掉提交时写 `queued` 事件（会落在上一次运行的事件流上），改为刷新后按版本 id 查排队位置；事件流只在确定性的 4xx 时放弃；停止取消停靠时把版本记为已终止；两处新加的 Redis 调用加容错；§5 #33、§4.4 AC-36、§8 同步 | 代码审查第二轮 |

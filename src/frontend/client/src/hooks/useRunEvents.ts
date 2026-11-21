@@ -62,7 +62,7 @@ export function reconnectDelay(attempt: number): number {
     return Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** (n - 1));
 }
 
-/** HTTP failures in a row (no event, no clean close between them) before the follower gives up. */
+/** Header-preparation failures in a row (no event, no clean close between them) before the follower gives up. */
 export const MAX_HTTP_FAILURES = 3;
 
 /** True when an HTTP status says that trying again cannot help (for example 401 or 403). */
@@ -177,10 +177,20 @@ export function followRunEvents(deps: RunEventFollowerDeps): RunEventFollower {
                     return;
                 }
                 if (failed && httpFailure) {
-                    httpFailures += 1;
-                    if (isFinalHttpStatus(httpFailure.status) || httpFailures >= MAX_HTTP_FAILURES) {
+                    // A final 4xx (logged out, no access) cannot recover. A 5xx can:
+                    // a gateway answers 502/503 while the backend restarts and the
+                    // run goes on in the worker, so it keeps retrying with backoff.
+                    // Headers that cannot be prepared count towards a small cap.
+                    if (isFinalHttpStatus(httpFailure.status)) {
                         stopLost();
                         return;
+                    }
+                    if (httpFailure.status === null) {
+                        httpFailures += 1;
+                        if (httpFailures >= MAX_HTTP_FAILURES) {
+                            stopLost();
+                            return;
+                        }
                     }
                 }
                 if (failed) {

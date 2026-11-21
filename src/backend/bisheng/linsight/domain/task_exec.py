@@ -752,6 +752,15 @@ class LinsightWorkflowTask:
             # terminal event (e.g. while attachments were ingested). The client
             # still gets ``run_stopped`` with the unread messages, and no relay
             # run starts for them.
+            if getattr(self, "_waiting_for_input", False):
+                # The stop cancelled a park: the record says it waits for the
+                # user's answer. End it like a user stop, or it stays waiting.
+                try:
+                    session_model = await self._state_manager.get_session_version_info()
+                    if session_model is not None:
+                        await self._handle_user_termination(session_model)
+                except Exception:
+                    logger.exception("planned run={}: could not record the stop of a run that asked", run.run_id)
             try:
                 await run.output.run_stopped("user", await self._discard_unread_on_stop(run))
                 await run.writer.flush()

@@ -185,19 +185,17 @@ describe('followRunEvents and HTTP failures', () => {
         expect(h.timers).toHaveLength(0);
     });
 
-    it('retries a server error, and gives up after too many in a row', () => {
+    it('keeps retrying a server error: the run may go on while the gateway restarts', () => {
         expect(isFinalHttpStatus(502)).toBe(false);
         const h = harness();
         h.send(0, { type: 'run_started', data: {}, run_id: 'r1' }, '7-0');
-        for (let i = 0; i < MAX_HTTP_FAILURES - 1; i += 1) {
+        for (let i = 0; i < MAX_HTTP_FAILURES * 2; i += 1) {
             h.opened[i].handlers.onClose(true, { status: 502 });
             expect(h.timers).toHaveLength(1);
             h.runTimer();
         }
-        h.opened[MAX_HTTP_FAILURES - 1].handlers.onClose(true, { status: 502 });
-        expect(h.follower.isStopped()).toBe(true);
-        expect(h.onLost).toHaveBeenCalledTimes(1);
-        expect(h.timers).toHaveLength(0);
+        expect(h.follower.isStopped()).toBe(false);
+        expect(h.onLost).not.toHaveBeenCalled();
     });
 
     it('counts headers that could not be prepared as an HTTP failure', () => {
@@ -213,12 +211,12 @@ describe('followRunEvents and HTTP failures', () => {
     it('starts the count again after an event arrives', () => {
         const h = harness();
         h.send(0, { type: 'run_started', data: {}, run_id: 'r1' }, '9-0');
-        h.opened[0].handlers.onClose(true, { status: 503 });
+        h.opened[0].handlers.onClose(true, { status: null });
         h.runTimer();
-        h.opened[1].handlers.onClose(true, { status: 503 });
+        h.opened[1].handlers.onClose(true, { status: null });
         h.runTimer();
         h.send(2, { type: 'text', data: { text: 'a' }, run_id: 'r1' }, '9-1');
-        h.opened[2].handlers.onClose(true, { status: 503 });
+        h.opened[2].handlers.onClose(true, { status: null });
         expect(h.follower.isStopped()).toBe(false);
         expect(h.timers).toHaveLength(1);
     });

@@ -91,3 +91,38 @@ async def test_run_that_was_declared_dead_writes_no_ending(make_env):  # noqa: F
     # Only the failure the other caller reported ends the run on the stream.
     assert types.count("run_failed") <= 1
     assert not [e for e in env.hook_events if e["type"] == "run_finished"]
+
+
+async def test_a_redis_error_while_confirming_the_lease_still_writes_the_answer(make_env):  # noqa: F811
+    env = make_env([AIMessage(content="答案")])
+    ctx = await env.submit("你好")
+    real_renew = env.lease.renew
+    calls = {"n": 0}
+
+    async def renew_fails_at_the_end(conversation_id, run_id):
+        calls["n"] += 1
+        if calls["n"] > 1:  # the first renew claims the run; the last one confirms it
+            raise ConnectionError("redis hiccup")
+        return await real_renew(conversation_id, run_id)
+
+    env.lease.renew = renew_fails_at_the_end
+
+    outcome = await env.run(ctx)
+
+    assert outcome.status == "finished"
+    assert (await env.types())[-1] == "run_finished"
+
+
+async def test_a_redis_error_while_reading_the_stop_flag_still_parks(make_env):  # noqa: F811
+    env = make_env([ASK])
+    ctx = await env.submit("帮我选颜色")
+
+    async def should_stop_fails(run_id):
+        raise ConnectionError("redis hiccup")
+
+    env.lease.should_stop = should_stop_fails
+
+    outcome = await env.run(ctx)
+
+    assert outcome.status == "waiting"
+    assert (await env.state()).status == rl.STATUS_WAITING

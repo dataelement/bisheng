@@ -453,6 +453,8 @@ async def test_stop_that_arrives_before_parking_ends_the_run(monkeypatch: pytest
     assert types[-1] == "run_stopped"
     assert env.finished == [(CHAT, SVID)]
     assert await env.lease.should_stop(SVID) is False
+    # The record does not stay "waiting for the user's answer".
+    assert env.state.session.status == SessionVersionStatusEnum.TERMINATED
 
 
 async def test_second_driver_of_the_same_run_is_rejected(monkeypatch: pytest.MonkeyPatch, tmp_path):

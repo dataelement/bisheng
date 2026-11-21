@@ -739,7 +739,7 @@ class DirectRunner:
                     await self._cleanup_local(ctx)
                     return DirectRunOutcome(STATUS_FAILED, error)
                 if work.result() == STATUS_WAITING:
-                    if await self.lease.should_stop(run_id):
+                    if await self._stop_pending(ctx):
                         # The stop arrived after the question was asked and before
                         # the run parked. Parking now would leave the flag behind,
                         # and the resumed run (same run_id) would stop on the answer.
@@ -785,10 +785,26 @@ class DirectRunner:
         """The run may write its own terminal event: it still holds the conversation.
 
         ``renew`` proves it; when the lease lapsed unnoticed, ``reclaim`` takes it
-        back unless another caller already reported the run.
+        back unless another caller already reported the run. A Redis error counts
+        as "still holds": the watcher renewed the lease within the last
+        RENEW_INTERVAL_SECONDS, and one failed call must not fail a finished answer.
         """
         cid, run_id = ctx.conversation_id, ctx.run_id
-        return await self.lease.renew(cid, run_id) or await self.lease.reclaim(cid, run_id)
+        try:
+            return await self.lease.renew(cid, run_id) or await self.lease.reclaim(cid, run_id)
+        except Exception:
+            logger.exception(
+                "direct run={} conversation={}: could not confirm the lease; writing the ending", run_id, cid
+            )
+            return True
+
+    async def _stop_pending(self, ctx: DirectRunContext) -> bool:
+        """A stop requested before the run parks. A Redis error counts as "no stop" (the run parks)."""
+        try:
+            return await self.lease.should_stop(ctx.run_id)
+        except Exception:
+            logger.exception("direct run={}: could not read the stop flag before parking", ctx.run_id)
+            return False
 
     async def _end_lost(self, ctx: DirectRunContext, sink: Callable[[dict], Awaitable[None]]) -> DirectRunOutcome:
         """End a run whose renew failed (see "the lease is lost" in the module docstring).

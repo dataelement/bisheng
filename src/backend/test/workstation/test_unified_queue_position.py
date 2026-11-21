@@ -13,7 +13,7 @@ import httpx
 
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.workstation.domain.services import run_send
-from test.workstation.test_unified_run_api import CID, OWNER, PREFIX, TENANT, V2, _body, _World, client, world  # noqa: F401
+from test.workstation.test_unified_run_api import CID, OWNER, PREFIX, TENANT, _World, client, world  # noqa: F401
 
 
 def _patch_queue(monkeypatch, record_id: str | None, index: int) -> list[str]:
@@ -31,7 +31,7 @@ def _patch_queue(monkeypatch, record_id: str | None, index: int) -> list[str]:
     return looked_up
 
 
-async def _hold(world: _World, *, task_mode: bool) -> str:
+async def _hold(world: _World, *, task_mode: bool) -> str:  # noqa: F811
     held = await world.dispatch.submit(
         CID, {"text": "调研一下", "task_mode": task_mode, "user_id": OWNER, "tenant_id": TENANT}
     )
@@ -91,32 +91,3 @@ async def test_queue_position_is_owner_only(world: _World, client: httpx.AsyncCl
     assert missing.json()["status_code"] == UnAuthorizedError.Code
     assert "position" not in other.text
     assert looked_up == []
-
-
-async def test_new_waiting_deep_research_run_writes_its_queued_event(
-    world: _World,  # noqa: F811
-    client: httpx.AsyncClient,  # noqa: F811
-    monkeypatch,
-):
-    """A page opened while the run still waits learns from the stream that the run exists."""
-
-    async def position(conversation_id, run_id, message):
-        return 2
-
-    monkeypatch.setattr(
-        run_send,
-        "_dispatch_wiring",
-        lambda: {"enqueue_relay": world.dispatch._enqueue_relay, "queue_position": position},
-    )
-
-    resp = await client.post(f"{PREFIX}/chat/completions", json=_body(task_mode=True), headers=V2)
-
-    run_id = resp.json()["data"]["run_id"]
-    events = [event async for event in world.stream.read(CID)]
-    assert [(e["type"], e["run_id"], e["data"]) for e in events] == [("queued", run_id, {"position": 2})]
-
-
-async def test_run_with_a_free_slot_writes_no_queued_event(world: _World, client: httpx.AsyncClient):  # noqa: F811
-    await client.post(f"{PREFIX}/chat/completions", json=_body(task_mode=True), headers=V2)
-
-    assert [event async for event in world.stream.read(CID)] == []

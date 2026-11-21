@@ -201,7 +201,10 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
     // the badge clears the moment the worker picks us up (index → 0) or any
     // execution output arrives over the WS.
     const noProgressYet = !tasks.length && !sessionSteps.length;
-    useLinsightQueuePolling(versionId, channelOpen && running && noProgressYet);
+    // AC-36: the conversation page (no live channel) also asks while a stored turn
+    // still waits in the worker queue, e.g. after a reload; a share page never asks.
+    const followsQueue = channelOpen || (!liveChannel && !shareToken);
+    useLinsightQueuePolling(versionId, followsQueue && running && noProgressYet);
     // Gate on noProgressYet too: once steps/tasks arrive polling stops and the
     // last-polled queueCount may stay stale >0, so this prevents the queue card
     // from lingering next to real task rows.
@@ -272,7 +275,7 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
         <ExecutionLiveContext.Provider value={running && !pendingInput && !tasks.length}>
         <div ref={rootRef} className="w-full">
             {/* queueing card (auto-disappears when the worker picks us up) */}
-            {queueing && channelOpen && <QueueCard position={linsight!.queueCount} onCancel={stop} />}
+            {queueing && followsQueue && <QueueCard position={linsight!.queueCount} onCancel={channelOpen ? stop : undefined} />}
 
             {/* session-level steps (planning-stage tools etc.); an answered clarify
                 renders as an inline IntentRow at its chronological position here
