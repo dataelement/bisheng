@@ -184,6 +184,24 @@ async def test_no_skills_selected_still_mounts_every_usable_skill(make_env, monk
 
 
 @pytest.mark.real_auto_enabled
+async def test_open_api_run_without_skills_mounts_none(make_env, monkeypatch: pytest.MonkeyPatch):  # noqa: F811
+    """F005 AC-21: the open API uses only what its caller passed; no skill is mounted when none is passed."""
+    calls: list = []
+
+    async def materialize(backend, tenant_id, selected, store=None, **kwargs):
+        calls.append(selected)
+        return SkillProvisionResult([], [], None, None)
+
+    monkeypatch.setattr(skill_provisioning, "materialize_session_skills", materialize)
+    env = make_env([AIMessage(content="你好")])
+    ctx = await env.submit("你好")
+    ctx.unattended = True  # what run_send sets for an open API request
+
+    assert (await env.run(ctx)).status == "finished"
+    assert calls == []
+
+
+@pytest.mark.real_auto_enabled
 @pytest.mark.parametrize("picked", [[], ["demo-skill"]])
 async def test_a_failed_skill_listing_does_not_fail_the_answer(make_env, monkeypatch: pytest.MonkeyPatch, picked):  # noqa: F811
     """F005 (user decision 2026-11-20): skills are an extra for a direct answer.

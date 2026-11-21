@@ -1230,7 +1230,12 @@ class DirectRunner:
         none. Unlike deep research, the run goes on without skills; picked skills
         are reported as not loaded. A single skill that fails to copy is already
         handled inside provisioning.
+
+        The open API (``unattended``) uses only the skills its caller passed
+        (AC-21): with none passed, nothing is mounted.
         """
+        if ctx.unattended and not ctx.skills:
+            return False
         try:
             result = await self._provision_skills(ctx, backend)
         except Exception:
