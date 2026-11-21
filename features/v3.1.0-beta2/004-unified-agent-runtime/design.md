@@ -256,9 +256,10 @@
 | 发送消息 | `POST /api/v1/workstation/chat/completions`（沿用） | 请求体不变。响应分两种：新客户端带协商头时返回 JSON `{run_id, disposition: "started"｜"queued"｜"blocked", message_id}`；不带协商头时保持今天的流式响应（服务端替它订阅事件流并转成旧格式）。 |
 | 订阅事件 | `GET /api/v1/workstation/conversations/{id}/events`（新增，SSE） | 支持 `Last-Event-ID` 续传。按会话归属校验权限。 |
 | 回答提问 | 统一链路：发送入口（会话处于等待回答时，下一条消息即回答）。旧通道沿用 `/api/v1/linsight/workbench/user-input` | 两种档位共用。 |
+| 排队位置 | `GET /api/v1/workstation/conversations/{id}/queue-position`（新增，AC-36） | 本人可查。返回 `{run_id, position}`；会话没有排队中的深度研究时 `position` 为 null。`position` 与旧接口 `/linsight/workbench/queue-status` 的 `index` 同义（从 1 起）。 |
 | 停止 | `POST /api/v1/workstation/conversations/{id}/stop`（新增）。旧通道沿用 `/api/v1/linsight/workbench/terminate-execute` | 两种档位共用。服务端按会话当前持有者停止，不读请求体里的 `run_id`。 |
 | 文件下载地址 | `GET /api/v1/workstation/conversations/{id}/files/{file_id}/url`（新增） | 只接受本会话工作区登记过的文件 id，不接受调用方给的对象键；本人或审计可取。 |
-| 协议选择 | 无 | 开关已删除（决策 13 的 2026-11-20 更新）。会话页总是带 `X-BS-Run-Protocol: 2`。不带该头的请求仍由统一发送入口按旧帧格式应答，订阅页的 AI 助手面板和桌面端在用。开放 API 的日常对话也经过统一发送入口，总是按旧帧格式应答（决策 14）。 |
+| 协议选择 | 无 | 开关已删除（决策 13 的 2026-11-20 更新）。会话页总是带 `X-BS-Run-Protocol: 2`。不带该头的请求仍由统一发送入口按旧帧格式应答，桌面端在用；client 前端已没有不带该头的发送（§8 第四轮）。开放 API 的日常对话也经过统一发送入口，总是按旧帧格式应答（决策 14）。 |
 | 开放 API | `/api/v2/workstation/*` | 请求、响应格式和状态含义不变（AC-39）。新增一种失败：会话 60 秒内没有空闲，返回 12048（决策 14）。 |
 
 事件的统一外形：`{id, run_id, seq, type, data, ts}`。`type` 的取值：
@@ -315,6 +316,7 @@
 | AC-27 | 交付文件写在主桶 `workspace/` 下，主桶没有生命周期规则；下载链接按需签名，不保存长期链接 | 【读码】F016 的转正逻辑 |
 | AC-28 | 工作区文件的预览与下载接口按会话归属校验；审计下载沿用 F016 的接口 | 【读码】`resolve_attachment_url` |
 | AC-32 | `run_failed` 事件的 `reason`、`reference_id` | 沿用 61f9ef5e99 的报错卡 |
+| AC-36 | 会话页在进行中的深度研究回合还没有任何输出时，每 5 秒调 `GET /conversations/{id}/queue-position`，位置大于 0 时显示排队卡片（“排队中，第 N 位”）。取消排队用输入框的停止按钮，卡片不另放取消按钮 | 位置的算法复用 `LinsightQueue.index`，与旧的 `/linsight/workbench/queue-status` 一致 |
 | AC-38 | 发送入口在消息进收件箱之前执行输入检测（`evaluate_workbench_user_text`），所以插话与普通消息走同一检测；输出检测放在事件映射之后、写入事件流之前 | 【读码】`chat_service.py:1890` |
 | AC-43 | 知识库检索工具由统一工厂装配，权限范围由工具实例闭包携带，与今天两条链路相同 | 【读码】`linsight/AGENTS.md` Prompt / tool wiring |
 | AC-49 | 把日常对话的读图组件（`VisionToolBindWrapper`、`KbImageStage`）接入统一工厂 | 已核实（T008）：部分能。日常对话的读图不是外层循环，是“callable model 包装器 + `view_image` 工具”（`common/image_view/vision_llm.py:465`、`chat_service.py:2376`），每个请求新建 `ImageRegistry`（`chat_service.py:1951`），看图模型是独立配置 `workbench.image_read_model`（`image_view/loop.py:398`）。深度研究靠主模型的 `visual` 标志（`agent_factory.py:1957`），`read_file` 直接返回图片块（`workspace_backend.py:460`），由 `binary_content_guard.py:245`、`:319` 两个中间件拦截与挪位。接入方式：把包装器改写成一个 `awrap_model_call` 中间件并自带 `view_image` 工具，`ImageRegistry`、`annotate`、`fetch`、`tool`、`loop.py` 的判定函数直接复用。四个阻碍点见 §5 坑 12 |
@@ -383,6 +385,7 @@
 | 30 | 前端每个文本增量都重建全部思考段和工具调用的事件对象并排序 | 长回答时 CPU 占用随事件数增长，下游所有工具行都重渲染 | `hooks/runAgentEvents.ts`：文本增量直接返回上次的事件数组；思考增量或工具帧只为变化的一项新建对象；缓存是以 store 对象为键的 WeakMap，不保留历史帧。未做 CPU 实测对比 |
 | 31 | 深度研究的流式正文原来不经过句柄转换：直接回答在 `DirectTurn.rewrite` 里把 `[Sn]` 换成引用标记，深度研究的 `_UnifiedRun.emit` 把模型原文直接写进事件流 | 回答生成过程中用户看到 `[S1]` 原文，结束后换成存库的正式回答才变成角标。114 实测（2026-11-19，会话 `96757276…`）：句柄表有 S1–S5，17 个 `text` 事件里有 9 处 `[Sn]`、0 个标记 | 转换逻辑抽成 `text_handle_rewriter.TextHandleRewriter`，两种档位共用；`_UnifiedRun` 在 `_create_agent` 建好引用范围后 `bind_citation_scope`，逐字引用约定（scope 未启用）时不转换。回归 `test/linsight/test_text_handle_rewriter.py`；114 复测见 verification-final.md §7 |
 | 32 | 中间件在 `model` 节点里自己调用的模型（`KbImageViewMiddleware._describe` 的看图模型），其 token 同样出现在 `stream_mode="messages"` 里，统一映射器按主图正文发成 `text` | 主模型不能读图、配了看图模型时，看图模型对图片的描述会作为回答显示给用户。langchain 1.5 的摘要调用自带 `nostream` 标签，不受影响；`vision_llm.py` 用 `callbacks: []` 自行避开 | 该调用加 `tags=[TAG_NOSTREAM]`。原理用最小脚本验证（节点内未打标签的 `ainvoke` 会进入 messages 流，打标签后不会）；114 未配看图模型，未在环境中复现。回归 `test_unified_citation_image_memory.py::test_image_reading_model_describes_pictures_for_a_text_model` |
+| 33 | 深度研究提交时，`run_dispatch.submit` 算出的排队位置放在 `SubmitResult.events` 的 `queued` 事件里，但只有直接回答把 `initial_events` 写进事件流，深度研究这条路径从来没写；位置也只在提交时算一次 | 会话页收不到排队位置，排队中的回合看起来像卡住（AC-36 不成立） | 不靠事件：新增 `GET /conversations/{id}/queue-position`，按会话当前的运行记录找到版本，再用 `LinsightQueue.index` 现算；前端在回合没有输出时轮询。回归：`test_unified_queue_position.py`、`useRunQueuePosition.test.ts` |
 
 ---
 
@@ -536,13 +539,14 @@ Wave 1–4 留下、技术上已知、尚未处理的：
 - **旧通道删除（2026-11-20 已做一轮）**：
   - 已删：开关及其读取点；`_task_mode_stream_completion` 与入队失败后依赖浏览器 start-execute 的分支；worker 的 `_legacy_session_run_lock` 与旧线程的工作区接管 `_seed_workspace_from_previous`；前端会话页的交接帧处理、附件解析轮询、旧的停止分支。
   - 第三轮（2026-11-20）：开放 API 的日常对话迁到统一运行时（决策 14），旧的日常 agent 循环 `_agent_stream_chat_completion` 及只被它使用的函数随之删除。
-  - 仍可达而保留：不带协商头的 SSE 兼容应答；`/linsight/workbench/*` 接口与任务 WebSocket（`/linsight/:id` 历史页跟进本人进行中的任务时在用）；前端 `beginStream` / `useAiChatSSE`（订阅页 AI 助手面板在用）；`task_exec.py` 里未在会话线程上的分支（升级前建的记录续跑时走）。
+  - 仍可达而保留：不带协商头的 SSE 兼容应答；`/linsight/workbench/*` 接口与任务 WebSocket（`/linsight/:id` 历史页跟进本人进行中的任务时在用）；`task_exec.py` 里未在会话线程上的分支（升级前建的记录续跑时走）。
   - 第二轮（2026-11-20，用户确认）：`/linsight/new` 不再能提交。进入这个地址时，前端新建对话、打开「深度研究」并跳到 `/c/new`。`/linsight/:id` 只读，没有输入框。前端删除了提交流水线（`useLinsightSubmit`、`submissionState`、`TaskModeInput`、`TaskModeChatInput` 及只被它们使用的组件）。分享页上的深度研究回合只显示快照：不开任务 WebSocket，不轮询排队，不提供回答提问和停止。后端的 `/linsight/workbench/submit` 与 `start-execute` 不再有 client 前端调用，接口本身保留，因为桌面端是否在用没有核实。
-  - 待用户决定：订阅页 AI 助手面板是否改用运行协议 2。
+  - 第四轮（2026-11-21，用户决定订阅页 AI 助手改用运行协议 2）：核实发现订阅页 AI 助手的两个调用方都传文章 id，实际走的是频道文章问答 `/api/v1/channel/chat/completions`（独立服务，不在 F004 范围）；面板里用 `useAiChat` 的“工作台模式”和“文件问答模式”都到不了（知识库文件问答由 `FileAiDock` 直接用 `useFileChat`）。删掉这两个模式后，client 前端已没有不带协商头的发送，`useAiChat` 的旧发送路径（`beginStream`、`useAiChatSSE`、`getSSEUrl`）随之删除，`useAiChat` 从 1281 行减到约 730 行。同时补了一个改动前就有的缺口：会话页删除一个正在回答的会话时，前端先请求停止该会话的运行，否则运行会继续往已删除的会话里写回答。
+  - 未追完：桌面端宿主的“运行中会话”列表只在发送请求进行期间包含该会话；请求返回后运行仍在继续时，宿主看不到它。这是运行协议 2 上线后就有的缺口，不是第四轮引入的。
   - 未追完：`agent_factory.py` 里按有无收件箱区分的图片中间件条件与两套计划措辞；`copy_workspace_prefix` 的 `only_if_empty` 默认路径。
   - worker 的运行作用域依赖 Redis。旧锁在 Redis 不可用时放行的行为已不存在。
 
-- **待用户决定**：统一运行时下的“重新生成”目前等于把原问题再发一次（§5 #29）。是否需要“同一问题下生成另一个回答”的语义，需要产品决定；要做就得后端先支持。
+- **重新生成**（用户决定，2026-11-21）：就是把原问题再发一次（§5 #29），不做“同一问题下生成另一个回答”。
 
 - **真正的并行与后台任务**：等 async subagents 稳定、且许可证与部署成本可接受时再评估（决策 5）。
 - **统一落库结构**：见决策 8 的触发条件。
@@ -571,3 +575,4 @@ Wave 1–4 留下、技术上已知、尚未处理的：
 | 2026-11-20 | 删除开关 `unified_runtime_enabled` 与只有它能到达的旧通道代码；决策 13、§4.3、§4.6、§8 同步 | 用户决定 |
 | 2026-11-20 | §8 记录第二轮删除：`/linsight/new` 改为跳到会话页并打开深度研究；分享页的深度研究回合改为只读快照 | 用户确认决策 11 的落地方式 |
 | 2026-11-20 | 新增决策 14：开放 API 日常对话迁到统一运行时；补回工作台系统提示词与日常对话遥测；新增错误码 12048；§4.3、§6.1、§8 同步 | 用户要求删掉开放 API 的旧 agent 逻辑，验收以 AC-39 为准 |
+| 2026-11-21 | 用户决定：订阅页 AI 助手改用运行协议 2（落点是删掉到不了的工作台模式与前端旧发送路径）、实现 AC-36 排队位置、重新生成保持“再发一次”；§4.3 增排队位置接口，§4.4 增 AC-36，§5 增 #33，§8 记第四轮 | 用户决定 |
