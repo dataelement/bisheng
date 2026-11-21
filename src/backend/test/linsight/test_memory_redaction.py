@@ -128,7 +128,13 @@ async def test_ac09_step_history_redis_and_ws_hold_no_memory_content(step_sinks)
     _assert_no_secret(history)
     entry = history[0]
     # The step history reuses the output stand-in, which carries the content-free status.
-    assert entry["params"] == {"redacted": True, "op": "search", "item_ids": ["item-7"], "ok": True, "reason_code": None}
+    assert entry["params"] == {
+        "redacted": True,
+        "op": "search",
+        "item_ids": ["item-7"],
+        "ok": True,
+        "reason_code": None,
+    }
     assert '"redacted": true' in entry["output"] and "item-7" in entry["output"]
     _assert_no_secret(step_sinks.redis.kv[f"{step_sinks.prefix}execution_tasks:{SVID}"])
     pushed = step_sinks.redis.lists[f"{step_sinks.prefix}messages"]
@@ -226,12 +232,10 @@ class _NoopModel(BaseChatModel):
 
 
 @pytest.fixture
-def summarizer(monkeypatch):
+def summarizer():
     from deepagents.backends import StateBackend
 
-    middleware = BishengSummarizationMiddleware(_NoopModel(), StateBackend(), usable_input=None)
-    monkeypatch.setattr(middleware, "_get_thread_id", lambda: SVID)
-    return middleware
+    return BishengSummarizationMiddleware(_NoopModel(), StateBackend(), usable_input=None)
 
 
 def test_ac09_compaction_file_has_no_memory_content(summarizer):
@@ -241,7 +245,7 @@ def test_ac09_compaction_file_has_no_memory_content(summarizer):
     pai, ptm = _plain_call()
     messages = [HumanMessage("任务"), ai, tm, pai, ptm]
 
-    path = summarizer._offload_to_backend(backend, messages)
+    path = summarizer._offload_to_backend(backend, messages, SVID)
 
     body = backend.files[path]
     _assert_no_secret(body)
@@ -255,7 +259,7 @@ async def test_ac09_async_compaction_file_has_no_memory_content(summarizer):
     backend = _RecordingBackend()
     ai, tm = _memory_call()
 
-    path = await summarizer._aoffload_to_backend(backend, [HumanMessage("任务"), ai, tm])
+    path = await summarizer._aoffload_to_backend(backend, [HumanMessage("任务"), ai, tm], SVID)
 
     _assert_no_secret(backend.files[path])
 

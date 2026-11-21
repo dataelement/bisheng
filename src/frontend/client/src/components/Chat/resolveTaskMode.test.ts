@@ -16,9 +16,8 @@ describe('resolveTaskModeOnNavigation', () => {
     // The production bug: a task conversation whose toggle was cleared by an
     // in-conversation navigation (sidebar 首页, whose target IS the current
     // pathname) never came back, because the reset ran on every location.key
-    // change while the restore's deps were constant within the visit. The user
-    // saw a lit button the whole time (`taskMode || taskRunning`) and their next
-    // turn silently went to the daily chain.
+    // change while the restore's deps were constant within the visit. The user's
+    // next turn silently went to the daily chain.
     it('keeps a task conversation in task mode across repeated navigations', () => {
         expect(resolve({ isTaskConversation: true })).toBe(true);
         // Same inputs again — a second navigation must not flip it off.

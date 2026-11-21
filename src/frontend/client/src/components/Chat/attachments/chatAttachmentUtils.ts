@@ -1,3 +1,4 @@
+import { getRunFileUrl } from '~/api/runApi';
 import { getAttachmentUrl } from '~/api/chatApi';
 import { resolveKnowledgePreviewUrl } from '~/pages/knowledge/FilePreview/previewUrlUtils';
 
@@ -37,10 +38,14 @@ export function getReissuableAttachment(
  * bucket, so it is only the answer when no fresh one can be issued.
  */
 export async function reissueAttachmentUrl(
-    attachment: { conversationId: string; fileId: string } | undefined,
+    attachment: { conversationId: string; fileId: string; run?: boolean } | undefined,
     fallback: string | undefined,
 ): Promise<string | undefined> {
     if (!attachment) return fallback;
-    const fresh = await getAttachmentUrl(attachment.conversationId, attachment.fileId);
+    // F004: a file of the current run is on no message row yet, so the run
+    // endpoint issues its link (it answers stored files as well).
+    const fresh = attachment.run
+        ? await getRunFileUrl(attachment.conversationId, attachment.fileId)
+        : await getAttachmentUrl(attachment.conversationId, attachment.fileId);
     return fresh ? resolveKnowledgePreviewUrl(fresh) : fallback;
 }

@@ -13,15 +13,15 @@ from test.e2e.helpers.api import API_BASE, assert_resp_200
 # Default test admin password. 114 and other non-default-password deployments
 # override via the ``E2E_ADMIN_PASSWORD`` env var (e.g. ``Bisheng@top1`` on
 # 192.168.106.114). Local dev / CI leaves the helper's built-in default.
-_DEFAULT_ADMIN_PASSWORD = 'admin123'
-_DEFAULT_USER_PASSWORD = 'test_password_123'
+_DEFAULT_ADMIN_PASSWORD = "admin123"
+_DEFAULT_USER_PASSWORD = "test_password_123"
 
 
 async def get_public_key(client: httpx.AsyncClient) -> str:
     """Fetch RSA public key from backend."""
-    resp = await client.get(f'{API_BASE}/user/public_key')
+    resp = await client.get(f"{API_BASE}/user/public_key")
     data = assert_resp_200(resp)
-    return data['public_key']
+    return data["public_key"]
 
 
 def encrypt_password(password: str, public_key_pem: str) -> str:
@@ -40,11 +40,11 @@ async def login(client: httpx.AsyncClient, username: str, password: str) -> str:
     encrypted_pwd = encrypt_password(password, pubkey)
 
     resp = await client.post(
-        f'{API_BASE}/user/login',
-        json={'user_name': username, 'password': encrypted_pwd},
+        f"{API_BASE}/user/login",
+        json={"user_name": username, "password": encrypted_pwd},
     )
     data = assert_resp_200(resp)
-    return data['access_token']
+    return data["access_token"]
 
 
 async def get_admin_token(client: httpx.AsyncClient) -> str:
@@ -56,16 +56,18 @@ async def get_admin_token(client: httpx.AsyncClient) -> str:
          admin passwords, e.g. ``Bisheng@top1`` on 192.168.106.114).
       3. Hard-coded default ``admin123`` (local dev / CI).
     """
-    token = os.environ.get('E2E_ADMIN_TOKEN', '').strip()
+    token = os.environ.get("E2E_ADMIN_TOKEN", "").strip()
     if token:
         return token
-    password = os.environ.get('E2E_ADMIN_PASSWORD', _DEFAULT_ADMIN_PASSWORD)
-    username = os.environ.get('E2E_ADMIN_USERNAME', 'admin')
+    password = os.environ.get("E2E_ADMIN_PASSWORD", _DEFAULT_ADMIN_PASSWORD)
+    username = os.environ.get("E2E_ADMIN_USERNAME", "admin")
     return await login(client, username, password)
 
 
 async def get_user_token(
-    client: httpx.AsyncClient, username: str, password: str,
+    client: httpx.AsyncClient,
+    username: str,
+    password: str,
 ) -> str:
     """Get JWT token for a specific user."""
     return await login(client, username, password)
@@ -73,7 +75,7 @@ async def get_user_token(
 
 def auth_headers(token: str) -> dict:
     """Build authentication request headers with JWT cookie."""
-    return {'Cookie': f'access_token_cookie={token}'}
+    return {"Cookie": f"access_token_cookie={token}"}
 
 
 async def create_test_user(
@@ -82,8 +84,13 @@ async def create_test_user(
     username: str,
     role_id: int = 2,
     password: str = _DEFAULT_USER_PASSWORD,
+    management_tenant: str | None = None,
 ) -> dict:
     """Create a test user via admin ``POST /user/create``.
+
+    ``management_tenant``: a global super admin must name the tenant of a
+    tenant-specific request (``X-Management-Tenant``), or the request is refused
+    with 19703.
 
     The backend endpoint expects an **RSA-encrypted** password (``UserService.
     create_user`` → ``decrypt_md5_password`` which RSA-decrypts then md5-hashes
@@ -94,14 +101,16 @@ async def create_test_user(
     RSA-encrypted+md5-decrypted login plaintext.
     """
     headers = auth_headers(admin_token)
+    if management_tenant is not None:
+        headers["X-Management-Tenant"] = str(management_tenant)
     pubkey = await get_public_key(client)
     encrypted_pwd = encrypt_password(password, pubkey)
     resp = await client.post(
-        f'{API_BASE}/user/create',
+        f"{API_BASE}/user/create",
         json={
-            'user_name': username,
-            'password': encrypted_pwd,
-            'role_id': role_id,
+            "user_name": username,
+            "password": encrypted_pwd,
+            "role_id": role_id,
         },
         headers=headers,
     )

@@ -54,13 +54,6 @@ export function getLinsightTaskList(versionId: string, linsight: LinsightInfo, s
 }
 
 
-// 开始执行灵思
-export function startLinsight(versionId: string): Promise<any> {
-    return request.post('/api/v1/linsight/workbench/start-execute', {
-        linsight_session_version_id: versionId
-    });
-}
-
 // F035 多轮对话：在已完成的同一会话里追加新一轮（复用同一 session_version + agent thread，保留上下文）
 export function continueLinsight(session_version_id: string, question: string, model?: string): Promise<any> {
     return request.post('/api/v1/linsight/workbench/continue', {

@@ -16,7 +16,6 @@ import {
   updateMemorySettingApi,
 } from "~/api/memory";
 import { reportTimezoneIfChanged, timezoneStorageKey } from "~/hooks/useMemoryTimezone";
-import { openChatStream, type SSESubmission } from "~/hooks/useAiChatSSE";
 
 jest.mock("~/api/request", () => ({
   __esModule: true,
@@ -25,22 +24,6 @@ jest.mock("~/api/request", () => ({
   prepareBrowserHeaders: () => Promise.resolve({}),
 }));
 
-type Listener = (event: { data: string }) => void;
-const mockStreams: Array<Record<string, Listener>> = [];
-jest.mock("sse.js", () => ({
-  SSE: jest.fn().mockImplementation(() => {
-    const listeners: Record<string, Listener> = {};
-    mockStreams.push(listeners);
-    return {
-      addEventListener: (name: string, listener: Listener) => {
-        listeners[name] = listener;
-      },
-      stream: jest.fn(),
-      close: jest.fn(),
-    };
-  }),
-}));
-jest.mock("~/api/chatApi", () => ({ getSSEUrl: () => "/api/chat" }));
 
 const mockedRequest = request as jest.Mocked<typeof request>;
 const envelope = (data: unknown) => ({ status_code: 200, status_message: "SUCCESS", data });
@@ -170,43 +153,7 @@ describe("timezone report (AC-14)", () => {
   });
 });
 
-describe("stream signal and history flags (AC-21)", () => {
-  function start(onAgentUpdate: jest.Mock) {
-    const submission: SSESubmission = {
-      payload: { conversationId: "c1" },
-      userMessage: { conversationId: "c1" } as ChatMessage,
-      onCreated: jest.fn(),
-      onMessage: jest.fn(),
-      onAgentUpdate,
-      onFinal: jest.fn(),
-      onStart: jest.fn(),
-      onError: jest.fn(),
-      onEnd: jest.fn(),
-    };
-    openChatStream(submission, (key) => key);
-    const listeners = mockStreams[mockStreams.length - 1];
-    return (data: unknown) => listeners.message({ data: JSON.stringify(data) });
-  }
-
-  it("puts turn_id and flags from a memory event on the message (AC-21)", () => {
-    const onAgentUpdate = jest.fn();
-    const emit = start(onAgentUpdate);
-    emit({ category: "agent_answer", type: "end", message: { msg: "ok" }, message_id: 99 });
-    emit({
-      category: "memory",
-      type: "end",
-      message: { turn_id: "t-1", has_write: true, has_attribution: false },
-      message_id: 99,
-    });
-    const patch = onAgentUpdate.mock.calls[onAgentUpdate.mock.calls.length - 1][0];
-    expect(patch.memory).toEqual({ turn_id: "t-1", has_write: true, has_attribution: false });
-    expect(patch.messageId).toBe("99");
-
-    const message = { messageId: "99", text: "ok" } as ChatMessage;
-    const [merged] = mergeMemoryFlags([message], { "99": patch.memory });
-    expect(merged.memory?.turn_id).toBe("t-1");
-  });
-
+describe("memory signal and history flags (AC-21)", () => {
   it("ignores a memory event without a turn id (AC-21)", () => {
     expect(parseMemorySignal({ category: "memory", message: { has_write: true } })).toBeNull();
     expect(parseMemorySignal({ category: "memory", message: JSON.stringify({ turn_id: "t", has_write: 1 }) }))

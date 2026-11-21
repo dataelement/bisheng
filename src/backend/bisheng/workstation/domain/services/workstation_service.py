@@ -838,9 +838,10 @@ class WorkStationService(BaseService):
     async def update_daily_chat_config(cls, data: WorkstationConfig) -> WorkstationConfig:
         """Update the default workstation configuration for daily chat."""
         workstation_payload = data.model_copy(update={"models": None})
+        payload = workstation_payload.model_dump(mode="json")
         await cls._aupsert_tenant_config(
             ConfigKeyEnum.WORKSTATION,
-            payload=json.dumps(workstation_payload.model_dump(mode="json"), ensure_ascii=True),
+            payload=json.dumps(payload, ensure_ascii=True),
         )
         config, *_ = await cls.get_daily_chat_config_with_meta()
         return config

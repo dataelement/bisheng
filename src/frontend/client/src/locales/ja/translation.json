@@ -474,7 +474,7 @@
   "com_linsight_add_skill": "スキルを追加",
   "com_linsight_exit_task_mode": "詳細リサーチを終了",
   "com_linsight_input_placeholder": "タスクの目標を入力すると、$t(com_linsight_task_mode)が進めます",
-  "com_linsight_awaiting_reply": "上記の質問に回答してタスクを続行してください",
+  "com_linsight_answer_placeholder": "上の選択肢を選ぶか、回答を直接入力してください",
   "com_linsight_skill_empty": "利用可能なスキルはありません",
   "com_linsight_skill_search": "スキルを検索",
   "com_linsight_task_mode": "詳細リサーチ",
@@ -2604,7 +2604,14 @@
   "com_chat_image_expired": "画像は無効になり、表示できません",
   "com_error_file_upload_incomplete": "「{{0}}」のアップロードが完了していません。削除して再アップロードしてから送信してください。",
   "com_linsight_error_title_chat_unknown": "回答の生成に失敗しました",
-  "com_linsight_error_desc_chat_unknown": "回答の生成中に問題が発生したため、処理が中断されました。",
+  "com_linsight_error_desc_chat_unknown": "このメッセージの処理中にシステムエラーが発生し、回答は生成されませんでした。もう一度送信してください。繰り返し失敗する場合は管理者にお問い合わせください。",
+  "com_linsight_error_desc_chat_content_filter": "モデル提供元がこの内容を不適切の可能性があると判定したため、回答は生成されませんでした。言い換えるか、質問を分けてもう一度お試しください。",
+  "com_linsight_error_desc_chat_quota_exhausted": "現在のモデルの利用枠またはアカウント残高が不足しているため、回答は生成されませんでした。管理者にチャージを依頼するか、利用可能な別のモデルに切り替えて再送信してください。",
+  "com_linsight_error_desc_chat_credit_exhausted": "今月利用できるモデルクレジットを使い切ったため、回答は生成されませんでした。管理者にクレジット上限の調整を依頼してください。クレジットは来月初めに回復します。",
+  "com_linsight_error_desc_chat_auth_error": "現在のモデルの認証情報が無効、または権限がないため、回答は生成されませんでした。管理者にモデル設定の確認を依頼してください。",
+  "com_linsight_error_desc_chat_context_overflow": "今回の内容は現在のモデルが一度に処理できる長さを超えているため、回答は生成されませんでした。内容を短くするか添付を減らして再送信するか、コンテキストの長いモデルに切り替えてください。",
+  "com_linsight_error_desc_chat_context_compress_failed": "会話が長いため、以前の内容を要約する必要がありましたが、要約に失敗し、回答は生成されませんでした。もう一度送信してください。繰り返し失敗する場合は、管理者にモデルサービスの確認を依頼してください。",
+  "com_linsight_error_desc_chat_output_truncated": "モデルが今回の回答で長く思考し、1 回の出力上限に達したため、回答は生成されませんでした。もう一度送信してください。繰り返し発生する場合は、管理者にこのモデルの最大出力長の引き上げを依頼してください。",
   "com_linsight_error_hint_chat_unknown": "ヒント：メッセージを再送信してください。繰り返し失敗する場合は管理者にお問い合わせください。",
   "com_linsight_error_title_file_parse_busy": "ファイル解析サービスが混雑しています",
   "com_linsight_error_desc_file_parse_busy": "ファイル解析サービスへのリクエストが集中しているため、添付ファイルを処理できませんでした。",
@@ -3003,6 +3010,7 @@
     "noModelsConfigured": "利用できるモデルがまだ設定されていないため、メッセージを送信できません。管理者にモデルの追加を依頼してください。",
     "recommendedApps": "おすすめのアプリ",
     "scrollToBottom": "一番下へ",
+    "messageQueued": "送信しました。処理待ちです",
     "preview": "プレビュー",
     "source": "ソース",
     "closeResearch": "詳細リサーチを終了",
@@ -3106,6 +3114,22 @@
       "name": "Excel スプレッドシート作成",
       "description": "データ表、集計表、予算表、財務モデル、見積書、台帳などの Excel ブック（.xlsx）を作成・編集します。.xlsx、.xls、.csv データの読み込みと整形、数式や書式の設定を行い、納品前にブックを再計算して確認します。"
     }
+  },
+  "runPlan": {
+    "cancelled": "キャンセル済み",
+    "stopped": "停止しました",
+    "awaitingAnswer": "回答をお待ちしています",
+    "stoppedNote": "停止しました。完了したステップとファイルは残っています。"
+  },
+  "runMessage": {
+    "toolStopped": "{{name}}を停止しました"
+  },
+  "runComposer": {
+    "stoppedPlaceholder": "停止しました。メッセージを送ると続きから再開できます",
+    "runningPlaceholder": "回答中でもいつでも入力できます。Enter で送信",
+    "stopFailed": "停止できませんでした。もう一度お試しください",
+    "uploadLocked": "現在の回答が終わるとファイルをアップロードできます",
+    "modelLocked": "現在の回答が終わるとモデルを切り替えられます"
   },
   "appChat": {
     "unknownApp": "不明なアプリ",
@@ -3220,5 +3244,12 @@
       "fact": "事実",
       "experience": "経験"
     }
+  },
+  "runTool": {
+    "viewCodeOutput": "コードと出力を表示",
+    "collapse": "折りたたむ",
+    "code": "コード",
+    "params": "パラメータ",
+    "output": "出力"
   }
 }

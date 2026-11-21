@@ -1,6 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { ChatKnowledge } from "./ChatKnowledge";
-import { KnowledgeSpaceSelect } from "../../Linsight/Input/KnowledgeSpaceSelect";
 
 let mockError = false;
 let mockSpaces = [{ id: "41", name: "Directly authorized" }];
@@ -106,21 +105,17 @@ const saved = {
   type: "space" as const,
 };
 
-test.each(["daily", "task"])(
-  "%s actual selector keeps selection and exposes visible continuation",
-  (variant) => {
+test(
+  "daily selector keeps selection and exposes visible continuation",
+  () => {
     const onChange = jest.fn();
     render(
-      variant === "daily" ? (
-        <ChatKnowledge
-          variant="knowledge"
-          value={[saved]}
-          onChange={onChange}
-          disabled={false}
-        />
-      ) : (
-        <KnowledgeSpaceSelect value={[saved]} onChange={onChange} />
-      ),
+      <ChatKnowledge
+        variant="knowledge"
+        value={[saved]}
+        onChange={onChange}
+        disabled={false}
+      />,
     );
     fireEvent.click(screen.getByText("open picker"));
     expect(mockCandidate).toHaveBeenLastCalledWith(
@@ -136,28 +131,22 @@ test.each(["daily", "task"])(
         { id: "41", name: "Directly authorized", type: "space" },
       ]),
     );
-    if (variant === "task")
-      expect(screen.getByText("Independent QA")).toBeInTheDocument();
   },
 );
 
-test.each(["daily", "task"])(
-  "%s empty nonterminal failure has a real retry instead of deleting selection",
-  (variant) => {
+test(
+  "daily empty nonterminal failure has a real retry instead of deleting selection",
+  () => {
     mockError = true;
     mockSpaces = [];
     const onChange = jest.fn();
     render(
-      variant === "daily" ? (
-        <ChatKnowledge
-          variant="knowledge"
-          value={[saved]}
-          onChange={onChange}
-          disabled={false}
-        />
-      ) : (
-        <KnowledgeSpaceSelect value={[saved]} onChange={onChange} />
-      ),
+      <ChatKnowledge
+        variant="knowledge"
+        value={[saved]}
+        onChange={onChange}
+        disabled={false}
+      />,
     );
     expect(screen.getByRole("alert")).toBeInTheDocument();
     fireEvent.click(screen.getByText("dshChat.retryKnowledge"));

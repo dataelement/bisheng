@@ -135,6 +135,10 @@ async def upload_file(
             "parsing_status": "completed",
         }
         timer.finish(filepath=file_path)
+        # F004 决策 12: parsing starts now instead of when the message is sent.
+        from bisheng.workstation.domain.services import direct_attachments
+
+        await direct_attachments.start_upload_parsing(payload, user_id=login_user.user_id)
         return resp_200(data=payload)
     except Exception as exc:
         timer.fail(exc)

@@ -937,7 +937,7 @@ async def announce_stranded_session_failure(session_version_id: str) -> None:
         logger.error(f"Failed to announce stranded session failure {session_version_id}: {e}")
 
 
-async def enqueue_session_for_execution(session_model: LinsightSessionVersion) -> None:
+async def enqueue_session_for_execution(session_model: LinsightSessionVersion, run_id: str | None = None) -> None:
     """Hand a task-mode session to the Linsight worker queue.
 
     Single entry point for enqueueing, shared by the unified submit path and the
@@ -957,12 +957,17 @@ async def enqueue_session_for_execution(session_model: LinsightSessionVersion) -
     Enqueueing twice is harmless: the executor re-reads the session and bails via
     ``_is_session_in_progress`` when it is already running, so the client's
     start-execute stays a safe no-op / late retry.
+
+    ``run_id`` (F004): the run id the unified send entry reserved the
+    conversation with. The worker claims the conversation under that id; without
+    it the run id is the session version id and the item is exactly the legacy one.
     """
     from bisheng.linsight.worker import LinsightQueue, encode_queue_item
 
     redis_client = await get_redis_client()
     queue = LinsightQueue("queue", namespace="linsight", redis=redis_client)
-    await queue.put(data=encode_queue_item(session_model.id, tenant_id=session_model.tenant_id))
+    extra = {"run_id": run_id} if run_id is not None else {}
+    await queue.put(data=encode_queue_item(session_model.id, tenant_id=session_model.tenant_id, **extra))
 
 
 async def persist_task_turn_message(session_model: LinsightSessionVersion) -> ChatMessage:

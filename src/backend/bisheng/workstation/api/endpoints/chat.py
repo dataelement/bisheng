@@ -1,7 +1,7 @@
 import asyncio
 from typing import Union
 
-from fastapi import APIRouter, Body, Request
+from fastapi import APIRouter, Body, Header, Request
 
 from bisheng.api.v1.schemas import resp_200
 from bisheng.common.errcode.http_error import UnAuthorizedError
@@ -19,6 +19,7 @@ from bisheng.workstation.domain.services.chat_helpers import (
     _is_new_format,
 )
 
+from ...domain.services import run_send
 from ...domain.services.chat_service import stream_chat_completion
 from ..dependencies import LoginUserDep, ShareLink, ShareLinkDep
 
@@ -110,3 +111,68 @@ async def chat_completions(
         await MemoryGate.open(chat_id, login_user)
 
     return await stream_chat_completion(request, data, login_user, memory_register=memory_register)
+
+
+@router.get("/conversations/{conversation_id}/events")
+async def conversation_events(
+    conversation_id: str,
+    last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
+    login_user=LoginUserDep,
+):
+    """F004: SSE of the conversation's run events (design 决策 4, §4.3).
+
+    Owner only. ``Last-Event-ID`` continues after that event; without it the
+    events of the current run are sent from its start. The stream ends when the
+    conversation has no run in progress.
+    """
+    if not await run_send.owns_conversation(conversation_id, login_user):
+        # Same answer for "not yours" and "does not exist".
+        return UnAuthorizedError.return_resp()
+    return await run_send.subscribe_response(conversation_id, last_event_id)
+
+
+@router.get("/conversations/{conversation_id}/queue-position")
+async def conversation_queue_position(conversation_id: str, login_user=LoginUserDep):
+    """F004 (AC-36): position of the conversation's deep-research run in the worker queue.
+
+    Owner only. ``{run_id, position}``; ``position`` is None when nothing of this
+    conversation waits in the queue.
+    """
+    if not await run_send.owns_conversation(conversation_id, login_user):
+        return UnAuthorizedError.return_resp()
+    return resp_200(data=await run_send.queue_position(conversation_id))
+
+
+@router.get("/conversations/{conversation_id}/files/{file_id}/url")
+async def conversation_file_url(conversation_id: str, file_id: str, login_user=LoginUserDep):
+    """F004 (AC-24, AC-28): fresh link to a file of the conversation. Owner only.
+
+    Covers a file the current run announced with a ``file`` event before any
+    message row carries it; other files are answered from the stored rows.
+    """
+    from ...domain.services import run_files
+
+    if not await run_send.owns_conversation(conversation_id, login_user):
+        return UnAuthorizedError.return_resp()
+    return resp_200(data={"url": await run_files.resolve_run_file_url(conversation_id, file_id, login_user)})
+
+
+@router.post("/conversations/{conversation_id}/stop")
+async def stop_conversation(conversation_id: str, login_user=LoginUserDep):
+    """F004: stop the run that holds the conversation (AC-29). Owner only.
+
+    Works for a direct answer and for deep research, on any node. Returns
+    ``{run_id, status, unread_messages}``: ``stopping`` (the run ends within
+    about a second and writes ``run_stopped``), ``stopped`` (it was waiting for
+    an answer or still queued and is ended now), ``expired`` or ``idle``
+    (nothing to stop).
+
+    A stopped run starts no relay run. ``unread_messages`` (``[{message_id,
+    text, files}]``) are the messages sent during the run that it never read;
+    the client puts their text back into the input box. For ``stopped`` they are
+    in this response and in the ``run_stopped`` event; for ``stopping`` the list
+    here is empty and the run's ``run_stopped`` event carries them.
+    """
+    if not await run_send.owns_conversation(conversation_id, login_user):
+        return UnAuthorizedError.return_resp()
+    return resp_200(data=await run_send.stop_conversation_run(conversation_id))

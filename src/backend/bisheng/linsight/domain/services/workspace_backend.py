@@ -65,6 +65,7 @@ from loguru import logger
 from minio.error import S3Error
 
 from bisheng.common.services.failure_context import FailureContextAdapter
+from bisheng.linsight.domain.services import file_events
 
 
 def _is_missing_key(exc: S3Error) -> bool:
@@ -474,6 +475,122 @@ def _binary_read_result(rel_path: str, data: bytes) -> ReadResult:
     )
 
 
+def workspace_prefix_for(svid: str) -> str:
+    """The legacy per-session-version workspace prefix ``workspace/{svid}``."""
+    return f"{WORKSPACE_PREFIX}/{svid}"
+
+
+def _normalize_prefix(prefix: str | None) -> str:
+    """Strip surrounding slashes so ``workspace/x/`` and ``/workspace/x`` agree."""
+    return (prefix or "").strip().strip("/")
+
+
+async def copy_workspace_prefix(
+    minio,
+    src_prefix: str,
+    dst_prefix: str,
+    zones: tuple[str, ...] = (OUTPUT_DIR, UPLOADS_DIR, LARGE_TOOL_RESULTS_DIR),
+    only_if_empty: bool = True,
+    replace_older: bool = False,
+) -> int:
+    """Server-side copy of one workspace's ``zones`` (plus ``manifest.json``) from
+    ``src_prefix`` to ``dst_prefix`` (F004: prefix-to-prefix seeding).
+
+    Prefixes are object-key prefixes such as ``workspace/{svid}`` or
+    ``workspace/{conversation_id}``. ``scratch/`` is never copied (intermediate
+    state, not a deliverable). The copy is server-side (no bytes through the app).
+
+    ``only_if_empty`` (default) keeps the historical idempotency rule: when the
+    destination already holds any object the copy is skipped entirely. With
+    ``only_if_empty=False`` the copy merges instead. What happens to an object
+    that already exists at the destination depends on ``replace_older``:
+
+    * ``False`` (default): it is never overwritten. For a source that holds
+      OLDER files than the destination (the workspace of an earlier version).
+    * ``True``: it is replaced when the source object was modified after it
+      (``last_modified`` of the object store, so one clock decides). For a
+      source that may hold NEWER files of the same name: the attachments a run
+      ingested, merged into a workspace earlier runs already wrote to. An
+      object the destination got later (an earlier merge of the same source, a
+      write of the agent, a newer upload of another run) is kept. An object
+      whose modification time the store does not report is replaced.
+      ``manifest.json`` is not listed, so it follows the ``False`` rule.
+
+    Best-effort: a per-object failure is logged and skipped so a partial source
+    workspace never blocks the run. Returns the number of objects copied.
+    """
+    src = _normalize_prefix(src_prefix)
+    dst = _normalize_prefix(dst_prefix)
+    if not src or not dst or src == dst:
+        return 0
+
+    def _copy() -> int:
+        bucket = minio.bucket
+        src_root = f"{src}/"
+        dst_root = f"{dst}/"
+
+        # Destination key -> its modification time (None when the store gives none).
+        existing: dict[str, object] = {}
+        for obj in minio.minio_client_sync.list_objects(bucket, prefix=dst_root, recursive=True):
+            if only_if_empty:
+                # Already seeded, or the run has started writing.
+                return 0
+            existing[obj.object_name] = getattr(obj, "last_modified", None)
+
+        # (key, size, modification time, listed)
+        src_keys: list[tuple[str, int, object, bool]] = []
+        for zone in zones:
+            prefix = f"{src_root}{zone}/"
+            for obj in minio.minio_client_sync.list_objects(bucket, prefix=prefix, recursive=True):
+                src_keys.append(
+                    (obj.object_name, int(getattr(obj, "size", 0) or 0), getattr(obj, "last_modified", None), True)
+                )
+        # manifest.json is a top-level pointer file (not under a zone).
+        src_keys.append((f"{src_root}{MANIFEST_NAME}", 0, None, False))
+
+        copied = 0
+        replaced = 0
+        copied_bytes = 0
+        for src_key, size, src_modified, listed in src_keys:
+            dst_key = dst_root + src_key[len(src_root) :]
+            if dst_key in existing:
+                if not (replace_older and listed):
+                    continue
+                dst_modified = existing[dst_key]
+                if src_modified is not None and dst_modified is not None and src_modified <= dst_modified:
+                    # The destination already has this copy, or something newer.
+                    continue
+                replaced += 1
+            try:
+                minio.copy_object_sync(
+                    source_bucket=bucket, source_object=src_key, dest_bucket=bucket, dest_object=dst_key
+                )
+                copied += 1
+                copied_bytes += size
+            except S3Error as e:
+                # A missing manifest/object is expected (NoSuchKey) — skip quietly;
+                # surface anything else but keep going (best-effort seeding).
+                if not _is_missing_key(e):
+                    logger.warning("workspace seed: copy failed for {}: {}", src_key, e)
+            except Exception as e:
+                logger.warning("workspace seed: copy failed for {}: {}", src_key, e)
+        if copied:
+            # Duplicating uploads/ per turn is a deliberate trade-off (the code
+            # interpreter needs the originals across turns); log the volume so the
+            # accumulation is visible to ops instead of silently growing.
+            logger.info(
+                "workspace seed: copied {} object(s) ({} replaced an older one), {} KiB from {} to {}",
+                copied,
+                replaced,
+                copied_bytes // 1024,
+                src,
+                dst,
+            )
+        return copied
+
+    return await asyncio.to_thread(_copy)
+
+
 async def seed_workspace_from_previous(
     minio,
     src_svid: str,
@@ -488,77 +605,42 @@ async def seed_workspace_from_previous(
 
     Each version's workspace is cumulative (a turn seeds from its immediate
     predecessor, which already inherited *its* predecessor), so copying just the
-    one prior turn carries the whole conversation forward. ``scratch/`` is
-    intentionally skipped (intermediate state, not a deliverable). The copy is
-    server-side (no bytes through the app). Best-effort: it no-ops when the
-    destination already has content (idempotent on re-runs) and a per-object
-    failure is logged and skipped so a partial prior workspace never blocks the
-    new turn. Returns the number of objects copied.
+    one prior turn carries the whole conversation forward. Kept as the
+    svid-addressed entry point; the work is done by ``copy_workspace_prefix``.
+    No-ops when the destination already has content (idempotent on re-runs).
+    Returns the number of objects copied.
     """
     if not src_svid or not dst_svid or src_svid == dst_svid:
         return 0
-
-    def _copy() -> int:
-        bucket = minio.bucket
-        src_root = f"{WORKSPACE_PREFIX}/{src_svid}/"
-        dst_root = f"{WORKSPACE_PREFIX}/{dst_svid}/"
-
-        # Idempotency: skip if the new turn's workspace already has any object
-        # (already seeded, or the turn has started writing).
-        for _ in minio.minio_client_sync.list_objects(bucket, prefix=dst_root, recursive=True):
-            return 0
-
-        src_keys: list[tuple[str, int]] = []
-        for zone in zones:
-            prefix = f"{WORKSPACE_PREFIX}/{src_svid}/{zone}/"
-            for obj in minio.minio_client_sync.list_objects(bucket, prefix=prefix, recursive=True):
-                src_keys.append((obj.object_name, int(getattr(obj, "size", 0) or 0)))
-        # manifest.json is a top-level pointer file (not under a zone).
-        src_keys.append((f"{WORKSPACE_PREFIX}/{src_svid}/{MANIFEST_NAME}", 0))
-
-        copied = 0
-        copied_bytes = 0
-        for src_key, size in src_keys:
-            dst_key = dst_root + src_key[len(src_root) :]
-            try:
-                minio.copy_object_sync(
-                    source_bucket=bucket, source_object=src_key, dest_bucket=bucket, dest_object=dst_key
-                )
-                copied += 1
-                copied_bytes += size
-            except S3Error as e:
-                # A missing manifest/object is expected (NoSuchKey) — skip quietly;
-                # surface anything else but keep going (best-effort seeding).
-                if not _is_missing_key(e):
-                    logger.warning(f"workspace seed: copy failed for {src_key}: {e}")
-            except Exception as e:
-                logger.warning(f"workspace seed: copy failed for {src_key}: {e}")
-        if copied:
-            # Duplicating uploads/ per turn is a deliberate trade-off (the code
-            # interpreter needs the originals across turns); log the volume so the
-            # accumulation is visible to ops instead of silently growing.
-            logger.info(
-                "workspace seed: copied {} object(s), {} KiB from {} to {}",
-                copied,
-                copied_bytes // 1024,
-                src_svid[:8],
-                dst_svid[:8],
-            )
-        return copied
-
-    return await asyncio.to_thread(_copy)
+    return await copy_workspace_prefix(
+        minio, src_prefix=workspace_prefix_for(src_svid), dst_prefix=workspace_prefix_for(dst_svid), zones=zones
+    )
 
 
 class WorkspaceBackend(FilesystemBackend):
     """MinIO-truth + write-through-cache backend for one linsight session.
 
     Args:
-        svid: session-version id; scopes the MinIO prefix and tenant isolation.
+        svid: session-version id; compatibility entry point that addresses the
+            legacy prefix ``workspace/{svid}``.
         minio: a ``MinioStorage`` instance (see ``get_minio_storage()``).
+        workspace_prefix: the object-key prefix this backend reads and writes
+            under (F004: ``workspace/{conversation_id}`` for a conversation
+            workspace). Wins over ``svid`` when both are given.
         file_dir: local cache directory (per-task; safe to clear).
     """
 
-    def __init__(self, svid: str, minio, file_dir: str, citation_scope=None) -> None:
+    def __init__(
+        self,
+        svid: str | None = None,
+        minio=None,
+        file_dir: str | None = None,
+        citation_scope=None,
+        *,
+        workspace_prefix: str | None = None,
+        create_cache_dir: bool = True,
+        on_output_file=None,
+    ) -> None:
         if not _DEEPAGENTS_AVAILABLE:
             # TODO(Wave2): align with deepagents FilesystemBackend once the
             # dependency is installed in this environment.
@@ -568,7 +650,17 @@ class WorkspaceBackend(FilesystemBackend):
             )
         # FilesystemBackend roots relative paths at cwd; we always pass absolute
         # cache paths so its base init is a no-op for our purposes.
-        self.svid = str(svid)
+        prefix = _normalize_prefix(workspace_prefix)
+        if not prefix and svid:
+            prefix = workspace_prefix_for(str(svid))
+        if not prefix:
+            raise ValueError("WorkspaceBackend needs svid or workspace_prefix")
+        if file_dir is None:
+            raise ValueError("WorkspaceBackend needs file_dir")
+        self.workspace_prefix = prefix
+        # ``svid`` stays a plain identifier for logs and existing callers; for a
+        # prefix-addressed backend it is the last prefix segment.
+        self.svid = str(svid) if svid else prefix.rsplit("/", 1)[-1]
         self.minio = minio
         self.file_dir = file_dir
         # F069 P1: the run's ``LinsightCitationScope``. While it is active
@@ -583,7 +675,14 @@ class WorkspaceBackend(FilesystemBackend):
         # or delete during the run is visible. ``skill_row_enabled`` is a test seam.
         self.skill_snapshot: list[dict] | None = None
         self.skill_row_enabled = None
-        os.makedirs(self.file_dir, exist_ok=True)
+        # F004 T055: called with the ``data`` of a ``file`` event after a file
+        # under ``output/`` was stored (``file_events.FileEventRelay``). It may be
+        # called from a worker thread and must return at once. None = no events.
+        self.on_output_file = on_output_file
+        # F004 决策 10: a ``direct`` run passes False so a run that touches no file
+        # creates no local directory. ``_cache_write`` creates parents on demand.
+        if create_cache_dir:
+            os.makedirs(self.file_dir, exist_ok=True)
 
     # -- key / cache helpers ------------------------------------------------
     def _ws_rel(self, path: str) -> str:
@@ -597,9 +696,44 @@ class WorkspaceBackend(FilesystemBackend):
             logger.info("workspace path: folded executor host path {} -> {}", path, rel)
         return rel
 
+    # -- file events (F004 T055) ----------------------------------------------
+    def notify_output_file(self, rel_path: str, size: int | None, source: str) -> None:
+        """Report one stored file. Only ``output/`` is reported; never raises.
+
+        Called after the object store accepted the write, so a reader of the
+        event can fetch the file at once.
+        """
+        callback = self.on_output_file
+        if callback is None or not file_events.is_deliverable_path(rel_path):
+            return
+        try:
+            callback(file_events.file_event_data(self.workspace_prefix, rel_path, size, source))
+        except Exception:
+            # The file is stored. Losing its live notice must not fail the write;
+            # the reconcile at the end of the run reports it.
+            logger.exception("workspace file event failed prefix={} path={}", self.workspace_prefix, rel_path)
+
+    def output_listing(self) -> dict[str, tuple]:
+        """``output/`` as the object store has it: path -> ``(size, etag or last_modified)``.
+
+        Raises when the object store cannot be listed; the caller decides.
+        """
+        key_prefix = f"{self.workspace_prefix}/"
+        listing: dict[str, tuple] = {}
+        objects = self.minio.minio_client_sync.list_objects(
+            self._bucket(), prefix=key_prefix + file_events.OUTPUT_ZONE, recursive=True
+        )
+        for obj in objects:
+            name = obj.object_name
+            if getattr(obj, "is_dir", False) or not name.startswith(key_prefix):
+                continue
+            mark = getattr(obj, "etag", None) or getattr(obj, "last_modified", None)
+            listing[name[len(key_prefix) :]] = (int(getattr(obj, "size", 0) or 0), str(mark) if mark else None)
+        return listing
+
     def _object_key(self, rel_path: str) -> str:
         """Map a workspace-relative path to its MinIO object key."""
-        return f"{WORKSPACE_PREFIX}/{self.svid}/{rel_path}"
+        return f"{self.workspace_prefix}/{rel_path}"
 
     def _cache_path(self, rel_path: str) -> Path:
         return Path(self.file_dir) / rel_path
@@ -939,6 +1073,7 @@ class WorkspaceBackend(FilesystemBackend):
         # cache first (fast local), then write-through to MinIO (truth).
         self._cache_write(rel, data)
         self._minio_put_sync(rel, data)
+        self.notify_output_file(rel, len(data), file_events.SOURCE_WRITE)
         return WriteResult(path="/" + rel)
 
     # -- read ---------------------------------------------------------------
@@ -982,7 +1117,7 @@ class WorkspaceBackend(FilesystemBackend):
     # -- ls (authoritative from MinIO) --------------------------------------
     def ls(self, path: str = "") -> LsResult:
         rel_prefix = self._ws_rel(path) if path else ""
-        object_prefix = f"{WORKSPACE_PREFIX}/{self.svid}/"
+        object_prefix = f"{self.workspace_prefix}/"
         if rel_prefix:
             # Terminate the prefix at a directory boundary. Without the slash,
             # ``ls("/uploads/年报")`` also matches a sibling ``年报备份/`` — harmless
@@ -990,7 +1125,7 @@ class WorkspaceBackend(FilesystemBackend):
             # sibling directories in there.
             object_prefix += rel_prefix.rstrip("/") + "/"
         entries: list[FileInfo] = []
-        key_prefix = f"{WORKSPACE_PREFIX}/{self.svid}/"
+        key_prefix = f"{self.workspace_prefix}/"
         try:
             objects = self.minio.minio_client_sync.list_objects(self._bucket(), prefix=object_prefix, recursive=True)
             for obj in objects:
@@ -1008,7 +1143,7 @@ class WorkspaceBackend(FilesystemBackend):
                     )
                 )
         except Exception as e:
-            logger.exception("workspace ls failed for svid=%s prefix=%s", self.svid, path)
+            logger.exception("workspace ls failed for prefix={} path={}", self.workspace_prefix, path)
             if type(e).__module__.startswith(("urllib3", "aiohttp", "httpx", "requests")):
                 FailureContextAdapter.capture(e, category="object_storage", service="minio", operation="read_file")
             payload = {"error": "Workspace listing failed."}
@@ -1020,7 +1155,7 @@ class WorkspaceBackend(FilesystemBackend):
     def _file_entry(self, rel_path: str) -> LsResult:
         """The one object stored exactly at ``rel_path``, in ``ls`` entry shape (empty if none)."""
         key = self._object_key(rel_path.rstrip("/"))
-        key_prefix = f"{WORKSPACE_PREFIX}/{self.svid}/"
+        key_prefix = f"{self.workspace_prefix}/"
         try:
             for obj in self.minio.minio_client_sync.list_objects(self._bucket(), prefix=key, recursive=False):
                 if obj.object_name != key:
@@ -1088,6 +1223,7 @@ class WorkspaceBackend(FilesystemBackend):
         new_data = self._canonicalize_citation_bytes(rel, new_text.encode("utf-8"))
         self._cache_write(rel, new_data)
         self._minio_put_sync(rel, new_data)
+        self.notify_output_file(rel, len(new_data), file_events.SOURCE_EDIT)
         return EditResult(path="/" + rel, occurrences=occurrences)
 
     # -- glob ---------------------------------------------------------------
@@ -1130,7 +1266,7 @@ class WorkspaceBackend(FilesystemBackend):
         ls_res = self.ls(base)
         if ls_res.error is not None:
             return GlobResult(error=ls_res.error)
-        prefix = f"/{WORKSPACE_PREFIX}/{self.svid}/"
+        prefix = f"/{self.workspace_prefix}/"
         matches: list[FileInfo] = []
         for entry in ls_res.entries or []:
             rel = entry["path"]
@@ -1156,7 +1292,7 @@ class WorkspaceBackend(FilesystemBackend):
             if file_res.error is not None:
                 return GrepResult(error=file_res.error)
             entries = file_res.entries or []
-        prefix = f"/{WORKSPACE_PREFIX}/{self.svid}/"
+        prefix = f"/{self.workspace_prefix}/"
         matches: list = []
 
         terms = _grep_terms(pattern)
@@ -1245,6 +1381,7 @@ class WorkspaceBackend(FilesystemBackend):
             object_name=self._object_key(rel),
             file=data,
         )
+        self.notify_output_file(rel, len(data), file_events.SOURCE_WRITE)
         return WriteResult(path="/" + rel)
 
     async def aread(self, file_path: str, offset: int = 0, limit: int = 2000) -> ReadResult:

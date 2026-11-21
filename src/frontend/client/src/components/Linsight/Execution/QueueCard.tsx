@@ -54,7 +54,8 @@ function QueueBalanceIcon({ size = 16, className }: { size?: number; className?:
     );
 }
 
-export function QueueCard({ position, onCancel }: { position: number; onCancel: () => void }) {
+/** `onCancel` absent: the carrier has its own stop control (the conversation page's input). */
+export function QueueCard({ position, onCancel }: { position: number; onCancel?: () => void }) {
     const localize = useLocalize();
     return (
         <div className="my-2 flex items-center gap-3 rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
@@ -65,15 +66,17 @@ export function QueueCard({ position, onCancel }: { position: number; onCancel: 
                     {localize('com_linsight_queue_position', { 0: String(position) })}
                 </span>
             </p>
-            <Button
-                color="default"
-                variant="outlined"
-                size="small"
-                className="shrink-0"
-                onClick={onCancel}
-            >
-                {localize('com_linsight_queue_cancel')}
-            </Button>
+            {onCancel && (
+                <Button
+                    color="default"
+                    variant="outlined"
+                    size="small"
+                    className="shrink-0"
+                    onClick={onCancel}
+                >
+                    {localize('com_linsight_queue_cancel')}
+                </Button>
+            )}
         </div>
     );
 }

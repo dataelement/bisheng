@@ -44,7 +44,30 @@ from bisheng.linsight.domain.services import workbench_impl
 from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
 from bisheng.linsight.domain.task_exec import LinsightWorkflowTask
 
+
 TENANT_ID = 3
+
+
+@pytest.fixture(autouse=True)
+def run_state_redis(monkeypatch: pytest.MonkeyPatch):
+    """The run scope of every execution keeps its lease, driver lock and events in Redis."""
+    import fakeredis.aioredis
+
+    from bisheng.workstation.domain.services.run_dispatch import RunDispatchService
+
+    redis = fakeredis.aioredis.FakeRedis()
+
+    async def _build_dispatch(_redis=None, clock=None):
+        return RunDispatchService(
+            redis,
+            **({"clock": clock} if clock is not None else {}),
+            enqueue_relay=AsyncMock(),
+            enqueue_item=AsyncMock(),
+        )
+
+    monkeypatch.setattr(te, "_run_redis", AsyncMock(return_value=redis))
+    monkeypatch.setattr(te, "build_run_dispatch", _build_dispatch)
+    return redis
 
 
 @pytest.fixture(autouse=True)

@@ -22,9 +22,8 @@ from bisheng.memory.domain.services import metrics as m
 from bisheng.memory.domain.services.activity import MemoryActivity
 from bisheng.memory.domain.services.factory import get_metrics, get_resident_service
 from bisheng.memory.domain.services.gate import MemoryGate
-from bisheng.memory.domain.services.redaction import is_memory_tool, redact_tool_event, split_reserved_tools
+from bisheng.memory.domain.services.redaction import is_memory_tool, redact_tool_event
 from bisheng.memory.domain.services.resident import SCENE_CLASS_CHAT, ResidentBlock
-from bisheng.memory.domain.services.tools import build_memory_tools
 from bisheng.memory.domain.services.turn_record import TurnRecordService
 
 MemoryRegister = Callable[[str], Awaitable[None]]
@@ -40,13 +39,6 @@ async def register_session(memory_register: MemoryRegister | None, chat_id: str 
         await memory_register(chat_id)
     except Exception:
         logger.exception("memory: registering daily chat {} failed", chat_id)
-
-
-def with_resident(sys_prompt: str | None, resident_text: str) -> str | None:
-    """Append the resident block after the system prompt (it is background, not instructions)."""
-    if not resident_text:
-        return sys_prompt
-    return f"{sys_prompt}\n\n{resident_text}" if sys_prompt else resident_text
 
 
 # ---- tool event redaction (decision 10): by tool name, whatever the turn's state ----
@@ -77,17 +69,24 @@ class DailyMemoryTurn:
         self.block: ResidentBlock | None = None
         # True on the login-state path (the endpoint passed memory_register).
         self.registered = False
+        # True when this execution continues a turn that an earlier execution opened
+        # (a unified run resumed after ask_user): the summary row already exists.
+        self.continued = False
         self._last_signal: dict | None = None
 
     @property
     def enabled(self) -> bool:
         return self.ctx is not None
 
-    async def start(self, registered: bool, actor_user_id: int | None = None) -> None:
+    async def start(self, registered: bool, actor_user_id: int | None = None, turn_id: str | None = None) -> None:
         """Enablement check and a fresh ``turn_id`` (only on the login-state path).
 
         ``actor_user_id`` is the logged-in user of this request: a chat registered
         to someone else never resolves for them, even if they know its chat_id.
+
+        ``turn_id`` (F004): the turn an earlier execution of the same run opened.
+        The resumed execution keeps it, so the records of both executions are
+        bound to one answer row and no second summary row is written.
         """
         self.registered = registered
         if not registered:
@@ -97,6 +96,9 @@ class DailyMemoryTurn:
         except Exception:
             logger.exception("memory: resolving daily chat {} failed", self.chat_id)
             self.ctx = None
+        if self.ctx is not None and turn_id:
+            self.ctx.turn_id = turn_id
+            self.continued = True
 
     async def _count_failure(self, metric: str) -> None:
         try:
@@ -115,6 +117,8 @@ class DailyMemoryTurn:
             self.block = None
             await self._count_failure(m.INJECT_FAILED)
         injected = self.block is not None and bool(self.block.text)
+        if self.continued:
+            return self.block.text if injected else ""
         try:
             await TurnRecordService.add_summary(
                 self.ctx,
@@ -126,17 +130,21 @@ class DailyMemoryTurn:
             logger.exception("memory: writing the turn summary failed for chat {}", self.chat_id)
         return self.block.text if injected else ""
 
-    def tools(self, tools: list) -> list:
-        """The turn's tool list plus the two memory tools; ``memory_`` names are reserved."""
+    def wiring(self, resident_text: str = ""):
+        """Tools and system-message text for the unified agent factory, or None when memory is off.
+
+        F004 T059: the tools and the text are built by ``agent_factory.wire_memory``,
+        the same function deep research uses (``LinsightMemoryRound``).
+        """
         if not self.enabled:
-            return tools
+            return None
+        from bisheng.linsight.domain.services import agent_factory
+
         try:
-            memory_tools = build_memory_tools(self.ctx)
+            return agent_factory.wire_memory(self.ctx, resident_text=resident_text)
         except Exception:
-            logger.exception("memory: building memory tools failed for chat {}", self.chat_id)
-            return tools
-        kept, _dropped = split_reserved_tools(tools)
-        return [*kept, *memory_tools]
+            logger.exception("memory: wiring memory into the run failed for chat {}", self.chat_id)
+            return None
 
     # ---- stream signal (decision 15): flags only, never item text --------------------
     @property

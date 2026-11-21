@@ -7,7 +7,30 @@ import { QueryKeys } from '~/types/chat';
 import { useDeleteConversationMutation } from '~/hooks/queries/data-provider';
 import { useConfirm } from '~/Providers';
 import { useLocalize, useNewConvo } from '~/hooks';
-import { closeChatStream } from '~/hooks/useAiChat';
+import { stopConversationRun } from '~/api/runApi';
+import { useRunStore } from '~/store/runStore';
+
+/** How long the delete waits for the stop request before it goes ahead. */
+export const STOP_BEFORE_DELETE_TIMEOUT_MS = 3000;
+
+/**
+ * Ask the backend to stop the run of a conversation and wait for the answer,
+ * at most `STOP_BEFORE_DELETE_TIMEOUT_MS`. A failed or slow stop is ignored:
+ * the delete goes ahead anyway.
+ */
+async function stopRunBeforeDelete(conversationId: string): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, STOP_BEFORE_DELETE_TIMEOUT_MS);
+  });
+  try {
+    await Promise.race([stopConversationRun(conversationId).then(() => undefined), timeout]);
+  } catch {
+    // The stop failed: delete anyway.
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 /**
  * Confirm-then-delete for a conversation, shared by the sidebar convo menu and
@@ -44,10 +67,11 @@ export function useDeleteConversationConfirm() {
         return;
       }
 
-      // A turn keeps streaming after you navigate away from its conversation, so
-      // deleting one has to stop it explicitly — the switch used to abort it as a
-      // side effect, and that side effect is gone on purpose.
-      closeChatStream(conversationId);
+      // A run keeps going after its page is left (F004): stop it, or it goes on
+      // writing into the deleted conversation. An idle conversation answers "idle".
+      // The stop goes first: after the delete the backend no longer lets this
+      // user stop the run of the conversation.
+      await stopRunBeforeDelete(conversationId);
 
       const messages = queryClient.getQueryData<TMessage[]>([QueryKeys.messages, conversationId]);
       const thread_id = messages?.[messages.length - 1]?.thread_id;
@@ -58,6 +82,9 @@ export function useDeleteConversationConfirm() {
         {
           onError: showApiError,
           onSuccess: () => {
+            // Drop the run state of the deleted conversation, so no page keeps
+            // showing (or following) its run.
+            useRunStore.getState().resetConversation(conversationId);
             if (currentConvoId === conversationId || currentConvoId === 'new') {
               newConversation();
               navigate('/c/new', { replace: true });

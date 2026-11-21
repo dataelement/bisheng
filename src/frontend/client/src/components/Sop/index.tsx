@@ -1,15 +1,12 @@
 // @ts-strict-ignore
-import { ChatErrorCard } from '~/components/ChatErrorCard';
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useActivate } from 'react-activation';
 import { getCaseDetail, getLinsightSessionVersionList, getLinsightTaskList } from '~/api/linsight';
 import { useGetLinsightToolList, useGetOrgToolList, useGetPersonalToolList } from '~/hooks/queries/data-provider';
-import { useLinsightManager, useLinsightSubmit } from '~/hooks/useLinsightManager';
-import { useSessionPresence } from '~/hooks/useSessionPresence';
+import { useLinsightManager } from '~/hooks/useLinsightManager';
+import { useOpenDeepResearchChat } from '~/components/Nav/NewChat';
 import { formatTime } from '~/utils';
-import { TaskModeChatInput } from '~/components/Linsight/Input/TaskModeChatInput';
-import Landing from '~/components/Chat/Landing';
 import { ExecutionFlow } from '~/components/Linsight/Execution/ExecutionFlow';
 import { useArtifactsPanel } from '~/components/Linsight/Artifacts/useArtifactsPanel';
 import { LoadingIcon } from '../ui/icon/Loading';
@@ -23,15 +20,20 @@ export default function SopPage({ id = '', vid = '', shareToken = '' }) {
     // 兼容历史链接 case开头
     const sopId = conversationId ? (conversationId.match(/case(\d+)/)?.[1] || '') : sid; // Compatible with historical cases 
 
-    const { loading, versionId, setVersionId, switchVersion, versions, setVersions } = useLinsightData({ conversationId, sopId, vid, shareToken });
-    // Department concurrency: one page lease for this task page. A share page
-    // (`vid`) only displays somebody else's task and must not take a slot.
-    const presence = useSessionPresence(conversationId === 'new' ? '' : conversationId, {
-        disabled: Boolean(shareToken || vid),
-    });
-    const [isLoading, error, pendingSubmitFailure] = useLinsightSubmit(versionId, setVersionId, setVersions, presence.ensureLeaseId)
-    const { getLinsight } = useLinsightManager()
+    const { loading, versionId, switchVersion, versions } = useLinsightData({ conversationId, sopId, vid, shareToken });
     const artifactsPanel = useArtifactsPanel(versionId);
+    // F004 (decision 11): this page only shows stored tasks. A new task starts
+    // on the conversation page with deep research turned on.
+    const isLanding = !sopId && !vid && (!conversationId || conversationId === 'new');
+    const openDeepResearchChat = useOpenDeepResearchChat();
+    useEffect(() => {
+        if (isLanding) openDeepResearchChat();
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- run on entering the landing only
+    }, [isLanding]);
+    useActivate(() => {
+        if (isLanding) openDeepResearchChat();
+    });
+    if (isLanding) return null;
 
     return (
         <div className='relative h-full bg-white'>
@@ -41,7 +43,6 @@ export default function SopPage({ id = '', vid = '', shareToken = '' }) {
                 </div>
             }
             <Header
-                isLoading={isLoading}
                 chatId={conversationId}
                 setVersionId={switchVersion}
                 versionId={versionId}
@@ -50,38 +51,13 @@ export default function SopPage({ id = '', vid = '', shareToken = '' }) {
                 onOpenWorkspace={artifactsPanel.openWorkspace}
             />
 
-            {versionId === 'new' && !sopId ? (
-                /* F035 Track H: fresh-task landing — unified with the daily
-                   landing. Same slogan (Landing) + the daily AiChatInput in
-                   task mode (extra "添加技能" entry), no blue gradient. */
-                <div className='w-full h-[calc(100vh-68px)] overflow-y-auto'>
-                    <div className='flex flex-col min-h-full pt-[20vh] pb-12'>
-                        <div className='shrink-0'>
-                            <Landing isNew />
-                        </div>
-                        <div className='w-full max-w-[800px] mx-auto px-3 touch-mobile:max-w-full shrink-0 py-3'>
-                            {pendingSubmitFailure && <ChatErrorCard failureInfo={pendingSubmitFailure.failureInfo} errorCode={pendingSubmitFailure.errorCode} description={pendingSubmitFailure.message} hideHint />}
-                            <TaskModeChatInput conversationId={conversationId || 'new'} />
-                        </div>
-                    </div>
-                </div>
-            ) : (
-                /* F035 Track H (P3): new conversational execution view — replaced
-                   the legacy SOPEditor/TaskFlow split panes (removed in P5). */
-                <div className='w-full h-[calc(100vh-68px)]'>
-                    {pendingSubmitFailure && <ChatErrorCard failureInfo={pendingSubmitFailure.failureInfo} errorCode={pendingSubmitFailure.errorCode} description={pendingSubmitFailure.message} hideHint />}
-                    <ExecutionFlow
-                        versionId={versionId}
-                        conversationId={conversationId}
-                        isSharePage={!!(isSharePage || sopId)}
-                        // Historical session opened from the home list keeps a real
-                        // conversationId (a fresh /linsight/new keeps 'new' via
-                        // replaceState), so this marks it read-only — hide the input.
-                        readOnly={!!conversationId && conversationId !== 'new'}
-                        artifactsPanel={artifactsPanel}
-                    />
-                </div>
-            )}
+            <div className='w-full h-[calc(100vh-68px)]'>
+                <ExecutionFlow
+                    versionId={versionId}
+                    isSharePage={!!(isSharePage || sopId)}
+                    artifactsPanel={artifactsPanel}
+                />
+            </div>
         </div>
     );
 }
@@ -135,18 +111,6 @@ export const useLinsightData = ({ vid, sopId, conversationId, shareToken }
             console.error('Failed to load session versions or tasks:', error);
         }
     };
-
-    // KeepAlive restore: when navigating back to /linsight/new, reset stale state
-    // so useLinsightSubmit watches submissionState('new') instead of the old versionId.
-    useActivate(() => {
-        const path = window.location.pathname;
-        if (path.endsWith('/linsight/new') || path.endsWith('/linsight')) {
-            if (versionId !== 'new') {
-                setVersionId('new');
-                setVersions([]);
-            }
-        }
-    });
 
     // 加载会话版本和任务
     useEffect(() => {

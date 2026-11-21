@@ -44,6 +44,7 @@ from test.linsight._memory_doubles import (  # noqa: F401 - pytest fixtures
     turn_rows,
 )
 
+
 MEMORY_TOOL_NAMES = {"memory_write", "memory_search"}
 
 
@@ -318,7 +319,7 @@ def worker(monkeypatch, memory_services, memory_db, task_message, tmp_path):
         monkeypatch.setattr(task, "_managed_resume", _managed.__get__(task))
         monkeypatch.setattr(task, "_restore_tenant_context", AsyncMock(return_value=None))
         for name in (
-            "_seed_workspace_from_previous",
+            "_prepare_run_workspace",
             "_sync_workspace_originals",
             "_update_session_status",
             "_handle_execution_error",
