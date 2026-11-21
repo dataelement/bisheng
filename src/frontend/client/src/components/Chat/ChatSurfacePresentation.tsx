@@ -70,7 +70,7 @@ export function ChatSurfacePresentation({
     canUseTaskMode,
     inviteQuotaBar,
     inviteQuotaDialog,
-    handleSend,
+    handleSend, handleSendAnswer,
     isNew,
     hasMessages,
     activeCitationMessageId,
@@ -256,7 +256,7 @@ export function ChatSurfacePresentation({
                               />
                               <RunClarifyCard
                                 conversationId={shareToken ? "" : conversationId}
-                                onSend={handleSend}
+                                onSend={handleSendAnswer}
                               />
                               {inviteQuotaBar}
                               <AiChatInput

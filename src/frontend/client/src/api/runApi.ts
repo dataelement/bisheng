@@ -21,6 +21,15 @@ const API = {
         `/api/v1/workstation/conversations/${encodeURIComponent(conversationId)}/files/${encodeURIComponent(fileId)}/url`,
 };
 
+/**
+ * Request options of the run calls. The backend answers a business error with
+ * HTTP 200 and an error envelope. Without `skip403Redirect` the response
+ * interceptor sends the whole page to /c/new on a business 403; with it, every
+ * error envelope rejects with the translated message. `showError: false` keeps
+ * the interceptor from showing a toast: the caller decides how to show it.
+ */
+const RUN_REQUEST_OPTIONS = { skip403Redirect: true, showError: false } as const;
+
 /** Path of the endpoint that issues a link to one file of the conversation's run. */
 export function getRunFileUrlPath(conversationId: string, fileId: string): string {
     return API.fileUrl(conversationId, fileId);
@@ -44,7 +53,10 @@ export async function getRunFileUrl(conversationId: string, fileId: string): Pro
  * queue, or null when nothing of the conversation waits there.
  */
 export async function getRunQueuePosition(conversationId: string): Promise<number | null> {
-    const res: { data?: { position?: number | null } } = await http.get(API.queuePosition(conversationId));
+    const res: { data?: { position?: number | null } } = await http.get(
+        API.queuePosition(conversationId),
+        RUN_REQUEST_OPTIONS,
+    );
     const position = res?.data?.position;
     return typeof position === 'number' && position > 0 ? position : null;
 }
@@ -69,13 +81,16 @@ export interface SendRunMessageOptions {
  * two stored row ids, and writes no events. An older backend answers it with
  * SSE text, so the body can be a string; `classifySendResponse`
  * (hooks/unifiedRun.ts) tells the cases apart.
- * A business error rejects through the shared response interceptors.
+ * A business error envelope (for example 12045, or 403) rejects with an error
+ * whose `message` is the translated copy. The request layer shows nothing and
+ * does not redirect; the caller shows the message.
  */
 export async function sendRunMessage(
     payload: Record<string, unknown>,
     options: SendRunMessageOptions = {},
 ): Promise<unknown> {
     return http.post(API.send(), payload, {
+        ...RUN_REQUEST_OPTIONS,
         headers: {
             'Content-Type': 'application/json',
             [RUN_PROTOCOL_HEADER]: RUN_PROTOCOL_V2,
@@ -96,11 +111,14 @@ export interface StopRunResult {
  * Ask the backend to stop the run of a conversation. The run reports the stop
  * through a `run_stopped` event. The messages it never read come back in that
  * event, or here when the run had no live execution (design §7 item 6).
+ * A business error envelope rejects with the translated message; the request
+ * layer shows nothing and does not redirect.
  */
 export async function stopConversationRun(conversationId: string, runId?: string | null): Promise<StopRunResult> {
     const res: { data?: Partial<StopRunResult> } | null = await http.post(
         API.stop(conversationId),
         runId ? { run_id: runId } : {},
+        RUN_REQUEST_OPTIONS,
     );
     const data = res?.data;
     return {

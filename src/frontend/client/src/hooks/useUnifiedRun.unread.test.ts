@@ -23,6 +23,7 @@ jest.mock('~/api/memory', () => ({
 }));
 jest.mock('~/api/request', () => ({ __esModule: true, default: {}, translateApiErrorMessage: () => 'failed' }));
 jest.mock('~/api/linsight', () => ({ getLinsightSessionVersionList: () => Promise.resolve([]) }));
+jest.mock('i18next', () => ({ __esModule: true, default: { t: (key: string) => key } }));
 
 import { useRunStore, type RunEvent } from '~/store/runStore';
 import { handedReturnedIds, rememberHandedReturnedIds } from '~/utils/returnedMessageLog';
@@ -324,5 +325,25 @@ describe('tenant switch off', () => {
         act(() => useRunStore.getState().applyUnreadMessages('c1', [unread('m1', 'one')]));
         expect(result.current.stored).toBe(rows);
         expect(conv().draftReturn).toBeNull();
+    });
+});
+
+describe('a run whose events the page stopped following', () => {
+    it('freezes the answer row with the lost-connection copy', () => {
+        // The history request fails too (for example after a logout).
+        mockGetAgentMessages.mockReturnValue(new Promise(() => undefined));
+        const live = [row('q', true), row('run:r1', false, { liveRunId: 'r1', text: '' })];
+        const { result } = renderPage(live);
+        emit({ type: 'run_started' }, { type: 'text', data: { text: 'so far' } });
+        // What useRunEvents applies when it gives up (no entry id: a local event).
+        act(() => {
+            useRunStore.getState().applyEvent('c1', {
+                type: 'run_failed',
+                run_id: 'r1',
+                data: { code: 0, reason: '', detail: '', connection_lost: true },
+            } as RunEvent);
+        });
+        expect(result.current.unified.isRunning).toBe(false);
+        expect(result.current.stored[1]).toMatchObject({ error: true, errorText: 'workstation.chat.connection_lost' });
     });
 });

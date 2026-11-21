@@ -83,6 +83,11 @@ export interface RunFailedData {
     failure_info?: Record<string, unknown> | null;
     /** A relay run that could not be created gives its messages back (design §7 item 1). */
     unread_messages?: RunUnreadMessage[];
+    /**
+     * Set only by this client, never by the backend: the page gave up following
+     * the run's events (useRunEvents), so it shows the run as "connection lost".
+     */
+    connection_lost?: boolean;
 }
 
 /** `run_stopped`: the user stopped the run; not a failure (design §7 items 2, 6). */

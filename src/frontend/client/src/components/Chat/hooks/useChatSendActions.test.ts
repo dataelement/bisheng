@@ -173,3 +173,29 @@ describe('handleRetryTaskTurn (item 15)', () => {
         expect(accepted).toBe(false);
     });
 });
+
+describe('handleSendAnswer (the question card of a waiting run)', () => {
+    it('sends the answer and leaves the composer draft alone', async () => {
+        emit({ type: 'run_started' });
+        ask();
+        const { result, sendMessage, allowInviteSend, setInputText } = setup();
+        allowInviteSend.mockReturnValue(false);
+        let accepted: unknown;
+        await act(async () => { accepted = await result.current.handleSendAnswer('the second one'); });
+        expect(sendMessage).toHaveBeenCalledWith('the second one', null, { taskMode: true });
+        expect(allowInviteSend).not.toHaveBeenCalled();
+        expect(accepted).toBe(true);
+        expect(setInputText).not.toHaveBeenCalled();
+    });
+
+    it('keeps the gates of the composer when no question waits', async () => {
+        const { result, sendMessage, allowInviteSend, setInputText } = setup();
+        allowInviteSend.mockReturnValue(false);
+        let accepted: unknown;
+        await act(async () => { accepted = await result.current.handleSendAnswer('research this'); });
+        expect(allowInviteSend).toHaveBeenCalledTimes(1);
+        expect(accepted).toBe(false);
+        expect(sendMessage).not.toHaveBeenCalled();
+        expect(setInputText).not.toHaveBeenCalled();
+    });
+});

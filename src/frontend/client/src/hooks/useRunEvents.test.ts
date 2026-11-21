@@ -1,6 +1,14 @@
+import { act, renderHook } from '@testing-library/react';
+import { SSE } from 'sse.js';
+import { prepareBrowserHeaders } from '~/api/request';
+import { useRunStore } from '~/store/runStore';
 import {
     EMPTY_CLOSES_BEFORE_SETTLE,
     followRunEvents,
+    isFinalHttpStatus,
+    MAX_HTTP_FAILURES,
+    openRunEventSource,
+    useRunEvents,
     parseRunEventFrame,
     reconnectDelay,
     RECONNECT_MAX_MS,
@@ -61,6 +69,7 @@ function harness() {
         if (conv.run) conv = reduceRunEvent(conv, { type: 'run_finished', data: {}, run_id: conv.run.runId });
     });
     const onIdle = jest.fn();
+    const onLost = jest.fn();
     const follower = followRunEvents({
         getCursor: () => conv.lastEventId,
         applyEvent: (event: RunEvent, entryId) => {
@@ -69,6 +78,7 @@ function harness() {
         isActive: () => conv.run?.status === 'running' || conv.run?.status === 'waiting',
         settle,
         onIdle,
+        onLost,
         open: (cursor, handlers) => {
             const entry = { cursor, handlers, closed: false };
             opened.push(entry);
@@ -80,7 +90,7 @@ function harness() {
     const send = (index: number, event: Record<string, unknown>, id: string) =>
         opened[index].handlers.onFrame({ data: frame(event), id });
     const runTimer = () => timers.shift()!.fn();
-    return { follower, opened, timers, settle, onIdle, send, runTimer, conv: () => conv };
+    return { follower, opened, timers, settle, onIdle, onLost, send, runTimer, conv: () => conv };
 }
 
 describe('followRunEvents', () => {
@@ -161,5 +171,163 @@ describe('followRunEvents', () => {
         h.opened[0].handlers.onClose(true);
         expect(h.conv().run?.text).toBe('');
         expect(h.timers).toHaveLength(0);
+    });
+});
+
+describe('followRunEvents and HTTP failures', () => {
+    it.each([401, 403, 404])('gives up at once on HTTP %i while the run looks active', (status) => {
+        const h = harness();
+        h.send(0, { type: 'run_started', data: {}, run_id: 'r1' }, '6-0');
+        h.opened[0].handlers.onClose(true, { status });
+        expect(h.follower.isStopped()).toBe(true);
+        expect(h.onLost).toHaveBeenCalledTimes(1);
+        expect(h.onIdle).not.toHaveBeenCalled();
+        expect(h.timers).toHaveLength(0);
+    });
+
+    it('retries a server error, and gives up after too many in a row', () => {
+        expect(isFinalHttpStatus(502)).toBe(false);
+        const h = harness();
+        h.send(0, { type: 'run_started', data: {}, run_id: 'r1' }, '7-0');
+        for (let i = 0; i < MAX_HTTP_FAILURES - 1; i += 1) {
+            h.opened[i].handlers.onClose(true, { status: 502 });
+            expect(h.timers).toHaveLength(1);
+            h.runTimer();
+        }
+        h.opened[MAX_HTTP_FAILURES - 1].handlers.onClose(true, { status: 502 });
+        expect(h.follower.isStopped()).toBe(true);
+        expect(h.onLost).toHaveBeenCalledTimes(1);
+        expect(h.timers).toHaveLength(0);
+    });
+
+    it('counts headers that could not be prepared as an HTTP failure', () => {
+        const h = harness();
+        h.send(0, { type: 'run_started', data: {}, run_id: 'r1' }, '8-0');
+        for (let i = 0; i < MAX_HTTP_FAILURES; i += 1) {
+            if (i > 0) h.runTimer();
+            h.opened[i].handlers.onClose(true, { status: null });
+        }
+        expect(h.onLost).toHaveBeenCalledTimes(1);
+    });
+
+    it('starts the count again after an event arrives', () => {
+        const h = harness();
+        h.send(0, { type: 'run_started', data: {}, run_id: 'r1' }, '9-0');
+        h.opened[0].handlers.onClose(true, { status: 503 });
+        h.runTimer();
+        h.opened[1].handlers.onClose(true, { status: 503 });
+        h.runTimer();
+        h.send(2, { type: 'text', data: { text: 'a' }, run_id: 'r1' }, '9-1');
+        h.opened[2].handlers.onClose(true, { status: 503 });
+        expect(h.follower.isStopped()).toBe(false);
+        expect(h.timers).toHaveLength(1);
+    });
+
+    it('keeps retrying network failures without an HTTP status', () => {
+        const h = harness();
+        h.send(0, { type: 'run_started', data: {}, run_id: 'r1' }, '10-0');
+        for (let i = 0; i < MAX_HTTP_FAILURES + 3; i += 1) {
+            if (i > 0) h.runTimer();
+            h.opened[i].handlers.onClose(true);
+        }
+        expect(h.follower.isStopped()).toBe(false);
+        expect(h.onLost).not.toHaveBeenCalled();
+        expect(h.timers).toHaveLength(1);
+    });
+
+    it('stops as idle, not lost, when the run is no longer active', () => {
+        const h = harness();
+        h.opened[0].handlers.onClose(true, { status: 401 });
+        expect(h.onIdle).toHaveBeenCalledTimes(1);
+        expect(h.onLost).not.toHaveBeenCalled();
+    });
+});
+
+/** A scripted stand-in for sse.js. */
+class FakeSSE {
+    static last: FakeSSE | null = null;
+    headers: Record<string, string>;
+    private listeners: Record<string, Array<(e: unknown) => void>> = {};
+    constructor(_url: string, options: { headers?: Record<string, string> }) {
+        this.headers = options.headers ?? {};
+        FakeSSE.last = this;
+    }
+    addEventListener(type: string, fn: (e: unknown) => void) {
+        (this.listeners[type] ??= []).push(fn);
+    }
+    stream = jest.fn();
+    close = jest.fn();
+    emit(type: string, event: Record<string, unknown>) {
+        for (const fn of this.listeners[type] ?? []) fn(event);
+    }
+    /** What sse.js does when the server answers an HTTP error. */
+    failWith(status: number) {
+        this.emit('error', { responseCode: status });
+        this.emit('readystatechange', { readyState: 2 });
+    }
+}
+
+const mockSSE = SSE as unknown as jest.Mock;
+const mockPrepare = prepareBrowserHeaders as jest.MockedFunction<typeof prepareBrowserHeaders>;
+const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+describe('openRunEventSource', () => {
+    beforeEach(() => {
+        mockSSE.mockImplementation((url: string, options: { headers?: Record<string, string> }) => new FakeSSE(url, options));
+        mockPrepare.mockResolvedValue({});
+    });
+
+    it('reports the HTTP status of a refused connection', async () => {
+        const onClose = jest.fn();
+        openRunEventSource('c1', null, { onFrame: jest.fn(), onClose });
+        await flush();
+        FakeSSE.last!.failWith(401);
+        await flush();
+        expect(onClose).toHaveBeenCalledWith(true, { status: 401 });
+    });
+
+    it('reports a network failure without an HTTP status', async () => {
+        const onClose = jest.fn();
+        openRunEventSource('c1', null, { onFrame: jest.fn(), onClose });
+        await flush();
+        FakeSSE.last!.failWith(0);
+        await flush();
+        expect(onClose).toHaveBeenCalledWith(true, undefined);
+    });
+
+    it('reports headers that could not be prepared', async () => {
+        mockPrepare.mockRejectedValue(new Error('scope'));
+        const onClose = jest.fn();
+        openRunEventSource('c1', null, { onFrame: jest.fn(), onClose });
+        await flush();
+        expect(onClose).toHaveBeenCalledWith(true, { status: null });
+    });
+});
+
+describe('useRunEvents', () => {
+    beforeEach(() => {
+        mockSSE.mockImplementation((url: string, options: { headers?: Record<string, string> }) => new FakeSSE(url, options));
+        mockPrepare.mockResolvedValue({});
+        useRunStore.setState({ conversations: {} });
+    });
+
+    it('shows the run as a lost connection when the event stream answers 401', async () => {
+        act(() => {
+            useRunStore.getState().applySendResult('c1', { run_id: 'r1', disposition: 'started', message_id: 'm1' });
+        });
+        renderHook(() => useRunEvents('c1', true));
+        await act(async () => {
+            await flush();
+        });
+        await act(async () => {
+            FakeSSE.last!.failWith(401);
+            await flush();
+        });
+        const run = useRunStore.getState().conversations.c1?.run;
+        expect(run?.status).toBe('failed');
+        expect(run?.error?.connection_lost).toBe(true);
+        // The lost run moves no cursor and opens no new connection.
+        expect(useRunStore.getState().conversations.c1?.lastEventId ?? null).toBeNull();
+        expect(mockSSE).toHaveBeenCalledTimes(1);
     });
 });

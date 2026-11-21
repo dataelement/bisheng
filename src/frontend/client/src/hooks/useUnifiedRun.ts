@@ -10,6 +10,7 @@
  *   - sends a message with `X-BS-Run-Protocol: 2` and applies the answer;
  *   - asks the backend to stop the run.
  */
+import i18next from 'i18next';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { ChatMessage } from '~/api/chatApi';
 import { getAgentMessages } from '~/api/chatApi';
@@ -110,7 +111,10 @@ async function isRunRecordInProgress(conversationId: string, versionId: string):
 
 /** Localized copy for the failure of a run; '' for a run that did not fail. */
 function failureTextOf(run: RunState): string {
-    return run.status === 'failed' ? translateApiErrorMessage({ status_code: run.error?.code ?? undefined }) : '';
+    if (run.status !== 'failed') return '';
+    // The page gave up following the run's events (useRunEvents).
+    if (run.error?.connection_lost) return String(i18next.t('workstation.chat.connection_lost'));
+    return translateApiErrorMessage({ status_code: run.error?.code ?? undefined });
 }
 
 const REJECTED: UnifiedSendResult = {

@@ -275,7 +275,7 @@ function useChatView(
     allowSend: allowInviteSend,
   } = useTaskInviteQuota(inviteOn);
 
-  const { handleSend, handleRetryTaskTurn } = useChatSendActions({
+  const { handleSend, handleSendAnswer, handleRetryTaskTurn } = useChatSendActions({
     taskMode, canUseTaskMode, conversationId: activeConvoId,
     sendMessage, allowInviteSend, composerIdentity, composerIdentityRef, setInputText,
   });
@@ -495,6 +495,7 @@ function useChatView(
     inviteQuotaBar,
     inviteQuotaDialog,
     handleSend,
+    handleSendAnswer,
     isNew,
     hasMessages,
     activeCitationMessageId,

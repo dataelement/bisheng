@@ -1,6 +1,6 @@
 /**
- * Send entries of the conversation page: the composer's send (also used by the
- * question card of a waiting run) and the retry of a failed deep-research
+ * Send entries of the conversation page: the composer's send, the send of the
+ * question card of a waiting run, and the retry of a failed deep-research
  * turn (F004).
  */
 import { useCallback, type MutableRefObject } from "react";
@@ -39,7 +39,11 @@ export function useChatSendActions({
   composerIdentityRef,
   setInputText,
 }: UseChatSendActionsOptions) {
-  const handleSend = useCallback(
+  /**
+   * Send one message with the gates of the composer: the deep-research toggle
+   * and the invite quota of a new deep-research request. Leaves the draft alone.
+   */
+  const sendGated = useCallback(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see SendMessage
     async (text: string, files?: any[] | null) => {
       const isTaskTurn = taskMode && canUseTaskMode;
@@ -47,25 +51,31 @@ export function useChatSendActions({
       // is not a new deep-research request, so the invite quota is not asked.
       const answering = isRunAwaitingAnswer(useRunStore.getState().conversations[conversationId]?.run);
       if (isTaskTurn && !answering && !allowInviteSend()) return false;
+      return sendMessage(text, files, { taskMode: isTaskTurn });
+    },
+    [taskMode, canUseTaskMode, conversationId, sendMessage, allowInviteSend],
+  );
+
+  /** The composer's send: clears the composer's draft when the message is accepted. */
+  const handleSend = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see SendMessage
+    async (text: string, files?: any[] | null) => {
       // Capture the turn's resources before resetting its composer draft. A
       // `false` result (e.g. the department is full) keeps the draft so the
       // user can send again once a slot frees up.
       const sendingIdentity = composerIdentity;
-      const accepted = await sendMessage(text, files, { taskMode: isTaskTurn });
+      const accepted = await sendGated(text, files);
       if (accepted && composerIdentityRef.current === sendingIdentity) setInputText("");
       return accepted;
     },
-    [
-      taskMode,
-      canUseTaskMode,
-      conversationId,
-      sendMessage,
-      allowInviteSend,
-      composerIdentity,
-      composerIdentityRef,
-      setInputText,
-    ],
+    [sendGated, composerIdentity, composerIdentityRef, setInputText],
   );
+
+  /**
+   * The send of the question card of a waiting run. The answer comes from the
+   * card, not from the composer, so the composer's draft stays as typed.
+   */
+  const handleSendAnswer = useCallback((text: string) => sendGated(text, null), [sendGated]);
 
   /**
    * F004: retry a failed deep-research turn. The turn's question is sent again
@@ -86,5 +96,5 @@ export function useChatSendActions({
     [canUseTaskMode, conversationId, sendMessage, allowInviteSend],
   );
 
-  return { handleSend, handleRetryTaskTurn };
+  return { handleSend, handleSendAnswer, handleRetryTaskTurn };
 }

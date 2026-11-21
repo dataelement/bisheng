@@ -9,6 +9,10 @@
  * This module therefore reads a closed connection like this:
  *   - the store says no run is active        → idle, stay disconnected;
  *   - the connection failed (network)        → reconnect with `Last-Event-ID`;
+ *   - the server answered an HTTP error      → a 4xx (except 408/429) is final;
+ *     other HTTP failures are retried, at most `MAX_HTTP_FAILURES` in a row.
+ *     When the follower gives up, the run is settled locally as failed with
+ *     "connection lost" (`onLost`), so the page does not stay "running";
  *   - it closed cleanly but the store still says "running" → the terminal
  *     event was missed (for example the reader stopped after a `resync` of a
  *     run that had already ended). Reconnect once; when the next connection
@@ -58,6 +62,14 @@ export function reconnectDelay(attempt: number): number {
     return Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** (n - 1));
 }
 
+/** HTTP failures in a row (no event, no clean close between them) before the follower gives up. */
+export const MAX_HTTP_FAILURES = 3;
+
+/** True when an HTTP status says that trying again cannot help (for example 401 or 403). */
+export function isFinalHttpStatus(status: number | null): boolean {
+    return status !== null && status >= 400 && status < 500 && status !== 408 && status !== 429;
+}
+
 /** Clean closes without any event, while a run looks active, before it is settled. */
 export const EMPTY_CLOSES_BEFORE_SETTLE = 2;
 const EMPTY_CLOSE_RETRY_MS = 300;
@@ -71,10 +83,20 @@ export interface RunEventSource {
     close: () => void;
 }
 
+/** A connection the server refused, or that could not be prepared. */
+export interface RunEventHttpFailure {
+    /** HTTP status of the answer; null when the request headers could not be prepared. */
+    status: number | null;
+}
+
 export interface RunEventSourceHandlers {
     onFrame: (frame: RunEventFrame) => void;
-    /** `failed` is true for a network/HTTP failure, false when the server ended the stream. */
-    onClose: (failed: boolean) => void;
+    /**
+     * `failed` is true for a network/HTTP failure, false when the server ended
+     * the stream. `httpFailure` is set only when the failure was not at the
+     * network level (an HTTP error status, or headers that could not be prepared).
+     */
+    onClose: (failed: boolean, httpFailure?: RunEventHttpFailure) => void;
 }
 
 export interface RunEventFollowerDeps {
@@ -88,13 +110,18 @@ export interface RunEventFollowerDeps {
     open: (cursor: string | null, handlers: RunEventSourceHandlers) => RunEventSource;
     /** Called once when the follower stops because the conversation is idle. */
     onIdle?: () => void;
+    /**
+     * Called once when the follower gives up on a run that still looks active
+     * (a final HTTP status, or too many HTTP failures in a row).
+     */
+    onLost?: () => void;
     schedule?: (fn: () => void, ms: number) => unknown;
     cancel?: (handle: unknown) => void;
 }
 
 export interface RunEventFollower {
     close: () => void;
-    /** True once the follower stopped (idle or closed by the caller). */
+    /** True once the follower stopped (idle, lost, or closed by the caller). */
     isStopped: () => boolean;
 }
 
@@ -109,12 +136,19 @@ export function followRunEvents(deps: RunEventFollowerDeps): RunEventFollower {
     let source: RunEventSource | null = null;
     let timer: unknown = null;
     let failures = 0;
+    let httpFailures = 0;
     let emptyCloses = 0;
 
     const stopIdle = () => {
         stopped = true;
         source = null;
         deps.onIdle?.();
+    };
+
+    const stopLost = () => {
+        stopped = true;
+        source = null;
+        deps.onLost?.();
     };
 
     const connect = () => {
@@ -128,12 +162,13 @@ export function followRunEvents(deps: RunEventFollowerDeps): RunEventFollower {
                 const event = parseRunEventFrame(frame.data, frame.id);
                 if (!event) return;
                 failures = 0;
+                httpFailures = 0;
                 // A resync alone does not prove the run is alive: the reader
                 // also sends one for a run that has already ended.
                 if (event.type !== 'resync') gotEvent = true;
                 deps.applyEvent(event, event.id ?? null);
             },
-            onClose: (failed) => {
+            onClose: (failed, httpFailure) => {
                 if (stopped || closed) return;
                 closed = true;
                 source = null;
@@ -141,11 +176,19 @@ export function followRunEvents(deps: RunEventFollowerDeps): RunEventFollower {
                     stopIdle();
                     return;
                 }
+                if (failed && httpFailure) {
+                    httpFailures += 1;
+                    if (isFinalHttpStatus(httpFailure.status) || httpFailures >= MAX_HTTP_FAILURES) {
+                        stopLost();
+                        return;
+                    }
+                }
                 if (failed) {
                     failures += 1;
                     timer = schedule(connect, reconnectDelay(failures));
                     return;
                 }
+                httpFailures = 0;
                 emptyCloses = gotEvent ? 0 : emptyCloses + 1;
                 if (emptyCloses >= EMPTY_CLOSES_BEFORE_SETTLE) {
                     deps.settle();
@@ -187,17 +230,21 @@ export function openRunEventSource(
     const sse = new SSE(url, { start: false, method: 'GET', headers: runEventRequestHeaders(cursor) });
     let done = false;
     let failed = false;
+    let httpFailure: RunEventHttpFailure | undefined;
     const finish = () => {
         if (done) return;
         done = true;
-        handlers.onClose(failed);
+        handlers.onClose(failed, httpFailure);
     };
     sse.addEventListener('message', (e: MessageEvent & { id?: string | null }) => {
         if (done) return;
         handlers.onFrame({ data: e.data, id: e.id ?? null });
     });
-    sse.addEventListener('error', () => {
+    sse.addEventListener('error', (e: Event & { responseCode?: number }) => {
         failed = true;
+        // sse.js puts the HTTP status on the event; 0 means no answer (network).
+        const status = typeof e?.responseCode === 'number' ? e.responseCode : 0;
+        if (status > 0) httpFailure = { status };
     });
     sse.addEventListener('readystatechange', (e: Event & { readyState?: number }) => {
         // sse.js: 0 = connecting, 1 = open, 2 = closed.
@@ -211,6 +258,7 @@ export function openRunEventSource(
         })
         .catch(() => {
             failed = true;
+            httpFailure = { status: null };
             finish();
         });
     return {
@@ -258,6 +306,16 @@ export function useRunEvents(conversationId: string | null | undefined, enabled:
                 store().applyEvent(cid, { type: 'run_finished', data: {}, run_id: run.runId });
             },
             open: (cursor, handlers) => openRunEventSource(cid, cursor, handlers),
+            onLost: () => {
+                const run = store().conversations[cid]?.run;
+                if (!run) return;
+                // No entry id: the event is local and must not move the cursor.
+                store().applyEvent(cid, {
+                    type: 'run_failed',
+                    data: { code: 0, reason: '', detail: '', connection_lost: true },
+                    run_id: run.runId,
+                });
+            },
         });
         followerRef.current = follower;
         return () => {

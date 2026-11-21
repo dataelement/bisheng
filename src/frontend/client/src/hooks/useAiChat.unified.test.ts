@@ -215,6 +215,23 @@ describe("conversation page", () => {
     expect(result.current.isStreaming).toBe(true);
   });
 
+  it("shows the reason of a business stop failure once", async () => {
+    mockGetAgentMessages.mockResolvedValue([row("101", true, "first")]);
+    mockStopConversationRun.mockRejectedValue(
+      Object.assign(new Error("The conversation no longer exists."), { kind: "business", status_code: 13001, presentation: "none" }),
+    );
+    const { result } = renderChat("c9");
+    await waitFor(() => expect(result.current.messages).toHaveLength(1));
+    emit("c9", { type: "run_started" });
+    mockShowToast.mockClear();
+    await act(async () => {
+      result.current.stopGenerating();
+    });
+    expect(mockShowToast).toHaveBeenCalledTimes(1);
+    expect(mockShowToast).toHaveBeenCalledWith({ message: "The conversation no longer exists.", status: "error" });
+    expect(result.current.isStreaming).toBe(true);
+  });
+
   it("does not repeat a stop failure the request layer already showed", async () => {
     mockGetAgentMessages.mockResolvedValue([row("101", true, "first")]);
     mockStopConversationRun.mockRejectedValue(Object.assign(new Error("denied"), { presentation: "toast" }));
