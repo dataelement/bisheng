@@ -22,10 +22,13 @@ Covers (API behaviour only; the UI items are in e2e-checklist.md):
 - AC-35: deep research gives its first event within 3 seconds when a slot is free.
 - Design decision 13: the config response carries no ``unified_runtime_enabled``.
 - Design §4.3: a request without ``X-BS-Run-Protocol`` is answered with SSE frames.
-- AC-39 / design decision 14 (only with ``E2E_F004_PAT``, a personal access token
-  of the admin with scope ``chat:invoke``): Open API daily chat keeps its SSE
-  contract, a second message on a busy conversation gets its own answer, and an
-  unknown conversation is HTTP 404.
+- AC-39 / design decision 14 (only with ``E2E_F004_OPEN_API_KEY``): Open API
+  daily chat keeps its SSE contract, a second message on a busy conversation
+  gets its own answer, and an unknown conversation is HTTP 404. The key is an
+  Open API key with scope ``chat:invoke`` that may act on behalf of the admin
+  (``X-On-Behalf-Of``, user id from ``E2E_F004_ON_BEHALF_OF``, default "1").
+  A personal access token from "AI 助手接入" does not work: its scope is fixed
+  to ``knowledge:read``.
 """
 
 import asyncio
@@ -294,9 +297,11 @@ class TestE2EF004UnifiedAgentRuntime:
 
 # ──────── Open API daily chat (AC-39, design decision 14) ────────
 
-# A personal access token of the admin account (scope chat:invoke). Its daily
-# conversations belong to the admin, so the class teardown deletes them.
-OPEN_API_TOKEN = os.environ.get("E2E_F004_PAT", "")
+# An Open API key with scope chat:invoke that may act on behalf of the admin.
+# On behalf of the admin, its daily conversations belong to the admin account,
+# so the class teardown can delete them through the login-state API.
+OPEN_API_KEY = os.environ.get("E2E_F004_OPEN_API_KEY", "")
+ON_BEHALF_OF = os.environ.get("E2E_F004_ON_BEHALF_OF", "1")
 OPEN_API_BASE = API_BASE.replace("/api/v1", "/api/v2")
 OPEN_API_FRAMES = [
     ("processing", "begin"),
@@ -315,7 +320,7 @@ def _sse_datas(text: str) -> list[dict]:
     return datas
 
 
-@pytest.mark.skipif(not OPEN_API_TOKEN, reason="E2E_F004_PAT is not set")
+@pytest.mark.skipif(not OPEN_API_KEY, reason="E2E_F004_OPEN_API_KEY is not set")
 class TestE2EF004OpenApiDailyChat:
     """E2E: Open API daily chat on the unified runtime keeps its contract."""
 
@@ -343,7 +348,11 @@ class TestE2EF004OpenApiDailyChat:
             f"{OPEN_API_BASE}/workstation/chat/completions",
             json=_body(text, conversation_id),
             # An Open API caller cannot switch protocols: the header changes nothing.
-            headers={"Authorization": f"Bearer {OPEN_API_TOKEN}", "X-BS-Run-Protocol": "2"},
+            headers={
+                "Authorization": f"Bearer {OPEN_API_KEY}",
+                "X-On-Behalf-Of": ON_BEHALF_OF,
+                "X-BS-Run-Protocol": "2",
+            },
         )
         datas = _sse_datas(resp.text) if resp.status_code == 200 else []
         final = next((d for d in datas if d.get("final")), None)
