@@ -860,7 +860,8 @@ async def test_waiting_item_goes_to_the_head_of_the_worker_queue(monkeypatch: py
             pushed.append(("tail", value))
 
         async def alpush(self, key, value, expiration=3600):
-            pushed.append(("head", pickle.loads(value)))
+            # The Redis client serializes the item itself (beta2 5790b992a1).
+            pushed.append(("head", value))
 
     monkeypatch.setattr(worker_mod, "get_redis_client", AsyncMock(return_value=_Client()))
     item = encode_queue_item(SVID_API, tenant_id=TENANT, run_id="run-waiting")
