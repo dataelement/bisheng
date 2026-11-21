@@ -2,7 +2,7 @@
 
 **测试环境**: http://192.168.106.114:13000/workspace （Client）
 **前置条件**: 已登录的账号；工作台至少配置一个模型；深度研究菜单权限已开。
-**接口层自动化**: `src/backend/test/e2e/test_e2e_f004_unified_agent_runtime.py`（13 个用例；其中 3 个开放 API 用例需要设置 `E2E_F004_OPEN_API_KEY`：在开放 API 管理里签发、带 `chat:invoke`、允许代表 admin 执行的密钥。「AI 助手接入」的个人令牌只有 `knowledge:read`，不能用）。
+**接口层自动化**: `src/backend/test/e2e/test_e2e_f004_unified_agent_runtime.py`（13 个用例；其中 3 个开放 API 用例需要设置 `E2E_F004_OPEN_API_KEY`：服务账号下签发、带 `chat:invoke` 和委托权限、委托范围包含普通测试账号 `e2e-f004rt-other` 的密钥。不能委托给 admin：系统禁止委托给全局超管和租户管理员。「AI 助手接入」的个人令牌只有 `knowledge:read`，也不能用）。
 
 状态标记：`[x]` 已在 114 执行并通过（2026-11-19、2026-11-20，提交 `c2d4205d16`）；`[ ]` 未执行。
 

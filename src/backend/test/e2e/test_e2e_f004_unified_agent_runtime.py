@@ -25,9 +25,11 @@ Covers (API behaviour only; the UI items are in e2e-checklist.md):
 - AC-39 / design decision 14 (only with ``E2E_F004_OPEN_API_KEY``): Open API
   daily chat keeps its SSE contract, a second message on a busy conversation
   gets its own answer, and an unknown conversation is HTTP 404. The key is an
-  Open API key with scope ``chat:invoke`` that may act on behalf of the admin
-  (``X-On-Behalf-Of``, user id from ``E2E_F004_ON_BEHALF_OF``, default "1").
-  A personal access token from "AI 助手接入" does not work: its scope is fixed
+  Open API key (服务账号密钥) with scopes ``chat:invoke`` and ``delegate``,
+  whose delegate scope (委托范围) includes the normal test user
+  ``e2e-f004rt-other``; the requests act on behalf of that user. Delegating to
+  the admin is refused by design (a global super or tenant admin is never a
+  delegation target), and a personal access token from "AI 助手接入" is fixed
   to ``knowledge:read``.
 """
 
@@ -297,11 +299,12 @@ class TestE2EF004UnifiedAgentRuntime:
 
 # ──────── Open API daily chat (AC-39, design decision 14) ────────
 
-# An Open API key with scope chat:invoke that may act on behalf of the admin.
-# On behalf of the admin, its daily conversations belong to the admin account,
-# so the class teardown can delete them through the login-state API.
+# An Open API key with scopes chat:invoke + delegate whose delegate scope holds
+# the normal test user. On behalf of that user, the daily conversations belong
+# to it, so the class teardown can delete them with that user's login.
 OPEN_API_KEY = os.environ.get("E2E_F004_OPEN_API_KEY", "")
-ON_BEHALF_OF = os.environ.get("E2E_F004_ON_BEHALF_OF", "1")
+# Open API errors that mean "the key may not act for this user".
+DELEGATION_REFUSED = {"26004", "26005", "26007"}
 OPEN_API_BASE = API_BASE.replace("/api/v1", "/api/v2")
 OPEN_API_FRAMES = [
     ("processing", "begin"),
@@ -325,18 +328,33 @@ class TestE2EF004OpenApiDailyChat:
     """E2E: Open API daily chat on the unified runtime keeps its contract."""
 
     conversations: list[str] = []
+    delegate_id: str = ""
 
     @pytest.fixture(autouse=True, scope="class")
     async def setup_and_teardown(self):
+        """The normal test user exists; its conversations are deleted with its own login."""
         cls = type(self)
         cls.conversations = []
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            token = await self._delegate_token(client)
+            info = assert_resp_200(await client.get(f"{API_BASE}/user/info", headers=auth_headers(token)))
+            cls.delegate_id = str(info["user_id"])
         yield
         async with httpx.AsyncClient(timeout=30.0) as client:
-            token = await get_admin_token(client)
+            token = await self._delegate_token(client)
             for conversation_id in cls.conversations:
                 await _stop(client, token, conversation_id)
-                resp = await client.delete(f"{API_BASE}/chat/{conversation_id}", headers=_owner_headers(token))
+                resp = await client.delete(f"{API_BASE}/chat/{conversation_id}", headers=auth_headers(token))
                 assert resp.status_code == 200, f"cleanup of {conversation_id} failed: {resp.text[:200]}"
+
+    @staticmethod
+    async def _delegate_token(client) -> str:
+        try:
+            return await get_user_token(client, OTHER_USER, OTHER_PASSWORD)
+        except AssertionError:
+            admin = await get_admin_token(client)
+            await create_test_user(client, admin, username=OTHER_USER, role_id=2, password=OTHER_PASSWORD)
+            return await get_user_token(client, OTHER_USER, OTHER_PASSWORD)
 
     @pytest.fixture
     async def client(self):
@@ -350,10 +368,16 @@ class TestE2EF004OpenApiDailyChat:
             # An Open API caller cannot switch protocols: the header changes nothing.
             headers={
                 "Authorization": f"Bearer {OPEN_API_KEY}",
-                "X-On-Behalf-Of": ON_BEHALF_OF,
+                "X-On-Behalf-Of": type(self).delegate_id,
                 "X-BS-Run-Protocol": "2",
             },
         )
+        if resp.status_code == 403 and any(code in resp.text for code in DELEGATION_REFUSED):
+            pytest.fail(
+                f"the Open API key may not act for {OTHER_USER} (user id {type(self).delegate_id}): "
+                f"add that user to the key's 委托范围. Response: {resp.text[:300]}"
+            )
+        assert resp.status_code in (200, 404), f"unexpected {resp.status_code}: {resp.text[:300]}"
         datas = _sse_datas(resp.text) if resp.status_code == 200 else []
         final = next((d for d in datas if d.get("final")), None)
         if final:
