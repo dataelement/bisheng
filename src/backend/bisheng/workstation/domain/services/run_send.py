@@ -284,6 +284,34 @@ async def owns_conversation(conversation_id: str, login_user: UserPayload) -> bo
     return session is not None and session.user_id == login_user.user_id
 
 
+async def _queue_index(version_id: str) -> int:
+    """1-based position of a deep-research version in the worker queue; 0 = not queued."""
+    from bisheng.core.cache.redis_manager import get_redis_client
+    from bisheng.linsight.worker import LinsightQueue
+
+    queue = LinsightQueue("queue", namespace="linsight", redis=await get_redis_client())
+    return int(await queue.index(version_id) or 0)
+
+
+async def queue_position(conversation_id: str) -> dict:
+    """AC-36: where the deep-research run of the conversation waits in the worker queue.
+
+    ``{"run_id", "position"}``; ``position`` is None when the conversation has
+    no planned run that waits in the queue (no run, a direct run, a run the
+    worker already took, or a run that waits for the conversation itself). The
+    caller has checked ownership.
+    """
+    svc = await run_services()
+    state = await svc.lease.get_state(conversation_id)
+    if state.status != STATUS_RUNNING or state.profile != PROFILE_PLANNED or not state.run_id:
+        return {"run_id": state.run_id or None, "position": None}
+    record = await _planned_run_record(conversation_id, state.run_id)
+    if record is None:
+        return {"run_id": state.run_id, "position": None}
+    index = await _queue_index(record.id)
+    return {"run_id": state.run_id, "position": index if index > 0 else None}
+
+
 async def subscribe_response(conversation_id: str, last_event_id: str | None) -> StreamingResponse:
     """SSE of the conversation's run events. The caller has checked ownership."""
     svc = await run_services()
@@ -842,6 +870,25 @@ async def _send(
         raise
 
 
+async def _emit_initial_events(conversation_id: str, result: SubmitResult) -> None:
+    """Write the events ``submit`` produced for a planned run (the ``queued`` position).
+
+    A direct run writes them itself after ``run_started``; a planned run starts
+    in the worker, so nobody else would. Best effort: the queue card also asks
+    the queue-position endpoint, and the run is already queued.
+    """
+    if not result.events:
+        return
+    try:
+        svc = await run_services()
+        for event in result.events:
+            await svc.stream.append(conversation_id, {**event, "run_id": result.run_id})
+    except Exception:
+        logger.exception(
+            "planned run={} conversation={}: could not write its queued event", result.run_id, conversation_id
+        )
+
+
 async def _start_planned(request, data, login_user, conversation, result, negotiated, memory_register, tenant_id):
     conversation_id = conversation.chat_id
     if result.kind == KIND_ANSWER:
@@ -861,6 +908,9 @@ async def _start_planned(request, data, login_user, conversation, result, negoti
             run_id=result.run_id,
         )
         _spawn_title(request, data, login_user, conversation)
+        # AC-36: the queue position of a new run goes to the event stream, so a
+        # page opened while the run still waits learns that the run exists.
+        await _emit_initial_events(conversation_id, result)
     logger.info(
         "unified send: planned run={} conversation={} version={} kind={}",
         result.run_id,

@@ -19,6 +19,16 @@ jest.mock("~/components/Linsight/Execution/TaskTurnPanel", () => ({
     return null;
   },
 }));
+const mockQueue: { position: number | null; calls: Array<[string | undefined, boolean]> } = { position: null, calls: [] };
+jest.mock("~/hooks/useRunQueuePosition", () => ({
+  useRunQueuePosition: (conversationId: string | undefined, enabled: boolean) => {
+    mockQueue.calls.push([conversationId, enabled]);
+    return enabled ? mockQueue.position : null;
+  },
+}));
+jest.mock("~/components/Linsight/Execution/QueueCard", () => ({
+  QueueCard: (props: { position: number }) => <div data-testid="queue-card">{props.position}</div>,
+}));
 jest.mock("~/components/Chat/Messages/Content/Markdown", () => ({
   __esModule: true,
   default: (props: { content: string; showCursor?: boolean }) => {
@@ -88,6 +98,8 @@ beforeEach(() => {
   mockMarkdown.length = 0;
   mockErrorCards.length = 0;
   act(() => useRunStore.setState({ conversations: {} }));
+  mockQueue.position = null;
+  mockQueue.calls = [];
 });
 
 describe("carrier that follows no run events (share view)", () => {
@@ -119,6 +131,33 @@ describe("conversation page", () => {
     expect(mockMarkdown[mockMarkdown.length - 1].showCursor).toBe(false);
     emit({ type: "ask_user_answered", data: { call_id: "k1" } }, "1-3");
     expect(mockMarkdown[mockMarkdown.length - 1].showCursor).toBe(true);
+  });
+});
+
+describe("queue position of a deep-research run (AC-36)", () => {
+  it("shows the position while the run in progress has produced nothing", () => {
+    mockQueue.position = 3;
+    emit({ type: "run_started" }, "1-1");
+    const view = renderBubble(taskRow({ liveRunId: "r1" }), true);
+    expect(view.getByTestId("queue-card").textContent).toBe("3");
+    expect(mockQueue.calls[mockQueue.calls.length - 1]).toEqual(["c1", true]);
+  });
+
+  it("stops asking once the run writes anything", () => {
+    mockQueue.position = 3;
+    emit({ type: "run_started" }, "1-1");
+    const view = renderBubble(taskRow({ liveRunId: "r1" }), true);
+    emit({ type: "thinking", data: { text: "thinking", call_id: "t1" } }, "1-2");
+    expect(view.queryByTestId("queue-card")).toBeNull();
+    expect(mockQueue.calls[mockQueue.calls.length - 1]).toEqual(["c1", false]);
+  });
+
+  it("never asks for a direct answer or a stored deep-research turn", () => {
+    mockQueue.position = 3;
+    emit({ type: "run_started" }, "1-1");
+    renderBubble(taskRow({ liveRunId: "r1", category: "agent_answer" }), true);
+    renderBubble(taskRow(), true);
+    expect(mockQueue.calls.every(([, enabled]) => enabled === false)).toBe(true);
   });
 });
 

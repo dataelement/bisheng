@@ -15,6 +15,8 @@ const API = {
     events: (conversationId: string) =>
         `/api/v1/workstation/conversations/${encodeURIComponent(conversationId)}/events`,
     stop: (conversationId: string) => `/api/v1/workstation/conversations/${encodeURIComponent(conversationId)}/stop`,
+    queuePosition: (conversationId: string) =>
+        `/api/v1/workstation/conversations/${encodeURIComponent(conversationId)}/queue-position`,
     fileUrl: (conversationId: string, fileId: string) =>
         `/api/v1/workstation/conversations/${encodeURIComponent(conversationId)}/files/${encodeURIComponent(fileId)}/url`,
 };
@@ -35,6 +37,16 @@ export async function getRunFileUrl(conversationId: string, fileId: string): Pro
     } catch {
         return undefined;
     }
+}
+
+/**
+ * AC-36: 1-based place of the conversation's deep-research run in the worker
+ * queue, or null when nothing of the conversation waits there.
+ */
+export async function getRunQueuePosition(conversationId: string): Promise<number | null> {
+    const res: { data?: { position?: number | null } } = await http.get(API.queuePosition(conversationId));
+    const position = res?.data?.position;
+    return typeof position === 'number' && position > 0 ? position : null;
 }
 
 /** Absolute URL of the run event stream (SSE) of one conversation. */

@@ -131,6 +131,18 @@ async def conversation_events(
     return await run_send.subscribe_response(conversation_id, last_event_id)
 
 
+@router.get("/conversations/{conversation_id}/queue-position")
+async def conversation_queue_position(conversation_id: str, login_user=LoginUserDep):
+    """F004 (AC-36): position of the conversation's deep-research run in the worker queue.
+
+    Owner only. ``{run_id, position}``; ``position`` is None when nothing of this
+    conversation waits in the queue.
+    """
+    if not await run_send.owns_conversation(conversation_id, login_user):
+        return UnAuthorizedError.return_resp()
+    return resp_200(data=await run_send.queue_position(conversation_id))
+
+
 @router.get("/conversations/{conversation_id}/files/{file_id}/url")
 async def conversation_file_url(conversation_id: str, file_id: str, login_user=LoginUserDep):
     """F004 (AC-24, AC-28): fresh link to a file of the conversation. Owner only.

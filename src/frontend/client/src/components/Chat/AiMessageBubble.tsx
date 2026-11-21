@@ -14,7 +14,9 @@ import { groupEventsForDisplay, type DisplayBlock } from "~/components/Chat/Mess
 import Markdown from "~/components/Chat/Messages/Content/Markdown";
 import CitationReferencesDrawer, { type CitationReferencesDesktopPayload } from "~/components/Chat/Messages/Content/CitationReferencesDrawer";
 import SearchWebUrls from "~/components/Chat/Messages/Content/SearchWebUrls";
+import { QueueCard } from "~/components/Linsight/Execution/QueueCard";
 import { TaskTurnPanel } from "~/components/Linsight/Execution/TaskTurnPanel";
+import { useRunQueuePosition } from "~/hooks/useRunQueuePosition";
 import type { ArtifactFile } from "~/components/Linsight/Artifacts/artifactUtils";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
@@ -493,6 +495,15 @@ function AssistantBubble({
         const run = state.conversations[message.conversationId]?.run;
         return run?.runId === message.liveRunId && run.status === "waiting";
     });
+    // AC-36: a deep-research run that has produced nothing yet may still wait in
+    // the worker queue; its position is asked for until work starts.
+    const liveTaskIdle = useRunStore((state) => {
+        if (!isLiveTaskRow || !message.conversationId) return false;
+        const run = state.conversations[message.conversationId]?.run;
+        if (!run || run.runId !== message.liveRunId || run.status !== "running") return false;
+        return !run.text && run.thinking.length === 0 && run.toolCalls.length === 0 && run.plan.length === 0;
+    });
+    const queuePosition = useRunQueuePosition(message.conversationId, liveTaskIdle);
 
     // Prefer the backend's own classification; fall back to the status code so
     // pre-classification backends still split busy-vs-failed correctly, and land
@@ -507,7 +518,7 @@ function AssistantBubble({
     const isTransientError = !!message.error && isTransientErrorType(resolvedErrorType);
 
     // v2.5 Agent-native detection — when a message has structured fields set
-    // (populated by useAiChatSSE.onAgentUpdate or by getAgentMessages history
+    // (populated from the run events or by the getAgentMessages history
     // loader), skip the legacy :::thinking:::/:::web::: regex parsing and let
     // the dedicated components own those sections.
     const isAgentNative = useMemo(() => {
@@ -605,6 +616,7 @@ function AssistantBubble({
     // tokens / events have landed yet. Disappears as soon as anything
     // streams in (events.length > 0 || regularContent).
     const showWaiting =
+        queuePosition === null &&
         !!isStreaming &&
         !!isLatest &&
         !message.error &&
@@ -689,6 +701,8 @@ function AssistantBubble({
                         {webContent.length > 0 && <SearchWebUrls webs={webContent} />}
                     </>
                 )}
+
+                {queuePosition !== null && <QueueCard position={queuePosition} />}
 
                 {/* Pre-stream "正在思考" indicator — pulsing black dot. Rendered AFTER the
                     thinking block so that once "思考内容" appears it sits below that node
