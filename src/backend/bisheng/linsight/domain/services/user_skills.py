@@ -61,6 +61,8 @@ class UserSkillsService:
         )
         rows = [row for row in rows if "visible" in actions.get(str(row.id), ())]
         disabled = await self.repository.disabled_ids(self.user_id) if self.user_id is not None else set()
+        # F005: an auto-enabled skill ignores a personal opt-out; the user cannot see it to turn it back on.
+        disabled = set(disabled) - {row.id for row in rows if getattr(row, "auto_enabled", False)}
         return [(row, row.id not in disabled) for row in rows if not available_only or row.id not in disabled]
 
     async def require(self, skill_id, available_only=True):

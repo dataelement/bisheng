@@ -65,7 +65,8 @@ async def skill_center(
     service = _service()
     center = await service.list_center(login_user.user_id, tab=tab)
     visible = await UserSkillsService(login_user.user_id).records(False, candidates=center.enterprise, actor=login_user)
-    enterprise = [{**_card(service, row), "enabled": enabled} for row, enabled in visible]
+    # F005: auto-enabled skills are not listed; the user cannot turn them off.
+    enterprise = [{**_card(service, row), "enabled": enabled} for row, enabled in visible if not row.auto_enabled]
     personal = [_card(service, row) for row in center.personal]
     enterprise_count = len(enterprise)
     if keyword:

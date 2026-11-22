@@ -675,6 +675,9 @@ class WorkspaceBackend(FilesystemBackend):
         # or delete during the run is visible. ``skill_row_enabled`` is a test seam.
         self.skill_snapshot: list[dict] | None = None
         self.skill_row_enabled = None
+        # F005: ``skills/`` is served from the skill store by ``skill_snapshot``,
+        # not from the workspace. ``skill_store`` is a test seam; None = SkillStore().
+        self.skill_store = None
         # F004 T055: called with the ``data`` of a ``file`` event after a file
         # under ``output/`` was stored (``file_events.FileEventRelay``). It may be
         # called from a worker thread and must return at once. None = no events.
@@ -829,11 +832,82 @@ class WorkspaceBackend(FilesystemBackend):
         return data
 
     def _materialize(self, rel_path: str) -> bytes | None:
-        """Return file bytes, preferring cache, lazily loading from MinIO."""
+        """Return file bytes, preferring cache, lazily loading from MinIO.
+
+        A ``skills/`` path that is not in the cache comes from the skill store
+        (F005); MinIO is only the fallback for sessions whose bundles were
+        written there before that change.
+        """
         data = self._cache_read(rel_path)
         if data is not None:
             return data
+        if _is_skills_path(rel_path):
+            data = self._load_skill_file(rel_path)
+            if data is not None:
+                return data
         return self._load_into_cache(rel_path)
+
+    # -- skills/ from the skill store (F005) --------------------------------
+    def _skill_entry(self, name: str) -> dict | None:
+        for entry in self.skill_snapshot or []:
+            if isinstance(entry, dict) and entry.get("name") == name and entry.get("content_hash"):
+                return entry
+        return None
+
+    def _skill_bundle_dir(self, entry: dict) -> Path | None:
+        """Local directory of the bundle version a snapshot entry names, or None."""
+        from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
+        from bisheng.linsight.domain.services.skill_store import SkillStore
+
+        store = self.skill_store or SkillStore()
+        tenant_id = int(entry.get("tenant_id") or get_current_tenant_id() or DEFAULT_TENANT_ID)
+        try:
+            return store.materialize(
+                tenant_id,
+                entry["name"],
+                entry["content_hash"],
+                owner_user_id=int(entry.get("owner_user_id") or 0),
+            )
+        except FileNotFoundError:
+            logger.warning("workspace skills: bundle {} @ {} is missing", entry["name"], entry["content_hash"])
+            return None
+
+    def _load_skill_file(self, rel_path: str) -> bytes | None:
+        """Read ``skills/<name>/<file>`` from the snapshot's bundle and fill the local copy."""
+        parts = rel_path.split("/", 2)
+        if len(parts) < 3 or not parts[2]:
+            return None
+        entry = self._skill_entry(parts[1])
+        base = self._skill_bundle_dir(entry) if entry else None
+        if base is None:
+            return None
+        target = (base / parts[2]).resolve()
+        if not target.is_relative_to(base.resolve()) or not target.is_file():
+            return None
+        data = target.read_bytes()
+        self._cache_write(rel_path, data)
+        return data
+
+    def _skill_listing(self, rel_prefix: str) -> list:
+        """``ls`` entries for the snapshot's bundles under ``rel_prefix`` (workspace-relative)."""
+        prefix = rel_prefix.strip("/")
+        if prefix and not _is_skills_path(prefix):
+            return []
+        entries = []
+        for entry in self.skill_snapshot or []:
+            if not (isinstance(entry, dict) and entry.get("name") and entry.get("content_hash")):
+                continue
+            base = self._skill_bundle_dir(entry)
+            if base is None:
+                continue
+            for path in sorted(base.rglob("*")):
+                if not path.is_file():
+                    continue
+                rel = f"{SKILLS_DIR}/{entry['name']}/{path.relative_to(base).as_posix()}"
+                if prefix and not (rel == prefix or rel.startswith(prefix + "/")):
+                    continue
+                entries.append(FileInfo(path="/" + rel, is_dir=False, size=path.stat().st_size))
+        return entries
 
     @staticmethod
     def _to_bytes(content) -> bytes:
@@ -1150,10 +1224,16 @@ class WorkspaceBackend(FilesystemBackend):
             if info := FailureContextAdapter.from_error(e):
                 payload["failure_info"] = info
             return LsResult(error=json.dumps(payload))
+        known = {entry["path"] for entry in entries}
+        entries.extend(entry for entry in self._skill_listing(rel_prefix) if entry["path"] not in known)
         return LsResult(entries=entries)
 
     def _file_entry(self, rel_path: str) -> LsResult:
         """The one object stored exactly at ``rel_path``, in ``ls`` entry shape (empty if none)."""
+        if _is_skills_path(rel_path.rstrip("/")):
+            exact = [entry for entry in self._skill_listing(rel_path) if entry["path"] == "/" + rel_path.rstrip("/")]
+            if exact:
+                return LsResult(entries=exact)
         key = self._object_key(rel_path.rstrip("/"))
         key_prefix = f"{self.workspace_prefix}/"
         try:

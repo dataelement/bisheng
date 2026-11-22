@@ -1218,10 +1218,36 @@ class DirectRunner:
         return {name: value for name, value in kwargs.items() if name in parameters}
 
     async def _mount_skills(self, ctx: DirectRunContext, backend: Any, sink: Callable[[dict], Awaitable[None]]) -> bool:
-        """Copy the selected skills into the workspace. True when at least one is there."""
-        if not ctx.skills:
+        """Copy every skill the user may use into the run directory. True when at least one is there.
+
+        F005 (AC-24): like deep research, a direct run mounts all of them whether or
+        not the user picked any; the picked ones are only the highlight. The copy
+        is local (no workspace write), so a user without skills still gets no
+        local directory (决策 10).
+
+        A failure to list the user's skills (database or permission service) does
+        not fail the answer: skills are an extra here, and the user usually picked
+        none. Unlike deep research, the run goes on without skills; picked skills
+        are reported as not loaded. A single skill that fails to copy is already
+        handled inside provisioning.
+
+        The open API (``unattended``) uses only the skills its caller passed
+        (AC-21): with none passed, nothing is mounted.
+        """
+        if ctx.unattended and not ctx.skills:
             return False
-        result = await self._provision_skills(ctx, backend)
+        try:
+            result = await self._provision_skills(ctx, backend)
+        except Exception:
+            # Non-critical extra (user decision 2026-11-20); logged with the traceback, picked skills are reported.
+            logger.exception(
+                "direct run={} conversation={}: skill provisioning failed; answering without skills",
+                ctx.run_id,
+                ctx.conversation_id,
+            )
+            if ctx.skills:
+                await sink(self._skill_failure_event(ctx, list(ctx.skills)))
+            return False
         snapshot = getattr(result, "snapshot", None)
         if snapshot:
             # Reads of ``skills/<name>/`` check the row that owns the directory.
@@ -1459,8 +1485,8 @@ class DirectRunner:
 
         With ``user_id`` every skill the user may use is copied and the selected
         names are the highlighted ones, exactly as in a deep-research run. A
-        direct run keeps no snapshot between executions, so each execution that
-        selected skills copies them again.
+        direct run keeps no snapshot between executions, so each execution
+        copies them again from the node cache (F005 决策 5).
         """
         from bisheng.linsight.domain.services import skill_provisioning
 
