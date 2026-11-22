@@ -123,4 +123,5 @@
 | 2026-11-20 | T012 | 子租户用户的代码执行器在直接回答和深度研究里都不生效，勾选也一样。`_init_bisheng_code_tool` 用 `aget_tool_by_tool_key(...).first()` 查工具，子租户的可见租户含根租户，查到的是根租户那一行，于是把用户勾选的本租户工具当成"隐式"，按根租户的工具类型查权限失败后静默跳过。beta1、beta2 代码相同，不是本特性引入 | 2026-11-20 核对 origin：release、main、feat/3.1.0、beta1、beta2 均未修。本特性不改；之后用户要求单独修复：`feat/3.1.0-beta1` 的 4645d9c0b8，已随 beac4a3257 合进 `feat/3.1.0-beta2`，`GptsToolsDao.(a)get_tool_by_tool_key` 优先取当前租户的行。本特性的 TC-AE-004/012 改用根租户账号验证 |
 | 2026-11-20 | T003 | 复查发现：总是挂载后，技能列表查询（MySQL + OpenFGA）出错会让没选技能的直接回答也失败 | 用户决定降级：`_mount_skills` 捕获异常后不带技能继续回答，用户选了技能时提示未能加载；补测试 2 条 |
 | 2026-11-22 | T003 | rebase 到合入 F004 的 beta2 后发现：开放 API 日常对话已改走 DirectRunner，「总是挂载」会让开放 API 挂上调用方没传的技能（AC-21） | `_mount_skills` 对 `unattended` 且未传技能的运行不挂载；补测试 1 条 |
+| 2026-11-22 | T012 | rebase 到 beta2 后，114 上的代码执行器无法运行：beta2 禁止后端宿主机本地执行（`build_code_executor` 对 `local` 抛 `SandboxConfigurationError`），114 没有配置 container/e2b 执行器。E2E 的 AC-14 原断言把「初始化失败」事件也算作调用，出现误报 | 断言改为只认正常结束、非 `init_failed` 的调用；AC-14、TC-AE-016 的执行部分待 114 配好沙箱后补测（11-20 在 F004 基线上已实测通过） |
 | 2026-11-20 | T011 | 客户端已经按可用列表剪掉旧的工具选择（`useAgentToolSelection`）和技能选择（`AiChatInput`、`SkillSelector`），不需要改代码 | 只在 T012 手动验证 TC-AE-008 |

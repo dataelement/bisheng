@@ -217,8 +217,22 @@ async def test_ac14_auto_enabled_tool_runs_without_being_picked(env):
 
     events = await _run(env, "运行一段 python 代码，打印 sys.version，把输出原样告诉我")  # noqa: RUF001
 
-    names = [e["data"].get("name") for e in events if e.get("type") == "tool_call"]
-    assert CODE_KEY in names
+    # A real call ends without ``init_failed``; a tool that could not be built also
+    # emits a finished frame under the same name, which must not count.
+    ran = [
+        e["data"]
+        for e in events
+        if e.get("type") == "tool_call"
+        and e["data"].get("name") == CODE_KEY
+        and e["data"].get("status") == "end"
+        and not (e["data"].get("extra_info") or {}).get("init_failed")
+    ]
+    failed = [
+        e["data"].get("output")
+        for e in events
+        if e.get("type") == "tool_call" and (e["data"].get("extra_info") or {}).get("init_failed")
+    ]
+    assert ran, f"code interpreter did not run; init failures: {failed}"
 
 
 @LLM
