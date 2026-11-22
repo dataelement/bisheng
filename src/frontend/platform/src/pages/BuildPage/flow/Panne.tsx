@@ -161,6 +161,7 @@ export default function Panne({ flow, preFlow }: { flow: WorkFlow, preFlow: stri
                             disableKeyboardA11y={true}
                             // fitView
                             className={workflowBackground === 'logo' ? "flow-bg-logo" : undefined}
+                            data-brand-logo={workflowBackground === 'logo' ? (t('bisheng', { ns: 'bs' }) || 'BISHENG') : undefined}
                             onDragOver={onDragOver}
                             onDrop={onDrop}
                             onSelectionChange={onSelectionChange}

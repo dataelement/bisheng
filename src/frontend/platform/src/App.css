@@ -354,6 +354,13 @@
 	display: block;
 	text-align: center;
 	opacity: 0.2;
+	white-space: nowrap;
+	pointer-events: none;
+	user-select: none;
+}
+
+.flow-bg-logo[data-brand-logo]::before {
+	content: attr(data-brand-logo);
 }
 
 
