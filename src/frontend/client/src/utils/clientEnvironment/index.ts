@@ -13,6 +13,7 @@ export type {
 } from "./types";
 export const DESKTOP_SESSION_KEY = "dsh:embedded-chat";
 const MOBILE_APP_SESSION_KEY = "bisheng:mobile-app";
+const HOST_BACK_SESSION_KEY = "bisheng:host-back";
 
 const fallback: ClientEnvironment = Object.freeze({
   channel: "web",
@@ -26,6 +27,7 @@ const fallback: ClientEnvironment = Object.freeze({
   capabilities: Object.freeze({
     hasNativePresentation: false,
     hasHostChatHeader: false,
+    hasHostBackButton: false,
   }),
 });
 let snapshot = fallback;
@@ -93,6 +95,21 @@ export function refreshClientEnvironment(): ClientEnvironment {
       /* The snapshot retains this presentation choice across SPA routes. */
     }
   }
+  // The file page is a separate WebView. Remembering the flag here does not
+  // leak it to the list page, whose document never received hostBack=1.
+  const hostBackRemembered = readSession(HOST_BACK_SESSION_KEY);
+  const hasHostBackButton =
+    channel === "web" &&
+    (new URLSearchParams(window.location.search).get("hostBack") === "1" ||
+      hostBackRemembered ||
+      snapshot.capabilities.hasHostBackButton);
+  if (hasHostBackButton && !hostBackRemembered) {
+    try {
+      window.sessionStorage.setItem(HOST_BACK_SESSION_KEY, "true");
+    } catch {
+      /* The snapshot retains this presentation choice across SPA routes. */
+    }
+  }
   let signals = {};
   try {
     const navigator = window.navigator as Navigator & {
@@ -116,7 +133,11 @@ export function refreshClientEnvironment(): ClientEnvironment {
       deviceType: host ? "host" : browser.deviceSource,
       os: host ? "host" : channel === "desktop" ? "unknown" : browser.osSource,
     }),
-    capabilities: Object.freeze({ hasNativePresentation, hasHostChatHeader }),
+    capabilities: Object.freeze({
+      hasNativePresentation,
+      hasHostChatHeader,
+      hasHostBackButton,
+    }),
   });
   if (typeof document !== "undefined") {
     const root = document.documentElement;

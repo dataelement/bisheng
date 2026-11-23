@@ -160,6 +160,23 @@ it.each(["getter", "read", "write"])(
   },
 );
 
+it("remembers a host back button after the file page drops the query", () => {
+  expect(load("?hostBack=1").capabilities.hasHostBackButton).toBe(true);
+  window.history.replaceState({}, "", "/knowledge/space/1/folder/2?tab=created");
+  expect(env.refreshClientEnvironment().capabilities.hasHostBackButton).toBe(true);
+  expect(load().capabilities.hasHostBackButton).toBe(true);
+  window.sessionStorage.clear();
+  expect(load().capabilities.hasHostBackButton).toBe(false);
+});
+
+it("does not infer a host back button from the mobile app header", () => {
+  expect(load("?embed=mobile-app").capabilities.hasHostBackButton).toBe(false);
+  expect(load("?hostBack=1&embed=dsh").capabilities).toMatchObject({
+    hasHostBackButton: false,
+    hasHostChatHeader: false,
+  });
+});
+
 it("does not infer the App header from a phone UA or apply it to desktop embedding", () => {
   jest
     .spyOn(window.navigator, "userAgent", "get")

@@ -12,6 +12,10 @@ jest.mock("~/api/knowledge", () => ({
     getFileDownloadApi: jest.fn(),
 }));
 jest.mock("~/hooks", () => ({ useLocalize: () => (key: string) => key, useAuthContext: () => ({ user: { id: '7', role: 'member', tenant_id: 60 } }) }));
+let mockHostBack = false;
+jest.mock("~/hooks/useClientEnvironment", () => ({
+    useClientEnvironment: () => ({ capabilities: { hasHostBackButton: mockHostBack } }),
+}));
 jest.mock("~/pages/Subscription/AiChat/FileAiDock", () => ({ FileAiDock: () => null }));
 jest.mock("./RichKnowledgePreview", () => ({ RichKnowledgePreview: () => null }));
 jest.mock("./index", () => ({
@@ -33,6 +37,7 @@ describe("knowledge preview resource contract", () => {
         jest.mocked(getMyResourcePermissions).mockResolvedValue({
             actions: ["download"], sources: [], mode: "INHERIT", roster_complete: true,
         } as never);
+        mockHostBack = false;
         __APP_ENV__.BASE_URL = "/workspace";
         window.matchMedia = jest.fn().mockReturnValue({
             matches: false, addEventListener: jest.fn(), removeEventListener: jest.fn(),
@@ -58,6 +63,32 @@ describe("knowledge preview resource contract", () => {
         await waitFor(() => expect(screen.getByTestId("viewer")).toHaveTextContent(expected));
         expect(screen.getByTestId("viewer")).toHaveAttribute("data-type", type);
         expect(previewApi).toHaveBeenCalledWith("6", "4");
+    });
+
+    function showMobileViewport() {
+        window.matchMedia = jest.fn().mockReturnValue({
+            matches: true, addEventListener: jest.fn(), removeEventListener: jest.fn(),
+        });
+    }
+
+    it("returns from the mobile preview when the app owns the back stack", async () => {
+        mockHostBack = true;
+        showMobileViewport();
+        const back = jest.spyOn(window.history, "back").mockImplementation(() => undefined);
+        Object.defineProperty(window.history, "length", { configurable: true, value: 2 });
+        previewApi.mockResolvedValue({ ...metadata, original_url: "/bisheng/original/file.pdf", preview_url: "" });
+        openPreview("file.pdf");
+        await screen.findByTestId("viewer");
+        fireEvent.click(await screen.findByRole("button", { name: "com_ui_go_back" }));
+        expect(back).toHaveBeenCalledTimes(1);
+    });
+
+    it("leaves the mobile preview without a back button when the app did not request one", async () => {
+        showMobileViewport();
+        previewApi.mockResolvedValue({ ...metadata, original_url: "/bisheng/original/file.pdf", preview_url: "" });
+        openPreview("file.pdf");
+        await screen.findByTestId("viewer");
+        expect(screen.queryByRole("button", { name: "com_ui_go_back" })).toBeNull();
     });
 
     it("shows conversion failure when PPTX has no derived preview", async () => {

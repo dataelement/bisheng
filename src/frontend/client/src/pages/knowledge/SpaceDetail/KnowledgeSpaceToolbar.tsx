@@ -1,14 +1,81 @@
 import { WorkbenchMenuButton } from "~/layouts/WorkbenchMenuButton";
 import { FolderPlus, Link2 } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { SortDirection, SortType, SpaceRole } from "~/api/knowledge";
 import { Outlined } from "bisheng-icons";
 import { Dropdown, DropdownGroup, DropdownItem } from "@bisheng/ui";
+import { useClientEnvironment } from "~/hooks/useClientEnvironment";
 import { CompoundSearchInput } from "./CompoundSearchInput";
 import { FileListToolbar } from "./FileListToolbar";
 import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
+import { knowledgePathWithTab } from "../knowledgeListNavigation";
 import { cn } from "~/utils";
 import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
 import type { KnowledgeSpaceModel } from "./index";
+
+/** The mobile app owns this page's back stack. A phone browser falls back to the list. */
+function postKnowledgeSpaceClose(): boolean {
+  const host = window.BishengMobile;
+  if (!host || typeof host.postMessage !== "function") return false;
+  host.postMessage(JSON.stringify({ type: "close" }));
+  return true;
+}
+
+function KnowledgeSpaceMobileLeading({
+  localize,
+  currentPath,
+  onNavigateFolder,
+  onOpenSystemMenu,
+  spaceListOpen,
+}: Pick<
+  KnowledgeSpaceModel,
+  "localize" | "currentPath" | "onNavigateFolder" | "onOpenSystemMenu" | "spaceListOpen"
+>) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const hostRequestsBack =
+    useClientEnvironment().capabilities?.hasHostBackButton === true;
+  const handleBack = () => {
+    if (currentPath.length > 0) {
+      const parent = currentPath[currentPath.length - 2];
+      onNavigateFolder(parent?.id);
+      return;
+    }
+    if (postKnowledgeSpaceClose()) return;
+    navigate(knowledgePathWithTab("/knowledge", location.search));
+  };
+  if (hostRequestsBack) {
+    return (
+      <button
+        type="button"
+        aria-label={localize("com_ui_go_back")}
+        onClick={handleBack}
+        disabled={spaceListOpen}
+        className={cn(
+          "inline-flex size-5 shrink-0 items-center justify-center text-text-1",
+          spaceListOpen && "pointer-events-none text-text-4",
+        )}
+      >
+        <Outlined.ArrowLeft className="size-5" />
+      </button>
+    );
+  }
+  return (
+    <WorkbenchMenuButton
+      type="button"
+      aria-label={localize("com_nav_open_sidebar")}
+      onClick={() => onOpenSystemMenu?.()}
+      disabled={spaceListOpen}
+      className={cn(
+        "inline-flex size-5 shrink-0 items-center justify-center text-text-1",
+        spaceListOpen && "pointer-events-none text-text-4",
+      )}
+    >
+      <Outlined.SidebarMenu className="size-5" />
+    </WorkbenchMenuButton>
+  );
+}
+
 interface KnowledgeSpaceToolbarProps {
   model: KnowledgeSpaceModel;
 }
@@ -134,7 +201,7 @@ export function KnowledgeSpaceToolbar({ model }: KnowledgeSpaceToolbarProps) {
         </div>
       )}
 
-      {/* Mobile top bar: system menu + space-name dropdown + search/sort/more.
+      {/* Mobile top bar: host back or system menu, space name, and search/sort/more.
                 Search/sort/more are greyed + disabled while the space-list dropdown is open. */}
       {isH5 && !searchMode && (
         /* Root has no padding on mobile; the inner row's px-4 gives the 16px gutter. */
@@ -144,18 +211,13 @@ export function KnowledgeSpaceToolbar({ model }: KnowledgeSpaceToolbarProps) {
                             center title stays screen-centered even when truncated.
                             84px = search(20) + gap(12) + sort(20) + gap(12) + more(20). */}
             <div className="flex min-w-[84px] shrink-0 items-center justify-start">
-              <WorkbenchMenuButton
-                type="button"
-                aria-label={localize("com_nav_open_sidebar")}
-                onClick={() => onOpenSystemMenu?.()}
-                disabled={spaceListOpen}
-                className={cn(
-                  "inline-flex size-5 shrink-0 items-center justify-center text-text-1",
-                  spaceListOpen && "pointer-events-none text-text-4",
-                )}
-              >
-                <Outlined.SidebarMenu className="size-5" />
-              </WorkbenchMenuButton>
+              <KnowledgeSpaceMobileLeading
+                localize={localize}
+                currentPath={currentPath}
+                onNavigateFolder={onNavigateFolder}
+                onOpenSystemMenu={onOpenSystemMenu}
+                spaceListOpen={spaceListOpen}
+              />
             </div>
             {/* Center group — title grows then truncates while staying centered */}
             <button
