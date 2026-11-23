@@ -8824,3 +8824,11 @@ T2021、T2027、T2029为集成后的行为回归；配对红测分别在T2015、
 逐项验证、性能实测与尚未执行的环境门禁见[实施验证记录](../../../docs/reviews/f118-upgrade-flow-implementation-20261120.md)；七维问题及关闭证据见[代码审查](../../../docs/reviews/f118-upgrade-flow-code-review-20261120.md)。
 
 任务自审：逐项检查AC158～166均有测试映射、测试先于对应实现、依赖ID存在、无范围编号用于测试AC标注、无前端/Worker混用、未加入本轮外功能；以现有release-contract/constitution为边界。执行中按task-review完成任务核查；最终e2e-test按维护CLI分类，不生成无关HTTP/UI样板，sdd-code-review对本轮增量及集成依赖执行七维检查。现有SG旧清单把Client写Zustand与当前AGENTS冲突，本轮不涉及前端，遵从AGENTS。
+
+### 2026-11-23 发布线合入与升级文档
+
+按用户授权，将`codex/f118-upgrade-flow-20261120`（`952165f85e`）合入最新`feat/3.1.0-beta1`基线`ec59c5a0fa`，合并提交`56a461e2d7`。隔离worktree无冲突合并，原工作区未提交改动未纳入；保留发布线分享链接、工具归属和注册规则三组修复，引用辅助化继续延期。
+
+本次定向迁移/结构/价格/运行时组合685项通过；Token模块混合集合的6项SQLite metadata建表错误按模块原有说明隔离运行，22项全部通过，与组合有重叠；发布线三组回归31项通过。125个Python文件格式和架构检查通过，124个lint通过，另1个文件38项既有lint与基线逐项相同。没有把组合初次非零退出或全仓测试写成全绿。完整证据及边界见[合入核对记录](../../../docs/reviews/f118-upgrade-beta1-merge-20261123.md)。
+
+已同步[3.0.0→3.1.0-beta1升级指南](../../../docs/upgrades/v3.1.0-beta1.md)：累计Alembic链、镜像digest核对、停服/一致备份、模型配置与价格、统一dry-run/apply和同Run恢复、Redis回填、分拆用量消费及开服验收、跨存储回滚。源码合并不代表镜像已发布或现场已上线，本轮没有重新操作165。
