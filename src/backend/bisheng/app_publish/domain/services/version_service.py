@@ -42,10 +42,12 @@ the tenant boundary (design 坑 19).
 from __future__ import annotations
 
 from datetime import datetime
+from types import SimpleNamespace
 from typing import Any, Protocol
 
 from loguru import logger
 
+from bisheng.app_publish.application.reference_resolution import resolve_app_references
 from bisheng.app_publish.domain.constants import AppReleaseAuditAction
 from bisheng.app_publish.domain.models.app_deployment import (
     STAGE_APPROVAL_CREATED,
@@ -55,11 +57,24 @@ from bisheng.app_publish.domain.models.app_deployment import (
     AppDeployment,
     AppDeploymentDao,
 )
+from bisheng.app_publish.domain.repositories.reference_source_repository import HostedAppReferenceSourceRepository
+from bisheng.app_publish.domain.schemas.app_manifest import CapabilityDeclaration
 from bisheng.app_publish.domain.schemas.failure import failure_from_error
 from bisheng.app_publish.domain.services import package_service
+from bisheng.app_publish.domain.services.reference_extractor import (
+    APP_REFERENCE_EXTRACTOR_VERSION,
+    extract_app_references,
+)
 from bisheng.app_publish.domain.services.release_audit import write_release_audit
+from bisheng.app_runtime.application.authorization import authorize_loaded_app, resolve_app_actor
+from bisheng.app_runtime.application.runtime_authorization import user_authorization_context
 from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateDecision
 from bisheng.common.errcode.base import BaseErrorCode
+from bisheng.common.errcode.knowledge import (
+    KnowledgeOperationPlanConflictError,
+    ReferenceCoverageNotReadyError,
+    ResourceReferenceInvalidError,
+)
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.app import AppDao
 from bisheng.database.models.app_version import (
@@ -70,6 +85,16 @@ from bisheng.database.models.app_version import (
     VERSION_KIND_ITERATION,
     AppVersion,
     AppVersionDao,
+)
+from bisheng.llm.application.model_name_resolution import get_model_name_resolution_port
+from bisheng.permission.application.business_authorization import require_business_action
+from bisheng.resource_reference.application.access import get_reference_binding_runtime
+from bisheng.resource_reference.application.contracts import (
+    SourceKey,
+    SourceType,
+    TargetKey,
+    TargetType,
+    reference_set_digest,
 )
 
 #: The three non-NULL values of ``app_version.terminal_state``. NULL — "no
@@ -201,31 +226,145 @@ class VersionService:
         alone, which is why they are written together here and never patched.
         """
         manifest = deployment.manifest or {}
-        async with get_async_db_session() as session:
-            previous = await AppVersionDao.amax_version_no(session, deployment.app_id)
-            row = AppVersion(
-                release_notes=deployment.release_notes,
-                id=deployment.version_id,
-                app_id=deployment.app_id,
-                version_no=previous + 1,
-                kind=VERSION_KIND_INITIAL if previous == 0 else VERSION_KIND_ITERATION,
-                terminal_state=None,
-                code_object_key=deployment.code_object_key or "",
-                manifest=manifest,
-                capabilities=manifest.get("capabilities") or {},
-                injections={},
-                tier_id=deployment.tier_code or manifest.get("tier") or "light",
-                runtime=str(manifest.get("runtime") or ""),
-                # The image the build produced. Without it the version row keeps
-                # image_ref NULL, and the deploy after approval sends an empty
-                # image to the orchestrator — Docker then rejects the create with
-                # "no command specified" and the app never comes online.
-                image_ref=image_ref,
-                submitted_at=deployment.create_time or datetime.now(),
-            )
-            await AppVersionDao.ainsert(session, row)
-            await session.commit()
-        return row
+        repository = HostedAppReferenceSourceRepository()
+        async with get_async_db_session() as session, session.begin():
+            root = await repository.aget_root(session, deployment.app_id)
+            if (
+                not deployment.version_id
+                or await repository.aget_version(session, root, deployment.version_id) is not None
+            ):
+                raise ReferenceCoverageNotReadyError(reason="app_version_not_new")
+            versions = await repository.alist_versions(session, root)
+            async with user_authorization_context(
+                deployment.authorization_context, SimpleNamespace(**root), version_id=deployment.version_id
+            ) as identity:
+                try:
+                    declaration = CapabilityDeclaration.model_validate(manifest.get("capabilities", {}))
+                except (TypeError, ValueError) as error:
+                    raise ResourceReferenceInvalidError(reason="app_reference_declaration_invalid") from error
+                names = get_model_name_resolution_port()
+                plan = await names.aprepare_model_names_current(
+                    session, root["tenant_id"], tuple(ref.name for ref in declaration.models), identity=identity
+                )
+                references = await resolve_app_references(
+                    session, declaration, identity=identity, source_tenant_id=root["tenant_id"], model_name_plan=plan
+                )
+                runtime = await get_reference_binding_runtime()
+                key = SourceKey(root["tenant_id"], SourceType.HOSTED_APP_VERSION, root["id"], deployment.version_id)
+                locked_root = None
+
+                async def lock_source_root(sql):
+                    nonlocal locked_root
+                    locked_root = await repository.aget_root(sql, root["id"], for_update=True)
+                    current_versions = await repository.alist_versions(sql, locked_root, for_update=True)
+                    if locked_root != root or current_versions != versions:
+                        raise KnowledgeOperationPlanConflictError(reason="app_version_manifest_changed")
+                    await cls._require_version_inventory(sql, locked_root, current_versions, key, runtime.repository)
+                    await authorize_loaded_app(
+                        identity,
+                        SimpleNamespace(**locked_root),
+                        deployment.authorization_context["purpose"],
+                        resume=deployment.authorization_context.get("resume_after_restore", False),
+                    )
+                    knowledge_ids = tuple(
+                        sorted(
+                            {
+                                int(ref.target.target_id)
+                                for ref in references
+                                if ref.target.target_type == TargetType.KNOWLEDGE_SPACE
+                            }
+                        )
+                    )
+                    knowledge = await repository.aget_knowledge_candidates(sql, ids=knowledge_ids, for_update=True)
+                    if {row["id"] for row in knowledge} != set(knowledge_ids):
+                        raise ResourceReferenceInvalidError(reason="app_knowledge_selection_unavailable")
+                    actor = await resolve_app_actor(identity)
+                    for row in knowledge:
+                        if row["type"] not in {0, 1, 3}:
+                            raise ResourceReferenceInvalidError(reason="app_knowledge_selection_unavailable")
+                        await require_business_action(
+                            identity,
+                            resource_type="knowledge_space" if row["type"] == 3 else "knowledge_library",
+                            resource_id=row["id"],
+                            action="visible",
+                            actor=actor,
+                        )
+
+                prepared = await runtime.aprepare_source_bindings(
+                    session,
+                    key,
+                    references,
+                    extractor_version=APP_REFERENCE_EXTRACTOR_VERSION,
+                    lock_source_root=lock_source_root,
+                    new_source=True,
+                )
+                previous = await repository.amax_version_no(session, locked_root)
+                row = AppVersion(
+                    release_notes=deployment.release_notes,
+                    id=deployment.version_id,
+                    app_id=deployment.app_id,
+                    version_no=previous + 1,
+                    kind=VERSION_KIND_INITIAL if previous == 0 else VERSION_KIND_ITERATION,
+                    terminal_state=None,
+                    code_object_key=deployment.code_object_key or "",
+                    manifest=manifest,
+                    capabilities=manifest.get("capabilities") or {},
+                    injections={},
+                    tier_id=deployment.tier_code or manifest.get("tier") or "light",
+                    runtime=str(manifest.get("runtime") or ""),
+                    # The image the build produced. Without it the version row keeps
+                    # image_ref NULL, and the deploy after approval sends an empty
+                    # image to the orchestrator — Docker then rejects the create with
+                    # "no command specified" and the app never comes online.
+                    image_ref=image_ref,
+                    submitted_at=deployment.create_time or datetime.now(),
+                )
+                # SQLModelSerializable.model_dump renders datetimes for wire;
+                # Repository INSERT values must retain native Python values.
+                values = {name: getattr(row, name) for name in AppVersion.model_fields}
+                saved = await repository.ainsert_version(session, locked_root, values)
+                await runtime.aapply_source_bindings(session, prepared)
+                return AppVersion(**saved)
+
+    @staticmethod
+    async def _require_version_inventory(session, root, versions, key, references):
+        """A new UUID does not repair missing indices of older immutable versions."""
+        guard = await references.aget_root_guard(session, key, for_update=True)
+        if versions and (
+            guard is None
+            or guard.record_kind != "root_guard"
+            or guard.ready
+            or guard.effective
+            or guard.source_revision <= 0
+        ):
+            raise ReferenceCoverageNotReadyError(reason="app_version_root_guard_inconsistent")
+        sets = await references.alist_source_sets_for_root(session, key, for_update=True)
+        raw = await references.alist_source_references_for_root(session, key, for_update=True)
+        by_version = {version["id"]: version for version in versions}
+        if {item.source_version for item in sets} != set(by_version) or any(
+            item.source_version not in by_version for item in raw
+        ):
+            raise ReferenceCoverageNotReadyError(reason="app_version_inventory_incomplete")
+        for indexed in sets:
+            rows = [item for item in raw if item.source_version == indexed.source_version]
+            try:
+                declaration = CapabilityDeclaration.model_validate(by_version[indexed.source_version]["capabilities"])
+                mapping = {item.slot_key: TargetKey(item.target_type, item.target_id) for item in rows}
+                configured = extract_app_references(declaration, resolved_targets=mapping)
+            except (TypeError, ValueError) as error:
+                raise ReferenceCoverageNotReadyError(reason="app_version_configuration_drift") from error
+            if (
+                not indexed.ready
+                or not indexed.effective
+                or indexed.source_revision <= 0
+                or guard is None
+                or indexed.source_revision > guard.source_revision
+                or len(mapping) != len(rows)
+                or indexed.extractor_version != APP_REFERENCE_EXTRACTOR_VERSION
+                or indexed.digest != reference_set_digest(configured)
+                or any(item.source_revision != indexed.source_revision for item in rows)
+            ):
+                raise ReferenceCoverageNotReadyError(reason="app_version_inventory_inconsistent")
 
     # -- the single latch -------------------------------------------------
 

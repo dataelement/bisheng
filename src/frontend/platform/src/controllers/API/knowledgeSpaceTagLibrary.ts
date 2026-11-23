@@ -56,3 +56,7 @@ export async function deleteKnowledgeSpaceTagLibraryApi(id: number): Promise<boo
 export async function getKnowledgeSpaceTagLibraryUsageApi(id: number): Promise<{ count: number }> {
   return await axios.get(`/api/v1/knowledge/space/tag-libraries/${id}/usage`)
 }
+
+export async function getKnowledgeSpaceAutoTagVisibilityApi(): Promise<{ visible: boolean }> {
+  return axios.get("/api/v1/knowledge/space/auto-tag-visibility")
+}

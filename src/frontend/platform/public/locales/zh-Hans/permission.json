@@ -187,7 +187,7 @@
     "inheritHelper": "切换为本级权限后，将以当前有效成员为基础创建独立授权。",
     "customHelper": "恢复继承时，本级自定义授权将由上级权限替代。",
     "parent": "上级资源",
-    "affectedAssignees": "预计影响 {{count}} 个授权对象",
+    "affectedAssignees": "预计影响权限：",
     "projection": "投影状态：{{state}}",
     "confirmTitle": "确认切换权限模式",
     "confirmDescription": "服务端将按影响分析切换模式，无需重新提交成员清单。",
@@ -211,7 +211,8 @@
     "inheritedFrom": "继承自",
     "parentFolder": "上级文件夹",
     "parentKnowledgeSpace": "上级知识空间",
-    "parentResource": "上级资源"
+    "parentResource": "上级资源",
+    "visibility_only": "仅可见，不包含内容操作"
   },
   "scope": {
     "local": "本级",

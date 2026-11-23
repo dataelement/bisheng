@@ -8,6 +8,7 @@ from langchain_core.tools import ArgsSchema, BaseTool
 from langgraph.prebuilt import create_react_agent
 from loguru import logger
 from pydantic import BaseModel, Field, SkipValidation, field_validator
+from sqlalchemy.engine.url import URL
 
 from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.citation.domain.services.citation_prompt_helper import (
@@ -43,6 +44,52 @@ agent_executor_dict = {
     "ReAct": "get_react_agent_executor",
     "function call": "get_openai_functions_agent_executor",
 }
+
+_SQL_AGENT_DRIVERS = {
+    "mysql": "mysql+pymysql",
+    "db2": "db2+ibm_db",
+    "postgres": "postgresql+psycopg2",
+    "postgresql": "postgresql+psycopg2",
+    "gaussdb": "opengauss+psycopg2",
+    "oracle": "oracle+oracledb",
+}
+
+
+def _split_db_address(address: str) -> tuple[str, int | None]:
+    """Split ``host:port`` or ``[ipv6]:port``. The host field must not keep brackets or the port."""
+    if address.startswith("[") and "]" in address:
+        host, _, rest = address[1:].partition("]")
+        if rest.startswith(":") and rest[1:].isdigit():
+            return host, int(rest[1:])
+        return host, None
+    host, sep, port_text = address.rpartition(":")
+    if sep and host and ":" not in host and port_text.isdigit():
+        return host, int(port_text)
+    return address, None
+
+
+def build_sql_agent_url(engine: str, username: str, password: str, address: str, database: str) -> URL:
+    """Build a SQLAlchemy URL from the agent form fields. Password is stored raw, not pre-encoded."""
+    driver = _SQL_AGENT_DRIVERS.get(engine or "")
+    if driver is None:
+        raise ValueError(f"Unsupported database engine: {engine}")
+    host, port = _split_db_address(address)
+    query = None
+    database_name = database
+    if engine == "mysql":
+        query = {"charset": "utf8mb4"}
+    elif engine == "oracle":
+        query = {"service_name": database}
+        database_name = None
+    return URL.create(
+        drivername=driver,
+        username=username,
+        password=password,
+        host=host,
+        port=port,
+        database=database_name,
+        query=query,
+    )
 
 
 class WorkflowCitationToolWrapper(BaseTool):
@@ -80,11 +127,13 @@ class WorkflowCitationToolWrapper(BaseTool):
             results = json.loads(output)
         except json.JSONDecodeError:
             return output
-        if not isinstance(results, list):
+        envelope = results if isinstance(results, dict) and set(results) == {"response", "web_results"} else None
+        results = envelope["web_results"] if envelope else results
+        if not isinstance(results, list) or any(not isinstance(item, dict) for item in results):
             return output
         results = annotate_web_results_with_citations(results)
         self._extend_citation_registry_items(collect_web_citation_registry_items(results))
-        return json.dumps(results, ensure_ascii=False)
+        return json.dumps({**envelope, "web_results": results} if envelope else results, ensure_ascii=False)
 
     async def _aappend_web_citation(self, output: Any) -> Any:
         if not isinstance(output, str):
@@ -93,11 +142,13 @@ class WorkflowCitationToolWrapper(BaseTool):
             results = json.loads(output)
         except json.JSONDecodeError:
             return output
-        if not isinstance(results, list):
+        envelope = results if isinstance(results, dict) and set(results) == {"response", "web_results"} else None
+        results = envelope["web_results"] if envelope else results
+        if not isinstance(results, list) or any(not isinstance(item, dict) for item in results):
             return output
         results = annotate_web_results_with_citations(results)
         await self._aextend_citation_registry_items(collect_web_citation_registry_items(results))
-        return json.dumps(results, ensure_ascii=False)
+        return json.dumps({**envelope, "web_results": results} if envelope else results, ensure_ascii=False)
 
     def _append_fetch_citation(self, output: Any) -> Any:
         output, items = annotate_fetched_page_with_citation(output, self.fetched_pages)
@@ -291,7 +342,9 @@ class AgentNode(BaseNode):
 
     def _init_agent(self, system_prompt: str):
         # Get a list of configured helper models
-        assistant_llm = LLMService.sync_get_assistant_llm(tenant_id=self.tenant_id)
+        assistant_llm = LLMService.sync_get_assistant_llm(
+            tenant_id=self.tenant_id, slots=(f"llm_list.{self.node_params['model_id']}.model_id",)
+        )
         if not assistant_llm.llm_list:
             raise Exception("Assistant reasoning model list is empty")
         default_llm = [one for one in assistant_llm.llm_list if one.model_id == self.node_params["model_id"]]
@@ -452,42 +505,17 @@ class AgentNode(BaseNode):
         es_client = KnowledgeRag.init_es_vectorstore_sync(index_name=self.tmp_collection_name)
         return es_client.as_retriever(search_kwargs={"filter": [{"terms": {"metadata.document_id": file_ids}}]})
 
-    def _init_sql_address(self) -> str:
-        """Inisialisasi SQL Database Address"""
+    def _init_sql_address(self) -> URL | str:
+        """Build the SQLAlchemy URL for the configured database. Empty when SQL agent is off."""
         if not self._sql_agent:
             return ""
-        if self._sql_agent.database_engine == "mysql":
-            try:
-                pass
-            except ImportError:
-                raise ImportError("Please install pymysql and sqlalchemy to use mysql database")
-            return f"mysql+pymysql://{self._sql_agent.db_username}:{self._sql_agent.db_password}@{self._sql_agent.db_address}/{self._sql_agent.db_name}?charset=utf8mb4"
-        elif self._sql_agent.database_engine == "db2":
-            try:
-                pass
-            except ImportError:
-                raise ImportError("Please install ibm_db and ibm_db_sa to use db2 database")
-            return f"db2+ibm_db://{self._sql_agent.db_username}:{self._sql_agent.db_password}@{self._sql_agent.db_address}/{self._sql_agent.db_name}"
-        elif self._sql_agent.database_engine in ["postgres", "postgresql"]:
-            try:
-                pass
-            except ImportError:
-                raise ImportError("Please install psycopg2 and sqlalchemy to use postgresql database")
-            return f"postgresql+psycopg2://{self._sql_agent.db_username}:{self._sql_agent.db_password}@{self._sql_agent.db_address}/{self._sql_agent.db_name}"
-        elif self._sql_agent.database_engine == "gaussdb":
-            try:
-                pass
-            except ImportError:
-                raise ImportError("Please install psycopg2 and opengauss_sqlalchemy to use gaussdb database")
-            return f"opengauss+psycopg2://{self._sql_agent.db_username}:{self._sql_agent.db_password}@{self._sql_agent.db_address}/{self._sql_agent.db_name}"
-        elif self._sql_agent.database_engine == "oracle":
-            try:
-                pass
-            except ImportError:
-                raise ImportError("Please install oracledb and sqlalchemy to use oracle database")
-            return f"oracle+oracledb://{self._sql_agent.db_username}:{self._sql_agent.db_password}@{self._sql_agent.db_address}?service_name={self._sql_agent.db_name}"
-        else:
-            raise ValueError(f"Unsupported database engine: {self._sql_agent.database_engine}")
+        return build_sql_agent_url(
+            self._sql_agent.database_engine or "",
+            self._sql_agent.db_username,
+            self._sql_agent.db_password,
+            self._sql_agent.db_address,
+            self._sql_agent.db_name,
+        )
 
     def _run(self, unique_id: str):
         ret = {}

@@ -263,10 +263,10 @@
     },
     "dalle_image_generator": {
       "params": {
-        "query": "画像に関する説明"
+        "query": "生成する画像の説明"
       },
-      "desc": "プロンプトに基づいて画像を生成します。",
-      "name": "Dalle3絵画"
+      "desc": "設定したサービスとモデルで、プロンプトから画像を生成します。",
+      "name": "画像生成"
     },
     "web_search": {
       "params": {
@@ -321,6 +321,13 @@
       },
       "desc": "会社名またはIDを使って企業の株主情報を取得できます。株主情報には株主名、出資比率、出資額、株主数などの詳細情報が含まれます。",
       "name": "企業株主"
+    },
+    "image_generation": {
+      "params": {
+        "query": "生成する画像の説明"
+      },
+      "desc": "設定したサービスとモデルで、プロンプトから画像を生成します。",
+      "name": "画像生成"
     }
   },
   "invalidEmailMessage": "有効なメールアドレスを入力してください",
@@ -391,8 +398,8 @@
       "name": "企業WeChat"
     },
     "Dalle3绘画": {
-      "desc": "OpenAIのテキストから画像生成モデル",
-      "name": "Dalle3絵画"
+      "name": "$t(tool:categories.图像生成.name)",
+      "desc": "$t(tool:categories.图像生成.desc)"
     },
     "Jina AI": {
       "desc": "指定されたウェブサイト（PDFをサポート）を大モデルが処理できるMarkdown形式に変換します",
@@ -413,6 +420,10 @@
     "SiliconFlow": {
       "desc": "テキストプロンプトに基づいて高品質な画像を生成します。FluxおよびStable Diffusionモデルに対応",
       "name": "SiliconFlow"
+    },
+    "图像生成": {
+      "name": "画像生成",
+      "desc": "設定したサービスとモデルで、プロンプトから画像を生成します。"
     }
   },
   "azureEndpointPlaceholder": "例: https://xxx.openai.azure.com/",
@@ -443,5 +454,14 @@
   "enterApiKey": "API Keyを入力してください",
   "encryptMethodSslLabel": "SSL暗号化",
   "uploadFile": "ファイルをアップロード",
-  "sandboxTestFailed": "テストは完了しませんでした。"
+  "sandboxTestFailed": "テストは完了しませんでした。",
+  "imageGeneration": {
+    "openai_api_base": "API ベース URL",
+    "openai_api_key": "API キー",
+    "model": "モデル",
+    "openai_proxy": "プロキシ（任意）",
+    "invalidAddress": "認証情報、クエリ、フラグメントを含まない HTTP(S) API URL を入力してください。",
+    "enterNewKey": "接続先のホストを変更した場合は API キーを再入力してください。",
+    "reconfigureAzure": "Azure には対応していません。互換 API のアドレス、API キー、モデルを設定してください。"
+  }
 }

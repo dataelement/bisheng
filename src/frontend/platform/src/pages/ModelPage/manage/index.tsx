@@ -1,9 +1,9 @@
 // @ts-strict-ignore
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { toast } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 
 import { Button } from "@bisheng/ui"
-import { locationContext } from "@/contexts/locationContext"
 import { userContext } from "@/contexts/userContext"
 import { useContext, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -12,6 +12,9 @@ import { useTranslation } from "react-i18next"
 
 import { changeLLmServerStatus, getAssistantModelList, getModelListApi, verifyLLmModelStatus } from "@/controllers/API/finetune"
 import { useQuery } from "@tanstack/react-query"
+import { useKnowledgePageScope } from "@/hooks/useKnowledgePageScope"
+import { managementRequestScope } from "@/controllers/managementScope"
+import { showApiError } from '@/controllers/request'
 import { useNavigate, useSearchParams } from "react-router-dom"
 import ModelConfig from "./ModelConfig"
 import { canManageModelSettings } from "./permissions"
@@ -28,6 +31,14 @@ const PROBE_WINDOW_MS = 45000
 const STATUS_UNKNOWN = 2
 
 export default function Management() {
+    const { scopes } = useKnowledgePageScope();
+    const scope = scopes?.ordinary;
+    if (!scope) return null;
+    return <ManagementContent key={`${scope.identityKey}:${scope.tenantId}:${scope.managementTenantId}`} />;
+}
+
+function ManagementContent() {
+    const { scopes } = useKnowledgePageScope();
     const { t, i18n } = useTranslation();
     useEffect(() => {
         i18n.loadNamespaces('model');
@@ -35,16 +46,16 @@ export default function Management() {
 
     const [data, setData] = useState([])
     const { user } = useContext(userContext)
-    const { appConfig } = useContext(locationContext)
     const [modelId, setModelId] = useState(null)
     const [systemModel, setSystemModel] = useState(false)
     const [systemModelTab, setSystemModelTab] = useState<string | undefined>(undefined)
     const [loading, setLoading] = useState(false)
     const { refetch } = useModel()
-    const canManage = canManageModelSettings(user, appConfig.multiTenantEnabled)
+    const canManage = canManageModelSettings(user)
     const [searchParams, setSearchParams] = useSearchParams()
     const navigate = useNavigate()
     useEffect(() => {
+        if (!canManage) return
         const tab = searchParams.get('systemModel')
         if (tab === 'dsh') {
             navigate('/dsh', { replace: true })
@@ -52,20 +63,25 @@ export default function Management() {
         }
         // Wait for model list to load before opening SystemModelConfig — otherwise
         // AssisModel's ModelSelect sees empty options and nulls out existing model_ids.
-        if (tab && data.length > 0) {
+        if (tab) {
             setSystemModelTab(tab)
             setSystemModel(true)
             const next = new URLSearchParams(searchParams)
             next.delete('systemModel')
             setSearchParams(next, { replace: true })
         }
-    }, [searchParams, setSearchParams, data, navigate])
+    }, [searchParams, setSearchParams, data, navigate, canManage])
 
     const reload = async () => {
         setLoading(true)
-        setData(await getModelListApi())
-        setLoading(false)
-        refetch()
+        try {
+            setData(await getModelListApi())
+            await refetch()
+        } catch (error) {
+            showApiError(error)
+        } finally {
+            setLoading(false)
+        }
     }
     useEffect(() => { reload() }, [])
 
@@ -129,7 +145,7 @@ export default function Management() {
             : server))
     }
 
-    if (modelId) return <ModelConfig
+    if (modelId && canManage) return <ModelConfig
         id={modelId}
         onGetName={handleGetRepeatName}
         onBack={() => setModelId(null)}
@@ -142,7 +158,7 @@ export default function Management() {
         }}
     />
 
-    if (systemModel) return <SystemModelConfig
+    if (systemModel && canManage) return <SystemModelConfig
         data={data}
         defaultTab={systemModelTab}
         onTabChange={setSystemModelTab}
@@ -152,7 +168,7 @@ export default function Management() {
     return <div className="relative bg-background-login h-full px-2 py-4">
         {loading && (
             <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-                <Outlined.Loading  className="size-4 animate-spin"/>
+                <LoadingState size="page" />
             </div>
         )}
         <div className="h-full overflow-y-auto">
@@ -164,8 +180,8 @@ export default function Management() {
                 </div>
                 <div className="flex gap-4">
                     {canManage && <Button onClick={() => setSystemModel(true)} variant="filled"
-                        className="gap-1 text-danger hover:text-danger" color="default">
-                        <Outlined.Setting className="text-danger" />
+                        className="gap-1" color="default">
+                        <Outlined.Setting />
                         {t('model.systemModelSettings')}
                     </Button>}
                     {canManage && <Button onClick={() => setModelId(-1)}>{t('model.addModel')}</Button>}
@@ -182,6 +198,7 @@ export default function Management() {
                         data.map(d => <ModelProviderRow
                             key={d.id}
                             canManage={canManage}
+                            showSharingCoverage={user?.is_global_super === true && scopes?.ordinary.tenantId === 1}
                             data={d}
                             probing={probeUntil > 0}
                             onToggle={(modelId, online) => handleCheck(d.id, modelId, online)}
@@ -198,9 +215,19 @@ export default function Management() {
 
 // model list（embeddings llm）
 export function useModel(type = 'llm') {
-    const { data, isLoading, refetch } = useQuery({
-        queryKey: [type === 'llm' ? "QueryModelsKey" : "QueryAssistantModelsKey"],
-        queryFn: () => type === 'llm' ? getModelListApi() : getAssistantModelList(),
+    const { scopes } = useKnowledgePageScope();
+    const scope = scopes?.ordinary;
+    const pin = managementRequestScope();
+    const { data, isLoading, refetch, error } = useQuery({
+        queryKey: [type === 'llm' ? "QueryModelsKey" : "QueryAssistantModelsKey", scope?.identityKey, scope?.tenantId, scope?.managementTenantId, pin],
+        enabled: !!scope,
+        cacheTime: 0,
+        queryFn: async () => {
+            if (managementRequestScope() !== pin) throw new Error('management_scope_changed');
+            const result = await (type === 'llm' ? getModelListApi() : getAssistantModelList());
+            if (managementRequestScope() !== pin) throw new Error('management_scope_changed');
+            return result;
+        },
         select: (data) => {
             const llmOptions = []
             const embeddings = []
@@ -249,13 +276,14 @@ export function useModel(type = 'llm') {
         asrModel = [],
         ttsModel = [],
         rerank = []
-    } = data ?? {};
+    } = (scope ? data : undefined) ?? {};
     return {
         llmOptions,
         embeddings,
         asrModel,
         ttsModel,
         isLoading,
+        error,
         rerank,
         refetch
     }

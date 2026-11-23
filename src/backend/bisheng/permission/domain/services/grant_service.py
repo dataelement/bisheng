@@ -28,6 +28,7 @@ from bisheng.permission.domain.services.grant_source_service import (
     GrantSnapshot,
     GrantSourceRecord,
     GrantSourceService,
+    is_visibility_only_model,
 )
 from bisheng.permission.domain.services.projection_plan import merge_projection_deltas
 from bisheng.permission.domain.services.projection_service import (
@@ -202,7 +203,9 @@ class GrantService:
         available = tuple(
             model
             for model in models
-            if (model.active or not require_active) and model.derived_level is not None and model.action_codes
+            if (model.active or not require_active)
+            and model.derived_level is not None
+            and (model.action_codes or is_visibility_only_model(model))
         )
         if system_authorized:
             return tuple(
@@ -237,7 +240,12 @@ class GrantService:
             (row for row in context.models if row.model_key == model_key),
             None,
         )
-        if model is None or not model.active or model.derived_level is None or not model.action_codes:
+        if (
+            model is None
+            or not model.active
+            or model.derived_level is None
+            or (not model.action_codes and not is_visibility_only_model(model, context.target.resource_type))
+        ):
             raise PermissionModelStateConflictError(msg=f"Permission model is unavailable: {model_key}")
         if not context.system_authorized and not any(
             self._capability_allows(capability, model) for capability in context.capabilities
@@ -300,12 +308,10 @@ class GrantService:
                     raise GrantLevelForbiddenError(msg="Tenant grant belongs to another resource scope")
                 if change.operation != "REMOVE":
                     model = model_by_key.get(change.target_model_key or change.model_key)
-                    if (
-                        model is None
-                        or "use" not in model.action_codes
-                        or set(model.action_codes) - {"use", "download"}
-                    ):
-                        raise GrantLevelForbiddenError(msg="All-member grants require a use-only permission model")
+                    if model is None or not is_visibility_only_model(model, context.target.resource_type):
+                        raise GrantLevelForbiddenError(
+                            msg="All-member grants require a visibility-only permission model"
+                        )
             deltas = self._apply_change(context, grants, change)
             compiled.extend(deltas)
 
@@ -449,7 +455,11 @@ class GrantService:
         """Authorize cleanup of an existing binding even after model deactivation."""
 
         model = next((row for row in context.models if row.model_key == model_key), None)
-        if model is None or model.derived_level is None or not model.action_codes:
+        if (
+            model is None
+            or model.derived_level is None
+            or (not model.action_codes and not is_visibility_only_model(model, context.target.resource_type))
+        ):
             raise PermissionModelStateConflictError(msg=f"Permission model is unavailable: {model_key}")
         if not context.system_authorized and not any(
             self._capability_allows(capability, model) for capability in context.capabilities

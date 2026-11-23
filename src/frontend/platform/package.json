@@ -1,8 +1,10 @@
 {
   "name": "bisheng",
-  "version": "3.0.2",
+  "version": "3.1.0-beta1",
   "private": true,
   "dependencies": {
+    "@bisheng/identity": "workspace:*",
+    "@bisheng/knowledge": "workspace:*",
     "@hello-pangea/dnd": "catalog:",
     "@bisheng/ui": "workspace:*",
     "@bisheng/diagram-runtime": "workspace:*",

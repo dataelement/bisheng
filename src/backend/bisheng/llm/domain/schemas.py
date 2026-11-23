@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
 
 from bisheng.api.v1.schemas import WSModel
 from bisheng.llm.domain.models import LLMModelBase, LLMServerBase
@@ -43,12 +43,12 @@ class LLMServerInfo(LLMServerBase):
         description="True when the caller sees this server via Root→Child share",
     )
     # Filled by the Service layer for super-admin callers viewing Root-owned
-    # servers, by reading the FGA ``shared_with`` tuple set. Drives the
+    # servers, from explicit sharing intent with legacy tuple fallback. Drives the
     # ModelConfig "share with child tenants" toggle. Always False for child
     # callers (they consume ``is_root_shared_readonly`` instead — no leak).
     share_to_children: bool = Field(
         default=False,
-        description="True when this Root-owned server is currently shared to children",
+        description="Explicit Root sharing preference; legacy records fall back to existing grants",
     )
     # Display name of the owning tenant. Hydrated by the Service layer for
     # Root-owned rows so the frontend "Root 共享 · 只读" badge can render
@@ -139,6 +139,27 @@ class LLMServerCreateReq(BaseModel):
     models: list[LLMModelCreateReq] | None = Field(
         default_factory=list, description="List of models under Service Provider"
     )
+
+
+class ModelRemovalSourcesRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    server_id: int = Field(strict=True, gt=0, le=2**63 - 1)
+    retained_model_ids: list[StrictInt] = Field(default_factory=list)
+    delete_server: bool = Field(default=False, strict=True)
+    cursor: str | None = None
+    page_size: int = Field(default=50, strict=True, ge=1, le=200)
+
+    @model_validator(mode="after")
+    def exact_retained_models(self):
+        values = self.retained_model_ids
+        if (
+            any(not 0 < value <= 2**63 - 1 for value in values)
+            or len(values) != len(set(values))
+            or (self.delete_server and values)
+        ):
+            raise ValueError("exact unique retained model identities are required")
+        return self
 
 
 class KnowledgeLLMConfig(BaseModel):

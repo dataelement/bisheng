@@ -39,8 +39,14 @@ from bisheng.linsight.domain.schemas.skill_schema import (
     SkillFileEntry,
     SkillRuntimeEntry,
     SkillSelectable,
+    skill_provider,
 )
-from bisheng.linsight.domain.services.github_skill_fetcher import fetch_skill_files, parse_github_url
+from bisheng.linsight.domain.services.github_skill_fetcher import (
+    GithubTarget,
+    fetch_skill_files,
+    parse_gitee_url,
+    parse_github_url,
+)
 from bisheng.linsight.domain.services.skill_store import (
     DISPLAY_NAME_META_KEY,
     MAX_BUNDLE_SIZE,
@@ -181,6 +187,7 @@ class SkillService:
                 description=skill.description,
                 default_checked=bool(skill.default_checked),
                 content_hash=skill.content_hash,
+                source=skill_provider(skill),
             )
             for skill in skills
         ]
@@ -264,12 +271,15 @@ class SkillService:
         return detail
 
     async def create_from_github(self, tenant_id: int, user_id: int, url: str) -> SkillDetail:
-        """Import a skill from a public GitHub directory URL.
+        """Import a skill from a public GitHub directory URL."""
+        return await self._create_from_repo(tenant_id, user_id, parse_github_url(url))
 
-        The downloaded bundle joins the exact same create chain as the upload path,
-        so frontmatter/size/duplicate checks and the owner tuple are all reused.
-        """
-        target = parse_github_url(url)
+    async def create_from_gitee(self, tenant_id: int, user_id: int, url: str) -> SkillDetail:
+        """Import a skill from a public Gitee directory URL."""
+        return await self._create_from_repo(tenant_id, user_id, parse_gitee_url(url))
+
+    async def _create_from_repo(self, tenant_id: int, user_id: int, target: GithubTarget) -> SkillDetail:
+        """Downloaded bundles join the same create chain as the upload path."""
         files = await fetch_skill_files(target)
         meta = self._extract_meta(files)
         detail = await self._create(tenant_id, user_id, meta.name, meta.display_name, meta.description, files)

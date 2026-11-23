@@ -1,3 +1,4 @@
+import { directoryTitleClass } from "@bisheng/knowledge";
 import { Dropdown } from "@bisheng/ui";
 import { Breadcrumb, type BreadcrumbItem } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
@@ -98,7 +99,7 @@ export function SpaceBreadcrumb({
         <div className="flex min-w-0 flex-1 items-center gap-0.5">
             {isRoot ? (
                 <>
-                    <h1 className="min-w-0 truncate text-base leading-8 text-text-1">
+                    <h1 className={directoryTitleClass}>
                         {space.name}
                     </h1>
                     {spaceMenu}

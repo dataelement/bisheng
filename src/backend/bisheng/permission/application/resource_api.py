@@ -203,6 +203,7 @@ class F048ResourcePermissionApi:
                 "name": names.get(model.model_key, model.model_key),
                 "level": model.derived_level,
                 "active": model.active,
+                "visibility_only": getattr(model, "visibility_only", False),
             }
             for model in models
         ]
@@ -486,6 +487,14 @@ class F048ResourcePermissionApi:
         parent_names = await self._subjects.resource_display_names(parents) if parents else {}
         model_names = {item.snapshot.model_key: item.name for item in catalog.models}
         model_states = {item.snapshot.model_key: item.snapshot.active for item in catalog.models}
+        target_models = {
+            item.snapshot.model_key: (
+                catalog.model_for_target(item.snapshot, resource_type=target.resource_type)
+                if callable(getattr(catalog, "model_for_target", None))
+                else item.snapshot
+            )
+            for item in catalog.models
+        }
         if any(row.model_key not in model_states for row in selected):
             raise PermissionVersionConflictError(msg="Permission Catalog changed while reading sources")
         data = [
@@ -503,8 +512,9 @@ class F048ResourcePermissionApi:
                         row.model_key,
                         row.model_key,
                     ),
-                    "level": row.model_level,
+                    "level": getattr(target_models[row.model_key], "derived_level", row.model_level),
                     "active": model_states[row.model_key],
+                    "visibility_only": getattr(target_models[row.model_key], "visibility_only", False),
                 },
                 "source": {
                     "type": row.source_type,
@@ -677,6 +687,7 @@ class F048ResourcePermissionApi:
                     "name": grant.model.model_key,
                     "level": grant.model.derived_level,
                     "active": grant.model.active,
+                    "visibility_only": getattr(grant.model, "visibility_only", False),
                 },
                 "source": {
                     "type": source.source_type,
@@ -699,6 +710,15 @@ class F048ResourcePermissionApi:
                 request=request,
                 result=result,
                 roster_before=roster_before,
+                roster_complete=roster_complete,
+            )
+        elif not getattr(getattr(result, "projection", None), "idempotent", False):
+            _audit_resource_grant_change(
+                actor,
+                resource_type,
+                resource_id,
+                request,
+                roster_before,
                 roster_complete=roster_complete,
             )
         return {
@@ -797,6 +817,8 @@ class F048ResourcePermissionApi:
             draft_id=draft_id,
             request=request,
         )
+        if resource_type != "app" and result.applied and not getattr(result.projection, "idempotent", False):
+            _audit_resource_mode(actor, resource_type, resource_id, result.mode)
         return {
             "applied": result.applied,
             "mode": result.mode,
@@ -890,3 +912,88 @@ class F048ResourcePermissionApi:
         if not isinstance(after_id, int) or after_id < 0:
             raise PermissionVersionConflictError(msg="Permission roster cursor is invalid")
         return after_id
+
+
+def _audit_scope_brief(items: list[str]) -> str:
+    if not items:
+        return "无"
+    shown = ",".join(items[:20])
+    return shown if len(items) <= 20 else f"{shown} 等{len(items)}项"
+
+
+def _audit_subject_label(change, roster_before: dict) -> str:
+    subject = change.subject
+    if subject is not None:
+        return f"{subject.type}:{subject.id}"
+    row_id = change.assignee_row_id
+    resolved = roster_before.get(row_id) if row_id is not None else None
+    if resolved:
+        return f"{resolved[0]}:{resolved[1]}"
+    return f"assignee:{row_id}"
+
+
+def _audit_resource_grant_change(
+    actor,
+    resource_type: str,
+    resource_id: str,
+    request,
+    roster_before: dict | None = None,
+    *,
+    roster_complete: bool = True,
+) -> None:
+    from bisheng.api.services.audit_log import AuditLogService
+
+    roster = roster_before or {}
+    granted: list[str] = []
+    adjusted: list[str] = []
+    revoked: list[str] = []
+    for change in request.changes:
+        who = _audit_subject_label(change, roster)
+        op = change.op.value
+        if op == "ADD":
+            model = change.model_key or ""
+            granted.append(f"{who}/{model}" if model else who)
+        elif op == "MOVE":
+            model = change.target_model_key or ""
+            adjusted.append(f"{who}→{model}" if model else who)
+        elif op == "REMOVE":
+            revoked.append(who)
+    operator_id = int(getattr(actor, "user_id", 0) or getattr(actor, "subject_id", 0) or 0)
+    incomplete = "" if roster_complete else "；名册不完整"
+    if granted or adjusted:
+        AuditLogService.record(
+            operator_id=operator_id,
+            operator_name="",
+            system_id="system",
+            event_type="grant_resource",
+            object_type=resource_type,
+            object_id=resource_id,
+            note=(
+                f"资源={resource_type}/{resource_id}；范围={_audit_scope_brief(granted)}；"
+                f"调整={_audit_scope_brief(adjusted)}；结果=成功{incomplete}"
+            ),
+        )
+    if revoked:
+        AuditLogService.record(
+            operator_id=operator_id,
+            operator_name="",
+            system_id="system",
+            event_type="revoke_resource",
+            object_type=resource_type,
+            object_id=resource_id,
+            note=f"资源={resource_type}/{resource_id}；范围={_audit_scope_brief(revoked)}；结果=成功{incomplete}",
+        )
+
+
+def _audit_resource_mode(actor, resource_type: str, resource_id: str, mode: str) -> None:
+    from bisheng.api.services.audit_log import AuditLogService
+
+    AuditLogService.record(
+        operator_id=int(getattr(actor, "user_id", 0) or getattr(actor, "subject_id", 0) or 0),
+        operator_name="",
+        system_id="system",
+        event_type="update_resource_mode",
+        object_type=resource_type,
+        object_id=resource_id,
+        note=f"资源={resource_type}/{resource_id}；模式={mode}；结果=成功",
+    )

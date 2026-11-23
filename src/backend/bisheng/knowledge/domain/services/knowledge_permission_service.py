@@ -11,13 +11,13 @@ from bisheng.common.errcode.permission import (
     PermissionInvalidResourceError,
 )
 from bisheng.common.services.metric_log import emit_metric
-from bisheng.database.models.department import DepartmentDao
 from bisheng.database.models.tenant import UserTenantDao
 from bisheng.knowledge.domain.models.knowledge import (
     Knowledge,
     KnowledgeDao,
     KnowledgeState,
     KnowledgeTypeEnum,
+    assert_copy_ready,
 )
 from bisheng.knowledge.domain.models.knowledge_file import (
     FileType,
@@ -25,6 +25,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileDao,
     KnowledgeFileStatus,
 )
+from bisheng.knowledge.domain.repositories.knowledge_compatibility_repository import KnowledgeCompatibilityRepository
 from bisheng.permission.application.business_authorization import (
     batch_check_business_actions,
     check_business_action,
@@ -45,7 +46,7 @@ _PERMISSION_SYNC_TIMEOUT_SECONDS = 60
 
 
 class KnowledgePermissionService:
-    """Action-native F048 checks for business-verified knowledge libraries."""
+    """Legacy knowledge IDs resolve through their actual tenant-owned resource type."""
 
     @classmethod
     async def check_action_async(
@@ -54,11 +55,14 @@ class KnowledgePermissionService:
         knowledge_id: int,
         action: str,
     ) -> bool:
+        resource_type = (await KnowledgeCompatibilityRepository().aresource_types([knowledge_id])).get(knowledge_id)
+        if resource_type is None:
+            return False
         return await check_business_action(
             login_user,
-            resource_type="knowledge_library",
+            resource_type=resource_type,
             resource_id=knowledge_id,
-            action=action,
+            action="visible" if action == "use" else action,
         )
 
     @classmethod
@@ -89,13 +93,23 @@ class KnowledgePermissionService:
         if not normalized_ids or not normalized_actions:
             return {}
 
-        action_map = await batch_check_business_actions(
-            login_user,
-            resource_type="knowledge_library",
-            resource_ids=normalized_ids,
-            actions=normalized_actions,
-        )
-        return {knowledge_id: set(action_map.get(str(knowledge_id), frozenset())) for knowledge_id in normalized_ids}
+        types = await KnowledgeCompatibilityRepository().aresource_types(normalized_ids)
+        result = {ident: set() for ident in normalized_ids}
+        for resource_type in ("knowledge_library", "knowledge_space"):
+            ids = [ident for ident in dict.fromkeys(normalized_ids) if types.get(ident) == resource_type]
+            if not ids:
+                continue
+            action_map = await batch_check_business_actions(
+                login_user,
+                resource_type=resource_type,
+                resource_ids=ids,
+                actions=normalized_actions,
+            )
+            for ident in ids:
+                # The public map retains a requested legacy alias key; its
+                # business authorization normalizes the actual decision to visible.
+                result[ident] = set(action_map.get(str(ident), frozenset()))
+        return result
 
     @classmethod
     def get_knowledge_action_map_sync(
@@ -198,7 +212,7 @@ class KnowledgePermissionService:
         knowledge_id: int,
     ) -> None:
         del owner_user_id
-        await self.ensure_action_async(login_user, knowledge_id, "use")
+        await self.ensure_action_async(login_user, knowledge_id, "visible")
 
     def ensure_knowledge_write_sync(
         self,
@@ -234,7 +248,14 @@ class KnowledgePermissionService:
         knowledge_id: int,
     ) -> None:
         del owner_user_id
-        self.ensure_action_sync(login_user, knowledge_id, "use")
+        self.ensure_action_sync(login_user, knowledge_id, "visible")
+
+
+@dataclass(frozen=True, slots=True)
+class KnowledgeTenantProof:
+    """Tenant ownership of one resource. Not a permission snapshot."""
+
+    tenant_id: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -328,6 +349,43 @@ class KnowledgeContainerDaoPermissionLoader:
             permission_version=version,
             context_version=context_version,
         )
+
+    async def load_permission_records(
+        self,
+        resource_type: str,
+        resource_ids: tuple[str, ...],
+    ) -> dict[str, KnowledgeTenantProof | None]:
+        """Prove many ids belong to the caller in one query.
+
+        Listing only needs the tenant on each row. Permission versions stay on
+        the single-record path, which is what an action check still uses.
+        """
+
+        result: dict[str, KnowledgeTenantProof | None] = dict.fromkeys(resource_ids)
+        numeric = [int(resource_id) for resource_id in resource_ids if resource_id.isdigit()]
+        if not numeric:
+            return result
+        rows: list[Knowledge] = []
+        for offset in range(0, len(numeric), 500):
+            rows.extend(await KnowledgeDao.aget_list_by_ids(numeric[offset : offset + 500]))
+        for row in rows:
+            assert_copy_ready(row)
+        allowed_kinds = {"knowledge_space": {"SPACE"}, "knowledge_library": {"NORMAL", "QA"}}
+        for row in rows:
+            if row.id is None or row.tenant_id is None:
+                continue
+            resource_id = str(row.id)
+            if resource_id not in result:
+                continue
+            try:
+                kind = KnowledgeTypeEnum(row.type).name
+                KnowledgeState(row.state)
+            except ValueError:
+                continue
+            if kind not in allowed_kinds.get(resource_type, set()):
+                continue
+            result[resource_id] = KnowledgeTenantProof(tenant_id=int(row.tenant_id))
+        return result
 
     async def load_permission_records_from_rows(
         self, rows: list[Knowledge], *, resource_type: str
@@ -476,6 +534,12 @@ class F048KnowledgeContainerPermissionAdapter:
             resource_type,
             resource_id,
         )
+
+    async def load_permission_records(self, *, resource_type: str, resource_ids: tuple[str, ...]):
+        method = getattr(self._loader, "load_permission_records", None)
+        if method is None:
+            return None
+        return await method(resource_type, resource_ids)
 
     async def resolve_permission_target(
         self,
@@ -675,12 +739,15 @@ class F048KnowledgeContainerPermissionAdapter:
         )
         if record is None:
             raise PermissionInvalidResourceError()
-        departments = await DepartmentDao.aget_by_ids([department_id])
-        if (
-            len(departments) != 1
-            or departments[0].tenant_id != record.tenant_id
-            or getattr(departments[0], "status", "active") != "active"
-        ):
+        from bisheng.common.errcode.department import DepartmentPermissionDeniedError
+        from bisheng.common.errcode.role import RolePolicyUnavailableError
+        from bisheng.department.domain.repositories.directory_repository import DirectoryRepository
+
+        try:
+            departments = await DirectoryRepository.active_departments(record.tenant_id, [department_id])
+        except (DepartmentPermissionDeniedError, RolePolicyUnavailableError) as exc:
+            raise PermissionInvalidResourceError() from exc
+        if len(departments) != 1:
             raise PermissionInvalidResourceError()
         actor = PermissionActor(
             user_id=operator_user_id,
@@ -763,22 +830,9 @@ class F048KnowledgeContainerPermissionAdapter:
         resource_type: str,
         resource_id: str,
     ) -> VerifiedPermissionTarget:
-        reason = _container_rejection(
-            record,
-            actor,
-            resource_type,
-            resource_id,
-            allowed_statuses={"PUBLISHED"},
-        )
-        if reason is not None:
-            raise _reject_container(reason, resource_type, resource_id)
-        return VerifiedPermissionTarget.from_business_service(
-            tenant_id=record.tenant_id,
-            resource_type=record.resource_type,
-            resource_id=record.resource_id,
-            resource_version=record.permission_version,
-            context_version=record.context_version,
-        )
+        # Processing state is not an authorization lifecycle. Conflict gates
+        # belong to the owning use case, independently of its exact F048 action.
+        return F048KnowledgeContainerPermissionAdapter._lifecycle_target(record, actor, resource_type, resource_id)
 
     @staticmethod
     def _lifecycle_target(
@@ -1101,7 +1155,7 @@ class KnowledgeFileDeliveryAuthorizationPort:
             resource_type="knowledge_library",
             resource_id=library_id,
             actor=actor,
-            action="use",
+            action="visible",
         )
         if not allowed:
             from bisheng.common.errcode.permission import PermissionDeniedError

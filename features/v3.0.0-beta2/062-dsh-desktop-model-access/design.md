@@ -597,6 +597,7 @@ gt_dsh_seat 只保存最小身份检索投影，不成为用户主数据。首�
 
 | 事实 | 不处理的后果 | 处理位置 |
 |---|---|---|
+| LangChain 可将 HTTP 200 SSE 内的超限错误转为 `ContextOverflowError`，同时保留代理的通用 `.code`；同步超限也可能携带 HTTP 400 | 只读 `.code` 或优先归类 HTTP 状态会丢失 `context_length_exceeded`，客户端无法识别超限恢复条件 | DSH `model_errors.is_context_length_error` 有界检查异常链中的类型/明确超限码；公开错误和用量账本共用判定，不透传供应商原文。`test_model_errors.py` 与真实 SDK/LangChain 模拟传输回归覆盖同步、流内、包装和未知错误 |
 | 放在 Gateway 项目不等于所有业务已依赖 Gateway | 新模块上线后 BiSheng 无法验席或管理 | DshGatewayClient 配置与能力探测；关闭时不初始化 |
 | Gateway 自有 Controller 不经过 Spring Cloud Gateway GlobalFilter | 只加路由 Filter 会漏掉发证/刷新端点 | DSH Controller / Service 自身认证与 capability 判定 |
 | 普通 JWT 中间件的“豁免”会开启 tenant bypass | DSH 路径可能跨租户读数据 | 专用认证分派与 context 生命周期测试 |
@@ -807,6 +808,8 @@ BiSheng 管理入口采用既有管理员能力校验并限定目标租户；模
 本期不增加自动释放或禁止管理员合理重新分配的冷却期，也不声称固定账号能技术识别真实自然人。可选的设备并发限制、在途终止和席位反滥用策略需另行定义，不通过心跳 TTL 改变席位口径。
 
 ## 修订历史
+
+- 2026-11-11：修复 DSH 对既有上下文超限错误的识别，统一 JSON/SSE 公共错误与账本分类；保留 `ContextOverflowError` 的语义，不改变错误字段、压缩策略或未知用量规则。由 demo2 流内超限被归为通用模型错误触发。
 
 - 2026-09-09：完成性复核补齐管理最后调用、受管模型候选与授权目标租户，修复明确策略拒绝、操作成功回读、Gateway票据错误/退出期限/device_name契约偏差；配额恢复开放顺序、不确定结算、容量/清理/后台有界处理均已修复并完成真实存储回归。T114 本地实现复核通过，外部验收汇总待完成，见 completion-audit.md。
 

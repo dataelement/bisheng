@@ -10,10 +10,13 @@
  * the existing input/output sections (no MergedStep→AgentToolCall adapter, so a
  * bare-string output never degrades into a single result chip).
  */
+import { ChatErrorCard } from '~/components/ChatErrorCard';
+import { parseFailureInfo } from '~/utils/failureInfo';
 import { Outlined } from 'bisheng-icons';
 import { memo, useState, type FC } from 'react';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
+import { toolCallDisplayName } from '~/utils/toolCallName';
 import CollapsibleTimelineItem from './CollapsibleTimelineItem';
 import { ACCENT, BODY, MUTED } from './execTokens';
 import { detailTextCls, formatStepParams, stepTypeIcon } from './StepRow';
@@ -52,15 +55,16 @@ const INK_GLYPH = '[&>svg]:text-text-1';
 /** Resolve the running / finished verb-phrase title for a tool step. */
 function resolveTitle(step: MergedStep, localize: ReturnType<typeof useLocalize>): string {
     const key = (step.name || '').toLowerCase();
+    const name = toolCallDisplayName(step.name || localize('com_tools_generic_fallback'));
     const verb = TOOL_VERB_I18N[key];
     if (step.running) {
         // Mirror ToolCallDisplay inflight phrasing; verb maps are past-tense, so
-        // running steps use the generic "Calling X" form against the raw name.
-        return localize('com_tools_state_tool_running', { name: step.name || localize('com_tools_generic_fallback') });
+        // running steps use the generic "Calling X" form with the display name.
+        return localize('com_tools_state_tool_running', { name });
     }
     if (verb) return localize(verb);
     // Fallback: "Used {name}" (North Star generic-tool phrasing).
-    return localize('com_tools_state_tool_done', { name: step.name || localize('com_tools_generic_fallback') });
+    return localize('com_tools_state_tool_done', { name });
 }
 
 const ToolRowLiteBase: FC<ToolRowLiteProps> = ({ step }) => {
@@ -74,7 +78,7 @@ const ToolRowLiteBase: FC<ToolRowLiteProps> = ({ step }) => {
     const [open, setOpen] = useState<boolean>(false);
 
     const paramsText = formatStepParams(step.params);
-    const hasDetails = !!(step.callReason || paramsText || step.output);
+    const hasDetails = !!(parseFailureInfo(step.extraInfo?.failure_info) || step.callReason || paramsText || step.output);
 
     const title = resolveTitle(step, localize);
     // Unified icon system (§1.3): running → Accent Loading spinner; done →
@@ -95,6 +99,7 @@ const ToolRowLiteBase: FC<ToolRowLiteProps> = ({ step }) => {
             open={hasDetails && open}
             onToggle={(next) => hasDetails && setOpen(next)}
         >
+            {parseFailureInfo(step.extraInfo?.failure_info) && <ChatErrorCard failureInfo={step.extraInfo?.failure_info} />}
             {step.callReason && <p className={DETAIL_TEXT} style={{ color: BODY }}>{step.callReason}</p>}
             {paramsText && (
                 <div className="mt-1">

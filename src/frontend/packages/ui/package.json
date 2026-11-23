@@ -36,6 +36,7 @@
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",
     "qrcode.react": "catalog:",
+    "react-day-picker": "^9.13.0",
     "tailwind-merge": "catalog:"
   },
   "devDependencies": {

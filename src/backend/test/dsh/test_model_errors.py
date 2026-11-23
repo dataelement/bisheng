@@ -2,9 +2,40 @@
 
 import httpx
 import pytest
+from langchain_core.exceptions import ContextOverflowError
+from langchain_openai.chat_models.base import OpenAIAPIContextOverflowError, OpenAIContextOverflowError
 from openai import APIConnectionError, APITimeoutError, AuthenticationError
 
 from bisheng.dsh.infrastructure.model_errors import model_failure_code, provider_failure_code
+
+
+@pytest.mark.parametrize("kind", ["langchain", "stream", "http"])
+def test_context_overflow_takes_precedence_over_generic_provider_code_and_status(kind):
+    request = httpx.Request("POST", "https://fixture.invalid")
+    if kind == "langchain":
+        error = ContextOverflowError("private provider body")
+    elif kind == "stream":
+        error = OpenAIAPIContextOverflowError("private provider body", request=request, body={"code": "upstream_error"})
+    else:
+        error = OpenAIContextOverflowError(
+            "private provider body", response=httpx.Response(400, request=request), body={"code": "upstream_error"}
+        )
+    assert model_failure_code(error) == "context_length_exceeded"
+    wrapper = RuntimeError("private wrapper")
+    wrapper.__cause__ = error
+    assert model_failure_code(wrapper) == "context_length_exceeded"
+
+
+def test_wrapped_context_overflow_uses_safe_public_error():
+    from bisheng.common.errcode.dsh import DshContextLengthExceededError
+    from bisheng.dsh.domain.services.model import DshModelService
+
+    error = RuntimeError("private wrapper")
+    error.__context__ = ContextOverflowError("private provider body")
+    assert model_failure_code(error) == "context_length_exceeded"
+    public = DshModelService._public_error(error)
+    assert isinstance(public, DshContextLengthExceededError)
+    assert "private" not in public.Msg
 
 
 @pytest.mark.parametrize("status", [400, 401, 403, 404, 408, 429, 500, 504])

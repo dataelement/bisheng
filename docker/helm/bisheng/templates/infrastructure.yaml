@@ -1,0 +1,198 @@
+{{- $root := . -}}
+{{- range $name := list "mysql" "redis" "minio" "elasticsearch" "milvus" -}}
+{{- $value := index $root.Values $name -}}
+{{- if $value.enabled -}}
+{{- $port := index (dict "mysql" 3306 "redis" 6379 "minio" 9000 "elasticsearch" 9200 "milvus" 19530) $name -}}
+{{- $paths := dict "mysql" "/var/lib/mysql" "redis" "/data" "minio" "/minio_data" "elasticsearch" "/bitnami/elasticsearch/data" "milvus" "/var/lib/milvus" -}}
+{{ print "\n---" }}
+apiVersion: v1
+kind: Service
+metadata: {name: {{ include "bisheng.component" (list $root $name) }}}
+spec:
+  selector:
+    {{- include "bisheng.selectorLabels" $root | nindent 4 }}
+    app.kubernetes.io/component: {{ $name }}
+  ports: [{name: service, port: {{ $value.external.port }}, targetPort: service}]
+{{ print "\n---" }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: {{ include "bisheng.component" (list $root $name) }}}
+spec:
+  serviceName: {{ include "bisheng.component" (list $root $name) }}
+  replicas: 1
+  persistentVolumeClaimRetentionPolicy: {whenDeleted: Retain, whenScaled: Retain}
+  selector:
+    matchLabels:
+      {{- include "bisheng.selectorLabels" $root | nindent 6 }}
+      app.kubernetes.io/component: {{ $name }}
+  template:
+    metadata:
+      labels:
+        {{- include "bisheng.selectorLabels" $root | nindent 8 }}
+        app.kubernetes.io/component: {{ $name }}
+    spec:
+      automountServiceAccountToken: false
+{{- with $value.podSecurityContext }}
+      securityContext: {{ toYaml . | nindent 8 }}
+{{- end }}
+{{- with $root.Values.global.imagePullSecrets }}
+      imagePullSecrets: {{ toYaml . | nindent 8 }}
+{{- end }}
+      containers:
+        - name: {{ $name }}
+          image: {{ include "bisheng.image" (list $root $value.image) | quote }}
+          imagePullPolicy: {{ $value.image.pullPolicy }}
+          ports: [{name: service, containerPort: {{ $port }}}]
+{{- if eq $name "mysql" }}
+          args: [--character-set-server=utf8mb4, --collation-server=utf8mb4_general_ci]
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: {{ include "bisheng.authSecret" (list $root "mysql-root" $value.auth) }}, key: {{ $value.auth.rootPasswordKey }}}
+{{- else if eq $name "redis" }}
+          command: [sh, -c, 'exec redis-server --appendonly yes --requirepass "$REDIS_PASSWORD"']
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: {{ include "bisheng.authSecret" (list $root "redis-auth" $value.auth) }}, key: {{ $value.auth.passwordKey }}}
+{{- else if eq $name "minio" }}
+          args: [server, /minio_data, --console-address, ':9001']
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef: {name: {{ include "bisheng.authSecret" (list $root "minio-auth" $value.auth) }}, key: {{ $value.auth.accessKeyKey }}}
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: {{ include "bisheng.authSecret" (list $root "minio-auth" $value.auth) }}, key: {{ $value.auth.secretKeyKey }}}
+{{- else if eq $name "elasticsearch" }}
+          env:
+            - {name: ELASTICSEARCH_HEAP_SIZE, value: 1g}
+            - {name: ES_JAVA_OPTS, value: {{ $value.javaOpts | quote }}}
+            - {name: ELASTICSEARCH_ENABLE_SECURITY, value: 'false'}
+            - {name: ELASTICSEARCH_ENABLE_REST_TLS, value: 'false'}
+            - {name: ELASTICSEARCH_CLUSTER_NAME, value: {{ include "bisheng.fullname" $root }}}
+            - {name: ELASTICSEARCH_NODE_NAME, valueFrom: {fieldRef: {fieldPath: metadata.name}}}
+            - {name: ELASTICSEARCH_EXTRA_FLAGS, value: {{ $value.extraFlags | quote }}}
+{{- else if eq $name "milvus" }}
+          command: [milvus, run, standalone]
+          env:
+            - {name: ETCD_ENDPOINTS, value: {{ default (printf "%s:2379" (include "bisheng.component" (list $root "etcd"))) $root.Values.milvus.etcd.externalEndpoint | quote }}}
+            - {name: MINIO_ADDRESS, value: {{ printf "%s:%d" (include "bisheng.host" (list $root "minio")) (int $root.Values.minio.external.port) | quote }}}
+            - {name: MINIO_USE_SSL, value: {{ $root.Values.minio.external.secure | quote }}}
+            - {name: MINIO_BUCKET_NAME, value: {{ default $root.Values.minio.buckets.milvus $root.Values.milvus.objectStorage.bucket | quote }}}
+            - name: MINIO_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef: {name: {{ default (include "bisheng.authSecret" (list $root "minio-auth" $root.Values.minio.auth)) $root.Values.milvus.objectStorage.existingSecret }}, key: {{ if $root.Values.milvus.objectStorage.existingSecret }}{{ $root.Values.milvus.objectStorage.accessKeyKey }}{{ else }}{{ $root.Values.minio.auth.accessKeyKey }}{{ end }}}
+            - name: MINIO_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: {name: {{ default (include "bisheng.authSecret" (list $root "minio-auth" $root.Values.minio.auth)) $root.Values.milvus.objectStorage.existingSecret }}, key: {{ if $root.Values.milvus.objectStorage.existingSecret }}{{ $root.Values.milvus.objectStorage.secretKeyKey }}{{ else }}{{ $root.Values.minio.auth.secretKeyKey }}{{ end }}}
+{{- end }}
+          resources: {{ toYaml $value.resources | nindent 12 }}
+          startupProbe: {{ toYaml $value.startupProbe | nindent 12 }}
+          readinessProbe: {{ toYaml $value.readinessProbe | nindent 12 }}
+          livenessProbe: {{ toYaml $value.livenessProbe | nindent 12 }}
+          volumeMounts: [{name: data, mountPath: {{ index $paths $name }}}]
+{{- with $value.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+{{- end }}
+{{- with $value.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+{{- end }}
+{{- with $value.tolerations }}
+      tolerations: {{ toYaml . | nindent 8 }}
+{{- end }}
+{{- if or $value.persistence.existingClaim (not $value.persistence.enabled) }}
+      volumes:
+        - name: data
+{{- if $value.persistence.existingClaim }}
+          persistentVolumeClaim: {claimName: {{ $value.persistence.existingClaim }}}
+{{- else }}
+          emptyDir: {sizeLimit: {{ $value.persistence.size }}}
+{{- end }}
+{{- else }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        annotations: {helm.sh/resource-policy: keep}
+      spec:
+        accessModes: [{{ $value.persistence.accessMode }}]
+{{- if ne (kindOf $value.persistence.storageClass) "invalid" }}
+        storageClassName: {{ $value.persistence.storageClass | quote }}
+{{- end }}
+        resources: {requests: {storage: {{ $value.persistence.size }}}}
+{{- end }}
+{{- end -}}
+{{- end -}}
+{{- if and .Values.milvus.enabled (not .Values.milvus.etcd.externalEndpoint) }}
+{{ print "\n---" }}
+apiVersion: v1
+kind: Service
+metadata: {name: {{ include "bisheng.component" (list . "etcd") }}}
+spec:
+  selector:
+    {{- include "bisheng.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: etcd
+  ports: [{name: service, port: 2379, targetPort: 2379}]
+{{ print "\n---" }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: {{ include "bisheng.component" (list . "etcd") }}}
+spec:
+  serviceName: {{ include "bisheng.component" (list . "etcd") }}
+  replicas: 1
+  persistentVolumeClaimRetentionPolicy: {whenDeleted: Retain, whenScaled: Retain}
+  selector:
+    matchLabels:
+      {{- include "bisheng.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: etcd
+  template:
+    metadata:
+      labels:
+        {{- include "bisheng.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: etcd
+    spec:
+      automountServiceAccountToken: false
+{{- with .Values.milvus.etcd.podSecurityContext }}
+      securityContext: {{ toYaml . | nindent 8 }}
+{{- end }}
+{{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets: {{ toYaml . | nindent 8 }}
+{{- end }}
+      containers:
+        - name: etcd
+          image: {{ include "bisheng.image" (list . .Values.milvus.etcd.image) | quote }}
+          command: [etcd, --advertise-client-urls=http://127.0.0.1:2379, --listen-client-urls=http://0.0.0.0:2379, --data-dir=/etcd]
+          ports: [{containerPort: 2379}]
+          resources: {{ toYaml .Values.milvus.etcd.resources | nindent 12 }}
+          startupProbe: {{ toYaml .Values.milvus.etcd.startupProbe | nindent 12 }}
+          readinessProbe: {{ toYaml .Values.milvus.etcd.readinessProbe | nindent 12 }}
+          livenessProbe: {{ toYaml .Values.milvus.etcd.livenessProbe | nindent 12 }}
+          volumeMounts: [{name: data, mountPath: /etcd}]
+{{- with .Values.milvus.etcd.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+{{- end }}
+{{- with .Values.milvus.etcd.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+{{- end }}
+{{- with .Values.milvus.etcd.tolerations }}
+      tolerations: {{ toYaml . | nindent 8 }}
+{{- end }}
+{{- if or .Values.milvus.etcd.persistence.existingClaim (not .Values.milvus.etcd.persistence.enabled) }}
+      volumes:
+        - name: data
+{{- if .Values.milvus.etcd.persistence.existingClaim }}
+          persistentVolumeClaim: {claimName: {{ .Values.milvus.etcd.persistence.existingClaim }}}
+{{- else }}
+          emptyDir: {sizeLimit: {{ .Values.milvus.etcd.persistence.size }}}
+{{- end }}
+{{- else }}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: [{{ .Values.milvus.etcd.persistence.accessMode }}]
+{{- if ne (kindOf .Values.milvus.etcd.persistence.storageClass) "invalid" }}
+        storageClassName: {{ .Values.milvus.etcd.persistence.storageClass | quote }}
+{{- end }}
+        resources: {requests: {storage: {{ .Values.milvus.etcd.persistence.size }}}}
+{{- end }}
+{{- end }}

@@ -16,13 +16,13 @@ def _policy(
     *,
     enabled=True,
     words_types=None,
-    custom_words='',
-    auto_reply='命中敏感词',
+    custom_words="",
+    auto_reply="命中敏感词",
     extra_config=None,
 ):
     return SimpleNamespace(
         enabled=enabled,
-        words_types=words_types or ['custom'],
+        words_types=words_types or ["custom"],
         custom_words=custom_words,
         auto_reply=auto_reply,
         extra_config=extra_config or {},
@@ -30,63 +30,100 @@ def _policy(
 
 
 def test_normalize_words_dedupes_and_keeps_phrase_spaces():
-    assert SensitiveWordPolicyService.normalize_words(' alpha, beta，alpha\nfoo bar ') == [
-        'alpha',
-        'beta',
-        'foo bar',
+    assert SensitiveWordPolicyService.normalize_words(" alpha, beta，alpha\nfoo bar ") == [
+        "alpha",
+        "beta",
+        "foo bar",
     ]
 
 
 def test_check_text_counts_custom_word_hits(monkeypatch):
     monkeypatch.setattr(
-        'bisheng.sensitive_word.domain.models.sensitive_word_policy.SensitiveWordPolicyDao.get_policy',
-        lambda **kwargs: _policy(custom_words='敏感词\n禁用词'),
+        "bisheng.sensitive_word.domain.models.sensitive_word_policy.SensitiveWordPolicyDao.get_policy",
+        lambda **kwargs: _policy(custom_words="敏感词\n禁用词"),
     )
 
     result = SensitiveWordPolicyService.check_text(
         tenant_id=1,
         business_type=SensitiveWordBusinessType.KNOWLEDGE_SPACE_FILE_PARSE,
-        text='敏感词出现一次，禁用词出现两次，禁用词。',
+        text="敏感词出现一次，禁用词出现两次，禁用词。",
     )
 
     assert result.enabled is True
     assert {hit.word: hit.count for hit in result.hits} == {
-        '敏感词': 1,
-        '禁用词': 2,
+        "敏感词": 1,
+        "禁用词": 2,
     }
-    assert result.auto_reply == '命中敏感词'
+    assert result.auto_reply == "命中敏感词"
 
 
 def test_check_text_uses_builtin_and_custom_words(monkeypatch):
     monkeypatch.setattr(
-        'bisheng.sensitive_word.domain.models.sensitive_word_policy.SensitiveWordPolicyDao.get_policy',
-        lambda **kwargs: _policy(words_types=['builtin', 'custom'], custom_words='自定义词'),
+        "bisheng.sensitive_word.domain.models.sensitive_word_policy.SensitiveWordPolicyDao.get_policy",
+        lambda **kwargs: _policy(words_types=["builtin", "custom"], custom_words="自定义词"),
     )
     monkeypatch.setattr(
         SensitiveWordPolicyService,
-        'load_builtin_words',
-        classmethod(lambda cls: ('内置词',)),
+        "load_builtin_words",
+        classmethod(lambda cls: ("内置词",)),
     )
 
     result = SensitiveWordPolicyService.check_text(
         tenant_id=1,
         business_type=SensitiveWordBusinessType.KNOWLEDGE_SPACE_FILE_PARSE,
-        text='内置词和自定义词都命中',
+        text="内置词和自定义词都命中",
     )
 
-    assert {hit.word for hit in result.hits} == {'内置词', '自定义词'}
+    assert {hit.word for hit in result.hits} == {"内置词", "自定义词"}
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_hits"),
+    [
+        ("请按参考答案格式整理公务员答案解析和考试答案讲解。", set()),
+        ("采用去中央化架构。附上论文代码和通信接收器说明。", set()),
+        ("请介绍足球玩法并提供庭审直播的链接。", set()),
+        ("請上傳學歷資料、学位證和资格證。", set()),
+        ("这份普通嘌呤饮食表用于本周健康检查。", set()),
+        ("玻璃烧瓶的清洗步骤将在三秒倒计时结束后显示。", set()),
+        ("等人手术完成以后再联系。", set()),
+        ("请查看证件办理流程、办理证件须知和制作证件照的要求。", set()),
+        ("请核对发票代收和代办发票报销的流程。", set()),
+        ("服务支持上门激活。", set()),
+        ("用手机跟踪本人设备、用手机监控温室湿度、用手机追剧。", set()),
+        ("窗口活动結束後請把紅片與黃片分開。", set()),
+        ("CNM", {"cnm"}),
+        ("有人说口活好。还有人说口活真好。", {"口活好", "口活真好"}),
+        ("想看黃片。發我幾部黃片。", {"看黃片", "幾部黃片"}),
+        ("代辦假學歷、低價代開假發票", {"代辦假學歷", "代開假發票"}),
+        ("代办假发票、制作假证件", {"代办假发票", "制作假证件"}),
+        ("兜售考试答案、卖考试答案", {"兜售考试答案", "卖考试答案"}),
+    ],
+)
+def test_builtin_dictionary_distinguishes_normal_and_blocked_phrases(monkeypatch, text, expected_hits):
+    monkeypatch.setattr(
+        "bisheng.sensitive_word.domain.models.sensitive_word_policy.SensitiveWordPolicyDao.get_policy",
+        lambda **kwargs: _policy(words_types=["builtin"]),
+    )
+    result = SensitiveWordPolicyService.check_text(
+        tenant_id=1,
+        business_type=SensitiveWordBusinessType.KNOWLEDGE_SPACE_FILE_PARSE,
+        text=text,
+    )
+    assert result.enabled is True
+    assert {hit.word for hit in result.hits} == expected_hits
 
 
 def test_disabled_or_empty_policy_is_not_effective(monkeypatch):
     monkeypatch.setattr(
-        'bisheng.sensitive_word.domain.models.sensitive_word_policy.SensitiveWordPolicyDao.get_policy',
-        lambda **kwargs: _policy(enabled=True, words_types=['custom'], custom_words=''),
+        "bisheng.sensitive_word.domain.models.sensitive_word_policy.SensitiveWordPolicyDao.get_policy",
+        lambda **kwargs: _policy(enabled=True, words_types=["custom"], custom_words=""),
     )
 
     result = SensitiveWordPolicyService.check_text(
         tenant_id=1,
         business_type=SensitiveWordBusinessType.KNOWLEDGE_SPACE_FILE_PARSE,
-        text='任意内容',
+        text="任意内容",
     )
 
     assert result.enabled is False
@@ -95,23 +132,25 @@ def test_disabled_or_empty_policy_is_not_effective(monkeypatch):
 
 def test_content_safety_transformer_raises_on_hits(monkeypatch):
     monkeypatch.setattr(
-        'bisheng.sensitive_word.domain.models.sensitive_word_policy.SensitiveWordPolicyDao.get_policy',
-        lambda **kwargs: _policy(custom_words='拦截词', auto_reply='不允许上传'),
+        "bisheng.sensitive_word.domain.models.sensitive_word_policy.SensitiveWordPolicyDao.get_policy",
+        lambda **kwargs: _policy(custom_words="拦截词", auto_reply="不允许上传"),
     )
 
     transformer = ContentSafetyTransformer(tenant_id=1)
 
+    source = [Document(page_content="这里包含拦截词")]
     with pytest.raises(ContentSafetyViolation) as exc:
-        transformer.transform_documents([Document(page_content='这里包含拦截词')])
+        transformer.transform_documents(source)
 
-    assert exc.value.to_remark()['reason'] == 'sensitive_check'
-    assert exc.value.to_remark()['auto_reply'] == '不允许上传'
+    assert exc.value.to_remark()["reason"] == "sensitive_check"
+    assert exc.value.to_remark()["auto_reply"] == "不允许上传"
+    assert exc.value.documents[0].page_content == "这里包含拦截词"
 
 
 def test_pipeline_stops_before_vector_write_when_content_safety_raises(monkeypatch):
     class FakeLoader:
         def load(self):
-            return [Document(page_content='这里包含拦截词')]
+            return [Document(page_content="这里包含拦截词")]
 
     class FakeVectorStore:
         def __init__(self):
@@ -121,8 +160,8 @@ def test_pipeline_stops_before_vector_write_when_content_safety_raises(monkeypat
             self.called = True
 
     monkeypatch.setattr(
-        'bisheng.sensitive_word.domain.models.sensitive_word_policy.SensitiveWordPolicyDao.get_policy',
-        lambda **kwargs: _policy(custom_words='拦截词'),
+        "bisheng.sensitive_word.domain.models.sensitive_word_policy.SensitiveWordPolicyDao.get_policy",
+        lambda **kwargs: _policy(custom_words="拦截词"),
     )
 
     vector_store = FakeVectorStore()

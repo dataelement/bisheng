@@ -15,20 +15,25 @@ from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.v1.schema.workflow import WorkflowEventType
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.core.cache import InMemoryCache
 from bisheng.core.cache.redis_manager import get_redis_client_sync
+from bisheng.core.context.tenant import get_current_tenant_id, is_tenant_filter_bypassed, strict_tenant_filter
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import FlowDao
-from bisheng.database.models.flow_version import FlowVersion, FlowVersionDao
+from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.evaluation.domain.models.evaluation import Evaluation, EvaluationTaskStatus, ExecType
 from bisheng.evaluation.domain.repositories.evaluation_repository import EvaluationRepository
 from bisheng.evaluation.domain.services.answer_correctness import compute_answer_correctness
 from bisheng.llm.domain.services import LLMService
+from bisheng.open_api.application.access_context import get_current_open_api_principal
+from bisheng.public_endpoints.application.access_context import get_current_public_api_principal
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid
 from bisheng.worker.workflow.redis_callback import RedisCallback
 from bisheng.worker.workflow.tasks import continue_workflow, execute_workflow, workflow_stateful_worker
+from bisheng.workflow.application.execution_admission import prepare_saved
 from bisheng.workflow.common.workflow import WorkflowStatus
 
 expire = 600
@@ -36,6 +41,45 @@ expire = 600
 
 class EvaluationService:
     UserCache: InMemoryCache = InMemoryCache()
+
+    @staticmethod
+    def require_jwt_identity(login_user: UserPayload) -> int:
+        tenant_id = get_current_tenant_id()
+        if (
+            not isinstance(login_user, UserPayload)
+            or type(tenant_id) is not int
+            or tenant_id <= 0
+            or is_tenant_filter_bypassed()
+            or get_current_open_api_principal() is not None
+            or get_current_public_api_principal() is not None
+        ):
+            raise UnAuthorizedError()
+        reference = login_user._runtime_credential_reference
+        if reference is not None and (
+            not isinstance(reference, dict)
+            or reference.get("kind") != "web_session"
+            or any(type(reference.get(key)) is not int for key in ("user_id", "tenant_id", "token_version"))
+            or (reference["user_id"], reference["tenant_id"], reference["token_version"])
+            != (login_user.user_id, login_user.tenant_id, login_user.token_version)
+        ):
+            raise UnAuthorizedError()
+        return tenant_id
+
+    @classmethod
+    def require_evaluation_owner(cls, evaluation_id: int, login_user: UserPayload) -> Evaluation:
+        tenant_id = cls.require_jwt_identity(login_user)
+        # A management pin is a trusted current view, not the JWT home tenant.
+        # It never lets an administrator execute another user's evaluation.
+        with strict_tenant_filter():
+            evaluation = EvaluationRepository.get_user_one_evaluation(login_user.user_id, evaluation_id)
+        if (
+            evaluation is None
+            or evaluation.user_id != login_user.user_id
+            or evaluation.tenant_id != tenant_id
+            or evaluation.is_delete
+        ):
+            raise NotFoundError()
+        return evaluation
 
     @classmethod
     def get_evaluation(
@@ -187,14 +231,17 @@ class EvaluationService:
         return f"evaluation_task_progress_{evaluation_id}"
 
 
-def execute_workflow_get_answer(workflow_info: FlowVersion, evaluation: Evaluation, question: str) -> str:
+def execute_workflow_get_answer(
+    workflow_data: dict, evaluation: Evaluation, question: str, *, login_user: UserPayload
+) -> str:
     # Initialize workflow
     unique_id = generate_uuid()
     workflow_id = evaluation.unique_id
     chat_id = ""
-    user_id = evaluation.user_id
+    EvaluationService.require_jwt_identity(login_user)
+    user_id = login_user.user_id
     workflow = RedisCallback(unique_id, workflow_id, chat_id, user_id)
-    workflow.set_workflow_data(workflow_info.data)
+    workflow.set_workflow_data(workflow_data)
     workflow.set_workflow_status(WorkflowStatus.WAITING.value)
     hash_key = generate_uuid()
     worker_node = workflow_stateful_worker.find_task_node_sync(hash_key)
@@ -252,47 +299,64 @@ def execute_workflow_get_answer(workflow_info: FlowVersion, evaluation: Evaluati
         raise Exception(f"workflow status is unknown: {status_info}")
 
 
-async def add_evaluation_task(evaluation_id: int):
-    evaluation = EvaluationRepository.get_one_evaluation(evaluation_id=evaluation_id)
-    if not evaluation:
-        return
-
+async def add_evaluation_task(evaluation_id: int, login_user: UserPayload):
+    # Recheck after dispatch; a stale or arbitrary ID must not recover the
+    # creator's identity or mutate another tenant/owner's task on failure.
+    evaluation = EvaluationService.require_evaluation_owner(evaluation_id, login_user)
     redis_key = EvaluationService.get_redis_key(evaluation_id)
-    redis_client = get_redis_client_sync()
+    redis_client = None
     try:
-        file_data = EvaluationService.read_csv_file(evaluation.file_path)
-        csv_data = EvaluationService.parse_csv(file_data)
-        progress_increment = 80 / len(csv_data)
-        current_progress = 0
-
         if evaluation.exec_type == ExecType.FLOW.value:
             raise ValueError("unsupport flow")
-
+        if evaluation.exec_type == ExecType.WORKFLOW.value:
+            if type(evaluation.version) is not int or evaluation.version <= 0:
+                raise Exception("workflow version info not found")
+            # Preflight happens before dataset I/O. Its graph is not reused as
+            # proof for later questions; each enqueue gets a fresh admission.
+            await prepare_saved(login_user, evaluation.unique_id, version_id=evaluation.version)
         elif evaluation.exec_type == ExecType.ASSISTANT.value:
             assistant = await AssistantDao.aget_one_assistant(evaluation.unique_id)
             if not assistant:
                 raise Exception("Assistant not found")
-            gpts_agent = AssistantAgent(assistant_info=assistant, chat_id="", invoke_user_id=evaluation.user_id)
+            gpts_agent = AssistantAgent(
+                assistant_info=assistant,
+                chat_id="",
+                invoke_user_id=login_user.user_id,
+                login_user=login_user,
+            )
             await gpts_agent.init_assistant()
+        else:
+            raise ValueError("unsupported evaluation type")
+
+        file_data = EvaluationService.read_csv_file(evaluation.file_path)
+        csv_data = EvaluationService.parse_csv(file_data)
+        progress_increment = 80 / len(csv_data)
+        current_progress = 0
+        redis_client = get_redis_client_sync()
+        if evaluation.exec_type == ExecType.ASSISTANT.value:
             for _index, one in enumerate(csv_data):
+                # Agent.run revalidates its current source and complete targets
+                # before invoking a provider, including for a reused Agent.
                 messages = await gpts_agent.run(one.get("question"))
                 if len(messages):
                     one["answer"] = messages[-1].content
                 current_progress += progress_increment
                 redis_client.set(redis_key, round(current_progress))
         elif evaluation.exec_type == ExecType.WORKFLOW.value:
-            workflow_info = FlowVersionDao.get_version_by_id(version_id=evaluation.version)
-            if not workflow_info or workflow_info.flow_id != evaluation.unique_id:
-                raise Exception("workflow version info not found")
             for _index, one in enumerate(csv_data):
+                prepared = await prepare_saved(login_user, evaluation.unique_id, version_id=evaluation.version)
                 one["answer"] = await asyncio.to_thread(
-                    execute_workflow_get_answer, workflow_info, evaluation, one.get("question", "")
+                    execute_workflow_get_answer,
+                    prepared.graph,
+                    evaluation,
+                    one.get("question", ""),
+                    login_user=login_user,
                 )
                 current_progress += progress_increment
                 redis_client.set(redis_key, round(current_progress))
 
         _llm = await LLMService.get_evaluation_llm_object(
-            evaluation.user_id,
+            login_user.user_id,
             tenant_id=evaluation.tenant_id,
         )
         result = await asyncio.to_thread(
@@ -349,7 +413,8 @@ async def add_evaluation_task(evaluation_id: int):
         evaluation.status = EvaluationTaskStatus.success.value
         evaluation.result_file_path = result_file_path
         EvaluationRepository.update_evaluation(evaluation=evaluation)
-        redis_client.delete(redis_key)
+        if redis_client is not None:
+            redis_client.delete(redis_key)
         logger.info(f"evaluation task success id={evaluation_id}")
 
     except Exception as e:
@@ -357,4 +422,5 @@ async def add_evaluation_task(evaluation_id: int):
         evaluation.status = EvaluationTaskStatus.failed.value
         evaluation.description = str(e)[-500:]  # Limit the length of the error description to avoid being too long
         EvaluationRepository.update_evaluation(evaluation=evaluation)
-        redis_client.delete(redis_key)
+        if redis_client is not None:
+            redis_client.delete(redis_key)

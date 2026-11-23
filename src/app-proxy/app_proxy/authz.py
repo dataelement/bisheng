@@ -110,6 +110,11 @@ def extract_access_token(connection: HTTPConnection) -> str | None:
     and ``path=/`` (K7). Bearer second, because the platform SPA keeps its token
     in localStorage and an app embedded in it may call through with a header.
     """
+    slug = connection.path_params.get("slug", "")
+    if is_valid_slug(slug):
+        desktop_token = connection.cookies.get("bisheng_app_session_" + slug)
+        if desktop_token:
+            return desktop_token
     token = connection.cookies.get(ACCESS_TOKEN_COOKIE)
     if token:
         return token

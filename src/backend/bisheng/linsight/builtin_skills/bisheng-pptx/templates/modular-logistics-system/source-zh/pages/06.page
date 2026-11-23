@@ -1,0 +1,641 @@
+pageType: process
+background:
+  type: solid
+  color: $paper
+notes: |
+  海外仓把仓储、分拣、配送、退换货、售后、库存资金和当地合规连接成一个经营节点。公开口径显示海外仓超过 2500 个，总面积超过 3000 万平方米；按下限计算，单仓平均面积约 1.2 万平方米以上，仅作数量级参考。2024 年国际货邮运输量同比增长 29.3%。
+  来源：https://dzswgf.mofcom.gov.cn/news/182/2025/4/1744004653888.html
+  来源：https://dzswgf.mofcom.gov.cn/news/phone/43/2025/6/m-1751262242749.html
+elements:
+  - elementId: p06-top-rule
+    elementType: shape
+    bounds:
+      - 0
+      - 0
+      - 960
+      - 12
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $yellow
+      width: 0
+  - elementId: p06-kicker
+    elementType: text
+    bounds:
+      - 54
+      - 32
+      - 420
+      - 18
+    content:
+      style: $section
+      text: 04 / OVERSEAS WAREHOUSE
+  - elementId: p06-title
+    elementType: text
+    bounds:
+      - 52
+      - 58
+      - 850
+      - 42
+    content:
+      style: $pageTitle
+      text: 海外仓不是仓：它是体验、现金与合规的经营节点
+  - elementId: p06-stats-panel
+    elementType: shape
+    bounds:
+      - 54
+      - 130
+      - 264
+      - 338
+    shapeName: rect
+    fill:
+      type: solid
+      color: $graphite
+    border:
+      color: $graphite
+      width: 0
+  - elementId: p06-stats-code
+    elementType: text
+    bounds:
+      - 72
+      - 148
+      - 220
+      - 18
+    content:
+      text: WAREHOUSE CAPACITY / 公开年份
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 9
+      color: $yellow
+      bold: true
+      letterSpacing: 0.8
+  - elementId: p06-stat-01
+    elementType: text
+    bounds:
+      - 70
+      - 178
+      - 218
+      - 52
+    content:
+      text: 2500+
+      fontFamily:
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 36
+      color: $yellow
+      bold: true
+  - elementId: p06-stat-01-label
+    elementType: text
+    bounds:
+      - 72
+      - 238
+      - 212
+      - 20
+    content:
+      text: 海外仓数量
+      fontFamily: *ref_0
+      fontSize: 11
+      color: $white
+      bold: true
+  - elementId: p06-stat-rule-01
+    elementType: line
+    bounds:
+      - 72
+      - 266
+      - 212
+      - 1
+    viewBox:
+      - 212
+      - 1
+    points: 0,0 212,0
+    border:
+      width: 1
+      color: $slate
+  - elementId: p06-stat-02
+    elementType: text
+    bounds:
+      - 70
+      - 282
+      - 218
+      - 42
+    content:
+      text: 3000 万㎡+
+      fontFamily: *ref_0
+      fontSize: 27
+      color: $white
+      bold: true
+  - elementId: p06-stat-02-label
+    elementType: text
+    bounds:
+      - 72
+      - 326
+      - 212
+      - 22
+    content:
+      text: 海外仓总面积
+      fontFamily: *ref_0
+      fontSize: 11
+      color: $steel
+      bold: true
+  - elementId: p06-stat-rule-02
+    elementType: line
+    bounds:
+      - 72
+      - 362
+      - 212
+      - 1
+    viewBox:
+      - 212
+      - 1
+    points: 0,0 212,0
+    border:
+      width: 1
+      color: $slate
+  - elementId: p06-stat-03
+    elementType: text
+    bounds:
+      - 70
+      - 378
+      - 218
+      - 36
+    content:
+      text: 约 1.2 万㎡+ / 仓
+      fontFamily: *ref_0
+      fontSize: 20
+      color: $yellow
+      bold: true
+  - elementId: p06-stat-03-label
+    elementType: text
+    bounds:
+      - 72
+      - 420
+      - 212
+      - 30
+    content:
+      text: 按下限计算，仅作数量级参考
+      fontFamily: *ref_0
+      fontSize: 9
+      color: $steel
+  - elementId: p06-system-panel
+    elementType: shape
+    bounds:
+      - 340
+      - 130
+      - 566
+      - 338
+    shapeName: rect
+    fill:
+      type: solid
+      color: $surface
+    border:
+      color: $graphite
+      width: 1.2
+  - elementId: p06-system-code
+    elementType: text
+    bounds:
+      - 360
+      - 148
+      - 270
+      - 18
+    content:
+      text: LOCAL FULFILLMENT CONTROL NODE
+      fontFamily: *ref_0
+      fontSize: 9
+      color: $slate
+      bold: true
+      letterSpacing: 0.8
+  - elementId: p06-hub
+    elementType: shape
+    bounds:
+      - 534
+      - 224
+      - 180
+      - 92
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellow
+    border:
+      color: $graphite
+      width: 2
+  - elementId: p06-hub-tag
+    elementType: text
+    bounds:
+      - 550
+      - 238
+      - 148
+      - 22
+    content:
+      text: CONTROL NODE
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      letterSpacing: 0.8
+      align:
+        - center
+        - middle
+  - elementId: p06-hub-title
+    elementType: text
+    bounds:
+      - 552
+      - 264
+      - 144
+      - 34
+    content:
+      text: 海外仓
+      fontFamily: *ref_0
+      fontSize: 24
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p06-node-storage
+    elementType: shape
+    bounds:
+      - 364
+      - 178
+      - 112
+      - 58
+    shapeName: rect
+    fill:
+      type: solid
+      color: $graphite
+    border:
+      color: $graphite
+      width: 0
+  - elementId: p06-node-storage-t
+    elementType: text
+    bounds:
+      - 376
+      - 190
+      - 88
+      - 34
+    content:
+      text: |-
+        01
+        仓储
+      fontFamily: *ref_0
+      fontSize: 11
+      color: $white
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p06-line-storage
+    elementType: line
+    bounds:
+      - 470
+      - 214
+      - 68
+      - 34
+    viewBox:
+      - 68
+      - 34
+    points: 0,0 68,34
+    border:
+      width: 2
+      color: $graphite
+    arrow:
+      - null
+      - triangle
+  - elementId: p06-node-sort
+    elementType: shape
+    bounds:
+      - 364
+      - 252
+      - 112
+      - 58
+    shapeName: rect
+    fill:
+      type: solid
+      color: $surface
+    border:
+      color: $graphite
+      width: 1
+  - elementId: p06-node-sort-t
+    elementType: text
+    bounds:
+      - 376
+      - 264
+      - 88
+      - 34
+    content:
+      text: |-
+        02
+        分拣
+      fontFamily: *ref_0
+      fontSize: 11
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p06-line-sort
+    elementType: line
+    bounds:
+      - 476
+      - 276
+      - 58
+      - 2
+    viewBox:
+      - 58
+      - 2
+    points: 0,1 58,1
+    border:
+      width: 2
+      color: $graphite
+    arrow:
+      - null
+      - triangle
+  - elementId: p06-node-delivery
+    elementType: shape
+    bounds:
+      - 364
+      - 326
+      - 112
+      - 58
+    shapeName: rect
+    fill:
+      type: solid
+      color: $graphite
+    border:
+      color: $graphite
+      width: 0
+  - elementId: p06-node-delivery-t
+    elementType: text
+    bounds:
+      - 376
+      - 338
+      - 88
+      - 34
+    content:
+      text: |-
+        03
+        配送
+      fontFamily: *ref_0
+      fontSize: 11
+      color: $white
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p06-line-delivery
+    elementType: line
+    bounds:
+      - 470
+      - 300
+      - 68
+      - 50
+    viewBox:
+      - 68
+      - 50
+    points: 0,50 68,0
+    border:
+      width: 2
+      color: $graphite
+    arrow:
+      - null
+      - triangle
+  - elementId: p06-node-returns
+    elementType: shape
+    bounds:
+      - 768
+      - 178
+      - 112
+      - 58
+    shapeName: rect
+    fill:
+      type: solid
+      color: $surface
+    border:
+      color: $graphite
+      width: 1
+  - elementId: p06-node-returns-t
+    elementType: text
+    bounds:
+      - 780
+      - 190
+      - 88
+      - 34
+    content:
+      text: |-
+        04
+        退换货
+      fontFamily: *ref_0
+      fontSize: 11
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p06-line-returns
+    elementType: line
+    bounds:
+      - 710
+      - 214
+      - 62
+      - 34
+    viewBox:
+      - 62
+      - 34
+    points: 0,34 62,0
+    border:
+      width: 2
+      color: $graphite
+    arrow:
+      - triangle
+      - null
+  - elementId: p06-node-service
+    elementType: shape
+    bounds:
+      - 768
+      - 252
+      - 112
+      - 58
+    shapeName: rect
+    fill:
+      type: solid
+      color: $graphite
+    border:
+      color: $graphite
+      width: 0
+  - elementId: p06-node-service-t
+    elementType: text
+    bounds:
+      - 780
+      - 264
+      - 88
+      - 34
+    content:
+      text: |-
+        05
+        售后
+      fontFamily: *ref_0
+      fontSize: 11
+      color: $white
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p06-line-service
+    elementType: line
+    bounds:
+      - 714
+      - 276
+      - 54
+      - 2
+    viewBox:
+      - 54
+      - 2
+    points: 0,1 54,1
+    border:
+      width: 2
+      color: $graphite
+    arrow:
+      - triangle
+      - null
+  - elementId: p06-node-compliance
+    elementType: shape
+    bounds:
+      - 768
+      - 326
+      - 112
+      - 58
+    shapeName: rect
+    fill:
+      type: solid
+      color: $surface
+    border:
+      color: $graphite
+      width: 1
+  - elementId: p06-node-compliance-t
+    elementType: text
+    bounds:
+      - 780
+      - 338
+      - 88
+      - 34
+    content:
+      text: |-
+        06
+        当地合规
+      fontFamily: *ref_0
+      fontSize: 11
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p06-line-compliance
+    elementType: line
+    bounds:
+      - 710
+      - 300
+      - 62
+      - 50
+    viewBox:
+      - 62
+      - 50
+    points: 0,0 62,50
+    border:
+      width: 2
+      color: $graphite
+    arrow:
+      - triangle
+      - null
+  - elementId: p06-capital-tag
+    elementType: shape
+    bounds:
+      - 548
+      - 336
+      - 152
+      - 38
+    shapeName: rect
+    fill:
+      type: solid
+      color: $yellowPale
+    border:
+      color: $yellow
+      width: 1
+  - elementId: p06-capital-tag-t
+    elementType: text
+    bounds:
+      - 560
+      - 345
+      - 128
+      - 20
+    content:
+      text: 库存 × 资金占用
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p06-mail-strip
+    elementType: shape
+    bounds:
+      - 360
+      - 406
+      - 520
+      - 40
+    shapeName: rect
+    fill:
+      type: solid
+      color: $graphite
+    border:
+      color: $graphite
+      width: 0
+  - elementId: p06-mail-strip-t
+    elementType: text
+    bounds:
+      - 376
+      - 415
+      - 488
+      - 22
+    content:
+      text: 2024 国际货邮运输量同比 +29.3%｜物流基础能力同步扩张
+      fontFamily: *ref_0
+      fontSize: 12
+      color: $yellow
+      bold: true
+      align:
+        - center
+        - middle
+  - elementId: p06-footer
+    elementType: text
+    bounds:
+      - 54
+      - 492
+      - 772
+      - 28
+    content:
+      text: 来源：商务部公开资料｜公开年份；单仓平均面积为下限口径计算，仅作数量级参考。
+      fontFamily: *ref_0
+      fontSize: 8
+      color: $slate
+  - elementId: p06-page
+    elementType: text
+    bounds:
+      - 882
+      - 504
+      - 28
+      - 16
+    content:
+      text: '06'
+      fontFamily: *ref_0
+      fontSize: 10
+      color: $graphite
+      bold: true
+      align:
+        - right
+        - top

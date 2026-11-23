@@ -30,6 +30,7 @@ jest.mock('sse.js', () => ({ SSE: class {} }));
 // untransformed ESM). useLinsightManager only reaches for useToastContext, and
 // only from the submit pipeline — stub the barrel instead of the world.
 jest.mock('~/Providers', () => ({ useToastContext: () => ({ showToast: jest.fn() }) }));
+jest.mock('~/hooks', () => ({ useLocalize: () => (key: string) => key }));
 jest.mock('~/api/linsight', () => ({
     getLinsightSessionVersionList: jest.fn(),
     getLinsightTaskList: jest.fn(),

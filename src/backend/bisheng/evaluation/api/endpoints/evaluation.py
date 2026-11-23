@@ -37,6 +37,7 @@ def create_evaluation(
 ):
     """Create Assessment Task."""
     try:
+        EvaluationService.require_jwt_identity(login_user)
         user_id = login_user.user_id
         if not version:
             version = 0
@@ -67,7 +68,8 @@ def create_evaluation(
             session.commit()
             session.refresh(db_evaluation)
 
-        background_tasks.add_task(add_evaluation_task, evaluation_id=db_evaluation.id)
+        EvaluationService.require_evaluation_owner(db_evaluation.id, login_user)
+        background_tasks.add_task(add_evaluation_task, evaluation_id=db_evaluation.id, login_user=login_user)
         return resp_200(db_evaluation.copy())
     finally:
         file.file.close()
@@ -95,4 +97,5 @@ def process_evaluation(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """Perform assessment tasks manually."""
-    background_tasks.add_task(add_evaluation_task, evaluation_id=evaluation_id)
+    EvaluationService.require_evaluation_owner(evaluation_id, login_user)
+    background_tasks.add_task(add_evaluation_task, evaluation_id=evaluation_id, login_user=login_user)

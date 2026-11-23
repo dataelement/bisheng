@@ -15,17 +15,16 @@ beforeEach(() => {
     vi.mocked(getModelVisibility).mockResolvedValue({ version: 3, everyone: false, subjects: [] })
     vi.mocked(getPolicySubjects).mockResolvedValue([{ kind: 'DEPARTMENT', id: 10, name: 'Engineering', depth: 0 }, { kind: 'ROLE', id: 10, name: 'Reviewer', depth: 0 }])
 })
-it('saves visibility while preserving the persisted multiplier outside the dialog', async () => {
-    vi.mocked(getModelVisibility).mockResolvedValue({ version: 3, everyone: false, subjects: [], credit_multiplier: '1.25' })
+it('saves visibility without sending a credit multiplier', async () => {
     const close = vi.fn()
     const user = userEvent.setup()
     render(<ModelAccessDialog model={{ id: 7, name: 'Model' }} onClose={close} />)
     await user.click(await screen.findByRole('button', { name: 'dialog.tabGrant' }))
     const dialog = screen.getByRole('dialog', { name: 'dialog.tabGrant - Model' })
     await user.click(await within(dialog).findByText('Ada'))
-    await user.click(within(dialog).getByRole('button', { name: 'subject.department' }))
+    await user.click(within(dialog).getByRole('tab', { name: 'subject.department' }))
     await user.click(await within(dialog).findByText('Engineering'))
-    await user.click(within(dialog).getByRole('button', { name: 'dsh.unified.role' }))
+    await user.click(within(dialog).getByRole('tab', { name: 'dsh.unified.role' }))
     await user.click(await within(dialog).findByText('Reviewer'))
     await user.click(within(dialog).getByRole('button', { name: 'dsh.unified.addToDraft' }))
     expect(saveModelVisibility).not.toHaveBeenCalled()
@@ -34,16 +33,15 @@ it('saves visibility while preserving the persisted multiplier outside the dialo
     expect(screen.getByText('Engineering')).toBeVisible()
     await user.click(screen.getByRole('tab', { name: 'dsh.unified.role' }))
     expect(screen.getByText('Reviewer')).toBeVisible()
-    expect(screen.queryByLabelText('dsh.unified.multiplier')).toBeNull()
     await user.click(screen.getByRole('button', { name: 'dsh.unified.save' }))
     await waitFor(() => expect(saveModelVisibility).toHaveBeenCalledWith(7, {
-        version: 3, everyone: false, credit_multiplier: '1.25', users: [{ value: 21, label: 'Ada' }],
+        version: 3, everyone: false, users: [{ value: 21, label: 'Ada' }],
         subjects: [{ kind: 'USER', id: 21 }, { kind: 'DEPARTMENT', id: 10 }, { kind: 'ROLE', id: 10 }],
     }))
     await waitFor(() => expect(close).toHaveBeenCalledOnce())
 })
-it('keeps the loaded permission and multiplier draft visible after a version conflict', async () => {
-    vi.mocked(getModelVisibility).mockResolvedValue({ version: 3, everyone: false, credit_multiplier: '1.25', subjects: [{ kind: 'ROLE', id: 10 }, { kind: 'USER', id: 21 }], users: [{ value: 21, label: 'Ada' }] })
+it('keeps the loaded permission draft visible after a version conflict', async () => {
+    vi.mocked(getModelVisibility).mockResolvedValue({ version: 3, everyone: false, subjects: [{ kind: 'ROLE', id: 10 }, { kind: 'USER', id: 21 }], users: [{ value: 21, label: 'Ada' }] })
     vi.mocked(saveModelVisibility).mockRejectedValue(new Error('conflict'))
     const close = vi.fn()
     const user = userEvent.setup()
@@ -53,8 +51,7 @@ it('keeps the loaded permission and multiplier draft visible after a version con
     await user.click(screen.getByRole('button', { name: 'dsh.unified.save' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('dsh.conflict')
     expect(screen.getByText('Reviewer')).toBeVisible()
-    expect(screen.queryByLabelText('dsh.unified.multiplier')).toBeNull()
-    expect(saveModelVisibility).toHaveBeenCalledWith(7, expect.objectContaining({ subjects: [{ kind: 'ROLE', id: 10 }], credit_multiplier: '1.25' }))
+    expect(saveModelVisibility).toHaveBeenCalledWith(7, expect.objectContaining({ subjects: [{ kind: 'ROLE', id: 10 }] }))
     expect(close).not.toHaveBeenCalled()
 })
 it('discards a cancelled add dialog without changing the parent policy', async () => {
@@ -70,7 +67,7 @@ it('discards a cancelled add dialog without changing the parent policy', async (
 })
 it('everyone hides individual choices', async () => {
     render(<ModelAccessDialog model={{ id: 7, name: 'Model' }} onClose={vi.fn()} />)
-    fireEvent.click(await screen.findByRole('switch', { name: 'dsh.unified.everyoneVisible' }))
+    fireEvent.click(await screen.findByRole('switch', { name: 'model:model.currentTenantEveryone' }))
     expect(screen.queryByLabelText('Engineering')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'dsh.unified.save' }))
     await waitFor(() => expect(saveModelVisibility).toHaveBeenCalledWith(7, { version: 3, everyone: true, subjects: [] }))
@@ -81,15 +78,24 @@ it('preserves the selected-member draft when the all-members switch collapses an
         subjects: [{ kind: 'USER', id: 21 }], users: [{ value: 21, label: 'Ada' }] })
     const user = userEvent.setup()
     render(<ModelAccessDialog model={{ id: 7, name: 'Model' }} onClose={vi.fn()} />)
-    const toggle = await screen.findByRole('switch', { name: 'dsh.unified.everyoneVisible' })
+    const toggle = await screen.findByRole('switch', { name: 'model:model.currentTenantEveryone' })
     expect(screen.getByText('Ada')).toBeVisible()
     await user.click(toggle)
     expect(toggle).toBeChecked()
     expect(screen.queryByRole('region', { name: 'dsh.unified.selectedVisible' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'dialog.tabGrant' })).toBeNull()
-    expect(screen.queryByLabelText('dsh.unified.multiplier')).toBeNull()
     await user.click(toggle)
     expect(toggle).not.toBeChecked()
     expect(screen.getByText('Ada')).toBeVisible()
+    expect(saveModelVisibility).not.toHaveBeenCalled()
+})
+
+it('refuses to limit a model to nobody', async () => {
+    vi.mocked(getModelVisibility).mockResolvedValue({ version: 1, everyone: true, subjects: [] })
+    const user = userEvent.setup()
+    render(<ModelAccessDialog model={{ id: 7, name: 'Model' }} onClose={vi.fn()} />)
+    await user.click(await screen.findByRole('switch', { name: 'model:model.currentTenantEveryone' }))
+    expect(screen.getByRole('note')).toHaveTextContent('dsh.unified.selectedVisibleEmpty')
+    expect(screen.getByRole('button', { name: 'dsh.unified.save' })).toBeDisabled()
     expect(saveModelVisibility).not.toHaveBeenCalled()
 })

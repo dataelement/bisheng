@@ -5,7 +5,7 @@ import jwt
 from fastapi import APIRouter, Body, Depends, Query, Request, WebSocket, WebSocketException
 from fastapi import status as http_status
 from loguru import logger
-from sqlmodel import select
+from starlette.websockets import WebSocketState
 
 from bisheng.api.services import report_template
 from bisheng.api.services.flow import FlowService
@@ -13,19 +13,20 @@ from bisheng.api.services.office_callback import afetch_office_document
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.v1.chat import chat_manager
 from bisheng.api.v1.schemas import FlowVersionCreate, resp_200
+from bisheng.chat_session.application.conversation_persistence import ConversationPersistence
 from bisheng.common.chat.types import WorkType
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.flow import AppWriteAuthError, WorkflowNameExistsError, WorkFlowOnlineEditError
+from bisheng.common.errcode.base import BaseErrorCode
+from bisheng.common.errcode.flow import AppWriteAuthError, WorkFlowOnlineEditError
 from bisheng.common.errcode.http_error import NotFoundError, ServerError, UnAuthorizedError
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings as bisheng_settings
-from bisheng.core.database import get_sync_db_session
 from bisheng.core.logger import trace_id_var
+from bisheng.core.session_activity import business_activity
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.assistant import AssistantDao
-from bisheng.database.models.flow import Flow, FlowCreate, FlowDao, FlowRead, FlowStatus, FlowType, FlowUpdate
-from bisheng.database.models.flow_version import FlowVersionDao
+from bisheng.database.models.flow import FlowCreate, FlowDao, FlowStatus, FlowType, FlowUpdate
 from bisheng.permission.application.business_authorization import (
     check_business_action,
     require_business_action,
@@ -33,7 +34,10 @@ from bisheng.permission.application.business_authorization import (
 from bisheng.role.domain.services.quota_service import QuotaResourceType, require_quota
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
+from bisheng.user.application.runtime_identity import browser_message_identity_scope
 from bisheng.utils import generate_uuid
+from bisheng.workflow.application.browser_scope import browser_workflow_scope
+from bisheng.workflow.application.execution_port import BoundWorkflowExecutionPort
 from bisheng_langchain.utils.requests import Requests
 
 router = APIRouter(prefix="/workflow", tags=["Workflow"])
@@ -379,26 +383,48 @@ async def run_once(
 
 
 @router.websocket("/chat/{workflow_id}")
+@business_activity(http=False, websocket_actions=("init_data", "input"))
 async def workflow_ws(
     *,
     workflow_id: str,
     websocket: WebSocket,
     chat_id: str | None = None,
+    flow_lease_id: str | None = None,
     login_user: UserPayload = Depends(UserPayload.get_login_user_from_ws),
 ):
     try:
-        await require_business_action(
-            login_user,
-            resource_type="workflow",
-            resource_id=workflow_id,
-            action="use",
-        )
-        await chat_manager.dispatch_client(websocket, workflow_id, chat_id, login_user, WorkType.WORKFLOW, websocket)
+        async with browser_workflow_scope(
+            login_user, workflow_id, admitted=getattr(websocket.state, "admitted_request", None)
+        ) as execution_user:
+            await require_business_action(
+                execution_user,
+                resource_type="workflow",
+                resource_id=workflow_id,
+                action="use",
+            )
+            # The connection retains this target through dispatch and cleanup.
+            await chat_manager.dispatch_client(
+                websocket,
+                workflow_id,
+                chat_id,
+                execution_user,
+                WorkType.WORKFLOW,
+                websocket,
+                conversation_persistence=ConversationPersistence(execution_user.user_id, user=execution_user),
+                message_admission=lambda: browser_message_identity_scope(execution_user),
+                flow_lease_id=flow_lease_id,
+                workflow_execution_port=BoundWorkflowExecutionPort(workflow_id, execution_user),
+            )
     except UnAuthorizedError:
         await websocket.close(
             code=http_status.WS_1008_POLICY_VIOLATION,
             reason="No permission to use this app",
         )
+    except BaseErrorCode as exc:
+        if websocket.application_state == WebSocketState.CONNECTING:
+            await websocket.accept()
+        if websocket.application_state == WebSocketState.CONNECTED:
+            await exc.websocket_close_message(websocket)
     except WebSocketException as exc:
         logger.error(f"Websocket exception: {exc!s}")
         await websocket.close(code=http_status.WS_1011_INTERNAL_ERROR, reason=str(exc))
@@ -413,32 +439,7 @@ async def create_flow(
     login_user: UserPayload = Depends(UserPayload.get_app_creator_user),
 ):
     """Create a new flow."""
-    # Determine if the user repeats the skill name
-    with get_sync_db_session() as session:
-        if session.exec(
-            select(Flow).where(
-                Flow.name == flow.name, Flow.flow_type == FlowType.WORKFLOW.value, Flow.user_id == login_user.user_id
-            )
-        ).first():
-            raise WorkflowNameExistsError.http_exception()
-    flow.user_id = login_user.user_id
-    db_flow = Flow.model_validate(flow)
-    # Defense-in-depth: Flow.tenant_id default is None and the framework's
-    # before_flush hook (bisheng.core.database.tenant_filter) auto-fills it
-    # from current_tenant_id. Keeping this explicit assignment so future
-    # callers without an HTTP middleware (CLI, scripts) still set it right.
-    db_flow.tenant_id = login_user.tenant_id
-    db_flow.create_time = None
-    db_flow.update_time = None
-    db_flow.flow_type = FlowType.WORKFLOW.value
-    # Create New Skill
-    db_flow = FlowDao.create_flow(db_flow, FlowType.WORKFLOW.value)
-
-    current_version = FlowVersionDao.get_version_by_flow(db_flow.id)
-    ret = FlowRead.model_validate(db_flow)
-    ret.version_id = current_version.id
-    await FlowService.create_flow_hook(request, login_user, db_flow)
-    return resp_200(data=ret)
+    return await FlowService.create_workflow(request, login_user, flow)
 
 
 @router.get("/versions", status_code=200)

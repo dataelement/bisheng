@@ -11,6 +11,8 @@ True hands a text-only endpoint a payload it answers with a 400.
 
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from bisheng.api.v1.schemas import WSModel
 from bisheng.linsight.domain.services import agent_factory
 from bisheng.llm.domain.schemas import WorkbenchModelConfig
@@ -28,12 +30,21 @@ def workbench(models, default_id=None):
 
 
 async def resolve(conf, model_id):
-    """Run ``_resolve_model`` with only the two external services faked out."""
+    """Use the projected user catalog and the authoritative vision reader."""
+    from types import SimpleNamespace
+
+    from bisheng.dsh.domain.services import model_catalog, vision
+
+    flags = {int(entry.id): entry.visual for entry in conf.models or []}
     with (
-        patch.object(agent_factory.LLMService, "get_workbench_llm", AsyncMock(return_value=conf)),
+        patch.object(agent_factory.LLMService, "get_workbench_llm_candidates", AsyncMock(return_value=conf)),
+        patch.object(model_catalog, "project_workbench_config", AsyncMock(return_value=conf)),
+        patch.object(
+            vision,
+            "read_vision",
+            AsyncMock(side_effect=lambda model_id: SimpleNamespace(vision=flags.get(model_id, False))),
+        ),
         patch.object(agent_factory.LLMService, "get_bisheng_linsight_llm", AsyncMock(return_value="LLM")),
-        # settings is a pydantic model -> patch the CLASS method, not the instance
-        # attribute (pydantic rejects the assignment).
         patch.object(
             type(agent_factory.settings), "get_linsight_conf", return_value=type("C", (), {"default_temperature": 0})()
         ),
@@ -59,16 +70,14 @@ async def test_default_model_is_looked_up_too():
     assert supports_vision is True
 
 
-async def test_unknown_model_id_fails_closed():
-    """A model id absent from the list (config drift) must read as "no vision",
-    matching the field's own default — never as "assume it can see"."""
-    _, supports_vision = await resolve(workbench([("7", True)]), "99")
-    assert supports_vision is False
+async def test_unknown_selected_model_is_refused_without_silent_replacement():
+    with pytest.raises(ValueError, match="not currently available"):
+        await resolve(workbench([("7", True)]), "99")
 
 
-async def test_empty_model_list_fails_closed():
-    _, supports_vision = await resolve(WorkbenchModelConfig(models=None, linsight_default_model_id="7"), "7")
-    assert supports_vision is False
+async def test_empty_user_catalog_cannot_execute_a_frozen_selection():
+    with pytest.raises(ValueError, match="not currently available"):
+        await resolve(WorkbenchModelConfig(models=None, linsight_default_model_id="7"), "7")
 
 
 async def test_id_comparison_survives_int_vs_str():

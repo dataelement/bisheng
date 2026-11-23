@@ -1,18 +1,19 @@
 import { ArrowLeft } from "lucide-react";
+import { Button, StateView } from "@bisheng/ui";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useToastContext } from "~/Providers";
 import { getChatOnlineApi, getUncategorized, recordUsedAppApi } from "~/api/apps";
 import { NotificationSeverity } from "~/common";
-import { Button } from "~/components/ui/Button";
 import { EmptyStateIllustration } from "~/components/illustrations";
 import { useLocalize, useMediaQuery } from "~/hooks";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
+import { SquareBanner } from "~/pages/square/SquareBanner";
 import { cn, copyText } from "~/utils";
 import { getAppShareUrl } from "./appUtils";
 import { AgentCard } from "./components/AgentCard";
-import { AgentNavigation } from "./components/AgentNavigation";
+import { AgentNavigation, type AppCategoryId } from "./components/AgentNavigation";
 import { AppSearchBar } from "./components/AppSearchBar";
 import { squareTypePath } from "~/pages/square/squarePaths";
 
@@ -20,22 +21,19 @@ const appFlowOriginKey = (flowId: string) => `app-flow-origin:${flowId}`;
 const appLastOriginKey = "app-last-origin";
 /** F054 hosted application — the one card type that leaves this SPA. */
 const HOSTED_APP_FLOW_TYPE = 35;
-/** Catch-all tab id shared with AgentNavigation — apps carrying no home tag. */
-const UNCATEGORIZED = "uncategorized";
 /** Sentinel understood by `getChatOnlineApi` as "do not filter by tag". */
 const ALL_CATEGORIES = -1;
 
 export default function ExplorePlaza() {
-  // Null until the navigation has its tags and can say which tab is the
-  // default; fetching before that would show one tab's apps and then swap.
-  const [activeTabId, setActiveTabId] = useState<number | string | null>(null);
+  const [activeTabId, setActiveTabId] = useState<AppCategoryId | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [agents, setAgents] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  // --- 游标瀑布流加载状态 ---
+  // Cursor pagination state.
   const [hasMore, setHasMore] = useState(true);
   const cursorRef = useRef<string | null>(null);
   const loaderRef = useRef<HTMLDivElement>(null);
@@ -47,6 +45,7 @@ export default function ExplorePlaza() {
 
   const navigate = useNavigate();
   const location = useLocation();
+  const isUnifiedSquare = location.pathname === "/square";
   const { showToast } = useToastContext();
   const localize = useLocalize();
   const { data: bsConfig } = useGetBsConfig();
@@ -67,38 +66,39 @@ export default function ExplorePlaza() {
   // every category, so picking a tab drops the keyword and gives the user
   // that tab's own contents back. Must stay referentially stable —
   // AgentNavigation keys its initial tag load off this callback.
-  const handleCategoryChange = useCallback((categoryId: number | string) => {
+  const handleCategoryChange = useCallback((categoryId: AppCategoryId) => {
     setActiveTabId(categoryId);
     setSearchQuery("");
   }, []);
 
   // Fetch one cursor page. `cursor === null` starts a fresh list (first page).
   const fetchAgents = useCallback(
-    async (query: string, categoryId: number | string, cursor: string | null, isAppend: boolean) => {
+    async (query: string, categoryId: AppCategoryId, cursor: string | null, isAppend: boolean) => {
       // Infinite scroll stays serialized. A first-page request never is: it
       // carries a new tab or keyword, and the old shared lock silently dropped
       // it whenever one was still in flight — the grid then kept showing the
       // previous filter's apps with the new keyword sitting in the box.
       if (isAppend && (loading || loadingMore)) return;
       const seq = isAppend ? listSeqRef.current : ++listSeqRef.current;
+      setLoadError(false);
       if (isAppend) setLoadingMore(true);
-      else setLoading(true);
+      else {
+        setLoading(true);
+        setLoadingMore(false);
+      }
       try {
         const keyword = query.trim();
-        // Search spans every category. An app carrying no home tag only ever
-        // shows up under the "uncategorised" tab, so a tag-scoped search made
-        // it unfindable from any other tab — the tab the plaza lands on by
-        // default whenever home tags are configured (F056 AC-08). While a
-        // keyword is present the tab filter is therefore dropped, and the
-        // active tab is un-highlighted so the widened scope is visible.
-        const result = keyword
-          ? await getChatOnlineApi(cursor, keyword, ALL_CATEGORIES, pageSize)
-          : categoryId === UNCATEGORIZED
-            ? await getUncategorized(cursor, pageSize)
-            : await getChatOnlineApi(cursor, "", categoryId as number, pageSize);
+        // Both All and keyword searches omit the tag filter.
+        const tagId = keyword || typeof categoryId !== "number" ? ALL_CATEGORIES : categoryId;
+        const result = !keyword && categoryId === "uncategorized"
+          ? await getUncategorized(cursor, pageSize)
+          : await getChatOnlineApi(cursor, keyword, tagId, pageSize);
 
         if (seq !== listSeqRef.current) return;
         const pageData = result.list || [];
+        if (result.hasMore && (!pageData.length || !result.nextCursor || result.nextCursor === cursor)) {
+          throw new Error("App pagination did not advance");
+        }
 
         const formattedResults = pageData.map((item: any) => ({
           ...item,
@@ -114,12 +114,16 @@ export default function ExplorePlaza() {
         console.error("Failed to fetch agents:", error);
         if (seq !== listSeqRef.current) return;
         if (!isAppend) setAgents([]);
+        // The observer must wait for an explicit retry after a failed page.
+        setLoadError(true);
+        setHasMore(false);
       } finally {
-        // The append lane owns `loadingMore` alone, so it always clears it.
-        // A superseded first page must NOT clear `loading` — the request
-        // that replaced it is still running and owns the spinner.
-        if (isAppend) setLoadingMore(false);
-        else if (seq === listSeqRef.current) setLoading(false);
+        // A response from an old filter cannot clear the current page's
+        // loading flags, including an append started after a new search.
+        if (seq === listSeqRef.current) {
+          if (isAppend) setLoadingMore(false);
+          else setLoading(false);
+        }
       }
     },
     [loading, loadingMore],
@@ -147,7 +151,9 @@ export default function ExplorePlaza() {
           target.isIntersecting &&
           !loading &&
           !loadingMore &&
+          !loadError &&
           hasMore &&
+          cursorRef.current !== null &&
           activeTabId !== null &&
           !loadMoreLockRef.current
         ) {
@@ -163,12 +169,9 @@ export default function ExplorePlaza() {
     }
 
     return () => observer.disconnect();
-  }, [loading, loadingMore, hasMore, searchQuery, activeTabId, fetchAgents]);
+  }, [loading, loadingMore, loadError, hasMore, searchQuery, activeTabId, fetchAgents]);
 
-  // The spinner also covers the wait for the navigation's tags, which decide
-  // the default tab. `loading` itself must stay false until a request is
-  // actually in flight — fetchAgents treats it as a re-entry guard and would
-  // skip the very first fetch, leaving the spinner up for good.
+  // Show the spinner while the navigation initializes the default tab.
   const showLoading = loading || activeTabId === null;
 
   const handleCardClick = (agent: any) => {
@@ -193,7 +196,7 @@ export default function ExplorePlaza() {
       recordUsedAppApi(String(flowId)).catch(() => {});
       return;
     }
-    const returnTo = location.pathname === "/square" ? squareTypePath("apps") : "/apps/explore";
+    const returnTo = isUnifiedSquare ? squareTypePath("apps") : "/apps/explore";
     try {
       sessionStorage.setItem(appFlowOriginKey(String(flowId)), "explore");
       sessionStorage.setItem(appLastOriginKey, "explore");
@@ -237,42 +240,20 @@ export default function ExplorePlaza() {
         "max-[767px]:h-[100dvh]",
       )}
     >
-      {/* 顶部横幅：与知识广场一致 — 跟随主题的品牌色渐变底（brand-50 → white） */}
-      <div className="relative w-full shrink-0 overflow-hidden border-b border-[#F0F1F5] bg-blue-500/[0.05]">
-        {/* Decorative scattered icons — kept from the original banner art, recolored
-                    via a brand-tinted mask layer so they follow the blue ⇄ green theme. */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 bg-blue-200"
-          style={{
-            WebkitMaskImage: `url(${__APP_ENV__.BASE_URL || ""}/assets/channel/apptab-icons.svg)`,
-            maskImage: `url(${__APP_ENV__.BASE_URL || ""}/assets/channel/apptab-icons.svg)`,
-            WebkitMaskSize: "cover",
-            maskSize: "cover",
-            WebkitMaskPosition: "center",
-            maskPosition: "center",
-            WebkitMaskRepeat: "no-repeat",
-            maskRepeat: "no-repeat",
-          }}
-        />
-        {/* Desktop hosts this page inside 广场 (~/pages/square), whose tabs are the way
-                    around; the back arrow is the mobile way out. */}
-        <div className="absolute left-4 top-4 z-10 md:hidden">
-          <Button
-            variant="ghost"
-            onClick={() => navigate("/apps")}
-            className="h-8 w-8 rounded-md border border-[#E5E6EB] bg-white p-0 text-[#4E5969] fine-pointer:hover:bg-[#F7F8FA] fine-pointer:hover:text-blue-500"
-          >
-            <ArrowLeft className="size-3.5" />
-          </Button>
-        </div>
-        <div className="relative mx-auto flex w-full max-w-[1000px] flex-col items-center justify-center px-5 pb-5 pt-7 text-center">
-          <h1 className="mb-1 font-['PingFang_SC'] text-[26px] font-semibold text-blue-500">{bannerTitle}</h1>
-          <p className="mb-3 max-w-[640px] font-['PingFang_SC'] text-[13px] leading-[22px] text-[#86909C]">
-            {bannerDescription}
-          </p>
-        </div>
-      </div>
+      <SquareBanner title={bannerTitle} description={bannerDescription}>
+        {/* The unified square owns navigation; only the standalone mobile page needs a back button. */}
+        {!isUnifiedSquare && (
+          <div className="absolute left-4 top-4 z-10 md:hidden">
+            <Button
+              variant="ghost"
+              onClick={() => navigate("/apps")}
+              className="h-8 w-8 rounded-md border border-[#E5E6EB] bg-white p-0 text-[#4E5969] fine-pointer:hover:bg-[#F7F8FA] fine-pointer:hover:text-blue-500"
+            >
+              <ArrowLeft className="size-3.5" />
+            </Button>
+          </div>
+        )}
+      </SquareBanner>
 
       {/* 过滤栏：桌面与原先一致；窄屏搜索独占一行（移动端始终展开搜索） */}
       <div className="w-full max-w-[1000px] shrink-0 flex items-center justify-between z-10 px-5 py-5 max-[576px]:flex-col max-[576px]:items-stretch max-[576px]:gap-3">
@@ -331,12 +312,33 @@ export default function ExplorePlaza() {
                 </span>
               </div>
             ) : null}
-            {!hasMore && agents.length > 0 && (
+            {!showLoading && !loadingMore && loadError && (
+              <div role="alert">
+                <StateView
+                  size="panel"
+                  title={localize("com_list_load_failed")}
+                  action={
+                    <Button
+                      color="default"
+                      variant="outlined"
+                      onClick={() => {
+                        if (activeTabId !== null) {
+                          void fetchAgents(searchQuery, activeTabId, cursorRef.current, cursorRef.current !== null);
+                        }
+                      }}
+                    >
+                      {localize("com_ui_retry")}
+                    </Button>
+                  }
+                />
+              </div>
+            )}
+            {!hasMore && !loadError && agents.length > 0 && (
               <p className="text-[#a9aeb8] text-[12px] font-['PingFang_SC'] mt-4">
                 {localize("com_app_explore_end_of_list")}
               </p>
             )}
-            {!showLoading && agents.length === 0 && (
+            {!showLoading && !loadError && agents.length === 0 && (
               <div className="flex flex-col items-center">
                 <EmptyStateIllustration className="size-[120px] mb-4" />
                 <p className="text-[#a9aeb8] text-[14px] font-['PingFang_SC']">

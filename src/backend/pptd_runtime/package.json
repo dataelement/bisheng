@@ -1,0 +1,15 @@
+{
+  "name": "pptd-runtime",
+  "private": true,
+  "description": "Pinned npm dependencies of the vendored PPTD engine (dsh-ppt/). Installed to /opt/pptd-runtime by base.Dockerfile or install.sh.",
+  "type": "module",
+  "engines": { "node": "^22.19.0 || >=24.0.0" },
+  "dependencies": {
+    "@aiden0z/pptx-renderer": "1.2.4",
+    "fflate": "0.8.3",
+    "js-yaml": "4.3.2",
+    "jsdom": "29.1.1",
+    "pptxgenjs": "4.0.1",
+    "sharp": "0.35.5"
+  }
+}

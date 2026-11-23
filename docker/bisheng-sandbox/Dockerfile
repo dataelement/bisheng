@@ -3,11 +3,45 @@
 #   docker build -f docker/bisheng-sandbox/Dockerfile -t dataelement/bisheng-sandbox:v3.0.0-beta1 .
 #
 # Derived from src/backend/base.Dockerfile: full uv.lock venv, LibreOffice, pandoc,
-# fonts, ffmpeg. Does NOT copy platform code, config.yaml, entrypoint.sh, or
+# fonts, ffmpeg, plus the PPTD engine at /opt/pptd-runtime. Does NOT copy
+# platform code, config.yaml, entrypoint.sh, or
 # Chromium. Build-time compilers / wget are purged before the final layer.
 #
 # CI: pass HTTP(S)_PROXY build-args (GitHub / Debian). Do not bake proxy into ENV —
 # the running sandbox has no outbound (AC-12).
+
+# PPTD engine runtime for the built-in "PPT 制作" skill (F014): Node + the locked
+# npm deps, built in its own stage so the final image keeps no curl / npm cache.
+# Same layout as the backend image and pptd_runtime/install.sh: /opt/pptd-runtime.
+FROM python:3.11-slim AS pptd-runtime
+ARG TARGETARCH
+ARG PPTD_NODE_VERSION=24.19.0
+ARG NPM_REGISTRY=https://registry.npmjs.org
+ARG APT_MIRROR=mirrors.tuna.tsinghua.edu.cn
+ARG APT_SECURITY_MIRROR=mirrors.tuna.tsinghua.edu.cn
+ARG http_proxy
+ARG https_proxy
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG no_proxy
+ARG NO_PROXY
+# Same mirror rewrite as the final stage: deb.debian.org through the CI proxy fails.
+RUN sed -i "s|deb.debian.org|${APT_MIRROR}|g; s|security.debian.org|${APT_SECURITY_MIRROR}|g" \
+        /etc/apt/sources.list.d/debian.sources && \
+    apt-get -o APT::Update::Error-Mode=any update && \
+    apt-get install -y --no-install-recommends curl ca-certificates xz-utils && \
+    rm -rf /var/lib/apt/lists/*
+COPY src/backend/pptd_runtime/package.json src/backend/pptd_runtime/package-lock.json /opt/pptd-runtime/
+RUN set -eux; \
+    case "${TARGETARCH:-amd64}" in amd64) NODE_ARCH=x64 ;; arm64) NODE_ARCH=arm64 ;; *) echo "unsupported arch ${TARGETARCH}"; exit 1 ;; esac; \
+    mkdir -p /opt/pptd-runtime/bin; \
+    curl -fsSL "https://nodejs.org/dist/v${PPTD_NODE_VERSION}/node-v${PPTD_NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" | tar -xJ -C /opt/pptd-runtime; \
+    mv /opt/pptd-runtime/node-v${PPTD_NODE_VERSION}-linux-${NODE_ARCH} /opt/pptd-runtime/node; \
+    ln -s ../node/bin/node /opt/pptd-runtime/bin/node; \
+    cd /opt/pptd-runtime && PATH=/opt/pptd-runtime/node/bin:$PATH npm ci --omit=dev --no-audit --no-fund --registry "${NPM_REGISTRY}"; \
+    /opt/pptd-runtime/bin/node -e "import('sharp').then(m => console.log('sharp', m.default.versions.sharp, process.arch))"
+COPY src/backend/pptd_runtime/dsh-ppt /opt/pptd-runtime/engine
+RUN /opt/pptd-runtime/bin/node /opt/pptd-runtime/engine/lib/bin.js --help >/dev/null && chmod -R a+rX /opt/pptd-runtime
 
 FROM python:3.11-slim
 
@@ -81,6 +115,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     chmod -R a+rX /app /usr/local/share/nltk_data
 
 # Playwright Python package arrives via uv.lock; do NOT install Chromium.
+
+# PPTD engine (see the pptd-runtime stage above).
+COPY --from=pptd-runtime /opt/pptd-runtime /opt/pptd-runtime
 
 COPY --chmod=0555 src/sandbox-runner /opt/sandbox-runner
 ENV PYTHONPATH="/opt/sandbox-runner"

@@ -53,14 +53,24 @@ gateway() { run_install --gateway --license-file "${CASE_ROOT}/license" --public
 new_case
 run_install --prepare-only
 ok
-cmp "${SCRIPT_DIR}/.env.example" "${CASE_DIR}/.env" || fail 'Default configuration was rewritten'
+[[ "$(env_get "${CASE_DIR}/.env" COMPOSE_PROFILES)" = app-runtime ]] || fail 'Runtime is not enabled by default'
+seen_secrets='|'
+for key in BISHENG_RUNTIME_MANAGER_SECRET BISHENG_RUNTIME_CONTROL_SECRET BISHENG_RUNTIME_ENTRY_SECRET BISHENG_RUNTIME_EGRESS_SECRET BISHENG_APP_PROXY_HMAC_SECRET BISHENG_APP_OBO_SECRET BISHENG_RUNTIME_HOST_ISOLATION_SECRET; do
+  value="$(env_get "${CASE_DIR}/.env" "$key")"
+  [[ ${#value} = 64 ]] || fail 'Runtime secret missing'
+  [[ "$seen_secrets" != *"|$value|"* ]] || fail 'Runtime identities share a secret'
+  seen_secrets="${seen_secrets}${value}|"
+  absent "${CASE_ROOT}/out" "$value"
+done
+[[ ${#seen_secrets} -gt 1 ]] || fail 'No runtime identities'
+[[ "$(env_get "${CASE_DIR}/.env" BISHENG_RUNTIME_PAYLOAD_KEY)" =~ ^[A-Za-z0-9_-]{43}=$ ]] || fail 'Invalid Fernet key'
 [[ "$(env_get "${CASE_DIR}/.env" MINIO_ROOT_USER)" = minioadmin ]] || fail 'Wrong MinIO user'
 [[ "$(env_get "${CASE_DIR}/.env" MINIO_ROOT_PASSWORD)" = minioadmin ]] || fail 'Wrong MinIO password'
 [[ "$(ls -l "${CASE_DIR}/.env" | awk '{print substr($1, 1, 10)}')" = -rw------- ]] || fail 'Unsafe .env permissions'
 absent "${CASE_ROOT}/calls" $'login\t'
 absent "${CASE_ROOT}/calls" $'pull\t'
 absent "${CASE_ROOT}/calls" $'up\t'
-pass 'Default setup copies the template exactly, uses legacy MinIO values, and does not deploy in prepare-only'
+pass 'Default setup enables runtime with independent secrets, preserves MinIO defaults, and does not deploy in prepare-only'
 
 env_set "${CASE_DIR}/.env" MINIO_ROOT_PASSWORD existing-password
 env_set "${CASE_DIR}/.env" BISHENG_BACKEND_IMAGE custom.example/backend:custom
@@ -141,7 +151,7 @@ pass 'A cached license does not enable Gateway without a file; an unreadable fil
 new_case
 gateway
 ok
-[[ "$(env_get "${CASE_DIR}/.env" COMPOSE_PROFILES)" = gateway ]] || fail 'Gateway profile missing'
+[[ "$(env_get "${CASE_DIR}/.env" COMPOSE_PROFILES)" = app-runtime,gateway ]] || fail 'Gateway profile missing'
 [[ "$(env_get "${CASE_DIR}/.env" BISHENG_PRO)" = true ]] || fail 'Commercial flag missing'
 for key in BISHENG_GATEWAY_HMAC_SECRET BISHENG_GATEWAY_DB_PASSWORD; do
   secret="$(env_get "${CASE_DIR}/.env" "$key")"
@@ -179,6 +189,43 @@ ok
 [[ "$(env_get "${CASE_DIR}/.env" BISHENG_GATEWAY_HMAC_SECRET)" = "$secret" ]] || fail 'Gateway credentials changed'
 absent "${CASE_ROOT}/calls" $'down\t'
 pass 'Disabling Gateway restores direct routing without deleting data or other profiles'
+
+new_case
+run_install --ft --prepare-only
+ok
+[[ "$(env_get "${CASE_DIR}/.env" COMPOSE_PROFILES)" = app-runtime,ft ]] || fail 'FT profile missing'
+absent "${CASE_ROOT}/calls" $'pull\t'
+absent "${CASE_ROOT}/calls" $'up\t'
+env_set "${CASE_DIR}/.env" BISHENG_FT_IMAGE custom.example/ft:custom
+cp "${CASE_DIR}/.env" "${CASE_ROOT}/before"
+run_install --prepare-only
+ok
+cmp "${CASE_DIR}/.env" "${CASE_ROOT}/before" || fail 'FT settings changed on rerun'
+pass 'FT opt-in persists without deploying in prepare-only or replacing custom images'
+
+env_set "${CASE_DIR}/.env" COMPOSE_PROFILES app-runtime,ft,ft
+gateway --ft --prepare-only
+ok
+[[ "$(env_get "${CASE_DIR}/.env" COMPOSE_PROFILES)" = app-runtime,gateway,ft ]] || fail 'Combined profiles lost or duplicated'
+run_install --no-gateway --prepare-only
+ok
+[[ "$(env_get "${CASE_DIR}/.env" COMPOSE_PROFILES)" = app-runtime,ft ]] || fail 'Disabling Gateway lost FT'
+gateway --no-ft --prepare-only
+ok
+[[ "$(env_get "${CASE_DIR}/.env" COMPOSE_PROFILES)" = app-runtime,gateway ]] || fail 'Disabling FT lost other profiles'
+absent "${CASE_ROOT}/calls" $'stop\t'
+absent "${CASE_ROOT}/calls" $'down\t'
+pass 'Gateway and FT switches preserve each other and app-runtime without stopping services'
+
+new_case
+printf 'COMPOSE_PROFILES=\nCUSTOM_SETTING=preserved\n' > "${CASE_DIR}/.env"
+run_install --ft
+ok
+[[ "$(env_get "${CASE_DIR}/.env" COMPOSE_PROFILES)" = ft ]] || fail 'Legacy env cannot opt in'
+contains "${CASE_DIR}/.env" 'CUSTOM_SETTING=preserved'
+contains "${CASE_ROOT}/calls" $'pull\t'
+contains "${CASE_ROOT}/calls" $'up\t-d\t'
+pass 'Existing env files can enable FT without replacing configuration'
 
 new_case
 TEST_LEGACY=yes run_install --prepare-only

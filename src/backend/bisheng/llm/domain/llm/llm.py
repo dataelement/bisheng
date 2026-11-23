@@ -21,6 +21,7 @@ from bisheng.common.errcode.server import (
     LlmProviderDeletedError,
     NoLlmModelConfigError,
 )
+from bisheng.common.services.failure_context import failure_boundary
 from bisheng.core.ai import (
     AzureChatOpenAI,
     ChatAnthropic,
@@ -53,6 +54,7 @@ from ..utils import (
 )
 from .base import BishengBase
 from .context_overflow import as_context_overflow
+from .response_validation import validate_astream, validate_result, validate_stream
 
 
 def _get_user_kwargs(model_config: dict) -> dict:
@@ -247,7 +249,7 @@ def _get_spark_params(params: dict, server_config: dict, model_config: dict) -> 
 
     user_kwargs = _get_user_kwargs(model_config)
     user_kwargs.update(params)
-    return params
+    return user_kwargs
 
 
 _llm_node_type: dict = {
@@ -274,6 +276,44 @@ _llm_node_type: dict = {
     # Generic OpenAI-protocol servers: send max_tokens, which older third-party servers still require
     LLMServerType.OPENAI_COMPATIBLE.value: {"client": ChatOpenAICompatible, "params_handler": _get_openai_params},
 }
+
+
+# Request-body fragments that switch a model's thinking off, keyed by provider.
+# Only switches the provider is known to read are listed; every other provider
+# gets nothing (an unknown field can make a strict API reject the request).
+# Inference servers render the model's own chat template, so the switch is a
+# template variable; the two names cover the DeepSeek (`thinking`) and Qwen3 /
+# GLM (`enable_thinking`) templates — a template ignores variables it never reads.
+_CHAT_TEMPLATE_THINKING_OFF: dict = {"chat_template_kwargs": {"thinking": False, "enable_thinking": False}}
+_THINKING_OFF_EXTRA_BODY: dict = {
+    LLMServerType.VLLM.value: _CHAT_TEMPLATE_THINKING_OFF,
+    LLMServerType.LLAMACPP.value: _CHAT_TEMPLATE_THINKING_OFF,
+    LLMServerType.XINFERENCE.value: _CHAT_TEMPLATE_THINKING_OFF,
+    LLMServerType.MIND_IE.value: _CHAT_TEMPLATE_THINKING_OFF,
+    LLMServerType.OPENAI_COMPATIBLE.value: _CHAT_TEMPLATE_THINKING_OFF,
+    LLMServerType.QWEN.value: {"enable_thinking": False},
+    LLMServerType.SILICON.value: {"enable_thinking": False},
+    LLMServerType.VOLCENGINE.value: {"thinking": {"type": "disabled"}},
+}
+
+
+def thinking_off_extra_body(server_type: str, current: dict | None) -> dict | None:
+    """Return ``current`` merged with the provider's thinking-off switch, or None.
+
+    ``extra_body`` passed at call time REPLACES the client's own (langchain-openai
+    builds the payload as ``{**defaults, **kwargs}``), so the client's existing
+    body — e.g. Qwen's ``enable_search`` — is carried over rather than dropped.
+    """
+    fragment = _THINKING_OFF_EXTRA_BODY.get(server_type)
+    if not fragment:
+        return None
+    merged = dict(current or {})
+    for key, value in fragment.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = {**merged[key], **value}
+        else:
+            merged[key] = dict(value) if isinstance(value, dict) else value
+    return merged
 
 
 def _raise_as_context_overflow(exc: Exception) -> None:
@@ -306,6 +346,18 @@ class BishengLLM(BishengBase, BaseChatModel):
     @classmethod
     async def get_bisheng_llm(cls, **kwargs) -> Self:
         return await cls.get_class_instance(**kwargs)
+
+    def thinking_off_kwargs(self) -> dict:
+        """Call-time kwargs that ask this model to answer without thinking.
+
+        For short utility calls (conversation titles) where reasoning only adds
+        latency. Empty when the provider has no known switch.
+        """
+        server_info = getattr(self, "server_info", None)
+        if not server_info or not self.llm:
+            return {}
+        extra_body = thinking_off_extra_body(server_info.type, getattr(self.llm, "extra_body", None))
+        return {"extra_body": extra_body} if extra_body is not None else {}
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -408,6 +460,7 @@ class BishengLLM(BishengBase, BaseChatModel):
 
     @wrapper_bisheng_model_limit_check
     @account_sync
+    @failure_boundary("model_service", "llm", "invoke_model")
     def _generate(
         self,
         messages: list[BaseMessage],
@@ -423,9 +476,12 @@ class BishengLLM(BishengBase, BaseChatModel):
                 # to dispatch streaming models to `_stream`). Because we delegate to the inner
                 # model directly, aggregate the stream here — this also keeps `on_llm_new_token`
                 # callbacks firing so workflow / chat UI streaming keeps working.
-                ret = generate_from_stream(self.llm._stream(messages, stop=stop, run_manager=run_manager, **kwargs))
+                ret = generate_from_stream(
+                    validate_stream(self.llm._stream(messages, stop=stop, run_manager=run_manager, **kwargs))
+                )
             else:
                 ret = self.llm._generate(messages, stop, run_manager, **kwargs)
+            validate_result(ret)
         except Exception as exc:
             _raise_as_context_overflow(exc)
             raise
@@ -433,6 +489,7 @@ class BishengLLM(BishengBase, BaseChatModel):
 
     @wrapper_bisheng_model_limit_check_async
     @account_async
+    @failure_boundary("model_service", "llm", "invoke_model")
     async def _agenerate(
         self,
         messages: list[BaseMessage],
@@ -446,10 +503,11 @@ class BishengLLM(BishengBase, BaseChatModel):
                 # See `_generate`: aggregate the inner stream so `on_llm_new_token` callbacks
                 # keep firing (workflow / chat UI streaming) instead of returning a raw Stream.
                 ret = await agenerate_from_stream(
-                    self.llm._astream(messages, stop=stop, run_manager=run_manager, **kwargs)
+                    validate_astream(self.llm._astream(messages, stop=stop, run_manager=run_manager, **kwargs))
                 )
             else:
                 ret = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
+            validate_result(ret)
         except Exception as exc:
             _raise_as_context_overflow(exc)
             raise
@@ -474,6 +532,7 @@ class BishengLLM(BishengBase, BaseChatModel):
 
     @wrapper_bisheng_model_generator
     @account_sync_stream
+    @failure_boundary("model_service", "llm", "invoke_model")
     def _stream(
         self,
         messages: list[BaseMessage],
@@ -482,7 +541,7 @@ class BishengLLM(BishengBase, BaseChatModel):
         **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
         try:
-            for one in self.llm._stream(messages, stop=stop, run_manager=run_manager, **kwargs):
+            for one in validate_stream(self.llm._stream(messages, stop=stop, run_manager=run_manager, **kwargs)):
                 yield normalize_reasoning_content(one)
         except Exception as exc:
             _raise_as_context_overflow(exc)
@@ -490,6 +549,7 @@ class BishengLLM(BishengBase, BaseChatModel):
 
     @wrapper_bisheng_model_generator_async
     @account_async_stream
+    @failure_boundary("model_service", "llm", "invoke_model")
     async def _astream(
         self,
         messages: list[BaseMessage],
@@ -498,7 +558,9 @@ class BishengLLM(BishengBase, BaseChatModel):
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
         try:
-            async for one in self.llm._astream(messages, stop=stop, run_manager=run_manager, **kwargs):
+            async for one in validate_astream(
+                self.llm._astream(messages, stop=stop, run_manager=run_manager, **kwargs)
+            ):
                 yield normalize_reasoning_content(one)
         except Exception as exc:
             _raise_as_context_overflow(exc)

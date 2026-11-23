@@ -98,15 +98,16 @@ async def test_configuration_checks_governed_model_before_saving(monkeypatch):
     from bisheng.dsh.domain.services import vision
     from bisheng.llm.domain.services.llm import LLMService
 
-    store = SimpleNamespace(read=AsyncMock(return_value='{"vision":true}'), save=AsyncMock())
-    snapshot = AsyncMock()
-    monkeypatch.setattr(LLMService, "get_dsh_model_snapshot", snapshot)
+    store = SimpleNamespace(read=AsyncMock(return_value='{"vision":true,"authority_version":1}'), save=AsyncMock())
+    snapshot = AsyncMock(return_value=(SimpleNamespace(tenant_id=1), SimpleNamespace()))
+    monkeypatch.setattr(LLMService, "get_dsh_model_metadata_snapshot", snapshot)
     monkeypatch.setattr(vision, "repository", lambda model_id: store)
-    assert await configure_vision(42, VisionSetting(vision=True)) == {"vision": True}
+    with profile_scope(1):
+        assert (await configure_vision(42, VisionSetting(vision=True)))["vision"] is True
     snapshot.assert_awaited_once_with(42)
     store.save.assert_awaited_once()
     snapshot.side_effect = RuntimeError("forbidden")
     store.save.reset_mock()
-    with pytest.raises(RuntimeError):
+    with profile_scope(1), pytest.raises(RuntimeError):
         await configure_vision(42, VisionSetting(vision=False))
     store.save.assert_not_awaited()

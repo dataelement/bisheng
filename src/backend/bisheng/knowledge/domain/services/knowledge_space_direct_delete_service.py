@@ -28,6 +28,7 @@ class KnowledgeSpaceDirectDeleteService:
         dispatch=dispatch_delete_job,
         purge_step=None,
         repository=None,
+        execution_application_factory=None,
     ):
         self.repository = repository or KnowledgeSpaceDeleteRepository(session_factory)
         self.session_factory = session_factory
@@ -35,6 +36,7 @@ class KnowledgeSpaceDirectDeleteService:
         self.load_permission_records = load_permission_records
         self.dispatch = dispatch
         self.purge_step = purge_step or self._purge_step
+        self.execution_application_factory = execution_application_factory
 
     async def delete(self, *, resource, applicant_user_id: int) -> dict:
         tenant_id = self.repository.tenant_id()
@@ -70,7 +72,17 @@ class KnowledgeSpaceDirectDeleteService:
     async def purge(self, job_id: str) -> bool:
         job = await self.repository.claim(job_id)
         if job is None:
-            return False
+            verified = await self.repository.claim_verification(job_id)
+            if verified is None:
+                return False
+            return await self._verify_outputs(verified)
+        if job.operation_type is not None:
+            if self.execution_application_factory is None:
+                await self.repository.advance(job, error="knowledge_delete_execution_unconfigured")
+                raise RuntimeError("confirmed deletion execution is not assembled")
+            return await self.execution_application_factory().apurge_claimed(
+                job, repository=self.repository, purge_step=self.purge_step
+            )
         try:
             for step in DELETE_STEPS:
                 if step in job.completed_steps:
@@ -84,7 +96,27 @@ class KnowledgeSpaceDirectDeleteService:
             await self.repository.advance(job, error=str(exc))
             raise
 
-    async def _purge_step(self, step: str, job) -> None:
+    async def _verify_outputs(self, job):
+        from bisheng.knowledge.domain.repositories.processing_fence_repository import ProcessingFenceRepository
+
+        try:
+            async with ProcessingFenceRepository(async_sessions=self.session_factory).cleanup(job):
+                for step in DELETE_STEPS[1:]:
+                    await self.repository.renew_verification(job)
+                    await self.purge_step(step, job, verification=True)
+                await self.repository.renew_verification(job, complete=True)
+            return True
+        except BaseException as error:
+            await self.repository.renew_verification(job, error=type(error).__name__)
+            raise
+
+    async def _renew(self, job):
+        if job.state == "SUCCEEDED":
+            await self.repository.renew_verification(job)
+        else:
+            await self.repository.advance(job)
+
+    async def _purge_step(self, step: str, job, *, verification=False) -> None:
         manifest = job.manifest
         file_ids = manifest["file_ids"]
         if step == "fga":
@@ -94,58 +126,95 @@ class KnowledgeSpaceDirectDeleteService:
 
             actor = PermissionActor(user_id=job.applicant_user_id, current_tenant_id=job.tenant_id)
             for snapshot in manifest["fga_permission_records"]:
-                await self.repository.advance(job)
+                await self._renew(job)
                 record = KnowledgeFilePermissionRecord(**{**snapshot, "ancestor_ids": tuple(snapshot["ancestor_ids"])})
                 adapter = await get_f048_resource_adapter(record.resource_type)
                 await adapter.project_delete(record=record, actor=actor)
             return
         if step == "minio":
-            if not manifest["object_names"]:
-                return
             from bisheng.core.storage.minio.minio_manager import get_minio_storage
+            from bisheng.knowledge.domain.repositories.processing_fence_repository import ProcessingFenceRepository
 
+            fence = ProcessingFenceRepository(async_sessions=self.session_factory)
+            generated = []
+            if job.operation_type is not None:
+                async with self.session_factory() as session:
+                    generated = await fence.artifacts(session, job)
+            objects = sorted(set(manifest["object_names"]) | set(generated))
+            if not objects:
+                return
             storage = await get_minio_storage()
-            for object_name in manifest["object_names"]:
-                await self.repository.advance(job)
+            for object_name in objects:
+                await self._renew(job)
                 await storage.remove_object(bucket_name=storage.bucket, object_name=object_name)
                 if await storage.object_exists(bucket_name=storage.bucket, object_name=object_name):
                     raise RuntimeError("knowledge deletion left an object in MinIO")
             return
-        if not file_ids:
+        # A later verification of CLEAR must never match documents uploaded
+        # after cutover. Only space deletion owns the entire physical namespace.
+        whole = job.operation_type == "knowledge_space_delete" or (
+            job.operation_type == "knowledge_space_clear" and not verification
+        )
+        if not file_ids and not whole:
             return
         from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
         from bisheng.knowledge.domain.models.knowledge import Knowledge
 
         knowledge = Knowledge(**manifest["knowledge"])
+        index_name = knowledge.index_name or knowledge.collection_name
         if step == "es":
-            store = await asyncio.to_thread(KnowledgeRag.init_knowledge_es_vectorstore_sync, knowledge=knowledge)
-            if await asyncio.to_thread(store.client.indices.exists, index=knowledge.index_name):
-                query = {"terms": {"metadata.document_id": file_ids}}
-                result = await asyncio.to_thread(store.client.delete_by_query, index=knowledge.index_name, query=query)
-                if result.get("failures"):
-                    raise RuntimeError("knowledge deletion returned Elasticsearch shard failures")
-                await asyncio.to_thread(store.client.indices.refresh, index=knowledge.index_name)
-                result = await asyncio.to_thread(store.client.count, index=knowledge.index_name, body={"query": query})
-                if int(result["count"]) != 0:
-                    raise RuntimeError("knowledge deletion left Elasticsearch chunks")
+            if file_ids:
+                from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
+
+                KnowledgeUtils.delete_violation_display_chunks(file_ids)
+            store = await asyncio.to_thread(
+                KnowledgeRag.init_knowledge_es_cleanup_sync, knowledge=knowledge, deletion_job=job
+            )
+            if await asyncio.to_thread(store.client.indices.exists, index=index_name):
+                if job.operation_type == "knowledge_space_delete":
+                    await asyncio.to_thread(store.client.indices.delete, index=index_name, ignore=[400, 404])
+                    if await asyncio.to_thread(store.client.indices.exists, index=index_name):
+                        raise RuntimeError("knowledge deletion left an Elasticsearch index")
+                    return
+                groups = (None,) if whole else (file_ids[start : start + 200] for start in range(0, len(file_ids), 200))
+                for group in groups:
+                    await self._renew(job)
+                    query = {"match_all": {}} if group is None else {"terms": {"metadata.document_id": group}}
+                    result = await asyncio.to_thread(store.client.delete_by_query, index=index_name, query=query)
+                    if result.get("failures"):
+                        raise RuntimeError("knowledge deletion returned Elasticsearch shard failures")
+                    await asyncio.to_thread(store.client.indices.refresh, index=index_name)
+                    result = await asyncio.to_thread(store.client.count, index=index_name, body={"query": query})
+                    if int(result["count"]) != 0:
+                        raise RuntimeError("knowledge deletion left Elasticsearch chunks")
             return
         if step == "milvus":
-            from bisheng.core.ai import FakeEmbeddings
-
             store = await asyncio.to_thread(
-                KnowledgeRag.init_knowledge_milvus_vectorstore_sync, 0, knowledge=knowledge, embeddings=FakeEmbeddings()
+                KnowledgeRag.init_knowledge_milvus_cleanup_sync, knowledge=knowledge, deletion_job=job
             )
             if store.col is not None:
-                expression = f"document_id in {file_ids}"
-                await asyncio.to_thread(store.col.delete, expr=expression, timeout=60)
-                await asyncio.to_thread(store.col.flush)
-                result = await asyncio.to_thread(
-                    store.col.query, expr=expression, output_fields=["count(*)"], timeout=60
-                )
-                if not isinstance(result, list) or len(result) != 1:
-                    raise RuntimeError("knowledge deletion received an invalid Milvus verification")
-                count = result[0].get("count(*)", result[0].get("count"))
-                if count is None or int(count) != 0:
-                    raise RuntimeError("knowledge deletion left Milvus chunks")
+                if job.operation_type == "knowledge_space_delete":
+                    if not knowledge.collection_name.startswith("col"):
+                        raise ValueError("knowledge collection must be an independently owned collection")
+                    await asyncio.to_thread(store.col.drop)
+                    from pymilvus import utility
+
+                    if await asyncio.to_thread(utility.has_collection, knowledge.collection_name, using=store.alias):
+                        raise RuntimeError("knowledge deletion left a Milvus collection")
+                    return
+                groups = (None,) if whole else (file_ids[start : start + 200] for start in range(0, len(file_ids), 200))
+                for group in groups:
+                    await self._renew(job)
+                    expression = "document_id >= 0" if group is None else f"document_id in {group}"
+                    await asyncio.to_thread(store.col.delete, expr=expression, timeout=60)
+                    await asyncio.to_thread(store.col.flush)
+                    result = await asyncio.to_thread(
+                        store.col.query, expr=expression, output_fields=["count(*)"], timeout=60
+                    )
+                    if not isinstance(result, list) or len(result) != 1:
+                        raise RuntimeError("knowledge deletion received an invalid Milvus verification")
+                    count = result[0].get("count(*)", result[0].get("count"))
+                    if count is None or int(count) != 0:
+                        raise RuntimeError("knowledge deletion left Milvus chunks")
             return
         raise ValueError(f"unsupported deletion step: {step}")

@@ -1,9 +1,9 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import modelDefaults from "../../../../../public/locales/zh-Hans/model.json";
 import { useDshBrowserConfig } from "@/hooks/useDshBrowserConfig";
 // @ts-strict-ignore
 import { shouldRetryApiError } from "@bisheng/api-client";
 import { Button, Cascader, toast } from "@bisheng/ui";
-import { Outlined } from "bisheng-icons";
 
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
@@ -21,11 +21,13 @@ import { FallbackBlockedBanner, InheritedBadge } from "../SystemConfigBanners";
 import { showApiError } from "@/controllers/request";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { managementRequestScope } from '@/controllers/managementScope';
 import { useModel } from "..";
 import { UserSelectableModels } from "../UserSelectableModels";
 import { updateModelMetadata } from "../userModelMetadata";
 import { hasValidWorkbenchEmbeddingModelId } from "./workbenchModelValidation";
+import { SharedToolSettings } from "./SharedToolSettings";
 
 export const ModelSelect = ({
   required = false,
@@ -39,8 +41,8 @@ export const ModelSelect = ({
 }) => {
   const { t } = useTranslation();
   const selectLabels = useSelectLabels();
-  const cascaderOptions = useMemo(() => toModelCascaderOptions(options), [options]);
-  const cascaderValue = useMemo(() => toModelCascaderValue(value, options), [options, value]);
+  const cascaderOptions = useMemo(() => toModelCascaderOptions(options, value, t('references.unavailable')), [options, value, t]);
+  const cascaderValue = useMemo(() => toModelCascaderValue(value, options, true), [options, value]);
 
   return (
     <div className="min-w-0">
@@ -70,7 +72,7 @@ export default function WorkbenchModel({ data, onBack }) {
   const { config: enterpriseConfig } = useDshBrowserConfig();
   const { llmOptions, embeddings, asrModel, ttsModel } = useModel();
   const { t } = useTranslation("model");
-
+  const queryClient = useQueryClient();
 
   const [form, setForm] = useState<any>({
     sourceModelId: null,
@@ -86,8 +88,17 @@ export default function WorkbenchModel({ data, onBack }) {
 
   const lastSaveFormDataRef = useRef(null);
   const [saveload, setSaveLoad] = useState(false);
+  // The collapsed section holds the required embedding model; open it when it blocks a save.
+  const [otherSettingsOpen, setOtherSettingsOpen] = useState(false);
 
   const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
+
+  const unavailableConfiguredModels = useMemo(() => {
+    const available = new Set(data.flatMap((server) => server.models
+      .filter((model) => model.online && model.model_type === "llm")
+      .map((model) => String(model.id))));
+    return form.models.filter((model) => !available.has(String(model.id)));
+  }, [data, form.models]);
 
   // Look up the model's own name from the cascader options by id, used as
   // the default displayName when the admin leaves it empty.
@@ -135,7 +146,7 @@ export default function WorkbenchModel({ data, onBack }) {
         chat_default_model_id: chatDefaultModelId ? String(chatDefaultModelId) : null,
         asr_model: asrModelId ? { id: String(asrModelId) } : null, // Accept an empty value.
         tts_model: ttsModelId ? { id: String(ttsModelId) } : null, // Accept an empty value.
-        // Model used to generate app conversation titles.
+        // Model that names new conversations (workbench, knowledge spaces, apps).
         chat_title_llm: chatTitleLlmId ? { id: String(chatTitleLlmId) } : null, // Accept an empty value.
         image_read_model: imageReadModelId ? { id: String(imageReadModelId) } : null,
       };
@@ -143,6 +154,8 @@ export default function WorkbenchModel({ data, onBack }) {
       await updateLinsightModelConfig(data);
       lastSaveFormDataRef.current = { ...lastSaveFormDataRef.current, ...data };
       toast.show({ type: "success", message: String(t("model.saveSuccess") ?? "") });
+      await queryClient.invalidateQueries({ queryKey: ['system-model-settings'] });
+            await queryClient.invalidateQueries({ queryKey: ['system-model-settings-impact'] });
       let updatedConfig;
       try {
         updatedConfig = await refetchConfig({ throwOnError: true });
@@ -196,9 +209,8 @@ export default function WorkbenchModel({ data, onBack }) {
   const handleSave = () => {
     if (form.models.some((model) => String(model.description ?? "").length > 50)) return;
     const errors = [];
-    if (!enterpriseConfig?.enabled && !form.models.length) {
-      errors.push(t("model.chatModelRequired"));
-    }
+    // Every online chat model is offered by default (narrowed by visibility), so
+    // the stored list only holds optional labels and may be empty.
     // Reject blank rows: a model without an id serializes to `{ id: '' }`,
     // which reaches the client model picker as <SelectItem value="">
     // (empty string) and crashes the whole page in Radix. Force the admin
@@ -208,6 +220,7 @@ export default function WorkbenchModel({ data, onBack }) {
     }
     if (!hasValidWorkbenchEmbeddingModelId(form.sourceModelId)) {
       errors.push(t("model.workVectorModel") + t("bs:required"));
+      setOtherSettingsOpen(true);
     }
     if (errors.length) {
       toast.show({ type: "error", message: errors.filter(Boolean).join("\n") });
@@ -268,7 +281,7 @@ export default function WorkbenchModel({ data, onBack }) {
   if (loading)
     return (
       <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-        <Outlined.Loading className="size-4 animate-spin" />
+        <LoadingState size="page" />
       </div>
     );
   const inheritedFromRoot = !!linsightConfig?.inherited_from_root;
@@ -279,6 +292,7 @@ export default function WorkbenchModel({ data, onBack }) {
       {inheritedFromRoot && (
         <div className="-mb-2 text-xs text-muted-foreground flex items-center">
           <InheritedBadge visible={true} />
+          <span className="ml-2">{t("model.draftSourceHelp")}</span>
         </div>
       )}
       <UserSelectableModels
@@ -293,7 +307,27 @@ export default function WorkbenchModel({ data, onBack }) {
           }))
         }
       />
-      <details className="mt-2 border-t pt-4">
+      {unavailableConfiguredModels.length > 0 && <section className="space-y-2 rounded-md border p-4">
+        <h3 className="text-sm font-medium">{t("model.unavailableConfiguredModels")}</h3>
+        <ul className="space-y-2">
+          {unavailableConfiguredModels.map((model) => {
+            const label = model.displayName || model.name || String(model.id);
+            return <li key={model.id} className="flex items-center justify-between gap-4">
+              <span className="min-w-0 break-words text-sm">{label} · {model.id}</span>
+              <Button variant="text" size="small" color="default" disabled={saveload || !linsightConfig}
+                aria-label={`${t("model.removeConfiguredModel")}: ${label}`}
+                onClick={() => setForm((prev) => ({ ...prev, models: prev.models.filter((row) => String(row.id) !== String(model.id)) }))}>
+                {t("model.removeConfiguredModel")}
+              </Button>
+            </li>;
+          })}
+        </ul>
+      </section>}
+      <details
+        className="mt-2 border-t pt-4"
+        open={otherSettingsOpen}
+        onToggle={(event) => setOtherSettingsOpen(event.currentTarget.open)}
+      >
         <summary className="cursor-pointer text-sm text-muted-foreground">
           {t("model.otherModelSettings")}
         </summary>
@@ -301,7 +335,7 @@ export default function WorkbenchModel({ data, onBack }) {
           <ModelSelect
             close
             label={t("model.linsightDefaultModel")}
-            tooltipText={t("model.linsightDefaultModelTooltip")}
+            tooltipText={`${t("model.linsightDefaultModelTooltip")} ${t("model.defaultModelVisibilityNote")}`}
             value={form.linsightDefaultModelId}
             options={llmOptions}
             onChange={(val) => handleDefaultModelChange("linsightDefaultModelId", val)}
@@ -309,6 +343,7 @@ export default function WorkbenchModel({ data, onBack }) {
           <ModelSelect
             close
             label={t("model.dailyDefaultModel")}
+            tooltipText={`${t("model.dailyDefaultModelTooltip")} ${t("model.defaultModelVisibilityNote")}`}
             value={form.chatDefaultModelId}
             options={llmOptions}
             onChange={(val) => handleDefaultModelChange("chatDefaultModelId", val)}
@@ -344,19 +379,27 @@ export default function WorkbenchModel({ data, onBack }) {
           <ModelSelect
             close
             label={t("model.sessionTitleGenerationModel")}
+            tooltipText={t("model.sessionTitleGenerationModelTooltip")}
             value={form.chatTitleLlmId}
             options={llmOptions}
             onChange={(val) => setForm({ ...form, chatTitleLlmId: val })}
           />
+          <ModelSelect
+            close
+            label={t("model.imageReadingModel")}
+            value={form.imageReadModelId}
+            options={llmOptions}
+            onChange={(val) => setForm({ ...form, imageReadModelId: val })}
+          />
+          <SharedToolSettings disabled={saveload || !linsightConfig} />
         </div>
       </details>
       <div className="mt-6 flex justify-end gap-4">
         <Button variant="outlined" color="default" onClick={onBack}>
           {t("model.cancel")}
         </Button>
-        <Button disabled={saveload || !linsightConfig} onClick={handleSave}>
-          {saveload && <Outlined.Loading className="mr-2 animate-spin" />}
-          {t("model.save")}
+        <Button disabled={saveload || !linsightConfig} onClick={handleSave} loading={saveload}>
+          {t(inheritedFromRoot ? "model.saveLocalConfiguration" : "model.save")}
         </Button>
       </div>
     </div>
@@ -365,7 +408,7 @@ export default function WorkbenchModel({ data, onBack }) {
 
 export function useLinsightConfig() {
   return useQuery({
-    queryKey: ["linsightModelEnvelope"],
+    queryKey: ["linsightModelEnvelope", managementRequestScope()],
     queryFn: () => getLinsightModelEnvelope({ showError: false }),
     onError: showApiError,
     select: (env) => {

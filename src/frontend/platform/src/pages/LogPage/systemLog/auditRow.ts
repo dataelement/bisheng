@@ -5,6 +5,7 @@
 // compliance reviewer notices first.
 
 import type { AuditAppOption, AuditRow } from "@/types/api/audit"
+import { orgLabel } from "../components/OrgFilter/orgLabel"
 
 export type { AuditAppOption, AuditRow }
 
@@ -13,17 +14,47 @@ export type Translate = (key: string, opts?: Record<string, unknown>) => string
 /** Structured v2 action → camelCase `log.eventTypeEnum` leaf key (see log.ts). */
 type ActionKeyFn = (action: string) => string
 
+/** Sentinel passed as `defaultValue` so a missing key is not the key path itself. */
+const MISSING_LABEL = '\u0000'
+
+/**
+ * Stored tokens that mean an existing caption. `linsight` is the historical
+ * personal-skill module; the page files those rows under the system module.
+ * `workflow` is the resource-grant spelling of `work_flow`.
+ */
+const SYSTEM_ID_ALIAS: Record<string, string> = {
+    linsight: 'system',
+}
+
+const OBJECT_TYPE_ALIAS: Record<string, string> = {
+    workflow: 'work_flow',
+}
+
+const enumLabel = (t: Translate, group: string, raw: string, alias: Record<string, string>): string => {
+    const leaf = alias[raw] ?? raw
+    const key = `log.${group}.${leaf}`
+    const translated = t(key, { defaultValue: MISSING_LABEL })
+    if (translated && translated !== MISSING_LABEL) return translated
+    const unknown = t(`log.${group}.unknown`, { defaultValue: MISSING_LABEL })
+    if (unknown && unknown !== MISSING_LABEL) return unknown
+    return raw
+}
+
 export const renderSystemId = (log: AuditRow, t: Translate): string => {
-    if (log.system_id) return t(`log.systemIdEnum.${log.system_id}`)
+    if (log.system_id) return enumLabel(t, 'systemIdEnum', log.system_id, SYSTEM_ID_ALIAS)
     if (log.action) {
         const ns = String(log.action).split('.')[0]
-        return t(`log.systemIdEnum.${ns}`, { defaultValue: ns })
+        return enumLabel(t, 'systemIdEnum', ns, SYSTEM_ID_ALIAS)
     }
     return '-'
 }
 
+/** F003 organisation column: the operator's department when the row was written. */
+export const renderOrg = (log: AuditRow, t: Translate): string =>
+    orgLabel(log.operator_dept_id, log.operator_dept_path, t)
+
 export const renderEventType = (log: AuditRow, t: Translate, actionToKey: ActionKeyFn): string => {
-    if (log.event_type) return t(`log.eventTypeEnum.${log.event_type}`)
+    if (log.event_type) return enumLabel(t, 'eventTypeEnum', log.event_type, {})
     if (log.action) {
         const key = actionToKey(log.action)
         return t(`log.eventTypeEnum.${key}`, { defaultValue: log.action })
@@ -32,8 +63,8 @@ export const renderEventType = (log: AuditRow, t: Translate, actionToKey: Action
 }
 
 export const renderObjectType = (log: AuditRow, t: Translate): string => {
-    if (log.object_type) return t(`log.objectTypeEnum.${log.object_type}`)
-    if (log.target_type) return t(`log.objectTypeEnum.${log.target_type}`, { defaultValue: log.target_type })
+    const raw = log.object_type || log.target_type
+    if (raw) return enumLabel(t, 'objectTypeEnum', raw, OBJECT_TYPE_ALIAS)
     return t('log.objectTypeEnum.none')
 }
 
@@ -95,6 +126,7 @@ export const buildAuditCsv = (
     const header = [
         t('log.auditId'),
         t('log.username'),
+        t('log.org.column'),
         t('log.operationTime'),
         t('log.systemModule'),
         t('log.operationAction'),
@@ -111,6 +143,7 @@ export const buildAuditCsv = (
         return [
             log.id,
             operator.secondary ? `${operator.primary} · ${operator.secondary}` : operator.primary,
+            renderOrg(log, t),
             (log.create_time || '').replace('T', ' '),
             renderSystemId(log, t),
             renderEventType(log, t, actionToKey),

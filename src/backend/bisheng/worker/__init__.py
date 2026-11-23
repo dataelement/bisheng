@@ -25,7 +25,9 @@ from bisheng.worker.knowledge.knowledge_chat_history_retention import (
     rehome_knowledge_chat_sessions as rehome_knowledge_chat_sessions,
 )
 from bisheng.worker.knowledge.move_worker import migrate_file_vectors
+from bisheng.worker.knowledge.processing_jobs import dispatch_pending_processing_jobs, execute_processing_job
 from bisheng.worker.knowledge.qa import copy_qa_knowledge_celery, insert_qa_celery, rebuild_qa_knowledge_celery
+from bisheng.worker.knowledge.rebuild_cleanup import cleanup_superseded_collections
 from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery, rebuild_knowledge_file_chunk
 from bisheng.worker.knowledge.scheduler import (
     reconcile_file_scheduler_task,
@@ -61,12 +63,15 @@ __all__ = [
     "add",
     "admin_scope_cleanup",
     "cleanup_succeeded_failed_tuples",
+    "cleanup_superseded_collections",
     "continue_workflow",
     "copy_qa_knowledge_celery",
     "dispatch_information_article_poll",
     "dispatch_information_subscription_reconcile",
+    "dispatch_pending_processing_jobs",
     "dispatch_personal_skill_orphan_sweep",
     "execute_approval_outbox",
+    "execute_processing_job",
     "execute_workflow",
     "file_copy_celery",
     "insert_qa_celery",

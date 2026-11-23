@@ -3,6 +3,7 @@ import { Outlined } from 'bisheng-icons';
 import cn from '../../utils/cn';
 import { Checkbox } from '../Checkbox/Checkbox';
 import { Tooltip } from '../Tooltip/Tooltip';
+import { useLoadingIndicatorRenderer } from '../../providers/LoadingIndicatorProvider';
 import {
   GROUP_LABEL,
   MENU_STACK,
@@ -106,6 +107,11 @@ export const SelectPanel = React.forwardRef<HTMLDivElement, SelectPanelProps>(fu
   ref,
 ) {
   const listRef = React.useRef<HTMLDivElement | null>(null);
+  const renderLoadingIndicator = useLoadingIndicatorRenderer();
+  const indicator = renderLoadingIndicator
+    ? renderLoadingIndicator({ className: 'size-4' })
+    : <Outlined.Loading className="size-4 animate-spin" aria-hidden />;
+  const loadingLabel = renderLoadingIndicator && typeof loadingText === 'string' ? loadingText : undefined;
 
   // Keep the highlighted option in view — arrow keys past the 8th row, and the
   // §8 "open scrolled to the current value".
@@ -118,9 +124,9 @@ export const SelectPanel = React.forwardRef<HTMLDivElement, SelectPanelProps>(fu
   // §6.5 — one line of text, never an illustration.
   if (loading) {
     return (
-      <div className={PANEL_MESSAGE} role="status">
-        <Outlined.Loading className="size-4 animate-spin" aria-hidden />
-        {loadingText}
+      <div className={PANEL_MESSAGE} role="status" aria-label={loadingLabel}>
+        {indicator}
+        {!renderLoadingIndicator && loadingText}
       </div>
     );
   }
@@ -195,9 +201,9 @@ export const SelectPanel = React.forwardRef<HTMLDivElement, SelectPanelProps>(fu
         );
       })}
       {loadingMore && (
-        <div className={cn(PANEL_MESSAGE, 'py-1.5')} role="status">
-          <Outlined.Loading className="size-4 animate-spin" aria-hidden />
-          {loadingText}
+        <div className={cn(PANEL_MESSAGE, 'py-1.5')} role="status" aria-label={loadingLabel}>
+          {indicator}
+          {!renderLoadingIndicator && loadingText}
         </div>
       )}
     </div>

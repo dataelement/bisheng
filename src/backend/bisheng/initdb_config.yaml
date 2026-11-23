@@ -57,6 +57,12 @@ default_operator:
   # 全平台免登录链接总开关。关闭后所有免登录链接立即不可访问。
   enable_guest_access: true
 
+# 新建部门业务 ID 的前缀，默认生成 BS@<随机串>。
+dept_id_prefix: "BS"
+
+# OnlyOffice 编辑器签名密钥，默认空；启用签名时须与文档服务的密钥一致。
+office_jwt_secret: ""
+
 # 密码安全相关配置
 password_conf:
   # 密码超过X天必须进行修改, 登录提示重新修改密码。大于0策略才生效
@@ -67,6 +73,8 @@ password_conf:
   max_error_times: 0
 
 system_login_method:
+  # 商业版标志由环境变量 BISHENG_PRO / BISHENG_DASHBOARD_PRO 决定，
+  # 未设置或不为 true 时默认为 false，不在系统配置中填写。
   # 是否允许多点登录
   allow_multi_login: true
   # sso系统登录配置（毕昇商业扩展套件功能，开源版无需配置）
@@ -132,8 +140,15 @@ daily_chat:
   # 默认 8000；配置缺失 / 类型错误 / <= 0 时也使用 8000。
   history_max_tokens: 8000
 
+# 灵思任务是否需要邀请码，默认关闭。
+linsight_invitation_code: false
+
 # 灵思模块相关配置
 linsight:
+  # 短引用句柄：true 使用 [Sn]，false 使用原始引用 ID。
+  citation_handles_enabled: true
+  # 默认继承部署文件 linsight_conf.debug；按需取消注释后覆盖为系统配置值。
+  # debug: false
   # 单个任务最大执行步骤数（LangGraph recursion_limit），防止死循环。
   # ⚠️ 这里的“步骤”是 LangGraph super-step，不是模型轮次：一轮模型调用约消耗 4 个 super-step
   #   （model → 工具循环熔断器 after_model → TodoList after_model → tools）。
@@ -158,10 +173,21 @@ linsight:
   # 距离预算耗尽还剩多少轮时开始提示模型收尾；最后 2 轮只保留写文件/导出工具，
   # 归零时不再提供任何工具，模型只能输出文本，图正常结束
   soft_landing_turns: 8
+  # 连续同类工具失败达到软阈值时提示模型调整，达到硬阈值时终止任务并收尾。
+  tool_failure_soft_limit: 3
+  tool_failure_hard_limit: 8
+  # 连续重复完全相同的成功工具调用达到软阈值时提示，达到硬阈值时终止。
+  # 设为 0 可分别关闭对应阈值。
+  tool_repeat_soft_limit: 3
+  tool_repeat_hard_limit: 8
+  # 模型工具参数被截断时，允许重新生成的次数。
+  truncation_retry_limit: 2
   # 灵思任务执行过程中模型调用重试次数
   retry_num: 3
   # 灵思任务执行过程中模型调用重试间隔时间（秒）
   retry_sleep: 5
+  # 内容过滤或瞬时错误重试耗尽后，允许跳过模型调用步骤的最大次数。
+  max_degrade: 3
   # 技能文件（.md / .zip / .skill）上传体积上限，单位 MB。改这里即可，前后端都读它。
   skill_upload_max_size_mb: 200
   # 技能包解压后全部文件的总大小上限，单位 MB。实际生效值不低于上面的上传上限，
@@ -169,6 +195,25 @@ linsight:
   skill_unpacked_max_size_mb: 500
   # 灵思模型默认温度
   default_temperature: 0
+  # waiting_list_url 未配置时默认 null；字段类型为 str，保持省略，按需填写链接。
+  # waiting_list_url: "https://example.com/waiting-list"
+  # 技能包本地缓存目录，空值表示进程缓存目录下的 linsight_skills。
+  # 对象存储为唯一事实来源，该目录可清理，不应指向共享卷。
+  skills_cache_dir: ""
+  # 历史技能迁移／恢复脚本使用的旧本地目录，运行时不读取。
+  # skills_root: "data/linsight_skills"
+
+# 旧版默认模型 getter 的系统配置入口；默认 {}，当前未发现业务调用，保持注释。
+# default_llm: {}
+# 旧聊天客户端读取的兼容系统配置，默认 {}，当前未消费其字段，保持注释。
+# gpts: {}
+
+# 首钢模块可选系统配置。prefix 默认为 null，填写非空前缀后启用文件编码。
+# 其余两项为预留字段，不参与文件编码流程；按需整体取消注释。
+# shougang:
+#   prefix: null
+#   deployment_label: null
+#   portal_admin_url: null
 
 information_conf:
   # 情报订阅服务的接口地址
@@ -183,7 +228,23 @@ information_conf:
   information_knowledge_delivery_enabled: true
   information_business_timezone: Asia/Shanghai
 
+# 中粮 E+ 站内信转发的系统配置默认值。按需整体取消注释。
+# 此块非空时优先于部署配置；保留注释可继续使用已有部署配置的回退值。
+# in_app_message_forwarding:
+#   cofco:
+#     enabled: false
+#     api_base: ""  # E+ API 基地址
+#     app_id: ""  # E+ 应用 ID
+#     secret: ""  # E+ 应用密钥
+#     agentid: null
+#     timeout_seconds: 5.0
+#     bisheng_inbox_url: ""  # 毕昇站内信入口地址
+#     enable_duplicate_check: 0
+#     duplicate_check_interval: 1800  # 去重窗口（秒）
+#     user_sources: [cofco_eplus, wecom]
+
 mcp:
+  # 兼容字段，校验器强制为 false，不能启用 STDIO MCP。
   enable_stdio: false
 
 knowledge_space:

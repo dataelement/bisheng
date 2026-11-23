@@ -1,0 +1,385 @@
+pageType: closing
+background:
+  type: solid
+  color: $navy
+notes: |
+  平台型卖家优先建立分市场真实利润表，以订单密度、时效敏感度和退换货成本筛选海外仓市场。
+  品牌型企业围绕核心市场打通内容、独立站、履约、售后和会员数据，并建立本地 P&L 与合规责任。
+elements:
+  - elementId: action-cyan-rail
+    elementType: shape
+    bounds:
+      - 0
+      - 0
+      - 14
+      - 540
+    shapeName: rect
+    fill:
+      type: solid
+      color: $cyan
+    border:
+      color: $cyan
+      width: 0
+  - elementId: action-top-rule
+    elementType: line
+    bounds:
+      - 52
+      - 46
+      - 856
+      - 1
+    viewBox:
+      - 856
+      - 1
+    points: 0,0 856,0
+    border:
+      color: $mist
+      width: 0.8
+  - elementId: action-mid-rule
+    elementType: line
+    bounds:
+      - 480
+      - 202
+      - 1
+      - 186
+    viewBox:
+      - 1
+      - 186
+    points: 0,0 0,186
+    border:
+      color: $mist
+      width: 0.7
+  - elementId: action-l1
+    elementType: line
+    bounds:
+      - 52
+      - 278
+      - 380
+      - 1
+    viewBox:
+      - 380
+      - 1
+    points: 0,0 380,0
+    border:
+      color: $mist
+      width: 0.6
+  - elementId: action-r1
+    elementType: line
+    bounds:
+      - 528
+      - 278
+      - 380
+      - 1
+    viewBox:
+      - 380
+      - 1
+    points: 0,0 380,0
+    border:
+      color: $mist
+      width: 0.6
+  - elementId: action-path-field
+    elementType: shape
+    bounds:
+      - 52
+      - 416
+      - 856
+      - 76
+    shapeName: rect
+    fill:
+      type: solid
+      color: $paper
+    border:
+      color: $paper
+      width: 0
+  - elementId: action-path-clay
+    elementType: shape
+    bounds:
+      - 622
+      - 416
+      - 286
+      - 76
+    shapeName: rect
+    fill:
+      type: solid
+      color: $clay
+    border:
+      color: $clay
+      width: 0
+  - elementId: action-path-rule1
+    elementType: line
+    bounds:
+      - 336
+      - 416
+      - 1
+      - 76
+    viewBox:
+      - 1
+      - 76
+    points: 0,0 0,76
+    border:
+      color: $navy
+      width: 0.8
+  - elementId: action-path-rule2
+    elementType: line
+    bounds:
+      - 622
+      - 416
+      - 1
+      - 76
+    viewBox:
+      - 1
+      - 76
+    points: 0,0 0,76
+    border:
+      color: $navy
+      width: 0.8
+  - elementId: action-kicker
+    elementType: text
+    bounds:
+      - 52
+      - 20
+      - 520
+      - 18
+    content:
+      text: MANAGEMENT ACTION / NEXT 90 DAYS
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 8.5
+      bold: true
+      letterSpacing: 1.15
+      color: $mist
+  - elementId: action-title
+    elementType: text
+    bounds:
+      - 52
+      - 76
+      - 666
+      - 88
+    content:
+      text: 平台帮助企业更快进入市场；<br>本地经营决定企业能否留下来。
+      fontFamily:
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 32
+      bold: true
+      lineHeight: 1.18
+      color: $white
+  - elementId: action-thesis
+    elementType: text
+    bounds:
+      - 744
+      - 88
+      - 164
+      - 54
+    content:
+      text: 先用可逆成本买信息<br>再用固定投入兑现体验
+      fontFamily: *ref_0
+      fontSize: 9.2
+      bold: true
+      lineHeight: 1.5
+      color: $cyan
+      align:
+        - right
+        - top
+  - elementId: action-platform-tag
+    elementType: text
+    bounds:
+      - 52
+      - 198
+      - 380
+      - 22
+    content:
+      text: A / 平台型卖家
+      fontFamily: *ref_0
+      fontSize: 12
+      bold: true
+      color: $cyan
+  - elementId: action-platform-1
+    elementType: text
+    bounds:
+      - 52
+      - 232
+      - 380
+      - 34
+    content:
+      text: 01　建立国家 × 品类真实利润表
+      fontFamily: *ref_0
+      fontSize: 14
+      bold: true
+      color: $white
+  - elementId: action-platform-1n
+    elementType: text
+    bounds:
+      - 78
+      - 292
+      - 342
+      - 46
+    content:
+      text: 把抽佣、投放、跨境运费、退货与资金占用<br>放进同一口径，先排除“有销量、没利润”的市场。
+      fontFamily: *ref_0
+      fontSize: 9.2
+      lineHeight: 1.4
+      color: $mist
+  - elementId: action-platform-2
+    elementType: text
+    bounds:
+      - 52
+      - 348
+      - 380
+      - 30
+    content:
+      text: 02　以履约信号筛选海外仓市场
+      fontFamily: *ref_0
+      fontSize: 14
+      bold: true
+      color: $white
+  - elementId: action-platform-2n
+    elementType: text
+    bounds:
+      - 78
+      - 380
+      - 342
+      - 24
+    content:
+      text: 订单密度、时效敏感度、退换货成本同时过线。
+      fontFamily: *ref_0
+      fontSize: 9.2
+      color: $mist
+  - elementId: action-brand-tag
+    elementType: text
+    bounds:
+      - 528
+      - 198
+      - 380
+      - 22
+    content:
+      text: B / 品牌型企业
+      fontFamily: *ref_0
+      fontSize: 12
+      bold: true
+      color: $clay
+  - elementId: action-brand-1
+    elementType: text
+    bounds:
+      - 528
+      - 232
+      - 380
+      - 34
+    content:
+      text: 01　围绕核心市场打通客户闭环
+      fontFamily: *ref_0
+      fontSize: 14
+      bold: true
+      color: $white
+  - elementId: action-brand-1n
+    elementType: text
+    bounds:
+      - 554
+      - 292
+      - 342
+      - 46
+    content:
+      text: 内容、独立站、履约、售后与会员数据共同服务复购，<br>把流量资产逐步变成客户资产。
+      fontFamily: *ref_0
+      fontSize: 9.2
+      lineHeight: 1.4
+      color: $mist
+  - elementId: action-brand-2
+    elementType: text
+    bounds:
+      - 528
+      - 348
+      - 380
+      - 30
+    content:
+      text: 02　建立本地 P&L 与合规责任
+      fontFamily: *ref_0
+      fontSize: 14
+      bold: true
+      color: $white
+  - elementId: action-brand-2n
+    elementType: text
+    bounds:
+      - 554
+      - 380
+      - 342
+      - 24
+    content:
+      text: 把税务、数据、消费者权益与库存安全纳入组织机制。
+      fontFamily: *ref_0
+      fontSize: 9.2
+      color: $mist
+  - elementId: action-path-1
+    elementType: text
+    bounds:
+      - 70
+      - 431
+      - 248
+      - 48
+    content:
+      text: 01  平台跨境<br>验证需求与价格带
+      fontFamily: *ref_0
+      fontSize: 11
+      bold: true
+      lineHeight: 1.3
+      color: $ink
+  - elementId: action-path-2
+    elementType: text
+    bounds:
+      - 354
+      - 431
+      - 248
+      - 48
+    content:
+      text: 02  独立站<br>沉淀客户与内容资产
+      fontFamily: *ref_0
+      fontSize: 11
+      bold: true
+      lineHeight: 1.3
+      color: $ink
+  - elementId: action-path-3
+    elementType: text
+    bounds:
+      - 640
+      - 431
+      - 250
+      - 48
+    content:
+      text: 03  本地履约<br>兑现时效、退换货与售后
+      fontFamily: *ref_0
+      fontSize: 11
+      bold: true
+      lineHeight: 1.3
+      color: $ink
+  - elementId: action-source
+    elementType: text
+    bounds:
+      - 52
+      - 510
+      - 700
+      - 14
+    content:
+      text: 行动框架基于前述公开数据及经营逻辑整理。
+      fontFamily: *ref_0
+      fontSize: 7.5
+      color: $mist
+  - elementId: action-page
+    elementType: text
+    bounds:
+      - 862
+      - 510
+      - 46
+      - 14
+    content:
+      text: 16—10
+      fontFamily: *ref_0
+      fontSize: 8
+      bold: true
+      color: $mist
+      align:
+        - right
+        - bottom

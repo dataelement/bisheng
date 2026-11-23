@@ -3,8 +3,8 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, expect, it, vi } from 'vitest'
 import Tasks from './index'
 
-const mock = vi.hoisted(() => ({ create: vi.fn().mockResolvedValue({ id: 1 }), reload: vi.fn() }))
-vi.mock('@/contexts/userContext', async () => ({ userContext: (await import('react')).createContext({ user: { role: 'admin' } }) }))
+const mock = vi.hoisted(() => ({ create: vi.fn().mockResolvedValue({ id: 1 }), reload: vi.fn(), user: { role: 'admin', is_child_admin: false } }))
+vi.mock('@/contexts/userContext', async () => ({ userContext: (await import('react')).createContext({ user: mock.user }) }))
 vi.mock('@/controllers/API/assistant', () => ({ getChatOnlineApi: vi.fn().mockResolvedValue({ list: [{ id: 'app-1', name: 'App', count: 5 }], nextCursor: null }) }))
 vi.mock('@/controllers/API/log', () => ({ createMarkApi: mock.create, getMarksApi: vi.fn(), deleteMarkApi: vi.fn() }))
 vi.mock('@/controllers/request', async (importOriginal) => ({ ...await importOriginal<typeof import('@/controllers/request')>() }))
@@ -17,7 +17,18 @@ return { ...actual, notification: { ...actual.notification, open: Reflect.get(pr
 vi.mock('@/components/bs-ui/alertDialog/useConfirm', () => ({ bsConfirm: vi.fn() }))
 vi.mock('@/components/bs-comp/selectComponent/Users', () => ({ default: ({ onChange }: { onChange: (value: { value: string }[]) => void }) => <button onClick={() => onChange([{ value: 'user-1' }])}>Select annotator</button> }))
 vi.mock('@/util/hook', () => ({ useTable: () => ({ page: 1, pageSize: 20, total: 1, setPage: vi.fn(), filterData: vi.fn(), reload: mock.reload, data: [{ id: 7, status: 3, create_time: '2026-10-20T10:00:00', create_user: 'Admin', mark_process: ['Alice 1/5'] }] }) }))
-afterEach(() => { cleanup(); vi.clearAllMocks() })
+afterEach(() => { cleanup(); vi.clearAllMocks(); mock.user.role = 'admin'; mock.user.is_child_admin = false })
+it('offers task creation to a child tenant administrator', () => {
+    mock.user.role = 'user'
+    mock.user.is_child_admin = true
+    render(<MemoryRouter><Tasks /></MemoryRouter>)
+    expect(screen.getByRole('button', { name: 'label.createTask' })).toBeVisible()
+})
+it('keeps task creation hidden for an ordinary annotator', () => {
+    mock.user.role = 'user'
+    render(<MemoryRouter><Tasks /></MemoryRouter>)
+    expect(screen.queryByRole('button', { name: 'label.createTask' })).not.toBeInTheDocument()
+})
 it('keeps the task link and requires applications plus annotators before creation', async () => {
     render(<MemoryRouter><Tasks /></MemoryRouter>)
     expect(screen.getByRole('link', { name: 'label.view' })).toHaveAttribute('href', '/label/7')

@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import Field
 
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -15,6 +15,7 @@ from bisheng.dsh.domain.schemas.contracts import DshContract
 from bisheng.dsh.domain.schemas.model_audit_context import AUDIT_FIELDS
 from bisheng.dsh.domain.services.identity import BrowserIdentity
 from bisheng.dsh.domain.services.settings import DshSettingsService
+from bisheng.dsh.request_origin import require_client_browser_origin
 
 router = APIRouter(route_class=DshRoute)
 browser_user = UserPayload.get_login_user
@@ -37,6 +38,7 @@ async def config(settings: DshSettings = Depends(get_settings)):
         "contract_version": settings.contract_version,
         "audit_context": {"fields": list(AUDIT_FIELDS)},
         "audit_conversation_title": {"version": 1},
+        "audit_message_feedback": {"version": 1},
     }
 
 
@@ -45,11 +47,7 @@ async def authorize(
     body: AuthorizeRequest, request: Request, user=Depends(browser_user), runtime: DshRuntime = Depends(get_runtime)
 ):
     # Exact Origin plus JSON-only POST blocks browser CSRF; never trust Referer as a fallback.
-    if (
-        request.headers.get("origin") != runtime.settings.platform_public_url
-        or request.headers.get("sec-fetch-site", "same-origin") != "same-origin"
-    ):
-        raise HTTPException(403, "Invalid browser origin")
+    await require_client_browser_origin(request, runtime.settings)
     if request.headers.get("content-type", "").split(";", 1)[0].lower() != "application/json":
         raise DshInvalidRequestError()
     result = await runtime.identity.authorize(

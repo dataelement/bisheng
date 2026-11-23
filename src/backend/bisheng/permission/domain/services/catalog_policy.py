@@ -23,7 +23,6 @@ REGISTERED_ACTION_CODES: tuple[str, ...] = (
     "download",
     "delete",
     "share",
-    "use",
     "publish",
     "unpublish",
 )
@@ -71,7 +70,6 @@ ACTION_RESOURCE_SCOPES: Mapping[str, frozenset[str]] = {
     "download": frozenset({"folder", "knowledge_file"}),
     "delete": MIGRATED_RESOURCE_TYPES,
     "share": frozenset({"knowledge_space", "knowledge_file", "workflow", "assistant"}),
-    "use": frozenset({"knowledge_library", "workflow", "assistant", "tool", "app", "linsight_skill"}),
     "publish": frozenset({"workflow", "assistant", "app"}),
     "unpublish": frozenset({"workflow", "assistant", "app"}),
 }

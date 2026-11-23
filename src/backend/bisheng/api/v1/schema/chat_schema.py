@@ -35,6 +35,10 @@ class AppChatList(BaseModel):
     mark_status: int | None = None
     mark_id: int | None = None
     messages: list[dict] | None = None  # All message list data for the session
+    # F003: organisation snapshot (sentinels in ``database/models/org_snapshot.py``) and usage type
+    operator_dept_id: int | None = None
+    operator_dept_path: str | None = None
+    usage_type: str | None = None  # daily | assistant | workflow | task
 
     @field_validator("user_name", mode="before")
     @classmethod

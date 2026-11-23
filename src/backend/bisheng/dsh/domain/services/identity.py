@@ -1,6 +1,7 @@
 """Current natural-person identity and one-time browser authorization."""
 
 import re
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Protocol
 from urllib.parse import urlsplit
@@ -37,10 +38,18 @@ class AuthorizationIntent(DshContract):
 
 
 class IdentityService:
-    def __init__(self, tickets: TicketRepository, identities: IdentityRecords, authorizations):
+    def __init__(
+        self,
+        tickets: TicketRepository,
+        identities: IdentityRecords,
+        authorizations,
+        *,
+        avatar_reader: Callable[[str, str], Awaitable[str | None]] | None = None,
+    ):
         self.tickets = tickets
         self.identities = identities
         self.authorizations = authorizations
+        self.avatar_reader = avatar_reader
 
     async def check(self, tenant_id: str, user_id: str) -> DshIdentitySnapshot:
         if not re.fullmatch(r"[1-9][0-9]*", tenant_id) or not re.fullmatch(r"[1-9][0-9]*", user_id):
@@ -71,7 +80,9 @@ class IdentityService:
         snapshot = await self.check(tenant_id, user_id)
         if not snapshot.active:
             raise DshUserDisabledError()
-        return {"user": snapshot.user.model_dump(), "tenant": snapshot.tenant.model_dump()}
+        user = snapshot.user.model_dump()
+        user["avatar"] = await self.avatar_reader(tenant_id, user_id) if self.avatar_reader is not None else None
+        return {"user": user, "tenant": snapshot.tenant.model_dump()}
 
     async def authorize(
         self, identity: BrowserIdentity, auth_id: str, *, decision: str = "approve"

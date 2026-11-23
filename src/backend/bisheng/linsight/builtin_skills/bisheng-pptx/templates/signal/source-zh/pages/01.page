@@ -1,0 +1,100 @@
+pageType: cover
+background:
+  type: solid
+  color: '#1C2644'
+notes: Native PPTD adaptation of Zara Zhang / Signal. MIT. Example figures are illustrative.
+elements:
+  - elementId: t1
+    elementType: text
+    bounds:
+      - 64
+      - 74
+      - 780
+      - 20
+    content:
+      text: 简报 / 战略 / 经营
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 11
+      color: '#C8A870'
+      lineHeight: 1.12
+      bold: false
+  - elementId: l2
+    elementType: line
+    bounds:
+      - 64
+      - 154
+      - 72
+      - 1
+    viewBox:
+      - 72
+      - 1
+    points: 0,0 72,0
+    border:
+      color: '#C8A870'
+      width: 2
+  - elementId: t3
+    elementType: text
+    bounds:
+      - 64
+      - 190
+      - 800
+      - 170
+    content:
+      text: |-
+        下一项
+        关键决策
+      fontFamily:
+        latin: Georgia
+        ea: Noto Serif CJK SC
+        mac: Songti SC
+        win: SimSun
+      fontSize: 70
+      color: '#E2DCD0'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t4
+    elementType: text
+    bounds:
+      - 64
+      - 403
+      - 780
+      - 44
+    content:
+      text: 证据、选择与行动计划
+      fontFamily: *ref_0
+      fontSize: 22
+      color: '#C8A870'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t5
+    elementType: text
+    bounds:
+      - 48
+      - 506
+      - 760
+      - 16
+    content:
+      text: 自编示例
+      fontFamily: *ref_0
+      fontSize: 9
+      color: '#E2DCD0'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t6
+    elementType: text
+    bounds:
+      - 870
+      - 503
+      - 40
+      - 20
+    content:
+      text: '01'
+      fontFamily: *ref_0
+      fontSize: 11
+      color: '#E2DCD0'
+      lineHeight: 1.12
+      bold: false

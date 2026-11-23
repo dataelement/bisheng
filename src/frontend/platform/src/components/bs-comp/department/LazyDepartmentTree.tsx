@@ -1,12 +1,15 @@
 import { departmentDisplayName } from "./departmentDisplayName";
-import { SearchInput } from '@bisheng/ui';
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
+import {
+  Button, SearchInput, Tag, TreeNavigation, TreeNavigationList, TreeNavigationNode, TreeNavigationStatus,
+} from "@bisheng/ui";
 
 import { DepartmentTreeNode } from "@/types/api/department";
 import { cn } from "@/utils";
 import { Outlined } from "bisheng-icons";
 import { SubjectSearchStatus } from "../selectComponent/SubjectSearchStatus";
 
-import { ReactNode,useMemo } from "react";
+import { useMemo, type ReactNode, type WheelEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { LazyDepartmentTree as LazyTreeController } from "./useLazyDepartmentTree";
 
@@ -15,6 +18,8 @@ const TREE_INDENT_PER_LEVEL = 22
 
 interface LazyDepartmentTreeProps {
   controller: LazyTreeController
+  /** Compact navigation rows for the organization sidebar. */
+  variant?: "navigation"
   /** dept_id of the currently selected row (for the highlight). */
   selectedDeptId?: string | null
   onSelect?: (node: DepartmentTreeNode) => void
@@ -23,12 +28,12 @@ interface LazyDepartmentTreeProps {
   searchPlaceholder?: string
   /** Leading slot per row (e.g. a checkbox/radio in pickers). */
   renderRowPrefix?: (node: DepartmentTreeNode) => ReactNode
-  /** Trailing slot per row (e.g. create-child button, mount badge in the nav tree). */
+  /** Trailing slot per row (e.g. TreeNavigationMenu in the navigation tree). */
   renderRowSuffix?: (node: DepartmentTreeNode) => ReactNode
   /** Rows whose label is rendered disabled (e.g. archived in pickers, already-granted). */
   isRowDisabled?: (node: DepartmentTreeNode) => boolean
-  /** Assign each row a ref so callers can scrollIntoView after reveal(). */
-  rowRef?: (deptId: string, el: HTMLDivElement | null) => void
+  /** Scroll to the current navigation node again after an external locate action. */
+  revealKey?: number
   className?: string
   emptyHint?: ReactNode
   /** Drive scrollTop from wheel deltas. Needed when nested in a Radix Popover/
@@ -44,7 +49,7 @@ interface RowProps {
 }
 
 function Row({ node, depth, searchMode, props }: RowProps) {
-  const { controller, selectedDeptId, onSelect, renderRowPrefix, renderRowSuffix, isRowDisabled, rowRef } =
+  const { controller, variant, selectedDeptId, onSelect, renderRowPrefix, renderRowSuffix, isRowDisabled } =
     props
   const { t } = useTranslation()
 
@@ -61,11 +66,48 @@ function Row({ node, depth, searchMode, props }: RowProps) {
   const isArchived = node.status === "archived"
   const disabled = isRowDisabled?.(node) ?? false
   const gutterWidth = depth * TREE_INDENT_PER_LEVEL
+  const name = departmentDisplayName(node, t("bs:department.defaultOrganization"))
+  const label = isArchived ? `${name} ${t("bs:department.archivedTag")}` : name
+  const rowSuffix = renderRowSuffix?.(node)
+  const children = childNodes.map((child) => (
+    <Row key={child.id} node={child} depth={depth + 1} searchMode={searchMode} props={props} />
+  ))
+
+  if (variant === "navigation") {
+    const failed = !searchMode && controller.hasLayerError(node.id)
+    const canExpand = !searchMode && node.has_children &&
+      (controller.getChildIds(node.id)?.length !== 0 || failed || isLoading)
+    return (
+      <TreeNavigationNode
+        name={label}
+        depth={depth}
+        current={isSelected}
+        disabled={disabled}
+        hideLeafArrow
+        icon={<Outlined.City />}
+        marker={node.is_tenant_root && <Tag size="small" color="brand">{t("bs:tenant.mountedTag")}</Tag>}
+        disclosure={canExpand ? {
+          expanded: isExpanded,
+          label: t(isExpanded ? "bs:organization.collapseDepartment" : "bs:organization.expandDepartment", { name }),
+          onToggle: () => controller.toggle(node),
+        } : undefined}
+        onSelect={onSelect ? () => onSelect(node) : undefined}
+        actions={rowSuffix}
+      >
+        {isExpanded && (children.length > 0 || isLoading || failed) && (
+          <>
+            {children}
+            {isLoading && <TreeNavigationStatus depth={depth + 1}><LoadingState size="inline" /></TreeNavigationStatus>}
+            {failed && !isLoading && <DepartmentTreeRetry controller={controller} parentId={node.id} depth={depth + 1} />}
+          </>
+        )}
+      </TreeNavigationNode>
+    )
+  }
 
   return (
     <div>
       <div
-        ref={(el) => rowRef?.(node.dept_id, el)}
         data-depth={depth}
         className={cn(
           "group flex items-center rounded-md py-1.5 pl-1.5 pr-2 text-sm hover:bg-accent",
@@ -90,7 +132,7 @@ function Row({ node, depth, searchMode, props }: RowProps) {
           }}
         >
           {isLoading ? (
-            <Outlined.Loading className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+            <LoadingState size="inline" />
           ) : node.has_children ? (
             isExpanded ? (
               <Outlined.Down className="h-3.5 w-3.5 text-muted-foreground" />
@@ -109,24 +151,33 @@ function Row({ node, depth, searchMode, props }: RowProps) {
           )}
         />
         <span className="flex-1 truncate">
-          {departmentDisplayName(node, t("bs:department.defaultOrganization"))}
-          {isArchived ? ` ${t("bs:department.archivedTag")}` : ""}
+          {label}
         </span>
-        {renderRowSuffix?.(node)}
+        {rowSuffix}
       </div>
-      {node.has_children && isExpanded && childNodes.length > 0 && (
-        <div>
-          {childNodes.map((child) => (
-            <Row key={child.id} node={child} depth={depth + 1} searchMode={searchMode} props={props} />
-          ))}
-        </div>
-      )}
+      {node.has_children && isExpanded && children.length > 0 && <div>{children}</div>}
     </div>
   )
 }
 
+interface DepartmentTreeRetryProps {
+  controller: LazyTreeController
+  parentId: number | null
+  depth?: number
+}
+
+function DepartmentTreeRetry({ controller, parentId, depth }: DepartmentTreeRetryProps) {
+  const { t } = useTranslation()
+  return (
+    <TreeNavigationStatus depth={depth}>
+      <span>{t("bs:organization.treeLoadFailed")}</span>
+      <Button variant="text" onClick={() => controller.retryLayer(parentId)}>{t("bs:organization.retry")}</Button>
+    </TreeNavigationStatus>
+  )
+}
+
 export function LazyDepartmentTree(props: LazyDepartmentTreeProps) {
-  const { controller, showSearch = true, searchPlaceholder, className, emptyHint, wheelScrollFix } = props
+  const { controller, variant, revealKey, showSearch = true, searchPlaceholder, className, emptyHint, wheelScrollFix } = props
   const { t } = useTranslation()
 
   const browseRoots = useMemo(
@@ -140,42 +191,53 @@ export function LazyDepartmentTree(props: LazyDepartmentTreeProps) {
   const searchMode = controller.searchMode
   const roots = searchMode ? controller.searchRoots : browseRoots
   const busy = searchMode ? controller.searching : controller.initialLoading
+  const rows = roots.map((node) => (
+    <Row key={node.id} node={node} depth={0} searchMode={searchMode} props={props} />
+  ))
+  const searchStatus = controller.searchTooLong || controller.searchFailed
+    ? <SubjectSearchStatus tooLong={controller.searchTooLong} failed={controller.searchFailed} onRetry={controller.retrySearch} />
+    : null
+  const handleWheel = wheelScrollFix ? (event: WheelEvent<HTMLElement>) => {
+    event.currentTarget.scrollTop += event.deltaY
+  } : undefined
 
   return (
     <div className={cn("flex flex-1 flex-col overflow-hidden", className)}>
       {showSearch && (
-        <SearchInput placeholder={searchPlaceholder ?? t("bs:subjectSearch.departmentPlaceholder")} {...controller.searchInputProps} className={"mb-2"} />
+        <SearchInput placeholder={searchPlaceholder ?? t("bs:subjectSearch.departmentPlaceholder")} {...controller.searchInputProps} className="mb-2 shrink-0" />
       )}
-      <div
-        className="flex-1 overflow-y-auto"
-        onWheel={
-          wheelScrollFix
-            ? (e) => {
-                e.currentTarget.scrollTop += e.deltaY
-              }
-            : undefined
-        }
-      >
-        {controller.searchTooLong || controller.searchFailed ? <SubjectSearchStatus tooLong={controller.searchTooLong} failed={controller.searchFailed} onRetry={controller.retrySearch} /> : busy ? (
-          <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
-            <Outlined.Loading className="mr-2 h-4 w-4 animate-spin" />
-            {t("loading")}
-          </div>
-        ) : roots.length === 0 ? (
-          <div className="py-6 text-center text-sm text-muted-foreground">
-            {emptyHint ?? t("bs:department.noResult")}
-          </div>
-        ) : (
-          roots.map((node) => (
-            <Row key={node.id} node={node} depth={0} searchMode={searchMode} props={props} />
-          ))
-        )}
-        {searchMode && controller.truncated && (
-          <div className="px-2 py-1.5 text-center text-xs text-muted-foreground">
-            {t("bs:department.searchTruncated")}
-          </div>
-        )}
-      </div>
+      {variant === "navigation" ? (
+        <TreeNavigation size="medium" showLine revealKey={revealKey} aria-label={t("bs:department.tree")} className="min-h-0 flex-1" onWheel={handleWheel}>
+          <TreeNavigationList>
+            {searchStatus ? <TreeNavigationStatus>{searchStatus}</TreeNavigationStatus> : (
+              <>
+                {rows}
+                {busy && roots.length === 0 && <TreeNavigationStatus><LoadingState size="inline" /></TreeNavigationStatus>}
+                {!busy && !searchMode && controller.hasLayerError(null) && <DepartmentTreeRetry controller={controller} parentId={null} />}
+                {!busy && roots.length === 0 && (searchMode || !controller.hasLayerError(null)) && (
+                  <TreeNavigationStatus>{emptyHint ?? t("bs:department.noResult")}</TreeNavigationStatus>
+                )}
+                {searchMode && controller.truncated && <TreeNavigationStatus>{t("bs:department.searchTruncated")}</TreeNavigationStatus>}
+              </>
+            )}
+          </TreeNavigationList>
+        </TreeNavigation>
+      ) : (
+        <div className="flex-1 overflow-y-auto" onWheel={handleWheel}>
+          {searchStatus ?? (busy ? (
+            <LoadingState className="py-6" />
+          ) : roots.length === 0 ? (
+            <div className="py-6 text-center text-sm text-muted-foreground">
+              {emptyHint ?? t("bs:department.noResult")}
+            </div>
+          ) : rows)}
+          {searchMode && controller.truncated && (
+            <div className="px-2 py-1.5 text-center text-xs text-muted-foreground">
+              {t("bs:department.searchTruncated")}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

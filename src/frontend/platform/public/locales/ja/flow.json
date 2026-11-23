@@ -607,5 +607,7 @@
   "rerunWorkflow": "再実行",
   "type": "タイプ",
   "valueType": "値のタイプ",
-  "selectDbType": "データベースの種類を選択"
+  "selectDbType": "データベースの種類を選択",
+  "modelLoadFailed": "モデル一覧を読み込めませんでした。再試行してください。",
+  "retryModelLoad": "再試行"
 }

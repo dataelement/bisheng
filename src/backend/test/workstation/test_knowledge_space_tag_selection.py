@@ -161,6 +161,7 @@ async def test_repository_checks_tag_owner_type_and_space_file_links(monkeypatch
     from sqlalchemy.ext.asyncio import create_async_engine
     from sqlmodel.ext.asyncio.session import AsyncSession
 
+    from bisheng.core.context.tenant import tenant_execution_scope
     from bisheng.database.models.group_resource import ResourceTypeEnum
     from bisheng.knowledge.domain.repositories import knowledge_space_tag_repository as module
 
@@ -170,7 +171,7 @@ async def test_repository_checks_tag_owner_type_and_space_file_links(monkeypatch
             "CREATE TABLE tag (id INTEGER PRIMARY KEY, business_type TEXT, business_id TEXT, tenant_id INTEGER)",
             "CREATE TABLE taglink (id INTEGER PRIMARY KEY, tag_id INTEGER, resource_type INTEGER, resource_id TEXT, tenant_id INTEGER)",
             "CREATE TABLE knowledgefile (id INTEGER PRIMARY KEY, knowledge_id INTEGER, tenant_id INTEGER)",
-            "INSERT INTO tag VALUES (11, 'knowledge_space', '7', 1), (12, 'knowledge_space', '8', 1), (13, 'knowledge', '7', 1)",
+            "INSERT INTO tag VALUES (11, 'knowledge_space', '7', 1), (12, 'knowledge_space', '8', 1), (13, 'knowledge', '7', 1), (14, 'knowledge_space', '7', 2)",
             "INSERT INTO knowledgefile VALUES (40, 7, 1), (41, 8, 1), (42, 7, 1)",
         ]:
             await connection.execute(text(statement))
@@ -188,12 +189,14 @@ async def test_repository_checks_tag_owner_type_and_space_file_links(monkeypatch
 
     monkeypatch.setattr(module, "get_async_db_session", session_scope)
     try:
-        repository = module.KnowledgeSpaceTagRepository()
-        assert await repository.tag_belongs_to_space(7, 11)
-        assert not await repository.tag_belongs_to_space(7, 12)
-        assert not await repository.tag_belongs_to_space(7, 13)
-        assert not await repository.tag_belongs_to_space(7, 999)
-        assert await repository.list_tagged_file_ids(7, 11) == [40]
+        with tenant_execution_scope(1):
+            repository = module.KnowledgeSpaceTagRepository()
+            assert await repository.tag_belongs_to_space(7, 11)
+            assert not await repository.tag_belongs_to_space(7, 12)
+            assert await repository.tag_belongs_to_space(7, 13)
+            assert not await repository.tag_belongs_to_space(7, 14)
+            assert not await repository.tag_belongs_to_space(7, 999)
+            assert await repository.list_tagged_file_ids(7, 11) == [40, 42]
     finally:
         await engine.dispose()
 

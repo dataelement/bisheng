@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Immutable release identifier (a new identifier for changed content)
+        description: Release identifier (reusing it republishes the same image tags)
         required: true
         type: string
 permissions:
@@ -43,13 +43,11 @@ jobs:
           RUNTIME_RELEASE: ${{ inputs.version || github.ref_name }}
           TARGET_ARCH: ${{ matrix.arch }}
           RUNTIME_PUBLISH: '1'
-          RUNTIME_REPLACE_RELEASE: ${{ github.event_name == 'push' && github.event.forced && github.ref_name || '' }}
         run: bash scripts/build_runtime_images.sh
       - name: Sync verified native images to CR
         env:
           RUNTIME_RELEASE: ${{ inputs.version || github.ref_name }}
           TARGET_ARCH: ${{ matrix.arch }}
-          RUNTIME_REPLACE_RELEASE: ${{ github.event_name == 'push' && github.event.forced && github.ref_name || '' }}
         run: bash scripts/sync_runtime_images_cr.sh
       - uses: actions/upload-artifact@v4
         with:

@@ -109,6 +109,7 @@ export interface KnowledgeSpace {
     memberCount: number;          // mapped from member_count
     fileCount: number;            // success-indexed file count
     totalFileCount: number;
+    state?: number | null;
     role: SpaceRole;
     isPinned: boolean;
     createdAt: string;            // mapped from create_time
@@ -223,7 +224,7 @@ export interface KnowledgeFile {
 // Backend raw types (snake_case from API responses)
 // ─────────────────────────────────────────────
 
-interface RawKnowledgeSpace {
+export interface RawKnowledgeSpace {
     id: number;
     name: string;
     description?: string;
@@ -234,6 +235,7 @@ interface RawKnowledgeSpace {
     member_count?: number;
     file_count?: number;
     total_file_count?: number;
+    state?: number | null;
     follower_num?: number;
     file_num?: number;
     role?: string;
@@ -342,7 +344,7 @@ export interface UploadFileResponse {
 // ─────────────────────────────────────────────
 
 /** Map a raw backend space to the frontend KnowledgeSpace model */
-function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
+export function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
     return {
         id: String(raw.id),
         name: raw.name,
@@ -355,6 +357,7 @@ function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
         memberCount: raw.member_count ?? raw.follower_num ?? 0,
         fileCount: raw.file_count ?? raw.file_num ?? 0,
         totalFileCount: raw.total_file_count ?? raw.file_num ?? raw.file_count ?? 0,
+        state: raw.state,
         role: (raw.user_role as SpaceRole) || (raw.role as SpaceRole) || SpaceRole.MEMBER,
         isPinned: raw.is_pinned ?? false,
         createdAt: raw.create_time || "",
@@ -506,6 +509,16 @@ function extractFileFailureEvidence(raw: { remark?: unknown; error_message?: unk
     return { remark: raw.remark, errorMessage: raw.error_message };
 }
 
+// Codes whose user-facing copy is a bare "parse failed" sentence: the code is
+// appended so support can trace the failure without exposing raw exceptions.
+const GENERIC_PARSE_FAILURE_CODES = new Set([10952]);
+
+function withParseFailureCode(code: unknown, message: string): string {
+    const numeric = Number(code);
+    if (!GENERIC_PARSE_FAILURE_CODES.has(numeric)) return message;
+    return String(i18next.t('com_knowledge.file_parse_failed_detail', { message, code: numeric }));
+}
+
 export function extractKnowledgeFileError(raw: any): string | undefined {
     const remark = raw?.remark;
     if (!remark && !raw?.error_message) return undefined;
@@ -515,7 +528,7 @@ export function extractKnowledgeFileError(raw: any): string | undefined {
             return formatSensitiveViolationMessage(Array.isArray(parsed.hits) ? parsed.hits : []);
         }
         const registered = formatMediaParseFailureMessage(parsed ?? {});
-        if (registered) return registered;
+        if (registered) return withParseFailureCode(parsed?.status_code ?? parsed?.code, registered);
         if (typeof parsed?.old_name === 'string' || typeof parsed?.new_name === 'string') return undefined;
         return String(i18next.t('api_errors.fallback'));
     } catch {
@@ -1589,7 +1602,8 @@ export type MoveInvalidReason =
     | "into_subtree"
     | "into_current_parent"
     | "depth_exceeded"
-    | "name_conflict";
+    | "name_conflict"
+    | "not_found" | "unsupported" | "processing" | "related_invalid";
 
 export interface InvalidEntry {
     id: number;
@@ -1715,10 +1729,12 @@ export interface KnowledgeFilePreview {
 
 export async function getFilePreviewApi(
     space_id: string,
-    file_id: string
+    file_id: string,
+    options?: { skip403Redirect: boolean; showError: boolean },
 ): Promise<KnowledgeFilePreview> {
+    const endpoint = `/api/v1/knowledge/space/${space_id}/files/${file_id}/preview`;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const res = await request.get<any>(`/api/v1/knowledge/space/${space_id}/files/${file_id}/preview`);
+    const res = await (options ? request.get<any>(endpoint, options) : request.get<any>(endpoint));
     const data = res?.data ?? res;
     return {
         original_url: data?.original_url ?? "",
@@ -1738,10 +1754,16 @@ export async function getFilePreviewApi(
  */
 export async function getFileDownloadApi(
     space_id: string,
-    file_id: string
+    file_id: string,
+    signal?: AbortSignal,
+    options?: { skip403Redirect: boolean; showError: boolean },
 ): Promise<{ original_url: string; preview_url: string }> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const res = await request.get<any>(`/api/v1/knowledge/space/${space_id}/files/${file_id}/download`);
+    const endpoint = `/api/v1/knowledge/space/${space_id}/files/${file_id}/download`;
+    type DownloadData = { original_url?: string; preview_url?: string };
+    type DownloadResponse = DownloadData & { data?: DownloadData | null };
+    const res = signal || options
+        ? await request.get<DownloadResponse>(endpoint, { ...options, ...(signal ? { signal } : {}) })
+        : await request.get<DownloadResponse>(endpoint);
     const data = res?.data ?? res;
     return {
         original_url: data?.original_url ?? "",
@@ -1796,11 +1818,13 @@ export interface VersionListResponse {
  * GET /api/v1/knowledge/space/file/{knowledge_file_id}/versions
  */
 export async function getFileVersionsApi(
-    knowledge_file_id: number
+    knowledge_file_id: number,
+    signal?: AbortSignal,
 ): Promise<VersionListResponse> {
-    const res = await request.get(
-        `/api/v1/knowledge/space/file/${knowledge_file_id}/versions`
-    ) as ApiResponse<VersionListResponse>;
+    const endpoint = `/api/v1/knowledge/space/file/${knowledge_file_id}/versions`;
+    const res = signal
+        ? await request.get<ApiResponse<VersionListResponse>>(endpoint, { signal })
+        : await request.get<ApiResponse<VersionListResponse>>(endpoint);
     return res.data;
 }
 
@@ -1846,12 +1870,11 @@ export interface SetPrimaryResponse {
  * Promote a version to primary (the version that represents the document in search / display).
  * POST /api/v1/knowledge/space/version/{version_id}/set-primary
  */
-export async function setPrimaryVersionApi(version_id: number): Promise<SetPrimaryResponse> {
+export async function setPrimaryVersionApi(version_id: number, signal?: AbortSignal): Promise<SetPrimaryResponse> {
     const res = await request.post(
         `/api/v1/knowledge/space/version/${version_id}/set-primary`,
         undefined,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        { skip403Redirect: true } as any,
+        { skip403Redirect: true, ...(signal ? { signal } : {}) },
     ) as ApiResponse<SetPrimaryResponse>;
     return res.data;
 }
@@ -1860,11 +1883,10 @@ export async function setPrimaryVersionApi(version_id: number): Promise<SetPrima
  * Delete a non-primary version (history record only; does not affect the document).
  * DELETE /api/v1/knowledge/space/version/{version_id}
  */
-export async function deleteFileVersionApi(version_id: number): Promise<void> {
+export async function deleteFileVersionApi(version_id: number, signal?: AbortSignal): Promise<void> {
     await request.delete(
         `/api/v1/knowledge/space/version/${version_id}`,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        { skip403Redirect: true } as any,
+        { skip403Redirect: true, ...(signal ? { signal } : {}) },
     );
 }
 
@@ -1952,10 +1974,12 @@ export async function getPendingSimilarFilesApi(space_id: number): Promise<Pendi
  */
 export async function getVersionRecommendationsApi(
     file_id: number,
+    signal?: AbortSignal,
 ): Promise<SimilarCandidateEntry[]> {
-    const res = await request.get<ApiResponse<SimilarCandidateEntry[]>>(
-        `/api/v1/knowledge/space/file/${file_id}/version-recommendations`
-    );
+    const endpoint = `/api/v1/knowledge/space/file/${file_id}/version-recommendations`;
+    const res = signal
+        ? await request.get<ApiResponse<SimilarCandidateEntry[]>>(endpoint, { signal })
+        : await request.get<ApiResponse<SimilarCandidateEntry[]>>(endpoint);
     return extractList<SimilarCandidateEntry>((res as any)?.data ?? res);
 }
 
@@ -1967,10 +1991,11 @@ export async function searchVersionSourcesApi(
     space_id: number,
     keyword: string,
     current_file_id: number,
+    signal?: AbortSignal,
 ): Promise<SearchableDocumentEntry[]> {
     const res = await request.get<ApiResponse<SearchableDocumentEntry[]>>(
         `/api/v1/knowledge/space/${space_id}/document/version-search`,
-        { params: { keyword, current_file_id } }
+        { params: { keyword, current_file_id }, ...(signal ? { signal } : {}) },
     );
     return extractList<SearchableDocumentEntry>((res as any)?.data ?? res);
 }
@@ -1988,12 +2013,12 @@ export interface MergeIntoCurrentPayload {
  */
 export async function mergeIntoCurrentApi(
     payload: MergeIntoCurrentPayload,
+    signal?: AbortSignal,
 ): Promise<LinkAsNewVersionResponse> {
     const res = await request.post(
         `/api/v1/knowledge/space/version/merge`,
         payload,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        { skip403Redirect: true } as any,
+        { skip403Redirect: true, ...(signal ? { signal } : {}) },
     ) as ApiResponse<LinkAsNewVersionResponse>;
     return res.data;
 }
@@ -2002,11 +2027,56 @@ export async function mergeIntoCurrentApi(
  * Dismiss the similar-file flag for a file (user chose not to link it to any document).
  * POST /api/v1/knowledge/space/file/{file_id}/dismiss-similar
  */
-export async function dismissSimilarApi(file_id: number): Promise<void> {
+export async function dismissSimilarApi(file_id: number, signal?: AbortSignal): Promise<void> {
     await request.post(
         `/api/v1/knowledge/space/file/${file_id}/dismiss-similar`,
         undefined,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        { skip403Redirect: true } as any,
+        { skip403Redirect: true, ...(signal ? { signal } : {}) },
     );
+}
+
+export async function getMoveManagementTenant(spaceId: string): Promise<string> {
+  const response = await request.getResponse<{ headers: Record<string, unknown> }>(`/api/v1/knowledge/space/${spaceId}/info`);
+  const tenant = response.headers["x-management-tenant"];
+  if (tenant == null) throw new Error("Move management scope is unavailable");
+  return String(tenant);
+}
+
+/** A move review is pinned to the actual management tenant that issued it. */
+export interface MoveConfirmation {
+  precheck: Pick<import("./knowledgeProcessing").OperationPrecheck, "confirmation_id" | "plan_digest">;
+  managementTenant: string;
+}
+
+export interface MoveReview extends MoveConfirmation {
+  precheck: import("./knowledgeProcessing").OperationPrecheck;
+}
+
+export async function precheckMoveFilesApi(
+  spaceId: string,
+  params: Parameters<typeof moveFilesApi>[1],
+): Promise<MoveReview> {
+  const tenant = await getMoveManagementTenant(spaceId);
+  const result = await request.post(`/api/v1/knowledge/space/${spaceId}/files/move/precheck`, {
+    items: params.items.map((item) => ({ id: Number(item.id), type: item.type })),
+    target_space_id: Number(params.target_space_id),
+    target_folder_id: params.target_folder_id == null ? null : Number(params.target_folder_id),
+    skip_invalid: false,
+  }, { headers: { "X-Management-Tenant": String(tenant) } }) as ApiResponse<MoveReview["precheck"]>;
+  if (result.status_code !== 200 || !result.data) throw Object.assign(new Error(result.status_message || "Move precheck failed"), result);
+  return { precheck: result.data, managementTenant: String(tenant) };
+}
+
+export async function confirmMoveFilesApi(
+  spaceId: string,
+  review: MoveConfirmation,
+  idempotencyKey: string,
+): Promise<MoveResult | import("./knowledgeProcessing").JobAccepted> {
+  const result = await request.post(`/api/v1/knowledge/space/${spaceId}/files/move/confirm`, {
+    confirmation_id: review.precheck.confirmation_id,
+    plan_digest: review.precheck.plan_digest,
+    idempotency_key: idempotencyKey,
+  }, { headers: { "X-Management-Tenant": review.managementTenant } }) as ApiResponse<MoveResult | import("./knowledgeProcessing").JobAccepted>;
+  if (result.status_code !== 200 || !result.data) throw Object.assign(new Error(result.status_message || "Move confirmation failed"), result);
+  return result.data;
 }

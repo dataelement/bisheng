@@ -25,7 +25,10 @@ class DshAuthorizationService:
         if int(count) > (1200 if action == "authorization" else 6000):
             raise DshTooManyRequestsError()
 
-    async def create(self, body):
+    async def create(self, body, *, origin=None):
+        public_origin = self.origin or origin
+        if not public_origin:
+            raise DshInvalidRequestError()
         try:
             redirect = urlsplit(body.redirect_uri)
             if (
@@ -49,7 +52,7 @@ class DshAuthorizationService:
         await self.repository.save(auth_id, payload)
         return {
             "auth_id": auth_id,
-            "authorize_url": self.origin + "/desktop-login?auth_id=" + auth_id,
+            "authorize_url": public_origin + "/desktop-login?auth_id=" + auth_id,
             "expires_in": 300,
         }
 

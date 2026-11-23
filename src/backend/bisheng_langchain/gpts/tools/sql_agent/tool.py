@@ -1,4 +1,3 @@
-
 from langchain_community.agent_toolkits import SQLDatabaseToolkit
 from langchain_community.utilities import SQLDatabase
 from langchain_core.callbacks import CallbackManagerForToolRun
@@ -8,6 +7,7 @@ from langchain_core.tools import BaseTool
 from langgraph.graph.state import CompiledStateGraph as CompiledGraph
 from langgraph.prebuilt import create_react_agent
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy.engine.url import URL
 
 _agent_system_prompt = """You are an autonomous agent that answers user questions by querying an SQL database through the provided tools.
 
@@ -48,15 +48,15 @@ class SqlAgentAPIWrapper(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     llm: BaseLanguageModel = Field(description="llm to use for sql agent")
-    sql_address: str = Field(description="sql database address for SQLDatabase uri")
+    sql_address: str | URL = Field(description="sql database address for SQLDatabase uri")
 
     db: SQLDatabase | None = None
     agent: CompiledGraph | None = None
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.llm = kwargs.get('llm')
-        self.sql_address = kwargs.get('sql_address')
+        self.llm = kwargs.get("llm")
+        self.sql_address = kwargs.get("sql_address")
 
         self.db = SQLDatabase.from_uri(self.sql_address)
         toolkit = SQLDatabaseToolkit(db=self.db, llm=self.llm)
@@ -87,9 +87,9 @@ class SqlAgentTool(BaseTool):
     api_wrapper: SqlAgentAPIWrapper
 
     def _run(
-            self,
-            query: str,
-            run_manager: CallbackManagerForToolRun | None = None,
+        self,
+        query: str,
+        run_manager: CallbackManagerForToolRun | None = None,
     ) -> str:
         """Use the tool."""
         try:
@@ -100,7 +100,7 @@ class SqlAgentTool(BaseTool):
         return res
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     from langchain_openai import AzureChatOpenAI
 
     llm = AzureChatOpenAI()

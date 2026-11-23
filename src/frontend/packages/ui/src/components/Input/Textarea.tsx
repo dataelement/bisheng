@@ -91,16 +91,13 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(fun
         ref={setRefs}
         rows={rows}
         className={cn(
-          // The floor for the user's own drag is the 32px medium-control height
-          // (§3), and at that floor one line has to sit CENTERED and whole:
-          // 1px border + 4 + 22 (line) + 4 + 1px border = 32. That is what fixes
-          // the vertical padding at 4px — 8px would need a 40px box, and a
-          // dragged-flat field would show a line cut off at both ends.
-          'input-no-zoom min-h-[30px] w-full resize-y border-0 bg-transparent px-3 py-1 text-inherit outline-none placeholder:text-text-3 disabled:cursor-not-allowed disabled:text-btn-disabled-text disabled:placeholder:text-btn-disabled-text',
+          // The drag floor keeps a full line and both padding edges visible,
+          // including responsive and enlarged text; the shell adds its border.
+          'input-no-zoom min-h-[max(30px,calc(1.5em+0.5rem))] w-full resize-y border-0 bg-transparent px-3 py-1 text-inherit outline-none placeholder:text-text-3 disabled:cursor-not-allowed disabled:text-btn-disabled-text disabled:placeholder:text-btn-disabled-text',
           // Room for the counter so the last line never runs under it — and the
           // floor grows by the same amount (4 + 22 + 28), or dragging flat would
           // bury the line behind the counter.
-          countVisible && 'min-h-[54px] pb-7',
+          countVisible && 'min-h-[max(54px,calc(1.5em+2rem))] pb-7',
           textareaClassName,
         )}
         disabled={disabled}

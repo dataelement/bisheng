@@ -28,6 +28,7 @@ from bisheng.permission.domain.models import (
     PermissionCatalogRelease,
     PermissionGrant,
     PermissionGrantAssignee,
+    PermissionProjectionOperation,
     PermissionVisibleSourceProjection,
     ResourcePermissionMode,
 )
@@ -310,7 +311,7 @@ class RedisConsistencyMarker:
                     resource_id=None,
                 ),
             )
-        elif plan.scope_type in {"department", "tenant", "user_group"}:
+        elif plan.scope_type in {"department", "tenant", "user_group", "llm_model_deletion"}:
             keys = (self._tenant_key(plan.tenant_id),)
         else:
             raise ValueError(f"unsupported permission marker scope: {plan.scope_type}")
@@ -487,8 +488,10 @@ class SqlProjectionScopeGuard:
         self,
         *,
         external_scopes: dict[str, ExternalProjectionScopePort] | None = None,
+        session_factory=None,
     ) -> None:
         self._external_scopes = dict(external_scopes or {})
+        self._session_factory = session_factory or (lambda: get_async_db_session())
 
     async def reserve(
         self,
@@ -515,7 +518,7 @@ class SqlProjectionScopeGuard:
             )
         if not separator:
             return False
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             statement = select(ResourcePermissionMode.id).where(
                 ResourcePermissionMode.tenant_id == plan.tenant_id,
                 ResourcePermissionMode.resource_type == resource_type,
@@ -537,7 +540,7 @@ class SqlProjectionScopeGuard:
         resource_type, separator, resource_id = plan.scope_key.partition(":")
         if not separator:
             return False
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             statement = select(ResourcePermissionMode.id).where(
                 ResourcePermissionMode.tenant_id == plan.tenant_id,
                 ResourcePermissionMode.resource_type == resource_type,
@@ -572,14 +575,29 @@ class SqlProjectionScopeGuard:
         resource_type, separator, resource_id = plan.scope_key.partition(":")
         if not separator:
             return
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             async with session.begin():
+                from bisheng.permission.domain.services.maintenance_guard import acheck_transaction
+
+                await acheck_transaction(session)
                 await session.execute(
                     update(ResourcePermissionMode)
                     .where(
                         ResourcePermissionMode.tenant_id == plan.tenant_id,
                         ResourcePermissionMode.resource_type == resource_type,
                         ResourcePermissionMode.resource_id == resource_id,
+                        ResourcePermissionMode.operation_id.in_(
+                            select(PermissionProjectionOperation.id).where(
+                                PermissionProjectionOperation.tenant_id == plan.tenant_id,
+                                PermissionProjectionOperation.idempotency_key == plan.idempotency_key,
+                                PermissionProjectionOperation.scope_type == plan.scope_type,
+                                PermissionProjectionOperation.scope_key == plan.scope_key,
+                                PermissionProjectionOperation.expected_version == plan.expected_version,
+                                PermissionProjectionOperation.target_version == plan.target_version,
+                                PermissionProjectionOperation.status == "FAILED_CLOSED",
+                            )
+                        ),
+                        ResourcePermissionMode.version.in_((plan.expected_version, plan.target_version)),
                     )
                     .values(
                         projection_state="FAILED_CLOSED",
@@ -658,204 +676,112 @@ class SqlProjectionFinalizer:
         self,
         *,
         external_scopes: dict[str, ExternalProjectionScopePort] | None = None,
+        session_factory=None,
     ) -> None:
         self._external_scopes = dict(external_scopes or {})
+        self._session_factory = session_factory or (lambda: get_async_db_session())
 
-    async def finalize(
-        self,
-        plan: ProjectionPlan,
-        operation_id: int,
-    ) -> None:
+    async def finalize(self, plan: ProjectionPlan, operation_id: int) -> None:
         if plan.scope_type != "resource":
             delegate = self._external_scopes.get(plan.scope_type)
             if delegate is None:
                 raise PermissionPublishNotReadyError(
-                    msg=(f"Permission projection finalizer is not configured: {plan.scope_type}")
+                    msg=f"Permission projection finalizer is not configured: {plan.scope_type}"
                 )
             await delegate.finalize(plan, operation_id)
             return
-        resource_type, separator, resource_id = plan.scope_key.partition(":")
+        from collections import defaultdict
+
+        from bisheng.permission.domain.services.projection_effects import finalization_effect
+
+        kind, separator, ident = plan.scope_key.partition(":")
         if not separator:
             raise PermissionPublishNotReadyError(msg="Permission resource scope key is invalid")
-        async with get_async_db_session() as session:
-            async with session.begin():
-                mode_row = (
-                    (
+        async with self._session_factory() as session, session.begin():
+            from bisheng.permission.domain.services.maintenance_guard import acheck_transaction
+
+            await acheck_transaction(session)
+
+            async def rows(model, conditions):
+                table = model.__table__
+                # Core column mappings are intentional: shared pure effects
+                # cannot carry ORM identity-map state or write authority.
+                return [
+                    dict(row)
+                    for row in (
                         await session.execute(
-                            select(ResourcePermissionMode)
-                            .where(
-                                ResourcePermissionMode.tenant_id == plan.tenant_id,
-                                ResourcePermissionMode.resource_type == resource_type,
-                                ResourcePermissionMode.resource_id == resource_id,
-                            )
+                            select(*table.c)
+                            .where(table.c.tenant_id == plan.tenant_id, *conditions)
+                            .order_by(table.c.id)
                             .with_for_update()
                         )
-                    )
-                    .scalars()
-                    .first()
-                )
-                if mode_row is None or mode_row.operation_id != operation_id:
-                    raise PermissionPublishNotReadyError(
-                        msg=("Permission scope operation changed before projection finalize")
-                    )
-                if mode_row.version == plan.target_version and mode_row.projection_state == "CURRENT":
-                    return
-                if mode_row.version != plan.expected_version or mode_row.projection_state not in {
-                    "PROJECTING",
-                    "FAILED_CLOSED",
-                }:
-                    raise PermissionPublishNotReadyError(msg=("Permission scope changed before projection finalize"))
+                    ).mappings()
+                ]
 
-                source_projection_state = mode_row.projection_state
-
-                grant_ids = tuple(
-                    (
-                        await session.execute(
-                            select(PermissionGrant.id).where(
-                                PermissionGrant.tenant_id == plan.tenant_id,
-                                PermissionGrant.resource_type == resource_type,
-                                PermissionGrant.resource_id == resource_id,
-                                PermissionGrant.projection_state == "PROJECTING",
-                            )
-                        )
-                    )
-                    .scalars()
-                    .all()
+            mode_table = ResourcePermissionMode.__table__
+            modes = await rows(
+                ResourcePermissionMode, (mode_table.c.resource_type == kind, mode_table.c.resource_id == ident)
+            )
+            if len(modes) != 1 or modes[0]["operation_id"] != operation_id:
+                raise PermissionPublishNotReadyError(
+                    msg="Permission scope operation changed before projection finalize"
                 )
-                if grant_ids:
-                    await session.execute(
-                        update(PermissionGrantAssignee)
-                        .where(
-                            PermissionGrantAssignee.tenant_id == plan.tenant_id,
-                            PermissionGrantAssignee.grant_id.in_(grant_ids),
-                            PermissionGrantAssignee.state == "PENDING",
-                        )
-                        .values(state="ACTIVE", update_time=func.now())
-                    )
-                    await session.execute(
-                        update(PermissionGrantAssignee)
-                        .where(
-                            PermissionGrantAssignee.tenant_id == plan.tenant_id,
-                            PermissionGrantAssignee.grant_id.in_(grant_ids),
-                            PermissionGrantAssignee.state == "PENDING_DELETE",
-                        )
-                        .values(
-                            state="INACTIVE",
-                            version=PermissionGrantAssignee.version + 1,
-                            update_time=func.now(),
-                        )
-                    )
-                    await session.execute(
-                        update(PermissionGrant)
-                        .where(
-                            PermissionGrant.id.in_(grant_ids),
-                            PermissionGrant.state == "PENDING",
-                        )
-                        .values(state="ACTIVE", update_time=func.now())
-                    )
-                    await session.execute(
-                        update(PermissionGrant)
-                        .where(PermissionGrant.id.in_(grant_ids))
-                        .values(
-                            projection_state="CURRENT",
-                            update_time=func.now(),
-                        )
-                    )
-
-                visible_sources = list(
-                    (
-                        await session.execute(
-                            select(PermissionVisibleSourceProjection)
-                            .where(
-                                PermissionVisibleSourceProjection.tenant_id == plan.tenant_id,
-                                PermissionVisibleSourceProjection.operation_id == operation_id,
-                                PermissionVisibleSourceProjection.state == "PENDING",
-                            )
-                            .with_for_update()
-                        )
-                    )
-                    .scalars()
-                    .all()
+            if modes[0]["version"] == plan.target_version and modes[0]["projection_state"] == "CURRENT":
+                return
+            grant_table = PermissionGrant.__table__
+            grants = await rows(
+                PermissionGrant, (grant_table.c.resource_type == kind, grant_table.c.resource_id == ident)
+            )
+            assignee_table = PermissionGrantAssignee.__table__
+            assignees = []
+            ids = [row["id"] for row in grants]
+            for offset in range(0, len(ids), 200):
+                assignees.extend(
+                    await rows(PermissionGrantAssignee, (assignee_table.c.grant_id.in_(ids[offset : offset + 200]),))
                 )
-                for source in visible_sources:
-                    prefix = "grant_assignee:"
-                    if source.source_kind != "GRANT_ASSIGNEE" or not source.source_owner_key.startswith(prefix):
-                        raise PermissionPublishNotReadyError(
-                            msg="Visible source recovery cannot infer its canonical owner state",
-                        )
-                    try:
-                        assignee_id = int(source.source_owner_key.removeprefix(prefix))
-                    except ValueError as exc:
-                        raise PermissionPublishNotReadyError(
-                            msg="Visible source recovery owner identity is invalid",
-                        ) from exc
-                    canonical_owner = (
-                        await session.execute(
-                            select(PermissionGrantAssignee, PermissionGrant)
-                            .join(
-                                PermissionGrant,
-                                PermissionGrant.id == PermissionGrantAssignee.grant_id,
+            source_table = PermissionVisibleSourceProjection.__table__
+            visible = await rows(
+                PermissionVisibleSourceProjection,
+                (source_table.c.operation_id == operation_id, source_table.c.state == "PENDING"),
+            )
+            models = (
+                ResourcePermissionMode,
+                PermissionGrant,
+                PermissionGrantAssignee,
+                PermissionVisibleSourceProjection,
+            )
+            before = dict(
+                zip((model.__tablename__ for model in models), (modes, grants, assignees, visible), strict=True)
+            )
+            after = finalization_effect(plan, operation_id, before)
+            for model in models:
+                table = model.__table__
+                previous = {row["id"]: row for row in before[model.__tablename__]}
+                groups = defaultdict(list)
+                for row in after[model.__tablename__]:
+                    old = previous[row["id"]]
+                    values = {key: value for key, value in row.items() if old[key] != value}
+                    if values:
+                        groups[tuple(sorted(values.items()))].append(row["id"])
+                for changed, changed_ids in groups.items():
+                    for offset in range(0, len(changed_ids), 200):
+                        batch = changed_ids[offset : offset + 200]
+                        conditions = [table.c.tenant_id == plan.tenant_id, table.c.id.in_(batch)]
+                        if model is ResourcePermissionMode:
+                            conditions.extend(
+                                (
+                                    table.c.operation_id == operation_id,
+                                    table.c.version == plan.expected_version,
+                                    table.c.projection_state == modes[0]["projection_state"],
+                                )
                             )
-                            .where(
-                                PermissionGrantAssignee.tenant_id == plan.tenant_id,
-                                PermissionGrantAssignee.id == assignee_id,
+                        result = await session.execute(
+                            update(table).where(*conditions).values(**dict(changed), update_time=func.now())
+                        )
+                        if result.rowcount != len(batch):
+                            raise PermissionPublishNotReadyError(
+                                msg="Permission scope changed during projection finalize"
                             )
-                        )
-                    ).first()
-                    if canonical_owner is None:
-                        raise PermissionPublishNotReadyError(
-                            msg="Visible source recovery canonical owner is missing",
-                        )
-                    assignee, grant = canonical_owner
-                    if assignee.state not in {"ACTIVE", "INACTIVE"} or grant.state not in {
-                        "ACTIVE",
-                        "INACTIVE",
-                    }:
-                        raise PermissionPublishNotReadyError(
-                            msg="Visible source recovery owner state is incomplete",
-                        )
-                    if grant.resource_type != source.resource_type or grant.resource_id != source.resource_id:
-                        raise PermissionPublishNotReadyError(
-                            msg="Visible source recovery owner resource is inconsistent",
-                        )
-                    if assignee.state == "ACTIVE" and grant.state != "ACTIVE":
-                        raise PermissionPublishNotReadyError(
-                            msg="Visible source recovery active assignee has no active Grant",
-                        )
-                    visibility_class = "protected" if assignee.protected else "ordinary"
-                    is_current = (
-                        assignee.state == "ACTIVE"
-                        and grant.state == "ACTIVE"
-                        and grant.model_key == source.model_key
-                        and assignee.version == source.source_version
-                        and assignee.source_locator == source.source_locator
-                        and assignee.source_fingerprint == source.source_fingerprint
-                        and assignee.projected_subject == source.projected_subject
-                        and visibility_class == source.visibility_class
-                    )
-                    source.state = "ACTIVE" if is_current else "RETIRED"
-                    session.add(source)
-
-                target_mode = self._target_mode(plan)
-                mode_values: dict[str, object] = {
-                    "version": plan.target_version,
-                    "projection_state": "CURRENT",
-                    "update_time": func.now(),
-                }
-                if target_mode is not None:
-                    mode_values["mode"] = target_mode
-                result = await session.execute(
-                    update(ResourcePermissionMode)
-                    .where(
-                        ResourcePermissionMode.id == mode_row.id,
-                        ResourcePermissionMode.operation_id == operation_id,
-                        ResourcePermissionMode.version == plan.expected_version,
-                        ResourcePermissionMode.projection_state == source_projection_state,
-                    )
-                    .values(**mode_values)
-                )
-                if not result.rowcount:
-                    raise PermissionPublishNotReadyError(msg=("Permission scope changed during projection finalize"))
 
     @staticmethod
     def _target_mode(plan: ProjectionPlan) -> str | None:
@@ -895,17 +821,20 @@ async def build_sql_projection_runtime(
     client: FGAClient,
     *,
     external_scopes: dict[str, ExternalProjectionScopePort] | None = None,
+    session_factory=None,
 ) -> SqlProjectionRuntime:
     marker = RedisConsistencyMarker()
     await marker.initialize()
     return SqlProjectionRuntime(
-        repository=ProjectionRepository(),
+        repository=ProjectionRepository(session_factory=session_factory or get_async_db_session),
         marker=marker,
         scope_guard=SqlProjectionScopeGuard(
             external_scopes=external_scopes,
+            session_factory=session_factory,
         ),
         fga=FGAProjectionAdapter(client),
         finalizer=SqlProjectionFinalizer(
             external_scopes=external_scopes,
+            session_factory=session_factory,
         ),
     )

@@ -16,9 +16,19 @@ from bisheng.permission.domain.services.permission_explain_service import Permis
 
 
 def fixture():
-    model = GrantModelSnapshot("old-custom", False, ("download", "use"), derived_level=1)
+    model = GrantModelSnapshot(
+        "old-custom",
+        False,
+        (),
+        derived_level=1,
+        visibility_only_resource_types=("knowledge_space",),
+        visibility_level=1,
+    )
     high = GrantModelSnapshot("high-custom", False, ("edit",), derived_level=3)
-    catalog = SimpleNamespace(models=tuple(SimpleNamespace(snapshot=m) for m in (model, high)))
+    catalog = SimpleNamespace(
+        models=tuple(SimpleNamespace(snapshot=m) for m in (model, high)),
+        action_resource_scopes=(("edit", ("knowledge_space",)), ("manage_permission", ("knowledge_space",))),
+    )
     row = PermissionSourceExplanation(
         source_id=11,
         source_version=2,

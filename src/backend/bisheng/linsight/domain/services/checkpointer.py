@@ -1,7 +1,7 @@
 """Plain-Redis LangGraph checkpoint saver for Linsight HITL (F035 Track B).
 
 Replaces ``langgraph-checkpoint-redis`` which requires Redis Stack / RediSearch.
-Uses only standard Redis commands — HSET/HGETALL, ZADD/ZREVRANGEBYSCORE, SCAN, DEL, EXPIRE —
+Uses standard Redis hashes, sorted sets and per-checkpoint write indexes,
 so it works with any plain Redis 6+ deployment.
 
 Key schema (all keys are UTF-8):
@@ -53,6 +53,8 @@ from langgraph.checkpoint.base import (
 _CKPT_DATA_KEY = "linsight:ckpt:data:{thread_id}:{checkpoint_ns}:{checkpoint_id}"
 _CKPT_IDX_KEY = "linsight:ckpt:idx:{thread_id}:{checkpoint_ns}"
 _CKPT_WRITE_KEY = "linsight:ckpt:write:{thread_id}:{checkpoint_ns}:{checkpoint_id}:{task_id_b64}:{idx}"
+_CKPT_WRITES_KEY = "linsight:ckpt:writes:{thread_id}:{checkpoint_ns}:{checkpoint_id}"
+_INDEX_READY = b"__indexed__"
 _DEFAULT_TTL = 7 * 24 * 3600  # 7 days
 
 
@@ -107,13 +109,11 @@ class PlainRedisCheckpointer(BaseCheckpointSaver):
             idx=idx,
         )
 
-    def _write_scan_pattern(self, thread_id: str, checkpoint_ns: str, checkpoint_id: str) -> str:
-        return _CKPT_WRITE_KEY.format(
+    def _writes_key(self, thread_id: str, checkpoint_ns: str, checkpoint_id: str) -> str:
+        return _CKPT_WRITES_KEY.format(
             thread_id=thread_id,
             checkpoint_ns=checkpoint_ns,
             checkpoint_id=checkpoint_id,
-            task_id_b64="*",
-            idx="*",
         )
 
     async def _fetch_pending_writes(
@@ -123,10 +123,13 @@ class PlainRedisCheckpointer(BaseCheckpointSaver):
         checkpoint_ns: str,
         checkpoint_id: str,
     ) -> list[PendingWrite]:
-        pattern = self._write_scan_pattern(thread_id, checkpoint_ns, checkpoint_id)
-        keys = [k async for k in rc.scan_iter(match=pattern, count=100)]
-        if not keys:
-            return []
+        keys = await rc.smembers(self._writes_key(thread_id, checkpoint_ns, checkpoint_id))
+        if _INDEX_READY not in keys:
+            raise RuntimeError(
+                "Legacy Linsight checkpoint needs write-index backfill; "
+                "run scripts/backfill_redis_processing_indexes.py before resuming existing tasks"
+            )
+        keys.discard(_INDEX_READY)
         writes: list[PendingWrite] = []
         for key in sorted(keys):
             raw = await rc.hgetall(key)
@@ -279,6 +282,8 @@ class PlainRedisCheckpointer(BaseCheckpointSaver):
                 {checkpoint_id: time.time()},
             )
             await pipe.expire(self._idx_key(thread_id, checkpoint_ns), self._ttl)
+            await pipe.sadd(self._writes_key(thread_id, checkpoint_ns, checkpoint_id), _INDEX_READY)
+            await pipe.expire(self._writes_key(thread_id, checkpoint_ns, checkpoint_id), self._ttl)
             await pipe.execute()
 
         return {
@@ -302,7 +307,8 @@ class PlainRedisCheckpointer(BaseCheckpointSaver):
         checkpoint_id: str = configurable["checkpoint_id"]
 
         client = await self._get_redis_client()
-        async with client.async_pipeline(transaction=False) as pipe:
+        async with client.async_pipeline(transaction=True) as pipe:
+            index_key = self._writes_key(thread_id, checkpoint_ns, checkpoint_id)
             for idx, (channel, value) in enumerate(writes):
                 effective_idx = WRITES_IDX_MAP.get(channel, idx)
                 write_key = self._write_key(thread_id, checkpoint_ns, checkpoint_id, task_id, effective_idx)
@@ -318,6 +324,10 @@ class PlainRedisCheckpointer(BaseCheckpointSaver):
                     },
                 )
                 await pipe.expire(write_key, self._ttl)
+                await pipe.sadd(index_key, write_key)
+            # Do not mark a legacy checkpoint complete: its old writes need the
+            # maintenance backfill, even if a new worker has added indexed writes.
+            await pipe.expire(index_key, self._ttl)
             await pipe.execute()
 
     # ------------------------------------------------------------------

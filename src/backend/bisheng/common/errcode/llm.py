@@ -35,3 +35,25 @@ class WorkbenchEmbeddingError(BaseErrorCode):
 class WorkbenchChatDefaultModelError(BaseErrorCode):
     Code: int = 10811
     Msg: str = "The daily-chat default model must be one of the configured workbench chat models."
+
+
+class ModelDiscoveryError(BaseErrorCode):
+    Code = 10812
+    Msg = "Model discovery failed. Check the connection settings and retry."
+
+    def __init__(self, *, msg: str | None = None, reason: str = "failure"):
+        super().__init__(msg=msg or self.Msg, reason=reason)
+
+
+class ModelPricingConflictError(BaseErrorCode):
+    """F016: the price was changed by someone else since this editor loaded it."""
+
+    Code: int = 10813
+    Msg: str = "The model price was changed by someone else. Refresh and try again."
+
+
+class ModelPricingInvalidError(BaseErrorCode):
+    """F016: a submitted model price is malformed."""
+
+    Code: int = 10814
+    Msg: str = "Invalid model price."

@@ -1,6 +1,7 @@
 // bisheng-icons has no boxed plus; SquarePlus matches the sibling "add condition" button.
 import { SquarePlus } from "lucide-react";
 import type { ComponentProps } from "react";
+import settingsLayout from "~/components/ModuleHome/ModuleSettingsLayout.module.css";
 import { NotificationSeverity } from "~/common";
 import {
   SettingsSectionHeader,
@@ -73,7 +74,7 @@ export function ChannelBusinessSettings({
           kind="basic"
           title={settings.localize("com_unified_permission.basic_settings")}
         />
-        <div className="space-y-4 px-6 max-[768px]:px-0">
+        <div className={`${settingsLayout.fields} space-y-4 px-6 max-[768px]:px-0`}>
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label className="text-body font-medium text-text-1">
@@ -154,7 +155,7 @@ export function ChannelBusinessSettings({
           kind="advanced"
           title={settings.localize("com_unified_permission.advanced_settings")}
         />
-        <div className="space-y-4 px-6 max-[768px]:px-0">
+        <div className={`${settingsLayout.fields} space-y-4 px-6 max-[768px]:px-0`}>
           <div className="space-y-3">
             <SettingsSwitchRow
               label={settings.localize(

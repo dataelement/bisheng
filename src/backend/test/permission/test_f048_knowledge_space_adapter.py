@@ -150,6 +150,30 @@ async def test_container_loader_reads_permission_version_through_facade(
 
 
 @pytest.mark.asyncio
+async def test_container_loader_proves_many_spaces_in_one_read(monkeypatch):
+    rows = [
+        SimpleNamespace(id=2, tenant_id=5, type=3, state=1, user_id=7, copy_source_id=None, copy_target_id=None),
+        SimpleNamespace(id=3, tenant_id=9, type=3, state=1, user_id=7, copy_source_id=None, copy_target_id=None),
+        SimpleNamespace(id=4, tenant_id=5, type=0, state=1, user_id=7, copy_source_id=None, copy_target_id=None),
+    ]
+    query = AsyncMock(return_value=rows)
+    monkeypatch.setattr(permission_module.KnowledgeDao, "aget_list_by_ids", query)
+    version_port = _VersionPort()
+
+    records = await KnowledgeContainerDaoPermissionLoader(version_port).load_permission_records(
+        "knowledge_space",
+        ("2", "3", "nope", "4"),
+    )
+
+    assert records["2"] is not None and records["2"].tenant_id == 5
+    assert records["3"] is not None and records["3"].tenant_id == 9
+    assert records["nope"] is None
+    assert records["4"] is None
+    query.assert_awaited_once_with([2, 3, 4])
+    assert version_port.calls == []
+
+
+@pytest.mark.asyncio
 async def test_container_service_verifies_business_facts_before_action() -> None:
     loader = _Loader(_record())
     permission = _Permission()
@@ -188,7 +212,7 @@ async def test_container_service_verifies_business_facts_before_action() -> None
     (
         (None, "knowledge_library"),
         (_record(tenant_id=6), "knowledge_library"),
-        (_record(status="COPYING"), "knowledge_library"),
+        (_record(status="DELETED"), "knowledge_library"),
         (_record(kind="SPACE"), "knowledge_library"),
         (
             _record(

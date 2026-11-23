@@ -2,9 +2,8 @@ import json
 import os
 import warnings
 from collections.abc import Callable
-from typing import Any, List, Tuple
+from typing import Any
 
-import httpx
 import pandas as pd
 import pymysql
 from dotenv import load_dotenv
@@ -22,19 +21,13 @@ from bisheng_langchain.gpts.tools.bing_search.tool import BingSearchResults
 from bisheng_langchain.gpts.tools.calculator.tool import calculator
 from bisheng_langchain.gpts.tools.code_interpreter.factory import build_code_executor
 from bisheng_langchain.gpts.tools.code_interpreter.tool import CodeInterpreterTool
-
-# from langchain_community.utilities.dalle_image_generator import DallEAPIWrapper
-from bisheng_langchain.gpts.tools.dalle_image_generator.tool import (
-    DallEImageGenerator,
-    ProxyDallEAPIWrapper,
-)
 from bisheng_langchain.gpts.tools.get_current_time.tool import get_current_time
+from bisheng_langchain.gpts.tools.image_generation.tool import build_image_generation_tool
 from bisheng_langchain.gpts.tools.local_file.local_file import LocalFileTool
 from bisheng_langchain.gpts.tools.sql_agent.tool import SqlAgentAPIWrapper, SqlAgentTool
 from bisheng_langchain.gpts.tools.web_fetch.tool import build_web_fetch_tool
 from bisheng_langchain.gpts.tools.web_search.tool import SearchTool, WebSearchTool
 from bisheng_langchain.rag import BishengRAGTool
-from bisheng_langchain.utils.azure_dalle_image_generator import AzureDallEWrapper
 
 
 def _get_current_time() -> BaseTool:
@@ -60,7 +53,7 @@ _BASE_TOOLS: dict[str, Callable[[], BaseTool]] = {
 _LLM_TOOLS: dict[str, Callable[[BaseLanguageModel], BaseTool]] = {}
 
 _EXTRA_LLM_TOOLS: dict[
-    str, Tuple[Callable[[Arg(BaseLanguageModel, "llm"), KwArg(Any)], BaseTool], List[str]]  # noqa  # noqa #type: ignore
+    str, tuple[Callable[[Arg(BaseLanguageModel, "llm"), KwArg(Any)], BaseTool], list[str]]  # type: ignore
 ] = {}
 
 
@@ -76,18 +69,8 @@ def _get_web_search(**kwargs: Any) -> BaseTool:
     return WebSearchTool(api_wrapper=search_tool)
 
 
-def _get_dalle_image_generator(**kwargs: Any) -> BaseTool:
-    # 说明是azure的openai配置
-    if kwargs.get("azure_endpoint"):
-        kwargs["api_key"] = kwargs.pop("openai_api_key")
-        kwargs["api_version"] = kwargs.pop("openai_api_version")
-        return DallEImageGenerator(api_wrapper=AzureDallEWrapper(**kwargs))
-    if kwargs.get("openai_proxy"):
-        kwargs["http_async_client"] = httpx.AsyncClient(proxy=kwargs.get("openai_proxy"))
-        kwargs["http_client"] = httpx.Client(proxy=kwargs.get("openai_proxy"))
-    kwargs["api_key"] = kwargs.pop("openai_api_key")
-    kwargs["base_url"] = kwargs.pop("openai_api_base", None)
-    return DallEImageGenerator(api_wrapper=ProxyDallEAPIWrapper(model="dall-e-3", **kwargs))
+def _get_legacy_image_generation(**kwargs: Any) -> BaseTool:
+    return build_image_generation_tool(name="dalle_image_generator", **kwargs)
 
 
 def _get_sql_agent(**kwargs: Any) -> BaseTool:
@@ -105,13 +88,18 @@ def _get_native_code_interpreter(**kwargs: Any) -> BaseTool:
     return CodeInterpreterTool(executor=executor, description=executor.description)
 
 
-# 第二个list内填必填参数，第三个list内填可选参数
+# Required and optional initialization parameters for each tool.
 _EXTRA_PARAM_TOOLS: dict[str, tuple[Callable[[KwArg(Any)], BaseTool], list[str | None], list[str | None]]] = {
     # type: ignore
     "dalle_image_generator": (
-        _get_dalle_image_generator,
+        _get_legacy_image_generation,
         ["openai_api_key"],
-        ["openai_api_base", "openai_proxy", "azure_deployment", "azure_endpoint", "openai_api_version"],
+        ["openai_api_base", "openai_proxy", "model", "provider", "azure_endpoint", "upload_image"],
+    ),
+    "image_generation": (
+        build_image_generation_tool,
+        ["openai_api_key"],
+        ["openai_api_base", "openai_proxy", "model", "provider", "azure_endpoint", "upload_image"],
     ),
     "bing_search": (_get_bing_search, ["bing_subscription_key", "bing_search_url"], []),
     "bisheng_code_interpreter": (_get_native_code_interpreter, ["minio"], ["config", "type"]),
@@ -153,6 +141,7 @@ def _handle_callbacks(callback_manager: BaseCallbackManager | None, callbacks: C
         warnings.warn(
             "callback_manager is deprecated. Please use callbacks instead.",
             DeprecationWarning,
+            stacklevel=2,
         )
         if callbacks is not None:
             raise ValueError("Cannot specify both callback_manager and callbacks arguments.")

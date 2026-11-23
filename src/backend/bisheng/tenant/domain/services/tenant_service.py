@@ -82,6 +82,14 @@ def _safe_tenant_dump(tenant: Tenant) -> dict:
 class TenantService:
     """Stateless service for tenant lifecycle management."""
 
+    _creation_factory = None
+
+    @classmethod
+    def configure_creation(cls, factory):
+        if not callable(factory):
+            raise TypeError("tenant creation application factory required")
+        cls._creation_factory = staticmethod(factory)
+
     # ── Tenant CRUD ────────────────────────────────────────────
 
     @classmethod
@@ -105,24 +113,9 @@ class TenantService:
                 quota_config=data.quota_config,
                 create_user=login_user.user_id,
             )
-            with bypass_tenant_filter():
-                tenant = await TenantDao.acreate_tenant(tenant)
-
-            # Step 2: Create root department
-            from bisheng.department.domain.services.department_service import DepartmentService
-
-            await DepartmentService.acreate_root_department(
-                tenant_id=tenant.id,
-                name=data.tenant_name,
-            )
-
-            # Step 3: Create UserTenant for each admin
-            for uid in data.admin_user_ids:
-                await UserTenantDao.aadd_user_to_tenant(
-                    user_id=uid,
-                    tenant_id=tenant.id,
-                    is_default=0,
-                )
+            if cls._creation_factory is None:
+                raise TenantCreationFailedError()
+            tenant = await cls._creation_factory(tenant=tenant, admin_user_ids=tuple(data.admin_user_ids))
 
             # Step 4: apply tenant permissions after DB commit.
             await cls._apply_tenant_permissions(
@@ -196,9 +189,12 @@ class TenantService:
         # matches the dialog list source exactly. v2.5.0 ``aadd_users``
         # residue rows in UserTenant no longer surface as phantom members.
         tenant_ids = [t.id for t in tenants]
-        user_counts, usage_map = await asyncio.gather(
+        from bisheng.tenant.domain.services.tenant_admin_service import TenantAdminService
+
+        user_counts, usage_map, admin_map = await asyncio.gather(
             UserDepartmentDao.acount_users_by_tenant_subtree_batch(tenant_ids),
             QuotaService.get_storage_used_gb_batch(tenant_ids),
+            TenantAdminService.list_tenant_admin_users(tenant_ids),
         )
 
         # Strip the ``#archived#<ts>`` suffix injected by ``unmount_child`` so
@@ -222,6 +218,7 @@ class TenantService:
                     storage_used_gb=round(usage_map.get(t.id, 0.0), 2),
                     storage_quota_gb=_get_storage_quota(t),
                     create_time=t.create_time,
+                    admin_users=admin_map.get(t.id),
                 )
             )
         return {"data": [item.model_dump() for item in items], "total": total}
@@ -317,6 +314,15 @@ class TenantService:
             await redis_client.aset(key, "1", expiration=0)
         else:
             await redis_client.adelete(key)
+
+        if data.status == "active" and getattr(tenant, "parent_tenant_id", None) == ROOT_TENANT_ID:
+            from bisheng.core.context.tenant import management_tenant_scope
+            from bisheng.llm.application.model_mount_sharing import get_model_mount_sharing_application
+
+            # Also handles a retry after the status committed but fanout failed.
+            with management_tenant_scope(ROOT_TENANT_ID):
+                application = await get_model_mount_sharing_application()
+                await application.areconcile_child(identity=login_user, child_id=tenant_id)
 
         if became_disabled:
             await cls._revoke_active_jwts_for_tenant(
@@ -796,7 +802,7 @@ class TenantService:
 
         Sequential per-user permission checks (the pre-fix shape)
         hung the edit-tenant dialog on Root: each check went through the
-        full permission pipeline (~2.5–3s) and 100 UserTenant rows pushed
+        full permission pipeline (~2.5-3s) and 100 UserTenant rows pushed
         the response past the 120s frontend timeout. batch_check folds
         them into one permission round-trip while preserving the semantic — the
         authorization model still resolves super_admin → admin, so Root
@@ -809,7 +815,7 @@ class TenantService:
             [u["user_id"] for u in users],
             tenant_id,
         )
-        return [u for u, ok in zip(users, flags) if ok]
+        return [u for u, ok in zip(users, flags, strict=False) if ok]
 
     @classmethod
     async def _is_tenant_admin(cls, user_id: int, tenant_id: int) -> bool:

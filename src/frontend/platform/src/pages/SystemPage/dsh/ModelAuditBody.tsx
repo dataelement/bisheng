@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { readAuditBody } from "@/controllers/API/dshModelAudit";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -75,7 +76,7 @@ export function ModelAuditBody({ requestId, tenantId }: ModelAuditBodyProps) {
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
         <p role={state === "interrupted" ? "alert" : "status"}>
-          {t("dsh.modelAuditView.transfer." + state)}
+          {state === "loading" ? <LoadingState size="inline" label={t("dsh.modelAuditView.transfer.loading")} /> : t("dsh.modelAuditView.transfer." + state)}
         </p>
         <p>{t("dsh.modelAuditView.newest_first")}</p>
         {messages.current.partial && (

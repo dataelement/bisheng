@@ -362,6 +362,8 @@ def create_app() -> FastAPI:
     application.add_route(
         f"{prefix}/{PREVIEW_SEGMENT}/{{session}}/{{tail:path}}", handle_preview_entry, methods=ENTRY_METHODS
     )
+    from app_proxy.desktop import handle_desktop_launch
+    application.add_route(f"{prefix}/{{slug}}/_desktop", handle_desktop_launch, methods=["POST"])
     # Two routes, because ``{tail:path}`` does not match the empty string:
     # ``/apps/foo`` and ``/apps/foo/x`` are both entry points (AC-25).
     application.add_route(f"{prefix}/{{slug}}", handle_entry, methods=ENTRY_METHODS)

@@ -67,6 +67,8 @@ declare module "*.svg" {
 // `data`. Declared here so passing it no longer needs an `as any` cast.
 declare module "axios" {
   export interface AxiosRequestConfig {
+    /** Independent identity/credential protocol; backend authorization still applies. */
+    managementContext?: 'independent'
     silent?: boolean
     showError?: boolean
     /** @deprecated Errors always retain transport evidence. */

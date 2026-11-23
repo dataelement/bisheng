@@ -26,12 +26,12 @@ import { SkillManagement } from "@/components/LinSight/skill/SkillManagement";
 import { canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
 
 const MANAGED_TOOLS = [
-    'Dalle3绘画', 'Bing web搜索', '天眼查',
+    'Bing web搜索', '天眼查',
     'Firecrawl', 'Jina AI', 'SiliconFlow',
     '发送邮件', '飞书消息', '联网搜索', '代码执行器', '经济金融数据'
 ];
 // Newer built-in tools are matched by a child tool_key instead of the stored type name.
-export const MANAGED_TOOL_KEYS = ['web_fetch'];
+export const MANAGED_TOOL_KEYS = ['web_fetch', 'image_generation', 'dalle_image_generator'];
 
 export const hasManagedToolKey = (children?: { tool_key?: string }[]) =>
     (children || []).some((child) => MANAGED_TOOL_KEYS.includes(child.tool_key || ''));
@@ -117,11 +117,10 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
 
     return (
         <div className="flex h-full relative" onClick={(e) => e.stopPropagation()}>
-            <div className="relative w-full flex h-full overflow-y-scroll scrollbar-hide bg-background-main border-t">
-                <div className="relative w-fit p-6">
+            <div className="relative w-full flex h-full overflow-y-scroll scrollbar-hide bg-background-main-content">
+                <div className="relative w-fit border-r border-border-base p-6">
                     {type !== 'skill' && <SearchInput
                         placeholder={t("tools.search")}
-                        className="mt-6"
                         onChange={(e) => setKeyword(e.target.value)}
                     />}
                     <div className="mt-4">
@@ -164,10 +163,10 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                         </div>
                     </div>}
                 </div>
-                <div className="h-full w-full flex-1 overflow-auto bg-background-login p-5 pb-20 pt-2 scrollbar-hide">
+                <div className="relative h-full w-full flex-1 overflow-auto p-5 pb-20 pt-2 scrollbar-hide">
                     {type === 'skill' ? <SkillManagement /> : <>
                     {
-                        loading && <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center bg-primary/5 z-10">
+                        loading && <div className="absolute inset-0 z-10 flex items-center justify-center">
                             <LoadingIcon className="size-24" />
                         </div>
                     }
@@ -181,8 +180,8 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                         {type === 'mcp' && <Button variant="outlined" disabled={btnLoading} className="mt-4 ml-4" onClick={async () => {
                                 await refresh()
                                 loadMcpData()
-                            }} color="default">
-                            {btnLoading && <Outlined.Loading className="animate-spin text-gray-800" />}
+                            }} color="default" loading={btnLoading}>
+
                             {t("tools.refresh")}
                         </Button>}
                     </div>

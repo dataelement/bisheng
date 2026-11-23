@@ -1,69 +1,80 @@
 import { useSelectLabels } from "@/components/bs-comp/formFields/useSelectLabels";
-import { changeCurrentVersion } from "@/controllers/API/flow";
-import { changeWorkflowCurrentVersion } from "@/controllers/API/workflow";
+import { changeWorkflowCurrentVersion, getWorkFlowVersions } from "@/controllers/API/workflow";
 import { showApiError } from "@/controllers/request";
-import { AppNumType } from "@/types/app";
 import { Select, Tooltip } from "@bisheng/ui";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-interface VersionCardData {
-    id: string;
-    flow_type: number;
-    version_list: { id: number | string; name: string; is_current: number }[];
+interface WorkflowVersion {
+    id: string | number;
+    name: string;
+    is_current: number;
 }
 
-interface SelectCompProps {
-    value: string;
-    onChange?: (id: string) => void;
-    data: VersionCardData;
-    disabled?: boolean;
+interface CardSelectVersionProps {
+    showPop: boolean;
+    data: { id: string };
+    onLoadActions: () => Promise<{ actions: string[]; hasError: boolean }>;
 }
 
-const SelectComp = ({ value, onChange, data, disabled = false }: SelectCompProps) => {
+export default function CardSelectVersion({ showPop, data, onLoadActions }: CardSelectVersionProps) {
+    const { t } = useTranslation();
+    const selectLabels = useSelectLabels();
+    const [versions, setVersions] = useState<WorkflowVersion[] | null>(null);
+    const [value, setValue] = useState<string | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [canEdit, setCanEdit] = useState(false);
+    const inFlight = useRef(false);
 
-    const { t } = useTranslation()
-    const selectLabels = useSelectLabels()
+    const handleOpen = async (open: boolean) => {
+        if (!open || inFlight.current) return;
+        inFlight.current = true;
+        setLoading(true);
+        try {
+            const result = await onLoadActions();
+            if (result.hasError) return;
+            setCanEdit(result.actions.includes("edit"));
+            const response = await getWorkFlowVersions(data.id);
+            const rows: WorkflowVersion[] = (response.data || []).filter(row => row.id != null && row.id !== "");
+            setVersions(rows);
+            setValue(String(rows.find(row => row.is_current === 1)?.id ?? "0"));
+        } catch (error) {
+            showApiError(error);
+        } finally {
+            setLoading(false);
+            inFlight.current = false;
+        }
+    };
 
-    const handleChange = (id: string) => {
-        const request = data.flow_type === AppNumType.FLOW
-            ? changeWorkflowCurrentVersion
-            : changeCurrentVersion
-        request({ flow_id: data.id, version_id: Number(id) })
-            .then(() => onChange?.(id)).catch(showApiError)
-    }
+    const handleChange = async (id: string) => {
+        if (!showPop || !canEdit || id === value || inFlight.current) return;
+        inFlight.current = true;
+        setLoading(true);
+        try {
+            await changeWorkflowCurrentVersion({ flow_id: data.id, version_id: Number(id) });
+            setValue(id);
+        } catch (error) {
+            showApiError(error);
+        } finally {
+            inFlight.current = false;
+            setLoading(false);
+        }
+    };
 
-    const options = data.version_list.length
-        ? data.version_list
-            .filter(version => version.id != null && version.id !== '')
-            .map(version => ({ value: String(version.id), label: version.name }))
-        : [{ value: '0', label: 'v0' }]
-
-    return <Select
+    const selector = <Select
         {...selectLabels}
-        aria-label={t('skills.version')}
+        aria-label={t("skills.version")}
         size="small"
         className="w-[120px]"
-        options={options}
-        value={value || null}
-        disabled={disabled}
-        // Re-picking the current version must not re-send the switch request.
-        onChange={(v) => { if (v != null && String(v) !== value) handleChange(String(v)) }}
-    />
+        placeholder={t("skills.version")}
+        options={versions?.length ? versions.map(row => ({ value: String(row.id), label: row.name })) : versions ? [{ value: "0", label: "v0" }] : []}
+        value={value}
+        loading={loading}
+        onOpenChange={(open) => { void handleOpen(open); }}
+        onChange={(next) => { if (next != null) void handleChange(String(next)); }}
+    />;
+
+    return <span className="inline-flex" onClick={event => event.stopPropagation()}>
+        {showPop ? <Tooltip content={t("skills.chooseOnline")}>{selector}</Tooltip> : selector}
+    </span>;
 }
-
-export default function CardSelectVersion(
-    { showPop, ...props }:
-        { showPop: boolean, data: VersionCardData }
-) {
-    const [value, setValue] = useState(String(props.data.version_list.find(item => item.is_current === 1)?.id ?? '0'))
-
-    const { t } = useTranslation()
-
-    if (showPop) return <Tooltip  content={<>
-                <p className="text-[white]">{t('skills.chooseOnline')}</p>
-             </>}><span className="inline-flex" tabIndex={0}><SelectComp {...props} value={value} onChange={setValue} /></span></Tooltip>
-
-
-    return <SelectComp {...props} value={value} disabled={!showPop} />
-};

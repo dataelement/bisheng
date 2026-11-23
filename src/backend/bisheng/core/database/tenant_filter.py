@@ -21,6 +21,7 @@ from bisheng.core.context.tenant import (
     is_management_all_tenants,
     is_strict_tenant_filter,
     is_tenant_filter_bypassed,
+    strict_tenant_filter,
 )
 
 logger = logging.getLogger(__name__)
@@ -42,7 +43,9 @@ _EXCLUDED_TABLES: set[str] = {"user_tenant", "channel_info_source"}
 _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.dsh.domain.models.content_safety_event",
     "bisheng.dsh.domain.models.local_session",
+    "bisheng.dsh.domain.models.mobile_session",
     "bisheng.dsh.domain.models.model_audit_conversation",
+    "bisheng.dsh.domain.models.model_audit_feedback",
     "bisheng.dsh.domain.models.model_audit_title",
     "bisheng.dsh.domain.models.model_audit_tree",
     "bisheng.dsh.domain.models.work_publication",
@@ -59,12 +62,15 @@ _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.database.models.message",
     "bisheng.database.models.session",
     "bisheng.chat_session.domain.models.workflow_file_manifest",
+    "bisheng.chat_session.domain.models.project",
     "bisheng.knowledge.domain.models.knowledge",
+    "bisheng.knowledge.domain.models.knowledge_vector_cleanup",
     "bisheng.knowledge.domain.models.department_knowledge_space",
     "bisheng.llm.domain.models.llm_server",
     "bisheng.llm.domain.models.llm_call_log",
     "bisheng.llm.domain.models.llm_token_log",
     "bisheng.llm.domain.models.tenant_system_model_config",
+    "bisheng.llm.domain.models.model_sharing_intent",
     "bisheng.workstation.domain.models.tenant_workstation_config",
     "bisheng.org_sync.domain.models.org_sync",
     "bisheng.approval.domain.models.approval_request",
@@ -87,6 +93,14 @@ _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.user.domain.models.user_role",
     "bisheng.knowledge.domain.models.knowledge_file",
     "bisheng.knowledge.domain.models.knowledge_space_delete_job",
+    "bisheng.knowledge.domain.models.knowledge_processing_job",
+    "bisheng.knowledge.domain.models.knowledge_processing_item",
+    "bisheng.knowledge.domain.models.knowledge_processing_retry",
+    "bisheng.knowledge.domain.models.knowledge_operation_plan",
+    "bisheng.knowledge.domain.models.knowledge_unification_run",
+    "bisheng.resource_reference.domain.models.business_resource_reference",
+    "bisheng.resource_reference.domain.models.business_reference_set",
+    "bisheng.resource_reference.domain.models.resource_reference_tombstone",
     "bisheng.tool.domain.models.gpts_tools",
     "bisheng.share_link.domain.models.share_link",
     "bisheng.message.domain.models.inbox_message",
@@ -149,6 +163,8 @@ _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.dsh.domain.models.admin_operation",
     "bisheng.dsh.domain.models.monthly_usage",
     "bisheng.dsh.domain.models.model_call",
+    # F016 per-tenant credit settings.
+    "bisheng.dsh.domain.models.credit_setting",
     "bisheng.dsh.domain.models.subject_policy",
     "bisheng.dsh.domain.models.subject_grant",
     "bisheng.dsh.domain.models.model_audit_setting",
@@ -292,6 +308,17 @@ def register_tenant_filter_events() -> None:
 
     _initialized = True
     logger.info(f"Tenant filter events registered for {len(_tenant_aware_tables)} tables")
+
+
+def apply_strict_tenant_filter(statement, tenant_col):
+    """Scope bulk writes, which do not receive the ORM SELECT event filter.
+
+    A wider discovery/management visibility set must not widen a mutation.
+    Explicitly authorized maintenance bypass remains the caller's responsibility.
+    """
+    with strict_tenant_filter():
+        clause = build_tenant_filter_clause(tenant_col)
+    return statement.where(clause) if clause is not None else statement
 
 
 def build_tenant_filter_clause(tenant_col):

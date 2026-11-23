@@ -14,12 +14,18 @@ import {
     stripCitationMarkers,
     transformPrivateCitations,
 } from '~/components/Chat/Messages/Content/citationUtils';
+import { reissueAttachmentUrl } from '~/components/Chat/attachments/chatAttachmentUtils';
 import { getShareTokenFromPath } from '~/utils/shareToken';
 
 /** Output file shape of `output_result.final_files` (= store `file_list`). */
 export interface ArtifactFile {
     /** Original uploaded attachment URL, already authorized by the conversation. */
     directUrl?: string;
+    /**
+     * A conversation attachment kept permanently: open it through a freshly
+     * issued link, since `directUrl` is the upload-time link and expires.
+     */
+    attachment?: { conversationId: string; fileId: string };
     file_id: string;
     file_name: string;
     file_url: string;
@@ -133,6 +139,10 @@ export function stripWorkspacePaths(text: string): string {
  * useLinsightManager with `file_name` + the backend entry fields) into drawer
  * artifacts. The previewable url is the parsed-markdown object (`markdown_file_path`);
  * invalid/expired entries (failed parse, no formal product) are dropped.
+ *
+ * `file_path` is the file's workspace path (`/uploads/<dir>/<name>`, the original
+ * when one was carried), so a markdown deliverable's `![](uploads/x.png)` resolves
+ * to the exact upload even inside a folder upload or after a `-2` rename.
  */
 export function toUploadedArtifacts(files: any[] | undefined): ArtifactFile[] {
     return (files || [])
@@ -145,9 +155,11 @@ export function toUploadedArtifacts(files: any[] | undefined): ArtifactFile[] {
             const previewAsImage = IMAGE_EXTS.includes(getFileExtension(name)) && !!f.original_file_path;
             const previewAsOriginal =
                 !previewAsImage && f.ingest_mode === 'spreadsheet_original' && !!f.original_file_path;
+            const workspacePath: string | undefined = f.raw_workspace_path || f.workspace_path;
             return {
                 file_id: f.file_id,
                 file_name: name,
+                ...(workspacePath ? { file_path: workspacePath } : {}),
                 file_url: previewAsImage || previewAsOriginal ? f.original_file_path : f.markdown_file_path,
                 file_md5: f.file_md5,
                 source: 'upload' as const,
@@ -247,6 +259,14 @@ export async function resolveArtifactUrl(
     return `${__APP_ENV__.BASE_URL}${res.data.file_path}`;
 }
 
+/** The link to fetch `file` from: a re-issued attachment link, its direct link, or a workspace resolve. */
+export async function resolveArtifactFileUrl(file: ArtifactFile, versionId: string): Promise<string> {
+    if (file.directUrl) {
+        return (await reissueAttachmentUrl(file.attachment, file.directUrl)) ?? file.directUrl;
+    }
+    return resolveArtifactUrl(file.file_url, artifactVersionId(file, versionId));
+}
+
 function decodeSafe(s: string): string {
     try {
         return decodeURIComponent(s);
@@ -274,6 +294,11 @@ export function isAbsoluteImageSrc(src: string): boolean {
  * the path suffix first (disambiguates same-name files in different dirs) and fall
  * back to basename. Returns the matching entry (whose `file_url` resolves to a
  * presigned URL) or undefined when nothing matches.
+ *
+ * Uploaded files (`source: 'upload'`) live under `uploads/` and match only a ref
+ * that names that directory (`uploads/x.png`); a bare `x.png` written next to an
+ * output markdown still means the deliverable image, so on a basename tie the
+ * deliverable wins.
  */
 export function matchArtifactByRelPath(
     fileList: ArtifactFile[] | undefined,
@@ -288,6 +313,9 @@ export function matchArtifactByRelPath(
     const bySuffix = fileList.find((f) => {
         if (!f.file_path) return false;
         const p = norm(f.file_path);
+        if (f.source === 'upload') {
+            return target.startsWith('uploads/') && (p === target || p.endsWith('/' + target));
+        }
         return (
             p === target ||
             p.endsWith('/' + target) ||
@@ -296,8 +324,9 @@ export function matchArtifactByRelPath(
         );
     });
     if (bySuffix) return bySuffix;
-    // 2) basename match on file_name (bare filename, no dir).
-    return fileList.find((f) => norm(f.file_name) === base);
+    // 2) basename match on file_name (bare filename, no dir); deliverables first.
+    const byBase = (f: ArtifactFile) => norm(f.file_name) === base;
+    return fileList.find((f) => f.source !== 'upload' && byBase(f)) ?? fileList.find(byBase);
 }
 
 const DELIVERABLE_LINK_EXT = /\.(md|markdown|html|htm|docx|pdf)$/i;
@@ -532,7 +561,7 @@ export async function fetchArtifactBlob(
   versionId: string,
   options?: ArtifactBlobOptions,
 ): Promise<{ blob: Blob; fileName: string }> {
-  const url = file.directUrl || await resolveArtifactUrl(file.file_url, artifactVersionId(file, versionId));
+  const url = await resolveArtifactFileUrl(file, versionId);
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Failed to download file: ${response.status}`);

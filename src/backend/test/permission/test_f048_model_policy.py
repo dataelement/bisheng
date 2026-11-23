@@ -76,10 +76,9 @@ def test_four_standard_models_are_rebuilt_cumulatively() -> None:
         "manager": 3,
         "owner": 4,
     }
-    assert set(models["viewer"].action_codes) == {"download", "use"}
+    assert set(models["viewer"].action_codes) == {"download"}
     assert set(models["editor"].action_codes) == {
         "download",
-        "use",
         "rename",
         "edit",
         "create_folder",

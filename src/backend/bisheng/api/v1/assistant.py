@@ -7,12 +7,14 @@ from loguru import logger
 
 from bisheng.api.services.assistant import AssistantService
 from bisheng.api.v1.schemas import AssistantCreateReq, AssistantUpdateReq, StreamData, resp_200
+from bisheng.chat_session.application.conversation_persistence import ConversationPersistence
 from bisheng.common.chat.manager import ChatManager
 from bisheng.common.chat.types import WorkType
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.core.cache.redis_manager import get_redis_client
+from bisheng.core.session_activity import business_activity
 from bisheng.database.models.assistant import Assistant
 from bisheng.permission.application.business_authorization import (
     require_business_action,
@@ -20,6 +22,7 @@ from bisheng.permission.application.business_authorization import (
 from bisheng.role.domain.services.quota_service import QuotaResourceType, require_quota
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
+from bisheng.user.application.runtime_identity import browser_message_identity_scope
 from bisheng.utils import generate_uuid
 
 router = APIRouter(prefix="/assistant", tags=["Assistant"])
@@ -34,9 +37,9 @@ async def get_assistant(
     page_size: int | None = Query(default=10, gt=0, description="Items per page"),
     status: int | None = Query(default=None, description="Is online status"),
     action: str = Query(
-        default="use",
+        default="visible",
         pattern="^(visible|use)$",
-        description="Concrete action required for each assistant",
+        description="Visibility required for each assistant; legacy use is interpreted as visible",
     ),
     cursor: str | None = Query(
         default=None,
@@ -58,7 +61,7 @@ async def get_assistant(
         tag_id=tag_id,
         cursor=cursor,
         page_size=page_size,
-        action=action,
+        action="visible" if action == "use" else action,
     )
     return resp_200(data=result)
 
@@ -242,11 +245,13 @@ async def update_tool_list(
 
 # Assistant Dialogue'swebsocketCONNECT
 @router.websocket("/chat/{assistant_id}")
+@business_activity(http=False, websocket_actions=("input",))
 async def chat(
     *,
     assistant_id: str,
     websocket: WebSocket,
     chat_id: str | None = None,
+    flow_lease_id: str | None = None,
     login_user: UserPayload = Depends(UserPayload.get_login_user_from_ws),
 ):
     try:
@@ -254,9 +259,21 @@ async def chat(
             login_user,
             resource_type="assistant",
             resource_id=assistant_id,
-            action="use",
+            action="visible",
         )
-        await chat_manager.dispatch_client(websocket, assistant_id, chat_id, login_user, WorkType.GPTS, websocket)
+        # ``flow_lease_id`` is the page lease opened by the session page; without
+        # it the connection takes its own execution lease.
+        await chat_manager.dispatch_client(
+            websocket,
+            assistant_id,
+            chat_id,
+            login_user,
+            WorkType.GPTS,
+            websocket,
+            conversation_persistence=ConversationPersistence(login_user.user_id, user=login_user),
+            message_admission=lambda: browser_message_identity_scope(login_user),
+            flow_lease_id=flow_lease_id,
+        )
     except UnAuthorizedError:
         await websocket.close(
             code=http_status.WS_1008_POLICY_VIOLATION,

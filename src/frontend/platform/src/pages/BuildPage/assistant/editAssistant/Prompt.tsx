@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { Button, Textarea } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 
@@ -34,7 +35,7 @@ export default function Prompt({ canEdit = false }) {
                 <span className="text-sm font-medium leading-none shrink-0">{t('build.assistantPortrait')}</span>
                 {/* The panel is read-only while generating; a thinking model may stay silent for a minute */}
                 {promptStreaming && <>
-                    <Outlined.Loading className="animate-spin ml-2 shrink-0 text-gray-600" />
+                    <LoadingState size="inline" className="ml-2 shrink-0" />
                     <span className="ml-1 truncate text-xs text-muted-foreground">{t('build.portraitGenerating')}</span>
                 </>}
             </div>

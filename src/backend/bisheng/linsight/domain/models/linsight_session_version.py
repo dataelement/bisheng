@@ -7,6 +7,8 @@ from sqlalchemy import Enum as SQLEnum
 from sqlmodel import Field, col, select, update
 
 from bisheng.common.models.base import SQLModelSerializable
+from bisheng.common.services.failure_context import FailureContextAdapter
+from bisheng.common.services.llm_error_classifier import recover_model_transport_failure
 from bisheng.core.database import get_async_db_session
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType, json_search_exists
 from bisheng.database.base import uuid_hex
@@ -186,6 +188,14 @@ class LinsightSessionVersion(LinsightSessionVersionBase, table=True):
         data.pop("api_meta", None)
         # Directory ownership is for the worker's read and execute checks.
         data.pop("skill_snapshot", None)
+        if isinstance(data.get("output_result"), dict):
+            if self.status == SessionVersionStatusEnum.FAILED:
+                data["output_result"] = recover_model_transport_failure(data["output_result"])
+            data["output_result"] = FailureContextAdapter.public_payload(data["output_result"])
+        if isinstance(data.get("files"), list):
+            data["files"] = [
+                FailureContextAdapter.public_payload(item) if isinstance(item, dict) else item for item in data["files"]
+            ]
         return data
 
 

@@ -78,7 +78,7 @@ def test_image_check_pod_has_no_source_or_data_mount_and_only_fixed_helper(plan)
         helper_env={"IMAGE_CHECK_PLAN": "{}", "DOCKER_CONFIG": "/run/registry"},
     )
     pod = pod_template(current)
-    assert not pod["spec"]["initContainers"]
+    assert "initContainers" not in pod["spec"]
     assert pod["spec"]["automountServiceAccountToken"] is False
     assert len(pod["spec"]["containers"]) == 1
     assert all("persistentVolumeClaim" not in v for v in pod["spec"]["volumes"])

@@ -1,3 +1,4 @@
+import { subscribeDshBrowserConfigChanges } from '@bisheng/api-client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import request from '@/controllers/request'
 import { getDshBrowserConfig, parseDshManagementSettings, saveDshManagementSettings } from './dshSettings'
@@ -16,7 +17,7 @@ describe('typed DSH management configuration', () => {
     })
     it('publishes refresh only after a successful save', async () => {
         const changed = vi.fn()
-        window.addEventListener('dsh-settings-changed', changed)
+        const stop = subscribeDshBrowserConfigChanges(changed)
         try {
             const value = { enabled: true, download_url: 'http://downloads.test/file', launch_url: 'dsh-desktop://login' }
             vi.mocked(request.put).mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(value)
@@ -26,7 +27,7 @@ describe('typed DSH management configuration', () => {
             expect(changed).toHaveBeenCalledTimes(1)
             expect(request.put).toHaveBeenLastCalledWith('/api/v1/dsh/admin/settings', value)
         } finally {
-            window.removeEventListener('dsh-settings-changed', changed)
+            stop()
         }
     })
 })

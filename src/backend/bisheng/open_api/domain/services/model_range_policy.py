@@ -27,12 +27,15 @@ from typing import Protocol
 
 from loguru import logger
 
+from bisheng.common.errcode.knowledge import KnowledgeUnificationError
 from bisheng.common.errcode.model_face import (
     ModelFaceAccessTokenRefusedError,
     ModelFaceCatalogUnavailableError,
+    ModelFaceError,
     ModelFaceIdentityHeaderRefusedError,
+    ModelFaceModelRevokedError,
 )
-from bisheng.llm.domain.services.model_catalog import ModelRange
+from bisheng.llm.domain.services.model_catalog import ModelRange, ResolvedModel
 from bisheng.open_api.domain.context import OpenApiPrincipal
 
 ACCESS_TOKEN_HEADER = "X-BiSheng-Access-Token"
@@ -67,6 +70,10 @@ class HostedAppDeclarationPort(Protocol):
     """
 
     async def declared_model_names(self, app_id: str, tenant_id: int) -> frozenset[str] | None: ...
+
+    async def assert_model_binding(
+        self, principal: OpenApiPrincipal, requested: str, resolved: ResolvedModel
+    ) -> None: ...
 
 
 class AccessSubjectVerifierPort(Protocol):
@@ -124,6 +131,26 @@ def _header(headers: Mapping[str, str] | None, name: str) -> str | None:
                 value = candidate
                 break
     return value
+
+
+async def assert_hosted_model_binding(principal: OpenApiPrincipal, requested: str, resolved: ResolvedModel) -> None:
+    """The effective UUID binding must agree with the actual provider identity."""
+    if principal.actor_kind != HOSTED_APP_ACTOR_KIND:
+        return
+    admit = getattr(_declaration_port, "assert_model_binding", None)
+    if not callable(admit):
+        raise ModelFaceCatalogUnavailableError()
+    try:
+        if await admit(principal, requested, resolved) is not None:
+            raise ModelFaceCatalogUnavailableError()
+    except ModelFaceError:
+        raise
+    except KnowledgeUnificationError as error:
+        if error.code == 10994:
+            raise ModelFaceCatalogUnavailableError(exception=error) from error
+        raise ModelFaceModelRevokedError(model=requested, exception=error) from error
+    except Exception as error:
+        raise ModelFaceCatalogUnavailableError(exception=error) from error
 
 
 async def resolve_range_and_subject(
@@ -225,6 +252,7 @@ __all__ = [
     "AccessSubjectVerifierPort",
     "HostedAppDeclarationPort",
     "ResolvedSubject",
+    "assert_hosted_model_binding",
     "get_access_subject_verifier",
     "get_hosted_app_declaration_port",
     "register_access_subject_verifier",

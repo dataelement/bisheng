@@ -2,20 +2,18 @@
  * F035 Track H: knowledge dropdown of the task-mode input. Multi-selects
  * personal knowledge spaces and organization knowledge bases; selections show
  * as removable chips above the textarea (spec §1, fig.7).
- * Data sources mirror the daily input's ChatKnowledge: spaces from
- * /knowledge/space/{mine,joined}, org KBs from /api/v1/knowledge (getKnowledgeInfo).
+ * Spaces use the visible cursor endpoint; organization knowledge bases keep their own catalog.
  */
 import { Check, ChevronDown, Loader2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { getDepartmentSpacesApi, getJoinedSpacesApi, getMineSpacesApi } from '~/api/knowledge';
+import { useVisibleKnowledgeSpaces } from '~/hooks/useVisibleKnowledgeSpaces';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '~/components/ui';
-import { SearchInput } from '@bisheng/ui';
+import { Button, SearchInput } from '@bisheng/ui';
 import { useGetBsConfig, useGetOrgToolList } from '~/hooks/queries/data-provider';
 import { useLocalize } from '~/hooks';
 import { useToastContext } from '~/Providers';
@@ -39,29 +37,10 @@ export function KnowledgeSpaceSelect({ value, disabled = false, onChange, compac
     const [open, setOpen] = useState(false);
     const [keyword, setKeyword] = useState('');
 
-    // Personal knowledge spaces: mine + joined + department merged (same as ChatKnowledge).
-    const { data: spaces = [], isFetching: spaceFetching } = useQuery({
-        queryKey: ['taskModeKnowledgeSpaces'],
-        queryFn: async () => {
-            const [mine, joined, department] = await Promise.all([
-                getMineSpacesApi(),
-                getJoinedSpacesApi(),
-                getDepartmentSpacesApi(),
-            ]);
-            const seen = new Set<string | number>();
-            const merged: any[] = [];
-            for (const s of [...mine, ...joined, ...department]) {
-                if (seen.has(s.id)) continue;
-                seen.add(s.id);
-                merged.push(s);
-            }
-            return merged;
-        },
-        enabled: open,
-        refetchOnWindowFocus: false,
-    });
+    const { spaces, isFetching: spaceFetching, isError: spaceError, retry: retrySpaces,
+        hasMore, loadMore } = useVisibleKnowledgeSpaces({ enabled: open, keyword });
 
-    // Org knowledge bases (use-permission filtered server-side).
+    // Organization knowledge bases keep their independent server-filtered catalog.
     const orgEnabled = (bsConfig as any)?.knowledgeBase?.enabled !== false;
     const { data: orgKbs = [], isFetching: orgFetching } = useGetOrgToolList({ page: 1, page_size: 50 });
 
@@ -70,10 +49,6 @@ export function KnowledgeSpaceSelect({ value, disabled = false, onChange, compac
     }, [open]);
 
     const kw = keyword.trim().toLowerCase();
-    const filteredSpaces = useMemo(
-        () => (kw ? spaces.filter((s: any) => s.name?.toLowerCase().includes(kw)) : spaces),
-        [spaces, kw],
-    );
     const filteredOrgKbs = useMemo(
         () => (kw ? (orgKbs || []).filter((k: any) => k.name?.toLowerCase().includes(kw)) : orgKbs || []),
         [orgKbs, kw],
@@ -186,12 +161,22 @@ export function KnowledgeSpaceSelect({ value, disabled = false, onChange, compac
                     <p className="px-1 py-1 text-xs font-medium text-slate-400">
                         {localize('com_ui_knowledge_space')}
                     </p>
-                    {filteredSpaces.map((item: any) => renderRow(item, 'space'))}
-                    {!isFetching && filteredSpaces.length === 0 && (
+                    {spaces.map((item) => renderRow(item, 'space'))}
+                    {!isFetching && spaces.length === 0 && !spaceError && !hasMore && (
                         <p className="px-1 py-1.5 text-center text-xs text-slate-300">
                             {localize('com_chat_knowledge_empty_no_spaces')}
                         </p>
                     )}
+
+                    {spaceError && <div role="alert" className="flex flex-col gap-2 text-body-sm text-text-3">
+                        <span>{localize('dshChat.knowledgeLoadError')}</span>
+                        <Button color="default" variant="outlined" onClick={() => { void retrySpaces(); }}>
+                            {localize('dshChat.retryKnowledge')}
+                        </Button>
+                    </div>}
+                    {hasMore && !spaceError && <Button color="default" variant="outlined" loading={spaceFetching} onClick={loadMore}>
+                        {localize('dshChat.loadMoreKnowledge')}
+                    </Button>}
 
                     {/* Organization knowledge bases */}
                     {orgEnabled && (

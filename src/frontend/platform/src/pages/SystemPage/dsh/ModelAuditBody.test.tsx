@@ -384,7 +384,7 @@ describe("audit body NDJSON-to-message UI", () => {
     });
     await screen.findByText("First live piece");
     expect(
-      screen.getByText("dsh.modelAuditView.transfer.loading"),
+      screen.getByRole("status", { name: "dsh.modelAuditView.transfer.loading" }),
     ).toBeInTheDocument();
     const signal = api.stream.mock.calls[0][1] as AbortSignal;
     source(

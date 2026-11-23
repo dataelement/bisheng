@@ -58,10 +58,15 @@ export const useAssistantStore = create<State & Actions>((set) => ({
   assistantState: { ...assistantTemp },
   dispatchAssistant: (action: Action, data: Partial<AssistantDetail>) => set((state) => assistantReducer(state, action, data)),
   setAssistantDetail: (data) => {
+    const metadata = new Map(data.knowledge_list?.map(item => [String(item.id), item]));
     set({
       assistantState: {
         ...data,
-        model_name: Number(data.model_name),
+        model_name: data.model_name,
+        // IDs are authoritative; visible metadata is optional decoration.
+        knowledge_list: (data.knowledge_ids ?? data.knowledge_list?.map(item => item.id) ?? []).map(id =>
+          metadata.get(String(id)) ?? { id }
+        ),
         // trailing empty slot for the guide-question editor
         guide_question: data.guide_question ? [...data.guide_question, ''] : ['']
       }

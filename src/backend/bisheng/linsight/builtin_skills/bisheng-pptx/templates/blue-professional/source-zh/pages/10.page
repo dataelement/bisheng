@@ -1,0 +1,350 @@
+pageType: content
+background:
+  type: solid
+  color: '#FDFAE7'
+notes: Authored composition experiment using the parent pack palette and typography. All figures are fictional demonstration data; replace with actual evidence.
+elements:
+  - elementId: t1
+    elementType: text
+    bounds:
+      - 48
+      - 26
+      - 820
+      - 20
+    content:
+      text: 09 / 交付路线图
+      fontFamily: &ref_0
+        latin: Arial
+        ea: Noto Sans CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 11
+      color: '#1E2BFA'
+      lineHeight: 1.12
+      bold: false
+  - elementId: l2
+    elementType: line
+    bounds:
+      - 48
+      - 57
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.5
+      color: '#C9C8BC'
+  - elementId: t3
+    elementType: text
+    bounds:
+      - 48
+      - 78
+      - 864
+      - 68
+    content:
+      text: 实施计划的前 90 天
+      fontFamily: &ref_1
+        latin: Arial
+        ea: Noto Serif CJK SC
+        mac: PingFang SC
+        win: Microsoft YaHei
+      fontSize: 34
+      color: '#111111'
+      lineHeight: 1.12
+      bold: true
+  - elementId: t4
+    elementType: text
+    bounds:
+      - 298
+      - 164
+      - 175
+      - 24
+    content:
+      text: 第 1 月
+      fontFamily: *ref_0
+      fontSize: 13
+      color: '#1E2BFA'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t5
+    elementType: text
+    bounds:
+      - 487
+      - 164
+      - 175
+      - 24
+    content:
+      text: 第 2 月
+      fontFamily: *ref_0
+      fontSize: 13
+      color: '#1E2BFA'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t6
+    elementType: text
+    bounds:
+      - 676
+      - 164
+      - 175
+      - 24
+    content:
+      text: 第 3 月
+      fontFamily: *ref_0
+      fontSize: 13
+      color: '#1E2BFA'
+      lineHeight: 1.12
+      bold: false
+  - elementId: l7
+    elementType: line
+    bounds:
+      - 286
+      - 196
+      - 1
+      - 226
+    viewBox:
+      - 1
+      - 226
+    points: 0,0 0,226
+    border:
+      width: 0.6
+      color: '#CACBBF'
+  - elementId: l8
+    elementType: line
+    bounds:
+      - 475
+      - 196
+      - 1
+      - 226
+    viewBox:
+      - 1
+      - 226
+    points: 0,0 0,226
+    border:
+      width: 0.6
+      color: '#CACBBF'
+  - elementId: l9
+    elementType: line
+    bounds:
+      - 664
+      - 196
+      - 1
+      - 226
+    viewBox:
+      - 1
+      - 226
+    points: 0,0 0,226
+    border:
+      width: 0.6
+      color: '#CACBBF'
+  - elementId: l10
+    elementType: line
+    bounds:
+      - 853
+      - 196
+      - 1
+      - 226
+    viewBox:
+      - 1
+      - 226
+    points: 0,0 0,226
+    border:
+      width: 0.6
+      color: '#CACBBF'
+  - elementId: t11
+    elementType: text
+    bounds:
+      - 48
+      - 204
+      - 218
+      - 32
+    content:
+      text: 基线与责任人
+      fontFamily: *ref_1
+      fontSize: 20
+      color: '#111111'
+      lineHeight: 1.12
+      bold: true
+  - elementId: t12
+    elementType: text
+    bounds:
+      - 48
+      - 238
+      - 218
+      - 22
+    content:
+      text: 运营
+      fontFamily: *ref_0
+      fontSize: 13
+      color: '#111111'
+      lineHeight: 1.12
+      bold: false
+  - elementId: s13
+    elementType: shape
+    bounds:
+      - 287
+      - 213
+      - 198.45000000000002
+      - 29
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#9EA5F4'
+    border:
+      width: 0
+      color: '#9EA5F4'
+  - elementId: t14
+    elementType: text
+    bounds:
+      - 48
+      - 279
+      - 218
+      - 32
+    content:
+      text: 调度试点
+      fontFamily: *ref_1
+      fontSize: 20
+      color: '#111111'
+      lineHeight: 1.12
+      bold: true
+  - elementId: t15
+    elementType: text
+    bounds:
+      - 48
+      - 313
+      - 218
+      - 22
+    content:
+      text: 产品
+      fontFamily: *ref_0
+      fontSize: 13
+      color: '#111111'
+      lineHeight: 1.12
+      bold: false
+  - elementId: s16
+    elementType: shape
+    bounds:
+      - 400.4
+      - 288
+      - 226.79999999999998
+      - 29
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#1E2BFA'
+    border:
+      width: 0
+      color: '#1E2BFA'
+  - elementId: t17
+    elementType: text
+    bounds:
+      - 48
+      - 354
+      - 218
+      - 32
+    content:
+      text: 扩展决策
+      fontFamily: *ref_1
+      fontSize: 20
+      color: '#111111'
+      lineHeight: 1.12
+      bold: true
+  - elementId: t18
+    elementType: text
+    bounds:
+      - 48
+      - 388
+      - 218
+      - 22
+    content:
+      text: 管理层
+      fontFamily: *ref_0
+      fontSize: 13
+      color: '#111111'
+      lineHeight: 1.12
+      bold: false
+  - elementId: s19
+    elementType: shape
+    bounds:
+      - 627.2
+      - 363
+      - 226.79999999999998
+      - 29
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#9EA5F4'
+    border:
+      width: 0
+      color: '#9EA5F4'
+  - elementId: s20
+    elementType: shape
+    bounds:
+      - 620
+      - 435
+      - 12
+      - 12
+    shapeName: ellipse
+    fill:
+      type: solid
+      color: '#1E2BFA'
+    border:
+      width: 0
+      color: '#1E2BFA'
+  - elementId: t21
+    elementType: text
+    bounds:
+      - 48
+      - 462
+      - 864
+      - 31
+    content:
+      text: 决策门槛：达到试点目标后再扩展
+      fontFamily: *ref_0
+      fontSize: 18
+      color: '#111111'
+      lineHeight: 1.12
+      bold: false
+  - elementId: l22
+    elementType: line
+    bounds:
+      - 626
+      - 196
+      - 1
+      - 245
+    viewBox:
+      - 1
+      - 245
+    points: 0,0 0,245
+    border:
+      width: 1
+      color: '#1E2BFA'
+  - elementId: t23
+    elementType: text
+    bounds:
+      - 48
+      - 507
+      - 760
+      - 16
+    content:
+      text: 版式示例 / 数据为模拟值
+      fontFamily: *ref_0
+      fontSize: 9
+      color: '#111111'
+      lineHeight: 1.12
+      bold: false
+  - elementId: t24
+    elementType: text
+    bounds:
+      - 870
+      - 504
+      - 42
+      - 22
+    content:
+      text: '10'
+      fontFamily: *ref_0
+      fontSize: 11
+      color: '#111111'
+      lineHeight: 1.12
+      bold: false

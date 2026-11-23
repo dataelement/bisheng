@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { usePreviewLoadingRenderer } from './PreviewLoading';
 
 /**
  * One presentation of a hosted application's version diff, used by **both**
@@ -144,6 +145,7 @@ export function VersionDiffView({
   emptyMessage,
   className,
 }: VersionDiffViewProps) {
+  const renderLoading = usePreviewLoadingRenderer();
   const { t } = useTranslation('shared', { keyPrefix: 'hostedApp.versionDiff' });
   const [picked, setPicked] = useState<string | null>(null);
 
@@ -166,6 +168,7 @@ export function VersionDiffView({
     picked && files.some((file) => file.path === picked) ? picked : (files[0]?.path ?? null);
 
   if (loading) {
+    if (renderLoading) return <div className={className}>{renderLoading({ size: 'panel', label: t('loading') })}</div>;
     return <p className={`text-sm text-slate-500 dark:text-slate-400 ${className ?? ''}`}>{t('loading')}</p>;
   }
   if (errorMessage) {

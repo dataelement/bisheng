@@ -56,6 +56,6 @@ if (!global.ResizeObserver) {
     disconnect() {}
   };
 }
-if (!Element.prototype.scrollIntoView) {
+if (typeof Element !== 'undefined' && !Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = jest.fn();
 }

@@ -11,6 +11,11 @@ const browserConfig = vi.hoisted(() => ({
     enabled: true, managementEnabled: true, isPro: true as boolean | undefined,
 }))
 
+const management = vi.hoisted(() => ({
+    scope: { scope_tenant_id: 2 as number | null }, loading: false, refresh: vi.fn(),
+}))
+vi.mock('@/hooks/useAdminScope', () => ({ useAdminScope: () => management }))
+
 vi.mock('@/contexts/locationContext', async () => {
     const { createContext } = await import('react')
     return { locationContext: createContext({ appConfig: browserConfig }) }
@@ -53,6 +58,8 @@ function LocationProbe() {
 describe('DshPage navigation', () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        management.scope.scope_tenant_id = 2
+        management.loading = false
         browserConfig.isPro = true
         vi.mocked(getDshSafetyCapabilities).mockRejectedValue(new Error('Test gateway unavailable'))
         browserConfig.enabled = true
@@ -63,6 +70,7 @@ describe('DshPage navigation', () => {
             user_id: 1,
             user_name: 'admin',
             role: 'admin',
+            tenant_id: 1,
         }
         const contextValue = {
             user,
@@ -258,6 +266,70 @@ describe('DshPage navigation', () => {
         expect(saveDshSensitivePolicy).not.toHaveBeenCalled()
     })
 
+    it('reads and saves safety settings for the top-level management tenant', async () => {
+        const policy = safetyPolicy('Child words')
+        vi.mocked(getDshSafetyCapabilities).mockResolvedValue({
+            available: true, enabled: true, configuration_ready: true,
+            builtin_digest: policy.builtin_digest, limits: policy.limits,
+        })
+        vi.mocked(getDshSensitivePolicy).mockResolvedValue(policy)
+        vi.mocked(saveDshSensitivePolicy).mockResolvedValue({ ...policy, version: 2, effective_within_seconds: 5 })
+        renderPage('/dsh?tab=content-safety', {
+            user_id: 1, user_name: 'global', role: 'admin', is_global_super: true, tenant_id: 1,
+        })
+        const words = await screen.findByRole('textbox', { name: 'dsh.contentSafety.settings.custom_words' })
+        expect(words).toHaveValue('Child words')
+        expect(getDshSafetyCapabilities).toHaveBeenCalledWith(2, expect.any(AbortSignal))
+        expect(getDshSensitivePolicy).toHaveBeenCalledWith(2, expect.any(AbortSignal))
+        expect(screen.queryByRole('combobox', { name: 'dsh.modelAuditView.selectTenant' })).toBeNull()
+        fireEvent.change(words, { target: { value: 'Updated child words' } })
+        fireEvent.click(screen.getByRole('button', { name: 'dsh.contentSafety.actions.save' }))
+        await waitFor(() => expect(saveDshSensitivePolicy).toHaveBeenCalledWith(
+            2, expect.objectContaining({ custom_words: 'Updated child words' }),
+        ))
+    })
+
+    it('does not send safety requests without a confirmed management tenant', () => {
+        management.scope.scope_tenant_id = null
+        renderPage('/dsh?tab=content-safety', {
+            user_id: 1, user_name: 'global', role: 'admin', is_global_super: true, tenant_id: 1,
+        })
+        expect(getDshSafetyCapabilities).not.toHaveBeenCalled()
+        expect(getDshSensitivePolicy).not.toHaveBeenCalled()
+        expect(saveDshSensitivePolicy).not.toHaveBeenCalled()
+        expect(screen.queryByRole('textbox')).toBeNull()
+    })
+
+    it('discards safety drafts when the management tenant changes', async () => {
+        const policy = safetyPolicy('First tenant words')
+        vi.mocked(getDshSafetyCapabilities).mockResolvedValue({
+            available: true, enabled: true, configuration_ready: true,
+            builtin_digest: policy.builtin_digest, limits: policy.limits,
+        })
+        vi.mocked(getDshSensitivePolicy).mockResolvedValueOnce(policy)
+            .mockResolvedValueOnce(safetyPolicy('Next tenant words'))
+        const view = renderPage('/dsh?tab=content-safety', {
+            user_id: 1, user_name: 'global', role: 'admin', is_global_super: true, tenant_id: 1,
+        })
+        const words = await screen.findByRole('textbox', { name: 'dsh.contentSafety.settings.custom_words' })
+        fireEvent.change(words, { target: { value: 'Unsaved old draft' } })
+        fireEvent.mouseDown(screen.getByRole('tab', { name: 'dsh.unified.usage' }), { button: 0, ctrlKey: false })
+        management.scope.scope_tenant_id = 3
+        view.rerenderPage()
+        fireEvent.mouseDown(screen.getByRole('tab', { name: 'dsh.contentSafety.title' }), { button: 0, ctrlKey: false })
+        await waitFor(() => expect(screen.getByRole('textbox', { name: 'dsh.contentSafety.settings.custom_words' })).toHaveValue('Next tenant words'))
+        expect(getDshSensitivePolicy).toHaveBeenLastCalledWith(3, expect.any(AbortSignal))
+        expect(screen.queryByDisplayValue('Unsaved old draft')).toBeNull()
+        expect(saveDshSensitivePolicy).not.toHaveBeenCalled()
+    })
+
+    it("uses a tenant administrator's real home rather than the super-admin selection", async () => {
+        renderPage('/dsh?tab=content-safety', {
+            user_id: 4, user_name: 'child', role: 'user', is_child_admin: true, tenant_id: 1, leaf_tenant_id: 7,
+        })
+        await waitFor(() => expect(getDshSafetyCapabilities).toHaveBeenCalledWith(7, expect.any(AbortSignal)))
+    })
+
     it('keeps navigation hidden when management is unavailable', () => {
         browserConfig.managementEnabled = false
         renderPage('/dsh?tab=content-safety')
@@ -269,8 +341,8 @@ describe('DshPage navigation', () => {
 
 function renderPage(
     initialEntry: string,
-    user: { user_id: number; user_name: string; role: string; is_global_super?: boolean; is_child_admin?: boolean; tenant_id?: number } = {
-        user_id: 1, user_name: 'admin', role: 'admin',
+    user: { user_id: number; user_name: string; role: string; is_global_super?: boolean; is_child_admin?: boolean; tenant_id?: number; leaf_tenant_id?: number } = {
+        user_id: 1, user_name: 'admin', role: 'admin', tenant_id: 1,
     },
 ) {
     const contextValue = {
@@ -288,4 +360,18 @@ function renderPage(
     )
     const view = render(content())
     return { ...view, rerenderPage: () => view.rerender(content()) }
+}
+
+function safetyPolicy(words: string) {
+    return {
+        version: 1, enabled: true, input_enabled: true, output_enabled: false,
+        words_types: ['2'] as ('1' | '2')[], custom_words: words, auto_reply: 'Blocked',
+        builtin_digest: 'a'.repeat(64), effective_word_count: 1,
+        limits: {
+            custom_words_max_bytes: 1048576, effective_words_max_count: 30000,
+            effective_words_max_bytes: 1048576, word_max_codepoints: 256,
+            request_max_bytes: 33554432, response_max_bytes: 33554432,
+            event_max_bytes: 8388608, rule_refs_max_count: 20,
+        },
+    }
 }

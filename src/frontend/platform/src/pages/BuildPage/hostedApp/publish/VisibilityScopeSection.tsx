@@ -18,6 +18,7 @@
  * - Local state remains owned by this section; API failures are handled at
  *   its effect and dialog-event boundaries through the shared request layer.
  */
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState"
 import { Button } from "@bisheng/ui"
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog"
 import {
@@ -70,7 +71,7 @@ export function VisibilityScopeSection({ app }: VisibilityScopeSectionProps) {
   const showBanner = isOwnerOnly(app.state, grants)
 
   const summary = loading
-    ? t("hostedApp.visibility.loading")
+    ? <LoadingState size="inline" label={t("hostedApp.visibility.loading")} />
     : // `total`, not `count`: i18next reserves `count` for plural selection
       // and types it as a number, which this "12+" string is not.
       t("hostedApp.visibility.summary", {

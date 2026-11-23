@@ -22,10 +22,15 @@ from bisheng.common.chat.client import ChatMessageExecution
 from bisheng.common.chat.types import WorkType
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.errcode.open_api import OpenApiCredentialInvalidError
+from bisheng.common.errcode.workstation import DepartmentDailyChatConcurrentLimitError
 from bisheng.common.schemas.api import PageData, resp_200
 from bisheng.common.schemas.telemetry.event_data_schema import ApplicationAliveEventData, ApplicationProcessEventData
 from bisheng.common.services import telemetry_service
 from bisheng.core.logger import trace_id_var
+from bisheng.department.domain.services.department_flow_service import (
+    DepartmentFlowService,
+    SlotOutcome,
+)
 from bisheng.open_api.application.access_context import open_api_access_context, validate_bearer
 from bisheng.open_api.domain.context import OpenApiExecutionSnapshot, get_current_open_api_principal
 from bisheng.open_api.domain.http_status import openai_stream_error
@@ -55,9 +60,17 @@ def _assistant_id_from_model(model: str) -> str:
         ) from None
 
 
-async def _stream_with_error_event(stream: AsyncIterator[str]) -> AsyncIterator[str]:
+async def _stream_with_error_event(
+    stream: AsyncIterator[str],
+    renew_task=None,
+    lease=None,
+) -> AsyncIterator[str]:
     """Follow the OpenAI streaming error convention when the stream fails midway:
-    send one `data: {"error": {...}}` event, then `data: [DONE]`."""
+    send one `data: {"error": {...}}` event, then `data: [DONE]`.
+
+    Also releases the department execution lease when the stream really ends —
+    the endpoint has long returned by then.
+    """
     try:
         async for item in stream:
             yield item
@@ -65,6 +78,8 @@ async def _stream_with_error_event(stream: AsyncIterator[str]) -> AsyncIterator[
         logger.opt(exception=True).error("assistant streaming failed")
         yield f"data: {json.dumps(openai_stream_error(exc), ensure_ascii=False)}\n\n"
         yield "data: [DONE]\n\n"
+    finally:
+        await DepartmentFlowService.stop_renewal(renew_task, lease)
 
 
 @router.post("/chat/completions")
@@ -80,16 +95,34 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
     try:
         operator = get_open_api_operator()
         started = time.time()
-        completion, assistant_info = await PublishedAssistantService.complete(
-            assistant_id=assistant_id,
-            model=req_data.model,
-            messages=req_data.messages,
-            stream=req_data.stream,
-            temperature=req_data.temperature,
-            operator=operator,
-        )
+        # Department concurrency: no page lease on the open API. Non-streaming
+        # covers ``complete``; streaming hands the same lease to the generator.
+        flow_outcome, flow_lease = await DepartmentFlowService.ensure_lease(operator)
+        if flow_outcome is SlotOutcome.REJECTED:
+            raise DepartmentDailyChatConcurrentLimitError()
+        flow_renew_task = DepartmentFlowService.start_renewal(flow_lease) if flow_lease else None
+        try:
+            completion, assistant_info = await PublishedAssistantService.complete(
+                assistant_id=assistant_id,
+                model=req_data.model,
+                messages=req_data.messages,
+                stream=req_data.stream,
+                temperature=req_data.temperature,
+                operator=operator,
+            )
+        except BaseException:
+            # The streaming generator never runs when ``complete`` fails, so the
+            # lease must be released here.
+            await DepartmentFlowService.stop_renewal(flow_renew_task, flow_lease)
+            raise
         if completion.stream is not None:
-            return StreamingResponse(_stream_with_error_event(completion.stream), media_type="text/event-stream")
+            # Released inside the generator, when the stream really ends.
+            return StreamingResponse(
+                _stream_with_error_event(completion.stream, flow_renew_task, flow_lease),
+                media_type="text/event-stream",
+            )
+        # Non-streaming: ``complete`` already produced the whole answer.
+        await DepartmentFlowService.stop_renewal(flow_renew_task, flow_lease)
         return completion.payload
     except Exception:
         logger.opt(exception=True).error("assistant completion failed")
@@ -159,7 +192,13 @@ async def get_assistant_list(
 
 @router.websocket("/chat/{assistant_id}")
 @open_api_scope("assistant:invoke", session=True)
-async def chat(*, websocket: WebSocket, assistant_id: str, chat_id: str | None = None):
+async def chat(
+    *,
+    websocket: WebSocket,
+    assistant_id: str,
+    chat_id: str | None = None,
+    flow_lease_id: str | None = None,
+):
     logger.info("act=assistant_chat_ws assistant_id={} ip={}", assistant_id, get_request_ip(websocket))
     operator = get_open_api_operator()
     try:
@@ -205,6 +244,7 @@ async def chat(*, websocket: WebSocket, assistant_id: str, chat_id: str | None =
                 WorkType.GPTS,
                 websocket,
                 session_subject=session_subject,
+                flow_lease_id=flow_lease_id,
                 message_admission=message_admission,
             )
     except WebSocketException as exc:

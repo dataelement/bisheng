@@ -1,0 +1,856 @@
+"""Formal M2 inventory entry; only the ledger is written in the caller's TX.
+
+New inventories preserve SQL index bindings without reading physical stores.
+Old frozen physical evidence keeps its original verification contract.
+This entry never detects downtime, seeds permissions, binds references, changes
+business data or certifies Coverage. Backups remain an operational prerequisite.
+"""
+
+from collections import defaultdict
+from contextlib import aclosing
+from copy import copy
+from dataclasses import asdict, dataclass, field
+
+from loguru import logger
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from bisheng.common.errcode.knowledge import KnowledgeOperationPlanConflictError, ReferenceCoverageNotReadyError
+from bisheng.core.context.tenant import tenant_execution_scope
+from bisheng.knowledge.application import unification_identity_retention as identity_retention
+from bisheng.knowledge.application.unification_artifacts import UnificationArtifactStore
+from bisheng.knowledge.application.unification_inventory_codec import (
+    InventoryRecord,
+    decode_inventory_page,
+    digest,
+    encode_inventory_page,
+    iter_manifest_nodes,
+    record_from_row,
+    record_from_values,
+)
+from bisheng.knowledge.application.unification_permission_inventory import PermissionInventoryVerifier
+from bisheng.knowledge.application.unification_permission_namespace import catalog_namespace_records
+from bisheng.knowledge.application.unification_physical_retention import (
+    PhysicalRetentionInventoryVerifier,
+)
+from bisheng.knowledge.application.unification_preflight import UnificationPreflight, source_decision
+from bisheng.knowledge.application.unification_preview_artifacts import preview_artifact_store
+from bisheng.knowledge.application.unification_source_codec import decode_source_page, encode_source_page
+from bisheng.knowledge.application.unification_sources import (
+    ReferenceInventoryRecord,
+    RootInventoryRecord,
+    SourceInventoryRecord,
+    UnificationSourceInventory,
+)
+from bisheng.knowledge.application.unification_space_membership_inventory import MembershipInventoryVerifier
+from bisheng.knowledge.application.unification_structural_retention import (
+    CREATOR_RETENTION,
+    FILE_RETENTION,
+    RETENTIONS,
+    StructuralRetentionInventoryVerifier,
+)
+from bisheng.knowledge.domain.models.knowledge_unification_run import unification_now
+from bisheng.knowledge.domain.repositories.unification_inventory_repository import UnificationInventoryRepository
+from bisheng.knowledge.domain.repositories.unification_run_repository import (
+    FrozenGlobalInventoryResult,
+    KnowledgeUnificationRunRepository,
+    _descriptor,
+)
+from bisheng.permission.application.migration_read import (
+    OriginalTupleFact,
+    PinnedMigrationPermissionReader,
+    target_authorization_model_checksum,
+)
+from bisheng.permission.domain.repositories.f118_migration_snapshot_repository import (
+    PermissionMigrationSnapshotRepository,
+)
+from bisheng.permission.migration.f118_plan import ResourceRetirementPlanner, build_catalog_retirement_plan
+from bisheng.resource_reference.application.contracts import ReferenceSpec, TransactionIdentity, reference_set_digest
+
+_SECTIONS = {
+    "resources": {
+        "resource",
+        "file",
+        "document",
+        "version",
+        "qa",
+        "tag",
+        "tag_link",
+        "tag_library",
+        "department_space",
+    },
+    "control": {
+        "tenant",
+        "membership",
+        "department",
+        "role",
+        "user_role",
+        "creator",
+        "role_fact",
+        "quota_usage",
+        "space_membership_header",
+        "space_member",
+        "existing_space_creator_retention",
+        "stranded_file_retention",
+        "rootless_file",
+        "rootless_file_retention",
+        "historical_resource_creator_retention",
+        "retained_permission_delete",
+        "workflow_creator_retention",
+    },
+    "permission": {"resource_mode", "grant", "assignee", "visible_source"},
+    "permission_namespace": {
+        "namespace_catalog",
+        "namespace_applicability",
+        "namespace_target_mode",
+        "namespace_after_grant",
+        "namespace_after_assignee",
+        "namespace_after_visible_source",
+    },
+    "catalog": {"catalog_release", "authorization", "catalog_action", "permission_model"},
+    "physical": {"physical_index", "physical_object", "physical_index_retention"},
+    "tasks": {"queued_task", "queued_task_orphan", "broker_task"},
+    "fga": {"fga_tuple"},
+    "conversion": {
+        "resource_conversion",
+        "initialize_v1",
+        "tag_conversion",
+        "tag_link_conversion",
+        "default_conversion",
+        "permission_plan",
+        "source_decision",
+    },
+}
+
+
+def _blocked(reason):
+    raise KnowledgeOperationPlanConflictError(reason=f"migration_inventory_{reason}")
+
+
+def _section(section, record):
+    if type(record) is not InventoryRecord or record.record_type not in _SECTIONS.get(section, set()):
+        _blocked("section_record_mismatch")
+    _ = record.data  # validates closure even for a manually constructed record
+
+
+@dataclass(frozen=True, slots=True)
+class FrozenInventoryPage:
+    kind: str
+    section: str
+    scope: str
+    tenant_id: int | None
+    page_index: int
+    record_count: int
+    descriptor: dict = field(repr=False)
+    content: bytes = field(repr=False)
+
+
+class _Pages:
+    def __init__(self, store, run_id, current):
+        self.store, self.run_id, self.current = store, run_id, current
+        self.buffers = defaultdict(list)
+        self.indices = defaultdict(int)
+        self.entries = {"baseline": [], "plan": []}
+
+    async def _put(self, content, kind):
+        self.current()
+        descriptor = await self.store.aput_canonical(run_id=self.run_id, kind=kind, content=content)
+        # aput_canonical already reads back and verifies the exact hash/envelope.
+        self.current()
+        return descriptor
+
+    async def add(self, section, tenant_id, record, *, kind="baseline"):
+        self.current()
+        if section != "sources":
+            _section(section, record)
+        key = (kind, section, tenant_id)
+        self.buffers[key].append(record)
+        if len(self.buffers[key]) == 199:
+            await self.flush(key)
+
+    async def flush(self, key):
+        kind, section, tenant = key
+        records = tuple(self.buffers.pop(key, ()))
+        if not records:
+            return
+        index = self.indices[key]
+        if section == "sources":
+            content = encode_source_page(run_id=self.run_id, tenant_id=tenant, page_index=index, records=records)
+            storage_kind = "sources"
+        else:
+            content = encode_inventory_page(
+                run_id=self.run_id,
+                section=section,
+                scope="global" if tenant is None else "tenant",
+                tenant_id=tenant,
+                page_index=index,
+                records=records,
+                kind=kind,
+            )
+            storage_kind = kind
+        descriptor = await self._put(content, storage_kind)
+        self.entries[kind].append(
+            record_from_values(
+                "manifest_entry",
+                section=section,
+                scope="global" if tenant is None else "tenant",
+                tenant_id=tenant,
+                page_index=index,
+                record_count=len(records),
+                descriptor=descriptor,
+                level=0,
+            )
+        )
+        self.indices[key] += 1
+
+    async def finish(self):
+        for key in tuple(self.buffers):
+            await self.flush(key)
+
+    async def manifest(self, kind, metadata):
+        root = None
+        for node in iter_manifest_nodes(
+            run_id=self.run_id, kind=kind, entries=iter(self.entries[kind]), metadata=metadata
+        ):
+            descriptor = await self._put(node.content, kind)
+            if descriptor != node.descriptor:
+                _blocked("manifest_identity")
+            if node.is_root:
+                root = descriptor
+        if root is None:
+            _blocked("manifest_missing")
+        return root
+
+
+class UnificationInventoryApplication:
+    def __init__(
+        self,
+        *,
+        artifact_store,
+        sharing_reader_factory=None,
+        physical_reader=None,
+        queued_task_reader=None,
+        broker_reader=None,
+        read_ports=None,
+    ):
+        # No eager clients/factories: general Storage and RAG constructors may
+        # create buckets/policies/indexes or enforce unrelated online gates.
+        self.store = artifact_store
+        self.reader_factory = sharing_reader_factory
+        # Accept legacy composition arguments without calling them. Ordinary
+        # migration does not construct ES/Milvus clients or stat file objects.
+        self.runs = KnowledgeUnificationRunRepository()
+        self.read_ports = read_ports
+        self.raw = read_ports.inventory if read_ports is not None else UnificationInventoryRepository()
+        self.permissions = read_ports.permissions if read_ports is not None else PermissionMigrationSnapshotRepository()
+        self.preflight = (
+            read_ports.preflight
+            if read_ports is not None
+            else UnificationPreflight(permissions=self.permissions, inventory=self.raw)
+        )
+
+    async def _verify_frozen(self, result, *, environment, backup_ref, schema_ref, current, permission_planner=None):
+        async for _ in self.aiter_frozen_pages(
+            result,
+            environment=environment,
+            backup_ref=backup_ref,
+            schema_ref=schema_ref,
+            current=current,
+            _permission_planner=permission_planner,
+        ):
+            continue
+        return result
+
+    async def aiter_frozen_pages(
+        self, result, *, environment, backup_ref, schema_ref, current=None, _permission_planner=None
+    ):
+        if current is not None and not callable(current):
+            _blocked("invalid_frozen_input")
+        execution = getattr(self.store, "verified_inputs", None)
+        bundle = None
+        if execution is not None:
+            key = execution.inventory_key(result, environment=environment, backup_ref=backup_ref, schema_ref=schema_ref)
+            bundle = execution.get_inventory(key)
+            if bundle is not None and bundle.sealed:
+                bundle.require_planner(_permission_planner)
+                async for page in bundle.iter_pages(FrozenInventoryPage):
+                    if current is not None:
+                        current()
+                    yield page
+                    if current is not None:
+                        current()
+                return
+            bundle = execution.begin_inventory(key)
+        try:
+            async for page in self._aiter_frozen_pages(
+                result,
+                environment=environment,
+                backup_ref=backup_ref,
+                schema_ref=schema_ref,
+                current=current,
+                _permission_planner=_permission_planner,
+                _plan_sink=bundle,
+            ):
+                if bundle is not None:
+                    bundle.append_page(page)
+                yield page
+            if bundle is not None:
+                bundle.seal()
+        finally:
+            if bundle is not None and not bundle.sealed:
+                bundle.abort()
+
+    async def _aiter_frozen_pages(
+        self,
+        result,
+        *,
+        environment,
+        backup_ref,
+        schema_ref,
+        current=None,
+        _permission_planner=None,
+        _plan_sink=None,
+    ):
+        if (
+            type(result) is not FrozenGlobalInventoryResult
+            or type(result.tenant_ids) is not tuple
+            or not result.tenant_ids
+            or any(type(tenant) is not int or tenant <= 0 for tenant in result.tenant_ids)
+            or tuple(sorted(set(result.tenant_ids))) != result.tenant_ids
+            or (current is not None and not callable(current))
+        ):
+            _blocked("invalid_frozen_input")
+        memberships = MembershipInventoryVerifier()
+        tenants = frozenset(result.tenant_ids)
+        structural = StructuralRetentionInventoryVerifier()
+        current = current if current is not None else lambda: None
+        baseline, plan = _descriptor(result.baseline_ref), _descriptor(result.plan_ref)
+        current()
+        plan_root_content = await self.store.aload_canonical(plan, run_id=result.run_id, kind="plan")
+        current()
+        plan_root = decode_inventory_page(
+            plan_root_content,
+            run_id=result.run_id,
+            section="manifest",
+            scope="global",
+            tenant_id=None,
+            page_index=0,
+            kind="plan",
+        )
+        metadata = [record.data for record in plan_root.records if record.record_type == "run"]
+        if len(metadata) != 1:
+            _blocked("manifest_metadata")
+        # Omitted assertions recover the original opaque fields from the
+        # hash-verified plan, including old Runs. Never recreate DBA evidence
+        # or reclassify an old Run under the new policy. The baseline below
+        # must agree with this same identity and the original ledger hashes.
+        material_policy = metadata[0].get("external_material_policy")
+        retained_identity = identity_retention.metadata(metadata[0])
+        from bisheng.knowledge.application.unification_inventory_codec import flow_binding_metadata
+
+        flow_binding = flow_binding_metadata(metadata[0])
+        backup_ref = metadata[0]["backup_ref"] if backup_ref is None else _descriptor(backup_ref)
+        schema_ref = metadata[0]["schema_ref"] if schema_ref is None else _descriptor(schema_ref)
+        preparation_policy = metadata[0].get("preparation_policy_version", 1)
+        physical_policy = metadata[0].get("physical_inventory_policy", "legacy_physical")
+        physical = PhysicalRetentionInventoryVerifier(policy=physical_policy)
+        permissions = PermissionInventoryVerifier(
+            run_id=result.run_id,
+            writer_contract_version=result.writer_contract_version,
+            target_model_checksum=metadata[0]["authorization_model_checksum"],
+            catalog_plan_checksum=metadata[0]["catalog_digest"],
+            permission_planner=_permission_planner,
+            plan_sink=_plan_sink,
+        )
+        for kind, descriptor in (("baseline", baseline), ("plan", plan)):
+            expected_baseline = None if kind == "baseline" else baseline
+            seen, indices = set(), {}
+
+            async def verify(
+                ref,
+                *,
+                section="manifest",
+                scope="global",
+                tenant_id=None,
+                page_index=0,
+                depth=0,
+                record_count=None,
+                kind=kind,
+                seen=seen,
+                indices=indices,
+                expected_baseline=expected_baseline,
+            ):
+                current()
+                if section == "physical" and physical_policy == "bindings_only":
+                    _blocked("unexpected_physical_inventory")
+                if scope == "tenant" and tenant_id not in tenants:
+                    _blocked("manifest_tenant")
+                if depth > 64 or ref["object_key"] in seen:
+                    _blocked("manifest_graph")
+                seen.add(ref["object_key"])
+                if kind == "plan" and depth == 0:
+                    content = plan_root_content
+                else:
+                    content = await self.store.aload_canonical(
+                        ref, run_id=result.run_id, kind="sources" if section == "sources" else kind
+                    )
+                current()
+                if section == "sources":
+                    page = decode_source_page(content, run_id=result.run_id, tenant_id=tenant_id, page_index=page_index)
+                    from bisheng.knowledge.application.unification_reference_state import validate_inventory_fact
+
+                    for record in page.records:
+                        validate_inventory_fact(record)
+                        structural.observe_source(record)
+                else:
+                    page = decode_inventory_page(
+                        content,
+                        run_id=result.run_id,
+                        section=section,
+                        scope=scope,
+                        tenant_id=tenant_id,
+                        page_index=page_index,
+                        kind=kind,
+                    )
+                if record_count is not None and len(page.records) != record_count:
+                    _blocked("manifest_counter")
+                if section != "manifest":
+                    if section != "sources":
+                        for record in page.records:
+                            _section(section, record)
+                            memberships.observe(kind=kind, section=section, tenant_id=tenant_id, record=record)
+                            permissions.observe(kind=kind, section=section, tenant_id=tenant_id, record=record)
+                            physical.observe(kind=kind, section=section, tenant_id=tenant_id, record=record)
+                            structural.observe(kind=kind, section=section, tenant_id=tenant_id, record=record)
+                    key = (kind, section, scope, tenant_id)
+                    if page_index != indices.get(key, 0):
+                        _blocked("manifest_page_order")
+                    indices[key] = page_index + 1
+                    yield FrozenInventoryPage(
+                        kind, section, scope, tenant_id, page_index, len(page.records), _descriptor(ref), content
+                    )
+                    return
+                metadata = [record.data for record in page.records if record.record_type == "run"]
+                if depth == 0:
+                    if len(metadata) != 1:
+                        _blocked("manifest_metadata")
+                    value = metadata[0]
+                    if value.get("preparation_policy_version", 1) != preparation_policy:
+                        _blocked("frozen_policy_changed")
+                    if value.get("physical_inventory_policy", "legacy_physical") != physical_policy:
+                        _blocked("frozen_physical_policy_changed")
+                    if value.get("external_material_policy") != material_policy:
+                        _blocked("frozen_material_policy_changed")
+                    if identity_retention.metadata(value) != retained_identity:
+                        _blocked("frozen_identity_retention_changed")
+                    if flow_binding_metadata(value) != flow_binding:
+                        _blocked("frozen_upgrade_flow_changed")
+                    expected = {
+                        "writer_contract_version": result.writer_contract_version,
+                        "environment": environment,
+                        "tenant_count": len(result.tenant_ids),
+                        "tenant_inventory_digest": digest(result.tenant_ids),
+                        "backup_ref": backup_ref,
+                        "schema_ref": schema_ref,
+                        "baseline_ref": expected_baseline,
+                    }
+                    if any(value.get(name) != item for name, item in expected.items()):
+                        _blocked("frozen_input_changed")
+                    if kind == "baseline":
+                        permissions.observe(
+                            kind=kind,
+                            section="manifest",
+                            tenant_id=None,
+                            record=next(record for record in page.records if record.record_type == "run"),
+                        )
+                elif metadata:
+                    _blocked("nested_manifest_metadata")
+                for record in page.records:
+                    if record.record_type == "run":
+                        continue
+                    if record.record_type != "manifest_entry":
+                        _blocked("manifest_entry")
+                    entry = record.data
+                    async for leaf in verify(
+                        entry["descriptor"],
+                        section=entry["section"],
+                        scope=entry["scope"],
+                        tenant_id=entry["tenant_id"],
+                        page_index=entry["page_index"],
+                        depth=depth + 1,
+                        record_count=entry["record_count"],
+                    ):
+                        yield leaf
+
+            async for leaf in verify(descriptor):
+                yield leaf
+        memberships.finish()
+        permissions.finish()
+        physical.finish()
+        structural.finish()
+
+    async def _tenant(self, session, pages, source_inventory, permission_planner, tenant, identity, planned_at):
+        context = await source_inventory.aprepare_tenant_context(session, **identity)
+        memberships = MembershipInventoryVerifier()
+        retained_creators = {}
+        liveness, liveness_pending, liveness_operations = {}, [], {}
+        async for section, record in self.preflight.aiter_tenant(
+            session, permission_planner=permission_planner, planned_at=planned_at, retain_rootless_files=True
+        ):
+            if record.record_type == "resource_mode":
+                data = record.data
+                liveness_pending.append((data["resource_type"], data["resource_id"]))
+                if data["operation_id"] is not None:
+                    liveness_operations[data["resource_type"], data["resource_id"]] = (
+                        data["operation_id"],
+                        data["version"],
+                    )
+            if len(liveness_pending) == 200 or (record.record_type == "permission_plan" and liveness_pending):
+                retained_deletes = []
+                liveness.update(
+                    await self.raw.ainspect_permission_resource_liveness(
+                        session,
+                        resources=tuple(liveness_pending),
+                        operations=liveness_operations,
+                        retained_deletes=retained_deletes,
+                    )
+                )
+                for fact in retained_deletes:
+                    logger.warning(
+                        "F118 retains payload for {}:{} with finalized delete {}; permissions remain disabled",
+                        fact.resource_type,
+                        fact.resource_id,
+                        fact.operation_id,
+                    )
+                    await pages.add(
+                        "control", tenant, record_from_values("retained_permission_delete", **asdict(fact)), kind="plan"
+                    )
+                liveness_pending.clear()
+                liveness_operations.clear()
+            if record.record_type == "permission_plan":
+                data = record.data
+                record = record_from_values(
+                    "permission_plan",
+                    **data,
+                    restore_missing_markers=liveness[data["resource_type"], data["resource_id"]],
+                )
+            kind = (
+                "plan"
+                if section in {"conversion", "permission_namespace"} or record.record_type in RETENTIONS
+                else "baseline"
+            )
+            if record.record_type in {CREATOR_RETENTION, "historical_resource_creator_retention"}:
+                retained_creators[record.data["space_id"]] = record.data["creator_user_id"]
+            elif record.record_type == FILE_RETENTION:
+                await source_inventory.sharing_reader.aassert_no_file_tuples(
+                    session, tenant, file_ids=(record.data["file_id"],)
+                )
+            memberships.observe(kind=kind, section=section, tenant_id=tenant, record=record)
+            await pages.add(section, tenant, record, kind=kind)
+        memberships.finish()
+        header, refs = None, []
+        creators, creator_records = {}, {}
+        source_headers = {}
+        pending_creators = {}
+        batch = []
+
+        def finish_source():
+            if header is not None and (
+                header.reference_count != len(refs) or header.reference_digest != reference_set_digest(tuple(refs))
+            ):
+                _blocked("source_reference_set")
+
+        def retained(row):
+            from bisheng.knowledge.application.unification_structural_retention import (
+                retained_invalid_assistant_creator,
+            )
+
+            if type(row) is RootInventoryRecord and retained_invalid_assistant_creator(
+                row, source_headers.get(row.root_key)
+            ):
+                return True
+            return (
+                type(row) is RootInventoryRecord
+                and row.root_key.source_type.value == "knowledge"
+                and row.root_key.source_id.isdecimal()
+                and retained_creators.get(int(row.root_key.source_id)) == row.creator_id
+            )
+
+        async def consume(items):
+            wanted = tuple(
+                sorted(
+                    {row.creator_id for row in items if type(row) is RootInventoryRecord and row.creator_id is not None}
+                    - creators.keys()
+                )
+            )
+            for offset in range(0, len(wanted), 200):
+                for fact in await self.preflight.controls.ainspect_users(
+                    session, user_ids=wanted[offset : offset + 200]
+                ):
+                    creators[fact.user_id] = fact.exists
+                    creator_records[fact.user_id] = fact
+                    await pages.add("control", tenant, record_from_row(fact))
+            for row in items:
+                if type(row) is RootInventoryRecord and row.creator_id is not None:
+                    if row.creator_id not in creators:
+                        _blocked("source_creator_fact_missing")
+                    if not creators[row.creator_id] and row.root_key.source_type.value == "workflow_version":
+                        from bisheng.knowledge.application.unification_structural_retention import (
+                            workflow_creator_retention,
+                        )
+
+                        proof = workflow_creator_retention(row, record_from_row(creator_records[row.creator_id]).data)
+                        await pages.add("control", tenant, proof, kind="plan")
+                        logger.warning(
+                            "F118 retains workflow {} missing creator {}; no account or grant is created",
+                            row.root_key.source_id,
+                            row.creator_id,
+                        )
+                    elif not creators[row.creator_id] and not retained(row):
+                        if (
+                            row.root_key.source_type.value == "assistant"
+                            and row.retained_version_count == 1
+                            and row.root_key not in source_headers
+                        ):
+                            # Linked-source pages emit their roots before their
+                            # source headers. Defer only until that exact header.
+                            pending_creators[row.root_key] = row
+                        else:
+                            _blocked("source_creator_missing")
+                await pages.add("sources", tenant, row)
+
+        async for row in source_inventory.aiter_tenant_source_records(session, **identity, context=context):
+            if type(row) is SourceInventoryRecord:
+                from bisheng.resource_reference.application.contracts import SourceRootKey
+
+                key = row.source_key
+                root_key = SourceRootKey(key.tenant_id, key.source_type, key.source_id)
+                source_headers[root_key] = row
+                if root_key in pending_creators:
+                    if not retained(pending_creators[root_key]):
+                        _blocked("source_creator_missing")
+                    del pending_creators[root_key]
+            if type(row) is ReferenceInventoryRecord:
+                if header is None or row.source_key != header.source_key:
+                    _blocked("source_header_missing")
+                refs.append(ReferenceSpec(row.slot_key, row.target))
+                await pages.add("conversion", tenant, source_decision(row, tenant_id=tenant), kind="plan")
+            else:
+                finish_source()
+                header, refs = (row, []) if type(row) is SourceInventoryRecord else (None, [])
+            batch.append(row)
+            if len(batch) == 199:
+                await consume(batch)
+                batch = []
+        finish_source()
+        if batch:
+            await consume(batch)
+        if pending_creators:
+            _blocked("source_creator_missing")
+
+    async def arun(
+        self,
+        session: AsyncSession,
+        *,
+        run_id,
+        writer_contract_version,
+        environment,
+        backup_ref=None,
+        schema_ref=None,
+        freeze=True,
+        planned_at=None,
+        retain_preview_artifacts=False,
+        flow_binding=None,
+    ) -> FrozenGlobalInventoryResult:
+        if type(freeze) is not bool:
+            _blocked("freeze_mode")
+        inputs = {
+            "run_id": run_id,
+            "writer_contract_version": writer_contract_version,
+            "environment": environment,
+            "backup_ref": backup_ref,
+            "schema_ref": schema_ref,
+            "freeze": freeze,
+            "planned_at": planned_at,
+            "flow_binding": flow_binding,
+        }
+        if freeze or retain_preview_artifacts:
+            return await self._arun(session, **inputs)
+        # Reuse every native inventory/plan validator, swapping only the page
+        # sink. Nothing can persist these descriptors or use them to resume.
+        with preview_artifact_store(self.store) as store:
+            preview = copy(self)
+            preview.store = store
+            return await preview._arun(session, **inputs)
+
+    async def _arun(
+        self,
+        session: AsyncSession,
+        *,
+        run_id,
+        writer_contract_version,
+        environment,
+        backup_ref,
+        schema_ref,
+        freeze,
+        planned_at=None,
+        flow_binding=None,
+    ) -> FrozenGlobalInventoryResult:
+        self.runs._global_scope(session)
+        self.runs.assert_inventory_clean(session)
+        self.runs._identity(run_id, writer_contract_version)
+        from bisheng.knowledge.application.unification_inventory_codec import flow_binding_metadata
+
+        flow_binding = flow_binding_metadata(flow_binding or {})
+        if type(environment) is not str or not environment or len(environment) > 128:
+            _blocked("environment")
+        if (backup_ref is None) != (schema_ref is None):
+            _blocked("material_descriptor_pair_required")
+        if backup_ref is not None:
+            # Backward-compatible internal callers can retain their opaque
+            # legacy metadata. These are no longer backup attestations.
+            backup_ref, schema_ref = _descriptor(backup_ref), _descriptor(schema_ref)
+        transaction = TransactionIdentity.capture(session)
+
+        def current():
+            try:
+                transaction.assert_current(session)
+            except (TypeError, ValueError):
+                _blocked("transaction_changed")
+
+        identity = {"run_id": run_id, "writer_contract_version": writer_contract_version}
+        with session.no_autoflush:
+            await self.runs.aschema_precheck(session)
+            from bisheng.knowledge.domain.repositories.unification_task_repository import UnificationTaskRepository
+
+            # Business cutover/tombstone consistency, not Celery consumption.
+            await UnificationTaskRepository().avalidate_migration_idle(session)
+            tenant_ids = await self.runs.alist_actual_tenant_ids(session)
+            lookup = self.runs.aget_global_freeze if freeze else self.runs.aget_global_freeze_readonly
+            existing = await lookup(session, **identity, tenant_ids=tenant_ids)
+            if existing is not None:
+                if not freeze:
+                    _blocked("preview_requires_new_run")
+                if flow_binding:
+                    content = await self.store.aload_canonical(existing.plan_ref, run_id=run_id, kind="plan")
+                    page = decode_inventory_page(
+                        content,
+                        run_id=run_id,
+                        section="manifest",
+                        scope="global",
+                        tenant_id=None,
+                        page_index=0,
+                        kind="plan",
+                    )
+                    original = [row.data for row in page.records if row.record_type == "run"]
+                    if len(original) != 1 or flow_binding_metadata(original[0]) != flow_binding:
+                        _blocked("frozen_upgrade_flow_changed")
+                await self._verify_frozen(
+                    existing, environment=environment, backup_ref=backup_ref, schema_ref=schema_ref, current=current
+                )
+                return existing
+            await self.raw.avalidate_history_prepared(session)
+            if not callable(self.reader_factory) or not isinstance(self.store, UnificationArtifactStore):
+                raise ReferenceCoverageNotReadyError(reason="migration_required_native_ports_missing")
+            await self.raw.avalidate_global_orphans(session)
+            await self.raw.avalidate_registered_source_tenants(session)
+            await self.preflight.resources.avalidate_global_integrity(session, retain_rootless_files=True)
+            await self.preflight.controls.avalidate_global_integrity(session)
+            retained_identity = await identity_retention.validate(session, repository=self.permissions)
+            catalog = await self.permissions.aload_catalog_baseline(session, environment=environment)
+            target_checksum = target_authorization_model_checksum()
+            catalog_plan = build_catalog_retirement_plan(
+                **identity,
+                before=catalog,
+                target_model_checksum=target_checksum,
+                namespace_type_mappings=(("knowledge_library", "knowledge_space"),),
+            )
+            permission_planner = ResourceRetirementPlanner(catalog_plan=catalog_plan)
+            pages = _Pages(self.store, run_id, current)
+            for row in (catalog.release, catalog.authorization, *catalog.actions, *catalog.models):
+                await pages.add("catalog", None, record_from_row(row))
+            for row in (*catalog_plan.after_actions, *catalog_plan.after_models):
+                await pages.add("catalog", None, record_from_row(row), kind="plan")
+            for record in catalog_namespace_records(permission_planner):
+                await pages.add("permission_namespace", None, record, kind="plan")
+            await pages.finish()
+            async with self.reader_factory(catalog) as reader:
+                if not isinstance(reader, PinnedMigrationPermissionReader) or reader._pin != catalog.authorization:
+                    _blocked("actual_pinned_reader_required")
+                from bisheng.knowledge.application.unification_tuple_sort import stable_original_tuples
+
+                async with aclosing(stable_original_tuples(reader.aiter_original_tuples(), current=current)) as facts:
+                    async for fact in facts:
+                        if type(fact) is not OriginalTupleFact:
+                            _blocked("original_tuple_type")
+                        await pages.add(
+                            "fga",
+                            None,
+                            record_from_values("fga_tuple", user=fact.user, relation=fact.relation, object=fact.object),
+                        )
+                source_args = {}
+                if self.read_ports is not None:
+                    source_args["knowledge_targets"] = self.read_ports.knowledge_targets
+                    if getattr(self.read_ports, "original_state", None) is not None:
+                        source_args["original_state"] = self.read_ports.original_state
+                source_inventory = UnificationSourceInventory(repository=self.raw, sharing_reader=reader, **source_args)
+                planned_at = planned_at if planned_at is not None else unification_now().replace(microsecond=0)
+                for tenant in tenant_ids:
+                    with tenant_execution_scope(tenant):
+                        await self._tenant(
+                            session, pages, source_inventory, permission_planner, tenant, identity, planned_at
+                        )
+                        await pages.finish()
+            # Operators stop all writers/consumers before M2. Migration does
+            # not infer downtime from Celery SQL statuses or inspect Redis
+            # broker/pidbox contents. Old frozen task pages remain readable.
+            await pages.finish()
+            common = {
+                "preparation_policy_version": 3,
+                "physical_inventory_policy": "bindings_only",
+                "writer_contract_version": writer_contract_version,
+                "environment": environment,
+                "tenant_count": len(tenant_ids),
+                "tenant_inventory_digest": digest(tenant_ids),
+                "backup_ref": backup_ref,
+                "schema_ref": schema_ref,
+            }
+            common.update(retained_identity.metadata() if retained_identity is not None else {})
+            common.update(flow_binding)
+            if backup_ref is None:
+                common["external_material_policy"] = "not_required"
+            baseline = await pages.manifest(
+                "baseline",
+                record_from_values(
+                    "run",
+                    **common,
+                    catalog_digest=catalog.release.checksum,
+                    authorization_model_checksum=catalog.authorization.model_checksum,
+                    baseline_ref=None,
+                ),
+            )
+            plan = await pages.manifest(
+                "plan",
+                record_from_values(
+                    "run",
+                    **common,
+                    catalog_digest=catalog_plan.checksum,
+                    authorization_model_checksum=target_checksum,
+                    baseline_ref=baseline,
+                ),
+            )
+            current()
+            candidate = FrozenGlobalInventoryResult(run_id, writer_contract_version, tenant_ids, baseline, plan)
+            await self._verify_frozen(
+                candidate,
+                environment=environment,
+                backup_ref=backup_ref,
+                schema_ref=schema_ref,
+                current=current,
+                permission_planner=permission_planner,
+            )
+            self.runs.assert_inventory_clean(session)
+            if not freeze:
+                return candidate
+            return await self.runs.afreeze_all(
+                session, **identity, tenant_ids=tenant_ids, baseline_ref=baseline, plan_ref=plan
+            )

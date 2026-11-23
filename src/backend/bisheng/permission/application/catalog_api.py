@@ -71,6 +71,7 @@ from bisheng.permission.domain.services.catalog_service import (
     CatalogService,
     CatalogTupleChange,
 )
+from bisheng.permission.domain.services.maintenance_guard import acheck_transaction
 from bisheng.permission.domain.services.model_policy import (
     CustomModelSelection,
     ModelReferenceSummary,
@@ -154,6 +155,7 @@ class SqlCatalogState:
         with bypass_tenant_filter():
             async with self._session_factory() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     existing = (
                         (
                             await session.execute(
@@ -233,6 +235,7 @@ class SqlCatalogState:
         with bypass_tenant_filter():
             async with self._session_factory() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     release = (
                         (
                             await session.execute(
@@ -347,6 +350,7 @@ class SqlCatalogState:
         with bypass_tenant_filter():
             async with self._session_factory() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     draft = (
                         (
                             await session.execute(
@@ -501,6 +505,7 @@ class SqlCatalogState:
         with bypass_tenant_filter():
             async with self._session_factory() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     draft = (
                         (
                             await session.execute(
@@ -604,6 +609,7 @@ class SqlCatalogState:
         with bypass_tenant_filter():
             async with self._session_factory() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     rows = list(
                         (
                             await session.execute(
@@ -645,6 +651,7 @@ class SqlCatalogState:
         with bypass_tenant_filter():
             async with self._session_factory() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     await session.execute(
                         update(PermissionCatalogRelease)
                         .where(
@@ -675,6 +682,7 @@ class SqlCatalogState:
         with bypass_tenant_filter():
             async with self._session_factory() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     await session.execute(
                         update(PermissionCatalogRelease)
                         .where(PermissionCatalogRelease.id == context.draft.release_id)
@@ -724,6 +732,7 @@ class SqlCatalogState:
         with bypass_tenant_filter():
             async with self._session_factory() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     result = await session.execute(
                         update(PermissionCatalogRelease)
                         .where(
@@ -861,6 +870,8 @@ class SqlCatalogState:
                 )
             ).scalars()
         )
+        if any(row.kind != "CUSTOM" and row.retired_use_level_floor is not None for row in rows):
+            raise ValueError("retired-use floor belongs only to a controlled custom model")
         ids = [int(row.id) for row in rows if row.id is not None]
         pairs = (
             list(
@@ -894,6 +905,9 @@ class SqlCatalogState:
                 active=bool(row.active),
                 allow_same_level=bool(row.allow_same_level),
                 config_scope=row.config_scope,
+                visibility_only_resource_types=tuple(row.visibility_only_resource_types or ()),
+                visibility_level=row.visibility_level,
+                retired_use_level_floor=row.retired_use_level_floor,
             )
             for row in rows
             if row.kind == "CUSTOM"
@@ -972,6 +986,9 @@ class SqlCatalogState:
                 derived_level=model.derived_level,
                 active=model.active,
                 allow_same_level=model.allow_same_level,
+                visibility_only_resource_types=list(model.visibility_only_resource_types),
+                visibility_level=model.visibility_level,
+                retired_use_level_floor=model.retired_use_level_floor,
             )
             session.add(row)
             await session.flush()
@@ -1355,14 +1372,8 @@ class OpenFGACatalogProjector:
         for subject in TECHNICAL_MARKER_SUBJECTS[1:]:
             subject_active = active_by_subject[subject]
             if subject_active not in (frozenset(), frozenset({old_key})):
-                raise CatalogCommitUnknownError(
-                    f"Catalog active pointer for {subject} is {sorted(subject_active)}"
-                )
-        present_deletes = [
-            change
-            for change in deletes
-            if active_by_subject[change.user] == frozenset({old_key})
-        ]
+                raise CatalogCommitUnknownError(f"Catalog active pointer for {subject} is {sorted(subject_active)}")
+        present_deletes = [change for change in deletes if active_by_subject[change.user] == frozenset({old_key})]
         await self._client.write_tuples(
             writes=[
                 {
@@ -1401,11 +1412,7 @@ class OpenFGACatalogProjector:
         )
         prefix = "permission_catalog_release:"
         return {
-            subject: frozenset(
-                row["object"].removeprefix(prefix)
-                for row in rows
-                if row["object"].startswith(prefix)
-            )
+            subject: frozenset(row["object"].removeprefix(prefix) for row in rows if row["object"].startswith(prefix))
             for subject, rows in zip(TECHNICAL_MARKER_SUBJECTS, pages, strict=True)
         }
 
@@ -1419,6 +1426,13 @@ class OpenFGACatalogProjector:
                     f"Catalog active pointer for {subject} differs: {sorted(subject_active)}"
                 )
         return canonical
+
+    @staticmethod
+    def expected_stage_tuples(draft: CatalogDraftSnapshot) -> tuple[tuple[str, str, str], ...]:
+        """The original Catalog graph, without changing its active pointer."""
+        return tuple(
+            (row["user"], row["relation"], row["object"]) for row in OpenFGACatalogProjector._expected_tuples(draft)
+        )
 
     @staticmethod
     def _expected_tuples(
@@ -1462,6 +1476,7 @@ class OpenFGACatalogProjector:
         with bypass_tenant_filter():
             async with self._session_factory() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     existing = set(
                         (
                             await session.execute(
@@ -1510,6 +1525,7 @@ class OpenFGACatalogProjector:
         with bypass_tenant_filter():
             async with self._session_factory() as session:
                 async with session.begin():
+                    await acheck_transaction(session)
                     await session.execute(
                         update(PermissionCatalogProjectionTuple)
                         .where(
@@ -1529,7 +1545,6 @@ class F048CatalogApi:
             "name": "协作编辑",
             "action_codes": (
                 "download",
-                "use",
                 "rename",
                 "edit",
                 "create_folder",
@@ -1549,7 +1564,6 @@ class F048CatalogApi:
             "name": "权限管理",
             "action_codes": (
                 "download",
-                "use",
                 "rename",
                 "edit",
                 "create_folder",
@@ -1757,6 +1771,8 @@ class F048CatalogApi:
                     "allow_same_level": model.allow_same_level,
                     "action_codes": list(model.selected_action_codes),
                     "version": row.version,
+                    "visibility_only_resource_types": list(model.visibility_only_resource_types),
+                    "visibility_level": model.visibility_level,
                 }
                 for model in snapshot.model_release.models
             ],
@@ -1797,6 +1813,9 @@ class F048CatalogApi:
                 active=model.active,
                 allow_same_level=model.allow_same_level,
                 config_scope=model.config_scope,
+                visibility_only_resource_types=model.visibility_only_resource_types,
+                visibility_level=model.visibility_level,
+                retired_use_level_floor=model.retired_use_level_floor,
             )
             for model in before.model_release.models
             if model.kind == "CUSTOM"

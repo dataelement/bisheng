@@ -1,0 +1,117 @@
+version: v2
+title: 示例集团 2026 年度工作汇报（政企红色参考稿）
+size:
+- 960
+- 540
+theme:
+  colors:
+    red: '#8B1A2B'
+    deepred: '#6E1422'
+    accent: '#A8232F'
+    gold: '#C9A84C'
+    lightgold: '#E8D6A0'
+    surface: '#F8F3EC'
+    white: '#FFFFFF'
+    ink: '#2B2B2B'
+    muted: '#6B6B6B'
+    rule: '#E3D6C3'
+  textStyles:
+    title:
+      fontFamily:
+        latin: Arial
+        ea: Microsoft YaHei
+      fontSize: 26
+      color: $red
+      lineHeight: 1.15
+      align:
+      - left
+      - top
+      bold: true
+    lead:
+      fontFamily:
+        latin: Arial
+        ea: Microsoft YaHei
+      fontSize: 15
+      color: $ink
+      lineHeight: 1.3
+      align:
+      - left
+      - top
+      bold: true
+    body:
+      fontFamily:
+        latin: Arial
+        ea: Microsoft YaHei
+      fontSize: 13
+      color: $ink
+      lineHeight: 1.4
+      align:
+      - left
+      - top
+    label:
+      fontFamily:
+        latin: Arial
+        ea: Microsoft YaHei
+      fontSize: 12
+      color: $muted
+      lineHeight: 1.3
+      align:
+      - left
+      - top
+    meta:
+      fontFamily:
+        latin: Arial
+        ea: Microsoft YaHei
+      fontSize: 10
+      color: $muted
+      lineHeight: 1.2
+      align:
+      - left
+      - top
+    kicker:
+      fontFamily:
+        latin: Arial
+        ea: Microsoft YaHei
+      fontSize: 11
+      color: $gold
+      lineHeight: 1.2
+      align:
+      - left
+      - top
+      bold: true
+  tableStyles:
+    gov-table:
+      cellStyle:
+        fontFamily:
+          latin: Arial
+          ea: Microsoft YaHei
+        fontSize: 12
+        color: $ink
+        fill:
+          type: solid
+          color: $white
+        border:
+          color: $rule
+          width: 0.8
+      firstRowStyle:
+        bold: true
+        color: $white
+        fill:
+          type: solid
+          color: $red
+pages:
+- pages/01.page
+- pages/02.page
+- pages/03.page
+- pages/04.page
+- pages/05.page
+- pages/06.page
+- pages/07.page
+- pages/08.page
+- pages/09.page
+- pages/10.page
+- pages/11.page
+- pages/12.page
+template:
+  id: gov-red
+  name: Gov Red

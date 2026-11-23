@@ -50,6 +50,127 @@
       "empty": "文件为空",
       "unsupported": "此文件类型不支持预览",
       "fileExpired": "文件已失效，请上传新文件后重试"
+    },
+    "selection": {
+      "loadMore": "加载更多"
+    },
+    "version": {
+      "dialog_title": "版本管理",
+      "section_recommendations": "推荐关联",
+      "section_search": "搜索文档",
+      "search_placeholder": "按文档名搜索",
+      "no_recommendations": "暂无推荐",
+      "no_search_results": "没有匹配的文档",
+      "similarity_label": "相似度",
+      "btn_link_as_new_version": "关联为新版本",
+      "btn_dismiss": "不关联",
+      "confirm_link_title": "确认关联",
+      "confirm_link_description": "「{{name}}」将作为「{{target}}」的新版本。原主版本将降为历史版本,确认继续?",
+      "confirm_merge_description": "「{{target}}」将作为「{{name}}」的新版本。原主版本将降为历史版本,确认继续?",
+      "similar_dialog_title": "处理相似文档",
+      "similar_dialog_empty": "暂无待处理的相似文档",
+      "similar_dialog_right_empty": "选择左侧文件查看推荐",
+      "toast_link_success": "关联成功",
+      "toast_dismiss_success": "已标记处理",
+      "header_process_similar_label": "处理相似文档",
+      "pill_similar": "相似文档",
+      "similar_dialog_subtitle": "{{count}} 个待处理文件",
+      "pending_row_recommend_count": "{{count}} 个推荐文档",
+      "section_current_file": "当前文件",
+      "current_file_recommend_pill": "{{count}}个推荐文档",
+      "section_recommendations_subtitle": "选择后,当前文件将作为该文档的新版本。",
+      "section_recommendations_subtitle_merge": "选择后，选择的文件将作为当前文档的主版本。",
+      "section_search_subtitle": "输入关键词查找当前知识空间内已有逻辑文档,选中后可关联为新版本。",
+      "search_button": "搜索",
+      "section_dismiss": "不关联推荐文档",
+      "section_dismiss_subtitle": "当前文件保持现有状态,不写入推荐的版本链。",
+      "btn_close": "关闭",
+      "primary_version_label": "当前主版本 V{{version}}",
+      "primary_version_uploader": "当前主版本 V{{version}} · 上传人 {{name}}",
+      "cancel": "取消",
+      "confirm": "确认",
+      "close": "关闭",
+      "unknown": "未知",
+      "error": "错误",
+      "retry": "重试",
+      "loading": "加载中",
+      "uncertain": "操作未确认完成。请关闭后刷新列表核对结果，不要重复提交；已上传的独立文件会保留。",
+      "history": {
+        "title": "版本历史",
+        "document": "逻辑文档",
+        "document_code": "文档编码",
+        "current_primary": "当前主版本",
+        "primary_badge": "主版本",
+        "columns": {
+          "version": "版本",
+          "filename": "原始文件名",
+          "file_code": "文件编码",
+          "uploader": "上传人",
+          "upload_time": "上传时间",
+          "parse_status": "解析状态",
+          "actions": "操作"
+        },
+        "status": {
+          "parsing": "解析中",
+          "success": "成功",
+          "failed": "失败",
+          "processing": "处理中",
+          "queueing": "排队中",
+          "timeout": "超时",
+          "violation": "违规"
+        },
+        "empty": "—",
+        "uncertain": "操作结果未确认，请关闭弹窗并刷新列表核对结果。",
+        "actions": {
+          "preview": "预览",
+          "download": "下载",
+          "primary": "设为主版本",
+          "delete": "删除"
+        },
+        "confirm": {
+          "primary": {
+            "title": "切换主版本",
+            "description": "V{{version}} 将成为主版本,RAG 检索和对话立即生效。"
+          },
+          "delete": {
+            "title": "删除历史版本",
+            "description": "V{{version}} 将被永久删除,无法恢复。"
+          }
+        },
+        "feedback": {
+          "primary": "已切换主版本",
+          "delete": "已删除版本"
+        },
+        "download_feedback": {
+          "no_url": "下载链接获取失败",
+          "failed": "下载失败"
+        }
+      }
+    },
+    "move": {
+      "title": "移动到",
+      "search_placeholder": "输入知识空间名称进行搜索",
+      "current_space_tag": "（当前）",
+      "department_spaces": "部门知识空间",
+      "created_by_me": "我创建的",
+      "joined_by_me": "我加入的",
+      "no_spaces": "暂无可移动到的知识空间",
+      "empty_folder": "此文件夹为空",
+      "move_here": "移动到此",
+      "cancel": "取消",
+      "loading": "加载中…",
+      "load_failed": "加载失败",
+      "retry": "重试",
+      "close": "关闭",
+      "expand": "展开{{name}}",
+      "collapse": "收起{{name}}",
+      "clear_search": "清除搜索",
+      "available_spaces": "可访问的知识空间",
+      "review_title": "确认移动",
+      "review_impact": "将移动 {{count}} 个对象及其版本。将清除的元数据字段：{{fields}}。原空间标签不会带入，继承权限按新位置生效。",
+      "no_removed_fields": "无",
+      "success": "已移动 {{count}} 项",
+      "cancel_all": "取消移动"
     }
   },
   "hostedApp": {
@@ -156,5 +277,16 @@
       "source_untitled": "暂无标题"
     },
     "com_msg_source_reference": "参考来源"
+  },
+  "cloudWorkbenches": {
+    "title": "云端工作台",
+    "description": "使用企业托管的应用，与团队共享实时数据。工作台与企业应用使用同一套账号、权限和发布流程。",
+    "refresh": "刷新",
+    "back": "返回应用",
+    "failed": "云端工作台加载失败，请重试或联系管理员确认服务端已支持此功能。",
+    "open": "打开工作台",
+    "empty": "暂无可使用的云端工作台。请在毕昇桌面端通过「制作我的工作台」开始创建，或联系应用负责人授权。",
+    "more": "加载更多",
+    "guide": "在线开发规范"
   }
 }

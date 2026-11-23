@@ -2,6 +2,88 @@
 
 This directory contains manual maintenance and migration scripts for the backend.
 
+## Restore omitted Root model sharing
+
+Run from `src/backend` using the live service `config`. This tool recognizes the
+legacy Root switch through actual sharing recipients and honors newer explicit
+OFF records. Preview never writes grants or receiving policies:
+
+```bash
+python scripts/repair_model_sharing.py --operator-id 191 --manifest /tmp/model-sharing.json
+python scripts/repair_model_sharing.py --operator-id 191 --manifest /tmp/model-sharing.json --apply --provider-ids 337,358
+```
+
+Apply requires explicit provider IDs from that preview and a currently authorized
+Root global super administrator. The original sharing Owner checks the preview's
+intent/version under the provider lock, then journals and projects missing grants.
+Only absent receiving visibility policies are initialized; existing restrictions,
+prices, defaults, provider credentials and pending operation records are preserved.
+Results include remaining coverage gaps and conflicts. Failed commands retain
+their original reservation and frozen manifest; do not delete or re-sign them.
+
+For an independently confirmed **unstarted** historical preparation, the preview
+may contain `unstarted_preparation` with its immutable fingerprint. Only with
+explicit operational authorization may that exact preparation be retired:
+
+```bash
+python scripts/repair_model_sharing.py --operator-id 191 --manifest /tmp/model-sharing.json --apply --provider-ids 12 --abandon-preparing
+```
+
+This refuses any changed fingerprint, nonempty frozen execution, receiving
+receipt or existing projection journal. The terminal `ABANDONED` record retains
+its original actor, command, request hash and plan digest, with the cancelling
+actor/fingerprint audited in its acknowledgement. A delayed worker or journal
+cannot execute it. Re-preview before repairing grants; cancellation and sharing
+are separate commands. It never cancels a started/reserved projection.
+
+## Single-version document path recovery
+
+Run `python scripts/repair_knowledge_document_path.py --tenant-id T --space-id S --file-id F`
+to preview a legacy logical-document/physical-file path mismatch. This command only accepts
+one primary version, an idle space/file, a valid folder chain and a CURRENT permission parent
+that already agrees with the physical file. It never moves files, rewrites indexes or grants access.
+Apply the inspected plan using `--apply --expected-digest HASH --backup /private/new-backup.json`.
+The backup must be new and is saved with mode 0600 before writing; changed facts reject the apply.
+Multi-version, ambiguous or permission-inconsistent data requires a separate recovery plan.
+
+## Redis usage and Linsight processing indexes
+
+`backfill_redis_processing_indexes.py` is the explicit upgrade step for old DSH
+usage streams and Linsight checkpoints. Normal consumers, including their first
+invocation, never enumerate the Redis DB. From `src/backend`, export the same
+`config` as the target service and use the new image/code for this command:
+
+1. Close ingress and stop all old API, Celery Workers, Beat and Linsight Workers.
+   Keep Redis and the configured infrastructure available. Do not clear event
+   streams, broker queues, consumer groups, request ledgers or checkpoint data.
+2. Preview, apply, then verify while all producers/consumers remain stopped:
+
+```bash
+python scripts/backfill_redis_processing_indexes.py
+python scripts/backfill_redis_processing_indexes.py --apply --services-stopped
+python scripts/backfill_redis_processing_indexes.py --verify
+```
+
+3. Require `ready: true` and exit code 0 before starting new consumers. On error,
+   keep the services stopped, investigate and repeat the command; partial index
+   additions are safe to repeat. Never discard events to bypass a migration error.
+4. Start the new Celery Worker and Beat to drain the registered usage backlog.
+   Confirm pending work has cleared and SQL projection is correct before starting
+   Linsight/API and reopening traffic. Do not run old and new code together.
+
+The default inventories and checks indexes without writing them; `--verify`
+returns nonzero for incomplete coverage. Apply refuses to run without the stopped
+service confirmation. The command initializes/closes service infrastructure
+clients. It registers every retained usage stream, schedules pending/unread work
+and invalidates old scheduling owners only. Payloads, stream IDs, group offsets,
+ACKs, request ledgers, counters, SQL and checkpoint TTLs are preserved. Drained
+streams are indexed for inspection without being unnecessarily queued again.
+Checkpoint completeness markers are published only after indexing old writes.
+Run against every service Redis DB being upgraded; usage migration is enabled
+when that service's DSH setting is enabled. Redis data/index restores require the
+same stopped-service verification. Fresh installs maintain indexes from their
+first writes and need no legacy scan.
+
 ## Built-in knowledge retrieval tool
 
 `register_work_knowledge_tool.py` completes the Work knowledge-search upgrade in
@@ -44,6 +126,60 @@ Verify single-space retrieval and K1/K2 multi-selection with distinct source mar
 and citations in Work. Keep the account enable switch and document permissions in
 the acceptance path. Code deployment, successful data upgrade, and real Work task
 acceptance are separate delivery states.
+
+## Departed membership visibility repair
+
+`repair_f048_membership_orphan.py` cleans the exact direct `visible` tuple left
+by the membership reactivation version bug. Deploy the code fix first. Run from
+`src/backend` with the same `config` as the live service:
+
+```bash
+python scripts/repair_f048_membership_orphan.py \
+  --tenant-id 1 --resource-key knowledge_space:14 --user-id 10
+```
+
+The default is read-only. The JSON plan contains the Store/model, resource
+version, historical source evidence, exact tuple selection and `plan_checksum`.
+It requires no ACTIVE business membership, only INACTIVE unprotected membership
+sources, and evidence of a RETIRED projection with an older source version.
+All current SQL source contributions are checked before selecting an orphan.
+An ACTIVE persisted contribution (including protected/non-Grant sources) also
+prevents deletion. Other users' tuples are never selected.
+
+For apply, back up the business and OpenFGA databases, stop **all permission
+writers using this Store**, including API, workers and periodic jobs, then wait
+for F048 heartbeats to expire (default TTL 45 seconds). Use an isolated maintenance
+process with the same config, mounts, network and installed backend image;
+copying this script is sufficient because it reuses the shipped reconciliation
+module. Do not restart the normal API entrypoint to run maintenance.
+
+```bash
+python scripts/repair_f048_membership_orphan.py \
+  --tenant-id 1 --resource-key knowledge_space:14 --user-id 10 \
+  --apply --operator-id 1 --confirm-store-id <preview-store-id> \
+  --confirm-plan-checksum <preview-plan-checksum>
+```
+
+Apply repeats the preview, checks Store/plan confirmations, refuses live runtime
+heartbeats or nonterminal projections, and deletes through the durable F048
+projection ledger. It verifies that the selected tuple disappeared and all other
+direct visible tuples stayed unchanged. The resource version advances through
+the normal finalizer; retired source records and memberships remain as history.
+Repeated successful apply is a no-op. A changed plan must be previewed again.
+
+Resume the stopped services and verify the departed ordinary user's joined list
+and resource/file visibility, as well as the creator's access. No full-Store
+reconcile, model publication, Catalog cutover or table deletion is performed.
+For another confirmed case, repeat with its exact tenant/resource/user; channels
+use `--resource-key channel:<id>`. The script intentionally does not infer that
+every unsupported relation was caused by this bug.
+
+Exit codes: `0` success/read-only preview; `2` invalid arguments; `3` a safety or
+data invariant blocked the operation; other nonzero codes indicate runtime failure.
+Retain the preview, database backups and projection operation IDs. On a partial
+failure, keep writers stopped and recover the recorded operation with the existing
+projection recovery procedure; do not restore a tuple without reviewing current
+authorization sources.
 
 ## Diagnostic Scripts
 
@@ -95,6 +231,82 @@ The script never writes to the database. Exit `0` means reflection found the
 column, exit `2` confirms a catalog/reflection mismatch, exit `3` means the
 column is absent from the DM catalog, and exit `4` means the diagnostic itself
 failed.
+
+## Model Configuration Upgrade
+
+### `backfill_model_pricing.py`
+
+F016 upgrade step: gives every existing LLM model a price (`llm_model.config.pricing`) with the
+same rule as saving a model in the admin UI — the built-in catalog price when the provider type and
+model name match, otherwise 0 (free) — then gates the upgrade. Existing prices are never touched.
+Run it after `alembic upgrade head` while the service is still stopped; the full sequence is in
+`features/v3.1.0-beta1/016-credit-pricing/runbook.md`.
+
+```bash
+cd src/backend/
+bash scripts/backfill_model_pricing.sh          # dry run: list what each model would get
+bash scripts/backfill_model_pricing.sh apply    # write prices for models that have none
+bash scripts/backfill_model_pricing.sh check    # gate: exit 0 passed, 2 something is missing
+```
+
+Models marked `default 0 (free)` in the dry run include paid cloud models whose names the catalog
+does not know (for example Volcengine Ark endpoint IDs); they stay free until an admin sets a price.
+
+Skipping the step does not stop conversations: a model without a price is billed as free (0 credits,
+with a warning log) and shows "price missing" in the admin table until it is backfilled or priced.
+An invalid stored price (fails the price schema) is treated the same way: the dry run lists it as
+`replace invalid` with its old value, `apply` replaces it, and `check` fails until it is fixed.
+
+### `migrate_model_token_configs.py`
+
+Convert legacy LLM `config.max_tokens` into advanced `config.user_kwargs` while
+preserving the effective limit and other parameters. Ollama writes `num_ctx`;
+other LLM providers write `max_tokens`. Model IDs, status, tenant ownership and
+provider daily-call quotas retain their values.
+
+Run from `src/backend/` with the live service's `config` environment:
+
+```bash
+python scripts/migrate_model_token_configs.py --all-tenants
+python scripts/migrate_model_token_configs.py --tenant-id 1
+```
+
+The CLI explicitly registers and initializes only its own database manager in
+the shared application context, using the service settings. It closes that
+manager in the same event loop on success, failure or cancellation; it does
+not start the FastAPI lifespan or initialize unrelated storage clients.
+
+Dry-run is the default. After draining model calls and stopping API/Worker/
+Linsight configuration writers, use the new backend runtime and a fresh private
+backup path to apply. Complete the target schema upgrade first:
+
+```bash
+python scripts/migrate_model_token_configs.py --all-tenants --apply \
+  --backup-file /secure-backups/model-tokens-before.json
+```
+
+Any invalid legacy configuration blocks the entire batch. The script creates
+an exclusive mode-0600 backup before writing; an existing backup path blocks
+writes. Re-running migrated rows is a no-op. Reports contain identifiers and
+counts; protect the backup because model configuration can contain credentials.
+Restart API/Worker/Linsight after migration to clear process-local model caches.
+Never delete daily-call Redis counters during this upgrade.
+
+To restore from a reviewed backup in the same maintenance window:
+
+```bash
+python scripts/migrate_model_token_configs.py --all-tenants \
+  --restore-backup /secure-backups/model-tokens-before.json
+python scripts/migrate_model_token_configs.py --all-tenants --apply \
+  --restore-backup /secure-backups/model-tokens-before.json \
+  --backup-file /secure-backups/model-tokens-before-restore.json
+```
+
+Restore checks the saved identity and post-upgrade configuration before writing.
+A later edit or a missing model blocks the batch; newly created models stay
+intact. Fix reported conflicts before retrying. MySQL/DM8 JSON conversion runs
+in Python; this procedure performs data maintenance outside Alembic revisions.
+See [the feature upgrade runbook](../../../features/v3.0.0/model-discovery/upgrade.md).
 
 ### `verify_mcp_stdio_blocked.py`
 
@@ -1343,6 +1555,15 @@ check. Only missing digests are filled; original names and bodies remain unchang
 Historical exact-name lookup is incomplete until this operation finishes. No fuzzy
 query fallback or automatic startup backfill is performed.
 
+## 启用 DSH 前补齐模型可见范围
+
+不部署 DSH 时，没有可见范围记录的对话模型默认全员可见；启用 DSH 后，没有记录的模型对所有人不可见。启用 DSH 之前，对每个租户运行一次，为缺少记录的对话模型（本租户及 Root 共享、含已下线）补一条「全员可见」记录；只新增，不改已有记录。
+
+```bash
+python scripts/backfill_model_visibility_everyone.py --tenant-id 1                              # 预览
+python scripts/backfill_model_visibility_everyone.py --tenant-id 1 --apply --actor-user-id 1    # 写入
+```
+
 ## DSH audit presentation preparation
 
 Run from `src/backend/` using the live service config. `python scripts/backfill_dsh_audit_presentation.py --tenant-id 1` previews one bounded batch; add `--apply --max-batches 20` to prepare historical presentation statuses and mark conversation projection. Resume with the reported `--after-request-id`, then rerun from the start to catch late rows. The independent audit inspection task projects groups; no model bodies, policy or keys are changed.
@@ -1419,3 +1640,257 @@ establish those guarantees.
 ## 工具与技能全员授权升级（f048-v6）
 
 `migrate_capability_authorization.py` 将现有内置工具及企业技能的全员可用状态转换为所属租户成员的可撤销 Grant。默认 dry-run，apply 需要 Store 确认与操作人；在发布授权模型后、业务进程停止期间执行。重复执行保留管理员的撤销结果。完整顺序见 [升级说明](../../../features/local/tools-skills-authorization/upgrade.md)。
+
+### F009 managed tenant inventory (read-only)
+
+From `src/backend/`: `python scripts/managed_tenant_preflight.py --tenant-id <T> [--user-id <id>] [--limit 100]`. Lists current role eligibility differences and pending resource/copy associations within the specified scope. There is no apply mode. Historical READY defaults are not proof of complete permission projections; verify against the existing permission inventory before rollout. Resolve pending/uncertain copies manually before downgrading the four columns.
+
+## F118 knowledge-space unification
+
+Existing channel sync selections with the old picker's `new-folder-<digits>`
+folder ID retain their original SQL configuration. M2 logs the channel/sync IDs
+requiring manual rebind, skips only that invalid folder reference, and keeps
+space/other real references. The selected invalid sync item cannot deliver to
+the space root; users must remove or rebind it in the channel configuration.
+Other malformed IDs and explicitly saved new selections remain strict.
+
+### Legacy historical preparation (existing plans only)
+
+For the normal upgrade use the unified dry-run/apply entry below. This section
+retains the standalone script's original plan compatibility and repair details;
+it is not a prerequisite command for a new unified Run.
+
+`prepare_f118_history.py` backs and cleans proven orphan files/documents/versions,
+invalid tags/members, repairs parent ownership/depth and unmapped empty-resource
+embedding names, and purges invalid derived permissions. Exact orphan MinIO
+objects and ES/Milvus slices are backed before deletion; live index bindings,
+shared stores, audit, roles and queues remain. Operators stop every writer/consumer.
+
+Retired PRIVATE libraries (`Knowledge.type=2`) retain their existing rows and
+permissions. History preparation does not require new permission modes or repair
+depth/parent projections for their files/documents. Valid ownership/parent-chain
+checks remain; this is not permission to discard malformed or foreign rows.
+
+```bash
+cd src/backend
+export config=config.yaml
+export PYTHONPATH=./
+python scripts/prepare_f118_history.py --plan /secure/upgrade/f118-history.json
+python scripts/prepare_f118_history.py --plan /secure/upgrade/f118-history.json --apply --operator-id 7
+```
+
+Preview saves a private, checksummed selected-row/FGA backup and plan using
+exclusive creation. Apply and retries read exactly that plan; never overwrite
+it with a new baseline. The adjacent `.events.jsonl` retains execution events.
+An active frozen Run is rejected. Ambiguous ownership, changed facts, unknown
+types or remaining live downstreams stop apply before repair. Preview/apply
+classify deterministic repairs, retained historical invalidity and blockers;
+the ordinary commands above require no per-row SQL edits or force option.
+Apply returns permission operation IDs; exit 2 reports unresolved blockers,
+and exit 3 means an error requiring the same plan to be inspected/resumed.
+Preview exit 0 does not certify migration readiness.
+
+Flat historical files whose Knowledge parent is globally absent and whose SQL,
+FGA and saved references contain no authorization/live contribution are retained
+when the original physical index is unknown. Their full rows enter the immutable
+new M2 baseline and are checked again during conversion/resume/Coverage. No index
+is guessed and no physical data is deleted for these retained records. Populated
+Knowledge resources with old embedding names retain the raw name and original
+index, with a source fingerprint and a `legacy_embedding_preserved` warning.
+The source is invalid for model execution until explicitly reconfigured to a
+lawful model. New resource creation remains strict; there is no default fallback.
+
+Successful old NORMAL-library files lacking every permission mirror, FGA edge and
+historical operation can initialize only their original parent's INHERIT mode
+through a native RESOURCE_CREATE ledger. No personal or everyone Grant is added.
+An existing FAILED_CLOSED GRANT_MUTATION with an intact original ledger, matching
+Store/model and original version fence uses native checksum-bound forward recovery.
+Changed evidence or a failed native recovery stops execution. All newly supported
+repairs remain tied to the exact saved plan and operator on retry. Older frozen
+Run materials are not rewritten or assigned the new retention policy.
+
+For a historical deleted resource whose saved plan contains only one of the two
+`permission_enabled` technical markers, apply can automatically forward-recover
+its own `history-delete` operation if strict OpenFGA deletion leaves it
+`FAILED_CLOSED`. Recovery verifies the original ledger/checksums, tenant, version,
+business absence, downstreams, mirrors and Catalog Store/model pin. It delegates
+only the remaining marker deletes to the native checksum-bound recovery service,
+verifies the complete frozen AFTER state, then continues derived cleanup. It does
+not restore missing markers or recover unrelated permission failures. New graph
+relations, changed fences/versions, a corrupted ledger, or a healthy original pair
+that later became mixed still stop execution.
+
+To resume such a failure, use the **updated script with the same saved plan and
+original operator ID**, repeating the apply command above. No new plan or manual
+SQL/OpenFGA edit is required. Completed operations reuse their original receipts;
+interruption after correction or during SQL finalization/cleanup resumes through
+the original ledger. Keep the plan, events and payload backups until the upgrade
+is verified. If recovery is refused, the CLI reports a safe reason code and, when
+available, the operation ID/status; investigate rather than replacing the plan.
+
+SQL evidence is saved before physical inspection in `.candidates.json`; exact
+payload backups use `.payloads/`. Missing original bindings/file identities stop
+cleanup; no whole-index deletion or guessed replacement is allowed. This selected
+evidence does not replace a full environment backup. See
+[implemented rules and complete flow](../../../docs/reviews/f118-confirmed-rules-implementation-20261113.md).
+
+Historical preparation reads business rows and permission modes in primary-key
+pages of 200. Its internal `f118_history_snapshot.py` helper stores complete row
+payloads and lookup indexes in private, disposable SQLite files; invoke the
+maintenance command above, not that helper. Set `TMPDIR` to a local disk with
+space for the complete JSON inventory and indexes. Actual repair can retain
+several snapshots simultaneously. Normal exit, exceptions and async cancellation
+remove them; a force-killed process can leave private temporary directories for
+operator cleanup. These files are not recovery evidence; retain the original
+plan/events/payload backups. No-op/replayed business repairs compare the complete
+digest without requesting write locks. Real repairs retain the locked recheck.
+
+### `repair_f118_folder_inheritance.py`
+
+Use only when an operator has explicitly confirmed that selected legacy folders
+with **no mode, Grants, visible-source rows or FGA tuples** should inherit their
+canonical parent. This is an optional repair for a reported history-preparation
+blocker, not a required upgrade stage or a backup-proof workflow. Stop all
+writers/consumers and finish any running history apply first; an active frozen
+F118 Run refuses this repair.
+
+Example IDs below are synthetic; replace them with the reviewed tenant/library,
+folder and operator IDs. Preview saves a NEW private selected-row/pin/parent plan:
+
+```bash
+python scripts/repair_f118_folder_inheritance.py \
+  --plan /app/data/upgrade/3.1.0-beta1/folder-inherit.json \
+  --tenant-id 101 --knowledge-id 10 \
+  --folder-id 50 --folder-id 51 --folder-id 52 --operator-id 7
+
+python scripts/repair_f118_folder_inheritance.py \
+  --plan /app/data/upgrade/3.1.0-beta1/folder-inherit.json \
+  --apply --confirm-inherit
+```
+
+Apply and retries use the same saved plan and operator. The script writes only
+the native `HISTORICAL_INHERIT_REPAIR` operation, its fenced mode and five
+parent/INHERIT/permission-enabled tuples per selected folder. It does not infer
+creator ownership or add people/role Grants. Native projection verification and
+finalization establish CURRENT; no SQL status is forced. Parent folders complete
+before children. An uncertain/failed operation resumes its original journal;
+later grants, parent changes, foreign modes/journals or a changed pin refuse it.
+
+The selection is bounded to 20 folders and 200 ancestor IDs, with at most 200
+distinct tenant keys per relevant permission table and 500 tuples per external
+parent. Tenant-index enumeration plus selected ranges preserve cross-tenant
+absence checks without repeatedly scanning large permission tables or loading
+all Grant/source payloads. Scope-limit failures stop rather than sample data.
+
+Keep the original `f118-history.json`, events and payload backups unchanged.
+If that original apply completed its selected cleanup but returned blocked
+missing modes, complete this explicit repair, then preview history preparation
+into a **different** file such as `f118-history-after-inherit.json`. Review its
+blocked/selected list and apply that new plan. Require `blocked=[]` and
+`preparation_complete=true` before starting M2. Do not rewrite the old plan's
+blocked list/checksum or perform this repair while an old apply is still running.
+
+### First installation before schema migration
+
+For a new installation, run `python scripts/initialize_installation.py --apply`
+from `src/backend/` with the service's config **before** `alembic upgrade head`.
+Both packaged entrypoints run this automatically. Source/systemd installations
+must use the same order. Without `--apply` the command is read-only.
+Only an empty database can acquire the durable pending installation marker.
+Interrupted schema creation is resumable; default Root, real empty Coverage and
+marker completion commit together before historical migrations can seed Root.
+Existing databases are left unchanged and missing Coverage requires the formal
+stopped-service migration below. Historical Alembic revisions are unchanged.
+
+### Formal stopped-service migration
+
+From `src/backend/`, with the service's exact `config`, completed schema upgrade,
+DBA-confirmed consistent backups, a persistent private data directory, and all
+business writers/consumers stopped:
+
+```bash
+python scripts/unify_knowledge_spaces.py --run-id maintenance-1 --dry-run
+python scripts/unify_knowledge_spaces.py --run-id maintenance-1 --apply --operator-id 7
+```
+
+Use a real active user's positive ID. The environment is discovered from the
+unique native CURRENT/ACTIVE release; `--environment` is an assertion. The first
+command checks the repair-after facts, complete SQL/permission plans and real
+six-source configuration/target/index closure without SQL, Run, FGA, Redis or
+remote artifact writes. Passing means exit 0, `can_apply=true`,
+`preflight_complete=true`, `ready=false`. It does not certify a completed migration.
+
+The second command consumes that exact plan, automatically prepares history,
+freezes the native baseline, converts SQL and permissions, registers/retire
+references, verifies the complete current universe and issues native Coverage.
+Only full success reports `ready=true`. Repeat the identical apply command after
+interruption; neither stage selection nor `--resume` is required.
+
+Default persistent materials:
+`/app/data/upgrade/3.1.0-beta1/f118/<run-id>/`. Override with `--materials-dir`.
+Directories/files are 0700/0600. Keep the immutable `flow.json`, `objects/`,
+private selected-row backups in `private/`, and summaries/progress in `reports/`.
+A failed report write does not publish a new executable candidate. Shared
+content-addressed replay/semantics and native Run bindings permit continuation
+after local material loss; private rollback backups should still be retained.
+
+Ordinary rootless files, old embedding names, missing historical creators and
+proven invalid saved versions retain their original rows/content/index bindings
+and invalid semantics with reports. Known depth/parent/permission receipt repairs
+execute automatically through their native owner rules. No owner replacement,
+account creation or new access is inferred. Unknown authority, tenant conflicts,
+cycles, changed proofs and unclosed external requests block. A physical cleanup
+that lacks a safe durable replay recipe is explicitly `not_evaluated`, never a
+passing plan. Existing standalone physical cleanup plans keep their old contract.
+
+Normal migration preserves SQL `index_name`/`collection_name` bindings without
+ES/Milvus health/count scans, per-file object stat, reparsing or index rebuilding.
+It does not scan broker tasks, copy tenant roles, stop/start services or attest
+DBA backups. Other model/pricing/schema/Redis migrations remain separate.
+
+Progress emits at stage changes and roughly every 15 seconds, including Run,
+tenant, unit, processed/committed counts, known total, elapsed time, observed rate,
+ETA, last acknowledged progress and current wait. Unknown total/rate/ETA is null.
+Command-local immutable input and compiler reuse avoids duplicate work; necessary
+live before/staged/after checks remain. Reference batches keep whole-source atomic
+commits. Their normal budget covers up to 100 sources, detail count and serialized
+plan bytes. An oversized single source is processed alone: its native configuration
+and complete source index are still loaded as one source, so memory is not constant.
+The final stable-order source/index tail check counts actual business plus index
+bytes and refuses drift before Coverage.
+
+Exit codes: 0 = complete executable preflight or declared-scope success;
+2 = parameter/data blocker; 3 = material/identity/pin/fact drift;
+4 = incomplete execution/check/output or cancellation. Failure JSON includes
+native phase/confirmed-position summaries, uncertainty and same-Run recovery.
+No provider error payload or credentials are printed. Report output failure does
+not undo committed business effects; the native ledger remains authoritative.
+
+For old frozen Runs, the same dry-run validates native SQL/permission recovery
+and full references, preserving original baseline/plan hashes, ordinal and receipts.
+Candidates are append-only under `reconciliation/<sha>/`. Apply uses a bound
+candidate or one uniquely matching a single current observation, never newest
+mtime. Missing proof requires maintenance reconciliation; unproven real source
+changes cannot be ignored. SQL Knowledge/default after-state checks stay exact.
+
+No `--backup-ref`, `--schema-ref`, `f118-inputs.json` or manual history plan is
+required. Old descriptor flags only assert existing frozen fields; their DBA
+objects are not fetched. `--verify --apply` strictly reverifies completed Runs;
+normal completed replays return the original Coverage result without adding
+checkpoints.
+
+#### Legacy diagnostic and history compatibility
+
+The earlier standalone history section documents existing plans, not an extra
+normal step. Preserve their original schema/checksum/operator, events and payload
+backups. Do not run them concurrently with the unified command.
+
+`--permissions-only --apply` and
+`--register-references-only --apply --resume` remain explicit diagnostics for an
+existing frozen Run. They share the global control lock, native attempt guards and
+uncertain-request handling. They do not certify full Ready; permission-only leaves
+references unverified, while registration-only retains its original committed
+proofs for a later full invocation. New Runs must use the unified dry-run/apply path.
+
+The detailed version upgrade sequence, result checks and business acceptance
+remain in [v3.1.0-beta1 upgrade guide](../../../docs/upgrades/v3.1.0-beta1.md).

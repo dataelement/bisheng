@@ -37,6 +37,7 @@ from loguru import logger
 from bisheng.common.services.config_service import settings
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.app_access_log import AppAccessLog, AppAccessLogDao
+from bisheng.database.models.org_snapshot import astamp
 
 #: Redis key of the merge window (design §6 key registry). One key per
 #: ``(app, visitor)``; its TTL *is* the window.
@@ -103,6 +104,7 @@ async def record_access(
             entry_time=datetime.now(),
             request_id=(request_id or "")[:64] or None,
         )
+        await astamp([row], lambda one: one.user_id)
         async with get_async_db_session() as session:
             await AppAccessLogDao.ainsert(session, row)
             await session.commit()

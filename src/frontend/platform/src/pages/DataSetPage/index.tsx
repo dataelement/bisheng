@@ -12,11 +12,29 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { deleteDatasetApi, getFileUrlApi, getPresetFileApi } from "@/controllers/API/finetune";
 import { useTable } from "@/util/hook";
 import { downloadFile } from "@/util/utils";
-import { useRef } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
+import { userContext } from "@/contexts/userContext";
 import { useTranslation } from "react-i18next";
 import CreateDataSet from "./CreateDataSet";
 
 export default function DataSetPage() {
+    const { user } = useContext(userContext);
+    const [viewRevision, setViewRevision] = useState(0);
+    useEffect(() => {
+        const reset = () => setViewRevision(value => value + 1);
+        window.addEventListener("bisheng:management-scope-changed", reset);
+        return () => window.removeEventListener("bisheng:management-scope-changed", reset);
+    }, []);
+    // Retire old rows, requests, pagination and dialogs before the new view loads.
+    return <DataSetContent key={`${user?.user_id}:${user?.leaf_tenant_id ?? user?.tenant_id}:${viewRevision}`} />;
+}
+
+function DataSetContent() {
+    const active = useRef(true);
+    useEffect(() => {
+        active.current = true;
+        return () => { active.current = false; };
+    }, []);
     const { t } = useTranslation();
     const paginationLocale = usePaginationLocale();
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({}, (param) =>
@@ -27,8 +45,9 @@ export default function DataSetPage() {
         bsConfirm({
             desc: t('dataset.confirmDelete'),
             onOk(next) {
+                if (!active.current) { next(); return Promise.resolve(); }
                 return deleteDatasetApi(id).then(() => {
-                    reload();
+                    if (active.current) reload();
                     next();
                 });
             },
@@ -40,6 +59,7 @@ export default function DataSetPage() {
 
     const handleDownloadFile = async (name, url) => {
         const res = await getFileUrlApi(url);
+        if (!active.current) return;
         if (!res.url) {
             return notification.open({ type: 'error', description: String(t('dataset.fileNotFound') ?? '') });
         }

@@ -1,13 +1,19 @@
+import hashlib
 import json
+import tempfile
+from collections.abc import Sequence
+from dataclasses import dataclass, field
 from functools import cached_property
 
-from langchain_core.documents import BaseDocumentTransformer
+from langchain_core.documents import BaseDocumentTransformer, Document
 
 from bisheng.api.v1.schemas import FileProcessBase
+from bisheng.knowledge.application.file_processing_adapter import legacy_rule_from_snapshot
 from bisheng.knowledge.domain.models.knowledge_file import FileSource, KnowledgeFile
 from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
+from bisheng.knowledge.domain.schemas.processing_settings import EffectiveProcessingSnapshot
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
-from bisheng.knowledge.rag.base_file_pipeline import BaseFilePipeline
+from bisheng.knowledge.rag.base_file_pipeline import BaseFilePipeline, FileExtensionMap
 from bisheng.knowledge.rag.pipeline.transformer.abstract import AbstractTransformer
 from bisheng.knowledge.rag.pipeline.transformer.content_safety import ContentSafetyTransformer
 from bisheng.knowledge.rag.pipeline.transformer.direct_chunk import DirectChunkTransformer
@@ -27,6 +33,74 @@ from bisheng.utils.file import download_minio_file
 _WEB_LINK_SEPARATORS = ["\n\n", "\n", "。", "\\.", "，", ",", "；", ";", "、", "\\s+", ""]  # noqa: RUF001
 _WEB_LINK_SEPARATOR_RULES = ["after"] * len(_WEB_LINK_SEPARATORS)
 
+FILE_PROCESSING_PATCH_FIELDS = frozenset(
+    {
+        "parse_type",
+        "preview_file_object_name",
+        "bbox_object_name",
+        "abstract",
+        "user_metadata",
+        "simhash",
+        "similar_status",
+        "file_encoding",
+        "thumbnails",
+    }
+)
+
+
+def physical_processing_source_digest(row):
+    fields = (
+        "id",
+        "tenant_id",
+        "knowledge_id",
+        "file_type",
+        "file_source",
+        "object_name",
+        "md5",
+        "file_size",
+        "file_name",
+        "file_level_path",
+        "user_metadata",
+    )
+    return hashlib.sha256(
+        json.dumps(
+            {key: getattr(row, key) for key in fields},
+            sort_keys=True,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode()
+    ).hexdigest()
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedFileProcessing:
+    file_id: int
+    tenant_id: int
+    space_id: int
+    model_config_revision: int
+    index_generation: str
+    physical_source_digest: str
+    source_revision: str
+    documents: tuple[Document, ...] = field(repr=False)
+    file_patch: dict = field(repr=False)
+    status: int = 2
+    error_code: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class FileProcessingResult:
+    file_id: int
+    source_revision: str
+    status: int
+    chunk_count: int
+    file_patch: dict = field(default_factory=dict, repr=False)
+    error_code: int | None = None
+
+    @property
+    def succeeded(self):
+        return self.status == 2
+
 
 class KnowledgeFilePipeline(BaseFilePipeline):
     def __init__(
@@ -36,10 +110,13 @@ class KnowledgeFilePipeline(BaseFilePipeline):
         preview_cache_key: str | None = None,
         no_summary: bool = False,
         need_thumbnail: bool = False,
+        effective_processing: EffectiveProcessingSnapshot | None = None,
         **kwargs,
     ):
         split_rule = FileProcessBase(knowledge_id=db_file.knowledge_id)
-        if db_file.split_rule and isinstance(db_file.split_rule, str):
+        if effective_processing is not None:
+            split_rule = legacy_rule_from_snapshot(effective_processing, space_id=db_file.knowledge_id)
+        elif db_file.split_rule and isinstance(db_file.split_rule, str):
             split_rule = FileProcessBase(**json.loads(db_file.split_rule))
         split_rule.knowledge_id = db_file.knowledge_id
         if db_file.file_source == FileSource.WEB_LINK.value:
@@ -135,6 +212,7 @@ class KnowledgeFilePipeline(BaseFilePipeline):
                 document_id=str(self.db_file.id),
                 knowledge_id=self.db_file.knowledge_id,
                 knowledge_file=self.db_file,
+                processing_guard=self.processing_guard,
             )
         )
         abstract_transformers.append(
@@ -143,6 +221,7 @@ class KnowledgeFilePipeline(BaseFilePipeline):
                 document_id=str(self.db_file.id),
                 knowledge_id=self.db_file.knowledge_id,
                 retain_images=self.file_split_rule.retain_images == 1,
+                processing_guard=self.processing_guard,
             )
         )
         if self.need_thumbnail:
@@ -150,6 +229,7 @@ class KnowledgeFilePipeline(BaseFilePipeline):
                 ThumbnailTransformer(
                     loader=self.loader,
                     knowledge_file=self.db_file,
+                    processing_guard=self.processing_guard,
                 )
             )
         if self.should_use_ppt_page_split():
@@ -186,6 +266,7 @@ class KnowledgeFilePipeline(BaseFilePipeline):
                 document_id=str(self.db_file.id),
                 knowledge_id=self.db_file.knowledge_id,
                 knowledge_file=self.db_file,
+                processing_guard=self.processing_guard,
             )
         )
         abstract_transformers.append(
@@ -194,6 +275,7 @@ class KnowledgeFilePipeline(BaseFilePipeline):
                 document_id=str(self.db_file.id),
                 knowledge_id=self.db_file.knowledge_id,
                 retain_images=self.file_split_rule.retain_images == 1,
+                processing_guard=self.processing_guard,
             )
         )
         abstract_transformers.append(
@@ -203,3 +285,46 @@ class KnowledgeFilePipeline(BaseFilePipeline):
             )
         )
         return abstract_transformers
+
+    def segment_for_display(self, documents: Sequence[Document]) -> list[Document]:
+        """Split already-loaded documents for the detail view.
+
+        Content safety runs before the splitter and aborts the pipeline, so a
+        violating file never reaches the vector stores. The detail page still
+        needs those segments. This uses the same splitter and does not call an
+        embedding model or a vector store.
+        """
+        docs = [doc for doc in documents or [] if isinstance(doc, Document)]
+        if not docs:
+            return []
+        if self.file_extension in {"xlsx", "csv", "xls", "et"}:
+            for index, doc in enumerate(docs):
+                doc.metadata["chunk_index"] = doc.metadata.get("chunk_index", index)
+            return docs
+        if self.should_use_ppt_page_split():
+            transformer: BaseDocumentTransformer = DirectChunkTransformer()
+        elif self.should_use_hierarchical_split():
+            transformer = HierarchicalSplitterTransformer(
+                hierarchy_level=self.file_split_rule.hierarchy_level,
+                append_title=self.file_split_rule.append_title,
+                max_chunk_size=self.file_split_rule.max_chunk_size,
+                fallback_separator=self.file_split_rule.separator,
+                fallback_separator_rule=self.file_split_rule.separator_rule,
+                fallback_chunk_size=self.file_split_rule.chunk_size,
+                fallback_chunk_overlap=self.get_splitter_kwargs()["chunk_overlap"],
+            )
+        else:
+            transformer = SplitterTransformer(**self.get_splitter_kwargs())
+        return list(transformer.transform_documents(docs))
+
+    def load_and_segment_for_display(self) -> list[Document]:
+        """Load the original file and segment it without indexing it."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            self.tmp_dir = tmp_dir
+            self.prepare_local_file()
+            file_process_config = FileExtensionMap.get(self.file_extension)
+            if not file_process_config:
+                return []
+            loader = getattr(self, file_process_config["loader"])()
+            loaded = loader.load() or []
+            return self.segment_for_display(list(loaded))

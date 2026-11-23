@@ -1,6 +1,8 @@
 // @bisheng/ui public API — presentation-only components + design-system utils.
 // Contract (README): no state management, no HTTP, no i18n keys, no routing.
 export { default as cn } from './utils/cn';
+export { LoadingIndicatorProvider, useLoadingIndicatorRenderer } from './providers/LoadingIndicatorProvider';
+export type { LoadingIndicatorProps, LoadingIndicatorRenderer } from './providers/LoadingIndicatorProvider';
 export { Button, buttonVariants } from './components/Button/Button';
 export type { ButtonProps, ButtonStyleProps } from './components/Button/Button';
 // Toast — imperative `toast.*` API + the single <Toaster /> container
@@ -91,11 +93,13 @@ export * from './components/Select';
 // adds desktop columns, phone drill-down, path values, strict selection,
 // search and lazy children. Copy and data stay with the caller.
 export * from './components/Cascader';
+export * from './components/DatePicker';
 // Dropdown — a set of related ACTIONS behind one trigger; picking runs it and
 // the trigger never changes (组件-Dropdown下拉菜单.md). Danger rows, disabled
 // rows, toggle rows, one submenu level and click / hover triggering are baked
 // in; confirmation stays the caller's (`useConfirm` in `onSelect`).
 export * from './components/Dropdown';
+export * from './components/TreeNavigation';
 // Pagination — cut a long list into pages for finding, comparing and coming
 // back (组件-Pagination分页.md). The ellipsis rule, the brand-tinted current page,
 // the always-present pager, the jumper past 10 pages and the phone's simple

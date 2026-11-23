@@ -12,6 +12,7 @@ from redis.exceptions import RedisError
 from bisheng.dsh.domain.schemas.model_policy import DshModelQuotaConfig, validate_model_configs
 from bisheng.dsh.domain.schemas.usage import UsageEvent
 from bisheng.dsh.infrastructure.quota_topology import QuotaTopology
+from bisheng.dsh.infrastructure.usage_work import with_usage_schedule
 
 
 class QuotaRejected(RuntimeError):
@@ -101,6 +102,8 @@ class QuotaRedis:
                 keys = self.keys(event)
                 keys.append(keys[0].removesuffix(":gate") + ":running")
                 keys.append(keys[0].removesuffix(":gate") + ":unknown_usage")
+                keys.append(self.prefix + ":projection_work")
+                source = with_usage_schedule(source, stream_key=6)
                 result = await self.redis.eval(source, len(keys), *keys, *args)
             except QuotaRejected:
                 raise
@@ -223,13 +226,14 @@ class QuotaRedis:
         keys = self.keys(terminal)
         try:
             result = await control.eval(
-                (Path(__file__).parent / "lua" / "quarantine.lua").read_text(),
-                5,
+                with_usage_schedule((Path(__file__).parent / "lua" / "quarantine.lua").read_text(), stream_key=4),
+                6,
                 keys[0],
                 keys[3],
                 keys[4],
                 keys[5],
                 keys[0].removesuffix(":gate") + ":running",
+                self.prefix + ":projection_work",
                 self.topology.run_id or "",
                 terminal.model_dump_json(),
                 self._identity(terminal),
@@ -385,6 +389,9 @@ class QuotaRedis:
         # Preserve hashes of historical 1x events while fencing nondefault rates.
         if event.credit_rate != 100:
             data["credit_rate"] = event.credit_rate
+        # F016: fence the frozen prices; absent on historical events, so their hashes are unchanged.
+        if event.pricing is not None:
+            data["pricing"] = event.pricing.model_dump(mode="json")
         started = event.started_at
         if started.tzinfo is None:
             started = started.replace(tzinfo=UTC)

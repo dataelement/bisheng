@@ -30,6 +30,40 @@ def normalize_conversation_title(content: str, question: str) -> str:
     return title.splitlines()[0].strip()[:_TITLE_MAX_CHARS] if title else DEFAULT_TITLE
 
 
+def _thinking_off_kwargs(llm: BaseChatModel) -> dict:
+    """Ask for the title without thinking.
+
+    A title is a few words; a thinking model otherwise spends hundreds of
+    reasoning tokens first. Measured 2026-11-09 on a production DeepSeek V4 under
+    vLLM: 12s / 431 tokens with thinking, 0.6s / 4 tokens without, same title —
+    and under task-mode load the thinking call ran past the title timeout.
+    """
+    getter = getattr(llm, "thinking_off_kwargs", None)
+    return getter() if callable(getter) else {}
+
+
+async def ainvoke_without_thinking(llm: BaseChatModel, messages: list):
+    kwargs = _thinking_off_kwargs(llm)
+    if kwargs:
+        try:
+            return await llm.ainvoke(messages, **kwargs)
+        except Exception:
+            # A server behind a generic provider type may reject the switch;
+            # naming still works with the model's defaults, just slower.
+            logger.warning("Title request with thinking off failed; retrying with provider defaults", exc_info=True)
+    return await llm.ainvoke(messages)
+
+
+def invoke_without_thinking(llm: BaseChatModel, messages: list):
+    kwargs = _thinking_off_kwargs(llm)
+    if kwargs:
+        try:
+            return llm.invoke(messages, **kwargs)
+        except Exception:
+            logger.warning("Title request with thinking off failed; retrying with provider defaults", exc_info=True)
+    return llm.invoke(messages)
+
+
 async def generate_conversation_title_async(
     question: str,
     llm: BaseChatModel,
@@ -58,7 +92,7 @@ async def generate_conversation_title_async(
 
         messages = [HumanMessage(content=prompt_obj.prompt)]
 
-        response = await asyncio.wait_for(llm.ainvoke(messages), timeout=TITLE_GENERATION_TIMEOUT_S)
+        response = await asyncio.wait_for(ainvoke_without_thinking(llm, messages), timeout=TITLE_GENERATION_TIMEOUT_S)
         return normalize_conversation_title(extract_message_text(response), question)
     except Exception:
         # Naming is non-critical to the reply; retain the question and log the failure.
@@ -91,7 +125,7 @@ def generate_conversation_title_sync(
 
         messages = [HumanMessage(content=prompt_obj.prompt)]
 
-        response = llm.invoke(messages)
+        response = invoke_without_thinking(llm, messages)
         return normalize_conversation_title(extract_message_text(response), question)
     except Exception:
         # Naming is non-critical to the reply; retain the question and log the failure.

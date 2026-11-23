@@ -1,8 +1,24 @@
-jest.mock('~/hooks/useVersionManagementEnabled', () => ({ usePersonalTokenEnabled: () => false }));
-jest.mock('~/hooks/useDshDesktop', () => ({ useDshDesktop: () => ({ enabled: false }) }));
+import { refreshClientEnvironment } from "~/utils/clientEnvironment";
+jest.mock("~/hooks/useVersionManagementEnabled", () => ({
+  usePersonalTokenEnabled: () => false,
+}));
+jest.mock("~/hooks/useDshDesktop", () => ({
+  useDshDesktop: () => ({ enabled: false }),
+}));
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import SettingsPage from "./SettingsPage";
+
+let mockMobile = false;
+let mockHostHeader = false;
+beforeEach(() => { mockMobile = false; mockHostHeader = false; });
+jest.mock("~/hooks/useClientEnvironment", () => ({
+  ...jest.requireActual("~/hooks/useClientEnvironment"),
+  useClientEnvironment: () => ({
+    channel: "web",
+    capabilities: { hasHostChatHeader: mockHostHeader },
+  }),
+}));
 
 const mockRefreshCount = jest.fn().mockResolvedValue(undefined);
 
@@ -13,7 +29,7 @@ jest.mock("recoil", () => ({
 
 jest.mock("~/hooks", () => ({
   useLocalize: () => (key: string) => key,
-  usePrefersMobileLayout: () => false,
+  usePrefersMobileLayout: () => mockMobile,
 }));
 
 jest.mock("~/hooks/useNotificationCount", () => ({
@@ -40,36 +56,56 @@ jest.mock("./sections/AccountPane", () => ({
   AccountPane: () => <div>account-pane</div>,
 }));
 jest.mock("./sections/DesktopSettingsPane", () => ({
-  DesktopSettingsPane: ({ section }: { section: string }) => <main data-testid="desktop-content">{section}</main>,
+  DesktopSettingsPane: ({ section }: { section: string }) => (
+    <main data-testid="desktop-content">{section}</main>
+  ),
 }));
 
 afterEach(() => {
   delete window.dshChatPresentation;
   window.sessionStorage.clear();
-  window.history.replaceState({}, '', '/');
+  window.history.replaceState({}, "", "/");
 });
 
 function LocationProbe() {
   const location = useLocation();
-  return <div data-testid="location">{`${location.pathname}${location.search}${location.hash}`}</div>;
+  return (
+    <div data-testid="location">{`${location.pathname}${location.search}${location.hash}`}</div>
+  );
 }
 
 describe("SettingsPage history", () => {
-  it.each([false, true])('uses content-only settings only with the native bridge (native=%s)', native => {
-    window.history.replaceState({}, '', '/workspace/settings/account?embed=dsh&dshSettings=1');
-    if (native) window.dshChatPresentation = { reportLanding: jest.fn() };
-    render(<MemoryRouter initialEntries={['/settings/account?embed=dsh&dshSettings=1']}>
-      <Routes><Route path="settings/:section?" element={<SettingsPage />} /></Routes>
-    </MemoryRouter>);
-    if (native) {
-      expect(screen.getByTestId('desktop-content').textContent).toBe('account');
-      expect(screen.queryByRole('navigation')).toBeNull();
-    } else {
-      expect(screen.getByRole('navigation')).toBeTruthy();
-      expect(screen.getByText('account-pane')).toBeTruthy();
-      expect(screen.queryByTestId('desktop-content')).toBeNull();
-    }
-  });
+  it.each([false, true])(
+    "uses content-only settings only with the native bridge (native=%s)",
+    (native) => {
+      window.history.replaceState(
+        {},
+        "",
+        "/workspace/settings/account?embed=dsh&dshSettings=1",
+      );
+      if (native) window.dshChatPresentation = { reportLanding: jest.fn() };
+      refreshClientEnvironment();
+      render(
+        <MemoryRouter
+          initialEntries={["/settings/account?embed=dsh&dshSettings=1"]}
+        >
+          <Routes>
+            <Route path="settings/:section?" element={<SettingsPage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      if (native) {
+        expect(screen.getByTestId("desktop-content").textContent).toBe(
+          "account",
+        );
+        expect(screen.queryByRole("navigation")).toBeNull();
+      } else {
+        expect(screen.getByRole("navigation")).toBeTruthy();
+        expect(screen.getByText("account-pane")).toBeTruthy();
+        expect(screen.queryByTestId("desktop-content")).toBeNull();
+      }
+    },
+  );
   it("returns to the entry page after settings sidebar navigation", () => {
     render(
       <MemoryRouter
@@ -92,7 +128,11 @@ describe("SettingsPage history", () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "com_message_approval_notifications" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "com_message_approval_notifications",
+      }),
+    );
     expect(screen.getByText("notification-pane")).not.toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "com_ui_go_back" }));
@@ -100,4 +140,27 @@ describe("SettingsPage history", () => {
       "/knowledge/space/42?tab=files#recent",
     );
   });
+});
+
+it.each([false, true])("keeps settings entries usable with native header=%s", (native) => {
+  mockMobile = true;
+  mockHostHeader = native;
+  render(
+    <MemoryRouter initialEntries={["/settings"]}>
+      <Routes>
+        <Route path="settings/:section?" element={<SettingsPage />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+  const menu = screen.queryByRole("button", { name: "com_nav_open_sidebar" });
+  const title = screen.queryByText("com_nav_settings");
+  if (native) {
+    expect(menu).toBeNull();
+    expect(title).toBeNull();
+  } else {
+    expect(menu).toBeVisible();
+    expect(title).toBeVisible();
+  }
+  fireEvent.click(screen.getByRole("button", { name: "com_account_info_title" }));
+  expect(screen.getByText("account-pane")).toBeVisible();
 });

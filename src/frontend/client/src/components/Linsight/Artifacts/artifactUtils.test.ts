@@ -739,3 +739,43 @@ describe('uploaded spreadsheet kept as the original workbook', () => {
         expect(getArtifactPreviewKind(artifact)).toBe('markdown');
     });
 });
+
+describe('uploaded image referenced from a markdown deliverable', () => {
+    const upload = (name: string, rawPath: string) =>
+        toUploadedArtifacts([
+            {
+                file_id: name,
+                original_filename: name,
+                valid: true,
+                markdown_file_path: `linsight/c1/${name}.md`,
+                original_file_path: `linsight/c1/${name}_original.png`,
+                workspace_path: rawPath.replace(/\.png$/, '.md'),
+                raw_workspace_path: rawPath,
+            },
+        ])[0];
+
+    it('carries the workspace path of the original', () => {
+        const artifact = upload('screenshot.png', '/uploads/screenshot.png');
+
+        expect(artifact.file_path).toBe('/uploads/screenshot.png');
+        expect(artifact.file_url).toBe('linsight/c1/screenshot.png_original.png');
+    });
+
+    it('resolves uploads/ refs by path, inside folders and after a -2 rename', () => {
+        const first = upload('x.png', '/uploads/attachments/x.png');
+        const renamed = upload('x.png', '/uploads/attachments/x-2.png');
+        const list = [first, renamed];
+
+        expect(matchArtifactByRelPath(list, 'uploads/attachments/x.png')).toBe(first);
+        expect(matchArtifactByRelPath(list, 'uploads/attachments/x-2.png')).toBe(renamed);
+    });
+
+    it('keeps a bare ref pointing at the deliverable with the same name', () => {
+        const uploaded = upload('chart.png', '/uploads/chart.png');
+        const output = { file_id: 'o1', file_name: 'chart.png', file_url: 'u', file_path: '/w/output/chart.png' };
+        const list = [uploaded, output];
+
+        expect(matchArtifactByRelPath(list, 'chart.png')).toBe(output);
+        expect(matchArtifactByRelPath(list, 'uploads/chart.png')).toBe(uploaded);
+    });
+});

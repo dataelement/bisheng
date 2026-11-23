@@ -168,17 +168,17 @@ export function SideNav() {
                             <button
                                 onClick={shareApp}
                                 type="button"
-                                className="flex h-[28px] min-w-0 flex-1 items-center justify-center gap-1 rounded-md border border-border-base bg-white text-[14px] leading-[22px] transition-colors fine-pointer:hover:bg-gray-50 touch-mobile:px-2"
+                                className="flex h-[28px] min-w-0 flex-1 items-center justify-center gap-1 rounded-md border border-border-base bg-white whitespace-nowrap text-[14px] leading-[22px] transition-colors fine-pointer:hover:bg-gray-50 touch-mobile:px-2"
                             >
-                                {localize('com_app_share_app')}
+                                <span className="truncate" title={localize('com_app_share_app')}>{localize('com_app_share_app')}</span>
                             </button>
                         ) : null}
                         <button
                             onClick={createNewChat}
                             type="button"
-                            className={`min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-border-base rounded-md text-[14px] leading-[22px] transition-colors fine-pointer:hover:bg-gray-50 max-[576px]:px-2 ${showShareApp ? 'flex-1' : 'w-full'}`}
+                            className={`min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-border-base rounded-md whitespace-nowrap text-[14px] leading-[22px] transition-colors fine-pointer:hover:bg-gray-50 max-[576px]:px-2 ${showShareApp ? 'flex-1' : 'w-full'}`}
                         >
-                            {localize('com_knowledge_start_new_chat')}
+                            <span className="truncate" title={localize('com_knowledge_start_new_chat')}>{localize('com_knowledge_start_new_chat')}</span>
                         </button>
                     </div>
                 </div>

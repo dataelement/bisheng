@@ -1,5 +1,5 @@
 import { Button } from '@bisheng/ui';
-import Separator from "@/components/bs-comp/chatComponent/Separator";
+import { Separator } from "@/components/bs-comp/chatComponent/Separator";
 
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
@@ -25,7 +25,7 @@ export default function LoginBridge({ oauthData, onHasLdap }: LoginBridgeProps) 
 
     return (
         <div>
-            <Separator className="my-4" text={t("login.otherMethods")}></Separator>
+            <Separator className="my-4" text={t("login.otherMethods")} />
             <div className="flex justify-center items-center gap-4">
                 {ssoUrl && (
                     <Button size="small" iconOnly onClick={() => (location.href = ssoUrl)}>

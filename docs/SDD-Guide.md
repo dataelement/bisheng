@@ -41,6 +41,7 @@ Not every change runs the full pipeline. Match track to scope:
         →  /sdd-review <dir> spec  →  ★ user confirms
 3. design.md  (only this feature's How; global laws → reference constitution)
         →  /sdd-review <dir> design  (Constitution Check gate, §5 🚧)  →  ★ user confirms
+        →  generate and validate test-cases.md (QA reference, see §2.1)
 4. tasks.md  (vertical slices; dependency waves 🚧)  →  /sdd-review <dir> tasks
 5. branch: feat/<version>/{NNN}-{name}   (create EARLY — docs + code live on the branch)
 6. implement  →  /task-review <dir> <id>  →  check off
@@ -49,6 +50,23 @@ Not every change runs the full pipeline. Match track to scope:
 8. /sdd-code-review --base <main>   (+ CI auto-review 🚧)
 9. merge
 ```
+
+### 2.1 QA reference cases after design confirmation
+
+In Full SDD, after the user confirms `design.md` and before drafting `tasks.md`, open the [QA case template](../features/_templates/test-cases.md) and use it as the starting file for `test-cases.md` in the feature directory. Use the confirmed spec for expected outcomes and the confirmed design for entry points, permissions, setup, and observation methods. This document is for test engineers to reference. Drafting adds no approval gate. This step produces written cases only. It does not generate scripts, execute cases, or feed the cases into `tasks.md`, the harness, development acceptance, or `/e2e-test`.
+
+1. **Use confirmed acceptance criteria as the oracle.** Map each case ID to one or more `AC-NN` references outside the case table. Select scenarios where a missed defect has a clear consequence, such as the main business path, role boundaries, data isolation, or recovery. Avoid cloning a case for every AC when another case already verifies the behavior. Treat unresolved product decisions as questions for the spec.
+2. **Separate the target from the evidence inspected.** Record the target version and the spec revision. If code is checked to verify an existing entry point, permission rule, data setup, or observation method, record the branch or ref, commit, and relevant file or symbol. Before implementation, label new behavior as spec-based and mark any unknown entry point, test data setup, or observation method as `待研发确认`. If target code is unavailable, state which assumptions could not be verified. If code and spec differ, record the discrepancy outside the table and keep the confirmed spec's expected result.
+3. **Write cases QA can assess and prepare.** Use one independently judgeable behavior per row, numbered steps and observable expected results. Put shared test data, role mappings, setup and cleanup instructions outside the table. Assign P0–P2 by business risk. Review each case for preparable prerequisites and an observable outcome, and list any remaining gaps by case ID.
+4. **Check the saved file before reporting completion.** Under `具体测试用例`, compare the header with the template for exact names and order. Verify that the separator and every case row have eight cells and that each new row ends in `待执行 | —`. These result columns are required even for reference-only cases. Repair any mismatch and recheck the saved file before handing it off. Use an alternate layout only if the user explicitly requests one.
+
+Before handing off the cases, verify that the setup and observation methods reflect the confirmed design.
+
+- **Make affected cases easier to execute.** Update entry points, role and permission setup, test data preparation, cleanup, and how QA can observe results where the design clarifies them. Check important failure and recovery paths and add a separate case when it covers a meaningful risk within an existing AC.
+- **Preserve the expected business outcome.** Use `spec.md` as the source of expected behavior. Record design references outside the eight-column table and distinguish planned behavior from verified implementation. Keep unresolved setup or observation gaps marked `待研发确认`. If the design conflicts with a confirmed AC, record the conflict and follow the existing confirmation rules in §3.
+- **Record the outcome.** Note the design revision reviewed and the affected case IDs, or record that no updates were needed. Preserve existing IDs and rerun the saved-file format check for any updates.
+
+If an approved spec change affects a case, update the affected rows and preserve their IDs. If QA later requests verification against a target build, verify that build's ref and update the evidence and setup notes. Neither update adds a development gate.
 
 ---
 
@@ -73,6 +91,7 @@ Three fixed ★: after Spec Discovery, after `spec.md`, after `design.md`.
 | Document | Answers | Update rule |
 |----------|---------|-------------|
 | `spec.md` | What & acceptance criteria | Only when requirements change |
+| `test-cases.md` | Written business test cases for QA reference | Generate after design confirmation and before task breakdown. Update affected cases when approved requirements or verified setup details change |
 | `design.md` | Why this How + today's-state snapshot | **Overwrite in place** — always reflects today |
 | `tasks.md` | What was done, in what order | Append — running log |
 

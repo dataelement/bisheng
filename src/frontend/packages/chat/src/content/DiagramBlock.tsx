@@ -1,4 +1,4 @@
-import { Button, Tooltip } from '@bisheng/ui';
+import { Button, Tooltip, useLoadingIndicatorRenderer } from '@bisheng/ui';
 import { Outlined } from 'bisheng-icons';
 import { ZoomOut } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -6,6 +6,7 @@ import { CopyMessageAction } from '../components/CopyMessageAction';
 import { useMarkdownServices } from './MarkdownServices';
 import { downloadDiagram, normalizeMindmapIndent, readEchartsRuntime, readMermaidRuntime, type ChartInstance } from './diagramRuntime';
 export function DiagramBlock({ language, code }: { language: 'mermaid' | 'echarts'; code: string }) {
+  const renderIndicator = useLoadingIndicatorRenderer();
   const { loadDiagramLibrary, localize, copyText, diagramTitle } = useMarkdownServices();
   const [mode, setMode] = useState<'chart' | 'code'>('chart');
   const [loading, setLoading] = useState(true);
@@ -59,7 +60,12 @@ export function DiagramBlock({ language, code }: { language: 'mermaid' | 'echart
             <Tooltip content={localize('shared:app_chat.download')}><Button iconOnly aria-label={localize('shared:app_chat.download')} color="default" variant="text" onClick={() => { if (diagramRef.current) void downloadDiagram(diagramRef.current, diagramTitle).catch(() => setError(true)); }}><Outlined.Download size={16} /></Button></Tooltip>
           </div>}
       </div>
-      {mode === 'chart' && loading && <div className="flex items-center justify-center h-[400px] text-muted-foreground">{localize('shared:app_chat.loading')}</div>}
+      {mode === 'chart' && loading && <div className="flex items-center justify-center h-[400px] text-muted-foreground"
+        role={renderIndicator ? 'status' : undefined}
+        aria-label={renderIndicator ? localize('shared:app_chat.loading') : undefined}>
+        {renderIndicator ? <span aria-hidden className="inline-flex">{renderIndicator({ className: 'size-10' })}</span>
+          : localize('shared:app_chat.loading')}
+      </div>}
       {mode === 'chart' && error && <p role="alert" className="p-4 text-danger">{localize('shared:app_chat.diagram_failed')}</p>}
       <div className={mode === 'chart' ? 'block overflow-hidden' : 'hidden'}
         onPointerDown={event => { if (language === 'mermaid') { drag.current = { x: event.clientX - pan.x, y: event.clientY - pan.y }; event.currentTarget.setPointerCapture(event.pointerId); } }}

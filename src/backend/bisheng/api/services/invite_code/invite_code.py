@@ -1,14 +1,22 @@
 from loguru import logger
+from sqlmodel import select
 
 from bisheng.api.services.invite_code.code_validator import VoucherGenerator
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.linsight import InviteCodeBindError, InviteCodeInvalidError
+from bisheng.common.errcode.linsight import (
+    InviteCodeBatchInvalidError,
+    InviteCodeBindError,
+    InviteCodeInvalidError,
+    InviteCodeLimitError,
+    InviteCodeNotFoundError,
+)
+from bisheng.core.database import get_async_db_session
 from bisheng.database.models.invite_code import InviteCode, InviteCodeDao
+from bisheng.user.domain.models.user import User
 from bisheng.utils import generate_uuid
 
 
 class InviteCodeService:
-
     @classmethod
     async def use_invite_code(cls, user_id: int) -> bool:
         """
@@ -58,17 +66,22 @@ class InviteCodeService:
         :param limit: Number of uses per invite code
         :return: Invitation code list created
         """
+        name = (name or "").strip()
+        if not name or len(name) > 64 or num < 1 or num > 100 or limit < 1 or limit > 100000:
+            raise InviteCodeBatchInvalidError()
         generator = VoucherGenerator()
         code_list = []
         batch_id = generate_uuid()
         for i in range(num):
-            code_list.append(InviteCode(
-                code=generator.generate_voucher(),
-                batch_id=batch_id,
-                batch_name=name,
-                limit=limit,
-                created_id=login_user.user_id,
-            ))
+            code_list.append(
+                InviteCode(
+                    code=generator.generate_voucher(),
+                    batch_id=batch_id,
+                    batch_name=name,
+                    limit=limit,
+                    created_id=login_user.user_id,
+                )
+            )
         # Check if the generated invite code is a duplicate
         unique_codes = []
         for code in code_list:
@@ -113,3 +126,56 @@ class InviteCodeService:
         if not flag:
             raise InviteCodeInvalidError()
         return flag
+
+    @classmethod
+    async def _user_names(cls, user_ids: list[int]) -> dict[int, str]:
+        if not user_ids:
+            return {}
+        async with get_async_db_session() as session:
+            result = await session.exec(select(User.user_id, User.user_name).where(User.user_id.in_(user_ids)))
+            return {row[0]: row[1] for row in result.all()}
+
+    @classmethod
+    def _to_item(cls, row: InviteCode, names: dict[int, str]) -> dict:
+        bind_user = row.bind_user or 0
+        created = row.create_time.strftime("%Y-%m-%d %H:%M:%S") if row.create_time else ""
+        return {
+            "id": row.id,
+            "code": row.code,
+            "batch_name": row.batch_name,
+            "limit": row.limit,
+            "used": row.used or 0,
+            "bind_user": bind_user,
+            "bind_user_name": names.get(bind_user) if bind_user else None,
+            "create_time": created,
+        }
+
+    @classmethod
+    async def list_invite_codes(cls, keyword: str, page: int, page_size: int) -> dict:
+        rows, total = await InviteCodeDao.list_invite_codes(keyword.strip(), page, page_size)
+        names = await cls._user_names([row.bind_user for row in rows if row.bind_user])
+        return {"total": total, "items": [cls._to_item(row, names) for row in rows]}
+
+    @classmethod
+    async def update_invite_code(cls, code_id: int, name: str, limit: int) -> dict:
+        name = (name or "").strip()
+        if not name or len(name) > 64 or limit < 1 or limit > 100000:
+            raise InviteCodeBatchInvalidError()
+        row = await InviteCodeDao.get_invite_code(code_id)
+        if row is None:
+            raise InviteCodeNotFoundError()
+        if limit < (row.used or 0):
+            raise InviteCodeLimitError()
+        updated = await InviteCodeDao.update_invite_code(code_id, name, limit)
+        if not updated:
+            raise InviteCodeNotFoundError()
+        row.batch_name = name
+        row.limit = limit
+        names = await cls._user_names([row.bind_user] if row.bind_user else [])
+        return cls._to_item(row, names)
+
+    @classmethod
+    async def delete_invite_code(cls, code_id: int) -> None:
+        deleted = await InviteCodeDao.delete_invite_code(code_id)
+        if not deleted:
+            raise InviteCodeNotFoundError()

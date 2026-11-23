@@ -39,6 +39,14 @@ description: >-
 
 ---
 
+### 存量部门上传审批的执行装配（F118，本地原生验证）
+
+旧 `/approval/requests/{id}/decision` 与存量消息 `DepartmentKnowledgeSpaceUploadApprovalHandler` 仍调用 `ApprovalService.decide_request`。两处 composition 显式注入 `approval/application/legacy_upload.py::finalize_approved_upload`；Domain 不默认导入 Application。原 KSS 不创建新上传审批，此兼容修复不恢复退役申请流程，也不新增审批中心场景。
+
+执行前重读已批准的原 request、decided_by、实际 tenant/space/parent/files，并复核当前有效 operator、申请人归属及原 reviewer 成员资格，权限仍走 operator 的原 upload_file；不清除或替换 permission actor。完整 payload 初次冻结，后续 guard 读取标量当前性和精确人员/成员事实，最终锁定申请后再比较完整 payload。KSS 原 tenant_execution_scope 内捕获身份，退出恢复原 HTTP 上下文。
+
+审批专用 SpaceUploadApplication 私有 record 构造仅将 creator 署名保为申请人；updater、审计和权限 actor 是真实执行者。内部 `_upload_accounting_user` 只供原个人配额/已用容量查询，保原申请人口径，不参与权限/身份。prepare 下载前后、blob/FGA、dispatch 前后与最终状态写前均复核，失效不报 finalized；取消和未知派发保持原失败/不确定语义，不建新重试平台。原生覆盖见 `test/approval/test_legacy_upload_execution.py`。目录目标按实际 `FileType.DIR` 校验；只读证据沿 `strict_tenant_filter` 自动隔离，最终状态 DML 仍保实际 tenant/审批者围栏。该测试真实 SQL 覆盖有效目录、非目录及外租户目录，未用硬编码数字替代目录枚举。
+
 ## 2. 架构与主流程
 
 ```
@@ -91,6 +99,8 @@ ApprovalCenterService.decide_task()
 
 ---
 
+**申请人角色条件（F009）**：`_get_user_role_labels` 的 `role_{id}` 来自 `role/application/effective_roles.py`，按用户仍存在的原普通绑定读取，与v3.0.0一致，不以绑定存储租户、定义类型/归属或部门范围作既有角色过滤；真实H仍校验并决定执行租户，跨租户兼属与管理M不新授予普通角色。平台超管、租户管理员、部门管理员身份标签独立读取；必要政策/身份查询失败会拒绝路由匹配，不回退普通用户免审。验证：`test/approval/test_managed_tenant_labels.py`。
+
 ## 3. 代码锚点
 
 > 路径相对 `src/backend/bisheng/`。这些是定位问题的第一入口。
@@ -102,6 +112,7 @@ ApprovalCenterService.decide_task()
 | `approval/domain/services/approval_gate.py` | 统一入口：路由匹配、实例创建、pass/pending/exception 分流 | `request_or_pass()`、`_create_exception_result()`、`_notify_admins_of_exception()` |
 | `approval/domain/services/approval_center_service.py` | 用户端：任务列表/详情、同意/拒绝、撤回、**业务侧取消**、菜单申请、多节点流转 | `decide_task()`、`_advance_after_node_approved()`、`_dispatch_outbox()`、`_send_approval_notify()`、`withdraw_instance()`（**带 18118 终态守卫**）、**`cancel_instance_by_business()`**（公共 API，见 §4.5） |
 | `approval/domain/services/approval_exception_service.py` | 管理端异常处理：重试/指定审批人/跳过节点/取消/标记完成 | `assign_approvers()`、`_resolve_exception_node()` |
+| `approval/domain/repositories/approver_candidate_repository.py` | 异常指派候选的只读分页搜索；有效且唯一 Home、本租户或已验证全局管理员、安全身份字段 | `search()` |
 | `approval/domain/services/approval_outbox_service.py` | outbox 执行与重试；成功后置 instance=EXECUTED | `execute_outbox()`、`retry_outbox()` |
 | `approval/domain/services/approval_scenario_admin_service.py` | 管理端：场景/分支/流程/节点配置、异常列表 | — |
 | `approval/domain/services/approver_resolver.py` | 解析审批人来源 `direct_user` / `department_admin` / `tenant_admin` | `resolve_approvers_from_sources()`、**`resolve_tenant_admin_user_ids()`** |
@@ -124,7 +135,7 @@ ApprovalCenterService.decide_task()
 
 ### 应用发布当前可见范围（F115）
 
-任务详情、个人实例详情、管理实例详情在原租户与审批阅读门禁通过后，调用 `read_current_scenario_detail()`。仅 `app_publish_request` 使用 Handler 的只读 `read_current_detail()`，其它场景不触发动态查询。新增同级 `current_visibility`；`detail_snapshot`、`payload_snapshot` 仍是冻结值，不回写。应用发布域核对实例绑定的 app/tenant，再经 F048 当前有效 `use` 来源和实时主体资格生成摘要；读取不完整时返回 `unavailable`，不误报“仅负责人可见”。此窄例外不授予长期 manage_permission、审批处理资格或其它资源能力。
+任务详情、个人实例详情、管理实例详情在原租户与审批阅读门禁通过后，调用 `read_current_scenario_detail()`。仅 `app_publish_request` 使用 Handler 的只读 `read_current_detail()`，其它场景不触发动态查询。新增同级 `current_visibility`；`detail_snapshot`、`payload_snapshot` 仍是冻结值，不回写。应用发布域核对实例绑定的 app/tenant，再经 F048 当前有效 `visible` 来源和实时主体资格生成摘要；读取不完整时返回 `unavailable`，不误报“仅负责人可见”。此窄例外不授予长期 manage_permission、审批处理资格或其它资源能力。
 
 ### 四个场景 Handler
 
@@ -297,6 +308,7 @@ GET    /approval/admin/flows/{flow_definition_id}/nodes       # 节点配置
 PUT    /approval/admin/flows/{flow_definition_id}/nodes       # 提交节点（全量提交触发新版本）
 GET    /approval/admin/flows/{flow_definition_id}/versions/{flow_version_id} # 版本预览
 GET    /approval/admin/exceptions                            # 异常列表
+GET    /approval/admin/exceptions/{exception_id}/approver-candidates # 本异常的合格人员；keyword/page/limit(<=50)，返回 data/total；exclusive 表示只能单独选择
 POST   /approval/admin/exceptions/{exception_id}/retry       # 重试/指定审批人/跳过节点/标记完成
 POST   /approval/admin/exceptions/{exception_id}/cancel      # 取消审批（必须填原因）
 ```
@@ -464,3 +476,11 @@ cd src/backend && uv run pytest test/approval test/app_publish
 - `approval/application/app_publish.py::withdraw_app_publish` → `ApprovalCenterService.withdraw_app_publish` → `app_publish_withdrawal_repository.py` 在一个事务内锁定目标实例、取消任务、写 withdrawn 动作。目标由发布模块基于冻结 tenant/app/deployment/version/instance 生成；发布模块先重验当前 publish，实际操作者计审计。通用 `withdraw_instance` 仍要求申请人。
 - 平台 Vibe 管理页使用 `POST /api/v1/apps/{app_id}/withdraw`，body 含 expected_instance_id 和可选 reason；不拿申请人身份代发通用撤回。完整确认和终态保护不变。
 - 双用途预览由 F055 public `preview_access` 当前资格端口消费 pending task；临时资格不会写入长期 F048 Grant。真实部署 E2E 尚未执行，以 F114 verification 为准。
+
+### 历史发布审批与异常候选一致性（2026-11-19）
+
+- 异常指派弹窗按 exception_id 请求 `approver-candidates`，不使用普通人员搜索结果。服务先验证具体管理租户与异常/实例归属，仅开放 approver_empty + open + instance=exception；保存时再次按当前资格验证，已处理异常不得重开。重试和取消 API 也显式传入具体管理租户围栏。
+- `AppCandidatePolicy` 与 `qualify_app_candidates` 共用双排除/有效人员/真实管理员判据。列表 SQL 在分页及 COUNT 前过滤停用、未知/多重有效 Home、外租户与被排除人员；允许现有真实全局管理员资格。单管理员自审例外用 exclusive 标记，前端双向互斥选择；保存仍重查管理员与候选人员的同一份 SQL 当前性，不能拿列表结果作权限证明。节点配置原 picker 与 approver_resolver 来源语义不变。
+- 只有两个新增身份字段都不存在的旧 CLI 快照，才调用 `app_publish/application/legacy_review_identity.py::frozen_legacy_review_user`。原 owner-only 管线在接收时验证凭据资源归属人等于应用归属人；恢复必须绑定真实 app/deployment/version/instance/tenant、版本号及冻结 owner/applicant，发布记录 authorization_context=NULL、submitted_by 为 0 或该冻结 owner。只恢复自审排除身份，不制造运行授权、不改快照、不使用服务账号当前归属人。
+- 现代字段已存在但为 NULL、发布记录/实例/租户/版本不匹配、提交身份不一致、证据不可读时继续拒绝；不能把 owner 当成通用缺省提交人。持久请求重建通过内部 `ApprovalGateRequest.instance_id`/同级 req 字段携带实例证据，初次请求没有该证据；正常候选、异常指定和后续节点读取同一冻结来源。
+- 现场 436/895 的只读重放、前后差异、未部署与异常 83 的独立执行问题见 `docs/reviews/beta1-approval-candidates-20261119.md`；原生回归在 `test/approval/test_exception_candidates.py`，前端在 `approvalCandidates.test.tsx`。没有迁移或重开已处理单据。

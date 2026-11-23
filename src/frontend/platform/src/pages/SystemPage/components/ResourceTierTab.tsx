@@ -1,3 +1,4 @@
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 import { Tag, notification } from "@bisheng/ui"
 import { Button } from "@bisheng/ui"
@@ -17,7 +18,6 @@ import {
   updateResourceTierApi,
 } from "@/controllers/API/hostedApp"
 import { showApiError } from "@/controllers/request"
-import { Loader2 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -248,8 +248,8 @@ export function ResourceTierTab() {
         <TableCell className="text-right">
           {editing ? (
             <>
-              <Button variant="link" disabled={busy} onClick={() => handleSave(row)}>
-                {busy ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+              <Button variant="link" disabled={busy} onClick={() => handleSave(row)} loading={busy}>
+
                 {t("hostedApp.tierAdmin.actions.save")}
               </Button>
               <Button variant="link" disabled={busy} onClick={handleCancel}>
@@ -282,10 +282,7 @@ export function ResourceTierTab() {
     <div className="h-full overflow-y-auto px-2 py-4">
       <p className="mb-4 text-sm text-muted-foreground">{t("hostedApp.tierAdmin.hint")}</p>
       {loading && rows.length === 0 ? (
-        <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          {t("hostedApp.tierAdmin.loading")}
-        </div>
+        <LoadingState label={t("hostedApp.tierAdmin.loading")} className="flex items-center gap-2 py-8 text-sm text-muted-foreground" />
       ) : rows.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted-foreground">{t("hostedApp.tierAdmin.empty")}</p>
       ) : (

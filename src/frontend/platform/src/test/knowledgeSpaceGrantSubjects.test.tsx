@@ -68,6 +68,7 @@ const node = (
 ) => ({
   id,
   dept_id: `BS@${id}`,
+  external_id: `BS@${id}`,
   name,
   parent_id,
   path,

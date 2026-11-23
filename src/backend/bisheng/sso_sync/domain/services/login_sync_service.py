@@ -31,7 +31,6 @@ from bisheng.core.context.tenant import (
 from bisheng.database.constants import (
     USER_DISABLE_SOURCE_GATEWAY,
     USER_DISABLE_SOURCE_ORG_SYNC,
-    AdminRole,
     DefaultRole,
 )
 from bisheng.database.models.audit_log import AuditLogDao
@@ -41,7 +40,6 @@ from bisheng.database.models.department_admin_grant import (
     DEPARTMENT_ADMIN_GRANT_SOURCE_SSO,
     DepartmentAdminGrantDao,
 )
-from bisheng.database.models.role import RoleDao
 from bisheng.database.models.tenant import ROOT_TENANT_ID
 from bisheng.department.domain.services.department_change_handler import (
     DepartmentChangeHandler,
@@ -73,7 +71,6 @@ from bisheng.tenant.domain.services.user_tenant_sync_service import (
     UserTenantSyncService,
 )
 from bisheng.user.domain.models.user import User, UserDao
-from bisheng.user.domain.models.user_role import UserRoleDao
 from bisheng.user.domain.services.auth import AuthJwt, LoginUser
 from bisheng.user.domain.services.user import UserService
 
@@ -156,6 +153,49 @@ class LoginSyncService:
                     row_source=row_source,
                 )
 
+                from bisheng.user.application.policy_bindings import policy_membership_ids
+
+                previous_department_ids = await policy_membership_ids(user.user_id)
+                previous_primary = await UserDepartmentDao.aget_user_primary_department(user.user_id)
+                primary_id = previous_primary.department_id if previous_primary is not None else None
+                wanted_secondaries = {dept.id for dept in secondary_depts}
+                removed_secondary_candidates = previous_department_ids - {primary_id} - wanted_secondaries
+                sso_secondaries = set()
+                if (
+                    primary_dept is not None
+                    and "secondary_dept_external_ids" in payload.model_fields_set
+                    and removed_secondary_candidates
+                ):
+                    # Removal ownership follows Department.source, as in the
+                    # existing secondary reconciliation, not membership.source.
+                    departments = await DepartmentDao.aget_by_ids(list(removed_secondary_candidates))
+                    sso_secondaries = {
+                        dept.id
+                        for dept in departments
+                        if dept.id in removed_secondary_candidates and dept.source == row_source
+                    }
+                desired_primary = primary_dept.id if primary_dept is not None else None
+                desired_department_ids = wanted_secondaries | (
+                    {desired_primary} if desired_primary is not None else set()
+                )
+                override_changes_membership = full_department_override and (
+                    primary_id != desired_primary or previous_department_ids != desired_department_ids
+                )
+                membership_change_requested = override_changes_membership or (
+                    primary_dept is not None
+                    and (
+                        primary_id != primary_dept.id
+                        or bool(wanted_secondaries - previous_department_ids)
+                        or (
+                            "secondary_dept_external_ids" in payload.model_fields_set
+                            and bool(sso_secondaries - wanted_secondaries)
+                        )
+                    )
+                )
+                from bisheng.user.application.policy_bindings import retire_current_policy_bindings
+
+                if membership_change_requested:
+                    await retire_current_policy_bindings(user.user_id)
                 if full_department_override:
                     await cls._replace_departments_full(
                         user.user_id,
@@ -182,6 +222,9 @@ class LoginSyncService:
                     payload.department_admin_external_ids,
                     row_source=row_source,
                 )
+
+                if membership_change_requested:
+                    await retire_current_policy_bindings(user.user_id)
 
                 # WeCom-style disable: keep department rows for org-tree placeholder (PRD 8b).
                 if payload.account_disabled is True:
@@ -217,6 +260,16 @@ class LoginSyncService:
                         leaf_tenant.status,
                     )
                     raise SsoTenantDisabledError.http_exception(f"tenant {leaf_tenant.id} status={leaf_tenant.status}")
+
+                from bisheng.user.application.policy_bindings import (
+                    retire_current_policy_bindings,
+                    seed_policy_defaults,
+                )
+
+                current_department_ids = await policy_membership_ids(user.user_id)
+                if membership_change_requested or current_department_ids != previous_department_ids:
+                    await retire_current_policy_bindings(user.user_id)
+                await seed_policy_defaults(user.user_id, current_department_ids - previous_department_ids)
 
                 guard = await UserService._reject_login_if_user_has_no_usable_access(user)
                 if guard is not None:
@@ -282,7 +335,7 @@ class LoginSyncService:
                     user = legacy
                 cls._apply_user_attrs(user, attrs)
                 cls._touch_user_sync_time(user)
-                user = await UserService.apersist_profile_update(user)
+                user = await UserService.apersist_profile_update(user, from_sync=True)
                 if write_migration_audit:
                     await AuditLogDao.ainsert_v2(
                         tenant_id=ROOT_TENANT_ID,
@@ -303,7 +356,7 @@ class LoginSyncService:
                 new_delete = 1 if payload.account_disabled is True else 0
                 ds = cls._disable_source_for_row(row_source, new_delete)
                 new_user = User(
-                    user_name=(attrs.name.strip() if attrs.name else "") or ext,
+                    user_name=attrs.name if attrs.name is not None else ext,
                     email=cls._normalize_contact_field(attrs.email),
                     phone_number=cls._normalize_contact_field(attrs.phone),
                     external_id=ext,
@@ -358,7 +411,7 @@ class LoginSyncService:
                     raise UserForbiddenError.http_exception()
             cls._apply_user_attrs(user, attrs)
             cls._touch_user_sync_time(user)
-            user = await UserService.apersist_profile_update(user)
+            user = await UserService.apersist_profile_update(user, from_sync=True)
 
         # Gateway org sync: optional explicit account enable/disable
         if payload.account_disabled is not None:
@@ -366,7 +419,7 @@ class LoginSyncService:
             if int(getattr(user, "delete", 0) or 0) != want:
                 user.delete = want
                 user.disable_source = cls._disable_source_for_row(row_source, want)
-                user = await UserService.apersist_profile_update(user)
+                user = await UserService.apersist_profile_update(user, from_sync=True)
 
         if int(getattr(user, "delete", 0) or 0) == 1 and payload.account_disabled is not True:
             raise UserForbiddenError.http_exception()
@@ -383,9 +436,9 @@ class LoginSyncService:
     @classmethod
     def _apply_user_attrs(cls, user: User, attrs) -> None:
         """Apply present HR attributes without clearing omitted fields."""
-        if attrs.name:
-            nm = attrs.name.strip()
-            if nm and user.user_name != nm:
+        if attrs.name is not None:
+            nm = attrs.name
+            if user.user_name != nm:
                 user.user_name = nm
         if attrs.email is not None:
             ne = cls._normalize_contact_field(attrs.email)
@@ -518,79 +571,16 @@ class LoginSyncService:
         current_memberships = await UserDepartmentDao.aget_user_departments(user_id)
         current_dept_ids = list(dict.fromkeys(int(row.department_id) for row in current_memberships))
 
-        await cls._replace_department_scoped_roles(
-            user_id,
-            revoke_dept_ids=current_dept_ids,
-            apply_dept_ids=desired_dept_ids,
-        )
-
+        desired = set(desired_dept_ids)
+        # Preserve unchanged membership identity; replay must not revoke/regrant defaults.
         for department_id in current_dept_ids:
-            await cls._remove_department_membership(user_id, department_id)
-
+            if department_id not in desired:
+                await cls._remove_department_membership(user_id, department_id)
         if primary_dept_id is not None:
-            await DepartmentMembershipProjectionService.aadd_member(
-                user_id=user_id,
-                department_id=int(primary_dept_id),
-                is_primary=1,
-                source=row_source,
-            )
-        for department_id in desired_secondary_ids:
-            await DepartmentMembershipProjectionService.aadd_member(
-                user_id=user_id,
-                department_id=int(department_id),
-                is_primary=0,
-                source=row_source,
-            )
+            await cls._ensure_primary(user_id, int(primary_dept_id), row_source=row_source)
+        await cls._ensure_secondaries(user_id, desired_secondary_ids, row_source=row_source, reconcile_remove=True)
 
         await cls._sync_department_member_tuples(user_id, desired_dept_ids)
-
-    @classmethod
-    async def _replace_department_scoped_roles(
-        cls,
-        user_id: int,
-        *,
-        revoke_dept_ids: list[int],
-        apply_dept_ids: list[int],
-    ) -> None:
-        """Revoke removed department-scoped roles, then apply target defaults."""
-        current_roles = await UserRoleDao.aget_user_roles(user_id)
-        current_role_ids = {int(row.role_id) for row in current_roles}
-
-        target_role_ids = set(current_role_ids)
-        if revoke_dept_ids and current_role_ids:
-            role_rows = await RoleDao.aget_role_by_ids(list(current_role_ids))
-            revoke_scope = {int(did) for did in revoke_dept_ids}
-            revoke_role_ids = {
-                int(role.id)
-                for role in role_rows
-                if getattr(role, "id", None) is not None
-                and int(getattr(role, "department_id", 0) or 0) in revoke_scope
-                and int(role.id) != AdminRole
-            }
-            target_role_ids -= revoke_role_ids
-
-        if apply_dept_ids:
-            dept_rows = await DepartmentDao.aget_by_ids(apply_dept_ids)
-            default_role_ids = {
-                int(role_id)
-                for dept in dept_rows
-                for role_id in (getattr(dept, "default_role_ids", None) or [])
-                if role_id is not None and int(role_id) != AdminRole
-            }
-            target_role_ids.update(default_role_ids)
-
-        need_add = sorted(target_role_ids - current_role_ids)
-        need_del = sorted(current_role_ids - target_role_ids)
-        if need_add:
-            UserRoleDao.add_user_roles(user_id, need_add)
-        if need_del:
-            UserRoleDao.delete_user_roles(user_id, need_del)
-        if need_add or need_del:
-            await LegacyRBACSyncService.sync_user_role_change(
-                user_id,
-                current_role_ids,
-                target_role_ids,
-            )
 
     @classmethod
     async def _sync_department_member_tuples(

@@ -1,5 +1,5 @@
 jest.mock('react-dom/server', () => jest.requireActual('react-dom/server.node'));
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import AiChatInput from './AiChatInput';
 
 // jsdom has no layout observer; behavior tests use deterministic geometry.
@@ -104,7 +104,7 @@ function props() {
 }
 beforeEach(() => { mockSetSkills.mockClear(); mockAvailableSkills = mockSkills; mockUseRealUploader = false; });
 
-test('new chat offers setup, established chat hides setup while preserving context', () => {
+test('established chat keeps the setup entries and the selected context', () => {
   const input = props();
   const view = render(<AiChatInput {...input} />);
   for (const label of ['skills', 'tools', 'research', 'spaces']) {
@@ -113,9 +113,8 @@ test('new chat offers setup, established chat hides setup while preserving conte
   expect(screen.getByText('Reference')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'tools' }).closest('.dsh-chat-composer')).toBeTruthy();
   view.rerender(<AiChatInput {...input} allowConfiguration={false} />);
-  for (const label of ['tools']) {
-    expect(screen.queryByRole('button', { name: label })).toBeNull();
-  }
+  // Tools travel with each request, so a follow-up turn can still add one.
+  expect(screen.getByRole('button', { name: 'tools' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'research' })).toHaveAttribute('aria-pressed', 'true');
   fireEvent.click(screen.getByRole('button', { name: 'research' }));
   expect(input.onToggleTaskMode).toHaveBeenCalledTimes(1);
@@ -186,7 +185,7 @@ test('returning to ordinary chat clears selected task skills', () => {
 });
 
 
-test.each([true, false])('send acceptance %s preserves selected skills while resetting accepted message drafts', (accepted) => {
+test.each([true, false])('send acceptance %s preserves selected skills while resetting accepted message drafts', async (accepted) => {
   const input = props();
   input.onSend.mockReturnValue(accepted);
   render(<AiChatInput {...input} />);
@@ -194,7 +193,7 @@ test.each([true, false])('send acceptance %s preserves selected skills while res
   const editor = screen.getByRole('textbox');
   editor.append(document.createTextNode('Prepare a report'));
   fireEvent.input(editor);
-  fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send message' })); });
   expect(input.onSend).toHaveBeenCalledWith('Prepare a report', [{ name: 'notes.txt', filepath: '/notes.txt' }]);
   if (accepted) {
     expect(mockSetSkills).not.toHaveBeenCalled();
@@ -203,7 +202,7 @@ test.each([true, false])('send acceptance %s preserves selected skills while res
     expect(screen.queryByText('notes.txt')).toBeNull();
     editor.append(document.createTextNode('Continue the report'));
     fireEvent.input(editor);
-    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send message' })); });
     expect(input.onSend).toHaveBeenLastCalledWith('Continue the report', null);
     expect(editor).toHaveTextContent('research');
     expect(mockSetSkills).not.toHaveBeenCalled();
@@ -325,4 +324,40 @@ test('shows the permission reason next to the composer and preserves a blocked q
   fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' });
   expect(input.onSend).toHaveBeenCalled();
   expect(screen.getByRole('textbox')).toHaveTextContent('D6-W');
+});
+
+
+test('an accepted send in an abandoned draft keeps the new composer text and files', async () => {
+  let finish: (accepted: boolean) => void = () => undefined;
+  const onSend = jest.fn(() => new Promise<boolean>(resolve => { finish = resolve; }));
+  const input = { ...props(), onSend, features: { taskMode: false } };
+  const view = render(<AiChatInput {...input} composerIdentity="project-a-draft" value="Question A" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+  expect(onSend).toHaveBeenCalledTimes(1);
+  view.rerender(<AiChatInput {...input} composerIdentity="project-b-draft" value="Question B" />);
+  fireEvent.click(screen.getByRole('button', { name: 'upload' }));
+  expect(screen.getByTestId('attachments')).toHaveTextContent('notes.txt');
+  await act(async () => { finish(true); });
+  expect(screen.getByRole('textbox')).toHaveTextContent('Question B');
+  expect(screen.getByTestId('attachments')).toHaveTextContent('notes.txt');
+});
+
+
+test('an explicit new composer discards unsent files without a late send clearing its successor', async () => {
+  let finish: (accepted: boolean) => void = () => undefined;
+  const onChange = jest.fn();
+  const onSend = jest.fn(() => new Promise<boolean>(resolve => { finish = resolve; }));
+  const input = { ...props(), onSend, onChange, features: { taskMode: false } };
+  const view = render(<AiChatInput key="draft-a" {...input} composerIdentity="draft-a" value="Question A" />);
+  fireEvent.click(screen.getByRole('button', { name: 'upload' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+  expect(onSend).toHaveBeenCalledWith('Question A', [{ name: 'notes.txt', filepath: '/notes.txt' }]);
+  view.rerender(<AiChatInput key="draft-b" {...input} composerIdentity="draft-b" value="Question B" />);
+  expect(screen.queryByTestId('attachments')).toBeNull();
+  await act(async () => { finish(true); });
+  expect(onChange).not.toHaveBeenCalledWith('');
+  expect(screen.getByRole('textbox')).toHaveTextContent('Question B');
+  onSend.mockResolvedValue(true);
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send message' })); });
+  expect(onSend).toHaveBeenLastCalledWith('Question B', null);
 });

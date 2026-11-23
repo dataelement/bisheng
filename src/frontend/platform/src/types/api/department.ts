@@ -47,13 +47,22 @@ export interface DepartmentDetail {
   member_count: number
 }
 
+export type RoleBindingIssueReason = "binding_tenant_mismatch" | "definition_out_of_scope" | "department_out_of_scope" | "definition_missing";
+export interface RoleBindingIssue {
+  binding_id: number;
+  role_id: number;
+  role_name: string | null;
+  reason: RoleBindingIssueReason;
+}
+
 export interface DepartmentMember {
   external_id?: string | null
   user_id: number
   user_name: string
-  /** 本地人员 ID（external_id），用于重名展示；非展示字段 */
+  /** Raw account alias returned by the department API. */
   person_id?: string | null
   department_id: number
+  department?: Pick<DepartmentTreeNode, "dept_id" | "name" | "status">
   is_primary: number
   source: string
   create_time: string
@@ -63,6 +72,7 @@ export interface DepartmentMember {
   disable_source?: string | null
   user_groups: { id: number; group_name: string }[]
   roles: { id: number; role_name: string }[]
+  role_binding_issues?: RoleBindingIssue[]
   /** 当前部门 OpenFGA admin；用于在角色列最前展示「部门管理员」 */
   is_department_admin?: boolean
 }

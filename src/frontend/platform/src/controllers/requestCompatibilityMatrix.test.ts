@@ -3,9 +3,20 @@ const notices = vi.hoisted(() => vi.fn());
 vi.mock('@bisheng/ui', () => ({ notification: { open: notices } }));
 beforeEach(() => { vi.resetModules(); localStorage.clear(); sessionStorage.clear(); notices.mockClear(); });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+it('keeps an auxiliary business 404 inspectable without replacing the page', async () => {
+  const current = { href: 'http://localhost/models', origin: 'http://localhost' };
+  vi.stubGlobal('location', current);
+  const { default: request } = await setup({ status_code: 404, status_message: 'Not found', data: { resource_id: 'flow-a' } });
+  const error = await request.get('/api/v1/guest-link/workflow/flow-a').catch(cause => cause);
+  expect(current.href).toBe('http://localhost/models');
+  expect(error).toMatchObject({ status_code: 404, presentation: 'toast', data: { resource_id: 'flow-a' } });
+  expect(notices).toHaveBeenCalledTimes(1);
+});
 async function setup(envelope: unknown) {
   const module = await import('./request');
-  module.default.defaults.adapter = async config => ({ config, status: 200, statusText: 'OK', headers: {}, data: envelope });
+  module.default.defaults.adapter = async config => ({ config, status: 200, statusText: 'OK', headers: {},
+    data: config.url?.startsWith('/api/v1/admin/request-scope')
+      ? {status_code: 200, data: {scope_tenant_id: 60, source: 'selected'}} : envelope });
   return module;
 }
 it('keeps password-expiration evidence for the login interaction without a generic notice', async () => {
@@ -21,6 +32,21 @@ it('preserves the legacy 11010 envelope for its caller-owned interaction', async
   expect(await request.get('/test')).toBe(body);
   expect(notices).not.toHaveBeenCalled();
 });
+it('keeps a deletion precheck conflict in the dialog without a duplicate notice', async () => {
+  const conflict = {
+    status_code: 10999,
+    status_message: 'Resource conflict',
+    data: { reason: 'space_transfer_input_required' },
+  };
+  await setup(conflict);
+  const { precheckDeletion } = await import('./API/knowledgeDeletion');
+  await expect(precheckDeletion({ spaceId: 7, kind: 'delete' })).rejects.toMatchObject({
+    status_code: conflict.status_code,
+    data: conflict.data,
+    presentation: 'none',
+  });
+  expect(notices).not.toHaveBeenCalled();
+});
 it('throttles concurrent license failures while every caller still receives its own error', async () => {
   vi.spyOn(Date, 'now').mockReturnValue(10000);
   const { default: request, showApiError } = await setup({ status_code: 11001, status_message: 'License expired', data: { license: 'expired' } });
@@ -30,7 +56,7 @@ it('throttles concurrent license failures while every caller still receives its 
   expect(notices).toHaveBeenCalledTimes(1);
 });
 it('keeps forced permission routing for showError=false while the legacy silent exception stays quiet', async () => {
-  const current = { href: '/current' };
+  const current = { href: '/current', origin: 'http://localhost' };
   vi.stubGlobal('location', current);
   const { default: request } = await setup({ status_code: 403, status_message: 'Forbidden', data: { reason: 'role' } });
   const forced = await request.get('/api/v1/restricted', { showError: false }).catch(cause => cause);

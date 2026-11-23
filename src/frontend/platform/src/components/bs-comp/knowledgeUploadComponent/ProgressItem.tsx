@@ -1,12 +1,13 @@
 // @ts-strict-ignore
 import { Button } from '@bisheng/ui';
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState";
 import { FileIcon } from "@/components/bs-icons/file";
 
 
 import { QuestionHint as QuestionTooltip } from '@/components/bs-comp/QuestionHint';
 import { uploadFileApi } from "@/controllers/API";
 import { cn } from "@/util/utils";
-import { CheckCircle2Icon, RefreshCw, RotateCw, XCircle } from "lucide-react";
+import { CheckCircle2Icon, RefreshCw, XCircle } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Progress, ProgressStatus } from ".";
 
@@ -85,7 +86,7 @@ export default function ProgressItem({ analysis = false, knowledgeId = '', item,
     const analysisStatusIcon = (item) => {
         if (!analysis) return
         if (item.progress === ProgressStatus.Await) {
-            return <RotateCw size={18} className=" text-primary animate-spin" />
+            return <LoadingState size="inline" />
         } else if (item.reason) {
             return <QuestionTooltip error content={item.reason} />
         } else {

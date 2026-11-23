@@ -16,7 +16,10 @@ from bisheng.utils import http_middleware
 @pytest.mark.parametrize("protocol", ["responses", "chat/completions"])
 async def test_stale_browser_cookie_cannot_preempt_desktop_bearer(monkeypatch, protocol):
     principal = DshPrincipal(tenant_id="2", user_id="3", session_id="desktop-session")
-    runtime = SimpleNamespace(access=SimpleNamespace(authenticate=AsyncMock(return_value=principal)))
+    runtime = SimpleNamespace(
+        sessions=SimpleNamespace(record_activity=AsyncMock()),
+        access=SimpleNamespace(authenticate=AsyncMock(return_value=principal)),
+    )
     model_runtime = SimpleNamespace(complete=AsyncMock(return_value={"id": "model-result"}))
     monkeypatch.setattr(models, "get_model_runtime", AsyncMock(return_value=model_runtime))
     monkeypatch.setattr(

@@ -80,6 +80,32 @@ async def test_always_enabled_settings_preserve_addresses_and_other_configuratio
         ).enabled
 
 
+async def test_anonymous_browser_config_through_production_admission(settings_app, monkeypatch):
+    from bisheng.admin.application import request_admission
+    from bisheng.dsh.api.router import router
+
+    original, _, _ = settings_app
+    app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None)
+    app.include_router(router, prefix="/api/v1")
+    app.dependency_overrides.update(original.dependency_overrides)
+    admission = AsyncMock(side_effect=HTTPException(401, "Authentication required"))
+    monkeypatch.setattr(request_admission, "authenticate_browser", admission)
+    request_admission.install_request_admission(app)
+
+    def require_login():
+        raise HTTPException(401, "Authentication required")
+
+    app.dependency_overrides[identity.browser_user] = require_login
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/api/v1/dsh/browser-config")
+        assert response.status_code == 200
+        assert set(response.json()["data"]) == {"management_enabled", "enabled", "download_url", "launch_url"}
+        admission.assert_not_awaited()
+        assert (await client.get("/api/v1/dsh/admin/settings")).status_code == 401
+        assert (await client.put("/api/v1/dsh/admin/settings", json={})).status_code == 401
+        assert (await client.post("/api/v1/dsh/authorize", json={"auth_id": "test"})).status_code == 401
+
+
 async def test_deployment_gate_wins_without_reading_database(settings_app, monkeypatch):
     app, _, _ = settings_app
     app.dependency_overrides[dependencies.get_settings] = lambda: DshSettings()

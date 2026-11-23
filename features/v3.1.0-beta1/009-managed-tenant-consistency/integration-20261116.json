@@ -1,0 +1,30 @@
+{
+  "date": "2026-11-16",
+  "source": "e084a5732b6888206b8968ff73bb2c3ee049af7c",
+  "target_before_merge": "7220ec02e3",
+  "target_branch": "feat/3.1.0-beta1",
+  "worktree_branch": "codex/integrate-tenant-context-beta1-20261116",
+  "gateway": {
+    "remote_branch": "codex/tenant-context-unification",
+    "verified_remote_sha": "aa4f272b6e9fe6e073415034cb0ece5b1c3e34e3",
+    "merged_to_main": false
+  },
+  "tests": {
+    "backend": 277,
+    "platform": 48,
+    "client": 23,
+    "shared": 22,
+    "e2e_skipped": 12
+  },
+  "conflict_files": [
+    "src/backend/bisheng/dsh/domain/services/model_catalog.py",
+    "src/backend/bisheng/workstation/api/endpoints/config.py"
+  ],
+  "frontend_standard_lint": "PASS both apps",
+  "frontend_standard_strict_types": "PASS both apps",
+  "shared_types": "PASS",
+  "scope_metadata": "PASS: Python 963, Gateway 80 route-method pairs",
+  "external_systems": "NOT_RUN",
+  "historical_data_changes": false,
+  "primary_checkout": "preserved existing dirty state"
+}

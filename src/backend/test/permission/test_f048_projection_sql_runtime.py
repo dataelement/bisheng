@@ -127,6 +127,46 @@ def _plan() -> ProjectionPlan:
     )
 
 
+async def test_late_failed_closed_mark_does_not_poison_a_later_revoke(session_factory):
+    original_id = await _seed_projecting_state(session_factory)
+    with bypass_tenant_filter():
+        async with session_factory() as session, session.begin():
+            old = await session.get(PermissionProjectionOperation, original_id)
+            old.status = "FAILED_CLOSED"
+            values = old.model_dump(exclude={"id", "create_time", "update_time"})
+            values.update(idempotency_key="later-revoke", expected_version=4, target_version=5, status="FINALIZED")
+            newer = PermissionProjectionOperation(**values)
+            session.add(newer)
+            await session.flush()
+            await session.execute(
+                sa.update(ResourcePermissionMode)
+                .where(
+                    ResourcePermissionMode.tenant_id == 7,
+                    ResourcePermissionMode.resource_type == "folder",
+                    ResourcePermissionMode.resource_id == "42",
+                )
+                .values(operation_id=newer.id, version=5, projection_state="CURRENT")
+            )
+    await SqlProjectionScopeGuard().fail_closed(_plan(), "late old failure")
+    with bypass_tenant_filter():
+        async with session_factory() as session:
+            mode = (await session.exec(select(ResourcePermissionMode))).one()
+            assert mode.version == 5 and mode.operation_id == newer.id and mode.projection_state == "CURRENT"
+
+
+async def test_failed_closed_mark_still_closes_its_own_terminal_failure(session_factory):
+    operation_id = await _seed_projecting_state(session_factory)
+    with bypass_tenant_filter():
+        async with session_factory() as session, session.begin():
+            operation = await session.get(PermissionProjectionOperation, operation_id)
+            operation.status = "FAILED_CLOSED"
+    await SqlProjectionScopeGuard().fail_closed(_plan(), "own terminal failure")
+    with bypass_tenant_filter():
+        async with session_factory() as session:
+            mode = (await session.exec(select(ResourcePermissionMode))).one()
+            assert mode.projection_state == "FAILED_CLOSED" and mode.operation_id == operation_id
+
+
 async def _seed_projecting_state(
     session_factory,
     *,

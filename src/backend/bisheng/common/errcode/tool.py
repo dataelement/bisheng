@@ -1,6 +1,11 @@
 from bisheng.common.errcode import BaseErrorCode
 
 
+class ToolCreationPendingError(BaseErrorCode):
+    Code: int = 15090
+    Msg: str = "Tool creation has not finished. The tool cannot be used yet."
+
+
 class ToolTypeRepeatError(BaseErrorCode):
     Code: int = 15000
     Msg: str = "Tool name already exists"
@@ -91,3 +96,8 @@ class ToolMcpUrlError(BaseErrorCode):
 class ToolMcpRequestError(BaseErrorCode):
     Code: int = 15032
     Msg: str = "Failed to retrieve MCP tools. Check the service status and configuration."
+
+
+class ToolImageConfigError(BaseErrorCode):
+    Code: int = 15033
+    Msg: str = "Invalid image generation settings. Check the API address, API key and model; Azure is not supported."

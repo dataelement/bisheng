@@ -94,6 +94,11 @@ class ResourceAuthorizationRegistry:
             or target.resource_id != normalized_id
         ):
             raise PermissionInvalidResourceError()
+        from bisheng.permission.application.request_boundary import request_business_target
+
+        expected = request_business_target()
+        if expected is not None and target.tenant_id != expected:
+            raise PermissionInvalidResourceError()
         return target
 
     async def confirm_absent(
@@ -148,6 +153,14 @@ class BoundResourceAuthorizationPort:
             resource_type=self._resource_type,
             resource_id=resource_id,
         )
+
+    async def load_permission_records(self, *, resource_ids: tuple[str, ...]):
+        """Batch form of the business proof. None means the adapter has no batch loader."""
+
+        method = getattr(self._adapter, "load_permission_records", None)
+        if method is None:
+            return None
+        return await method(resource_type=self._resource_type, resource_ids=resource_ids)
 
 
 class PermissionDecisionApplication:

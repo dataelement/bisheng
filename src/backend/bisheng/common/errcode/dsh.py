@@ -324,6 +324,38 @@ class DshToolOutputTooLargeError(BaseErrorCode):
     ClientCode: str = "tool_output_too_large"
 
 
+class DshMobileUserDisabledError(BaseErrorCode):
+    Code: int = 26153
+    Msg: str = "User account unavailable; sign in again"
+    HttpStatus: int = 401
+    ClientCode: str = "mobile_user_disabled"
+    ErrorType: str = "authentication_error"
+
+
+class DshMobileTenantUnavailableError(BaseErrorCode):
+    Code: int = 26154
+    Msg: str = "Tenant unavailable; sign in again"
+    HttpStatus: int = 401
+    ClientCode: str = "mobile_tenant_unavailable"
+    ErrorType: str = "authentication_error"
+
+
+class DshMobileTokenVersionError(BaseErrorCode):
+    Code: int = 26155
+    Msg: str = "Login is no longer valid; sign in again"
+    HttpStatus: int = 401
+    ClientCode: str = "mobile_token_version_changed"
+    ErrorType: str = "authentication_error"
+
+
+class DshMobileLoggedInElsewhereError(BaseErrorCode):
+    Code: int = 26156
+    Msg: str = "Your account is logged in on another device"
+    HttpStatus: int = 401
+    ClientCode: str = "mobile_logged_in_elsewhere"
+    ErrorType: str = "authentication_error"
+
+
 class DshContentSafetyAuthError(BaseErrorCode):
     Code: int = 26170
     Msg: str = "Content safety event authentication failed"
@@ -379,6 +411,16 @@ class DshContentSafetyTooLargeError(BaseErrorCode):
     ErrorType: str = "invalid_request_error"
 
 
+class DshModelPricingMissingError(BaseErrorCode):
+    """F016: a billed model has no price record (upgrade backfill not done); never billed as free."""
+
+    Code: int = 26176
+    Msg: str = "Model pricing is not configured; contact the administrator"
+    HttpStatus: int = 503
+    ClientCode: str = "model_pricing_missing"
+    ErrorType: str = "service_unavailable_error"
+
+
 DSH_ERROR_TYPES = (
     DshContentSafetyAuthError,
     DshContentSafetyInvalidEventError,
@@ -386,6 +428,7 @@ DSH_ERROR_TYPES = (
     DshContentSafetyExpiredError,
     DshContentSafetyUnavailableError,
     DshContentSafetyTooLargeError,
+    DshModelPricingMissingError,
     DshToolNotFoundError,
     DshToolPermissionDeniedError,
     DshToolUnsupportedError,
@@ -427,5 +470,9 @@ DSH_ERROR_TYPES = (
     DshInternalErrorError,
     DshOperationInProgressError,
     DshOperationConflictError,
+    DshMobileUserDisabledError,
+    DshMobileTenantUnavailableError,
+    DshMobileTokenVersionError,
+    DshMobileLoggedInElsewhereError,
 )
 ERROR_BY_CLIENT_CODE = {error.ClientCode: error for error in DSH_ERROR_TYPES}

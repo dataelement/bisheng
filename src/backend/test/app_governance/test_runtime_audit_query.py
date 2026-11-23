@@ -332,6 +332,43 @@ async def test_capability_and_access_snapshots_without_live_joins(audit_env):
 
 
 @pytest.mark.parametrize(
+    ("boundary", "expected_ids"),
+    [
+        ({"start_time": "2025-01-02T00:00:00Z"}, [1, 12, 11]),
+        ({"end_time": "2025-01-02T23:59:59.999999Z"}, [11, 10]),
+    ],
+)
+async def test_custom_one_sided_range_is_shared_by_pages_candidates_and_export(audit_env, boundary, expected_ids):
+    from bisheng.database.models.app_access_log import AppAccessLog
+
+    service, repo, sessions, scope = audit_env
+    async with sessions() as session:
+        for record_id, entry_time in (
+            (10, datetime(2025, 1, 1, 23, 59, 59, 999999)),
+            (11, datetime(2025, 1, 2, 23, 59, 59, 999999)),
+            (12, datetime(2025, 1, 3)),
+        ):
+            session.add(
+                AppAccessLog(id=record_id, tenant_id=1, app_id="app-a", user_id=record_id, entry_time=entry_time)
+            )
+        await session.commit()
+
+    filters = {"time_range": "custom", **boundary}
+    first = await service.list(AUDIT_USER, "access", filters, limit=1)
+    rest = await service.list(AUDIT_USER, "access", filters, cursor=first["next_cursor"])
+    assert [row["id"] for row in first["items"] + rest["items"]] == expected_ids
+
+    candidates = await service.candidates(AUDIT_USER, "access", "visitor", filters)
+    assert {int(item["id"]) for item in candidates["items"]} == {
+        9 if row_id == 1 else row_id for row_id in expected_ids
+    }
+
+    snapshot = await repo.snapshot(scope, first["snapshot_id"])
+    pages = repo.stream_export(scope, "access", snapshot.normalized_filter, snapshot.watermark)
+    assert [row["id"] async for page in pages for row in page] == expected_ids
+
+
+@pytest.mark.parametrize(
     "filters",
     [{"time_range": "custom"}, {"time_range": "all", "credential_id": 10}, {"time_range": "all", "app_id": "foreign"}],
 )

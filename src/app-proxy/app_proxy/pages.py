@@ -37,6 +37,7 @@ from __future__ import annotations
 import html
 from dataclasses import dataclass
 
+from app_proxy import app_inaccessible_appearance, app_unpublished_appearance
 from app_proxy.authz import (
     DECISION_FORBIDDEN,
     DECISION_LOGIN,
@@ -46,8 +47,7 @@ from app_proxy.authz import (
     DECISION_UNAVAILABLE,
 )
 from app_proxy.config import DEFAULT_SQUARE_URL
-from app_proxy.recovery_appearance import ILLUSTRATION as RECOVERY_ILLUSTRATION
-from app_proxy.recovery_appearance import STYLE as RECOVERY_STYLE
+from app_proxy.recovery_appearance import ILLUSTRATION, STATE_VIEW_MOBILE_STYLE, STYLE
 
 #: Transitional, not a verdict: the app exists and you may enter, but nothing
 #: is answering right now. Two kinds, told apart by the manager's answer rather
@@ -108,44 +108,11 @@ ERROR_CODES = {
     PAGE_RECOVERING: 16148,
 }
 
-_STYLE = """
-:root { color-scheme: light dark; }
-* { box-sizing: border-box; }
-body {
-  margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
-  padding: 24px; background: #f5f6f8; color: #1f2329;
-  font: 14px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
-        "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-}
-.card {
-  width: 100%; max-width: 480px; background: #fff; border-radius: 12px; padding: 40px 32px;
-  box-shadow: 0 2px 12px rgba(31, 35, 41, .08); text-align: center;
-}
-.mark { font-size: 40px; line-height: 1; margin-bottom: 16px; }
-h1 { font-size: 20px; font-weight: 600; margin: 0 0 12px; }
-p { margin: 0 0 8px; color: #646a73; }
-.app { color: #1f2329; font-weight: 500; }
-.hint { font-size: 13px; color: #8f959e; margin-top: 16px; }
-.actions { margin-top: 28px; }
-a.button {
-  display: inline-block; padding: 8px 20px; border-radius: 6px; text-decoration: none;
-  background: #1668dc; color: #fff; font-size: 14px;
-}
-a.button:hover { background: #1554b5; }
-@media (prefers-color-scheme: dark) {
-  body { background: #1a1a1a; color: #e5e6eb; }
-  .card { background: #242424; box-shadow: none; }
-  p { color: #9a9a9a; }
-  .app { color: #e5e6eb; }
-}
-"""
-
 
 @dataclass(frozen=True)
 class _Layout:
     """What a page looks like — the same in every language."""
 
-    mark: str
     show_square: bool = True
 
 
@@ -181,15 +148,20 @@ class _Chrome:
 
 
 _LAYOUT: dict[str, _Layout] = {
-    DECISION_FORBIDDEN: _Layout(mark="🔒"),
-    DECISION_STOPPED: _Layout(mark="⏸"),
+    DECISION_FORBIDDEN: _Layout(),
+    DECISION_STOPPED: _Layout(),
     # Carries neither name nor owner — draft / pending / deleted / never
     # existed must be one indistinguishable page (AC-29).
-    DECISION_NOT_FOUND: _Layout(mark="🔍"),
-    DECISION_NOT_ENABLED: _Layout(mark="🧩", show_square=False),
-    DECISION_UNAVAILABLE: _Layout(mark="⚠️", show_square=False),
-    PAGE_DEPLOYING: _Layout(mark="🚀", show_square=False),
-    PAGE_RECOVERING: _Layout(mark="🔄", show_square=False),
+    DECISION_NOT_FOUND: _Layout(),
+    DECISION_NOT_ENABLED: _Layout(show_square=False),
+    DECISION_UNAVAILABLE: _Layout(show_square=False),
+    PAGE_DEPLOYING: _Layout(show_square=False),
+    PAGE_RECOVERING: _Layout(show_square=False),
+}
+
+_APP_STATE_APPEARANCE = {
+    DECISION_NOT_FOUND: app_unpublished_appearance,
+    DECISION_UNAVAILABLE: app_inaccessible_appearance,
 }
 
 _CHROME: dict[str, _Chrome] = {
@@ -473,11 +445,17 @@ def render_page(
     # not-found page would make four supposedly identical renders differ, which
     # is exactly the enumeration oracle AC-29 closes.
     if request_id and (kind == DECISION_UNAVAILABLE or kind in TRANSITIONAL_KINDS):
-        hint = f'    <p class="hint">{html.escape(chrome.request_id.format(id=request_id))}</p>'
+        escaped_id = html.escape(request_id)
+        if kind == DECISION_UNAVAILABLE:
+            escaped_id = f'<span class="hint-id">{escaped_id}</span>'
+        hint = f'    <p class="hint">{html.escape(chrome.request_id).format(id=escaped_id)}</p>'
 
     refresh_meta, retry_script = _retry_markup(kind)
-    style = RECOVERY_STYLE if kind == PAGE_RECOVERING else _STYLE
-    mark = RECOVERY_ILLUSTRATION if kind == PAGE_RECOVERING else layout.mark
+    illustration, style = ILLUSTRATION, STYLE
+    appearance = _APP_STATE_APPEARANCE.get(kind)
+    if appearance is not None:
+        illustration = appearance.ILLUSTRATION
+        style += STATE_VIEW_MOBILE_STYLE + appearance.STYLE
 
     return f"""<!doctype html>
 <html lang="{_HTML_LANG[locale]}">
@@ -490,7 +468,7 @@ def render_page(
 </head>
 <body>
   <div class="card">
-    <div class="mark">{mark}</div>
+    <div class="mark">{illustration}</div>
     <h1>{html.escape(copy.title)}</h1>
 {body}
 {actions}

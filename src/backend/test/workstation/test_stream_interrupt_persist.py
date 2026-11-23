@@ -182,6 +182,94 @@ async def test_interrupt_after_completion_does_not_double_insert(stream_env):
     assert len(_answer_rows(stream_env.inserted)) == 1
 
 
+@pytest.mark.parametrize("chunks", [[], ["Partial answer", " before throttling"]])
+@pytest.mark.parametrize("typed", [False, True])
+async def test_rate_limit_persists_before_error_sse_without_title_call(stream_env, monkeypatch, chunks, typed):
+    from bisheng.common.errcode.workstation import LLMRateLimitError
+    from bisheng.workstation.domain.services.chat_helpers import _format_new_message
+
+    metadata = {
+        "execution_id": "101",
+        "attempt_id": "attempt-1",
+        "status_version": 2,
+        "model_id": 17,
+        "reference_id": "support-one",
+    }
+    stream_env.state["chunks"] = chunks
+    stream_env.state["after"] = LLMRateLimitError(**metadata) if typed else RuntimeError("Requests rate limit exceeded")
+    title = AsyncMock()
+    monkeypatch.setattr(chat_service, "gen_title", title)
+
+    response = await chat_service._agent_stream_chat_completion(MagicMock(), _data(), MagicMock())
+    async for chunk in response.body_iterator:
+        if chunk.startswith("event: error"):
+            rows = _answer_rows(stream_env.inserted)
+            assert len(rows) == 1
+            history = _format_new_message(rows[0])
+            assert history["message"]["msg"] == "".join(chunks)
+            assert history["extra"]["error_code"] == 12046
+            assert history["extra"]["error_type"] == "rate_limit"
+            error = json.loads(chunk.split("data: ", 1)[1])
+            assert history["extra"]["reference_id"] == error["data"]["reference_id"]
+            if typed:
+                for key, value in metadata.items():
+                    assert history["extra"][key] == value
+            await response.body_iterator.aclose()
+            break
+    else:
+        pytest.fail("rate-limit error SSE was not emitted")
+    assert len(_answer_rows(stream_env.inserted)) == 1
+    title.assert_not_called()
+
+
+async def test_completed_rate_limit_stream_persists_once_and_skips_title(stream_env, monkeypatch):
+    stream_env.state["after"] = RuntimeError("Requests rate limit exceeded")
+    title = AsyncMock()
+    monkeypatch.setattr(chat_service, "gen_title", title)
+    chunks = await _drain(await chat_service._agent_stream_chat_completion(MagicMock(), _data(), MagicMock()))
+    assert len(_answer_rows(stream_env.inserted)) == 1
+    assert any('"final": true' in chunk for chunk in chunks)
+    title.assert_not_called()
+
+
+async def test_leaving_on_rate_limit_releases_request_execution_lease(stream_env, monkeypatch):
+    lease = object()
+    renewal = object()
+    service = chat_service.DepartmentFlowService
+    monkeypatch.setattr(service, "ensure_lease", AsyncMock(return_value=(chat_service.SlotOutcome.HELD, lease)))
+    monkeypatch.setattr(service, "start_renewal", MagicMock(return_value=renewal))
+    stop = AsyncMock()
+    monkeypatch.setattr(service, "stop_renewal", stop)
+    stream_env.state["after"] = RuntimeError("Requests rate limit exceeded")
+    response = await chat_service._agent_stream_chat_completion(SimpleNamespace(headers={}), _data(), MagicMock())
+    async for chunk in response.body_iterator:
+        if chunk.startswith("event: error"):
+            await response.body_iterator.aclose()
+            break
+    stop.assert_awaited_once_with(renewal, lease)
+    assert len(_answer_rows(stream_env.inserted)) == 1
+
+
+async def test_rate_limit_partial_output_still_passes_final_content_safety_scan(stream_env, monkeypatch):
+    stream_env.state["chunks"] = ["Unsafe partial answer"]
+    stream_env.state["after"] = RuntimeError("Requests rate limit exceeded")
+    monkeypatch.setattr(chat_service.SensitiveWordPolicyService, "is_workbench_content_safety_active", lambda *_a: True)
+    scanner = SimpleNamespace(feed=lambda _: None, finish=lambda: SimpleNamespace(auto_reply="Safe replacement"))
+    monkeypatch.setattr(
+        "bisheng.sensitive_word.domain.services.stream_scanner.StreamContentSafetyScanner", lambda _: scanner
+    )
+    monkeypatch.setattr(chat_service.ChatMessageDao, "aupdate_message_model", AsyncMock())
+    monkeypatch.setattr(chat_service, "mark_session_content_violation", MagicMock())
+    chunks = await _drain(await chat_service._agent_stream_chat_completion(MagicMock(), _data(), MagicMock()))
+    rows = _answer_rows(stream_env.inserted)
+    assert len(rows) == 1
+    assert json.loads(rows[0].message)["msg"] == "Safe replacement"
+    assert "Unsafe" not in rows[0].message
+    assert not any(chunk.startswith("event: error") for chunk in chunks)
+    updated_question = chat_service.ChatMessageDao.aupdate_message_model.await_args.args[0]
+    assert updated_question.sensitive_status == chat_service.SensitiveStatus.VIOLATIONS.value
+
+
 @pytest.mark.parametrize("error_type", ["file_parse_failed", "file_parse_busy"])
 async def test_attachment_parse_failure_ends_stream_without_calling_model(stream_env, monkeypatch, error_type):
     from bisheng.common.errcode.workstation import ChatFileParseError

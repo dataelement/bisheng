@@ -2,11 +2,14 @@ import { Button } from '@bisheng/ui';
 
 import { Copy } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
+import { LoadingState } from "@/components/bs-icons/loading/LoadingState"
 
 import { copyText } from "@/utils"
 import { loadScript } from "./Mermaid"
 
 export default function ECharts({ option }: { option: string }) {
+    const { t } = useTranslation("shared")
     const [mode, setMode] = useState<"chart" | "code">("chart")
     const [echartsLib, setEchartsLib] = useState<any>(null)
     const chartRef = useRef<any | null>(null)
@@ -25,18 +28,18 @@ export default function ECharts({ option }: { option: string }) {
     }, [])
 
     useEffect(() => {
-        // 等待 echarts 库加载完成
+        // Wait until the chart library is available.
         if (!echartsLib) return
 
-        // 清理旧实例
+        // Dispose the previous chart instance.
         if (chartRef.current) {
             chartRef.current.dispose()
             chartRef.current = null
         }
 
-        // 只在图表模式下初始化
+        // Initialize the chart only when its canvas is mounted.
         if (domRef.current) {
-            // 确保 DOM 已经渲染
+            // Wait until the canvas has rendered.
             setTimeout(() => {
                 if (domRef.current && echartsLib) {
                     chartRef.current = echartsLib.init(domRef.current)
@@ -58,7 +61,7 @@ export default function ECharts({ option }: { option: string }) {
         }
     }, [option, echartsLib])
 
-    // 自适应宽度
+    // Keep the chart responsive to its container.
     useEffect(() => {
         if (mode !== "chart" || !containerRef.current || !chartRef.current) return
 
@@ -110,30 +113,30 @@ export default function ECharts({ option }: { option: string }) {
     return (
         <div className="my-3 -ml-3.5" ref={containerRef}>
             <div className="shadow-sm rounded-lg bg-muted overflow-hidden">
-                {/* 头部切换按钮 */}
+                {/* Chart and code view controls. */}
                 <div className="flex items-center justify-between p-2 relative z-10 bg-muted">
                     <div className="flex gap-1 bg-background rounded-md">
                         <Button onClick={() => setMode("chart")} variant={mode === "chart" ? "default" : "ghost"} className="text-xs h-8">
-                            图表
+                            {t("app_chat.chart")}
                         </Button>
                         <Button onClick={() => setMode("code")} variant={mode === "code" ? "default" : "ghost"} className="text-xs h-8">
-                            代码
+                            {t("app_chat.code")}
                         </Button>
                     </div>
                     {mode === "code" && (
                         <div className="flex items-center">
                             <Button onClick={handleCopy} variant="text" className="text-xs h-8" color="default">
                                 <Copy size={16} />
-                                {copySuccess ? "已复制" : "复制"}
+                                {t(copySuccess ? "app_chat.copied" : "app_chat.copy")}
                             </Button>
                         </div>
                     )}
                 </div>
 
-                {/* 内容区域 */}
+                {/* Active chart or source view. */}
                 <div className="">
                     {!echartsLib && mode === "chart" && (
-                        <div className="flex items-center justify-center h-[400px] text-muted-foreground">loading...</div>
+                        <LoadingState className="h-[400px]" />
                     )}
                     <div ref={domRef} style={{ height: 400 }} className={mode === "chart" && echartsLib ? "block" : "hidden"} />
                     <div className={mode === "code" ? "block relative" : "hidden"}>

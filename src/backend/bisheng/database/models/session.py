@@ -9,6 +9,8 @@ from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType
 from bisheng.core.database.retry import retry_on_transient_db_conflict
+from bisheng.core.database.tenant_filter import apply_strict_tenant_filter
+from bisheng.database.models.org_snapshot import astamp_session, stamp_session
 from bisheng.database.models.user_group import UserGroupDao
 
 
@@ -70,6 +72,16 @@ class MessageSessionBase(SQLModelSerializable):
     dislike: int | None = Field(default=0, description="Number of messages clicked")
     copied: int | None = Field(default=0, description="Number of messages copied")
     sensitive_status: int = Field(default=SensitiveStatus.PASS.value, description="Review Status")
+    # F003: initiator's primary department when the session was created; later
+    # messages inherit it. Sentinels as in ``database/models/org_snapshot.py``.
+    operator_dept_id: int | None = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=True, index=True, comment="F003: initiator primary department snapshot"),
+    )
+    operator_dept_path: str | None = Field(
+        default=None,
+        sa_column=Column(String(1024), nullable=True, comment="F003: department name path at the time"),
+    )
     create_time: datetime | None = Field(
         default=None, sa_column=Column(DateTime, nullable=False, index=True, server_default=text("CURRENT_TIMESTAMP"))
     )
@@ -99,6 +111,7 @@ class MessageSessionDao(MessageSessionBase):
         if not data.group_ids:
             user_groups = UserGroupDao.get_user_group(data.user_id)
             data.group_ids = [ug.group_id for ug in user_groups]
+        stamp_session(data)
 
         with get_sync_db_session() as session:
             session.add(data)
@@ -113,6 +126,7 @@ class MessageSessionDao(MessageSessionBase):
         if not data.group_ids:
             user_groups = await UserGroupDao.aget_user_group(data.user_id)
             data.group_ids = [ug.group_id for ug in user_groups]
+        await astamp_session(data)
 
         async with get_async_db_session() as session:
             session.add(data)
@@ -122,7 +136,11 @@ class MessageSessionDao(MessageSessionBase):
 
     @classmethod
     async def delete_session(cls, chat_id: str):
-        statement = update(MessageSession).where(MessageSession.chat_id == chat_id).values(is_delete=True)
+        statement = (
+            apply_strict_tenant_filter(update(MessageSession), MessageSession.tenant_id)
+            .where(MessageSession.chat_id == chat_id)
+            .values(is_delete=True)
+        )
         async with get_async_db_session() as session:
             await session.exec(statement)
             await session.commit()
@@ -320,7 +338,7 @@ class MessageSessionDao(MessageSessionBase):
     @classmethod
     def update_sensitive_status(cls, chat_id: str, sensitive_status: SensitiveStatus):
         statement = (
-            update(MessageSession)
+            apply_strict_tenant_filter(update(MessageSession), MessageSession.tenant_id)
             .where(MessageSession.chat_id == chat_id)
             .values(sensitive_status=sensitive_status.value)
         )
@@ -333,7 +351,7 @@ class MessageSessionDao(MessageSessionBase):
         if like_count == 0:
             return
         statement = (
-            update(MessageSession)
+            apply_strict_tenant_filter(update(MessageSession), MessageSession.tenant_id)
             .where(MessageSession.chat_id == chat_id)
             .values(like=MessageSession.like + like_count)
         )
@@ -346,7 +364,7 @@ class MessageSessionDao(MessageSessionBase):
         if dislike_count == 0:
             return
         statement = (
-            update(MessageSession)
+            apply_strict_tenant_filter(update(MessageSession), MessageSession.tenant_id)
             .where(MessageSession.chat_id == chat_id)
             .values(dislike=MessageSession.dislike + dislike_count)
         )
@@ -359,7 +377,7 @@ class MessageSessionDao(MessageSessionBase):
         if copied_count == 0:
             return
         statement = (
-            update(MessageSession)
+            apply_strict_tenant_filter(update(MessageSession), MessageSession.tenant_id)
             .where(MessageSession.chat_id == chat_id)
             .values(copied=MessageSession.copied + copied_count)
         )
@@ -370,7 +388,7 @@ class MessageSessionDao(MessageSessionBase):
     @classmethod
     def update_session_info_by_flow(cls, name: str, description: str, logo: str, flow_id: str, flow_type: int):
         statement = (
-            update(MessageSession)
+            apply_strict_tenant_filter(update(MessageSession), MessageSession.tenant_id)
             .where(MessageSession.flow_id == flow_id, MessageSession.flow_type == flow_type)
             .values(flow_name=name, flow_description=description, flow_logo=logo)
         )
@@ -382,7 +400,7 @@ class MessageSessionDao(MessageSessionBase):
     @retry_on_transient_db_conflict()
     async def update_session_name(cls, chat_id: str, name: str):
         statement = (
-            update(MessageSession)
+            apply_strict_tenant_filter(update(MessageSession), MessageSession.tenant_id)
             .where(col(MessageSession.chat_id) == chat_id)
             .values(name=name, update_time=datetime.now())
         )
@@ -394,7 +412,9 @@ class MessageSessionDao(MessageSessionBase):
     @retry_on_transient_db_conflict()
     async def touch_session(cls, chat_id: str):
         statement = (
-            update(MessageSession).where(col(MessageSession.chat_id) == chat_id).values(update_time=datetime.now())
+            apply_strict_tenant_filter(update(MessageSession), MessageSession.tenant_id)
+            .where(col(MessageSession.chat_id) == chat_id)
+            .values(update_time=datetime.now())
         )
 
         async def _run() -> None:
@@ -415,7 +435,7 @@ class MessageSessionDao(MessageSessionBase):
         cls, chat_id: str, name: str, *, only_if_default: bool = False, tenant_id: int | None = None
     ) -> bool:
         statement = (
-            update(MessageSession)
+            apply_strict_tenant_filter(update(MessageSession), MessageSession.tenant_id)
             .where(col(MessageSession.chat_id) == chat_id)
             .values(name=name, update_time=datetime.now())
         )

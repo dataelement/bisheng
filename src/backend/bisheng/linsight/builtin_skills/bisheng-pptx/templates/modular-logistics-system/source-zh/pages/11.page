@@ -1,0 +1,555 @@
+pageType: content
+background:
+  type: solid
+  color: '#F2F2EE'
+notes: Authored sequence composition. All new example statements and figures are illustrative, not reported facts. Replace them with user evidence. Four lifelines with ordered request and response arrows
+elements:
+  - elementId: s1
+    elementType: shape
+    bounds:
+      - 0
+      - 0
+      - 960
+      - 8
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#FFD400'
+    border:
+      width: 0
+      color: '#FFD400'
+  - elementId: s2
+    elementType: shape
+    bounds:
+      - 48
+      - 25
+      - 18
+      - 18
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#FFD400'
+    border:
+      width: 0
+      color: '#FFD400'
+  - elementId: t3
+    elementType: text
+    bounds:
+      - 76
+      - 27
+      - 665
+      - 20
+    content:
+      text: MODULAR LOGISTICS SYSTEM
+      fontFamily: &ref_0
+        latin: Arial
+        mac: PingFang SC
+        win: Microsoft YaHei
+        ea: Noto Sans CJK SC
+      fontSize: 10
+      lineHeight: 1.1
+      color: '#202224'
+      bold: false
+  - elementId: l4
+    elementType: line
+    bounds:
+      - 48
+      - 59
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.6
+      color: '#b3b4b1'
+  - elementId: t5
+    elementType: text
+    bounds:
+      - 48
+      - 76
+      - 864
+      - 64
+    content:
+      text: 让交接顺序清晰可见
+      fontFamily:
+        latin: Arial
+        mac: PingFang SC
+        win: Microsoft YaHei
+        ea: Noto Sans CJK SC
+      fontSize: 32
+      lineHeight: 1.1
+      color: '#202224'
+      bold: true
+  - elementId: t6
+    elementType: text
+    bounds:
+      - 754
+      - 46
+      - 158
+      - 13
+    content:
+      text: 图示 02
+      fontFamily: *ref_0
+      fontSize: 9
+      lineHeight: 1.1
+      color: '#5f6061'
+      bold: false
+      align: right
+  - elementId: s7
+    elementType: shape
+    bounds:
+      - 70
+      - 164
+      - 162
+      - 49
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#FFFFFF'
+    border:
+      width: 0.8
+      color: '#202224'
+  - elementId: t8
+    elementType: text
+    bounds:
+      - 82
+      - 177
+      - 138
+      - 30
+    content:
+      text: 需求方
+      fontFamily: *ref_0
+      fontSize: 18
+      lineHeight: 1.1
+      color: '#181915'
+      bold: false
+      align: center
+  - elementId: l9
+    elementType: line
+    bounds:
+      - 151
+      - 217
+      - 1
+      - 210
+    viewBox:
+      - 1
+      - 210
+    points: 0,0 0,210
+    border:
+      width: 0.6
+      color: '#b3b4b1'
+  - elementId: s10
+    elementType: shape
+    bounds:
+      - 289
+      - 164
+      - 162
+      - 49
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#FFFFFF'
+    border:
+      width: 0.8
+      color: '#202224'
+  - elementId: t11
+    elementType: text
+    bounds:
+      - 301
+      - 177
+      - 138
+      - 30
+    content:
+      text: 调度
+      fontFamily: *ref_0
+      fontSize: 18
+      lineHeight: 1.1
+      color: '#181915'
+      bold: false
+      align: center
+  - elementId: l12
+    elementType: line
+    bounds:
+      - 370
+      - 217
+      - 1
+      - 210
+    viewBox:
+      - 1
+      - 210
+    points: 0,0 0,210
+    border:
+      width: 0.6
+      color: '#b3b4b1'
+  - elementId: s13
+    elementType: shape
+    bounds:
+      - 508
+      - 164
+      - 162
+      - 49
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#FFFFFF'
+    border:
+      width: 0.8
+      color: '#202224'
+  - elementId: t14
+    elementType: text
+    bounds:
+      - 520
+      - 177
+      - 138
+      - 30
+    content:
+      text: 仓库
+      fontFamily: *ref_0
+      fontSize: 18
+      lineHeight: 1.1
+      color: '#181915'
+      bold: false
+      align: center
+  - elementId: l15
+    elementType: line
+    bounds:
+      - 589
+      - 217
+      - 1
+      - 210
+    viewBox:
+      - 1
+      - 210
+    points: 0,0 0,210
+    border:
+      width: 0.6
+      color: '#b3b4b1'
+  - elementId: s16
+    elementType: shape
+    bounds:
+      - 727
+      - 164
+      - 162
+      - 49
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#FFFFFF'
+    border:
+      width: 0.8
+      color: '#202224'
+  - elementId: t17
+    elementType: text
+    bounds:
+      - 739
+      - 177
+      - 138
+      - 30
+    content:
+      text: 承运方
+      fontFamily: *ref_0
+      fontSize: 18
+      lineHeight: 1.1
+      color: '#181915'
+      bold: false
+      align: center
+  - elementId: l18
+    elementType: line
+    bounds:
+      - 808
+      - 217
+      - 1
+      - 210
+    viewBox:
+      - 1
+      - 210
+    points: 0,0 0,210
+    border:
+      width: 0.6
+      color: '#b3b4b1'
+  - elementId: l19
+    elementType: line
+    bounds:
+      - 151
+      - 250
+      - 219
+      - 1
+    viewBox:
+      - 219
+      - 1
+    points: 0,0 219,0
+    border:
+      width: 1.2
+      color: '#796916'
+  - elementId: l20
+    elementType: line
+    bounds:
+      - 364.03232834558344
+      - 250
+      - 5.967671654416563
+      - 3.6588106025146203
+    viewBox:
+      - 5.967671654416563
+      - 3.6588106025146203
+    points: 0,3.6588106025146203 5.967671654416563,0
+    border:
+      width: 1.2
+      color: '#796916'
+  - elementId: l21
+    elementType: line
+    bounds:
+      - 364.03232834558344
+      - 246.34118939748538
+      - 5.967671654416563
+      - 3.6588106025146203
+    viewBox:
+      - 5.967671654416563
+      - 3.6588106025146203
+    points: 0,0 5.967671654416563,3.6588106025146203
+    border:
+      width: 1.2
+      color: '#796916'
+  - elementId: t22
+    elementType: text
+    bounds:
+      - 166
+      - 220
+      - 189
+      - 27
+    content:
+      text: 确认订单
+      fontFamily: *ref_0
+      fontSize: 14
+      lineHeight: 1.1
+      color: '#202224'
+      bold: false
+      align: center
+  - elementId: l23
+    elementType: line
+    bounds:
+      - 370
+      - 296
+      - 219
+      - 1
+    viewBox:
+      - 219
+      - 1
+    points: 0,0 219,0
+    border:
+      width: 1.2
+      color: '#796916'
+  - elementId: l24
+    elementType: line
+    bounds:
+      - 583.0323283455834
+      - 296
+      - 5.967671654416563
+      - 3.6588106025146203
+    viewBox:
+      - 5.967671654416563
+      - 3.6588106025146203
+    points: 0,3.6588106025146203 5.967671654416563,0
+    border:
+      width: 1.2
+      color: '#796916'
+  - elementId: l25
+    elementType: line
+    bounds:
+      - 583.0323283455834
+      - 292.3411893974854
+      - 5.967671654416563
+      - 3.6588106025146203
+    viewBox:
+      - 5.967671654416563
+      - 3.6588106025146203
+    points: 0,0 5.967671654416563,3.6588106025146203
+    border:
+      width: 1.2
+      color: '#796916'
+  - elementId: t26
+    elementType: text
+    bounds:
+      - 385
+      - 266
+      - 189
+      - 27
+    content:
+      text: 分配库存
+      fontFamily: *ref_0
+      fontSize: 14
+      lineHeight: 1.1
+      color: '#202224'
+      bold: false
+      align: center
+  - elementId: l27
+    elementType: line
+    bounds:
+      - 589
+      - 342
+      - 219
+      - 1
+    viewBox:
+      - 219
+      - 1
+    points: 0,0 219,0
+    border:
+      width: 1.2
+      color: '#796916'
+  - elementId: l28
+    elementType: line
+    bounds:
+      - 802.0323283455834
+      - 342
+      - 5.967671654416563
+      - 3.6588106025146203
+    viewBox:
+      - 5.967671654416563
+      - 3.6588106025146203
+    points: 0,3.6588106025146203 5.967671654416563,0
+    border:
+      width: 1.2
+      color: '#796916'
+  - elementId: l29
+    elementType: line
+    bounds:
+      - 802.0323283455834
+      - 338.3411893974854
+      - 5.967671654416563
+      - 3.6588106025146203
+    viewBox:
+      - 5.967671654416563
+      - 3.6588106025146203
+    points: 0,0 5.967671654416563,3.6588106025146203
+    border:
+      width: 1.2
+      color: '#796916'
+  - elementId: t30
+    elementType: text
+    bounds:
+      - 604
+      - 312
+      - 189
+      - 27
+    content:
+      text: 预留运力
+      fontFamily: *ref_0
+      fontSize: 14
+      lineHeight: 1.1
+      color: '#202224'
+      bold: false
+      align: center
+  - elementId: l31
+    elementType: line
+    bounds:
+      - 151
+      - 400
+      - 657
+      - 1
+    viewBox:
+      - 657
+      - 1
+    points: 657,0 0,0
+    border:
+      width: 1.2
+      color: '#796916'
+  - elementId: l32
+    elementType: line
+    bounds:
+      - 151
+      - 396.3411893974854
+      - 5.9676716544165345
+      - 3.6588106025146203
+    viewBox:
+      - 5.9676716544165345
+      - 3.6588106025146203
+    points: 5.9676716544165345,0 0,3.6588106025146203
+    border:
+      width: 1.2
+      color: '#796916'
+  - elementId: l33
+    elementType: line
+    bounds:
+      - 151
+      - 400
+      - 5.9676716544165345
+      - 3.6588106025146203
+    viewBox:
+      - 5.9676716544165345
+      - 3.6588106025146203
+    points: 5.9676716544165345,3.6588106025146203 0,0
+    border:
+      width: 1.2
+      color: '#796916'
+  - elementId: t34
+    elementType: text
+    bounds:
+      - 166
+      - 370
+      - 627
+      - 27
+    content:
+      text: 确认时段
+      fontFamily: *ref_0
+      fontSize: 14
+      lineHeight: 1.1
+      color: '#202224'
+      bold: false
+      align: center
+  - elementId: l35
+    elementType: line
+    bounds:
+      - 48
+      - 465
+      - 864
+      - 1
+    viewBox:
+      - 864
+      - 1
+    points: 0,0 864,0
+    border:
+      width: 0.6
+      color: '#c4c4c2'
+  - elementId: t36
+    elementType: text
+    bounds:
+      - 48
+      - 475
+      - 864
+      - 25
+    content:
+      text: 承诺配送时段前，先确认库存和运力。
+      fontFamily: *ref_0
+      fontSize: 13
+      lineHeight: 1.1
+      color: '#202224'
+      bold: false
+  - elementId: t37
+    elementType: text
+    bounds:
+      - 48
+      - 507
+      - 783
+      - 16
+    content:
+      text: 版式示例 / 数据为模拟值
+      fontFamily: *ref_0
+      fontSize: 9
+      lineHeight: 1.1
+      color: '#202224'
+      bold: false
+  - elementId: t38
+    elementType: text
+    bounds:
+      - 871
+      - 504
+      - 41
+      - 22
+    content:
+      text: '11'
+      fontFamily: *ref_0
+      fontSize: 11
+      lineHeight: 1.1
+      color: '#202224'
+      bold: false

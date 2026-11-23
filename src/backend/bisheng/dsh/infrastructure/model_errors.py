@@ -3,6 +3,7 @@
 import re
 
 import httpx
+from langchain_core.exceptions import ContextOverflowError
 from openai import APIConnectionError, APITimeoutError
 
 
@@ -18,12 +19,29 @@ def provider_failure_code(value):
     }.get(code if isinstance(code, str) else None, "upstream_error")
 
 
-def model_failure_code(error):
+def _error_chain(error):
     seen = set()
     for _ in range(8):
         if error is None or id(error) in seen:
             break
         seen.add(id(error))
+        yield error
+        error = error.__cause__ or error.__context__
+
+
+def is_context_length_error(error):
+    # LangChain's HTTP-200 stream overflow keeps the gateway's generic code.
+    # Its typed exception is authoritative, including through provider wrappers.
+    return any(
+        isinstance(item, ContextOverflowError) or getattr(item, "code", None) == "context_length_exceeded"
+        for item in _error_chain(error)
+    )
+
+
+def model_failure_code(exception):
+    if is_context_length_error(exception):
+        return "context_length_exceeded"
+    for error in _error_chain(exception):
         if isinstance(error, (TimeoutError, httpx.TimeoutException, APITimeoutError)):
             return "upstream_timeout"
         status = getattr(error, "status_code", None)
@@ -38,11 +56,8 @@ def model_failure_code(error):
             status = int(match[1]) if match else None
         if isinstance(status, int) and 400 <= status <= 599:
             return f"upstream_http_{status}"
-        if getattr(error, "code", None) == "context_length_exceeded":
-            return "context_length_exceeded"
         if isinstance(error, (ConnectionError, httpx.NetworkError, APIConnectionError)):
             return "upstream_connection_failed"
         if getattr(error, "ClientCode", None) == "upstream_timeout":
             return "upstream_timeout"
-        error = error.__cause__ or error.__context__
     return "upstream_error"

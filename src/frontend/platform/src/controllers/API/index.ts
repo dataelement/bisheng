@@ -530,9 +530,10 @@ export async function subUploadLibFile(data: UploadFileFc | DefaultUploadFileFc)
 
 export async function importKnowledgeWebLinkApi(
   knowledgeId: string | number,
-  data: { url: string; title?: string; overwrite?: boolean },
+  data: { url: string; title?: string; overwrite?: boolean; parent_id?: number | null },
+  signal?: AbortSignal,
 ) {
-  return await axios.post(`/api/v1/knowledge/space/${knowledgeId}/web-links`, data, { silent: true });
+  return await axios.post(`/api/v1/knowledge/space/${knowledgeId}/web-links`, data, { silent: true, ...(signal ? { signal } : {}) });
 }
 
 //调整分段策略
@@ -1245,8 +1246,8 @@ export async function GPUlistByFinetuneApi(): Promise<any> {
 export async function setWorkstationConfigApi(data): Promise<any> {
   return await axios.post(`api/v1/workstation/config`, data);
 }
-export async function getWorkstationConfigApi(): Promise<any> {
-  return await axios.get(`api/v1/workstation/config`);
+export async function getWorkstationConfigApi(purpose?: "navigation"): Promise<any> {
+  return await axios.get(`api/v1/workstation/config`, purpose ? { params: { purpose } } : undefined);
 }
 // 工作台日常配置
 export async function setDailyConfigApi(data): Promise<any> {

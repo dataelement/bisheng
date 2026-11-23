@@ -1,0 +1,96 @@
+{
+  "source_commit": "1429c7463e",
+  "archive_sha256": "1deb9de97efb2f7eb7196640126ef3dd876881b624162f49486730f586f52463",
+  "stages": [
+    {
+      "stage": "01-formal-preflight-before",
+      "started": "2026-11-20T20:13:54+0800",
+      "ended": "2026-11-20T20:15:49+0800",
+      "elapsed_ms": 115292,
+      "exit_code": 3,
+      "commit": "1429c7463e"
+    },
+    {
+      "stage": "02-delete-closures-preview",
+      "started": "2026-11-20T20:16:51+0800",
+      "ended": "2026-11-20T20:17:01+0800",
+      "elapsed_ms": 10132,
+      "exit_code": 0,
+      "commit": "1429c7463e"
+    },
+    {
+      "stage": "03-delete-closures-apply",
+      "started": "2026-11-20T20:17:46+0800",
+      "ended": "2026-11-20T20:17:56+0800",
+      "elapsed_ms": 10862,
+      "exit_code": 0,
+      "commit": "1429c7463e"
+    },
+    {
+      "stage": "04-formal-preflight-after",
+      "started": "2026-11-20T20:18:36+0800",
+      "ended": "2026-11-20T20:20:24+0800",
+      "elapsed_ms": 108897,
+      "exit_code": 0,
+      "commit": "1429c7463e"
+    },
+    {
+      "stage": "05-formal-apply",
+      "started": "2026-11-20T20:21:29+0800",
+      "ended": "2026-11-20T20:29:46+0800",
+      "elapsed_ms": 497466,
+      "exit_code": 0,
+      "commit": "1429c7463e"
+    },
+    {
+      "stage": "06-redis-preview",
+      "started": "2026-11-20T20:31:11+0800",
+      "ended": "2026-11-20T20:31:19+0800",
+      "elapsed_ms": 8414,
+      "exit_code": 0,
+      "commit": "1429c7463e"
+    },
+    {
+      "stage": "07-redis-apply",
+      "started": "2026-11-20T20:32:54+0800",
+      "ended": "2026-11-20T20:33:03+0800",
+      "elapsed_ms": 8489,
+      "exit_code": 0,
+      "commit": "1429c7463e"
+    },
+    {
+      "stage": "08-redis-verify",
+      "started": "2026-11-20T20:33:03+0800",
+      "ended": "2026-11-20T20:33:11+0800",
+      "elapsed_ms": 8463,
+      "exit_code": 0,
+      "commit": "1429c7463e"
+    }
+  ],
+  "script_total_ms": 768015,
+  "formal_result": {
+    "mode": "apply",
+    "run_id": "upgrade-310b1-20261119",
+    "tenant_ids": [
+      1,
+      189
+    ],
+    "complete": true,
+    "ready": true,
+    "baseline_hash": "38bf58c6a55a23480a0ae90534444d54c86db3252266604570008f5683892c21",
+    "plan_hash": "110cc9b45649f0521eae64ff8d440cb932ca2678d51466957c957ed22392c82b"
+  },
+  "coverage_totals": {
+    "source_count": 117,
+    "reference_count": 135,
+    "invalid_legacy_count": 70,
+    "valid_count": 65,
+    "zero_reference_count": 8
+  },
+  "source_integrity_after_run": {
+    "checked_regular_files": 5364,
+    "changed_tracked_members": []
+  },
+  "unified_flow_design_implemented": false,
+  "business_services_restarted": false
+}

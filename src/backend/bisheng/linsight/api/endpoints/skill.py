@@ -19,6 +19,7 @@ from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
 from bisheng.linsight.domain.schemas.skill_schema import (
     SkillCreateForm,
     SkillDefaultCheckedUpdate,
+    SkillGiteeImportRequest,
     SkillGitHubImportRequest,
     SkillStatusUpdate,
 )
@@ -172,6 +173,15 @@ async def import_skill_from_github(
     login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
 ) -> UnifiedResponseModel:
     detail = await SkillService().create_from_github(_current_tenant_id(), login_user.user_id, payload.url)
+    return resp_200(detail)
+
+
+@router.post("/import-gitee", summary="Import a skill from a public Gitee directory URL")
+async def import_skill_from_gitee(
+    payload: SkillGiteeImportRequest,
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
+) -> UnifiedResponseModel:
+    detail = await SkillService().create_from_gitee(_current_tenant_id(), login_user.user_id, payload.url)
     return resp_200(detail)
 
 

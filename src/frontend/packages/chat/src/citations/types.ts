@@ -9,6 +9,7 @@ export interface CitationServices {
   resolveCitationDetails: (ids: string[]) => Promise<ChatCitation[]>;
   getCitationUnresolvedReason: (id: string) => 'expired' | 'forbidden' | undefined | null;
   resolveDocumentUrls: (detail: ChatCitation) => Promise<PreviewResource>;
+  resolveDownloadUrl?: (detail: ChatCitation) => Promise<string>;
   download: (url: string, fileName: string) => void | Promise<void>;
   openArticle: (url: string) => void;
   localize: ChatLocalize;

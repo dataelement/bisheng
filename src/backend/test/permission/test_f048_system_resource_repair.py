@@ -18,6 +18,8 @@ from bisheng.common.errcode.permission import (
     PermissionPublishNotReadyError,
 )
 from bisheng.core.context.tenant import get_current_tenant_id, tenant_execution_scope
+from bisheng.linsight.domain.models.linsight_skill import LinsightSkill
+from bisheng.linsight.domain.repositories import skill_permission as skill_repository
 from bisheng.permission.application import control_state, sql_runtime, system_resource_reconcile
 from bisheng.permission.application.control_state import (
     RuntimeCatalogSnapshot,
@@ -50,7 +52,7 @@ def _spec(tenant_id=1, resource_id="902"):
         tenant_id=tenant_id,
         resource_type="tool",
         resource_id=resource_id,
-        action_codes=("use", "visible"),
+        action_codes=("visible",),
         context_version=f"preset:{tenant_id}:{resource_id}",
     )
 
@@ -84,7 +86,7 @@ class _FGA(FakeFGAProjection):
                     select(PermissionProjectionOperation).order_by(PermissionProjectionOperation.id.desc())
                 )
             ).first()
-            assert operation.status in {"STAGING", "COMMIT_UNKNOWN"}
+            assert operation.status in {"STAGING", "COMMIT_UNKNOWN", "FAILED_CLOSED"}
             ledger = (
                 await session.exec(
                     select(PermissionProjectionTuple).where(PermissionProjectionTuple.operation_id == operation.id)
@@ -110,6 +112,7 @@ async def repair_env(monkeypatch):
         "permission_grant_assignee",
         "permission_visible_source_projection",
         "t_gpts_tools_type",
+        "linsight_skill",
     ):
         cloned = SQLModel.metadata.tables[name].to_metadata(metadata)
         cloned.c.id.type = sa.Integer()
@@ -121,7 +124,7 @@ async def repair_env(monkeypatch):
         async with AsyncSession(engine, expire_on_commit=False) as session:
             yield session
 
-    for module in (sql_runtime, control_state, system_resource_reconcile, bootstrap):
+    for module in (sql_runtime, control_state, system_resource_reconcile, bootstrap, skill_repository):
         monkeypatch.setattr(module, "get_async_db_session", factory)
     async with factory() as session:
         session.add(
@@ -151,7 +154,13 @@ async def repair_env(monkeypatch):
             models=(
                 RuntimeModelSnapshot(
                     snapshot=GrantModelSnapshot(
-                        model_key="viewer", active=True, action_codes=("use",), derived_level=1
+                        model_key="viewer",
+                        active=True,
+                        action_codes=(),
+                        derived_level=1,
+                        visibility_only=True,
+                        visibility_level=1,
+                        visibility_only_resource_types=("tool", "linsight_skill"),
                     ),
                     name="Viewer",
                     kind="STANDARD",
@@ -282,9 +291,28 @@ async def test_non_current_resources_fail_closed(repair_env, status):
             )
         )
         await session.commit()
-    with pytest.raises(PermissionPublishNotReadyError, match="non-current"):
+    with pytest.raises(PermissionPublishNotReadyError, match="ledger is missing"):
         await reconcile_system_owned_resources(env.runtime, (_spec(),), apply=True, operator_id=1)
     assert not env.fga.calls
+
+
+async def test_original_failed_closed_system_creation_recovers_its_pending_grant(repair_env):
+    env = repair_env
+    env.fga.timeout_mode, env.fga.timeout_call = "mixed", 2
+    with pytest.raises(Exception) as failure:
+        await reconcile_system_owned_resources(env.runtime, (_spec(),), apply=True, operator_id=1)
+    async with env.factory() as session:
+        mode = (await session.exec(select(ResourcePermissionMode))).one()
+        grant = (await session.exec(select(PermissionGrant))).one()
+        assert mode.projection_state == grant.projection_state == "FAILED_CLOSED", (
+            type(failure.value).__name__,
+            str(failure.value),
+        )
+    report = await reconcile_system_owned_resources(env.runtime, (_spec(),), apply=True, operator_id=1)
+    assert report.current_count == 1
+    async with env.factory() as session:
+        assert (await session.exec(select(PermissionGrant))).one().state == "ACTIVE"
+        assert (await session.exec(select(PermissionGrantAssignee))).one().state == "ACTIVE"
 
 
 async def test_builtin_skill_entrypoint_uses_real_permission_creation(repair_env, monkeypatch):
@@ -297,6 +325,13 @@ async def test_builtin_skill_entrypoint_uses_real_permission_creation(repair_env
         "get_f048_process_runtime",
         AsyncMock(return_value=SimpleNamespace(components=SimpleNamespace(facade=env.runtime))),
     )
+    async with env.factory() as session:
+        session.add(
+            LinsightSkill(
+                id=902, tenant_id=1, name="builtin", description="Builtin", source="builtin", object_path="skills.zip"
+            )
+        )
+        await session.commit()
     await ensure_builtin_skill_permission(SimpleNamespace(id=902, tenant_id=1))
     assert ("tenant:1#member", "visible", "linsight_skill:902") in env.fga.present
     async with env.factory() as session:

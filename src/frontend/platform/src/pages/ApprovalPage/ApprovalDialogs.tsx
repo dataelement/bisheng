@@ -182,18 +182,19 @@ export function ApprovalDialogs({ controller }: ApprovalDialogsProps) {
       </Dialog>
       {/* ── Exception Approver Picker Dialog ────────────────────────────────── */}
       <Dialog open={exceptionPickerOpen} onOpenChange={(v) => !v && setExceptionPickerOpen(false)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md grid-cols-1">
           <DialogHeader>
             <DialogTitle>{t("approvalPage.assignApproversAction")}</DialogTitle>
           </DialogHeader>
-          <ApproverUserPicker
+          {exceptionPickerItem && <ApproverUserPicker
+            exceptionId={exceptionPickerItem.id}
             value={exceptionPickerTempIds}
             names={exceptionPickerTempNames}
             onChange={(ids, names) => {
               setExceptionPickerTempIds(ids);
               setExceptionPickerTempNames(names);
             }}
-          />
+          />}
           <DialogFooter>
             <Button size="medium" variant="outlined" type="button" onClick={() => setExceptionPickerOpen(false)} color="default">
               {t("approvalPage.cancel")}

@@ -187,7 +187,7 @@
     "inheritHelper": "Switching to local permissions creates an independent grant list from the currently effective members.",
     "customHelper": "Restoring inheritance replaces local custom grants with the parent permissions.",
     "parent": "Parent Resource",
-    "affectedAssignees": "Estimated impact: {{count}} assignees",
+    "affectedAssignees": "Estimated permission impact:",
     "projection": "Projection status: {{state}}",
     "confirmTitle": "Confirm Permission Mode Change",
     "confirmDescription": "The server applies the analyzed change; the member list is not resubmitted.",
@@ -211,7 +211,8 @@
     "inheritedFrom": "Inherited from",
     "parentFolder": "Parent folder",
     "parentKnowledgeSpace": "Parent knowledge space",
-    "parentResource": "Parent resource"
+    "parentResource": "Parent resource",
+    "visibility_only": "Visibility only — no content actions"
   },
   "scope": {
     "local": "Local",

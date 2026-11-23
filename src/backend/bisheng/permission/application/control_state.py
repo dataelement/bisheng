@@ -5,7 +5,7 @@ from __future__ import annotations
 import secrets
 from dataclasses import dataclass, replace
 
-from sqlalchemy import update
+from sqlalchemy import and_, or_, update
 from sqlmodel import col, select
 
 from bisheng.common.errcode.permission import (
@@ -13,8 +13,9 @@ from bisheng.common.errcode.permission import (
     PermissionPublishNotReadyError,
     PermissionVersionConflictError,
 )
-from bisheng.core.context.tenant import strict_tenant_filter, tenant_execution_scope
+from bisheng.core.context.tenant import is_tenant_filter_bypassed, strict_tenant_filter, tenant_execution_scope
 from bisheng.core.database import get_async_db_session
+from bisheng.permission.application.catalog_api import SqlCatalogState
 from bisheng.permission.application.sql_runtime import (
     stable_assignee_id,
     stable_grant_key,
@@ -28,6 +29,7 @@ from bisheng.permission.domain.models import (
     PermissionGrantAssignee,
     PermissionModel,
     PermissionModelAction,
+    PermissionProjectionOperation,
     PermissionVisibleSourceProjection,
     ResourcePermissionMode,
 )
@@ -36,6 +38,8 @@ from bisheng.permission.domain.schemas import (
     VerifiedPermissionTarget,
     VisibleSourceProjectionDTO,
 )
+from bisheng.permission.domain.services.catalog_policy import derive_action_release
+from bisheng.permission.domain.services.catalog_service import _checksum as canonical_catalog_checksum
 from bisheng.permission.domain.services.grant_service import (
     GrantMutationContext,
 )
@@ -44,6 +48,8 @@ from bisheng.permission.domain.services.grant_source_service import (
     GrantSnapshot,
     GrantSourceRecord,
     GrantSourceService,
+    model_snapshot_for_target,
+    requires_existing_visibility_evidence,
 )
 from bisheng.permission.domain.services.mode_service import (
     ModeContext,
@@ -59,6 +65,7 @@ from bisheng.permission.domain.services.permission_explain_service import (
 from bisheng.permission.domain.services.projection_plan import ProjectionOutcome
 from bisheng.permission.domain.services.visibility_projection_service import (
     VisibilityProjectionCompilation,
+    VisibilityProjectionCompiler,
 )
 
 
@@ -80,6 +87,17 @@ class RuntimeCatalogSnapshot:
     model_id: str
     model_checksum: str
     models: tuple[RuntimeModelSnapshot, ...]
+    action_resource_scopes: tuple[tuple[str, tuple[str, ...]], ...] = ()
+
+    def model_for_target(self, model: GrantModelSnapshot, *, resource_type: str) -> GrantModelSnapshot:
+        """Use trusted Catalog scopes for every Grant/roster target snapshot."""
+
+        scopes = dict(self.action_resource_scopes)
+        return model_snapshot_for_target(
+            model,
+            resource_type=resource_type,
+            applicable_action_codes=tuple(code for code in model.action_codes if resource_type in scopes.get(code, ())),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,8 +118,11 @@ class PermissionResourceSnapshot:
 class SqlPermissionControlState:
     """Own all permission-table reads/writes needed by online services."""
 
+    def __init__(self, *, session_factory=None):
+        self._session_factory = session_factory or (lambda: get_async_db_session())
+
     async def current_catalog(self) -> RuntimeCatalogSnapshot:
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             release_rows = list(
                 (
                     await session.execute(
@@ -122,57 +143,90 @@ class SqlPermissionControlState:
             )
             if authorization_release is None or authorization_release.status != "ACTIVE":
                 raise PermissionPublishNotReadyError(msg="CURRENT Catalog authorization model is not active")
-            model_rows = list(
-                (
-                    await session.execute(
-                        select(PermissionModel)
-                        .where(PermissionModel.catalog_release_id == release.id)
-                        .order_by(PermissionModel.model_key)
-                    )
-                )
-                .scalars()
-                .all()
-            )
-            model_ids = [int(row.id) for row in model_rows if row.id is not None]
-            action_pairs = (
-                list(
+            try:
+                action_release = derive_action_release(await SqlCatalogState._load_actions(session, int(release.id)))
+                model_release = await SqlCatalogState._load_models(session, int(release.id), action_release)
+                payload = {"actions": action_release.checksum, "models": model_release.checksum}
+                if release.predecessor_id is not None:
+                    payload.update(predecessor_release_id=release.predecessor_id, release_key=release.release_key)
+                if model_release.blockers or canonical_catalog_checksum(payload) != release.checksum:
+                    raise ValueError("CURRENT Catalog payload does not match its publication checksum")
+                model_rows = list(
                     (
                         await session.execute(
-                            select(
-                                PermissionModelAction.model_id,
-                                PermissionAction.code,
-                            )
-                            .join(
-                                PermissionAction,
-                                PermissionAction.id == PermissionModelAction.action_id,
-                            )
-                            .where(
-                                col(PermissionModelAction.model_id).in_(model_ids),
-                                PermissionAction.active == 1,
-                            )
+                            select(PermissionModel).where(PermissionModel.catalog_release_id == release.id)
                         )
-                    ).all()
+                    )
+                    .scalars()
+                    .all()
                 )
-                if model_ids
-                else []
-            )
-        actions: dict[int, list[str]] = {}
-        for model_id, action_code in action_pairs:
-            actions.setdefault(int(model_id), []).append(str(action_code))
+                canonical = {model.model_key: model for model in model_release.models}
+                if len(model_rows) != len(canonical) or {row.model_key for row in model_rows} != set(canonical):
+                    raise ValueError("CURRENT Catalog model rows are incomplete")
+                model_ids = [int(row.id) for row in model_rows]
+                selected_rows = (
+                    list(
+                        (
+                            await session.execute(
+                                select(
+                                    PermissionModelAction.model_id,
+                                    PermissionAction.code,
+                                    PermissionAction.catalog_release_id,
+                                )
+                                .select_from(PermissionModelAction)
+                                .outerjoin(PermissionAction, PermissionAction.id == PermissionModelAction.action_id)
+                                .where(col(PermissionModelAction.model_id).in_(model_ids))
+                            )
+                        ).all()
+                    )
+                    if model_ids
+                    else []
+                )
+                selected: dict[int, list[str]] = {}
+                for model_id, code, action_release_id in selected_rows:
+                    if code is None or action_release_id != release.id:
+                        raise ValueError("CURRENT model references an action outside its release")
+                    selected.setdefault(int(model_id), []).append(code)
+                fields = (
+                    "name",
+                    "kind",
+                    "config_scope",
+                    "derived_level",
+                    "active",
+                    "allow_same_level",
+                    "visibility_level",
+                    "retired_use_level_floor",
+                )
+                for row in model_rows:
+                    expected = canonical[row.model_key]
+                    if (
+                        any(getattr(row, field) != getattr(expected, field) for field in fields)
+                        or row.normalized_name != expected.name.casefold()
+                        or tuple(sorted(row.visibility_only_resource_types or ()))
+                        != expected.visibility_only_resource_types
+                        or tuple(sorted(selected.get(int(row.id), ()))) != tuple(sorted(expected.selected_action_codes))
+                    ):
+                        raise ValueError("CURRENT stored model differs from the canonical derivation")
+            except (ValueError, TypeError) as exc:
+                raise PermissionPublishNotReadyError(
+                    msg="CURRENT Catalog SQL contents are incomplete or inconsistent", exception=exc
+                ) from exc
         models = tuple(
             RuntimeModelSnapshot(
                 snapshot=GrantModelSnapshot(
-                    model_key=row.model_key,
-                    active=bool(row.active),
-                    action_codes=tuple(sorted(actions.get(int(row.id or 0), ()))),
-                    derived_level=row.derived_level,
-                    allow_same_level=bool(row.allow_same_level),
+                    model_key=model.model_key,
+                    active=model.active,
+                    action_codes=model.action_codes,
+                    derived_level=model.derived_level,
+                    allow_same_level=model.allow_same_level,
+                    visibility_only_resource_types=model.visibility_only_resource_types,
+                    visibility_level=model.visibility_level,
                 ),
-                name=row.name,
-                kind=row.kind,
+                name=model.name,
+                kind=model.kind,
                 version=release.version,
             )
-            for row in model_rows
+            for model in model_release.models
         )
         return RuntimeCatalogSnapshot(
             release_id=int(release.id),
@@ -183,6 +237,11 @@ class SqlPermissionControlState:
             model_id=authorization_release.model_id,
             model_checksum=authorization_release.model_checksum,
             models=models,
+            action_resource_scopes=tuple(
+                (action.code, tuple(sorted(action.resource_types)))
+                for action in action_release.actions
+                if action.active and action.level is not None
+            ),
         )
 
     async def mode_for_target(
@@ -191,7 +250,7 @@ class SqlPermissionControlState:
         *,
         for_update: bool = False,
     ) -> ResourcePermissionMode:
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             statement = select(ResourcePermissionMode).where(
                 ResourcePermissionMode.tenant_id == target.tenant_id,
                 ResourcePermissionMode.resource_type == target.resource_type,
@@ -220,7 +279,7 @@ class SqlPermissionControlState:
         must be CURRENT; any other state fails closed.
         """
 
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             statement = select(ResourcePermissionMode).where(
                 ResourcePermissionMode.tenant_id == tenant_id,
                 ResourcePermissionMode.resource_type == resource_type,
@@ -246,7 +305,7 @@ class SqlPermissionControlState:
         resource_type: str,
         resource_id: str,
     ) -> tuple[int, str]:
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             statement = select(ResourcePermissionMode).where(
                 ResourcePermissionMode.tenant_id == tenant_id,
                 ResourcePermissionMode.resource_type == resource_type,
@@ -278,7 +337,7 @@ class SqlPermissionControlState:
         tenant_ids = tuple(dict.fromkeys(tenant_id for tenant_id, _, _ in normalized))
         resource_types = tuple(dict.fromkeys(resource_type for _, resource_type, _ in normalized))
         resource_ids = tuple(dict.fromkeys(resource_id for _, _, resource_id in normalized))
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             statement = select(ResourcePermissionMode).where(
                 col(ResourcePermissionMode.tenant_id).in_(tenant_ids),
                 col(ResourcePermissionMode.resource_type).in_(resource_types),
@@ -314,13 +373,114 @@ class SqlPermissionControlState:
             )
         return snapshots
 
+    async def load_grants_batch(
+        self,
+        *,
+        targets: tuple[VerifiedPermissionTarget, ...],
+        models: tuple[GrantModelSnapshot, ...],
+    ) -> dict[tuple[int, str, str], tuple[GrantSnapshot, ...]]:
+        """Read exact verified scopes without multiplying target/model/source rows."""
+        if (
+            type(targets) is not tuple
+            or len(targets) > 200
+            or any(not isinstance(target, VerifiedPermissionTarget) for target in targets)
+        ):
+            raise ValueError("Grant batches require at most 200 verified targets")
+        keys = tuple(dict.fromkeys((target.tenant_id, target.resource_type, target.resource_id) for target in targets))
+        result = dict.fromkeys(keys, ())
+        if not keys:
+            return result
+        if is_tenant_filter_bypassed():
+            raise PermissionPublishNotReadyError(msg="Grant batch requires the original tenant scope")
+        by_model = {model.model_key: model for model in models}
+        if not by_model:
+            return result
+        predicates = tuple(
+            and_(
+                PermissionGrant.tenant_id == tenant,
+                PermissionGrant.resource_type == resource_type,
+                PermissionGrant.resource_id == resource_id,
+            )
+            for tenant, resource_type, resource_id in keys
+        )
+        async with self._session_factory() as session:
+            with session.no_autoflush, strict_tenant_filter():
+                rows = list(
+                    (
+                        await session.execute(
+                            select(PermissionGrant)
+                            .where(or_(*predicates), col(PermissionGrant.model_key).in_(tuple(by_model)))
+                            .order_by(PermissionGrant.id)
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                if any(
+                    (int(row.tenant_id), row.resource_type, row.resource_id) not in result
+                    or row.model_key not in by_model
+                    for row in rows
+                ):
+                    raise PermissionPublishNotReadyError(msg="Grant rows do not match their exact verified scopes")
+                grant_ids = tuple(dict.fromkeys(int(row.id) for row in rows))
+                sources: dict[int, list[GrantSourceRecord]] = {}
+                for offset in range(0, len(grant_ids), 200):
+                    query = (
+                        select(PermissionGrantAssignee)
+                        .where(
+                            col(PermissionGrantAssignee.grant_id).in_(grant_ids[offset : offset + 200]),
+                            PermissionGrantAssignee.state == "ACTIVE",
+                        )
+                        .order_by(PermissionGrantAssignee.id)
+                        .limit(200)
+                    )
+                    after = None
+                    while True:
+                        assignees = (
+                            (
+                                await session.execute(
+                                    query if after is None else query.where(PermissionGrantAssignee.id > after)
+                                )
+                            )
+                            .scalars()
+                            .all()
+                        )
+                        for source in assignees:
+                            sources.setdefault(int(source.grant_id), []).append(self._source_snapshot(source))
+                        if len(assignees) < 200:
+                            break
+                        after = int(assignees[-1].id)
+        grouped: dict[tuple[int, str, str], list[GrantSnapshot]] = {}
+        for row in rows:
+            key = (int(row.tenant_id), row.resource_type, row.resource_id)
+            roster = tuple(sources.get(int(row.id), ()))
+            grouped.setdefault(key, []).append(
+                GrantSnapshot(
+                    grant_id=stable_grant_key(
+                        tenant_id=key[0],
+                        resource_type=key[1],
+                        resource_id=key[2],
+                        model_key=row.model_key,
+                    ),
+                    tenant_id=key[0],
+                    resource_type=key[1],
+                    resource_id=key[2],
+                    model=by_model[row.model_key],
+                    active=row.state == "ACTIVE" and bool(roster),
+                    version=row.version,
+                    sources=roster,
+                )
+            )
+        result.update((key, tuple(values)) for key, values in grouped.items())
+        return result
+
     async def load_grants(
         self,
         *,
         target: VerifiedPermissionTarget,
         models: tuple[GrantModelSnapshot, ...],
     ) -> tuple[GrantSnapshot, ...]:
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             grant_rows = list(
                 (
                     await session.execute(
@@ -397,7 +557,7 @@ class SqlPermissionControlState:
         The resource version fence and _upsert_assignee recheck this snapshot
         during prepare, before any OpenFGA write.
         """
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             row = (
                 (
                     await session.execute(
@@ -429,7 +589,7 @@ class SqlPermissionControlState:
     ) -> tuple[VisibleSourceProjectionDTO, ...]:
         """Load the complete active contribution set for one resource scope."""
 
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             rows = list(
                 (
                     await session.execute(
@@ -468,7 +628,7 @@ class SqlPermissionControlState:
     ) -> InheritedGrantSet | None:
         if target.parent_type is None or target.parent_id is None:
             return None
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             ancestor_mode = await self._nearest_custom_ancestor_mode(
                 session,
                 tenant_id=target.tenant_id,
@@ -554,7 +714,7 @@ class SqlPermissionControlState:
             return (), False
         fetch_limit = limit + 1
         inherited_mode: ResourcePermissionMode | None = None
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             local_rows = await self._source_rows(
                 session,
                 tenant_id=target.tenant_id,
@@ -564,6 +724,14 @@ class SqlPermissionControlState:
                 after_id=after_id,
                 limit=fetch_limit,
                 protected_only=normalized_mode == "INHERIT",
+            )
+            await self._validate_evidence_only_source_rows(
+                session,
+                rows=local_rows,
+                models=model_by_key,
+                tenant_id=target.tenant_id,
+                resource_type=target.resource_type,
+                resource_id=target.resource_id,
             )
             inherited_rows = []
             if normalized_mode == "INHERIT" and target.parent_type is not None and target.parent_id is not None:
@@ -587,6 +755,14 @@ class SqlPermissionControlState:
                 # has its own protected creator row, and the inherited copy only
                 # showed up as a second, identical entry that cannot be acted on.
                 inherited_rows = [(row, model_key) for row, model_key in inherited_rows if row.source_type != "CREATOR"]
+                await self._validate_evidence_only_source_rows(
+                    session,
+                    rows=inherited_rows,
+                    models=model_by_key,
+                    tenant_id=target.tenant_id,
+                    resource_type=inherited_mode.resource_type,
+                    resource_id=inherited_mode.resource_id,
+                )
         combined = sorted(
             (
                 *((row, model_key, "LOCAL") for row, model_key in local_rows),
@@ -619,6 +795,55 @@ class SqlPermissionControlState:
             ),
             len(combined) > limit,
         )
+
+    async def _validate_evidence_only_source_rows(
+        self,
+        session,
+        *,
+        rows,
+        models,
+        tenant_id: int,
+        resource_type: str,
+        resource_id: str,
+    ) -> None:
+        """A legacy empty model may describe only an already projected source.
+
+        Keep the original cursor query and reject inconsistent evidence rather
+        than filtering after LIMIT (which would silently truncate pagination).
+        """
+        selected = [(row, key) for row, key in rows if requires_existing_visibility_evidence(models[key])]
+        if not selected:
+            return
+        owners = tuple(f"grant_assignee:{row.id}" for row, _ in selected)
+        evidence = []
+        for offset in range(0, len(owners), 200):
+            result = await session.execute(
+                select(PermissionVisibleSourceProjection).where(
+                    PermissionVisibleSourceProjection.tenant_id == tenant_id,
+                    PermissionVisibleSourceProjection.resource_type == resource_type,
+                    PermissionVisibleSourceProjection.resource_id == resource_id,
+                    PermissionVisibleSourceProjection.source_owner_key.in_(owners[offset : offset + 200]),
+                    PermissionVisibleSourceProjection.state == "ACTIVE",
+                )
+            )
+            evidence.extend(self._visible_source_snapshot(row) for row in result.scalars())
+        grouped = {}
+        for row, key in selected:
+            grouped.setdefault((row.grant_id, key), []).append(self._source_snapshot(row))
+        snapshots = tuple(
+            GrantSnapshot(str(grant_id), tenant_id, resource_type, resource_id, models[key], True, tuple(sources))
+            for (grant_id, key), sources in grouped.items()
+        )
+        try:
+            compiled = VisibilityProjectionCompiler().compile(
+                tenant_id=tenant_id,
+                grants=snapshots,
+                existing_sources=tuple(evidence),
+            )
+            if compiled.deltas or compiled.retired_sources:
+                raise ValueError("legacy visibility evidence does not match its source rows")
+        except ValueError as error:
+            raise PermissionPublishNotReadyError(reason="legacy_visibility_source_unavailable") from error
 
     @staticmethod
     async def _source_rows(
@@ -668,8 +893,11 @@ class SqlPermissionControlState:
         target: VerifiedPermissionTarget,
         mode: str,
     ) -> ResourcePermissionMode:
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             async with session.begin():
+                from bisheng.permission.domain.services.maintenance_guard import acheck_transaction
+
+                await acheck_transaction(session)
                 await self._assert_catalog_writable(session)
                 return await self._ensure_mode_row_in_session(
                     session,
@@ -730,8 +958,11 @@ class SqlPermissionControlState:
             context,
             grant,
         )
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             async with session.begin():
+                from bisheng.permission.domain.services.maintenance_guard import acheck_transaction
+
+                await acheck_transaction(session)
                 await self._assert_catalog_writable(session)
                 mode_row = await self._ensure_mode_row_in_session(
                     session,
@@ -779,8 +1010,18 @@ class SqlPermissionControlState:
         )
         if not projection_grants and visibility is None:
             return
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             async with session.begin():
+                from bisheng.permission.domain.services.maintenance_guard import acheck_transaction
+
+                await acheck_transaction(session)
+                mode = await self._owner_fence(session, context)
+                if (
+                    mode.operation_id != outcome.operation_id
+                    or mode.version != outcome.target_version
+                    or mode.projection_state != "CURRENT"
+                ):
+                    raise PermissionVersionConflictError(msg="Owner operation was superseded before finalize")
                 for projection_grant in projection_grants:
                     grant_row = await self._grant_row(
                         session,
@@ -791,9 +1032,17 @@ class SqlPermissionControlState:
                     )
                     if grant_row is None or grant_row.id is None:
                         raise PermissionVersionConflictError(msg=("Owner/copy Grant disappeared before finalize"))
+                    if grant_row.projection_state == "CURRENT":
+                        # The generic durable finalizer already completed this
+                        # Grant. Do not re-activate a later inactive row.
+                        continue
                     await session.execute(
                         update(PermissionGrant)
-                        .where(PermissionGrant.id == grant_row.id)
+                        .where(
+                            PermissionGrant.id == grant_row.id,
+                            PermissionGrant.state == "PENDING",
+                            PermissionGrant.projection_state.in_(("PROJECTING", "FAILED_CLOSED")),
+                        )
                         .values(
                             state="ACTIVE",
                             projection_state="CURRENT",
@@ -821,14 +1070,26 @@ class SqlPermissionControlState:
         error: Exception,
     ) -> None:
         del error
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             async with session.begin():
+                from bisheng.permission.domain.services.maintenance_guard import acheck_transaction
+
+                await acheck_transaction(session)
+                mode_row = await self._owner_fence(session, context)
+                operation = await session.get(PermissionProjectionOperation, mode_row.operation_id)
+                if str(operation.status) != "FAILED_CLOSED" or mode_row.version not in {
+                    operation.expected_version,
+                    operation.target_version,
+                }:
+                    return  # Preserve the durable ledger's exact uncertainty.
                 await session.execute(
                     update(ResourcePermissionMode)
                     .where(
                         ResourcePermissionMode.tenant_id == context.target.tenant_id,
                         ResourcePermissionMode.resource_type == context.target.resource_type,
                         ResourcePermissionMode.resource_id == context.target.resource_id,
+                        ResourcePermissionMode.operation_id == operation.id,
+                        ResourcePermissionMode.version == mode_row.version,
                     )
                     .values(projection_state="FAILED_CLOSED")
                 )
@@ -838,9 +1099,39 @@ class SqlPermissionControlState:
                         PermissionGrant.tenant_id == context.target.tenant_id,
                         PermissionGrant.resource_type == context.target.resource_type,
                         PermissionGrant.resource_id == context.target.resource_id,
+                        PermissionGrant.projection_state == "PROJECTING",
                     )
                     .values(projection_state="FAILED_CLOSED")
                 )
+
+    @staticmethod
+    async def _owner_fence(session, context):
+        row = (
+            await session.exec(
+                select(ResourcePermissionMode)
+                .where(
+                    ResourcePermissionMode.tenant_id == context.target.tenant_id,
+                    ResourcePermissionMode.resource_type == context.target.resource_type,
+                    ResourcePermissionMode.resource_id == context.target.resource_id,
+                )
+                .with_for_update()
+            )
+        ).first()
+        operation = (
+            await session.get(PermissionProjectionOperation, row.operation_id) if row and row.operation_id else None
+        )
+        if (
+            operation is None
+            or operation.idempotency_key != context.idempotency_key
+            or operation.tenant_id != context.target.tenant_id
+            or operation.scope_key != f"{context.target.resource_type}:{context.target.resource_id}"
+            or operation.expected_version != context.target.resource_version
+            or operation.operation_type != context.operation_type
+            or operation.store_id != context.store_id
+            or operation.model_id != context.model_id
+        ):
+            raise PermissionVersionConflictError(msg="Owner operation no longer owns this scope")
+        return row
 
     async def prepare_grants(
         self,
@@ -852,8 +1143,11 @@ class SqlPermissionControlState:
         operation_id: int,
     ) -> None:
         del idempotency_key
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             async with session.begin():
+                from bisheng.permission.domain.services.maintenance_guard import acheck_transaction
+
+                await acheck_transaction(session)
                 await self._assert_catalog_writable(
                     session,
                     expected_release_id=(context.current_catalog_release_id),
@@ -910,8 +1204,28 @@ class SqlPermissionControlState:
         visibility: VisibilityProjectionCompilation | None,
         outcome: ProjectionOutcome,
     ) -> None:
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             async with session.begin():
+                from bisheng.permission.domain.services.maintenance_guard import acheck_transaction
+
+                await acheck_transaction(session)
+                mode = (
+                    await session.exec(
+                        select(ResourcePermissionMode)
+                        .where(
+                            ResourcePermissionMode.tenant_id == context.target.tenant_id,
+                            ResourcePermissionMode.resource_type == context.target.resource_type,
+                            ResourcePermissionMode.resource_id == context.target.resource_id,
+                        )
+                        .with_for_update()
+                    )
+                ).first()
+                if mode is None or (mode.operation_id, mode.version, mode.projection_state) != (
+                    outcome.operation_id,
+                    outcome.target_version,
+                    "CURRENT",
+                ):
+                    raise PermissionVersionConflictError(msg="Grant operation was superseded before finalize")
                 for grant in grants:
                     row = await self._grant_row(
                         session,
@@ -969,7 +1283,7 @@ class SqlPermissionControlState:
             candidates = tuple(dict.fromkeys(secrets.randbits(62) or 1 for _ in range(count)))
             if len(candidates) != count:
                 continue
-            async with get_async_db_session() as session:
+            async with self._session_factory() as session:
                 existing = set(
                     (
                         await session.execute(
@@ -1049,8 +1363,11 @@ class SqlPermissionControlState:
             grants=grants,
         )
         await self.finalize_grants(grant_context, grants, visibility, outcome)
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             async with session.begin():
+                from bisheng.permission.domain.services.maintenance_guard import acheck_transaction
+
+                await acheck_transaction(session)
                 await session.execute(
                     update(ResourcePermissionMode)
                     .where(
@@ -1073,8 +1390,11 @@ class SqlPermissionControlState:
         parent_id: str | None = None,
         expected_catalog_release_id: int | None = None,
     ) -> None:
-        async with get_async_db_session() as session:
+        async with self._session_factory() as session:
             async with session.begin():
+                from bisheng.permission.domain.services.maintenance_guard import acheck_transaction
+
+                await acheck_transaction(session)
                 await self._assert_catalog_writable(
                     session,
                     expected_release_id=expected_catalog_release_id,

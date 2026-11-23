@@ -9,10 +9,16 @@ def configured_display_names(config) -> dict[str, str]:
     }
 
 
-async def read_display_names() -> dict[str, str]:
-    from bisheng.llm.domain.services.llm import LLMService
+async def read_workbench_metadata():
+    from bisheng.llm.application.model_default_read import get_model_default_read_runtime
+    from bisheng.llm.domain.schemas import WorkbenchModelConfig
 
-    return configured_display_names(await LLMService.get_workbench_llm())
+    record = await get_model_default_read_runtime().aget_default("linsight_llm")
+    return WorkbenchModelConfig.model_validate_json(record.payload_json)
+
+
+async def read_display_names() -> dict[str, str]:
+    return configured_display_names(await read_workbench_metadata())
 
 
 def model_display_name(model, server, display_name: str | None = None) -> str:
