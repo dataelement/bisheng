@@ -1,5 +1,6 @@
 """Skill visibility and executable availability are independent. AC-79/82/83."""
 
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -85,8 +86,14 @@ async def test_original_narrowed_scope_filters_runtime_before_fga(skills, monkey
 
 
 async def test_builtin_skill_creation_emits_only_visibility(monkeypatch):
+    from bisheng.linsight.domain.repositories.skill_permission import SkillPermissionRepository
     from bisheng.permission.application import process_runtime, system_resource_reconcile
 
+    @asynccontextmanager
+    async def lock(repository, skill_id, *, tenant_id):
+        yield LinsightSkill(id=skill_id, tenant_id=tenant_id, source="builtin", owner_user_id=0)
+
+    monkeypatch.setattr(SkillPermissionRepository, "lock", lock)
     runtime = object()
     reconcile = AsyncMock()
     monkeypatch.setattr(

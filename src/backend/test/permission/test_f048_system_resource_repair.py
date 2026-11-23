@@ -18,6 +18,8 @@ from bisheng.common.errcode.permission import (
     PermissionPublishNotReadyError,
 )
 from bisheng.core.context.tenant import get_current_tenant_id, tenant_execution_scope
+from bisheng.linsight.domain.models.linsight_skill import LinsightSkill
+from bisheng.linsight.domain.repositories import skill_permission as skill_repository
 from bisheng.permission.application import control_state, sql_runtime, system_resource_reconcile
 from bisheng.permission.application.control_state import (
     RuntimeCatalogSnapshot,
@@ -110,6 +112,7 @@ async def repair_env(monkeypatch):
         "permission_grant_assignee",
         "permission_visible_source_projection",
         "t_gpts_tools_type",
+        "linsight_skill",
     ):
         cloned = SQLModel.metadata.tables[name].to_metadata(metadata)
         cloned.c.id.type = sa.Integer()
@@ -121,7 +124,7 @@ async def repair_env(monkeypatch):
         async with AsyncSession(engine, expire_on_commit=False) as session:
             yield session
 
-    for module in (sql_runtime, control_state, system_resource_reconcile, bootstrap):
+    for module in (sql_runtime, control_state, system_resource_reconcile, bootstrap, skill_repository):
         monkeypatch.setattr(module, "get_async_db_session", factory)
     async with factory() as session:
         session.add(
@@ -322,6 +325,13 @@ async def test_builtin_skill_entrypoint_uses_real_permission_creation(repair_env
         "get_f048_process_runtime",
         AsyncMock(return_value=SimpleNamespace(components=SimpleNamespace(facade=env.runtime))),
     )
+    async with env.factory() as session:
+        session.add(
+            LinsightSkill(
+                id=902, tenant_id=1, name="builtin", description="Builtin", source="builtin", object_path="skills.zip"
+            )
+        )
+        await session.commit()
     await ensure_builtin_skill_permission(SimpleNamespace(id=902, tenant_id=1))
     assert ("tenant:1#member", "visible", "linsight_skill:902") in env.fga.present
     async with env.factory() as session:

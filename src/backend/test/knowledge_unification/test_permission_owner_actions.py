@@ -1,5 +1,6 @@
 """F118 system-owner projection contracts. AC-78, AC-79, AC-81, AC-83."""
 
+from contextlib import asynccontextmanager
 from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -243,6 +244,13 @@ async def test_real_builtin_creation_reaches_owner_with_only_visible_and_current
             actor=PermissionActor(user_id=7, current_tenant_id=5),
         )
     else:
+        from bisheng.linsight.domain.repositories.skill_permission import SkillPermissionRepository
+
+        @asynccontextmanager
+        async def lock(repository, skill_id, *, tenant_id):
+            yield SimpleNamespace(id=skill_id, tenant_id=tenant_id, source="builtin", owner_user_id=0)
+
+        monkeypatch.setattr(SkillPermissionRepository, "lock", lock)
         monkeypatch.setattr(
             process_runtime,
             "get_f048_process_runtime",
