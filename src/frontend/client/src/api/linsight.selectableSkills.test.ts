@@ -10,7 +10,7 @@ const environment = (channel: ClientEnvironment['channel']): ClientEnvironment =
   deviceType: 'desktop',
   os: 'macos',
   sources: { channel: 'default', deviceType: 'default', os: 'default' },
-  capabilities: { hasNativePresentation: channel === 'desktop', hasHostChatHeader: false },
+  capabilities: { hasNativePresentation: channel === 'desktop', hasHostChatHeader: false, hasHostBackButton: false },
 });
 
 const skills = [

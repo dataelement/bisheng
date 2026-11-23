@@ -78,6 +78,7 @@ describe("knowledge preview resource contract", () => {
         Object.defineProperty(window.history, "length", { configurable: true, value: 2 });
         previewApi.mockResolvedValue({ ...metadata, original_url: "/bisheng/original/file.pdf", preview_url: "" });
         openPreview("file.pdf");
+        await screen.findByTestId("viewer");
         fireEvent.click(await screen.findByRole("button", { name: "com_ui_go_back" }));
         expect(back).toHaveBeenCalledTimes(1);
     });
